@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from elspais.graph.reference_faults import RefItem
+    from elspais.graph.reference_faults import FaultClass, FaultCode, RefItem
 
 # --- Errors ---
 
@@ -132,6 +132,7 @@ class IdGrammar:
     """
 
     namespace: str
+    namespace_separator: str
     level: str
     component: str
     identifier: str
@@ -503,6 +504,20 @@ class IdResolver:
         parts = re.split(r"(\{[^}]+\})", cfg.canonical_template)
         identifier = "".join(placeholders[p] if p in placeholders else _literal(p) for p in parts)
 
+        # The literal character the canonical template places right after
+        # {namespace} -- the boundary declares_namespace() tests against,
+        # taken from the same template the identifier fragment above is
+        # built from rather than assumed to be "-".
+        namespace_separator = ""
+        for i, part in enumerate(parts):
+            if part == "{namespace}" and i + 1 < len(parts):
+                following = (
+                    _respell(parts[i + 1], separator) if separator is not None else parts[i + 1]
+                )
+                if following:
+                    namespace_separator = following[0]
+                break
+
         assertion_separator = re.escape(
             separator if separator is not None else cfg.assertions.separator
         )
@@ -519,6 +534,7 @@ class IdResolver:
 
         return IdGrammar(
             namespace=namespace,
+            namespace_separator=namespace_separator,
             level=level,
             component=component,
             identifier=identifier,
@@ -527,6 +543,21 @@ class IdResolver:
             assertion_separator=assertion_separator,
             multi_separator=re.escape(cfg.assertions.multi_separator),
         )
+
+    # Implements: REQ-d00272-C
+    def declares_namespace(self, item: str) -> bool:
+        """Whether *item* opens with this repository's namespace.
+
+        The boundary between the namespace and what follows comes from the
+        grammar rather than from an assumed ``-``: a repository configured
+        with another separator would otherwise have every one of its
+        identifiers attributed elsewhere.
+        """
+        grammar = self.grammar()
+        pattern = re.compile(
+            rf"(?:{grammar.namespace})(?:{re.escape(grammar.namespace_separator)}|$)"
+        )
+        return bool(pattern.match(item))
 
     # Implements: REQ-d00081-D
     def multi_assertion_reference_regex(self) -> re.Pattern[str]:
@@ -1146,6 +1177,26 @@ class FederatedIdReader:
             self._extra_item_regexes[key] = compiled
         return compiled
 
+    # Implements: REQ-d00272-B, REQ-d00272-C
+    def classify_unmatched(self, candidate: str) -> tuple[FaultClass, tuple[FaultCode, ...]]:
+        """How far reading *candidate* got, for an item no grammar accepted.
+
+        Two tests, in order, and neither is a judgement about what an
+        identifier looks like.  A space is what no identifier of any
+        configuration contains, so an item holding one was not written as an
+        identifier and must not be described as naming a repository.  Past
+        that, whether some member *declares* the namespace the item opens
+        with is a fact the federation holds, and it separates an identifier
+        of this estate spelled wrongly from a name belonging outside it.
+        """
+        from elspais.graph.reference_faults import FaultClass, FaultCode
+
+        if any(ch.isspace() for ch in candidate):
+            return FaultClass.MALFORMED, (FaultCode.NOT_AN_IDENTIFIER,)
+        if any(r.declares_namespace(candidate) for r in self._resolvers):
+            return FaultClass.MALFORMED, ()
+        return FaultClass.UNKNOWN_NAMESPACE, ()
+
     # Implements: REQ-d00269-G, REQ-p00014-T
     def parse_ref_list(
         self,
@@ -1215,13 +1266,9 @@ class FederatedIdReader:
             if matched:
                 results.append(RefItem(raw=candidate, index=index, resolved=ref))
             else:
+                fault_class, codes = self.classify_unmatched(candidate)
                 results.append(
-                    RefItem(
-                        raw=candidate,
-                        index=index,
-                        fault_class=FaultClass.MALFORMED,
-                        codes=(),
-                    )
+                    RefItem(raw=candidate, index=index, fault_class=fault_class, codes=codes)
                 )
         return results
 

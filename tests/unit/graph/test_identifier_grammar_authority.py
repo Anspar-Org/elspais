@@ -135,6 +135,7 @@ def test_matcher_and_resolver_recognise_the_same_strings(config: dict, probe: st
 
 _SENTINEL = IdGrammar(
     namespace="ZQX",
+    namespace_separator="-",
     level="q",
     component="[0-9]{4}",
     identifier="ZQX[-_]q[0-9]{4}",

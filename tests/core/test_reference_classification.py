@@ -164,3 +164,33 @@ def test_an_underscore_notation_item_binds_in_a_reference_list(reader):
     items = reader.parse_ref_list("REQ_d00001_A")
     assert items[0].resolved == "REQ-d00001-A"
     assert items[0].fault_class is None
+
+
+# Verifies: REQ-d00272-B
+@pytest.mark.parametrize(
+    "item",
+    ["not a reference at all", "see REQ-d00001", "REQ-d00001 (A, C, F)"],
+)
+def test_an_item_holding_a_space_is_not_an_identifier(reader, item):
+    cls, _codes = reader.classify_unmatched(item)
+    assert cls is FaultClass.MALFORMED
+
+
+# Verifies: REQ-d00272-B
+def test_a_spaced_item_is_never_called_a_repository(reader):
+    cls, _ = reader.classify_unmatched("not a reference at all")
+    assert cls is not FaultClass.UNKNOWN_NAMESPACE
+
+
+# Verifies: REQ-d00272-C
+def test_an_item_opening_with_a_declared_namespace_is_ours(reader):
+    """REQ is this repository's namespace, so REQ-d0000X is ours, written wrongly."""
+    cls, _ = reader.classify_unmatched("REQ-d0000X")
+    assert cls is FaultClass.MALFORMED
+
+
+# Verifies: REQ-d00272-C
+def test_an_item_opening_with_no_declared_namespace_is_foreign(reader):
+    cls, codes = reader.classify_unmatched("WIDGET-42")
+    assert cls is FaultClass.UNKNOWN_NAMESPACE
+    assert codes == ()
