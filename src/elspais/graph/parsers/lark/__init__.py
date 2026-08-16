@@ -362,9 +362,11 @@ class FileDispatcher:
                     # A file-level default is an annotation like any other:
                     # it names a list of references or it names none
                     # (REQ-d00269-G).
-                    for ref in read_reference_list(self._reader, text) or ():
-                        if ref not in file_default_verifies:
-                            file_default_verifies.append(ref)
+                    items = read_reference_list(self._reader, text)
+                    if items and not any(i.fault_class is not None for i in items):
+                        for ref in (i.resolved for i in items if i.resolved):
+                            if ref not in file_default_verifies:
+                                file_default_verifies.append(ref)
 
         transformer = ReferenceTransformer(
             self._resolver,

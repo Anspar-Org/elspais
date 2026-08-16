@@ -40,6 +40,7 @@ from elspais.graph.parsers.patterns import (
 )
 
 if TYPE_CHECKING:
+    from elspais.graph.reference_faults import RefItem
     from elspais.utilities.patterns import FederatedIdReader, IdResolver
 
 _log = logging.getLogger(__name__)
@@ -67,8 +68,8 @@ def reference_target(text: str) -> str:
 
 
 # Implements: REQ-d00269-G
-def read_reference_list(reader: FederatedIdReader, text: str) -> list[str] | None:
-    """The references a reference line names, or None if it names none.
+def read_reference_list(reader: FederatedIdReader, text: str) -> list[RefItem]:
+    """The items a reference line names, each with its verdict.
 
     One reading for every surface that has a whole annotation line in hand,
     so a file-level default and the annotation above a function admit the
@@ -386,12 +387,16 @@ class ReferenceTransformer:
         elif keyword in ("integrates", "refines"):
             return None
 
-        refs = read_reference_list(self.reader, text)
-        if refs is None:
+        items = read_reference_list(self.reader, text)
+        if not items:
+            return None
+        if any(i.fault_class is not None for i in items):
             raw = self._raw_target(text)
             if not raw:
                 return None
             refs = [raw]
+        else:
+            refs = [i.resolved for i in items if i.resolved]
 
         func_name, class_name, func_line, func_end_line = self.line_context.get(
             line_num, (None, None, 0, 0)

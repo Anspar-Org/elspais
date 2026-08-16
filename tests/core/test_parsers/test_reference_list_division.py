@@ -2,16 +2,18 @@
 """Dividing a list of references into its items.
 
 A *Traceability* keyword introduces a list and nothing else, and the one
-place that list is divided is ``FederatedIdReader.parse_ref_list``. What it
-does with an item no member's grammar accounts for is the caller's policy,
-and the two policies are not interchangeable:
+place that list is divided is ``FederatedIdReader.parse_ref_list``. It
+judges every item on its own and returns a verdict for each -- resolved, or
+faulted -- regardless of ``on_unmatched``. What becomes of a faulted item on
+behalf of the whole line is the caller's policy, not the divider's:
 
 ``reject``
     A scanned annotation is found in the wild. A line the grammar can only
-    partly account for is a line read wrongly, so none of it is kept.
+    partly account for is a line read wrongly, so the caller discards the
+    whole line rather than keeping whichever items parsed.
 ``keep``
     A reference authored in a spec file is data. A wrong one has to survive
-    being read in order to be reported as a broken reference; a policy that
+    being read in order to be reported as a broken reference; a caller that
     dropped the line would retire the diagnostic along with the typo.
 
 These pin the difference, so a later unification on one policy has to face
@@ -54,36 +56,46 @@ def _reader() -> FederatedIdReader:
     return FederatedIdReader(build_resolver(config))
 
 
-# Verifies: REQ-p00014-T
+# Verifies: REQ-p00014-T, REQ-d00269-G
 def test_a_reference_no_grammar_claims_survives_the_keep_policy():
-    """Under the spec-file policy the unreadable item is carried through as
-    written, so something downstream can report it."""
-    refs = _reader().parse_ref_list(f"{_GOOD}, {_TYPO}", on_unmatched="keep")
+    """The unreadable item is carried through as its own item, verbatim, so
+    a caller applying the spec-file policy can still report it."""
+    items = _reader().parse_ref_list(f"{_GOOD}, {_TYPO}", on_unmatched="keep")
 
-    assert refs is not None, "the keep policy must not discard the whole line"
-    assert _TYPO in refs, (
+    assert len(items) == 2, f"every item gets its own verdict; got {items}"
+    typo_item = items[1]
+    assert typo_item.raw == _TYPO, (
         "the item no grammar accounts for must reach the caller verbatim -- "
-        f"dropping it retires the broken-reference report; got {refs}"
+        f"dropping it retires the broken-reference report; got {typo_item}"
     )
-    assert any(
-        ref.startswith("REQ-p00001") for ref in refs
-    ), f"the readable reference must survive alongside it; got {refs}"
+    assert typo_item.resolved is None
+    assert typo_item.fault_class is not None
+    good_item = items[0]
+    assert good_item.resolved is not None and good_item.resolved.startswith(
+        "REQ-p00001"
+    ), f"the readable reference must survive alongside it; got {items}"
 
 
-# Verifies: REQ-p00014-T
-def test_a_reference_no_grammar_claims_rejects_a_scanned_line():
-    """Under the scanned-annotation policy the same text yields nothing: a
-    line only partly accounted for is a line read wrongly."""
-    assert _reader().parse_ref_list(f"{_GOOD}, {_TYPO}", on_unmatched="reject") is None
+# Verifies: REQ-p00014-T, REQ-d00269-G
+@pytest.mark.parametrize("policy", ["keep", "reject"])
+def test_on_unmatched_does_not_change_what_parse_ref_list_returns(policy):
+    """``on_unmatched`` is the caller's policy for the whole line -- the
+    divider classifies each item the same way regardless of it."""
+    items = _reader().parse_ref_list(f"{_GOOD}, {_TYPO}", on_unmatched=policy)
+
+    assert len(items) == 2
+    assert items[0].resolved is not None
+    assert items[1].raw == _TYPO
+    assert items[1].fault_class is not None
 
 
 # Verifies: REQ-p00014-T
 @pytest.mark.parametrize("policy", ["keep", "reject"])
 def test_a_wholly_readable_list_reads_the_same_under_either_policy(policy):
     """The policies differ only over the item that cannot be read."""
-    refs = _reader().parse_ref_list(f"{_GOOD}, REQ-p00002", on_unmatched=policy)
+    items = _reader().parse_ref_list(f"{_GOOD}, REQ-p00002", on_unmatched=policy)
 
-    assert refs is not None
+    refs = [i.resolved for i in items if i.resolved]
     assert "REQ-p00002" in refs
     assert _TYPO not in refs
 

@@ -14,7 +14,10 @@ from __future__ import annotations
 import re
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from elspais.graph.reference_faults import RefItem
 
 # --- Errors ---
 
@@ -1149,8 +1152,8 @@ class FederatedIdReader:
         *,
         extra_items: Sequence[str] = (),
         on_unmatched: str = "reject",
-    ) -> list[str] | None:
-        """The references *text* spells as a separated list, or None.
+    ) -> list[RefItem]:
+        """The items *text* spells as a separated list, each with its verdict.
 
         The one place a list of references is divided into its items.  A
         *Traceability* keyword introduces a list and nothing else, so each
@@ -1181,35 +1184,53 @@ class FederatedIdReader:
                 reader does not own -- a journey step, say -- which are
                 accepted verbatim rather than normalized.
             on_unmatched: ``"reject"`` or ``"keep"``, as above.
+
+        Returns:
+            A ``RefItem`` per item, never ``None``.  An empty list means the
+            content was empty.
         """
+        from elspais.graph.reference_faults import FaultClass, FaultCode, RefItem
+
         if on_unmatched not in ("reject", "keep"):
             raise ValueError(f"on_unmatched must be 'reject' or 'keep', got {on_unmatched!r}")
         stripped = text.strip()
         if not stripped:
-            return None
+            return []
         item = self._item_pattern()
         extras = self._extra_patterns(extra_items)
-        refs: list[str] = []
-        for part in stripped.split(REF_LIST_SEPARATOR):
+        results: list[RefItem] = []
+        seen: set[str] = set()
+        for index, part in enumerate(stripped.split(REF_LIST_SEPARATOR)):
             candidate = part.strip()
             if not candidate:
-                if on_unmatched == "reject":
-                    return None
+                results.append(
+                    RefItem(
+                        raw="",
+                        index=index,
+                        fault_class=FaultClass.MALFORMED,
+                        codes=(FaultCode.EMPTY_ITEM,),
+                    )
+                )
                 continue
             if item.fullmatch(candidate):
                 ref = self.normalize(candidate)
             elif any(extra.fullmatch(candidate) for extra in extras):
                 ref = candidate
-            elif on_unmatched == "keep":
-                # normalize() keeps a reference no member claims visible
-                # rather than discarding it, which is what carries a typo
-                # through to the broken-reference report.
-                ref = self.normalize(candidate)
             else:
-                return None
-            if ref not in refs:
-                refs.append(ref)
-        return refs
+                results.append(
+                    RefItem(
+                        raw=candidate,
+                        index=index,
+                        fault_class=FaultClass.MALFORMED,
+                        codes=(),
+                    )
+                )
+                continue
+            if ref in seen:
+                continue
+            seen.add(ref)
+            results.append(RefItem(raw=candidate, index=index, resolved=ref))
+        return results
 
     def extract_underscored_ref(self, text: str) -> str | None:
         """The first identifier *text* spells in underscore notation, or None.

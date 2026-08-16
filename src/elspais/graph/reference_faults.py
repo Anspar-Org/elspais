@@ -97,3 +97,26 @@ class ReferenceFault:
             f"{self.source_id} --[{self.edge_kind}]--> {self.target_id} "
             f"({self.fault_class.label}{foreign})"
         )
+
+
+@dataclass(frozen=True)
+class RefItem:
+    """One item of a reference list, and what became of it.
+
+    Exactly one of ``resolved`` and ``fault_class`` is set.  A list is judged
+    item by item, so an item that read produces its relationship whatever its
+    neighbours did (REQ-d00269-G).
+
+    Attributes:
+        raw: The item as the author wrote it, stripped of surrounding space.
+        resolved: The normalized reference, or None if the item did not read.
+        index: Position in the list, 0-based.
+        fault_class: How far reading this item got, or None if it read.
+        codes: What is wrong with it, where the input determines that.
+    """
+
+    raw: str
+    index: int
+    resolved: str | None = None
+    fault_class: FaultClass | None = None
+    codes: tuple[str, ...] = ()
