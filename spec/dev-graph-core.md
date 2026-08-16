@@ -443,7 +443,9 @@ K. Where a reference list names the same target more than once, every instance S
 
 L. Where an item both opens with an acceptable reference and can be read as differing from one by a relaxation, the relaxation SHALL be reported. Trailing content SHALL be reported only where no relaxation accounts for the item.
 
-M. An item holding any character the writing system counts as a space SHALL be treated under B, whichever character it is.
+M. An item holding any character no identifier configuration can admit SHALL be treated under B. A character the writing system counts as a space is such a character, whichever one it is, as is any character reserved out of every identifier pattern.
+
+N. An identifier SHALL have one canonical spelling. A reference written in another spelling the configuration admits SHALL be reported at a severity the project configures, and SHALL produce the relationship it names regardless.
 
 ### Rationale
 
@@ -461,7 +463,9 @@ K makes a repeated target an error rather than a convenience. Silently keeping t
 
 L ranks trailing content beneath every named relaxation. An item that opens with a valid reference can always be read as that reference plus whatever follows, so an unranked trailing-content reading accounts for every malformed item and would either win every time or tie every time — leaving the named relaxations unreachable and every diagnosis generic. Ranking it last makes it what it should be: the account that applies when nothing more specific does.
 
-M keeps the space test from turning on which space was typed. A character that reads as a space to an author but not to the test would take an item that is plainly not an identifier and report it as a name from a repository nobody configured — the precise misattribution B exists to prevent, reintroduced by an invisible character.
+M keeps the space test from turning on which space was typed, and generalises past spaces for the same reason. A character that reads as a space to an author but not to the test would take an item that is plainly not an identifier and report it as a name from a repository nobody configured — the precise misattribution B exists to prevent, reintroduced by an invisible character. The same holds for a character reserved out of every identifier pattern: no configuration can produce one, so an item carrying it was not written as an identifier, and saying so needs no judgement about what it resembles. Stating the test as a property of the character rather than listing the characters means a newly reserved one is covered when it is reserved rather than when someone remembers to add it here.
+
+N pairs with G, one for the referent and one for the keyword. Both say the same thing: a spelling the configuration admits produces its relationship, and that it is not the canonical spelling is a fact about the file worth reporting rather than a reason to withhold an edge. Which spellings a configuration admits is settled elsewhere; what N adds is that admitting more than one form does not mean writing more than one.
 
 This requirement declares `Satisfies:` against the REQ-p00019 anti-pattern template and concretizes its classes for reference reading. Misattribution and double-counting are the classes this subsystem exists to answer, and assertions A, B and C pin them: one class per item and never a later one, no describing an item holding a space as though it named a repository, and attribution decided by what a repository declares rather than by what the text resembles. Silent omission and unreported non-performance are pinned by the obligation to report every recognised reference that produces no relationship (REQ-d00269-F, REQ-d00269-G), and phantom success by the rule that reading within an item informs a report and never contributes an edge (assertion F, REQ-d00269-J). Undisclosed substitution is pinned twice over: a list of which some items bound and others did not is a partial result, disclosed by reporting each item that failed, and a defect the tool could not determine is carried as the generic code rather than passed off as no defect at all (REQ-d00271-C).
 
@@ -471,11 +475,12 @@ One class has no purchase here and is left visibly uncovered rather than answere
 
 ### Changelog
 
+- 2026-08-15 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: generalise the space test to any character no configuration can admit (M); one canonical spelling per identifier, reported not withheld (N)
 - 2026-08-15 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: a keyword its file may not use is read and refused rather than passed over (J); every instance of a repeated target is reported and none resolves (K); trailing content ranks beneath every named relaxation (L); any space character reaches the space test (M)
 - 2026-08-15 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: record how each REQ-p00019 class is answered for this subsystem — concretized, bound through the instance, or left visibly uncovered with its reason
 - 2026-08-15 | - | - | Michael Lewis (<michael@anspar.org>) | Initial authoring: the rule assigning reference failure classes — the space and namespace tests, minimal relaxation, and reading within an item without binding from it
 
-*End* *Reference Fault Classification* | **Hash**: e030bbf8
+*End* *Reference Fault Classification* | **Hash**: fadb924e
 
 ## REQ-d00254: Test Evidence: Attribution, Ingestion, and Coverage Crediting
 

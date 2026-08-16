@@ -396,7 +396,7 @@ F. Every reference recognised under E that produces no relationship SHALL be rep
 
 G. The content a *Traceability* keyword introduces SHALL be a separated list of references, and each item of that list SHALL be judged on its own: an item the grammar accounts for produces its relationship, and an item it does not is reported under the class it reached. An item SHALL be matched whole, so that a reference is never resolved by an identifier found within a larger item.
 
-H. A list whose content ends with the separator SHALL continue onto the next line that may hold reference content — the next line of the same comment block, or the next line of the same metadata block. A list ending with the separator and having no such line SHALL bind the references it holds and report the separator that introduced nothing.
+H. A list whose content ends with the separator SHALL continue onto the next line that may hold reference content — the next line of the same comment block, or the next line of the same metadata block. A line holding no content, and a line whose own first content is a *Traceability* keyword, SHALL NOT be such a line. A list ending with the separator and having no such line to continue onto SHALL bind the references it holds and report the separator that introduced nothing.
 
 J. Where a reference is spelled in a way the grammar does not accept, the report SHALL name the defect it can determine and SHALL NOT produce the relationship the reference would have produced had it been spelled acceptably.
 
@@ -418,6 +418,8 @@ The prohibition on shape in E is about recognition, and does not extend to descr
 
 H exists because a list long enough to need a second line is ordinary, and a form the tool neither accepts nor rejects is the worst of the three answers available. The separator already means the list has not ended, so continuation asks nothing of an author that spelling the list correctly did not already ask; and a separator with nothing after it says the same thing about a list that has, in fact, ended.
 
+Two lines are excluded from continuing a list, and both exclusions keep continuation from overriding something that was already decided. A line whose first content is a keyword is a declaration, and E makes that the whole of what opens a reference list; letting a separator on the line above capture it would take a plainly intended declaration, read it as one item holding spaces, and lose every reference in it. A line holding no content cannot be where the list resumes either, because reading past it would mean looking further than the line that follows — and a lookahead that skips is a lookahead with no bound, which is how a list reaches content written far below it and never meant for it.
+
 The complementary negative rule — that federation membership alone credits nothing — belongs to the federation role model and is not restated here. Together the two bound the behaviour from both sides: coverage crosses a boundary exactly where a *Traceability* edge crosses it, and nowhere else.
 
 Coverage computed over a wired federation is idempotent, so a surface may recompute without double-counting.
@@ -426,7 +428,9 @@ A concurrency version is derived from a node's content and its outgoing *Traceab
 
 ### Changelog
 
+- 2026-08-15 | af36a1b3 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-15 | c861d2bc | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-15 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: neither an empty line nor a line opening with a keyword may continue a list (H)
 - 2026-08-15 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: judge list items one at a time (G); keyword recognition is case-independent with an abutting separator (E); severity per failure class (F); list continuation onto a following line (H); a named defect never yields the relationship (J)
 - 2026-08-11 | 8cac4dcd | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-11 | f5855c6e | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: a keyword introduces a list of references and nothing else (G)
@@ -436,5 +440,5 @@ A concurrency version is derived from a node's content and its outgoing *Traceab
 - 2026-08-08 | bd05142f | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 - 2026-08-09 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: cross-repository coverage credit
 
-*End* *Cross-Repository Coverage Credit* | **Hash**: c861d2bc
+*End* *Cross-Repository Coverage Credit* | **Hash**: af36a1b3
 ---
