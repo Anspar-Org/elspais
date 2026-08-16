@@ -108,12 +108,15 @@ def test_a_defect_costs_one_reference_not_the_line(reader):
     assert failed[0].raw == "REQ-d0000X"
 
 
-# Verifies: REQ-d00269-G, REQ-p00014-T
+# Verifies: REQ-d00269-G, REQ-d00269-H, REQ-p00014-T
 def test_a_trailing_separator_binds_what_precedes_it(reader):
+    """A dangling separator is reported as itself, not as a generic empty
+    item -- REQ-d00269-H names it as the separator that introduced nothing.
+    """
     items = reader.parse_ref_list("REQ-d00001,")
     assert [i.resolved for i in items if i.resolved] == ["REQ-d00001"]
-    empties = [i for i in items if FaultCode.EMPTY_ITEM in i.codes]
-    assert len(empties) == 1
+    trailing = [i for i in items if FaultCode.TRAILING_SEPARATOR in i.codes]
+    assert len(trailing) == 1
 
 
 # Verifies: REQ-d00269-G

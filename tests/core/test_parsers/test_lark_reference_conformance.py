@@ -103,6 +103,18 @@ def _all_refs(result) -> set[str]:
     return found
 
 
+def _diagnostics(result):
+    """The transformer's reported faults for a parse result.
+
+    ``result`` is the ``(results, transformer)`` pair ``parse_code``
+    returns -- a diagnostic is a fact about the file, not about any single
+    ``ParsedContent``, so it lives on the transformer rather than on a
+    result entry.
+    """
+    _results, tx = result
+    return tx.faults
+
+
 def _parse_test(content, resolver, code_parser, **kwargs):
     """Parse as test_ref."""
     if not content.endswith("\n"):
@@ -393,3 +405,44 @@ def test_a_keyword_introducing_nothing_is_admitted_and_reported(parse_code):
     assert line_num == 1
     assert keyword == "implements"
     assert FaultCode.EMPTY_REFERENCE_LIST in ref_item.codes
+
+
+# Verifies: REQ-d00269-H
+def test_a_trailing_separator_continues_onto_the_next_comment_line(parse_code):
+    result = parse_code(
+        "# Implements: REQ-d00001,\n" "#             REQ-d00002\n" "def f():\n    return 1\n"
+    )
+    refs = _all_refs(result)
+    assert "REQ-d00001" in refs
+    assert "REQ-d00002" in refs
+
+
+# Verifies: REQ-d00269-H
+def test_a_separator_with_nothing_to_continue_onto_binds_what_precedes_it(parse_code):
+    result = parse_code("# Implements: REQ-d00001,\ndef f():\n    return 1\n")
+    assert "REQ-d00001" in _all_refs(result)
+
+
+# Verifies: REQ-d00269-H
+def test_a_continuation_without_a_separator_is_an_orphan(parse_code):
+    """No separator means line 1 is a complete list and line 2 stands alone."""
+    result = parse_code(
+        "# Implements: REQ-d00001\n" "#             REQ-d00002\n" "def f():\n    return 1\n"
+    )
+    refs = _all_refs(result)
+    assert "REQ-d00001" in refs
+    assert "REQ-d00002" not in refs
+
+
+# Verifies: REQ-d00269-H, REQ-p00019-A
+def test_an_orphan_reference_line_is_never_silent(parse_code):
+    """The standing defect: this produced no node, no remainder, no diagnostic.
+
+    ``REQ-d00272-H`` is a keyword introducing no content -- a different
+    defect from this one, which is a bare identifier line with no keyword
+    above it at all -- so the fault this line raises is cited to
+    REQ-d00269-H (the continuation rule that defines the orphan category)
+    and REQ-p00019-A (the never-silent obligation), not to REQ-d00272-H.
+    """
+    result = parse_code("def f():\n    #   REQ-d00001\n    return 1\n")
+    assert _diagnostics(result), "an orphan reference must be reported"

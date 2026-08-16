@@ -43,6 +43,7 @@ from elspais.graph.parsers.patterns import (
     KEYWORD_PATTERN as _KEYWORD_RE,
 )
 from elspais.graph.reference_faults import FaultClass, FaultCode, RefItem, refs_and_verdicts
+from elspais.utilities.patterns import REF_LIST_SEPARATOR
 
 if TYPE_CHECKING:
     from elspais.utilities.patterns import FederatedIdReader, IdResolver
@@ -135,6 +136,17 @@ class ReferenceTransformer:
         self.quoted_lines = quoted_lines or set()
         self.warnings: list[str] = []
         self.faults: list[tuple[RefItem, int, str]] = []
+        # Continuation state (REQ-d00269-H), rebuilt once per transform() call
+        # and consulted by id(node) rather than threaded through every call
+        # site.  ``_joined_text``/``_joined_end_line``/``_joined_raw`` are
+        # keyed by id() of the opener node that ends with the separator;
+        # ``_consumed`` holds id() of the block_ref/other_line nodes folded
+        # into an opener, so the dispatch loop skips them outright instead of
+        # reporting them as orphans or remainder.
+        self._joined_text: dict[int, str] = {}
+        self._joined_end_line: dict[int, int] = {}
+        self._joined_raw: dict[int, str] = {}
+        self._consumed: set[int] = set()
         # (line, code) for a keyword recognised in a non-canonical form --
         # a fact about the file, never a reason to withhold the edge it
         # introduces (REQ-d00272-G).
@@ -151,9 +163,17 @@ class ReferenceTransformer:
         # First pass: process classified lines
         i = 0
         children = tree.children
+        self._fold_continuations(children)
         while i < len(children):
             child = children[i]
             if not isinstance(child, Tree):
+                i += 1
+                continue
+
+            # A line folded into a preceding opener's continuation is
+            # already represented there (REQ-d00269-H); it is neither
+            # dispatched on its own nor reported as an orphan.
+            if id(child) in self._consumed:
                 i += 1
                 continue
 
@@ -290,11 +310,47 @@ class ReferenceTransformer:
 
             elif child.data == "unresolved_ref":
                 token = child.children[0]
-                pc = self._handle_unresolved_ref(str(token), token.line)  # type: ignore[attr-defined]
+                key = id(child)
+                text = self._joined_text.get(key, str(token))  # type: ignore[attr-defined]
+                pc = self._handle_unresolved_ref(
+                    text,
+                    token.line,  # type: ignore[attr-defined]
+                    end_line=self._joined_end_line.get(key),
+                    raw_text=self._joined_raw.get(key),
+                )
                 if pc:
                     results.append(pc)
                 else:
-                    other_lines.append((token.line, str(token)))  # type: ignore[attr-defined]
+                    other_lines.append(
+                        (token.line, self._joined_raw.get(key, str(token)))  # type: ignore[attr-defined]
+                    )
+
+            elif child.data == "block_ref":
+                # A block_ref line reaching here was not consumed by a
+                # block_header's own collection loop and was not folded
+                # into a preceding opener's continuation -- there is no
+                # keyword above it at all, so it names an identifier
+                # without declaring anything.  Silently dropping it is
+                # exactly the standing defect this work removes: it must
+                # be reported (REQ-d00269-H, REQ-p00019-A) and still fall
+                # through to the remainder gatherer so the line round-trips.
+                token = child.children[0]
+                body = str(token)  # type: ignore[attr-defined]
+                line_num = token.line  # type: ignore[attr-defined]
+                # Implements: REQ-d00269-H, REQ-p00019-A
+                self.faults.append(
+                    (
+                        RefItem(
+                            raw=body,
+                            index=-1,
+                            fault_class=FaultClass.MALFORMED,
+                            codes=(FaultCode.ORPHAN_REFERENCE,),
+                        ),
+                        line_num,
+                        "",
+                    )
+                )
+                other_lines.append((line_num, body))
 
             i += 1
 
@@ -397,14 +453,28 @@ class ReferenceTransformer:
         (REQ-d00269-G).  So both go through one reader.
         """
         token = node.children[0]
-        return self._handle_unresolved_ref(str(token), token.line)  # type: ignore[attr-defined]
+        key = id(node)
+        text = self._joined_text.get(key, str(token))  # type: ignore[attr-defined]
+        return self._handle_unresolved_ref(
+            text,
+            token.line,  # type: ignore[attr-defined]
+            end_line=self._joined_end_line.get(key),
+            raw_text=self._joined_raw.get(key),
+        )
 
     # ------------------------------------------------------------------
     # Unresolvable reference handling
     # ------------------------------------------------------------------
 
     # Implements: REQ-d00269-D, REQ-d00269-G, REQ-d00272-J
-    def _handle_unresolved_ref(self, text: str, line_num: int) -> ParsedContent | None:
+    def _handle_unresolved_ref(
+        self,
+        text: str,
+        line_num: int,
+        *,
+        end_line: int | None = None,
+        raw_text: str | None = None,
+    ) -> ParsedContent | None:
         """Read a reference line, resolved or not.
 
         The line is recognised because of where the keyword sits, so the
@@ -426,6 +496,17 @@ class ReferenceTransformer:
 
         Returns None only when the line names nothing at all: an empty
         declaration, or content no grammar of the federation accounts for.
+
+        Args:
+            text: The content to read -- the opener's own text, or the
+                opener's text already joined with a continuation
+                (REQ-d00269-H).
+            line_num: The opener's own line, always the reported start.
+            end_line: The last physical line folded into *text*, when a
+                continuation joined; defaults to *line_num*.
+            raw_text: The original, newline-joined multi-line text to store
+                for rendering, when a continuation joined; defaults to
+                *text* verbatim.
         """
         keyword = self._detect_keyword(text)
         if self._keyword_invalid_for_content(keyword):
@@ -449,8 +530,8 @@ class ReferenceTransformer:
             return ParsedContent(
                 content_type=self.content_type,
                 start_line=line_num,
-                end_line=line_num,
-                raw_text=text,
+                end_line=end_line if end_line is not None else line_num,
+                raw_text=raw_text if raw_text is not None else text,
                 parsed_data=parsed_data,
             )
 
@@ -509,8 +590,8 @@ class ReferenceTransformer:
         return ParsedContent(
             content_type=self.content_type,
             start_line=line_num,
-            end_line=line_num,
-            raw_text=text,
+            end_line=end_line if end_line is not None else line_num,
+            raw_text=raw_text if raw_text is not None else text,
             parsed_data=parsed_data,
         )
 
@@ -555,6 +636,90 @@ class ReferenceTransformer:
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
+
+    # Implements: REQ-d00269-H
+    def _fold_continuations(self, children: list[Any]) -> None:
+        """Fold a reference list ending in the separator into the line(s)
+        immediately below it, populating ``self._joined_*`` and
+        ``self._consumed`` for the dispatch loop to consult.
+
+        Continuation is a line-joining concern, not a grammar-shape one: the
+        whole line is already in hand here, so joining happens over the
+        classified nodes rather than by teaching the grammar a second way to
+        divide a reference list.
+
+        Only a line of the *same comment block* may continue one, and two
+        exclusions keep continuation from overriding something already
+        decided (REQ-d00269-H):
+
+        - A line whose own first content is a keyword lexes as
+          ``single_ref``/``unresolved_ref``/``block_header``, never as a
+          bare ``block_ref`` or content-bearing ``other_line`` -- so rule 1
+          holds structurally, with no extra check needed here.
+        - A line holding no content -- a blank line (no node at all, so the
+          next node's line number is not adjacent) or an empty comment (an
+          ``other_line`` whose stripped body is empty) -- does not continue
+          either; both are caught by the line-adjacency and non-empty-body
+          checks below.
+
+        A quoted line is displayed text, not a declaration (REQ-d00269-E),
+        so neither an opener nor a candidate touches this fold while its
+        line sits in ``self.quoted_lines`` -- the main loop's own
+        quoted-line handling stays the single place that decides what a
+        quoted line means.
+        """
+        openers = ("single_ref", "unresolved_ref")
+        n = len(children)
+        for idx, child in enumerate(children):
+            if not (isinstance(child, Tree) and child.data in openers):
+                continue
+            if self._token_line(child) in self.quoted_lines:
+                continue
+            opener_text = self._token_text(child)
+            if not opener_text.rstrip().endswith(REF_LIST_SEPARATOR):
+                continue
+
+            extraction = opener_text.rstrip()
+            raw_lines = [opener_text]
+            last_line = self._token_line(child)
+            j = idx + 1
+            while j < n and extraction.endswith(REF_LIST_SEPARATOR):
+                nxt = children[j]
+                if not (isinstance(nxt, Tree) and nxt.data in ("block_ref", "other_line")):
+                    break
+                if self._token_line(nxt) != last_line + 1:
+                    break
+                if self._token_line(nxt) in self.quoted_lines:
+                    break
+                candidate_text = self._token_text(nxt)
+                body = self._comment_body_or_none(candidate_text)
+                if body is None:
+                    break
+                extraction = f"{extraction} {body}"
+                raw_lines.append(candidate_text)
+                self._consumed.add(id(nxt))
+                last_line = self._token_line(nxt)
+                j += 1
+
+            if len(raw_lines) > 1:
+                key = id(child)
+                self._joined_text[key] = extraction
+                self._joined_end_line[key] = last_line
+                self._joined_raw[key] = "\n".join(raw_lines)
+
+    def _comment_body_or_none(self, text: str) -> str | None:
+        """The content after *text*'s comment marker, or None.
+
+        None covers both a line that opens with no comment marker at all,
+        and one that does but holds nothing after it -- an empty comment
+        continues no list (REQ-d00269-H).
+        """
+        stripped = text.lstrip(" \t")
+        marker = re.match(r"#|//|--", stripped)
+        if not marker:
+            return None
+        content = stripped[marker.end() :].strip()
+        return content or None
 
     def _extract_ids(self, text: str) -> list[str]:
         """Extract requirement IDs from a reference line (including multi-assertion syntax).

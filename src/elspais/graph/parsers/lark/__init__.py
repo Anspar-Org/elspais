@@ -374,19 +374,32 @@ class FileDispatcher:
         # earlier pass reading the same line first.
         quoted_lines = self._quoted_line_numbers(content, file_path)
 
+        # A file-level default list is read like any other reference list,
+        # continuation included (REQ-d00269-H): a bare instance built only
+        # to fold the tree once, before the real transformer -- which needs
+        # file_default_verifies to construct -- exists.
+        _fold_tx = ReferenceTransformer(
+            self._resolver, "test_ref", reader=self._reader, quoted_lines=quoted_lines
+        )
+        _fold_tx._fold_continuations(tree.children)
+
         file_default_verifies: list[str] = []
 
         for child in tree.children:
             if not hasattr(child, "data"):
                 continue
             if child.data == "single_ref":
+                # A single_ref is always an opener, never a continuation
+                # candidate (only block_ref/other_line can be folded), so
+                # this line is read for its own sake -- possibly extended
+                # by a joined continuation below it.
                 token = child.children[0]
                 ln = token.line  # type: ignore[attr-defined]
                 if first_def_line and ln >= first_def_line:
                     continue
                 if ln in quoted_lines:
                     continue
-                text = str(token)
+                text = _fold_tx._joined_text.get(id(child), str(token))
                 # File-level reference comments become default verifies for
                 # all test functions in the file.  Only 'Verifies' is valid
                 # in test files; 'Implements'/'Refines' are skipped.

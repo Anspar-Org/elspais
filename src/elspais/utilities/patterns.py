@@ -1373,16 +1373,24 @@ class FederatedIdReader:
         if not stripped:
             return []
         extras = self._extra_patterns(extra_items)
+        parts = stripped.split(REF_LIST_SEPARATOR)
+        last_index = len(parts) - 1
         results: list[RefItem] = []
-        for index, part in enumerate(stripped.split(REF_LIST_SEPARATOR)):
+        for index, part in enumerate(parts):
             candidate = part.strip()
             if not candidate:
+                # Implements: REQ-d00269-H
+                # An empty final item means the separator that introduced it
+                # had nothing to introduce -- a dangling separator, not a
+                # gap between two named items -- so it is reported as one
+                # and the other, never both, by its position in the list.
+                code = FaultCode.TRAILING_SEPARATOR if index == last_index else FaultCode.EMPTY_ITEM
                 results.append(
                     RefItem(
                         raw="",
                         index=index,
                         fault_class=FaultClass.MALFORMED,
-                        codes=(FaultCode.EMPTY_ITEM,),
+                        codes=(code,),
                     )
                 )
                 continue
