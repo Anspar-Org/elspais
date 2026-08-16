@@ -314,6 +314,8 @@ def test_a_keyword_is_recognised_in_any_case(parse_code, spelling):
 def test_a_non_canonical_keyword_still_binds(parse_code):
     result = parse_code("# implements: REQ-d00001\ndef f():\n    return 1\n")
     assert "REQ-d00001" in _all_refs(result)
+    _results, tx = result
+    assert (1, FaultCode.KEYWORD_WRONG_CASE) in tx.style_findings
 
 
 # Verifies: REQ-d00269-E
@@ -353,11 +355,25 @@ def test_markdown_emphasis_in_a_code_comment_still_binds(parse_code):
     assert (1, FaultCode.KEYWORD_MARKDOWN_EMPHASIS_OFF_MARKDOWN) in tx.style_findings
 
 
-# Verifies: REQ-d00272-G
-def test_a_lowercase_keyword_records_a_style_finding(parse_code):
-    result = parse_code("# implements: REQ-d00001\ndef f():\n    return 1\n")
-    _results, tx = result
-    assert (1, FaultCode.KEYWORD_WRONG_CASE) in tx.style_findings
+# Verifies: REQ-d00272-B
+def test_a_stray_leading_asterisk_on_the_target_does_not_bind(parse_code):
+    """A malformed target must stay malformed, not be laundered by the
+    emphasis-stripping fix.
+
+    The fix for markdown-emphasis-wrapped keywords must strip only the
+    keyword's own closing "**", never any leading "*" that is part of what
+    the author actually wrote as the target -- otherwise an ordinary typo
+    silently becomes a clean edge, which is the exact defect this work
+    exists to remove.
+    """
+    results, tx = parse_code("# Implements: *REQ-d00001\ndef f():\n    return 1\n")
+    assert "REQ-d00001" not in _all_refs((results, tx))
+    refs = [r for r in results if r.content_type == "code_ref"]
+    assert len(refs) == 1
+    verdicts = refs[0].parsed_data.get("reference_verdicts", {})
+    assert (
+        "*REQ-d00001" in verdicts
+    ), f"the stray asterisk must survive verbatim in the reported target; got {verdicts}"
 
 
 # Verifies: REQ-d00272-G

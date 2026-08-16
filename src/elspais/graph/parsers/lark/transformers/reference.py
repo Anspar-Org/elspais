@@ -65,10 +65,18 @@ def reference_target(text: str) -> str:
     if not match:
         return ""
     # A markdown-emphasis-wrapped keyword (REQ-d00272-G) closes with a
-    # trailing "**" the bare keyword pattern does not consume; strip it
-    # alongside the colon/whitespace that always separate keyword from
-    # target so the target itself starts clean either way.
-    tail = text[match.end() :].lstrip(": \t*")
+    # trailing "**" the bare keyword pattern does not consume; strip that
+    # one specific marker, immediately after the match and nowhere else.
+    # A leading "*" that survives is not this keyword's closing emphasis --
+    # it is part of what the author wrote as the target (however malformed)
+    # and must reach the reader intact, so only ": \t" strip beyond this
+    # point. The grammar only ever admits double-asterisk wrapping, never a
+    # single "*", so there is no legitimate single-marker form to account
+    # for here.
+    tail = text[match.end() :]
+    if tail.startswith("**"):
+        tail = tail[2:]
+    tail = tail.lstrip(": \t")
     for terminator in ("*/", "-->"):
         if tail.endswith(terminator):
             tail = tail[: -len(terminator)]
