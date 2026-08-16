@@ -194,3 +194,103 @@ def test_an_item_opening_with_no_declared_namespace_is_foreign(reader):
     cls, codes = reader.classify_unmatched("WIDGET-42")
     assert cls is FaultClass.UNKNOWN_NAMESPACE
     assert codes == ()
+
+
+def _project(tmp_path, repo_root, code: str):
+    from elspais.config import load_config
+    from elspais.graph.factory import build_graph
+
+    (tmp_path / ".elspais.toml").write_text((repo_root / ".elspais.toml").read_text())
+    spec = tmp_path / "spec"
+    spec.mkdir()
+    (spec / "r.md").write_text(
+        "# REQ-d00001: Thing\n\n"
+        "**Level**: dev | **Status**: Active | **Implements**: -\n\n"
+        "## Assertions\n\n"
+        "A. The system SHALL do a thing.\n\n"
+        "B. The system SHALL do another.\n\n"
+        "*End* *Thing* | **Hash**: 00000000\n"
+    )
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "m.py").write_text(code)
+    config_path = tmp_path / ".elspais.toml"
+    return build_graph(
+        load_config(config_path),
+        config_path=config_path,
+        repo_root=tmp_path,
+        scan_code=True,
+        scan_tests=False,
+    )
+
+
+# Verifies: REQ-p00014-R
+def test_an_absent_requirement_is_unknown_requirement(tmp_path, repo_root):
+    graph = _project(tmp_path, repo_root, "# Implements: REQ-d00099\ndef f():\n    return 1\n")
+    fault = next(f for f in graph.broken_references() if f.target_id == "REQ-d00099")
+    assert fault.fault_class is FaultClass.UNKNOWN_REQUIREMENT
+
+
+# Verifies: REQ-p00014-R
+def test_an_absent_label_on_a_present_requirement_is_unknown_assertion(tmp_path, repo_root):
+    graph = _project(tmp_path, repo_root, "# Implements: REQ-d00001-Z\ndef f():\n    return 1\n")
+    fault = next(f for f in graph.broken_references() if f.target_id == "REQ-d00001-Z")
+    assert fault.fault_class is FaultClass.UNKNOWN_ASSERTION
+
+
+# Verifies: REQ-d00269-G
+def test_a_multi_assertion_item_binds_the_labels_that_exist(tmp_path, repo_root):
+    """A+Z: A binds, Z is reported. Salvage applies inside the expansion too."""
+    graph = _project(tmp_path, repo_root, "# Implements: REQ-d00001-A+Z\ndef f():\n    return 1\n")
+    targets = {f.target_id for f in graph.broken_references()}
+    assert any("Z" in t for t in targets)
+    assert not any(t.endswith("-A") for t in targets)
+
+
+# Verifies: REQ-d00272-J
+def test_a_keyword_a_code_file_may_not_use_is_refused_not_passed_over(tmp_path, repo_root):
+    """Refines: is requirement-to-requirement only; a code file may not use it."""
+    graph = _project(tmp_path, repo_root, "# Refines: REQ-d00001-A\ndef f():\n    return 1\n")
+    fault = next(f for f in graph.broken_references() if f.target_id == "REQ-d00001-A")
+    assert fault.fault_class is FaultClass.FORBIDDEN
+    assert "refines" in fault.diagnostic.lower()
+    assert "code" in fault.diagnostic.lower()
+    # The refusal produced no relationship.
+    node = graph.find_by_id("REQ-d00001-A")
+    from elspais.graph.relations import EdgeKind
+
+    assert not any(node.iter_edges_by_kind(EdgeKind.REFINES))
+
+
+# Verifies: REQ-d00272-J
+def test_a_keyword_a_test_file_may_not_use_is_refused_not_passed_over(tmp_path, repo_root):
+    (tmp_path / ".elspais.toml").write_text((repo_root / ".elspais.toml").read_text())
+    spec = tmp_path / "spec"
+    spec.mkdir()
+    (spec / "r.md").write_text(
+        "# REQ-d00001: Thing\n\n"
+        "**Level**: dev | **Status**: Active | **Implements**: -\n\n"
+        "## Assertions\n\n"
+        "A. The system SHALL do a thing.\n\n"
+        "*End* *Thing* | **Hash**: 00000000\n"
+    )
+    from elspais.config import load_config
+    from elspais.graph.factory import build_graph
+
+    tests_dir = tmp_path / "tests"
+    tests_dir.mkdir()
+    (tests_dir / "test_m.py").write_text(
+        "# Implements: REQ-d00001-A\n" "def test_f():\n" "    assert True\n"
+    )
+    config_path = tmp_path / ".elspais.toml"
+    graph = build_graph(
+        load_config(config_path),
+        config_path=config_path,
+        repo_root=tmp_path,
+        scan_code=False,
+        scan_tests=True,
+    )
+    fault = next(f for f in graph.broken_references() if f.target_id == "REQ-d00001-A")
+    assert fault.fault_class is FaultClass.FORBIDDEN
+    assert "implements" in fault.diagnostic.lower()
+    assert "test" in fault.diagnostic.lower()

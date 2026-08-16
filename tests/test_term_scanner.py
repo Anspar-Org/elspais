@@ -1,6 +1,6 @@
 """Tests for extract_comments() in term_scanner.
 
-# Implements: REQ-d00236
+Covers REQ-d00236.
 
 Validates REQ-d00236-A+B+C+D+E+F+G: comment extraction from source
 code across multiple language families.

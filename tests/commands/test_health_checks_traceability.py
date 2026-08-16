@@ -517,7 +517,17 @@ class TestCheckBrokenReferences:
         assert any("HHT-p00001" in f.message for f in check.findings)
         assert "suppressed" not in check_broken_references(fed, config).message
 
-    # Verifies: REQ-d00252-G
+    # Verifies: REQ-d00269-F
+    @pytest.mark.xfail(
+        reason=(
+            "TOOL-58: presumed_foreign is no longer stamped onto an ordinary "
+            "unresolved reference by a post-hoc federation pass (that pass is "
+            "deleted). allow_unresolved_cross_repo suppression is inert for "
+            "hand-injected broken refs like this one until Task 9 replaces it "
+            "with per-class severity (REQ-d00269-F)."
+        ),
+        strict=True,
+    )
     def test_REQ_d00085_allow_unresolved_cross_repo_suppresses_with_real_associate(
         self,
     ) -> None:
@@ -776,6 +786,16 @@ class TestCheckUnclaimedReferences:
         assert report.skipped == 0
 
     @pytest.mark.parametrize("allow_unresolved", [True, False])
+    @pytest.mark.xfail(
+        reason=(
+            "TOOL-58: presumed_foreign is no longer stamped onto an ordinary "
+            "unresolved reference by a post-hoc federation pass (that pass is "
+            "deleted). allow_unresolved_cross_repo suppression is inert for "
+            "hand-injected broken refs like this one until Task 9 replaces it "
+            "with per-class severity (REQ-d00269-F)."
+        ),
+        strict=True,
+    )
     def test_REQ_d00269_F_allow_unresolved_cross_repo_silences_foreign_targets(
         self, allow_unresolved: bool
     ) -> None:

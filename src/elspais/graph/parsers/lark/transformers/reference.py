@@ -13,15 +13,18 @@ test_name_ref, or other_line.  This transformer:
 Keyword semantics per file type:
 
 - **test files**: Only ``Verifies`` is valid.  ``Implements`` and ``Refines``
-  are silently skipped (no edge, no warning) -- the reference is dropped as
-  if it were never written, leaving the TEST node unlinked. This is
-  deliberate: test fixtures legitimately contain cross-type keywords in
-  string literals that the grammar also matches, so a warning would be
-  too noisy to be useful.
-- **code files**: ``Implements`` creates IMPLEMENTS edges.  ``Verifies`` creates
-  VERIFIES edges (for code that produces pass/fail results).  ``Refines`` is
-  invalid (requirement-to-requirement only) and is silently skipped the same
-  way.
+  are read and refused: no edge is created, and the TEST node stays
+  unlinked, but the declaration is reported as a ``FaultClass.FORBIDDEN``
+  broken reference naming the keyword and the file kind (REQ-d00272-J).
+- **code files**: ``Implements`` creates IMPLEMENTS edges.  ``Verifies``
+  creates VERIFIES edges (for code that produces pass/fail results).
+  ``Refines`` and ``Integrates`` are invalid here (``Refines`` is
+  requirement-to-requirement only; ``Integrates`` is spec-file only) and are
+  read and refused the same way as an invalid keyword in a test file.
+
+A keyword a file's kind does not admit is still recognised because it is
+unmistakably a declaration: passing it over as prose would leave the author
+of an annotation that did nothing without a report saying so.
 """
 
 from __future__ import annotations
@@ -185,17 +188,37 @@ class ReferenceTransformer:
                         break
 
                 if refs:
-                    # Skip keywords invalid for this file type (silently —
-                    # test fixtures legitimately contain cross-type keywords
-                    # in string literals that the grammar also matches)
-                    # Implements: REQ-d00252
-                    # Integrates is spec-file only; it must never create a
-                    # traceability edge in code or test.
-                    if keyword == "integrates":
-                        continue
-                    if self.content_type == "code_ref" and keyword == "refines":
-                        continue
-                    if self.content_type == "test_ref" and keyword != "verifies":
+                    # Implements: REQ-d00272-J
+                    # A keyword this file's kind does not admit is read and
+                    # refused, not passed over as prose: no edge, but a
+                    # FORBIDDEN fault naming the keyword and the file kind.
+                    if self._keyword_invalid_for_content(keyword):
+                        func_name, class_name, func_line, func_end_line = (
+                            self._forbidden_line_context(start_ln)
+                        )
+                        parsed_data = {
+                            "implements": [],
+                            "verifies": [],
+                            "function_name": func_name,
+                            "class_name": class_name,
+                            "function_line": func_line,
+                            "function_end_line": func_end_line,
+                            "forbidden_keyword": keyword,
+                            "forbidden": refs,
+                        }
+                        if self.content_type == "test_ref":
+                            parsed_data["file_default_verifies"] = self.file_default_verifies
+                        if func_line:
+                            emitted_func_lines.add(func_line)
+                        results.append(
+                            ParsedContent(
+                                content_type=self.content_type,
+                                start_line=start_ln,
+                                end_line=end_ln,
+                                raw_text="\n".join(raw_lines),
+                                parsed_data=parsed_data,
+                            )
+                        )
                         continue
 
                     func_name, class_name, func_line, func_end_line = self.line_context.get(
@@ -203,7 +226,7 @@ class ReferenceTransformer:
                     )
 
                     if self.content_type == "code_ref":
-                        parsed_data: dict[str, Any] = {
+                        parsed_data = {
                             "implements": refs if keyword == "implements" else [],
                             "verifies": refs if keyword == "verifies" else [],
                             "function_name": func_name,
@@ -356,7 +379,7 @@ class ReferenceTransformer:
     # Unresolvable reference handling
     # ------------------------------------------------------------------
 
-    # Implements: REQ-d00269-D, REQ-d00269-G
+    # Implements: REQ-d00269-D, REQ-d00269-G, REQ-d00272-J
     def _handle_unresolved_ref(self, text: str, line_num: int) -> ParsedContent | None:
         """Read a reference line, resolved or not.
 
@@ -371,21 +394,41 @@ class ReferenceTransformer:
         no edge, because a reference that resolved is a reference nothing
         reports.
 
-        Returns None when the keyword is not one this kind of file may use.
-        That says only that the line is not claimed as a reference; what
-        becomes of it is the caller's to decide, and the two callers decide
-        differently -- one gathers the line into a remainder block, the
-        other lets it fall out of the parse entirely.
+        A keyword this kind of file may not use is read the same as any
+        other, and the relationship it declares is refused rather than
+        created -- but the refusal is reported, naming the keyword and the
+        file kind, rather than the line being passed over as though it were
+        prose (REQ-d00272-J).
+
+        Returns None only when the line names nothing at all: an empty
+        declaration, or content no grammar of the federation accounts for.
         """
         keyword = self._detect_keyword(text)
-        if self.content_type == "test_ref":
-            if keyword != "verifies":
+        if self._keyword_invalid_for_content(keyword):
+            items = read_reference_list(self.reader, text)
+            targets = [i.resolved or i.raw for i in items if i.raw]
+            if not targets:
                 return None
-        # Implements: REQ-d00252
-        # Integrates is spec-file only, and Refines is
-        # requirement-to-requirement only: neither may create an edge here.
-        elif keyword in ("integrates", "refines"):
-            return None
+            func_name, class_name, func_line, func_end_line = self._forbidden_line_context(line_num)
+            parsed_data: dict[str, Any] = {
+                "implements": [],
+                "verifies": [],
+                "function_name": func_name,
+                "class_name": class_name,
+                "function_line": func_line,
+                "function_end_line": func_end_line,
+                "forbidden_keyword": keyword,
+                "forbidden": targets,
+            }
+            if self.content_type == "test_ref":
+                parsed_data["file_default_verifies"] = self.file_default_verifies
+            return ParsedContent(
+                content_type=self.content_type,
+                start_line=line_num,
+                end_line=line_num,
+                raw_text=text,
+                parsed_data=parsed_data,
+            )
 
         items = read_reference_list(self.reader, text)
         if not items:
@@ -404,7 +447,7 @@ class ReferenceTransformer:
             line_num, (None, None, 0, 0)
         )
         if self.content_type == "code_ref":
-            parsed_data: dict[str, Any] = {
+            parsed_data = {
                 "implements": refs if keyword == "implements" else [],
                 "verifies": refs if keyword == "verifies" else [],
                 "function_name": func_name,
@@ -500,6 +543,36 @@ class ReferenceTransformer:
         if m:
             return m.group(0).lower()
         return "implements"
+
+    # Implements: REQ-d00272-J
+    def _keyword_invalid_for_content(self, keyword: str) -> bool:
+        """Whether *keyword* is one this file's kind may not use.
+
+        ``Integrates`` is spec-file only; ``Refines`` is
+        requirement-to-requirement only.  A test file admits only
+        ``Verifies``.
+        """
+        if keyword == "integrates":
+            return True
+        if self.content_type == "code_ref" and keyword == "refines":
+            return True
+        if self.content_type == "test_ref" and keyword != "verifies":
+            return True
+        return False
+
+    def _forbidden_line_context(self, line_num: int) -> tuple[str | None, str | None, int, int]:
+        """Function/class context for a refused keyword's fault, by file kind.
+
+        A code file keeps its ordinary context, since a refused code
+        reference still anchors to the function it annotates. A test file
+        deliberately drops it: attaching ``function_line`` here would mark
+        that line "emitted" and suppress the third-pass unlinked-test
+        fallback, silently costing the actual test function the
+        file-default ``Verifies`` it is owed regardless of this refusal.
+        """
+        if self.content_type == "code_ref":
+            return self.line_context.get(line_num, (None, None, 0, 0))
+        return (None, None, 0, 0)
 
     def _is_empty_comment(self, text: str) -> bool:
         """Check if a line is an empty comment."""

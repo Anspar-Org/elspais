@@ -34,7 +34,7 @@ from elspais.graph.GraphNode import (
 )
 from elspais.graph.mutations import MutationEntry, MutationLog
 from elspais.graph.parsers import ParsedContent
-from elspais.graph.reference_faults import ReferenceFault
+from elspais.graph.reference_faults import FaultClass, ReferenceFault
 from elspais.graph.relations import EdgeKind, Stereotype
 from elspais.graph.render import format_definition_block, render_end_marker
 from elspais.graph.terms import TermDictionary, TermEntry, compute_definition_hash
@@ -203,6 +203,22 @@ class TraceGraph:
             The matching GraphNode, or None if not found.
         """
         return self._index.get(node_id)
+
+    # Implements: REQ-p00014-R
+    def _resolution_class(self, target_id: str) -> FaultClass:
+        """Which class an item that read but did not resolve reached.
+
+        A label that names no assertion of a requirement that exists is a
+        different finding from a requirement nothing holds: the first is
+        always the author's, the second may be a sibling that has not
+        authored it yet.  Reporting the later class than the reference
+        reached would describe a defect the author does not have.
+        """
+        if self._resolver is not None:
+            split = self._resolver.split_assertion_ref(target_id)
+            if split is not None and self.find_by_id(split[0]) is not None:
+                return FaultClass.UNKNOWN_ASSERTION
+        return FaultClass.UNKNOWN_REQUIREMENT
 
     def make_assertion_id(self, req_id: str, label: str) -> str:
         """Compose an assertion node ID using the configured separator.
@@ -884,6 +900,7 @@ class TraceGraph:
                     source_id=source_id,
                     target_id=old_target_id,
                     edge_kind=edge_kind_str,
+                    fault_class=self._resolution_class(old_target_id),
                 )
             )
             self._add_leftover_ref(source, EdgeKind(edge_kind_str), old_target_id)
@@ -2168,6 +2185,7 @@ class TraceGraph:
                     source_id=source_id,
                     target_id=target_id,
                     edge_kind=edge_kind.value,
+                    fault_class=self._resolution_class(target_id),
                 )
             )
             entry.after_state["broken"] = True
@@ -2689,6 +2707,7 @@ class TraceGraph:
                     source_id=source_id,
                     target_id=new_target_id,
                     edge_kind=broken_ref.edge_kind,
+                    fault_class=self._resolution_class(new_target_id),
                 )
             )
             self._add_leftover_ref(source, edge_kind, new_target_id)
@@ -3565,7 +3584,13 @@ class GraphBuilder:
         else:
             self.satellite_kinds = _DEFAULT_SATELLITE_KINDS
         self._nodes: dict[str, GraphNode] = {}
-        self._pending_links: list[tuple[str, str, EdgeKind]] = []
+        # The fourth element is the verdict dict Task 3's reader attached to
+        # the raw item that named this target (empty when the surface that
+        # queued the link carries none), consulted only if the target turns
+        # out missing when links are resolved.
+        self._pending_links: list[
+            tuple[str, str, EdgeKind, dict[str, tuple[FaultClass, tuple[str, ...]]]]
+        ] = []
         # Implements: REQ-d00254-G
         # Source RESULT->TEST links for test_id-less reporters (e.g. flutter-
         # machine), matched by real source-file path + test() source line rather
@@ -3972,10 +3997,10 @@ class GraphBuilder:
 
         # Queue implements/refines links for later resolution
         for impl_ref in data.get("implements", []):
-            self._pending_links.append((req_id, impl_ref, EdgeKind.IMPLEMENTS))
+            self._pending_links.append((req_id, impl_ref, EdgeKind.IMPLEMENTS, {}))
 
         for refine_ref in data.get("refines", []):
-            self._pending_links.append((req_id, refine_ref, EdgeKind.REFINES))
+            self._pending_links.append((req_id, refine_ref, EdgeKind.REFINES, {}))
 
         # Implements: REQ-p00014-B
         for sat_ref in data.get("satisfies", []):
@@ -4043,7 +4068,7 @@ class GraphBuilder:
 
         # Queue validates links for later resolution
         for addr_ref in data.get("validates", []):
-            self._pending_links.append((journey_id, addr_ref, EdgeKind.VALIDATES))
+            self._pending_links.append((journey_id, addr_ref, EdgeKind.VALIDATES, {}))
 
         # Implements: REQ-p00014-V, REQ-p00014-R
         # A declaration outside the metadata produced no relationship. Saying
@@ -4057,6 +4082,7 @@ class GraphBuilder:
                     source_id=journey_id,
                     target_id=declared,
                     edge_kind="validates",
+                    fault_class=FaultClass.FORBIDDEN,
                     diagnostic=(
                         f"declared in {where} rather than in the journey's "
                         f"metadata, so it validates nothing. Move the "
@@ -4091,7 +4117,10 @@ class GraphBuilder:
         all_refs = [(ref, EdgeKind.IMPLEMENTS) for ref in data.get("implements", [])] + [
             (ref, EdgeKind.VERIFIES) for ref in data.get("verifies", [])
         ]
-        for ref, edge_kind in all_refs:
+        forbidden = data.get("forbidden") or []
+        verdicts = data.get("reference_verdicts") or {}
+
+        def _ensure_code_node() -> str:
             code_id = make_code_id(source_id, content.start_line)
             if code_id not in self._nodes:
                 node = GraphNode(
@@ -4116,8 +4145,33 @@ class GraphBuilder:
                 if func_end_line:
                     node.set_field("function_end_line", func_end_line)
                 self._nodes[code_id] = node
+            return code_id
 
-            self._pending_links.append((code_id, ref, edge_kind))
+        for ref, edge_kind in all_refs:
+            code_id = _ensure_code_node()
+            self._pending_links.append((code_id, ref, edge_kind, verdicts))
+
+        # Implements: REQ-d00272-J
+        # A keyword a code file may not use is read, not passed over: the
+        # relationship it would have declared is refused and reported,
+        # anchored to the same CODE node an admitted keyword would use.
+        if forbidden:
+            code_id = _ensure_code_node()
+            keyword = data.get("forbidden_keyword", "")
+            for raw_target in forbidden:
+                for expanded in self._expand_multi_assertion(raw_target):
+                    self._broken_references.append(
+                        ReferenceFault(
+                            source_id=code_id,
+                            target_id=expanded,
+                            edge_kind=keyword,
+                            fault_class=FaultClass.FORBIDDEN,
+                            diagnostic=(
+                                f"'{keyword.capitalize()}:' is not a valid keyword in "
+                                f"a code file; the declaration is refused."
+                            ),
+                        )
+                    )
 
     def _add_test_ref(self, content: ParsedContent) -> None:
         """Add test reference nodes.
@@ -4166,8 +4220,34 @@ class GraphBuilder:
             node.set_field("raw_text", content.raw_text)
             self._nodes[test_id] = node
 
+        verdicts = data.get("reference_verdicts") or {}
         for val_ref in data.get("verifies", []):
-            self._pending_links.append((test_id, val_ref, EdgeKind.VERIFIES))
+            self._pending_links.append((test_id, val_ref, EdgeKind.VERIFIES, verdicts))
+
+        # Implements: REQ-d00272-J
+        # A keyword a test file may not use (anything but Verifies) is read,
+        # not passed over: the relationship it would have declared is
+        # refused and reported.  No function context is attached here even
+        # when one is available -- doing so would mark the function's line
+        # "emitted" and suppress the third-pass unlinked-test fallback that
+        # gives the actual test function its file-default Verifies.
+        forbidden = data.get("forbidden") or []
+        if forbidden:
+            keyword = data.get("forbidden_keyword", "")
+            for raw_target in forbidden:
+                for expanded in self._expand_multi_assertion(raw_target):
+                    self._broken_references.append(
+                        ReferenceFault(
+                            source_id=test_id,
+                            target_id=expanded,
+                            edge_kind=keyword,
+                            fault_class=FaultClass.FORBIDDEN,
+                            diagnostic=(
+                                f"'{keyword.capitalize()}:' is not a valid keyword in "
+                                f"a test file; the declaration is refused."
+                            ),
+                        )
+                    )
 
     def _add_test_result(self, content: ParsedContent) -> None:
         """Add a test result node.
@@ -4232,7 +4312,7 @@ class GraphBuilder:
         # enabled).
         if test_id and self._link_results_to_tests and data.get("match") != "aggregate":
             # Implements: REQ-d00127-E
-            self._pending_links.append((result_id, test_id, EdgeKind.YIELDS))
+            self._pending_links.append((result_id, test_id, EdgeKind.YIELDS, {}))
         elif data.get("match") == "source" and self._link_results_to_tests:
             # Implements: REQ-d00254-G
             # Source-matching reporters (e.g. flutter-machine) emit no test_id;
@@ -4347,6 +4427,38 @@ class GraphBuilder:
             return [target_id]
         return [self._resolver.render_canonical(e) for e in self._resolver.expand(parsed)]
 
+    # Implements: REQ-p00014-R
+    def _resolution_class(self, target_id: str) -> FaultClass:
+        """Which class an item that read but did not resolve reached.
+
+        A label that names no assertion of a requirement that exists is a
+        different finding from a requirement nothing holds: the first is
+        always the author's, the second may be a sibling that has not
+        authored it yet.  Reporting the later class than the reference
+        reached would describe a defect the author does not have.
+        """
+        split = self._resolver.split_assertion_ref(target_id)
+        if split is not None and split[0] in self._nodes:
+            return FaultClass.UNKNOWN_ASSERTION
+        return FaultClass.UNKNOWN_REQUIREMENT
+
+    def _fault_verdict(
+        self, target_id: str, verdicts: dict[str, tuple[FaultClass, tuple[str, ...]]]
+    ) -> tuple[FaultClass, tuple[str, ...]]:
+        """The class and codes for *target_id*, from its parsed verdict or resolution.
+
+        A verdict Task 3's reader carried (grammar-level: the item never
+        matched any member's identifier) always wins when present; an item
+        that matched but names a node this graph does not hold falls back to
+        ``_resolution_class``, since no grammar-level verdict exists for it
+        (REQ-d00269-G reads a multi-assertion item's expanded labels
+        individually, and only the whole item's raw text is ever a verdict
+        key).
+        """
+        if target_id in verdicts:
+            return verdicts[target_id]
+        return self._resolution_class(target_id), ()
+
     # Implements: REQ-p00014-B, REQ-p00014-C, REQ-d00069-H
     def _instantiate_satisfies_templates(self) -> None:
         """Clone template subtrees for each Satisfies declaration.
@@ -4388,6 +4500,7 @@ class GraphBuilder:
                             source_id=declaring_id,
                             target_id=template_id,
                             edge_kind=EdgeKind.SATISFIES.value,
+                            fault_class=self._resolution_class(template_id),
                         )
                     )
                 template_roots[template_id] = []
@@ -4404,6 +4517,7 @@ class GraphBuilder:
                             source_id=declaring_id,
                             target_id=template_id,
                             edge_kind=EdgeKind.SATISFIES.value,
+                            fault_class=FaultClass.FORBIDDEN,
                             diagnostic=(
                                 f"{template_id} is not marked **Template**; "
                                 f"mark {template_id} with **Template** if it's "
@@ -4428,6 +4542,7 @@ class GraphBuilder:
                             source_id=declaring_id,
                             target_id=template_id,
                             edge_kind=EdgeKind.SATISFIES.value,
+                            fault_class=self._resolution_class(template_id),
                         )
                     )
                 continue
@@ -4440,6 +4555,7 @@ class GraphBuilder:
                         source_id=declaring_id,
                         target_id=template_id,
                         edge_kind=EdgeKind.SATISFIES.value,
+                        fault_class=FaultClass.FORBIDDEN,
                         diagnostic=(
                             "Chained instantiation is not supported. "
                             "Satisfy the original template directly."
@@ -4457,6 +4573,7 @@ class GraphBuilder:
                         source_id=declaring_id,
                         target_id=template_id,
                         edge_kind=EdgeKind.SATISFIES.value,
+                        fault_class=FaultClass.FORBIDDEN,
                         diagnostic=(
                             f"{template_id} is not marked **Template**; "
                             f"mark {template_id} with **Template** if it's "
@@ -4590,6 +4707,7 @@ class GraphBuilder:
                     source_id=template_id,
                     target_id=expanded,
                     edge_kind=edge_kind.value,
+                    fault_class=FaultClass.FORBIDDEN,
                     diagnostic=(
                         f"Templates are pure specs; remove "
                         f"behavioural-claim metadata or remove the "
@@ -4642,17 +4760,24 @@ class GraphBuilder:
         # Phase 2: Instantiate templates before resolving links
         self._instantiate_satisfies_templates()
 
-        # Expand multi-assertion references before resolving
-        expanded_links: list[tuple[str, str, EdgeKind]] = []
-        for source_id, target_id, edge_kind in self._pending_links:
+        # Expand multi-assertion references before resolving. Salvage
+        # reaches inside a multi-assertion item the same as anywhere else
+        # (REQ-d00269-G): each label is resolved on its own, so A+Z binds A
+        # and reports only Z. The whole item's verdict (present only when
+        # nothing about it matched at all) travels with every label it
+        # expands to, since a per-label verdict was never computed for it.
+        expanded_links: list[
+            tuple[str, str, EdgeKind, dict[str, tuple[FaultClass, tuple[str, ...]]]]
+        ] = []
+        for source_id, target_id, edge_kind, verdicts in self._pending_links:
             for resolved_target in self._expand_multi_assertion(target_id):
-                expanded_links.append((source_id, resolved_target, edge_kind))
+                expanded_links.append((source_id, resolved_target, edge_kind, verdicts))
 
         # Resolve pending links. Track which (source, target, kind) refs
         # actually became edges so the stored ref fields can be re-scoped to
         # unresolved leftovers afterwards (REQ-d00132-F, REQ-d00132-G).
         resolved_refs: set[tuple[str, str, str]] = set()
-        for source_id, target_id, edge_kind in expanded_links:
+        for source_id, target_id, edge_kind, verdicts in expanded_links:
             source = self._nodes.get(source_id)
             target = self._nodes.get(target_id)
 
@@ -4674,6 +4799,7 @@ class GraphBuilder:
                             source_id=source_id,
                             target_id=target_id,
                             edge_kind=edge_kind.value,
+                            fault_class=FaultClass.FORBIDDEN,
                             diagnostic=(
                                 f"{target_id} is a Template: target it with "
                                 f"Satisfies:, not Refines:. To add detail, "
@@ -4690,6 +4816,7 @@ class GraphBuilder:
                             source_id=source_id,
                             target_id=target_id,
                             edge_kind=edge_kind.value,
+                            fault_class=FaultClass.FORBIDDEN,
                             diagnostic=(
                                 "Refining instance content is not supported. "
                                 "Instance subtrees are read-only synthetic "
@@ -4707,6 +4834,7 @@ class GraphBuilder:
                             source_id=source_id,
                             target_id=target_id,
                             edge_kind=edge_kind.value,
+                            fault_class=FaultClass.FORBIDDEN,
                             diagnostic=(
                                 "Instance assertions have no canonical "
                                 "on-disk identifier; target the template "
@@ -4723,6 +4851,7 @@ class GraphBuilder:
                             source_id=source_id,
                             target_id=target_id,
                             edge_kind=edge_kind.value,
+                            fault_class=FaultClass.FORBIDDEN,
                             diagnostic=(
                                 "Instance assertions have no canonical "
                                 "on-disk identifier; target the template "
@@ -4743,6 +4872,7 @@ class GraphBuilder:
                             source_id=source_id,
                             target_id=target_id,
                             edge_kind=edge_kind.value,
+                            fault_class=FaultClass.FORBIDDEN,
                             diagnostic=(
                                 "Journeys and steps are only valid as "
                                 "`Verifies:` targets, not Implements/Refines."
@@ -4789,12 +4919,19 @@ class GraphBuilder:
                     if impl_end:
                         edge.metadata["impl_end_line"] = impl_end
             elif source and not target:
-                # Broken reference: target doesn't exist
+                # Broken reference: target doesn't exist. Consult the
+                # verdict Task 3's reader carried for this item first; only
+                # an item no grammar accounted for has one, so a target that
+                # matched but names no node here falls back to the
+                # resolution-stage decision (REQ-p00014-R).
+                fault_class, codes = self._fault_verdict(target_id, verdicts)
                 self._broken_references.append(
                     ReferenceFault(
                         source_id=source_id,
                         target_id=target_id,
                         edge_kind=edge_kind.value,
+                        fault_class=fault_class,
+                        codes=codes,
                     )
                 )
 

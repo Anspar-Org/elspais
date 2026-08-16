@@ -199,23 +199,37 @@ def test_REQ_d00252_B_integrates_in_test_file_creates_no_edge(tmp_path):
     ), "Integrates: in a test file must not create an inbound traceability edge"
 
 
+# Verifies: REQ-d00272-J
 def test_REQ_d00252_B_integrates_ref_skipped_in_code_transformer():
     """An Integrates: comment must not be reclassified as an IMPLEMENTS ref.
 
     Drives the transformer directly because the reference grammar does not
-    list ``Integrates`` as a keyword today; this guard ensures that if such
-    a ref ever reaches the transformer it is dropped rather than falling
-    back to ``implements``.
+    list ``Integrates`` as a keyword today. Integrates is spec-file only, so
+    a code file's comment is read and refused rather than reclassified: no
+    IMPLEMENTS ref, but a forbidden target the builder stamps FORBIDDEN
+    (REQ-d00272-J), not silently dropped as though it were prose.
     """
     tx = ReferenceTransformer(_resolver(), "code_ref")
-    assert tx._handle_single_ref(_single_ref("# Integrates: REQ-d00001")) is None
+    pc = tx._handle_single_ref(_single_ref("# Integrates: REQ-d00001"))
+    assert pc is not None
+    assert pc.parsed_data["implements"] == []
+    assert pc.parsed_data["verifies"] == []
+    assert pc.parsed_data["forbidden_keyword"] == "integrates"
+    assert pc.parsed_data["forbidden"] == ["REQ-d00001"]
     # A genuine Implements ref must still be honored (no over-skipping).
     pc = tx._handle_single_ref(_single_ref("# Implements: REQ-d00001"))
     assert pc is not None
     assert pc.parsed_data["implements"] == ["REQ-d00001"]
 
 
+# Verifies: REQ-d00272-J
 def test_REQ_d00252_B_integrates_ref_skipped_in_test_transformer():
-    """An Integrates: comment in a test file yields no parsed ref."""
+    """An Integrates: comment in a test file is read and refused, not passed
+    over: no VERIFIES ref, but a forbidden target the builder stamps
+    FORBIDDEN (REQ-d00272-J)."""
     tx = ReferenceTransformer(_resolver(), "test_ref")
-    assert tx._handle_single_ref(_single_ref("# Integrates: REQ-d00001")) is None
+    pc = tx._handle_single_ref(_single_ref("# Integrates: REQ-d00001"))
+    assert pc is not None
+    assert pc.parsed_data["verifies"] == []
+    assert pc.parsed_data["forbidden_keyword"] == "integrates"
+    assert pc.parsed_data["forbidden"] == ["REQ-d00001"]

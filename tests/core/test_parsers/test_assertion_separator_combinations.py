@@ -37,6 +37,7 @@ from pathlib import Path
 import pytest
 
 from elspais.graph.GraphNode import NodeKind
+from elspais.graph.reference_faults import FaultClass
 from elspais.graph.relations import EdgeKind
 
 _SPEC = """\
@@ -227,13 +228,18 @@ def test_journey_validates_across_separator_combinations(
     assert rollup.uat_coverage.direct_labels == set(expected_labels)
 
 
-# Verifies: REQ-d00082-E, REQ-d00252-G
+# Verifies: REQ-d00082-E, REQ-p00014-R
 def test_journey_dash_style_ref_under_slash_config_is_hard_broken(tmp_path):
     """A journey `Validates:` ref that still uses "-" when the project is
     configured with a "/" separator must remain a hard broken reference
-    naming the journey as source, NOT be presumed foreign (no associates are
-    configured -- REQ-d00252-G guard 1), and carry the separator-config
-    diagnostic (REQ-d00252-G guard 2)."""
+    naming the journey as source, and not presumed foreign -- no associates
+    are configured, and there is nothing else in the federation the target
+    could belong to. Classification at resolution time falls back to
+    UNKNOWN_REQUIREMENT: the item never parsed under this repository's own
+    grammar, so no base requirement could be confirmed present (REQ-p00014-R).
+    Naming the specific separator-config mismatch as the likely cause is a
+    structured-code diagnosis not yet wired to journeys' Validates: (Task 6
+    threads it for code/test annotations only)."""
     from elspais.graph.factory import build_graph
 
     sep, multi = "/", "+"
@@ -259,12 +265,10 @@ def test_journey_dash_style_ref_under_slash_config_is_hard_broken(tmp_path):
     assert br.target_id == dash_style_ref
     assert br.edge_kind == "validates"
     assert br.presumed_foreign is False, (
-        "No associates are configured, so the generic presumed-foreign guard "
-        "(REQ-d00252-G guard 1) must leave this a hard broken reference."
+        "No associates are configured, so there is no other repository this "
+        "reference could belong to."
     )
-    assert (
-        "[id-patterns.assertions] separator/multi_separator" in br.diagnostic
-    ), f"Expected a separator-config diagnostic (REQ-d00252-G guard 2), got {br.diagnostic!r}"
+    assert br.fault_class is FaultClass.UNKNOWN_REQUIREMENT
 
 
 # --------------------------------------------------------------------------- #
@@ -432,9 +436,13 @@ def test_code_comment_off_config_residue_is_a_broken_reference(tmp_path):
         f"truncated requirement prefix; got {br.target_id!r}"
     )
     assert br.edge_kind == "implements"
-    assert "[id-patterns.assertions] separator/multi_separator" in br.diagnostic, (
+    # The item's leading token is this repository's own declared namespace,
+    # so the reader's grammar-level verdict (REQ-d00272-C) is MALFORMED, not
+    # UNKNOWN_REQUIREMENT -- the item never matched any member's identifier
+    # at all, rather than matching and then naming an absent node.
+    assert br.fault_class is FaultClass.MALFORMED, (
         "A reference that fails to produce a valid relationship must name the "
-        f"failure class (REQ-p00014-R); got {br.diagnostic!r}"
+        f"failure class (REQ-p00014-R); got {br.fault_class}"
     )
 
 

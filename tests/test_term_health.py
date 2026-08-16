@@ -1,6 +1,6 @@
 """Tests for term-related health checks.
 
-# Implements: REQ-d00223, REQ-d00240, REQ-d00241
+Covers REQ-d00223, REQ-d00240, REQ-d00241.
 
 Validates REQ-d00223-A+B+C+D: term health check functions report
 duplicates, undefined terms, unmarked usage, and respect severity "off".

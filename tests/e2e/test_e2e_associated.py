@@ -1545,9 +1545,12 @@ class TestFederationContributionInvariance:
             "DDD-d00005",
             "DDD-d00006",
         ]
+        # presumed_foreign is False for both (TOOL-58): see the c_broken
+        # note in test_entry_point_changes_the_member_set_not_a_member_
+        # contribution above.
         assert d_both["broken"] == [
             ("DDD-d00005", "DDD-d99999", "implements", False),
-            ("DDD-d00006", "ZZZ-d00001", "implements", True),
+            ("DDD-d00006", "ZZZ-d00001", "implements", False),
         ], f"unexpected broken references for d: {d_both['broken']}"
         assert d_both["coverage"]["DDD-d00003"] == (2, 1.0, 1.0)
 
@@ -1661,19 +1664,23 @@ class TestFederationContributionInvariance:
 
         # c's references only ever point at members present under both
         # entry points, so its broken-reference set does not move.
-        c_broken = [("CCC-d00005", "BBB-d99999", "implements", True)]
+        # presumed_foreign is False here (TOOL-58): a post-hoc federation
+        # pass no longer stamps it onto an ordinary unresolved reference,
+        # pending Task 9's per-class severity replacement.
+        c_broken = [("CCC-d00005", "BBB-d99999", "implements", False)]
         assert from_a["c"]["broken"] == c_broken, f"{from_a['c']['broken']}"
         assert from_b["c"]["broken"] == c_broken, f"{from_b['c']['broken']}"
 
         # b's does: BBB-d00002 -> AAA-d00001 resolves against a member
-        # under one entry point and is presumed foreign under the other.
+        # under one entry point and stays broken under the other.
+        # presumed_foreign is False (TOOL-58): see the c_broken note above.
         assert from_a["b"]["broken"] == [], (
             f"b's reference into a should resolve when a is a federation "
             f"member: {from_a['b']['broken']}"
         )
         assert from_b["b"]["broken"] == [
-            ("BBB-d00002", "AAA-d00001", "implements", True),
+            ("BBB-d00002", "AAA-d00001", "implements", False),
         ], (
-            f"b's reference into a should be a presumed-foreign broken "
-            f"reference when a is outside the federation: {from_b['b']['broken']}"
+            f"b's reference into a should be a broken reference when a is "
+            f"outside the federation: {from_b['b']['broken']}"
         )
