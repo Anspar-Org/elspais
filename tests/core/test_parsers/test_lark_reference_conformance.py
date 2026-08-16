@@ -11,7 +11,7 @@ from __future__ import annotations
 import pytest
 
 from elspais.config.schema import ElspaisConfig
-from elspais.graph.parsers.lark import GrammarFactory
+from elspais.graph.parsers.lark import FileDispatcher, GrammarFactory
 from elspais.graph.parsers.lark.transformers.reference import ReferenceTransformer
 from elspais.utilities.patterns import IdPatternConfig, IdResolver
 
@@ -191,3 +191,49 @@ class TestTestRefParsing:
         assert len(refs) == 1
         assert "REQ-p00001" in refs[0].parsed_data["verifies"]
         assert "REQ-p00002" in refs[0].parsed_data["verifies"]
+
+    # Verifies: REQ-d00269-G
+    def test_a_partly_unmatched_file_default_binds_nothing(self, resolver):
+        """A second all-or-nothing site, distinct from
+        ``_handle_unresolved_ref``: ``FileDispatcher.dispatch_test`` reads a
+        file-level ``Verifies:`` comment into ``file_default_verifies``
+        through its own loop, with its own
+        ``any(i.fault_class is not None for i in items)`` check, before any
+        ``ReferenceTransformer`` runs. One unmatched item in that list must
+        leave every unlinked test function with no inherited default.
+
+        Driven through the real ``FileDispatcher.dispatch_test`` pipeline
+        (prescan, tree parse, the file-level extraction loop, then the
+        transformer's third pass for unlinked test functions) rather than a
+        reimplementation of the loop, so this fails if the loop's fault
+        check is ever removed or weakened.
+
+        The file-level comment sits far enough above ``test_something`` that
+        the AST pre-scan's forward-looking comment/function binding does not
+        attach it as the function's own annotation -- keeping this test on
+        the file-default path (the third pass) rather than the
+        already-covered per-function path in ``_handle_unresolved_ref``.
+        """
+        content = (
+            "# Verifies: REQ-p00001, GARBAGE-999\n"
+            "import time\n\n\n\n\n\n\n"
+            "def test_something():\n"
+            "    assert True\n"
+        )
+        dispatcher = FileDispatcher(resolver)
+        items = dispatcher.dispatch_test(content, file_path="tests/test_demo.py")
+
+        unlinked = [
+            r
+            for r in items
+            if r.content_type == "test_ref"
+            and r.parsed_data.get("function_name") == "test_something"
+        ]
+        assert len(unlinked) == 1, f"expected one entry for test_something; got {items}"
+        assert unlinked[0].parsed_data["file_default_verifies"] == [], (
+            "one unmatched item in the file-level Verifies: list must leave "
+            "no file-level default -- otherwise the good reference in the "
+            "same list would bind to every unlinked test in the file; got "
+            f"{unlinked[0].parsed_data}"
+        )
+        assert unlinked[0].parsed_data["verifies"] == []
