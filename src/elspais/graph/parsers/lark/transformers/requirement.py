@@ -985,7 +985,7 @@ class RequirementTransformer:
         if refs_str.strip() in _NO_REF_VALUES:
             return []
         items = self.reader.parse_ref_list(refs_str)
-        refs = [i.resolved if i.resolved else self.reader.normalize(i.raw) for i in items if i.raw]
+        refs = [i.resolved if i.resolved else i.raw for i in items if i.raw]
         return [ref for ref in refs if ref not in _NO_REF_VALUES]
 
     # ------------------------------------------------------------------

@@ -130,20 +130,26 @@ def foo(): pass
         assert len(refs) == 0
 
     # Verifies: REQ-d00269-G
-    def test_a_partly_unmatched_scanned_line_binds_nothing(self, resolver, code_parser):
-        """A scanned annotation is found in the wild rather than authored as
-        data, so one item the grammar cannot account for discards the whole
-        line -- the reference that did resolve does not get to keep its
-        edge on its own. This is the all-or-nothing reject policy, which
-        lives at this caller layer (``_handle_unresolved_ref``), not inside
-        the divider."""
+    def test_a_partly_unmatched_scanned_line_binds_the_good_item(self, resolver, code_parser):
+        """A defect in one item is evidence about that item, not the list:
+        the item the grammar cannot account for is reported (carried
+        through in ``implements`` and named in ``reference_verdicts``)
+        while the item that did resolve still binds -- salvage, not
+        all-or-nothing rejection."""
         content = "# Implements: REQ-p00001, GARBAGE-999\ndef foo(): pass\n"
         results = _parse_code(content, resolver, code_parser)
         refs = [r for r in results if r.content_type == "code_ref"]
         assert len(refs) == 1
-        assert refs[0].parsed_data["implements"] != ["REQ-p00001"], (
-            "one unmatched item must discard the whole line rather than "
-            f"keeping the item that did resolve; got {refs[0].parsed_data['implements']}"
+        assert "REQ-p00001" in refs[0].parsed_data["implements"], (
+            "the item that resolved must still bind; got " f"{refs[0].parsed_data['implements']}"
+        )
+        assert "GARBAGE-999" in refs[0].parsed_data["implements"], (
+            "the faulted item stays in the list so the builder can report "
+            f"it as a broken reference; got {refs[0].parsed_data['implements']}"
+        )
+        assert "GARBAGE-999" in refs[0].parsed_data["reference_verdicts"], (
+            "the faulted item's verdict must reach the builder; got "
+            f"{refs[0].parsed_data['reference_verdicts']}"
         )
 
 
@@ -193,20 +199,19 @@ class TestTestRefParsing:
         assert "REQ-p00002" in refs[0].parsed_data["verifies"]
 
     # Verifies: REQ-d00269-G
-    def test_a_partly_unmatched_file_default_binds_nothing(self, resolver):
-        """A second all-or-nothing site, distinct from
-        ``_handle_unresolved_ref``: ``FileDispatcher.dispatch_test`` reads a
-        file-level ``Verifies:`` comment into ``file_default_verifies``
-        through its own loop, with its own
-        ``any(i.fault_class is not None for i in items)`` check, before any
-        ``ReferenceTransformer`` runs. One unmatched item in that list must
-        leave every unlinked test function with no inherited default.
+    def test_a_partly_unmatched_file_default_binds_the_good_item(self, resolver):
+        """A second salvage site, distinct from ``_handle_unresolved_ref``:
+        ``FileDispatcher.dispatch_test`` reads a file-level ``Verifies:``
+        comment into ``file_default_verifies`` through its own loop. One
+        unmatched item in that list must not cost the item that did
+        resolve -- every unlinked test function still inherits the good
+        reference as its default.
 
         Driven through the real ``FileDispatcher.dispatch_test`` pipeline
         (prescan, tree parse, the file-level extraction loop, then the
         transformer's third pass for unlinked test functions) rather than a
-        reimplementation of the loop, so this fails if the loop's fault
-        check is ever removed or weakened.
+        reimplementation of the loop, so this fails if the loop's salvage
+        behaviour is ever weakened back to all-or-nothing.
 
         The file-level comment sits far enough above ``test_something`` that
         the AST pre-scan's forward-looking comment/function binding does not
@@ -230,10 +235,8 @@ class TestTestRefParsing:
             and r.parsed_data.get("function_name") == "test_something"
         ]
         assert len(unlinked) == 1, f"expected one entry for test_something; got {items}"
-        assert unlinked[0].parsed_data["file_default_verifies"] == [], (
-            "one unmatched item in the file-level Verifies: list must leave "
-            "no file-level default -- otherwise the good reference in the "
-            "same list would bind to every unlinked test in the file; got "
-            f"{unlinked[0].parsed_data}"
+        assert unlinked[0].parsed_data["file_default_verifies"] == ["REQ-p00001"], (
+            "the item that resolved must still populate the file-level "
+            f"default; got {unlinked[0].parsed_data}"
         )
-        assert unlinked[0].parsed_data["verifies"] == []
+        assert unlinked[0].parsed_data["verifies"] == ["REQ-p00001"]

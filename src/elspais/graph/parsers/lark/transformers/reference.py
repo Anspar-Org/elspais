@@ -390,13 +390,15 @@ class ReferenceTransformer:
         items = read_reference_list(self.reader, text)
         if not items:
             return None
-        if any(i.fault_class is not None for i in items):
-            raw = self._raw_target(text)
-            if not raw:
-                return None
-            refs = [raw]
-        else:
-            refs = [i.resolved for i in items if i.resolved]
+        # A faulted item stays in the ref list: the builder records a fault
+        # for a ref that does not resolve, so dropping it here would make
+        # every malformed item vanish -- the defect this work exists to
+        # remove.  Its verdict rides alongside so the builder can stamp the
+        # class rather than re-deriving it.
+        refs = [i.resolved or i.raw for i in items if i.raw]
+        verdicts = {i.raw: (i.fault_class, i.codes) for i in items if i.fault_class is not None}
+        if not refs:
+            return None
 
         func_name, class_name, func_line, func_end_line = self.line_context.get(
             line_num, (None, None, 0, 0)
@@ -409,6 +411,7 @@ class ReferenceTransformer:
                 "class_name": class_name,
                 "function_line": func_line,
                 "function_end_line": func_end_line,
+                "reference_verdicts": verdicts,
             }
         else:
             parsed_data = {
@@ -417,6 +420,7 @@ class ReferenceTransformer:
                 "class_name": class_name,
                 "function_line": func_line,
                 "file_default_verifies": self.file_default_verifies,
+                "reference_verdicts": verdicts,
             }
 
         return ParsedContent(
@@ -426,11 +430,6 @@ class ReferenceTransformer:
             raw_text=text,
             parsed_data=parsed_data,
         )
-
-    @staticmethod
-    def _raw_target(text: str) -> str:
-        """The text a reference line names as its target, verbatim."""
-        return reference_target(text)
 
     # ------------------------------------------------------------------
     # Test name reference handling

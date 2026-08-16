@@ -150,9 +150,7 @@ class JourneyParser:
         validates_match = self.VALIDATES_PATTERN.search(text)
         if validates_match:
             items = self.reader.parse_ref_list(validates_match.group("validates"))
-            refs = [
-                i.resolved if i.resolved else self.reader.normalize(i.raw) for i in items if i.raw
-            ]
+            refs = [i.resolved if i.resolved else i.raw for i in items if i.raw]
             data["validates"] = refs
 
         return data

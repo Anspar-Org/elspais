@@ -360,13 +360,13 @@ class FileDispatcher:
                         # keywords in string literals
                         continue
                     # A file-level default is an annotation like any other:
-                    # it names a list of references or it names none
-                    # (REQ-d00269-G).
+                    # each item is judged on its own, so one item the
+                    # grammar cannot account for does not cost the items
+                    # that did resolve (REQ-d00269-G).
                     items = read_reference_list(self._reader, text)
-                    if items and not any(i.fault_class is not None for i in items):
-                        for ref in (i.resolved for i in items if i.resolved):
-                            if ref not in file_default_verifies:
-                                file_default_verifies.append(ref)
+                    for ref in (i.resolved for i in items if i.resolved):
+                        if ref not in file_default_verifies:
+                            file_default_verifies.append(ref)
 
         transformer = ReferenceTransformer(
             self._resolver,

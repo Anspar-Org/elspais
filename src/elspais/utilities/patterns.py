@@ -1062,7 +1062,6 @@ class FederatedIdReader:
                 resolvers.append(other)
         self._resolvers: tuple[IdResolver, ...] = tuple(resolvers)
         self._ref_regex: re.Pattern[str] | None = None
-        self._item_regex: re.Pattern[str] | None = None
         self._extra_item_regexes: dict[tuple[str, ...], tuple[re.Pattern[str], ...]] = {}
 
     @property
@@ -1104,6 +1103,23 @@ class FederatedIdReader:
             )
         return self._ref_regex
 
+    def _classify(self, raw_ref: str) -> tuple[str, bool]:
+        """Normalize *raw_ref* under the grammar of the member that claims it,
+        and say whether some member actually confirmed it as its own.
+
+        A member's grammar is more than its canonical spelling -- an alias
+        reads whole too, and a mis-cased label is still recognised (case is
+        repaired for a label, never for a component, since a component's
+        case is its identity). ``normalize_ref`` already applies both; this
+        additionally reports whether the result was a member's own
+        identifier rather than merely handed back cleaned up and unclaimed.
+        """
+        for resolver in self._resolvers:
+            candidate = resolver.normalize_ref(raw_ref)
+            if resolver.is_local_id(candidate):
+                return candidate, True
+        return self.own.normalize_ref(raw_ref), False
+
     def normalize(self, raw_ref: str) -> str:
         """Normalize *raw_ref* under the grammar of the member that claims it.
 
@@ -1111,11 +1127,7 @@ class FederatedIdReader:
         claims the reference, which keeps an unresolvable reference visible
         rather than discarding it.
         """
-        for resolver in self._resolvers:
-            candidate = resolver.normalize_ref(raw_ref)
-            if resolver.is_local_id(candidate):
-                return candidate
-        return self.own.normalize_ref(raw_ref)
+        return self._classify(raw_ref)[0]
 
     def extract_refs(self, text: str) -> list[str]:
         """Every member's identifiers named in *text*, in the order written."""
@@ -1125,17 +1137,6 @@ class FederatedIdReader:
             if ref not in refs:
                 refs.append(ref)
         return refs
-
-    def _item_pattern(self) -> re.Pattern[str]:
-        """One member reference, matched whole rather than searched for."""
-        if self._item_regex is None:
-            self._item_regex = re.compile(
-                "(?:"
-                + "|".join(r.multi_assertion_reference_regex().pattern for r in self._resolvers)
-                + ")",
-                re.IGNORECASE,
-            )
-        return self._item_regex
 
     def _extra_patterns(self, extra_items: Sequence[str]) -> tuple[re.Pattern[str], ...]:
         key = tuple(extra_items)
@@ -1151,7 +1152,6 @@ class FederatedIdReader:
         text: str,
         *,
         extra_items: Sequence[str] = (),
-        on_unmatched: str = "reject",
     ) -> list[RefItem]:
         """The items *text* spells as a separated list, each with its verdict.
 
@@ -1163,19 +1163,11 @@ class FederatedIdReader:
         one nothing reports, since a reference that resolved is a reference
         that looked fine.
 
-        What becomes of an item no grammar accounts for is the caller's
-        policy, and the only thing that varies between surfaces:
-
-        ``reject``
-            None for the whole text.  A scanned annotation is found in the
-            wild rather than authored as data, so a target the grammar can
-            only partly account for is a target read wrongly, and the caller
-            reports the line rather than keeping whichever items parsed.
-        ``keep``
-            The item is carried through as written.  A reference authored in
-            a spec file is data, and a wrong one has to survive being read in
-            order to be reported as a broken reference; dropping the line
-            would retire the diagnostic along with the typo.
+        Each item is judged on its own.  An item the grammar accounts for
+        produces its reference; one it does not is returned carrying the class
+        it reached, so the caller reports it rather than losing it.  A defect
+        in one item is evidence about that item and not about the list
+        (REQ-d00269-G).
 
         Args:
             text: The content a keyword introduced, with the keyword and its
@@ -1183,7 +1175,6 @@ class FederatedIdReader:
             extra_items: Patterns for items belonging to a grammar this
                 reader does not own -- a journey step, say -- which are
                 accepted verbatim rather than normalized.
-            on_unmatched: ``"reject"`` or ``"keep"``, as above.
 
         Returns:
             A ``RefItem`` per item, never ``None``.  An empty list means the
@@ -1191,12 +1182,9 @@ class FederatedIdReader:
         """
         from elspais.graph.reference_faults import FaultClass, FaultCode, RefItem
 
-        if on_unmatched not in ("reject", "keep"):
-            raise ValueError(f"on_unmatched must be 'reject' or 'keep', got {on_unmatched!r}")
         stripped = text.strip()
         if not stripped:
             return []
-        item = self._item_pattern()
         extras = self._extra_patterns(extra_items)
         results: list[RefItem] = []
         seen: set[str] = set()
@@ -1212,19 +1200,15 @@ class FederatedIdReader:
                     )
                 )
                 continue
-            if item.fullmatch(candidate):
-                ref = self.normalize(candidate)
-                matched = True
-            elif any(extra.fullmatch(candidate) for extra in extras):
+            # Whole-item membership, not a merged regex: a member's grammar
+            # is more than its canonical form (an alias reads whole too, and
+            # a mis-cased label is still recognised), and ``_classify`` is
+            # anchored both ends throughout, so this is exactly the match a
+            # single identifier gets, never a search inside a larger string.
+            ref, matched = self._classify(candidate)
+            if not matched and any(extra.fullmatch(candidate) for extra in extras):
                 ref = candidate
                 matched = True
-            else:
-                # Dedup applies uniformly to every non-empty item, matched or
-                # not -- the original divider deduped on the normalized form
-                # whether or not a grammar claimed the item, and a caller
-                # that keeps unmatched items relies on that collapse.
-                ref = self.normalize(candidate)
-                matched = False
             if ref in seen:
                 continue
             seen.add(ref)

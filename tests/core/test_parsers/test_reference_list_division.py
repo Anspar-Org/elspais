@@ -4,27 +4,18 @@
 A *Traceability* keyword introduces a list and nothing else, and the one
 place that list is divided is ``FederatedIdReader.parse_ref_list``. It
 judges every item on its own and returns a verdict for each -- resolved, or
-faulted -- regardless of ``on_unmatched``. What becomes of a faulted item on
-behalf of the whole line is the caller's policy, not the divider's:
-
-``reject``
-    A scanned annotation is found in the wild. A line the grammar can only
-    partly account for is a line read wrongly, so the caller discards the
-    whole line rather than keeping whichever items parsed.
-``keep``
-    A reference authored in a spec file is data. A wrong one has to survive
-    being read in order to be reported as a broken reference; a caller that
-    dropped the line would retire the diagnostic along with the typo.
-
-These pin the difference, so a later unification on one policy has to face
-the surface it would silence.
+faulted. There is no caller-selectable policy: a faulted item always stays
+in the returned list, carrying the class it reached, so every caller reports
+it rather than losing it. What a caller does with that verdict -- report the
+faulted item as broken, drop it from a scanned annotation's edges, keep it
+verbatim in a spec file's metadata -- is the caller's own business, decided
+by what it does with ``.resolved``/``.fault_class`` on each item; it is no
+longer a parameter of the divider itself (REQ-d00269-G).
 """
 
 from __future__ import annotations
 
 from pathlib import Path
-
-import pytest
 
 from elspais.config.schema import ElspaisConfig
 from elspais.utilities.patterns import FederatedIdReader, build_resolver
@@ -57,10 +48,11 @@ def _reader() -> FederatedIdReader:
 
 
 # Verifies: REQ-p00014-T, REQ-d00269-G
-def test_a_reference_no_grammar_claims_survives_the_keep_policy():
-    """The unreadable item is carried through as its own item, verbatim, so
-    a caller applying the spec-file policy can still report it."""
-    items = _reader().parse_ref_list(f"{_GOOD}, {_TYPO}", on_unmatched="keep")
+def test_an_unreadable_item_survives_alongside_a_readable_one():
+    """The unreadable item is carried through as its own item, verbatim, and
+    the readable item beside it still resolves -- a defect in one item is
+    evidence about that item, not the list."""
+    items = _reader().parse_ref_list(f"{_GOOD}, {_TYPO}")
 
     assert len(items) == 2, f"every item gets its own verdict; got {items}"
     typo_item = items[1]
@@ -76,44 +68,23 @@ def test_a_reference_no_grammar_claims_survives_the_keep_policy():
     ), f"the readable reference must survive alongside it; got {items}"
 
 
-# Verifies: REQ-p00014-T, REQ-d00269-G
-@pytest.mark.parametrize("policy", ["keep", "reject"])
-def test_on_unmatched_does_not_change_what_parse_ref_list_returns(policy):
-    """``on_unmatched`` is the caller's policy for the whole line -- the
-    divider classifies each item the same way regardless of it."""
-    items = _reader().parse_ref_list(f"{_GOOD}, {_TYPO}", on_unmatched=policy)
-
-    assert len(items) == 2
-    assert items[0].resolved is not None
-    assert items[1].raw == _TYPO
-    assert items[1].fault_class is not None
-
-
 # Verifies: REQ-p00014-T
-@pytest.mark.parametrize("policy", ["keep", "reject"])
-def test_a_wholly_readable_list_reads_the_same_under_either_policy(policy):
-    """The policies differ only over the item that cannot be read."""
-    items = _reader().parse_ref_list(f"{_GOOD}, REQ-p00002", on_unmatched=policy)
+def test_a_wholly_readable_list_reads_cleanly():
+    """A list with no defect carries no fault for any item."""
+    items = _reader().parse_ref_list(f"{_GOOD}, REQ-p00002")
 
     refs = [i.resolved for i in items if i.resolved]
     assert "REQ-p00002" in refs
     assert _TYPO not in refs
 
 
-# Verifies: REQ-p00014-T
-def test_an_unrecognised_policy_is_refused():
-    """There are two policies, and the caller names one of them."""
-    with pytest.raises(ValueError, match="on_unmatched"):
-        _reader().parse_ref_list(_GOOD, on_unmatched="ignore")
-
-
 # Verifies: REQ-d00269-G
 def test_a_repeated_unmatched_item_reaches_the_caller_once():
     """A typo written twice in the same list must not double the diagnostic
-    -- the divider deduped every branch uniformly before per-item verdicts
-    existed, and a caller that keeps unmatched items (a spec file's
-    ``Implements:``) must still see one entry, not two."""
-    items = _reader().parse_ref_list(f"{_TYPO}, {_TYPO}", on_unmatched="keep")
+    -- the divider dedups every branch uniformly, so a caller that keeps
+    unmatched items (a spec file's ``Implements:``) sees one entry, not
+    two."""
+    items = _reader().parse_ref_list(f"{_TYPO}, {_TYPO}")
     refs = [i.resolved if i.resolved else i.raw for i in items if i.raw]
 
     assert refs == [_TYPO], (
