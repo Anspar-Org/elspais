@@ -225,6 +225,52 @@ def _project(tmp_path, repo_root, code: str):
     )
 
 
+# Verifies: REQ-d00272-C
+def test_the_longest_declared_namespace_owns_the_diagnosis():
+    """``self._resolvers`` is own-repo-first order; the item must still be
+    attributed to whichever declaring member's namespace is the longest
+    match, not whichever is scanned first, or a federation whose own
+    namespace is a strict prefix of a sibling's (``REQ`` inside ``REQ-ALP``)
+    would misattribute every one of the sibling's malformed items to
+    itself -- and get no diagnosis at all, since the wrong owner's grammar
+    cannot explain a defect that belongs to a different repository's
+    identifiers."""
+    own_config = {
+        "project": {"namespace": "REQ"},
+        "levels": {"dev": {"rank": 1, "letter": "d"}},
+        "id-patterns": {
+            "canonical": "{namespace}-{level.letter}{component}",
+            "component": {"style": "numeric", "digits": 5, "leading_zeros": True},
+            "assertions": {
+                "label_style": "uppercase",
+                "max_count": 26,
+                "zero_pad": False,
+                "multi_separator": "+",
+            },
+        },
+    }
+    sibling_config = {
+        "project": {"namespace": "REQ-ALP"},
+        "levels": {"prd": {"rank": 1, "letter": "p"}},
+        "id-patterns": {
+            "canonical": "{namespace}-{level.letter}{component}",
+            "component": {"style": "numeric", "digits": 3, "leading_zeros": True},
+            "assertions": {
+                "label_style": "uppercase",
+                "max_count": 26,
+                "zero_pad": False,
+                "multi_separator": "+",
+            },
+        },
+    }
+    federated = FederatedIdReader(
+        own=build_resolver(own_config), others=[build_resolver(sibling_config)]
+    )
+    fault_class, codes = federated.classify_unmatched("REQ-ALP-p001+A")
+    assert fault_class is FaultClass.MALFORMED
+    assert FaultCode.WRONG_ASSERTION_SEPARATOR in codes
+
+
 # Verifies: REQ-p00014-R
 def test_an_absent_requirement_is_unknown_requirement(tmp_path, repo_root):
     graph = _project(tmp_path, repo_root, "# Implements: REQ-d00099\ndef f():\n    return 1\n")
@@ -536,3 +582,60 @@ def test_a_duplicated_multi_assertion_reference_binds_nothing_and_reports_each_i
     assert len(faults) == 2, f"expected one fault per instance, got {faults}"
     assert all(f.fault_class is FaultClass.FORBIDDEN for f in faults)
     assert all(FaultCode.DUPLICATE_ITEM in f.codes for f in faults)
+
+
+# Verifies: REQ-d00212-R
+@pytest.mark.parametrize("item", ["req-d00001", "REQ-d1", "REQ-D00001"])
+def test_case_and_padding_resolve_rather_than_faulting(reader, item):
+    """Neither reaches diagnose_item: the matcher already admits both."""
+    items = reader.parse_ref_list(item)
+    assert items[0].resolved == "REQ-d00001"
+    assert items[0].fault_class is None
+
+
+# Verifies: REQ-d00272-D
+def test_a_single_relaxation_is_named(reader):
+    codes = reader.own.diagnose_item("REQ-d00001+A")
+    assert FaultCode.WRONG_ASSERTION_SEPARATOR in codes
+
+
+# Verifies: REQ-d00272-D
+def test_a_wrong_multi_separator_is_named(reader):
+    """Two labels joined by the assertion separator instead of the
+    multi-*Assertion* separator name the other dimension."""
+    codes = reader.own.diagnose_item("REQ-d00001-A-B")
+    assert FaultCode.WRONG_MULTI_SEPARATOR in codes
+
+
+# Verifies: REQ-d00271-D
+def test_an_item_no_relaxation_explains_is_named_no_further(reader):
+    assert reader.own.diagnose_item("WIDGET-42") == ()
+
+
+# Verifies: REQ-d00272-E
+def test_an_identifier_followed_by_other_text_names_both(reader):
+    codes = reader.own.diagnose_item("REQ-d00001 (A")
+    assert FaultCode.IDENTIFIER_WITH_TRAILING_TEXT in codes
+
+
+# Verifies: REQ-d00272-D
+@pytest.mark.parametrize("item", ["REQ-d00001", "REQ-d00001-A", "REQ-d00001-A+B+C"])
+def test_an_already_acceptable_item_names_no_relaxation(reader, item):
+    """Each relaxation is a no-op on a string its own wrong shape does not
+    match, so applying one to an already-acceptable item trivially
+    fullmatches too -- without a guard for that, every size would report a
+    combo that succeeded for a reason unrelated to any defect, and two
+    single-relaxation combos succeeding the same trivial way would read as
+    AMBIGUOUS for an item that is not malformed at all."""
+    assert reader.own.diagnose_item(item) == ()
+
+
+# Verifies: REQ-d00271-A
+def test_a_label_outside_the_configured_series_is_named_through_classify_unmatched(reader):
+    """A bare identifier followed by the real assertion separator and a
+    character the label alphabet does not admit is a defect in the label,
+    not generic trailing content -- ``classify_unmatched`` names it more
+    specifically than ``IDENTIFIER_WITH_TRAILING_TEXT``."""
+    fault_class, codes = reader.classify_unmatched("REQ-d00001-9")
+    assert fault_class is FaultClass.MALFORMED
+    assert codes == (FaultCode.LABEL_OUT_OF_SERIES,)

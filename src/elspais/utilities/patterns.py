@@ -572,6 +572,129 @@ class IdResolver:
         suffix = rf"(?:{g.assertion_separator}{label}(?:{g.multi_separator}{label})*)?"
         return re.compile(f"{g.identifier}{suffix}", re.IGNORECASE)
 
+    # Implements: REQ-d00272-D
+    def _canonical_assertion_sep(self, item: str) -> str:
+        """Rewrite *item* as though its assertion separator were spelled
+        with this repository's multi-*Assertion* separator by mistake.
+
+        Only the boundary between the identifier and the first label is
+        touched -- an author who reaches for the wrong character reaches for
+        it once, at the one boundary that looks like a separator to type,
+        and every label after it is still joined by whatever character the
+        author used there. Returns *item* unchanged where the wrong-spelling
+        shape does not match, so a caller testing the result against the
+        strict grammar sees no false success.
+        """
+        g = self.grammar()
+        label = g.assertion_label
+        wrong = re.compile(
+            rf"^({g.identifier}){g.multi_separator}({label}(?:{g.multi_separator}{label})*)$",
+            re.IGNORECASE,
+        )
+        m = wrong.fullmatch(item)
+        if not m:
+            return item
+        return f"{m.group(1)}{self.config.assertions.separator}{m.group(2)}"
+
+    # Implements: REQ-d00272-D
+    def _canonical_multi_sep(self, item: str) -> str:
+        """Rewrite *item* as though its labels were joined with this
+        repository's assertion separator by mistake, in place of the
+        multi-*Assertion* separator.
+
+        Requires at least two labels: with only one, nothing distinguishes
+        "wrong multi-separator" from a correctly-formed single-label
+        reference, so there is nothing here for this relaxation to name.
+        Returns *item* unchanged where the wrong-spelling shape does not
+        match.
+        """
+        g = self.grammar()
+        label = g.assertion_label
+        wrong = re.compile(
+            rf"^({g.identifier}){g.assertion_separator}"
+            rf"({label}(?:{g.assertion_separator}{label})+)$",
+            re.IGNORECASE,
+        )
+        m = wrong.fullmatch(item)
+        if not m:
+            return item
+        af = self.config.assertions
+        labels = re.split(re.escape(af.separator), m.group(2))
+        return f"{m.group(1)}{af.separator}{af.multi_separator.join(labels)}"
+
+    # Implements: REQ-d00272-D, REQ-d00272-L
+    def diagnose_item(self, item: str) -> tuple[str, ...]:
+        """The smallest set of relaxations that makes *item* acceptable.
+
+        Minimality is what bounds the diagnosis: a larger set that also
+        succeeds contains a relaxation the input never asked for, and naming
+        it describes a defect the author does not have.  Where two disjoint
+        sets of equal size each succeed, the input admits two accounts and
+        neither is issued (REQ-d00271-D).
+
+        A relaxation never produces a reference.  It says what is wrong and
+        stops (REQ-d00269-J).
+        """
+        import itertools
+
+        from elspais.graph.reference_faults import FaultCode
+
+        relaxations = {
+            FaultCode.WRONG_ASSERTION_SEPARATOR: self._canonical_assertion_sep,
+            FaultCode.WRONG_MULTI_SEPARATOR: self._canonical_multi_sep,
+        }
+        # The matcher already ignores case and numeric padding, so an item
+        # differing only in those resolved and never reached this function.
+        exact = self.multi_assertion_reference_regex()
+
+        # An item that already fullmatches has nothing for a relaxation to
+        # explain -- each relaxation is a no-op on a string its own "wrong"
+        # shape does not match, and a no-op applied to an already-acceptable
+        # item would otherwise register as a trivially succeeding combo at
+        # every size, reporting AMBIGUOUS for an item that is not malformed
+        # at all.
+        if exact.fullmatch(item):
+            return ()
+
+        for size in range(1, len(relaxations) + 1):
+            succeeding = []
+            for combo in itertools.combinations(relaxations, size):
+                candidate = item
+                for code in combo:
+                    candidate = relaxations[code](candidate)
+                if exact.fullmatch(candidate):
+                    succeeding.append(frozenset(combo))
+            if len(succeeding) == 1:
+                return tuple(sorted(succeeding[0]))
+            if len(succeeding) > 1:
+                return (FaultCode.AMBIGUOUS,)
+
+        prefix = exact.match(item)
+        if prefix and prefix.end() < len(item):
+            return (FaultCode.IDENTIFIER_WITH_TRAILING_TEXT,)
+        return ()
+
+    # Implements: REQ-d00272-D
+    def label_position_defect(self, item: str) -> bool:
+        """Whether *item* opens with a bare identifier immediately followed
+        by this repository's own assertion separator.
+
+        ``diagnose_item`` reports unaccounted trailing content generically
+        (``IDENTIFIER_WITH_TRAILING_TEXT``); this narrows that to the one
+        case worth naming more specifically -- the separator the author used
+        is already correct, so what follows it occupies label position, and
+        a defect there is about the label rather than about content the
+        reference never reaches. A label outside the configured series is
+        decided by the series itself, not by re-reading, so it is not one of
+        ``diagnose_item``'s relaxations.
+        """
+        exact = self.multi_assertion_reference_regex()
+        prefix = exact.match(item)
+        if not prefix:
+            return False
+        trailing = item[prefix.end() :]
+        return trailing.startswith(self.config.assertions.separator)
+
     def parse(self, raw_id: str) -> ParsedId | None:
         """Try all compiled forms. Returns ParsedId with canonical type_code.
 
@@ -1194,8 +1317,20 @@ class FederatedIdReader:
 
         if any(ch.isspace() for ch in candidate):
             return FaultClass.MALFORMED, (FaultCode.NOT_AN_IDENTIFIER,)
-        if any(r.declares_namespace(candidate) for r in self._resolvers):
-            return FaultClass.MALFORMED, ()
+        declaring = [r for r in self._resolvers if r.declares_namespace(candidate)]
+        if declaring:
+            # Longest matching namespace, not first: `self._resolvers` is
+            # own-repo-first, so a first-match pick would attribute
+            # `REQ-ALP-p00001` to a member declaring plain `REQ` whenever
+            # that member is scanned, reintroducing the misattribution this
+            # function exists to prevent (REQ-d00272-C).
+            owner = max(declaring, key=lambda r: len(r.config.namespace))
+            codes = owner.diagnose_item(candidate)
+            if codes == (FaultCode.IDENTIFIER_WITH_TRAILING_TEXT,) and owner.label_position_defect(
+                candidate
+            ):
+                codes = (FaultCode.LABEL_OUT_OF_SERIES,)
+            return FaultClass.MALFORMED, codes
         return FaultClass.UNKNOWN_NAMESPACE, ()
 
     # Implements: REQ-d00269-G, REQ-p00014-T
