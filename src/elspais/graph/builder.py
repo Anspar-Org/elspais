@@ -3995,12 +3995,16 @@ class GraphBuilder:
             existing = node._content.get("parse_unfixable_reasons", [])
             node._content["parse_unfixable_reasons"] = existing + ["section_header_depth_unfixable"]
 
-        # Queue implements/refines links for later resolution
+        # Queue implements/refines links for later resolution. The verdict
+        # dict Task 3's reader carried for this requirement's reference
+        # lists rides along, so a malformed or duplicated item is classified
+        # the same way here as in a code or test annotation (REQ-d00272-K).
+        req_verdicts = data.get("reference_verdicts") or {}
         for impl_ref in data.get("implements", []):
-            self._pending_links.append((req_id, impl_ref, EdgeKind.IMPLEMENTS, {}))
+            self._pending_links.append((req_id, impl_ref, EdgeKind.IMPLEMENTS, req_verdicts))
 
         for refine_ref in data.get("refines", []):
-            self._pending_links.append((req_id, refine_ref, EdgeKind.REFINES, {}))
+            self._pending_links.append((req_id, refine_ref, EdgeKind.REFINES, req_verdicts))
 
         # Implements: REQ-p00014-B
         for sat_ref in data.get("satisfies", []):
@@ -4066,9 +4070,13 @@ class GraphBuilder:
             edge = node.link(step_node, EdgeKind.STRUCTURES)
             edge.metadata = {"render_order": float(line_num)}
 
-        # Queue validates links for later resolution
+        # Queue validates links for later resolution. Same verdict-threading
+        # as a requirement's Implements/Refines (REQ-d00272-K): a journey's
+        # Validates: is read through the same reader, so it is classified
+        # the same way.
+        jny_verdicts = data.get("reference_verdicts") or {}
         for addr_ref in data.get("validates", []):
-            self._pending_links.append((journey_id, addr_ref, EdgeKind.VALIDATES, {}))
+            self._pending_links.append((journey_id, addr_ref, EdgeKind.VALIDATES, jny_verdicts))
 
         # Implements: REQ-p00014-V, REQ-p00014-R
         # A declaration outside the metadata produced no relationship. Saying

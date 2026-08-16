@@ -17,6 +17,7 @@ from elspais.graph.parsers.patterns import (
     JNY_ID_LINE_PATTERN,
     VALIDATES_PATTERN,
 )
+from elspais.graph.reference_faults import refs_and_verdicts
 
 
 class JourneyParser:
@@ -150,7 +151,8 @@ class JourneyParser:
         validates_match = self.VALIDATES_PATTERN.search(text)
         if validates_match:
             items = self.reader.parse_ref_list(validates_match.group("validates"))
-            refs = [i.resolved if i.resolved else i.raw for i in items if i.raw]
+            refs, verdicts = refs_and_verdicts(items)
             data["validates"] = refs
+            data["reference_verdicts"] = verdicts
 
         return data

@@ -41,6 +41,7 @@ from elspais.graph.parsers.patterns import (
 from elspais.graph.parsers.patterns import (
     KEYWORD_PATTERN as _KEYWORD_RE,
 )
+from elspais.graph.reference_faults import refs_and_verdicts
 
 if TYPE_CHECKING:
     from elspais.graph.reference_faults import RefItem
@@ -444,8 +445,7 @@ class ReferenceTransformer:
         # every malformed item vanish -- the defect this work exists to
         # remove.  Its verdict rides alongside so the builder can stamp the
         # class rather than re-deriving it.
-        refs = [i.resolved or i.raw for i in items if i.raw]
-        verdicts = {i.raw: (i.fault_class, i.codes) for i in items if i.fault_class is not None}
+        refs, verdicts = refs_and_verdicts(items)
         if not refs:
             return None
 

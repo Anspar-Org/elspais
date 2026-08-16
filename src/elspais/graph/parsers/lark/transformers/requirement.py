@@ -31,6 +31,7 @@ from elspais.graph.parsers.patterns import (
 from elspais.graph.parsers.patterns import (
     VALIDATES_PATTERN as _VALIDATES_RE,
 )
+from elspais.graph.reference_faults import FaultClass, refs_and_verdicts
 from elspais.graph.render import parse_end_marker
 from elspais.utilities.markdown import strip_emphasis
 
@@ -208,6 +209,11 @@ class RequirementTransformer:
         satisfies: list[str] = []
         # Implements: REQ-d00252
         integrates: list[str] = []
+        # Implements: REQ-d00272-K
+        # Keyed by raw text (the form a pending link carries as its target),
+        # merged across every metadata line so the builder consults one
+        # dict regardless of which field or line an item came from.
+        reference_verdicts: dict[str, tuple[FaultClass, tuple[str, ...]]] = {}
         assertions: list[dict[str, Any]] = []
         sections: list[dict[str, Any]] = []
         changelog: list[dict[str, str]] = []
@@ -233,34 +239,46 @@ class RequirementTransformer:
                 if meta.get("status"):
                     status = meta["status"]
                 if meta.get("implements"):
-                    old_len = len(implements)
-                    for ref in meta["implements"]:
-                        if ref not in implements:
-                            implements.append(ref)
-                    if len(implements) < old_len + len(meta["implements"]):
+                    if self._merge_ref_field(
+                        implements,
+                        reference_verdicts,
+                        meta["implements"],
+                        meta.get("implements_verdicts", {}),
+                    ):
                         has_redundant_refs = True
                 if meta.get("refines"):
-                    old_len = len(refines)
-                    for ref in meta["refines"]:
-                        if ref not in refines:
-                            refines.append(ref)
-                    if len(refines) < old_len + len(meta["refines"]):
+                    if self._merge_ref_field(
+                        refines,
+                        reference_verdicts,
+                        meta["refines"],
+                        meta.get("refines_verdicts", {}),
+                    ):
                         has_redundant_refs = True
                 # Implements: REQ-p00014-A
+                # Satisfies resolves through _instantiate_satisfies_templates,
+                # which does not yet consult a verdict dict -- keep the
+                # unconditional collapse so a duplicated target reaches
+                # template instantiation once, not twice.
                 if meta.get("satisfies"):
-                    old_len = len(satisfies)
-                    for ref in meta["satisfies"]:
-                        if ref not in satisfies:
-                            satisfies.append(ref)
-                    if len(satisfies) < old_len + len(meta["satisfies"]):
+                    if self._merge_ref_field(
+                        satisfies,
+                        reference_verdicts,
+                        meta["satisfies"],
+                        meta.get("satisfies_verdicts", {}),
+                        preserve_verdicted_duplicates=False,
+                    ):
                         has_redundant_refs = True
                 # Implements: REQ-d00252
+                # Integrates resolves in FederatedGraph._wire_integrates_edges,
+                # which likewise does not yet consult a verdict dict.
                 if meta.get("integrates"):
-                    old_len = len(integrates)
-                    for ref in meta["integrates"]:
-                        if ref not in integrates:
-                            integrates.append(ref)
-                    if len(integrates) < old_len + len(meta["integrates"]):
+                    if self._merge_ref_field(
+                        integrates,
+                        reference_verdicts,
+                        meta["integrates"],
+                        meta.get("integrates_verdicts", {}),
+                        preserve_verdicted_duplicates=False,
+                    ):
                         has_redundant_refs = True
                 # Implements: REQ-p00014-E
                 if meta.get("template"):
@@ -347,6 +365,8 @@ class RequirementTransformer:
             "heading_level": heading_level,
             "assertions_heading_level": assertions_depth,
             "changelog_heading_level": changelog_depth,
+            # Implements: REQ-d00272-K
+            "reference_verdicts": reference_verdicts,
         }
         if has_redundant_refs:
             parsed_data["has_redundant_refs"] = True
@@ -380,15 +400,15 @@ class RequirementTransformer:
                 elif child.type == "STATUS_FIELD":
                     result["status"] = val
                 elif child.type == "IMPLEMENTS_FIELD":
-                    result["implements"] = self._parse_ref_list(val)
+                    result["implements"], result["implements_verdicts"] = self._parse_ref_list(val)
                 elif child.type == "REFINES_FIELD":
-                    result["refines"] = self._parse_ref_list(val)
+                    result["refines"], result["refines_verdicts"] = self._parse_ref_list(val)
                 # Implements: REQ-p00014-A
                 elif child.type == "SATISFIES_FIELD":
-                    result["satisfies"] = self._parse_ref_list(val)
+                    result["satisfies"], result["satisfies_verdicts"] = self._parse_ref_list(val)
                 # Implements: REQ-d00252
                 elif child.type == "INTEGRATES_FIELD":
-                    result["integrates"] = self._parse_ref_list(val)
+                    result["integrates"], result["integrates_verdicts"] = self._parse_ref_list(val)
                 # Implements: REQ-p00014-E
                 elif child.type == "TEMPLATE_FIELD":
                     result["template"] = True
@@ -691,7 +711,10 @@ class RequirementTransformer:
                 token = child.children[0]
                 text = str(token)
                 val = re.sub(r"^[Vv]alidates[:=\s]\s*", "", text).strip()
-                parsed_data["validates"] = self._parse_ref_list(val)
+                # Implements: REQ-d00272-K
+                parsed_data["validates"], parsed_data["reference_verdicts"] = self._parse_ref_list(
+                    val
+                )
 
             elif child.data == "jny_body_line":
                 # Preamble body text (after metadata, before sections)
@@ -972,21 +995,72 @@ class RequirementTransformer:
     # Reference parsing
     # ------------------------------------------------------------------
 
-    def _parse_ref_list(self, refs_str: str) -> list[str]:
-        """The references a spec-file list names, each kept whether or not it resolves.
+    def _parse_ref_list(
+        self, refs_str: str
+    ) -> tuple[list[str], dict[str, tuple[FaultClass, tuple[str, ...]]]]:
+        """The references a spec-file list names, each kept whether or not it
+        resolves, alongside the verdict for any item that did not read
+        cleanly.
 
         Dividing the list is the reader's job and only the reader's; what a
         spec file adds is that a reference it cannot account for is retained
         rather than discarded, because a wrong reference has to survive being
-        read in order to be reported as a broken one.
+        read in order to be reported as a broken one. The verdict rides
+        alongside (REQ-d00272-K) exactly as it does for a code or test
+        annotation (``transformers/reference.py``), through the one shared
+        ``refs_and_verdicts`` conversion -- so the builder consults the same
+        shape regardless of which surface divided the list.
         """
         if not refs_str:
-            return []
+            return [], {}
         if refs_str.strip() in _NO_REF_VALUES:
-            return []
+            return [], {}
         items = self.reader.parse_ref_list(refs_str)
-        refs = [i.resolved if i.resolved else i.raw for i in items if i.raw]
-        return [ref for ref in refs if ref not in _NO_REF_VALUES]
+        refs, verdicts = refs_and_verdicts(items)
+        refs = [ref for ref in refs if ref not in _NO_REF_VALUES]
+        verdicts = {raw: v for raw, v in verdicts.items() if raw not in _NO_REF_VALUES}
+        return refs, verdicts
+
+    @staticmethod
+    def _merge_ref_field(
+        accumulator: list[str],
+        verdicts: dict[str, tuple[FaultClass, tuple[str, ...]]],
+        field_refs: list[str],
+        field_verdicts: dict[str, tuple[FaultClass, tuple[str, ...]]],
+        *,
+        preserve_verdicted_duplicates: bool = True,
+    ) -> bool:
+        """Merge one metadata line's references into the requirement's
+        running list and verdict dict; returns whether a redundant repeat
+        was collapsed (``has_redundant_refs``, for the file-dirty marker).
+
+        An item that itself carries a verdict -- e.g. ``DUPLICATE_ITEM``,
+        which ``parse_ref_list`` detects among items of the SAME line --
+        is kept at every position when ``preserve_verdicted_duplicates`` is
+        set: that verdict already decided the item binds nothing, and
+        collapsing it here would silently return the very edge
+        REQ-d00272-K forbids. Only the Implements/Refines/Validates fields
+        the builder actually consults a verdict for pass this; Satisfies
+        and Integrates resolve through their own machinery that does not
+        yet consult one (a documented gap, not this flag's job to close),
+        so they keep the pre-existing unconditional collapse -- otherwise
+        a duplicated Satisfies: target would reach
+        ``_instantiate_satisfies_templates`` twice for the one declaration.
+        An item with no verdict that repeats a raw string already
+        accumulated from an EARLIER metadata line (the cross-line
+        ``**Refines**:`` typo `elspais fix` cleans up) is always collapsed
+        to one instance, unchanged from before this task.
+        """
+        redundant = False
+        for ref in field_refs:
+            if preserve_verdicted_duplicates and ref in field_verdicts:
+                accumulator.append(ref)
+            elif ref not in accumulator:
+                accumulator.append(ref)
+            else:
+                redundant = True
+        verdicts.update(field_verdicts)
+        return redundant
 
     # ------------------------------------------------------------------
     # Helpers

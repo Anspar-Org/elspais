@@ -346,3 +346,161 @@ def test_a_duplicated_existing_target_binds_nothing_and_reports_twice(tmp_path, 
     assert len(faults) == 2, f"expected one fault per instance, got {faults}"
     assert all(f.fault_class is FaultClass.FORBIDDEN for f in faults)
     assert all(FaultCode.DUPLICATE_ITEM in f.codes for f in faults)
+
+
+# ---------------------------------------------------------------------------
+# Spec-file and journey reference classification (Task 12): the same
+# verdict-threading the code/test path already gets, for **Implements**:,
+# **Refines**: and a journey's Validates:.
+# ---------------------------------------------------------------------------
+
+
+def _spec_project(tmp_path, repo_root, implements: str = "-", refines: str = "-"):
+    """A project with a target requirement (REQ-d00001) and a second
+    requirement (REQ-d00002) whose **Implements**:/**Refines**: carries the
+    string under test."""
+    from elspais.config import load_config
+    from elspais.graph.factory import build_graph
+
+    (tmp_path / ".elspais.toml").write_text((repo_root / ".elspais.toml").read_text())
+    spec = tmp_path / "spec"
+    spec.mkdir()
+    (spec / "r.md").write_text(
+        "# REQ-d00001: Thing\n\n"
+        "**Level**: dev | **Status**: Active | **Implements**: -\n\n"
+        "## Assertions\n\n"
+        "A. The system SHALL do a thing.\n\n"
+        "B. The system SHALL do another.\n\n"
+        "*End* *Thing* | **Hash**: 00000000\n"
+        "---\n"
+        f"# REQ-d00002: Other\n\n"
+        f"**Level**: dev | **Status**: Active | **Implements**: {implements} | "
+        f"**Refines**: {refines}\n\n"
+        "## Assertions\n\n"
+        "A. The system SHALL do a third thing.\n\n"
+        "*End* *Other* | **Hash**: 00000000\n"
+    )
+    config_path = tmp_path / ".elspais.toml"
+    return build_graph(
+        load_config(config_path),
+        config_path=config_path,
+        repo_root=tmp_path,
+        scan_code=False,
+        scan_tests=False,
+    )
+
+
+def _journey_project(tmp_path, repo_root, validates: str):
+    """A project with a target requirement (REQ-d00001) and a journey whose
+    Validates: line carries the string under test."""
+    from elspais.config import load_config
+    from elspais.graph.factory import build_graph
+
+    (tmp_path / ".elspais.toml").write_text((repo_root / ".elspais.toml").read_text())
+    spec = tmp_path / "spec"
+    spec.mkdir()
+    (spec / "r.md").write_text(
+        "# REQ-d00001: Thing\n\n"
+        "**Level**: dev | **Status**: Active | **Implements**: -\n\n"
+        "## Assertions\n\n"
+        "A. The system SHALL do a thing.\n\n"
+        "B. The system SHALL do another.\n\n"
+        "*End* *Thing* | **Hash**: 00000000\n"
+    )
+    (spec / "journeys.md").write_text(
+        "## JNY-o-01: A Journey\n\n"
+        "**Actor**: User\n"
+        "**Goal**: Do a thing\n"
+        f"Validates: {validates}\n\n"
+        "### Steps\n\n"
+        "1. Do the thing\n\n"
+        "*End* *JNY-o-01*\n"
+    )
+    config_path = tmp_path / ".elspais.toml"
+    return build_graph(
+        load_config(config_path),
+        config_path=config_path,
+        repo_root=tmp_path,
+        scan_code=False,
+        scan_tests=False,
+    )
+
+
+# Verifies: REQ-d00272-A, REQ-d00272-C
+def test_a_malformed_spec_reference_is_not_reported_as_a_missing_requirement(tmp_path, repo_root):
+    """Stage 0 must not be reported as stage 2."""
+    graph = _spec_project(tmp_path, repo_root, implements="not a reference")
+    fault = next(f for f in graph.broken_references() if "not a reference" in f.target_id)
+    assert fault.fault_class is FaultClass.MALFORMED
+
+
+# Verifies: REQ-d00272-C
+def test_a_foreign_spec_reference_is_not_reported_as_a_missing_requirement(tmp_path, repo_root):
+    graph = _spec_project(tmp_path, repo_root, implements="WIDGET-42")
+    fault = next(f for f in graph.broken_references() if f.target_id == "WIDGET-42")
+    assert fault.fault_class is FaultClass.UNKNOWN_NAMESPACE
+
+
+# Verifies: REQ-d00272-K
+def test_a_duplicated_spec_reference_binds_nothing_and_reports_twice(tmp_path, repo_root):
+    """The code/test path already refuses this; the spec path must too."""
+    from elspais.graph.relations import EdgeKind
+
+    graph = _spec_project(tmp_path, repo_root, implements="REQ-d00001, REQ-d00001")
+    node = graph.find_by_id("REQ-d00001")
+    assert node is not None
+    edges = [e for e in node.iter_edges_by_kind(EdgeKind.IMPLEMENTS) if e.source.id == "REQ-d00002"]
+    assert edges == []
+    faults = [f for f in graph.broken_references() if f.target_id == "REQ-d00001"]
+    assert len(faults) == 2
+    assert all(FaultCode.DUPLICATE_ITEM in f.codes for f in faults)
+
+
+# Verifies: REQ-d00272-K
+def test_a_duplicated_refines_reference_binds_nothing_and_reports_twice(tmp_path, repo_root):
+    from elspais.graph.relations import EdgeKind
+
+    graph = _spec_project(tmp_path, repo_root, refines="REQ-d00001, REQ-d00001")
+    node = graph.find_by_id("REQ-d00001")
+    assert node is not None
+    edges = [e for e in node.iter_edges_by_kind(EdgeKind.REFINES) if e.source.id == "REQ-d00002"]
+    assert edges == []
+    faults = [f for f in graph.broken_references() if f.target_id == "REQ-d00001"]
+    assert len(faults) == 2
+    assert all(FaultCode.DUPLICATE_ITEM in f.codes for f in faults)
+
+
+# Verifies: REQ-d00272-A, REQ-d00272-C
+def test_a_malformed_journey_validates_reference_is_not_reported_as_a_missing_requirement(
+    tmp_path, repo_root
+):
+    graph = _journey_project(tmp_path, repo_root, validates="not a reference")
+    fault = next(f for f in graph.broken_references() if "not a reference" in f.target_id)
+    assert fault.fault_class is FaultClass.MALFORMED
+
+
+# Verifies: REQ-d00272-C
+def test_a_foreign_journey_validates_reference_is_not_reported_as_a_missing_requirement(
+    tmp_path, repo_root
+):
+    graph = _journey_project(tmp_path, repo_root, validates="WIDGET-42")
+    fault = next(f for f in graph.broken_references() if f.target_id == "WIDGET-42")
+    assert fault.fault_class is FaultClass.UNKNOWN_NAMESPACE
+
+
+# Verifies: REQ-d00272-K
+def test_a_duplicated_journey_validates_reference_binds_nothing_and_reports_twice(
+    tmp_path, repo_root
+):
+    from elspais.graph.relations import EdgeKind
+
+    graph = _journey_project(tmp_path, repo_root, validates="REQ-d00001, REQ-d00001")
+    node = graph.find_by_id("REQ-d00001")
+    assert node is not None
+    jny = graph.find_by_id("JNY-o-01")
+    assert jny is not None
+    edges = [e for e in node.iter_outgoing_edges() if e.kind == EdgeKind.VALIDATES]
+    assert edges == []
+    faults = [f for f in graph.broken_references() if f.target_id == "REQ-d00001"]
+    assert len(faults) == 2
+    assert all(FaultCode.DUPLICATE_ITEM in f.codes for f in faults)

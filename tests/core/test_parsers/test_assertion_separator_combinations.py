@@ -37,7 +37,7 @@ from pathlib import Path
 import pytest
 
 from elspais.graph.GraphNode import NodeKind
-from elspais.graph.reference_faults import FaultClass
+from elspais.graph.reference_faults import FaultClass, FaultCode
 from elspais.graph.relations import EdgeKind
 
 _SPEC = """\
@@ -228,19 +228,18 @@ def test_journey_validates_across_separator_combinations(
     assert rollup.uat_coverage.direct_labels == set(expected_labels)
 
 
-# Verifies: REQ-d00082-E, REQ-p00014-R, REQ-d00252-G
+# Verifies: REQ-d00082-E, REQ-p00014-R, REQ-d00272-A
 def test_journey_dash_style_ref_under_slash_config_is_hard_broken(tmp_path):
     """A journey `Validates:` ref that still uses "-" when the project is
     configured with a "/" separator must remain a hard broken reference
     naming the journey as source, and not presumed foreign -- no associates
     are configured, and there is nothing else in the federation the target
-    could belong to. Classification at resolution time falls back to
-    UNKNOWN_REQUIREMENT: the item never parsed under this repository's own
-    grammar, so no base requirement could be confirmed present (REQ-p00014-R).
-    Journeys' `Validates:` carries no grammar-level verdict (only code/test
-    annotations thread one), so the resolution stage itself names the
-    likely cause when the target opens with this repo's own namespace
-    (REQ-d00252-G)."""
+    could belong to. A journey's `Validates:` is now read through the same
+    reader as a code or test annotation (REQ-d00272-K), so the item never
+    parsing under this repository's own grammar is a grammar-level verdict
+    -- MALFORMED, carrying SYNTAX_ERROR -- rather than a later-stage
+    UNKNOWN_REQUIREMENT (REQ-d00272-A forbids reporting a later stage than
+    the one reading actually reached)."""
     from elspais.graph.factory import build_graph
 
     sep, multi = "/", "+"
@@ -269,10 +268,8 @@ def test_journey_dash_style_ref_under_slash_config_is_hard_broken(tmp_path):
         "No associates are configured, so there is no other repository this "
         "reference could belong to."
     )
-    assert br.fault_class is FaultClass.UNKNOWN_REQUIREMENT
-    assert (
-        "[id-patterns.assertions] separator/multi_separator" in br.diagnostic
-    ), f"Expected a separator-config diagnostic (REQ-d00252-G), got {br.diagnostic!r}"
+    assert br.fault_class is FaultClass.MALFORMED
+    assert FaultCode.SYNTAX_ERROR in br.codes
 
 
 # --------------------------------------------------------------------------- #

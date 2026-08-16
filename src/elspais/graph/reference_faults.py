@@ -123,3 +123,27 @@ class RefItem:
     resolved: str | None = None
     fault_class: FaultClass | None = None
     codes: tuple[str, ...] = ()
+
+
+# Implements: REQ-d00269-G, REQ-d00272-K
+def refs_and_verdicts(
+    items: list[RefItem],
+) -> tuple[list[str], dict[str, tuple[FaultClass, tuple[str, ...]]]]:
+    """Split a ``parse_ref_list`` result into the shape every caller needs.
+
+    ``refs`` keeps one entry per item -- resolved where an item read, raw
+    where it did not, so a faulted item survives to be reported instead of
+    vanishing.  ``verdicts`` is keyed by raw text (the form that reaches the
+    builder as a pending link's target) and carries every item's class and
+    codes, INCLUDING a resolved item's -- an item that read cleanly but was
+    later found to repeat a target it shares with a sibling has its
+    ``resolved`` cleared and its verdict set to ``FORBIDDEN``/
+    ``DUPLICATE_ITEM`` by ``parse_ref_list`` itself, and that verdict must
+    still reach the builder alongside its raw text. One reading, so every
+    surface that divides a reference list -- code/test annotations, spec
+    metadata, journey ``Validates:`` -- hands its builder the identical
+    shape rather than three near-identical transforms of the same list.
+    """
+    refs = [i.resolved or i.raw for i in items if i.raw]
+    verdicts = {i.raw: (i.fault_class, i.codes) for i in items if i.fault_class is not None}
+    return refs, verdicts
