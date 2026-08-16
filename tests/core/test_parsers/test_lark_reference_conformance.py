@@ -446,3 +446,45 @@ def test_an_orphan_reference_line_is_never_silent(parse_code):
     """
     result = parse_code("def f():\n    #   REQ-d00001\n    return 1\n")
     assert _diagnostics(result), "an orphan reference must be reported"
+
+
+# Verifies: REQ-d00269-H
+def test_a_continuation_candidate_need_not_be_identifier_shaped(parse_code):
+    """REQ-d00269-H continues onto "the next line of the same comment
+    block" -- any comment line, not only one already shaped like an
+    identifier.  Narrowing the fold to identifier-shaped lines would leave
+    ``XREQ-d00002`` (no configured namespace opens with ``X``) as silent
+    prose instead of a reported, unbound item -- the anti-silence failure
+    this requirement exists to remove.  The space test (REQ-d00272-B) still
+    refuses to guess: the item is read and reported, never bound.
+    """
+    results, tx = parse_code(
+        "# Implements: REQ-d00001,\n" "#             XREQ-d00002\n" "def f():\n    return 1\n"
+    )
+    refs = _all_refs((results, tx))
+    assert "REQ-d00001" in refs
+    # The faulted item stays in the list (raw, unresolved) so the builder can
+    # report it as a broken reference -- REQ-d00269-G -- but nothing coerces
+    # it into REQ-d00002: no edge exists that its author did not spell.
+    assert "REQ-d00002" not in refs
+    verdicted = [
+        r
+        for r in results
+        if r.content_type == "code_ref"
+        and "XREQ-d00002" in r.parsed_data.get("reference_verdicts", {})
+    ]
+    assert verdicted, f"XREQ-d00002 must be reported as a faulted item; got {results}"
+
+
+# Verifies: REQ-d00269-H
+def test_a_continuation_chain_of_three_lines_binds_every_reference(parse_code):
+    result = parse_code(
+        "# Implements: REQ-d00001,\n"
+        "#             REQ-d00002,\n"
+        "#             REQ-d00003\n"
+        "def f():\n    return 1\n"
+    )
+    refs = _all_refs(result)
+    assert "REQ-d00001" in refs
+    assert "REQ-d00002" in refs
+    assert "REQ-d00003" in refs

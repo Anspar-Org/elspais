@@ -163,6 +163,14 @@ class ReferenceTransformer:
         # First pass: process classified lines
         i = 0
         children = tree.children
+        # Cleared rather than accumulated: transform() is single-use per
+        # file in every current caller, but a stale id() surviving a second
+        # call would be a silent aliasing bug waiting for a caller that
+        # isn't.
+        self._joined_text.clear()
+        self._joined_end_line.clear()
+        self._joined_raw.clear()
+        self._consumed.clear()
         self._fold_continuations(children)
         while i < len(children):
             child = children[i]
