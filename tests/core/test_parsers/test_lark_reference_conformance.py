@@ -13,6 +13,7 @@ import pytest
 from elspais.config.schema import ElspaisConfig
 from elspais.graph.parsers.lark import FileDispatcher, GrammarFactory
 from elspais.graph.parsers.lark.transformers.reference import ReferenceTransformer
+from elspais.graph.reference_faults import FaultCode
 from elspais.utilities.patterns import IdPatternConfig, IdResolver
 
 
@@ -65,6 +66,41 @@ def _parse_code(content, resolver, code_parser):
     tree = code_parser.parse(content)
     tx = ReferenceTransformer(resolver, "code_ref")
     return tx.transform(tree)
+
+
+@pytest.fixture
+def parse_code(resolver, code_parser):
+    """Parse *content* as a code file, returning ``(results, transformer)``.
+
+    The transformer is returned alongside the ``ParsedContent`` list so a
+    test can inspect ``transformer.style_findings`` -- a fact about the
+    file that never travels on the results themselves.
+    """
+
+    def _parse(content):
+        text = content if content.endswith("\n") else content + "\n"
+        tree = code_parser.parse(text)
+        tx = ReferenceTransformer(resolver, "code_ref")
+        return tx.transform(tree), tx
+
+    return _parse
+
+
+def _all_refs(result) -> set[str]:
+    """Every reference-shaped string surfacing anywhere in a parse result.
+
+    ``result`` is the ``(results, transformer)`` pair ``parse_code``
+    returns.  Implements/verifies/forbidden all count -- a test asking "is
+    this identifier bound anywhere" should not have to know which keyword
+    was used or whether the keyword was refused for this file's kind.
+    """
+    results, _tx = result
+    found: set[str] = set()
+    for r in results:
+        found.update(r.parsed_data.get("implements", []) or [])
+        found.update(r.parsed_data.get("verifies", []) or [])
+        found.update(r.parsed_data.get("forbidden", []) or [])
+    return found
 
 
 def _parse_test(content, resolver, code_parser, **kwargs):
@@ -265,3 +301,79 @@ class TestTestRefParsing:
             "its verdict must ride alongside so the builder can report it "
             f"as a broken reference; got {file_level[0].parsed_data}"
         )
+
+
+# Verifies: REQ-d00269-E
+@pytest.mark.parametrize("spelling", ["Implements", "IMPLEMENTS", "implements", "ImPlEmEnTs"])
+def test_a_keyword_is_recognised_in_any_case(parse_code, spelling):
+    result = parse_code(f"# {spelling}: REQ-d00001\ndef f():\n    return 1\n")
+    assert "REQ-d00001" in _all_refs(result)
+
+
+# Verifies: REQ-d00272-G
+def test_a_non_canonical_keyword_still_binds(parse_code):
+    result = parse_code("# implements: REQ-d00001\ndef f():\n    return 1\n")
+    assert "REQ-d00001" in _all_refs(result)
+
+
+# Verifies: REQ-d00269-E
+def test_a_space_before_the_colon_is_not_a_keyword(parse_code):
+    result = parse_code("# Implements : REQ-d00001\ndef f():\n    return 1\n")
+    assert "REQ-d00001" not in _all_refs(result)
+
+
+# Verifies: REQ-d00269-E
+@pytest.mark.parametrize(
+    "header,opens",
+    [
+        ("# IMPLEMENTS REQUIREMENTS:", True),
+        ("# Implements Requirements:", True),
+        ("# IMPLEMENTS REQUIREMENTS", False),
+        ("# IMPLEMENTS REQUIREMENT:", False),
+    ],
+)
+def test_the_legacy_block_header_is_strict_about_everything_but_case(parse_code, header, opens):
+    result = parse_code(f"{header}\n#   REQ-d00001\ndef f():\n    return 1\n")
+    assert ("REQ-d00001" in _all_refs(result)) is opens
+
+
+# Verifies: REQ-d00272-G
+def test_no_space_after_the_comment_marker_still_binds(parse_code):
+    result = parse_code("#Implements: REQ-d00001\ndef f():\n    return 1\n")
+    assert "REQ-d00001" in _all_refs(result)
+    _results, tx = result
+    assert (1, FaultCode.KEYWORD_NO_MARKER_SPACE) in tx.style_findings
+
+
+# Verifies: REQ-d00272-G
+def test_markdown_emphasis_in_a_code_comment_still_binds(parse_code):
+    result = parse_code("# **Implements**: REQ-d00001\ndef f():\n    return 1\n")
+    assert "REQ-d00001" in _all_refs(result)
+    _results, tx = result
+    assert (1, FaultCode.KEYWORD_MARKDOWN_EMPHASIS_OFF_MARKDOWN) in tx.style_findings
+
+
+# Verifies: REQ-d00272-G
+def test_a_lowercase_keyword_records_a_style_finding(parse_code):
+    result = parse_code("# implements: REQ-d00001\ndef f():\n    return 1\n")
+    _results, tx = result
+    assert (1, FaultCode.KEYWORD_WRONG_CASE) in tx.style_findings
+
+
+# Verifies: REQ-d00272-G
+def test_the_canonical_form_records_no_style_finding(parse_code):
+    result = parse_code("# Implements: REQ-d00001\ndef f():\n    return 1\n")
+    _results, tx = result
+    assert tx.style_findings == []
+
+
+# Verifies: REQ-d00272-H
+def test_a_keyword_introducing_nothing_is_admitted_and_reported(parse_code):
+    """An empty declaration is recognised, not silently folded into remainder."""
+    results, tx = parse_code("# Implements:\ndef f():\n    return 1\n")
+    assert not _all_refs((results, tx))
+    assert len(tx.faults) == 1
+    ref_item, line_num, keyword = tx.faults[0]
+    assert line_num == 1
+    assert keyword == "implements"
+    assert FaultCode.EMPTY_REFERENCE_LIST in ref_item.codes

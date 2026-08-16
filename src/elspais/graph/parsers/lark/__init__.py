@@ -88,12 +88,23 @@ class GrammarFactory:
 
         # Reference grammar tokens (comment styles + keywords)
         tokens["__COMMENT_STYLES__"] = r"\#|\/\/|\-\-"
-        impl_kw = ["Implements", "IMPLEMENTS"]
-        ver_kw = ["Verifies", "VERIFIES"]
-        ref_kw = ["Refines", "REFINES"]
-        tokens["__KEYWORDS__"] = "|".join(re.escape(k) for k in impl_kw + ver_kw + ref_kw)
-        tokens["__IMPL_KEYWORDS__"] = "|".join(re.escape(k) for k in impl_kw)
-        tokens["__VER_KEYWORDS__"] = "|".join(re.escape(k) for k in ver_kw)
+
+        # Implements: REQ-d00269-E
+        # What a keyword is does not depend on its case, nor on whether it is
+        # wrapped in markdown emphasis; that its form is non-canonical is
+        # reported instead (REQ-d00272-G).
+        def _any_case(word: str) -> str:
+            letters = "".join(
+                f"[{c.upper()}{c.lower()}]" if c.isalpha() else re.escape(c) for c in word
+            )
+            return rf"(?:\*\*)?{letters}(?:\*\*)?"
+
+        impl_kw = ["Implements"]
+        ver_kw = ["Verifies"]
+        ref_kw = ["Refines"]
+        tokens["__KEYWORDS__"] = "|".join(_any_case(k) for k in impl_kw + ver_kw + ref_kw)
+        tokens["__IMPL_KEYWORDS__"] = "|".join(_any_case(k) for k in impl_kw)
+        tokens["__VER_KEYWORDS__"] = "|".join(_any_case(k) for k in ver_kw)
 
         return tokens
 

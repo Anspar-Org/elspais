@@ -57,6 +57,11 @@ class FaultCode:
     ORPHAN_REFERENCE = "E_ORPHAN_REFERENCE"
     # Implements: REQ-d00272-K
     DUPLICATE_ITEM = "E_DUPLICATE_ITEM"
+    # A keyword's form is non-canonical -- the finding never costs the edge
+    # its keyword introduces (REQ-d00272-G).
+    KEYWORD_WRONG_CASE = "E_KEYWORD_WRONG_CASE"
+    KEYWORD_NO_MARKER_SPACE = "E_KEYWORD_NO_MARKER_SPACE"
+    KEYWORD_MARKDOWN_EMPHASIS_OFF_MARKDOWN = "E_KEYWORD_MARKDOWN_EMPHASIS_OFF_MARKDOWN"
 
 
 @dataclass(frozen=True)

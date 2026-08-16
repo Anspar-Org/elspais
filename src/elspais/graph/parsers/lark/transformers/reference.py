@@ -30,6 +30,7 @@ of an annotation that did nothing without a report saying so.
 from __future__ import annotations
 
 import logging
+import re
 from typing import TYPE_CHECKING, Any
 
 from lark import Tree
@@ -41,10 +42,9 @@ from elspais.graph.parsers.patterns import (
 from elspais.graph.parsers.patterns import (
     KEYWORD_PATTERN as _KEYWORD_RE,
 )
-from elspais.graph.reference_faults import refs_and_verdicts
+from elspais.graph.reference_faults import FaultClass, FaultCode, RefItem, refs_and_verdicts
 
 if TYPE_CHECKING:
-    from elspais.graph.reference_faults import RefItem
     from elspais.utilities.patterns import FederatedIdReader, IdResolver
 
 _log = logging.getLogger(__name__)
@@ -64,7 +64,11 @@ def reference_target(text: str) -> str:
     match = _KEYWORD_RE.search(text)
     if not match:
         return ""
-    tail = text[match.end() :].lstrip(": \t")
+    # A markdown-emphasis-wrapped keyword (REQ-d00272-G) closes with a
+    # trailing "**" the bare keyword pattern does not consume; strip it
+    # alongside the colon/whitespace that always separate keyword from
+    # target so the target itself starts clean either way.
+    tail = text[match.end() :].lstrip(": \t*")
     for terminator in ("*/", "-->"):
         if tail.endswith(terminator):
             tail = tail[: -len(terminator)]
@@ -122,6 +126,11 @@ class ReferenceTransformer:
         self.source_id = source_id
         self.quoted_lines = quoted_lines or set()
         self.warnings: list[str] = []
+        self.faults: list[tuple[RefItem, int, str]] = []
+        # (line, code) for a keyword recognised in a non-canonical form --
+        # a fact about the file, never a reason to withhold the edge it
+        # introduces (REQ-d00272-G).
+        self.style_findings: list[tuple[int, str]] = []
 
     def transform(self, tree: Tree) -> list[ParsedContent]:
         """Transform parse tree into ParsedContent list."""
@@ -439,7 +448,24 @@ class ReferenceTransformer:
 
         items = read_reference_list(self.reader, text)
         if not items:
+            self.faults.append(
+                (
+                    RefItem(
+                        raw="",
+                        index=-1,
+                        fault_class=FaultClass.MALFORMED,
+                        codes=(FaultCode.EMPTY_REFERENCE_LIST,),
+                    ),
+                    line_num,
+                    keyword,
+                )
+            )
             return None
+
+        # Implements: REQ-d00272-G
+        for code in self._keyword_form_defects(text):
+            self.style_findings.append((line_num, code))
+
         # A faulted item stays in the ref list: the builder records a fault
         # for a ref that does not resolve, so dropping it here would make
         # every malformed item vanish -- the defect this work exists to
@@ -549,6 +575,42 @@ class ReferenceTransformer:
         if m:
             return m.group(0).lower()
         return "implements"
+
+    # Implements: REQ-d00272-G
+    def _keyword_form_defects(self, text: str) -> tuple[str, ...]:
+        """Which keyword-form dimensions this line's keyword violates.
+
+        Three independent facts about how a recognised keyword was written,
+        sharing one configurable severity rather than three -- nobody would
+        hold "wrong case" and "stray asterisks" to different rules.  None of
+        them changes what the line binds; a caller wanting the reference-list
+        reading unaffected by style may ignore the return value entirely.
+        """
+        stripped = text.lstrip(" \t")
+        marker_match = re.match(r"#|//|--", stripped)
+        if not marker_match:
+            return ()
+        after_marker = stripped[marker_match.end() :]
+        has_marker_space = after_marker[:1] in (" ", "\t")
+        content_after_marker = after_marker.lstrip(" \t")
+
+        m = _KEYWORD_RE.search(text)
+        if not m:
+            return ()
+        keyword = m.group(0)
+
+        codes: list[str] = []
+        canonical = keyword[:1].upper() + keyword[1:].lower()
+        if keyword != canonical:
+            codes.append(FaultCode.KEYWORD_WRONG_CASE)
+        if not has_marker_space:
+            codes.append(FaultCode.KEYWORD_NO_MARKER_SPACE)
+        # This transformer reads only code/test files, which have no
+        # markdown to render -- so emphasis wrapping the keyword here is
+        # always the off-markdown case.
+        if content_after_marker.startswith("**"):
+            codes.append(FaultCode.KEYWORD_MARKDOWN_EMPHASIS_OFF_MARKDOWN)
+        return tuple(codes)
 
     # Implements: REQ-d00272-J
     def _keyword_invalid_for_content(self, keyword: str) -> bool:

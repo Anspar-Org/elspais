@@ -19,9 +19,9 @@
 //   __TYPE_PATTERN__    e.g. "p|o|d"
 //   __DIGITS_PATTERN__  e.g. "\\d{1,5}"
 //   __COMMENT_STYLES__  e.g. "\\#|//|\\-\\-"
-//   __IMPL_KEYWORDS__   e.g. "Implements|IMPLEMENTS"
-//   __VER_KEYWORDS__    e.g. "Verifies|VERIFIES"
-//   __KEYWORDS__        e.g. "Implements|IMPLEMENTS|Verifies|VERIFIES|..."
+//   __IMPL_KEYWORDS__   e.g. "[Ii][Mm][Pp]...", matching any case
+//   __VER_KEYWORDS__    e.g. "[Vv][Ee][Rr]...", matching any case
+//   __KEYWORDS__        every keyword, case-insensitive, alternated
 
 start: (_entry)*
 
@@ -78,10 +78,14 @@ other_line.1: TEXT
 // Matches lines starting with either the configured namespace (e.g. REQ-) or
 // the fixed JNY- prefix so that ``Verifies: JNY-OQ-Login-01/2`` is
 // recognized even when no REQ ID appears on the line.
-SINGLE_REF_LINE.5: /[ \t]*(?:__COMMENT_STYLES__)[ \t]*(?:__KEYWORDS__):?[ \t]+(?:__NAMESPACE__[-_]|JNY-)[^\n]+/
+SINGLE_REF_LINE.5: /[ \t]*(?:__COMMENT_STYLES__)[ \t]*(?:__KEYWORDS__):[ \t]+(?:__NAMESPACE__[-_]|JNY-)[^\n]+/
 
-// Block header: comment + keyword + REQUIREMENTS: (optional leading whitespace)
-BLOCK_HEADER_LINE.5: /[ \t]*(?:__COMMENT_STYLES__)[ \t]*(?:__KEYWORDS__)[ \t]+[Rr][Ee][Qq][Uu][Ii][Rr][Ee][Mm][Ee][Nn][Tt][Ss]?:?[ \t]*/
+// Block header: comment + keyword + REQUIREMENTS: (optional leading whitespace).
+// Case-lax like every other keyword form, but otherwise held to the same
+// strictness as the single-line forms: the plural is fixed and the colon
+// is required, so a header missing either reads as prose rather than as a
+// silently-accepted block opener.
+BLOCK_HEADER_LINE.5: /[ \t]*(?:__COMMENT_STYLES__)[ \t]*(?:__KEYWORDS__)[ \t]+[Rr][Ee][Qq][Uu][Ii][Rr][Ee][Mm][Ee][Nn][Tt][Ss]:[ \t]*/
 
 // Block reference line: comment + indented REQ-ID or JNY-ID
 BLOCK_REF_LINE.4: /[ \t]*(?:__COMMENT_STYLES__)[ \t]+(?:__NAMESPACE__[-_]|JNY-)[^\n]+/
@@ -108,7 +112,12 @@ TEST_NAME_LINE.4: /[ \t]*(?:async[ \t]+)?def[ \t]+test_\w*__NAMESPACE__[-_][^\n]
 // transformer, over the target as a whole: a target this terminal admits
 // and that grammar cannot account for resolves to nothing and is reported
 // verbatim.
-UNRESOLVED_REF_LINE.3: /[ \t]*(?:__COMMENT_STYLES__)[ \t]*(?:__KEYWORDS__):[ \t]+[^\n]+/
+//
+// Once a line is recognised, shape is what distinguishes the classes
+// within it: content after the colon is optional here, so a keyword
+// introducing nothing at all is admitted and reported rather than
+// vanishing as ordinary text (REQ-d00272-H).
+UNRESOLVED_REF_LINE.3: /[ \t]*(?:__COMMENT_STYLES__)[ \t]*(?:__KEYWORDS__):[ \t]*[^\n]*/
 
 // Generic text (lowest priority)
 TEXT.1: /[^\n]+/
