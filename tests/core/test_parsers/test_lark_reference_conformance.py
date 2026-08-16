@@ -218,6 +218,13 @@ class TestTestRefParsing:
         attach it as the function's own annotation -- keeping this test on
         the file-default path (the third pass) rather than the
         already-covered per-function path in ``_handle_unresolved_ref``.
+
+        Salvage is only honest because the item that did *not* resolve is
+        still reported somewhere: the same line also goes through the
+        transformer's ordinary ``single_ref`` handling (``_handle_unresolved_ref``),
+        which produces its own ``test_ref`` entry (unattached to any
+        function) carrying ``GARBAGE-999`` in both ``verifies`` and
+        ``reference_verdicts`` -- that is this test's other half.
         """
         content = (
             "# Verifies: REQ-p00001, GARBAGE-999\n"
@@ -240,3 +247,21 @@ class TestTestRefParsing:
             f"default; got {unlinked[0].parsed_data}"
         )
         assert unlinked[0].parsed_data["verifies"] == ["REQ-p00001"]
+
+        # The faulted sibling is not simply dropped: the file-level line's
+        # own single_ref entry (function_name is None -- it belongs to no
+        # function) carries it forward for reporting.
+        file_level = [
+            r
+            for r in items
+            if r.content_type == "test_ref" and r.parsed_data.get("function_name") is None
+        ]
+        assert len(file_level) == 1, f"expected one file-level entry; got {items}"
+        assert "GARBAGE-999" in file_level[0].parsed_data["verifies"], (
+            "the faulted item must still reach a reportable entry, not "
+            f"vanish once salvaged from the default; got {file_level[0].parsed_data}"
+        )
+        assert "GARBAGE-999" in file_level[0].parsed_data["reference_verdicts"], (
+            "its verdict must ride alongside so the builder can report it "
+            f"as a broken reference; got {file_level[0].parsed_data}"
+        )

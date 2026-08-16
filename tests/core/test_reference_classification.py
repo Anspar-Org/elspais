@@ -153,3 +153,14 @@ def test_a_code_file_binds_the_good_items_of_a_mixed_line(tmp_path, repo_root):
     targets = {f.target_id for f in graph.broken_references()}
     assert "REQ-d0000X" in targets
     assert "REQ-d00001-A" not in targets  # the good item bound
+
+
+# Verifies: REQ-d00269-G
+def test_an_underscore_notation_item_binds_in_a_reference_list(reader):
+    """A list item spelled in underscore notation -- the same grammar a
+    Python test function name renders (``IdResolver.grammar(separator="_")``)
+    -- is matched whole and resolves, not left as a string no member's
+    canonical, dash-separated form claims."""
+    items = reader.parse_ref_list("REQ_d00001_A")
+    assert items[0].resolved == "REQ-d00001-A"
+    assert items[0].fault_class is None
