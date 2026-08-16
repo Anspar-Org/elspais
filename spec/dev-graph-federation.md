@@ -230,21 +230,27 @@ E. When an `Integrates:` target cannot be resolved, the build SHALL report a bro
 
 F. Coverage inherited through `Integrates:` edges SHALL count toward the declaring requirement's implemented status in coverage reports (so an integrating requirement is not reported as an uncovered gap), and coverage reports SHALL summarize integrated requirements' implemented and passing coverage (result-verified or line-coverage-credited) grouped by the owning associate, with a federation total.
 
-G. The generic presumed-foreign determination applied after cross-repo wiring to any broken *Traceability* reference that does not already carry a diagnostic (independent of the `Integrates:`-specific determination in assertion E) SHALL NOT mark a reference foreign when the federation has no configured associates, since there is no other repository the reference could belong to. It also SHALL NOT mark a reference foreign when the target's leading token matches the declaring repo's own configured namespace and no configured associate declares that same namespace; such a reference is a malformed same-repo reference, not a cross-repo one, and SHALL remain a hard broken reference carrying a diagnostic naming the likely cause (e.g. an `[id-patterns.assertions]` separator/multi_separator mismatch).
+G. The generic presumed-foreign determination applied after cross-repo wiring to any broken *Traceability* reference that does not already carry a diagnostic (independent of the `Integrates:`-specific determination in assertion E) SHALL NOT mark a reference foreign when the federation has no configured associates, since there is no other repository the reference could belong to. It also SHALL NOT mark a reference foreign when the target's leading token matches the declaring repo's own configured namespace and no configured associate declares that same namespace; such a reference is a malformed same-repo reference, not a cross-repo one, and SHALL remain a hard broken reference whose cause is named.
+
+K. A cause is named by recording the code that identifies it together with the file and the line the reference was written on, where that code's meaning is documented for a reader. Prose accompanying a code SHALL NOT name a cause the code does not.
 
 ### Rationale
+
+K settles what naming a cause requires, because the obligation was being met by a sentence and a sentence cannot be relied on to stay true. A fixed string that reads "check the assertion separator" is correct for the defect it was written for and wrong for every other defect that reaches the same code path — and it went wrong exactly when the tool became able to say something more precise, which is the worst moment for a report to start misdescribing what it found. What is durable is the code: it is decided where the defect is decided, it carries no claim beyond its own definition, and a reader who does not know it can look it up. Recording where the reference was written is what makes it actionable, and documenting the code is what makes it legible; a code without either is an opaque string, and prose that contradicts one is worse than no prose at all.
 
 The bottom-up reference model (`Implements:` authored on the implementer) would force a reusable library to name each consumer's requirement IDs, coupling the library to its consumers and breaking isolated builds. `Integrates:` is the top-down inverse: authored and stored on the consumer, it points into the library and is wired as a distinct INTEGRATES edge during federation. A dedicated edge kind keeps the library's `Implements:` derivation clean (no consumer IDs leak into library files on render), while contributing to coverage like IMPLEMENTS. Passing status (the result-verified or line-coverage-credited union, REQ-d00258-B) propagates by a live-query overlay that reads the library node's own metrics, consistent with the existing cross-repo inheritance mechanism.
 
 ### Changelog
 
+- 2026-08-16 | be93221f | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-16 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: naming a cause means a recorded code with its file and line and a documented meaning, not a fixed sentence (K)
 - 2026-07-31 | 8e07589c | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-03 | d9d4bc98 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-03 | 425d61aa | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-31 | d1f691f0 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-31 | b576d134 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms, update hash, add missing changelog section
 
-*End* *External Library Integration via Integrates Keyword* | **Hash**: 8e07589c
+*End* *External Library Integration via Integrates Keyword* | **Hash**: be93221f
 ---
 
 ## REQ-d00253: Federation Write/Generation Scope
