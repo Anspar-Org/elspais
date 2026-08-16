@@ -20,6 +20,7 @@ class FaultClass(Enum):
     the one the reference reached" checkable (REQ-p00014-R, REQ-d00272-A).
     """
 
+    # Implements: REQ-p00014-R, REQ-d00272-A
     MALFORMED = ("malformed", 0)
     UNKNOWN_NAMESPACE = ("unknown_namespace", 1)
     UNKNOWN_REQUIREMENT = ("unknown_requirement", 2)
@@ -40,6 +41,7 @@ class FaultCode:
     specific is known -- not the absence of a diagnosis (REQ-d00271-C).
     """
 
+    # Implements: REQ-d00271-A, REQ-d00271-E
     SYNTAX_ERROR = "E_SYNTAX_ERROR"
     NOT_AN_IDENTIFIER = "E_NOT_AN_IDENTIFIER"
     WRONG_CASE = "E_WRONG_CASE"
@@ -78,11 +80,13 @@ class ReferenceFault:
     target_id: str
     edge_kind: str
     fault_class: FaultClass = FaultClass.UNKNOWN_REQUIREMENT
+    # Implements: REQ-d00271-B
     codes: tuple[str, ...] = ()
     item_index: int = -1
     presumed_foreign: bool = False
     diagnostic: str = ""
 
+    # Implements: REQ-d00271-C
     def __post_init__(self) -> None:
         if FaultCode.SYNTAX_ERROR not in self.codes:
             object.__setattr__(self, "codes", (FaultCode.SYNTAX_ERROR, *self.codes))
