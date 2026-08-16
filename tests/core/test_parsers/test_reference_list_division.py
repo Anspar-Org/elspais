@@ -79,18 +79,16 @@ def test_a_wholly_readable_list_reads_cleanly():
 
 
 # Verifies: REQ-d00269-G
-def test_a_repeated_unmatched_item_reaches_the_caller_once():
-    """A typo written twice in the same list must not double the diagnostic
-    -- the divider dedups every branch uniformly, so a caller that keeps
-    unmatched items (a spec file's ``Implements:``) sees one entry, not
-    two."""
+def test_a_repeated_unmatched_item_reaches_the_caller_at_each_position():
+    """A typo written twice in the same list is judged at each position of
+    the list on its own (REQ-d00269-G): an item that never resolved names
+    no target, so it is not the "repeated target" REQ-d00272-K collapses --
+    a caller that keeps unmatched items (a spec file's ``Implements:``) sees
+    both."""
     items = _reader().parse_ref_list(f"{_TYPO}, {_TYPO}")
     refs = [i.resolved if i.resolved else i.raw for i in items if i.raw]
 
-    assert refs == [_TYPO], (
-        "a duplicate unmatched item must collapse to one caller-visible "
-        f"entry, exactly as the original divider collapsed it; got {refs}"
-    )
+    assert refs == [_TYPO, _TYPO]
 
 
 _SPEC_CONFIG = """\

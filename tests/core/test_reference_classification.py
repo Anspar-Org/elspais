@@ -85,16 +85,17 @@ def test_empty_content_yields_no_items(reader):
 
 
 # Verifies: REQ-d00269-G
-def test_a_repeated_unmatched_item_collapses_to_one(reader):
-    """A duplicate item collapses to one entry whether or not it resolved --
-    the divider deduped uniformly before this task and must go on doing so,
-    since a caller that keeps an unmatched item relies on that collapse to
-    avoid reporting and wiring the same typo twice."""
+def test_a_repeated_unmatched_item_is_reported_at_every_position(reader):
+    """An item that never resolved names no target, so it is not the
+    "repeated target" REQ-d00272-K speaks of -- but REQ-d00269-G still
+    judges each position of the list on its own, so it is not collapsed
+    away either. Both positions are reported."""
     items = reader.parse_ref_list("BADREF, BADREF")
-    assert len(items) == 1
-    assert items[0].raw == "BADREF"
-    assert items[0].resolved is None
-    assert items[0].fault_class is not None
+    assert len(items) == 2
+    assert [i.raw for i in items] == ["BADREF", "BADREF"]
+    assert all(i.resolved is None for i in items)
+    assert all(i.fault_class is not None for i in items)
+    assert all(FaultCode.DUPLICATE_ITEM not in i.codes for i in items)
 
 
 # Verifies: REQ-d00269-G
@@ -294,3 +295,25 @@ def test_a_keyword_a_test_file_may_not_use_is_refused_not_passed_over(tmp_path, 
     assert fault.fault_class is FaultClass.FORBIDDEN
     assert "implements" in fault.diagnostic.lower()
     assert "test" in fault.diagnostic.lower()
+
+
+# Verifies: REQ-d00272-K
+def test_every_instance_of_a_repeated_target_is_reported_and_none_resolves(reader):
+    items = reader.parse_ref_list("REQ-d00001, REQ-d00001")
+    assert [i.resolved for i in items] == [None, None]
+    assert all(FaultCode.DUPLICATE_ITEM in i.codes for i in items)
+
+
+# Verifies: REQ-d00272-K
+def test_a_target_named_once_still_resolves(reader):
+    items = reader.parse_ref_list("REQ-d00001, REQ-d00002")
+    assert [i.resolved for i in items] == ["REQ-d00001", "REQ-d00002"]
+
+
+# Verifies: REQ-d00212-R
+def test_two_spellings_of_one_identifier_count_as_a_repeat(reader):
+    """Detection is on the normalized target: case is not a way to name a
+    target twice without it being noticed."""
+    items = reader.parse_ref_list("REQ-d00001, req-d00001")
+    assert [i.resolved for i in items] == [None, None]
+    assert all(FaultCode.DUPLICATE_ITEM in i.codes for i in items)

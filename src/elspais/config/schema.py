@@ -717,6 +717,33 @@ class ElspaisConfig(_StrictModel):
             _validate_namespace(key)
         return v
 
+    @model_validator(mode="after")
+    def _v_levels_letter_case_collision(self):
+        # Implements: REQ-d00212-G
+        # An identifier's level code is matched case-insensitively
+        # (REQ-d00212-R): two levels whose letter differs only in case would
+        # make that tolerance ambiguous -- an identifier written in one
+        # level's case could equally be the other's typo. Case-insensitive
+        # matching is safe only because this pair is refused before either
+        # level's identifiers are ever read, the same guard shape as
+        # REQ-d00251-F/K for the separator characters.
+        seen: dict[str, tuple[str, str]] = {}
+        for key, level in (self.levels or {}).items():
+            folded = level.letter.lower()
+            prior = seen.get(folded)
+            if prior is not None and prior[1] != level.letter:
+                prior_key, prior_letter = prior
+                raise ValueError(
+                    f'levels.{key}.letter "{level.letter}" and '
+                    f'levels.{prior_key}.letter "{prior_letter}" differ only in '
+                    f"case. A repository's identifier configuration must admit "
+                    f"exactly one spelling of any given identifier, up to case; "
+                    f"give one level a letter the other's case cannot be "
+                    f"mistaken for."
+                )
+            seen.setdefault(folded, (key, level.letter))
+        return self
+
     @field_validator("statuses")
     @classmethod
     def _v_status_keys(cls, v: dict[str, Any]) -> dict[str, Any]:

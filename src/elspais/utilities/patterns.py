@@ -894,20 +894,21 @@ class IdResolver:
             ]
         return self._ci_forms
 
-    # Implements no requirement. Repairing a mis-spelled reference is an
-    # unspecified stop-gap: it contradicts the rule that an identifier
-    # resolves only in the one spelling its configuration admits, and it
-    # goes when test annotations stop depending on it.
+    # Implements: REQ-d00212-R, REQ-d00212-S
     def _canonicalize_case(self, cleaned: str) -> str | None:
         """Rewrite a reference's level code and *Assertion* labels to canonical case.
 
-        A reference is recognised case-insensitively but parsed case-sensitively,
-        so without this a mis-cased label reads as an identifier no repository
-        claims -- reported as foreign rather than as the typo it is.
+        Case does not decide whether an identifier resolves (REQ-d00212-R):
+        two case-spellings of a level code or label name the same identifier,
+        and the configuration guard (REQ-d00212-G) keeps that reading safe by
+        refusing a configuration that would let two case-spellings collide.
+        Rendering stays canonical regardless of the case an author wrote, so
+        this is what makes reading tolerant without making writing ambiguous.
 
-        The component is deliberately not touched. Under a case-style its case
-        is its identity, so a mis-cased component is a different component, not
-        the same one spelled differently, and it stays unresolved.
+        The component is deliberately not touched (REQ-d00212-S): under a
+        case-style its case is its identity, so a mis-cased component is a
+        different component, not the same one spelled differently, and it
+        stays unresolved -- case tolerance reaches no further than case.
         """
         for _form_name, regex, alias_used in self._case_insensitive_forms():
             m = regex.match(cleaned)
@@ -1238,7 +1239,6 @@ class FederatedIdReader:
             return []
         extras = self._extra_patterns(extra_items)
         results: list[RefItem] = []
-        seen: set[str] = set()
         for index, part in enumerate(stripped.split(REF_LIST_SEPARATOR)):
             candidate = part.strip()
             if not candidate:
@@ -1260,15 +1260,32 @@ class FederatedIdReader:
             if not matched and any(extra.fullmatch(candidate) for extra in extras):
                 ref = candidate
                 matched = True
-            if ref in seen:
-                continue
-            seen.add(ref)
             if matched:
                 results.append(RefItem(raw=candidate, index=index, resolved=ref))
             else:
                 fault_class, codes = self.classify_unmatched(candidate)
                 results.append(
                     RefItem(raw=candidate, index=index, fault_class=fault_class, codes=codes)
+                )
+
+        # Implements: REQ-d00272-K
+        # A repeated target is a list its author has lost track of. Every
+        # instance is reported and none resolves -- keeping the first would
+        # hide the very thing worth reporting. Detection is on the resolved
+        # (normalized) target, so two spellings of one identifier count as a
+        # repeat; an item that never resolved names no target and so cannot
+        # collide with anything.
+        target_counts: dict[str, int] = {}
+        for item in results:
+            if item.resolved is not None:
+                target_counts[item.resolved] = target_counts.get(item.resolved, 0) + 1
+        for i, item in enumerate(results):
+            if item.resolved is not None and target_counts[item.resolved] > 1:
+                results[i] = RefItem(
+                    raw=item.raw,
+                    index=item.index,
+                    fault_class=FaultClass.FORBIDDEN,
+                    codes=(FaultCode.DUPLICATE_ITEM,),
                 )
         return results
 

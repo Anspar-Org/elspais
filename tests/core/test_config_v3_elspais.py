@@ -149,6 +149,35 @@ class TestIdPatternsConfigChanges:
         assert "{level.letter}" in cfg.aliases["short"]
         assert "{type.letter}" not in cfg.aliases["short"]
 
+    def test_REQ_d00212_G_level_letters_colliding_only_by_case_rejected(self):
+        """A configuration naming two levels whose letter differs only in
+        case is refused: matching an identifier's level code is
+        case-insensitive (REQ-d00212-R), so such a pair would make that
+        tolerance ambiguous."""
+        with pytest.raises(ValidationError) as excinfo:
+            ElspaisConfig(
+                levels={
+                    "prd": LevelConfig(rank=1, letter="p", implements=["prd"]),
+                    "product": LevelConfig(rank=2, letter="P", implements=["prd"]),
+                }
+            )
+        message = str(excinfo.value)
+        assert "prd" in message
+        assert "product" in message
+
+    def test_REQ_d00212_G_level_letters_distinct_case_accepted(self):
+        """Two levels with genuinely distinct letters load without complaint,
+        including a level letter that happens to repeat across a rebuilt
+        config (not a collision -- the same spelling, not two of them)."""
+        cfg = ElspaisConfig(
+            levels={
+                "prd": LevelConfig(rank=1, letter="p", implements=["prd"]),
+                "ops": LevelConfig(rank=2, letter="o", implements=["prd", "ops"]),
+            }
+        )
+        assert cfg.levels["prd"].letter == "p"
+        assert cfg.levels["ops"].letter == "o"
+
 
 # ---------------------------------------------------------------------------
 # REQ-d00212-H: HierarchyConfig is booleans only
