@@ -4442,10 +4442,36 @@ class GraphBuilder:
             return FaultClass.UNKNOWN_ASSERTION
         return FaultClass.UNKNOWN_REQUIREMENT
 
+    # Implements: REQ-d00252-G
+    def _own_namespace_diagnostic(self, target_id: str) -> str:
+        """A diagnostic naming the likely cause when *target_id* opens with
+        this repository's own namespace but never resolved.
+
+        Reached only when no grammar-level verdict already exists for the
+        item: a surface whose reader threads one (code and test
+        annotations) already carries this information in a structured
+        ``MALFORMED`` class, and prose beside it would duplicate rather
+        than restore an obligation. A journey's ``Validates:`` and a spec
+        file's ``Implements:``/``Refines:``/``Satisfies:``/``Integrates:``
+        carry no verdict yet (REQ-d00269-G's reader is threaded for
+        code/test annotations only), so this is where the obligation is
+        met for them: a mis-styled same-repo reference is told apart from
+        one that may simply belong to a sibling not yet authored.
+        """
+        if not self._resolver.declares_namespace(target_id):
+            return ""
+        own_namespace = self._resolver.config.namespace
+        return (
+            f"{target_id} matches this repo's namespace ({own_namespace}) but "
+            "does not parse under the configured ID pattern (check "
+            "[id-patterns.assertions] separator/multi_separator)."
+        )
+
     def _fault_verdict(
         self, target_id: str, verdicts: dict[str, tuple[FaultClass, tuple[str, ...]]]
-    ) -> tuple[FaultClass, tuple[str, ...]]:
-        """The class and codes for *target_id*, from its parsed verdict or resolution.
+    ) -> tuple[FaultClass, tuple[str, ...], str]:
+        """The class, codes, and diagnostic for *target_id*, from its parsed
+        verdict or resolution.
 
         A verdict Task 3's reader carried (grammar-level: the item never
         matched any member's identifier) always wins when present; an item
@@ -4456,8 +4482,13 @@ class GraphBuilder:
         key).
         """
         if target_id in verdicts:
-            return verdicts[target_id]
-        return self._resolution_class(target_id), ()
+            fault_class, codes = verdicts[target_id]
+            return fault_class, codes, ""
+        return (
+            self._resolution_class(target_id),
+            (),
+            self._own_namespace_diagnostic(target_id),
+        )
 
     # Implements: REQ-p00014-B, REQ-p00014-C, REQ-d00069-H
     def _instantiate_satisfies_templates(self) -> None:
@@ -4779,7 +4810,15 @@ class GraphBuilder:
         resolved_refs: set[tuple[str, str, str]] = set()
         for source_id, target_id, edge_kind, verdicts in expanded_links:
             source = self._nodes.get(source_id)
-            target = self._nodes.get(target_id)
+            # A verdict Task 3's reader carried for this raw item (an
+            # unmatched item's grammar-level class, or a repeated target's
+            # DUPLICATE_ITEM) already answers whether it may bind -- and the
+            # answer is always no. Node lookup must not override that: a
+            # duplicate's raw text is a real reference's own spelling (that
+            # is what makes it a duplicate rather than a typo), so
+            # ``self._nodes.get(target_id)`` finds the real node and would
+            # bind it were this check skipped (REQ-d00272-K).
+            target = None if target_id in verdicts else self._nodes.get(target_id)
 
             if source and target:
                 # Implements: REQ-p00014-G
@@ -4924,7 +4963,7 @@ class GraphBuilder:
                 # an item no grammar accounted for has one, so a target that
                 # matched but names no node here falls back to the
                 # resolution-stage decision (REQ-p00014-R).
-                fault_class, codes = self._fault_verdict(target_id, verdicts)
+                fault_class, codes, diagnostic = self._fault_verdict(target_id, verdicts)
                 self._broken_references.append(
                     ReferenceFault(
                         source_id=source_id,
@@ -4932,6 +4971,7 @@ class GraphBuilder:
                         edge_kind=edge_kind.value,
                         fault_class=fault_class,
                         codes=codes,
+                        diagnostic=diagnostic,
                     )
                 )
 

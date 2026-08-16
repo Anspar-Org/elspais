@@ -228,7 +228,7 @@ def test_journey_validates_across_separator_combinations(
     assert rollup.uat_coverage.direct_labels == set(expected_labels)
 
 
-# Verifies: REQ-d00082-E, REQ-p00014-R
+# Verifies: REQ-d00082-E, REQ-p00014-R, REQ-d00252-G
 def test_journey_dash_style_ref_under_slash_config_is_hard_broken(tmp_path):
     """A journey `Validates:` ref that still uses "-" when the project is
     configured with a "/" separator must remain a hard broken reference
@@ -237,9 +237,10 @@ def test_journey_dash_style_ref_under_slash_config_is_hard_broken(tmp_path):
     could belong to. Classification at resolution time falls back to
     UNKNOWN_REQUIREMENT: the item never parsed under this repository's own
     grammar, so no base requirement could be confirmed present (REQ-p00014-R).
-    Naming the specific separator-config mismatch as the likely cause is a
-    structured-code diagnosis not yet wired to journeys' Validates: (Task 6
-    threads it for code/test annotations only)."""
+    Journeys' `Validates:` carries no grammar-level verdict (only code/test
+    annotations thread one), so the resolution stage itself names the
+    likely cause when the target opens with this repo's own namespace
+    (REQ-d00252-G)."""
     from elspais.graph.factory import build_graph
 
     sep, multi = "/", "+"
@@ -269,6 +270,9 @@ def test_journey_dash_style_ref_under_slash_config_is_hard_broken(tmp_path):
         "reference could belong to."
     )
     assert br.fault_class is FaultClass.UNKNOWN_REQUIREMENT
+    assert (
+        "[id-patterns.assertions] separator/multi_separator" in br.diagnostic
+    ), f"Expected a separator-config diagnostic (REQ-d00252-G), got {br.diagnostic!r}"
 
 
 # --------------------------------------------------------------------------- #

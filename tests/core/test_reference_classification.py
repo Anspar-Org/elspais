@@ -317,3 +317,32 @@ def test_two_spellings_of_one_identifier_count_as_a_repeat(reader):
     items = reader.parse_ref_list("REQ-d00001, req-d00001")
     assert [i.resolved for i in items] == [None, None]
     assert all(FaultCode.DUPLICATE_ITEM in i.codes for i in items)
+
+
+# Verifies: REQ-d00272-K
+def test_a_duplicated_existing_target_binds_nothing_and_reports_twice(tmp_path, repo_root):
+    """End-to-end through build_graph(): the reader's verdict is not enough
+    on its own. A downstream consumer that falls back to raw text when an
+    item's ``resolved`` is None -- the same fallback that lets a genuinely
+    unmatched item survive to be reported -- must not let a duplicate's raw
+    text (which may spell a real, existing node) reach the builder as a
+    bindable target. REQ-d00001 exists in the fixture graph, so this is the
+    case that actually exercises the bug: an ordinary unmatched item never
+    coincides with a real id, a duplicate of an existing one always does.
+    """
+    graph = _project(
+        tmp_path,
+        repo_root,
+        "# Implements: REQ-d00001, REQ-d00001\ndef f():\n    return 1\n",
+    )
+    node = graph.find_by_id("REQ-d00001")
+    assert node is not None
+    from elspais.graph.relations import EdgeKind
+
+    assert not any(node.iter_edges_by_kind(EdgeKind.IMPLEMENTS)), (
+        "a duplicated target must produce no relationship, even though the " "target itself exists"
+    )
+    faults = [f for f in graph.broken_references() if f.target_id == "REQ-d00001"]
+    assert len(faults) == 2, f"expected one fault per instance, got {faults}"
+    assert all(f.fault_class is FaultClass.FORBIDDEN for f in faults)
+    assert all(FaultCode.DUPLICATE_ITEM in f.codes for f in faults)
