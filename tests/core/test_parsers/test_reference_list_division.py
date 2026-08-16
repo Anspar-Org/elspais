@@ -107,6 +107,21 @@ def test_an_unrecognised_policy_is_refused():
         _reader().parse_ref_list(_GOOD, on_unmatched="ignore")
 
 
+# Verifies: REQ-d00269-G
+def test_a_repeated_unmatched_item_reaches_the_caller_once():
+    """A typo written twice in the same list must not double the diagnostic
+    -- the divider deduped every branch uniformly before per-item verdicts
+    existed, and a caller that keeps unmatched items (a spec file's
+    ``Implements:``) must still see one entry, not two."""
+    items = _reader().parse_ref_list(f"{_TYPO}, {_TYPO}", on_unmatched="keep")
+    refs = [i.resolved if i.resolved else i.raw for i in items if i.raw]
+
+    assert refs == [_TYPO], (
+        "a duplicate unmatched item must collapse to one caller-visible "
+        f"entry, exactly as the original divider collapsed it; got {refs}"
+    )
+
+
 _SPEC_CONFIG = """\
 version = 3
 

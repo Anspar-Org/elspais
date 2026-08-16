@@ -99,6 +99,7 @@ class ReferenceFault:
         )
 
 
+# Implements: REQ-d00269-G
 @dataclass(frozen=True)
 class RefItem:
     """One item of a reference list, and what became of it.

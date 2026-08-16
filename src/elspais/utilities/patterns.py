@@ -1214,8 +1214,22 @@ class FederatedIdReader:
                 continue
             if item.fullmatch(candidate):
                 ref = self.normalize(candidate)
+                matched = True
             elif any(extra.fullmatch(candidate) for extra in extras):
                 ref = candidate
+                matched = True
+            else:
+                # Dedup applies uniformly to every non-empty item, matched or
+                # not -- the original divider deduped on the normalized form
+                # whether or not a grammar claimed the item, and a caller
+                # that keeps unmatched items relies on that collapse.
+                ref = self.normalize(candidate)
+                matched = False
+            if ref in seen:
+                continue
+            seen.add(ref)
+            if matched:
+                results.append(RefItem(raw=candidate, index=index, resolved=ref))
             else:
                 results.append(
                     RefItem(
@@ -1225,11 +1239,6 @@ class FederatedIdReader:
                         codes=(),
                     )
                 )
-                continue
-            if ref in seen:
-                continue
-            seen.add(ref)
-            results.append(RefItem(raw=candidate, index=index, resolved=ref))
         return results
 
     def extract_underscored_ref(self, text: str) -> str | None:

@@ -82,3 +82,16 @@ def test_an_item_that_read_carries_no_fault(reader):
 def test_empty_content_yields_no_items(reader):
     assert reader.parse_ref_list("") == []
     assert reader.parse_ref_list("   ") == []
+
+
+# Verifies: REQ-d00269-G
+def test_a_repeated_unmatched_item_collapses_to_one(reader):
+    """A duplicate item collapses to one entry whether or not it resolved --
+    the divider deduped uniformly before this task and must go on doing so,
+    since a caller that keeps an unmatched item relies on that collapse to
+    avoid reporting and wiring the same typo twice."""
+    items = reader.parse_ref_list("BADREF, BADREF")
+    assert len(items) == 1
+    assert items[0].raw == "BADREF"
+    assert items[0].resolved is None
+    assert items[0].fault_class is not None

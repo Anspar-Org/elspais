@@ -129,6 +129,23 @@ def foo(): pass
         refs = [r for r in results if r.content_type == "code_ref"]
         assert len(refs) == 0
 
+    # Verifies: REQ-d00269-G
+    def test_a_partly_unmatched_scanned_line_binds_nothing(self, resolver, code_parser):
+        """A scanned annotation is found in the wild rather than authored as
+        data, so one item the grammar cannot account for discards the whole
+        line -- the reference that did resolve does not get to keep its
+        edge on its own. This is the all-or-nothing reject policy, which
+        lives at this caller layer (``_handle_unresolved_ref``), not inside
+        the divider."""
+        content = "# Implements: REQ-p00001, GARBAGE-999\ndef foo(): pass\n"
+        results = _parse_code(content, resolver, code_parser)
+        refs = [r for r in results if r.content_type == "code_ref"]
+        assert len(refs) == 1
+        assert refs[0].parsed_data["implements"] != ["REQ-p00001"], (
+            "one unmatched item must discard the whole line rather than "
+            f"keeping the item that did resolve; got {refs[0].parsed_data['implements']}"
+        )
+
 
 class TestTestRefParsing:
     """Test test reference parsing via Lark grammar."""
