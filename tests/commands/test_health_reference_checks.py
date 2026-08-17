@@ -7,7 +7,7 @@ import pathlib
 
 import pytest
 
-from elspais.commands.health import run_checks
+from elspais.commands.health import _REFERENCE_CHECKS, run_checks
 from elspais.graph.reference_faults import FaultClass
 
 
@@ -59,7 +59,19 @@ def f5():
 # which is a relationship its author appears to intend and has not spelled.
 def f6():
     pass
+
+
+# Implements: REQ-d00001-A
+def f7():
+    pass
+
+
+# Implements: req-d1
+def f8():
+    pass
 """
+
+_INFORMAL_CITATION = "# REQ-d00001-A: this prose cites a requirement without declaring anything,"
 
 
 @pytest.fixture(scope="module")
@@ -157,12 +169,17 @@ def test_every_fault_class_is_populated_by_this_fixture(faulted_graph, config):
 
 
 # Verifies: REQ-p00019-K
-def test_reference_fault_classes_partition_the_broken_references(faulted_graph):
+def test_reference_fault_classes_partition_the_broken_references(faulted_graph, config):
     """Every broken reference the graph recorded lands in exactly one of
-    the five classes -- the classification is total, not merely disjoint
-    on the fixture's five hand-picked examples."""
-    all_classes = {f.fault_class for f in faulted_graph.broken_references()}
-    assert all_classes <= set(FaultClass)
+    the five classes: the five buckets sum to the whole population, so no
+    fault is counted twice and none is dropped."""
+    checks = run_checks(faulted_graph, config)
+    bucketed = sum(
+        len(next(c for c in checks if c.name == name).findings)
+        for _fc, name, _desc in _REFERENCE_CHECKS
+    )
+    assert bucketed == len(faulted_graph.broken_references())
+    assert set(FaultClass) >= {f.fault_class for f in faulted_graph.broken_references()}
 
 
 # Verifies: REQ-d00272-O
@@ -180,17 +197,31 @@ def test_an_informal_citation_is_reported_as_an_undeclared_relationship(faulted_
 # Verifies: REQ-d00272-O
 def test_an_informal_citation_produces_no_relationship(faulted_graph):
     """Reading intent as a declaration is the failure this vocabulary
-    exists to prevent: the citing comment must credit nothing."""
-    from elspais.graph import EdgeKind
+    exists to prevent: the citing comment must credit nothing.
+
+    The control is the file itself. ``m.py`` cites REQ-d00001 twice -- once
+    informally above ``f6``, once with a keyword above ``f7`` -- so an
+    assertion satisfied by an empty graph would fail here. Exactly one of
+    the two may reach the requirement, and it must be ``f7``'s.
+    """
+    from elspais.graph import EdgeKind, NodeKind
 
     node = faulted_graph.find_by_id("REQ-d00001")
     assert node is not None
     citing = [
-        e.target.id
+        e.target
         for e in node.iter_edges_by_kind(EdgeKind.IMPLEMENTS)
-        if "f6" in str(e.target.id)
+        if e.target.kind is NodeKind.CODE
     ]
-    assert not citing
+    lines = sorted(c.get_field("parse_line") for c in citing)
+    body = _CODE.split("\n")
+    declared_line = body.index("# Implements: REQ-d00001-A") + 1
+    informal_line = body.index(_INFORMAL_CITATION) + 1
+    assert declared_line in lines, "the declared reference must bind"
+    assert informal_line not in lines, (
+        f"the informal citation at line {informal_line} must bind nothing; "
+        f"lines citing REQ-d00001 are {lines}"
+    )
 
 
 # Verifies: REQ-d00272-O
@@ -207,3 +238,41 @@ def test_an_undeclared_finding_names_its_file_and_line(faulted_graph, config):
     hit = next(f for f in undeclared.findings if "REQ-d00001-A" in f.message)
     assert hit.file_path and hit.file_path.endswith("m.py")
     assert hit.line
+
+
+# Verifies: REQ-d00272-N
+def test_a_non_canonical_spelling_is_reported_and_still_binds(faulted_graph, config):
+    """The referent counterpart of ``keyword_form``: a spelling the
+    configuration admits produces its relationship, and that it is not the
+    canonical spelling is reported rather than charged to the reference."""
+    from elspais.graph import EdgeKind, NodeKind
+
+    checks = run_checks(faulted_graph, config)
+    form = next(c for c in checks if c.name == "references.identifier_form")
+    assert any("req-d1" in f.message for f in form.findings)
+    assert any("E_WRONG_CASE" in f.message for f in form.findings)
+    assert any("E_WRONG_PADDING" in f.message for f in form.findings)
+
+    node = faulted_graph.find_by_id("REQ-d00001")
+    body = _CODE.split("\n")
+    non_canonical_line = body.index("# Implements: req-d1") + 1
+    lines = [
+        e.target.get_field("parse_line")
+        for e in node.iter_edges_by_kind(EdgeKind.IMPLEMENTS)
+        if e.target.kind is NodeKind.CODE
+    ]
+    assert non_canonical_line in lines, "the relationship it names still holds"
+
+
+# Verifies: REQ-d00272-N, REQ-p00019-K
+def test_a_non_canonical_spelling_is_not_a_broken_reference(faulted_graph):
+    """A finding that costs no edge must never join a bucket counting
+    references that failed to bind."""
+    assert not any("req-d1" in f.target_id for f in faulted_graph.broken_references())
+
+
+# Verifies: REQ-d00272-N
+def test_the_identifier_form_check_carries_its_own_severity(faulted_graph, config):
+    config["rules"]["references"]["identifier_form"] = "ok"
+    checks = run_checks(faulted_graph, config)
+    assert next(c for c in checks if c.name == "references.identifier_form").severity == "ok"

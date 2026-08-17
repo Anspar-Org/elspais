@@ -267,22 +267,32 @@ before an *Assertion* label, `+` between labels), and the repository holds
 | `# Implements: REQ-d00001-Z` | unknown_assertion | — |
 | `# Implements: REQ-d00001, REQ-d00001` | forbidden | `E_DUPLICATE_ITEM` (both instances) |
 | `# Refines: REQ-d00001` (in a code file) | forbidden | — |
+| `# Implements: req-d00001` | — | binds; `E_NON_CANONICAL_SPELLING` `E_WRONG_CASE` |
+| `# Implements: REQ-d1` | — | binds; `E_NON_CANONICAL_SPELLING` `E_WRONG_PADDING` |
 | `#Implements: REQ-d00001` | — | binds; `E_KEYWORD_NO_MARKER_SPACE` |
 | `# implements: REQ-d00001` | — | binds; `E_KEYWORD_WRONG_CASE` |
 | `# **Implements**: REQ-d00001` (off markdown) | — | binds; `E_KEYWORD_MARKDOWN_EMPHASIS_OFF_MARKDOWN` |
 | `#   REQ-d00001` (no keyword above) | — | reported as an undeclared relationship |
 
+The `forbidden` class covers every reference that reads and resolves and whose
+relationship is refused anyway. Its description says only what is true of all
+of them; which refusal it was is the finding's code.
+
 `E_SYNTAX_ERROR` accompanies every reported fault. Carried *alone* it is the
 report that nothing more specific is known — the tool declining to guess, not
-the absence of a diagnosis. `E_AMBIGUOUS` accompanies it where two accounts of
-an item each explain it equally well: a code is issued only where the input
-determines the defect it names, so where the input admits two accounts neither
-is issued.
+the absence of a diagnosis. That is also what an item admitting two accounts of
+equal extent carries: a code is issued only where the input determines the
+defect it names, so where two accounts each explain the item, neither is
+issued and the generic code stands alone.
 
-The last three rows are not reference faults. A keyword written in a
-non-canonical form binds exactly as the canonical form would — the finding is a
-fact about the file, never a reason to withhold a relationship — and is
-reported under `references.keyword_form`. A comment opening with an identifier
-that no keyword introduces is a relationship its author appears to intend and
-has not spelled; it is reported under `references.undeclared` and produces
-nothing.
+The last six rows are not reference faults, and none of them costs a
+relationship. A reference spelled in a form the configuration admits that is
+not the canonical one — different case, different padding, an alias — binds
+exactly as the canonical spelling would and is reported under
+`references.identifier_form`, carrying `E_NON_CANONICAL_SPELLING` plus
+whichever of case and padding the two spellings determine. The finding names
+the file and the line; nothing rewrites the annotation for you. A keyword written in a non-canonical form is the same fact about
+the keyword rather than the referent, reported under
+`references.keyword_form`. And a comment opening with an identifier that no
+keyword introduces is a relationship its author appears to intend and has not
+spelled; it is reported under `references.undeclared` and produces nothing.

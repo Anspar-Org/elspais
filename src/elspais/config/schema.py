@@ -442,6 +442,8 @@ class ReferenceSeverityConfig(_StrictModel):
     forbidden: str = "error"
     # Implements: REQ-d00272-G
     keyword_form: str = "warning"
+    # Implements: REQ-d00272-N
+    identifier_form: str = "warning"
     # Implements: REQ-d00272-O
     undeclared: str = "warning"
 

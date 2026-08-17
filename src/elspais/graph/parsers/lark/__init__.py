@@ -444,7 +444,7 @@ class FileDispatcher:
         return results
 
 
-# Implements: REQ-d00269-H, REQ-d00272-G, REQ-d00272-O
+# Implements: REQ-d00269-H, REQ-d00272-G, REQ-d00272-N, REQ-d00272-O
 def _fault_and_style_content(transformer) -> list:
     """Turn a transformer's faults, style findings and undeclared
     relationships into synthetic ``ParsedContent`` entries.
@@ -484,6 +484,20 @@ def _fault_and_style_content(transformer) -> list:
                 end_line=line_num,
                 raw_text="",
                 parsed_data={"code": code, "source_id": transformer.source_id},
+            )
+        )
+    for line_num, text, codes in getattr(transformer, "identifier_form", ()):
+        entries.append(
+            ParsedContent(
+                content_type="identifier_form_finding",
+                start_line=line_num,
+                end_line=line_num,
+                raw_text=text,
+                parsed_data={
+                    "text": text,
+                    "codes": codes,
+                    "source_id": transformer.source_id,
+                },
             )
         )
     for line_num, text in getattr(transformer, "undeclared", ()):

@@ -47,8 +47,9 @@ Configuration checks always run as part of traceability verification. For focuse
 | `references.unknown_namespace` | No reference names a target no configured repository claims; default severity: info |
 | `references.unknown_requirement` | No claimed reference names a requirement that repository does not hold; default severity: error |
 | `references.unknown_assertion` | No claimed reference names an assertion label its requirement lacks; default severity: error |
-| `references.forbidden` | No reference uses a keyword its file kind refuses; default severity: error |
+| `references.forbidden` | No reference that reads and resolves has its relationship refused — a keyword the file kind may not use, or a target the list names twice; default severity: error |
 | `references.keyword_form` | No keyword is written in a non-canonical case, spacing, or markdown-emphasis form; default severity: warning (never costs the edge its keyword introduces) |
+| `references.identifier_form` | No reference is spelled in a non-canonical form the configuration admits; default severity: warning (never costs the relationship it names) |
 | `references.undeclared` | No comment opens with an identifier that no keyword introduces; default severity: warning (produces no relationship) |
 | `spec.needs_rewrite` | Flags requirements that will be rewritten on next save (duplicate refs, stale hash); severity: warning |
 | `spec.hash_integrity` | Flags Satisfies-linked requirements for review when their template hash is stale; severity: warning |
@@ -194,6 +195,7 @@ unknown_requirement = "error"  # ok | info | warning | error
 unknown_assertion = "error"    # ok | info | warning | error
 forbidden = "error"            # ok | info | warning | error
 keyword_form = "warning"       # ok | info | warning | error
+identifier_form = "warning"    # ok | info | warning | error
 undeclared = "warning"         # ok | info | warning | error
 ```
 
@@ -212,7 +214,7 @@ never a later one:
 | `references.unknown_namespace` | The text reads, but no configured repository's identifier grammar claims it. |
 | `references.unknown_requirement` | A repository claims the identifier format, but holds no such requirement. |
 | `references.unknown_assertion` | The requirement exists, but not that assertion label. |
-| `references.forbidden` | The reference reads and resolves, but its keyword is not valid for this file kind (e.g. `Refines:` in a code file). |
+| `references.forbidden` | The reference reads and resolves, but the relationship it declares is refused — its keyword is not valid for this file kind (e.g. `Refines:` in a code file), or the list names the same target more than once. |
 
 A target no repository claims is by definition outside every configured ID
 pattern, so its shape says nothing about whether the author meant a
@@ -231,7 +233,13 @@ silence expected cross-repository references entirely.
 A keyword written in a non-canonical case, spacing, or markdown-emphasis
 form is reported separately, under `references.keyword_form` — a style
 finding never costs the edge its keyword introduces, so it does not join a
-check that counts references that failed to bind.
+check that counts references that failed to bind. `references.identifier_form`
+says the same thing about the referent: a reference spelled in a form the
+configuration admits but that is not the canonical one — different case,
+different padding, an alias — produces the relationship it names, and its
+spelling is reported rather than charged to it. The report names the file and
+the line so the spelling can be brought into line by hand; nothing rewrites a
+code or test annotation for you.
 
 #### `references.undeclared` — A Relationship Meant, Not Declared
 

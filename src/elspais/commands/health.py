@@ -695,8 +695,41 @@ _REFERENCE_CHECKS: tuple[tuple[FaultClass, str, str], ...] = (
         "references.unknown_assertion",
         "the requirement exists, but not that label",
     ),
-    (FaultClass.FORBIDDEN, "references.forbidden", "exists, but not for this keyword"),
+    # The class covers every reference that read and resolved and whose
+    # relationship is nonetheless refused -- a keyword the file kind may not
+    # use, and a target the list names more than once.  The description says
+    # only what is true of both; which one it was is the finding's code
+    # (REQ-p00019-J, REQ-d00252-K).
+    (
+        FaultClass.FORBIDDEN,
+        "references.forbidden",
+        "resolve, but the relationship they declare is refused",
+    ),
 )
+
+
+# Implements: REQ-d00204-E
+def _unavailable_repos(graph: FederatedGraph) -> list[dict[str, str]]:
+    """The configured repositories that could not be loaded, with where each
+    one lives and why it failed.
+
+    A reader who cannot resolve a reference because a repository is missing
+    needs to know how to obtain it, and that belongs in the report whatever
+    severity the project has chosen for the class -- severity follows the
+    class a reference reached, this follows from the federation's state.
+    """
+    out: list[dict[str, str]] = []
+    for entry in graph.iter_repos():
+        if entry.graph is not None:
+            continue
+        out.append(
+            {
+                "name": entry.name,
+                "path": str(entry.repo_root) if entry.repo_root else "",
+                "error": entry.error or "",
+            }
+        )
+    return sorted(out, key=lambda r: r["name"])
 
 
 def check_reference_class(
@@ -715,6 +748,7 @@ def check_reference_class(
     typed = _validate_config(config or {})
     severity = getattr(typed.rules.references, fault_class.label)
     faults = [f for f in graph.broken_references() if f.fault_class is fault_class]
+    unavailable = _unavailable_repos(graph)
     if not faults:
         return HealthCheck(
             name=name,
@@ -744,14 +778,23 @@ def check_reference_class(
                 line=line,
             )
         )
+    # Implements: REQ-d00204-E
+    message = f"{len(faults)} reference(s): {description}"
+    if unavailable:
+        obtain = "; ".join(
+            f"{r['name']} at {r['path']}" + (f" ({r['error']})" if r["error"] else "")
+            for r in unavailable
+        )
+        message += f" -- a target may belong to a repository that could not be read: {obtain}"
     return HealthCheck(
         name=name,
         passed=severity == "ok",
-        message=f"{len(faults)} reference(s): {description}",
+        message=message,
         category="references",
         severity=severity,
         details={
             "count": len(faults),
+            "unavailable_repos": unavailable,
             "references": [
                 {
                     "source": f.source_id,
@@ -807,6 +850,63 @@ def check_reference_keyword_form(
         name="references.keyword_form",
         passed=severity == "ok",
         message=f"{len(findings_raw)} keyword(s) written in a non-canonical form",
+        category="references",
+        severity=severity,
+        details={"count": len(findings_raw)},
+        findings=findings,
+    )
+
+
+# Implements: REQ-d00272-N
+def check_reference_identifier_form(
+    graph: FederatedGraph, config: dict[str, Any] | None
+) -> HealthCheck:
+    """Report a reference spelled in a form other than the canonical one.
+
+    The referent counterpart of ``references.keyword_form``, and it withholds
+    just as little: a spelling the configuration admits produces the
+    relationship it names, and that it is not the canonical spelling is a
+    fact about the file rather than a reason to refuse an edge.  So it is
+    reported under its own rule and can never join a check that counts
+    references that failed to bind.
+    """
+    typed = _validate_config(config or {})
+    severity = typed.rules.references.identifier_form
+    findings_raw = graph.identifier_form_findings()
+    if not findings_raw:
+        return HealthCheck(
+            name="references.identifier_form",
+            passed=True,
+            message="No references spelled in a non-canonical form",
+            category="references",
+            severity=severity,
+        )
+    findings = []
+    for f in findings_raw:
+        try:
+            repo_name = graph.repo_for(f.source_id).name
+        except KeyError:
+            repo_name = None
+        file_path, line = _fault_location(graph, f.source_id, f.line)
+        codes = " ".join(c for c in f.codes if c != FaultCode.NON_CANONICAL_SPELLING)
+        detail = f" [{codes}]" if codes else ""
+        findings.append(
+            HealthFinding(
+                message=(
+                    f"{f.text} -- spelled in a form the configuration admits but "
+                    f"is not the canonical one; the relationship it names still "
+                    f"holds{detail}"
+                ),
+                node_id=f.source_id,
+                repo=repo_name,
+                file_path=file_path,
+                line=line,
+            )
+        )
+    return HealthCheck(
+        name="references.identifier_form",
+        passed=severity == "ok",
+        message=f"{len(findings_raw)} reference(s) spelled in a non-canonical form",
         category="references",
         severity=severity,
         details={"count": len(findings_raw)},
@@ -2052,6 +2152,7 @@ def run_spec_checks(
             for fault_class, name, description in _REFERENCE_CHECKS
         ],
         check_reference_keyword_form(graph, config),
+        check_reference_identifier_form(graph, config),
         check_reference_undeclared(graph, config),
         check_spec_hash_integrity(graph),
         check_no_cycles(graph),
@@ -3594,6 +3695,7 @@ _FOLLOWUP_COMMANDS: dict[str, str] = {
     "references.unknown_assertion": "elspais broken",
     "references.forbidden": "elspais broken",
     "references.keyword_form": "elspais checks --spec --format json",
+    "references.identifier_form": "elspais checks --spec --format json",
     "references.undeclared": "elspais checks --spec --format json",
     "spec.structural_orphans": "elspais checks --spec --format json",
     "spec.hierarchy_levels": "elspais checks --spec --format json",

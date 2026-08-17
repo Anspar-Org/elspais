@@ -346,6 +346,9 @@ _FIELD_COMMENTS: dict[str, str] = {
     "rules.references.keyword_form": (
         '"ok" | "info" | "warning" | "error" — a keyword written in a non-canonical form'
     ),
+    "rules.references.identifier_form": (
+        '"ok" | "info" | "warning" | "error" — a reference spelled non-canonically'
+    ),
     "rules.references.undeclared": (
         '"ok" | "info" | "warning" | "error" — a comment citing a requirement without a keyword'
     ),

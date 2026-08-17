@@ -22,6 +22,7 @@ from elspais.graph.GraphNode import (
 from elspais.graph.mutations import MutationEntry
 from elspais.graph.reference_faults import (
     FaultClass,
+    IdentifierFormFinding,
     ReferenceFault,
     StyleFinding,
     UndeclaredRelationship,
@@ -791,6 +792,17 @@ class FederatedGraph:
         result: list[StyleFinding] = []
         for _name, graph in self._live_graphs():
             result.extend(graph.style_findings())
+        return result
+
+    # Implements: REQ-d00272-N
+    def identifier_form_findings(self) -> list[IdentifierFormFinding]:
+        """Get every non-canonical reference spelling across all repos.
+
+        # Strategy: aggregate
+        """
+        result: list[IdentifierFormFinding] = []
+        for _name, graph in self._live_graphs():
+            result.extend(graph.identifier_form_findings())
         return result
 
     # Implements: REQ-d00272-O

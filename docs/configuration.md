@@ -483,11 +483,17 @@ retired = ["Deprecated", "Superseded", "Rejected"]
 #   unknown_requirement -- a configured repository's grammar claims the
 #     identifier, but it names no requirement that repository holds.
 #   unknown_assertion -- the requirement exists, but not that label.
-#   forbidden -- the keyword is not valid for the file kind it was
-#     written in (e.g. `Refines:` in a code file).
+#   forbidden -- the reference reads and resolves, but the relationship it
+#     declares is refused: the keyword is not valid for the file kind it
+#     was written in (e.g. `Refines:` in a code file), or the list names
+#     the same target more than once.
 #   keyword_form -- a keyword written in a non-canonical case, spacing, or
 #     markdown-emphasis form. Never costs the edge its keyword introduces;
 #     a style finding, not a broken reference.
+#   identifier_form -- a reference spelled in a form the configuration
+#     admits that is not the canonical one (case, padding, an alias).
+#     Never costs the relationship it names; a style finding, like
+#     keyword_form, but about the referent rather than the keyword.
 #   undeclared -- a comment opening with an identifier that no keyword
 #     introduces: a relationship its author appears to intend and has not
 #     spelled. Nothing about it is malformed and it produces no
@@ -502,6 +508,7 @@ unknown_requirement = "error"
 unknown_assertion = "error"
 forbidden = "error"
 keyword_form = "warning"
+identifier_form = "warning"
 undeclared = "warning"
 
 #──────────────────────────────────────────────────────────────────────────────

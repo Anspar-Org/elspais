@@ -630,7 +630,9 @@ class IdResolver:
         succeeds contains a relaxation the input never asked for, and naming
         it describes a defect the author does not have.  Where two disjoint
         sets of equal size each succeed, the input admits two accounts and
-        neither is issued (REQ-d00271-D).
+        neither is issued (REQ-d00271-D): the item carries the generic code
+        alone, which is already the report that nothing more specific is
+        known (REQ-d00271-C).
 
         A relaxation never produces a reference.  It says what is wrong and
         stops (REQ-d00269-J).
@@ -651,8 +653,8 @@ class IdResolver:
         # explain -- each relaxation is a no-op on a string its own "wrong"
         # shape does not match, and a no-op applied to an already-acceptable
         # item would otherwise register as a trivially succeeding combo at
-        # every size, reporting AMBIGUOUS for an item that is not malformed
-        # at all.
+        # every size, naming a defect an item that is not malformed at all
+        # does not have.
         if exact.fullmatch(item):
             return ()
 
@@ -667,7 +669,7 @@ class IdResolver:
             if len(succeeding) == 1:
                 return tuple(sorted(succeeding[0]))
             if len(succeeding) > 1:
-                return (FaultCode.AMBIGUOUS,)
+                return ()
 
         prefix = exact.match(item)
         if prefix and prefix.end() < len(item):

@@ -700,6 +700,11 @@
           "title": "Keyword Form",
           "type": "string"
         },
+        "identifier_form": {
+          "default": "warning",
+          "title": "Identifier Form",
+          "type": "string"
+        },
         "undeclared": {
           "default": "warning",
           "title": "Undeclared",

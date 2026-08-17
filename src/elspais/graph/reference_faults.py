@@ -9,6 +9,7 @@ anything having to be reconfigured (REQ-d00271-E).
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from enum import Enum
 
@@ -51,9 +52,16 @@ class FaultCode:
     EMPTY_ITEM = "E_EMPTY_ITEM"
     EMPTY_REFERENCE_LIST = "E_EMPTY_REFERENCE_LIST"
     IDENTIFIER_WITH_TRAILING_TEXT = "E_IDENTIFIER_WITH_TRAILING_TEXT"
-    AMBIGUOUS = "E_AMBIGUOUS"
     # Implements: REQ-d00272-K
     DUPLICATE_ITEM = "E_DUPLICATE_ITEM"
+    # An identifier is spelled in a form the configuration admits but is not
+    # the canonical one -- the finding never costs the relationship the
+    # reference names (REQ-d00272-N).  ``NON_CANONICAL_SPELLING`` is carried
+    # by every such finding and, carried alone, is the report that the
+    # spelling differs in no respect the tool has a name for.
+    NON_CANONICAL_SPELLING = "E_NON_CANONICAL_SPELLING"
+    WRONG_CASE = "E_WRONG_CASE"
+    WRONG_PADDING = "E_WRONG_PADDING"
     # A keyword's form is non-canonical -- the finding never costs the edge
     # its keyword introduces (REQ-d00272-G).
     KEYWORD_WRONG_CASE = "E_KEYWORD_WRONG_CASE"
@@ -177,6 +185,68 @@ class StyleFinding:
     source_id: str
     code: str
     line: int | None = None
+
+
+# Implements: REQ-d00272-N
+@dataclass(frozen=True)
+class IdentifierFormFinding:
+    """A reference spelled in a form the configuration admits, but not the
+    canonical one.
+
+    The referent counterpart of :class:`StyleFinding`, and it says the same
+    thing about the identifier that that says about the keyword: a spelling
+    the configuration admits produces the relationship it names, and that it
+    is not the canonical spelling is a fact about the file worth reporting
+    rather than a reason to withhold an edge.
+
+    Attributes:
+        source_id: ID of the node the finding is anchored to.
+        text: The reference as the author wrote it.
+        codes: ``NON_CANONICAL_SPELLING`` always, plus whichever of
+            ``WRONG_CASE``/``WRONG_PADDING`` the input determines.
+        line: The line the reference was written on.
+    """
+
+    source_id: str
+    text: str
+    codes: tuple[str, ...] = ()
+    line: int | None = None
+
+    def __post_init__(self) -> None:
+        if FaultCode.NON_CANONICAL_SPELLING not in self.codes:
+            object.__setattr__(self, "codes", (FaultCode.NON_CANONICAL_SPELLING, *self.codes))
+
+
+# Zeros that open a digit run -- the padding a component style adds, as
+# opposed to a zero that is part of the number.
+_LEADING_ZEROS = re.compile(r"(?<!\d)0+(\d)")
+
+
+def _unpadded(text: str) -> str:
+    """*text* with the padding zeros stripped from every component."""
+    return _LEADING_ZEROS.sub(r"\1", text)
+
+
+# Implements: REQ-d00272-N, REQ-d00271-D
+def identifier_form_defects(raw: str, resolved: str | None) -> tuple[str, ...]:
+    """How *raw*'s spelling differs from the canonical *resolved* one.
+
+    Empty where the item did not resolve (a reference that produced no
+    relationship is a fault, and its spelling is not the story) or where it
+    was already written canonically.  Otherwise the generic code, plus
+    whichever of case and padding the two spellings determine -- and only
+    those: a difference in neither is reported as the generic code alone
+    rather than guessed at (REQ-d00271-D).
+    """
+    if not resolved or raw == resolved:
+        return ()
+    codes: list[str] = []
+    if _unpadded(raw).lower() == _unpadded(resolved).lower():
+        if raw.lower() != resolved.lower():
+            codes.append(FaultCode.WRONG_PADDING)
+        if _unpadded(raw) != _unpadded(resolved):
+            codes.append(FaultCode.WRONG_CASE)
+    return (FaultCode.NON_CANONICAL_SPELLING, *sorted(codes))
 
 
 # Implements: REQ-d00272-O

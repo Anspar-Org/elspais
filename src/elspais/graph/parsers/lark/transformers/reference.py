@@ -42,7 +42,13 @@ from elspais.graph.parsers.patterns import (
 from elspais.graph.parsers.patterns import (
     KEYWORD_PATTERN as _KEYWORD_RE,
 )
-from elspais.graph.reference_faults import FaultClass, FaultCode, RefItem, refs_and_verdicts
+from elspais.graph.reference_faults import (
+    FaultClass,
+    FaultCode,
+    RefItem,
+    identifier_form_defects,
+    refs_and_verdicts,
+)
 from elspais.utilities.patterns import REF_LIST_SEPARATOR
 
 if TYPE_CHECKING:
@@ -155,6 +161,10 @@ class ReferenceTransformer:
         # keyword introduces -- a relationship the author appears to intend
         # and has not declared (REQ-d00272-O).
         self.undeclared: list[tuple[int, str]] = []
+        # (line, text, codes) for a reference the configuration admits but
+        # did not spell canonically -- never a reason to withhold the
+        # relationship it names (REQ-d00272-N).
+        self.identifier_form: list[tuple[int, str, tuple[str, ...]]] = []
 
     def transform(self, tree: Tree) -> list[ParsedContent]:
         """Transform parse tree into ParsedContent list."""
@@ -571,6 +581,12 @@ class ReferenceTransformer:
         # Implements: REQ-d00272-G
         for code in self._keyword_form_defects(text):
             self.style_findings.append((line_num, code))
+
+        # Implements: REQ-d00272-N
+        for it in items:
+            codes = identifier_form_defects(it.raw, it.resolved)
+            if codes:
+                self.identifier_form.append((line_num, it.raw, codes))
 
         # Implements: REQ-d00269-H
         # An item with no raw text -- a dangling separator or an empty slot

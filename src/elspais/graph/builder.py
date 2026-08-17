@@ -37,6 +37,7 @@ from elspais.graph.parsers import ParsedContent
 from elspais.graph.reference_faults import (
     FaultClass,
     FaultCode,
+    IdentifierFormFinding,
     ReferenceFault,
     StyleFinding,
     UndeclaredRelationship,
@@ -163,6 +164,12 @@ class TraceGraph:
     # Identifiers opening a comment no keyword introduces -- an intended
     # relationship that was never declared, and so not a failed reference.
     _undeclared_relationships: list[UndeclaredRelationship] = field(
+        default_factory=list, init=False, repr=False
+    )
+    # Implements: REQ-d00272-N
+    # References the configuration admits but did not spell canonically --
+    # each produced its relationship, so kept apart from _broken_references.
+    _identifier_form_findings: list[IdentifierFormFinding] = field(
         default_factory=list, init=False, repr=False
     )
     # Detection: duplicate REQ IDs across files (populated at build time).
@@ -365,6 +372,11 @@ class TraceGraph:
     def undeclared_relationships(self) -> list[UndeclaredRelationship]:
         """Get every comment that cites an identifier without declaring one."""
         return list(self._undeclared_relationships)
+
+    # Implements: REQ-d00272-N
+    def identifier_form_findings(self) -> list[IdentifierFormFinding]:
+        """Get every reference spelled in a non-canonical admitted form."""
+        return list(self._identifier_form_findings)
 
     def duplicate_req_ids(self) -> dict[str, list[str]]:
         """Return cross-file duplicate REQ IDs detected at build time.
@@ -3640,6 +3652,8 @@ class GraphBuilder:
         self._style_findings: list[StyleFinding] = []
         # Implements: REQ-d00272-O
         self._undeclared_relationships: list[UndeclaredRelationship] = []
+        # Implements: REQ-d00272-N
+        self._identifier_form_findings: list[IdentifierFormFinding] = []
         # Detection: duplicate REQ IDs across files. Maps the canonical (real)
         # requirement ID -> ordered list of source paths that defined it. First
         # occurrence keeps the real ID; subsequent occurrences get a synthetic
@@ -3785,6 +3799,20 @@ class GraphBuilder:
             source_id = file_node.id if file_node is not None else data.get("source_id", "")
             self._style_findings.append(
                 StyleFinding(source_id=source_id, code=data["code"], line=content.start_line)
+            )
+        elif content.content_type == "identifier_form_finding":
+            # Implements: REQ-d00272-N
+            # The relationship was produced; only its spelling is reported,
+            # so this joins no bucket that counts references that failed.
+            data = content.parsed_data
+            source_id = file_node.id if file_node is not None else data.get("source_id", "")
+            self._identifier_form_findings.append(
+                IdentifierFormFinding(
+                    source_id=source_id,
+                    text=data["text"],
+                    codes=tuple(data["codes"]),
+                    line=content.start_line,
+                )
             )
         elif content.content_type == "undeclared_relationship":
             # Implements: REQ-d00272-O
@@ -5227,6 +5255,7 @@ class GraphBuilder:
         graph._broken_references = list(self._broken_references)
         graph._style_findings = list(self._style_findings)
         graph._undeclared_relationships = list(self._undeclared_relationships)
+        graph._identifier_form_findings = list(self._identifier_form_findings)
         graph._duplicate_req_ids = {k: list(v) for k, v in self._duplicate_req_ids.items()}
 
         # Implements: REQ-d00222-A, REQ-d00222-B

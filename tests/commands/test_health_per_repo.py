@@ -366,7 +366,9 @@ class TestBrokenReferenceSeverity:
     not exist is an error. The severity is fixed per class by configuration
     (REQ-d00269-F) rather than varying by whether the target's repo happens
     to be in error state -- a class answers "how far did reading get",
-    which the target repo's live/error status does not change.
+    which the target repo's live/error status does not change. What the
+    repository's state does decide is whether the report carries the
+    information a reader needs to obtain it.
     """
 
     def test_REQ_d00204_E_broken_refs_within_repo_is_error(self) -> None:
@@ -445,6 +447,41 @@ class TestBrokenReferenceSeverity:
         assert not check.passed, "Broken references should fail the check"
         assert len(check.findings) == 2, f"Expected 2 findings, got {len(check.findings)}"
         assert all(f.repo == "alpha" for f in check.findings)
+
+        # REQ-d00204-E: the report carries what a reader needs to obtain the
+        # repository that could not be read -- which one it is and where it
+        # lives -- whatever severity the class was given.
+        unavailable = check.details["unavailable_repos"]
+        assert [r["name"] for r in unavailable] == ["beta"]
+        assert unavailable[0]["path"] == str(Path("/repo/beta"))
+        assert unavailable[0]["error"] == "Failed to build graph"
+        assert "beta" in check.message and str(Path("/repo/beta")) in check.message
+
+    def test_REQ_d00204_E_a_federation_that_loaded_names_no_repository_to_obtain(self) -> None:
+        """The obtaining information is present because a repository is
+        missing, not as boilerplate on every report."""
+        alpha_graph = build_graph(
+            make_requirement(
+                "REQ-d00092",
+                title="Alpha Dev",
+                level="DEV",
+                implements=["REQ-p99999"],
+                source_path="spec/alpha.md",
+            ),
+            repo_root=Path("/repo/alpha"),
+        )
+        alpha_config = _make_config()
+        beta_graph = build_graph(
+            make_requirement("REQ-p00081", title="Beta", level="PRD", source_path="spec/beta.md"),
+            repo_root=Path("/repo/beta"),
+        )
+        fed = _build_two_repo_federation(alpha_graph, alpha_config, beta_graph, _make_config())
+
+        check = _check_unknown_requirement(fed, alpha_config)
+
+        assert check.findings
+        assert check.details["unavailable_repos"] == []
+        assert "could not be read" not in check.message
 
 
 class TestRunSpecChecksIteratesRepos:

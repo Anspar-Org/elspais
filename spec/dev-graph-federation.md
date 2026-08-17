@@ -180,7 +180,7 @@ C. Per-repo checks SHALL produce a separate `HealthCheck` per repo per check typ
 
 D. `HealthFinding` SHALL support an optional `repo` field (str | None) for per-repo attribution.
 
-E. `check_broken_references` SHALL distinguish within-repo broken references (error severity) from cross-repo broken references where the target repo is in error state (warning severity with clone assistance info).
+E. A reference that fails to resolve because the repository owning its target is in an error state SHALL still be reported, and the report SHALL carry what a reader needs to obtain that repository. How loudly it is reported SHALL follow from the class the reference reached, not from the state of the repository that would have owned it.
 
 F. `run_spec_checks` SHALL accept a `FederatedGraph` and iterate `iter_repos()` for config-sensitive checks, using `FederatedGraph.from_single()` to create per-repo sub-federations.
 
@@ -194,12 +194,16 @@ J. Findings attributed to repositories outside the invocation's write scope SHAL
 
 ### Rationale
 
+E once tied a reference's severity to whether the repository that would own its target happened to be loadable. That made the same defect report at two different volumes depending on a condition the author of the reference has no control over and often cannot see, and it duplicated a decision that belongs to the classification: how far reading the reference got. Severity now follows the class and nothing else. What survives from the old rule is the part that helped — a reader who cannot resolve a reference because a repository is missing needs to know how to obtain it, and that belongs in the report whatever severity the project has chosen for the class.
+
 Without per-repo delegation, all nodes are validated against the root repo's config. When repos have different hierarchy rules, format rules, or changelog policies, this produces false positives (root config rejects valid associate nodes) or false negatives (root config allows invalid associate nodes). Per-repo delegation ensures each repo is validated by its own rules.
 
 Assertions H–J realize REQ-p00082's verdict-scoping invariants for the checks surface: a broken reference from the caller's repository *into* an org repository is the caller's bug and must gate the caller's change, while a malformed requirement *inside* a repository the caller cannot write to must never turn the command into noise by failing runs the caller cannot fix.
 
 ### Changelog
 
+- 2026-08-16 | 15c6ff55 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-16 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: severity follows the class a reference reached, not the load state of the repository that would own its target (E)
 - 2026-07-31 | 7e0f5586 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-30 | 32a98213 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-30 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-38: add finding-ownership attribution (H) and write-scope verdict scoping (I, J)
@@ -207,7 +211,7 @@ Assertions H–J realize REQ-p00082's verdict-scoping invariants for the checks 
 - 2026-05-11 | 2313140d | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 2313140d | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Per-Repo Health Check Delegation* | **Hash**: 7e0f5586
+*End* *Per-Repo Health Check Delegation* | **Hash**: 15c6ff55
 ---
 
 ## REQ-d00252: External Library Integration via Integrates Keyword
