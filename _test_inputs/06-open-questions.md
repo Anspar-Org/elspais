@@ -25,6 +25,24 @@ invisible unless someone writes the case down. Both readings are recorded in
 CASE-09. If label-case repair is intended, it is an exception that should be
 stated in the design rather than living only in a docstring.
 
+**Superseded 2026-08-16.** `identifier_form` (`REQ-d00272-N`) and
+`REQ-d00212-R` settled this beyond label case: matching admits both case and
+digit-padding variation everywhere in an identifier, component included — an
+admitted spelling resolves and is reported as a style finding
+(`references.identifier_form`, `E_NON_CANONICAL_SPELLING` plus whichever of
+`E_WRONG_CASE`/`E_WRONG_PADDING` applies), never refused. Confirmed against a
+real build: `req-d00001`, `REQ-D00001`, `REQ-d1`, `REQ-d001`, and
+`REQ-d00001-a` all bind, all report under `references.identifier_form`, none
+report `MALFORMED`. There is no component/label asymmetry — that was this
+question's whole premise, and it no longer holds. `01-item-cascade.md`
+sections 3 (`E_WRONG_CASE`) and 4 (`E_WRONG_PADDING`) are superseded
+wholesale by the same ruling: every `Bindings: none` / `MALFORMED` verdict in
+those two sections is a pre-`identifier_form` reading. The case tables are
+left as written rather than edited — a converter needs to find this note, not
+a silently corrected table. CLAUDE.md's "Case is never repaired" sentence is
+the one artifact of this question that was still live prose rather than a
+catalog case, and has been corrected separately.
+
 ---
 
 ## Q2 — does a variable-length numeric component admit leading zeros?
@@ -323,6 +341,20 @@ Three things this decides that the sentence does not:
    blanket edge to the requirement. Blanket and assertion-targeted evidence
    enter the strict and generous footings differently (REQ-d00069-J/L), so
    this changes reported coverage, not only reported faults.
+
+**Superseded 2026-08-16.** The plan owner's ruling: nothing binds except the
+exact correct syntax; any match looser than that is purely an attempt at
+providing a helpful error message. That is `REQ-d00272-F` as shipped
+("Reading within an item SHALL inform what is reported about it and SHALL NOT
+contribute a relationship") — the tool reads a leading identifier in order to
+*name* it in the report (`REQ-d00272-E`), never to bind it. `REQ-d00001 and
+REQ-d00002` binds nothing and reports both parts; confirmed against a real
+build. The 2026-08-15 decision recorded above did not reach the shipped
+requirement and does not describe current or intended behaviour. Cases
+NOTID-02, NOTID-04, NOTID-05, NOTID-07, NOTID-09..13 and SALV-01b, and their
+Q22/Q23 inheritors, all expect the pre-Q21 (no-binding) reading; the case
+tables are left as written rather than edited, so a converter reading this
+file finds the ruling here rather than a silently corrected table.
 
 ## Q22 — does the anchor rule apply to an abutting residue?
 

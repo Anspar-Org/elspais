@@ -42,24 +42,32 @@ Multiple requirements on one line:
 relationship (see `elspais docs graph-model`). Use `Verifies:` in code files
 that produce pass/fail result output (e.g., benchmarks writing JUnit XML).
 
-## Code Linking -- Multiline Blocks
+## Code Linking -- Multiline Lists
 
-When a file implements many requirements, use block syntax:
+When a file implements many requirements, end the line with the list
+separator and continue on the next comment line:
+
+```python
+# Implements: REQ-d00001-A,
+#             REQ-d00002-B,
+#             REQ-d00003
+```
+
+The separator is what says the list has not ended. Without it, the first line
+is a complete list and anything below it is a citation with no keyword of its
+own -- reported as an undeclared relationship (`references.undeclared`),
+never as part of the list above it and never as a broken reference.
+
+### Legacy: block header
 
 ```python
 # IMPLEMENTS REQUIREMENTS:
 #   REQ-d00001-A
 #   REQ-d00002-B
-#   REQ-d00003
 ```
 
-```javascript
-// VERIFIES REQUIREMENTS:
-//   REQ-d00010
-//   REQ-d00011
-```
-
-The block ends at the first line that is not an indented comment with a requirement ID.
+This form still parses. The colon is required and the word is plural. Nothing
+emits it; prefer the continuation form above.
 
 ## Test Linking -- Function Names
 
