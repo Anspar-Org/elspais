@@ -1,9 +1,9 @@
-# Verifies: REQ-d00252, REQ-d00258-B
+# Verifies: REQ-d00252, REQ-d00258-N
 """Validates REQ-d00252-D.
 
 A consumer REQ inherits the library REQ's implemented + passing coverage,
 where "passing" is the result-verified/line-coverage-credited union
-(REQ-d00258-B `tested_and_passing()`).
+(REQ-d00258-N `tested_and_passing()`).
 """
 
 import shutil
@@ -71,7 +71,7 @@ def test_REQ_d00252_D_no_integrates_yields_zero(tmp_path):
 def test_REQ_d00252_D_lcov_only_credit_propagates_as_passing(tmp_path):
     """A library REQ whose only evidence is line-coverage credit (lcov_tested,
     no Verifies:-based result) still propagates as passing coverage to the
-    consumer (REQ-d00258-B `tested_and_passing()` union, not raw `verified`).
+    consumer (REQ-d00258-N `tested_and_passing()` union, not raw `verified`).
     """
     fed = _federate(tmp_path)
     app_req = fed._repos["app"].graph._index["APP-d00001"]
@@ -107,7 +107,7 @@ def test_REQ_d00252_D_library_failures_propagate_to_consumer(tmp_path):
     credit reads as covered in the tested_and_passing() union (max per-label
     fraction), so the covered count alone would show 100% passing. The rollup
     must also carry has_failures=True so a red library suite is never
-    displayed as clean to INTEGRATES consumers (REQ-d00258-B).
+    displayed as clean to INTEGRATES consumers (REQ-d00258-N).
     """
     fed = _federate(tmp_path)
     app_req = fed._repos["app"].graph._index["APP-d00001"]

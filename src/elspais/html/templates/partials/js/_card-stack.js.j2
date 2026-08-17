@@ -855,7 +855,7 @@ function buildCardHtml(nodeId, data, collapsed) {
     // Surfaced by _serialize_node_generic when the REQ has integrations.
     // See CUR-1419 / REQ-d00252-D. Fields differ from satisfier_rollup:
     // implemented_covered/total + verified_covered/total (no covered_fraction).
-    // NOTE (REQ-d00258-B): despite the `verified_*` field names (kept for
+    // NOTE (REQ-d00258-N): despite the `verified_*` field names (kept for
     // wire compatibility), the value is the tested_and_passing() union
     // (result-verified OR line-coverage-credited), so it is labeled
     // "passing" here rather than "verified". `has_failures` flags a red

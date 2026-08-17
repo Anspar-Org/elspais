@@ -229,6 +229,40 @@ class TestGetTestCoverage:
         assert result["referenced_pct"] == 0
         assert result["uncovered_assertions"] == ["REQ-p00002-A"]
 
+    # Verifies: REQ-d00258-O
+    def test_REQ_d00258_O_reports_the_tested_breakdown(self, coverage_graph):
+        """The tool reports what came back from the tests it counts: A is
+        tested and its result passed, B fails, and C is tested with no verdict
+        -- so the three account for the whole tested set."""
+        from elspais.graph.metrics import CoverageDimension
+        from elspais.mcp.server import _get_test_coverage
+
+        rollup = coverage_graph.find_by_id("REQ-p00001").get_metric("rollup_metrics")
+        rollup.tested = CoverageDimension(
+            total=3,
+            direct=3.0,
+            indirect=3.0,
+            direct_labels={"A", "B", "C"},
+            indirect_labels={"A", "B", "C"},
+            direct_pct_by_label={"A": 1.0, "B": 1.0, "C": 1.0},
+            indirect_pct_by_label={"A": 1.0, "B": 1.0, "C": 1.0},
+        )
+        rollup.verified = CoverageDimension(
+            total=3,
+            direct=1.0,
+            indirect=1.0,
+            has_failures=True,
+            failing_labels={"B"},
+            direct_labels={"A"},
+            indirect_labels={"A"},
+            direct_pct_by_label={"A": 1.0},
+            indirect_pct_by_label={"A": 1.0},
+        )
+
+        result = _get_test_coverage(coverage_graph, "REQ-p00001")
+
+        assert result["tested_breakdown"] == {"passed": 1, "failed": 1, "awaiting_result": 1}
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Tests for get_uncovered_assertions() - REQ-d00067

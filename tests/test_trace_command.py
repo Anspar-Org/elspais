@@ -1001,3 +1001,231 @@ class TestTraceFooting:
 
         data = _get_node_data(node, graph)
         assert data["verified"] == "1/1 (100%) ~ (baseline)"
+
+
+_BREAKDOWN_CONFIG = """\
+version = 3
+
+[project]
+name = "tested-breakdown-trace"
+namespace = "REQ"
+
+[levels.dev]
+rank = 1
+letter = "d"
+implements = ["dev"]
+
+[id-patterns]
+canonical = "{namespace}-{level.letter}{component}"
+
+[id-patterns.component]
+style = "numeric"
+digits = 5
+leading_zeros = true
+
+[scanning.spec]
+directories = ["spec"]
+
+[scanning.test]
+enabled = true
+directories = ["tests"]
+file_patterns = ["test_*.py"]
+
+[[scanning.test.targets]]
+name = "a"
+reporter = "junit"
+results = "results/results.xml"
+match = "source"
+
+[rules.hierarchy]
+allow_circular = false
+allow_structural_orphans = true
+
+[rules.format]
+require_hash = false
+require_assertions = false
+require_status = false
+"""
+
+_BREAKDOWN_SPEC = """\
+# Requirements
+
+---
+
+### REQ-d00001: Req A
+
+The system SHALL do A, B and C.
+
+## Assertions
+
+A. The system SHALL do A.
+B. The system SHALL do B.
+C. The system SHALL do C.
+
+*End* *Req A*
+---
+"""
+
+_BREAKDOWN_JOURNEY = """\
+# User Journeys
+
+---
+
+### JNY-OQ-01: Flow
+
+**Actor**: End User
+**Goal**: Do the thing
+Validates: REQ-d00001-A
+
+## Steps
+
+1. The user does the thing
+
+*End* *JNY-OQ-01*
+---
+"""
+
+_BREAKDOWN_JUNIT = """\
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="suite" tests="2">
+  <testcase name="test_a" classname="tests.test_a" file="tests/test_a.py" time="0.01"/>
+  <testcase name="test_b" classname="tests.test_b" file="tests/test_b.py" time="0.01">
+    <failure message="boom">boom</failure>
+  </testcase>
+</testsuite>
+"""
+
+
+@pytest.fixture
+def tested_breakdown_project(tmp_path):
+    """On-disk project whose one requirement holds each tested state at once.
+
+    Assertion A is verified by a passing test, B by a failing one, and C by a
+    test whose result never arrived -- so the Tested breakdown reads 1P 1F 1A
+    (REQ-d00258-O). A journey validates A, so the requirement also has a row to
+    render under the UAT preset (which shows no Tested column).
+    """
+    project = tmp_path / "project"
+    (project / "spec").mkdir(parents=True)
+    (project / "spec" / "reqs.md").write_text(_BREAKDOWN_SPEC, encoding="utf-8")
+    (project / "spec" / "journeys.md").write_text(_BREAKDOWN_JOURNEY, encoding="utf-8")
+
+    (project / "tests").mkdir(parents=True)
+    for label in ("a", "b", "c"):
+        (project / "tests" / f"test_{label}.py").write_text(
+            f"# Verifies: REQ-d00001-{label.upper()}\ndef test_{label}():\n    pass\n",
+            encoding="utf-8",
+        )
+
+    (project / "results").mkdir(parents=True)
+    (project / "results" / "results.xml").write_text(_BREAKDOWN_JUNIT, encoding="utf-8")
+
+    (project / ".elspais.toml").write_text(_BREAKDOWN_CONFIG, encoding="utf-8")
+    return project
+
+
+class TestTraceTestedBreakdown:
+    """REQ-d00258-O: the trace Tested cell carries the three-way breakdown."""
+
+    def _tested_cell(self, markdown_text, req_id):
+        lines = markdown_text.splitlines()
+        header_line = next(line for line in lines if line.startswith("| ID"))
+        headers = [h.strip() for h in header_line.strip("|").split("|")]
+        idx = headers.index("Tested")
+        row = next(line for line in lines if line.startswith("|") and req_id in line)
+        return [c.strip() for c in row.strip("|").split("|")][idx]
+
+    # Verifies: REQ-d00258-O
+    def test_tested_cell_carries_the_breakdown(self, tested_breakdown_project):
+        """The breakdown qualifies Tested, so it rides in the Tested cell and
+        adds no column of its own."""
+        from elspais.commands.trace import format_markdown
+
+        graph = _build_project_graph(tested_breakdown_project)
+        out = "\n".join(format_markdown(graph))
+
+        cell = self._tested_cell(out, "REQ-d00001")
+        assert cell == "3/3 (100%) [1P 1F 1A]"
+        header_line = next(line for line in out.splitlines() if line.startswith("| ID"))
+        assert "Awaiting" not in header_line
+
+    # Verifies: REQ-d00258-O
+    def test_legend_emitted_when_a_row_carried_a_breakdown(self, tested_breakdown_project):
+        """The compact form is unreadable without its key."""
+        from elspais.commands.trace import format_markdown
+
+        graph = _build_project_graph(tested_breakdown_project)
+        out = "\n".join(format_markdown(graph))
+
+        assert "> Tested breakdown:" in out
+
+    # Verifies: REQ-d00258-O
+    def test_legend_absent_when_nothing_is_tested(self, code_tested_no_attribution_project):
+        """No row carried a breakdown, so no key is offered: there is no
+        breakdown of an empty set."""
+        from elspais.commands.trace import format_markdown
+
+        graph = _build_project_graph(code_tested_no_attribution_project)
+        out = "\n".join(format_markdown(graph))
+
+        assert "> Tested breakdown:" not in out
+
+    # Verifies: REQ-d00258-O, REQ-d00257-C
+    @pytest.mark.parametrize("preset_name", ["uat", "minimal"])
+    def test_breakdown_absent_from_presets_without_a_tested_column(
+        self, tested_breakdown_project, preset_name
+    ):
+        """A breakdown of a figure the preset does not show explains nothing,
+        and its key would point at a column that is not there. The UAT report
+        excludes the test columns outright (REQ-d00257-C)."""
+        from elspais.commands.trace import (
+            _UAT_COLUMNS,
+            REPORT_PRESETS,
+            ReportPreset,
+            format_markdown,
+        )
+
+        if preset_name == "uat":
+            preset = ReportPreset(name="uat", columns=list(_UAT_COLUMNS), dimension="uat")
+        else:
+            preset = ReportPreset(
+                name=preset_name, columns=list(REPORT_PRESETS[preset_name].columns)
+            )
+
+        graph = _build_project_graph(tested_breakdown_project)
+        out = "\n".join(format_markdown(graph, preset=preset))
+
+        # The requirement IS rendered and IS carrying a breakdown -- the
+        # absence below is the gating, not an empty report.
+        assert "REQ-d00001" in out
+        header_line = next(line for line in out.splitlines() if line.startswith("| ID"))
+        assert "Tested" not in header_line
+        assert "> Tested breakdown:" not in out
+        assert "1P" not in out
+
+    # Verifies: REQ-d00258-O
+    def test_csv_gives_the_breakdown_columns_of_its_own(self, tested_breakdown_project):
+        """A machine format should not need to parse the figures out of a
+        bracket, so CSV carries them as three columns beside Tested and the
+        Tested cell stays a bare count."""
+        import csv as csv_module
+        import io as io_module
+
+        from elspais.commands.trace import format_csv
+
+        graph = _build_project_graph(tested_breakdown_project)
+        out = "\n".join(format_csv(graph))
+
+        reader = csv_module.reader(io_module.StringIO(out))
+        headers = next(reader)
+        tested_idx = headers.index("Tested")
+        assert headers[tested_idx + 1 : tested_idx + 4] == [
+            "Tested Passed",
+            "Tested Failed",
+            "Tested Awaiting",
+        ]
+
+        row = next(csv_module.reader(io_module.StringIO(out.splitlines()[1])))
+        assert row[tested_idx] == "3/3 (100%)"
+        assert row[tested_idx + 1 : tested_idx + 4] == ["1", "1", "1"]
+        assert "1P" not in out

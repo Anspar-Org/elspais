@@ -302,10 +302,10 @@ def _get_node_data(node, graph: FederatedGraph, *, assertion_labels: bool = Fals
     )
 
     if rollup:
-        from elspais.graph.metrics import tested_and_passing
+        from elspais.graph.metrics import tested_and_passing, tested_partition
 
         for key, attr, use_ind_count, use_ind_labels in _DIMS:
-            # Implements: REQ-d00258-A, REQ-d00258-B
+            # Implements: REQ-d00258-A, REQ-d00258-N
             # "Passing" (the verified column) is the union of result-verified
             # and line-coverage-credited evidence.
             dim: CoverageDimension = (
@@ -326,6 +326,18 @@ def _get_node_data(node, graph: FederatedGraph, *, assertion_labels: bool = Fals
                 num = dim.indirect if use_ind_count else dim.direct
                 formatted = _fmt_count(num, total_a)
                 data[key] = formatted if formatted == "n/a" else f"{formatted}{marker}"
+        # Implements: REQ-d00258-O
+        # Carried beside the Tested cell rather than inside it, so each format
+        # places it: the table appends it, CSV gives it columns of its own.
+        # Empty when nothing is tested -- there is no breakdown of an empty set.
+        part = tested_partition(rollup)
+        data["tested_passed"] = part.passed
+        data["tested_failed"] = part.failed
+        data["tested_awaiting"] = part.awaiting
+        data["tested_breakdown"] = (
+            f"[{part.passed}P {part.failed}F {part.awaiting}A]" if part.tested else ""
+        )
+
         ct = rollup.code_tested
         data["code_tested"] = _fmt_code_tested(ct)
         if assertion_labels:
@@ -457,6 +469,8 @@ def format_markdown(graph: FederatedGraph, preset: ReportPreset | None = None) -
     # marker in its verified cell, so the legend is only emitted when it's
     # relevant (and full-run output stays byte-identical to before).
     has_carry_marker = False
+    # Implements: REQ-d00258-O
+    has_tested_breakdown = False
 
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
         if preset.dimension == "uat":
@@ -472,6 +486,13 @@ def format_markdown(graph: FederatedGraph, preset: ReportPreset | None = None) -
             verified_cell = data.get("verified", "")
             if "(baseline)" in verified_cell or "—" in verified_cell:
                 has_carry_marker = True
+        # Implements: REQ-d00258-O
+        # Only where the Tested column is rendered: a breakdown of a figure
+        # this preset does not show explains nothing, and its legend would
+        # point at a column that is not there.
+        if "tested" in columns and data.get("tested_breakdown"):
+            data["tested"] = f"{data['tested']} {data['tested_breakdown']}"
+            has_tested_breakdown = True
 
         row_values = _format_row(data, columns)
         yield "| " + " | ".join(row_values) + " |"
@@ -515,6 +536,17 @@ def format_markdown(graph: FederatedGraph, preset: ReportPreset | None = None) -
             "> Legend: `(baseline)` = carried from a prior run (not re-run this PR, "
             "verdict still honored); `—` = target not run and no baseline "
             "(skipped, not a regression)."
+        )
+
+    # Implements: REQ-d00258-O
+    # The breakdown is unreadable without its key, so the key appears whenever
+    # a row carried one.
+    if has_tested_breakdown:
+        yield ""
+        yield (
+            "> Tested breakdown: `P` passed, `F` failed, `A` awaiting a result "
+            "(declared, and no verdict came back). The three account for every "
+            "tested assertion."
         )
 
 
@@ -565,6 +597,12 @@ def format_csv(graph: FederatedGraph, preset: ReportPreset | None = None) -> Ite
         else:
             header_names.append(col_headers.get(c, c.title()))
             csv_columns.append(c)
+        # Implements: REQ-d00258-O
+        # Columns rather than a bracket inside the Tested cell: a machine
+        # format should not need to parse a figure out of prose.
+        if c == "tested":
+            header_names.extend(["Tested Passed", "Tested Failed", "Tested Awaiting"])
+            csv_columns.extend(["tested_passed", "tested_failed", "tested_awaiting"])
 
     extra_prefix = []
     extra_suffix = []

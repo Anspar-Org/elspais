@@ -623,7 +623,7 @@ Reporting surfaces (trace, summary, MCP project summary, HTML viewer) SHALL pres
 
 A. All reporting surfaces (trace, summary, MCP project summary, HTML viewer) SHALL headline coverage counts on the generous footing per REQ-d00069-L, and text surfaces SHALL append a `~` marker, per coverage dimension, to any count whose evidence is not fully direct.
 
-B. Reporting surfaces SHALL use exactly five coverage display terms: Implemented, Tested, Passing, UAT Covered, UAT Passed. The term "Validated" SHALL NOT denote test coverage. Passing SHALL be the union of result-verified and line-coverage-credited evidence.
+B. The coverage display terms available to a reporting surface SHALL be Implemented, Tested, Passing, UAT Covered, and UAT Passed, and no other word SHALL denote a coverage dimension.
 
 C. The CLI summary, the MCP project summary, and the viewer SHALL derive their coverage statistics from a single shared aggregation so identical questions receive identical answers.
 
@@ -647,13 +647,22 @@ L. A per-status `expects_implementation` flag SHALL declare whether a requiremen
 
 M. A surface that reports which assertions need work (`gaps`, the health coverage checks, and the MCP uncovered-*Assertion* and test-coverage tools) SHALL determine gaps on the strict footing per REQ-d00069-L, so that an *Assertion* with no evidence naming it is reported however much whole-requirement evidence its requirement carries.
 
+N. Passing SHALL require at least one of result-verified and line-coverage-credited evidence to indicate passing, and neither to indicate failing.
+
+O. Tested SHALL be reported with a breakdown of the assertions it counts into those that passed, those that failed, and those awaiting a result, and the three counts SHALL together account for every tested *Assertion*. The breakdown qualifies the Tested figure and SHALL NOT introduce a coverage dimension of its own.
+
 ### Rationale
+
+O says a tested *Assertion* is always in exactly one of three states, and that a reader is told all three. Passing alone leaves the remainder ambiguous: an *Assertion* absent from it either failed or never returned a verdict, and those call for opposite actions -- one is a defect to fix, the other a run to complete or ingest. An estate can be entirely green on Passing while most of its tests never ran, and until the three are counted together nothing says so. They break Tested down rather than standing beside it, because each one is a tested *Assertion* seen from closer up, not a further dimension of coverage.
 
 A reports how the estate is doing and M reports what is left to do; the two questions want different footings. Crediting whole-requirement evidence to every *Assertion* is defensible when summarising, because the evidence plausibly reaches them and the `~` marker says as much. It is not defensible when listing work, because an *Assertion* nobody has written evidence for is precisely what the list exists to surface — and on the generous footing it is the one thing the list can never show.
 
 ### Changelog
 
+- 2026-08-17 | 0f7c5cf2 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-17 | 2371dd44 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-11 | e0925092 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-17 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: state the display terms as the permitted set rather than a count (B); give Passing its own assertion, requiring one kind of evidence to indicate passing and neither to indicate failing (N); partition Tested into passed, failed and awaiting a result as a breakdown of it (O)
 - 2026-08-11 | 5270fa45 | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: gap surfaces answer on the strict footing (M)
 - 2026-07-31 | 5270fa45 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-07 | 90053f29 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -665,7 +674,7 @@ A reports how the estate is doing and M reports what is left to do; the two ques
 - 2026-07-03 | c843c727 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-02 | be97c170 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: add missing changelog section
 
-*End* *Reporting Surface Consistency* | **Hash**: e0925092
+*End* *Reporting Surface Consistency* | **Hash**: 0f7c5cf2
 
 ---
 

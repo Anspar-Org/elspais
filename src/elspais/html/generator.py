@@ -187,6 +187,7 @@ def compute_coverage_tiers(node: GraphNode, config: dict[str, Any] | None = None
     """
     from elspais.config.schema import CoverageConfig, CoverageSeverityConfig
     from elspais.config.status_words import get_status_words
+    from elspais.graph.metrics import tested_partition
 
     empty: dict[str, Any] = {
         "impl_color": "",
@@ -291,7 +292,7 @@ def compute_coverage_tiers(node: GraphNode, config: dict[str, Any] | None = None
     # denom-label-set-or-None-for-absolute).
     # "verified" (rendered as the "Passing" badge) uses tested_and_passing(),
     # the union of result-verified and line-coverage-credited evidence
-    # (REQ-d00258-B) -- NOT the raw `rollup.verified` dimension, which would
+    # (REQ-d00258-N) -- NOT the raw `rollup.verified` dimension, which would
     # miss lcov-only credit and understate the badge/bucket.
     dim_map = [
         ("implemented", rollup.implemented, cov_config.implemented, "impl", None),
@@ -391,6 +392,16 @@ def compute_coverage_tiers(node: GraphNode, config: dict[str, Any] | None = None
         tip = f"{label}: {desc} — {provenance}"
         if marker:
             tip += " ~"
+        # Implements: REQ-d00258-O
+        # The Tested badge is where the breakdown belongs on this surface: it
+        # qualifies that figure and introduces no badge of its own.
+        if prefix == "tested":
+            part = tested_partition(rollup)
+            if part.tested:
+                tip += (
+                    f" — {part.passed} passed, {part.failed} failed,"
+                    f" {part.awaiting} awaiting a result"
+                )
 
         result[f"{prefix}_color"] = color
         result[f"{prefix}_tip"] = tip
@@ -544,12 +555,19 @@ def compute_assertion_coverage_states(
         set the requirement-wide ``has_failures`` flag (REQ-d00258-G). The
         requirement-level badge still goes red for any failing assertion via the
         dimension-wide ``has_failures`` in ``compute_coverage_tiers``.
+
+        The failure is read BEFORE the credit, because credit does not answer
+        it: line coverage never observes a verdict, so a failing test whose
+        lines were executed leaves this assertion at full credit and failing at
+        once. Reading credit first would paint it green while the Passing
+        figures beside it exclude it (REQ-d00258-N), which is the same
+        disagreement REQ-d00258-G exists to prevent.
         """
+        if label in passing.failing_labels:
+            return "failing"
         f = _frac(passing, label)
         if f >= 1.0 - eps:
             return "full"
-        if label in passing.failing_labels:
-            return "failing"
         if f > eps:
             return "partial"
         return "missing"
@@ -919,7 +937,7 @@ class HTMLGenerator:
                 coverage_status: "none", "partial", or "full" (strict)
                 coverage_indirect: "none", "partial", or "full" (includes indirect)
             """
-            from elspais.graph.metrics import RollupMetrics
+            from elspais.graph.metrics import RollupMetrics, tested_and_passing
 
             rollup: RollupMetrics | None = node.get_metric("rollup_metrics")
 
@@ -949,7 +967,9 @@ class HTMLGenerator:
             else:
                 indirect = "full"
 
-            return (strict, indirect, rollup.verified.has_failures)
+            # Passing-dimension failures, so an lcov-side failure is seen
+            # as well as a result-verified one (REQ-d00258-N).
+            return (strict, indirect, tested_and_passing(rollup).has_failures)
 
         def get_assertion_letters(node: GraphNode, parent_id: str | None) -> list[str]:
             """Get assertion letters that this node implements from a specific parent."""

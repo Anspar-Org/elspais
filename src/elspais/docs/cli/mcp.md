@@ -186,7 +186,11 @@ Get summary statistics for the project.
                              with_test_refs, with_passing, total_assertions,
                              implemented_assertions, implemented_direct,
                              tested_assertions, tested_direct,
-                             passing_assertions, passing_direct)
+                             tested_passed, tested_failed,
+                             tested_awaiting, passing_assertions,
+                             passing_direct). The three tested_* counts
+                             are the Tested breakdown and account for
+                             every tested assertion.
     changes                 Git change metrics:
       - uncommitted       Modified spec files
       - branch_changed    Changed vs main branch

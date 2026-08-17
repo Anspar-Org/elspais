@@ -22,6 +22,7 @@ from elspais.graph.metrics import (
     integrates_by_associate,
     integrates_total,
     tested_and_passing,
+    tested_partition,
 )
 
 # Implements: REQ-d00258-H
@@ -421,6 +422,11 @@ class LevelAggregate:
     passing: DimensionSums = field(default_factory=DimensionSums)
     uat_covered: DimensionSums = field(default_factory=DimensionSums)
     uat_passed: DimensionSums = field(default_factory=DimensionSums)
+    # The Tested breakdown (REQ-d00258-O): every tested assertion in this
+    # level is in exactly one of the three, so they sum to the tested count.
+    tested_passed: int = 0
+    tested_failed: int = 0
+    tested_awaiting: int = 0
 
 
 @dataclass
@@ -449,6 +455,11 @@ class DimensionAggregate:
     req_with_any: int = 0
     req_with_direct: int = 0
     has_failures: bool = False
+    # The Tested breakdown (REQ-d00258-O). Populated only for the 'tested'
+    # dimension: it breaks Tested down, and means nothing beside another.
+    tested_passed: int = 0
+    tested_failed: int = 0
+    tested_awaiting: int = 0
 
 
 def _level_keys(config: dict[str, Any] | None) -> list[str]:
@@ -526,6 +537,11 @@ def aggregate_by_level(graph: Any, config: dict[str, Any] | None = None) -> list
             agg.with_test_refs += 1
         if passing_dim.indirect > 0:
             agg.with_passing += 1
+        # Implements: REQ-d00258-O
+        part = tested_partition(rollup)
+        agg.tested_passed += part.passed
+        agg.tested_failed += part.failed
+        agg.tested_awaiting += part.awaiting
 
     return [groups[k.lower()] for k in keys]
 
@@ -575,9 +591,14 @@ def aggregate_dimension(
                 agg.req_with_any += 1
                 agg.req_with_direct += 1
             continue
-        dim: CoverageDimension | None = getattr(rollup, dimension, None)
-        if dim is None:
+        # Through the shared numerator, so 'verified' aggregates the Passing
+        # dimension -- one kind of evidence saying it passed and neither saying
+        # it failed (REQ-d00258-N) -- rather than the raw verified field, which
+        # neither unions in line-coverage credit nor sees an lcov-side failure.
+        # Every other dimension resolves to itself.
+        if not hasattr(rollup, dimension):
             continue
+        dim: CoverageDimension = numerator_dimension(rollup, dimension)
         agg.total += dim.total
         agg.direct += dim.direct
         agg.covered += dim.indirect
@@ -587,6 +608,12 @@ def aggregate_dimension(
             agg.req_with_direct += 1
         if dim.has_failures:
             agg.has_failures = True
+        # Implements: REQ-d00258-O
+        if dimension == "tested":
+            part = tested_partition(rollup)
+            agg.tested_passed += part.passed
+            agg.tested_failed += part.failed
+            agg.tested_awaiting += part.awaiting
     return agg
 
 
@@ -663,6 +690,9 @@ def collect_coverage(graph: Any, config: dict[str, Any] | None = None) -> dict[s
                 "implemented_direct": round(agg.implemented.direct, 3),
                 "tested_assertions": round(agg.tested.covered, 3),
                 "tested_direct": round(agg.tested.direct, 3),
+                "tested_passed": agg.tested_passed,
+                "tested_failed": agg.tested_failed,
+                "tested_awaiting": agg.tested_awaiting,
                 "passing_assertions": round(agg.passing.covered, 3),
                 "passing_direct": round(agg.passing.direct, 3),
             }

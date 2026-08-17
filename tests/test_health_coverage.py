@@ -1095,3 +1095,58 @@ class TestCheckUncreditedEvidence:
 
         assert check.passed is True
         assert check.findings == []
+
+
+class TestTestedBreakdownInHealth:
+    """REQ-d00258-O: the tests.tested finding reports what came back."""
+
+    def _graph(self) -> FederatedGraph:
+        """One requirement: A passed, B failed, C awaiting a result."""
+
+        def dim(fractions, **kwargs):
+            return CoverageDimension(
+                total=3,
+                direct=sum(fractions.values()),
+                indirect=sum(fractions.values()),
+                direct_labels={lbl for lbl, f in fractions.items() if f > 0},
+                indirect_labels={lbl for lbl, f in fractions.items() if f > 0},
+                direct_pct_by_label=dict(fractions),
+                indirect_pct_by_label=dict(fractions),
+                **kwargs,
+            )
+
+        req = _make_req("REQ-d00001")
+        req.set_metric(
+            "rollup_metrics",
+            RollupMetrics(
+                total_assertions=3,
+                implemented=dim({"A": 1.0, "B": 1.0, "C": 1.0}),
+                tested=dim({"A": 1.0, "B": 1.0, "C": 1.0}),
+                verified=dim(
+                    {"A": 1.0, "B": 0.0, "C": 0.0},
+                    has_failures=True,
+                    failing_labels={"B"},
+                ),
+            ),
+        )
+        return _make_graph(req)
+
+    # Verifies: REQ-d00258-O
+    def test_message_breaks_the_tested_figure_down(self):
+        check = check_dimension_coverage(self._graph(), "tested", config={})
+
+        assert "1 passed / 1 failed / 1 awaiting a result" in check.message
+        assert check.details["tested_passed"] == 1
+        assert check.details["tested_failed"] == 1
+        assert check.details["tested_awaiting"] == 1
+
+    # Verifies: REQ-d00258-O
+    def test_breakdown_belongs_to_tested_alone(self):
+        """It breaks Tested down, so it means nothing beside another dimension
+        and must not appear in one."""
+        check = check_dimension_coverage(self._graph(), "implemented", config={})
+
+        assert "awaiting a result" not in check.message
+        assert check.details["tested_passed"] == 0
+        assert check.details["tested_failed"] == 0
+        assert check.details["tested_awaiting"] == 0

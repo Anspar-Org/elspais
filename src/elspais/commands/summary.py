@@ -114,6 +114,22 @@ def _marker(covered: float, direct: float) -> str:
     return " ~" if covered > direct + 1e-9 else ""
 
 
+# Implements: REQ-d00258-O
+def _tested_breakdown(lv: dict) -> str:
+    """The tested assertions of one level, by what came back.
+
+    Silent when nothing is tested: there is no breakdown of an empty set, and
+    "(0 passed, 0 failed, 0 awaiting a result)" reads as a finding where there
+    is only an absence.
+    """
+    passed = lv.get("tested_passed", 0)
+    failed = lv.get("tested_failed", 0)
+    awaiting = lv.get("tested_awaiting", 0)
+    if passed + failed + awaiting == 0:
+        return ""
+    return f"  [{passed} passed, {failed} failed, {awaiting} awaiting a result]"
+
+
 def _render_text(data: dict) -> str:
     # Implements: REQ-d00254-I
     carried = data.get("carried_result_targets", 0) or 0
@@ -138,10 +154,14 @@ def _render_text(data: dict) -> str:
             f" ({_pct(lv['implemented_assertions'], ta):.1f}%)"
             f"{_marker(lv['implemented_assertions'], lv['implemented_direct'])}"
         )
+        # Implements: REQ-d00258-O
+        # The breakdown qualifies Tested rather than standing beside it, so it
+        # rides on the Tested line and adds no coverage term of its own.
         lines.append(
             f"    Tested:      {fmt_assertion_count(lv['tested_assertions'])}/{ta}"
             f" ({_pct(lv['tested_assertions'], ta):.1f}%)"
             f"{_marker(lv['tested_assertions'], lv['tested_direct'])}"
+            f"{_tested_breakdown(lv)}"
         )
         lines.append(
             f"    Passing:     {fmt_assertion_count(lv['passing_assertions'])}/{ta}"
@@ -155,7 +175,8 @@ def _render_text(data: dict) -> str:
         lines.append(f"  ({', '.join(parts)} not included in coverage)")
 
     # REQ-d00252-F: External integrations grouped by owning associate.
-    # "Passing" (REQ-d00258-B vocabulary): integrates_by_associate() now folds
+    # "Passing" (REQ-d00258-B vocabulary, REQ-d00258-N union):
+    # integrates_by_associate() now folds
     # the library node's tested_and_passing() union (result-verified OR
     # line-coverage-credited) into these figures, so the label matches the
     # other coverage columns. `!` marks a row whose library suite has failing
@@ -230,6 +251,7 @@ def _render_markdown(data: dict) -> str:
         tested = (
             f"{fmt_assertion_count(ta_tested)}/{ta} ({_pct(ta_tested, ta):.0f}%)"
             f"{_marker(ta_tested, lv['tested_direct'])}"
+            f"{_tested_breakdown(lv)}"
         )
         pas = (
             f"{fmt_assertion_count(pa)}/{ta} ({_pct(pa, ta):.0f}%){carry_marker}"
@@ -244,7 +266,8 @@ def _render_markdown(data: dict) -> str:
         lines.append(f"*{', '.join(parts)} not included in coverage.*")
 
     # REQ-d00252-F: External integrations grouped by owning associate.
-    # "Passing" (REQ-d00258-B vocabulary): integrates_by_associate() now folds
+    # "Passing" (REQ-d00258-B vocabulary, REQ-d00258-N union):
+    # integrates_by_associate() now folds
     # the library node's tested_and_passing() union (result-verified OR
     # line-coverage-credited) into these figures, so the label matches the
     # other coverage columns. `!` marks a row whose library suite has failing
@@ -309,6 +332,9 @@ def _render_csv(data: dict) -> str:
             "Implemented %",
             "Tested",
             "Tested %",
+            "Tested Passed",
+            "Tested Failed",
+            "Tested Awaiting",
             "Passing",
             "Passing %",
         ]
@@ -327,6 +353,10 @@ def _render_csv(data: dict) -> str:
                 _pct(ia, ta),
                 te,
                 _pct(te, ta),
+                # Implements: REQ-d00258-O
+                lv.get("tested_passed", 0),
+                lv.get("tested_failed", 0),
+                lv.get("tested_awaiting", 0),
                 pa,
                 _pct(pa, ta),
             ]

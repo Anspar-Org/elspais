@@ -2233,7 +2233,7 @@ def check_governed_rule_divergence(
             name="config.governed_rules",
             passed=True,
             message="No federated member configures a governed rule differently",
-            category="config",
+            category="spec",
             severity="info",
         )
     repos = sorted({f.repo for f in findings if f.repo})
@@ -2244,7 +2244,7 @@ def check_governed_rule_divergence(
             f"{len(findings)} governed setting(s) across {len(repos)} member(s) differ "
             "from the configuration this run judges by"
         ),
-        category="config",
+        category="spec",
         severity="info",
         findings=findings,
     )
@@ -2563,6 +2563,12 @@ def check_dimension_coverage(
         msg_parts.append(
             f"{fmt_assertion_count(indirect_assertions)} indirect ({indirect_pct:.0f}%)"
         )
+    # Implements: REQ-d00258-O
+    if dimension == "tested" and (agg.tested_passed + agg.tested_failed + agg.tested_awaiting):
+        msg_parts.append(
+            f"{agg.tested_passed} passed / {agg.tested_failed} failed / "
+            f"{agg.tested_awaiting} awaiting a result"
+        )
     if has_any_failures:
         msg_parts.append("FAILURES DETECTED")
     message = ", ".join(msg_parts) + note + message_suffix
@@ -2583,6 +2589,9 @@ def check_dimension_coverage(
             "direct_assertions": round(direct_assertions, 3),
             "indirect_assertions": round(indirect_assertions, 3),
             "direct_pct": round(direct_pct, 1),
+            "tested_passed": agg.tested_passed,
+            "tested_failed": agg.tested_failed,
+            "tested_awaiting": agg.tested_awaiting,
             "indirect_pct": round(indirect_pct, 1),
             "has_failures": has_any_failures,
         },
@@ -2637,7 +2646,7 @@ def check_whole_req_only_coverage(graph, config=None) -> HealthCheck:
 
 
 # The display word for each end of a chain, so a finding reads in the
-# vocabulary REQ-d00258-B fixes for every surface rather than in dimension
+# vocabulary REQ-d00258-B permits, for every surface, rather than in dimension
 # field names.
 _DIMENSION_WORD: dict[str, str] = {
     "implemented": "Implemented",

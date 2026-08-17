@@ -482,6 +482,7 @@ class TestJsonFormat:
 class TestCsvFormat:
     """Validates REQ-d00086-C: CSV format output."""
 
+    # Verifies: REQ-d00258-O
     def test_REQ_d00086_C_csv_has_correct_headers(self):
         """CSV output has the expected column headers."""
         graph = _make_graph()
@@ -499,6 +500,11 @@ class TestCsvFormat:
             "Implemented %",
             "Tested",
             "Tested %",
+            # The Tested breakdown (REQ-d00258-O) rides on Tested, so its three
+            # columns sit with it rather than beside the other dimensions.
+            "Tested Passed",
+            "Tested Failed",
+            "Tested Awaiting",
             "Passing",
             "Passing %",
         ]
@@ -516,6 +522,7 @@ class TestCsvFormat:
         # 1 header + 3 levels (PRD, OPS, DEV)
         assert len(rows) == 4
 
+    # Verifies: REQ-d00258-O
     def test_REQ_d00086_C_csv_row_values(self):
         """CSV data rows contain correct level summary values."""
         graph = _make_graph()
@@ -541,8 +548,14 @@ class TestCsvFormat:
         assert row[4] == "75.0"  # Implemented %
         assert row[5] == "2.0"  # Tested
         assert row[6] == "50.0"  # Tested %
-        assert row[7] == "1.0"  # Passing
-        assert row[8] == "25.0"  # Passing %
+        # The breakdown counts assertions, not fractional credit, so it is
+        # rendered as plain ints. This rollup carries no per-assertion evidence
+        # map, so no assertion is in the tested set to break down.
+        assert row[7] == "0"  # Tested Passed
+        assert row[8] == "0"  # Tested Failed
+        assert row[9] == "0"  # Tested Awaiting
+        assert row[10] == "1.0"  # Passing
+        assert row[11] == "25.0"  # Passing %
 
     def test_REQ_d00086_C_csv_parseable(self):
         """CSV output is parseable by Python csv module without errors."""
@@ -1163,3 +1176,86 @@ class TestSummaryFooting:
         text = _render_text(collect_coverage(canonical_graph, canonical_config))
         assert "Validated" not in text
         assert "Tested:" in text
+
+
+class TestTestedBreakdown:
+    """REQ-d00258-O: the summary reports Tested with its three-way breakdown."""
+
+    def _graph_with_breakdown(self) -> TraceGraph:
+        """One PRD requirement: A passed, B failed, C awaiting a result."""
+        from elspais.graph.metrics import CoverageDimension
+
+        graph = _make_graph()
+        node = _add_requirement(graph, "REQ-p00001", "Breakdown Req", level="prd")
+
+        def dim(fractions, **kwargs):
+            return CoverageDimension(
+                total=3,
+                direct=sum(fractions.values()),
+                indirect=sum(fractions.values()),
+                direct_labels={lbl for lbl, f in fractions.items() if f > 0},
+                indirect_labels={lbl for lbl, f in fractions.items() if f > 0},
+                direct_pct_by_label=dict(fractions),
+                indirect_pct_by_label=dict(fractions),
+                **kwargs,
+            )
+
+        node.set_metric(
+            "rollup_metrics",
+            RollupMetrics(
+                total_assertions=3,
+                implemented=dim({"A": 1.0, "B": 1.0, "C": 1.0}),
+                tested=dim({"A": 1.0, "B": 1.0, "C": 1.0}),
+                verified=dim(
+                    {"A": 1.0, "B": 0.0, "C": 0.0},
+                    has_failures=True,
+                    failing_labels={"B"},
+                ),
+            ),
+        )
+        return graph
+
+    # Verifies: REQ-d00258-O
+    def test_text_tested_line_carries_the_breakdown(self):
+        """The breakdown qualifies Tested, so it rides on the Tested line and
+        introduces no coverage term of its own."""
+        data = collect_coverage(self._graph_with_breakdown())
+        output = _render(data, "text")
+
+        tested_line = next(ln for ln in output.splitlines() if "Tested:" in ln)
+        assert "[1 passed, 1 failed, 1 awaiting a result]" in tested_line
+        # REQ-d00258-B: no new coverage display term appears alongside it.
+        assert "Awaiting:" not in output
+        assert "Failed:" not in output
+
+    # Verifies: REQ-d00258-O
+    def test_text_breakdown_silent_when_nothing_is_tested(self):
+        """There is no breakdown of an empty set: a level with no tested
+        assertion says nothing rather than reporting three zeros."""
+        graph = _make_graph()
+        node = _add_requirement(graph, "REQ-p00001", "Untested", level="prd")
+        _set_rollup(node, total=2, covered=2, tested=0, validated=0)
+
+        output = _render(collect_coverage(graph), "text")
+
+        tested_line = next(ln for ln in output.splitlines() if "Tested:" in ln)
+        assert "awaiting" not in tested_line
+
+    # Verifies: REQ-d00258-O
+    def test_markdown_tested_cell_carries_the_breakdown(self):
+        data = collect_coverage(self._graph_with_breakdown())
+        output = _render(data, "markdown")
+
+        assert "[1 passed, 1 failed, 1 awaiting a result]" in output
+
+    # Verifies: REQ-d00258-O
+    def test_csv_columns_carry_the_breakdown(self):
+        data = collect_coverage(self._graph_with_breakdown())
+        output = _render(data, "csv")
+
+        row = next(csv.DictReader(io.StringIO(output)))
+        assert row["Tested Passed"] == "1"
+        assert row["Tested Failed"] == "1"
+        assert row["Tested Awaiting"] == "1"
+        # The three account for every tested assertion the Tested column counts.
+        assert float(row["Tested"]) == 3.0

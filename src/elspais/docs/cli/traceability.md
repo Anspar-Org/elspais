@@ -23,8 +23,9 @@ This answers: "How do we know this requirement is satisfied?"
 `trace` (standard/full presets) and `summary` report five coverage columns
 using exactly this display vocabulary: **Implemented, Tested, Passing, UAT
 Covered, UAT Passed** (plus `Code Tested` and `LCOV Tested` for line
-coverage). "Validated" never denotes test coverage on any surface -- it
-collides with the `Validates:` keyword (journey → requirement UAT links).
+coverage). These are the only words that denote a coverage dimension; in
+particular "Validated" is not one of them, since it collides with the
+`Validates:` keyword (journey → requirement UAT links).
 
 **Generous footing + `~` marker.** Every one of the five assertion-based
 columns headlines the *generous* footing -- `CoverageDimension.indirect`,
@@ -44,12 +45,26 @@ empty `Tested`/`Passing` denominator as neutral `missing` (grey), never a red
 gap -- the "not all built" story lives on the `Implemented` column. A failing
 in-denominator label always reads `failing` (red).
 
-**Passing is a union.** The `Passing` column (dimension key `verified`) is
-the union of two kinds of evidence: a passing `Verifies:` test result
-(`verified`), or a covered `Implements:` line under a target with
-`credit_coverage = "verified"` (`lcov_tested`, and only if that target isn't
-also failing). Either alone is enough to count as passing; see
-`tested_and_passing()` in `graph/metrics.py`. `summary`'s level-aggregated
+**What Passing takes.** The `Passing` column (dimension key `verified`) draws
+on two kinds of evidence: a passing `Verifies:` test result (`verified`), or a
+covered `Implements:` line under a target with `credit_coverage = "verified"`
+(`lcov_tested`). Either alone is enough to count as passing, and neither may
+report the assertion failing -- line coverage never sees a verdict, so a
+failing test still executes lines, and an assertion its result failed on is
+excluded however much line credit it earned. See `tested_and_passing()` in
+`graph/metrics.py`.
+
+**The Tested breakdown.** Every tested assertion is in exactly one of three
+states, and all three are reported alongside the Tested figure: passed,
+failed, and awaiting a result -- the last covering a test that has not run,
+one whose results were never ingested, and one that returned no verdict.
+`summary` renders it as `[N passed, N failed, N awaiting a result]`, `trace`
+compactly as `[3P 0F 2A]` with a legend under the table, and `summary
+--format csv` as three columns. It is a breakdown OF Tested, not a coverage
+dimension of its own: the display vocabulary stays at the five terms above.
+Passing alone would leave the remainder ambiguous -- an assertion missing
+from it either failed or never returned a verdict, and those ask for opposite
+things. `summary`'s level-aggregated
 Passing figure gets a trailing `*` (footnoted) instead of `~` when any
 underlying RESULT data was carried from a previous run -- see `elspais docs
 test-targets` (*Per-PR selectivity*).

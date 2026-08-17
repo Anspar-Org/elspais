@@ -525,7 +525,7 @@ def _serialize_node_generic(node: Any, graph: FederatedGraph | None = None) -> d
                 }
         # CUR-1419: consumer REQs declaring `Integrates:` inherit the
         # library node's implemented/passing coverage (result-verified or
-        # line-coverage-credited union, REQ-d00258-B) across INTEGRATES
+        # line-coverage-credited union, REQ-d00258-N) across INTEGRATES
         # edges. Surface the live overlay so viewers can show inherited
         # status. Skip when there are no integrations to avoid noise.
         # `verified_*` key names are the wire contract (semantics: the
@@ -3997,6 +3997,18 @@ def _get_test_coverage(graph: FederatedGraph, req_id: str) -> dict[str, Any]:
     # Read uat_validated_pct from rollup_metrics if available
     uat_validated_pct = rollup.uat_verified.indirect_pct if rollup is not None else 0.0
 
+    # Implements: REQ-d00258-O
+    tested_breakdown: dict[str, int] | None = None
+    if rollup is not None:
+        from elspais.graph.metrics import tested_partition
+
+        part = tested_partition(rollup)
+        tested_breakdown = {
+            "passed": part.passed,
+            "failed": part.failed,
+            "awaiting_result": part.awaiting,
+        }
+
     return {
         "success": True,
         "req_id": req_id,
@@ -4007,6 +4019,10 @@ def _get_test_coverage(graph: FederatedGraph, req_id: str) -> dict[str, Any]:
         "total_assertions": total,
         "covered_count": covered_count,
         "referenced_pct": round(referenced_pct, 1),
+        # Implements: REQ-d00258-O
+        # What came back from the tests this requirement has: a breakdown of
+        # its tested assertions, not a further coverage dimension.
+        "tested_breakdown": tested_breakdown,
         "uat": {
             "jny_nodes": jny_nodes,
             "covered_assertions": sorted(covered_uat_assertion_ids),

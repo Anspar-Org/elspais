@@ -1,11 +1,11 @@
-# Verifies: REQ-d00252, REQ-d00258-B
+# Verifies: REQ-d00252, REQ-d00258-N
 """Validates REQ-d00252-F.
 
 Coverage reports summarize integrated requirements grouped by the owning
 associate, with a federation total. This exercises the data helper
 ``integrates_by_associate`` (and the optional ``integrates_total`` aggregate).
 The inherited "verified" figures are the passing union (result-verified or
-line-coverage-credited, REQ-d00258-B `tested_and_passing()`), not raw
+line-coverage-credited, REQ-d00258-N `tested_and_passing()`), not raw
 `verified`.
 """
 
@@ -90,7 +90,7 @@ def test_REQ_d00252_F_total_aggregates(tmp_path):
 def test_REQ_d00252_F_lcov_only_credit_counts_as_passing(tmp_path):
     """A library REQ with only lcov_tested (line-coverage) credit -- no
     Verifies:-based result -- still counts toward the associate's passing
-    figure (REQ-d00258-B union), not just raw `verified`.
+    figure (REQ-d00258-N union), not just raw `verified`.
     """
     fed = _federate(tmp_path)
     lib_req = fed._repos["library"].graph._index["LIB-d00007"]
@@ -122,7 +122,7 @@ def test_REQ_d00252_F_library_failures_flag_associate_row(tmp_path):
     """A library assertion with a FAILING Verifies-result but full lcov credit
     still counts as covered in the union, but the per-associate row (and the
     federation total) must carry has_failures=True so a red library suite is
-    never reported as clean (REQ-d00258-B).
+    never reported as clean (REQ-d00258-N).
     """
     fed = _federate(tmp_path)
     lib_req = fed._repos["library"].graph._index["LIB-d00007"]

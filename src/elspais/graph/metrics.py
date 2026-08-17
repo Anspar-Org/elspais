@@ -563,7 +563,7 @@ class IntegratesRollup:
     # non-integer. Totals are assertion counts and stay int.
     implemented_covered: float
     implemented_total: int
-    # NOTE (REQ-d00258-B): despite the field name (kept for MCP/GUI wire
+    # NOTE (REQ-d00258-N): despite the field name (kept for MCP/GUI wire
     # compatibility -- see `integrates_rollup()`), these are NOT the raw
     # `verified` dimension. They are the "passing" union of result-verified
     # and line-coverage-credited evidence (`tested_and_passing()`), so a
@@ -576,7 +576,7 @@ class IntegratesRollup:
     # a FAILING Verifies-result but full lcov credit still reads as covered --
     # this flag is the only signal that the library suite is red, and every
     # surface showing the covered/total figures must surface it too
-    # (REQ-d00258-B).
+    # (REQ-d00258-N).
     has_failures: bool = False
 
     @property
@@ -607,7 +607,7 @@ def integrates_rollup(node: GraphNode) -> IntegratesRollup:
     library node's finalized ``rollup_metrics`` (computed in its own repo) and
     fold its implemented dimension and its *passing* union in. "Passing" is
     the result-verified-or-line-coverage-credited union computed by
-    :func:`tested_and_passing` (REQ-d00258-B) -- not the raw ``verified``
+    :func:`tested_and_passing` (REQ-d00258-N) -- not the raw ``verified``
     dimension -- so a library requirement whose only evidence is lcov credit
     (e.g. an aggregate-tooling repo with no `Verifies:`-based results) still
     propagates as passing coverage to the consumer. A consumer REQ with no
@@ -648,7 +648,7 @@ class AssociateIntegration:
     # REQ-d00069-J); totals are assertion counts and stay int.
     implemented_covered: float
     implemented_total: int
-    # NOTE (REQ-d00258-B): the "verified" field name is kept for MCP/summary
+    # NOTE (REQ-d00258-N): the "verified" field name is kept for MCP/summary
     # wire compatibility, but the value is the "passing" union (result-verified
     # or line-coverage-credited, `tested_and_passing()`), not raw `verified`.
     verified_covered: float
@@ -665,7 +665,7 @@ def integrates_by_associate(graph) -> list[AssociateIntegration]:
 
     Scans every INTEGRATES edge in the federation (consumer REQ -> library REQ),
     groups by the owning associate repo of the target library node, and sums the
-    inherited implemented coverage plus the *passing* union (REQ-d00258-B
+    inherited implemented coverage plus the *passing* union (REQ-d00258-N
     `tested_and_passing()`: result-verified or line-coverage-credited), read
     live from each target's ``rollup_metrics``. Returns one entry per
     associate, sorted by associate name. A federation total is the caller's
@@ -752,15 +752,24 @@ def integrates_total(items: list[AssociateIntegration]) -> AssociateIntegration:
 
 # Implements: REQ-d00254-B
 def tested_and_passing(metrics: RollupMetrics) -> CoverageDimension:
-    """Union of `verified` and `lcov_tested` for the headline 'tested & passing' score.
+    """The Passing dimension, from `verified` and `lcov_tested` together.
 
-    Per-assertion fractions are the max across the two dimensions (not summed);
-    has_failures is True if either dimension reports a failure. Used by the
-    summary headline and the health combined signal (CUR-1533).
+    An *Assertion* passes when at least one of the two kinds of evidence says
+    it passed and neither says it failed (REQ-d00258-N). Per-assertion
+    fractions are the max across the two dimensions (not summed), and an
+    *Assertion* either source reports failing contributes nothing to the
+    passing figures however much credit the other source gave it: line
+    coverage never observes a verdict, so a failing test still executes lines
+    and would otherwise be counted as passing by the source that cannot tell.
 
-    When per-label dicts are populated the union is label-keyed; when they are
-    absent (e.g. in simplified test fixtures) the raw direct/indirect scalars
-    are combined via max so the headline is never understated.
+    Its per-label fractions are kept as they were credited, so the evidence
+    remains readable and the failing *Assertion* renders under its own
+    standing (REQ-d00258-G) rather than disappearing.
+
+    When per-label dicts are populated the figures are label-keyed; when they
+    are absent (e.g. in simplified test fixtures) the raw direct/indirect
+    scalars are combined via max, which cannot attribute a failure to an
+    *Assertion* and so does not exclude one.
     """
     vd = metrics.verified
     lt = metrics.lcov_tested
@@ -775,15 +784,18 @@ def tested_and_passing(metrics: RollupMetrics) -> CoverageDimension:
     direct_pct = merge(vd.direct_pct_by_label, lt.direct_pct_by_label)
     indirect_pct = merge(vd.indirect_pct_by_label, lt.indirect_pct_by_label)
 
+    # Implements: REQ-d00258-N
+    failing = set(vd.failing_labels) | set(lt.failing_labels)
+
     # Fall back to raw scalars when no per-label data is present (e.g. simplified
     # test fixtures that don't populate direct_pct_by_label).
     if direct_pct:
-        combined_direct = sum(direct_pct.values())
+        combined_direct = sum(v for lbl, v in direct_pct.items() if lbl not in failing)
     else:
         combined_direct = max(vd.direct, lt.direct)
 
     if indirect_pct:
-        combined_indirect = sum(indirect_pct.values())
+        combined_indirect = sum(v for lbl, v in indirect_pct.items() if lbl not in failing)
     else:
         combined_indirect = max(vd.indirect, lt.indirect)
 
@@ -795,7 +807,7 @@ def tested_and_passing(metrics: RollupMetrics) -> CoverageDimension:
         # Per-assertion failure attribution is the union of both sources'
         # failing labels, so the "passing" standing reads red only for the
         # assertions that actually failed (REQ-d00258-G).
-        failing_labels=set(vd.failing_labels) | set(lt.failing_labels),
+        failing_labels=failing,
         direct_labels=set(direct_pct),
         indirect_labels=set(indirect_pct),
         direct_pct_by_label=direct_pct,
@@ -803,8 +815,57 @@ def tested_and_passing(metrics: RollupMetrics) -> CoverageDimension:
     )
 
 
+# Implements: REQ-d00258-O
+@dataclass(frozen=True)
+class TestedPartition:
+    """The tested assertions of one requirement, by what came back.
+
+    Every tested *Assertion* is in exactly one of the three, so the counts sum
+    to ``tested``. Passing alone would leave the remainder ambiguous: an
+    *Assertion* missing from it either failed or never returned a verdict, and
+    those ask for opposite things of a reader.
+
+    Counts assertions rather than fractional credit. A partially-credited
+    *Assertion* is still one *Assertion*, and it is the *Assertion* that
+    passed, failed, or is waiting.
+    """
+
+    passed: int
+    failed: int
+    awaiting: int
+
+    @property
+    def tested(self) -> int:
+        return self.passed + self.failed + self.awaiting
+
+
+# Implements: REQ-d00258-O
+def tested_partition(metrics: RollupMetrics) -> TestedPartition:
+    """Partition a requirement's tested assertions into the three states.
+
+    The tested set is read on the generous footing, matching the Tested figure
+    this breaks down (REQ-d00258-A). An *Assertion* is failing when either kind
+    of passing evidence reports it so, passing when some passing evidence
+    credits it and none reports it failing, and awaiting a result otherwise --
+    which covers a test that has not run, one whose results were never
+    ingested, and one that returned no verdict.
+    """
+    tested_labels = {lbl for lbl, frac in metrics.tested.indirect_pct_by_label.items() if frac > 0}
+    passing = tested_and_passing(metrics)
+    failed = tested_labels & set(passing.failing_labels)
+    passed = {
+        lbl for lbl in tested_labels - failed if passing.indirect_pct_by_label.get(lbl, 0.0) > 0
+    }
+    return TestedPartition(
+        passed=len(passed),
+        failed=len(failed),
+        awaiting=len(tested_labels) - len(failed) - len(passed),
+    )
+
+
 __all__ = [
     "AssociateIntegration",
+    "TestedPartition",
     "CoverageDimension",
     "CoverageSource",
     "CoverageContribution",
@@ -813,6 +874,7 @@ __all__ = [
     "SatisfierRollup",
     "direct_coverage_for",
     "fmt_assertion_count",
+    "tested_partition",
     "has_integration",
     "inherited_coverage_for",
     "integrates_by_associate",

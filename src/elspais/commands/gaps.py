@@ -12,6 +12,7 @@ if TYPE_CHECKING:
     from elspais.graph.federated import FederatedGraph
 
 from elspais.graph import NodeKind
+from elspais.graph.metrics import tested_and_passing
 from elspais.graph.relations import EdgeKind
 
 
@@ -198,9 +199,10 @@ def collect_gaps(
         if not assertion_nodes:
             data.no_assertions.append(GapEntry(req_id, title))
 
-        # Failing: test or UAT failures
+        # Failing: test or UAT failures. Read through the Passing dimension,
+        # so a failure line coverage carries is seen too (REQ-d00258-N).
         if metrics is not None:
-            if metrics.verified.has_failures:
+            if tested_and_passing(metrics).has_failures:
                 data.failing.append((req_id, title, "test"))
             if metrics.uat_verified.has_failures:
                 data.failing.append((req_id, title, "uat"))
