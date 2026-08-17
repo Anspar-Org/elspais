@@ -679,7 +679,7 @@ Coverage dimensions are chained: one dimension counts only the assertions anothe
 
 A. Where evidence for a coverage dimension names an *Assertion* that the dimension does not count, the tool SHALL report the evidence, the *Assertion* it names, and the dimension the evidence does not reach.
 
-B. Whether a dimension counts an *Assertion* SHALL be decided on the generous footing, so that whole-requirement evidence keeps within the dimension every *Assertion* it credits.
+B. Whether a dimension counts an *Assertion* SHALL be decided by the same rule that produces that dimension's figures under the project's own configuration, so that what is reported as uncredited is exactly what the project's coverage answers leave out.
 
 C. The severity of the report SHALL be what the project configures for it, and SHALL be an error where the project configures nothing.
 
@@ -693,8 +693,8 @@ F. Where a dimension counts no *Assertion* of a requirement at all, the tool SHA
 
 An error default is the honest reading of what the condition means. A test that names an *Assertion* nothing implements is one of two defects: the implementation exists and its `Implements:` reference was never written, or the test is aimed at an *Assertion* it does not exercise. Neither is a matter of style, and both cost the estate the same thing — a requirement that reads as untested when it is tested, or as tested when it is not. A warning would leave the author to decide which of those two they are looking at without telling them there is a decision to make.
 
-B keeps the report from firing on the ordinary shape of a young estate. Whole-requirement implementation evidence is evidence; an *Assertion* it credits is implemented as far as any surface reports, and a test naming that *Assertion* credits its dimension normally. Deciding this on the strict footing would report the whole of a healthy estate that annotates implementation per requirement and tests per *Assertion* — a pattern the tool encourages elsewhere.
+B ties the report to the project's own arithmetic rather than to a footing named once here. Under the default configuration a dimension counts whole-requirement evidence, so an *Assertion* credited only that way stays inside the dimension and a test naming it credits normally — an estate that annotates implementation per requirement and tests per *Assertion* is not reported wholesale for a pattern the tool encourages elsewhere. A project that has configured indirect evidence not to credit has decided the opposite for itself, and its figures genuinely do leave that *Assertion* out; a report fixed to the generous footing would then say nothing about evidence the project's own answers discard, which is the silence this requirement exists to end. Whichever rule is in force, the report and the figures describe the same estate.
 
-This is not the question REQ-d00258-M answers. That assertion governs surfaces listing what remains to be done, which read the strict footing so an *Assertion* with no evidence naming it cannot hide behind its requirement's. Here the *Assertion* is not missing evidence; it has evidence that credits nothing, and the generous footing is what decides whether that is so.
+This is not the question REQ-d00258-M answers. That assertion governs surfaces listing what remains to be done, which read the strict footing so an *Assertion* with no evidence naming it cannot hide behind its requirement's. Here the *Assertion* is not missing evidence; it has evidence that credits nothing.
 
-*End* *Uncredited Coverage Evidence* | **Hash**: fa2cd2a9
+*End* *Uncredited Coverage Evidence* | **Hash**: b7624174

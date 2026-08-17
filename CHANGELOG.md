@@ -167,10 +167,13 @@ error where the project configures nothing. The default is an error because the
 condition has only two explanations, and both are defects: the implementation
 exists and its `Implements:` reference was never written, or the test is aimed
 at an *Assertion* it does not exercise. Whether a dimension counts an
-*Assertion* is decided on the generous footing, so whole-requirement
-implementation evidence keeps its assertions counted and an estate that
-annotates implementation per requirement and tests per *Assertion* is not
-reported wholesale. Where a dimension counts no *Assertion* of a requirement at
+*Assertion* is decided by the same rule that produces that dimension's figures
+under the project's own configuration, so the report and the figures always
+describe the same estate: by default whole-requirement implementation evidence
+keeps its assertions counted, and an estate that annotates implementation per
+requirement and tests per *Assertion* is not reported wholesale; where a project
+has configured indirect evidence not to credit, evidence its own figures discard
+is reported rather than passed over. Where a dimension counts no *Assertion* of a requirement at
 all, that is one finding for the requirement rather than one per *Assertion*.
 Reporting credits nothing: the figures are unchanged on both footings
 (REQ-d00274).
