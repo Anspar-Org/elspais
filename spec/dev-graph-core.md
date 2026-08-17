@@ -671,7 +671,7 @@ A reports how the estate is doing and M reports what is left to do; the two ques
 
 ## REQ-d00274: Uncredited Coverage Evidence
 
-**Level**: dev | **Status**: Draft | **Implements**: REQ-p00015
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00015
 
 Coverage dimensions are chained: one dimension counts only the assertions another dimension already covers. Evidence can therefore name an *Assertion* its dimension does not count, and so contribute to no answer the tool gives. This requirement obliges the tool to say that the evidence exists and reaches nothing, rather than let it disappear into a denominator it was never in.
 
@@ -698,5 +698,9 @@ B ties the report to the project's own arithmetic rather than to a footing named
 A and B divide the question between them. B settles what the dimension counts, which is the figures' business; A settles what the evidence names, which is not a matter of footing at all. Whole-requirement evidence names the requirement, and crediting it to every *Assertion* is the generous footing's doing rather than the author's, so an *Assertion* reached only that way was named by nobody and cannot be reported as though evidence were aimed at it. F is where such evidence is answered, against the requirement it did name.
 
 This is not the question REQ-d00258-M answers. That assertion governs surfaces listing what remains to be done, which read the strict footing so an *Assertion* with no evidence naming it cannot hide behind its requirement's. Here the *Assertion* is not missing evidence; it has evidence that credits nothing.
+
+### Changelog
+
+- 2026-08-17 | b7624174 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: add missing changelog section
 
 *End* *Uncredited Coverage Evidence* | **Hash**: b7624174
