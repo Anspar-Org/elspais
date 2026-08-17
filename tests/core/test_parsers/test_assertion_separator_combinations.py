@@ -20,9 +20,8 @@ A field incident showed that journey ``Validates:`` references are the same
 risk surface: under a non-"-"/"_" separator, a correctly-styled ref wires
 assertion-targeted VALIDATES edges (REQ -> journey, per the ``Validates:``
 field behavior specified in spec/requirements-spec.md), while
-a ref that still uses "-" produces a hard broken reference carrying a
-separator-config diagnostic (REQ-d00252-G). The tests below extend the same
-separator/multi-separator matrix to cover that path.
+a ref that still uses "-" produces a hard broken reference. The tests below
+extend the same separator/multi-separator matrix to cover that path.
 
 Every separator in the matrix is a character a reference list does not
 already spend: "," divides one reference from the next, so a configuration
@@ -426,7 +425,7 @@ def _code_node_id(graph) -> str:
 def test_code_comment_off_config_residue_is_a_broken_reference(tmp_path):
     """A code comment citing ``<REQ>/Z`` when the configured assertion
     separator is "-" must yield a broken reference carrying the FULL
-    ``<REQ>/Z`` string plus the separator-config diagnostic -- not a
+    ``<REQ>/Z`` string and fault_class MALFORMED -- not a
     silently-truncated blanket edge to ``<REQ>``."""
     project = _make_residue_project(
         tmp_path,
