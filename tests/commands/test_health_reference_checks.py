@@ -8,7 +8,6 @@ import pathlib
 import pytest
 
 from elspais.commands.health import _REFERENCE_CHECKS, run_checks
-from elspais.graph.reference_faults import FaultClass
 
 
 def _names(checks):
@@ -179,7 +178,6 @@ def test_reference_fault_classes_partition_the_broken_references(faulted_graph, 
         for _fc, name, _desc in _REFERENCE_CHECKS
     )
     assert bucketed == len(faulted_graph.broken_references())
-    assert set(FaultClass) >= {f.fault_class for f in faulted_graph.broken_references()}
 
 
 # Verifies: REQ-d00272-O

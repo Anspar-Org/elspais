@@ -709,6 +709,19 @@ _REFERENCE_CHECKS: tuple[tuple[FaultClass, str, str], ...] = (
 
 
 # Implements: REQ-d00204-E
+# The two classes an unreadable repository can actually account for. A
+# reference REACHES one of these by failing to find its target, which a
+# missing repository explains. The other three refute the explanation on
+# their own terms: MALFORMED identified no target at all, and FORBIDDEN and
+# UNKNOWN_ASSERTION both resolved theirs -- so the repository owning it
+# demonstrably loaded. Naming a missing repository beside any of those would
+# be prose naming a cause the finding does not have, which is the defect the
+# whole classification exists to remove (REQ-p00019-J, REQ-d00252-K).
+_CLASSES_A_MISSING_REPO_EXPLAINS = frozenset(
+    {FaultClass.UNKNOWN_NAMESPACE, FaultClass.UNKNOWN_REQUIREMENT}
+)
+
+
 def _unavailable_repos(graph: FederatedGraph) -> list[dict[str, str]]:
     """The configured repositories that could not be loaded, with where each
     one lives and why it failed.
@@ -717,6 +730,10 @@ def _unavailable_repos(graph: FederatedGraph) -> list[dict[str, str]]:
     needs to know how to obtain it, and that belongs in the report whatever
     severity the project has chosen for the class -- severity follows the
     class a reference reached, this follows from the federation's state.
+
+    Which reports it belongs on is decided by the caller, and REQ-d00204-E
+    scopes it: the obligation attaches to a reference that fails *because*
+    the repository owning its target is in an error state.
     """
     out: list[dict[str, str]] = []
     for entry in graph.iter_repos():
@@ -748,7 +765,9 @@ def check_reference_class(
     typed = _validate_config(config or {})
     severity = getattr(typed.rules.references, fault_class.label)
     faults = [f for f in graph.broken_references() if f.fault_class is fault_class]
-    unavailable = _unavailable_repos(graph)
+    unavailable = (
+        _unavailable_repos(graph) if fault_class in _CLASSES_A_MISSING_REPO_EXPLAINS else []
+    )
     if not faults:
         return HealthCheck(
             name=name,

@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from elspais.commands.health import (
+    _REFERENCE_CHECKS,
     HealthFinding,
     check_reference_class,
     run_spec_checks,
@@ -482,6 +483,67 @@ class TestBrokenReferenceSeverity:
         assert check.findings
         assert check.details["unavailable_repos"] == []
         assert "could not be read" not in check.message
+
+    def test_REQ_d00204_E_only_the_classes_a_missing_repo_explains_name_one(self) -> None:
+        """A missing repository is named beside the classes it can account
+        for, and beside no others -- even while one is genuinely missing.
+
+        Three classes refute the explanation on their own terms: MALFORMED
+        identified no target at all, and FORBIDDEN and UNKNOWN_ASSERTION
+        both resolved theirs, so the repository owning it demonstrably
+        loaded. Naming a missing repository there would be prose naming a
+        cause the finding does not have (REQ-p00019-J, REQ-d00252-K).
+        """
+        from elspais.graph.reference_faults import ReferenceFault
+
+        alpha_graph = build_graph(
+            make_requirement("REQ-d00093", title="Alpha", level="DEV", source_path="spec/a.md"),
+            repo_root=Path("/repo/alpha"),
+        )
+        # One fault of every class, so each check has a finding to describe.
+        alpha_graph._broken_references = [
+            ReferenceFault(
+                source_id="REQ-d00093",
+                target_id=f"target-{fc.label}",
+                edge_kind="implements",
+                fault_class=fc,
+            )
+            for fc in FaultClass
+        ]
+        alpha_config = _make_config()
+        fed = FederatedGraph(
+            [
+                RepoEntry(
+                    name="alpha",
+                    graph=alpha_graph,
+                    config=alpha_config,
+                    repo_root=Path("/repo/alpha"),
+                ),
+                RepoEntry(
+                    name="beta",
+                    graph=None,
+                    config=None,
+                    repo_root=Path("/repo/beta"),
+                    error="Failed to build graph",
+                ),
+            ]
+        )
+
+        explained = {FaultClass.UNKNOWN_NAMESPACE, FaultClass.UNKNOWN_REQUIREMENT}
+        named = set()
+        for fault_class, name, description in _REFERENCE_CHECKS:
+            check = check_reference_class(fed, alpha_config, fault_class, name, description)
+            assert check.findings, f"{name} must have a finding to describe"
+            if check.details["unavailable_repos"]:
+                named.add(fault_class)
+                assert "beta" in check.message
+            else:
+                assert "could not be read" not in check.message
+
+        assert named == explained, (
+            "a missing repository must be named beside exactly the classes it "
+            f"can account for; named {sorted(c.label for c in named)}"
+        )
 
 
 class TestRunSpecChecksIteratesRepos:
