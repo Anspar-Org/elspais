@@ -157,10 +157,18 @@ def numerator_dimension(rollup: RollupMetrics, dimension: str) -> CoverageDimens
     return tested_and_passing(rollup) if dimension == "verified" else getattr(rollup, dimension)
 
 
-def credited_labels(dim: CoverageDimension, *, allow_indirect: bool = True) -> set[str]:
-    """Labels this dimension credits under the footing the project configured."""
-    pct = dim.indirect_pct_by_label if allow_indirect else dim.direct_pct_by_label
-    return {lbl for lbl, frac in pct.items() if frac > 0}
+# Implements: REQ-d00274-A, REQ-d00274-D
+def authored_dimension(rollup: RollupMetrics, dimension: str) -> CoverageDimension:
+    """The dimension holding evidence somebody WROTE for ``dimension``.
+
+    Differs from ``numerator_dimension`` only for 'verified', whose figures union
+    in line-coverage credit. That credit is derived from which lines a test run
+    happened to touch: nobody wrote it against an *Assertion*, so it names none
+    (REQ-d00274-A) and there is no file and line to report it at
+    (REQ-d00274-D). It belongs in the figures, and not in a report about what
+    an author annotated.
+    """
+    return getattr(rollup, dimension)
 
 
 def relative_tier_for(
@@ -196,19 +204,24 @@ _EVIDENCE_SOURCES: dict[str, frozenset[CoverageSource]] = {
     "uat_verified": frozenset({CoverageSource.UAT_EXPLICIT, CoverageSource.UAT_INFERRED}),
 }
 
-# The chain links over which "outside the denominator" is a fact about what
-# somebody annotated, and so is reportable under that description (REQ-p00019-J).
-#
-# 'verified' is deliberately absent. On real estates its GENEROUS footing
-# credits assertions the ``tested`` dimension does not, while the two strict
-# footings agree exactly -- so a label can sit outside the Passing denominator
-# while a passing test demonstrably covers its requirement. Reporting that as
-# evidence naming an assertion no test covers would say something untrue of the
-# finding, which is the misattribution REQ-p00019-J forbids. Passing ought to be
-# a subset of Tested and is not; that incoherence belongs to how the two
-# dimensions are populated, not to the author of any annotation, and no author
-# could act on a report of it. It is left visible here rather than papered over.
-_REPORTABLE_CHAIN: tuple[str, ...] = ("tested", "uat_verified")
+
+# Implements: REQ-d00274-A
+def named_labels(dim: CoverageDimension) -> set[str]:
+    """Assertions this dimension's evidence NAMES, as opposed to reaches.
+
+    Assertion-targeted evidence names an *Assertion*. Whole-requirement
+    (blanket) evidence names the requirement, and the generous footing then
+    extends its credit to every *Assertion* -- so the generous per-label map
+    answers "which assertions does the credit reach", which is a different
+    question from "which assertions did somebody write down".
+
+    REQ-d00274-A is about the second question. Reading the first would report an
+    *Assertion* nobody named as though evidence had been aimed at it, and would
+    do so on every estate that annotates by requirement -- an author sent looking
+    for an annotation that was never written. Blanket evidence is not thereby
+    lost: it names the requirement, and REQ-d00274-F reports it there.
+    """
+    return {lbl for lbl, frac in dim.direct_pct_by_label.items() if frac > 0}
 
 
 @dataclass(frozen=True)
@@ -279,14 +292,17 @@ def iter_uncredited_evidence(
 
     A chained dimension counts only the assertions its denominator dimension
     covers, so evidence can name an *Assertion* outside that set and contribute
-    to nothing. Both the numerator and the denominator are read through the same
-    helpers the tier uses, so what is reported here is exactly what the project's
-    own figures leave out, whichever footing it configured (REQ-d00274-B).
+    to nothing. The denominator is read through the same helper the tier uses, so
+    what is reported is exactly what the project's own figures leave out,
+    whichever footing it configured (REQ-d00274-B). The numerator is what the
+    evidence NAMES (REQ-d00274-A), which is not a question of footing: an
+    *Assertion* reached only because blanket evidence was extended to it was
+    named by nobody, and is reported through its requirement under
+    REQ-d00274-F if the dimension counts nothing of that requirement at all.
 
     Read-only: nothing here alters a metric, so reporting credits nothing
     (REQ-d00274-E).
     """
-    allow_indirect = allow_indirect_from_config(config)
     out: list[UncreditedEvidence] = []
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
         if not _counts_for_coverage(config, node.status):
@@ -294,33 +310,35 @@ def iter_uncredited_evidence(
         rollup: RollupMetrics | None = node.get_metric("rollup_metrics")
         if rollup is None or rollup.total_assertions == 0:
             continue
-        for dimension in _REPORTABLE_CHAIN:
-            denom_name = DENOMINATOR_DIMENSION[dimension]
+        for dimension, denom_name in DENOMINATOR_DIMENSION.items():
             denom = denominator_labels(rollup, dimension)
             if denom is None:  # pragma: no cover - chained dimensions only
                 continue
-            num_dim = numerator_dimension(rollup, dimension)
-            uncredited = credited_labels(num_dim, allow_indirect=allow_indirect) - denom
-            if not uncredited:
-                continue
-            sources = _evidence_sources_for(rollup, dimension, uncredited)
-            labels = tuple(sorted(uncredited))
+            num_dim = authored_dimension(rollup, dimension)
             if not denom:
-                # The dimension counts no assertion of this requirement at all:
-                # one finding for the requirement, not one per assertion.
+                # The dimension counts no assertion of this requirement at all,
+                # so every piece of its evidence credits nothing -- one finding
+                # for the requirement, not one per assertion (REQ-d00274-F).
+                # Blanket evidence is caught here and only here: it named the
+                # requirement, which is what this finding is about.
+                reached = {lbl for lbl, f in num_dim.indirect_pct_by_label.items() if f > 0}
+                if not reached:
+                    continue
+                sources = _evidence_sources_for(rollup, dimension, reached)
                 out.append(
                     UncreditedEvidence(
                         requirement_id=node.id,
                         dimension=dimension,
                         denominator=denom_name,
                         assertion_label=None,
-                        labels=labels,
+                        labels=tuple(sorted(reached)),
                         carries_result=_evidence_passes(graph, sources),
                         source_ids=sources,
                     )
                 )
                 continue
-            for label in labels:
+            uncredited = named_labels(num_dim) - denom
+            for label in sorted(uncredited):
                 label_sources = _evidence_sources_for(rollup, dimension, {label})
                 out.append(
                     UncreditedEvidence(
@@ -672,9 +690,10 @@ __all__ = [
     "allow_indirect_from_config",
     "collect_coverage",
     "aggregate_dimension",
-    "credited_labels",
+    "authored_dimension",
     "denominator_labels",
     "iter_uncredited_evidence",
+    "named_labels",
     "numerator_dimension",
     "relative_tier",
     "relative_tier_for",

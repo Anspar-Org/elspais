@@ -861,9 +861,11 @@ assertion it names, the dimension it fails to reach, and the file and line it wa
 written on. It defaults to `error` because the condition has only two
 explanations and both are defects: the implementation exists and its
 `Implements:` reference was never written, or the test is aimed at an assertion
-it does not exercise. Where a dimension counts no assertion of a requirement at
-all, that is reported once for the requirement rather than once per assertion.
-Set `"warning"` or `"ok"` to lower it.
+it does not exercise. Only assertion-targeted evidence names an assertion; a
+whole-requirement `Verifies: REQ-xxx` names the requirement, and is reported
+against the requirement -- once, not once per assertion -- and only where the
+dimension counts no assertion of it at all. Set `"warning"` or `"ok"` to lower
+it.
 
 #### `status_words` (per-relationship dimension labels)
 

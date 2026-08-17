@@ -10,7 +10,7 @@ from elspais.graph.aggregation import (
     absolute_tier,
     aggregate_by_level,
     aggregate_dimension,
-    credited_labels,
+    authored_dimension,
     denominator_labels,
     iter_uncredited_evidence,
     numerator_dimension,
@@ -699,11 +699,10 @@ class TestDenominatorLabelsAbsoluteDimensions:
         assert denominator_labels(rollup, dimension) == {"A"}
 
 
-# Verifies: REQ-d00274
+# Verifies: REQ-d00258-I
 class TestNumeratorDimension:
-    """REQ-d00274-B: the numerator read for a chained dimension's evidence is
-    exactly the dimension the tier figures measure -- 'verified' reads the
-    tested_and_passing union, not the raw verified dimension."""
+    """The dimension the tier figures measure for a chained link -- 'verified'
+    reads the tested_and_passing union, not the raw verified dimension."""
 
     def test_tested_numerator_is_the_tested_dimension(self):
         rollup = RollupMetrics(total_assertions=1, tested=_dim({"A"}, total=1))
@@ -720,25 +719,89 @@ class TestNumeratorDimension:
         )
         num = numerator_dimension(rollup, "verified")
         assert num is not rollup.verified
-        assert credited_labels(num) == {"A"}
+        assert {lbl for lbl, f in num.indirect_pct_by_label.items() if f > 0} == {"A"}
 
 
-# Verifies: REQ-d00274
-class TestCreditedLabels:
-    """REQ-d00274-B: the numerator honors the project's configured footing --
-    only direct per-label fractions credit under allow_indirect=False."""
+# Verifies: REQ-d00274-A
+# Verifies: REQ-d00274-D
+class TestAuthoredDimension:
+    """``authored_dimension`` reads only evidence somebody WROTE against an
+    *Assertion* -- unlike ``numerator_dimension``, it does not union in
+    line-coverage credit for 'verified'. Line-coverage credit names no
+    *Assertion* (REQ-d00274-A) and has no file/line to report (REQ-d00274-D):
+    it belongs in the figures, not in a report about what an author
+    annotated."""
 
-    def test_generous_footing_credits_indirect_only_labels(self):
-        dim = _dim({"A", "B"}, direct=set())
-        assert credited_labels(dim, allow_indirect=True) == {"A", "B"}
+    def test_verified_is_the_raw_verified_dimension(self):
+        rollup = RollupMetrics(total_assertions=1, verified=_dim({"A"}, total=1))
+        assert authored_dimension(rollup, "verified") is rollup.verified
 
-    def test_strict_footing_excludes_indirect_only_labels(self):
-        dim = _dim({"A", "B"}, direct=set())
-        assert credited_labels(dim, allow_indirect=False) == set()
+    def test_lcov_only_credit_is_invisible_to_authored_but_visible_to_numerator(self):
+        """The whole point of the helper: lcov_tested credits A while verified
+        credits nothing -- authored_dimension must not see A, while
+        numerator_dimension (which unions lcov in) must."""
+        rollup = RollupMetrics(
+            total_assertions=1,
+            verified=_dim(set(), total=1),
+            lcov_tested=_dim({"A"}, total=1),
+        )
+        authored = authored_dimension(rollup, "verified")
+        assert {lbl for lbl, f in authored.indirect_pct_by_label.items() if f > 0} == set()
 
-    def test_strict_footing_still_credits_direct_labels(self):
-        dim = _dim({"A", "B"}, direct={"A"})
-        assert credited_labels(dim, allow_indirect=False) == {"A"}
+        numerator = numerator_dimension(rollup, "verified")
+        assert {lbl for lbl, f in numerator.indirect_pct_by_label.items() if f > 0} == {"A"}
+
+
+# Verifies: REQ-d00274-A
+# Verifies: REQ-d00274-D
+class TestIterUncreditedEvidenceExcludesLineCoverageCredit:
+    """``iter_uncredited_evidence`` reads ``authored_dimension``, not
+    ``numerator_dimension``, so line-coverage-only credit for 'verified' --
+    nobody wrote it against an *Assertion*, and there is no file/line to
+    report it at -- never produces a finding. Evidence somebody actually
+    wrote (a `Verifies:` result) for the identical shape still does, so the
+    exclusion is specific to line-coverage credit rather than a silent hole
+    in the whole 'verified' link.
+
+    Regression guard: this must fail if the scan goes back to reading
+    ``numerator_dimension`` for 'verified'.
+    """
+
+    def test_lcov_only_credit_outside_denominator_produces_no_finding(self):
+        req = _make_req("REQ-d00014")
+        req.set_metric(
+            "rollup_metrics",
+            RollupMetrics(
+                total_assertions=2,
+                implemented=_dim({"B"}, total=2),  # B implemented -> tested's own denom is {B}
+                tested=_dim({"B"}, total=2),  # only B (named) tested -> Passing denom = {B}
+                verified=_dim(set(), total=2),  # nobody wrote a Verifies: result for A
+                lcov_tested=_dim({"A"}, total=2),  # but a test run happened to cover A's lines
+            ),
+        )
+        graph = _make_graph(req)
+        assert iter_uncredited_evidence(graph) == []
+
+    def test_written_evidence_outside_denominator_still_fires(self):
+        """Same shape, but the Passing-side credit for A is a `Verifies:`
+        result (authored evidence) instead of line coverage: it DOES
+        produce a finding -- the exclusion is line coverage specifically."""
+        req = _make_req("REQ-d00015")
+        req.set_metric(
+            "rollup_metrics",
+            RollupMetrics(
+                total_assertions=2,
+                implemented=_dim({"B"}, total=2),  # B implemented -> tested's own denom is {B}
+                tested=_dim({"B"}, total=2),  # only B (named) tested -> Passing denom = {B}
+                verified=_dim({"A"}, total=2),  # a Verifies: result names A directly
+            ),
+        )
+        graph = _make_graph(req)
+        items = iter_uncredited_evidence(graph)
+        assert len(items) == 1
+        assert items[0].dimension == "verified"
+        assert items[0].denominator == "tested"
+        assert items[0].assertion_label == "A"
 
 
 # Verifies: REQ-d00274-A, REQ-d00274-D, REQ-d00274-F
@@ -801,28 +864,6 @@ class TestIterUncreditedEvidence:
         assert items[0].assertion_label is None
         assert set(items[0].labels) == {"A", "B"}
 
-    def test_footing_toggles_whether_indirect_only_evidence_is_reported(self):
-        """B: the numerator honors `allow_indirect`. A blanket (whole-req) test
-        result credits B only indirectly; under the strict footing it is not
-        credited at all, so there is nothing to report as uncredited."""
-        req = _make_req("REQ-d00004")
-        req.set_metric(
-            "rollup_metrics",
-            RollupMetrics(
-                total_assertions=2,
-                implemented=_dim({"A"}, total=2),
-                tested=_dim({"A", "B"}, direct=set(), total=2),
-            ),
-        )
-        graph = _make_graph(req)
-        generous = iter_uncredited_evidence(graph)
-        assert len(generous) == 1
-        assert generous[0].assertion_label == "B"
-
-        strict_cfg = {"rules": {"coverage": {"allow_indirect": False}}}
-        strict = iter_uncredited_evidence(graph, strict_cfg)
-        assert strict == []
-
     def test_no_double_report_across_chained_dimensions(self):
         """An assertion reported as uncredited under 'tested' is not ALSO
         reported under 'verified': verified's denominator is the tested
@@ -879,64 +920,60 @@ class TestIterUncreditedEvidence:
         assert rollup.implemented.indirect_pct_by_label == {"A": 1.0}
 
 
-# Verifies: REQ-d00274-B
-# Verifies: REQ-p00019-J
-class TestUncreditedEvidenceExcludesVerifiedLink:
-    """'verified' is not scanned by ``iter_uncredited_evidence``: its numerator
-    (``tested_and_passing`` -- Verifies-results UNION line-coverage credit,
-    plus the transitive CODE->TEST provenance path) counts routes the
-    ``tested`` dimension never records. A label credited only by one of those
-    routes is therefore outside the Passing denominator BY CONSTRUCTION, for
-    every estate -- reporting it as "no test covers this" would be untrue of
-    every such finding, violating REQ-p00019-J's rule that a finding's
-    description must be true of everything it covers.
-
-    Regression guard: if 'verified' is ever added back to the reportable
-    chain, these tests must fail.
+# Verifies: REQ-d00274-A
+class TestUncreditedEvidenceNamedNotReached:
+    """``iter_uncredited_evidence`` scans every chained link (``verified``
+    included -- there is no exclusion list). What changed is the numerator:
+    it reads ``named_labels`` -- assertion-targeted evidence only -- not the
+    generous reached-set, so a label a blanket reference merely EXTENDED to
+    is never reported as an individually-uncredited assertion. Blanket
+    evidence still surfaces, through its requirement, under REQ-d00274-F.
     """
 
-    def test_verified_crediting_beyond_tested_produces_no_finding(self):
-        """1: verified/lcov credits A while tested credits nothing for A --
-        under the retired 'verified' link this would be an uncredited-evidence
-        finding; it must not be one now."""
+    def test_blanket_extended_label_produces_no_per_assertion_finding(self):
+        """A blanket (whole-req) `Verifies:` reaches A and B indirectly but
+        names neither directly. With a non-empty denominator ({A}, from A
+        being implemented), the extended-but-unnamed label B must NOT surface
+        as a per-assertion finding -- the regression guard for the fix: it
+        must fail again if the numerator goes back to reading the generous
+        (reached) per-label map instead of the named one."""
         req = _make_req("REQ-d00009")
         req.set_metric(
             "rollup_metrics",
             RollupMetrics(
-                total_assertions=1,
-                implemented=_dim({"A"}, total=1),
-                tested=_dim(set(), total=1),
-                verified=_dim({"A"}, total=1),
+                total_assertions=2,
+                implemented=_dim({"A"}, total=2),
+                tested=_dim({"A", "B"}, direct=set(), total=2),  # blanket only, names nothing
             ),
         )
         graph = _make_graph(req)
         assert iter_uncredited_evidence(graph) == []
 
-    def test_tested_finding_still_fires_while_verified_stays_silent(self):
-        """2: same shape (verified credits a label 'tested' does not), plus a
-        genuinely uncredited 'tested' assertion (B, tested but unimplemented).
-        Exactly one finding comes back -- the 'tested' one for B -- and
-        excluding 'verified' did not also suppress it."""
+    def test_assertion_targeted_evidence_outside_denominator_still_fires_on_verified(self):
+        """'verified' is scanned again (no exclusion list): a `Verifies:`
+        result naming A directly, where A is outside the Passing denominator
+        (the tested labels, {B} here), is a genuine finding -- the fix did
+        not silence real ones."""
         req = _make_req("REQ-d00010")
         req.set_metric(
             "rollup_metrics",
             RollupMetrics(
                 total_assertions=2,
-                implemented=_dim({"A"}, total=2),  # only A implemented
-                tested=_dim({"B"}, total=2),  # B tested, not implemented -> uncredited
-                verified=_dim({"A"}, total=2),  # A verified/passing, but tested never counted A
+                implemented=_dim({"B"}, total=2),  # B implemented -> tested's own denom is {B}
+                tested=_dim({"B"}, total=2),  # B (named) tested -> Passing denominator = {B}
+                verified=_dim({"A"}, total=2),  # passing result names A directly
             ),
         )
         graph = _make_graph(req)
         items = iter_uncredited_evidence(graph)
         assert len(items) == 1
-        assert items[0].dimension == "tested"
-        assert items[0].assertion_label == "B"
-        assert not any(i.dimension == "verified" for i in items)
+        assert items[0].dimension == "verified"
+        assert items[0].denominator == "tested"
+        assert items[0].assertion_label == "A"
 
     def test_uat_verified_link_is_still_scanned(self):
-        """3: 'uat_verified' is NOT excluded like 'verified' -- UAT-Passed
-        evidence naming an assertion no journey validates is still reported."""
+        """UAT-Passed evidence naming an assertion no journey validates is
+        reported, same as any other chained link."""
         req = _make_req("REQ-d00011")
         req.set_metric(
             "rollup_metrics",
@@ -952,3 +989,52 @@ class TestUncreditedEvidenceExcludesVerifiedLink:
         assert items[0].dimension == "uat_verified"
         assert items[0].denominator == "uat_coverage"
         assert items[0].assertion_label == "A"
+
+
+# Verifies: REQ-d00274-B
+class TestUncreditedEvidenceDenominatorMatchesTier:
+    """B: whether a dimension counts an Assertion is decided by the SAME rule
+    that produces the tier figures -- both read ``denominator_labels``. A
+    blanket/whole-requirement implementation counts A exactly as the tier
+    counts it (indirect credit reaches every assertion); no implementation
+    evidence at all does not. The check's denominator must agree with that
+    membership in both directions, not just assert today's shape of it.
+    """
+
+    @pytest.mark.parametrize(
+        "implemented_dim,label_in_denominator",
+        [
+            # A implemented only by blanket/whole-requirement evidence: the
+            # tier's indirect footing reaches A, so the denominator counts it.
+            (_dim({"A"}, direct=set(), total=1), True),
+            # No implementation evidence of any kind: the tier does not count
+            # A, so the denominator must not either.
+            (_dim(set(), total=1), False),
+        ],
+    )
+    def test_denominator_membership_tracks_finding_presence(
+        self, implemented_dim, label_in_denominator
+    ):
+        req = _make_req("REQ-d00012")
+        req.set_metric(
+            "rollup_metrics",
+            RollupMetrics(
+                total_assertions=1,
+                implemented=implemented_dim,
+                tested=_dim({"A"}, total=1),  # A named by a direct, assertion-targeted test
+            ),
+        )
+        graph = _make_graph(req)
+        rollup = graph.find_by_id(req.id).get_metric("rollup_metrics")
+
+        in_denominator = "A" in denominator_labels(rollup, "tested")
+        assert in_denominator is label_in_denominator
+
+        items = iter_uncredited_evidence(graph)
+        finding_names_a = any(
+            i.dimension == "tested" and ("A" == i.assertion_label or "A" in i.labels) for i in items
+        )
+        # The invariant B protects: the check's finding and the tier's
+        # denominator membership must disagree in lockstep -- a finding
+        # exists exactly when the label is OUTSIDE the denominator.
+        assert finding_names_a is not in_denominator

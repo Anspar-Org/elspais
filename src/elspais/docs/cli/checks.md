@@ -413,10 +413,13 @@ the assertion named, the dimension not reached, and the file and line the
 evidence was written on. It is an `error` by default (`[rules.coverage]
 uncredited_evidence`) because the condition has only two explanations and both
 are defects -- a missing `Implements:` reference, or a test aimed at an
-assertion it does not exercise. A dimension counting no assertion of a
-requirement at all is one finding for the requirement, not one per assertion.
-Membership follows whichever footing `allow_indirect` selects, so the report and
-the figures always describe the same estate.
+assertion it does not exercise. Only assertion-targeted evidence names an
+assertion: a whole-requirement `Verifies: REQ-xxx` names the requirement, so it
+is never reported against an individual assertion — it is reported against the
+requirement, and only where the dimension counts no assertion of it at all,
+which is one finding rather than one per assertion. What the dimension counts
+is read from the same definition the coverage tier uses, so a finding and the
+figure beside it cannot disagree.
 
 ### `code_tested` — line coverage
 
