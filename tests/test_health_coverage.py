@@ -12,6 +12,7 @@ from elspais.commands.health import (
     check_test_coverage,
     check_uat_coverage,
     check_uat_results,
+    check_uncredited_evidence,
     run_code_checks,
     run_uat_checks,
 )
@@ -454,9 +455,7 @@ class TestCheckUatResults:
     def test_failures_flagged(self, tmp_path):
         """CSV with failures produces failing check with findings."""
         csv_file = tmp_path / "uat-results.csv"
-        csv_file.write_text(
-            "journey_id,status\n" "JNY-001,pass\n" "JNY-002,fail\n" "JNY-003,failed\n"
-        )
+        csv_file.write_text("journey_id,status\nJNY-001,pass\nJNY-002,fail\nJNY-003,failed\n")
 
         config = {
             "scanning": {"journey": {"results_file": str(csv_file)}},
@@ -542,11 +541,7 @@ class TestCheckUatResults:
         """Pass rate is correctly calculated."""
         csv_file = tmp_path / "uat-results.csv"
         csv_file.write_text(
-            "journey_id,status\n"
-            "JNY-001,pass\n"
-            "JNY-002,pass\n"
-            "JNY-003,fail\n"
-            "JNY-004,pass\n"
+            "journey_id,status\nJNY-001,pass\nJNY-002,pass\nJNY-003,fail\nJNY-004,pass\n"
         )
 
         config = {
@@ -820,4 +815,149 @@ class TestWholeReqOnlyCoverageCheck:
         )
         annotate_coverage(graph)
         check = check_whole_req_only_coverage(graph)
+        assert check.findings == []
+
+
+class TestCheckUncreditedEvidence:
+    """REQ-d00274: evidence naming an assertion its chained dimension does not
+    count is a health finding, error by default, naming the file and line the
+    evidence was written on and distinguishing a passing test from a bare
+    reference."""
+
+    @staticmethod
+    def _built_graph(*, with_result: bool = False):
+        from tests.core.graph_test_helpers import (
+            build_graph,
+            make_code_ref,
+            make_requirement,
+            make_test_ref,
+        )
+
+        contents = [
+            make_requirement(
+                "REQ-100",
+                level="PRD",
+                assertions=[{"label": "A", "text": "a"}, {"label": "B", "text": "b"}],
+            ),
+            make_code_ref(implements=["REQ-100-A"], source_path="src/impl.py"),
+            make_test_ref(
+                verifies=["REQ-100-B"],
+                source_path="tests/test_b.py",
+                start_line=5,
+                end_line=6,
+            ),
+        ]
+        if with_result:
+            from tests.core.graph_test_helpers import make_test_result
+
+            contents.append(
+                make_test_result(
+                    "result-b",
+                    status="passed",
+                    test_id="test:tests/test_b.py:5",
+                    match="source",
+                )
+            )
+        return build_graph(*contents)
+
+    # Verifies: REQ-d00274-A, REQ-d00274-C
+    def test_error_by_default(self):
+        """A/C: unimplemented-but-tested B is reported, error severity when
+        the project configures nothing."""
+        from elspais.graph.annotators import annotate_coverage
+
+        graph = self._built_graph()
+        annotate_coverage(graph)
+        check = check_uncredited_evidence(graph)
+
+        assert check.name == "tests.uncredited_evidence"
+        assert check.category == "tests"
+        assert check.severity == "error"
+        assert check.passed is False
+        assert len(check.findings) == 1
+        finding = check.findings[0]
+        assert finding.node_id == "REQ-100"
+        assert "REQ-100-B" in finding.message
+
+    # Verifies: REQ-d00274-D
+    def test_finding_names_file_and_line_of_the_evidence(self):
+        """D: the finding resolves to the TEST node's own file and line, not
+        the requirement's spec location."""
+        from elspais.graph.annotators import annotate_coverage
+
+        graph = self._built_graph()
+        annotate_coverage(graph)
+        check = check_uncredited_evidence(graph)
+
+        finding = check.findings[0]
+        assert finding.file_path == "tests/test_b.py"
+        assert finding.line == 5
+
+    # Verifies: REQ-d00274-D
+    def test_bare_reference_vs_passing_test_are_distinguished(self):
+        """D: a test that only names the assertion reads differently from one
+        that also carries a passing result."""
+        from elspais.graph.annotators import annotate_coverage
+
+        bare_graph = self._built_graph(with_result=False)
+        annotate_coverage(bare_graph)
+        bare_message = check_uncredited_evidence(bare_graph).findings[0].message
+        assert "A test names" in bare_message
+        assert "A passing test names" not in bare_message
+
+        passing_graph = self._built_graph(with_result=True)
+        annotate_coverage(passing_graph)
+        passing_message = check_uncredited_evidence(passing_graph).findings[0].message
+        assert "A passing test names" in passing_message
+
+    # Verifies: REQ-d00274-C
+    def test_configured_severity_is_honored(self):
+        from elspais.graph.annotators import annotate_coverage
+
+        graph = self._built_graph()
+        annotate_coverage(graph)
+        cfg = {"rules": {"coverage": {"uncredited_evidence": "warning"}}}
+        check = check_uncredited_evidence(graph, config=cfg)
+
+        assert check.severity == "warning"
+        # "warning" still leaves the finding unresolved -- only "ok" passes.
+        assert check.passed is False
+
+    # Verifies: REQ-d00274-C
+    def test_ok_severity_passes_the_check(self):
+        from elspais.graph.annotators import annotate_coverage
+
+        graph = self._built_graph()
+        annotate_coverage(graph)
+        cfg = {"rules": {"coverage": {"uncredited_evidence": "ok"}}}
+        check = check_uncredited_evidence(graph, config=cfg)
+
+        assert check.severity == "ok"
+        assert check.passed is True
+
+    # Verifies: REQ-d00274
+    def test_healthy_shape_produces_no_finding(self):
+        """No evidence outside a chained dimension's denominator -> check
+        passes with no findings."""
+        from elspais.graph.annotators import annotate_coverage
+        from tests.core.graph_test_helpers import (
+            build_graph,
+            make_code_ref,
+            make_requirement,
+            make_test_ref,
+        )
+
+        graph = build_graph(
+            make_requirement(
+                "REQ-200",
+                level="PRD",
+                assertions=[{"label": "A", "text": "a"}],
+            ),
+            make_code_ref(implements=["REQ-200-A"], source_path="src/impl.py"),
+            make_test_ref(verifies=["REQ-200-A"], source_path="tests/test_a.py"),
+        )
+        annotate_coverage(graph)
+        check = check_uncredited_evidence(graph)
+
+        assert check.passed is True
         assert check.findings == []

@@ -15,6 +15,7 @@ from typing import Any
 from elspais.graph.GraphNode import NodeKind
 from elspais.graph.metrics import (
     CoverageDimension,
+    CoverageSource,
     RollupMetrics,
     has_integration,
     integrates_by_associate,
@@ -123,6 +124,45 @@ def allow_indirect_from_config(config: Any | None) -> bool:
     return bool(getattr(cov, "allow_indirect", True))
 
 
+def denominator_labels(rollup: RollupMetrics, dimension: str) -> set[str] | None:
+    """The label set a chained dimension is measured over; None if absolute.
+
+    The denominator is the set of labels ACTUALLY covered in the prior
+    dimension (fraction > 0), NOT every label present in the per-label map:
+    ``_conduct_refines_coverage`` seeds a 0.0 entry for every assertion label
+    (incl. unimplemented ones), so building the set from the dict keys would
+    silently make this "relative" chain absolute and disagree with the
+    gaps/MCP surfaces (which filter frac > 0). REQ-d00258-I.
+
+    ONE definition, so the tier that reports a dimension and the check that
+    reports evidence falling outside it cannot disagree about what the
+    dimension counts (REQ-d00274-B).
+
+    """
+    denom_name = DENOMINATOR_DIMENSION.get(dimension)
+    if denom_name is None:
+        return None
+    return {
+        lbl for lbl, frac in getattr(rollup, denom_name).indirect_pct_by_label.items() if frac > 0
+    }
+
+
+def numerator_dimension(rollup: RollupMetrics, dimension: str) -> CoverageDimension:
+    """The dimension whose coverage is measured for ``dimension``.
+
+    'verified' measures ``tested_and_passing`` (verified | lcov credit), matching
+    the badge projection -- NOT the raw ``rollup.verified`` dimension, which would
+    miss line-coverage credit.
+    """
+    return tested_and_passing(rollup) if dimension == "verified" else getattr(rollup, dimension)
+
+
+def credited_labels(dim: CoverageDimension, *, allow_indirect: bool = True) -> set[str]:
+    """Labels this dimension credits under the footing the project configured."""
+    pct = dim.indirect_pct_by_label if allow_indirect else dim.direct_pct_by_label
+    return {lbl for lbl, frac in pct.items() if frac > 0}
+
+
 def relative_tier_for(
     rollup: RollupMetrics,
     dimension: str,
@@ -138,20 +178,162 @@ def relative_tier_for(
     which would miss line-coverage credit. An absolute dimension (implemented,
     uat_coverage) returns its own ``.tier`` and is never N/A.
     """
-    denom_name = DENOMINATOR_DIMENSION.get(dimension)
-    if denom_name is None:
+    denom_labels = denominator_labels(rollup, dimension)
+    if denom_labels is None:
         return absolute_tier(getattr(rollup, dimension), allow_indirect=allow_indirect), False
-    # The denominator is the set of labels ACTUALLY covered in the prior
-    # dimension (fraction > 0), NOT every label present in the per-label map:
-    # ``_conduct_refines_coverage`` seeds a 0.0 entry for every assertion label
-    # (incl. unimplemented ones), so building the set from the dict keys would
-    # silently make this "relative" chain absolute and disagree with the
-    # gaps/MCP surfaces (which filter frac > 0). REQ-d00258-I.
-    denom_labels = {
-        lbl for lbl, frac in getattr(rollup, denom_name).indirect_pct_by_label.items() if frac > 0
-    }
-    num_dim = tested_and_passing(rollup) if dimension == "verified" else getattr(rollup, dimension)
+    num_dim = numerator_dimension(rollup, dimension)
     return relative_tier(num_dim, denom_labels, allow_indirect=allow_indirect)
+
+
+# Implements: REQ-d00274-A, REQ-d00274-D
+# Which coverage contributions are the EVIDENCE for a chained dimension, so a
+# finding can name the file and line the author wrote rather than only the
+# assertion nothing counted. 'verified' is carried by the same test nodes as
+# 'tested'; line-coverage credit contributes no node at all, which is why a
+# finding may resolve no source and must still be reported.
+_EVIDENCE_SOURCES: dict[str, frozenset[CoverageSource]] = {
+    "tested": frozenset({CoverageSource.TEST_DIRECT, CoverageSource.TEST_INDIRECT}),
+    "uat_verified": frozenset({CoverageSource.UAT_EXPLICIT, CoverageSource.UAT_INFERRED}),
+}
+
+# The chain links over which "outside the denominator" is a fact about what
+# somebody annotated, and so is reportable under that description (REQ-p00019-J).
+#
+# 'verified' is deliberately absent. On real estates its GENEROUS footing
+# credits assertions the ``tested`` dimension does not, while the two strict
+# footings agree exactly -- so a label can sit outside the Passing denominator
+# while a passing test demonstrably covers its requirement. Reporting that as
+# evidence naming an assertion no test covers would say something untrue of the
+# finding, which is the misattribution REQ-p00019-J forbids. Passing ought to be
+# a subset of Tested and is not; that incoherence belongs to how the two
+# dimensions are populated, not to the author of any annotation, and no author
+# could act on a report of it. It is left visible here rather than papered over.
+_REPORTABLE_CHAIN: tuple[str, ...] = ("tested", "uat_verified")
+
+
+@dataclass(frozen=True)
+class UncreditedEvidence:
+    """Evidence naming an *Assertion* its dimension does not count.
+
+    ``assertion_label`` is None when the dimension counts no *Assertion* of the
+    requirement at all: that is one fact about the requirement, reported once,
+    not once per *Assertion* the evidence happens to name (REQ-d00274-F).
+
+    ``carries_result`` distinguishes evidence that only names the *Assertion*
+    from evidence that also passed or failed for it (REQ-d00274-D) -- the
+    difference between a test aimed somewhere nothing is implemented and a
+    passing test aimed there.
+    """
+
+    requirement_id: str
+    dimension: str
+    denominator: str
+    assertion_label: str | None
+    labels: tuple[str, ...]
+    carries_result: bool
+    source_ids: tuple[str, ...]
+
+
+def _evidence_sources_for(
+    rollup: RollupMetrics, dimension: str, labels: set[str]
+) -> tuple[str, ...]:
+    """Node ids of the evidence crediting ``labels`` in ``dimension``."""
+    wanted = _EVIDENCE_SOURCES.get(dimension, frozenset())
+    found: list[str] = []
+    for label in sorted(labels):
+        for contrib in rollup.assertion_coverage.get(label, ()):
+            if contrib.source_type in wanted and contrib.source_id not in found:
+                found.append(contrib.source_id)
+    return tuple(found)
+
+
+_PASSING_STATUSES = frozenset({"passed", "pass", "success"})
+
+
+# Implements: REQ-d00274-D
+def _evidence_passes(graph: Any, source_ids: tuple[str, ...]) -> bool:
+    """Whether THIS evidence carries a passing result of its own.
+
+    Read from the evidence node's own RESULT children, never from the
+    requirement's aggregate: a dimension can credit a label because a sibling
+    test passed, and saying "a passing test names this" of a test that failed
+    would put the finding under a description untrue of it (REQ-p00019-J).
+    """
+    for source_id in source_ids:
+        node = graph.find_by_id(source_id)
+        if node is None:
+            continue
+        for child in node.iter_children():
+            if child.kind != NodeKind.RESULT:
+                continue
+            if (child.get_field("status", "") or "").lower() in _PASSING_STATUSES:
+                return True
+    return False
+
+
+# Implements: REQ-d00274-A, REQ-d00274-B, REQ-d00274-E, REQ-d00274-F
+def iter_uncredited_evidence(
+    graph: Any, config: dict[str, Any] | None = None
+) -> list[UncreditedEvidence]:
+    """Evidence that reaches no coverage answer, across the chained dimensions.
+
+    A chained dimension counts only the assertions its denominator dimension
+    covers, so evidence can name an *Assertion* outside that set and contribute
+    to nothing. Both the numerator and the denominator are read through the same
+    helpers the tier uses, so what is reported here is exactly what the project's
+    own figures leave out, whichever footing it configured (REQ-d00274-B).
+
+    Read-only: nothing here alters a metric, so reporting credits nothing
+    (REQ-d00274-E).
+    """
+    allow_indirect = allow_indirect_from_config(config)
+    out: list[UncreditedEvidence] = []
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+        if not _counts_for_coverage(config, node.status):
+            continue
+        rollup: RollupMetrics | None = node.get_metric("rollup_metrics")
+        if rollup is None or rollup.total_assertions == 0:
+            continue
+        for dimension in _REPORTABLE_CHAIN:
+            denom_name = DENOMINATOR_DIMENSION[dimension]
+            denom = denominator_labels(rollup, dimension)
+            if denom is None:  # pragma: no cover - chained dimensions only
+                continue
+            num_dim = numerator_dimension(rollup, dimension)
+            uncredited = credited_labels(num_dim, allow_indirect=allow_indirect) - denom
+            if not uncredited:
+                continue
+            sources = _evidence_sources_for(rollup, dimension, uncredited)
+            labels = tuple(sorted(uncredited))
+            if not denom:
+                # The dimension counts no assertion of this requirement at all:
+                # one finding for the requirement, not one per assertion.
+                out.append(
+                    UncreditedEvidence(
+                        requirement_id=node.id,
+                        dimension=dimension,
+                        denominator=denom_name,
+                        assertion_label=None,
+                        labels=labels,
+                        carries_result=_evidence_passes(graph, sources),
+                        source_ids=sources,
+                    )
+                )
+                continue
+            for label in labels:
+                label_sources = _evidence_sources_for(rollup, dimension, {label})
+                out.append(
+                    UncreditedEvidence(
+                        requirement_id=node.id,
+                        dimension=dimension,
+                        denominator=denom_name,
+                        assertion_label=label,
+                        labels=(label,),
+                        carries_result=_evidence_passes(graph, label_sources),
+                        source_ids=label_sources,
+                    )
+                )
+    return out
 
 
 @dataclass
@@ -484,11 +666,16 @@ __all__ = [
     "DimensionSums",
     "LevelAggregate",
     "TierBuckets",
+    "UncreditedEvidence",
     "absolute_tier",
     "aggregate_by_level",
     "allow_indirect_from_config",
     "collect_coverage",
     "aggregate_dimension",
+    "credited_labels",
+    "denominator_labels",
+    "iter_uncredited_evidence",
+    "numerator_dimension",
     "relative_tier",
     "relative_tier_for",
     "tier_buckets",

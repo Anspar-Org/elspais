@@ -846,6 +846,25 @@ assertion-level evidence lifts the state -- a requirement covered only
 indirectly reads `missing`/`partial`, and the indirect evidence is shown in
 hover as "not credited" so the fallback stays visible.
 
+#### `uncredited_evidence` (evidence that reaches no figure)
+
+```toml
+[rules.coverage]
+uncredited_evidence = "error"   # default
+```
+
+Because the chain measures each dimension over the prior link, evidence can name
+an assertion its dimension does not count -- a test on an assertion nothing
+implements. The figures are computed without it, so it credits nothing. The
+`tests.uncredited_evidence` check reports each such piece of evidence with the
+assertion it names, the dimension it fails to reach, and the file and line it was
+written on. It defaults to `error` because the condition has only two
+explanations and both are defects: the implementation exists and its
+`Implements:` reference was never written, or the test is aimed at an assertion
+it does not exercise. Where a dimension counts no assertion of a requirement at
+all, that is reported once for the requirement rather than once per assertion.
+Set `"warning"` or `"ok"` to lower it.
+
 #### `status_words` (per-relationship dimension labels)
 
 The coverage dimension labels shown on badges, buttons, hover, and reports are

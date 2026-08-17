@@ -310,6 +310,11 @@ _FIELD_COMMENTS: dict[str, str] = {
         "a dimension's state; false: only direct assertion-level evidence credits "
         "it (indirect shown as not-credited in hover)"
     ),
+    "rules.coverage.uncredited_evidence": (
+        'error (default): severity for the "tests.uncredited_evidence" check -- '
+        "evidence naming an assertion its dimension does not count (a test on an "
+        "assertion nothing implements), which reaches no coverage figure"
+    ),
     "rules.coverage.status_words": (
         "Per-relationship coverage labels. Keys: implements|verifies|yields|"
         'validates|validated. Defaults: Implemented / Tested / Passing / "UAT '

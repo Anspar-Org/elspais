@@ -156,6 +156,7 @@ that changes to cross-cutting requirements are propagated to their consumers.
 |-------|-------------|
 | `tests.coverage` | Test coverage statistics with rollup (informational) |
 | `tests.unlinked` | Test files with no traceability markers -- either no test functions found, or no test in the file links to any requirement (a file with at least one linked test is not flagged); severity: info |
+| `tests.uncredited_evidence` | Evidence naming an assertion its dimension does not count -- a test on an assertion nothing implements -- so it reaches no coverage figure; configured by `[rules.coverage] uncredited_evidence`, default severity: error |
 | `tests.results` | Test pass/fail status from JUnit XML or pytest JSON results |
 | `tests.retired_references` | Tests referencing requirements with retired status (Deprecated, Superseded, Rejected); default severity: warning |
 | `tests.provisional_references` | Tests referencing requirements with provisional status (Draft, Proposed); default severity: info |
@@ -403,6 +404,19 @@ credits the tier, and a trailing `~` flags any tier whose evidence is not fully
 direct. Set `allow_indirect = false` to require direct assertion-level evidence;
 indirect-only coverage then reads `missing`/`partial` and is shown as
 "not credited" in the viewer hover.
+
+**Evidence outside the denominator.** Measuring over the prior link means
+evidence can name an assertion the dimension does not count -- a test on an
+assertion nothing implements. It credits nothing, and `tests.uncredited_evidence`
+reports it rather than letting it vanish into a denominator it was never in:
+the assertion named, the dimension not reached, and the file and line the
+evidence was written on. It is an `error` by default (`[rules.coverage]
+uncredited_evidence`) because the condition has only two explanations and both
+are defects -- a missing `Implements:` reference, or a test aimed at an
+assertion it does not exercise. A dimension counting no assertion of a
+requirement at all is one finding for the requirement, not one per assertion.
+Membership follows whichever footing `allow_indirect` selects, so the report and
+the figures always describe the same estate.
 
 ### `code_tested` — line coverage
 

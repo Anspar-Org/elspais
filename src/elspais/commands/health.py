@@ -2511,6 +2511,102 @@ def check_whole_req_only_coverage(graph, config=None) -> HealthCheck:
     )
 
 
+# The display word for each end of a chain, so a finding reads in the
+# vocabulary REQ-d00258-B fixes for every surface rather than in dimension
+# field names.
+_DIMENSION_WORD: dict[str, str] = {
+    "implemented": "Implemented",
+    "tested": "Tested",
+    "verified": "Passing",
+    "uat_coverage": "UAT Covered",
+    "uat_verified": "UAT Passed",
+}
+
+# Implements: REQ-d00274-D
+# Evidence that only names an *Assertion*, against evidence that also carries a
+# result for it. A passing test aimed where nothing is implemented is the same
+# defect with a sharper edge, and an author reading the report should not have
+# to work out which one they have.
+_UNCREDITED_EVIDENCE_WORD: dict[str, dict[bool, str]] = {
+    "tested": {False: "A test names", True: "A passing test names"},
+    "verified": {False: "Passing evidence names", True: "Passing evidence names"},
+    "uat_verified": {False: "A journey result names", True: "A passing journey names"},
+}
+
+# What the denominator leaving something out means, in the reader's terms: for
+# one *Assertion*, and for a requirement none of whose assertions it counts.
+_UNCREDITED_DENOMINATOR_WORD: dict[str, tuple[str, str]] = {
+    "implemented": ("nothing implements", "nothing implements any of its assertions"),
+    "tested": ("no test covers", "no test covers any of its assertions"),
+    "uat_coverage": ("no journey validates", "no journey validates any of its assertions"),
+}
+
+
+# Implements: REQ-d00274-A, REQ-d00274-C, REQ-d00274-D, REQ-d00274-F
+def check_uncredited_evidence(
+    graph: FederatedGraph, config: dict[str, Any] | None = None
+) -> HealthCheck:
+    """Report evidence that names an *Assertion* its dimension does not count.
+
+    Coverage dimensions are chained, so a test naming an *Assertion* nothing
+    implements contributes to no answer the tool gives: the figures are
+    computed without it and, until this check, nothing said it was there.
+    An error by default, because the condition has only two explanations and
+    both are defects -- a missing ``Implements:`` reference, or a test aimed at
+    an *Assertion* it does not exercise.
+    """
+    from elspais.graph.aggregation import iter_uncredited_evidence
+
+    typed = _validate_config(config or {})
+    severity = typed.rules.coverage.uncredited_evidence
+    items = iter_uncredited_evidence(graph, config)
+    if not items:
+        return HealthCheck(
+            name="tests.uncredited_evidence",
+            passed=True,
+            message="No coverage evidence that credits nothing",
+            category="tests",
+            severity=severity,
+        )
+
+    findings = []
+    for item in items:
+        word = _DIMENSION_WORD.get(item.dimension, item.dimension)
+        # A source is the annotation the author wrote. Line-coverage credit is
+        # written nowhere, so the finding carries no location rather than the
+        # requirement's own file, which is not where the evidence lives.
+        if item.source_ids:
+            file_path, line = _fault_location(graph, item.source_ids[0], None)
+        else:
+            file_path, line = None, None
+        evidence = _UNCREDITED_EVIDENCE_WORD[item.dimension][item.carries_result]
+        one, none_of = _UNCREDITED_DENOMINATOR_WORD[item.denominator]
+        if item.assertion_label is None:
+            clause = (
+                f"{item.requirement_id} ({len(item.labels)} assertion(s): "
+                f"{', '.join(item.labels)}), and {none_of}"
+            )
+        else:
+            clause = f"{item.requirement_id}-{item.assertion_label}, which {one}"
+        findings.append(
+            HealthFinding(
+                message=(f"{evidence} {clause}, so it credits no {word} figure"),
+                node_id=item.requirement_id,
+                file_path=file_path,
+                line=line,
+            )
+        )
+    return HealthCheck(
+        name="tests.uncredited_evidence",
+        passed=severity == "ok",
+        message=(f"{len(items)} piece(s) of coverage evidence reach no coverage figure"),
+        category="tests",
+        severity=severity,
+        details={"count": len(items)},
+        findings=findings,
+    )
+
+
 def check_code_coverage(
     graph: FederatedGraph,
     exclude_status: set[str] | None = None,
@@ -3242,6 +3338,7 @@ def run_test_checks(
     return [
         check_test_coverage(graph, exclude_status=exclude_status, config=config),
         check_dimension_coverage(graph, "verified", exclude_status=exclude_status, config=config),
+        check_uncredited_evidence(graph, config),
         check_unlinked_tests(graph),
         check_test_results(graph, config=config),
         check_test_results_stale(graph),
@@ -3723,6 +3820,7 @@ _FOLLOWUP_COMMANDS: dict[str, str] = {
     "spec.changelog_format": "elspais checks --spec --format json",
     "code.unlinked": "elspais unlinked",
     "tests.unlinked": "elspais unlinked",
+    "tests.uncredited_evidence": "elspais checks --tests --format json",
     "tests.results": "elspais failing",
     "uat.results": "elspais failing",
     "terms.duplicates": "elspais checks --terms --format json",

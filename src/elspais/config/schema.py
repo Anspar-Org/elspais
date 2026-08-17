@@ -420,6 +420,13 @@ class CoverageConfig(_StrictModel):
     # generous footing (REQ-d00069-L). When False, ONLY direct coverage lifts a
     # state; indirect-only coverage reads `missing` (REQ-d00258, Phase 4).
     allow_indirect: bool = True
+    # Implements: REQ-d00274-C
+    # Evidence naming an assertion its dimension does not count -- a test on an
+    # assertion nothing implements. An error by default because the condition
+    # has only two explanations and both are defects: the implementation exists
+    # and its `Implements:` reference was never written, or the test is aimed at
+    # an assertion it does not exercise.
+    uncredited_evidence: str = "error"
     # Per-relationship label overrides (REQ-d00258). Keyed by relationship name
     # (implements/verifies/yields/validates/validated); resolved to dimension
     # labels via elspais.config.status_words.get_status_words().

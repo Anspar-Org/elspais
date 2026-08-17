@@ -151,32 +151,11 @@ that goes unanswered is visible as a decision rather than as an omission
 - **BREAKING: a reference list that names the same target twice now produces no relationship at all (REQ-d00272-K)** — previously a repeated target in a code or test annotation was deduplicated silently and the first instance bound, so `# Implements: REQ-d00001, REQ-d00001` produced one edge and no report. Every instance is now refused and every instance is reported, so that annotation produces **no** edge where it used to produce one — a list that names a target twice is a list its author has lost track of, and resolving it for them hides that. **Migration**: remove the repeat; the single remaining reference binds exactly as before.
 - **BREAKING: `[validation].allow_unresolved_cross_repo` is retired (REQ-d00269-F)** — it silenced both broken-reference checks together, taking six syntax errors down with the genuine cross-repository references on the estate this work started from. Severity is now chosen per class, so the same effect for expected cross-repository references is `[rules.references] unknown_namespace = "ok"` — reported, but not failing the run — without touching the other four classes. A config still setting `allow_unresolved_cross_repo` is rejected by the strict schema rather than silently ignored.
 
-#### Specification only: coverage evidence that credits nothing
+#### Coverage evidence that credits nothing is reported
 
-A requirement authored ahead of the implementation that will satisfy it. No
-behaviour changes in this release.
+- **NEW: `tests.uncredited_evidence` — a test on an *Assertion* nothing implements no longer passes in silence (REQ-d00274)** — coverage dimensions are chained (Tested is measured over the implemented assertions, Passing over the tested ones), so evidence can name an *Assertion* its dimension does not count and reach no answer the tool gives. A test naming an *Assertion* nobody has written an `Implements:` reference for is the ordinary case of this, and until now the figures were simply computed without it: nothing said the test was there, and nothing said it counted for nothing. The new check reports each such piece of evidence with the *Assertion* it names, the dimension it fails to reach, and the file and line it was written on, and distinguishes a test that merely names the *Assertion* from one that passes for it. Severity is `[rules.coverage] uncredited_evidence`, **default `error`** — the condition has only two explanations and both are defects: the implementation exists and its `Implements:` reference was never written, or the test is aimed at an *Assertion* it does not exercise. Whether a dimension counts an *Assertion* is decided by the same rule that produces that dimension's own figures, so the report and the figures always describe the same estate, whichever footing `allow_indirect` selects. Where a dimension counts no *Assertion* of a requirement at all, that is one finding for the requirement rather than one per *Assertion*, so a count of findings stays a count of distinct facts. Reporting credits nothing: coverage figures are unchanged on both footings. Documented under `elspais docs checks` and `docs/configuration.md`.
 
-Coverage dimensions are chained — one dimension counts only the assertions
-another already covers — so evidence can name an *Assertion* its dimension does
-not count and reach no answer the tool gives. A test naming an *Assertion*
-nothing implements is the ordinary case, and today it is silent: the coverage
-figures are computed without it and nothing says it was there. That evidence is
-now to be reported, naming the *Assertion*, the dimension it does not reach, and
-the file and line it was written on, at a severity the project configures and an
-error where the project configures nothing. The default is an error because the
-condition has only two explanations, and both are defects: the implementation
-exists and its `Implements:` reference was never written, or the test is aimed
-at an *Assertion* it does not exercise. Whether a dimension counts an
-*Assertion* is decided by the same rule that produces that dimension's figures
-under the project's own configuration, so the report and the figures always
-describe the same estate: by default whole-requirement implementation evidence
-keeps its assertions counted, and an estate that annotates implementation per
-requirement and tests per *Assertion* is not reported wholesale; where a project
-has configured indirect evidence not to credit, evidence its own figures discard
-is reported rather than passed over. Where a dimension counts no *Assertion* of a requirement at
-all, that is one finding for the requirement rather than one per *Assertion*.
-Reporting credits nothing: the figures are unchanged on both footings
-(REQ-d00274).
+  Two limits are worth stating rather than leaving to be discovered. The Passing link of the chain is **not** reported, because building it surfaced a separate defect it would misdescribe: on real requirements the Passing dimension's generous footing credits assertions the Tested dimension does not, while the two strict footings agree exactly. Passing ought to be a subset of Tested and is not. An *Assertion* caught by that gap sits outside the Passing denominator although a passing test demonstrably covers its requirement, so reporting it as evidence naming an *Assertion* no test covers would state something untrue of the finding — and no author could act on it, because nothing they wrote caused it. The defect is left visible rather than papered over; the Tested and UAT-Passed links, where the question is about annotations somebody wrote, are reported. And elspais's own estate carries 55 findings across some thirty requirements, so this repository sets the rule to `warning` for itself until they are answered one at a time; the finding is right in every case, and the setting records where the estate stands rather than a doubt about the check.
 
 #### Upgrading: configuration and identifiers
 

@@ -291,6 +291,11 @@
           "title": "Allow Indirect",
           "type": "boolean"
         },
+        "uncredited_evidence": {
+          "default": "error",
+          "title": "Uncredited Evidence",
+          "type": "string"
+        },
         "status_words": {
           "additionalProperties": {
             "type": "string"
