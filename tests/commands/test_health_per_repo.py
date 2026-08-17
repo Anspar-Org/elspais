@@ -1,5 +1,6 @@
 # Verifies: REQ-d00204-A, REQ-d00204-B, REQ-d00204-C, REQ-d00204-D
 # Verifies: REQ-d00204-E, REQ-d00204-F
+# Verifies: REQ-d00275-A, REQ-d00275-D
 """Tests for per-repo health check delegation in federated graphs.
 
 Validates REQ-d00204: Config-sensitive health checks run per-repo with
@@ -10,22 +11,19 @@ on the full FederatedGraph.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 from elspais.commands.health import (
     _REFERENCE_CHECKS,
     HealthFinding,
+    check_governed_rule_divergence,
     check_reference_class,
     run_spec_checks,
 )
 from elspais.config import _merge_configs, config_defaults
+from elspais.graph.builder import TraceGraph
 from elspais.graph.federated import FederatedGraph, RepoEntry
 from elspais.graph.reference_faults import FaultClass
 from tests.core.graph_test_helpers import build_graph, make_requirement
-
-if TYPE_CHECKING:
-    from elspais.graph.builder import TraceGraph
-
 
 # === Helpers ===
 
@@ -613,3 +611,146 @@ class TestRunSpecChecksIteratesRepos:
             f"Messages: {[c.message for c in failed_hierarchy]}. "
             "run_spec_checks must iterate repos and use each repo's own config."
         )
+
+
+def _governed_member(name: str, rules: dict) -> dict:
+    """A member config exactly as written -- no schema defaults filled in.
+
+    Real member configs reach ``RepoEntry`` through the config loader, but the
+    disclosure compares the settings a repository *declared*, so these tests
+    hand it the declared form directly.
+    """
+    return {
+        "project": {"name": name, "namespace": name.upper()},
+        "rules": rules,
+    }
+
+
+def _governed_federation(*configs: dict) -> FederatedGraph:
+    """A federation of one empty TraceGraph per supplied member config."""
+    return FederatedGraph(
+        [
+            RepoEntry(
+                name=cfg["project"]["name"],
+                graph=TraceGraph(),
+                config=cfg,
+                repo_root=Path("/repo") / cfg["project"]["name"],
+            )
+            for cfg in configs
+        ]
+    )
+
+
+class TestGovernedRuleDivergenceDisclosure:
+    """Tests for disclosure of governed settings a member configured otherwise.
+
+    Validates REQ-d00275-D: where a member's configuration would have decided
+    a governed setting differently from the invoking repository's, the tool
+    discloses the difference -- naming the setting, both values and the member
+    -- without failing the run. REQ-d00275-A scopes what "governed" covers.
+    """
+
+    def test_REQ_d00275_D_divergent_severity_names_setting_values_and_member(self) -> None:
+        """The disclosure carries all three facts D requires."""
+        host = _governed_member("host", {"references": {"retired": "warning"}})
+        lib = _governed_member("lib", {"references": {"retired": "error"}})
+
+        check = check_governed_rule_divergence(_governed_federation(host, lib), host)
+
+        assert check.name == "config.governed_rules"
+        assert len(check.findings) == 1, [f.message for f in check.findings]
+        finding = check.findings[0]
+        assert finding.repo == "lib", "the disclosure must attribute the member"
+        assert "rules.references.retired" in finding.message, "must name the setting"
+        assert "error" in finding.message, "must carry the member's value"
+        assert "warning" in finding.message, "must carry the governing value"
+        assert "lib" in finding.message
+
+    def test_REQ_d00275_D_disclosure_never_fails_the_run(self) -> None:
+        """A difference is disclosed, never judged: passed stays True, severity info."""
+        host = _governed_member("host", {"coverage": {"uncredited_evidence": "error"}})
+        lib = _governed_member("lib", {"coverage": {"uncredited_evidence": "info"}})
+
+        check = check_governed_rule_divergence(_governed_federation(host, lib), host)
+
+        assert check.findings, "this fixture must produce a disclosure to be meaningful"
+        assert check.passed is True, "the disclosure must not fail the run"
+        assert check.severity == "info"
+
+    def test_REQ_d00275_D_agreeing_member_is_not_disclosed(self) -> None:
+        """A member that declared the same governed value has nothing to disclose."""
+        host = _governed_member("host", {"references": {"retired": "error"}})
+        # Declared explicitly and identically -- the value comparison runs, and
+        # finds nothing to report.
+        lib = _governed_member("lib", {"references": {"retired": "error"}})
+
+        check = check_governed_rule_divergence(_governed_federation(host, lib), host)
+
+        assert check.findings == []
+        assert check.passed is True
+
+    def test_REQ_d00275_A_authoring_rules_are_the_members_own(self) -> None:
+        """Hierarchy and format rules are not governed, so differing is not disclosed.
+
+        REQ-d00204-A leaves the rules a repository's own content is authored by
+        with that repository. Only settings deciding how a finding is judged,
+        scored or reported are governed by the invoking repository, so a member
+        differing on these has nothing to disclose.
+        """
+        host = _governed_member(
+            "host",
+            {
+                "hierarchy": {"allow_orphans": False},
+                "format": {"require_shall": True, "no_assertions_severity": "error"},
+            },
+        )
+        lib = _governed_member(
+            "lib",
+            {
+                "hierarchy": {"allow_orphans": True},
+                "format": {"require_shall": False, "no_assertions_severity": "info"},
+            },
+        )
+
+        check = check_governed_rule_divergence(_governed_federation(host, lib), host)
+
+        assert check.findings == [], [f.message for f in check.findings]
+
+    def test_REQ_d00275_A_status_roles_are_governed_despite_living_under_format(self) -> None:
+        """How a status is read when reporting is governed, so it is disclosed."""
+        host = _governed_member("host", {"format": {"status_roles": {"active": ["Active"]}}})
+        lib = _governed_member("lib", {"format": {"status_roles": {"active": ["Active", "Draft"]}}})
+
+        check = check_governed_rule_divergence(_governed_federation(host, lib), host)
+
+        assert len(check.findings) == 1, [f.message for f in check.findings]
+        assert "rules.format.status_roles.active" in check.findings[0].message
+        assert check.findings[0].repo == "lib"
+
+    def test_REQ_d00275_D_setting_a_member_never_declared_is_not_a_difference(self) -> None:
+        """Settings are read as written: an undeclared one was not decided otherwise."""
+        host = _governed_member(
+            "host",
+            {"coverage": {"uncredited_evidence": "warning"}, "references": {"retired": "error"}},
+        )
+        # Declares one governed setting, agreeing; says nothing about coverage.
+        lib = _governed_member("lib", {"references": {"retired": "error"}})
+
+        check = check_governed_rule_divergence(_governed_federation(host, lib), host)
+
+        assert check.findings == [], (
+            "an undeclared setting must not be reported as a difference; "
+            f"got {[f.message for f in check.findings]}"
+        )
+
+    def test_REQ_d00275_D_disclosure_runs_as_part_of_the_spec_checks(self) -> None:
+        """The disclosure reaches the health report, not just its own entry point."""
+        host = _governed_member("host", {"references": {"retired": "warning"}})
+        lib = _governed_member("lib", {"references": {"retired": "error"}})
+
+        checks = run_spec_checks(_governed_federation(host, lib), host)
+
+        disclosures = [c for c in checks if c.name == "config.governed_rules"]
+        assert len(disclosures) == 1, [c.name for c in checks]
+        assert [f.repo for f in disclosures[0].findings] == ["lib"]
+        assert disclosures[0].passed is True

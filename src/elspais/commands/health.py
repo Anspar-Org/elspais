@@ -750,6 +750,7 @@ def _unavailable_repos(graph: FederatedGraph) -> list[dict[str, str]]:
     return sorted(out, key=lambda r: r["name"])
 
 
+# Implements: REQ-d00275-A
 def check_reference_class(
     graph: FederatedGraph,
     config: dict[str, Any] | None,
@@ -2127,6 +2128,128 @@ def check_no_requirements(graph: FederatedGraph) -> HealthCheck:
     )
 
 
+# The settings the invoking repository governs for the whole federation
+# (REQ-d00275-A): how a finding is judged, scored and reported. Deliberately
+# not every setting under [rules] -- hierarchy and format state the rules a
+# repository's own content is authored by, and those stay with that repository
+# (REQ-d00204-A). Status roles sit under [rules.format] but decide how a
+# requirement's status is read when reporting, so they are governed.
+_GOVERNED_SETTING_ROOTS: tuple[str, ...] = (
+    "rules.coverage",
+    "rules.references",
+    "rules.format.status_roles",
+)
+
+
+def _flatten_settings(value: Any, prefix: str) -> dict[str, Any]:
+    """Dotted-key view of a config subtree, for comparing two of them.
+
+    An empty table is a leaf, not an absence. A setting whose value is a table
+    of entries is answered by "no entries" as surely as by any other value, and
+    dropping it would let one side of a comparison read as unset when it is in
+    fact what the run judges by.
+    """
+    if not isinstance(value, dict) or not value:
+        return {prefix: value}
+    flat: dict[str, Any] = {}
+    for key, sub in value.items():
+        flat.update(_flatten_settings(sub, f"{prefix}.{key}" if prefix else str(key)))
+    return flat
+
+
+def _governed_settings(config: dict[str, Any] | None) -> dict[str, Any]:
+    """The governed settings a config holds, as dotted keys.
+
+    Filters whatever mapping it is given; it does not fill anything in. A
+    config loaded from disk arrives with the schema defaults already merged,
+    so a member that declared no governed setting still carries the values it
+    would have judged by, which is what the disclosure is about -- a member
+    silently relying on a default the invoking project overrode would have
+    reported differently on its own, and that is worth being told.
+    """
+    if not config:
+        return {}
+    flat = _flatten_settings(config, "")
+    return {
+        key: val
+        for key, val in flat.items()
+        if any(key == root or key.startswith(f"{root}.") for root in _GOVERNED_SETTING_ROOTS)
+    }
+
+
+# Implements: REQ-d00275-D
+def check_governed_rule_divergence(
+    graph: FederatedGraph, config: dict[str, Any] | None = None
+) -> HealthCheck:
+    """Disclose where a member configured a governed setting differently.
+
+    The invoking repository's configuration governs how findings are judged
+    and reported across the federation, which means a member is being measured
+    by rules its maintainer did not choose. Where the two differ, that member's
+    own repository would have reported something else, and a finding silenced
+    by the invoking configuration is otherwise indistinguishable from a finding
+    that was never there.
+
+    A member reaches a differing value two ways -- by declaring it, or by
+    never declaring it and keeping a default the invoking project overrode.
+    Both are disclosed, because both mean the member's own run would report
+    something else, which is the thing worth knowing. Neither is reported as a
+    choice the member's maintainer made.
+
+    Never a failure: differing configurations are what federated repositories
+    legitimately do, so this reports and does not judge (REQ-d00275-D).
+    """
+    invoking = _governed_settings(config)
+    findings: list[HealthFinding] = []
+    for entry in graph.iter_repos():
+        if entry.config is None or entry.config == config:
+            continue
+        member = _governed_settings(entry.config)
+        for key in sorted(set(invoking) | set(member)):
+            if key not in member:
+                continue
+            theirs = member[key]
+            if key not in invoking:
+                mine = "no value"
+            else:
+                mine = repr(invoking[key])
+                if invoking[key] == theirs:
+                    continue
+            # "would judge by", not "sets": a config arrives with defaults
+            # merged, so a member reaching this value by never declaring it is
+            # indistinguishable here from one that wrote it down. What is true
+            # of both is the value the member would have judged by.
+            findings.append(
+                HealthFinding(
+                    message=(
+                        f"{entry.name} would judge {key} by {theirs!r}; this run judges "
+                        f"by {mine}, configured here"
+                    ),
+                    repo=entry.name,
+                )
+            )
+    if not findings:
+        return HealthCheck(
+            name="config.governed_rules",
+            passed=True,
+            message="No federated member configures a governed rule differently",
+            category="config",
+            severity="info",
+        )
+    repos = sorted({f.repo for f in findings if f.repo})
+    return HealthCheck(
+        name="config.governed_rules",
+        passed=True,
+        message=(
+            f"{len(findings)} governed setting(s) across {len(repos)} member(s) differ "
+            "from the configuration this run judges by"
+        ),
+        category="config",
+        severity="info",
+        findings=findings,
+    )
+
+
 # Implements: REQ-d00204-A, REQ-d00204-B, REQ-d00204-F
 def run_spec_checks(
     graph: FederatedGraph,
@@ -2164,6 +2287,7 @@ def run_spec_checks(
 
     checks: list[HealthCheck] = [
         check_no_requirements(graph),
+        check_governed_rule_divergence(graph, config),
         check_associate_paths(config, _repo_root),
         check_spec_files_parseable(graph),
         check_spec_no_duplicates(graph),
@@ -2942,6 +3066,7 @@ def _collect_file_mtimes(
     return mtimes
 
 
+# Implements: REQ-d00275-C
 def _configured_test_targets(graph: FederatedGraph, config: dict | None) -> list[tuple[str, Any]]:
     """``(repo name, target)`` for every federation member configuring one.
 

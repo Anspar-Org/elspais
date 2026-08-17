@@ -641,6 +641,17 @@ path = "../phoenix"
 namespace = "PHX"
 ```
 
+**Whose configuration decides what.** In a federation the repository you invoke
+from governs how findings are judged, scored and reported — reference
+severities, the coverage rules, and how a status is read. Two things stay with
+the member: an identifier is always read under the grammar of the repository
+that owns it, and a setting that states a fact about a repository rather than a
+rule for judging one — where its spec directories are, its namespace, where its
+test results are written — is read from that repository's own config. Where a
+member configures a governed setting differently from you, the
+`config.governed_rules` check discloses it: the setting, both values, and the
+member. It is informational and never fails a run.
+
 ### Type-Prefix Style Requirements
 
 ```toml

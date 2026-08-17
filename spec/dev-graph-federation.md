@@ -452,3 +452,33 @@ A concurrency version is derived from a node's content and its outgoing *Traceab
 
 *End* *Cross-Repository Coverage Credit* | **Hash**: af36a1b3
 ---
+
+## REQ-d00275: Whose Configuration Governs a Federated Answer
+
+**Level**: dev | **Status**: Draft | **Implements**: REQ-p00005
+
+A federated answer is computed from several repositories, each carrying its own configuration. This requirement settles which of those configurations decides each part of the answer, so that the same estate does not answer differently depending on where the tool was invoked without saying that it did.
+
+### Assertions
+
+A. Where a configured setting decides how a finding is judged, scored or reported, the configuration of the repository the tool was invoked from SHALL govern for the whole federation.
+
+B. An identifier SHALL be read under the grammar of the repository that owns it, whichever repository the tool was invoked from.
+
+C. Where a setting states a fact about a repository rather than a rule for judging one -- where its files are, what it calls its identifiers, its namespace, where its results are written -- that repository's own configuration SHALL be read, whichever repository the tool was invoked from.
+
+D. Where a member's configuration would have decided a governed setting differently from the invoking repository's, the tool SHALL disclose the difference, naming the setting, both values, and the member. The disclosure SHALL NOT fail the run.
+
+### Rationale
+
+A federated answer is one report, and a reader has to be able to predict the rules it was produced under. Deciding each finding's severity by the configuration of whichever repository it came from would make one report speak in several voices, and would let a repository outside the reader's control change the verdict on the reader's own run.
+
+B is the exception because grammar is not a judgment. A repository declares only the identifiers it owns (REQ-d00251-L), so reading one repository's identifier under another's grammar does not judge it differently -- it fails to read it at all.
+
+C is the boundary that keeps A from swallowing what is not a rule. Where a repository's files are, what it calls its identifiers, and where its results are written are facts about that repository. Overriding a fact from outside does not make an answer stricter or more generous; it makes it wrong, and wrong in a direction that reads as an absence -- a federation whose member configures test targets, described as configuring none, sends a reader looking for a missing configuration instead of missing results.
+
+The rules by which a repository's own content is judged well-formed -- its hierarchy, its format conventions, its changelog policy -- are not covered here and stay where REQ-d00204-A puts them, with the repository whose content is being judged. The line A draws is between judging a finding and judging the content a finding is about.
+
+D exists because A is silent by construction. A setting the invoking project chose governs a member whose maintainer never chose it, and where the two differ the member's own repository would have reported something else. Undisclosed, a finding silenced by the invoking configuration is indistinguishable from a finding that was never there, which is the omission the anti-pattern template names. It cannot fail the run, because the difference is not a defect: federations are assembled from repositories that legitimately configure themselves differently.
+
+*End* *Whose Configuration Governs a Federated Answer* | **Hash**: 9ab2ef7c

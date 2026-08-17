@@ -185,6 +185,7 @@
 | REQ-d00272 | Reference Fault Classification                                | dev-graph-core.md       | d01290ac |
 | REQ-d00273 | Requirement Metadata Block                                    | dev-graph-file-nodes.md | 2d7e25e8 |
 | REQ-d00274 | Uncredited Coverage Evidence                                  | dev-graph-core.md       | b7624174 |
+| REQ-d00275 | Whose Configuration Governs a Federated Answer                | dev-graph-federation.md | 9ab2ef7c |
 
 ## User Journeys
 

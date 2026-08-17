@@ -1254,7 +1254,7 @@ class IdResolver:
         return instance_id.split(INSTANCE_SEPARATOR, 1)[0]
 
 
-# Implements: REQ-d00269-C, REQ-d00251-L
+# Implements: REQ-d00269-C, REQ-d00251-L, REQ-d00275-B
 class FederatedIdReader:
     """Reads the identifiers of every repository in one federation.
 
