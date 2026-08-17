@@ -151,6 +151,30 @@ that goes unanswered is visible as a decision rather than as an omission
 - **BREAKING: a reference list that names the same target twice now produces no relationship at all (REQ-d00272-K)** — previously a repeated target in a code or test annotation was deduplicated silently and the first instance bound, so `# Implements: REQ-d00001, REQ-d00001` produced one edge and no report. Every instance is now refused and every instance is reported, so that annotation produces **no** edge where it used to produce one — a list that names a target twice is a list its author has lost track of, and resolving it for them hides that. **Migration**: remove the repeat; the single remaining reference binds exactly as before.
 - **BREAKING: `[validation].allow_unresolved_cross_repo` is retired (REQ-d00269-F)** — it silenced both broken-reference checks together, taking six syntax errors down with the genuine cross-repository references on the estate this work started from. Severity is now chosen per class, so the same effect for expected cross-repository references is `[rules.references] unknown_namespace = "ok"` — reported, but not failing the run — without touching the other four classes. A config still setting `allow_unresolved_cross_repo` is rejected by the strict schema rather than silently ignored.
 
+#### Specification only: coverage evidence that credits nothing
+
+A requirement authored ahead of the implementation that will satisfy it. No
+behaviour changes in this release.
+
+Coverage dimensions are chained — one dimension counts only the assertions
+another already covers — so evidence can name an *Assertion* its dimension does
+not count and reach no answer the tool gives. A test naming an *Assertion*
+nothing implements is the ordinary case, and today it is silent: the coverage
+figures are computed without it and nothing says it was there. That evidence is
+now to be reported, naming the *Assertion*, the dimension it does not reach, and
+the file and line it was written on, at a severity the project configures and an
+error where the project configures nothing. The default is an error because the
+condition has only two explanations, and both are defects: the implementation
+exists and its `Implements:` reference was never written, or the test is aimed
+at an *Assertion* it does not exercise. Whether a dimension counts an
+*Assertion* is decided on the generous footing, so whole-requirement
+implementation evidence keeps its assertions counted and an estate that
+annotates implementation per requirement and tests per *Assertion* is not
+reported wholesale. Where a dimension counts no *Assertion* of a requirement at
+all, that is one finding for the requirement rather than one per *Assertion*.
+Reporting credits nothing: the figures are unchanged on both footings
+(REQ-d00274).
+
 #### Upgrading: configuration and identifiers
 
 Every change below refuses something a configuration or a stored identifier

@@ -666,3 +666,35 @@ A reports how the estate is doing and M reports what is left to do; the two ques
 - 2026-07-02 | be97c170 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: add missing changelog section
 
 *End* *Reporting Surface Consistency* | **Hash**: e0925092
+
+---
+
+## REQ-d00274: Uncredited Coverage Evidence
+
+**Level**: dev | **Status**: Draft | **Implements**: REQ-p00015
+
+Coverage dimensions are chained: one dimension counts only the assertions another dimension already covers. Evidence can therefore name an *Assertion* its dimension does not count, and so contribute to no answer the tool gives. This requirement obliges the tool to say that the evidence exists and reaches nothing, rather than let it disappear into a denominator it was never in.
+
+### Assertions
+
+A. Where evidence for a coverage dimension names an *Assertion* that the dimension does not count, the tool SHALL report the evidence, the *Assertion* it names, and the dimension the evidence does not reach.
+
+B. Whether a dimension counts an *Assertion* SHALL be decided on the generous footing, so that whole-requirement evidence keeps within the dimension every *Assertion* it credits.
+
+C. The severity of the report SHALL be what the project configures for it, and SHALL be an error where the project configures nothing.
+
+D. The report SHALL name the file and the line the evidence was written on, and SHALL distinguish evidence that only names the *Assertion* from evidence that also carries a result.
+
+E. Reporting SHALL NOT alter what the evidence credits: the *Assertion* SHALL remain uncounted by that dimension, and the reported evidence SHALL NOT enter any coverage figure on either footing.
+
+F. Where a dimension counts no *Assertion* of a requirement at all, the tool SHALL report that once for the requirement rather than once for each *Assertion* the evidence names.
+
+### Rationale
+
+An error default is the honest reading of what the condition means. A test that names an *Assertion* nothing implements is one of two defects: the implementation exists and its `Implements:` reference was never written, or the test is aimed at an *Assertion* it does not exercise. Neither is a matter of style, and both cost the estate the same thing — a requirement that reads as untested when it is tested, or as tested when it is not. A warning would leave the author to decide which of those two they are looking at without telling them there is a decision to make.
+
+B keeps the report from firing on the ordinary shape of a young estate. Whole-requirement implementation evidence is evidence; an *Assertion* it credits is implemented as far as any surface reports, and a test naming that *Assertion* credits its dimension normally. Deciding this on the strict footing would report the whole of a healthy estate that annotates implementation per requirement and tests per *Assertion* — a pattern the tool encourages elsewhere.
+
+This is not the question REQ-d00258-M answers. That assertion governs surfaces listing what remains to be done, which read the strict footing so an *Assertion* with no evidence naming it cannot hide behind its requirement's. Here the *Assertion* is not missing evidence; it has evidence that credits nothing, and the generous footing is what decides whether that is so.
+
+*End* *Uncredited Coverage Evidence* | **Hash**: fa2cd2a9

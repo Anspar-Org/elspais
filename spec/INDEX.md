@@ -184,6 +184,7 @@
 | REQ-d00271 | Diagnostic Code Vocabulary                                    | dev-cli.md              | 6f4019d1 |
 | REQ-d00272 | Reference Fault Classification                                | dev-graph-core.md       | d01290ac |
 | REQ-d00273 | Requirement Metadata Block                                    | dev-graph-file-nodes.md | 2d7e25e8 |
+| REQ-d00274 | Uncredited Coverage Evidence                                  | dev-graph-core.md       | fa2cd2a9 |
 
 ## User Journeys
 
