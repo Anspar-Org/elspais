@@ -43,8 +43,13 @@ Configuration checks always run as part of traceability verification. For focuse
 | `spec.refines_resolve` | All Refines: references resolve |
 | `spec.hierarchy_levels` | Requirements follow hierarchy rules |
 | `spec.structural_orphans` | No nodes without a FILE ancestor (build bugs) |
-| `spec.broken_references` | No edges targeting non-existent nodes, where the target matches a configured ID pattern; severity: error |
-| `spec.unclaimed_references` | No reference names a target that no configured repository claims; default severity: info |
+| `references.malformed` | No reference fails to read as a reference at all; default severity: warning |
+| `references.unknown_namespace` | No reference names a target no configured repository claims; default severity: info |
+| `references.unknown_requirement` | No claimed reference names a requirement that repository does not hold; default severity: error |
+| `references.unknown_assertion` | No claimed reference names an assertion label its requirement lacks; default severity: error |
+| `references.forbidden` | No reference uses a keyword its file kind refuses; default severity: error |
+| `references.keyword_form` | No keyword is written in a non-canonical case, spacing, or markdown-emphasis form; default severity: warning (never costs the edge its keyword introduces) |
+| `references.undeclared` | No comment opens with an identifier that no keyword introduces; default severity: warning (produces no relationship) |
 | `spec.needs_rewrite` | Flags requirements that will be rewritten on next save (duplicate refs, stale hash); severity: warning |
 | `spec.hash_integrity` | Flags Satisfies-linked requirements for review when their template hash is stale; severity: warning |
 | `spec.changelog_present` | Active requirements must have at least one changelog entry (when `changelog.present = true`); severity: warning |
@@ -180,41 +185,75 @@ active-like status, so `code.provisional_references` and
 
 ```toml
 [rules.references]
-retired = "warning"       # info | warning | error
-provisional = "info"      # info | warning | error
-aspirational = "info"     # info | warning | error
-unclaimed = "info"        # ok | info | warning | error
+retired = "warning"            # info | warning | error
+provisional = "info"           # info | warning | error
+aspirational = "info"          # info | warning | error
+malformed = "warning"          # ok | info | warning | error
+unknown_namespace = "info"     # ok | info | warning | error
+unknown_requirement = "error"  # ok | info | warning | error
+unknown_assertion = "error"    # ok | info | warning | error
+forbidden = "error"            # ok | info | warning | error
+keyword_form = "warning"       # ok | info | warning | error
+undeclared = "warning"         # ok | info | warning | error
 ```
 
-#### `spec.unclaimed_references` — Targets Nobody Claims
+#### The Five Reference Checks — How Far Reading Got
 
 A reference is recognised by *where* it is written, not by what it names: a
 *Traceability* keyword opening a comment, or opening a metadata line in a
 spec file, introduces a reference, and everything after the colon is its
-target. A target no repository claims is by definition outside every
-configured ID pattern, so its shape says nothing about whether the author
-meant a reference — only its position can, which is why documentation may
-show a keyword inside backticks or a fenced block without invoking one.
+target. Reading that target proceeds through stages, and a fault is
+reported under exactly one check — the furthest stage reading it reached,
+never a later one:
 
-The two broken-reference checks split that population by whether any
-configured repository's ID pattern claims the target:
+| Check | What reading found |
+|---|---|
+| `references.malformed` | The text never read as a reference at all (bad syntax, wrong separator, an empty item). |
+| `references.unknown_namespace` | The text reads, but no configured repository's identifier grammar claims it. |
+| `references.unknown_requirement` | A repository claims the identifier format, but holds no such requirement. |
+| `references.unknown_assertion` | The requirement exists, but not that assertion label. |
+| `references.forbidden` | The reference reads and resolves, but its keyword is not valid for this file kind (e.g. `Refines:` in a code file). |
 
-| | `spec.broken_references` | `spec.unclaimed_references` |
-|---|---|---|
-| Target shape | matches a configured ID pattern | matches none |
-| Typical cause | a misspelled or deleted identifier | a sibling repo not yet authored, or prose written after a keyword |
-| Severity | error (fixed) | `[rules.references] unclaimed` |
+A target no repository claims is by definition outside every configured ID
+pattern, so its shape says nothing about whether the author meant a
+reference — only its position can, which is why documentation may show a
+keyword inside backticks or a fenced block without invoking one.
 
 Two consequences worth knowing. A section banner such as
 `# Verifies: how the parser handles blank lines` is a reference to a target
 named "how the parser handles blank lines" — reword it or move the keyword
 off the front of the comment. And a reference whose target lives in a repo
-you have not configured is reported here rather than discarded, so a
-federation assembled from a partial checkout still tells you what it could
-not read.
+you have not configured is reported under `references.unknown_namespace`
+rather than discarded, so a federation assembled from a partial checkout
+still tells you what it could not read. Set `unknown_namespace = "ok"` to
+silence expected cross-repository references entirely.
+
+A keyword written in a non-canonical case, spacing, or markdown-emphasis
+form is reported separately, under `references.keyword_form` — a style
+finding never costs the edge its keyword introduces, so it does not join a
+check that counts references that failed to bind.
+
+#### `references.undeclared` — A Relationship Meant, Not Declared
+
+Opening a comment with an identifier and then explaining, in prose, why the
+code below answers to it — `# REQ-d00252-F: covered through the associate,
+so not a gap` — is a natural way to write, and an author doing it means the
+relationship. Nothing about the line is malformed, so reporting it as a
+malformed reference would name a defect the author does not have. It is
+reported under `references.undeclared` instead, with the message that
+saying it with a keyword would make it count.
+
+It produces no relationship. An informal citation is evidence of intent,
+and inferring an edge from intent would credit a requirement nobody
+declared. Two comments are excluded, because neither is a citation: one a
+*Traceability* keyword introduces is already a declaration, and one
+continuing a reference list is an item of that list.
+
+Where prose citations are house style, set `undeclared = "ok"` — the
+findings still appear, and the run does not fail on them.
 
 **Follow-up:** Run `elspais broken` to list every unresolved reference,
-claimed and unclaimed alike.
+across every class.
 
 ### UAT Checks
 

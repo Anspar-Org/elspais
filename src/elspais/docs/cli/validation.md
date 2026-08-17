@@ -124,7 +124,7 @@ Because recognition does not inspect the target, everything after the colon
 is the target whatever it looks like -- including an identifier from a
 repository this project has not configured, whose namespace need not
 resemble your own. Such a reference is reported by
-`spec.unclaimed_references` at a severity you choose (see
+`references.unknown_namespace` at a severity you choose (see
 `elspais docs checks`) rather than discarded.
 
 ## What a Reference May Introduce

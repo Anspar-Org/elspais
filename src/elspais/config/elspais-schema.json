@@ -653,7 +653,7 @@
     },
     "ReferenceSeverityConfig": {
       "additionalProperties": false,
-      "description": "Severity levels for the reference checks.\n\n``unclaimed`` governs references whose target no configured repository\nclaims. Noticing one is not the project's decision, but how loudly is:\na repository may legitimately reference a requirement a sibling has not\nauthored yet, and the same finding is advisory to one project and a\nbuild failure to another.",
+      "description": "Severity for each class of reference fault, and for reference status.\n\nSeverity is chosen per class because the classes differ in what would\nresolve them: configuring a missing repository answers one and answers\nnothing about a line that never read as an identifier (REQ-d00269-F).",
       "properties": {
         "retired": {
           "default": "warning",
@@ -670,9 +670,39 @@
           "title": "Aspirational",
           "type": "string"
         },
-        "unclaimed": {
+        "malformed": {
+          "default": "warning",
+          "title": "Malformed",
+          "type": "string"
+        },
+        "unknown_namespace": {
           "default": "info",
-          "title": "Unclaimed",
+          "title": "Unknown Namespace",
+          "type": "string"
+        },
+        "unknown_requirement": {
+          "default": "error",
+          "title": "Unknown Requirement",
+          "type": "string"
+        },
+        "unknown_assertion": {
+          "default": "error",
+          "title": "Unknown Assertion",
+          "type": "string"
+        },
+        "forbidden": {
+          "default": "error",
+          "title": "Forbidden",
+          "type": "string"
+        },
+        "keyword_form": {
+          "default": "warning",
+          "title": "Keyword Form",
+          "type": "string"
+        },
+        "undeclared": {
+          "default": "warning",
+          "title": "Undeclared",
           "type": "string"
         }
       },
@@ -1031,11 +1061,6 @@
           "default": 8,
           "title": "Hash Length",
           "type": "integer"
-        },
-        "allow_unresolved_cross_repo": {
-          "default": false,
-          "title": "Allow Unresolved Cross Repo",
-          "type": "boolean"
         },
         "strict_hierarchy": {
           "default": false,

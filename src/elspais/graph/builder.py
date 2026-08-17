@@ -34,7 +34,13 @@ from elspais.graph.GraphNode import (
 )
 from elspais.graph.mutations import MutationEntry, MutationLog
 from elspais.graph.parsers import ParsedContent
-from elspais.graph.reference_faults import FaultClass, FaultCode, ReferenceFault
+from elspais.graph.reference_faults import (
+    FaultClass,
+    FaultCode,
+    ReferenceFault,
+    StyleFinding,
+    UndeclaredRelationship,
+)
 from elspais.graph.relations import EdgeKind, Stereotype
 from elspais.graph.render import format_definition_block, render_end_marker
 from elspais.graph.terms import TermDictionary, TermEntry, compute_definition_hash
@@ -147,6 +153,18 @@ class TraceGraph:
     # Detection: orphans and broken references (populated at build time)
     _orphaned_ids: set[str] = field(default_factory=set, init=False)
     _broken_references: list[ReferenceFault] = field(default_factory=list, init=False)
+    # Implements: REQ-d00272-G
+    # Keyword-form findings (non-canonical case/spacing/emphasis) -- never
+    # cost the edge their keyword introduces, so kept apart from
+    # _broken_references rather than joining a bucket that counts
+    # references that failed to bind.
+    _style_findings: list[StyleFinding] = field(default_factory=list, init=False, repr=False)
+    # Implements: REQ-d00272-O
+    # Identifiers opening a comment no keyword introduces -- an intended
+    # relationship that was never declared, and so not a failed reference.
+    _undeclared_relationships: list[UndeclaredRelationship] = field(
+        default_factory=list, init=False, repr=False
+    )
     # Detection: duplicate REQ IDs across files (populated at build time).
     # Maps canonical REQ ID -> ordered list of source paths defining it.
     _duplicate_req_ids: dict[str, list[str]] = field(default_factory=dict, init=False, repr=False)
@@ -337,6 +355,16 @@ class TraceGraph:
     def has_broken_references(self) -> bool:
         """Check if the graph has broken references."""
         return len(self._broken_references) > 0
+
+    # Implements: REQ-d00272-G
+    def style_findings(self) -> list[StyleFinding]:
+        """Get all keyword-form style findings detected during build."""
+        return list(self._style_findings)
+
+    # Implements: REQ-d00272-O
+    def undeclared_relationships(self) -> list[UndeclaredRelationship]:
+        """Get every comment that cites an identifier without declaring one."""
+        return list(self._undeclared_relationships)
 
     def duplicate_req_ids(self) -> dict[str, list[str]]:
         """Return cross-file duplicate REQ IDs detected at build time.
@@ -3608,6 +3636,10 @@ class GraphBuilder:
         self._satisfies_links: list[tuple[str, str]] = []  # (declaring_id, template_id)
         # Detection: broken references
         self._broken_references: list[ReferenceFault] = []
+        # Implements: REQ-d00272-G
+        self._style_findings: list[StyleFinding] = []
+        # Implements: REQ-d00272-O
+        self._undeclared_relationships: list[UndeclaredRelationship] = []
         # Detection: duplicate REQ IDs across files. Maps the canonical (real)
         # requirement ID -> ordered list of source paths that defined it. First
         # occurrence keeps the real ID; subsequent occurrences get a synthetic
@@ -3729,6 +3761,44 @@ class GraphBuilder:
                 node = self._nodes.get(remainder_id)
                 if node:
                     self._wire_contains_edge(file_node, node, content)
+        elif content.content_type == "reference_fault":
+            # Implements: REQ-d00269-H, REQ-p00019-A
+            # No node is created and no CONTAINS edge wired -- the physical
+            # line already round-trips via the remainder gatherer. The FILE
+            # node is the only anchor available for a fault with no CODE/TEST
+            # node of its own (an empty reference list, a trailing separator).
+            data = content.parsed_data
+            source_id = file_node.id if file_node is not None else data.get("source_id", "")
+            self._broken_references.append(
+                ReferenceFault(
+                    source_id=source_id,
+                    target_id=data["raw"],
+                    edge_kind=data.get("edge_kind") or "",
+                    fault_class=data["fault_class"],
+                    codes=data["codes"],
+                    line=content.start_line,
+                )
+            )
+        elif content.content_type == "style_finding":
+            # Implements: REQ-d00272-G
+            data = content.parsed_data
+            source_id = file_node.id if file_node is not None else data.get("source_id", "")
+            self._style_findings.append(
+                StyleFinding(source_id=source_id, code=data["code"], line=content.start_line)
+            )
+        elif content.content_type == "undeclared_relationship":
+            # Implements: REQ-d00272-O
+            # No node, no edge: reading an informal citation as a
+            # declaration is exactly the inference this vocabulary exists
+            # to refuse.  The FILE node anchors it, since the line
+            # declared nothing that could carry it.
+            data = content.parsed_data
+            source_id = file_node.id if file_node is not None else data.get("source_id", "")
+            self._undeclared_relationships.append(
+                UndeclaredRelationship(
+                    source_id=source_id, text=data["text"], line=content.start_line
+                )
+            )
 
     def _add_requirement(self, content: ParsedContent) -> None:
         """Add a requirement node and its assertions."""
@@ -4493,16 +4563,19 @@ class GraphBuilder:
         (REQ-d00252-G): the verdict says reading failed at the grammar
         stage, not *why*, and an own-repo item deserves the same
         separator-mismatch hint whether or not a grammar-level verdict
-        happened to exist for the surface that read it. A ``DUPLICATE_ITEM``
-        verdict (or any other non-``MALFORMED`` class) gets none -- the verdict
-        there already names the real cause, and the separator prose would
-        misdescribe an item that parsed just fine.
+        happened to exist for the surface that read it. Any verdict carrying
+        a code more specific than ``SYNTAX_ERROR`` (``DUPLICATE_ITEM``,
+        ``LABEL_OUT_OF_SERIES``, ...) gets none -- prose accompanying a code
+        SHALL NOT name a cause the code does not (REQ-d00252-K), and the
+        separator prose would misdescribe an item a specific code already
+        explains.
         """
         if target_id in verdicts:
             fault_class, codes = verdicts[target_id]
+            more_specific = any(c != FaultCode.SYNTAX_ERROR for c in codes)
             diagnostic = (
                 self._own_namespace_diagnostic(target_id)
-                if fault_class is FaultClass.MALFORMED and FaultCode.DUPLICATE_ITEM not in codes
+                if fault_class is FaultClass.MALFORMED and not more_specific
                 else ""
             )
             return fault_class, codes, diagnostic
@@ -5152,6 +5225,8 @@ class GraphBuilder:
         graph._index = dict(self._nodes)
         graph._orphaned_ids = orphaned_ids
         graph._broken_references = list(self._broken_references)
+        graph._style_findings = list(self._style_findings)
+        graph._undeclared_relationships = list(self._undeclared_relationships)
         graph._duplicate_req_ids = {k: list(v) for k, v in self._duplicate_req_ids.items()}
 
         # Implements: REQ-d00222-A, REQ-d00222-B

@@ -211,7 +211,7 @@ class TestALoneRepositoryIsUnchanged:
         federated = build_graph(repo_root=consumer)
 
         assert [entry.name for entry in federated.iter_repos()] == ["d"]
-        # Implements: REQ-d00269-D -- the reference is reported, not resolved.
+        # Per REQ-d00269-D, the reference is reported rather than resolved.
         assert [br.target_id for br in federated.broken_references()] == ["BBB-d00002-A"]
 
     def test_REQ_d00269_C_lone_repository_scans_its_own_annotations_unchanged(self, tmp_path):

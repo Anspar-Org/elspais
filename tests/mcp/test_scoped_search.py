@@ -99,7 +99,7 @@ def scoped_graph():
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Verifies: _collect_scope_ids()
+# Section: _collect_scope_ids()
 # ─────────────────────────────────────────────────────────────────────────────
 
 
@@ -193,7 +193,7 @@ class TestCollectScopeIds:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Verifies: _scoped_search() helper
+# Section: _scoped_search() helper
 # ─────────────────────────────────────────────────────────────────────────────
 
 
@@ -472,7 +472,7 @@ class TestScopedSearch:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Verifies: scoped_search MCP tool wrapper
+# Section: scoped_search MCP tool wrapper
 # ─────────────────────────────────────────────────────────────────────────────
 
 
@@ -556,7 +556,7 @@ class TestScopedSearchMCPTool:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Verifies: Phase 2 multi-term scoring integration
+# Section: Phase 2 multi-term scoring integration
 # ─────────────────────────────────────────────────────────────────────────────
 
 

@@ -39,14 +39,14 @@ def test_a_fault_always_carries_the_generic_code():
 def test_a_fault_may_carry_several_specific_codes():
     fault = ReferenceFault(
         source_id="code:/x.py",
-        target_id="req-d1",
+        target_id="REQ-d00001+A-B",
         edge_kind="implements",
         fault_class=FaultClass.MALFORMED,
-        codes=(FaultCode.WRONG_CASE, FaultCode.WRONG_PADDING),
+        codes=(FaultCode.WRONG_ASSERTION_SEPARATOR, FaultCode.WRONG_MULTI_SEPARATOR),
     )
     assert FaultCode.SYNTAX_ERROR in fault.codes
-    assert FaultCode.WRONG_CASE in fault.codes
-    assert FaultCode.WRONG_PADDING in fault.codes
+    assert FaultCode.WRONG_ASSERTION_SEPARATOR in fault.codes
+    assert FaultCode.WRONG_MULTI_SEPARATOR in fault.codes
 
 
 @pytest.fixture(scope="module")
@@ -399,8 +399,8 @@ def test_a_duplicated_existing_target_binds_nothing_and_reports_twice(tmp_path, 
 
 # ---------------------------------------------------------------------------
 # Spec-file and journey reference classification (Task 12): the same
-# verdict-threading the code/test path already gets, for **Implements**:,
-# **Refines**: and a journey's Validates:.
+# verdict-threading the code/test path already gets, for a spec's
+# Implements/Refines metadata and a journey's Validates line.
 # ---------------------------------------------------------------------------
 
 

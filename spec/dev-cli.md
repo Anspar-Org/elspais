@@ -209,7 +209,7 @@ A failing check's findings are what the reader came for; a passing check's are n
 
 ## REQ-d00271: Diagnostic Code Vocabulary
 
-**Level**: dev | **Status**: Draft | **Implements**: REQ-p00015
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00015
 
 A report groups findings so they can be counted and a severity chosen for them, and names each finding's defect so it can be acted on. Those are separate vocabularies with separate obligations: the first is closed so a project can configure against it, the second is open so a diagnosis can become more specific without anything having to be reconfigured.
 
@@ -233,6 +233,8 @@ D is what keeps B from becoming guesswork. Reporting several respects in which a
 
 ### Changelog
 
+- 2026-08-16 | 6f4019d1 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: sync changelog hash
+- 2026-08-16 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: Active — every reported fault carries codes, the codes are documented with a producing input in `elspais docs linking`, and two codes no input could produce are retired from the vocabulary
 - 2026-08-15 | - | - | Michael Lewis (<michael@anspar.org>) | Initial authoring: closed categories over open codes, multiple codes per finding, a generic code, and issuance only where determined
 
 *End* *Diagnostic Code Vocabulary* | **Hash**: 6f4019d1

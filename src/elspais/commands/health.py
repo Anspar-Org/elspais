@@ -16,13 +16,14 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from collections.abc import Callable, Iterator
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from elspais.config.schema import ElspaisConfig
 from elspais.config.status_roles import StatusRole
+from elspais.graph.reference_faults import FaultClass, FaultCode
 
 if TYPE_CHECKING:
     from elspais.graph.federated import FederatedGraph
@@ -651,227 +652,219 @@ def check_structural_orphans(
     )
 
 
-# Implements: REQ-d00269-F
-def _claim_test(graph: FederatedGraph) -> Callable[[str], bool]:
-    """Build the predicate "some configured repository claims this identifier".
+def _fault_location(
+    graph: FederatedGraph, source_id: str, line: int | None
+) -> tuple[str | None, int | None]:
+    """The file path and line a fault's ``source_id`` names.
 
-    A claimed target that resolves to nothing is a misspelling of an
-    identifier the federation understands. An unclaimed one is a name from
-    outside every configured grammar -- a different kind of finding, and the
-    only kind whose severity a project may choose.
-
-    The federation's resolvers are built once and closed over, so answering
-    the question for a whole estate's worth of references costs one resolver
-    per repository rather than one per reference.
+    A fault anchored to a CODE/TEST node reads its file through
+    ``file_node()`` and its line through ``parse_line``. A fault anchored
+    directly to a FILE node (an empty reference list, a trailing separator,
+    a comment citing a requirement without declaring one -- no CODE/TEST
+    node exists for those lines) reads its own
+    ``relative_path``, and its line has nowhere to live but the fault
+    itself, so *line* (threaded from ``ReferenceFault.line``) wins whenever
+    it is set (REQ-d00252-K).
     """
-    from elspais.graph.parsers.patterns import JNY_ID_PATTERN
-    from elspais.utilities.patterns import build_resolver
+    from elspais.graph import NodeKind
 
-    resolvers = []
-    for entry in graph.iter_repos():
-        if entry.config is None:
-            continue
-        try:
-            resolvers.append(build_resolver(entry.config))
-        except Exception:  # pragma: no cover - malformed config is reported elsewhere
-            continue
-
-    def claimed(target_id: str) -> bool:
-        if JNY_ID_PATTERN.fullmatch(target_id.split("/")[0]):
-            return True
-        return any(resolver.is_local_id(target_id) for resolver in resolvers)
-
-    return claimed
+    node = graph.find_by_id(source_id)
+    if node is None:
+        return None, line
+    file_n = node if node.kind == NodeKind.FILE else node.file_node()
+    file_path = file_n.get_field("relative_path") if file_n else None
+    resolved_line = line if line is not None else node.get_field("parse_line")
+    return file_path, resolved_line
 
 
-# Implements: REQ-d00269-F
-def check_unclaimed_references(graph: FederatedGraph, config=None) -> HealthCheck:
-    """Check for references naming a target no configured repository claims.
+# Implements: REQ-d00269-F, REQ-p00019-J, REQ-p00019-K
+_REFERENCE_CHECKS: tuple[tuple[FaultClass, str, str], ...] = (
+    (FaultClass.MALFORMED, "references.malformed", "does not read as a reference"),
+    (
+        FaultClass.UNKNOWN_NAMESPACE,
+        "references.unknown_namespace",
+        "no configured repository claims this identifier",
+    ),
+    (
+        FaultClass.UNKNOWN_REQUIREMENT,
+        "references.unknown_requirement",
+        "claimed, but no such requirement exists",
+    ),
+    (
+        FaultClass.UNKNOWN_ASSERTION,
+        "references.unknown_assertion",
+        "the requirement exists, but not that label",
+    ),
+    (FaultClass.FORBIDDEN, "references.forbidden", "exists, but not for this keyword"),
+)
 
-    Recognition of these references is decided by position -- a *Traceability*
-    keyword opening a comment or a metadata line -- so what follows may be any
-    text at all. Reporting them is what keeps a reference the tool could not
-    read from reading, in every downstream report, exactly like a requirement
-    that was never referenced.
 
-    ``validation.allow_unresolved_cross_repo`` keeps the meaning it has for
-    broken references: a project that has said it does not want to hear about
-    a reference into a repository it has not configured does not hear about it
-    here either.
+def check_reference_class(
+    graph: FederatedGraph,
+    config: dict[str, Any] | None,
+    fault_class: FaultClass,
+    name: str,
+    description: str,
+) -> HealthCheck:
+    """Report the faults of one class, under a description true of each.
+
+    A fault belongs to exactly one class -- the furthest stage reading it
+    reached -- so a finding appears under one check and a count of findings
+    is a count of distinct facts (REQ-p00019-K).
     """
     typed = _validate_config(config or {})
-    claimed = _claim_test(graph)
-    unclaimed = [br for br in graph.broken_references() if not claimed(br.target_id)]
-    if typed.validation.allow_unresolved_cross_repo:
-        unclaimed = [br for br in unclaimed if not br.presumed_foreign]
-
-    severity = typed.rules.references.unclaimed
-
-    if not unclaimed:
-        # The configured severity is reported whether or not anything was
-        # found. Dropping it here made the check answer "error" while
-        # passing, and moved it between the passed and skipped counts
-        # depending on its findings -- so the same check reported under two
-        # different headings from one run to the next.
+    severity = getattr(typed.rules.references, fault_class.label)
+    faults = [f for f in graph.broken_references() if f.fault_class is fault_class]
+    if not faults:
         return HealthCheck(
-            name="spec.unclaimed_references",
+            name=name,
             passed=True,
-            message="No references to unclaimed targets",
-            category="spec",
+            message=f"No references that {description}",
+            category="references",
             severity=severity,
         )
-
     findings = []
-    for br in unclaimed:
+    for f in faults:
+        codes = " ".join(c for c in f.codes if c != FaultCode.SYNTAX_ERROR)
+        detail = f" [{codes}]" if codes else ""
         try:
-            repo_name = graph.repo_for(br.source_id).name
+            repo_name = graph.repo_for(f.source_id).name
         except KeyError:
             repo_name = None
+        file_path, line = _fault_location(graph, f.source_id, f.line)
         findings.append(
             HealthFinding(
                 message=(
-                    f"Unclaimed reference: {br.source_id} -> {br.target_id} ({br.edge_kind}) "
-                    "-- no configured repository claims this identifier"
+                    f"{f.source_id} -> {f.target_id} ({f.edge_kind}) "
+                    f"-- {f.diagnostic or description}{detail}"
                 ),
-                node_id=br.source_id,
+                node_id=f.source_id,
                 repo=repo_name,
+                file_path=file_path,
+                line=line,
             )
         )
-
     return HealthCheck(
-        name="spec.unclaimed_references",
+        name=name,
         passed=severity == "ok",
-        message=f"{len(unclaimed)} reference(s) to targets no configured repository claims",
-        category="spec",
+        message=f"{len(faults)} reference(s): {description}",
+        category="references",
         severity=severity,
         details={
-            "count": len(unclaimed),
+            "count": len(faults),
             "references": [
-                {"source": br.source_id, "target": br.target_id, "kind": br.edge_kind}
-                for br in unclaimed[:20]
+                {
+                    "source": f.source_id,
+                    "target": f.target_id,
+                    "kind": f.edge_kind,
+                    "codes": list(f.codes),
+                }
+                for f in faults[:20]
             ],
         },
         findings=findings,
     )
 
 
-# Implements: REQ-d00204-E
-def check_broken_references(graph: FederatedGraph, config=None) -> HealthCheck:
-    """Check for edges targeting non-existent nodes.
+# Implements: REQ-d00272-G
+def check_reference_keyword_form(
+    graph: FederatedGraph, config: dict[str, Any] | None
+) -> HealthCheck:
+    """Report a keyword written in a non-canonical form.
 
-    Distinguishes within-repo broken references (error severity) from
-    cross-repo references where the target repo is in error state
-    (warning severity with clone assistance info).
-
-    When validation.allow_unresolved_cross_repo is True, broken references
-    whose target ID uses a different namespace prefix than the current repo
-    are silently suppressed.
-
-    A target no configured repository claims is left to
-    ``spec.unclaimed_references``, whose severity the project chooses; were
-    both checks to report it, that choice would be overridden here.
+    A style finding never costs the edge its keyword introduces -- it is
+    reported under its own rule, at its own severity, so it can never join a
+    bucket that counts references that failed to bind.
     """
-    claimed = _claim_test(graph)
-    broken = [br for br in graph.broken_references() if claimed(br.target_id)]
-
-    suppressed_count = 0
-    if config is not None:
-        _tc = _validate_config(config)
-        _allow_unresolved = _tc.validation.allow_unresolved_cross_repo if _tc else False
-    else:
-        _allow_unresolved = False
-    if _allow_unresolved:
-        local_broken = [br for br in broken if not br.presumed_foreign]
-        suppressed_count = len(broken) - len(local_broken)
-        broken = local_broken
-
-    if broken:
-        # Identify error-state repos and collect all known node IDs
-        error_repos = {entry.name for entry in graph.iter_repos() if entry.graph is None}
-        # All node IDs owned by live repos — if a target isn't here and
-        # error-state repos exist, it might belong to a missing repo
-        owned_ids = set(graph._ownership.keys()) if hasattr(graph, "_ownership") else set()
-
-        within_repo_findings = []
-        cross_repo_findings = []
-
-        for br in broken:
-            try:
-                source_entry = graph.repo_for(br.source_id)
-                repo_name = source_entry.name
-            except KeyError:
-                repo_name = None
-
-            # Implements: REQ-p00014-F
-            # Surface the optional diagnostic verbatim so authors see the
-            # specific guidance attached by the validation matrix.
-            base_msg = f"Broken reference: {br.source_id} -> {br.target_id} ({br.edge_kind})"
-            if br.diagnostic:
-                msg = f"{base_msg}: {br.diagnostic}"
-            else:
-                msg = base_msg
-            finding = HealthFinding(
-                message=msg,
-                node_id=br.source_id,
-                repo=repo_name,
-            )
-
-            # Only classify as cross-repo if the target is genuinely
-            # unresolvable AND error-state repos exist that might contain it.
-            # A target that isn't in any live repo's ownership map could
-            # plausibly belong to a missing repo.
-            target_in_live_repo = br.target_id in owned_ids
-            if error_repos and not target_in_live_repo:
-                cross_repo_findings.append(finding)
-            else:
-                within_repo_findings.append(finding)
-
-        all_findings = within_repo_findings + cross_repo_findings
-
-        # Severity: error if any within-repo broken refs, warning if only cross-repo
-        if within_repo_findings:
-            severity = "error"
-            msg_parts = [f"{len(within_repo_findings)} broken reference(s)"]
-            if cross_repo_findings:
-                msg_parts.append(
-                    f"{len(cross_repo_findings)} possibly due to missing repo(s): "
-                    + ", ".join(sorted(error_repos))
-                )
-            message = "; ".join(msg_parts)
-        else:
-            severity = "warning"
-            message = (
-                f"{len(cross_repo_findings)} broken reference(s), "
-                f"possibly due to missing repo(s): {', '.join(sorted(error_repos))}"
-            )
-
+    typed = _validate_config(config or {})
+    severity = typed.rules.references.keyword_form
+    findings_raw = graph.style_findings()
+    if not findings_raw:
         return HealthCheck(
-            name="spec.broken_references",
-            passed=False,
-            message=message,
-            category="spec",
+            name="references.keyword_form",
+            passed=True,
+            message="No keywords written in a non-canonical form",
+            category="references",
             severity=severity,
-            details={
-                "count": len(broken),
-                "within_repo": len(within_repo_findings),
-                "cross_repo": len(cross_repo_findings),
-                "error_repos": sorted(error_repos),
-                "references": [
-                    {"source": br.source_id, "target": br.target_id, "kind": br.edge_kind}
-                    for br in broken[:20]
-                ],
-            },
-            findings=all_findings,
         )
-
-    message = "No broken references"
-    if suppressed_count:
-        message += f" ({suppressed_count} cross-repo suppressed)"
+    findings = []
+    for sf in findings_raw:
+        try:
+            repo_name = graph.repo_for(sf.source_id).name
+        except KeyError:
+            repo_name = None
+        file_path, line = _fault_location(graph, sf.source_id, sf.line)
+        findings.append(
+            HealthFinding(
+                message=f"{sf.source_id}: {sf.code} -- keyword written in a non-canonical form",
+                node_id=sf.source_id,
+                repo=repo_name,
+                file_path=file_path,
+                line=line,
+            )
+        )
     return HealthCheck(
-        name="spec.broken_references",
-        passed=True,
-        message=message,
-        category="spec",
+        name="references.keyword_form",
+        passed=severity == "ok",
+        message=f"{len(findings_raw)} keyword(s) written in a non-canonical form",
+        category="references",
+        severity=severity,
+        details={"count": len(findings_raw)},
+        findings=findings,
+    )
+
+
+# Implements: REQ-d00272-O
+def check_reference_undeclared(graph: FederatedGraph, config: dict[str, Any] | None) -> HealthCheck:
+    """Report a comment that cites an identifier without declaring anything.
+
+    Nothing about such a comment is malformed, so reporting it as a
+    malformed reference would be wrong twice: it would name a defect its
+    author does not have, and the useful message is not that something is
+    broken but that saying it with a keyword would make it count.  No
+    relationship is produced from it -- an informal citation is evidence of
+    intent, and inferring an edge from intent is the failure the whole
+    vocabulary exists to prevent.
+    """
+    typed = _validate_config(config or {})
+    severity = typed.rules.references.undeclared
+    cites = graph.undeclared_relationships()
+    if not cites:
+        return HealthCheck(
+            name="references.undeclared",
+            passed=True,
+            message="No comments cite a requirement without declaring a relationship",
+            category="references",
+            severity=severity,
+        )
+    findings = []
+    for c in cites:
+        try:
+            repo_name = graph.repo_for(c.source_id).name
+        except KeyError:
+            repo_name = None
+        file_path, line = _fault_location(graph, c.source_id, c.line)
+        findings.append(
+            HealthFinding(
+                message=(
+                    f"{c.text} -- a relationship appears to be intended and is not "
+                    "declared; introduce the identifier with a Traceability keyword "
+                    "(e.g. `Implements:` or `Verifies:`) for it to count"
+                ),
+                node_id=c.source_id,
+                repo=repo_name,
+                file_path=file_path,
+                line=line,
+            )
+        )
+    return HealthCheck(
+        name="references.undeclared",
+        passed=severity == "ok",
+        message=(f"{len(cites)} comment(s) cite a requirement without declaring a relationship"),
+        category="references",
+        severity=severity,
+        details={"count": len(cites)},
+        findings=findings,
     )
 
 
@@ -2054,8 +2047,12 @@ def run_spec_checks(
         check_associate_paths(config, _repo_root),
         check_spec_files_parseable(graph),
         check_spec_no_duplicates(graph),
-        check_broken_references(graph, config),
-        check_unclaimed_references(graph, config),
+        *[
+            check_reference_class(graph, config, fault_class, name, description)
+            for fault_class, name, description in _REFERENCE_CHECKS
+        ],
+        check_reference_keyword_form(graph, config),
+        check_reference_undeclared(graph, config),
         check_spec_hash_integrity(graph),
         check_no_cycles(graph),
     ]
@@ -2533,17 +2530,26 @@ def _check_status_references(
     )
 
 
-# Implements: REQ-d00241-A
+# Implements: REQ-d00241-A, REQ-d00241-E
 def check_no_traceability(
     unlinked_files: list[str],
     severity: str = "warning",
+    faulted_files: frozenset[str] | set[str] = frozenset(),
 ) -> HealthCheck:
     """Check for code files with no traceability markers.
 
     Test files are deliberately excluded -- ``tests.unlinked``
     (``check_unlinked_tests``) already reports marker-less test files;
     including them here too would double-report the same file.
+
+    A file whose markers produced no relationship carries markers, and
+    saying it carries none sends its author to add what is already there.
+    Those files are reported by the reference checks, which name what is
+    actually wrong with them, and are excluded here (*faulted_files*: the
+    set of file paths appearing as the ``source_id`` of any
+    ``ReferenceFault``).
     """
+    unlinked_files = [f for f in unlinked_files if f not in faulted_files]
     if severity == "off":
         return HealthCheck(
             name="code.no_traceability",
@@ -2634,8 +2640,28 @@ def run_code_checks(
             rel = file_n.get_field("relative_path")
             if rel:
                 unlinked_files.append(rel)
-    checks.append(check_no_traceability(unlinked_files, severity=no_trace_sev))
+    # Implements: REQ-d00241-E
+    faulted_files = {
+        path
+        for f in graph.broken_references()
+        if (path := _fault_location(graph, f.source_id, f.line)[0]) is not None
+    }
+    checks.append(
+        check_no_traceability(unlinked_files, severity=no_trace_sev, faulted_files=faulted_files)
+    )
 
+    return checks
+
+
+def run_checks(graph: FederatedGraph, config: dict[str, Any] | None = None) -> list[HealthCheck]:
+    """Run the spec and code health checks together, as a flat list.
+
+    A thin combiner over ``run_spec_checks``/``run_code_checks`` for callers
+    that want both families from one call without resolving spec
+    directories themselves.
+    """
+    checks = list(run_spec_checks(graph, config or {}))
+    checks.extend(run_code_checks(graph, config=config))
     return checks
 
 
@@ -3562,8 +3588,13 @@ _FOLLOWUP_COMMANDS: dict[str, str] = {
     "spec.implements_resolve": "elspais broken",
     "spec.refines_resolve": "elspais broken",
     "spec.satisfies_resolve": "elspais broken",
-    "spec.broken_references": "elspais broken",
-    "spec.unclaimed_references": "elspais broken",
+    "references.malformed": "elspais broken",
+    "references.unknown_namespace": "elspais broken",
+    "references.unknown_requirement": "elspais broken",
+    "references.unknown_assertion": "elspais broken",
+    "references.forbidden": "elspais broken",
+    "references.keyword_form": "elspais checks --spec --format json",
+    "references.undeclared": "elspais checks --spec --format json",
     "spec.structural_orphans": "elspais checks --spec --format json",
     "spec.hierarchy_levels": "elspais checks --spec --format json",
     "spec.changelog_present": "elspais fix",
@@ -3632,6 +3663,7 @@ def _build_hint(report: HealthReport, already_verbose: bool) -> str | None:
 
     category_flags = {
         "spec": "--spec",
+        "references": "--spec",
         "code": "--code",
         "tests": "--tests",
         "config": "",
@@ -3680,7 +3712,7 @@ def _build_report_data(report: HealthReport, verbose: bool = False) -> _ReportDa
     counting (excluding info-severity from pass/total), check icon selection,
     summary line, and hint string.
     """
-    categories = ["config", "spec", "code", "tests", "uat", "terms"]
+    categories = ["config", "spec", "references", "code", "tests", "uat", "terms"]
     sections: list[_SectionData] = []
 
     for category in categories:
@@ -3840,7 +3872,7 @@ def _render_junit(
     import xml.etree.ElementTree as ET
 
     testsuites = ET.Element("testsuites")
-    categories = ["config", "spec", "code", "tests", "uat", "terms"]
+    categories = ["config", "spec", "references", "code", "tests", "uat", "terms"]
 
     for category in categories:
         checks = list(report.iter_by_category(category))

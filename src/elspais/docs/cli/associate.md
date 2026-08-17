@@ -152,30 +152,26 @@ member's grammar admits the identifier — not on whether the requirement
 exists:
 
 ```python
-# Implements: CAL-d99999-A     -> broken reference (error)
-# Implements: ZZZ-d00001-A     -> unclaimed reference (severity is yours)
+# Implements: CAL-d99999-A     -> references.unknown_requirement (error)
+# Implements: ZZZ-d00001-A     -> references.unknown_namespace (severity is yours)
 ```
 
 `CAL-d99999-A` is spelled the way the `CAL` repository spells its
 identifiers, so that repository is the one that would own it — it simply has
-not authored it. That is a broken reference, and its severity is fixed at
-error: the repository that would answer for the target is in the federation
-and does not have it.
+not authored it. That is `references.unknown_requirement`, and its severity
+is fixed at error: the repository that would answer for the target is in the
+federation and does not have it.
 
 `ZZZ-d00001-A` is spelled the way no member spells anything, so no member
-would own it. That is an unclaimed reference, reported at the severity the
-project configures in `[rules.references].unclaimed` (`info` by default) —
-a sibling repository that has not been written yet is advisory to one
-project and a build failure to another.
+would own it. That is `references.unknown_namespace`, reported at the
+severity the project configures in `[rules.references].unknown_namespace`
+(`info` by default) — a sibling repository that has not been written yet is
+advisory to one project and a build failure to another. Set it to `"ok"` to
+silence expected cross-repository references entirely.
 
 List both with `elspais broken`. A requirement with no evidence and a
 requirement whose evidence could not be resolved otherwise read identically in
 every report.
-
-One setting changes this: with `[validation].allow_unresolved_cross_repo`
-turned on, a reference presumed to belong to a repository this project has
-not configured is dropped from both reports rather than appearing in either.
-It is off by default.
 
 ## Notes
 

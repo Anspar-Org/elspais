@@ -408,11 +408,6 @@ color = "#6c757d"
 # Hash mode for change detection: "full-text" | "normalized-text"
 hash_mode = "normalized-text"
 
-# Allow unresolved cross-repo references. When true, a reference presumed to
-# belong to a repository this project has not configured is dropped from both
-# `spec.broken_references` and `spec.unclaimed_references`.
-allow_unresolved_cross_repo = false
-
 # hash_algorithm = "sha256"         # Hash algorithm
 # hash_length = 8                   # Hash truncation length (characters)
 # strict_hierarchy = false          # Strict hierarchy validation
@@ -474,20 +469,40 @@ aspirational = ["Roadmap", "Future", "Idea"]
 retired = ["Deprecated", "Superseded", "Rejected"]
 
 # Severity of the reference checks. Each value is "ok", "info", "warning"
-# or "error"; "ok" reports the finding without failing the run.
+# or "error"; "ok" reports the finding without failing the run. Each class
+# is how far reading a reference got before it failed -- never a later
+# class than the one it reached.
 #   retired/provisional/aspirational -- a reference resolves, but to a
 #     requirement whose status makes the link stale or premature.
-#   unclaimed -- a reference resolves to nothing and names an identifier no
-#     configured repository claims. A sibling repository that has not yet
-#     authored the requirement is advisory to one project and a build
-#     failure to another, so the level is yours to pick; a target that does
-#     match a configured ID pattern but names no node stays a hard error
-#     under `spec.broken_references` and is not tunable here.
+#   malformed -- the text never read as a reference at all.
+#   unknown_namespace -- a reference resolves to nothing and names an
+#     identifier no configured repository claims. A sibling repository
+#     that has not yet authored the requirement is advisory to one project
+#     and a build failure to another, so the level is yours to pick; set
+#     it to "ok" to silence expected cross-repository references entirely.
+#   unknown_requirement -- a configured repository's grammar claims the
+#     identifier, but it names no requirement that repository holds.
+#   unknown_assertion -- the requirement exists, but not that label.
+#   forbidden -- the keyword is not valid for the file kind it was
+#     written in (e.g. `Refines:` in a code file).
+#   keyword_form -- a keyword written in a non-canonical case, spacing, or
+#     markdown-emphasis form. Never costs the edge its keyword introduces;
+#     a style finding, not a broken reference.
+#   undeclared -- a comment opening with an identifier that no keyword
+#     introduces: a relationship its author appears to intend and has not
+#     spelled. Nothing about it is malformed and it produces no
+#     relationship; set it to "ok" where prose citations are house style.
 [rules.references]
 retired = "warning"
 provisional = "info"
 aspirational = "info"
-unclaimed = "info"
+malformed = "warning"
+unknown_namespace = "info"
+unknown_requirement = "error"
+unknown_assertion = "error"
+forbidden = "error"
+keyword_form = "warning"
+undeclared = "warning"
 
 #──────────────────────────────────────────────────────────────────────────────
 # CHANGELOG

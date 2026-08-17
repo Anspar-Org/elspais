@@ -414,7 +414,7 @@ A label is a permanent name: references point at it, coverage accrues to it, and
 
 ## REQ-d00272: Reference Fault Classification
 
-**Level**: dev | **Status**: Draft | **Implements**: REQ-p00014-R
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00014-R
 **Satisfies**: REQ-p00019
 
 A reference that fails is described by how far reading it got, and the classes are only as useful as the rule that assigns them. This states that rule: what decides that an item was written as an identifier at all, which repository's grammar it should be read against, and how much of a defect may be named without guessing.
@@ -447,6 +447,8 @@ M. An item holding any character no identifier configuration can admit SHALL be 
 
 N. An identifier SHALL have one canonical spelling. A reference written in another spelling the configuration admits SHALL be reported at a severity the project configures, and SHALL produce the relationship it names regardless.
 
+O. Where an identifier is the first content of a comment that no *Traceability* keyword introduces, and the comment does not continue a list, the tool SHALL report that a relationship appears to be intended and is not declared, at a severity the project configures. It SHALL produce no relationship.
+
 ### Rationale
 
 B and C are the whole of the decidability claim, and they are stated as tests on the item rather than as descriptions of what an identifier looks like because a shape can always be argued with. A space is what no identifier of any configuration contains, and a declared namespace is a fact the federation holds rather than an inference about the text; between them they separate three populations that a project acts on differently — text that was never a reference, an estate identifier spelled wrongly, and a name belonging to a repository nobody configured. Collapsing any two of those sends an author to work that will not fix anything.
@@ -465,6 +467,12 @@ L ranks trailing content beneath every named relaxation. An item that opens with
 
 M keeps the space test from turning on which space was typed, and generalises past spaces for the same reason. A character that reads as a space to an author but not to the test would take an item that is plainly not an identifier and report it as a name from a repository nobody configured — the precise misattribution B exists to prevent, reintroduced by an invisible character. The same holds for a character reserved out of every identifier pattern: no configuration can produce one, so an item carrying it was not written as an identifier, and saying so needs no judgement about what it resembles. Stating the test as a property of the character rather than listing the characters means a newly reserved one is covered when it is reserved rather than when someone remembers to add it here.
 
+O names a habit rather than a defect. Opening a comment with an identifier and then explaining, in prose, why the code below answers to it is a natural way to write, and an author doing it means the relationship — they have simply not spelled it in the form the tool reads. Reporting it as a malformed reference would be wrong twice: nothing about it is malformed, and the useful message is not that something is broken but that saying it with a keyword would make it count.
+
+What makes the report safe is that it produces nothing. An informal citation is evidence of intent, not a declaration, and inferring a relationship from intent is the failure every other assertion here exists to prevent — an edge nobody wrote, indistinguishable downstream from one they did. So the tool says what it sees and leaves the declaring to the author.
+
+The exclusions are what keep it from firing on text that means something else. A comment a keyword introduces is already a declaration and is judged as one. A comment continuing a list is part of that list, and its identifier is an item rather than a citation. Everything else that opens a comment with an identifier is an author pointing at a requirement without linking to it, which is worth one line of report and no more.
+
 N pairs with G, one for the referent and one for the keyword. Both say the same thing: a spelling the configuration admits produces its relationship, and that it is not the canonical spelling is a fact about the file worth reporting rather than a reason to withhold an edge. Which spellings a configuration admits is settled elsewhere; what N adds is that admitting more than one form does not mean writing more than one.
 
 This requirement declares `Satisfies:` against the REQ-p00019 anti-pattern template and concretizes its classes for reference reading. Misattribution and double-counting are the classes this subsystem exists to answer, and assertions A, B and C pin them: one class per item and never a later one, no describing an item holding a space as though it named a repository, and attribution decided by what a repository declares rather than by what the text resembles. Silent omission and unreported non-performance are pinned by the obligation to report every recognised reference that produces no relationship (REQ-d00269-F, REQ-d00269-G), and phantom success by the rule that reading within an item informs a report and never contributes an edge (assertion F, REQ-d00269-J). Undisclosed substitution is pinned twice over: a list of which some items bound and others did not is a partial result, disclosed by reporting each item that failed, and a defect the tool could not determine is carried as the generic code rather than passed off as no defect at all (REQ-d00271-C).
@@ -475,12 +483,16 @@ One class has no purchase here and is left visibly uncovered rather than answere
 
 ### Changelog
 
+- 2026-08-16 | d01290ac | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-16 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: an identifier opening a comment with no keyword is reported as an undeclared relationship and produces none (O)
+- 2026-08-16 | fadb924e | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: sync changelog hash
+- 2026-08-16 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: Active — the five classes now reach `elspais checks` as `references.*`, each with its own severity, and G/N's keyword/identifier-form reporting is `references.keyword_form`
 - 2026-08-15 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: generalise the space test to any character no configuration can admit (M); one canonical spelling per identifier, reported not withheld (N)
 - 2026-08-15 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: a keyword its file may not use is read and refused rather than passed over (J); every instance of a repeated target is reported and none resolves (K); trailing content ranks beneath every named relaxation (L); any space character reaches the space test (M)
 - 2026-08-15 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: record how each REQ-p00019 class is answered for this subsystem — concretized, bound through the instance, or left visibly uncovered with its reason
 - 2026-08-15 | - | - | Michael Lewis (<michael@anspar.org>) | Initial authoring: the rule assigning reference failure classes — the space and namespace tests, minimal relaxation, and reading within an item without binding from it
 
-*End* *Reference Fault Classification* | **Hash**: fadb924e
+*End* *Reference Fault Classification* | **Hash**: d01290ac
 
 ## REQ-d00254: Test Evidence: Attribution, Ingestion, and Coverage Crediting
 

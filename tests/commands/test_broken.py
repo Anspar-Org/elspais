@@ -8,7 +8,7 @@ from elspais.commands.broken import collect_broken, render_broken_markdown, rend
 from elspais.config import config_defaults
 from elspais.graph.builder import TraceGraph
 from elspais.graph.federated import FederatedGraph
-from elspais.graph.reference_faults import ReferenceFault
+from elspais.graph.reference_faults import FaultClass, ReferenceFault
 
 
 def _test_config() -> dict:
@@ -25,11 +25,17 @@ def _make_ref(
     foreign: bool = False,
     diagnostic: str = "",
 ) -> ReferenceFault:
-    """Create a ReferenceFault for testing."""
+    """Create a ReferenceFault for testing.
+
+    ``foreign=True`` sets ``fault_class=UNKNOWN_NAMESPACE`` -- the class the
+    listing's "[foreign]" display flag now reads (REQ-d00269-F) -- alongside
+    ``presumed_foreign``, which the clone-assistance path still carries.
+    """
     return ReferenceFault(
         source_id=source,
         target_id=target,
         edge_kind=kind,
+        fault_class=FaultClass.UNKNOWN_NAMESPACE if foreign else FaultClass.UNKNOWN_REQUIREMENT,
         presumed_foreign=foreign,
         diagnostic=diagnostic,
     )
@@ -81,31 +87,22 @@ class TestCollectBroken:
         result = collect_broken(graph, config=None)
         assert len(result) == 1
 
-    def test_keeps_foreign_when_allow_unresolved_false(self) -> None:
-        """When allow_unresolved_cross_repo is false, foreign refs are kept."""
-        ref = _make_ref(foreign=True)
-        graph = _make_graph(ref)
-        config: dict = {"validation": {"allow_unresolved_cross_repo": False}}
-        result = collect_broken(graph, config)
-        assert len(result) == 1
+    def test_collection_ignores_config(self) -> None:
+        """collect_broken always shows the whole population.
 
-    def test_suppresses_foreign_when_allow_unresolved_true(self) -> None:
-        """When allow_unresolved_cross_repo is true, foreign refs are filtered out."""
+        Silencing a class of reference is now a review-time severity choice
+        (``[rules.references] unknown_namespace = "ok"``, say), not a
+        listing-time filter -- ``allow_unresolved_cross_repo`` is retired,
+        so a foreign-looking reference is kept regardless of what *config*
+        says.
+        """
         foreign_ref = _make_ref(source="REQ-p00001", target="EXT-x00001", foreign=True)
         local_ref = _make_ref(source="REQ-p00002", target="REQ-p00099", foreign=False)
         graph = _make_graph(foreign_ref, local_ref)
-        config: dict = {"validation": {"allow_unresolved_cross_repo": True}}
-        result = collect_broken(graph, config)
-        assert len(result) == 1
-        assert result[0].source_id == "REQ-p00002"
-
-    def test_keeps_non_foreign_when_allow_unresolved_true(self) -> None:
-        """Non-foreign refs are kept even when allow_unresolved is true."""
-        ref = _make_ref(foreign=False)
-        graph = _make_graph(ref)
-        config: dict = {"validation": {"allow_unresolved_cross_repo": True}}
-        result = collect_broken(graph, config)
-        assert len(result) == 1
+        result = collect_broken(
+            graph, config={"rules": {"references": {"unknown_namespace": "ok"}}}
+        )
+        assert len(result) == 2
 
 
 # ---- Text rendering tests ----
@@ -240,24 +237,30 @@ class TestRenderBrokenMarkdown:
 
 
 class TestListingDistinctFromBrokenCheck:
-    """The listing and the ``spec.broken_references`` check answer different
+    """The listing and ``references.unknown_requirement`` answer different
     questions, so the listing must not borrow the check's vocabulary."""
 
     def test_listing_does_not_call_unclaimed_targets_broken(self) -> None:
         # Verifies: REQ-d00269-F
         """A target no configured repository claims is listed by the command
-        while ``spec.broken_references`` reports none. The listing must not
-        describe what it shows as broken references, or the two surfaces give
+        while ``references.unknown_requirement`` reports none -- it belongs to
+        ``references.unknown_namespace`` instead. The listing must not describe
+        what it shows as broken references, or the two surfaces give
         contradictory answers to the same question."""
         from elspais.commands.broken import render_section
-        from elspais.commands.health import check_broken_references
+        from elspais.commands.health import FaultClass, check_reference_class
 
         config = _test_config()
         graph = _make_graph(_make_ref(target="CAL-d99999", foreign=True))
 
-        check = check_broken_references(graph, config)
-        assert check.passed, "an unclaimed target belongs to spec.unclaimed_references"
-        assert "broken reference" in check.message.lower()
+        check = check_reference_class(
+            graph,
+            config,
+            FaultClass.UNKNOWN_REQUIREMENT,
+            "references.unknown_requirement",
+            "claimed, but no such requirement exists",
+        )
+        assert check.passed, "an unclaimed target belongs to references.unknown_namespace"
 
         output, exit_code = render_section(graph, config, _make_args(format="text"))
         assert exit_code == 1

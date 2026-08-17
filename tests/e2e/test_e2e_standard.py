@@ -129,7 +129,7 @@ class TestHealthCheckNames:
         check_names = {c["name"] for c in data.get("checks", [])}
         for name in (
             "spec.structural_orphans",
-            "spec.broken_references",
+            "references.unknown_requirement",
             "tests.unlinked",
             "code.unlinked",
         ):
@@ -140,7 +140,13 @@ class TestHealthCheckNames:
         assert result.returncode == 0
         data = json.loads(result.stdout)
         check_names = {c["name"] for c in data.get("checks", [])}
-        for name in ("spec.orphans", "tests.references_resolve", "code.references_resolve"):
+        for name in (
+            "spec.orphans",
+            "tests.references_resolve",
+            "code.references_resolve",
+            "spec.broken_references",
+            "spec.unclaimed_references",
+        ):
             assert name not in check_names, f"Old check name '{name}' should not be present"
 
 

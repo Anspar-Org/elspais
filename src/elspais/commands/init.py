@@ -328,8 +328,26 @@ _FIELD_COMMENTS: dict[str, str] = {
     "rules.references.aspirational": (
         '"ok" | "info" | "warning" | "error" — refs to aspirational REQs'
     ),
-    "rules.references.unclaimed": (
+    "rules.references.malformed": (
+        '"ok" | "info" | "warning" | "error" — refs that do not read as a reference'
+    ),
+    "rules.references.unknown_namespace": (
         '"ok" | "info" | "warning" | "error" — refs to targets no repo claims'
+    ),
+    "rules.references.unknown_requirement": (
+        '"ok" | "info" | "warning" | "error" — claimed refs to a requirement that does not exist'
+    ),
+    "rules.references.unknown_assertion": (
+        '"ok" | "info" | "warning" | "error" — refs naming a label the requirement lacks'
+    ),
+    "rules.references.forbidden": (
+        '"ok" | "info" | "warning" | "error" — refs using a keyword the file kind refuses'
+    ),
+    "rules.references.keyword_form": (
+        '"ok" | "info" | "warning" | "error" — a keyword written in a non-canonical form'
+    ),
+    "rules.references.undeclared": (
+        '"ok" | "info" | "warning" | "error" — a comment citing a requirement without a keyword'
     ),
     # --- [changelog] ---
     "changelog": "Changelog enforcement for requirement changes",
@@ -352,7 +370,6 @@ _FIELD_COMMENTS: dict[str, str] = {
     "validation.hash_mode": '"normalized-text" — how requirement content is hashed',
     "validation.hash_algorithm": '"sha256" (default) — hash algorithm',
     "validation.hash_length": "Hash truncation length in chars (default: 8)",
-    "validation.allow_unresolved_cross_repo": "Suppress errors for unresolved cross-repo refs",
     "validation.strict_hierarchy": "Strict hierarchy validation mode",
     # --- [terms] ---
     "terms": "Defined terms: glossary, index, and health checks",

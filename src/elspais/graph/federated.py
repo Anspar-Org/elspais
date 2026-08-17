@@ -20,7 +20,12 @@ from elspais.graph.GraphNode import (
     NodeKind,
 )
 from elspais.graph.mutations import MutationEntry
-from elspais.graph.reference_faults import FaultClass, ReferenceFault
+from elspais.graph.reference_faults import (
+    FaultClass,
+    ReferenceFault,
+    StyleFinding,
+    UndeclaredRelationship,
+)
 from elspais.graph.relations import EdgeKind
 
 if TYPE_CHECKING:
@@ -776,6 +781,28 @@ class FederatedGraph:
         # Strategy: aggregate
         """
         return any(graph.has_broken_references() for _name, graph in self._live_graphs())
+
+    # Implements: REQ-d00272-G
+    def style_findings(self) -> list[StyleFinding]:
+        """Get all keyword-form style findings across all repos.
+
+        # Strategy: aggregate
+        """
+        result: list[StyleFinding] = []
+        for _name, graph in self._live_graphs():
+            result.extend(graph.style_findings())
+        return result
+
+    # Implements: REQ-d00272-O
+    def undeclared_relationships(self) -> list[UndeclaredRelationship]:
+        """Get every undeclared relationship across all repos.
+
+        # Strategy: aggregate
+        """
+        result: list[UndeclaredRelationship] = []
+        for _name, graph in self._live_graphs():
+            result.extend(graph.undeclared_relationships())
+        return result
 
     def duplicate_req_ids(self) -> dict[str, list[str]]:
         """Aggregate cross-file duplicate REQ IDs across all repos.
@@ -1714,6 +1741,7 @@ class FederatedGraph:
                         source_id=br.source_id,
                         target_id=br.target_id,
                         edge_kind=br.edge_kind,
+                        fault_class=FaultClass.UNKNOWN_NAMESPACE,
                         presumed_foreign=True,
                         diagnostic=(
                             f"{br.source_id} satisfies {br.target_id}; "
@@ -1974,6 +2002,9 @@ class FederatedGraph:
                 source_id=source_id,
                 target_id=target_id,
                 edge_kind=EdgeKind.INTEGRATES.value,
+                fault_class=(
+                    FaultClass.UNKNOWN_REQUIREMENT if claimed else FaultClass.UNKNOWN_NAMESPACE
+                ),
                 presumed_foreign=not claimed,
                 diagnostic=(
                     f"{source_id} integrates {target_id}: a configured associate "

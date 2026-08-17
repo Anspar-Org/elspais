@@ -151,6 +151,10 @@ class ReferenceTransformer:
         # a fact about the file, never a reason to withhold the edge it
         # introduces (REQ-d00272-G).
         self.style_findings: list[tuple[int, str]] = []
+        # (line, text) for a comment opening with an identifier that no
+        # keyword introduces -- a relationship the author appears to intend
+        # and has not declared (REQ-d00272-O).
+        self.undeclared: list[tuple[int, str]] = []
 
     def transform(self, tree: Tree) -> list[ParsedContent]:
         """Transform parse tree into ParsedContent list."""
@@ -352,26 +356,17 @@ class ReferenceTransformer:
                 # block_header's own collection loop and was not folded
                 # into a preceding opener's continuation -- there is no
                 # keyword above it at all, so it names an identifier
-                # without declaring anything.  Silently dropping it is
-                # exactly the standing defect this work removes: it must
-                # be reported (REQ-d00269-H, REQ-p00019-A) and still fall
-                # through to the remainder gatherer so the line round-trips.
+                # without declaring anything.  Nothing about it is
+                # malformed -- it is a relationship its author appears to
+                # intend and has not spelled, reported as that and
+                # producing no relationship (REQ-d00272-O).  The line
+                # still falls through to the remainder gatherer so it
+                # round-trips.
                 token = child.children[0]
                 body = str(token)  # type: ignore[attr-defined]
                 line_num = token.line  # type: ignore[attr-defined]
-                # Implements: REQ-d00269-H, REQ-p00019-A
-                self.faults.append(
-                    (
-                        RefItem(
-                            raw=body,
-                            index=-1,
-                            fault_class=FaultClass.MALFORMED,
-                            codes=(FaultCode.ORPHAN_REFERENCE,),
-                        ),
-                        line_num,
-                        "",
-                    )
-                )
+                # Implements: REQ-d00272-O, REQ-d00269-H, REQ-p00019-A
+                self.undeclared.append((line_num, body.strip()))
                 other_lines.append((line_num, body))
 
             i += 1
@@ -576,6 +571,18 @@ class ReferenceTransformer:
         # Implements: REQ-d00272-G
         for code in self._keyword_form_defects(text):
             self.style_findings.append((line_num, code))
+
+        # Implements: REQ-d00269-H
+        # An item with no raw text -- a dangling separator or an empty slot
+        # between two named items -- never enters ``refs`` below
+        # (``refs_and_verdicts`` filters on ``if i.raw``), so its verdict
+        # would otherwise sit in ``verdicts`` under the collision-prone key
+        # "" and never be read: the builder only walks ``refs``. Reported
+        # directly here, one fault per empty item, so a dangling separator
+        # surfaces even when every sibling item resolved cleanly.
+        for it in items:
+            if not it.raw and it.fault_class is not None:
+                self.faults.append((it, line_num, keyword))
 
         # A faulted item stays in the ref list: the builder records a fault
         # for a ref that does not resolve, so dropping it here would make

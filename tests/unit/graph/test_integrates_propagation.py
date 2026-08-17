@@ -77,8 +77,9 @@ def test_REQ_d00252_D_lcov_only_credit_propagates_as_passing(tmp_path):
     app_req = fed._repos["app"].graph._index["APP-d00001"]
     lib_req = fed._repos["library"].graph._index["LIB-d00007"]
 
-    # Library REQ has assertion A. Give it ONLY lcov_tested credit -- no
-    # Verifies:-based result, so its raw `verified` dimension stays at zero.
+    # Library REQ has assertion A. Give it ONLY lcov_tested credit -- with
+    # no result from a `Verifies` test, its raw `verified` dimension stays
+    # at zero.
     lib_req.set_metric(
         "rollup_metrics",
         RollupMetrics(

@@ -183,12 +183,12 @@ Fix with: `elspais fix REQ-d00001`
 
 ## Link Rules
 
-### `spec.broken_references`
+### `references.unknown_requirement`
 
-Implements references must point to existing requirements. This rule validates that referenced requirement IDs exist.
+Implements references must point to existing requirements. This rule validates that a claimed target -- one matching a configured repository's identifier grammar -- names a requirement that repository holds.
 
 ```text
-❌ ERROR [spec.broken_references] REQ-d00001
+❌ ERROR [references.unknown_requirement] REQ-d00001
    Implements reference not found: p99999
 ```text
 
@@ -228,7 +228,7 @@ Violations are reported with severity levels:
    Circular dependency detected: d00001 -> d00002 -> d00001
    File: spec/dev-impl.md:42
 
-❌ ERROR [spec.broken_references] REQ-d00005
+❌ ERROR [references.unknown_requirement] REQ-d00005
    Implements reference not found: p99999
    File: spec/dev-impl.md:120
 

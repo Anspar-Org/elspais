@@ -314,7 +314,9 @@ class FileDispatcher:
             reader=self._reader,
             quoted_lines=self._quoted_line_numbers(content, file_path),
         )
-        return transformer.transform(tree)
+        results = transformer.transform(tree)
+        results.extend(_fault_and_style_content(transformer))
+        return results
 
     def dispatch_test(
         self,
@@ -437,7 +439,64 @@ class FileDispatcher:
             reader=self._reader,
             quoted_lines=quoted_lines,
         )
-        return transformer.transform(tree)
+        results = transformer.transform(tree)
+        results.extend(_fault_and_style_content(transformer))
+        return results
+
+
+# Implements: REQ-d00269-H, REQ-d00272-G, REQ-d00272-O
+def _fault_and_style_content(transformer) -> list:
+    """Turn a transformer's faults, style findings and undeclared
+    relationships into synthetic ``ParsedContent`` entries.
+
+    A ``reference_fault``/``style_finding``/``undeclared_relationship``
+    entry creates no node and wires no edge -- the physical lines already
+    round-trip via the remainder gatherer -- it exists only to carry the
+    finding through the same ``add_parsed_content`` dispatch every other
+    piece of content travels, since nothing else read
+    ``ReferenceTransformer.faults``/``style_findings``/``undeclared``
+    before this (Task 9).
+    """
+    from elspais.graph.parsers import ParsedContent
+
+    entries: list[ParsedContent] = []
+    for item, line_num, edge_kind in transformer.faults:
+        entries.append(
+            ParsedContent(
+                content_type="reference_fault",
+                start_line=line_num,
+                end_line=line_num,
+                raw_text=item.raw,
+                parsed_data={
+                    "raw": item.raw,
+                    "edge_kind": edge_kind,
+                    "fault_class": item.fault_class,
+                    "codes": item.codes,
+                    "source_id": transformer.source_id,
+                },
+            )
+        )
+    for line_num, code in transformer.style_findings:
+        entries.append(
+            ParsedContent(
+                content_type="style_finding",
+                start_line=line_num,
+                end_line=line_num,
+                raw_text="",
+                parsed_data={"code": code, "source_id": transformer.source_id},
+            )
+        )
+    for line_num, text in getattr(transformer, "undeclared", ()):
+        entries.append(
+            ParsedContent(
+                content_type="undeclared_relationship",
+                start_line=line_num,
+                end_line=line_num,
+                raw_text=text,
+                parsed_data={"text": text, "source_id": transformer.source_id},
+            )
+        )
+    return entries
 
 
 __all__ = ["GrammarFactory", "FileDispatcher"]

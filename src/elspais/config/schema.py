@@ -425,19 +425,25 @@ class CoverageConfig(_StrictModel):
 
 
 class ReferenceSeverityConfig(_StrictModel):
-    """Severity levels for the reference checks.
+    """Severity for each class of reference fault, and for reference status.
 
-    ``unclaimed`` governs references whose target no configured repository
-    claims. Noticing one is not the project's decision, but how loudly is:
-    a repository may legitimately reference a requirement a sibling has not
-    authored yet, and the same finding is advisory to one project and a
-    build failure to another.
+    Severity is chosen per class because the classes differ in what would
+    resolve them: configuring a missing repository answers one and answers
+    nothing about a line that never read as an identifier (REQ-d00269-F).
     """
 
     retired: str = "warning"
     provisional: str = "info"
     aspirational: str = "info"
-    unclaimed: str = "info"
+    malformed: str = "warning"
+    unknown_namespace: str = "info"
+    unknown_requirement: str = "error"
+    unknown_assertion: str = "error"
+    forbidden: str = "error"
+    # Implements: REQ-d00272-G
+    keyword_form: str = "warning"
+    # Implements: REQ-d00272-O
+    undeclared: str = "warning"
 
 
 class RulesConfig(_StrictModel):
@@ -457,7 +463,6 @@ class ValidationConfig(_StrictModel):
     hash_mode: str = "normalized-text"
     hash_algorithm: str = "sha256"
     hash_length: int = 8
-    allow_unresolved_cross_repo: bool = False
     strict_hierarchy: bool = False
 
 

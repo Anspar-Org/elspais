@@ -228,7 +228,7 @@ def test_journey_validates_across_separator_combinations(
     assert rollup.uat_coverage.direct_labels == set(expected_labels)
 
 
-# Verifies: REQ-d00082-E, REQ-p00014-R, REQ-d00272-A, REQ-d00252-G
+# Verifies: REQ-d00082-E, REQ-p00014-R, REQ-d00272-A, REQ-d00252-G, REQ-d00252-K
 def test_journey_dash_style_ref_under_slash_config_is_hard_broken(tmp_path):
     """A journey `Validates:` ref that still uses "-" when the project is
     configured with a "/" separator must remain a hard broken reference
@@ -239,13 +239,18 @@ def test_journey_dash_style_ref_under_slash_config_is_hard_broken(tmp_path):
     parsing under this repository's own grammar is a grammar-level verdict
     -- MALFORMED, carrying SYNTAX_ERROR -- rather than a later-stage
     UNKNOWN_REQUIREMENT (REQ-d00272-A forbids reporting a later stage than
-    the one reading actually reached). The class alone doesn't say *why* it
-    is malformed, and REQ-d00252-G obliges a diagnostic naming the likely
-    cause (a same-repo item, so probably a separator/multi_separator
-    mismatch rather than an unrelated typo) -- that obligation holds
-    whether or not a grammar-level verdict happened to exist for the
-    surface that read the item, so it must survive threading the verdict
-    through, not just the no-verdict fallback path."""
+    the one reading actually reached).
+
+    Naming *why* it is malformed is owed once, not twice: this item also
+    carries ``E_IDENTIFIER_WITH_TRAILING_TEXT`` (the dash-style suffix reads
+    as trailing text on the correctly-spelled component), a code more
+    specific than ``SYNTAX_ERROR`` -- so the separator-config prose is
+    withheld here (REQ-d00252-K: prose accompanying a code SHALL NOT name a
+    cause the code does not) and the code is what names the cause. Where no
+    code says more than "this failed to parse", the prose still does
+    (REQ-d00252-G) -- this test asserts the code path; the no-more-specific
+    path is covered where a same-repo item is malformed for no reason a
+    code names."""
     from elspais.graph.factory import build_graph
 
     sep, multi = "/", "+"
@@ -277,8 +282,12 @@ def test_journey_dash_style_ref_under_slash_config_is_hard_broken(tmp_path):
     assert br.fault_class is FaultClass.MALFORMED
     assert FaultCode.SYNTAX_ERROR in br.codes
     assert (
-        "[id-patterns.assertions] separator/multi_separator" in br.diagnostic
-    ), f"Expected a separator-config diagnostic (REQ-d00252-G), got {br.diagnostic!r}"
+        FaultCode.IDENTIFIER_WITH_TRAILING_TEXT in br.codes
+    ), f"Expected the specific code that now names the cause, got {br.codes!r}"
+    assert br.diagnostic == "", (
+        "A code more specific than SYNTAX_ERROR already names the cause; the "
+        f"separator-config prose would be a second, redundant naming: {br.diagnostic!r}"
+    )
 
 
 # --------------------------------------------------------------------------- #

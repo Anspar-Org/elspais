@@ -112,7 +112,7 @@ def _diagnostics(result):
     result entry.
     """
     _results, tx = result
-    return tx.faults
+    return [*tx.faults, *tx.undeclared]
 
 
 def _parse_test(content, resolver, code_parser, **kwargs):
@@ -434,27 +434,61 @@ def test_a_continuation_without_a_separator_is_an_orphan(parse_code):
     refs = _all_refs(result)
     assert "REQ-d00001" in refs
     assert "REQ-d00002" not in refs
-    assert _diagnostics(result), "line 2 must be reported as an orphan, not merely dropped"
+    assert _diagnostics(result), "line 2 must be reported, not merely dropped"
 
 
-# Verifies: REQ-d00269-H, REQ-p00019-A
-def test_an_orphan_reference_line_is_never_silent(parse_code):
+# Verifies: REQ-d00272-O, REQ-p00019-A
+def test_a_bare_identifier_comment_is_never_silent(parse_code):
     """The standing defect: this produced no node, no remainder, no diagnostic.
 
     ``REQ-d00272-H`` is a keyword introducing no content -- a different
     defect from this one, which is a bare identifier line with no keyword
-    above it at all -- so the fault this line raises is cited to
-    REQ-d00269-H (the continuation rule that defines the orphan category)
-    and REQ-p00019-A (the never-silent obligation), not to REQ-d00272-H.
+    above it at all.  Nothing about this line is malformed, so it is
+    reported as a relationship its author appears to intend and has not
+    declared (REQ-d00272-O), never as a reference fault.
     """
     results, tx = parse_code("def f():\n    #   REQ-d00001\n    return 1\n")
-    assert _diagnostics((results, tx)), "an orphan reference must be reported"
-    # Round-trip fidelity is absolute: the orphan line is reported AND still
+    assert tx.undeclared, "a bare identifier comment must be reported"
+    assert not tx.faults, "it is not a reference fault -- nothing about it is malformed"
+    # Round-trip fidelity is absolute: the line is reported AND still
     # renders back verbatim through the remainder gatherer, never dropped.
     remainder = [r for r in results if r.content_type == "remainder"]
     assert any(
         "#   REQ-d00001" in r.raw_text for r in remainder
-    ), f"the orphan line must survive verbatim in a remainder; got {remainder}"
+    ), f"the line must survive verbatim in a remainder; got {remainder}"
+
+
+# Verifies: REQ-d00272-O
+def test_an_informal_citation_produces_no_relationship(parse_code):
+    """Prose citing a requirement is evidence of intent, and inferring an
+    edge from intent is the failure this vocabulary exists to prevent."""
+    results, tx = parse_code(
+        "# REQ-d00001: the code below answers to this, informally.\n" "def f():\n    return 1\n"
+    )
+    assert not _all_refs((results, tx)), "an informal citation must bind nothing"
+    assert len(tx.undeclared) == 1
+    line_num, text = tx.undeclared[0]
+    assert line_num == 1
+    assert "REQ-d00001" in text
+
+
+# Verifies: REQ-d00272-O
+def test_a_comment_a_keyword_introduces_is_not_an_informal_citation(parse_code):
+    """A keyword makes the comment a declaration, not a citation."""
+    results, tx = parse_code("# Implements: REQ-d00001\ndef f():\n    return 1\n")
+    assert "REQ-d00001" in _all_refs((results, tx))
+    assert not tx.undeclared
+
+
+# Verifies: REQ-d00272-O
+def test_a_comment_continuing_a_list_is_not_an_informal_citation(parse_code):
+    """A continuation line is an item of its list, not a citation of its own."""
+    results, tx = parse_code(
+        "# Implements: REQ-d00001,\n" "#             REQ-d00002\n" "def f():\n    return 1\n"
+    )
+    refs = _all_refs((results, tx))
+    assert "REQ-d00001" in refs and "REQ-d00002" in refs
+    assert not tx.undeclared
 
 
 # Verifies: REQ-d00269-H

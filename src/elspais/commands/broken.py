@@ -16,35 +16,40 @@ def collect_broken(
     graph: FederatedGraph,
     config: dict[str, Any] | None,
 ) -> list[ReferenceFault]:
-    """Collect broken references, respecting allow_unresolved_cross_repo."""
+    """Collect every unresolved reference the graph recorded.
 
-    broken = graph.broken_references()
-
-    allow_unresolved = False
-    if config is not None:
-        from elspais.config import validate_config
-
-        try:
-            allow_unresolved = validate_config(config).validation.allow_unresolved_cross_repo
-        except Exception:
-            pass
-
-    if allow_unresolved:
-        broken = [br for br in broken if not br.presumed_foreign]
-
-    return broken
+    Silencing by class now happens at review time, through
+    ``[rules.references]`` severity (``unknown_namespace = "ok"`` for
+    expected cross-repository references) -- this listing always shows the
+    whole population regardless of *config*, so a project's severity
+    choices never hide something from it.
+    """
+    return list(graph.broken_references())
 
 
 # =============================================================================
 # Rendering
 # =============================================================================
 
-# This command lists every reference that resolves to nothing. The health
-# checks partition the same set -- `spec.broken_references` for a target
-# some configured repository claims, `spec.unclaimed_references` for one no
-# repository claims -- so the listing uses the union's name and leaves
-# "broken" to mean what the check means by it.
+# This command lists every reference that resolves to nothing. The five
+# reference checks (`references.malformed`, `references.unknown_namespace`,
+# `references.unknown_requirement`, `references.unknown_assertion`,
+# `references.forbidden`) partition the same set by fault class, so the
+# listing uses the union's name and leaves "broken" to mean what a check
+# means by it.
 _LABEL = "UNRESOLVED REFERENCES"
+
+
+def _is_foreign(br: ReferenceFault) -> bool:
+    """A target no configured repository claims -- the display flag.
+
+    Derived from *fault_class* rather than read off ``presumed_foreign``:
+    the field is retained for the clone-assistance path, but what earns the
+    "[foreign]" tag here is the class a fault actually reached.
+    """
+    from elspais.graph.reference_faults import FaultClass
+
+    return br.fault_class is FaultClass.UNKNOWN_NAMESPACE
 
 
 def render_broken_text(refs: list[ReferenceFault]) -> str:
@@ -53,7 +58,7 @@ def render_broken_text(refs: list[ReferenceFault]) -> str:
         return f"\n{_LABEL}: none"
     lines = [f"\n{_LABEL} ({len(refs)}):"]
     for br in sorted(refs, key=lambda r: (r.source_id, r.target_id)):
-        foreign = " [foreign]" if br.presumed_foreign else ""
+        foreign = " [foreign]" if _is_foreign(br) else ""
         lines.append(f"  {br.source_id:20s} -> {br.target_id:20s} ({br.edge_kind}){foreign}")
         if br.diagnostic:
             lines.append(f"      {br.diagnostic}")
@@ -71,7 +76,7 @@ def render_broken_markdown(refs: list[ReferenceFault]) -> str:
         "|--------|--------|------|------------|",
     ]
     for br in sorted(refs, key=lambda r: (r.source_id, r.target_id)):
-        foreign = " [foreign]" if br.presumed_foreign else ""
+        foreign = " [foreign]" if _is_foreign(br) else ""
         lines.append(
             f"| {br.source_id} | {br.target_id} | {br.edge_kind}{foreign} | {br.diagnostic} |"
         )
@@ -103,7 +108,7 @@ def render_section(
                 "source": br.source_id,
                 "target": br.target_id,
                 "kind": br.edge_kind,
-                "foreign": br.presumed_foreign,
+                "foreign": _is_foreign(br),
                 "diagnostic": br.diagnostic,
             }
             for br in sorted(refs, key=lambda r: (r.source_id, r.target_id))
@@ -138,7 +143,7 @@ def compute_broken(
             "source": br.source_id,
             "target": br.target_id,
             "kind": br.edge_kind,
-            "foreign": br.presumed_foreign,
+            "foreign": _is_foreign(br),
             "diagnostic": br.diagnostic,
         }
         for br in sorted(refs, key=lambda r: (r.source_id, r.target_id))

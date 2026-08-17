@@ -14,11 +14,12 @@ from typing import TYPE_CHECKING
 
 from elspais.commands.health import (
     HealthFinding,
-    check_broken_references,
+    check_reference_class,
     run_spec_checks,
 )
 from elspais.config import _merge_configs, config_defaults
 from elspais.graph.federated import FederatedGraph, RepoEntry
+from elspais.graph.reference_faults import FaultClass
 from tests.core.graph_test_helpers import build_graph, make_requirement
 
 if TYPE_CHECKING:
@@ -348,11 +349,24 @@ class TestPerRepoFindingsAttribution:
             )
 
 
-class TestBrokenReferenceSeverity:
-    """Tests for broken reference severity in federation.
+def _check_unknown_requirement(graph, config=None):
+    return check_reference_class(
+        graph,
+        config,
+        FaultClass.UNKNOWN_REQUIREMENT,
+        "references.unknown_requirement",
+        "claimed, but no such requirement exists",
+    )
 
-    Validates REQ-d00204-E: Broken refs within-repo are errors,
-    cross-repo with error-state target are warnings.
+
+class TestBrokenReferenceSeverity:
+    """Tests for reference-fault severity in federation.
+
+    Validates REQ-d00204-E: a claimed reference to a requirement that does
+    not exist is an error. The severity is fixed per class by configuration
+    (REQ-d00269-F) rather than varying by whether the target's repo happens
+    to be in error state -- a class answers "how far did reading get",
+    which the target repo's live/error status does not change.
     """
 
     def test_REQ_d00204_E_broken_refs_within_repo_is_error(self) -> None:
@@ -378,25 +392,19 @@ class TestBrokenReferenceSeverity:
 
         fed = _build_two_repo_federation(alpha_graph, alpha_config, beta_graph, beta_config)
 
-        check = check_broken_references(fed)
+        check = _check_unknown_requirement(fed, alpha_config)
 
-        # Within-repo broken reference should be an error, not just a warning
         assert not check.passed, "Within-repo broken reference should fail the check"
         assert check.severity == "error", (
-            f"Within-repo broken reference should be severity='error', got '{check.severity}'. "
-            "The new behavior distinguishes within-repo (error) from cross-repo (warning)."
+            f"references.unknown_requirement should be severity='error' by default, "
+            f"got '{check.severity}'."
         )
 
-    def test_REQ_d00204_E_broken_refs_cross_repo_error_state_is_warning(self) -> None:
-        """Cross-repo reference to error-state repo should be severity=warning,
-        distinct from within-repo broken refs which should be errors.
-
-        The new check_broken_references must distinguish the two cases by
-        inspecting the federation's error-state repos.
+    def test_REQ_d00204_E_broken_refs_to_error_state_repo_still_reported(self) -> None:
+        """A reference that would target a repo now in error state is still
+        reported, at the same fixed severity as any other claimed-but-missing
+        reference -- an error-state repo is not a reason to go quiet.
         """
-        # Alpha has TWO broken refs:
-        # 1. REQ-p99000 - would be in beta (error-state) -> warning
-        # 2. REQ-p99999 - doesn't exist anywhere -> error
         alpha_graph = build_graph(
             make_requirement(
                 "REQ-d00090",
@@ -432,23 +440,11 @@ class TestBrokenReferenceSeverity:
         )
         fed = FederatedGraph([alpha_entry, beta_entry])
 
-        check = check_broken_references(fed)
+        check = _check_unknown_requirement(fed, alpha_config)
 
         assert not check.passed, "Broken references should fail the check"
-
-        # The check should produce findings with different severity annotations
-        # Within-repo broken refs -> error findings, cross-repo to error-state -> warning findings
-        assert len(check.findings) >= 2, f"Expected at least 2 findings, got {len(check.findings)}"
-
-        # Findings should be distinguishable by their severity or repo annotation
-        # The new implementation must annotate findings differently
-        finding_messages = [f.message for f in check.findings]
-        has_repo_attr = any(hasattr(f, "repo") and f.repo is not None for f in check.findings)
-        assert has_repo_attr, (
-            "Broken reference findings must have 'repo' attribution to distinguish "
-            "within-repo (error) from cross-repo-to-error-state (warning). "
-            f"Findings: {finding_messages}"
-        )
+        assert len(check.findings) == 2, f"Expected 2 findings, got {len(check.findings)}"
+        assert all(f.repo == "alpha" for f in check.findings)
 
 
 class TestRunSpecChecksIteratesRepos:

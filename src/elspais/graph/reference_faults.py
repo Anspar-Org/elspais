@@ -44,8 +44,6 @@ class FaultCode:
     # Implements: REQ-d00271-A, REQ-d00271-E
     SYNTAX_ERROR = "E_SYNTAX_ERROR"
     NOT_AN_IDENTIFIER = "E_NOT_AN_IDENTIFIER"
-    WRONG_CASE = "E_WRONG_CASE"
-    WRONG_PADDING = "E_WRONG_PADDING"
     WRONG_ASSERTION_SEPARATOR = "E_WRONG_ASSERTION_SEPARATOR"
     WRONG_MULTI_SEPARATOR = "E_WRONG_MULTI_SEPARATOR"
     LABEL_OUT_OF_SERIES = "E_LABEL_OUT_OF_SERIES"
@@ -54,7 +52,6 @@ class FaultCode:
     EMPTY_REFERENCE_LIST = "E_EMPTY_REFERENCE_LIST"
     IDENTIFIER_WITH_TRAILING_TEXT = "E_IDENTIFIER_WITH_TRAILING_TEXT"
     AMBIGUOUS = "E_AMBIGUOUS"
-    ORPHAN_REFERENCE = "E_ORPHAN_REFERENCE"
     # Implements: REQ-d00272-K
     DUPLICATE_ITEM = "E_DUPLICATE_ITEM"
     # A keyword's form is non-canonical -- the finding never costs the edge
@@ -81,6 +78,11 @@ class ReferenceFault:
             absent, and is a different question from this fault's class.
         diagnostic: Free text from the validation matrix, surfaced verbatim
             (REQ-p00014-F).
+        line: The line the reference was written on, when the fault is
+            anchored to a node (a FILE, say) that carries no ``parse_line``
+            of its own -- an empty reference list or a trailing separator
+            has nowhere else to put it, so it rides on the fault
+            (REQ-d00252-K).
     """
 
     source_id: str
@@ -92,6 +94,7 @@ class ReferenceFault:
     item_index: int = -1
     presumed_foreign: bool = False
     diagnostic: str = ""
+    line: int | None = None
 
     # Implements: REQ-d00271-C
     def __post_init__(self) -> None:
@@ -152,3 +155,56 @@ def refs_and_verdicts(
     refs = [i.resolved or i.raw for i in items if i.raw]
     verdicts = {i.raw: (i.fault_class, i.codes) for i in items if i.fault_class is not None}
     return refs, verdicts
+
+
+# Implements: REQ-d00272-G
+@dataclass(frozen=True)
+class StyleFinding:
+    """A keyword written in a non-canonical form.
+
+    Never withholds the edge its keyword introduces -- it is a fact about
+    how the file is written, not about whether the reference resolved, so it
+    is reported through its own rule rather than joining a bucket that
+    counts references that failed to bind.
+
+    Attributes:
+        source_id: ID of the node the finding is anchored to (a FILE node,
+            when no more specific node exists for the line).
+        code: One of the keyword-form codes (``E_KEYWORD_*``).
+        line: The line the keyword was written on.
+    """
+
+    source_id: str
+    code: str
+    line: int | None = None
+
+
+# Implements: REQ-d00272-O
+@dataclass(frozen=True)
+class UndeclaredRelationship:
+    """An identifier opening a comment that no *Traceability* keyword introduces.
+
+    Opening a comment with an identifier and then explaining, in prose, why
+    the code below answers to it is a natural way to write, and an author
+    doing it means the relationship -- they have simply not spelled it in
+    the form the tool reads.  Nothing about the line is malformed, so it is
+    not a reference fault; and reading intent as a declaration is the
+    failure this whole vocabulary exists to prevent, so it produces no
+    relationship.  It is reported on its own, at its own severity, with a
+    message that leads the author to write the keyword.
+
+    Two comments are excluded, and neither is a citation: one a keyword
+    introduces is already a declaration, and one continuing a list is an
+    item of that list.  Both are consumed before this is reached.
+
+    Attributes:
+        source_id: ID of the node the finding is anchored to -- the FILE
+            node, since no CODE/TEST node exists for a line that declared
+            nothing.
+        text: The comment as written, verbatim.
+        line: The line the comment was written on.
+    """
+
+    source_id: str
+    text: str
+    line: int | None = None

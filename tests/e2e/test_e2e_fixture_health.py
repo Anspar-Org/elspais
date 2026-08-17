@@ -62,8 +62,10 @@ class TestFixtureHealthE2E:
         assert result.returncode == 0
         data = json.loads(result.stdout)
         categories = {c["category"] for c in data["checks"]}
-        # --spec should only produce spec-category checks
-        assert categories <= {"spec"}, f"Expected only spec checks, got: {categories}"
+        # --spec should only produce spec-category checks -- "references" is
+        # part of that family (run_spec_checks emits both), not a code/tests
+        # category leaking in.
+        assert categories <= {"spec", "references"}, f"Expected only spec checks, got: {categories}"
 
     def test_REQ_p00002_health_formats(self, fixture_dir) -> None:
         """elspais health supports multiple output formats without crashing."""

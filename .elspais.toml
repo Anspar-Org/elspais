@@ -265,6 +265,10 @@ retired = "warning"
 provisional = "info"
 # "ok" | "info" | "warning" | "error" -- refs to Roadmap/Future/Idea
 aspirational = "info"
+# "ok" | "info" | "warning" | "error" -- a comment citing a requirement in
+# prose without a keyword. This estate writes those deliberately, so the
+# findings are listed without failing the run.
+undeclared = "info"
 
 # Changelog enforcement for requirement changes
 [changelog]
@@ -301,8 +305,6 @@ min_length = 3
 [validation]
 # "normalized-text" -- how requirement content is hashed
 hash_mode = "normalized-text"
-# Suppress errors for unresolved cross-repo refs
-allow_unresolved_cross_repo = false
 # Hash algorithm
 hash_algorithm = "sha256"
 # Hash truncation length in chars

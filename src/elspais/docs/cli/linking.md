@@ -236,3 +236,53 @@ configurable: `#`, `//` and `--` introduce a reference, and a keyword inside a
 block comment is not read.
 
 See `elspais docs config` for the full configuration reference.
+
+## What a reference report says
+
+Every reported reference carries a **class** — how far reading it got — and one
+or more **codes** naming what is wrong with it. The classes are fixed, because
+a project configures a severity per class. The codes are open: a diagnosis
+becomes more specific over releases without anything having to be
+reconfigured.
+
+Each row below is an input and what the tool reports for it. The identifier
+configuration is the default one shown above (`REQ-`, five numeric digits, `-`
+before an *Assertion* label, `+` between labels), and the repository holds
+`REQ-d00001` with assertions A and B.
+
+| Input | Class | Codes |
+|---|---|---|
+| `# Implements: REQ-d00001` | — | binds |
+| `# Implements: not a reference` | malformed | `E_NOT_AN_IDENTIFIER` |
+| `# Implements: REQ-d00001+A` | malformed | `E_WRONG_ASSERTION_SEPARATOR` |
+| `# Implements: REQ-d00001-A-B` | malformed | `E_WRONG_MULTI_SEPARATOR` |
+| `# Implements: REQ-d00001-1` | malformed | `E_LABEL_OUT_OF_SERIES` |
+| `# Implements: REQ-d00001-AB` | malformed | `E_IDENTIFIER_WITH_TRAILING_TEXT` |
+| `# Implements: REQ-d00001 (A, C)` | malformed | `E_NOT_AN_IDENTIFIER` on the first item; the second reads as a name no repository claims |
+| `# Implements: REQ-d00001,,REQ-d00002` | malformed | `E_EMPTY_ITEM` |
+| `# Implements: REQ-d00001,` (nothing follows) | malformed | `E_TRAILING_SEPARATOR` |
+| `# Implements:` | malformed | `E_EMPTY_REFERENCE_LIST` |
+| `# Implements: WIDGET-42` | unknown_namespace | — |
+| `# Implements: REQ-d00099` | unknown_requirement | — |
+| `# Implements: REQ-d00001-Z` | unknown_assertion | — |
+| `# Implements: REQ-d00001, REQ-d00001` | forbidden | `E_DUPLICATE_ITEM` (both instances) |
+| `# Refines: REQ-d00001` (in a code file) | forbidden | — |
+| `#Implements: REQ-d00001` | — | binds; `E_KEYWORD_NO_MARKER_SPACE` |
+| `# implements: REQ-d00001` | — | binds; `E_KEYWORD_WRONG_CASE` |
+| `# **Implements**: REQ-d00001` (off markdown) | — | binds; `E_KEYWORD_MARKDOWN_EMPHASIS_OFF_MARKDOWN` |
+| `#   REQ-d00001` (no keyword above) | — | reported as an undeclared relationship |
+
+`E_SYNTAX_ERROR` accompanies every reported fault. Carried *alone* it is the
+report that nothing more specific is known — the tool declining to guess, not
+the absence of a diagnosis. `E_AMBIGUOUS` accompanies it where two accounts of
+an item each explain it equally well: a code is issued only where the input
+determines the defect it names, so where the input admits two accounts neither
+is issued.
+
+The last three rows are not reference faults. A keyword written in a
+non-canonical form binds exactly as the canonical form would — the finding is a
+fact about the file, never a reason to withhold a relationship — and is
+reported under `references.keyword_form`. A comment opening with an identifier
+that no keyword introduces is a relationship its author appears to intend and
+has not spelled; it is reported under `references.undeclared` and produces
+nothing.

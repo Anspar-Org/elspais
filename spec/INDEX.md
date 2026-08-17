@@ -182,7 +182,7 @@
 | REQ-d00269 | Cross-Repository Coverage Credit                              | dev-graph-federation.md | af36a1b3 |
 | REQ-d00270 | Single-Authority Identifier Grammar Derivation                | dev-graph-config.md     | c8cb35b9 |
 | REQ-d00271 | Diagnostic Code Vocabulary                                    | dev-cli.md              | 6f4019d1 |
-| REQ-d00272 | Reference Fault Classification                                | dev-graph-core.md       | fadb924e |
+| REQ-d00272 | Reference Fault Classification                                | dev-graph-core.md       | d01290ac |
 | REQ-d00273 | Requirement Metadata Block                                    | dev-graph-file-nodes.md | 2d7e25e8 |
 
 ## User Journeys
