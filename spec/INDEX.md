@@ -17,7 +17,7 @@
 | REQ-p00005 | Multi-Repository Requirements                    | prd-features.md | de05471c |
 | REQ-p00006 | Interactive Traceability Viewer                  | prd-features.md | 185217a3 |
 | REQ-p00013 | Automated Testing                                | prd-core.md     | 4318202c |
-| REQ-p00014 | Satisfies Relationship                           | prd-features.md | 1bae4f82 |
+| REQ-p00014 | Satisfies Relationship                           | prd-features.md | ca4892c1 |
 | REQ-p00015 | Complete and Current Reporting                   | prd-core.md     | 9aa9a8aa |
 | REQ-p00016 | NOT APPLICABLE Status                            | prd-features.md | 2211802a |
 | REQ-p00017 | Reference Integrity Under Mutation               | prd-core.md     | 8ddf7122 |
@@ -123,7 +123,7 @@
 | REQ-d00209 | Schema-Driven Init Template Generation                        | dev-graph-config.md     | b25e4468 |
 | REQ-d00210 | Documentation Drift Detection                                 | dev-graph-config.md     | 59023724 |
 | REQ-d00211 | Config-Driven Viewer UI Values                                | dev-graph-config.md     | 254fcba9 |
-| REQ-d00212 | Config Schema v3 Models                                       | dev-graph-config.md     | a2917c2b |
+| REQ-d00212 | Config Schema v3 Models                                       | dev-graph-config.md     | 468cf0e9 |
 | REQ-d00213 | Version Check and Update Notification                         | dev-cli.md              | cedd398b |
 | REQ-d00214 | MCP Server Install/Uninstall CLI Commands                     | dev-mcp-tools.md        | 5f372b62 |
 | REQ-d00215 | Keyword Extraction Annotator                                  | dev-graph-core.md       | db477d99 |

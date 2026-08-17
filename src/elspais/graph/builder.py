@@ -36,7 +36,6 @@ from elspais.graph.mutations import MutationEntry, MutationLog
 from elspais.graph.parsers import ParsedContent
 from elspais.graph.reference_faults import (
     FaultClass,
-    FaultCode,
     IdentifierFormFinding,
     ReferenceFault,
     StyleFinding,
@@ -4263,21 +4262,15 @@ class GraphBuilder:
         # anchored to the same CODE node an admitted keyword would use.
         if forbidden:
             code_id = _ensure_code_node()
-            keyword = data.get("forbidden_keyword", "")
-            for raw_target in forbidden:
-                for expanded in self._expand_multi_assertion(raw_target):
-                    self._broken_references.append(
-                        ReferenceFault(
-                            source_id=code_id,
-                            target_id=expanded,
-                            edge_kind=keyword,
-                            fault_class=FaultClass.FORBIDDEN,
-                            diagnostic=(
-                                f"'{keyword.capitalize()}:' is not a valid keyword in "
-                                f"a code file; the declaration is refused."
-                            ),
-                        )
-                    )
+            self._broken_references.extend(
+                self._forbidden_keyword_faults(
+                    code_id,
+                    data.get("forbidden_keyword", ""),
+                    forbidden,
+                    verdicts,
+                    "code",
+                )
+            )
 
     def _add_test_ref(self, content: ParsedContent) -> None:
         """Add test reference nodes.
@@ -4339,21 +4332,15 @@ class GraphBuilder:
         # gives the actual test function its file-default Verifies.
         forbidden = data.get("forbidden") or []
         if forbidden:
-            keyword = data.get("forbidden_keyword", "")
-            for raw_target in forbidden:
-                for expanded in self._expand_multi_assertion(raw_target):
-                    self._broken_references.append(
-                        ReferenceFault(
-                            source_id=test_id,
-                            target_id=expanded,
-                            edge_kind=keyword,
-                            fault_class=FaultClass.FORBIDDEN,
-                            diagnostic=(
-                                f"'{keyword.capitalize()}:' is not a valid keyword in "
-                                f"a test file; the declaration is refused."
-                            ),
-                        )
-                    )
+            self._broken_references.extend(
+                self._forbidden_keyword_faults(
+                    test_id,
+                    data.get("forbidden_keyword", ""),
+                    forbidden,
+                    verdicts,
+                    "test",
+                )
+            )
 
     def _add_test_result(self, content: ParsedContent) -> None:
         """Add a test result node.
@@ -4548,35 +4535,12 @@ class GraphBuilder:
             return FaultClass.UNKNOWN_ASSERTION
         return FaultClass.UNKNOWN_REQUIREMENT
 
-    # Implements: REQ-d00252-G
-    def _own_namespace_diagnostic(self, target_id: str) -> str:
-        """A diagnostic naming the likely cause when *target_id* opens with
-        this repository's own namespace but never resolved.
-
-        Every surface that reads a reference list now threads a verdict
-        (code/test annotations, spec ``Implements:``/``Refines:``, and a
-        journey's ``Validates:`` -- ``Satisfies:``/``Integrates:`` do not
-        yet). REQ-d00252-G's cause-naming obligation still has to be met for
-        a grammar-level ``MALFORMED`` verdict on an own-namespace item --
-        that class alone does not say *why* (e.g. a separator/multi_separator
-        mismatch versus some other malformed spelling) -- so ``_fault_verdict``
-        calls this for a plain ``MALFORMED`` verdict too, not only on its
-        no-verdict fallback path.
-        """
-        if not self._resolver.declares_namespace(target_id):
-            return ""
-        own_namespace = self._resolver.config.namespace
-        return (
-            f"{target_id} matches this repo's namespace ({own_namespace}) but "
-            "does not parse under the configured ID pattern (check "
-            "[id-patterns.assertions] separator/multi_separator)."
-        )
-
+    # Implements: REQ-d00252-K
     def _fault_verdict(
         self, target_id: str, verdicts: dict[str, tuple[FaultClass, tuple[str, ...]]]
-    ) -> tuple[FaultClass, tuple[str, ...], str]:
-        """The class, codes, and diagnostic for *target_id*, from its parsed
-        verdict or resolution.
+    ) -> tuple[FaultClass, tuple[str, ...]]:
+        """The class and codes for *target_id*, from its parsed verdict or
+        resolution.
 
         A verdict Task 3's reader carried (grammar-level: the item never
         matched any member's identifier) always wins when present; an item
@@ -4586,32 +4550,68 @@ class GraphBuilder:
         individually, and only the whole item's raw text is ever a verdict
         key).
 
-        A plain ``MALFORMED`` verdict (no more specific code than
-        ``SYNTAX_ERROR``) still gets the own-namespace diagnostic
-        (REQ-d00252-G): the verdict says reading failed at the grammar
-        stage, not *why*, and an own-repo item deserves the same
-        separator-mismatch hint whether or not a grammar-level verdict
-        happened to exist for the surface that read it. Any verdict carrying
-        a code more specific than ``SYNTAX_ERROR`` (``DUPLICATE_ITEM``,
-        ``LABEL_OUT_OF_SERIES``, ...) gets none -- prose accompanying a code
-        SHALL NOT name a cause the code does not (REQ-d00252-K), and the
-        separator prose would misdescribe an item a specific code already
-        explains.
+        No prose accompanies either answer. A cause is named by the code, the
+        file and the line the reference was written on, and that code's
+        documented meaning (REQ-d00252-K); all three reach every surface, so
+        a sentence guessing at a separator mismatch would only add a fourth
+        naming that the input does not determine -- and, on the fallback
+        path, would name a defect an item that parsed perfectly and is simply
+        absent does not have.
         """
         if target_id in verdicts:
-            fault_class, codes = verdicts[target_id]
-            more_specific = any(c != FaultCode.SYNTAX_ERROR for c in codes)
-            diagnostic = (
-                self._own_namespace_diagnostic(target_id)
-                if fault_class is FaultClass.MALFORMED and not more_specific
-                else ""
-            )
-            return fault_class, codes, diagnostic
-        return (
-            self._resolution_class(target_id),
-            (),
-            self._own_namespace_diagnostic(target_id),
-        )
+            return verdicts[target_id]
+        return self._resolution_class(target_id), ()
+
+    # Implements: REQ-d00272-A, REQ-d00272-J
+    def _forbidden_keyword_faults(
+        self,
+        source_id: str,
+        keyword: str,
+        targets: list[str],
+        verdicts: dict[str, tuple[FaultClass, tuple[str, ...]]],
+        file_kind: str,
+    ) -> list[ReferenceFault]:
+        """The faults a keyword *file_kind* may not use produces for *targets*.
+
+        ``FORBIDDEN`` is the last stage of reading, and an item only arrives
+        there by having read: the keyword refuses a relationship the item
+        successfully named.  An item that never read stopped earlier and
+        carries its own verdict, which is reported instead -- stamping the
+        refusal on it would report a later stage than reading reached
+        (REQ-d00272-A) and describe it as resolving, which it did not.
+
+        The verdict is looked up against the item as written, before any
+        multi-*Assertion* expansion: the reader keys a verdict by the whole
+        item's raw text, and an expanded label is not that key.
+        """
+        faults: list[ReferenceFault] = []
+        for raw_target in targets:
+            if raw_target in verdicts:
+                fault_class, codes = verdicts[raw_target]
+                faults.append(
+                    ReferenceFault(
+                        source_id=source_id,
+                        target_id=raw_target,
+                        edge_kind=keyword,
+                        fault_class=fault_class,
+                        codes=codes,
+                    )
+                )
+                continue
+            for expanded in self._expand_multi_assertion(raw_target):
+                faults.append(
+                    ReferenceFault(
+                        source_id=source_id,
+                        target_id=expanded,
+                        edge_kind=keyword,
+                        fault_class=FaultClass.FORBIDDEN,
+                        diagnostic=(
+                            f"'{keyword.capitalize()}:' is not a valid keyword in "
+                            f"a {file_kind} file; the declaration is refused."
+                        ),
+                    )
+                )
+        return faults
 
     # Implements: REQ-p00014-B, REQ-p00014-C, REQ-d00069-H
     def _instantiate_satisfies_templates(self) -> None:
@@ -5098,7 +5098,7 @@ class GraphBuilder:
                 # an item no grammar accounted for has one, so a target that
                 # matched but names no node here falls back to the
                 # resolution-stage decision (REQ-p00014-R).
-                fault_class, codes, diagnostic = self._fault_verdict(target_id, verdicts)
+                fault_class, codes = self._fault_verdict(target_id, verdicts)
                 self._broken_references.append(
                     ReferenceFault(
                         source_id=source_id,
@@ -5106,7 +5106,6 @@ class GraphBuilder:
                         edge_kind=edge_kind.value,
                         fault_class=fault_class,
                         codes=codes,
-                        diagnostic=diagnostic,
                     )
                 )
 

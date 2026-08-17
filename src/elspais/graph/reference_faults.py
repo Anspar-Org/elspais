@@ -52,6 +52,11 @@ class FaultCode:
     EMPTY_ITEM = "E_EMPTY_ITEM"
     EMPTY_REFERENCE_LIST = "E_EMPTY_REFERENCE_LIST"
     IDENTIFIER_WITH_TRAILING_TEXT = "E_IDENTIFIER_WITH_TRAILING_TEXT"
+    # A numeric component's VALUE exceeds what the configuration admits
+    # (REQ-d00212-T).  Distinct from a padding defect: re-padding cannot make
+    # an out-of-range value fit, so nothing about the spelling would answer
+    # it -- the number itself is one this repository cannot name.
+    COMPONENT_OUT_OF_RANGE = "E_COMPONENT_OUT_OF_RANGE"
     # Implements: REQ-d00272-K
     DUPLICATE_ITEM = "E_DUPLICATE_ITEM"
     # An identifier is spelled in a form the configuration admits but is not

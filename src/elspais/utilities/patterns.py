@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -39,6 +39,17 @@ INSTANCE_SEPARATOR = "::"
 # every surface that reads a list of references, so a *Requirement*'s
 # metadata line and a code annotation admit exactly the same target.
 REF_LIST_SEPARATOR = ","
+
+# Implements: REQ-p00014-S, REQ-d00272-M
+# The characters no identifier configuration may produce. `:` separates the
+# parts of a node identifier, so configuration validation refuses any pattern
+# element able to put one into an identifier -- which makes an item carrying
+# one an item that was never written as an identifier, exactly as a space is.
+# One definition: the schema's refusal and the reader's classification are two
+# consequences of the same reservation, and a character reserved in one and
+# not the other would leave an item both impossible to configure and reported
+# as a name from a repository nobody configured.
+RESERVED_IDENTIFIER_CHARACTERS = (":",)
 
 # --- Shared regex patterns ---
 
@@ -172,8 +183,14 @@ def component_regex(component: ComponentFormat, internal_separator: str | None =
     """
     style = component.style
     if style == "numeric":
+        # Implements: REQ-d00212-R, REQ-d00212-T
+        # The configured digit count bounds the component's VALUE, not the
+        # characters written: leading zeros carry no value, so they are
+        # consumed separately and only the significant digits are counted.
+        # `\d{1,N}` alone caps characters, which makes how many zeros an
+        # author typed decide whether an identifier resolves.
         if component.digits > 0:
-            return rf"\d{{1,{component.digits}}}"
+            return rf"0*\d{{1,{component.digits}}}"
         return r"\d+"
     if style == "camelCase":
         return r"[a-z][a-zA-Z0-9]+"
@@ -364,7 +381,13 @@ class IdResolver:
         m = re.search(r"\{(?:type|level)\.(\w+)\}", template)
         return m.group(1) if m else None
 
-    def _compile_regex(self, template: str, separator: str | None = None) -> re.Pattern:
+    def _compile_regex(
+        self,
+        template: str,
+        separator: str | None = None,
+        *,
+        unbounded_component: bool = False,
+    ) -> re.Pattern:
         """Compile a template string into a regex for parsing.
 
         Args:
@@ -374,6 +397,11 @@ class IdResolver:
                 spelled with this character. A Python test name can spell them
                 only as ``_``; that is one grammar in two notations, so the
                 notation is a parameter here rather than a second derivation.
+            unbounded_component: Drop the configured bound on a numeric
+                component's value. Never used to admit a reference -- only to
+                tell an item whose number is too large from one that is
+                misspelled, so the report names the defect the input has
+                (REQ-d00212-T).
         """
         pattern = template
         if separator is not None:
@@ -402,7 +430,10 @@ class IdResolver:
                 pattern = pattern.replace(match.group(0), f"(?P<type>{val_alt})")
 
         # {component} -> resolved via the single style→regex helper
-        comp_pattern = component_regex(self.config.component, internal_separator=separator)
+        component = self.config.component
+        if unbounded_component and component.style == "numeric" and component.digits > 0:
+            component = replace(component, digits=0)
+        comp_pattern = component_regex(component, internal_separator=separator)
         pattern = pattern.replace("{component}", f"(?P<component>{comp_pattern})")
 
         # Assertion suffix (optional)
@@ -676,6 +707,30 @@ class IdResolver:
             return (FaultCode.IDENTIFIER_WITH_TRAILING_TEXT,)
         return ()
 
+    # Implements: REQ-d00212-T
+    def component_out_of_range(self, item: str) -> bool:
+        """Whether *item* is this repository's identifier but for a numeric
+        component whose value the configuration cannot admit.
+
+        A padding defect and an out-of-range value are different defects with
+        different remedies: one is answered by rewriting the same number,
+        the other by no spelling at all.  Telling them apart needs the value,
+        so the item is re-read with the bound lifted and the number compared
+        against what the configuration admits -- never to resolve it, only to
+        say which defect it has.
+        """
+        component = self.config.component
+        if component.style != "numeric" or component.digits <= 0:
+            return False
+        relaxed = self._compile_regex(self.config.canonical_template, unbounded_component=True)
+        match = re.compile(relaxed.pattern, re.IGNORECASE).fullmatch(item)
+        if match is None:
+            return False
+        value = match.groupdict().get("component")
+        if not value or not value.isdigit():
+            return False
+        return int(value) >= 10**component.digits
+
     # Implements: REQ-d00272-D
     def label_position_defect(self, item: str) -> bool:
         """Whether *item* opens with a bare identifier immediately followed
@@ -794,8 +849,16 @@ class IdResolver:
         internal = STYLE_INTERNAL_SEPARATOR.get(comp.style)
         if separator is not None and internal is not None and component:
             component = component.replace(separator, internal)
-        if comp.style == "numeric" and comp.digits > 0 and comp.leading_zeros:
-            component = component.zfill(comp.digits)
+        # Implements: REQ-d00212-R
+        # A numeric component's identity is its value, so the canonical form
+        # is that value written to the configured width -- reached by
+        # discarding the zeros the author wrote and re-padding, not by
+        # padding what was written. `zfill` alone leaves an over-padded
+        # component longer than the configuration names, and the identifier
+        # renders in a form that configuration does not.
+        if comp.style == "numeric" and comp.digits > 0:
+            value = component.lstrip("0") or "0"
+            component = value.zfill(comp.digits) if comp.leading_zeros else value
 
         # Parse assertions
         assertions_str = groups.get("assertions", "")
@@ -1303,21 +1366,24 @@ class FederatedIdReader:
             self._extra_item_regexes[key] = compiled
         return compiled
 
-    # Implements: REQ-d00272-B, REQ-d00272-C
+    # Implements: REQ-d00272-B, REQ-d00272-C, REQ-d00272-M
     def classify_unmatched(self, candidate: str) -> tuple[FaultClass, tuple[FaultCode, ...]]:
         """How far reading *candidate* got, for an item no grammar accepted.
 
         Two tests, in order, and neither is a judgement about what an
-        identifier looks like.  A space is what no identifier of any
-        configuration contains, so an item holding one was not written as an
-        identifier and must not be described as naming a repository.  Past
-        that, whether some member *declares* the namespace the item opens
-        with is a fact the federation holds, and it separates an identifier
-        of this estate spelled wrongly from a name belonging outside it.
+        identifier looks like.  A character no configuration can put in an
+        identifier is what no identifier contains, so an item holding one was
+        not written as an identifier and must not be described as naming a
+        repository -- a space is such a character whichever one it is, and so
+        is a character reserved out of every identifier pattern
+        (REQ-d00272-M).  Past that, whether some member *declares* the
+        namespace the item opens with is a fact the federation holds, and it
+        separates an identifier of this estate spelled wrongly from a name
+        belonging outside it.
         """
         from elspais.graph.reference_faults import FaultClass, FaultCode
 
-        if any(ch.isspace() for ch in candidate):
+        if any(ch.isspace() or ch in RESERVED_IDENTIFIER_CHARACTERS for ch in candidate):
             return FaultClass.MALFORMED, (FaultCode.NOT_AN_IDENTIFIER,)
         declaring = [r for r in self._resolvers if r.declares_namespace(candidate)]
         if declaring:
@@ -1327,6 +1393,13 @@ class FederatedIdReader:
             # that member is scanned, reintroducing the misattribution this
             # function exists to prevent (REQ-d00272-C).
             owner = max(declaring, key=lambda r: len(r.config.namespace))
+            # Implements: REQ-d00212-T
+            # An out-of-range value is read as an identifier with trailing
+            # digits by the bounded grammar, which names a defect the author
+            # does not have: no repadding makes the number fit, so the value
+            # is what is wrong and the value is what is reported.
+            if owner.component_out_of_range(candidate):
+                return FaultClass.MALFORMED, (FaultCode.COMPONENT_OUT_OF_RANGE,)
             codes = owner.diagnose_item(candidate)
             if codes == (FaultCode.IDENTIFIER_WITH_TRAILING_TEXT,) and owner.label_position_defect(
                 candidate

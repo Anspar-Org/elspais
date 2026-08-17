@@ -198,13 +198,13 @@ D. CODE that declares `Implements: <template-assertion>` and TEST that declares 
 
 E. Authors SHALL mark a requirement as a template by adding the no-value `**Template**` flag (markdown decoration optional) anywhere on the pipe-separated metadata line. The parser SHALL set `Stereotype.TEMPLATE` on the resulting REQ and on each of its *Assertions*. The render protocol SHALL emit the flag verbatim on the metadata line for any node with `Stereotype.TEMPLATE`.
 
-F. `BrokenReference` SHALL carry an optional `diagnostic` field that explains why a reference is invalid. The `elspais checks` command SHALL surface the diagnostic verbatim in its health-finding message so authors get actionable guidance (e.g. *"REQ-A is not marked **Template**; mark REQ-A with **Template** if it's intended to be satisfiable."*).
+F. `ReferenceFault` SHALL carry an optional `diagnostic` field that explains why a reference is invalid. The `elspais checks` command SHALL surface the diagnostic verbatim in its health-finding message so authors get actionable guidance (e.g. *"REQ-A is not marked **Template**; mark REQ-A with **Template** if it's intended to be satisfiable."*).
 
-G. The graph builder SHALL enforce a static validation matrix at build time, raising typed `BrokenReference` diagnostics for each invalid combination: `Satisfies:` against a target that exists but is not marked `**Template**`; `Satisfies:` against an `INSTANCE` target (chained instantiation); `Refines:` against a `TEMPLATE` target from a REQ not itself marked `**Template**` (a template's refiners must themselves be templates); `Refines:` against an `INSTANCE` target (refining instance content); `Implements:` from CODE against an `INSTANCE` target; `Verifies:` from TEST against an `INSTANCE` target; a REQ marked `**Template**` that declares `Implements:`/`Refines:` metadata targeting nodes outside its template subtree.
+G. The graph builder SHALL enforce a static validation matrix at build time, raising typed `ReferenceFault` diagnostics for each invalid combination: `Satisfies:` against a target that exists but is not marked `**Template**`; `Satisfies:` against an `INSTANCE` target (chained instantiation); `Refines:` against a `TEMPLATE` target from a REQ not itself marked `**Template**` (a template's refiners must themselves be templates); `Refines:` against an `INSTANCE` target (refining instance content); `Implements:` from CODE against an `INSTANCE` target; `Verifies:` from TEST against an `INSTANCE` target; a REQ marked `**Template**` that declares `Implements:`/`Refines:` metadata targeting nodes outside its template subtree.
 
 H. When a requirement declares `Satisfies:` against a template owned by an associated repository, the federated graph builder SHALL clone the template subtree (the target REQ, its directly-attached *Assertions*, and descendant template REQs with theirs) into the declaring repo's index with composite IDs of the form `declaring_id::original_id`, wiring intra-graph `SATISFIES`, `STRUCTURES`, `REFINES`, and `DEFINES` edges and a cross-graph `INSTANCE` edge from each clone to its template original.
 
-J. When a cross-repository `Satisfies:` target is not claimed by any associated repository, the federated graph builder SHALL emit a typed `BrokenReference` whose diagnostic names the target ID, lists the currently-declared associates (or states that none are declared), and points authors at the `[associates.<name>]` block in `.elspais.toml`. When transitively walking `SATISFIES` and `INSTANCE` edges produces a cycle, the federated graph builder SHALL emit a typed `BrokenReference` whose diagnostic contains the word `cycle` and the cycle path; reporting one cycle per build is sufficient.
+J. When a cross-repository `Satisfies:` target is not claimed by any associated repository, the federated graph builder SHALL emit a typed `ReferenceFault` whose diagnostic names the target ID, lists the currently-declared associates (or states that none are declared), and points authors at the `[associates.<name>]` block in `.elspais.toml`. When transitively walking `SATISFIES` and `INSTANCE` edges produces a cycle, the federated graph builder SHALL emit a typed `ReferenceFault` whose diagnostic contains the word `cycle` and the cycle path; reporting one cycle per build is sufficient.
 
 K. Coverage computation, rollup, and reporting SHALL treat an instance node exactly as a directly declared node of the same kind.
 
@@ -232,6 +232,8 @@ V. A user journey SHALL declare what it validates in one place: its metadata, wh
 
 ### Changelog
 
+- 2026-08-16 | ca4892c1 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-16 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: name the type a reference fault is reported as, `ReferenceFault` (F, G, J)
 - 2026-08-15 | 1bae4f82 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-14 | 11ee2801 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-14 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: a journey declares what it validates in one place, its metadata (V)
@@ -258,7 +260,7 @@ V. A user journey SHALL declare what it validates in one place: its metadata, wh
 - 2026-05-04 | bae1b85d | - | Developer (<dev@example.com>) | Auto-fix: canonicalize term forms, update hash
 - 2026-03-30 | 9115ce0d | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *Satisfies Relationship* | **Hash**: 1bae4f82
+*End* *Satisfies Relationship* | **Hash**: ca4892c1
 ---
 
 ## REQ-p00016: NOT APPLICABLE Status

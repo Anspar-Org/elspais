@@ -80,10 +80,16 @@ def reference_target(text: str) -> str:
     # point. The grammar only ever admits double-asterisk wrapping, never a
     # single "*", so there is no legitimate single-marker form to account
     # for here.
+    # The keyword's own colon is one character, so exactly one is removed.
+    # Stripping a SET would eat every colon an author typed, and
+    # ``# Implements:::: REQ-d00001`` would bind as though it were written
+    # correctly -- the same silent repair the "**" strip above is bounded to
+    # avoid. A second colon is content, and content carrying a character no
+    # identifier may contain is reported (REQ-d00272-M), not tidied away.
     tail = text[match.end() :]
     if tail.startswith("**"):
         tail = tail[2:]
-    tail = tail.lstrip(": \t")
+    tail = tail.lstrip(" \t").removeprefix(":").lstrip(" \t")
     for terminator in ("*/", "-->"):
         if tail.endswith(terminator):
             tail = tail[: -len(terminator)]
@@ -537,8 +543,14 @@ class ReferenceTransformer:
         """
         keyword = self._detect_keyword(text)
         if self._keyword_invalid_for_content(keyword):
+            # Implements: REQ-d00272-A
+            # The keyword's refusal is a stage-4 verdict, and an item only
+            # reaches it by having read.  An item that never read stopped
+            # earlier, so its own verdict rides along here exactly as it does
+            # on the admitted path -- reporting the refusal for it would name
+            # a later stage than reading actually reached.
             items = read_reference_list(self.reader, text)
-            targets = [i.resolved or i.raw for i in items if i.raw]
+            targets, verdicts = refs_and_verdicts(items)
             if not targets:
                 return None
             func_name, class_name, func_line, func_end_line = self._forbidden_line_context(line_num)
@@ -551,6 +563,7 @@ class ReferenceTransformer:
                 "function_end_line": func_end_line,
                 "forbidden_keyword": keyword,
                 "forbidden": targets,
+                "reference_verdicts": verdicts,
             }
             if self.content_type == "test_ref":
                 parsed_data["file_default_verifies"] = self.file_default_verifies

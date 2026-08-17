@@ -175,7 +175,7 @@ P. The configuration schema SHALL make the severity of every health check config
 
 Q. The configuration schema SHALL express file selection for scanning through a single mechanism, such that exactly one configuration surface determines whether any given file is scanned.
 
-R. An identifier SHALL resolve to a requirement only where it is spelled as the configuration of the repository owning that requirement admits. Neither case nor, for a numeric component, the number of leading zeros SHALL decide whether it resolves. An identifier SHALL be rendered in the one form that configuration names, on every surface.
+R. An identifier SHALL resolve to a requirement only where it is spelled as the configuration of the repository owning that requirement admits. Neither case nor, for a numeric component, the number of leading zeros SHALL decide whether it resolves, except where a component's configured style makes its case part of the pattern it must match. An identifier SHALL be rendered in the one form that configuration names, on every surface.
 
 S. Reading an identifier without regard to case and padding SHALL NOT extend to any other difference. A spelling that differs from what the configuration admits in anything else SHALL resolve to nothing, and SHALL NOT be repaired into one that resolves.
 
@@ -191,6 +191,8 @@ G, R and S hold within a single repository, not only where several meet. G fixes
 
 Case is exempt from that, and the exemption is safe for a reason that has to be built rather than assumed. Reading without regard to case can only mislead where two admissible spellings differ in case alone — and G now forbids a configuration from holding such a pair at all, so the ambiguity has no way to arise. What remains is one identifier reachable by more than one casing, and a single casing in which it is written back. An author who types a label in the wrong case is naming a requirement that exists, unambiguously, and refusing them costs an edge to buy nothing; an author who mistypes a digit is naming a requirement that may not exist at all, which is why S keeps every other difference resolving to nothing.
 
+The exception R carries is not a softening of it but the same reasoning applied once more. Where a component's style spells its own shape — PascalCase, camelCase, snake_case, kebab-case — the case is not how the identifier is presented, it is what the pattern admits, and a component in the wrong case does not differ from a valid one by case: it fails to be one. Treating it as a case variant would mean reading a string the configuration never admitted, which is the repair S forbids. A project that wants case to carry no meaning in its components has a way to say so, by choosing a style that does not spell one.
+
 Padding is exempt on stronger grounds still, and T says why: a numeric component is a number. Leading zeros do not make a different number, so a configuration that treated them as identifying would not be describing numbers at all — it would be describing characters that happen to be digits, which is a different component style and is configured as one. The same safety argument applies without needing a guard: a repository has one padding configuration, so two admissible spellings can never differ in padding alone. What the digit count bounds is therefore the value, not the spelling — a component may be written with any number of leading zeros and remain the same component, while one carrying more significant digits than the configuration admits is outside the space entirely and no amount of re-padding brings it back.
 
 The two obligations are therefore a pair rather than a compromise: matching relaxes exactly as far as the configuration guard makes safe, and no further. Rendering is what keeps the estate uniform regardless — an identifier read in any casing is stored and re-emitted in the one the configuration names, so a file rewritten by the tool converges on that casing rather than preserving whatever was typed.
@@ -201,6 +203,8 @@ R is a condition on resolving, never on writing, which is what keeps a reference
 
 ### Changelog
 
+- 2026-08-16 | 468cf0e9 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-16 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: case decides resolution where a component's style makes case part of the pattern it must match (R)
 - 2026-08-15 | a2917c2b | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-15 | a11d15f9 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-15 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: numeric padding is presentation and the digit count bounds the value rather than the spelling (R, T)
@@ -224,7 +228,7 @@ R is a condition on resolving, never on writing, which is what keeps a reference
 - 2026-03-30 | db4ad28c | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 - 2026-03-29 | c75b87f8 | - | Michael Lewis (<michael@anspar.org>) | Add assertion N for config migration v3 to v4
 
-*End* *Config Schema v3 Models* | **Hash**: a2917c2b
+*End* *Config Schema v3 Models* | **Hash**: 468cf0e9
 ---
 
 ## REQ-d00251: A Repository's Identifier Grammar

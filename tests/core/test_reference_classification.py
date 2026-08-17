@@ -642,3 +642,173 @@ def test_a_label_outside_the_configured_series_is_named_through_classify_unmatch
     fault_class, codes = reader.classify_unmatched("REQ-d00001-9")
     assert fault_class is FaultClass.MALFORMED
     assert codes == (FaultCode.LABEL_OUT_OF_SERIES,)
+
+
+# --------------------------------------------------------------------------- #
+# A cause is named by a code, a location, and that code's documented meaning
+# --------------------------------------------------------------------------- #
+
+
+# Verifies: REQ-d00252-K, REQ-d00272-A
+@pytest.mark.parametrize(
+    "annotation,expected_class",
+    [
+        ("# Implements: REQ-d09999\n", FaultClass.UNKNOWN_REQUIREMENT),
+        ("# Implements: REQ-d00001-Z\n", FaultClass.UNKNOWN_ASSERTION),
+    ],
+)
+def test_a_reference_that_parsed_and_is_absent_carries_no_prose(
+    tmp_path, repo_root, annotation, expected_class
+):
+    """An item spelled exactly as this repository's grammar admits, naming
+    something the graph does not hold, has nothing wrong with its spelling.
+    Prose blaming the assertion separator would name a cause the input does
+    not determine -- and, because a health finding renders the diagnostic in
+    place of the check's description, it would replace the one true sentence
+    about the fault with a false one."""
+    graph = _project(tmp_path, repo_root, annotation + "def f():\n    return 1\n")
+    faults = [f for f in graph.broken_references() if f.source_id.startswith("code:")]
+    assert len(faults) == 1, f"expected one fault, got {faults}"
+    assert faults[0].fault_class is expected_class
+    assert faults[0].diagnostic == "", (
+        "the code, the file and the line name the cause; a fourth naming "
+        f"guessing at a separator is not one the input determines: {faults[0].diagnostic!r}"
+    )
+
+
+# Verifies: REQ-d00252-K, REQ-d00272-A
+def test_a_malformed_own_namespace_reference_names_its_cause_by_code_and_location(
+    tmp_path, repo_root
+):
+    """What names the cause is the code together with where the reference was
+    written, and both reach the surface that reports it."""
+    from elspais.commands.health import _fault_location
+
+    graph = _project(tmp_path, repo_root, "# Implements: REQ-d00001+A\ndef f():\n    return 1\n")
+    faults = [f for f in graph.broken_references() if f.source_id.startswith("code:")]
+    assert len(faults) == 1, f"expected one fault, got {faults}"
+    fault = faults[0]
+    assert fault.fault_class is FaultClass.MALFORMED
+    assert FaultCode.WRONG_ASSERTION_SEPARATOR in fault.codes
+    file_path, line = _fault_location(graph, fault.source_id, fault.line)
+    assert file_path and file_path.endswith("m.py")
+    assert line == 1
+    assert fault.diagnostic == ""
+
+
+# --------------------------------------------------------------------------- #
+# A keyword the file may not use refuses only what actually read
+# --------------------------------------------------------------------------- #
+
+
+# Verifies: REQ-d00272-A, REQ-d00272-J
+def test_an_item_that_never_read_is_not_reported_as_refused(tmp_path, repo_root):
+    """`Refines:` is not a keyword a code file may use, but the refusal is a
+    verdict on a relationship the item named -- and this item named none. Its
+    own, earlier verdict is what is reported."""
+    graph = _project(tmp_path, repo_root, "# Refines: not a reference\ndef f():\n    return 1\n")
+    faults = [f for f in graph.broken_references() if f.source_id.startswith("code:")]
+    assert len(faults) == 1, f"expected one fault, got {faults}"
+    assert faults[0].fault_class is FaultClass.MALFORMED
+    assert faults[0].fault_class is not FaultClass.FORBIDDEN
+    assert faults[0].diagnostic == "", (
+        "the refusal prose says the reference resolves and the relationship "
+        "is refused, which is false of an item that never read"
+    )
+
+
+# Verifies: REQ-d00272-A, REQ-d00272-J
+def test_a_mixed_forbidden_line_reports_each_item_at_the_stage_it_reached(tmp_path, repo_root):
+    """One list, two items, two different stages: the item that read reaches
+    the keyword's refusal, the item that did not stops where it stopped."""
+    graph = _project(
+        tmp_path,
+        repo_root,
+        "# Refines: not a reference, REQ-d00001-A\ndef f():\n    return 1\n",
+    )
+    faults = {f.target_id: f for f in graph.broken_references() if f.source_id.startswith("code:")}
+    assert set(faults) == {"not a reference", "REQ-d00001-A"}, faults
+    assert faults["not a reference"].fault_class is FaultClass.MALFORMED
+    assert faults["REQ-d00001-A"].fault_class is FaultClass.FORBIDDEN
+    assert "not a valid keyword" in faults["REQ-d00001-A"].diagnostic
+
+
+# --------------------------------------------------------------------------- #
+# Padding decides nothing; an out-of-range value is its own defect
+# --------------------------------------------------------------------------- #
+
+
+# Verifies: REQ-d00212-R
+@pytest.mark.parametrize(
+    "item,canonical",
+    [
+        ("REQ-d1", "REQ-d00001"),
+        ("REQ-d001", "REQ-d00001"),
+        ("REQ-d000001", "REQ-d00001"),
+        ("REQ-d00001", "REQ-d00001"),
+        ("REQ-d012345", "REQ-d12345"),
+        ("REQ-d0", "REQ-d00000"),
+        ("REQ-d00000", "REQ-d00000"),
+    ],
+)
+def test_leading_zeros_never_decide_whether_an_identifier_resolves(reader, item, canonical):
+    """The configured digit count bounds the component's VALUE. Every
+    spelling below the bound reads, however many zeros precede it, and each
+    renders in the one form the configuration names."""
+    items = reader.parse_ref_list(item)
+    assert items[0].resolved == canonical
+    assert items[0].fault_class is None
+
+
+# Verifies: REQ-d00212-T
+@pytest.mark.parametrize("item", ["REQ-d123456", "REQ-d0123456"])
+def test_a_component_value_beyond_the_configured_bound_resolves_to_nothing(reader, item):
+    """No repadding makes 123456 fit five digits, so this is not a padding
+    defect: the value itself is one the configuration cannot name, and the
+    code says so rather than blaming trailing text."""
+    items = reader.parse_ref_list(item)
+    assert items[0].resolved is None
+    assert items[0].fault_class is FaultClass.MALFORMED
+    fault_class, codes = reader.classify_unmatched(item)
+    assert fault_class is FaultClass.MALFORMED
+    assert codes == (FaultCode.COMPONENT_OUT_OF_RANGE,)
+
+
+# --------------------------------------------------------------------------- #
+# A character no configuration can admit
+# --------------------------------------------------------------------------- #
+
+
+# Verifies: REQ-d00272-M
+@pytest.mark.parametrize("item", ["REQ-d00001:A", ":", "file:REQ:spec/r.md"])
+def test_an_item_holding_a_reserved_character_is_not_an_identifier(reader, item):
+    """`:` separates the parts of a node identifier, so configuration
+    validation refuses any pattern element able to produce one. An item
+    carrying one therefore cannot be any repository's identifier, and
+    describing it as a name from a repository nobody configured is the
+    misattribution the space test exists to prevent."""
+    fault_class, codes = reader.classify_unmatched(item)
+    assert fault_class is FaultClass.MALFORMED
+    assert fault_class is not FaultClass.UNKNOWN_NAMESPACE
+    assert codes == (FaultCode.NOT_AN_IDENTIFIER,)
+
+
+# Verifies: REQ-d00272-M, REQ-d00269-G
+def test_repeated_colons_after_a_keyword_bind_nothing(tmp_path, repo_root):
+    """The keyword's own colon is one character. Removing every colon an
+    author typed would let `# Implements:::: REQ-d00001` bind as though it
+    were written correctly -- a silent repair, and exactly the shape of the
+    defect the bounded emphasis strip beside it avoids."""
+    from elspais.graph.relations import EdgeKind
+
+    graph = _project(tmp_path, repo_root, "# Implements:::: REQ-d00001-A\ndef f():\n    return 1\n")
+    node = graph.find_by_id("REQ-d00001")
+    assert node is not None
+    assert not any(node.iter_edges_by_kind(EdgeKind.IMPLEMENTS)), (
+        "an annotation with three colons the keyword did not write is not the "
+        "annotation the author meant, and must not bind as though it were"
+    )
+    faults = [f for f in graph.broken_references() if f.source_id.startswith("code:")]
+    assert len(faults) == 1, f"expected one fault, got {faults}"
+    assert faults[0].fault_class is FaultClass.MALFORMED
+    assert FaultCode.NOT_AN_IDENTIFIER in faults[0].codes

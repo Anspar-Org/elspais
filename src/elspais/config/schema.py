@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -9,7 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 # Hex-color and namespace patterns live in the utilities lib so all consumers
 # share a single regex. See `utilities/color.py` and `utilities/patterns.py`.
 from elspais.utilities.color import validate_hex_color as _validate_hex_color
-from elspais.utilities.patterns import REF_LIST_SEPARATOR
+from elspais.utilities.patterns import REF_LIST_SEPARATOR, RESERVED_IDENTIFIER_CHARACTERS
 from elspais.utilities.patterns import validate_namespace as _validate_namespace
 
 # Implements: REQ-p00014-S
@@ -21,7 +22,8 @@ from elspais.utilities.patterns import validate_namespace as _validate_namespace
 # into a produced identifier excludes it, on the field rather than in a
 # validator, so the exported JSON schema carries the same refusal an editor
 # reads.
-_NO_COLON = r"^[^:]*$"
+_RESERVED = "".join(RESERVED_IDENTIFIER_CHARACTERS)
+_NO_COLON = rf"^[^{re.escape(_RESERVED)}]*$"
 _NO_COLON_MESSAGE = "must not contain ':', which separates the parts of a node identifier"
 
 

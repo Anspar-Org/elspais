@@ -36,6 +36,7 @@ from pathlib import Path
 
 import pytest
 
+from elspais.commands.health import _fault_location
 from elspais.graph.GraphNode import NodeKind
 from elspais.graph.reference_faults import FaultClass, FaultCode
 from elspais.graph.relations import EdgeKind
@@ -241,16 +242,14 @@ def test_journey_dash_style_ref_under_slash_config_is_hard_broken(tmp_path):
     UNKNOWN_REQUIREMENT (REQ-d00272-A forbids reporting a later stage than
     the one reading actually reached).
 
-    Naming *why* it is malformed is owed once, not twice: this item also
-    carries ``E_IDENTIFIER_WITH_TRAILING_TEXT`` (the dash-style suffix reads
-    as trailing text on the correctly-spelled component), a code more
-    specific than ``SYNTAX_ERROR`` -- so the separator-config prose is
-    withheld here (REQ-d00252-K: prose accompanying a code SHALL NOT name a
-    cause the code does not) and the code is what names the cause. Where no
-    code says more than "this failed to parse", the prose still does
-    (REQ-d00252-G) -- this test asserts the code path; the no-more-specific
-    path is covered where a same-repo item is malformed for no reason a
-    code names."""
+    What names the cause is what REQ-d00252-K says names one: the code
+    (``E_IDENTIFIER_WITH_TRAILING_TEXT`` -- the dash-style suffix reads as
+    trailing text on the correctly-spelled component), the file and the line
+    the reference was written on, and that code's documented meaning. All
+    three reach the surface that reports it, so no prose is carried: a
+    sentence guessing at a separator would be a fourth naming the input does
+    not determine, and REQ-d00252-K bars prose from naming a cause the code
+    does not."""
     from elspais.graph.factory import build_graph
 
     sep, multi = "/", "+"
@@ -284,9 +283,16 @@ def test_journey_dash_style_ref_under_slash_config_is_hard_broken(tmp_path):
     assert (
         FaultCode.IDENTIFIER_WITH_TRAILING_TEXT in br.codes
     ), f"Expected the specific code that now names the cause, got {br.codes!r}"
+
+    # The other half of what names a cause: where the reference was written.
+    file_path, line = _fault_location(graph, br.source_id, br.line)
+    assert file_path, "a cause is named with the file the reference was written in"
+    assert file_path.endswith(".md")
+    assert line, "a cause is named with the line the reference was written on"
+
     assert br.diagnostic == "", (
-        "A code more specific than SYNTAX_ERROR already names the cause; the "
-        f"separator-config prose would be a second, redundant naming: {br.diagnostic!r}"
+        "The code and the location name the cause; prose guessing at a "
+        f"separator would name one the input does not determine: {br.diagnostic!r}"
     )
 
 
