@@ -23,6 +23,7 @@ from typing import TYPE_CHECKING, Any
 
 from elspais.config.schema import ElspaisConfig
 from elspais.config.status_roles import StatusRole
+from elspais.graph.aggregation import EvidenceResult
 from elspais.graph.reference_faults import FaultClass, FaultCode
 
 if TYPE_CHECKING:
@@ -2524,13 +2525,29 @@ _DIMENSION_WORD: dict[str, str] = {
 
 # Implements: REQ-d00274-D
 # Evidence that only names an *Assertion*, against evidence that also carries a
-# result for it. A passing test aimed where nothing is implemented is the same
-# defect with a sharper edge, and an author reading the report should not have
-# to work out which one they have.
-_UNCREDITED_EVIDENCE_WORD: dict[str, dict[bool, str]] = {
-    "tested": {False: "A test names", True: "A passing test names"},
-    "verified": {False: "Passing evidence names", True: "Passing evidence names"},
-    "uat_verified": {False: "A journey result names", True: "A passing journey names"},
+# verdict for it. A test aimed where nothing is implemented, one that passed
+# there, and one that failed there are three different things, and an author
+# reading the report should not have to work out which one they have.
+#
+# The 'verified' row reads the same in all three states: its evidence is
+# credited from a declaration rather than from a result node of its own, so no
+# verdict is ever attached to the finding.
+_UNCREDITED_EVIDENCE_WORD: dict[str, dict[EvidenceResult, str]] = {
+    "tested": {
+        EvidenceResult.NONE: "A test names",
+        EvidenceResult.PASSED: "A passing test names",
+        EvidenceResult.FAILED: "A failing test names",
+    },
+    "verified": {
+        EvidenceResult.NONE: "Passing evidence names",
+        EvidenceResult.PASSED: "Passing evidence names",
+        EvidenceResult.FAILED: "Passing evidence names",
+    },
+    "uat_verified": {
+        EvidenceResult.NONE: "A journey result names",
+        EvidenceResult.PASSED: "A passing journey names",
+        EvidenceResult.FAILED: "A failing journey names",
+    },
 }
 
 # What the denominator leaving something out means, in the reader's terms: for
@@ -2575,11 +2592,16 @@ def check_uncredited_evidence(
         # A source is the annotation the author wrote. Line-coverage credit is
         # written nowhere, so the finding carries no location rather than the
         # requirement's own file, which is not where the evidence lives.
-        if item.source_ids:
-            file_path, line = _fault_location(graph, item.source_ids[0], None)
+        # Where a verdict is what the finding reports, it is reported at the
+        # test that returned it: the wording and the location must name the
+        # same test, or a reader is sent to a passing test to be shown a
+        # failure (REQ-p00019-J).
+        located_at = item.result_source_id or (item.source_ids[0] if item.source_ids else None)
+        if located_at:
+            file_path, line = _fault_location(graph, located_at, None)
         else:
             file_path, line = None, None
-        evidence = _UNCREDITED_EVIDENCE_WORD[item.dimension][item.carries_result]
+        evidence = _UNCREDITED_EVIDENCE_WORD[item.dimension][item.result]
         one, none_of = _UNCREDITED_DENOMINATOR_WORD[item.denominator]
         if item.assertion_label is None:
             clause = (
@@ -2920,6 +2942,33 @@ def _collect_file_mtimes(
     return mtimes
 
 
+def _configured_test_targets(graph: FederatedGraph, config: dict | None) -> list[tuple[str, Any]]:
+    """``(repo name, target)`` for every federation member configuring one.
+
+    Where its test results live is a fact about a repository, not a rule the
+    invoking project gets to answer on its behalf: reading only the invoking
+    config describes a federation whose associate configures targets as having
+    none, and sends the reader looking for a missing configuration instead of
+    missing results. Over a lone repository this reads that repository's own
+    config, so the answer is unchanged.
+
+    The invoking config is one of those members and is counted once, through
+    whichever it is. It is read separately only when the federation does not
+    hold it -- no member declares it, or no member carries a config at all.
+    """
+    targets: list[tuple[str, Any]] = []
+    held = False
+    for entry in graph.iter_repos():
+        if entry.config is None:
+            continue
+        held = held or entry.config == config
+        member = _validate_config(entry.config)
+        targets.extend((entry.name, t) for t in member.scanning.test.targets)
+    if config and not held:
+        targets.extend(("", t) for t in _validate_config(config).scanning.test.targets)
+    return targets
+
+
 def check_test_results(graph: FederatedGraph, config: dict | None = None) -> HealthCheck:
     """Check test result status from JUnit/pytest output.
 
@@ -2940,11 +2989,7 @@ def check_test_results(graph: FederatedGraph, config: dict | None = None) -> Hea
     deselected = run_meta["deselected_count"]
 
     if not result_nodes:
-        if config:
-            _tc = _validate_config(config)
-            targets = _tc.scanning.test.targets
-        else:
-            targets = []
+        targets = _configured_test_targets(graph, config)
         if not targets:
             return HealthCheck(
                 name="tests.results",
@@ -2953,11 +2998,13 @@ def check_test_results(graph: FederatedGraph, config: dict | None = None) -> Hea
                 category="tests",
                 severity="info",
             )
+        repos = sorted({name for name, _ in targets if name})
+        where = f" across {len(repos)} repositories" if len(repos) > 1 else ""
         return HealthCheck(
             name="tests.results",
             passed=False,
             message=(
-                f"Test targets configured ({len(targets)}) but no results ingested. "
+                f"Test targets configured ({len(targets)}){where} but no results ingested. "
                 "Run `elspais checks --run-tests` or refresh manually."
             ),
             category="tests",

@@ -6,6 +6,7 @@ import pytest
 from elspais.graph.aggregation import (
     DENOMINATOR_DIMENSION,
     TIER_TO_BUCKET,
+    EvidenceResult,
     _level_keys,
     absolute_tier,
     aggregate_by_level,
@@ -18,10 +19,18 @@ from elspais.graph.aggregation import (
     relative_tier_for,
     tier_buckets,
 )
+from elspais.graph.annotators import annotate_coverage
 from elspais.graph.federated import FederatedGraph
 from elspais.graph.GraphNode import GraphNode, NodeKind
 from elspais.graph.metrics import CoverageDimension, RollupMetrics
-from tests.core.graph_test_helpers import grammar_for
+from tests.core.graph_test_helpers import (
+    build_graph,
+    grammar_for,
+    make_code_ref,
+    make_requirement,
+    make_test_ref,
+    make_test_result,
+)
 
 
 def _make_req(req_id: str, level: str = "dev", status: str = "Active") -> GraphNode:
@@ -1038,3 +1047,157 @@ class TestUncreditedEvidenceDenominatorMatchesTier:
         # denominator membership must disagree in lockstep -- a finding
         # exists exactly when the label is OUTSIDE the denominator.
         assert finding_names_a is not in_denominator
+
+
+def _graph_naming_unimplemented_b(sources, *, extra_a_status: str | None = None):
+    """A built graph where A is implemented and B is not, and every entry in
+    ``sources`` is a test naming B.
+
+    ``sources`` is a sequence of ``(path, line, status)``; ``status`` of None
+    means that test produced no RESULT node at all. ``extra_a_status`` adds a
+    second test that names the IMPLEMENTED assertion A and carries that status
+    -- a sibling whose verdict must not colour the finding about B.
+
+    Only B produces a finding: the 'tested' denominator is the implemented
+    labels, so the test naming B credits no Tested figure.
+    """
+    contents = [
+        make_requirement(
+            "REQ-100",
+            level="PRD",
+            assertions=[{"label": "A", "text": "a"}, {"label": "B", "text": "b"}],
+        ),
+        make_code_ref(implements=["REQ-100-A"], source_path="src/impl.py"),
+    ]
+    if extra_a_status is not None:
+        contents.append(
+            make_test_ref(
+                verifies=["REQ-100-A"], source_path="tests/test_a.py", start_line=3, end_line=4
+            )
+        )
+        contents.append(
+            make_test_result(
+                "result-a",
+                status=extra_a_status,
+                test_id="test:tests/test_a.py:3",
+                match="source",
+            )
+        )
+    for index, (path, line, status) in enumerate(sources):
+        contents.append(
+            make_test_ref(
+                verifies=["REQ-100-B"], source_path=path, start_line=line, end_line=line + 1
+            )
+        )
+        if status is not None:
+            contents.append(
+                make_test_result(
+                    f"result-{index}",
+                    status=status,
+                    test_id=f"test:{path}:{line}",
+                    match="source",
+                )
+            )
+    graph = build_graph(*contents)
+    annotate_coverage(graph)
+    return graph
+
+
+def _sole_finding(graph):
+    items = iter_uncredited_evidence(graph)
+    assert len(items) == 1, [(i.dimension, i.assertion_label) for i in items]
+    assert items[0].assertion_label == "B"
+    return items[0]
+
+
+# Verifies: REQ-d00274-D
+class TestUncreditedEvidenceCarriesItsResult:
+    """D: a finding distinguishes evidence that only NAMES the *Assertion*
+    from evidence that also carries a verdict for it. A test aimed at an
+    *Assertion* nothing implements, a passing one, and a failing one are three
+    different things to be told, so the finding carries a three-state result
+    rather than "is there a result at all"."""
+
+    def test_test_without_a_result_carries_no_verdict(self):
+        """A `Verifies:` annotation with no RESULT node behind it: the
+        evidence names B and reports nothing about it, so no source can be
+        named as the one that returned a verdict."""
+        item = _sole_finding(_graph_naming_unimplemented_b([("tests/test_b.py", 5, None)]))
+        assert item.result is EvidenceResult.NONE
+        assert item.result_source_id is None
+
+    def test_passing_result_is_reported_as_passed(self):
+        graph = _graph_naming_unimplemented_b([("tests/test_b.py", 5, "passed")])
+        assert _sole_finding(graph).result is EvidenceResult.PASSED
+
+    def test_failing_result_is_reported_as_failed(self):
+        """The sharpest form of the defect: a test that ran and FAILED against
+        an *Assertion* nothing implements. Before the result was carried this
+        was indistinguishable from a test that never ran."""
+        graph = _graph_naming_unimplemented_b([("tests/test_b.py", 5, "failed")])
+        assert _sole_finding(graph).result is EvidenceResult.FAILED
+
+    @pytest.mark.parametrize("status", ["failed", "fail", "failure", "error", "FAILED"])
+    def test_failing_spellings_are_recognised(self, status):
+        graph = _graph_naming_unimplemented_b([("tests/test_b.py", 5, status)])
+        assert _sole_finding(graph).result is EvidenceResult.FAILED
+
+    @pytest.mark.parametrize("status", ["passed", "pass", "success", "Passed"])
+    def test_passing_spellings_are_recognised(self, status):
+        graph = _graph_naming_unimplemented_b([("tests/test_b.py", 5, status)])
+        assert _sole_finding(graph).result is EvidenceResult.PASSED
+
+    @pytest.mark.parametrize("status", ["skipped", "", "xfail"])
+    def test_unrecognised_status_carries_no_verdict_rather_than_a_failure(self, status):
+        """A status the tool does not recognise as either verdict reports
+        neither. A skipped test did not fail, and saying it did would put the
+        finding under a description untrue of it."""
+        graph = _graph_naming_unimplemented_b([("tests/test_b.py", 5, status)])
+        assert _sole_finding(graph).result is EvidenceResult.NONE
+
+    @pytest.mark.parametrize(
+        "sources,verdict_from",
+        [
+            (
+                [("tests/test_b.py", 5, "passed"), ("tests/test_c.py", 9, "failed")],
+                "test:tests/test_c.py:9",
+            ),
+            (
+                [("tests/test_b.py", 5, "failed"), ("tests/test_c.py", 9, "passed")],
+                "test:tests/test_b.py:5",
+            ),
+        ],
+        ids=["passing-first", "failing-first"],
+    )
+    def test_failure_among_the_sources_decides_the_verdict(self, sources, verdict_from):
+        """Two tests name B, one passing and one failing: the finding reads
+        FAILED whichever order they were resolved in -- a failure is not
+        cancelled by a sibling that passed -- and it records WHICH source
+        returned that verdict, so a reader is sent to the failing test rather
+        than to whichever was listed first."""
+        item = _sole_finding(_graph_naming_unimplemented_b(sources))
+        # Both tests were attributed to the one finding -- otherwise the
+        # verdict below would say nothing about which one won.
+        assert len(item.source_ids) == 2, item.source_ids
+        assert item.result is EvidenceResult.FAILED
+        assert item.result_source_id == verdict_from
+
+    def test_verdict_is_read_from_the_named_evidence_not_a_sibling(self):
+        """A failing test naming the IMPLEMENTED assertion A leaves the
+        finding about B reading PASSED: the verdict comes from the RESULT
+        children of the evidence that named B, never from the requirement's
+        aggregate, which a failing sibling would poison."""
+        graph = _graph_naming_unimplemented_b(
+            [("tests/test_b.py", 5, "passed")], extra_a_status="failed"
+        )
+        item = _sole_finding(graph)
+        assert item.source_ids == ("test:tests/test_b.py:5",)
+        assert item.result is EvidenceResult.PASSED
+
+    def test_a_passing_sibling_does_not_lend_its_verdict(self):
+        """The mirror: a passing test naming A does not make the resultless
+        test naming B read as passing."""
+        graph = _graph_naming_unimplemented_b(
+            [("tests/test_b.py", 5, None)], extra_a_status="passed"
+        )
+        assert _sole_finding(graph).result is EvidenceResult.NONE

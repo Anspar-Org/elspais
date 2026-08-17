@@ -410,7 +410,10 @@ evidence can name an assertion the dimension does not count -- a test on an
 assertion nothing implements. It credits nothing, and `tests.uncredited_evidence`
 reports it rather than letting it vanish into a denominator it was never in:
 the assertion named, the dimension not reached, and the file and line the
-evidence was written on. It is an `error` by default (`[rules.coverage]
+evidence was written on. Where the evidence carries a verdict of its own the
+finding says so -- "A test names", "A passing test names" and "A failing test
+names" are three different reports, and a test that failed against an assertion
+nothing implements is the sharpest form of the defect. It is an `error` by default (`[rules.coverage]
 uncredited_evidence`) because the condition has only two explanations and both
 are defects -- a missing `Implements:` reference, or a test aimed at an
 assertion it does not exercise. Only assertion-targeted evidence names an

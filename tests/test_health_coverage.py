@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from elspais.commands.health import (
     _config_with_status_overlay,
     _excluded_note,
@@ -825,7 +827,7 @@ class TestCheckUncreditedEvidence:
     reference."""
 
     @staticmethod
-    def _built_graph(*, with_result: bool = False):
+    def _built_graph(*, with_result: bool = False, result_status: str = "passed"):
         from tests.core.graph_test_helpers import (
             build_graph,
             make_code_ref,
@@ -853,7 +855,7 @@ class TestCheckUncreditedEvidence:
             contents.append(
                 make_test_result(
                     "result-b",
-                    status="passed",
+                    status=result_status,
                     test_id="test:tests/test_b.py:5",
                     match="source",
                 )
@@ -909,6 +911,138 @@ class TestCheckUncreditedEvidence:
         annotate_coverage(passing_graph)
         passing_message = check_uncredited_evidence(passing_graph).findings[0].message
         assert "A passing test names" in passing_message
+
+    # Verifies: REQ-d00274-D
+    def test_failing_test_is_worded_as_failing(self):
+        """D: a test that RAN and failed against an assertion nothing
+        implements is the sharpest form of the defect, and must not read like
+        a test that merely named it or one that passed."""
+        from elspais.graph.annotators import annotate_coverage
+
+        graph = self._built_graph(with_result=True, result_status="failed")
+        annotate_coverage(graph)
+        message = check_uncredited_evidence(graph).findings[0].message
+
+        assert message.startswith("A failing test names")
+        assert "REQ-100-B" in message
+
+    # Verifies: REQ-d00274-D
+    @pytest.mark.parametrize("status", ["skipped", ""])
+    def test_test_without_a_verdict_is_not_worded_as_failing(self, status):
+        """D: a status carrying neither verdict is reported as a bare
+        reference. A skipped test did not fail, and the wording must not say
+        it did."""
+        from elspais.graph.annotators import annotate_coverage
+
+        graph = self._built_graph(with_result=True, result_status=status)
+        annotate_coverage(graph)
+        message = check_uncredited_evidence(graph).findings[0].message
+
+        assert message.startswith("A test names")
+        assert "failing" not in message
+
+    @staticmethod
+    def _mixed_result_graph(first_status: str | None, second_status: str | None):
+        """Two tests naming the same uncredited assertion B, with differing
+        results: ``tests/test_b.py:5`` (resolved first) and
+        ``tests/test_c.py:9``.
+
+        A status of None means that test produced no RESULT node at all.
+        """
+        from tests.core.graph_test_helpers import (
+            build_graph,
+            make_code_ref,
+            make_requirement,
+            make_test_ref,
+            make_test_result,
+        )
+
+        contents = [
+            make_requirement(
+                "REQ-100",
+                level="PRD",
+                assertions=[{"label": "A", "text": "a"}, {"label": "B", "text": "b"}],
+            ),
+            make_code_ref(implements=["REQ-100-A"], source_path="src/impl.py"),
+        ]
+        for index, (path, line, status) in enumerate(
+            [("tests/test_b.py", 5, first_status), ("tests/test_c.py", 9, second_status)]
+        ):
+            contents.append(
+                make_test_ref(
+                    verifies=["REQ-100-B"], source_path=path, start_line=line, end_line=line + 1
+                )
+            )
+            if status is not None:
+                contents.append(
+                    make_test_result(
+                        f"result-{index}",
+                        status=status,
+                        test_id=f"test:{path}:{line}",
+                        match="source",
+                    )
+                )
+        return build_graph(*contents)
+
+    # Verifies: REQ-d00274-D, REQ-p00019-J
+    @pytest.mark.parametrize(
+        "first_status,second_status,expected_file,expected_line",
+        [
+            ("passed", "failed", "tests/test_c.py", 9),
+            ("failed", "passed", "tests/test_b.py", 5),
+        ],
+        ids=["passing-first", "failing-first"],
+    )
+    def test_failing_finding_locates_at_the_failing_test(
+        self, first_status, second_status, expected_file, expected_line
+    ):
+        """J: the test the wording describes and the test the reader is sent
+        to are the same one. Two tests name B, one passing and one failing;
+        the message says "A failing test", so the location must be the FAILING
+        test whichever of the two the sources happened to list first.
+
+        Regression guard: reporting at the first source instead makes the
+        passing-first case point at ``tests/test_b.py:5`` -- a true sentence
+        over a false location.
+        """
+        from elspais.graph.annotators import annotate_coverage
+
+        graph = self._mixed_result_graph(first_status, second_status)
+        annotate_coverage(graph)
+        finding = check_uncredited_evidence(graph).findings[0]
+
+        assert finding.message.startswith("A failing test names")
+        assert (finding.file_path, finding.line) == (expected_file, expected_line)
+
+    # Verifies: REQ-d00274-D, REQ-p00019-J
+    def test_passing_finding_locates_at_the_passing_test(self):
+        """J, the other verdict: the first test names B and returned no result
+        at all while the second passed. The message says "A passing test", so
+        the reader is sent to the test that passed -- not to the resultless
+        one that merely happens to be listed first."""
+        from elspais.graph.annotators import annotate_coverage
+
+        graph = self._mixed_result_graph(None, "passed")
+        annotate_coverage(graph)
+        finding = check_uncredited_evidence(graph).findings[0]
+
+        assert finding.message.startswith("A passing test names")
+        assert (finding.file_path, finding.line) == ("tests/test_c.py", 9)
+
+    # Verifies: REQ-p00019-J
+    def test_verdictless_finding_still_locates_at_its_evidence(self):
+        """Two tests name B and neither returned a verdict, so no source can be
+        pointed at as the one that did. The finding still names evidence it is
+        about rather than losing its location -- the wording claims nothing
+        about which of the two, so either is honest and the first stands."""
+        from elspais.graph.annotators import annotate_coverage
+
+        graph = self._mixed_result_graph(None, "skipped")
+        annotate_coverage(graph)
+        finding = check_uncredited_evidence(graph).findings[0]
+
+        assert finding.message.startswith("A test names")
+        assert (finding.file_path, finding.line) == ("tests/test_b.py", 5)
 
     # Verifies: REQ-d00274-C
     def test_configured_severity_is_honored(self):

@@ -10,6 +10,7 @@ carried alongside for detail/marker rendering.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from enum import Enum
 from typing import Any
 
 from elspais.graph.GraphNode import NodeKind
@@ -232,10 +233,14 @@ class UncreditedEvidence:
     requirement at all: that is one fact about the requirement, reported once,
     not once per *Assertion* the evidence happens to name (REQ-d00274-F).
 
-    ``carries_result`` distinguishes evidence that only names the *Assertion*
-    from evidence that also passed or failed for it (REQ-d00274-D) -- the
-    difference between a test aimed somewhere nothing is implemented and a
-    passing test aimed there.
+    ``result`` distinguishes evidence that only names the *Assertion* from
+    evidence that also carries a verdict for it (REQ-d00274-D) -- a test aimed
+    somewhere nothing is implemented, a passing test aimed there, and a failing
+    one are three different things to be told.
+
+    ``result_source_id`` is the source that returned that verdict, so the
+    finding is reported at the file and line of the test it describes rather
+    than at whichever source happened to be listed first.
     """
 
     requirement_id: str
@@ -243,7 +248,8 @@ class UncreditedEvidence:
     denominator: str
     assertion_label: str | None
     labels: tuple[str, ...]
-    carries_result: bool
+    result: EvidenceResult
+    result_source_id: str | None
     source_ids: tuple[str, ...]
 
 
@@ -261,17 +267,49 @@ def _evidence_sources_for(
 
 
 _PASSING_STATUSES = frozenset({"passed", "pass", "success"})
+_FAILING_STATUSES = frozenset({"failed", "fail", "failure", "error"})
+
+
+class EvidenceResult(str, Enum):
+    """The verdict a piece of evidence carries for the *Assertion* it names.
+
+    Three states, because a missing verdict and a failure are different facts:
+    a test that returned no verdict says nothing about the *Assertion* it
+    names, while a test that ran and failed against an *Assertion* nothing
+    implements is the sharpest form of the defect this check exists to report
+    (REQ-d00274-D). The verdict shapes what the finding says; whether the
+    finding is raised at all, and at what severity, does not depend on it.
+    """
+
+    NONE = "none"
+    PASSED = "passed"
+    FAILED = "failed"
 
 
 # Implements: REQ-d00274-D
-def _evidence_passes(graph: Any, source_ids: tuple[str, ...]) -> bool:
-    """Whether THIS evidence carries a passing result of its own.
+def _evidence_result(graph: Any, source_ids: tuple[str, ...]) -> tuple[EvidenceResult, str | None]:
+    """The verdict THIS evidence carries, and which source returned it.
+
+    The second element is the source the verdict came from, so a finding can
+    be reported at the file and line of the evidence it describes. Where the
+    sources disagree, the one named in the wording and the one pointed at are
+    the same test: sending a reader to a passing test under the words "a
+    failing test" would be a true sentence over a false location (REQ-p00019-J).
 
     Read from the evidence node's own RESULT children, never from the
     requirement's aggregate: a dimension can credit a label because a sibling
     test passed, and saying "a passing test names this" of a test that failed
     would put the finding under a description untrue of it (REQ-p00019-J).
+
+    A failure among the sources decides the answer, matching how a failing
+    result is read everywhere else. NONE is the absence of a verdict, which a
+    test reaches two ways: no RESULT of its own -- declared and not run, or run
+    and not ingested -- and a RESULT whose status is neither a pass nor a fail,
+    such as a skipped one. Neither is reported as a failure it never returned.
+    Separating those two is the business of the Passing/Failing/No-result
+    partition, not of a report about evidence crediting nothing.
     """
+    passed_at: str | None = None
     for source_id in source_ids:
         node = graph.find_by_id(source_id)
         if node is None:
@@ -279,9 +317,14 @@ def _evidence_passes(graph: Any, source_ids: tuple[str, ...]) -> bool:
         for child in node.iter_children():
             if child.kind != NodeKind.RESULT:
                 continue
-            if (child.get_field("status", "") or "").lower() in _PASSING_STATUSES:
-                return True
-    return False
+            status = (child.get_field("status", "") or "").lower()
+            if status in _FAILING_STATUSES:
+                return EvidenceResult.FAILED, source_id
+            if status in _PASSING_STATUSES and passed_at is None:
+                passed_at = source_id
+    if passed_at is not None:
+        return EvidenceResult.PASSED, passed_at
+    return EvidenceResult.NONE, None
 
 
 # Implements: REQ-d00274-A, REQ-d00274-B, REQ-d00274-E, REQ-d00274-F
@@ -325,6 +368,7 @@ def iter_uncredited_evidence(
                 if not reached:
                     continue
                 sources = _evidence_sources_for(rollup, dimension, reached)
+                verdict, verdict_source = _evidence_result(graph, sources)
                 out.append(
                     UncreditedEvidence(
                         requirement_id=node.id,
@@ -332,7 +376,8 @@ def iter_uncredited_evidence(
                         denominator=denom_name,
                         assertion_label=None,
                         labels=tuple(sorted(reached)),
-                        carries_result=_evidence_passes(graph, sources),
+                        result=verdict,
+                        result_source_id=verdict_source,
                         source_ids=sources,
                     )
                 )
@@ -340,6 +385,7 @@ def iter_uncredited_evidence(
             uncredited = named_labels(num_dim) - denom
             for label in sorted(uncredited):
                 label_sources = _evidence_sources_for(rollup, dimension, {label})
+                verdict, verdict_source = _evidence_result(graph, label_sources)
                 out.append(
                     UncreditedEvidence(
                         requirement_id=node.id,
@@ -347,7 +393,8 @@ def iter_uncredited_evidence(
                         denominator=denom_name,
                         assertion_label=label,
                         labels=(label,),
-                        carries_result=_evidence_passes(graph, label_sources),
+                        result=verdict,
+                        result_source_id=verdict_source,
                         source_ids=label_sources,
                     )
                 )

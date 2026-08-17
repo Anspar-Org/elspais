@@ -858,7 +858,9 @@ an assertion its dimension does not count -- a test on an assertion nothing
 implements. The figures are computed without it, so it credits nothing. The
 `tests.uncredited_evidence` check reports each such piece of evidence with the
 assertion it names, the dimension it fails to reach, and the file and line it was
-written on. It defaults to `error` because the condition has only two
+written on. A verdict the evidence carries is part of that report: a test that
+only names the assertion, one that passed against it, and one that failed against
+it read as three different findings. It defaults to `error` because the condition has only two
 explanations and both are defects: the implementation exists and its
 `Implements:` reference was never written, or the test is aimed at an assertion
 it does not exercise. Only assertion-targeted evidence names an assertion; a
