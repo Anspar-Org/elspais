@@ -626,7 +626,7 @@ A. While a serving process answers from program code that differs from the progr
 
 B. Such a process SHALL go on accepting the request to persist changes it holds that exist nowhere else.
 
-C. While such a process holds changes that exist nowhere else, it SHALL decline the requests it would otherwise answer from the differing code.
+C. While such a process holds changes that exist nowhere else, it SHALL decline the other requests it would otherwise answer.
 
 D. While such a process holds no changes that exist nowhere else, its working tree SHALL become served from the program code that tree now holds, without a client having to ask.
 
@@ -648,8 +648,9 @@ Assertion E exists because a change is rarely one file. An editor writing out a 
 
 ### Changelog
 
+- 2026-08-18 | eaea87c6 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-18 | 0588f7bb | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-18 | bfd8a2aa | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-18 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: state what a serving process owes its clients when its program code changes beneath it
 
-*End* *Serving From Current Program Code* | **Hash**: 0588f7bb
+*End* *Serving From Current Program Code* | **Hash**: eaea87c6
