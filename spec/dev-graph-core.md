@@ -164,7 +164,7 @@ The coverage annotation system SHALL support an INDIRECT coverage source for who
 
 A. `CoverageSource` enum SHALL include distinct test-evidence values -- `TEST_DIRECT` for an assertion-targeted `Verifies:` and `TEST_INDIRECT` for a whole-requirement `Verifies:` -- kept separate from implementation-evidence sources (`DIRECT`/`EXPLICIT`/`INFERRED`) so that a test that verifies an *Assertion* credits the Tested dimension only and never the Implemented dimension (REQ-d00084-D). (`INDIRECT` remains for the transitive CODE->TEST provenance path.)
 
-B. A whole-requirement (assertion-less) reference SHALL credit ALL of the target requirement's assertions at full value on the generous footing. This SHALL hold symmetrically for `Verifies:` (source `TEST_INDIRECT` -> Tested), `Implements:` on CODE (source `CODE_INDIRECT` -> Implemented), `Implements:`/`Refines:` from a child requirement (source `INFERRED` -> Implemented), and `Validates:` from a journey (source `UAT_INFERRED` -> UAT Covered). No whole-requirement reference SHALL credit the strict (direct) footing.
+B. A whole-requirement (assertion-less) reference SHALL credit every *Assertion* of the target requirement in the indirect measure, at full value, and SHALL credit no direct measure. This SHALL hold for `Verifies:` (Tested), `Implements:` on CODE (Implemented), `Implements:`/`Refines:` from a child requirement, and `Validates:` from a journey alike -- a reference that names no *Assertion* names them all equally, whatever keyword carried it.
 
 C. `RollupMetrics` SHALL track `validated_with_indirect` count for assertions validated when including INDIRECT sources.
 
@@ -180,18 +180,33 @@ H. When a requirement declares `Satisfies: X`, the graph builder SHALL clone the
 
 I. 100% coverage of a template instance SHALL be achieved when every leaf *Assertion* in the cloned template subtree (excluding N/A assertions) has at least one inbound coverage edge (`Implements:`, `Verifies:`, or `Validates:`) on its template original, consistent with the inherited-coverage rule (REQ-p00014-K).
 
-J. A `Refines:` relationship SHALL NOT contribute coverage by itself, but it SHALL conduct the refining requirement's own rolled-up coverage upward to the *Assertion* it targets. A requirement's coverage SHALL be the mean of its assertions' coverage (assertions are unweighted), computed independently per coverage dimension. Coverage SHALL be tracked on two footings (REQ-d00069-L). An *Assertion*'s **strict (direct)** coverage SHALL be the equal-weight mean of its assertion-specific contributions (local direct evidence at full value; each assertion-targeted refining requirement at its own rolled-up coverage), and SHALL be `0` when it has none; whole-requirement (blanket) credit SHALL NOT enter the strict footing. An *Assertion*'s **generous (indirect)** coverage SHALL be the maximum of (a) its strict coverage, (b) full value when the requirement has local whole-requirement evidence (a whole-requirement test/code/journey), and (c) the mean coverage of the requirement's whole-requirement (blanket) `Refines:` edges at FULL weight. The generous footing SHALL be monotone: adding assertion-specific evidence SHALL NOT lower it. The prior `1/N` blanket deflation is retired.
+J. A `Refines:` relationship SHALL NOT contribute coverage by itself; it SHALL conduct the coverage of the refining requirement to the assertions its own citation names -- the *Assertion* it names, or every *Assertion* of the requirement where it names only the requirement. Each measure SHALL conduct into the same measure, direct into direct and indirect into indirect, so that no measure is ever composed of another. The value conducted SHALL be the mean, in that measure, of the contributing requirements' own coverage, a requirement's coverage being the mean over its assertions, computed independently per dimension.
 
 K. The system SHALL report coverage gaps on template instance nodes through the standard coverage mechanisms. Instance nodes are normal graph nodes and participate in existing health checks.
 
-L. Coverage SHALL be tracked on two footings per dimension: strict (direct, assertion-targeted evidence only) and generous (indirect, additionally counting whole-requirement, inferred, conducted, and inherited evidence). Reporting surfaces SHALL headline the generous footing and SHALL express precision as a tier (full, partial, failing, missing), rendering a single unified indirect-evidence caveat (a `~` marker meaning "some coverage comes from whole-requirement references") rather than a second count. The caveat SHALL be derived from `indirect > direct` per dimension and per *Assertion*, and SHALL be applied consistently at BOTH the requirement badge and the per-*Assertion* level so the two never disagree.
+L. Coverage SHALL be measured on two independent axes per dimension. The first axis is what a citation named: *direct* where it named the *Assertion* it credits, *indirect* where it named only the requirement and is therefore attributed equally to every *Assertion* of it. The second axis is where the evidence sits: *immediate* where it is attached to what is being reported, and *rolled-up* where it is conducted from a refining requirement, in which case the first axis describes the refining requirement's own evidence. The four measures they yield SHALL each be reported in their own right, and none SHALL be defined in terms of another.
+
+M. An *Assertion*'s immediate coverage SHALL be whole or absent, since a citation either names it or does not. Its rolled-up coverage MAY be fractional, being the mean of the coverage of the requirements refining it, so that a partially finished refinement reads as partially done.
+
+N. Total coverage SHALL be reported as well, taken per *Assertion* as the greatest of that *Assertion*'s four measures, so that an *Assertion* covered more than one way is counted once and a requirement's total can never exceed its number of assertions.
 
 ### Rationale
+
+Two questions are asked of coverage and they are not the same question. "What still needs doing here" is answered by what a citation names and where it is attached: an *Assertion* nobody has cited is work, however finished the requirements refining it may be. "How much of this is real" is answered by conduction: a requirement high in the tree is rarely cited by code at all, and what makes it true is the state of everything beneath it. One number cannot answer both, and a number that tries answers neither -- averaging an *Assertion*'s own citation together with the progress of a refinement made the figure move when nothing about that *Assertion* had changed, and let an *Assertion* nobody had cited read as fully covered because something below it was finished.
+
+A measure conducts only into itself, because the two are not the same unit. Direct coverage counts assertions somebody wrote evidence against; indirect counts assertions reached by evidence written against their requirement. Adding one to the other, or letting a requirement covered only as a whole raise an *Assertion*'s direct figure one level up, would put a number under a description that is not true of it -- and would do so invisibly, since nothing downstream can tell which part of a summed figure came from where. What the refining citation names decides which assertions receive a conducted value; it does not decide which measure that value belongs to.
+
+Separating the axes is what makes each measure sayable in a sentence. Direct and indirect say what a citation named; immediate and rolled-up say whether the evidence is attached here or conducted from below. Each of the four is reported in its own right, so no measure is defined as another's remainder, and each can independently be complete: a requirement whose assertions are each cited AND which is also cited as a whole is fully covered twice over, which the old nested pair could not express.
+
+Total exists because a reader also wants one number, and taking it per *Assertion* as the greatest of that *Assertion*'s measures is what keeps it honest -- an *Assertion* covered three ways is still one covered *Assertion*, so a requirement's total can never exceed the number of assertions it has.
 
 Whole-requirement tests (e.g., `test_implements_req_d00087` with no *Assertion* suffix) currently contribute zero *Assertion* coverage. Adding INDIRECT as a separate source allows a "progress indicator" view alongside strict *Traceability*, following the same pattern as INFERRED coverage for requirement-to-requirement relationships.
 
 ### Changelog
 
+- 2026-08-17 | 6de09e95 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-17 | 6ac9e8a6 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-17 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: measure coverage on two axes -- what a citation named, and whether the evidence is attached or conducted -- reporting each measure in its own right plus a per-assertion total (J, L, M, N)
 - 2026-07-31 | 8c02235b | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-07 | 2d89da53 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-03 | ddbc50c8 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -201,7 +216,7 @@ Whole-requirement tests (e.g., `test_implements_req_d00087` with no *Assertion* 
 - 2026-05-11 | e9b5c3f1 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | e9b5c3f1 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *Indirect Coverage Source* | **Hash**: 8c02235b
+*End* *Indirect Coverage Source* | **Hash**: 6de09e95
 ---
 
 ## REQ-d00070: Indirect Coverage Toggle Display
@@ -632,7 +647,7 @@ Reporting surfaces (trace, summary, MCP project summary, HTML viewer) SHALL pres
 
 ### Assertions
 
-A. All reporting surfaces (trace, summary, MCP project summary, HTML viewer) SHALL headline coverage counts on the generous footing per REQ-d00069-L, and text surfaces SHALL append a `~` marker, per coverage dimension, to any count whose evidence is not fully direct.
+A. All reporting surfaces (trace, summary, MCP project summary, HTML viewer) SHALL headline total coverage (REQ-d00069-N) and SHALL make the measures behind it available, so that a reader is never shown a figure without being able to see what evidence produced it.
 
 B. The coverage display terms available to a reporting surface SHALL be Implemented, Tested, Passing, UAT Covered, and UAT Passed, and no other word SHALL denote a coverage dimension.
 
@@ -648,21 +663,25 @@ G. The viewer SHALL assign each *Assertion* a semantic coverage *standing* (full
 
 H. The requirement-level coverage tier, the per-*Assertion* coverage standing, and the viewer filter bucket SHALL be drawn from one shared set of coverage state names — full, partial, failing, and missing — so that a given coverage condition maps to the same state word on every surface. The prior split of the full state into separate direct and indirect states SHALL NOT reappear as distinct tier states.
 
-I. Tested SHALL be measured as the coverage of the implemented assertions, Passing as the coverage of the tested assertions, and UAT Passed as the coverage of the UAT-covered assertions. A chained dimension whose relative denominator is empty SHALL read missing at neutral severity — neither a reported gap nor error-colored — and SHALL NOT drag the requirement's combined coverage bucket. A failing result on any assertion within a dimension's denominator SHALL render that dimension failing regardless of the covered fraction.
+I. Tested SHALL be measured as the coverage of the implemented assertions, Passing as the coverage of the tested assertions, and UAT Passed as the coverage of the UAT-covered assertions, each chain measured within one measure so that a figure and its denominator are made of the same kind of evidence. A chained dimension whose denominator is empty SHALL read missing at neutral severity -- neither a reported gap nor error-colored -- and SHALL NOT drag the requirement's combined coverage bucket. A failing result on any assertion within a dimension's denominator SHALL render that dimension failing regardless of the covered fraction.
 
-J. The distinction between direct and indirect coverage (for example, coverage conducted through a refinement relationship) SHALL be surfaced as a caveat — a `~` marker accompanied by hover provenance — rather than as a distinct tier color. A configurable `allow_indirect` setting (default enabled) SHALL govern whether indirect coverage credits a dimension's state: when disabled, only direct coverage credits the state and indirect coverage SHALL be reported as present but not credited.
+J. A surface SHALL NOT annotate a coverage figure with a caveat standing in for a measure it did not show. Where the difference between measures matters, the measures themselves SHALL be reported (REQ-d00069-L).
 
 K. The coverage dimension labels SHALL be derived from a single configurable mapping from each coverage-conferring relationship to its display word, and every surface SHALL render dimension labels through that one mapping.
 
 L. A per-status `expects_implementation` flag SHALL declare whether a requirement in that status is expected to have implementation; its default SHALL be derived from the status's role, so that active-role statuses expect implementation and others do not. When a status does not expect implementation, absent implementation SHALL be neither flagged as a gap, nor error-colored, nor counted against aggregate implemented coverage. All surfaces SHALL resolve this flag through a single shared helper, and it SHALL supersede the coverage-exclusion role when determining coverage inclusion.
 
-M. A surface that reports which assertions need work (`gaps`, the health coverage checks, and the MCP uncovered-*Assertion* and test-coverage tools) SHALL determine gaps on the strict footing per REQ-d00069-L, so that an *Assertion* with no evidence naming it is reported however much whole-requirement evidence its requirement carries.
+M. A surface that reports which assertions need work (`gaps`, the health coverage checks, and the MCP uncovered-*Assertion* and test-coverage tools) SHALL read the immediate direct measure, so that an *Assertion* no citation names is reported however much whole-requirement evidence its requirement carries and however finished the requirements refining it are.
 
 N. Passing SHALL count an *Assertion* only where a test declared against that *Assertion* returned a passing result, and no such test returned a failure. Evidence that no test named the *Assertion* -- line coverage of the code implementing it, or a result reached through the code rather than through the test -- SHALL NOT credit Passing.
 
 O. Tested SHALL be reported with a breakdown of the assertions it counts into those that passed, those that failed, and those awaiting a result, and the three counts SHALL together account for every tested *Assertion*. The breakdown qualifies the Tested figure and SHALL NOT introduce a coverage dimension of its own.
 
 ### Rationale
+
+The measures answer different questions, so the surfaces divide along the same line: what still needs doing is read from the immediate direct measure, because an *Assertion* no citation names is work whatever is happening below it, while a summary headlines total, because a reader asking how far along something is wants one number that counts each *Assertion* once.
+
+A caveat marker was how a single figure used to admit it was standing in for two. With the measures published there is nothing for it to admit, and a marker that means "this number is partly something else" is worse than the something else being shown.
 
 N draws the line between measuring a requirement's tests and measuring its code. A test that names an *Assertion* and passes is the only thing that says that *Assertion* passes; that a line of implementing code ran during some test run says the code was reached, which is a different fact about a different subject. Crediting the second as the first was a workaround for an inability that does not exist: a test can carry its `Verifies:` in every language the tool reads tests in, so an *Assertion* reported as passing without one is reporting an annotation nobody wrote. It also broke the chain -- Passing could credit an *Assertion* Tested did not, leaving the two figures incomparable and the excess unexplainable to a reader.
 
@@ -674,6 +693,8 @@ A reports how the estate is doing and M reports what is left to do; the two ques
 
 ### Changelog
 
+- 2026-08-17 | cc6480b3 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-17 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: headline total and publish the measures behind it (A); read work-lists from immediate direct evidence (M); retire the caveat marker that stood in for an unshown measure (J); chain each dimension within one measure (I)
 - 2026-08-17 | c0428191 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms, update hash
 - 2026-08-17 | 0f7c5cf2 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-17 | 2371dd44 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -691,7 +712,7 @@ A reports how the estate is doing and M reports what is left to do; the two ques
 - 2026-07-03 | c843c727 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-02 | be97c170 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: add missing changelog section
 
-*End* *Reporting Surface Consistency* | **Hash**: c0428191
+*End* *Reporting Surface Consistency* | **Hash**: cc6480b3
 
 ---
 

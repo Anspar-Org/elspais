@@ -83,7 +83,7 @@
 | REQ-d00066 | Test Coverage Tool Implementation                             | dev-mcp-tools.md        | 8a9b0217 |
 | REQ-d00067 | Uncovered Assertions Tool Implementation                      | dev-mcp-tools.md        | c838e24d |
 | REQ-d00068 | Assertion Keyword Search Tool Implementation                  | dev-mcp-tools.md        | d552fda6 |
-| REQ-d00069 | Indirect Coverage Source                                      | dev-graph-core.md       | 8c02235b |
+| REQ-d00069 | Indirect Coverage Source                                      | dev-graph-core.md       | 6de09e95 |
 | REQ-d00070 | Indirect Coverage Toggle Display                              | dev-graph-core.md       | a55fcb89 |
 | REQ-d00071 | Unified Root vs Orphan Classification                         | dev-graph-core.md       | f2cb5f45 |
 | REQ-d00072 | Link Suggestion Core Engine                                   | dev-graph-core.md       | 9d57c2ad |
@@ -169,7 +169,7 @@
 | REQ-d00255 | Test-to-Journey UAT Verification                              | dev-graph-core.md       | ab5cb648 |
 | REQ-d00256 | Step-Level UAT Verification                                   | dev-graph-core.md       | 8bf40a7c |
 | REQ-d00257 | UAT-Scoped Traceability Report                                | dev-graph-core.md       | 2a8aab8b |
-| REQ-d00258 | Reporting Surface Consistency                                 | dev-graph-core.md       | c0428191 |
+| REQ-d00258 | Reporting Surface Consistency                                 | dev-graph-core.md       | cc6480b3 |
 | REQ-d00259 | Requirement Format Reference Command                          | dev-cli.md              | c3b67490 |
 | REQ-d00260 | Workspace Registry and Federated View Assembly                | dev-graph-federation.md | 510a0f67 |
 | REQ-d00261 | Federation Role Model                                         | dev-graph-federation.md | fb8db8a9 |
