@@ -64,6 +64,96 @@ class TestTraceCommand:
         assert isinstance(parsed, list)
         assert any(item["id"] == "REQ-p00001" for item in parsed)
 
+    # Verifies: REQ-d00069-L, REQ-d00258-A
+    def test_json_carries_the_four_measures_per_dimension(self, canonical_federated_graph, capsys):
+        """REQ-d00258-A: JSON is where the measures are cheap to make
+        available without widening the text/markdown/html table."""
+        data = compute_trace(canonical_federated_graph, {}, {})
+        preset = ReportPreset(
+            name="standard",
+            columns=list(REPORT_PRESETS["standard"].columns),
+        )
+        _render_json_from_data(data, preset)
+
+        content = capsys.readouterr().out
+        parsed = json.loads(content)
+        item = next(i for i in parsed if i["id"] == "REQ-p00001")
+        for suffix in (
+            "_immediate_direct",
+            "_immediate_indirect",
+            "_rolled_direct",
+            "_rolled_indirect",
+        ):
+            assert f"tested{suffix}" in item
+            assert f"implemented{suffix}" in item
+        # code_tested/lcov_tested are outside the REQ-d00258-B vocabulary
+        # and carry no measure split.
+        assert "code_tested_immediate_direct" not in item
+
+    # Verifies: REQ-d00069-L, REQ-d00258-A
+    def test_format_json_graph_path_carries_the_four_measures(
+        self, canonical_federated_graph, capsys
+    ):
+        """The live-graph JSON path (``format_json``) matches the
+        daemon-payload path (``_render_json_from_data``) above."""
+        from elspais.commands.trace import format_json
+
+        preset = ReportPreset(
+            name="standard",
+            columns=list(REPORT_PRESETS["standard"].columns),
+        )
+        out = "".join(format_json(canonical_federated_graph, preset))
+        parsed = json.loads(out)
+        item = next(i for i in parsed if i["id"] == "REQ-p00001")
+        assert "tested_rolled_direct" in item
+        assert "implemented_immediate_indirect" in item
+
+
+# Verifies: REQ-d00069-N, REQ-d00258-A, REQ-d00258-J
+class TestTraceHeadlineIsTheTotal:
+    """A discriminating fixture where the legacy blended footings and the
+    REQ-d00069-N total genuinely disagree, so a headline reverted to the
+    legacy footing (without reinstating the `~` marker) would be caught."""
+
+    def test_headline_reads_the_total_not_the_legacy_blended_footing(self):
+        """*Assertion* A carries partial LOCAL evidence (0.6) AND a fully
+        finished conducted refinement (1.0). The legacy footings average the
+        two into 0.8; the total takes the greatest of the four measures
+        (1.0)."""
+        from elspais.commands.trace import _get_node_data
+        from elspais.graph.builder import TraceGraph
+        from elspais.graph.GraphNode import GraphNode, NodeKind
+        from elspais.graph.metrics import CoverageDimension, RollupMetrics
+
+        node = GraphNode("REQ-p00001", NodeKind.REQUIREMENT, label="Partial+Refined")
+        node.set_field("level", "prd")
+        node.set_field("status", "Active")
+        node.set_metric(
+            "rollup_metrics",
+            RollupMetrics(
+                total_assertions=1,
+                implemented=CoverageDimension(
+                    total=1,
+                    direct=0.8,
+                    indirect=0.8,
+                    direct_pct_by_label={"A": 0.8},
+                    indirect_pct_by_label={"A": 0.8},
+                    immediate_direct_by_label={"A": 0.6},
+                    rolled_direct_by_label={"A": 1.0},
+                ),
+            ),
+        )
+        dim = node.get_metric("rollup_metrics").implemented
+        assert dim.direct == pytest.approx(0.8)
+        assert dim.indirect == pytest.approx(0.8)
+        assert dim.covered == pytest.approx(1.0)
+
+        data = _get_node_data(node, TraceGraph())
+        assert data["implemented"] == "1/1 (100%)"
+        assert "0.8" not in data["implemented"]
+        assert data["implemented_immediate_direct"] == "0.6/1 (60%)"
+        assert data["implemented_rolled_direct"] == "1/1 (100%)"
+
 
 class TestTraceReportPresets:
     """Tests for --preset functionality."""

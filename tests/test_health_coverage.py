@@ -313,13 +313,16 @@ class TestCoverageCheckShowsTheMeasuresBehindItsFigures:
         config = {"levels": {"prd": {"rank": 1, "expects_validation": True}, "dev": {"rank": 3}}}
         return check_uat_coverage(graph, exclude_status=set(), config=config)
 
-    def test_message_carries_both_the_cited_and_the_conducted_figure(self):
+    def test_message_carries_both_the_cited_and_the_legacy_blended_figure(self):
         """Nothing cites REQ-900-A, and conduction covers it. Both numbers are
-        shown, each naming the measure it is on."""
+        shown, each naming the measure/footing it is on -- the second names
+        itself a LEGACY footing rather than reusing the four-measure words
+        `summary`/`trace` now use for REQ-d00069-L's direct/indirect/
+        conducted measures."""
         check = self._conducted_only_uat_check()
         assert "1/1 REQs covered on any measure" in check.message
         assert "0/1 assertions cited by name here" in check.message
-        assert "1/1 averaging those citations with what refinements conduct" in check.message
+        assert "1/1 on the legacy direct footing" in check.message
         assert check.details["cited_assertions"] == 0.0
         assert check.details["direct_assertions"] == 1.0
 

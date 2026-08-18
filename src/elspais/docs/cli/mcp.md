@@ -184,13 +184,20 @@ Get summary statistics for the project.
                              shape to the `elspais summary` CLI's `levels`
                              list (level, total, with_code_refs,
                              with_test_refs, with_passing, total_assertions,
-                             implemented_assertions, implemented_direct,
-                             tested_assertions, tested_direct,
-                             tested_passed, tested_failed,
-                             tested_awaiting, passing_assertions,
-                             passing_direct). The three tested_* counts
-                             are the Tested breakdown and account for
-                             every tested assertion.
+                             tested_passed, tested_failed, tested_awaiting).
+                             The three tested_* counts are the Tested
+                             breakdown and account for every tested
+                             assertion. Per dimension (implemented, tested,
+                             passing, uat_covered, uat_passed) the payload
+                             carries `<dim>_total_covered` -- the
+                             REQ-d00069-N per-*Assertion* total the CLI now
+                             headlines -- plus the four REQ-d00069-L measures
+                             behind it: `<dim>_immediate_direct`,
+                             `<dim>_immediate_indirect`, `<dim>_rolled_direct`,
+                             `<dim>_rolled_indirect`. The legacy
+                             `<dim>_assertions`/`<dim>_direct` keys are still
+                             present but are no longer what any CLI surface
+                             reads.
     changes                 Git change metrics:
       - uncommitted       Modified spec files
       - branch_changed    Changed vs main branch

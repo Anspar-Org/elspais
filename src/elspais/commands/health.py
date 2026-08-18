@@ -2506,17 +2506,24 @@ def check_dimension_coverage(
 
     Reports the requirement-level count and the assertion-level figures, each
     naming the measure it is on (REQ-d00258-A): assertions a citation names
-    here, then the figure that averages those citations with the coverage
-    refinements conduct, then the one that also counts whole-requirement
-    evidence. The first is the measure the gap surfaces answer on
-    (REQ-d00258-M), so a reader can see why this check reports coverage while
-    `gaps` still lists work.
+    here (the REQ-d00069-L immediate-direct measure -- the one word this
+    check shares with the four-measure vocabulary `summary`/`trace` now
+    headline), then two LEGACY BLENDED footings this check still reads
+    (Task 3 did not move `check_dimension_coverage` off them): a direct
+    footing that blends assertion citations with refinement credit, and an
+    indirect footing that additionally folds in whole-requirement evidence.
+    Neither legacy footing is named "direct"/"indirect"/"conducted" the way
+    the four measures are, on purpose -- those words now denote specific
+    REQ-d00069-L measures elsewhere, and a blended legacy figure is not one
+    of them. The first (cited-by-name) figure is the measure the gap
+    surfaces answer on (REQ-d00258-M), so a reader can see why this check
+    reports coverage while `gaps` still lists work.
 
     The figures are NOT nested and are not described as though they were: the
-    blended figures average a citation with what refinements conduct, so a
-    fully cited *Assertion* refined by unfinished work reads LOWER on them
-    than on the cited figure. Each label therefore says what its own figure
-    counts and claims no ordering against its neighbours.
+    legacy blended footings average a citation with what refinements conduct,
+    so a fully cited *Assertion* refined by unfinished work reads LOWER on
+    them than on the cited-by-name figure. Each label therefore says what its
+    own figure counts and claims no ordering against its neighbours.
 
     Args:
         graph: The graph to check.
@@ -2579,17 +2586,27 @@ def check_dimension_coverage(
     # (REQ-d00258-A). The requirement count is on the same generous reading as
     # the last assertion figure -- a requirement is counted once any of its
     # measures is above zero.
+    # Implements: REQ-d00258-A
+    # These two labels name themselves as LEGACY BLENDED figures rather than
+    # borrowing the four-measure words (direct/indirect/conducted):
+    # "cited by name here" above is the genuine REQ-d00069-L immediate-direct
+    # measure, but these two are the pre-REQ-d00069-L blended footings this
+    # check still reads (`agg.direct`/`agg.covered`), and summary/trace now
+    # use "direct"/"indirect"/"conducted" to mean the four measures -- so a
+    # blended legacy figure must not reuse those words to mean something else.
     msg_parts = [
         f"{label}: {req_with_any}/{req_count} REQs covered on any measure ({req_pct:.0f}%)",
         f"{fmt_assertion_count(cited_assertions)}/{total_assertions} assertions"
         f" cited by name here ({cited_pct:.0f}%)",
         f"{fmt_assertion_count(direct_assertions)}/{total_assertions}"
-        f" averaging those citations with what refinements conduct ({direct_pct:.0f}%)",
+        f" on the legacy direct footing, which blends citations with refinement"
+        f" credit ({direct_pct:.0f}%)",
     ]
     if abs(indirect_assertions - direct_assertions) > 1e-9:
         msg_parts.append(
             f"{fmt_assertion_count(indirect_assertions)}/{total_assertions}"
-            f" counting whole-requirement evidence too ({indirect_pct:.0f}%)"
+            f" on the legacy indirect footing, which also folds in"
+            f" whole-requirement evidence ({indirect_pct:.0f}%)"
         )
     # Implements: REQ-d00258-O
     if dimension == "tested" and (agg.tested_passed + agg.tested_failed + agg.tested_awaiting):

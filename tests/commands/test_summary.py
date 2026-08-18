@@ -1257,6 +1257,57 @@ class TestMeasuresArePublished:
         for word in ("direct", "indirect", "conducted"):
             assert word in out
 
+    # Verifies: REQ-d00069-N, REQ-d00258-A, REQ-d00258-J
+    def test_headline_reads_the_total_not_the_legacy_blended_footing(self):
+        """A discriminating fixture where the legacy blended footings and the
+        REQ-d00069-N total genuinely disagree: *Assertion* A carries partial
+        LOCAL evidence (0.6, e.g. a partially-verified journey attached here)
+        AND a fully-finished conducted refinement (1.0). The legacy footings
+        AVERAGE the two into 0.8 (`direct_pct_by_label`/`indirect_pct_by_label`,
+        as the real annotator's per-assertion mean would); the total takes
+        the GREATEST of the four measures (1.0) -- a finished refinement is
+        not capped by averaging it against a weaker local citation.
+        `_set_rollup`-based fixtures elsewhere in this file cannot produce
+        this shape: they are direct-only, so total trivially equals the
+        legacy figure and a reverted headline would pass unnoticed."""
+        from elspais.graph.metrics import CoverageDimension
+
+        graph = _make_graph()
+        node = _add_requirement(graph, "REQ-p00001", "Partial+Refined", level="prd")
+        node.set_metric(
+            "rollup_metrics",
+            RollupMetrics(
+                total_assertions=1,
+                implemented=CoverageDimension(
+                    total=1,
+                    direct=0.8,
+                    indirect=0.8,
+                    direct_pct_by_label={"A": 0.8},
+                    indirect_pct_by_label={"A": 0.8},
+                    immediate_direct_by_label={"A": 0.6},
+                    rolled_direct_by_label={"A": 1.0},
+                ),
+            ),
+        )
+
+        dim = node.get_metric("rollup_metrics").implemented
+        # Confirm the fixture actually produces the discriminating shape
+        # before trusting an assertion built on it.
+        assert dim.direct == pytest.approx(0.8)
+        assert dim.indirect == pytest.approx(0.8)
+        assert dim.covered == pytest.approx(1.0)  # REQ-d00069-N total
+
+        data = collect_coverage(graph)
+        lv = next(lv for lv in data["levels"] if lv["level"] == "PRD")
+        assert lv["implemented_total_covered"] == pytest.approx(1.0)
+        assert lv["implemented_assertions"] == pytest.approx(0.8)  # legacy, unread by the CLI now
+
+        out = _render(data, "text")
+        implemented_line = next(ln for ln in out.splitlines() if "Implemented:" in ln)
+        assert "1/1 (100" in implemented_line
+        assert "0.8/1" not in implemented_line
+        assert "80.0%" not in implemented_line
+
 
 class TestTestedBreakdown:
     """REQ-d00258-O: the summary reports Tested with its three-way breakdown."""

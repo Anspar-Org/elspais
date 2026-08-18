@@ -38,12 +38,23 @@ only the whole requirement) crossed with where the evidence sits (*immediate*
 requirement's own coverage via `Refines:`). `trace --format csv` publishes
 all four as columns of their own beside each dimension's total (`Tested
 Immediate Direct`, `Tested Immediate Indirect`, `Tested Rolled Direct`,
-`Tested Rolled Indirect`, and likewise for the other four dimensions), and
-`summary` prints them beneath each level's headline in the same vocabulary a
-`health` coverage check uses ("cited by name here", "whole-requirement",
-"conducted direct/indirect"). There is no caveat marker standing in for a
-measure a surface does not show -- where the difference between measures
-matters, the measures themselves are reported. See `elspais docs checks`
+`Tested Rolled Indirect`, and likewise for the other four dimensions);
+`trace --format json` carries the same four fields per dimension in each
+requirement's object. The text/markdown/html table intentionally does NOT
+grow four more numbers per dimension -- it is already eleven columns wide,
+and REQ-d00258-A requires the measures to be *available*, which `--format
+json`/`csv` already satisfy without making the default table unreadable.
+`summary` prints the four measures beneath each level's headline, naming
+each one directly: "cited by name here" (immediate-direct), "whole-requirement"
+(immediate-indirect), "conducted direct"/"conducted indirect" (the two
+rolled-up measures). These words are now the canonical names for the four
+REQ-d00069-L measures everywhere; the `health` coverage check's two
+comparable-looking figures are LEGACY BLENDED footings that predate this
+split and are labeled "legacy direct footing"/"legacy indirect footing" so
+they are not mistaken for the same quantities. There is no caveat marker
+standing in for a measure a surface does not show -- where the difference
+between measures matters, the measures themselves are reported. See
+`elspais docs checks`
 (*Coverage Dimensions*) for the model underneath this.
 
 **Relative denominators.** `Tested` and `Passing` measure against their own

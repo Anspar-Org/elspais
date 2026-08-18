@@ -466,6 +466,22 @@ _COVERAGE_COLUMNS_WITH_MEASURES = [
 ]
 
 
+def _add_measure_fields(node_dict: dict, data: dict, columns: list[str]) -> None:
+    """Add the four REQ-d00069-L measure fields for each rendered dimension.
+
+    JSON's per-requirement object is where REQ-d00258-A's "available" is
+    cheapest to satisfy without widening the text/markdown/html table: a
+    field costs nothing to a reader who is not looking at it. Only for
+    dimensions actually present in ``columns`` (the UAT preset excludes the
+    code dimensions; the minimal preset excludes coverage entirely).
+    """
+    for col in columns:
+        if col not in _COVERAGE_COLUMNS_WITH_MEASURES:
+            continue
+        for suffix, _header in _MEASURE_COLUMNS:
+            node_dict[col + suffix] = data.get(col + suffix)
+
+
 def _format_row(data: dict, columns: list[str]) -> list[str]:
     """Format a single row from node data according to columns."""
     values = []
@@ -769,6 +785,7 @@ def format_json(graph: FederatedGraph, preset: ReportPreset | None = None) -> It
         if preset.dimension == "uat":
             # UAT view: only uat_coverage, uat_verified, and journeys; no code columns
             node_dict: dict = {col: data.get(col) for col in _UAT_COLUMNS}
+            _add_measure_fields(node_dict, data, _UAT_COLUMNS)
             node_dict["journeys"] = uat_jnys
             yield json.dumps(node_dict, indent=2)
             continue
@@ -785,6 +802,12 @@ def format_json(graph: FederatedGraph, preset: ReportPreset | None = None) -> It
                 }
             else:
                 node_dict[col] = data.get(col)
+        # Implements: REQ-d00069-L, REQ-d00258-A
+        # JSON carries the four measures behind each dimension's total as
+        # fields of their own -- the brief requires it, and unlike the
+        # text/markdown/html table (already 11 columns wide) a JSON object
+        # has no readability cost to adding four fields per dimension.
+        _add_measure_fields(node_dict, data, preset.columns)
 
         # Add detail fields (controlled by flags)
         if preset.include_body:
@@ -877,6 +900,8 @@ def _render_json_from_data(data: dict, preset: ReportPreset) -> None:
                 }
             else:
                 node_dict[col] = node_data.get(col)
+        # Implements: REQ-d00069-L, REQ-d00258-A
+        _add_measure_fields(node_dict, node_data, preset.columns)
         if preset.include_body:
             node_dict["body"] = node_data.get("body", "")
         if preset.include_assertions:
