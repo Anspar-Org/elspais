@@ -614,43 +614,46 @@ Assertions F and G separate the two ways a process comes into existence because 
 
 *End* *Reaching the Serving Process* | **Hash**: cd6333aa
 
-## REQ-o00077: Serving From Current Program Code
+## REQ-o00077: Serving From the Installed Program
 
 **Level**: ops | **Status**: Active | **Implements**: REQ-o00075
 
-The tool SHALL keep what a serving process answers from in step with the program code its working tree holds, for as long as it serves.
+The tool SHALL keep what a serving process answers from in step with the program the tool is installed from, for as long as it serves.
 
 ### Assertions
 
-A. While a serving process answers from program code that differs from the program code its working tree now holds, the tool SHALL disclose that difference to the clients it is serving.
+A. While a serving process answers from a program that differs from the one the tool is now installed from, the tool SHALL disclose that difference to the clients it is serving.
 
 B. Such a process SHALL go on accepting the request to persist changes it holds that exist nowhere else.
 
 C. While such a process holds changes that exist nowhere else, it SHALL decline the other requests it would otherwise answer.
 
-D. While such a process holds no changes that exist nowhere else, its working tree SHALL become served from the program code that tree now holds, without a client having to ask.
+D. While such a process holds no changes that exist nowhere else, its working tree SHALL become served from the program the tool is now installed from, without a client having to ask.
 
-E. A run of changes arriving together SHALL cause at most one response.
+E. A run of changes to that program arriving together SHALL cause at most one response.
 
 ### Rationale
 
-A process that outlives the commands using it goes on answering from the program code it loaded when it started, and no process can re-read its own code. This requirement is what that process owes the clients it is already serving once its tree's code has moved on.
+A process that outlives the commands using it goes on answering from the program it loaded when it started, and no process can re-read its own program. This requirement is what that process owes the clients it is already serving once the tool has been installed afresh beneath it.
 
-REQ-o00076-I governs what a client is handed when it acquires a process, and is judged at that moment; this one governs the process a client is already holding. Code and configuration are named together there, and separating them here is what the difference between them demands: configuration drift is answered by rebuilding from the configuration on disk, and code drift cannot be answered that way at all. The case this exists for is a working tree whose contents are the tool's own source, where the ordinary act of editing makes every serving process stale. The client most exposed is the one least able to notice — a session that acquired a process once and goes on using it for hours without ever acquiring again, and for which an acquisition-time rule never fires.
+Two different things go stale in a process that serves a working tree, and they are not one condition. The content the tool traces — the specifications, code and tests the tree holds — changes constantly, and a serving process answers that by rebuilding its graph from what the tree now holds. The program the tool itself runs is not traced but installed, and it can fall out of step only because a process outlives the installation it started from. Merging the two would let a rebuild report a difference no rebuild can repair, or an installed-program difference suppress a rebuild that was owed; they are reported and acted on separately for that reason.
 
-Assertion C is the strong one, and it is confined to the case where the process holds changes nothing else can see. Both of the remedies otherwise available are closed there: answering from the client's own code would answer from a graph those changes are missing from, and replacing the process would end it while it still holds them. What is left is to stop answering questions whose answers would come from code the client is not running. Assertion B is what keeps that from becoming a way to lose work, since a process that will not accept the request to write what it holds has trapped it.
+REQ-o00076-I governs what a client is handed when it acquires a process, and is judged at that moment; this one governs the process a client is already holding. Code and configuration are named together there, and separating them here is what the difference between them demands: a configuration that has moved is answered by rebuilding from the configuration on disk, and a program that has moved cannot be answered that way at all. The case this exists for is a working tree whose contents are the tool's own source and which the tool is installed from, where the ordinary act of editing the tree reinstalls the program beneath every process serving it. The client most exposed is the one least able to notice — a session that acquired a process once and goes on using it for hours without ever acquiring again, and for which an acquisition-time rule never fires.
+
+Assertion C is the strong one, and it is confined to the case where the process holds changes nothing else can see. Both of the remedies otherwise available are closed there: answering from the client's own program would answer from a graph those changes are missing from, and replacing the process would end it while it still holds them. What is left is to stop answering questions whose answers would come from a program the client is not running. Assertion B is what keeps that from becoming a way to lose work, since a process that will not accept the request to write what it holds has trapped it.
 
 C declines where REQ-o00075-G refuses to let the process become a dependency, and the two stand together rather than in conflict. G keeps every operation reachable without a serving process at all, and a client told to persist and acquire again has been told how to reach exactly that. A refusal that is finite and names its own remedy is not a dependency; one that leaves a client with nowhere to go would be.
 
 Assertion D covers the case where nothing is at risk, and it acts without being asked because the client that most needs it is the one that will never ask. Whether the tree comes to be served by a replacement process or by the same one renewed is not fixed here; what matters is that no client goes on being answered from code its tree no longer holds.
 
-Assertion E exists because a change is rarely one file. An editor writing out a directory, a branch being switched, a build emitting sources — each is one act that arrives as many separate events, and answering each in turn would disturb a serving process repeatedly while its code was still moving. Counting responses rather than events is what makes D safe to perform unasked, and it bounds the disturbance by the change rather than by the file count.
+Assertion E exists because a change is rarely one file. An editor writing out a directory, a branch being switched, a build emitting sources — each is one act that arrives as many separate events, and answering each in turn would disturb a serving process repeatedly while the program beneath it was still moving. Counting responses rather than events is what makes D safe to perform unasked, and it bounds the disturbance by the change rather than by the file count.
 
 ### Changelog
 
+- 2026-08-18 | 8ef6d965 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-18 | eaea87c6 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-18 | 0588f7bb | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-18 | bfd8a2aa | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-18 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: state what a serving process owes its clients when its program code changes beneath it
 
-*End* *Serving From Current Program Code* | **Hash**: eaea87c6
+*End* *Serving From the Installed Program* | **Hash**: 8ef6d965
