@@ -220,11 +220,11 @@ retired = ["Deprecated", "Superseded"]
 [rules.coverage]
 # Evidence naming an assertion its dimension does not count -- a test on an
 # assertion nothing implements. The default is "error"; this estate carries a
-# backlog of 45 such tests across 28 requirements, so it is reported at
-# "warning" until they are answered one by one. Lowered to describe where this
-# estate stands, not because the finding is wrong: each one is either an
-# `Implements:` reference nobody wrote or a test aimed at an assertion it does
-# not exercise.
+# backlog of 41 such tests across 27 requirements (re-derived 2026-08-18 under
+# the four-measure arithmetic), so it is reported at "warning" until they are
+# answered one by one. Lowered to describe where this estate stands, not
+# because the finding is wrong: each one is either an `Implements:` reference
+# nobody wrote or a test aimed at an assertion it does not exercise.
 uncredited_evidence = "warning"
 
 # Coverage severity tiers per dimension (ok | info | warning | error)
