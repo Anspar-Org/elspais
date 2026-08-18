@@ -1,5 +1,6 @@
 # Validates REQ-d00069-A, REQ-d00069-B, REQ-d00069-C, REQ-d00069-D
 # Validates REQ-d00069-E, REQ-d00069-F
+# Validates REQ-d00069-J, REQ-d00069-M, REQ-d00069-N
 # Validates REQ-d00070-A, REQ-d00070-B, REQ-d00070-C, REQ-d00070-D, REQ-d00070-E
 """Tests for INDIRECT coverage from whole-requirement tests and transitive CODE chains.
 
@@ -1067,3 +1068,76 @@ class TestFullCreditConduction:
         assert parent.implemented.indirect_pct_by_label["A"] == 1.0  # monotone max
         assert parent.implemented.direct_pct_by_label["A"] == 0.5  # targeted only
         assert parent.implemented.indirect_pct_by_label["B"] == 1.0
+
+
+# Verifies: REQ-d00069-J
+class TestConductionKeepsMeasuresApart:
+    """A measure conducts only into itself, and local evidence is untouched.
+
+    Validates REQ-d00069-J, REQ-d00069-M, REQ-d00069-N.
+    """
+
+    @staticmethod
+    def _graph(child_assertions, child_blanket_code, parent_refines):
+        """Parent REQ-d00002/B refined by child REQ-d00001.
+
+        ``child_blanket_code`` writes `Implements: REQ-d00001` (no assertion)
+        so the child is covered ONLY in its indirect measure.
+        ``parent_refines`` is the child's `Refines:` target, e.g.
+        "REQ-d00002-B" (names an assertion) or "REQ-d00002" (blanket).
+        """
+        parent = make_requirement(
+            "REQ-d00002",
+            assertions=[{"label": "A", "text": "a"}, {"label": "B", "text": "b"}],
+        )
+        child = make_requirement(
+            "REQ-d00001",
+            refines=[parent_refines],
+            assertions=[{"label": lbl, "text": lbl} for lbl in child_assertions],
+        )
+        code = make_code_ref(implements=[child_blanket_code], source_path="src/x.py")
+        graph = build_graph(parent, child, code)
+        annotate_coverage(graph)
+        return graph
+
+    @staticmethod
+    def _dim(graph, req_id, name="implemented"):
+        return getattr(graph.find_by_id(req_id).get_metric("rollup_metrics"), name)
+
+    def test_an_indirect_only_child_never_raises_a_parents_direct_measure(self):
+        graph = self._graph(["A"], "REQ-d00001", "REQ-d00002-B")
+        parent = self._dim(graph, "REQ-d00002")
+        assert parent.rolled_indirect_by_label.get("B", 0.0) == 1.0
+        assert parent.rolled_direct_by_label.get("B", 0.0) == 0.0
+
+    def test_local_evidence_is_not_diluted_by_an_unfinished_refinement(self):
+        # Child has two assertions, only one implemented -> child coverage 0.5.
+        parent = make_requirement(
+            "REQ-d00002",
+            assertions=[{"label": "A", "text": "a"}, {"label": "B", "text": "b"}],
+        )
+        child = make_requirement(
+            "REQ-d00001",
+            refines=["REQ-d00002-B"],
+            assertions=[{"label": "A", "text": "a"}, {"label": "B", "text": "b"}],
+        )
+        child_code = make_code_ref(implements=["REQ-d00001-A"], source_path="src/c.py")
+        parent_code = make_code_ref(implements=["REQ-d00002-B"], source_path="src/p.py")
+        graph = build_graph(parent, child, child_code, parent_code)
+        annotate_coverage(graph)
+        dim = self._dim(graph, "REQ-d00002")
+        # The parent's own citation is whole and stays whole (REQ-d00069-M).
+        assert dim.immediate_direct_by_label["B"] == 1.0
+        # The refinement is half done, and says so, in its own measure.
+        assert dim.rolled_direct_by_label["B"] == 0.5
+        # Total takes the greatest per assertion, so B counts once (REQ-d00069-N).
+        assert dim.total_by_label["B"] == 1.0
+
+    def test_a_blanket_refines_conducts_to_every_assertion(self):
+        graph = self._graph(["A"], "REQ-d00001-A", "REQ-d00002")
+        dim = self._dim(graph, "REQ-d00002")
+        # The citation named no assertion, so every assertion receives it...
+        assert set(dim.rolled_direct_by_label) == {"A", "B"}
+        # ...in the measure the child's own evidence had (REQ-d00069-J).
+        assert dim.rolled_direct_by_label["A"] == 1.0
+        assert dim.rolled_indirect_by_label.get("A", 0.0) == 0.0
