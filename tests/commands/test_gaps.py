@@ -171,13 +171,13 @@ class TestCollectGaps:
         assert "REQ-p00001" not in ids
 
     def test_tested_req_not_in_untested(self) -> None:
-        """A requirement with tested.direct > 0 is NOT in untested."""
+        """A requirement with tested.immediate_direct > 0 is NOT in untested."""
         from elspais.graph.metrics import CoverageDimension
 
         req = _make_req("REQ-p00001", "Tested")
         metrics = RollupMetrics(
             total_assertions=1,
-            tested=CoverageDimension(total=1, direct=1, indirect=1),
+            tested=CoverageDimension(total=1, immediate_direct_by_label={"A": 1.0}),
         )
         req.set_metric("rollup_metrics", metrics)
         graph = _make_graph(req)
@@ -227,7 +227,7 @@ class TestCollectGaps:
             "rollup_metrics",
             RollupMetrics(
                 total_assertions=1,
-                uat_coverage=CoverageDimension(total=1, direct=0, indirect=0),
+                uat_coverage=CoverageDimension(total=1),
             ),
         )
         dev = GraphNode(id="REQ-d00001", kind=NodeKind.REQUIREMENT, label="Internal")
@@ -237,7 +237,7 @@ class TestCollectGaps:
             "rollup_metrics",
             RollupMetrics(
                 total_assertions=1,
-                uat_coverage=CoverageDimension(total=1, direct=0, indirect=0),
+                uat_coverage=CoverageDimension(total=1),
             ),
         )
         graph = _make_graph(prd, dev)
@@ -318,10 +318,6 @@ def _req_with_assertions(
         # built from real references.
         return CoverageDimension(
             total=len(labels),
-            direct=sum(fractions.values()),
-            indirect=sum(fractions.values()),
-            direct_pct_by_label=dict(fractions),
-            indirect_pct_by_label=dict(fractions),
             immediate_direct_by_label=dict(fractions),
         )
 
@@ -840,20 +836,20 @@ class TestStrictFootingGaps:
         assert "B" not in self._gap_labels(data, "uncovered")
 
     # Verifies: REQ-d00258-M
-    def test_REQ_d00258_M_reporting_surface_still_headlines_generous_footing(
+    def test_REQ_d00258_M_reporting_surface_still_headlines_the_total(
         self, blanket_evidence_graph
     ) -> None:
         """(c) REQ-d00258-A is untouched: the shared aggregation the reporting
         surfaces read still credits whole-requirement evidence to every
-        assertion (generous 2.0 vs strict 1.0 on the same graph)."""
+        assertion (total 2.0 vs immediate direct 1.0 on the same graph)."""
         from elspais.graph.aggregation import aggregate_dimension, relative_tier_for
 
         agg = aggregate_dimension(blanket_evidence_graph, "implemented", config={})
-        assert agg.covered == pytest.approx(2.0)  # generous: A and B
-        assert agg.direct == pytest.approx(1.0)  # strict: B only
+        assert agg.total_covered == pytest.approx(2.0)  # total: A and B
+        assert agg.immediate_direct == pytest.approx(1.0)  # cited by name: B only
 
         rollup = blanket_evidence_graph.find_by_id("REQ-700").get_metric("rollup_metrics")
-        tier, is_na = relative_tier_for(rollup, "tested", measure="indirect")
+        tier, is_na = relative_tier_for(rollup, "tested", measure="total")
         assert (tier, is_na) == ("full", False)
 
     # Verifies: REQ-d00258-M

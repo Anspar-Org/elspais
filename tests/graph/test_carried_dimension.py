@@ -14,6 +14,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from elspais.graph.aggregation import absolute_tier
+
 _SPEC = """\
 # Requirements
 
@@ -172,10 +174,10 @@ def test_verified_dimension_carried_flag(tmp_path):
     metrics_a = req_a.get_metric("rollup_metrics")
     metrics_b = req_b.get_metric("rollup_metrics")
 
-    assert metrics_a.verified.tier == "full"
+    assert absolute_tier(metrics_a.verified, measure="total") == "full"
     assert metrics_a.verified.carried is False
 
-    assert metrics_b.verified.tier == "full"
+    assert absolute_tier(metrics_b.verified, measure="total") == "full"
     assert metrics_b.verified.carried is True
 
 
@@ -195,7 +197,7 @@ def test_carried_failing_result_still_reports_failing_tier(tmp_path):
     req_c = graph.find_by_id("REQ-d00003")
     metrics_c = req_c.get_metric("rollup_metrics")
 
-    assert metrics_c.verified.tier == "failing"
+    assert absolute_tier(metrics_c.verified, measure="total") == "failing"
     assert metrics_c.verified.carried is True
 
 

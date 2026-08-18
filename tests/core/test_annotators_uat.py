@@ -1,5 +1,6 @@
 # Verifies: REQ-d00069-A
 """Tests for UAT coverage annotation via JNY Validates edges."""
+from elspais.graph.aggregation import absolute_tier
 from elspais.graph.annotators import annotate_coverage
 from tests.core.graph_test_helpers import build_graph, make_journey, make_requirement
 
@@ -23,9 +24,9 @@ class TestJnyValidatesExplicitCoverage:
         req_node = graph.find_by_id("REQ-p00001")
         metrics = req_node.get_metric("rollup_metrics")
         assert metrics is not None
-        assert metrics.uat_coverage.indirect == 1
-        assert metrics.uat_coverage.direct == 1
-        assert metrics.uat_coverage.indirect - metrics.uat_coverage.direct == 0
+        assert metrics.uat_coverage.covered == 1
+        assert metrics.uat_coverage.immediate_direct == 1
+        assert metrics.uat_coverage.covered - metrics.uat_coverage.immediate_direct == 0
 
 
 class TestJnyValidatesInferredCoverage:
@@ -46,9 +47,9 @@ class TestJnyValidatesInferredCoverage:
 
         req_node = graph.find_by_id("REQ-p00001")
         metrics = req_node.get_metric("rollup_metrics")
-        assert metrics.uat_coverage.indirect == 2
-        assert metrics.uat_coverage.indirect - metrics.uat_coverage.direct == 2
-        assert metrics.uat_coverage.direct == 0
+        assert metrics.uat_coverage.covered == 2
+        assert metrics.uat_coverage.covered - metrics.uat_coverage.immediate_direct == 2
+        assert metrics.uat_coverage.immediate_direct == 0
 
 
 class TestJnyValidatesIsolation:
@@ -68,9 +69,9 @@ class TestJnyValidatesIsolation:
 
         req_node = graph.find_by_id("REQ-p00001")
         metrics = req_node.get_metric("rollup_metrics")
-        assert metrics.implemented.indirect == 0  # automated unaffected
-        assert metrics.implemented.direct == 0
-        assert metrics.uat_coverage.indirect == 1
+        assert metrics.implemented.covered == 0  # automated unaffected
+        assert metrics.implemented.immediate_direct == 0
+        assert metrics.uat_coverage.covered == 1
 
 
 class TestUatRollupThroughImplements:
@@ -92,7 +93,7 @@ class TestUatRollupThroughImplements:
 
         ops_node = graph.find_by_id("REQ-o00001")
         metrics = ops_node.get_metric("rollup_metrics")
-        assert metrics.uat_coverage.indirect > 0
+        assert metrics.uat_coverage.covered > 0
 
 
 class TestUatPerAssertionFailureAttribution:
@@ -139,7 +140,7 @@ class TestUatPerAssertionFailureAttribution:
         assert metrics.uat_verified.failing_labels == {"A"}
         # Requirement-level dimension unchanged.
         assert metrics.uat_verified.has_failures is True
-        assert metrics.uat_verified.tier == "failing"
+        assert absolute_tier(metrics.uat_verified, measure="total") == "failing"
 
         states = compute_assertion_coverage_states(node)
         assert states["A"]["uat_verified"] == "failing"

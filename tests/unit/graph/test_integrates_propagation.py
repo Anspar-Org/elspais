@@ -57,7 +57,7 @@ def test_REQ_d00252_D_consumer_inherits_library_coverage(tmp_path):
 
     # The consumer's OWN persisted verified stays zero (its assertion A is untested locally).
     own = app_req.get_metric("rollup_metrics")
-    assert own.verified.indirect == 0
+    assert own.verified.covered == 0
 
 
 def test_REQ_d00252_D_no_integrates_yields_zero(tmp_path):
@@ -91,12 +91,7 @@ def test_REQ_d00252_D_lcov_only_credit_does_not_propagate_as_passing(tmp_path):
             verified=CoverageDimension(total=1),
             lcov_tested=CoverageDimension(
                 total=1,
-                direct=1.0,
-                indirect=1.0,
-                direct_labels={"A"},
-                indirect_labels={"A"},
-                direct_pct_by_label={"A": 1.0},
-                indirect_pct_by_label={"A": 1.0},
+                immediate_direct_by_label={"A": 1.0},
             ),
         ),
     )
@@ -125,14 +120,9 @@ def test_REQ_d00252_D_library_failures_propagate_to_consumer(tmp_path):
             # B's declared test passed; A's failed.
             verified=CoverageDimension(
                 total=2,
-                direct=1.0,
-                indirect=1.0,
                 has_failures=True,
                 failing_labels={"A"},
-                direct_labels={"B"},
-                indirect_labels={"B"},
-                direct_pct_by_label={"B": 1.0},
-                indirect_pct_by_label={"B": 1.0},
+                immediate_direct_by_label={"B": 1.0},
             ),
         ),
     )

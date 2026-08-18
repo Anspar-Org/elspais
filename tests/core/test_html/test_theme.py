@@ -144,15 +144,9 @@ class TestComputeValidationColorCatalog:
 
         rollup = RollupMetrics(
             total_assertions=2,
-            implemented=CoverageDimension(
-                total=2, direct=2, indirect=2, immediate_direct_by_label={"A": 1.0, "B": 1.0}
-            ),
-            tested=CoverageDimension(
-                total=2, direct=2, indirect=2, immediate_direct_by_label={"A": 1.0, "B": 1.0}
-            ),
-            verified=CoverageDimension(
-                total=2, direct=2, indirect=2, immediate_direct_by_label={"A": 1.0, "B": 1.0}
-            ),
+            implemented=CoverageDimension(total=2, immediate_direct_by_label={"A": 1.0, "B": 1.0}),
+            tested=CoverageDimension(total=2, immediate_direct_by_label={"A": 1.0, "B": 1.0}),
+            verified=CoverageDimension(total=2, immediate_direct_by_label={"A": 1.0, "B": 1.0}),
         )
         node = self._make_active_node_with_metrics(rollup)
         tiers = compute_coverage_tiers(node)
@@ -176,22 +170,16 @@ class TestComputeValidationColorCatalog:
             total_assertions=2,
             implemented=CoverageDimension(
                 total=2,
-                direct=2,
-                indirect=2,
                 immediate_direct_by_label={"A": 1.0, "B": 1.0},
                 immediate_indirect_by_label={"A": 1.0, "B": 1.0},
             ),
             tested=CoverageDimension(
                 total=2,
-                direct=2,
-                indirect=2,
                 immediate_direct_by_label={"A": 1.0, "B": 1.0},
                 immediate_indirect_by_label={"A": 1.0, "B": 1.0},
             ),
             verified=CoverageDimension(
                 total=2,
-                direct=1,
-                indirect=1,
                 has_failures=True,
                 failing_labels={"A"},
                 immediate_direct_by_label={"B": 1.0},
@@ -217,15 +205,9 @@ class TestComputeValidationColorCatalog:
 
         rollup = RollupMetrics(
             total_assertions=3,
-            implemented=CoverageDimension(
-                total=3, direct=1, indirect=1, immediate_direct_by_label={"A": 1.0}
-            ),
-            tested=CoverageDimension(
-                total=3, direct=1, indirect=1, immediate_direct_by_label={"A": 1.0}
-            ),
-            verified=CoverageDimension(
-                total=3, direct=1, indirect=1, immediate_direct_by_label={"A": 1.0}
-            ),
+            implemented=CoverageDimension(total=3, immediate_direct_by_label={"A": 1.0}),
+            tested=CoverageDimension(total=3, immediate_direct_by_label={"A": 1.0}),
+            verified=CoverageDimension(total=3, immediate_direct_by_label={"A": 1.0}),
         )
         node = self._make_active_node_with_metrics(rollup)
         tiers = compute_coverage_tiers(node)
@@ -252,20 +234,14 @@ class TestComputeValidationColorCatalog:
             total_assertions=2,
             implemented=CoverageDimension(
                 total=2,
-                direct=0,
-                indirect=2,
                 immediate_indirect_by_label={"A": 1.0, "B": 1.0},
             ),
             tested=CoverageDimension(
                 total=2,
-                direct=0,
-                indirect=2,
                 immediate_indirect_by_label={"A": 1.0, "B": 1.0},
             ),
             verified=CoverageDimension(
                 total=2,
-                direct=0,
-                indirect=2,
                 immediate_indirect_by_label={"A": 1.0, "B": 1.0},
             ),
         )
@@ -291,9 +267,9 @@ class TestComputeValidationColorCatalog:
 
         rollup = RollupMetrics(
             total_assertions=2,
-            implemented=CoverageDimension(total=2, direct=0, indirect=0),
-            tested=CoverageDimension(total=2, direct=0, indirect=0),
-            verified=CoverageDimension(total=2, direct=0, indirect=0),
+            implemented=CoverageDimension(total=2),
+            tested=CoverageDimension(total=2),
+            verified=CoverageDimension(total=2),
         )
         node = self._make_active_node_with_metrics(rollup)
         tiers = compute_coverage_tiers(node)
@@ -394,17 +370,11 @@ class TestSeverityCatalog:
 
         rollup = RollupMetrics(
             total_assertions=2,
-            implemented=CoverageDimension(
-                total=2, direct=2, indirect=2, immediate_direct_by_label={"A": 1.0, "B": 1.0}
-            ),
-            tested=CoverageDimension(
-                total=2, direct=2, indirect=2, immediate_direct_by_label={"A": 1.0, "B": 1.0}
-            ),
-            verified=CoverageDimension(
-                total=2, direct=2, indirect=2, immediate_direct_by_label={"A": 1.0, "B": 1.0}
-            ),
-            uat_coverage=CoverageDimension(total=2, direct=0, indirect=0),
-            uat_verified=CoverageDimension(total=2, direct=0, indirect=0),
+            implemented=CoverageDimension(total=2, immediate_direct_by_label={"A": 1.0, "B": 1.0}),
+            tested=CoverageDimension(total=2, immediate_direct_by_label={"A": 1.0, "B": 1.0}),
+            verified=CoverageDimension(total=2, immediate_direct_by_label={"A": 1.0, "B": 1.0}),
+            uat_coverage=CoverageDimension(total=2),
+            uat_verified=CoverageDimension(total=2),
         )
         node = self._make_active_node_with_metrics(rollup)
         tiers = compute_coverage_tiers(node)
@@ -424,19 +394,11 @@ class TestSeverityCatalog:
 
         rollup = RollupMetrics(
             total_assertions=2,
-            implemented=CoverageDimension(
-                total=2, direct=2, indirect=2, immediate_direct_by_label={"A": 1.0, "B": 1.0}
-            ),
-            tested=CoverageDimension(
-                total=2, direct=2, indirect=2, immediate_direct_by_label={"A": 1.0, "B": 1.0}
-            ),
-            verified=CoverageDimension(
-                total=2, direct=2, indirect=2, immediate_direct_by_label={"A": 1.0, "B": 1.0}
-            ),
+            implemented=CoverageDimension(total=2, immediate_direct_by_label={"A": 1.0, "B": 1.0}),
+            tested=CoverageDimension(total=2, immediate_direct_by_label={"A": 1.0, "B": 1.0}),
+            verified=CoverageDimension(total=2, immediate_direct_by_label={"A": 1.0, "B": 1.0}),
             # A journey validates 1 of 2 assertions -> partial.
-            uat_coverage=CoverageDimension(
-                total=2, direct=1, indirect=1, immediate_direct_by_label={"A": 1.0}
-            ),
+            uat_coverage=CoverageDimension(total=2, immediate_direct_by_label={"A": 1.0}),
         )
         node = self._make_active_node_with_metrics(rollup)
         tiers = compute_coverage_tiers(node)
@@ -455,13 +417,9 @@ class TestSeverityCatalog:
 
         rollup = RollupMetrics(
             total_assertions=2,
-            implemented=CoverageDimension(total=2, direct=0, indirect=0),
-            tested=CoverageDimension(
-                total=2, direct=2, indirect=2, immediate_direct_by_label={"A": 1.0, "B": 1.0}
-            ),
-            verified=CoverageDimension(
-                total=2, direct=2, indirect=2, immediate_direct_by_label={"A": 1.0, "B": 1.0}
-            ),
+            implemented=CoverageDimension(total=2),
+            tested=CoverageDimension(total=2, immediate_direct_by_label={"A": 1.0, "B": 1.0}),
+            verified=CoverageDimension(total=2, immediate_direct_by_label={"A": 1.0, "B": 1.0}),
         )
         node = self._make_active_node_with_metrics(rollup)
         tiers = compute_coverage_tiers(node)
@@ -481,22 +439,16 @@ class TestSeverityCatalog:
             total_assertions=2,
             implemented=CoverageDimension(
                 total=2,
-                direct=2,
-                indirect=2,
                 immediate_direct_by_label={"A": 1.0, "B": 1.0},
                 immediate_indirect_by_label={"A": 1.0, "B": 1.0},
             ),
             tested=CoverageDimension(
                 total=2,
-                direct=2,
-                indirect=2,
                 immediate_direct_by_label={"A": 1.0, "B": 1.0},
                 immediate_indirect_by_label={"A": 1.0, "B": 1.0},
             ),
             verified=CoverageDimension(
                 total=2,
-                direct=1,
-                indirect=1,
                 has_failures=True,
                 failing_labels={"A"},
                 immediate_direct_by_label={"B": 1.0},
@@ -526,26 +478,20 @@ class TestSeverityCatalog:
             total_assertions=2,
             implemented=CoverageDimension(
                 total=2,
-                direct=2,
-                indirect=2,
                 immediate_direct_by_label={"A": 1.0, "B": 1.0},
                 immediate_indirect_by_label={"A": 1.0, "B": 1.0},
             ),
             tested=CoverageDimension(
                 total=2,
-                direct=2,
-                indirect=2,
                 immediate_direct_by_label={"A": 1.0, "B": 1.0},
                 immediate_indirect_by_label={"A": 1.0, "B": 1.0},
             ),
             # No Verifies: coverage at all on this dimension...
-            verified=CoverageDimension(total=2, direct=0, indirect=0),
+            verified=CoverageDimension(total=2),
             # ...and full line-coverage credit, label-keyed over exactly the
             # tested denominator labels, which still reaches Passing nowhere.
             lcov_tested=CoverageDimension(
                 total=2,
-                direct=2,
-                indirect=2,
                 immediate_direct_by_label={"A": 1.0, "B": 1.0},
                 immediate_indirect_by_label={"A": 1.0, "B": 1.0},
             ),
@@ -566,17 +512,11 @@ class TestSeverityCatalog:
 
         rollup = RollupMetrics(
             total_assertions=2,
-            implemented=CoverageDimension(
-                total=2, direct=2, indirect=2, immediate_direct_by_label={"A": 1.0, "B": 1.0}
-            ),
-            tested=CoverageDimension(
-                total=2, direct=2, indirect=2, immediate_direct_by_label={"A": 1.0, "B": 1.0}
-            ),
-            verified=CoverageDimension(
-                total=2, direct=2, indirect=2, immediate_direct_by_label={"A": 1.0, "B": 1.0}
-            ),
-            uat_coverage=CoverageDimension(total=2, direct=0, indirect=0),
-            uat_verified=CoverageDimension(total=2, direct=0, indirect=0),
+            implemented=CoverageDimension(total=2, immediate_direct_by_label={"A": 1.0, "B": 1.0}),
+            tested=CoverageDimension(total=2, immediate_direct_by_label={"A": 1.0, "B": 1.0}),
+            verified=CoverageDimension(total=2, immediate_direct_by_label={"A": 1.0, "B": 1.0}),
+            uat_coverage=CoverageDimension(total=2),
+            uat_verified=CoverageDimension(total=2),
         )
         node = self._make_active_node_with_metrics(rollup)  # level PRD
         config = {"levels": {"prd": {"expects_validation": True}}}
@@ -597,17 +537,11 @@ class TestSeverityCatalog:
 
         rollup = RollupMetrics(
             total_assertions=2,
-            implemented=CoverageDimension(
-                total=2, direct=2, indirect=2, immediate_direct_by_label={"A": 1.0, "B": 1.0}
-            ),
-            tested=CoverageDimension(
-                total=2, direct=2, indirect=2, immediate_direct_by_label={"A": 1.0, "B": 1.0}
-            ),
-            verified=CoverageDimension(
-                total=2, direct=2, indirect=2, immediate_direct_by_label={"A": 1.0, "B": 1.0}
-            ),
-            uat_coverage=CoverageDimension(total=2, direct=0, indirect=0),
-            uat_verified=CoverageDimension(total=2, direct=0, indirect=0),
+            implemented=CoverageDimension(total=2, immediate_direct_by_label={"A": 1.0, "B": 1.0}),
+            tested=CoverageDimension(total=2, immediate_direct_by_label={"A": 1.0, "B": 1.0}),
+            verified=CoverageDimension(total=2, immediate_direct_by_label={"A": 1.0, "B": 1.0}),
+            uat_coverage=CoverageDimension(total=2),
+            uat_verified=CoverageDimension(total=2),
         )
         node = self._make_active_node_with_metrics(rollup)  # level PRD
         # Config where prd does NOT expect validation.
@@ -695,15 +629,9 @@ class TestStatusRoleGating:
 
         return RollupMetrics(
             total_assertions=2,
-            implemented=CoverageDimension(
-                total=2, direct=2, indirect=2, immediate_direct_by_label={"A": 1.0, "B": 1.0}
-            ),
-            tested=CoverageDimension(
-                total=2, direct=2, indirect=2, immediate_direct_by_label={"A": 1.0, "B": 1.0}
-            ),
-            verified=CoverageDimension(
-                total=2, direct=2, indirect=2, immediate_direct_by_label={"A": 1.0, "B": 1.0}
-            ),
+            implemented=CoverageDimension(total=2, immediate_direct_by_label={"A": 1.0, "B": 1.0}),
+            tested=CoverageDimension(total=2, immediate_direct_by_label={"A": 1.0, "B": 1.0}),
+            verified=CoverageDimension(total=2, immediate_direct_by_label={"A": 1.0, "B": 1.0}),
         )
 
     # Verifies: REQ-d00258-C

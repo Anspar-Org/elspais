@@ -96,6 +96,6 @@ def test_edges_are_presentation_and_carry_no_verdict():
     # But neither result named the test, so neither says anything about A.
     annotate_coverage(g, CoverageCreditConfig())
     m = g.find_by_id("REQ-p00001").get_metric("rollup_metrics")
-    assert m.tested.direct_pct_by_label.get("A") == 1.0
+    assert m.tested.total_by_label.get("A") == 1.0
     assert m.verified.has_failures is False
-    assert m.verified.direct_pct_by_label.get("A", 0.0) == 0.0
+    assert m.verified.total_by_label.get("A", 0.0) == 0.0

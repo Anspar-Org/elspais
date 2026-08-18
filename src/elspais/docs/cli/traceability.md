@@ -97,7 +97,7 @@ data was carried from a previous run -- see `elspais docs test-targets`
 (*Per-PR selectivity*).
 
 **Code Tested: per-test or `n/a`.** The `Code Tested` column reports
-`code_tested.direct` -- implementation lines whose coverage.py **context**
+`code_tested.attributed_lines` -- implementation lines whose coverage.py **context**
 names the specific test that exercised them (Python only, via pytest-cov's
 `--cov-context=test`). When no per-test context data is available for a
 requirement's covered lines (aggregate-only coverage tooling, or a coverage

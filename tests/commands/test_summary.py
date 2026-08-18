@@ -122,20 +122,14 @@ def _set_rollup(
         total_assertions=total,
         implemented=CoverageDimension(
             total=total,
-            direct=covered,
-            indirect=covered,
             immediate_direct_by_label=_synthetic_immediate_direct(total, covered),
         ),
         tested=CoverageDimension(
             total=total,
-            direct=tested,
-            indirect=tested,
             immediate_direct_by_label=_synthetic_immediate_direct(total, tested),
         ),
         verified=CoverageDimension(
             total=total,
-            direct=validated,
-            indirect=validated,
             has_failures=has_failures,
             immediate_direct_by_label=_synthetic_immediate_direct(total, validated),
         ),
@@ -253,21 +247,21 @@ class TestLevelGrouping:
 
         # PRD: p00001(3) + p00002(2) = 5 total assertions
         assert prd["total_assertions"] == 5
-        assert prd["implemented_assertions"] == 4  # 2 + 2
-        assert prd["tested_assertions"] == 3  # 1 + 2
-        assert prd["passing_assertions"] == 1  # 1 + 0
+        assert prd["implemented_total_covered"] == 4  # 2 + 2
+        assert prd["tested_total_covered"] == 3  # 1 + 2
+        assert prd["passing_total_covered"] == 1  # 1 + 0
 
         # OPS: o00001 only
         assert ops["total_assertions"] == 4
-        assert ops["implemented_assertions"] == 3
-        assert ops["tested_assertions"] == 2
-        assert ops["passing_assertions"] == 2
+        assert ops["implemented_total_covered"] == 3
+        assert ops["tested_total_covered"] == 2
+        assert ops["passing_total_covered"] == 2
 
         # DEV: d00001 only (d00002 Draft excluded, d00003 Deprecated excluded)
         assert dev["total_assertions"] == 1
-        assert dev["implemented_assertions"] == 1
-        assert dev["tested_assertions"] == 1
-        assert dev["passing_assertions"] == 1
+        assert dev["implemented_total_covered"] == 1
+        assert dev["tested_total_covered"] == 1
+        assert dev["passing_total_covered"] == 1
 
     def test_REQ_d00086_A_with_code_refs_count(self):
         """with_code_refs counts reqs that have at least one implemented assertion."""
@@ -494,9 +488,9 @@ class TestJsonFormat:
         assert prd["level"] == "PRD"
         assert prd["total"] == 1
         assert prd["total_assertions"] == 3
-        assert prd["implemented_assertions"] == 2
-        assert prd["tested_assertions"] == 1
-        assert prd["passing_assertions"] == 1
+        assert prd["implemented_total_covered"] == 2
+        assert prd["tested_total_covered"] == 1
+        assert prd["passing_total_covered"] == 1
 
     def test_REQ_d00086_C_json_excluded_counts(self):
         """JSON output includes excluded status counts."""
@@ -600,11 +594,11 @@ class TestCsvFormat:
         assert row["Tested"] == "2.0"
         assert row["Tested %"] == "50.0"
         # The breakdown counts assertions, not fractional credit, so it is
-        # rendered as plain ints. This rollup carries no per-assertion evidence
-        # map, so no assertion is in the tested set to break down.
-        assert row["Tested Passed"] == "0"
+        # rendered as plain ints. Two assertions are tested; one of them also
+        # has a passing result, the other is still awaiting one.
+        assert row["Tested Passed"] == "1"
         assert row["Tested Failed"] == "0"
-        assert row["Tested Awaiting"] == "0"
+        assert row["Tested Awaiting"] == "1"
         assert row["Tested Immediate Direct"] == "2.0"
         assert row["Passing"] == "1.0"
         assert row["Passing %"] == "25.0"
@@ -759,12 +753,7 @@ class TestSummaryIntegrations:
                 verified=CoverageDimension(total=1),
                 lcov_tested=CoverageDimension(
                     total=1,
-                    direct=1.0,
-                    indirect=1.0,
-                    direct_labels={"A"},
-                    indirect_labels={"A"},
-                    direct_pct_by_label={"A": 1.0},
-                    indirect_pct_by_label={"A": 1.0},
+                    immediate_direct_by_label={"A": 1.0},
                 ),
             ),
         )
@@ -802,14 +791,9 @@ class TestSummaryIntegrations:
                 total_assertions=2,
                 verified=CoverageDimension(
                     total=2,
-                    direct=1.0,
-                    indirect=1.0,
                     has_failures=True,
                     failing_labels={"A"},
-                    direct_labels={"B"},
-                    indirect_labels={"B"},
-                    direct_pct_by_label={"B": 1.0},
-                    indirect_pct_by_label={"B": 1.0},
+                    immediate_direct_by_label={"B": 1.0},
                 ),
             ),
         )
@@ -846,15 +830,9 @@ class TestLineCoverageDoesNotCreditPassing:
         # Set rollup with lcov_tested but NO verified credit
         rm = RollupMetrics(
             total_assertions=1,
-            verified=CoverageDimension(total=1, direct=0.0, indirect=0.0),
+            verified=CoverageDimension(total=1),
             lcov_tested=CoverageDimension(
                 total=1,
-                direct=1.0,
-                indirect=1.0,
-                direct_labels={"A"},
-                indirect_labels={"A"},
-                direct_pct_by_label={"A": 1.0},
-                indirect_pct_by_label={"A": 1.0},
             ),
         )
         req.set_metric("rollup_metrics", rm)
@@ -862,7 +840,7 @@ class TestLineCoverageDoesNotCreditPassing:
         data = collect_coverage(graph)
         dev = next(lv for lv in data["levels"] if lv["level"] == "DEV")
         assert (
-            dev["passing_assertions"] == 0
+            dev["passing_total_covered"] == 0
         ), "lcov_tested credit must not count toward headline passing"
         assert dev["with_passing"] == 0
 
@@ -1210,10 +1188,11 @@ class TestSummaryCarriedFootnote:
 
 
 class TestSummaryFooting:
-    """Verifies REQ-d00258-A/B/C: shared aggregation, generous footing, and
-    the Implemented/Tested/Passing vocabulary (no "Validated")."""
+    """Verifies REQ-d00258-A/B/C: shared aggregation, the per-*Assertion*
+    total as headline, and the Implemented/Tested/Passing vocabulary (no
+    "Validated")."""
 
-    def test_tested_and_passing_use_generous_footing(self, canonical_graph, canonical_config):
+    def test_tested_and_passing_headline_the_total(self, canonical_graph, canonical_config):
         from elspais.graph.aggregation import collect_coverage
 
         data = collect_coverage(canonical_graph, canonical_config)
@@ -1221,11 +1200,11 @@ class TestSummaryFooting:
 
         agg = {lv.level: lv for lv in aggregate_by_level(canonical_graph, canonical_config)}
         for lv in data["levels"]:
-            assert lv["tested_assertions"] == pytest.approx(
-                round(agg[lv["level"]].tested.covered, 3)
+            assert lv["tested_total_covered"] == pytest.approx(
+                round(agg[lv["level"]].tested.total_covered, 3)
             )
-            assert lv["passing_assertions"] == pytest.approx(
-                round(agg[lv["level"]].passing.covered, 3)
+            assert lv["passing_total_covered"] == pytest.approx(
+                round(agg[lv["level"]].passing.total_covered, 3)
             )
             assert "validated_assertions" not in lv
 
@@ -1280,10 +1259,6 @@ class TestMeasuresArePublished:
                 total_assertions=1,
                 implemented=CoverageDimension(
                     total=1,
-                    direct=0.8,
-                    indirect=0.8,
-                    direct_pct_by_label={"A": 0.8},
-                    indirect_pct_by_label={"A": 0.8},
                     immediate_direct_by_label={"A": 0.6},
                     rolled_direct_by_label={"A": 1.0},
                 ),
@@ -1293,14 +1268,13 @@ class TestMeasuresArePublished:
         dim = node.get_metric("rollup_metrics").implemented
         # Confirm the fixture actually produces the discriminating shape
         # before trusting an assertion built on it.
-        assert dim.direct == pytest.approx(0.8)
-        assert dim.indirect == pytest.approx(0.8)
+        assert dim.immediate_direct == pytest.approx(0.6)
+        assert dim.rolled_direct == pytest.approx(1.0)
         assert dim.covered == pytest.approx(1.0)  # REQ-d00069-N total
 
         data = collect_coverage(graph)
         lv = next(lv for lv in data["levels"] if lv["level"] == "PRD")
         assert lv["implemented_total_covered"] == pytest.approx(1.0)
-        assert lv["implemented_assertions"] == pytest.approx(0.8)  # legacy, unread by the CLI now
 
         out = _render(data, "text")
         implemented_line = next(ln for ln in out.splitlines() if "Implemented:" in ln)
@@ -1322,12 +1296,6 @@ class TestTestedBreakdown:
         def dim(fractions, **kwargs):
             return CoverageDimension(
                 total=3,
-                direct=sum(fractions.values()),
-                indirect=sum(fractions.values()),
-                direct_labels={lbl for lbl, f in fractions.items() if f > 0},
-                indirect_labels={lbl for lbl, f in fractions.items() if f > 0},
-                direct_pct_by_label=dict(fractions),
-                indirect_pct_by_label=dict(fractions),
                 # REQ-d00069-M: this fixture models only direct, immediate
                 # evidence (a citation named the *Assertion* directly), so the
                 # REQ-d00069-N total (what the CLI now headlines) equals the

@@ -533,13 +533,18 @@ def get_implementation_status(node: GraphNode) -> str:
     Args:
         node: The GraphNode to check.
 
+    Reports on the per-*Assertion* total (REQ-d00069-N) -- the greatest of the
+    four measures per *Assertion* -- because this is a reporting figure and
+    REQ-d00258-A headlines the total.
+
     Returns:
-        'Full': referenced_pct >= 100
-        'Partial': referenced_pct > 0
-        'Unimplemented': referenced_pct == 0
+        'Full': every assertion covered on some measure
+        'Partial': some coverage on some measure
+        'Unimplemented': no coverage on any measure
     """
     rollup = node.get_metric("rollup_metrics")
-    pct = rollup.implemented.indirect_pct if rollup else 0
+    dim = rollup.implemented if rollup else None
+    pct = (dim.covered / dim.total * 100) if dim and dim.total else 0.0
     if pct >= 100:
         return "Full"
     elif pct > 0:
@@ -641,7 +646,7 @@ def count_code_coverage(graph: FederatedGraph) -> dict[str, int]:
     Returns dict with:
     - total_executable_lines: sum of executable_lines across FILE nodes
     - total_covered_lines: sum of lines where hit_count > 0 across FILE nodes
-    - total_attributed_lines: sum of code_tested.total across all REQUIREMENT nodes
+    - total_attributed_lines: sum of code_tested.total_lines across all REQUIREMENT nodes
       (lines shared across REQs may be counted multiple times)
     """
     from elspais.graph import NodeKind
@@ -661,7 +666,7 @@ def count_code_coverage(graph: FederatedGraph) -> dict[str, int]:
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
         rollup = node.get_metric("rollup_metrics")
         if rollup is not None:
-            total_attributed += rollup.code_tested.total
+            total_attributed += rollup.code_tested.total_lines
 
     return {
         "total_executable_lines": total_executable,
@@ -775,7 +780,7 @@ def _compute_code_tested(
         metrics: The RollupMetrics to update (modifies code_tested in place).
     """
     from elspais.graph import NodeKind
-    from elspais.graph.metrics import CoverageDimension
+    from elspais.graph.metrics import LineCoverage
     from elspais.graph.relations import EdgeKind
 
     # Collect implementation lines: set of (relative_path, line_number)
@@ -887,11 +892,10 @@ def _compute_code_tested(
     # are deliberately excluded rather than treated as equivalent to "|run".
     direct_count = _direct_context_count(node, lines_by_file)
 
-    metrics.code_tested = CoverageDimension(
-        total=len(impl_lines),
-        direct=direct_count,
-        indirect=indirect_count,
-        has_failures=False,
+    metrics.code_tested = LineCoverage(
+        total_lines=len(impl_lines),
+        attributed_lines=direct_count,
+        covered_lines=indirect_count,
     )
 
 
@@ -1125,14 +1129,24 @@ def _compute_lcov_tested(
         if f > 0 and f >= threshold(lines):
             direct_pct[lbl] = f
 
-    indirect_pct: dict[str, float] = dict(direct_pct)
+    # Implements: REQ-d00069-L, REQ-d00069-M
+    # The measures partition by WHAT THE CITATION NAMED: an assertion-targeted
+    # `Implements:` credits the assertion it names (direct), a blanket one
+    # credits every assertion of the requirement (indirect). The two maps are
+    # DISJOINT -- an assertion cited by name is not also whole-requirement
+    # evidence -- and both are immediate, because line-coverage credit is
+    # attached to the requirement whose code was executed and is never
+    # conducted up a `Refines:` chain (``lcov_tested`` is absent from
+    # ``_PROPAGATING_DIMENSIONS``).
+    blanket_pct: dict[str, float] = {}
     if blanket_lines:
         bf = frac(blanket_lines)
         if bf > 0 and bf >= threshold(blanket_lines):
             for lbl in labels:
-                indirect_pct.setdefault(lbl, bf)
+                if lbl not in direct_pct:
+                    blanket_pct[lbl] = bf
 
-    if not indirect_pct:
+    if not direct_pct and not blanket_pct:
         return
 
     # Implements: REQ-d00254-A, REQ-d00254-B
@@ -1146,14 +1160,10 @@ def _compute_lcov_tested(
 
     metrics.lcov_tested = CoverageDimension(
         total=len(labels),
-        direct=sum(direct_pct.values()),
-        indirect=sum(indirect_pct.values()),
         has_failures=has_failures,
         failing_labels=failing_labels,
-        direct_labels=set(direct_pct),
-        indirect_labels=set(indirect_pct),
-        direct_pct_by_label=dict(direct_pct),
-        indirect_pct_by_label=dict(indirect_pct),
+        immediate_direct_by_label=dict(direct_pct),
+        immediate_indirect_by_label=dict(blanket_pct),
     )
 
 
@@ -1716,61 +1726,41 @@ def _conduct_refines_coverage(graph: FederatedGraph) -> None:
     requirement contributes its own rolled-up coverage as one equal-weight
     incoming edge to the targeted parent *Assertion* (REQ-d00069-J).
 
-    Per assertion A of requirement R, for each dimension and each strictness
-    ``mode`` ("direct" = assertion-targeted only, "indirect" = also
-    whole-requirement):
+    This pass computes the two ROLLED measures of REQ-d00069-L,
+    ``rolled_direct_by_label`` and ``rolled_indirect_by_label``. They hold
+    conducted value ONLY, never the evidence attached to the *Assertion* itself
+    -- that is the immediate pair, written earlier and read here as fixed
+    input. Each measure conducts into the same measure, direct into direct and
+    indirect into indirect, so no measure is ever composed of another. The
+    refining citation's shape decides only WHICH assertions receive a conducted
+    value: the one it names, or every assertion where it names the requirement
+    alone. A blanket citation therefore conducts the refining requirement's
+    DIRECT coverage into the parent's rolled DIRECT measure -- the citation
+    shape it was written in does not change which measure the value belongs to.
 
-    - direct contributors = (1.0 if A has local direct leaf evidence) plus
-      ``coverage(child)`` for every assertion-targeted REFINES edge naming A.
-      The direct value is their mean (0.0 if there are none). Whole-requirement
-      (blanket) credit never enters the direct footing -- it stays a precise,
-      non-transitive locator (REQ-d00069-J/L).
-    - the indirect (generous) footing is MONOTONE: it is the max of the direct
-      mean and any whole-requirement credit, so adding assertion-targeted
-      (possibly partial) evidence never lowers it below what blanket evidence
-      already established. Whole-requirement credit is the stronger of:
-        * 1.0, if A has local whole-requirement leaf evidence (a whole-req test
-          genuinely exercises every assertion); or
-        * ``mean(coverage(child))`` over whole-requirement (blanket) REFINES
-          edges, averaged across blanket edges. A blanket Refines names no
-          assertion but conducts its refining requirement's own coverage at
-          FULL weight -- the previous 1/N-per-assertion deflation is retired
-          (REQ-d00069-J).
+    A refining requirement's own coverage in a measure is the mean over its
+    assertions of that *Assertion*'s coverage in that measure, an *Assertion*'s
+    coverage being the greater of what is attached to it and what is conducted
+    into it (REQ-d00069-N). It is computed recursively, memoized, with a
+    visited guard so an unexpected cycle degrades to 0 rather than recursing
+    forever. Contributions are equal-weight per incoming edge.
 
-    ``coverage(child)`` is the child requirement's mean assertion coverage in
-    the same dimension/mode, computed recursively (memoized, with a visited
-    guard so an unexpected cycle degrades to 0 rather than recursing forever).
-
-    Alongside those two footings this pass computes the two ROLLED measures of
-    REQ-d00069-L, ``rolled_direct_by_label`` and ``rolled_indirect_by_label``.
-    They answer a different question and follow different rules: they hold
-    conducted value only, never the evidence attached to the *Assertion*
-    itself (that is the immediate pair), and each measure conducts into the
-    same measure, direct into direct and indirect into indirect, so no measure
-    is ever composed of another. The refining citation's shape decides only
-    WHICH assertions receive a conducted value -- the one it names, or all of
-    them where it names the requirement alone -- and a blanket citation
-    therefore conducts the refining requirement's direct coverage into the
-    parent's rolled DIRECT measure, which is exactly what the footings above
-    must not do. Total per *Assertion* is the greatest of the four measures
-    (REQ-d00069-N), taken by ``CoverageDimension.total_by_label``.
+    Total per *Assertion* is the greatest of the four measures (REQ-d00069-N),
+    taken by ``CoverageDimension.total_by_label``.
     """
     from elspais.graph import NodeKind
 
     reqs = list(graph.nodes_by_kind(NodeKind.REQUIREMENT))
 
-    # Snapshot per-requirement assertion labels and local (pre-conduction) leaf
-    # evidence so the recursion reads immutable input while we overwrite dims.
+    # Snapshot per-requirement assertion labels and the immediate measures
+    # (REQ-d00069-L) so the recursion reads immutable input while we write the
+    # rolled measures. The immediate maps are what the rolled ones are
+    # conducted FROM, and nothing here writes them, so the recursion below
+    # reads a fixed picture. They carry per-label FRACTIONS, not just label
+    # membership: most dimensions attach all-or-nothing evidence (1.0), but
+    # uat_verified is fractional (a partially-verified journey credits its
+    # verified-step ratio, REQ-d00255-C).
     labels_by_req: dict[str, list[str]] = {}
-    # Snapshot the local per-label FRACTIONS (not just label membership) so
-    # conduction preserves fractional local evidence. Most dimensions have
-    # all-or-nothing local evidence (1.0), but uat_verified is fractional
-    # (a partially-verified journey credits its verified-step ratio,
-    # REQ-d00255-C); snapping it back to 1.0 here would discard that partial.
-    local_evidence: dict[str, dict[str, tuple[dict[str, float], dict[str, float]]]] = {}
-    # The immediate measures (REQ-d00069-L), snapshotted the same way. They are
-    # the input the rolled measures are conducted FROM, and nothing here writes
-    # them, so the recursion below reads a fixed picture.
     immediate: dict[str, dict[str, tuple[dict[str, float], dict[str, float]]]] = {}
     for req in reqs:
         metrics = req.get_metric("rollup_metrics")
@@ -1782,92 +1772,20 @@ def _conduct_refines_coverage(graph: FederatedGraph) -> None:
             if child.kind == NodeKind.ASSERTION and child.get_field("label", "")
         ]
         labels_by_req[req.id] = labels
-        ev: dict[str, tuple[dict[str, float], dict[str, float]]] = {}
         imm: dict[str, tuple[dict[str, float], dict[str, float]]] = {}
         for dim_name in _PROPAGATING_DIMENSIONS:
             dim = getattr(metrics, dim_name)
-            ev[dim_name] = (dict(dim.direct_pct_by_label), dict(dim.indirect_pct_by_label))
             imm[dim_name] = (
                 dict(dim.immediate_direct_by_label),
                 dict(dim.immediate_indirect_by_label),
             )
-        local_evidence[req.id] = ev
         immediate[req.id] = imm
 
-    memo: dict[tuple[str, str, str], float] = {}
-
-    def assertion_fraction(
-        req: GraphNode,
-        label: str,
-        dim_name: str,
-        mode: str,
-        visiting: frozenset[str],
-    ) -> float:
-        direct_pct_local, indirect_pct_local = local_evidence[req.id][dim_name]
-        direct_vals: list[float] = []
-        local_direct = direct_pct_local.get(label, 0.0)
-        if local_direct > 0:
-            direct_vals.append(local_direct)
-        blanket_refines_vals: list[float] = []
-        for edge in req.iter_outgoing_edges():
-            if not edge.kind.conducts_coverage():
-                continue
-            if edge.assertion_targets:
-                if label in edge.assertion_targets:
-                    direct_vals.append(req_coverage(edge.target, dim_name, mode, visiting))
-            else:
-                blanket_refines_vals.append(req_coverage(edge.target, dim_name, mode, visiting))
-
-        # Direct (strict) footing: assertion-specific evidence only, equal-weight
-        # mean. Whole-requirement/blanket credit never enters the direct footing
-        # (keeps the ~ caveat a precise, non-transitive locator, REQ-d00069-J/L).
-        direct_mean = (sum(direct_vals) / len(direct_vals)) if direct_vals else 0.0
-        if mode != "indirect":
-            return direct_mean
-        # Indirect (generous) footing is MONOTONE: it is the max of the direct
-        # mean and any whole-requirement credit, so adding assertion-targeted
-        # (possibly partial) evidence never LOWERS the generous headline.
-        candidates: list[float] = []
-        if direct_vals:
-            candidates.append(direct_mean)
-        local_indirect = indirect_pct_local.get(label, 0.0)
-        if local_indirect > 0:
-            # Local whole-requirement leaf evidence (a whole-req test/code/journey)
-            # exercises every assertion -> its own local fraction (1.0, or a
-            # partial uat_verified ratio, REQ-d00255-C).
-            candidates.append(local_indirect)
-        if blanket_refines_vals:
-            # A blanket `Refines:` conducts the refining requirement's OWN rolled-up
-            # coverage at FULL weight (mean across blanket edges) -- the 1/N
-            # deflation is retired (REQ-d00069-J). The fraction reflects the child's
-            # actual coverage, not an arbitrary discount.
-            candidates.append(sum(blanket_refines_vals) / len(blanket_refines_vals))
-        return max(candidates) if candidates else 0.0
-
-    def req_coverage(req: GraphNode, dim_name: str, mode: str, visiting: frozenset[str]) -> float:
-        key = (dim_name, mode, req.id)
-        cached = memo.get(key)
-        if cached is not None:
-            return cached
-        if req.id in visiting:
-            return 0.0  # cycle guard -- valid graphs are DAGs (CUR-1521)
-        labels = labels_by_req.get(req.id)
-        if not labels:
-            memo[key] = 0.0
-            return 0.0
-        inner = visiting | {req.id}
-        total = sum(assertion_fraction(req, lbl, dim_name, mode, inner) for lbl in labels)
-        value = total / len(labels)
-        memo[key] = value
-        return value
-
     # Implements: REQ-d00069-J, REQ-d00069-L
-    # The four-measure conduction, computed in parallel with the legacy
-    # footings above and written to its own fields. Conducted values ONLY:
-    # local evidence is not mixed in here, because it is already recorded in
-    # the immediate measures, and averaging the two would make an *Assertion*'s
-    # own citation read lower merely because something refining it is
-    # unfinished.
+    # The four-measure conduction. Conducted values ONLY: local evidence is
+    # not mixed in here, because it is already recorded in the immediate
+    # measures, and averaging the two would make an *Assertion*'s own citation
+    # read lower merely because something refining it is unfinished.
     measure_memo: dict[tuple[str, str], tuple[float, float]] = {}
 
     def rolled_values(
@@ -1940,20 +1858,6 @@ def _conduct_refines_coverage(graph: FederatedGraph) -> None:
             continue
         for dim_name in _PROPAGATING_DIMENSIONS:
             dim = getattr(metrics, dim_name)
-            direct_pct = {
-                lbl: assertion_fraction(req, lbl, dim_name, "direct", frozenset()) for lbl in labels
-            }
-            indirect_pct = {
-                lbl: assertion_fraction(req, lbl, dim_name, "indirect", frozenset())
-                for lbl in labels
-            }
-            dim.direct_pct_by_label = direct_pct
-            dim.indirect_pct_by_label = indirect_pct
-            dim.direct = sum(direct_pct.values())
-            dim.indirect = sum(indirect_pct.values())
-            dim.direct_labels = {lbl for lbl, v in direct_pct.items() if v > eps}
-            dim.indirect_labels = {lbl for lbl, v in indirect_pct.items() if v > eps}
-
             # Implements: REQ-d00069-J
             rolled = {lbl: rolled_values(req, lbl, dim_name, frozenset()) for lbl in labels}
             dim.rolled_direct_by_label = {lbl: v[0] for lbl, v in rolled.items() if v[0] > eps}

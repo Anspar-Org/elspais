@@ -8,6 +8,7 @@ credit an *Assertion* into Passing nor exclude one from it.
 
 import pytest
 
+from elspais.graph.aggregation import covered_labels
 from elspais.graph.metrics import (
     CoverageDimension,
     RollupMetrics,
@@ -17,15 +18,10 @@ from elspais.graph.metrics import (
 
 
 def _credited(label: str, fraction: float = 1.0, **kwargs) -> CoverageDimension:
-    """A dimension crediting one label at `fraction` on both footings."""
+    """A dimension crediting one label at `fraction`, cited by name here."""
     return CoverageDimension(
         total=1,
-        direct=fraction,
-        indirect=fraction,
-        direct_labels={label},
-        indirect_labels={label},
-        direct_pct_by_label={label: fraction},
-        indirect_pct_by_label={label: fraction},
+        immediate_direct_by_label={label: fraction},
         **kwargs,
     )
 
@@ -36,28 +32,12 @@ def test_line_coverage_of_another_assertion_does_not_enter_passing():
     *Assertion* line coverage reached but no test named stays out of Passing
     entirely -- out of the labels, and out of the figures."""
     m = RollupMetrics(total_assertions=2)
-    m.verified = CoverageDimension(
-        total=2,
-        direct=1.0,
-        indirect=1.0,
-        direct_labels={"A"},
-        indirect_labels={"A"},
-        direct_pct_by_label={"A": 1.0},
-        indirect_pct_by_label={"A": 1.0},
-    )
-    m.lcov_tested = CoverageDimension(
-        total=2,
-        direct=1.0,
-        indirect=1.0,
-        direct_labels={"B"},
-        indirect_labels={"B"},
-        direct_pct_by_label={"B": 1.0},
-        indirect_pct_by_label={"B": 1.0},
-    )
+    m.verified = CoverageDimension(total=2, immediate_direct_by_label={"A": 1.0})
+    m.lcov_tested = CoverageDimension(total=2, immediate_direct_by_label={"B": 1.0})
     u = tested_and_passing(m)
     assert u.total == 2
-    assert u.indirect_labels == {"A"}
-    assert u.indirect == 1.0
+    assert covered_labels(u, "total") == {"A"}
+    assert u.covered == 1.0
 
 
 # Verifies: REQ-d00258-N
@@ -77,15 +57,11 @@ def test_line_coverage_does_not_raise_a_partial_assertion_to_full():
     the per-label fraction is the `verified` fraction, not the max of the two.
     Regression guard against the max-merge union returning."""
     m = RollupMetrics(total_assertions=1)
-    m.verified = CoverageDimension(
-        total=1, indirect=0.5, indirect_pct_by_label={"A": 0.5}, indirect_labels={"A"}
-    )
-    m.lcov_tested = CoverageDimension(
-        total=1, indirect=1.0, indirect_pct_by_label={"A": 1.0}, indirect_labels={"A"}
-    )
+    m.verified = CoverageDimension(total=1, immediate_indirect_by_label={"A": 0.5})
+    m.lcov_tested = CoverageDimension(total=1, immediate_indirect_by_label={"A": 1.0})
     u = tested_and_passing(m)
-    assert u.indirect_pct_by_label["A"] == 0.5
-    assert u.indirect == 0.5
+    assert u.total_by_label["A"] == 0.5
+    assert u.covered == 0.5
 
 
 # Verifies: REQ-d00258-N
@@ -97,8 +73,8 @@ def test_a_failing_declared_test_excludes_its_own_assertion():
     m.verified = _credited("A", has_failures=True, failing_labels={"A"})
 
     u = tested_and_passing(m)
-    assert u.direct == 0.0
-    assert u.indirect == 0.0
+    assert u.immediate_direct == 0.0
+    assert u.covered == 0.0
 
 
 # Verifies: REQ-d00258-N
@@ -111,8 +87,8 @@ def test_line_coverage_cannot_exclude_an_assertion_its_tests_passed():
     m.lcov_tested = _credited("A", has_failures=True, failing_labels={"A"})
 
     u = tested_and_passing(m)
-    assert u.direct == 1.0
-    assert u.indirect == 1.0
+    assert u.immediate_direct == 1.0
+    assert u.covered == 1.0
     assert u.failing_labels == set()
 
 
@@ -123,34 +99,30 @@ def test_exclusion_is_per_assertion_not_requirement_wide():
     m = RollupMetrics(total_assertions=2)
     m.verified = CoverageDimension(
         total=2,
-        direct=0.5,
-        indirect=0.5,
         has_failures=True,
         failing_labels={"A"},
-        direct_labels={"B"},
-        indirect_labels={"B"},
-        direct_pct_by_label={"B": 0.5},
-        indirect_pct_by_label={"B": 0.5},
+        immediate_direct_by_label={"B": 0.5},
     )
 
     u = tested_and_passing(m)
     # B keeps its own 0.5; A (failing) contributes nothing.
-    assert u.direct == 0.5
-    assert u.indirect == 0.5
+    assert u.immediate_direct == 0.5
+    assert u.covered == 0.5
 
 
 # Verifies: REQ-d00258-N, REQ-d00258-G
-def test_excluded_assertion_keeps_its_evidence_and_its_failing_standing():
-    """Excluding the failing assertion from the totals must not erase what was
-    credited to it, nor the record that it failed."""
+def test_excluded_assertion_keeps_its_failing_standing():
+    """A failing assertion contributes to no measure of Passing, and the record
+    that it failed survives in ``failing_labels`` -- which is what a
+    per-*Assertion* standing reads first (REQ-d00258-G), so the assertion still
+    renders under its own standing rather than disappearing."""
     m = RollupMetrics(total_assertions=1)
     m.verified = _credited("A", has_failures=True, failing_labels={"A"})
 
     u = tested_and_passing(m)
-    assert u.direct_pct_by_label["A"] == 1.0
-    assert u.indirect_pct_by_label["A"] == 1.0
-    assert "A" in u.direct_labels
-    assert "A" in u.indirect_labels
+    assert "A" not in covered_labels(u, "immediate_direct")
+    assert "A" not in covered_labels(u, "total")
+    assert u.covered == 0.0
     assert u.failing_labels == {"A"}
     assert u.has_failures is True
     # The failing assertion is excluded from the numerator, never the denominator.
@@ -163,15 +135,10 @@ def test_excluded_assertion_keeps_its_evidence_and_its_failing_standing():
 
 
 def _dim(fractions: dict[str, float], *, total: int, **kwargs) -> CoverageDimension:
-    """A dimension crediting each label at its fraction on both footings."""
+    """A dimension crediting each label at its fraction, cited by name here."""
     return CoverageDimension(
         total=total,
-        direct=sum(fractions.values()),
-        indirect=sum(fractions.values()),
-        direct_labels={lbl for lbl, f in fractions.items() if f > 0},
-        indirect_labels={lbl for lbl, f in fractions.items() if f > 0},
-        direct_pct_by_label=dict(fractions),
-        indirect_pct_by_label=dict(fractions),
+        immediate_direct_by_label=dict(fractions),
         **kwargs,
     )
 
@@ -269,9 +236,7 @@ def test_partition_matches_the_tested_set_of_a_built_graph(canonical_graph):
         rollup = node.get_metric("rollup_metrics")
         if rollup is None:
             continue
-        tested_labels = {
-            lbl for lbl, frac in rollup.tested.indirect_pct_by_label.items() if frac > 0
-        }
+        tested_labels = {lbl for lbl, frac in rollup.tested.total_by_label.items() if frac > 0}
         seen_tested += len(tested_labels)
         assert tested_partition(rollup).tested == len(tested_labels), node.id
 

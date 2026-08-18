@@ -140,10 +140,6 @@ def coverage_graph():
     def _dim(total: int, fractions: dict[str, float]) -> CoverageDimension:
         return CoverageDimension(
             total=total,
-            direct=sum(fractions.values()),
-            indirect=sum(fractions.values()),
-            direct_pct_by_label=dict(fractions),
-            indirect_pct_by_label=dict(fractions),
             immediate_direct_by_label=dict(fractions),
             immediate_indirect_by_label=dict(fractions),
         )
@@ -243,23 +239,13 @@ class TestGetTestCoverage:
         rollup = coverage_graph.find_by_id("REQ-p00001").get_metric("rollup_metrics")
         rollup.tested = CoverageDimension(
             total=3,
-            direct=3.0,
-            indirect=3.0,
-            direct_labels={"A", "B", "C"},
-            indirect_labels={"A", "B", "C"},
-            direct_pct_by_label={"A": 1.0, "B": 1.0, "C": 1.0},
-            indirect_pct_by_label={"A": 1.0, "B": 1.0, "C": 1.0},
+            immediate_direct_by_label={"A": 1.0, "B": 1.0, "C": 1.0},
         )
         rollup.verified = CoverageDimension(
             total=3,
-            direct=1.0,
-            indirect=1.0,
             has_failures=True,
             failing_labels={"B"},
-            direct_labels={"A"},
-            indirect_labels={"A"},
-            direct_pct_by_label={"A": 1.0},
-            indirect_pct_by_label={"A": 1.0},
+            immediate_direct_by_label={"A": 1.0},
         )
 
         result = _get_test_coverage(coverage_graph, "REQ-p00001")
@@ -849,12 +835,8 @@ class TestUatValidatedPctMeasure:
         rollup = graph.find_by_id("REQ-p00001").get_metric("rollup_metrics")
         rollup.uat_verified = CoverageDimension(
             total=3,
-            direct=len(immediate_direct),
-            indirect=3,
             # A journey naming the requirement reaches every assertion on the
             # legacy blended footing...
-            direct_pct_by_label=dict.fromkeys(immediate_direct, 1.0),
-            indirect_pct_by_label={"A": 1.0, "B": 1.0, "C": 1.0},
             immediate_indirect_by_label={"A": 1.0, "B": 1.0, "C": 1.0},
             # ...but named only these by name.
             immediate_direct_by_label=dict.fromkeys(immediate_direct, 1.0),

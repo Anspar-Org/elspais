@@ -10,6 +10,7 @@ failing test aimed at.
 
 import pytest
 
+from elspais.graph.aggregation import covered_labels
 from elspais.graph.annotators import CoverageCreditConfig, annotate_coverage
 from elspais.graph.GraphNode import make_file_id
 from tests.core.graph_test_helpers import (
@@ -52,11 +53,11 @@ def _build(*, covered, result_status="passed", credit_mode="verified", min_frac=
 
 def test_lcov_tested_credited_any_execution_green():
     m = _build(covered={10})  # 1 of 3 lines
-    assert m.lcov_tested.direct_pct_by_label.get("A") == 1 / 3
-    assert "A" in m.lcov_tested.direct_labels
+    assert m.lcov_tested.total_by_label.get("A") == 1 / 3
+    assert "A" in covered_labels(m.lcov_tested, "immediate_direct")
     assert m.lcov_tested.has_failures is False
     # not folded into verified
-    assert m.verified.direct == 0.0
+    assert m.verified.immediate_direct == 0.0
 
 
 # Verifies: REQ-d00254-A, REQ-d00254-B
@@ -69,21 +70,21 @@ def test_lcov_tested_carries_no_verdict_when_app_red(credit_mode):
     verdict to every assertion the lines happen to implement.
     """
     m = _build(covered={10}, result_status="failed", credit_mode=credit_mode)
-    assert "A" in m.lcov_tested.direct_labels
+    assert "A" in covered_labels(m.lcov_tested, "immediate_direct")
     assert m.lcov_tested.has_failures is False
     assert m.lcov_tested.failing_labels == set()
 
 
 def test_lcov_tested_zero_coverage_not_credited():
     m = _build(covered=set())
-    assert m.lcov_tested.direct_labels == set()
+    assert covered_labels(m.lcov_tested, "immediate_direct") == set()
 
 
 def test_lcov_tested_threshold_blocks_partial():
     m = _build(covered={10}, min_frac=0.5)  # 1/3 < 0.5
-    assert m.lcov_tested.direct_labels == set()
+    assert covered_labels(m.lcov_tested, "immediate_direct") == set()
 
 
 def test_lcov_tested_off_by_default():
     m = _build(covered={10}, credit_mode="off")
-    assert m.lcov_tested.direct == 0.0
+    assert m.lcov_tested.immediate_direct == 0.0

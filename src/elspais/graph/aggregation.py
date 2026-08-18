@@ -64,16 +64,12 @@ DENOMINATOR_DIMENSION: dict[str, str] = {
 # REQ-d00069-L are the primary entries; ``total`` is the per-*Assertion*
 # greatest of them (REQ-d00069-N) and ``immediate`` is the strongest evidence
 # ATTACHED here whichever a citation named -- neither is a fifth measure, both
-# are derived views a surface asks for by name. ``direct``/``indirect`` are the
-# legacy blended footings, still named here because the surfaces that have not
-# yet been migrated must still say which figure they are reading.
+# are derived views a surface asks for by name.
 _MEASURE_ATTRS: dict[str, str] = {
     "immediate_direct": "immediate_direct_by_label",
     "immediate_indirect": "immediate_indirect_by_label",
     "rolled_direct": "rolled_direct_by_label",
     "rolled_indirect": "rolled_indirect_by_label",
-    "direct": "direct_pct_by_label",
-    "indirect": "indirect_pct_by_label",
 }
 
 MEASURES: tuple[str, ...] = (
@@ -234,55 +230,16 @@ def absolute_tier(dim: CoverageDimension, *, measure: str) -> str:
     measure's summed coverage is compared against the assertion count, so a
     dimension reads ``full`` only when the named measure accounts for every
     *Assertion*.
-
-    The two legacy footings are read from their own summed fields rather than
-    re-derived from the per-label maps, because those fields are the figures
-    the un-migrated surfaces publish and a dimension may carry one without the
-    other.
     """
     eps = _COVERED_EPS
     if dim.has_failures:
         return "failing"
-    if measure == "indirect":
-        covered: float = dim.indirect
-    elif measure == "direct":
-        covered = dim.direct
-    else:
-        covered = sum(min(v, 1.0) for v in measure_by_label(dim, measure).values())
+    covered = sum(min(v, 1.0) for v in measure_by_label(dim, measure).values())
     if dim.total > 0 and covered >= dim.total - eps:
         return "full"
     if covered > eps:
         return "partial"
     return "missing"
-
-
-def legacy_measure(allow_indirect: bool) -> str:
-    """The legacy footing name for the retired ``allow_indirect`` setting.
-
-    Nothing calls this: no surface selects a footing this way any more. Kept
-    only until the ``allow_indirect`` config key it serves is removed.
-    """
-    return "indirect" if allow_indirect else "direct"
-
-
-def allow_indirect_from_config(config: Any | None) -> bool:
-    """Extract the retired ``[rules.coverage] allow_indirect`` from a config.
-
-    Nothing calls this, and nothing reads the key it extracts. Kept only until
-    the key itself is removed. Accepts both the plain config ``dict`` form and
-    an already-parsed model.
-    """
-    if not config:
-        return True
-    rules = config.get("rules", {}) if isinstance(config, dict) else getattr(config, "rules", None)
-    if rules is None:
-        return True
-    cov = rules.get("coverage", {}) if isinstance(rules, dict) else getattr(rules, "coverage", None)
-    if cov is None:
-        return True
-    if isinstance(cov, dict):
-        return bool(cov.get("allow_indirect", True))
-    return bool(getattr(cov, "allow_indirect", True))
 
 
 def denominator_labels(rollup: RollupMetrics, dimension: str, *, measure: str) -> set[str] | None:
@@ -551,7 +508,7 @@ def iter_uncredited_evidence(
                 # for the requirement, not one per assertion (REQ-d00274-F).
                 # Blanket evidence is caught here and only here: it named the
                 # requirement, which is what this finding is about.
-                reached = covered_labels(num_dim, "indirect")
+                reached = covered_labels(num_dim, chain_measure)
                 if not reached:
                     continue
                 sources = _evidence_sources_for(rollup, dimension, reached)
@@ -592,15 +549,11 @@ def iter_uncredited_evidence(
 class DimensionSums:
     """One dimension's assertion-fraction sums for a level.
 
-    ``covered``/``direct`` are the LEGACY blended footings, kept until the
-    surfaces still reading them have moved. The four measures of REQ-d00069-L
-    and the per-*Assertion* total of REQ-d00069-N are carried alongside, each
-    in its own right, so a surface can report a figure and show the evidence
-    behind it (REQ-d00258-A).
+    The four measures of REQ-d00069-L and the per-*Assertion* total of
+    REQ-d00069-N, each summed in its own right, so a surface can report a
+    figure and show the evidence behind it (REQ-d00258-A).
     """
 
-    covered: float = 0.0
-    direct: float = 0.0
     total: int = 0
     immediate_direct: float = 0.0
     immediate_indirect: float = 0.0
@@ -642,18 +595,16 @@ class TierBuckets:
 class DimensionAggregate:
     """Whole-graph per-dimension sums plus the per-REQ counts health reports.
 
-    ``total``/``direct``/``covered`` are the same assertion-fraction sums as
-    ``DimensionSums`` (generous footing on ``covered``); the ``req_*`` fields
-    and ``has_failures`` are the additional per-requirement tallies
-    health.py's dimension-coverage check needs for its message.
+    ``total`` and the measure sums are the same assertion-fraction sums as
+    ``DimensionSums``; the ``req_*`` fields and ``has_failures`` are the
+    additional per-requirement tallies health.py's dimension-coverage check
+    needs for its message.
     """
 
     total: int = 0
-    direct: float = 0.0
-    covered: float = 0.0
     # Implements: REQ-d00069-L, REQ-d00069-N
     # The four measures and the per-*Assertion* total, each summed in its own
-    # right beside the legacy footings above.
+    # right.
     immediate_direct: float = 0.0
     immediate_indirect: float = 0.0
     rolled_direct: float = 0.0
@@ -694,8 +645,6 @@ def _level_keys(config: dict[str, Any] | None) -> list[str]:
 
 
 def _accumulate(sums: DimensionSums, dim: CoverageDimension) -> None:
-    sums.covered += dim.indirect
-    sums.direct += dim.direct
     sums.total += dim.total
     # Implements: REQ-d00069-L, REQ-d00069-N
     sums.immediate_direct += measure_total(dim, "immediate_direct")
@@ -723,7 +672,7 @@ def _counts_for_coverage(config: dict[str, Any] | None, status: str | None) -> b
 
 
 def aggregate_by_level(graph: Any, config: dict[str, Any] | None = None) -> list[LevelAggregate]:
-    """Per-level assertion-fraction sums on the generous footing."""
+    """Per-level assertion-fraction sums, on each of the four measures."""
     keys = _level_keys(config)
     groups: dict[str, LevelAggregate] = {k.lower(): LevelAggregate(level=k.upper()) for k in keys}
 
@@ -745,11 +694,15 @@ def aggregate_by_level(graph: Any, config: dict[str, Any] | None = None) -> list
         _accumulate(agg.uat_covered, rollup.uat_coverage)
         _accumulate(agg.uat_passed, rollup.uat_verified)
         # REQ-d00252-F: INTEGRATES delegation counts as implemented.
-        if rollup.implemented.indirect > 0 or has_integration(node):
+        # Implements: REQ-d00258-A
+        # "has any coverage at all" is asked of the per-*Assertion* total
+        # (REQ-d00069-N) -- the greatest of the four measures -- so a
+        # requirement counts here exactly when some measure credits it.
+        if rollup.implemented.covered > 0 or has_integration(node):
             agg.with_code_refs += 1
-        if rollup.tested.indirect > 0:
+        if rollup.tested.covered > 0:
             agg.with_test_refs += 1
-        if passing_dim.indirect > 0:
+        if passing_dim.covered > 0:
             agg.with_passing += 1
         # Implements: REQ-d00258-O
         part = tested_partition(rollup)
@@ -814,17 +767,19 @@ def aggregate_dimension(
             continue
         dim: CoverageDimension = numerator_dimension(rollup, dimension)
         agg.total += dim.total
-        agg.direct += dim.direct
-        agg.covered += dim.indirect
         # Implements: REQ-d00069-L, REQ-d00069-N
         agg.immediate_direct += measure_total(dim, "immediate_direct")
         agg.immediate_indirect += measure_total(dim, "immediate_indirect")
         agg.rolled_direct += measure_total(dim, "rolled_direct")
         agg.rolled_indirect += measure_total(dim, "rolled_indirect")
         agg.total_covered += dim.covered
-        if dim.indirect > 0 or integrates:
+        # Implements: REQ-d00258-A, REQ-d00258-M
+        # "covered on any measure" is the per-*Assertion* total; "cited by
+        # name here" is the immediate direct measure, the one the work-list
+        # surfaces answer on (REQ-d00258-M).
+        if dim.covered > 0 or integrates:
             agg.req_with_any += 1
-        if dim.direct > 0 or integrates:
+        if measure_total(dim, "immediate_direct") > 0 or integrates:
             agg.req_with_direct += 1
         if dim.has_failures:
             agg.has_failures = True
@@ -834,6 +789,69 @@ def aggregate_dimension(
             agg.tested_passed += part.passed
             agg.tested_failed += part.failed
             agg.tested_awaiting += part.awaiting
+    return agg
+
+
+# Implements: REQ-d00254-B, REQ-d00258-E
+@dataclass
+class LineAggregate:
+    """Whole-graph line-coverage sums, plus the per-REQ counts health reports.
+
+    Measured in LINES, kept apart from :class:`DimensionAggregate` because the
+    two count different populations and must never be added together or
+    compared as though they were the same figure.
+    """
+
+    total_lines: int = 0
+    attributed_lines: float = 0.0
+    covered_lines: float = 0.0
+    req_count: int = 0
+    req_with_covered: int = 0
+    req_with_attribution: int = 0
+
+    @property
+    def has_attribution(self) -> bool:
+        """Whether ANY line carried a naming context (REQ-d00258-E).
+
+        Aggregate-only coverage tooling records no per-test context, so it
+        cannot produce an attribution figure; a surface reads this to render
+        nothing rather than a misleading zero.
+        """
+        return self.attributed_lines > 0
+
+
+# Implements: REQ-d00254-B
+def aggregate_line_coverage(
+    graph: Any,
+    config: dict[str, Any] | None = None,
+    level_filter: Any = None,
+) -> LineAggregate:
+    """Whole-graph line-coverage sums over the requirements coverage includes.
+
+    The same status-inclusion gate as :func:`aggregate_dimension`
+    (REQ-d00258-C), so a requirement excluded from assertion coverage is
+    excluded from line coverage too and the two reports describe one estate.
+    """
+    agg = LineAggregate()
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+        if not _counts_for_coverage(config, node.status):
+            continue
+        if level_filter is not None and not level_filter(node.level):
+            continue
+        rollup: RollupMetrics | None = node.get_metric("rollup_metrics")
+        if rollup is None:
+            continue
+        lines = rollup.code_tested
+        if lines.total_lines == 0:
+            continue
+        agg.req_count += 1
+        agg.total_lines += lines.total_lines
+        agg.attributed_lines += lines.attributed_lines
+        agg.covered_lines += lines.covered_lines
+        if lines.covered_lines > 0:
+            agg.req_with_covered += 1
+        if lines.attributed_lines > 0:
+            agg.req_with_attribution += 1
     return agg
 
 
@@ -928,15 +946,9 @@ def collect_coverage(graph: Any, config: dict[str, Any] | None = None) -> dict[s
                 "with_test_refs": agg.with_test_refs,
                 "with_passing": agg.with_passing,
                 "total_assertions": agg.total_assertions,
-                "implemented_assertions": round(agg.implemented.covered, 3),
-                "implemented_direct": round(agg.implemented.direct, 3),
-                "tested_assertions": round(agg.tested.covered, 3),
-                "tested_direct": round(agg.tested.direct, 3),
                 "tested_passed": agg.tested_passed,
                 "tested_failed": agg.tested_failed,
                 "tested_awaiting": agg.tested_awaiting,
-                "passing_assertions": round(agg.passing.covered, 3),
-                "passing_direct": round(agg.passing.direct, 3),
                 **_measure_fields("implemented", agg.implemented),
                 **_measure_fields("tested", agg.tested),
                 **_measure_fields("passing", agg.passing),
@@ -1009,6 +1021,7 @@ __all__ = [
     "TIER_TO_BUCKET",
     "WORK_LIST_MEASURE",
     "DimensionAggregate",
+    "LineAggregate",
     "DimensionSums",
     "LevelAggregate",
     "TierBuckets",
@@ -1016,15 +1029,14 @@ __all__ = [
     "absolute_tier",
     "aggregate_by_level",
     "assertion_measures",
-    "allow_indirect_from_config",
     "collect_coverage",
     "covered_labels",
     "is_covered",
-    "legacy_measure",
     "measure_by_label",
     "measure_phrase",
     "measure_total",
     "aggregate_dimension",
+    "aggregate_line_coverage",
     "authored_dimension",
     "denominator_labels",
     "dimension_measures",

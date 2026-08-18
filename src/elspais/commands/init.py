@@ -305,11 +305,6 @@ _FIELD_COMMENTS: dict[str, str] = {
     "rules.coverage.*.partial": "Some assertions covered, some not",
     "rules.coverage.*.failing": "Has coverage but test results show failures",
     "rules.coverage.*.missing": "No coverage at all",
-    "rules.coverage.allow_indirect": (
-        "no longer read by any surface and scheduled for removal; tiers score the "
-        "total measure (each assertion at the greatest of its four) and work lists "
-        "score evidence that named the assertion"
-    ),
     "rules.coverage.uncredited_evidence": (
         'error (default): severity for the "tests.uncredited_evidence" check -- '
         "evidence naming an assertion its dimension does not count (a test on an "
@@ -615,10 +610,10 @@ def _add_table(
                     sub.add(sk, inner)
                 else:
                     # A bare scalar sharing a table with sub-tables (e.g.
-                    # rules.coverage.allow_indirect alongside the per-dimension
-                    # tables) gets hoisted above them by tomlkit, orphaning a
-                    # standalone comment. Attach it inline so it stays with the
-                    # value.
+                    # rules.coverage.uncredited_evidence alongside the
+                    # per-dimension tables) gets hoisted above them by tomlkit,
+                    # orphaning a standalone comment. Attach it inline so it
+                    # stays with the value.
                     parent_has_tables = any(isinstance(x, dict) for x in v.values())
                     field_comment = _resolve_field_comment(sub_field_path)
                     if parent_has_tables and field_comment:

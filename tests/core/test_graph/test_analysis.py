@@ -45,14 +45,18 @@ def _add_node(
     node = GraphNode(id=node_id, kind=kind, label=label or node_id)
     node._content = {"level": level, "status": status}
     if referenced_pct is not None:
-        # Use indirect to represent the old referenced_pct semantic
+        # Credit is attached to this requirement by a citation naming each
+        # assertion, i.e. the immediate direct measure (REQ-d00069-L).
         total = 100  # use 100 so pct math works out
-        indirect = int(referenced_pct)  # count = pct when total=100
+        covered = int(referenced_pct)  # count = pct when total=100
         node.set_metric(
             "rollup_metrics",
             RollupMetrics(
                 total_assertions=total,
-                implemented=CoverageDimension(total=total, direct=indirect, indirect=indirect),
+                implemented=CoverageDimension(
+                    total=total,
+                    immediate_direct_by_label={f"A{i}": 1.0 for i in range(covered)},
+                ),
             ),
         )
     graph._index[node_id] = node

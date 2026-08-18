@@ -2505,25 +2505,19 @@ def check_dimension_coverage(
     """Check coverage for one of the 5 CoverageDimension dimensions.
 
     Reports the requirement-level count and the assertion-level figures, each
-    naming the measure it is on (REQ-d00258-A): assertions a citation names
-    here (the REQ-d00069-L immediate-direct measure -- the one word this
-    check shares with the four-measure vocabulary `summary`/`trace` now
-    headline), then two LEGACY BLENDED footings this check still reads
-    (Task 3 did not move `check_dimension_coverage` off them): a direct
-    footing that blends assertion citations with refinement credit, and an
-    indirect footing that additionally folds in whole-requirement evidence.
-    Neither legacy footing is named "direct"/"indirect"/"conducted" the way
-    the four measures are, on purpose -- those words now denote specific
-    REQ-d00069-L measures elsewhere, and a blended legacy figure is not one
-    of them. The first (cited-by-name) figure is the measure the gap
-    surfaces answer on (REQ-d00258-M), so a reader can see why this check
-    reports coverage while `gaps` still lists work.
+    naming the measure it is on (REQ-d00258-A). The headline is the
+    per-*Assertion* total (REQ-d00069-N) -- each *Assertion* counted once at
+    the greatest of its four measures -- and the four measures behind it are
+    listed under the ONE shared vocabulary (``MEASURE_WORDS``), the same words
+    `summary`, `trace` and the viewer render. The immediate direct measure
+    ("cited by name here") is named first because it is what the gap surfaces
+    answer on (REQ-d00258-M), so a reader can see why this check reports
+    coverage while `gaps` still lists work.
 
-    The figures are NOT nested and are not described as though they were: the
-    legacy blended footings average a citation with what refinements conduct,
-    so a fully cited *Assertion* refined by unfinished work reads LOWER on
-    them than on the cited-by-name figure. Each label therefore says what its
-    own figure counts and claims no ordering against its neighbours.
+    The measures are NOT nested and are not described as though they were: an
+    *Assertion* can carry credit on several of them, which is why the total is
+    a per-*Assertion* maximum rather than their sum. Each label therefore says
+    what its own figure counts and claims no ordering against its neighbours.
 
     Args:
         graph: The graph to check.
@@ -2538,7 +2532,7 @@ def check_dimension_coverage(
             requirement levels are counted (see ``aggregate_dimension``).
         message_suffix: Optional clarifying text appended to the message.
     """
-    from elspais.graph.aggregation import aggregate_dimension
+    from elspais.graph.aggregation import MEASURE_WORDS, aggregate_dimension
     from elspais.graph.metrics import fmt_assertion_count
 
     dim_labels = {
@@ -2547,7 +2541,6 @@ def check_dimension_coverage(
         "verified": ("Passing", "tests"),
         "uat_coverage": ("UAT Covered", "uat"),
         "uat_verified": ("UAT Passed", "uat"),
-        "code_tested": ("Code Tested (line coverage)", "code"),
         "lcov_tested": ("Coverage-Verified (lcov)", "tests"),
     }
     label, category = dim_labels.get(dimension, (dimension, "code"))
@@ -2557,57 +2550,61 @@ def check_dimension_coverage(
     # aggregation module -- not a second re-implementation of the walk here.
     agg = aggregate_dimension(graph, dimension, config=config, level_filter=level_filter)
     req_count = agg.req_count
-    req_with_any = agg.req_with_any  # REQs where dim.indirect > 0
-    req_with_direct = agg.req_with_direct  # REQs where dim.direct > 0
+    req_with_any = agg.req_with_any  # REQs covered on the per-Assertion total
+    req_with_direct = agg.req_with_direct  # REQs with immediate-direct coverage
     total_assertions = agg.total
-    direct_assertions = agg.direct
-    indirect_assertions = agg.covered
     has_any_failures = agg.has_failures
 
-    # Implements: REQ-d00258-A
-    # The immediate direct measure, read from the shared aggregation rather
-    # than recomputed -- assertions somebody cited by name here, and the
-    # measure the gap surfaces answer on (REQ-d00258-M). Reported beside the
-    # figures below so a reader sees both numbers rather than inferring one
-    # from the other, and can tell a requirement that is covered from one that
-    # still has assertions nobody has written evidence for.
-    cited_assertions = agg.immediate_direct
+    # Implements: REQ-d00258-A, REQ-d00069-L, REQ-d00069-N
+    # The headline is the per-*Assertion* total -- the greatest of the four
+    # measures per *Assertion*, so each *Assertion* is counted once however
+    # many ways it is covered -- and the four measures behind it are reported
+    # with it, so a reader is never shown a figure without the evidence that
+    # produced it. Every figure is read from the shared aggregation rather
+    # than recomputed here.
+    total_covered = agg.total_covered
+    measures = {
+        "immediate_direct": agg.immediate_direct,
+        "immediate_indirect": agg.immediate_indirect,
+        "rolled_direct": agg.rolled_direct,
+        "rolled_indirect": agg.rolled_indirect,
+    }
+    # The immediate direct measure is also the one the work-listing surfaces
+    # answer on (REQ-d00258-M), so it is named first below.
+    cited_assertions = measures["immediate_direct"]
+
+    def _pct(value: float) -> float:
+        return (value / total_assertions * 100) if total_assertions > 0 else 0.0
 
     req_pct = (req_with_any / req_count * 100) if req_count > 0 else 0
-    cited_pct = (cited_assertions / total_assertions * 100) if total_assertions > 0 else 0
-    direct_pct = (direct_assertions / total_assertions * 100) if total_assertions > 0 else 0
-    indirect_pct = (indirect_assertions / total_assertions * 100) if total_assertions > 0 else 0
+    cited_pct = _pct(cited_assertions)
+    total_pct = _pct(total_covered)
     # REQ-d00258-C: note and counts read the SAME config (the --treat-active overlay),
     # so a promoted status is counted AND absent from the excluded-note.
     note = _excluded_note(graph, config=config)
 
-    # Every figure says which evidence it counts, so a reader who sees two of
-    # them disagree is told why rather than left to infer one from the other
-    # (REQ-d00258-A). The requirement count is on the same generous reading as
-    # the last assertion figure -- a requirement is counted once any of its
-    # measures is above zero.
     # Implements: REQ-d00258-A
-    # These two labels name themselves as LEGACY BLENDED figures rather than
-    # borrowing the four-measure words (direct/indirect/conducted):
-    # "cited by name here" above is the genuine REQ-d00069-L immediate-direct
-    # measure, but these two are the pre-REQ-d00069-L blended footings this
-    # check still reads (`agg.direct`/`agg.covered`), and summary/trace now
-    # use "direct"/"indirect"/"conducted" to mean the four measures -- so a
-    # blended legacy figure must not reuse those words to mean something else.
+    # Every figure says which evidence it counts, in the ONE shared vocabulary
+    # (MEASURE_WORDS) the CLI summary and the viewer render, so a reader who
+    # meets two surfaces meets the same words for the same quantities. The
+    # requirement count is on the same total reading as the headline -- a
+    # requirement is counted once any of its measures is above zero.
     msg_parts = [
         f"{label}: {req_with_any}/{req_count} REQs covered on any measure ({req_pct:.0f}%)",
-        f"{fmt_assertion_count(cited_assertions)}/{total_assertions} assertions"
-        f" cited by name here ({cited_pct:.0f}%)",
-        f"{fmt_assertion_count(direct_assertions)}/{total_assertions}"
-        f" on the legacy direct footing, which blends citations with refinement"
-        f" credit ({direct_pct:.0f}%)",
+        f"{fmt_assertion_count(total_covered)}/{total_assertions} assertions"
+        f" covered in total ({total_pct:.0f}%)",
     ]
-    if abs(indirect_assertions - direct_assertions) > 1e-9:
-        msg_parts.append(
-            f"{fmt_assertion_count(indirect_assertions)}/{total_assertions}"
-            f" on the legacy indirect footing, which also folds in"
-            f" whole-requirement evidence ({indirect_pct:.0f}%)"
-        )
+    # The immediate direct measure is ALWAYS shown, zero included: it is what
+    # the gap surfaces answer on (REQ-d00258-M), so a zero here is exactly the
+    # fact that explains why `gaps` lists work this check counts as covered.
+    # The other three are shown only when they carry something.
+    measure_parts = [
+        f"{fmt_assertion_count(value)}/{total_assertions} {MEASURE_WORDS[name]}"
+        f" ({_pct(value):.0f}%)"
+        for name, value in measures.items()
+        if name == "immediate_direct" or value > 1e-9
+    ]
+    msg_parts.append("of which " + ", ".join(measure_parts))
     # Implements: REQ-d00258-O
     if dimension == "tested" and (agg.tested_passed + agg.tested_failed + agg.tested_awaiting):
         msg_parts.append(
@@ -2634,15 +2631,67 @@ def check_dimension_coverage(
             # Implements: REQ-d00258-A
             "cited_assertions": round(cited_assertions, 3),
             "cited_pct": round(cited_pct, 1),
-            "direct_assertions": round(direct_assertions, 3),
-            "indirect_assertions": round(indirect_assertions, 3),
-            "direct_pct": round(direct_pct, 1),
+            "total_covered": round(total_covered, 3),
+            "total_pct": round(total_pct, 1),
+            **{name: round(value, 3) for name, value in measures.items()},
             "tested_passed": agg.tested_passed,
             "tested_failed": agg.tested_failed,
             "tested_awaiting": agg.tested_awaiting,
-            "indirect_pct": round(indirect_pct, 1),
             "has_failures": has_any_failures,
         },
+    )
+
+
+# Implements: REQ-d00254-B, REQ-d00258-E
+def check_line_coverage(graph, config=None, level_filter=None) -> HealthCheck:
+    """INFO: how much of the attributed implementation a test run executed.
+
+    Reported in LINES, and deliberately not through the assertion-coverage
+    check: line coverage measures the code, assertion coverage measures the
+    *Traceability*, and putting them through one function would invite the two
+    counts to be read as the same kind of number (REQ-d00254-B).
+
+    Per-test attribution is rendered only when the tooling produced it. Where
+    coverage arrives aggregate-only there is no context to attribute a line to
+    a test, and a zero would read as "no test exercises this" rather than "the
+    question was not asked" (REQ-d00258-E).
+    """
+    from elspais.graph.aggregation import aggregate_line_coverage
+
+    agg = aggregate_line_coverage(graph, config=config, level_filter=level_filter)
+    covered_pct = (agg.covered_lines / agg.total_lines * 100) if agg.total_lines else 0.0
+
+    msg_parts = [
+        f"Code Tested (line coverage): {agg.req_with_covered}/{agg.req_count}"
+        f" REQs with covered implementation lines",
+        f"{agg.covered_lines:.0f}/{agg.total_lines} lines covered ({covered_pct:.0f}%)",
+    ]
+    details: dict[str, object] = {
+        "dimension": "code_tested",
+        "total_lines": agg.total_lines,
+        "covered_lines": round(agg.covered_lines, 3),
+        "covered_pct": round(covered_pct, 1),
+        "total_requirements": agg.req_count,
+        "reqs_with_covered_lines": agg.req_with_covered,
+    }
+    if agg.has_attribution:
+        attributed_pct = (agg.attributed_lines / agg.total_lines * 100) if agg.total_lines else 0.0
+        msg_parts.append(
+            f"{agg.attributed_lines:.0f}/{agg.total_lines} attributed to a"
+            f" verifying test ({attributed_pct:.0f}%)"
+        )
+        details["attributed_lines"] = round(agg.attributed_lines, 3)
+        details["attributed_pct"] = round(attributed_pct, 1)
+    else:
+        msg_parts.append("per-test attribution not available from this coverage data")
+
+    return HealthCheck(
+        name="code.code_tested",
+        passed=True,
+        message=", ".join(msg_parts) + _excluded_note(graph, config=config),
+        category="code",
+        severity="info",
+        details=details,
     )
 
 
@@ -3126,17 +3175,13 @@ def run_code_checks(
         check_whole_req_only_coverage(graph, config),
     ]
 
-    # Add code_tested dimension only when line coverage data is present
+    # Add line coverage only when line coverage data is present
     has_coverage = any(
-        (m := node.get_metric("rollup_metrics")) is not None and m.code_tested.total > 0
+        (m := node.get_metric("rollup_metrics")) is not None and m.code_tested.total_lines > 0
         for node in graph.nodes_by_kind(NodeKind.REQUIREMENT)
     )
     if has_coverage:
-        checks.append(
-            check_dimension_coverage(
-                graph, "code_tested", exclude_status=exclude_status, config=config
-            )
-        )
+        checks.append(check_line_coverage(graph, config=config))
 
     # Implements: REQ-d00241-B, REQ-d00241-C
     no_trace_sev = typed_config.rules.format.no_traceability_severity

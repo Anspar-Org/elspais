@@ -18,6 +18,7 @@ from pathlib import Path
 import pytest
 
 from elspais.config.schema import ElspaisConfig
+from elspais.graph.aggregation import absolute_tier
 from elspais.graph.parsers.lark.transformers.reference import ReferenceTransformer
 from elspais.graph.parsers.patterns import JOURNEY_REF_PATTERN
 from elspais.utilities.patterns import IdPatternConfig, IdResolver
@@ -127,7 +128,7 @@ def graph_whole_journey_pass(tmp_path):
 def test_all_steps_pass_gives_full_direct(graph_steps_all_pass):
     """All steps' tests pass + Validates names an assertion -> full."""
     req = graph_steps_all_pass.find_by_id("REQ-d00001")
-    assert req.get_metric("rollup_metrics").uat_verified.tier == "full"
+    assert absolute_tier(req.get_metric("rollup_metrics").uat_verified, measure="total") == "full"
 
 
 # Verifies: REQ-d00256
@@ -135,7 +136,9 @@ def test_one_step_fails_gives_failing(graph_one_step_fails):
     """A single failing step's test flips the REQ uat_verified tier to failing,
     and the journey records the failing step's label."""
     req = graph_one_step_fails.find_by_id("REQ-d00001")
-    assert req.get_metric("rollup_metrics").uat_verified.tier == "failing"
+    assert (
+        absolute_tier(req.get_metric("rollup_metrics").uat_verified, measure="total") == "failing"
+    )
     jny = graph_one_step_fails.find_by_id("JNY-OQ-Login-01")
     jv = jny.get_metric("journey_verification")
     assert jv.tier == "failing"
@@ -164,11 +167,11 @@ def test_untested_step_credits_partial_uat(graph_untested_step):
     """
     req = graph_untested_step.find_by_id("REQ-d00001")
     uat = req.get_metric("rollup_metrics").uat_verified
-    assert uat.tier == "partial"
+    assert absolute_tier(uat, measure="total") == "partial"
     assert uat.has_failures is False
     # Validates: REQ-d00001-A is assertion-targeted -> the fraction lands on A,
     # strictly between 0 and 1 (2 of 3 steps verified ~= 0.667).
-    frac = uat.indirect_pct_by_label["A"]
+    frac = uat.total_by_label["A"]
     assert 0.0 < frac < 1.0
     assert frac == pytest.approx(2 / 3)
 
@@ -183,7 +186,9 @@ def test_partial_journey_consistency_standing_and_tier(graph_untested_step):
 
     req = graph_untested_step.find_by_id("REQ-d00001")
     # Requirement-level dimension tier.
-    assert req.get_metric("rollup_metrics").uat_verified.tier == "partial"
+    assert (
+        absolute_tier(req.get_metric("rollup_metrics").uat_verified, measure="total") == "partial"
+    )
     # Per-assertion standing for the validated assertion A.
     states = compute_assertion_coverage_states(req)
     assert states["A"]["uat_verified"] == "partial"
@@ -194,9 +199,9 @@ def test_all_steps_pass_credits_full_uat(graph_steps_all_pass):
     """A fully-verified journey credits FULL (1.0) uat_verified -- unchanged."""
     req = graph_steps_all_pass.find_by_id("REQ-d00001")
     uat = req.get_metric("rollup_metrics").uat_verified
-    assert uat.tier == "full"
+    assert absolute_tier(uat, measure="total") == "full"
     assert uat.has_failures is False
-    assert uat.indirect_pct_by_label["A"] == pytest.approx(1.0)
+    assert uat.total_by_label["A"] == pytest.approx(1.0)
 
 
 # Verifies: REQ-d00255-C
@@ -205,7 +210,7 @@ def test_failing_step_credits_failure_signal(graph_one_step_fails):
     positive uat_verified credit (REQ-d00255-C)."""
     req = graph_one_step_fails.find_by_id("REQ-d00001")
     uat = req.get_metric("rollup_metrics").uat_verified
-    assert uat.tier == "failing"
+    assert absolute_tier(uat, measure="total") == "failing"
     assert uat.has_failures is True
 
 
@@ -215,7 +220,7 @@ def test_whole_journey_pass_no_steps_full(graph_whole_journey_pass):
     jny = graph_whole_journey_pass.find_by_id("JNY-OQ-Login-01")
     assert jny.get_metric("journey_verification").fully_verified is True
     req = graph_whole_journey_pass.find_by_id("REQ-d00001")
-    assert req.get_metric("rollup_metrics").uat_verified.tier == "full"
+    assert absolute_tier(req.get_metric("rollup_metrics").uat_verified, measure="total") == "full"
 
 
 # ---------------------------------------------------------------------------

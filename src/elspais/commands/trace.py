@@ -210,6 +210,7 @@ def _get_node_data(node, graph: FederatedGraph, *, assertion_labels: bool = Fals
     """
     from elspais.graph.metrics import (
         CoverageDimension,
+        LineCoverage,
         RollupMetrics,
         fmt_assertion_count,
     )
@@ -262,15 +263,16 @@ def _get_node_data(node, graph: FederatedGraph, *, assertion_labels: bool = Fals
         pct = round(num / total * 100)
         return f"{fmt_assertion_count(num)}/{total} ({pct}%)"
 
-    def _fmt_code_tested(dim: CoverageDimension) -> str:
-        if dim.total == 0 or (dim.direct == 0 and dim.indirect > 0):
+    def _fmt_code_tested(lines: LineCoverage) -> str:
+        if lines.total_lines == 0 or not lines.has_attribution:
             # Aggregate-only tooling (e.g. lcov/coverage.json without per-test
-            # attribution) can't prove a *direct* count -- rendering "0/N (0%)"
-            # would misrepresent real (aggregate) coverage as no coverage at
-            # all (REQ-d00258-E).
+            # attribution) records no context naming a test, so it cannot
+            # produce an attribution count -- rendering "0/N (0%)" would
+            # misrepresent real (aggregate) coverage as no coverage at all
+            # (REQ-d00258-E).
             return "n/a"
-        pct = round(dim.direct / dim.total * 100)
-        return f"{fmt_assertion_count(dim.direct)}/{dim.total} ({pct}%)"
+        pct = round(lines.attributed_lines / lines.total_lines * 100)
+        return f"{fmt_assertion_count(lines.attributed_lines)}/{lines.total_lines} ({pct}%)"
 
     # Implements: REQ-d00258-A, REQ-d00258-J
     # (column_key, rollup_attr). All five dimensions headline on the
@@ -347,14 +349,14 @@ def _get_node_data(node, graph: FederatedGraph, *, assertion_labels: bool = Fals
         data["code_tested"] = _fmt_code_tested(ct)
         if assertion_labels:
             # Same guard as _fmt_code_tested (REQ-d00258-E): aggregate-only
-            # coverage (direct==0 while indirect>0) has no per-test attribution
-            # to report, so the label/pct cells must not claim "0/N"/"0%".
-            if ct.total == 0 or (ct.direct == 0 and ct.indirect > 0):
+            # coverage has no per-test attribution to report, so the cells
+            # must not claim "0/N"/"0%".
+            if ct.total_lines == 0 or not ct.has_attribution:
                 data["code_tested_labels"] = "n/a"
                 data["code_tested_pct"] = "n/a"
             else:
-                data["code_tested_labels"] = f"{ct.direct}/{ct.total}"
-                data["code_tested_pct"] = f"{round(ct.direct / ct.total * 100)}%"
+                data["code_tested_labels"] = f"{ct.attributed_lines:.0f}/{ct.total_lines}"
+                data["code_tested_pct"] = f"{round(ct.attributed_lines / ct.total_lines * 100)}%"
         # Implements: REQ-d00254-I+J
         # Special-case the "verified" cell: distinguish "not run, no baseline"
         # from a carried (baseline) verdict, ahead of the "n/a"/count rendering
@@ -377,10 +379,13 @@ def _get_node_data(node, graph: FederatedGraph, *, assertion_labels: bool = Fals
 
         lt = rollup.lcov_tested
         if lt.total > 0:
-            lt_pct = round(lt.indirect / lt.total * 100)
+            # Implements: REQ-d00069-N, REQ-d00258-A
+            # The per-*Assertion* total, like every other dimension headline.
+            lt_by_label = lt.total_by_label
+            lt_pct = round(lt.covered / lt.total * 100)
             data["lcov_tested"] = f"lcov {lt_pct}%"
             if assertion_labels:
-                labels = lt.indirect_labels if lt.indirect_labels else lt.direct_labels
+                labels = {lbl for lbl, frac in lt_by_label.items() if frac > 0}
                 label_str = _compact_labels(labels) if labels else f"0/{lt.total}"
                 data["lcov_tested_labels"] = label_str
                 data["lcov_tested_pct"] = f"{lt_pct}%"

@@ -1476,8 +1476,6 @@ class TestGetProjectSummary:
                 total_assertions=2,
                 implemented=CoverageDimension(
                     total=2,
-                    direct=2,
-                    indirect=2,
                     immediate_direct_by_label={"A": 1.0, "B": 1.0},
                 ),
             ),
@@ -1490,8 +1488,6 @@ class TestGetProjectSummary:
                 total_assertions=2,
                 implemented=CoverageDimension(
                     total=2,
-                    direct=1,
-                    indirect=1,
                     immediate_direct_by_label={"A": 1.0},
                 ),
             ),

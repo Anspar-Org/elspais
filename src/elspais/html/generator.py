@@ -57,7 +57,6 @@ class TreeRow:
     has_children: bool
     has_failures: bool
     is_associated: bool  # From sponsor/associated repository
-    coverage_indirect: str = "none"  # "none", "partial", "full" (including indirect)
     validation_color: str = ""  # val-green/val-yellow-green/val-yellow/val-red/val-orange or ""
     validation_tip: str = ""  # Hover tooltip explaining the validation color
     source_file: str = ""  # Relative path to source file
@@ -905,15 +904,17 @@ class HTMLGenerator:
                 return False
             return "roadmap" in (_fn.get_field("relative_path") or "").lower()
 
-        def compute_coverage(node: GraphNode) -> tuple[str, str, bool]:
+        def compute_coverage(node: GraphNode) -> tuple[str, bool]:
             """Get coverage status and failure flag from pre-computed metrics.
 
-            Uses RollupMetrics computed by annotate_coverage().
+            Uses RollupMetrics computed by annotate_coverage(). Reports on the
+            per-*Assertion* total (REQ-d00069-N) -- the greatest of an
+            *Assertion*'s four measures -- like every other coverage headline
+            (REQ-d00258-A).
 
             Returns:
-                Tuple of (coverage_status, coverage_indirect, has_failures)
-                coverage_status: "none", "partial", or "full" (strict)
-                coverage_indirect: "none", "partial", or "full" (includes indirect)
+                Tuple of (coverage_status, has_failures), coverage_status
+                being "none", "partial", or "full".
             """
             from elspais.graph.metrics import RollupMetrics, tested_and_passing
 
@@ -926,28 +927,20 @@ class HTMLGenerator:
                     if child.kind == NodeKind.CODE:
                         has_code = True
                         break
-                cov = "full" if has_code else "none"
-                return (cov, cov, False)
+                return ("full" if has_code else "none", False)
 
-            # Strict coverage (excludes INDIRECT)
-            if rollup.implemented.direct_pct == 0:
-                strict = "none"
-            elif rollup.implemented.direct_pct < 100:
-                strict = "partial"
+            dim = rollup.implemented
+            pct = (dim.covered / dim.total * 100) if dim.total else 0.0
+            if pct <= 0:
+                cov = "none"
+            elif pct < 100:
+                cov = "partial"
             else:
-                strict = "full"
-
-            # Indirect coverage (includes INDIRECT)
-            if rollup.implemented.indirect_pct == 0:
-                indirect = "none"
-            elif rollup.implemented.indirect_pct < 100:
-                indirect = "partial"
-            else:
-                indirect = "full"
+                cov = "full"
 
             # Passing-dimension failures, so an lcov-side failure is seen
             # as well as a result-verified one (REQ-d00258-N).
-            return (strict, indirect, tested_and_passing(rollup).has_failures)
+            return (cov, tested_and_passing(rollup).has_failures)
 
         def get_assertion_letters(node: GraphNode, parent_id: str | None) -> list[str]:
             """Get assertion letters that this node implements from a specific parent."""
@@ -1019,9 +1012,7 @@ class HTMLGenerator:
             is_test = node.kind == NodeKind.TEST
             is_test_result = node.kind == NodeKind.RESULT
             is_impl_node = is_code or is_test or is_test_result  # Implementation/evidence nodes
-            coverage, coverage_indirect, has_failures = (
-                ("none", "none", False) if is_impl_node else compute_coverage(node)
-            )
+            coverage, has_failures = ("none", False) if is_impl_node else compute_coverage(node)
             val_color, val_tip = ("", "") if is_impl_node else compute_validation_color(node)
             assertion_letters = (
                 get_assertion_letters(node, parent_id)
@@ -1059,7 +1050,6 @@ class HTMLGenerator:
                 level=(node.level or "").upper() if not is_impl_node else "",
                 status=(node.status or "").upper() if not is_impl_node else "",
                 coverage=coverage,
-                coverage_indirect=coverage_indirect,
                 validation_color=val_color,
                 validation_tip=val_tip,
                 topic=get_topic(node) if not is_impl_node else "",

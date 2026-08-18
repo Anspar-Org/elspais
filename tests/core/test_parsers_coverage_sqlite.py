@@ -207,7 +207,7 @@ class TestParse:
         self, cov_fixture: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """When `coverage` is not importable, parse() returns {} rather
-        than raising -- code_tested.direct stays 0, no crash (CUR-1568)."""
+        than raising -- code_tested.immediate_direct stays 0, no crash (CUR-1568)."""
         import builtins
 
         _, cov_path = cov_fixture

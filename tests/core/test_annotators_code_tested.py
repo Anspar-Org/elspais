@@ -91,10 +91,9 @@ class TestCodeTestedIndirectFromFileCoverage:
         rollup: RollupMetrics = req_node.get_metric("rollup_metrics")
         assert rollup is not None
         ct = rollup.code_tested
-        assert ct.total == 11  # lines 10..20
-        assert ct.indirect == 6  # even lines: 10,12,14,16,18,20
-        assert ct.direct == 0
-        assert ct.has_failures is False
+        assert ct.total_lines == 11  # lines 10..20
+        assert ct.covered_lines == 6  # even lines: 10,12,14,16,18,20
+        assert ct.attributed_lines == 0
 
 
 class TestCodeTestedNoCoverageData:
@@ -112,9 +111,9 @@ class TestCodeTestedNoCoverageData:
         assert rollup is not None
         ct = rollup.code_tested
         # total should reflect implementation lines, indirect 0 (no coverage data)
-        assert ct.total == 11
-        assert ct.indirect == 0
-        assert ct.direct == 0
+        assert ct.total_lines == 11
+        assert ct.covered_lines == 0
+        assert ct.attributed_lines == 0
 
 
 class TestCodeTestedDeduplicatesOverlappingRanges:
@@ -136,8 +135,8 @@ class TestCodeTestedDeduplicatesOverlappingRanges:
         rollup: RollupMetrics = req_node.get_metric("rollup_metrics")
         assert rollup is not None
         ct = rollup.code_tested
-        assert ct.total == 11  # deduplicated: 10..20
-        assert ct.indirect == 11  # all covered
+        assert ct.total_lines == 11  # deduplicated: 10..20
+        assert ct.covered_lines == 11  # all covered
 
 
 class TestCodeTestedFullCoverage:
@@ -155,16 +154,20 @@ class TestCodeTestedFullCoverage:
         rollup: RollupMetrics = req_node.get_metric("rollup_metrics")
         assert rollup is not None
         ct = rollup.code_tested
-        assert ct.total == 11
-        assert ct.indirect == 11
-        assert ct.tier == "full"
+        assert ct.total_lines == 11
+        assert ct.covered_lines == 11
+        assert ct.covered_lines == ct.total_lines
 
 
-class TestCodeTestedHasFailuresAlwaysFalse:
-    """Verify has_failures is False for code_tested dimension."""
+class TestCodeTestedCarriesNoVerdict:
+    """Line coverage records what a run executed, never a pass/fail verdict.
 
-    def test_code_tested_has_failures_always_false(self):
-        """has_failures is always False for code_tested."""
+    ``code_tested`` is a ``LineCoverage``, not a coverage dimension, and
+    carries no failure flag at all -- whether the run's tests passed is the
+    results' business, reported there (REQ-d00254-B).
+    """
+
+    def test_code_tested_carries_no_failure_flag(self):
         line_cov = dict.fromkeys(range(10, 21), 1)
         _, req_node = _build_req_with_code(
             impl_start=10,
@@ -174,7 +177,7 @@ class TestCodeTestedHasFailuresAlwaysFalse:
 
         rollup: RollupMetrics = req_node.get_metric("rollup_metrics")
         assert rollup is not None
-        assert rollup.code_tested.has_failures is False
+        assert not hasattr(rollup.code_tested, "has_failures")
 
 
 # Verifies: REQ-d00254-G, REQ-d00258-E
@@ -252,9 +255,9 @@ class TestCodeTestedDirectFromContexts:
         rollup: RollupMetrics = req_node.get_metric("rollup_metrics")
         assert rollup is not None
         ct = rollup.code_tested
-        assert ct.total == 3  # lines 10..12
-        assert ct.direct == 2
-        assert ct.indirect == 2  # indirect stays the whole-file coverage count
+        assert ct.total_lines == 3  # lines 10..12
+        assert ct.attributed_lines == 2
+        assert ct.covered_lines == 2  # indirect stays the whole-file coverage count
 
     def test_context_of_unrelated_test_does_not_credit_direct(self):
         """A context naming a test that does NOT verify this REQ credits nothing."""
@@ -269,8 +272,8 @@ class TestCodeTestedDirectFromContexts:
         rollup: RollupMetrics = req_node.get_metric("rollup_metrics")
         assert rollup is not None
         ct = rollup.code_tested
-        assert ct.direct == 0
-        assert ct.indirect == 2  # file-level coverage credit is unaffected
+        assert ct.attributed_lines == 0
+        assert ct.covered_lines == 2  # file-level coverage credit is unaffected
 
     def test_setup_and_teardown_contexts_do_not_credit_direct(self):
         """Only "|run" contexts count; fixture "|setup"/"|teardown" phases don't."""
@@ -284,7 +287,7 @@ class TestCodeTestedDirectFromContexts:
 
         rollup: RollupMetrics = req_node.get_metric("rollup_metrics")
         assert rollup is not None
-        assert rollup.code_tested.direct == 0
+        assert rollup.code_tested.attributed_lines == 0
 
     def test_class_based_test_context_normalizes_and_credits(self):
         """Class::function context form matches a class-scoped TEST node id."""
@@ -299,7 +302,7 @@ class TestCodeTestedDirectFromContexts:
 
         rollup: RollupMetrics = req_node.get_metric("rollup_metrics")
         assert rollup is not None
-        assert rollup.code_tested.direct == 1
+        assert rollup.code_tested.attributed_lines == 1
 
     def test_no_line_contexts_direct_stays_zero(self):
         """Backward compatibility: coverage without a contexts map credits no direct."""
@@ -310,8 +313,8 @@ class TestCodeTestedDirectFromContexts:
 
         rollup: RollupMetrics = req_node.get_metric("rollup_metrics")
         assert rollup is not None
-        assert rollup.code_tested.direct == 0
-        assert rollup.code_tested.indirect == 2
+        assert rollup.code_tested.attributed_lines == 0
+        assert rollup.code_tested.covered_lines == 2
 
     def test_context_credits_multiple_contexts_on_one_line(self):
         """A line covered by several tests' contexts still credits once
@@ -328,7 +331,7 @@ class TestCodeTestedDirectFromContexts:
 
         rollup: RollupMetrics = req_node.get_metric("rollup_metrics")
         assert rollup is not None
-        assert rollup.code_tested.direct == 1
+        assert rollup.code_tested.attributed_lines == 1
 
     def test_no_verifies_edge_direct_stays_zero(self):
         """A test with no Verifies: to this REQ never credits direct,
@@ -341,4 +344,4 @@ class TestCodeTestedDirectFromContexts:
 
         rollup: RollupMetrics = req_node.get_metric("rollup_metrics")
         assert rollup is not None
-        assert rollup.code_tested.direct == 0
+        assert rollup.code_tested.attributed_lines == 0

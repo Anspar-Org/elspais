@@ -689,12 +689,12 @@ def _assert_a_implemented(fed, req_id: str) -> None:
     with no evidence at all.
     """
     dim = _implemented(fed, req_id)
-    assert dim.direct > 0.0, (
+    assert dim.immediate_direct > 0.0, (
         f"{req_id} reports no implemented coverage; its own code declares "
         f"'Implements: {req_id}-A', so coverage was never annotated for this repo"
     )
-    assert dim.direct_pct_by_label["A"] == 1.0
-    assert dim.direct_pct_by_label.get("B", 0.0) == 0.0
+    assert dim.total_by_label["A"] == 1.0
+    assert dim.total_by_label.get("B", 0.0) == 0.0
 
 
 class TestCoverageAnnotatedInEveryBuildShape:
@@ -754,9 +754,9 @@ class TestCoverageAnnotatedInEveryBuildShape:
         alone = _implemented(build_graph(repo_root=coverage_repos["lib"]), "LIB-d00001")
         joined = _implemented(build_graph(repo_root=coverage_repos["app"]), "LIB-d00001")
 
-        assert (alone.direct, alone.indirect) == (joined.direct, joined.indirect)
-        assert alone.direct_pct_by_label == joined.direct_pct_by_label
-        assert alone.direct > 0.0, "the lone build carries no coverage to compare"
+        assert (alone.immediate_direct, alone.covered) == (joined.immediate_direct, joined.covered)
+        assert alone.total_by_label == joined.total_by_label
+        assert alone.immediate_direct > 0.0, "the lone build carries no coverage to compare"
 
 
 class TestRootRepoReportsItsOrigin:

@@ -1619,10 +1619,23 @@ def _get_requirement(graph: FederatedGraph, req_id: str) -> dict[str, Any]:
     metrics_data = None
     metrics = node.get_metric("rollup_metrics")
     if metrics is not None:
+        # Implements: REQ-d00258-A, REQ-d00069-N
+        # A requirement-detail payload is a REPORT, not a work list, so both
+        # figures are the per-*Assertion* total -- the greatest of an
+        # *Assertion*'s four measures, counting each *Assertion* once however
+        # many ways it is covered. They are named for the measure they carry:
+        # "referenced" claimed a citation had named the assertions, which the
+        # total does not say. Both keys move together, because two figures
+        # reported on different measures inside one payload is exactly the
+        # disagreement REQ-d00258-C exists to prevent.
+        implemented = metrics.implemented
+        covered = implemented.covered
         metrics_data = {
-            "referenced_pct": metrics.implemented.indirect_pct,
+            "implemented_total_pct": (
+                (covered / implemented.total * 100) if implemented.total else 0.0
+            ),
             "total_assertions": metrics.total_assertions,
-            "covered_assertions": metrics.implemented.indirect,
+            "implemented_total_covered": covered,
         }
 
     # Source location

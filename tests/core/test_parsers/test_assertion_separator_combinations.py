@@ -36,6 +36,7 @@ from pathlib import Path
 import pytest
 
 from elspais.commands.health import _fault_location
+from elspais.graph.aggregation import covered_labels
 from elspais.graph.GraphNode import NodeKind
 from elspais.graph.reference_faults import FaultClass, FaultCode
 from elspais.graph.relations import EdgeKind
@@ -197,7 +198,7 @@ def test_journey_validates_across_separator_combinations(
     produce assertion-targeted VALIDATES edges (REQ -> journey, per the
     ``Validates:`` field behavior specified in spec/requirements-spec.md)
     carrying exactly the referenced assertion labels, with
-    ``rollup_metrics.uat_coverage.direct_labels`` matching.
+    ``covered_labels(rollup_metrics.uat_coverage, "immediate_direct")`` matching.
     """
     from elspais.graph.factory import build_graph
 
@@ -225,7 +226,7 @@ def test_journey_validates_across_separator_combinations(
         f"Expected VALIDATES assertion_targets {expected_labels} for ref "
         f"{ref!r} (sep={sep!r}, multi={multi!r}), got {sorted(validates_targets)}"
     )
-    assert rollup.uat_coverage.direct_labels == set(expected_labels)
+    assert covered_labels(rollup.uat_coverage, "immediate_direct") == set(expected_labels)
 
 
 # Verifies: REQ-d00082-E, REQ-p00014-R, REQ-d00272-A, REQ-d00252-G, REQ-d00252-K
@@ -730,7 +731,10 @@ def test_journey_validates_two_assertions_of_one_requirement(sep, multi, tmp_pat
         f"Both cited labels must reach the graph as targeted VALIDATES edges "
         f"(sep={sep!r}, multi={multi!r}); got {targets}"
     )
-    assert req.get_metric("rollup_metrics").uat_coverage.direct_labels == {"A", "B"}
+    assert covered_labels(req.get_metric("rollup_metrics").uat_coverage, "immediate_direct") == {
+        "A",
+        "B",
+    }
     assert not graph.broken_references(), (
         "A reference spelled in the repository's own grammar must resolve; "
         f"got {graph.broken_references()}"

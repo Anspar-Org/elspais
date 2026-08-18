@@ -56,13 +56,13 @@ def test_app_verdict_never_reaches_a_test_of_its_own(app_status):
     m = g.find_by_id("REQ-p00001").get_metric("rollup_metrics")
 
     # The `Verifies:` linkage is live -- this assertion IS tested.
-    assert m.tested.direct_pct_by_label.get("A") == 1.0
+    assert m.tested.total_by_label.get("A") == 1.0
     # ...and no verdict was inferred for it, in either direction.
-    assert m.verified.direct == 0.0
-    assert m.verified.indirect == 0.0
+    assert m.verified.immediate_direct == 0.0
+    assert m.verified.covered == 0.0
     assert m.verified.has_failures is False
     # lcov_tested untouched (separate dimension)
-    assert m.lcov_tested.indirect == 0.0
+    assert m.lcov_tested.covered == 0.0
 
 
 def test_unarmed_credit_is_no_different():
@@ -71,6 +71,6 @@ def test_unarmed_credit_is_no_different():
     g = _build("passed")
     annotate_coverage(g)  # no credit config
     m = g.find_by_id("REQ-p00001").get_metric("rollup_metrics")
-    assert m.tested.direct_pct_by_label.get("A") == 1.0
-    assert m.verified.direct == 0.0
+    assert m.tested.total_by_label.get("A") == 1.0
+    assert m.verified.immediate_direct == 0.0
     assert m.verified.has_failures is False

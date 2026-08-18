@@ -40,7 +40,7 @@ def test_file_scope_result_grants_no_verdict(result_status):
     assert g.find_by_id("r1").get_field("match_scope") == "file"
     m = g.find_by_id("REQ-p00001").get_metric("rollup_metrics")
     # The `Verifies:` linkage is live, so the assertion IS tested...
-    assert m.tested.direct_pct_by_label.get("A") == 1.0
+    assert m.tested.total_by_label.get("A") == 1.0
     # ...and awaiting a result: neither credited nor blamed.
-    assert m.verified.direct_pct_by_label.get("A", 0.0) == 0.0
+    assert m.verified.total_by_label.get("A", 0.0) == 0.0
     assert m.verified.has_failures is False

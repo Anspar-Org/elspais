@@ -580,7 +580,7 @@ class TestExistingBehaviorUnaffected:
         # Coverage should still work
         rollup = req_node.get_metric("rollup_metrics")
         assert rollup is not None, "rollup_metrics should still be set"
-        assert rollup.implemented.indirect_pct == 100.0
+        assert rollup.implemented.covered_pct == 100.0
 
     def test_REQ_d00128_I_roots_unchanged(self, tmp_path: Path) -> None:
         """Graph roots are still REQUIREMENT nodes, not FILE nodes."""

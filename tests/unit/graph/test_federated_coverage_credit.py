@@ -243,8 +243,8 @@ def _metrics(graph, req_id):
 def test_cross_repo_evidence_credits_the_named_assertion(federated, dimension, label, covered):
     """Evidence recorded in the app credits exactly the library assertion it names."""
     dim = getattr(_metrics(federated, "LIB-d00001"), dimension)
-    assert dim.direct_pct_by_label[label] == 1.0
-    assert {lbl for lbl, v in dim.direct_pct_by_label.items() if v > 0} == covered
+    assert dim.total_by_label[label] == 1.0
+    assert {lbl for lbl, v in dim.total_by_label.items() if v > 0} == covered
 
 
 # Verifies: REQ-d00269-A
@@ -253,7 +253,7 @@ def test_cross_repo_refines_conducts_coverage(federated):
     library assertion it refines -- which only one computation spanning both
     repositories can do."""
     dim = _metrics(federated, "LIB-d00001").implemented
-    assert dim.direct_pct_by_label["C"] == 1.0
+    assert dim.total_by_label["C"] == 1.0
 
 
 # Verifies: REQ-d00269-B
@@ -285,8 +285,8 @@ def test_library_built_alone_is_unaffected(alone):
     metrics = _metrics(alone, "LIB-d00001")
     for dimension in ("implemented", "tested", "verified", "uat_coverage"):
         dim = getattr(metrics, dimension)
-        assert dim.direct == 0.0
-        assert dim.indirect == 0.0
+        assert dim.immediate_direct == 0.0
+        assert dim.covered == 0.0
     assert metrics.assertion_coverage == {}
 
 
@@ -296,7 +296,7 @@ def test_recomputation_does_not_double_count(federated):
     recompute without inflating the numbers."""
     before = _metrics(federated, "LIB-d00001")
     snapshot = {
-        d: (getattr(before, d).direct, getattr(before, d).indirect)
+        d: (getattr(before, d).immediate_direct, getattr(before, d).covered)
         for d in ("implemented", "tested", "verified", "uat_coverage")
     }
     contributions = {k: len(v) for k, v in before.assertion_coverage.items()}
@@ -313,7 +313,9 @@ def test_recomputation_does_not_double_count(federated):
     )
 
     after = _metrics(federated, "LIB-d00001")
-    assert {d: (getattr(after, d).direct, getattr(after, d).indirect) for d in snapshot} == snapshot
+    assert {
+        d: (getattr(after, d).immediate_direct, getattr(after, d).covered) for d in snapshot
+    } == snapshot
     assert {k: len(v) for k, v in after.assertion_coverage.items()} == contributions
 
 
@@ -324,8 +326,8 @@ def test_integrates_credit_stays_with_its_overlay(federated):
     same library evidence into the consumer's own dimensions as well."""
     consumer = federated.find_by_id("APP-d00003")
     own = consumer.get_metric("rollup_metrics")
-    assert own.implemented.direct == 0.0
-    assert own.implemented.indirect == 0.0
+    assert own.implemented.immediate_direct == 0.0
+    assert own.implemented.covered == 0.0
     assert own.assertion_coverage == {}
 
     inherited = integrates_rollup(consumer)
@@ -500,9 +502,9 @@ def test_consumer_crediting_policy_stops_at_the_boundary(policy_federation):
     alone_metrics = _metrics(build_graph(repo_root=lib), "PLIB-d00001")
     federated_metrics = _metrics(build_graph(repo_root=app), "PLIB-d00001")
 
-    assert alone_metrics.verified.indirect == 0.0
-    assert federated_metrics.verified.direct == alone_metrics.verified.direct
-    assert federated_metrics.verified.indirect == alone_metrics.verified.indirect
+    assert alone_metrics.verified.covered == 0.0
+    assert federated_metrics.verified.immediate_direct == alone_metrics.verified.immediate_direct
+    assert federated_metrics.verified.covered == alone_metrics.verified.covered
 
 
 # Verifies: REQ-d00261-E
@@ -513,5 +515,5 @@ def test_consumer_keeps_its_own_crediting_policy(policy_federation):
     credit is the assertion that test names."""
     app, _lib = policy_federation
     metrics = _metrics(build_graph(repo_root=app), "PAPP-d00001")
-    assert metrics.verified.direct_pct_by_label["A"] == 1.0
-    assert metrics.verified.direct == 1.0
+    assert metrics.verified.total_by_label["A"] == 1.0
+    assert metrics.verified.immediate_direct == 1.0

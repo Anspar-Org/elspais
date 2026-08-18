@@ -51,8 +51,8 @@ class CoverageSource(Enum):
     - INDIRECT: transitive CODE->TEST evidence (CODE implements, that CODE is
       verified by a TEST); provenance only — does not itself feed ``implemented``
     - CODE_INDIRECT: CODE Implements the whole REQ (blanket, no assertion
-      suffix), all assertions implied; feeds ``implemented.indirect`` only,
-      never ``implemented.direct``
+      suffix), all assertions implied; feeds the INDIRECT measures of
+      ``implemented`` only, never its direct ones
     - TEST_DIRECT: TEST verifies a specific assertion (Verifies: REQ-xxx-A);
       feeds ``tested``, NOT ``implemented``
     - TEST_INDIRECT: TEST verifies whole REQ (Verifies: REQ-xxx), all assertions
@@ -100,18 +100,17 @@ class CoverageDimension:
     Each of the 5 coverage dimensions (implemented, tested, verified,
     uat_covered, uat_verified) uses this same structure.
 
-    Assertion coverage is **fractional** in [0.0, 1.0] (a requirement's
-    coverage has always been ``covered / total``; the only change is that an
-    individual assertion can now be partially covered, e.g. when a parent
-    *Assertion* is refined by several requirements and only some are covered --
-    see REQ-d00069-J). ``direct`` / ``indirect`` are therefore **sums** of the
-    per-assertion fractions (so they may be non-integer); the per-assertion
-    values live in ``direct_pct_by_label`` / ``indirect_pct_by_label``.
+    Coverage is recorded on the four measures of REQ-d00069-L. Two independent
+    axes: what a citation named (**direct**, this *Assertion* by name, versus
+    **indirect**, the requirement as a whole) and where the evidence sits
+    (**immediate**, attached here, versus **rolled**, conducted up a ``Refines:``
+    chain). None is defined in terms of another. Per-assertion credit is
+    **fractional** in [0.0, 1.0] -- an *Assertion* refined by several
+    requirements of which only some are covered is partially covered
+    (REQ-d00069-J) -- so a measure's sum may be non-integer.
 
     Attributes:
         total: Total assertions in the requirement
-        direct: Sum of per-assertion direct fractions (assertion-targeted edges)
-        indirect: Sum of per-assertion fractions incl. blanket/whole-req edges
         has_failures: True if ANY result is failed/error for this dimension.
             This is **requirement-wide** -- it drives the requirement-level
             badge/``tier`` (any assertion failing => the requirement dimension
@@ -127,10 +126,6 @@ class CoverageDimension:
             failures). Only meaningful on ``verified``/``uat_verified``/
             ``lcov_tested`` (dims that carry pass/fail); other dims leave it
             empty.
-        direct_labels: Assertions with direct coverage > 0
-        indirect_labels: Assertions with any coverage > 0
-        direct_pct_by_label: Per-assertion direct fraction in [0,1]
-        indirect_pct_by_label: Per-assertion fraction (incl. blanket) in [0,1]
         carried: True when every verified signal contributing to this
             dimension came from a "carried" (baseline, not freshly-run)
             RESULT node (CUR-1557). Provenance only -- never affects
@@ -153,14 +148,8 @@ class CoverageDimension:
     """
 
     total: int = 0
-    direct: float = 0.0
-    indirect: float = 0.0
     has_failures: bool = False
     failing_labels: set[str] = field(default_factory=set)
-    direct_labels: set[str] = field(default_factory=set)
-    indirect_labels: set[str] = field(default_factory=set)
-    direct_pct_by_label: dict[str, float] = field(default_factory=dict)
-    indirect_pct_by_label: dict[str, float] = field(default_factory=dict)
     carried: bool = False
 
     # Implements: REQ-d00069-L
@@ -171,32 +160,6 @@ class CoverageDimension:
     immediate_indirect_by_label: dict[str, float] = field(default_factory=dict)
     rolled_direct_by_label: dict[str, float] = field(default_factory=dict)
     rolled_indirect_by_label: dict[str, float] = field(default_factory=dict)
-
-    @property
-    def direct_pct(self) -> float:
-        """Percentage of assertions with direct coverage."""
-        return (self.direct / self.total * 100) if self.total else 0.0
-
-    @property
-    def indirect_pct(self) -> float:
-        """Percentage of assertions with any coverage (direct + blanket)."""
-        return (self.indirect / self.total * 100) if self.total else 0.0
-
-    @property
-    def tier(self) -> str:
-        """Classify into a unified state key: 'failing' | 'full' | 'partial' |
-        'missing'. The direct/indirect distinction is surfaced separately as a
-        caveat (~ marker + hover), not as a tier (design §2, §4). Float sums are
-        compared with a small epsilon so a fully-covered requirement reads full.
-        """
-        eps = 1e-9
-        if self.has_failures:
-            return "failing"
-        if self.total > 0 and self.indirect >= self.total - eps:
-            return "full"
-        if self.direct > eps or self.indirect > eps:
-            return "partial"
-        return "missing"
 
     @property
     def immediate_direct(self) -> float:
@@ -240,6 +203,49 @@ class CoverageDimension:
     def covered(self) -> float:
         return sum(self.total_by_label.values())
 
+    # Implements: REQ-d00258-A
+    @property
+    def covered_pct(self) -> float:
+        """The headline percentage: covered assertions over all of them."""
+        return (self.covered / self.total * 100) if self.total else 0.0
+
+
+# Implements: REQ-d00254-B
+@dataclass
+class LineCoverage:
+    """Line-coverage measurement for one requirement's implementation.
+
+    A DELIBERATELY separate type from :class:`CoverageDimension`. Line coverage
+    counts LINES of implementation a test run executed; assertion coverage
+    counts *Assertions* somebody wrote evidence for. They are different
+    measurements over different populations, so the four measures of
+    REQ-d00069-L -- which are per-*Assertion* -- cannot express this one, and a
+    type that pretended otherwise would invite a reader to compare a line count
+    with an assertion count.
+
+    Attributes:
+        total_lines: Implementation lines attributed to the requirement.
+        attributed_lines: Lines a coverage run executed AND whose recorded
+            context names a test that verifies this requirement. Requires
+            per-test context data; aggregate-only coverage cannot produce it
+            and leaves this at 0 (REQ-d00258-E).
+        covered_lines: Lines any coverage run executed, whichever test did it.
+    """
+
+    total_lines: int = 0
+    attributed_lines: float = 0.0
+    covered_lines: float = 0.0
+
+    @property
+    def has_attribution(self) -> bool:
+        """Whether per-test attribution data was available at all.
+
+        REQ-d00258-E: a tool fed aggregate-only coverage must render no
+        attribution figure rather than a misleading zero, and the two are told
+        apart by whether ANY line carries a naming context.
+        """
+        return self.attributed_lines > 0
+
 
 def _dim(total: int = 0) -> CoverageDimension:
     """Factory helper for default CoverageDimension with total pre-set."""
@@ -273,23 +279,27 @@ class RollupMetrics:
     - verified: TEST results passing for assertions
     - uat_coverage: JNY Validates coverage of assertions
     - uat_verified: JNY results passing for assertions
-    - code_tested: Implementation lines covered by tests (total=lines, not assertions)
-    - lcov_tested: Coverage-based "tested & passing" credit, kept SEPARATE from verified (CUR-1533)
+    - lcov_tested: Coverage-based "tested" credit, kept SEPARATE from verified (CUR-1533)
+
+    Beside them ``code_tested`` is a :class:`LineCoverage` -- a measurement in
+    LINES, not assertions, and so not a coverage dimension at all.
     """
 
     total_assertions: int = 0
     assertion_coverage: dict[str, list[CoverageContribution]] = field(default_factory=dict)
 
-    # The 7 uniform coverage dimensions
+    # The 6 uniform (per-assertion) coverage dimensions
     implemented: CoverageDimension = field(default_factory=CoverageDimension)
     tested: CoverageDimension = field(default_factory=CoverageDimension)
     verified: CoverageDimension = field(default_factory=CoverageDimension)
     uat_coverage: CoverageDimension = field(default_factory=CoverageDimension)
     uat_verified: CoverageDimension = field(default_factory=CoverageDimension)
-    code_tested: CoverageDimension = field(default_factory=CoverageDimension)
     # CUR-1533: coverage-based "tested & passing" credit, kept SEPARATE from
     # `verified` (which is // Verifies:-based). Assertion-granular.
     lcov_tested: CoverageDimension = field(default_factory=CoverageDimension)
+
+    # Line coverage: measured in LINES, so it is not a CoverageDimension.
+    code_tested: LineCoverage = field(default_factory=LineCoverage)
 
     def add_contribution(self, contribution: CoverageContribution) -> None:
         """Add a coverage contribution for an assertion.
@@ -351,11 +361,11 @@ class RollupMetrics:
                     uat_inferred_labels.add(label)
 
         # ── Populate dimensions from contribution data ──
-        uat_all = uat_explicit_labels | uat_inferred_labels
-        # Implemented: direct = assertion-targeted (DIRECT + EXPLICIT),
-        #              indirect = all (DIRECT + EXPLICIT + INFERRED)
+        # Implemented: direct == the citation named the *Assertion* (DIRECT +
+        # EXPLICIT); indirect == it named the requirement (INFERRED +
+        # CODE_INDIRECT). The two are DISJOINT -- an *Assertion* cited by name
+        # is not also whole-requirement evidence (REQ-d00069-L).
         impl_direct = direct_labels | explicit_labels
-        impl_indirect = impl_direct | inferred_labels | code_indirect_labels
         # Implements: REQ-d00069-B, REQ-d00069-M
         # Immediate credit here is whole -- Implemented evidence (DIRECT/
         # EXPLICIT/INFERRED sources) is all-or-nothing, unlike uat_verified
@@ -364,12 +374,6 @@ class RollupMetrics:
         immediate_indirect = dict.fromkeys(inferred_labels | code_indirect_labels, 1.0)
         self.implemented = CoverageDimension(
             total=n,
-            direct=len(impl_direct),
-            indirect=len(impl_indirect),
-            direct_labels=set(impl_direct),
-            indirect_labels=set(impl_indirect),
-            direct_pct_by_label=dict.fromkeys(impl_direct, 1.0),
-            indirect_pct_by_label=dict.fromkeys(impl_indirect, 1.0),
             immediate_direct_by_label=immediate_direct,
             immediate_indirect_by_label=immediate_indirect,
         )
@@ -378,12 +382,6 @@ class RollupMetrics:
         #               indirect = all (UAT_EXPLICIT + UAT_INFERRED)
         self.uat_coverage = CoverageDimension(
             total=n,
-            direct=len(uat_explicit_labels),
-            indirect=len(uat_all),
-            direct_labels=set(uat_explicit_labels),
-            indirect_labels=set(uat_all),
-            direct_pct_by_label=dict.fromkeys(uat_explicit_labels, 1.0),
-            indirect_pct_by_label=dict.fromkeys(uat_all, 1.0),
             immediate_direct_by_label=dict.fromkeys(uat_explicit_labels, 1.0),
             immediate_indirect_by_label=dict.fromkeys(uat_inferred_labels, 1.0),
         )
@@ -417,29 +415,15 @@ class RollupMetrics:
         all-or-nothing (1.0) label sets.
         """
         n = self.total_assertions
-        tested_all = tested_direct_labels | tested_indirect_labels
         self.tested = CoverageDimension(
             total=n,
-            direct=len(tested_direct_labels),
-            indirect=len(tested_all),
-            direct_labels=set(tested_direct_labels),
-            indirect_labels=set(tested_all),
-            direct_pct_by_label=dict.fromkeys(tested_direct_labels, 1.0),
-            indirect_pct_by_label=dict.fromkeys(tested_all, 1.0),
             immediate_direct_by_label=dict.fromkeys(tested_direct_labels, 1.0),
             immediate_indirect_by_label=dict.fromkeys(tested_indirect_labels, 1.0),
         )
-        verified_all = verified_direct_labels | verified_indirect_labels
         self.verified = CoverageDimension(
             total=n,
-            direct=len(verified_direct_labels),
-            indirect=len(verified_all),
             has_failures=verified_failures,
             failing_labels=set(verified_failing_labels or ()),
-            direct_labels=set(verified_direct_labels),
-            indirect_labels=set(verified_all),
-            direct_pct_by_label=dict.fromkeys(verified_direct_labels, 1.0),
-            indirect_pct_by_label=dict.fromkeys(verified_all, 1.0),
             immediate_direct_by_label=dict.fromkeys(verified_direct_labels, 1.0),
             immediate_indirect_by_label=dict.fromkeys(verified_indirect_labels, 1.0),
         )
@@ -466,14 +450,8 @@ class RollupMetrics:
         # a different thing (rolled-up, conduction, Task 2).
         self.uat_verified = CoverageDimension(
             total=n,
-            direct=sum(uat_verified_direct_pct.values()),
-            indirect=sum(uat_indirect_pct_by_label.values()),
             has_failures=uat_verified_failures,
             failing_labels=set(uat_verified_failing_labels or ()),
-            direct_labels={lbl for lbl, f in uat_verified_direct_pct.items() if f > 0},
-            indirect_labels={lbl for lbl, f in uat_indirect_pct_by_label.items() if f > 0},
-            direct_pct_by_label=dict(uat_verified_direct_pct),
-            indirect_pct_by_label=uat_indirect_pct_by_label,
             immediate_direct_by_label={
                 lbl: f for lbl, f in uat_verified_direct_pct.items() if f > 0
             },
@@ -710,10 +688,10 @@ def integrates_rollup(node: GraphNode) -> IntegratesRollup:
         metrics = edge.target.get_metric("rollup_metrics")
         if metrics is None:
             continue
-        impl_c += metrics.implemented.indirect
+        impl_c += metrics.implemented.covered
         impl_t += metrics.implemented.total
         passing = tested_and_passing(metrics)
-        ver_c += passing.indirect
+        ver_c += passing.covered
         ver_t += passing.total
         fails = fails or passing.has_failures
     return IntegratesRollup(
@@ -795,10 +773,10 @@ def integrates_by_associate(graph) -> list[AssociateIntegration]:
             metrics = target.get_metric("rollup_metrics")
             if metrics is None:
                 continue
-            impl_c[owner] += metrics.implemented.indirect
+            impl_c[owner] += metrics.implemented.covered
             impl_t[owner] += metrics.implemented.total
             passing = tested_and_passing(metrics)
-            ver_c[owner] += passing.indirect
+            ver_c[owner] += passing.covered
             ver_t[owner] += passing.total
             fails[owner] = fails[owner] or passing.has_failures
 
@@ -850,31 +828,16 @@ def tested_and_passing(metrics: RollupMetrics) -> CoverageDimension:
     wrote. ``lcov_tested`` remains its own dimension, reported beside these
     (REQ-d00254-B).
 
-    Per-label fractions are kept as they were credited, so a failing
-    *Assertion* still renders under its own standing (REQ-d00258-G) rather
-    than disappearing; it contributes nothing to the figures.
+    A failing *Assertion* contributes to no measure here, and the record that
+    it failed survives in ``failing_labels`` -- which is what a per-*Assertion*
+    standing reads first (REQ-d00258-G), so it still renders under its own
+    standing rather than disappearing.
 
     The name is kept because every reporting surface reaches Passing through
     it, and there is one place to change if what Passing counts changes again.
     """
     vd = metrics.verified
     failing = set(vd.failing_labels)
-
-    direct_pct = dict(vd.direct_pct_by_label)
-    indirect_pct = dict(vd.indirect_pct_by_label)
-
-    # Fall back to raw scalars when no per-label data is present (e.g. simplified
-    # test fixtures that don't populate direct_pct_by_label), which cannot
-    # attribute a failure to an *Assertion* and so does not exclude one.
-    if direct_pct:
-        combined_direct = sum(v for lbl, v in direct_pct.items() if lbl not in failing)
-    else:
-        combined_direct = vd.direct
-
-    if indirect_pct:
-        combined_indirect = sum(v for lbl, v in indirect_pct.items() if lbl not in failing)
-    else:
-        combined_indirect = vd.indirect
 
     # Implements: REQ-d00069-L, REQ-d00258-N
     # The four measures come through with the failing assertions removed, the
@@ -888,14 +851,8 @@ def tested_and_passing(metrics: RollupMetrics) -> CoverageDimension:
 
     return CoverageDimension(
         total=vd.total,
-        direct=combined_direct,
-        indirect=combined_indirect,
         has_failures=vd.has_failures,
         failing_labels=failing,
-        direct_labels=set(direct_pct),
-        indirect_labels=set(indirect_pct),
-        direct_pct_by_label=direct_pct,
-        indirect_pct_by_label=indirect_pct,
         carried=vd.carried,
         immediate_direct_by_label=_passing_only(vd.immediate_direct_by_label),
         immediate_indirect_by_label=_passing_only(vd.immediate_indirect_by_label),
@@ -932,19 +889,19 @@ class TestedPartition:
 def tested_partition(metrics: RollupMetrics) -> TestedPartition:
     """Partition a requirement's tested assertions into the three states.
 
-    The tested set is read on the generous footing, matching the Tested figure
-    this breaks down (REQ-d00258-A). An *Assertion* is failing when a test
+    The tested set is read on the per-*Assertion* total (REQ-d00069-N),
+    matching the Tested figure this breaks down (REQ-d00258-A). An *Assertion*
+    is failing when a test
     declared against it reported a failure, passing when such a test reported a
     pass and none reported a failure, and awaiting a result otherwise --
     which covers a test that has not run, one whose results were never
     ingested, and one that returned no verdict.
     """
-    tested_labels = {lbl for lbl, frac in metrics.tested.indirect_pct_by_label.items() if frac > 0}
+    tested_labels = {lbl for lbl, frac in metrics.tested.total_by_label.items() if frac > 0}
     passing = tested_and_passing(metrics)
+    passing_by_label = passing.total_by_label
     failed = tested_labels & set(passing.failing_labels)
-    passed = {
-        lbl for lbl in tested_labels - failed if passing.indirect_pct_by_label.get(lbl, 0.0) > 0
-    }
+    passed = {lbl for lbl in tested_labels - failed if passing_by_label.get(lbl, 0.0) > 0}
     return TestedPartition(
         passed=len(passed),
         failed=len(failed),
@@ -959,6 +916,7 @@ __all__ = [
     "CoverageSource",
     "CoverageContribution",
     "IntegratesRollup",
+    "LineCoverage",
     "RollupMetrics",
     "SatisfierRollup",
     "direct_coverage_for",

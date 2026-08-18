@@ -260,10 +260,16 @@ def _count_uncovered_descendants(
         included_children = [c for c in node.iter_children() if c.id in included_set]
 
         if not included_children and nid != node_id:
-            # Leaf node — check coverage
+            # Leaf node — check coverage.
+            # Implements: REQ-d00258-M
+            # "Uncovered" is asked on the immediate direct measure: this count
+            # ranks requirements by how much UNDONE work depends on them, and
+            # a leaf whose only credit is whole-requirement evidence or the
+            # coverage of something refining it has had nothing written
+            # against it by name.
             rollup = node.get_metric("rollup_metrics")
-            coverage = rollup.implemented.indirect_pct if rollup else 0
-            if coverage == 0:
+            covered = sum(rollup.implemented.immediate_direct_by_label.values()) if rollup else 0.0
+            if covered <= 0:
                 count += 1
         else:
             for child in included_children:

@@ -51,15 +51,11 @@ def _spread_rollup():
         total_assertions=5,
         implemented=CoverageDimension(
             total=5,
-            direct=1,
-            indirect=1,
             immediate_direct_by_label={"A": 1.0},
             immediate_indirect_by_label={"A": 1.0},
         ),
         tested=CoverageDimension(
             total=5,
-            direct=2,
-            indirect=2,
             immediate_direct_by_label={"A": 1.0, "B": 1.0},
             immediate_indirect_by_label={"A": 1.0, "B": 1.0},
         ),
@@ -67,8 +63,6 @@ def _spread_rollup():
         # (requirement-wide) and B in failing_labels (the assertion that failed).
         verified=CoverageDimension(
             total=5,
-            direct=1,
-            indirect=1,
             has_failures=True,
             failing_labels={"B"},
             immediate_direct_by_label={"A": 1.0},
@@ -76,8 +70,6 @@ def _spread_rollup():
         ),
         uat_coverage=CoverageDimension(
             total=5,
-            direct=2,
-            indirect=2,
             immediate_direct_by_label={"C": 1.0, "D": 1.0},
             immediate_indirect_by_label={"C": 1.0, "D": 1.0},
         ),
@@ -85,8 +77,6 @@ def _spread_rollup():
         # the machinery must project D to "partial"/yellow.
         uat_verified=CoverageDimension(
             total=5,
-            direct=1,
-            indirect=1.5,
             has_failures=False,
             immediate_direct_by_label={"C": 1.0},
             immediate_indirect_by_label={"C": 1.0, "D": 0.5},
@@ -137,9 +127,7 @@ class TestAssertionCoverageStates:
         assertion to be in the dimension's failing_labels."""
         rollup = RollupMetrics(
             total_assertions=1,
-            tested=CoverageDimension(
-                total=1, direct=1, indirect=1, immediate_indirect_by_label={"A": 1.0}
-            ),
+            tested=CoverageDimension(total=1, immediate_indirect_by_label={"A": 1.0}),
             verified=CoverageDimension(
                 total=1,
                 has_failures=failing,
@@ -159,9 +147,7 @@ class TestAssertionCoverageStates:
         fractionally) must read PARTIAL/yellow, not grey/none."""
         rollup = RollupMetrics(
             total_assertions=1,
-            uat_coverage=CoverageDimension(
-                total=1, direct=1, indirect=1, immediate_indirect_by_label={"A": 1.0}
-            ),
+            uat_coverage=CoverageDimension(total=1, immediate_indirect_by_label={"A": 1.0}),
             uat_verified=CoverageDimension(
                 total=1,
                 has_failures=False,
@@ -177,8 +163,6 @@ class TestAssertionCoverageStates:
             total_assertions=2,
             implemented=CoverageDimension(
                 total=2,
-                direct=0.0,
-                indirect=0.5,
                 immediate_indirect_by_label={"A": 0.5},
             ),
         )
@@ -196,13 +180,9 @@ class TestAssertionCoverageStates:
         standing is unaffected."""
         rollup = RollupMetrics(
             total_assertions=1,
-            tested=CoverageDimension(
-                total=1, direct=1, indirect=1, immediate_indirect_by_label={"A": 1.0}
-            ),
+            tested=CoverageDimension(total=1, immediate_indirect_by_label={"A": 1.0}),
             verified=CoverageDimension(total=1),  # no result-verified credit
-            lcov_tested=CoverageDimension(
-                total=1, direct=1, indirect=1, immediate_indirect_by_label={"A": 1.0}
-            ),
+            lcov_tested=CoverageDimension(total=1, immediate_indirect_by_label={"A": 1.0}),
         )
         node = _req_with_rollup(rollup, labels=("A",))
         states = compute_assertion_coverage_states(node)
@@ -217,8 +197,6 @@ class TestAssertionCoverageStates:
             total_assertions=2,
             tested=CoverageDimension(
                 total=2,
-                direct=2,
-                indirect=2,
                 immediate_indirect_by_label={"A": 1.0, "B": 1.0},
             ),
             # A failed (in failing_labels); B is merely partial (0.5), no own
@@ -243,8 +221,6 @@ class TestAssertionCoverageStates:
             total_assertions=2,
             uat_coverage=CoverageDimension(
                 total=2,
-                direct=2,
-                indirect=2,
                 immediate_indirect_by_label={"A": 1.0, "B": 1.0},
             ),
             uat_verified=CoverageDimension(
@@ -285,8 +261,6 @@ class TestRequirementAssertionConsistency:
             total_assertions=3,
             implemented=CoverageDimension(
                 total=3,
-                direct=3,
-                indirect=3,
                 immediate_direct_by_label={"A": 1.0, "B": 1.0, "C": 1.0},
                 immediate_indirect_by_label={"A": 1.0, "B": 1.0, "C": 1.0},
             ),

@@ -44,7 +44,7 @@ class TestIndirectCoverageSource:
 
 
 class TestCodeIndirectFinalize:
-    """CODE_INDIRECT feeds implemented.indirect, never implemented.direct.
+    """CODE_INDIRECT feeds implemented.covered, never implemented.immediate_direct.
 
     Validates REQ-d00069-B: whole-requirement CODE Implements credits all
     assertions on the generous footing only.
@@ -61,10 +61,13 @@ class TestCodeIndirectFinalize:
                 )
             )
         metrics.finalize()
-        assert metrics.implemented.indirect == 2
-        assert metrics.implemented.direct == 0
-        assert metrics.implemented.indirect_pct_by_label == {"A": 1.0, "B": 1.0}
-        assert metrics.implemented.direct_pct_by_label == {}
+        assert metrics.implemented.covered == 2
+        assert metrics.implemented.immediate_direct == 0
+        assert metrics.implemented.total_by_label == {"A": 1.0, "B": 1.0}
+        # CODE_INDIRECT names the requirement, not the assertion, so it lands
+        # in the immediate INDIRECT measure and in no direct one.
+        assert metrics.implemented.immediate_indirect_by_label == {"A": 1.0, "B": 1.0}
+        assert metrics.implemented.immediate_direct_by_label == {}
 
 
 class TestIndirectCoverageContributions:
@@ -129,11 +132,11 @@ class TestIndirectCoverageContributions:
         rollup: RollupMetrics = node.get_metric("rollup_metrics")
 
         # Strict (implemented) coverage excludes INDIRECT test sources
-        assert rollup.implemented.indirect_pct == 0.0
-        assert rollup.implemented.indirect == 0
+        assert rollup.implemented.covered_pct == 0.0
+        assert rollup.implemented.covered == 0
 
         # Test coverage includes whole-req (INDIRECT) tests
-        assert rollup.tested.indirect_pct == 100.0
+        assert rollup.tested.covered_pct == 100.0
 
 
 class TestDualCoverageMetrics:
@@ -161,8 +164,8 @@ class TestDualCoverageMetrics:
         node = graph.find_by_id("REQ-100")
         rollup: RollupMetrics = node.get_metric("rollup_metrics")
 
-        assert rollup.implemented.indirect_pct == 0.0
-        assert rollup.tested.indirect_pct == 100.0
+        assert rollup.implemented.covered_pct == 0.0
+        assert rollup.tested.covered_pct == 100.0
 
     def test_REQ_d00069_C_both_equal_without_indirect(self):
         """When no whole-req tests, both metrics are equal."""
@@ -183,14 +186,14 @@ class TestDualCoverageMetrics:
         node = graph.find_by_id("REQ-100")
         rollup: RollupMetrics = node.get_metric("rollup_metrics")
 
-        assert rollup.tested.direct_pct == 50.0
-        assert rollup.tested.indirect_pct == 50.0  # Same: no whole-req tests
+        assert rollup.tested.covered_pct == 50.0
+        assert rollup.tested.covered_pct == 50.0  # Same: no whole-req tests
 
 
 class TestValidatedWithIndirect:
-    """Tests for verified.indirect metric.
+    """Tests for verified.covered metric.
 
-    Validates REQ-d00069-D: verified.indirect includes whole-req passing tests.
+    Validates REQ-d00069-D: verified.covered includes whole-req passing tests.
     """
 
     def test_REQ_d00069_D_passing_whole_req_validates_all(self):
@@ -219,11 +222,11 @@ class TestValidatedWithIndirect:
         node = graph.find_by_id("REQ-100")
         rollup: RollupMetrics = node.get_metric("rollup_metrics")
 
-        assert rollup.verified.direct == 0  # Strict: no assertion-targeted passing tests
-        assert rollup.verified.indirect == 3  # All 3 assertions
+        assert rollup.verified.immediate_direct == 0  # Strict: no assertion-targeted passing tests
+        assert rollup.verified.covered == 3  # All 3 assertions
 
     def test_REQ_d00069_D_mixed_targeted_and_whole(self):
-        """verified.indirect unions targeted and whole-req validations."""
+        """verified.covered unions targeted and whole-req validations."""
         graph = build_graph(
             make_requirement(
                 "REQ-100",
@@ -251,8 +254,8 @@ class TestValidatedWithIndirect:
         node = graph.find_by_id("REQ-100")
         rollup: RollupMetrics = node.get_metric("rollup_metrics")
 
-        assert rollup.verified.direct == 1  # Only A via targeted test
-        assert rollup.verified.indirect == 2  # A + B (union)
+        assert rollup.verified.immediate_direct == 1  # Only A via targeted test
+        assert rollup.verified.covered == 2  # A + B (union)
 
 
 class TestEdgeCase1MixedDirectIndirect:
@@ -285,15 +288,17 @@ class TestEdgeCase1MixedDirectIndirect:
 
         # Implemented: 0 -- assertion-targeted tests are TEST evidence (TEST_DIRECT),
         # not implementation evidence (REQ-d00084-D). No CODE/REQ here.
-        assert rollup.implemented.direct == 0
-        assert rollup.implemented.indirect == 0
+        assert rollup.implemented.immediate_direct == 0
+        assert rollup.implemented.covered == 0
 
-        # Tested: 3 direct, 11 indirect (whole-req test covers all)
-        assert rollup.tested.direct == 3
-        assert abs(rollup.tested.direct_pct - (3 / 11 * 100)) < 0.1
+        # Tested: 3 cited by name here, all 11 reached in total
+        assert rollup.tested.immediate_direct == 3
+        assert (
+            abs(rollup.tested.immediate_direct / rollup.tested.total * 100 - (3 / 11 * 100)) < 0.1
+        )
 
-        # Indirect test coverage: all 11 covered (direct 3 + whole-req 8, union = 11)
-        assert rollup.tested.indirect_pct == 100.0
+        # Total: all 11 covered (3 cited by name + 8 reached whole-requirement)
+        assert rollup.tested.covered_pct == 100.0
 
 
 class TestEdgeCase2MultipleTestsOneFailing:
@@ -332,9 +337,9 @@ class TestEdgeCase2MultipleTestsOneFailing:
         node = graph.find_by_id("REQ-100")
         rollup: RollupMetrics = node.get_metric("rollup_metrics")
 
-        assert rollup.verified.direct == 1  # A is validated (at least one pass)
+        assert rollup.verified.immediate_direct == 1  # A is validated (at least one pass)
         assert rollup.verified.has_failures is True  # r3 failed
-        assert rollup.tested.direct_pct == 100.0  # A is directly covered by tests
+        assert rollup.tested.covered_pct == 100.0  # A is directly covered by tests
 
 
 class TestEdgeCase3WholeReqMixedResults:
@@ -367,10 +372,10 @@ class TestEdgeCase3WholeReqMixedResults:
         node = graph.find_by_id("REQ-100")
         rollup: RollupMetrics = node.get_metric("rollup_metrics")
 
-        assert rollup.implemented.indirect_pct == 0.0  # Implemented: none
-        assert rollup.tested.indirect_pct == 100.0  # Tested indirect: full
+        assert rollup.implemented.covered_pct == 0.0  # Implemented: none
+        assert rollup.tested.covered_pct == 100.0  # Tested indirect: full
         assert rollup.verified.has_failures is True
-        assert rollup.verified.indirect == 5  # All 5 validated indirectly
+        assert rollup.verified.covered == 5  # All 5 validated indirectly
 
 
 class TestEdgeCase4NoWholeReqTest:
@@ -398,9 +403,9 @@ class TestEdgeCase4NoWholeReqTest:
         node = graph.find_by_id("REQ-100")
         rollup: RollupMetrics = node.get_metric("rollup_metrics")
 
-        assert rollup.tested.direct_pct == 60.0
-        assert rollup.tested.indirect_pct == 60.0  # Same: no whole-req tests
-        assert rollup.tested.direct == 3
+        assert rollup.tested.covered_pct == 60.0
+        assert rollup.tested.covered_pct == 60.0  # Same: no whole-req tests
+        assert rollup.tested.immediate_direct == 3
 
 
 class TestRollupMetricsIndirectDefaults:
@@ -412,9 +417,9 @@ class TestRollupMetricsIndirectDefaults:
     def test_REQ_d00070_C_default_dimension_fields(self):
         """Coverage dimension fields default to zero."""
         metrics = RollupMetrics()
-        assert metrics.tested.indirect_pct == 0.0
-        assert metrics.verified.indirect == 0
-        assert metrics.implemented.indirect_pct == 0.0
+        assert metrics.tested.covered_pct == 0.0
+        assert metrics.verified.covered == 0
+        assert metrics.implemented.covered_pct == 0.0
 
     def test_REQ_d00070_C_finalize_with_indirect_contributions(self):
         """Finalize correctly computes implemented dimension from contribution data."""
@@ -428,8 +433,8 @@ class TestRollupMetricsIndirectDefaults:
         metrics.finalize()
 
         # Implemented: only C (DIRECT); INDIRECT is a test source, not implemented
-        assert metrics.implemented.indirect == 1
-        assert metrics.implemented.indirect_pct == 25.0
+        assert metrics.implemented.covered == 1
+        assert metrics.implemented.covered_pct == 25.0
 
         # INDIRECT contributions are tracked in assertion_coverage but not in implemented
         assert "A" in metrics.assertion_coverage
@@ -437,7 +442,7 @@ class TestRollupMetricsIndirectDefaults:
 
 
 class TestIntegrationWholeReqTest:
-    """Integration test: whole-req test -> implemented=0%, tested.indirect=100%.
+    """Integration test: whole-req test -> implemented=0%, tested.covered=100%.
 
     Validates REQ-d00070-D: End-to-end integration of indirect coverage.
     """
@@ -469,15 +474,15 @@ class TestIntegrationWholeReqTest:
         rollup: RollupMetrics = node.get_metric("rollup_metrics")
 
         # Implemented: 0% (whole-req tests don't count as implementation)
-        assert rollup.implemented.indirect_pct == 0.0
-        assert rollup.implemented.indirect == 0
+        assert rollup.implemented.covered_pct == 0.0
+        assert rollup.implemented.covered == 0
 
         # Tested indirect: 100%
-        assert rollup.tested.indirect_pct == 100.0
+        assert rollup.tested.covered_pct == 100.0
 
         # Verification
-        assert rollup.verified.direct == 0  # No targeted tests pass
-        assert rollup.verified.indirect == 3  # All verified indirectly
+        assert rollup.verified.immediate_direct == 0  # No targeted tests pass
+        assert rollup.verified.covered == 3  # All verified indirectly
         assert rollup.verified.has_failures is False
 
 
@@ -510,11 +515,13 @@ class TestIndirectWithExistingSources:
         rollup: RollupMetrics = node.get_metric("rollup_metrics")
 
         # INFERRED gives implemented coverage (100%)
-        assert rollup.implemented.indirect_pct == 100.0
-        assert rollup.implemented.indirect - rollup.implemented.direct == 2  # inferred count
+        assert rollup.implemented.covered_pct == 100.0
+        assert (
+            rollup.implemented.covered - rollup.implemented.immediate_direct == 2
+        )  # inferred count
 
         # Test indirect also 100% (whole-req test covers all)
-        assert rollup.tested.indirect_pct == 100.0
+        assert rollup.tested.covered_pct == 100.0
 
         # Both sources present in assertion_coverage: INFERRED (implemented
         # evidence from REQ-020) and TEST_INDIRECT (test evidence from whole-req test)
@@ -642,7 +649,7 @@ class TestTransitiveCoverageThroughCode:
         annotate_coverage(graph)
 
         metrics = req.get_metric("rollup_metrics")
-        assert metrics.verified.indirect == 0
+        assert metrics.verified.covered == 0
         for label in ["A", "B"]:
             contribs = metrics.assertion_coverage.get(label, [])
             assert any(c.source_type == CoverageSource.INDIRECT for c in contribs)
@@ -680,7 +687,7 @@ class TestTransitiveCoverageThroughCode:
             assert any(c.source_type == CoverageSource.INDIRECT for c in contribs)
         # And `verified` stays at 0 -- here because nothing returned a verdict
         # at all, which the with-result case reaches for its own reason.
-        assert metrics.verified.indirect == 0
+        assert metrics.verified.covered == 0
 
     # Verifies: REQ-d00069-E
     def test_direct_test_overrides_transitive(self):
@@ -714,8 +721,8 @@ class TestTransitiveCoverageThroughCode:
         assert any(c.source_type == CoverageSource.INDIRECT for c in a_contribs)
 
         # A should be directly tested AND verified
-        assert metrics.tested.direct >= 1
-        assert metrics.verified.direct >= 1
+        assert metrics.tested.immediate_direct >= 1
+        assert metrics.verified.immediate_direct >= 1
 
     # Verifies: REQ-d00069-J
     def test_no_transitive_for_refines_edge(self):
@@ -751,12 +758,12 @@ class TestTransitiveCoverageThroughCode:
         annotate_coverage(graph)
 
         metrics = req.get_metric("rollup_metrics")
-        assert metrics.tested.indirect_pct == 0
-        assert metrics.implemented.indirect_pct == 0
+        assert metrics.tested.covered_pct == 0
+        assert metrics.implemented.covered_pct == 0
 
     # Verifies: REQ-d00069-B
     def test_transitive_strict_coverage_excludes_indirect(self):
-        """Blanket CODE Implements credits `implemented.indirect` (REQ-d00069-B);
+        """Blanket CODE Implements credits `implemented.covered` (REQ-d00069-B);
         the CODE->TEST transitive chain itself adds no further `implemented`
         contribution beyond that (it only feeds `verified`/assertion_coverage)."""
         graph, req, code, test, result = self._build_chain()
@@ -765,16 +772,16 @@ class TestTransitiveCoverageThroughCode:
         metrics = req.get_metric("rollup_metrics")
         # `_build_chain()` links req->code with a blanket Implements (no
         # assertion_targets), which now credits ALL assertions into
-        # implemented.indirect via CODE_INDIRECT (REQ-d00069-B).
-        assert metrics.implemented.indirect_pct == 100.0
-        assert metrics.implemented.indirect == 2
+        # implemented.covered via CODE_INDIRECT (REQ-d00069-B).
+        assert metrics.implemented.covered_pct == 100.0
+        assert metrics.implemented.covered == 2
         # But INDIRECT contributions exist in assertion_coverage for all assertions
         for label in ["A", "B"]:
             contribs = metrics.assertion_coverage.get(label, [])
             assert any(c.source_type == CoverageSource.INDIRECT for c in contribs)
         # But `verified` captures none of them: a passing result reached
         # through the CODE credits no *Traceability* dimension (REQ-d00258-N).
-        assert metrics.verified.indirect == 0
+        assert metrics.verified.covered == 0
 
     # Verifies: REQ-d00069-E
     def test_transitive_multiple_code_nodes(self):
@@ -996,9 +1003,9 @@ class TestBlanketCodeImplements:
         )
         annotate_coverage(graph)
         rollup = graph.find_by_id("REQ-100").get_metric("rollup_metrics")
-        assert rollup.implemented.indirect == 2
-        assert rollup.implemented.direct == 0
-        assert rollup.implemented.indirect_pct_by_label == {"A": 1.0, "B": 1.0}
+        assert rollup.implemented.covered == 2
+        assert rollup.implemented.immediate_direct == 0
+        assert rollup.implemented.total_by_label == {"A": 1.0, "B": 1.0}
 
 
 class TestFullCreditConduction:
@@ -1036,12 +1043,20 @@ class TestFullCreditConduction:
         graph = self._refined_by(["REQ-C-A", "REQ-C-B"])
         annotate_coverage(graph)
         parent = graph.find_by_id("REQ-P").get_metric("rollup_metrics")
-        assert parent.implemented.indirect_pct_by_label["A"] == 1.0
-        assert parent.implemented.indirect_pct_by_label["B"] == 1.0
+        assert parent.implemented.total_by_label["A"] == 1.0
+        assert parent.implemented.total_by_label["B"] == 1.0
 
-    def test_REQ_d00069_J_monotone_targeted_refine_does_not_lower_indirect(self):
-        # Parent A additionally targeted-refined by a 50%-covered child:
-        # direct footing shows the targeted fraction; indirect stays 1.0 (max).
+    def test_REQ_d00069_J_each_conducting_edge_carries_equal_weight(self):
+        # Parent A is refined twice: by a fully-covered blanket child and by a
+        # 50%-covered targeted one. Both conduct into the same measure at equal
+        # weight, so A reads their mean.
+        #
+        # This inverts what the retired generous footing did. That footing took
+        # the MAX of blanket credit and the targeted mean, so adding a partly
+        # finished refinement could never lower it. The four measures make no
+        # such claim: conduction is an equal-weight mean per incoming edge
+        # (REQ-d00069-J), and a reader who wants the un-averaged view reads the
+        # measure that carries it rather than a footing that hid the average.
         graph = build_graph(
             make_requirement(
                 "REQ-P",
@@ -1065,9 +1080,12 @@ class TestFullCreditConduction:
         )
         annotate_coverage(graph)
         parent = graph.find_by_id("REQ-P").get_metric("rollup_metrics")
-        assert parent.implemented.indirect_pct_by_label["A"] == 1.0  # monotone max
-        assert parent.implemented.direct_pct_by_label["A"] == 0.5  # targeted only
-        assert parent.implemented.indirect_pct_by_label["B"] == 1.0
+        # A: mean(blanket child 1.0, targeted child 0.5) == 0.75.
+        assert parent.implemented.rolled_direct_by_label["A"] == 0.75
+        assert parent.implemented.total_by_label["A"] == 0.75
+        # B: only the blanket edge reaches it, so it keeps the full 1.0 -- the
+        # partly finished refinement of A does not touch its sibling.
+        assert parent.implemented.total_by_label["B"] == 1.0
 
 
 # Verifies: REQ-d00069-J

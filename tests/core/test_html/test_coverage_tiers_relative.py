@@ -31,12 +31,8 @@ def _dim(labels=(), *, total=5, failing=()):
     labels = set(labels)
     return CoverageDimension(
         total=total,
-        direct=len(labels),
-        indirect=len(labels),
         has_failures=bool(failing),
         failing_labels=set(failing),
-        direct_labels=set(labels),
-        indirect_labels=set(labels),
         immediate_direct_by_label=dict.fromkeys(labels, 1.0),
         immediate_indirect_by_label=dict.fromkeys(labels, 1.0),
     )
@@ -171,12 +167,8 @@ def _dim_with_zeros(covered=(), zeros=(), *, total=5, failing=()):
     pct = {**dict.fromkeys(covered, 1.0), **dict.fromkeys(zeros, 0.0)}
     return CoverageDimension(
         total=total,
-        direct=len(covered),
-        indirect=len(covered),
         has_failures=bool(failing),
         failing_labels=set(failing),
-        direct_labels=set(covered),
-        indirect_labels=set(covered),
         immediate_direct_by_label=dict(pct),
         immediate_indirect_by_label=dict(pct),
     )

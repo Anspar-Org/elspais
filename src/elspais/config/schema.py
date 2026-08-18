@@ -415,12 +415,6 @@ class CoverageConfig(_StrictModel):
     )
     uat_coverage: CoverageSeverityConfig = Field(default_factory=_uat_severity)
     uat_verified: CoverageSeverityConfig = Field(default_factory=_uat_severity)
-    # No longer read by any surface, and scheduled for removal. A tier is
-    # scored on the total measure -- each *Assertion* counted once at the
-    # greatest of its four (REQ-d00069-N) -- and a work list on the evidence
-    # that named the *Assertion* (REQ-d00258-M). Neither consults this, so
-    # setting it has no effect.
-    allow_indirect: bool = True
     # Implements: REQ-d00274-C
     # Evidence naming an assertion its dimension does not count -- a test on an
     # assertion nothing implements. An error by default because the condition

@@ -187,7 +187,7 @@ class TestHTMLGeneratorStats:
 
         The fixture's TEST/CODE refs target the whole requirement (no
         assertion labels), so all coverage is indirect: the strict footing
-        (dim.direct) is 0 while the generous footing (dim.covered) is 2. A
+        (dim.immediate_direct) is 0 while the generous footing (dim.covered) is 2. A
         _compute_stats that reimplements the rollup on the strict footing
         would report a different requirement/assertion count than
         aggregate_by_level and fail here.

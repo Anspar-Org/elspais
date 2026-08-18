@@ -1427,8 +1427,8 @@ def _observe(entry_root):
             rollup = node.get_metric("rollup_metrics")
             coverage[node.id] = (
                 rollup.total_assertions,
-                rollup.implemented.direct,
-                rollup.implemented.indirect,
+                rollup.implemented.immediate_direct,
+                rollup.implemented.covered,
             )
         observed[Path(entry.repo_root).resolve().name] = {
             "reqs": sorted(node.id for node in graph.iter_by_kind(NodeKind.REQUIREMENT)),

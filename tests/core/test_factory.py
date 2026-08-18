@@ -445,7 +445,7 @@ A. The system SHALL perform action X.
 
         rollup = req_node.get_metric("rollup_metrics")
         assert rollup is not None, "rollup_metrics should be set after build_graph()"
-        referenced_pct = rollup.implemented.indirect_pct
+        referenced_pct = rollup.implemented.covered_pct
         assert (
             referenced_pct == 100.0
         ), f"Expected 100% coverage (1/1 assertion covered), got {referenced_pct}"
@@ -519,8 +519,8 @@ B. The system SHALL do B.
         assert rollup is not None, "rollup_metrics should be set after build_graph()"
         assert isinstance(rollup, RollupMetrics), f"Expected RollupMetrics, got {type(rollup)}"
         assert rollup.total_assertions == 2
-        assert rollup.implemented.indirect == 1
-        assert rollup.implemented.indirect_pct == 50.0
+        assert rollup.implemented.covered == 1
+        assert rollup.implemented.covered_pct == 50.0
 
     def test_REQ_o00061_B_project_summary_nonzero_coverage_after_build_graph(
         self, tmp_path: Path

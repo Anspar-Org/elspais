@@ -103,12 +103,7 @@ def test_REQ_d00252_F_lcov_only_credit_does_not_count_as_passing(tmp_path):
             verified=CoverageDimension(total=1),
             lcov_tested=CoverageDimension(
                 total=1,
-                direct=1.0,
-                indirect=1.0,
-                direct_labels={"A"},
-                indirect_labels={"A"},
-                direct_pct_by_label={"A": 1.0},
-                indirect_pct_by_label={"A": 1.0},
+                immediate_direct_by_label={"A": 1.0},
             ),
         ),
     )
@@ -136,14 +131,9 @@ def test_REQ_d00252_F_library_failures_flag_associate_row(tmp_path):
             total_assertions=2,
             verified=CoverageDimension(
                 total=2,
-                direct=1.0,
-                indirect=1.0,
                 has_failures=True,
                 failing_labels={"A"},
-                direct_labels={"B"},
-                indirect_labels={"B"},
-                direct_pct_by_label={"B": 1.0},
-                indirect_pct_by_label={"B": 1.0},
+                immediate_direct_by_label={"B": 1.0},
             ),
         ),
     )

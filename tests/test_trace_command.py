@@ -134,18 +134,18 @@ class TestTraceHeadlineIsTheTotal:
                 total_assertions=1,
                 implemented=CoverageDimension(
                     total=1,
-                    direct=0.8,
-                    indirect=0.8,
-                    direct_pct_by_label={"A": 0.8},
-                    indirect_pct_by_label={"A": 0.8},
                     immediate_direct_by_label={"A": 0.6},
                     rolled_direct_by_label={"A": 1.0},
                 ),
             ),
         )
         dim = node.get_metric("rollup_metrics").implemented
-        assert dim.direct == pytest.approx(0.8)
-        assert dim.indirect == pytest.approx(0.8)
+        # The legacy blended footing averaged the citation with what the
+        # refinement conducted -- (0.6 + 1.0) / 2 == 0.8, LOWER than either.
+        # The total is a per-*Assertion* max instead, so a finished refinement
+        # cannot be pulled down by a partial citation beside it.
+        assert dim.immediate_direct == pytest.approx(0.6)
+        assert dim.rolled_direct == pytest.approx(1.0)
         assert dim.covered == pytest.approx(1.0)
 
         data = _get_node_data(node, TraceGraph())
@@ -845,7 +845,7 @@ def marker_verified_project(tmp_path):
     (whole-requirement) `# Verifies:` reference with a passing result.
 
     A blanket reference credits every assertion INDIRECTly but none
-    DIRECTly, so `tested_and_passing(rollup).indirect > .direct` -- the
+    DIRECTly, so `tested_and_passing(rollup).covered > .immediate_direct` -- the
     trace 'verified' cell must headline the total (REQ-d00069-N), with the
     immediate-direct and immediate-indirect measure columns showing which
     measure carried the evidence rather than a `~` marker (REQ-d00258-J).
@@ -935,8 +935,8 @@ A. The system SHALL do A.
 @pytest.fixture
 def code_tested_no_attribution_project(tmp_path):
     """On-disk project: REQ-d00001's implementation has aggregate (lcov)
-    line-coverage data but no per-test attribution -- `code_tested.direct`
-    stays 0 while `.indirect` is > 0 (per-test attribution is not derivable
+    line-coverage data but no per-test attribution -- `code_tested.immediate_direct`
+    stays 0 while `.covered` is > 0 (per-test attribution is not derivable
     from aggregate tooling). REQ-d00258-E: the trace 'code_tested' cell must
     render `n/a`, never a misleading `0/N (0%)`.
     """
@@ -1017,14 +1017,14 @@ class TestTraceFooting:
         graph = _build_project_graph(marker_verified_project, targets=None)
         node = graph.find_by_id("REQ-d00001")
         dim = tested_and_passing(node.get_metric("rollup_metrics"))
-        assert dim.indirect > dim.direct + 1e-9
+        assert dim.covered > dim.immediate_direct + 1e-9
 
         data = _get_node_data(node, graph)
         assert "~" not in data["verified"]
         pct = round(dim.covered / dim.total * 100)
         assert data["verified"] == f"{fmt_assertion_count(dim.covered)}/{dim.total} ({pct}%)"
         assert data["verified_immediate_direct"].startswith("0/")
-        indirect_str = fmt_assertion_count(dim.indirect)
+        indirect_str = fmt_assertion_count(dim.covered)
         assert data["verified_immediate_indirect"].startswith(f"{indirect_str}/")
 
     # Verifies: REQ-d00258-B
@@ -1044,8 +1044,8 @@ class TestTraceFooting:
         graph = _build_project_graph(code_tested_no_attribution_project, targets=None)
         node = graph.find_by_id("REQ-d00001")
         rollup = node.get_metric("rollup_metrics")
-        assert rollup.code_tested.direct == 0
-        assert rollup.code_tested.indirect > 0
+        assert rollup.code_tested.attributed_lines == 0
+        assert rollup.code_tested.covered_lines > 0
 
         data = _get_node_data(node, graph)
         assert not data["code_tested"].startswith("0/")
@@ -1061,8 +1061,8 @@ class TestTraceFooting:
         graph = _build_project_graph(code_tested_no_attribution_project, targets=None)
         node = graph.find_by_id("REQ-d00001")
         rollup = node.get_metric("rollup_metrics")
-        assert rollup.code_tested.direct == 0
-        assert rollup.code_tested.indirect > 0
+        assert rollup.code_tested.attributed_lines == 0
+        assert rollup.code_tested.covered_lines > 0
 
         data = _get_node_data(node, graph, assertion_labels=True)
         assert data["code_tested_labels"] == "n/a"
@@ -1080,9 +1080,9 @@ class TestTraceFooting:
         graph = _build_project_graph(code_tested_no_attribution_project, targets=None)
         node = graph.find_by_id("REQ-d00001")
         rollup = node.get_metric("rollup_metrics")
-        # Simplified dimensions (e.g. scalar-only fixtures) may carry counts
-        # without per-label data; the renderer must not fall back to "-".
-        rollup.lcov_tested = CoverageDimension(total=2, indirect=1.0)
+        # A dimension with assertions but no credited label must render the
+        # honest "0/N" rather than falling back to "-".
+        rollup.lcov_tested = CoverageDimension(total=2)
 
         data = _get_node_data(node, graph, assertion_labels=True)
         assert data["lcov_tested_labels"] == "0/2"
@@ -1100,8 +1100,8 @@ class TestTraceFooting:
         node = graph.find_by_id("REQ-d00002")
         rollup = node.get_metric("rollup_metrics")
         assert rollup.verified.carried
-        assert rollup.verified.direct == 0
-        assert rollup.verified.indirect > 0
+        assert rollup.verified.immediate_direct == 0
+        assert rollup.verified.covered > 0
 
         data = _get_node_data(node, graph)
         assert data["verified"] == "1/1 (100%) (baseline)"

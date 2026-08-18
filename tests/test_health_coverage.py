@@ -92,7 +92,7 @@ class TestCheckTestCoverage:
         req = _make_req("REQ-d00001")
         metrics = RollupMetrics(
             total_assertions=2,
-            tested=CoverageDimension(total=2, direct=1, indirect=1),
+            tested=CoverageDimension(total=2, immediate_direct_by_label={"A": 1.0}),
         )
         req.set_metric("rollup_metrics", metrics)
 
@@ -105,11 +105,11 @@ class TestCheckTestCoverage:
 
     # Verifies: REQ-d00218-A
     def test_req_without_direct_tested_not_counted(self):
-        """Requirement with tested.direct == 0 is not test-covered."""
+        """Requirement with tested.immediate_direct == 0 is not test-covered."""
         req = _make_req("REQ-d00001")
         metrics = RollupMetrics(
             total_assertions=2,
-            tested=CoverageDimension(total=2, direct=0, indirect=0),
+            tested=CoverageDimension(total=2),
         )
         req.set_metric("rollup_metrics", metrics)
 
@@ -120,20 +120,21 @@ class TestCheckTestCoverage:
 
     # Verifies: REQ-d00218-B
     def test_test_coverage_separate_from_code_coverage(self):
-        """Test coverage uses tested.direct, not implemented.direct (which includes CODE)."""
+        """Test coverage reads tested's immediate direct measure, not
+        implemented's (which includes CODE)."""
         req = _make_req("REQ-d00001")
-        # implemented.direct includes CODE refs; tested.direct is TEST-only
+        # implemented.immediate_direct includes CODE refs; tested.immediate_direct is TEST-only
         metrics = RollupMetrics(
             total_assertions=3,
-            implemented=CoverageDimension(total=3, direct=2, indirect=2),
-            tested=CoverageDimension(total=3, direct=0, indirect=0),
+            implemented=CoverageDimension(total=3, immediate_direct_by_label={"A": 1.0, "B": 1.0}),
+            tested=CoverageDimension(total=3),
         )
         req.set_metric("rollup_metrics", metrics)
 
         graph = _make_graph(req)
         result = check_test_coverage(graph, exclude_status=set())
 
-        # Test coverage should be 0 even though implemented.direct is 2
+        # Test coverage should be 0 even though implemented.immediate_direct is 2
         assert result.details["reqs_with_any_coverage"] == 0
 
     # Verifies: REQ-d00218-C
@@ -142,14 +143,14 @@ class TestCheckTestCoverage:
         active_req = _make_req("REQ-d00001", status="Active")
         active_metrics = RollupMetrics(
             total_assertions=1,
-            tested=CoverageDimension(total=1, direct=1, indirect=1),
+            tested=CoverageDimension(total=1, immediate_direct_by_label={"A": 1.0}),
         )
         active_req.set_metric("rollup_metrics", active_metrics)
 
         deprecated_req = _make_req("REQ-d00002", status="Deprecated")
         dep_metrics = RollupMetrics(
             total_assertions=1,
-            tested=CoverageDimension(total=1, direct=0, indirect=0),
+            tested=CoverageDimension(total=1),
         )
         deprecated_req.set_metric("rollup_metrics", dep_metrics)
 
@@ -171,14 +172,14 @@ class TestCheckTestCoverage:
         # Simulate rollup: parent gets credit from child's test coverage
         parent_metrics = RollupMetrics(
             total_assertions=1,
-            tested=CoverageDimension(total=1, direct=1, indirect=1),
+            tested=CoverageDimension(total=1, immediate_direct_by_label={"A": 1.0}),
         )
         parent.set_metric("rollup_metrics", parent_metrics)
 
         child = _make_req("REQ-d00001", level="dev")
         child_metrics = RollupMetrics(
             total_assertions=1,
-            tested=CoverageDimension(total=1, direct=1, indirect=1),
+            tested=CoverageDimension(total=1, immediate_direct_by_label={"A": 1.0}),
         )
         child.set_metric("rollup_metrics", child_metrics)
 
@@ -208,7 +209,7 @@ class TestCheckTestCoverage:
             "rollup_metrics",
             RollupMetrics(
                 total_assertions=2,
-                tested=CoverageDimension(total=2, direct=2, indirect=2),
+                tested=CoverageDimension(total=2, immediate_direct_by_label={"A": 1.0, "B": 1.0}),
             ),
         )
 
@@ -217,7 +218,7 @@ class TestCheckTestCoverage:
             "rollup_metrics",
             RollupMetrics(
                 total_assertions=1,
-                tested=CoverageDimension(total=1, direct=0, indirect=0),
+                tested=CoverageDimension(total=1),
             ),
         )
 
@@ -226,7 +227,7 @@ class TestCheckTestCoverage:
             "rollup_metrics",
             RollupMetrics(
                 total_assertions=3,
-                tested=CoverageDimension(total=3, direct=1, indirect=1),
+                tested=CoverageDimension(total=3, immediate_direct_by_label={"A": 1.0}),
             ),
         )
 
@@ -248,7 +249,7 @@ class TestCheckTestCoverage:
             "rollup_metrics",
             RollupMetrics(
                 total_assertions=1,
-                tested=CoverageDimension(total=1, direct=1, indirect=1),
+                tested=CoverageDimension(total=1, immediate_direct_by_label={"A": 1.0}),
             ),
         )
         other = _make_req("REQ-d00002", status="Wibble")
@@ -256,7 +257,7 @@ class TestCheckTestCoverage:
             "rollup_metrics",
             RollupMetrics(
                 total_assertions=1,
-                tested=CoverageDimension(total=1, direct=0, indirect=0),
+                tested=CoverageDimension(total=1),
             ),
         )
         graph = _make_graph(covered, other)
@@ -313,18 +314,20 @@ class TestCoverageCheckShowsTheMeasuresBehindItsFigures:
         config = {"levels": {"prd": {"rank": 1, "expects_validation": True}, "dev": {"rank": 3}}}
         return check_uat_coverage(graph, exclude_status=set(), config=config)
 
-    def test_message_carries_both_the_cited_and_the_legacy_blended_figure(self):
+    def test_message_carries_the_total_and_the_measures_behind_it(self):
         """Nothing cites REQ-900-A, and conduction covers it. Both numbers are
-        shown, each naming the measure/footing it is on -- the second names
-        itself a LEGACY footing rather than reusing the four-measure words
-        `summary`/`trace` now use for REQ-d00069-L's direct/indirect/
-        conducted measures."""
+        shown, each naming the measure it is on, in the ONE shared vocabulary
+        (REQ-d00258-A). The zero on the measure the gap surfaces answer on
+        (REQ-d00258-M) is shown even though it is zero -- it is the fact that
+        explains why `gaps` lists work this check counts as covered."""
         check = self._conducted_only_uat_check()
         assert "1/1 REQs covered on any measure" in check.message
-        assert "0/1 assertions cited by name here" in check.message
-        assert "1/1 on the legacy direct footing" in check.message
+        assert "1/1 assertions covered in total" in check.message
+        assert "0/1 cited by name here" in check.message
+        assert "1/1 conducted direct" in check.message
         assert check.details["cited_assertions"] == 0.0
-        assert check.details["direct_assertions"] == 1.0
+        assert check.details["total_covered"] == 1.0
+        assert check.details["rolled_direct"] == 1.0
 
     def test_finding_says_why_the_requirement_is_listed(self):
         """The finding explains itself against the figure above it, rather
@@ -365,13 +368,9 @@ class TestCheckUatCoverage:
             total_assertions=2,
             uat_coverage=CoverageDimension(
                 total=2,
-                direct=1,
-                indirect=1,
                 # A journey names A: evidence attached to this requirement, so
                 # it is recorded in the immediate direct measure (REQ-d00069-L)
                 # -- which is what the gap walk reads (REQ-d00258-M).
-                direct_pct_by_label={"A": 1.0},
-                indirect_pct_by_label={"A": 1.0},
                 immediate_direct_by_label={"A": 1.0},
             ),
         )
@@ -391,7 +390,7 @@ class TestCheckUatCoverage:
         req = _make_req("REQ-d00001")
         metrics = RollupMetrics(
             total_assertions=2,
-            uat_coverage=CoverageDimension(total=2, direct=0, indirect=0),
+            uat_coverage=CoverageDimension(total=2),
         )
         req.set_metric("rollup_metrics", metrics)
 
@@ -418,7 +417,7 @@ class TestCheckUatCoverage:
             "rollup_metrics",
             RollupMetrics(
                 total_assertions=2,
-                uat_coverage=CoverageDimension(total=2, direct=0, indirect=0),
+                uat_coverage=CoverageDimension(total=2),
             ),
         )
         graph = _make_graph(req)
@@ -436,7 +435,7 @@ class TestCheckUatCoverage:
             "rollup_metrics",
             RollupMetrics(
                 total_assertions=2,
-                uat_coverage=CoverageDimension(total=2, direct=0, indirect=0),
+                uat_coverage=CoverageDimension(total=2),
             ),
         )
         graph = _make_graph(req)
@@ -453,7 +452,7 @@ class TestCheckUatCoverage:
         active.set_metric(
             "rollup_metrics",
             RollupMetrics(
-                uat_coverage=CoverageDimension(total=1, direct=1, indirect=1),
+                uat_coverage=CoverageDimension(total=1, immediate_direct_by_label={"A": 1.0}),
             ),
         )
 
@@ -461,7 +460,7 @@ class TestCheckUatCoverage:
         rejected.set_metric(
             "rollup_metrics",
             RollupMetrics(
-                uat_coverage=CoverageDimension(total=1, direct=1, indirect=1),
+                uat_coverage=CoverageDimension(total=1, immediate_direct_by_label={"A": 1.0}),
             ),
         )
 
@@ -669,7 +668,7 @@ class TestRunUatChecks:
         req_active.set_metric(
             "rollup_metrics",
             RollupMetrics(
-                uat_coverage=CoverageDimension(total=1, direct=1, indirect=1),
+                uat_coverage=CoverageDimension(total=1, immediate_direct_by_label={"A": 1.0}),
             ),
         )
 
@@ -677,7 +676,7 @@ class TestRunUatChecks:
         req_deprecated.set_metric(
             "rollup_metrics",
             RollupMetrics(
-                uat_coverage=CoverageDimension(total=1, direct=1, indirect=1),
+                uat_coverage=CoverageDimension(total=1, immediate_direct_by_label={"A": 1.0}),
             ),
         )
 
@@ -731,7 +730,7 @@ class TestStatusOverlayCoverageConsistency:
             "rollup_metrics",
             RollupMetrics(
                 total_assertions=1,
-                implemented=CoverageDimension(total=1, direct=1, indirect=1),
+                implemented=CoverageDimension(total=1, immediate_direct_by_label={"A": 1.0}),
             ),
         )
         draft = _make_req("REQ-d00002", status="Draft")
@@ -739,7 +738,7 @@ class TestStatusOverlayCoverageConsistency:
             "rollup_metrics",
             RollupMetrics(
                 total_assertions=1,
-                implemented=CoverageDimension(total=1, direct=0, indirect=0),
+                implemented=CoverageDimension(total=1),
             ),
         )
         return _make_graph(active, draft)
@@ -1176,12 +1175,7 @@ class TestTestedBreakdownInHealth:
         def dim(fractions, **kwargs):
             return CoverageDimension(
                 total=3,
-                direct=sum(fractions.values()),
-                indirect=sum(fractions.values()),
-                direct_labels={lbl for lbl, f in fractions.items() if f > 0},
-                indirect_labels={lbl for lbl, f in fractions.items() if f > 0},
-                direct_pct_by_label=dict(fractions),
-                indirect_pct_by_label=dict(fractions),
+                immediate_direct_by_label=dict(fractions),
                 **kwargs,
             )
 
@@ -1374,12 +1368,20 @@ class TestCheckExternalTests:
         graph = self._graph(("tests/test_out.py", 9, "failed"))
         annotate_coverage(graph)
         before = graph.find_by_id("REQ-100").get_metric("rollup_metrics")
-        snapshot = (before.tested.direct, before.verified.direct, before.verified.has_failures)
+        snapshot = (
+            before.tested.immediate_direct,
+            before.verified.immediate_direct,
+            before.verified.has_failures,
+        )
 
         check_external_tests(graph, {})
 
         after = graph.find_by_id("REQ-100").get_metric("rollup_metrics")
-        assert (after.tested.direct, after.verified.direct, after.verified.has_failures) == snapshot
+        assert (
+            after.tested.immediate_direct,
+            after.verified.immediate_direct,
+            after.verified.has_failures,
+        ) == snapshot
         # The outsider's failure is genuinely outside the figure it left alone.
         assert after.verified.has_failures is False
-        assert after.tested.direct == 1.0
+        assert after.tested.immediate_direct == 1.0

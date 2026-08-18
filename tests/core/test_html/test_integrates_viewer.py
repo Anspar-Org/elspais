@@ -205,18 +205,15 @@ class TestIntegratesRollupSerialized:
             "rollup_metrics",
             RollupMetrics(
                 total_assertions=2,
-                implemented=CoverageDimension(total=2, direct=2.0, indirect=2.0),
+                implemented=CoverageDimension(
+                    total=2, immediate_direct_by_label={"A": 1.0, "B": 1.0}
+                ),
                 # B's declared test passed; A's failed.
                 verified=CoverageDimension(
                     total=2,
-                    direct=1.0,
-                    indirect=1.0,
                     has_failures=True,
                     failing_labels={"A"},
-                    direct_labels={"B"},
-                    indirect_labels={"B"},
-                    direct_pct_by_label={"B": 1.0},
-                    indirect_pct_by_label={"B": 1.0},
+                    immediate_direct_by_label={"B": 1.0},
                 ),
             ),
         )

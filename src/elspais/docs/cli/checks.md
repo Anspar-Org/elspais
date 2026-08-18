@@ -343,17 +343,18 @@ two tiers of confidence:
 
 The system classifies *how specifically* coverage was claimed:
 
-| Source | When | Dimension effect |
-|--------|------|-----------------|
-| `DIRECT` | TEST or CODE names specific assertions (`REQ-xxx-A`) | `implemented.direct`, `tested.direct` |
-| `EXPLICIT` | Child REQ names specific assertions (`Implements: REQ-xxx-A+B`) | `implemented.direct` |
-| `INFERRED` | Child REQ targets whole parent (`Implements: REQ-xxx`) | `implemented.indirect` only |
-| `INDIRECT` | TEST targets whole REQ (no assertion labels) | `tested.indirect` only |
-| `UAT_EXPLICIT` | JNY names specific assertions (`Validates: REQ-xxx-A`) | `uat_coverage.direct` |
-| `UAT_INFERRED` | JNY targets whole REQ (`Validates: REQ-xxx`) | `uat_coverage.indirect` only |
+| Source | When | Measure credited |
+|--------|------|------------------|
+| `DIRECT` | TEST or CODE names specific assertions (`REQ-xxx-A`) | `implemented` / `tested` immediate direct |
+| `EXPLICIT` | Child REQ names specific assertions (`Implements: REQ-xxx-A+B`) | `implemented` immediate direct |
+| `INFERRED` | Child REQ targets whole parent (`Implements: REQ-xxx`) | `implemented` immediate indirect |
+| `INDIRECT` | TEST targets whole REQ (no assertion labels) | `tested` immediate indirect |
+| `UAT_EXPLICIT` | JNY names specific assertions (`Validates: REQ-xxx-A`) | `uat_coverage` immediate direct |
+| `UAT_INFERRED` | JNY targets whole REQ (`Validates: REQ-xxx`) | `uat_coverage` immediate indirect |
 
-After collection, `implemented.direct = DIRECT | EXPLICIT` and
-`implemented.indirect = DIRECT | EXPLICIT | INFERRED`.
+Every source above is *immediate*: the evidence is attached to the requirement
+that carries the assertion. The two *rolled* measures hold value conducted up a
+`Refines:` chain from a refining requirement, and nothing else.
 
 ### Roll-up: how RESULT nodes contribute
 
@@ -370,8 +371,8 @@ REQ (assertion "A")
 
 What gets credited:
 
-- `tested.direct` += "A" — from the VERIFIES edge (assertion-targeted)
-- `verified.direct` += "A" — from the RESULT with `status=passed`
+- `tested` immediate direct += "A" — from the VERIFIES edge (assertion-targeted)
+- `verified` immediate direct += "A" — from the RESULT with `status=passed`
 
 If the RESULT is absent or failing, `tested` still gets credit but `verified`
 does not. The same pattern applies to UAT: a journey RESULT populates
@@ -385,7 +386,7 @@ Each dimension resolves to a **tier** that drives severity and UI color:
 |------|---------|
 | `missing` | No coverage at all (grey/neutral when the denominator is empty; a red gap only when in-scope) |
 | `partial` | Some assertions covered, not all |
-| `full` | All assertions covered (the direct/indirect distinction is shown as a `~` marker, not a separate tier) |
+| `full` | All assertions covered |
 | `failing` | Coverage exists but results are failing |
 
 Tier, per-assertion standing, and bucket share this one vocabulary
@@ -400,12 +401,12 @@ built. A failing in-denominator label is always `failing` (red), regardless of
 the fraction.
 
 **Which evidence credits a tier.** A tier is scored on the total measure: each
-assertion counted once, at the greatest of what a citation named here, what
-whole-requirement evidence reached, and what `Refines:` conduction carried up.
-The `[rules.coverage] allow_indirect` setting no longer selects a footing --
-nothing reads it, and the key is scheduled for removal. Work-list surfaces
-(`gaps`, `untested`, `unvalidated`) are the strict counterpart: they count only
-evidence that named the assertion, so they can report work a tier calls done.
+assertion counted once, at the greatest of its four measures -- what a citation
+named here, what whole-requirement evidence reached, and what `Refines:`
+conduction carried up in each of those two shapes. Work-list surfaces (`gaps`,
+`untested`, `unvalidated`) are the strict counterpart: they count only the
+immediate direct measure -- evidence that named the assertion -- so they can
+report work a tier calls done.
 
 **Evidence outside the denominator.** Measuring over the prior link means
 evidence can name an assertion the dimension does not count -- a test on an
@@ -428,13 +429,18 @@ figure beside it cannot disagree.
 
 ### `code_tested` — line coverage
 
-Unlike the other five dimensions, `code_tested` counts **source lines** rather
-than assertions. It cross-references implementation line ranges (from
-`Implements:` edges to CODE nodes) against file-level line-coverage data
-(LCOV or coverage.json). `code_tested.indirect` counts any covered
-implementation line, regardless of which test covered it.
+`code_tested` is not a coverage dimension at all: it counts **source lines**
+rather than assertions, and carries its own three figures rather than the four
+measures. It cross-references implementation line ranges (from `Implements:`
+edges to CODE nodes) against file-level line-coverage data (LCOV or
+coverage.json).
 
-`code_tested.direct` additionally counts implementation lines whose recorded
+- `total_lines` -- implementation lines attributed to the requirement.
+- `covered_lines` -- lines any coverage run executed, whichever test did it.
+- `attributed_lines` -- lines a run executed *and* whose recorded context
+  names a test that verifies the requirement.
+
+`attributed_lines` counts implementation lines whose recorded
 test **context** names a test that `Verifies:` the requirement (Python only,
 via coverage.py's per-test dynamic contexts). A `coverage.json` produced with
 pytest-cov's `--cov-context=test` *and* `show_contexts = true` under
@@ -443,8 +449,8 @@ pytest-cov's `--cov-context=test` *and* `show_contexts = true` under
 with no class). Only the `|run` phase credits direct attribution --
 `|setup`/`|teardown` fixture-phase execution is not evidence the test itself
 exercised the line. Coverage formats without a `contexts` map (LCOV, or
-coverage.json exported without `show_contexts`) always report
-`code_tested.direct == 0`.
+coverage.json exported without `show_contexts`) record no attribution at all,
+and every surface renders `n/a` rather than a misleading `0`.
 
 Do not set `[tool.coverage.run] dynamic_context = "test_function"` alongside
 `--cov-context=test`: that is coverage.py's own (incompatible) context

@@ -186,7 +186,7 @@ def test_per_test_pass_credits_only_its_assertions(graph_per_test_credit):
     even though test-B failed."""
     m = graph_per_test_credit.find_by_id("REQ-p00001").get_metric("rollup_metrics")
     assert (
-        m.verified.direct_pct_by_label.get("A", 0.0) == 1.0
+        m.verified.total_by_label.get("A", 0.0) == 1.0
     ), "A should be credited since r_pass (match_scope='test') passed for test-A"
 
 
@@ -194,7 +194,7 @@ def test_per_test_fail_does_not_credit_its_own_assertion(graph_per_test_credit):
     """Assertion B is NOT credited because test-B (match_scope='test') failed."""
     m = graph_per_test_credit.find_by_id("REQ-p00001").get_metric("rollup_metrics")
     assert (
-        m.verified.direct_pct_by_label.get("B", 0.0) == 0.0
+        m.verified.total_by_label.get("B", 0.0) == 0.0
     ), "B should not be credited since r_fail (match_scope='test') failed for test-B"
 
 
@@ -233,13 +233,13 @@ def test_file_scope_results_carry_no_verdict(graph_file_scope_fallback):
     it either. Both assertions are tested and awaiting a result."""
     m = graph_file_scope_fallback.find_by_id("REQ-p00001").get_metric("rollup_metrics")
     # The `Verifies:` linkage is live for both assertions...
-    assert m.tested.direct_pct_by_label.get("A") == 1.0
-    assert m.tested.direct_pct_by_label.get("B") == 1.0
+    assert m.tested.total_by_label.get("A") == 1.0
+    assert m.tested.total_by_label.get("B") == 1.0
     # ...and the results reached neither of them.
     assert m.verified.has_failures is False
     assert m.verified.failing_labels == set()
-    assert m.verified.direct_pct_by_label.get("A", 0.0) == 0.0
-    assert m.verified.direct_pct_by_label.get("B", 0.0) == 0.0
+    assert m.verified.total_by_label.get("A", 0.0) == 0.0
+    assert m.verified.total_by_label.get("B", 0.0) == 0.0
 
 
 def test_file_scope_match_scope_is_file_for_null_line(graph_file_scope_fallback):

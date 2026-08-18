@@ -100,9 +100,9 @@ class TestAggregateByLevel:
             rollup = node.get_metric("rollup_metrics")
             if rollup is None:
                 continue
-            expected_impl += rollup.implemented.indirect
+            expected_impl += rollup.implemented.covered
             expected_total += rollup.total_assertions
-        assert levels["DEV"].implemented.covered == pytest.approx(expected_impl)
+        assert levels["DEV"].implemented.total_covered == pytest.approx(expected_impl)
         assert levels["DEV"].implemented.total == expected_total
 
     # Verifies: REQ-d00258-N
@@ -113,7 +113,7 @@ class TestAggregateByLevel:
         broke this: Passing could name an assertion Tested never did."""
         levels = aggregate_by_level(canonical_graph, canonical_config)
         for lv in levels:
-            assert lv.passing.covered <= lv.tested.covered + 1e-9
+            assert lv.passing.total_covered <= lv.tested.total_covered + 1e-9
 
 
 class TestLevelKeys:
@@ -155,14 +155,14 @@ class TestLevelKeys:
             "rollup_metrics",
             RollupMetrics(
                 total_assertions=1,
-                implemented=CoverageDimension(total=1, direct=1, indirect=1),
+                implemented=CoverageDimension(total=1, immediate_direct_by_label={"A": 1.0}),
             ),
         )
         graph = _make_graph(req)
         levels = {lv.level: lv for lv in aggregate_by_level(graph, config)}
         assert "EXTRA" in levels
         assert levels["EXTRA"].total_requirements == 1
-        assert levels["EXTRA"].implemented.covered == pytest.approx(1.0)
+        assert levels["EXTRA"].implemented.total_covered == pytest.approx(1.0)
 
 
 class TestAggregateDimension:
@@ -175,7 +175,11 @@ class TestAggregateDimension:
             "rollup_metrics",
             RollupMetrics(
                 total_assertions=2,
-                tested=CoverageDimension(total=2, direct=1, indirect=2),
+                tested=CoverageDimension(
+                    total=2,
+                    immediate_direct_by_label={"A": 1.0},
+                    immediate_indirect_by_label={"B": 1.0},
+                ),
             ),
         )
         req2 = _make_req("REQ-d00002")
@@ -183,18 +187,18 @@ class TestAggregateDimension:
             "rollup_metrics",
             RollupMetrics(
                 total_assertions=3,
-                tested=CoverageDimension(total=3, direct=0, indirect=1),
+                tested=CoverageDimension(total=3, immediate_indirect_by_label={"A": 1.0}),
             ),
         )
         graph = _make_graph(req1, req2)
 
         agg = aggregate_dimension(graph, "tested")
         assert agg.total == 5
-        assert agg.direct == pytest.approx(1.0)
-        assert agg.covered == pytest.approx(3.0)
+        assert agg.immediate_direct == pytest.approx(1.0)
+        assert agg.total_covered == pytest.approx(3.0)
         assert agg.req_count == 2
-        assert agg.req_with_any == 2  # both have tested.indirect > 0
-        assert agg.req_with_direct == 1  # only req1 has tested.direct > 0
+        assert agg.req_with_any == 2  # both are covered on the total
+        assert agg.req_with_direct == 1  # only req1 is cited by name
 
     def test_no_rollup_metrics_counts_req_but_not_covered(self):
         req = _make_req("REQ-d00001")
@@ -212,7 +216,7 @@ class TestAggregateDimension:
             "rollup_metrics",
             RollupMetrics(
                 total_assertions=1,
-                implemented=CoverageDimension(total=1, direct=1, indirect=1),
+                implemented=CoverageDimension(total=1, immediate_direct_by_label={"A": 1.0}),
             ),
         )
         deprecated = _make_req("REQ-d00002", status="Deprecated")
@@ -220,7 +224,7 @@ class TestAggregateDimension:
             "rollup_metrics",
             RollupMetrics(
                 total_assertions=1,
-                implemented=CoverageDimension(total=1, direct=1, indirect=1),
+                implemented=CoverageDimension(total=1, immediate_direct_by_label={"A": 1.0}),
             ),
         )
         graph = _make_graph(active, deprecated)
@@ -237,7 +241,7 @@ class TestAggregateDimension:
             "rollup_metrics",
             RollupMetrics(
                 total_assertions=1,
-                verified=CoverageDimension(total=1, direct=0, indirect=0, has_failures=True),
+                verified=CoverageDimension(total=1, has_failures=True),
             ),
         )
         graph = _make_graph(req)
@@ -272,17 +276,13 @@ def _dim(labels, *, direct=None, failing=(), total=0):
     """A CoverageDimension crediting ``labels`` at fraction 1.0.
 
     ``total`` sets the absolute assertion count (only relevant to the absolute
-    ``.tier``); relative measurement ignores it and uses the label dicts.
+    tier); relative measurement ignores it and uses the label dicts.
     """
     labels = set(labels)
     direct = set(labels if direct is None else direct)
     return CoverageDimension(
         total=total,
-        direct=len(direct),
-        indirect=len(labels),
         failing_labels=set(failing),
-        direct_pct_by_label=dict.fromkeys(direct, 1.0),
-        indirect_pct_by_label=dict.fromkeys(labels, 1.0),
         # The evidence is attached to this requirement, so it lands in the
         # immediate measures (REQ-d00069-L): a label credited directly was
         # named by its citation, one credited only in ``labels`` was reached
@@ -315,9 +315,9 @@ class TestRelativeTierFor:
             tested=_dim({"A"}, total=2),
         )
         # Relative: denom = implemented labels {A}; A tested -> full.
-        assert relative_tier_for(rollup, "tested", measure="indirect") == ("full", False)
+        assert relative_tier_for(rollup, "tested", measure="total") == ("full", False)
         # Absolute would have been partial (1 of 2 assertions).
-        assert rollup.tested.tier == "partial"
+        assert absolute_tier(rollup.tested, measure="total") == "partial"
 
     def test_tested_empty_denominator_is_na(self):
         """Nothing implemented -> tested has an empty denominator -> N/A
@@ -327,7 +327,7 @@ class TestRelativeTierFor:
             implemented=_dim(set(), total=2),
             tested=_dim(set(), total=2),
         )
-        assert relative_tier_for(rollup, "tested", measure="indirect") == ("missing", True)
+        assert relative_tier_for(rollup, "tested", measure="total") == ("missing", True)
 
     # Verifies: REQ-d00258-N
     def test_verified_ignores_line_coverage_credit(self):
@@ -341,18 +341,18 @@ class TestRelativeTierFor:
             lcov_tested=_dim({"A"}, total=1),  # line coverage reached A's code
         )
         # denom = tested labels {A}; nothing declared against A passed -> gap.
-        assert relative_tier_for(rollup, "verified", measure="indirect") == ("missing", False)
+        assert relative_tier_for(rollup, "verified", measure="total") == ("missing", False)
         # The line-coverage dimension keeps its own, undiminished answer.
-        assert rollup.lcov_tested.tier == "full"
+        assert absolute_tier(rollup.lcov_tested, measure="total") == "full"
 
     def test_absolute_dimension_returns_dim_tier(self):
         """A dimension NOT in the denominator map returns the absolute
-        ``.tier`` (never N/A)."""
+        absolute tier (never N/A)."""
         rollup = RollupMetrics(
             total_assertions=2,
             implemented=_dim({"A"}, total=2),
         )
-        assert relative_tier_for(rollup, "implemented", measure="indirect") == ("partial", False)
+        assert relative_tier_for(rollup, "implemented", measure="total") == ("partial", False)
 
 
 # Verifies: REQ-d00258-C
@@ -416,25 +416,18 @@ def _dim_with_zeros(covered, zeros, *, total=0, failing=()):
     """A CoverageDimension crediting ``covered`` at 1.0 while seeding ``zeros``
     at 0.0 in the per-label maps.
 
-    Mirrors ``_conduct_refines_coverage`` (annotators.py), which rebuilds
-    ``indirect_pct_by_label`` with an entry for EVERY assertion label -- 0.0 for
-    the ones not covered in that dimension. A denominator built from the dict
-    KEYS would therefore wrongly include those unimplemented labels
-    (REQ-d00258-I).
+    Mirrors ``_conduct_refines_coverage`` (annotators.py), which seeds a
+    per-label entry for EVERY assertion label -- 0.0 for the ones not covered
+    in that dimension. A denominator built from the dict KEYS would therefore
+    wrongly include those unimplemented labels (REQ-d00258-I).
     """
     covered = set(covered)
     zeros = set(zeros)
     pct = {**dict.fromkeys(covered, 1.0), **dict.fromkeys(zeros, 0.0)}
     return CoverageDimension(
         total=total,
-        direct=len(covered),
-        indirect=len(covered),
         has_failures=bool(failing),
         failing_labels=set(failing),
-        direct_labels=set(covered),
-        indirect_labels=set(covered),
-        direct_pct_by_label=dict(pct),
-        indirect_pct_by_label=dict(pct),
         immediate_direct_by_label=dict(pct),
     )
 
@@ -442,8 +435,8 @@ def _dim_with_zeros(covered, zeros, *, total=0, failing=()):
 # Verifies: REQ-d00258-I
 class TestDenominatorExcludesUnimplementedLabels:
     """REGRESSION (REQ-d00258-I): the relative denominator is the set of labels
-    ACTUALLY covered in the prior dimension (indirect fraction > 0), NOT every
-    label present in ``indirect_pct_by_label``.
+    ACTUALLY covered in the prior dimension (fraction > 0), NOT every label
+    present in the measure's per-label map.
 
     ``_conduct_refines_coverage`` seeds a 0.0 entry for every assertion label
     (including unimplemented ones), so building the denominator from the dict
@@ -459,7 +452,7 @@ class TestDenominatorExcludesUnimplementedLabels:
             tested=_dim_with_zeros({"A"}, {"B"}, total=2),
         )
         # denom must be {A} only -> A tested -> full, NOT partial over {A,B}.
-        assert relative_tier_for(rollup, "tested", measure="indirect") == ("full", False)
+        assert relative_tier_for(rollup, "tested", measure="total") == ("full", False)
 
     def test_relative_tier_for_all_zero_denominator_is_na(self):
         # Nothing implemented (both labels present at 0.0), but tested credits
@@ -469,7 +462,7 @@ class TestDenominatorExcludesUnimplementedLabels:
             implemented=_dim_with_zeros(set(), {"A", "B"}, total=2),
             tested=_dim_with_zeros({"A", "B"}, set(), total=2),
         )
-        assert relative_tier_for(rollup, "tested", measure="indirect") == ("missing", True)
+        assert relative_tier_for(rollup, "tested", measure="total") == ("missing", True)
 
     def test_tier_buckets_excludes_zero_conducted_label(self):
         req = _make_req("REQ-d00020")
@@ -506,8 +499,8 @@ def test_relative_tier_shared_helper_measures_over_denominator():
     """The shared ``relative_tier`` lives in aggregation and measures a
     numerator dimension over an explicit label-set denominator."""
     dim = _dim({"A"})
-    assert relative_tier(dim, {"A", "B"}, measure="indirect") == ("partial", False)
-    assert relative_tier(dim, set(), measure="indirect") == ("missing", True)
+    assert relative_tier(dim, {"A", "B"}, measure="total") == ("partial", False)
+    assert relative_tier(dim, set(), measure="total") == ("missing", True)
 
 
 # Verifies: REQ-d00258
@@ -516,8 +509,8 @@ class TestAllowIndirect:
     """``[rules.coverage] allow_indirect`` selects which legacy footing a
     surface names as the measure it scores.
 
-    The generous footing (``measure="indirect"``) credits whole-requirement
-    evidence; the strict one (``measure="direct"``) credits only what a
+    The generous footing (``measure="total"``) credits whole-requirement
+    evidence; the strict one (``measure="immediate_direct"``) credits only what a
     citation named. Exercised for the absolute helper (``absolute_tier``) and
     the shared relative helper (``relative_tier_for``), both of which score
     whichever measure their caller names. No reporting surface still selects a
@@ -530,56 +523,54 @@ class TestAllowIndirect:
         """An absolute dimension covered only indirectly (direct=0) is ``full``
         on the generous footing and ``missing`` on the strict one."""
         dim = _dim({"A", "B"}, direct=set(), total=2)
-        assert absolute_tier(dim, measure="indirect") == "full"
-        assert absolute_tier(dim, measure="direct") == "missing"
+        assert absolute_tier(dim, measure="total") == "full"
+        assert absolute_tier(dim, measure="immediate_direct") == "missing"
 
     def test_absolute_tier_direct_full_under_both(self):
-        """Direct coverage credits the absolute tier regardless of the flag."""
+        """Coverage a citation named here credits both measures."""
         dim = _dim({"A", "B"}, direct={"A", "B"}, total=2)
-        assert absolute_tier(dim, measure="indirect") == "full"
-        assert absolute_tier(dim, measure="direct") == "full"
+        assert absolute_tier(dim, measure="total") == "full"
+        assert absolute_tier(dim, measure="immediate_direct") == "full"
 
     def test_absolute_tier_direct_partial_when_false(self):
-        """Partial direct credit -> ``partial`` under measure="direct"."""
+        """Partial cited credit -> ``partial`` on the immediate direct measure."""
         dim = _dim({"A", "B"}, direct={"A"}, total=2)
-        assert absolute_tier(dim, measure="direct") == "partial"
+        assert absolute_tier(dim, measure="immediate_direct") == "partial"
 
     def test_absolute_tier_failing_wins(self):
-        """A failing dimension is ``failing`` under both settings."""
+        """A failing dimension is ``failing`` on every measure."""
         dim = CoverageDimension(
             total=1,
-            direct=1,
-            indirect=1,
             has_failures=True,
             failing_labels={"A"},
-            direct_pct_by_label={"A": 1.0},
-            indirect_pct_by_label={"A": 1.0},
+            immediate_direct_by_label={"A": 1.0},
         )
-        assert absolute_tier(dim, measure="direct") == "failing"
-        assert absolute_tier(dim, measure="indirect") == "failing"
+        assert absolute_tier(dim, measure="immediate_direct") == "failing"
+        assert absolute_tier(dim, measure="total") == "failing"
 
-    def test_relative_tier_for_absolute_dim_honors_allow_indirect(self):
-        """``relative_tier_for`` on an absolute dim (implemented) credits direct
-        only when measure="direct"."""
+    def test_relative_tier_for_absolute_dim_scores_the_named_measure(self):
+        """``relative_tier_for`` on an absolute dim (implemented) credits
+        whole-requirement evidence on the total but not on immediate direct."""
         rollup = RollupMetrics(
             total_assertions=2,
             implemented=_dim({"A", "B"}, direct=set(), total=2),
         )
-        assert relative_tier_for(rollup, "implemented", measure="indirect") == ("full", False)
-        assert relative_tier_for(rollup, "implemented", measure="direct") == (
+        assert relative_tier_for(rollup, "implemented", measure="total") == ("full", False)
+        assert relative_tier_for(rollup, "implemented", measure="immediate_direct") == (
             "missing",
             False,
         )
 
-    def test_relative_tier_for_chained_dim_honors_allow_indirect(self):
-        """A chained dim (tested) credits its direct numerator only when False."""
+    def test_relative_tier_for_chained_dim_scores_the_named_measure(self):
+        """A chained dim (tested) credits its cited numerator only on the
+        immediate direct measure."""
         rollup = RollupMetrics(
             total_assertions=2,
             implemented=_dim({"A", "B"}, total=2),
             tested=_dim({"A", "B"}, direct=set(), total=2),
         )
-        assert relative_tier_for(rollup, "tested", measure="indirect") == ("full", False)
-        assert relative_tier_for(rollup, "tested", measure="direct") == (
+        assert relative_tier_for(rollup, "tested", measure="total") == ("full", False)
+        assert relative_tier_for(rollup, "tested", measure="immediate_direct") == (
             "missing",
             False,
         )
@@ -594,11 +585,10 @@ class TestTierBucketsAgreeWithTheBadge:
     ``count_by_coverage``; the viewer badge tiers the same requirement from
     ``compute_coverage_tiers``. Both score the headline measure (REQ-d00258-A),
     so a requirement cannot badge FULL in one surface and be counted PARTIAL
-    or MISSING by another asking the same question (REQ-d00258-C) -- whatever
-    footing the project once configured.
+    or MISSING by another asking the same question (REQ-d00258-C).
     """
 
-    _CONFIGS = [None, {"rules": {"coverage": {"allow_indirect": False}}}]
+    _CONFIGS = [None, {}]
 
     @pytest.mark.parametrize("config", _CONFIGS)
     def test_whole_requirement_evidence_buckets_as_the_badge_tiers_it(self, config):
@@ -661,7 +651,7 @@ class TestCoverageInclusionViaExpectsImplementation:
             "rollup_metrics",
             RollupMetrics(
                 total_assertions=1,
-                implemented=CoverageDimension(total=1, direct=1, indirect=1),
+                implemented=CoverageDimension(total=1, immediate_direct_by_label={"A": 1.0}),
             ),
         )
         draft = _make_req("REQ-d00002", status="Draft")
@@ -669,7 +659,7 @@ class TestCoverageInclusionViaExpectsImplementation:
             "rollup_metrics",
             RollupMetrics(
                 total_assertions=1,
-                implemented=CoverageDimension(total=1, direct=1, indirect=1),
+                implemented=CoverageDimension(total=1, immediate_direct_by_label={"A": 1.0}),
             ),
         )
         return _make_graph(active, draft)
@@ -683,7 +673,7 @@ class TestCoverageInclusionViaExpectsImplementation:
         }
         dev = levels["DEV"]
         assert dev.total_requirements == 1  # only the Active req
-        assert dev.implemented.covered == pytest.approx(1.0)
+        assert dev.implemented.total_covered == pytest.approx(1.0)
 
     def test_expects_implementation_flag_includes_draft_in_aggregate_by_level(self):
         """NEW: ``[statuses.Draft] expects_implementation=true`` surgically
@@ -694,7 +684,7 @@ class TestCoverageInclusionViaExpectsImplementation:
         levels = {lv.level: lv for lv in aggregate_by_level(graph, config)}
         dev = levels["DEV"]
         assert dev.total_requirements == 2  # Active + Draft now counted
-        assert dev.implemented.covered == pytest.approx(2.0)
+        assert dev.implemented.total_covered == pytest.approx(2.0)
 
     @pytest.mark.parametrize(
         "config,expected_req_count,expected_total",
@@ -730,11 +720,11 @@ class TestDenominatorLabelsAbsoluteDimensions:
 
     def test_implemented_has_no_denominator(self):
         rollup = RollupMetrics(total_assertions=1, implemented=_dim({"A"}, total=1))
-        assert denominator_labels(rollup, "implemented", measure="indirect") is None
+        assert denominator_labels(rollup, "implemented", measure="total") is None
 
     def test_uat_coverage_has_no_denominator(self):
         rollup = RollupMetrics(total_assertions=1, uat_coverage=_dim({"A"}, total=1))
-        assert denominator_labels(rollup, "uat_coverage", measure="indirect") is None
+        assert denominator_labels(rollup, "uat_coverage", measure="total") is None
 
     @pytest.mark.parametrize("dimension,denom_name", list(DENOMINATOR_DIMENSION.items()))
     def test_chained_dimension_denominator_matches_prior_link_labels(self, dimension, denom_name):
@@ -742,7 +732,7 @@ class TestDenominatorLabelsAbsoluteDimensions:
             total_assertions=1,
             **{denom_name: _dim({"A"}, total=1)},
         )
-        assert denominator_labels(rollup, dimension, measure="indirect") == {"A"}
+        assert denominator_labels(rollup, dimension, measure="total") == {"A"}
 
 
 # Verifies: REQ-d00258-I
@@ -764,7 +754,7 @@ class TestNumeratorDimension:
             lcov_tested=_dim({"A"}, total=1),
         )
         num = numerator_dimension(rollup, "verified")
-        assert {lbl for lbl, f in num.indirect_pct_by_label.items() if f > 0} == set()
+        assert {lbl for lbl, f in num.total_by_label.items() if f > 0} == set()
 
     def test_verified_numerator_drops_a_failing_assertion_from_the_figures(self):
         """Still not the raw `.verified` dimension: an assertion a declared
@@ -776,8 +766,8 @@ class TestNumeratorDimension:
         )
         num = numerator_dimension(rollup, "verified")
         assert num is not rollup.verified
-        assert num.indirect == 1.0
-        assert rollup.verified.indirect == 2.0
+        assert num.covered == 1.0
+        assert rollup.verified.covered == 2.0
 
 
 # Verifies: REQ-d00274-A
@@ -803,10 +793,10 @@ class TestAuthoredDimension:
             verified=_dim({"A", "B"}, total=2, failing={"A"}),
         )
         authored = authored_dimension(rollup, "verified")
-        assert authored.indirect == 2.0
+        assert authored.covered == 2.0
 
         numerator = numerator_dimension(rollup, "verified")
-        assert numerator.indirect == 1.0
+        assert numerator.covered == 1.0
 
 
 # Verifies: REQ-d00274-A
@@ -945,10 +935,10 @@ class TestIterUncreditedEvidence:
         graph = _make_graph(req)
 
         assert iter_uncredited_evidence(graph) == []
-        # The retired `allow_indirect` key no longer moves this answer: the
+        # A project config no longer moves this answer: the
         # report reads the measure the figures are computed on, not a footing
         # a config once selected.
-        cfg = {"rules": {"coverage": {"allow_indirect": False}}}
+        cfg: dict = {"rules": {"coverage": {}}}
         assert iter_uncredited_evidence(graph, cfg) == []
 
     def test_dimension_counts_no_assertion_reports_once_for_requirement(self):
@@ -1017,12 +1007,12 @@ class TestIterUncreditedEvidence:
         iter_uncredited_evidence(graph)
         after = aggregate_dimension(graph, "tested")
         assert before.total == after.total
-        assert before.direct == after.direct
-        assert before.covered == after.covered
+        assert before.immediate_direct == after.immediate_direct
+        assert before.total_covered == after.total_covered
         assert before.req_with_any == after.req_with_any
         rollup = graph.find_by_id(req.id).get_metric("rollup_metrics")
-        assert rollup.tested.indirect_pct_by_label == {"A": 1.0, "B": 1.0}
-        assert rollup.implemented.indirect_pct_by_label == {"A": 1.0}
+        assert rollup.tested.total_by_label == {"A": 1.0, "B": 1.0}
+        assert rollup.implemented.total_by_label == {"A": 1.0}
 
 
 # Verifies: REQ-d00274-A
@@ -1132,7 +1122,7 @@ class TestUncreditedEvidenceDenominatorMatchesTier:
         graph = _make_graph(req)
         rollup = graph.find_by_id(req.id).get_metric("rollup_metrics")
 
-        in_denominator = "A" in denominator_labels(rollup, "tested", measure="indirect")
+        in_denominator = "A" in denominator_labels(rollup, "tested", measure="total")
         assert in_denominator is label_in_denominator
 
         items = iter_uncredited_evidence(graph)
@@ -1414,11 +1404,12 @@ class TestNamedLabelsExcludesConductedCredit:
         }
 
     def test_conducted_tested_credit_reaches_b(self, conducted_graph):
-        """The premise, and the input the old reading used: REQ-900-B carries
-        full conducted Tested credit and it lands in the legacy direct map."""
+        """The premise: REQ-900-B carries full conducted Tested credit, and it
+        lands in the ROLLED measure -- not in the immediate one, which is what
+        an author wrote here (REQ-d00069-L)."""
         rollup = conducted_graph.find_by_id("REQ-900").get_metric("rollup_metrics")
         assert rollup.tested.rolled_direct_by_label["B"] == pytest.approx(1.0)
-        assert rollup.tested.direct_pct_by_label["B"] == pytest.approx(1.0)
+        assert "B" not in rollup.tested.immediate_direct_by_label
 
     def test_conducted_credit_is_not_reported_as_written_evidence(self, conducted_graph):
         """No test names REQ-900-B, so no finding sends an author there."""

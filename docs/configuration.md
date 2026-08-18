@@ -756,7 +756,7 @@ See `elspais docs test-targets` for all `[[scanning.test.targets]]` fields.
 
 elspais's own suite (this repo's `.elspais.toml`) demonstrates a
 coverage-only target that still gets per-test line attribution
-(`code_tested.direct`) without a machine-readable results file, by pointing
+(`code_tested.attributed_lines`) without a machine-readable results file, by pointing
 `coverage` directly at coverage.py's native `.coverage` SQLite data file:
 
 ```toml
@@ -770,7 +770,7 @@ coverage = ".coverage"
 
 Reading contexts from `.coverage` requires the `coverage` package (the
 `elspais[coverage]` extra) to be importable in elspais's own interpreter --
-if it isn't, ingestion degrades gracefully: `code_tested.direct` stays `0`
+if it isn't, ingestion degrades gracefully: no line is attributed to a test
 and `Code Tested` renders the honest `n/a`, with a single warning naming the
 extra to install. No other config is required; format detection sniffs the
 SQLite file header, so no `reporter` field is needed for this target. A
@@ -840,28 +840,34 @@ Passing) renders `missing` at neutral severity (grey), never a red gap -- you
 cannot test what is not built. A **failing** in-denominator label renders
 `failing` (red) regardless of the fraction.
 
-#### `allow_indirect` (direct vs indirect credit)
+#### The four measures and the total
 
-```toml
-[rules.coverage]
-allow_indirect = true   # default
-```
+Coverage is measured four ways, on two independent axes: what a citation named
+(**direct**, this assertion by name, versus **indirect**, the requirement as a
+whole) and where the evidence sits (**immediate**, attached to this
+requirement, versus **rolled**, conducted up a `Refines:` chain from a refining
+requirement).
 
-Indirect coverage is evidence that named the whole requirement rather than the
-specific assertion (`Implements: REQ-xxx`), or that reached an assertion via
-`Refines:` conduction. This setting blended the two into one credited footing.
+| Measure | Reported as |
+|---------|-------------|
+| immediate direct | cited by name here |
+| immediate indirect | whole-requirement |
+| rolled direct | conducted direct |
+| rolled indirect | conducted indirect |
 
-**No surface reads it any more, and the key is scheduled for removal.** Every
-reporting surface now headlines the **total** measure and every work-list
-surface reads the immediate direct measure; neither consults this setting.
-Setting it has no effect.
+The **total** is taken per assertion as the greatest of its four measures, so
+an assertion covered three ways is still one covered assertion and the total
+can never exceed the assertion count.
 
-The viewer no longer reads it. Its badges and per-assertion pills headline the
-**total** measure -- each assertion counted once at the greatest of its four
-measures -- and name all four in the hover text ("cited by name here",
-"whole-requirement", "conducted direct", "conducted indirect"), so what
-produced a standing is shown rather than flagged with a marker. There is no
-`~` caveat in the viewer.
+Reporting surfaces (`summary`, `trace`, the MCP project summary, the viewer)
+headline the total and publish the four measures beside it, so a figure is
+never shown without the evidence that produced it. Work-list surfaces (`gaps`,
+`untested`, `unvalidated`, the MCP uncovered-assertion and test-coverage tools)
+read the immediate direct measure alone, so an assertion nobody cited by name
+is reported however much whole-requirement evidence its requirement carries.
+
+There is no setting that selects between them, and no caveat marker: where the
+difference between measures matters, the measures themselves are reported.
 
 #### `uncredited_evidence` (evidence that reaches no figure)
 

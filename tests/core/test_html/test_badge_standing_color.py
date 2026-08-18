@@ -39,15 +39,10 @@ YELLOW_GREEN = _severity_color("info")  # the retired color
 def _dim(pct_by_label, *, total, failing=()):
     """A CoverageDimension crediting each label at its given fraction."""
     pct = dict(pct_by_label)
-    covered = {lbl for lbl, f in pct.items() if f >= 1.0 - 1e-9}
     return CoverageDimension(
         total=total,
-        direct=len(covered),
-        indirect=len(covered),
         has_failures=bool(failing),
         failing_labels=set(failing),
-        direct_labels=set(covered),
-        indirect_labels=set(covered),
         immediate_direct_by_label=dict(pct),
         immediate_indirect_by_label=dict(pct),
     )
