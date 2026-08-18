@@ -51,6 +51,7 @@ def installed_root() -> Path:
     return Path(elspais.__file__).resolve().parent
 
 
+# Implements: REQ-o00077-A
 def compute_executable_hash(root: Path | None = None) -> str:
     """Digest every file the tool is installed from.
 
@@ -158,6 +159,7 @@ class ExecutableWatcher:
         with self._lock:
             return self._settled
 
+    # Implements: REQ-o00077-E
     def poll(self) -> str | None:
         """Take one reading. Returns the new identity when a run settles.
 
@@ -237,6 +239,7 @@ def install_watcher(replacement: ExecutableWatcher | None) -> None:
         _WATCHER = replacement
 
 
+# Implements: REQ-o00077-A
 def difference() -> dict[str, str] | None:
     """What this process runs versus what is installed, or None if they agree.
 

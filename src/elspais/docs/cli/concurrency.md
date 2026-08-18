@@ -214,6 +214,27 @@ Once a daemon has decided to stop, further mutations are refused with
 rather than accepted into a shutdown that would drop them. Treat it like
 any other rejection: nothing was applied, so reconnect and re-apply.
 
+## On `executable_changed`: the Server Is Running Older elspais
+
+A server loads elspais once and answers from it until it ends, so when
+elspais is reinstalled beneath a running server -- which, when the tree
+you are working in is elspais's own source, is what editing a file
+amounts to -- that server goes on answering from the program it started
+with. This is not the same thing as your spec files going stale, and it
+is reported separately: `executable_difference` appears on
+`get_workspace_info`, `get_graph_status`, `/api/dirty` and
+`/api/check-freshness`, naming what the server is running and what is
+now installed.
+
+A daemon in that state stands itself down once it holds nothing unsaved,
+and the next command starts a fresh one; you will not normally see it. A
+**stdio** MCP server cannot do that -- exiting would remove its tools
+from your session, and nothing restarts it -- so instead every call
+except `save_mutations` is refused with `executable_changed`. Nothing was
+applied. Call `save_mutations` if the reply reports `held_mutations`
+above zero, then reconnect the server (`/mcp` in Claude Code) to pick up
+the current program.
+
 `/api/check-freshness` therefore reports two independent signals:
 
 - `stale` (with `stale_files`) -- spec files changed **on disk**, e.g. a

@@ -64,7 +64,7 @@
 | REQ-o00074 | Background Daemon Lifetime          | ops-mcp.md          | dace8fb0 |
 | REQ-o00075 | Shared Graph Daemon                 | ops-mcp.md          | b44d9887 |
 | REQ-o00076 | Reaching the Serving Process        | ops-mcp.md          | cd6333aa |
-| REQ-o00077 | Serving From the Installed Program  | ops-mcp.md          | 8ef6d965 |
+| REQ-o00077 | Serving From the Installed Program  | ops-mcp.md          | b6acd5d0 |
 
 ## DEVELOPMENT
 

@@ -628,9 +628,11 @@ B. Such a process SHALL go on accepting the request to persist changes it holds 
 
 C. While such a process holds changes that exist nowhere else, it SHALL decline the other requests it would otherwise answer.
 
-D. While such a process holds no changes that exist nowhere else, its working tree SHALL become served from the program the tool is now installed from, without a client having to ask.
+D. While such a process holds no changes that exist nowhere else and can be replaced without ending the session of a client it is serving, its working tree SHALL become served from the program the tool is now installed from, without a client having to ask.
 
 E. A run of changes to that program arriving together SHALL cause at most one response.
+
+F. While such a process cannot be replaced without ending the session of a client it is serving, it SHALL decline the other requests it would otherwise answer, and SHALL name the action that renews it.
 
 ### Rationale
 
@@ -644,16 +646,21 @@ Assertion C is the strong one, and it is confined to the case where the process 
 
 C declines where REQ-o00075-G refuses to let the process become a dependency, and the two stand together rather than in conflict. G keeps every operation reachable without a serving process at all, and a client told to persist and acquire again has been told how to reach exactly that. A refusal that is finite and names its own remedy is not a dependency; one that leaves a client with nowhere to go would be.
 
-Assertion D covers the case where nothing is at risk, and it acts without being asked because the client that most needs it is the one that will never ask. Whether the tree comes to be served by a replacement process or by the same one renewed is not fixed here; what matters is that no client goes on being answered from code its tree no longer holds.
+Assertion D covers the case where nothing is at risk, and it acts without being asked because the client that most needs it is the one that will never ask. Whether the tree comes to be served by a replacement process or by the same one renewed is not fixed here.
+
+D is conditioned because for some processes no such replacement exists. Where a client reaches a process over a connection that client owns, the process cannot be replaced without that connection ending, and a connection that ends takes the tool away from the client until the client re-establishes it — which costs more than the difference D exists to remove. Assertion F is what those processes do instead. Naming the action that renews it is the whole of F's value: a client left holding a working connection and an instruction can act on it, where one whose connection vanished mid-task can only discover that it has.
+
+F and C reach the same behaviour from opposite conditions, and that is deliberate. Such a process answers the same way whether it holds work or not, so a client meets one rule rather than two, and neither a wrong answer given confidently nor a tool that quietly disappeared is among the outcomes.
 
 Assertion E exists because a change is rarely one file. An editor writing out a directory, a branch being switched, a build emitting sources — each is one act that arrives as many separate events, and answering each in turn would disturb a serving process repeatedly while the program beneath it was still moving. Counting responses rather than events is what makes D safe to perform unasked, and it bounds the disturbance by the change rather than by the file count.
 
 ### Changelog
 
+- 2026-08-18 | b6acd5d0 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-18 | 8ef6d965 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-18 | eaea87c6 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-18 | 0588f7bb | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-18 | bfd8a2aa | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-18 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: state what a serving process owes its clients when its program code changes beneath it
 
-*End* *Serving From the Installed Program* | **Hash**: 8ef6d965
+*End* *Serving From the Installed Program* | **Hash**: b6acd5d0

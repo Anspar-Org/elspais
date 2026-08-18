@@ -1,4 +1,4 @@
-# Verifies: REQ-o00077-A+B+C+D+E
+# Verifies: REQ-o00077-A+B+C+D+E+F
 """What a serving process owes its clients when the program beneath it moves.
 
 A process loads its program once and answers from it until it ends. When
@@ -47,6 +47,17 @@ class _FakeState(dict):
     def __init__(self, pending: int) -> None:
         super().__init__()
         self["graph"] = type("G", (), {"mutation_log": _FakeLog(pending)})()
+
+
+def _renewable(pending: int) -> _FakeState:
+    """A state whose process can be replaced without ending a session.
+
+    The HTTP daemon raises this flag on its holder; a stdio server, whose
+    client reaches it over a connection that client owns, never does.
+    """
+    state = _FakeState(pending)
+    state["renewable_unasked"] = True
+    return state
 
 
 @pytest.fixture(autouse=True)
@@ -209,13 +220,71 @@ class TestDriftGuardRefusesOnlyWhatItMust:
 
         assert _guard_executable_drift(_FakeState(pending=3), "save_mutations") is None
 
-    def test_REQ_o00077_C_nothing_held_is_not_this_guards_business(self):
-        """Validates REQ-o00077-C: the refusal is confined to held work.
-        A moved program with nothing pending is answered by replacing the
-        process, not by refusing its clients."""
+    def test_REQ_o00077_D_a_clean_renewable_process_says_nothing(self):
+        """Validates REQ-o00077-D: where the process can be replaced without
+        ending anyone's session and holds nothing that would be lost by it,
+        there is no refusal to deliver -- the tree is simply re-served, and the
+        client never learns there was anything to refuse. This is also where C
+        stops: nothing held is not that assertion's case."""
         self._drifted()
 
-        assert _guard_executable_drift(_FakeState(pending=0), "search") is None
+        assert _guard_executable_drift(_renewable(pending=0), "search") is None
+
+    def test_REQ_o00077_F_a_clean_unrenewable_process_still_refuses(self):
+        """Validates REQ-o00077-F: standing down here would take the tool out of
+        the client's session altogether, and a client whose connection vanished
+        mid-task can only discover that it has. Refusing is what is left, and it
+        is refused with nothing held."""
+        self._drifted()
+        rejection = _guard_executable_drift(_FakeState(pending=0), "search")
+
+        assert rejection is not None
+        assert rejection["success"] is False
+        assert rejection["code"] == "executable_changed"
+        assert rejection["held_mutations"] == 0
+
+    def test_REQ_o00077_F_the_refusal_names_the_action_that_renews_it(self):
+        """Validates REQ-o00077-F: naming the renewing action is the whole of
+        the assertion's value. A client left holding a working connection and an
+        instruction can act on it; one told only that it was refused is stuck
+        against a process that will refuse it again."""
+        self._drifted()
+        rejection = _guard_executable_drift(_FakeState(pending=0), "search")
+
+        assert "reconnect" in rejection["hint"].lower()
+
+    def test_REQ_o00077_B_persisting_stays_available_with_nothing_held(self):
+        """Validates REQ-o00077-B: the exemption is written against the request,
+        not against the reason for refusing, so it survives F as it does C. A
+        client meeting F still has to be able to reach the one request that
+        empties the process."""
+        self._drifted()
+
+        assert _guard_executable_drift(_FakeState(pending=0), "save_mutations") is None
+
+    def test_REQ_o00077_F_the_answer_is_the_same_whether_work_is_held(self):
+        """Validates REQ-o00077-F: F and C reach the same behaviour from
+        opposite conditions on purpose, so a client of an unrenewable process
+        meets one rule rather than two and never has to work out which of them
+        it is under."""
+        self._drifted()
+        clean = _guard_executable_drift(_FakeState(pending=0), "search")
+        holding = _guard_executable_drift(_FakeState(pending=4), "search")
+
+        assert clean is not None and holding is not None
+        assert clean["code"] == holding["code"]
+
+    def test_REQ_o00077_C_held_work_refuses_even_where_renewal_is_open(self):
+        """Validates REQ-o00077-C: being replaceable is no help while the
+        process holds the only copy of a change, because the replacement would
+        end it along with the process. C is read first, and D's condition only
+        ever decides the case C has already let go."""
+        self._drifted()
+        rejection = _guard_executable_drift(_renewable(pending=3), "search")
+
+        assert rejection is not None
+        assert rejection["code"] == "executable_changed"
+        assert rejection["held_mutations"] == 3
 
     def test_REQ_o00077_C_unmoved_program_refuses_nothing(self):
         """Validates REQ-o00077-C: pending work under the program this process

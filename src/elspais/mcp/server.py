@@ -2409,6 +2409,12 @@ _CONCURRENCY_PROTOCOL = (
     "   restore_from_safety_branch(..., if_tip_mutation_id) require the\n"
     '   mutation-log tip (current_tip from get_mutation_log(); "" = nothing\n'
     "   pending). On mutation_log_conflict, review 'unseen' before retrying.\n"
+    "5. On executable_changed: elspais was reinstalled since this server\n"
+    "   started, so it is answering from the older program. Nothing was\n"
+    "   applied. save_mutations is still accepted and is the only thing\n"
+    "   that is — call it if held_mutations is above zero, then reconnect\n"
+    "   this server (/mcp in Claude Code) to pick up the current program.\n"
+    "   Retrying without reconnecting returns the same rejection.\n"
     "\n"
     'Full protocol: docs("concurrency"); quick answers: faq("concurrency").'
 )
@@ -2565,6 +2571,22 @@ _FAQ_ENTRIES: list[dict[str, str]] = [
             "restore_from_safety_branch(branch, if_tip_mutation_id=<tip>) rolls\n"
             "files back to a safety branch (it discards pending work, so it\n"
             'takes the tip too). See docs("concurrency") for why these take it.'
+        ),
+    },
+    {
+        "topic": "concurrency",
+        "question": "Why is everything returning executable_changed?",
+        "answer": (
+            "elspais was reinstalled since this server started, so it is still\n"
+            "answering from the program it loaded. That happens routinely when\n"
+            "the tree you are editing is elspais's own source. Nothing you sent\n"
+            "was applied. A daemon stands itself down and is replaced without\n"
+            "you noticing; a stdio MCP server cannot, because exiting would take\n"
+            "its tools out of your session and nothing would restart it. So it\n"
+            "refuses everything except save_mutations instead. Call that if the\n"
+            "rejection reports held_mutations above zero, then reconnect the\n"
+            "server (/mcp in Claude Code). This is unrelated to your spec files\n"
+            "going stale, and is reported separately as executable_difference."
         ),
     },
     {
@@ -2931,7 +2953,7 @@ def _guard_shutdown(state: Any) -> dict[str, Any] | None:
 _PERSIST_TOOLS = frozenset({"save_mutations"})
 
 
-# Implements: REQ-o00077-A, REQ-o00077-B, REQ-o00077-C
+# Implements: REQ-o00077-A, REQ-o00077-B, REQ-o00077-C, REQ-o00077-F
 def _guard_executable_drift(state: Any, tool_name: str) -> dict[str, Any] | None:
     """Refuse a call this process would answer from a superseded program.
 
@@ -2965,8 +2987,26 @@ def _guard_executable_drift(state: Any, tool_name: str) -> dict[str, Any] | None
         # this guard exists to protect held work, and a reading it could
         # not take is not evidence that any is held.
         return None
-    if pending == 0:
+    if pending == 0 and state.get("renewable_unasked"):
+        # REQ-o00077-D's case: this process can be replaced without
+        # ending anyone's session, so it stands down instead of
+        # refusing, and the client never learns there was anything to
+        # refuse.
         return None
+    renew = "Reconnect this MCP server (in Claude Code, /mcp) to pick up the " "current program."
+    if pending == 0:
+        # Implements: REQ-o00077-F
+        return {
+            "success": False,
+            "code": "executable_changed",
+            "error": (
+                "elspais has been reinstalled since this server started. Answers "
+                "from here would come from the program as it was, so they are "
+                "refused."
+            ),
+            "hint": f"Nothing was changed, and nothing is held here. {renew}",
+            "held_mutations": 0,
+        }
     return {
         "success": False,
         "code": "executable_changed",
@@ -2977,9 +3017,8 @@ def _guard_executable_drift(state: Any, tool_name: str) -> dict[str, Any] | None
             f"are refused."
         ),
         "hint": (
-            "Nothing was changed. Call save_mutations to write what is held -- "
-            "that request is still accepted -- then reconnect this MCP server "
-            "to pick up the current program."
+            f"Nothing was changed. Call save_mutations to write what is held -- "
+            f"that request is still accepted -- then {renew[0].lower()}{renew[1:]}"
         ),
         "held_mutations": pending,
     }
@@ -7826,6 +7865,14 @@ def run_server(
         # the program moving beneath a process has nothing to do with
         # who asked for that process.
         from elspais.mcp.executable import watcher as _executable_watcher
+
+        # Implements: REQ-o00077-D
+        # A client reaches this process over a connection it did not
+        # create and can re-establish at will, so replacing the process
+        # costs it nothing it cannot recover. That is what earns D's
+        # silence here and F's refusal on a transport where it is not
+        # true.
+        state.shared["renewable_unasked"] = True
 
         def _renew_on_settled_change(_installed: str) -> None:
             renew_for_installed_program(state.shared, lambda: state.graph)
