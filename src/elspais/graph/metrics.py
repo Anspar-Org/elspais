@@ -138,11 +138,12 @@ class CoverageDimension:
             Only meaningful on the ``verified`` dimension; other dimensions
             leave this at its default (``False``).
         immediate_direct_by_label: Per-assertion immediate-direct credit
-            (whole or absent, REQ-d00069-M) -- a citation named this
+            (whole where the evidence is whole, partial where the evidence
+            itself is partial, REQ-d00069-M) -- a citation named this
             *Assertion* and the evidence is attached here.
         immediate_indirect_by_label: Per-assertion immediate-indirect credit
-            (whole or absent) -- a citation named only the requirement and
-            the evidence is attached here.
+            (same strength rule as immediate_direct) -- a citation named
+            only the requirement and the evidence is attached here.
         rolled_direct_by_label: Per-assertion rolled-up-direct credit (MAY
             be fractional, REQ-d00069-M) -- conducted from a refining
             requirement's own direct coverage.
@@ -234,6 +235,7 @@ class CoverageDimension:
                     out[label] = frac
         return out
 
+    # Implements: REQ-d00069-N
     @property
     def covered(self) -> float:
         return sum(self.total_by_label.values())
@@ -355,9 +357,9 @@ class RollupMetrics:
         impl_direct = direct_labels | explicit_labels
         impl_indirect = impl_direct | inferred_labels | code_indirect_labels
         # Implements: REQ-d00069-B, REQ-d00069-M
-        # Immediate evidence is whole or absent: a citation either named the
-        # *Assertion* or named its requirement. Fractions belong to
-        # conduction, which fills the rolled maps later.
+        # Immediate credit here is whole -- Implemented evidence (DIRECT/
+        # EXPLICIT/INFERRED sources) is all-or-nothing, unlike uat_verified
+        # below, whose partially-verified journeys carry a genuine fraction.
         immediate_direct = dict.fromkeys(impl_direct, 1.0)
         immediate_indirect = dict.fromkeys(inferred_labels | code_indirect_labels, 1.0)
         self.implemented = CoverageDimension(
@@ -457,9 +459,11 @@ class RollupMetrics:
         # Implements: REQ-d00069-M
         # uat_verified's direct/indirect_pct_by_label carry fractions (a
         # partially-verified journey credits its verified-step ratio,
-        # REQ-d00255-C) -- but immediate coverage is whole or absent, so the
-        # immediate maps record 1.0 for any assertion with a nonzero
-        # fraction; the fraction itself belongs to conduction (Task 2).
+        # REQ-d00255-C). Immediate coverage records that same strength --
+        # whole where the evidence is whole, partial where the evidence
+        # itself is partial -- so the immediate maps carry the fraction
+        # verbatim, not flattened to 1.0. A mean-of-refinements fraction is
+        # a different thing (rolled-up, conduction, Task 2).
         self.uat_verified = CoverageDimension(
             total=n,
             direct=sum(uat_verified_direct_pct.values()),
@@ -470,12 +474,12 @@ class RollupMetrics:
             indirect_labels={lbl for lbl, f in uat_indirect_pct_by_label.items() if f > 0},
             direct_pct_by_label=dict(uat_verified_direct_pct),
             indirect_pct_by_label=uat_indirect_pct_by_label,
-            immediate_direct_by_label=dict.fromkeys(
-                (lbl for lbl, f in uat_verified_direct_pct.items() if f > 0), 1.0
-            ),
-            immediate_indirect_by_label=dict.fromkeys(
-                (lbl for lbl, f in uat_indirect_pct_by_label.items() if f > 0), 1.0
-            ),
+            immediate_direct_by_label={
+                lbl: f for lbl, f in uat_verified_direct_pct.items() if f > 0
+            },
+            immediate_indirect_by_label={
+                lbl: f for lbl, f in uat_indirect_pct_by_label.items() if f > 0
+            },
         )
 
 

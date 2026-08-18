@@ -1,10 +1,10 @@
 # Verifies: REQ-d00069-L, REQ-d00069-M, REQ-d00069-N
 """The four coverage measures, and the total taken per assertion."""
 
-from elspais.graph.metrics import CoverageDimension
+from elspais.graph.metrics import CoverageDimension, RollupMetrics
 
 
-def test_immediate_measures_are_whole_or_absent():
+def test_immediate_measures_sum_whole_evidence():
     dim = CoverageDimension(
         total=3,
         immediate_direct_by_label={"A": 1.0},
@@ -44,6 +44,31 @@ def test_a_blanket_citation_credits_every_assertion_indirectly(canonical_graph):
             continue
         for name in ("implemented", "tested"):
             dim = getattr(rollup, name)
-            # An immediate measure never holds a fraction (REQ-d00069-M).
+            # implemented/tested evidence is all-or-nothing, so their
+            # immediate measures never hold a fraction (REQ-d00069-M).
             assert all(v == 1.0 for v in dim.immediate_direct_by_label.values())
             assert all(v == 1.0 for v in dim.immediate_indirect_by_label.values())
+
+
+# Verifies: REQ-d00069-M
+def test_a_partially_verified_journey_leaves_a_fraction_in_the_immediate_map():
+    """A journey verified in 1 of its 2 steps credits its ratio, not 1.0.
+
+    REQ-d00069-M: immediate coverage records the strength of the evidence
+    attached to it, whole where the evidence is whole and partial where the
+    evidence itself is partial -- so uat_verified's immediate map must carry
+    the verified-step ratio, not flatten it to whole.
+    """
+    rollup = RollupMetrics(total_assertions=2)
+    rollup.populate_test_dimensions(
+        tested_direct_labels=set(),
+        tested_indirect_labels=set(),
+        verified_direct_labels=set(),
+        verified_indirect_labels=set(),
+        verified_failures=False,
+        uat_verified_direct_pct={"A": 0.5},
+        uat_verified_indirect_pct={},
+        uat_verified_failures=False,
+    )
+    assert rollup.uat_verified.immediate_direct_by_label == {"A": 0.5}
+    assert rollup.uat_verified.immediate_indirect_by_label == {"A": 0.5}

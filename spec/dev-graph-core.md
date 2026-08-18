@@ -186,7 +186,7 @@ K. The system SHALL report coverage gaps on template instance nodes through the 
 
 L. Coverage SHALL be measured on two independent axes per dimension. The first axis is what a citation named: *direct* where it named the *Assertion* it credits, *indirect* where it named only the requirement and is therefore attributed equally to every *Assertion* of it. The second axis is where the evidence sits: *immediate* where it is attached to what is being reported, and *rolled-up* where it is conducted from a refining requirement, in which case the first axis describes the refining requirement's own evidence. The four measures they yield SHALL each be reported in their own right, and none SHALL be defined in terms of another.
 
-M. An *Assertion*'s immediate coverage SHALL be whole or absent, since a citation either names it or does not. Its rolled-up coverage MAY be fractional, being the mean of the coverage of the requirements refining it, so that a partially finished refinement reads as partially done.
+M. An *Assertion*'s immediate coverage SHALL record the strength of the evidence attached to it. That strength SHALL be whole wherever the evidence is whole, a citation either naming the *Assertion* or not; it MAY be partial where the evidence itself is partial, as a journey verified in part credits in proportion to its verification (REQ-d00255-C). Rolled-up coverage MAY likewise be fractional, being the mean of the coverage of the requirements refining it, so that a partially finished refinement reads as partially done.
 
 N. Total coverage SHALL be reported as well, taken per *Assertion* as the greatest of that *Assertion*'s four measures, so that an *Assertion* covered more than one way is counted once and a requirement's total can never exceed its number of assertions.
 
@@ -204,6 +204,7 @@ Whole-requirement tests (e.g., `test_implements_req_d00087` with no *Assertion* 
 
 ### Changelog
 
+- 2026-08-18 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: immediate coverage records the strength of the evidence attached, whole where the evidence is whole and partial where the evidence is (M)
 - 2026-08-17 | 6de09e95 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-17 | 6ac9e8a6 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-17 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: measure coverage on two axes -- what a citation named, and whether the evidence is attached or conducted -- reporting each measure in its own right plus a per-assertion total (J, L, M, N)
