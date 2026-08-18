@@ -1318,3 +1318,66 @@ class TestWorkListsReadImmediateDirectEvidence:
         the same rollup."""
         rollup = refined_graph.find_by_id("REQ-800").get_metric("rollup_metrics")
         assert rollup.implemented.covered == pytest.approx(2.0)
+
+
+@pytest.fixture(scope="module")
+def conducted_graph():
+    graph = build_graph(
+        make_requirement(
+            "REQ-900",
+            level="PRD",
+            assertions=[{"label": lbl, "text": f"Assertion {lbl}"} for lbl in ("A", "B", "C")],
+        ),
+        make_requirement(
+            "REQ-901",
+            level="DEV",
+            refines=["REQ-900-B"],
+            assertions=[{"label": "A", "text": "Refining assertion"}],
+        ),
+        make_code_ref(implements=["REQ-900-A"], source_path="src/a.py"),
+        make_test_ref(verifies=["REQ-900-C"], source_path="tests/test_c.py"),
+        make_test_ref(verifies=["REQ-901-A"], source_path="tests/test_refiner.py"),
+    )
+    annotate_coverage(graph)
+    return graph
+
+
+# Verifies: REQ-d00274-A
+class TestNamedLabelsExcludesConductedCredit:
+    """The uncredited-evidence check reports what an author WROTE.
+
+    ``named_labels`` answers "which assertions did somebody write evidence
+    for", which REQ-d00274-A distinguishes from "which assertions does credit
+    reach". A value conducted up a `Refines:` chain was written against the
+    refining requirement, so reporting it here would send an author to an
+    *Assertion* looking for an annotation that exists somewhere else -- and
+    would do it at error severity.
+
+    PARENT-A is implemented, so the Tested denominator is {A}. PARENT-C is
+    named by a real `Verifies:` and is outside that denominator, so it is a
+    finding. PARENT-B is outside it too and carries FULL conducted Tested
+    credit from REFINER -- but no test names it, so it is not.
+    """
+
+    def _tested_findings(self, graph):
+        return {
+            item.assertion_label
+            for item in iter_uncredited_evidence(graph)
+            if item.requirement_id == "REQ-900" and item.dimension == "tested"
+        }
+
+    def test_conducted_tested_credit_reaches_b(self, conducted_graph):
+        """The premise, and the input the old reading used: REQ-900-B carries
+        full conducted Tested credit and it lands in the legacy direct map."""
+        rollup = conducted_graph.find_by_id("REQ-900").get_metric("rollup_metrics")
+        assert rollup.tested.rolled_direct_by_label["B"] == pytest.approx(1.0)
+        assert rollup.tested.direct_pct_by_label["B"] == pytest.approx(1.0)
+
+    def test_conducted_credit_is_not_reported_as_written_evidence(self, conducted_graph):
+        """No test names REQ-900-B, so no finding sends an author there."""
+        assert "B" not in self._tested_findings(conducted_graph)
+
+    def test_written_evidence_outside_the_denominator_still_fires(self, conducted_graph):
+        """The mirror, so the narrowing cannot be over-applied: REQ-900-C is
+        named by a real `Verifies:` and is still reported."""
+        assert self._tested_findings(conducted_graph) == {"C"}

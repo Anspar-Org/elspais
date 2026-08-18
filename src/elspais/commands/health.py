@@ -2504,8 +2504,19 @@ def check_dimension_coverage(
 ) -> HealthCheck:
     """Check coverage for one of the 5 CoverageDimension dimensions.
 
-    Reports both requirement-level (any coverage) and assertion-level
-    (direct/indirect percentages) metrics.
+    Reports the requirement-level count and the assertion-level figures, each
+    naming the measure it is on (REQ-d00258-A): assertions a citation names
+    here, then the figure that averages those citations with the coverage
+    refinements conduct, then the one that also counts whole-requirement
+    evidence. The first is the measure the gap surfaces answer on
+    (REQ-d00258-M), so a reader can see why this check reports coverage while
+    `gaps` still lists work.
+
+    The figures are NOT nested and are not described as though they were: the
+    blended figures average a citation with what refinements conduct, so a
+    fully cited *Assertion* refined by unfinished work reads LOWER on them
+    than on the cited figure. Each label therefore says what its own figure
+    counts and claims no ordering against its neighbours.
 
     Args:
         graph: The graph to check.
@@ -2546,22 +2557,39 @@ def check_dimension_coverage(
     indirect_assertions = agg.covered
     has_any_failures = agg.has_failures
 
+    # Implements: REQ-d00258-A
+    # The immediate direct measure, read from the shared aggregation rather
+    # than recomputed -- assertions somebody cited by name here, and the
+    # measure the gap surfaces answer on (REQ-d00258-M). Reported beside the
+    # figures below so a reader sees both numbers rather than inferring one
+    # from the other, and can tell a requirement that is covered from one that
+    # still has assertions nobody has written evidence for.
+    cited_assertions = agg.immediate_direct
+
     req_pct = (req_with_any / req_count * 100) if req_count > 0 else 0
+    cited_pct = (cited_assertions / total_assertions * 100) if total_assertions > 0 else 0
     direct_pct = (direct_assertions / total_assertions * 100) if total_assertions > 0 else 0
     indirect_pct = (indirect_assertions / total_assertions * 100) if total_assertions > 0 else 0
     # REQ-d00258-C: note and counts read the SAME config (the --treat-active overlay),
     # so a promoted status is counted AND absent from the excluded-note.
     note = _excluded_note(graph, config=config)
 
-    # Build message showing both levels
+    # Every figure says which evidence it counts, so a reader who sees two of
+    # them disagree is told why rather than left to infer one from the other
+    # (REQ-d00258-A). The requirement count is on the same generous reading as
+    # the last assertion figure -- a requirement is counted once any of its
+    # measures is above zero.
     msg_parts = [
-        f"{label}: {req_with_any}/{req_count} REQs ({req_pct:.0f}%)",
-        f"{fmt_assertion_count(direct_assertions)}/{total_assertions} assertions"
-        f" direct ({direct_pct:.0f}%)",
+        f"{label}: {req_with_any}/{req_count} REQs covered on any measure ({req_pct:.0f}%)",
+        f"{fmt_assertion_count(cited_assertions)}/{total_assertions} assertions"
+        f" cited by name here ({cited_pct:.0f}%)",
+        f"{fmt_assertion_count(direct_assertions)}/{total_assertions}"
+        f" averaging those citations with what refinements conduct ({direct_pct:.0f}%)",
     ]
     if abs(indirect_assertions - direct_assertions) > 1e-9:
         msg_parts.append(
-            f"{fmt_assertion_count(indirect_assertions)} indirect ({indirect_pct:.0f}%)"
+            f"{fmt_assertion_count(indirect_assertions)}/{total_assertions}"
+            f" counting whole-requirement evidence too ({indirect_pct:.0f}%)"
         )
     # Implements: REQ-d00258-O
     if dimension == "tested" and (agg.tested_passed + agg.tested_failed + agg.tested_awaiting):
@@ -2586,6 +2614,9 @@ def check_dimension_coverage(
             "total_requirements": req_count,
             "req_coverage_percent": round(req_pct, 1),
             "total_assertions": total_assertions,
+            # Implements: REQ-d00258-A
+            "cited_assertions": round(cited_assertions, 3),
+            "cited_pct": round(cited_pct, 1),
             "direct_assertions": round(direct_assertions, 3),
             "indirect_assertions": round(indirect_assertions, 3),
             "direct_pct": round(direct_pct, 1),
@@ -3423,7 +3454,12 @@ def check_uat_coverage(
         if rollup is None or not covered_labels(rollup.uat_coverage, "immediate"):
             uncovered.append(
                 HealthFinding(
-                    message=f"{node.id}: no UAT validation (level expects_validation)",
+                    message=(
+                        f"{node.id}: no journey names this requirement or any of "
+                        f"its assertions -- UAT coverage conducted from a refining "
+                        f"requirement is not validation of this one "
+                        f"(level expects_validation)"
+                    ),
                     node_id=node.id,
                 )
             )

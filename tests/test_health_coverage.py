@@ -277,6 +277,62 @@ class TestCheckTestCoverage:
 # =============================================================================
 
 
+# Verifies: REQ-d00258-A
+class TestCoverageCheckShowsTheMeasuresBehindItsFigures:
+    """A coverage check reports figures on more than one measure, and says
+    which measure each is on.
+
+    A requirement whose UAT coverage is entirely conducted from a refinement
+    is genuinely covered on the conducted figure AND genuinely holds an
+    *Assertion* no journey names, which is work (REQ-d00258-M). Reported as
+    two bare numbers that is a reader's contradiction; reported as two named
+    measures it is the model. REQ-d00258-A is what requires the naming: a
+    reader is never shown a figure without being able to see what evidence
+    produced it.
+    """
+
+    @staticmethod
+    def _conducted_only_uat_check():
+        from elspais.commands.health import check_uat_coverage
+        from elspais.graph.annotators import annotate_coverage
+        from tests.core.graph_test_helpers import build_graph, make_journey, make_requirement
+
+        graph = build_graph(
+            make_requirement(
+                "REQ-900", level="PRD", assertions=[{"label": "A", "text": "Assertion A"}]
+            ),
+            make_requirement(
+                "REQ-901",
+                level="DEV",
+                refines=["REQ-900-A"],
+                assertions=[{"label": "A", "text": "Refining assertion"}],
+            ),
+            make_journey("JNY-001", validates=["REQ-901-A"]),
+        )
+        annotate_coverage(graph)
+        config = {"levels": {"prd": {"rank": 1, "expects_validation": True}, "dev": {"rank": 3}}}
+        return check_uat_coverage(graph, exclude_status=set(), config=config)
+
+    def test_message_carries_both_the_cited_and_the_conducted_figure(self):
+        """Nothing cites REQ-900-A, and conduction covers it. Both numbers are
+        shown, each naming the measure it is on."""
+        check = self._conducted_only_uat_check()
+        assert "1/1 REQs covered on any measure" in check.message
+        assert "0/1 assertions cited by name here" in check.message
+        assert "1/1 averaging those citations with what refinements conduct" in check.message
+        assert check.details["cited_assertions"] == 0.0
+        assert check.details["direct_assertions"] == 1.0
+
+    def test_finding_says_why_the_requirement_is_listed(self):
+        """The finding explains itself against the figure above it, rather
+        than reading as its contradiction."""
+        check = self._conducted_only_uat_check()
+        assert check.passed is False
+        (finding,) = check.findings
+        assert "no journey names this requirement" in finding.message
+        assert "conducted from a refining requirement is not validation" in finding.message
+
+
 class TestCheckUatCoverage:
     """Tests for check_uat_coverage health check."""
 
