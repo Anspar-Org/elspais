@@ -27,16 +27,24 @@ coverage). These are the only words that denote a coverage dimension; in
 particular "Validated" is not one of them, since it collides with the
 `Validates:` keyword (journey → requirement UAT links).
 
-**Generous footing + `~` marker.** Every one of the five assertion-based
-columns headlines the *generous* footing -- `CoverageDimension.indirect`,
-which counts an assertion covered whether the link named it directly
-(`REQ-xxx-A`) or only the whole requirement (`REQ-xxx`). A trailing `~`
-appended to a cell means that column's count is not fully backed by
-direct (assertion-level) evidence, i.e. `indirect > direct` for at least one
-covered assertion in that row. No marker means the generous and strict
-(direct) counts agree -- every bit of credit is assertion-specific. See
-`elspais docs checks` (*Coverage Dimensions*) for the direct/indirect/tier
-model underneath this.
+**Total headline + the four measures behind it.** Every one of the five
+assertion-based columns headlines the per-*Assertion* TOTAL: for each
+assertion, the greatest of four measures, so an assertion covered more than
+one way is counted once and a requirement's total can never exceed its
+assertion count. The four measures answer two independent questions: what a
+citation named (*direct* -- it named the assertion; *indirect* -- it named
+only the whole requirement) crossed with where the evidence sits (*immediate*
+-- attached to this requirement; *rolled-up* -- conducted from a refining
+requirement's own coverage via `Refines:`). `trace --format csv` publishes
+all four as columns of their own beside each dimension's total (`Tested
+Immediate Direct`, `Tested Immediate Indirect`, `Tested Rolled Direct`,
+`Tested Rolled Indirect`, and likewise for the other four dimensions), and
+`summary` prints them beneath each level's headline in the same vocabulary a
+`health` coverage check uses ("cited by name here", "whole-requirement",
+"conducted direct/indirect"). There is no caveat marker standing in for a
+measure a surface does not show -- where the difference between measures
+matters, the measures themselves are reported. See `elspais docs checks`
+(*Coverage Dimensions*) for the model underneath this.
 
 **Relative denominators.** `Tested` and `Passing` measure against their own
 denominator, not the whole spec: `Tested` is tested / **implemented** and
@@ -71,9 +79,9 @@ dimension of its own: the display vocabulary stays at the five terms above.
 Passing alone would leave the remainder ambiguous -- an assertion missing
 from it either failed or never returned a verdict, and those ask for opposite
 things. `summary`'s level-aggregated
-Passing figure gets a trailing `*` (footnoted) instead of `~` when any
-underlying RESULT data was carried from a previous run -- see `elspais docs
-test-targets` (*Per-PR selectivity*).
+Passing figure gets a trailing `*` (footnoted) when any underlying RESULT
+data was carried from a previous run -- see `elspais docs test-targets`
+(*Per-PR selectivity*).
 
 **Code Tested: per-test or `n/a`.** The `Code Tested` column reports
 `code_tested.direct` -- implementation lines whose coverage.py **context**
@@ -108,8 +116,9 @@ output. Columns: ID, Title, Level, Status, UAT Covered, UAT Passed, Journeys
 (`JNY-id:verdict` pairs). Code-dimension columns (Implemented, Tested, Passing,
 etc.) are excluded.
 
-Coverage counts headline on the generous footing (direct + indirect evidence);
-a trailing `~` marker flags a count whose evidence isn't fully direct.
+Coverage counts headline the per-*Assertion* total (the greatest of the four
+measures behind it) -- see *Total headline + the four measures behind it*
+above.
 
 Journey verdicts: `pass` (all steps have a passing test, none failed), `fail`
 (at least one failure), `partial` (some steps pass but not all), `unverified`

@@ -86,6 +86,27 @@ def _add_requirement(
     return node
 
 
+def _synthetic_immediate_direct(total: int, covered: float) -> dict[str, float]:
+    """Synthetic per-label immediate-direct credit summing to ``covered``.
+
+    ``_set_rollup`` only knows an assertion COUNT, not real per-assertion
+    labels, so this fabricates labels A, B, C... and credits the first
+    ``covered`` of them at full value (REQ-d00069-M) -- enough for
+    ``CoverageDimension.covered`` (the REQ-d00069-N total the CLI now
+    headlines) to equal the legacy ``direct``/``indirect`` figure these
+    fixtures set, since none of them model conducted or blanket evidence.
+    """
+    labels = [chr(65 + i) for i in range(total)]
+    out: dict[str, float] = {}
+    whole = int(covered)
+    for lbl in labels[:whole]:
+        out[lbl] = 1.0
+    frac = covered - whole
+    if frac > 1e-9 and whole < len(labels):
+        out[labels[whole]] = frac
+    return out
+
+
 def _set_rollup(
     node: GraphNode,
     total: int = 0,
@@ -99,10 +120,24 @@ def _set_rollup(
 
     rm = RollupMetrics(
         total_assertions=total,
-        implemented=CoverageDimension(total=total, direct=covered, indirect=covered),
-        tested=CoverageDimension(total=total, direct=tested, indirect=tested),
+        implemented=CoverageDimension(
+            total=total,
+            direct=covered,
+            indirect=covered,
+            immediate_direct_by_label=_synthetic_immediate_direct(total, covered),
+        ),
+        tested=CoverageDimension(
+            total=total,
+            direct=tested,
+            indirect=tested,
+            immediate_direct_by_label=_synthetic_immediate_direct(total, tested),
+        ),
         verified=CoverageDimension(
-            total=total, direct=validated, indirect=validated, has_failures=has_failures
+            total=total,
+            direct=validated,
+            indirect=validated,
+            has_failures=has_failures,
+            immediate_direct_by_label=_synthetic_immediate_direct(total, validated),
         ),
     )
     node.set_metric("rollup_metrics", rm)
@@ -482,7 +517,7 @@ class TestJsonFormat:
 class TestCsvFormat:
     """Validates REQ-d00086-C: CSV format output."""
 
-    # Verifies: REQ-d00258-O
+    # Verifies: REQ-d00258-O, REQ-d00069-L, REQ-d00258-A
     def test_REQ_d00086_C_csv_has_correct_headers(self):
         """CSV output has the expected column headers."""
         graph = _make_graph()
@@ -492,12 +527,19 @@ class TestCsvFormat:
         reader = csv.reader(io.StringIO(output))
         headers = next(reader)
 
+        measure_headers = [
+            "Immediate Direct",
+            "Immediate Indirect",
+            "Rolled Direct",
+            "Rolled Indirect",
+        ]
         expected_headers = [
             "Level",
             "Requirements",
             "Assertions",
             "Implemented",
             "Implemented %",
+            *[f"Implemented {m}" for m in measure_headers],
             "Tested",
             "Tested %",
             # The Tested breakdown (REQ-d00258-O) rides on Tested, so its three
@@ -505,8 +547,10 @@ class TestCsvFormat:
             "Tested Passed",
             "Tested Failed",
             "Tested Awaiting",
+            *[f"Tested {m}" for m in measure_headers],
             "Passing",
             "Passing %",
+            *[f"Passing {m}" for m in measure_headers],
         ]
         assert headers == expected_headers
 
@@ -522,9 +566,14 @@ class TestCsvFormat:
         # 1 header + 3 levels (PRD, OPS, DEV)
         assert len(rows) == 4
 
-    # Verifies: REQ-d00258-O
+    # Verifies: REQ-d00258-O, REQ-d00069-N, REQ-d00258-A
     def test_REQ_d00086_C_csv_row_values(self):
-        """CSV data rows contain correct level summary values."""
+        """CSV data rows contain correct level summary values.
+
+        Looked up by header name rather than position: REQ-d00069-L added
+        measure columns between the dimension totals, so a positional index
+        would silently start reading the wrong cell.
+        """
         graph = _make_graph()
         node = _add_requirement(graph, "REQ-p00001", "CSV Req", level="prd")
         _set_rollup(node, total=4, covered=3, tested=2, validated=1)
@@ -532,30 +581,34 @@ class TestCsvFormat:
         data = collect_coverage(graph)
         output = _render(data, "csv")
 
-        reader = csv.reader(io.StringIO(output))
-        _header = next(reader)
+        reader = csv.DictReader(io.StringIO(output))
         row = next(reader)  # PRD row
 
         # Coverage counts are sums of per-assertion fractions (REQ-d00069-J)
         # sourced from DimensionSums (a float accumulator), so whole-number
         # counts render with a trailing ".0" in the raw machine formats
         # (CSV/JSON); only the text renderer uses fmt_assertion_count() to
-        # strip it for human display.
-        assert row[0] == "PRD"  # Level
-        assert row[1] == "1"  # Requirements
-        assert row[2] == "4"  # Assertions
-        assert row[3] == "3.0"  # Implemented
-        assert row[4] == "75.0"  # Implemented %
-        assert row[5] == "2.0"  # Tested
-        assert row[6] == "50.0"  # Tested %
+        # strip it for human display. The headline is now the per-*Assertion*
+        # TOTAL (REQ-d00069-N); this fixture credits everything as immediate
+        # direct evidence, so it equals the legacy figure (REQ-d00258-A).
+        assert row["Level"] == "PRD"
+        assert row["Requirements"] == "1"
+        assert row["Assertions"] == "4"
+        assert row["Implemented"] == "3.0"
+        assert row["Implemented %"] == "75.0"
+        assert row["Implemented Immediate Direct"] == "3.0"
+        assert row["Tested"] == "2.0"
+        assert row["Tested %"] == "50.0"
         # The breakdown counts assertions, not fractional credit, so it is
         # rendered as plain ints. This rollup carries no per-assertion evidence
         # map, so no assertion is in the tested set to break down.
-        assert row[7] == "0"  # Tested Passed
-        assert row[8] == "0"  # Tested Failed
-        assert row[9] == "0"  # Tested Awaiting
-        assert row[10] == "1.0"  # Passing
-        assert row[11] == "25.0"  # Passing %
+        assert row["Tested Passed"] == "0"
+        assert row["Tested Failed"] == "0"
+        assert row["Tested Awaiting"] == "0"
+        assert row["Tested Immediate Direct"] == "2.0"
+        assert row["Passing"] == "1.0"
+        assert row["Passing %"] == "25.0"
+        assert row["Passing Immediate Direct"] == "1.0"
 
     def test_REQ_d00086_C_csv_parseable(self):
         """CSV output is parseable by Python csv module without errors."""
@@ -1176,13 +1229,33 @@ class TestSummaryFooting:
             )
             assert "validated_assertions" not in lv
 
-    def test_text_render_uses_tested_label_and_marker(self, canonical_graph, canonical_config):
+    def test_text_render_uses_tested_label(self, canonical_graph, canonical_config):
         from elspais.commands.summary import _render_text
         from elspais.graph.aggregation import collect_coverage
 
         text = _render_text(collect_coverage(canonical_graph, canonical_config))
         assert "Validated" not in text
         assert "Tested:" in text
+
+
+# Verifies: REQ-d00258-A, REQ-d00258-J
+class TestMeasuresArePublished:
+    """REQ-d00258-J retires the `~` caveat marker: a surface names the
+    measures behind its headline instead of flagging that one is partly
+    another."""
+
+    def test_no_caveat_marker_anywhere_in_the_output(self, canonical_graph, canonical_config):
+        out = _render(collect_coverage(canonical_graph, canonical_config), "text")
+        assert "~" not in out
+
+    def test_each_dimension_shows_the_measures_behind_its_total(
+        self, canonical_graph, canonical_config
+    ):
+        out = _render(collect_coverage(canonical_graph, canonical_config), "text")
+        # One line per dimension carries the total, then the four measures.
+        assert "Implemented:" in out
+        for word in ("direct", "indirect", "conducted"):
+            assert word in out
 
 
 class TestTestedBreakdown:
@@ -1204,6 +1277,11 @@ class TestTestedBreakdown:
                 indirect_labels={lbl for lbl, f in fractions.items() if f > 0},
                 direct_pct_by_label=dict(fractions),
                 indirect_pct_by_label=dict(fractions),
+                # REQ-d00069-M: this fixture models only direct, immediate
+                # evidence (a citation named the *Assertion* directly), so the
+                # REQ-d00069-N total (what the CLI now headlines) equals the
+                # legacy direct/indirect figures set above.
+                immediate_direct_by_label=dict(fractions),
                 **kwargs,
             )
 

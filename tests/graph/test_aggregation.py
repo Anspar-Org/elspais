@@ -904,6 +904,44 @@ class TestIterUncreditedEvidence:
         graph = _make_graph(req)
         assert iter_uncredited_evidence(graph) == []
 
+    # Verifies: REQ-d00274-B
+    def test_denominator_honors_the_project_configured_footing(self):
+        """B: membership follows the SAME rule that produces the chained
+        figures under the project's own config, not a footing fixed in this
+        helper. A is implemented only indirectly (blanket evidence); on the
+        default (generous) footing the project's own Tested figure counts A,
+        so a `Verifies:` naming A reaches something and nothing is reported.
+        Under `allow_indirect=false` the project's own figures leave A out of
+        the Tested denominator, and a report fixed to the generous footing
+        would say nothing about evidence the project's own answers discard --
+        the silence REQ-d00274 exists to end."""
+        req = _make_req("REQ-d00017")
+        req.set_metric(
+            "rollup_metrics",
+            RollupMetrics(
+                total_assertions=1,
+                implemented=_dim({"A"}, direct=set(), total=1),  # A: blanket only
+                tested=_dim({"A"}, total=1),  # a `Verifies:` names A directly
+            ),
+        )
+        graph = _make_graph(req)
+
+        # Default config -> allow_indirect=True -> the generous footing counts
+        # A as implemented, so the Tested evidence naming A reaches it.
+        assert iter_uncredited_evidence(graph) == []
+
+        # allow_indirect=false -> the project's own figures compute Tested's
+        # denominator on the strict footing, which does not count A.
+        cfg = {"rules": {"coverage": {"allow_indirect": False}}}
+        items = iter_uncredited_evidence(graph, cfg)
+        assert len(items) == 1
+        assert items[0].dimension == "tested"
+        assert items[0].denominator == "implemented"
+        # The strict footing implements nothing at all, so this is the
+        # whole-dimension finding (REQ-d00274-F), not a per-label one.
+        assert items[0].assertion_label is None
+        assert items[0].labels == ("A",)
+
     def test_dimension_counts_no_assertion_reports_once_for_requirement(self):
         """F: nothing implemented at all -> one finding for the requirement,
         not one per assertion the tested evidence names."""

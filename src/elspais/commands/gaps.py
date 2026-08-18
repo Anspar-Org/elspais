@@ -30,10 +30,13 @@ class GapEntry:
     ``assertions`` holds ``(assertion_id, label, fraction)`` triples. The label
     is carried rather than re-derived from the id: recovering it would mean
     splitting the id on a boundary character only the owning repository's
-    grammar knows. ``fraction``
-    is the assertion's conducted coverage fraction in ``[0.0, 1.0)`` (REQ-d00069-J).
-    A fraction of ``0.0`` means no coverage at all; ``0 < fraction < 1`` means
-    the assertion is partially covered via REFINES conduction.
+    grammar knows. ``fraction`` is the assertion's immediate direct coverage
+    fraction in ``[0.0, 1.0)`` (REQ-d00258-M, REQ-d00069-M). A fraction of
+    ``0.0`` means no evidence is attached here at all; ``0 < fraction < 1``
+    means evidence attached directly to this *Assertion* is itself partial
+    (e.g. a journey verified in part, REQ-d00255-C) -- coverage conducted up a
+    `Refines:` chain plays no part in this fraction, since a gap list answers
+    what still needs citing here, not what a refinement has done elsewhere.
     """
 
     req_id: str
@@ -311,14 +314,16 @@ def render_gap_text(gap_type: str, data: GapData) -> str:
     else:
         for entry in sorted(gaps, key=lambda e: e.req_id):
             if entry.assertions:
-                # Partial gap: show REQ with uncovered assertions. A partially
-                # conducted assertion (0 < fraction < 1, REQ-d00069-J) is
-                # annotated with its percentage so it reads differently from
-                # an assertion with no coverage at all (fraction 0.0).
+                # Partial gap: show REQ with uncovered assertions. An
+                # *Assertion* with partial evidence attached directly
+                # (0 < fraction < 1, REQ-d00069-M, e.g. a journey verified in
+                # part) is annotated with its percentage so it reads
+                # differently from an *Assertion* with no evidence here at
+                # all (fraction 0.0).
                 parts = []
                 for _aid, label, frac in entry.assertions:
                     if frac > 0:
-                        parts.append(f"{label} — {round(frac * 100)}% via refines-conduction")
+                        parts.append(f"{label} — {round(frac * 100)}% direct")
                     else:
                         parts.append(label)
                 labels = ", ".join(parts)
@@ -374,7 +379,7 @@ def render_gap_markdown(gap_type: str, data: GapData) -> str:
         for entry in sorted(gaps, key=lambda e: e.req_id):
             if entry.assertions:
                 parts = [
-                    f"{aid} ({round(frac * 100)}% via refines-conduction)" if frac > 0 else aid
+                    f"{aid} ({round(frac * 100)}% direct)" if frac > 0 else aid
                     for aid, _label, frac in entry.assertions
                 ]
                 assertions = ", ".join(parts)
@@ -461,10 +466,11 @@ def _gap_entry_to_list(entry: GapEntry) -> list:
     """Serialize GapEntry for JSON.
 
     Uncovered assertions are serialized as ``{"id": ..., "fraction": ...}``
-    dicts so a partially-conducted assertion (0 < fraction < 1, REQ-d00069-J)
-    is distinguishable from one with no coverage at all. ``fraction`` is
-    rounded to 4 places, matching the MCP surface (server.py), so the two
-    JSON surfaces agree on precision rather than one emitting raw floats.
+    dicts so an *Assertion* with partial direct evidence (0 < fraction < 1,
+    REQ-d00069-M) is distinguishable from one with no evidence attached here
+    at all. ``fraction`` is rounded to 4 places, matching the MCP surface
+    (server.py), so the two JSON surfaces agree on precision rather than one
+    emitting raw floats.
     """
     result: list = [entry.req_id, entry.title]
     if entry.assertions:

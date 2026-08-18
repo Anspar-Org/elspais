@@ -487,11 +487,12 @@ class TestRenderGapText:
         assert "REQ-p00001" in output
         assert "[C, D]" in output
 
-    # Verifies: REQ-d00069-J, REQ-d00258-A
+    # Verifies: REQ-d00069-M, REQ-d00258-A, REQ-d00258-M
     def test_partial_gap_shows_fraction_and_via(self) -> None:
-        """A partially-conducted assertion (0 < fraction < 1, REQ-d00069-J) is
-        annotated with its percentage and 'via refines-conduction' so it reads
-        differently from an assertion with no coverage at all."""
+        """An *Assertion* with partial direct evidence (0 < fraction < 1,
+        REQ-d00069-M) is annotated with its percentage and 'direct' so it
+        reads differently from an *Assertion* with no evidence here at
+        all."""
         data = GapData(
             uncovered=[
                 GapEntry(
@@ -502,8 +503,8 @@ class TestRenderGapText:
             ]
         )
         output = render_gap_text("uncovered", data)
-        assert "% via refines-conduction" in output
-        assert "40% via refines-conduction" in output
+        assert "% direct" in output
+        assert "40% direct" in output
         # Fully-uncovered sibling still renders as a bare label
         assert ", D]" in output or "D]" in output
 
@@ -536,17 +537,17 @@ class TestRenderGapMarkdown:
         # Header, separator, data row
         assert any("|---" in line for line in lines)
 
-    # Verifies: REQ-d00069-J, REQ-d00258-A
+    # Verifies: REQ-d00069-M, REQ-d00258-A
     def test_partial_fraction_annotated(self) -> None:
-        """A partially-conducted assertion (REQ-d00069-J) shows its percentage
-        and 'via refines-conduction' in the markdown table cell."""
+        """An *Assertion* with partial direct evidence (REQ-d00069-M) shows
+        its percentage and 'direct' in the markdown table cell."""
         data = GapData(
             uncovered=[
                 GapEntry("REQ-p00001", "Login", [("REQ-p00001-C", "C", 0.4)]),
             ]
         )
         output = render_gap_markdown("uncovered", data)
-        assert "40% via refines-conduction" in output
+        assert "40% direct" in output
 
 
 # Verifies: REQ-d00069-J, REQ-d00258-A

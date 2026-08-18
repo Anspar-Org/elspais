@@ -492,11 +492,15 @@ def iter_uncredited_evidence(
         rollup: RollupMetrics | None = node.get_metric("rollup_metrics")
         if rollup is None or rollup.total_assertions == 0:
             continue
+        # The measure the chained tier figures (tier_buckets, relative_tier,
+        # the viewer badges) are actually computed on -- the config-selected
+        # legacy footing, not a hardcoded one (REQ-d00274-B): a project that
+        # configures `allow_indirect = false` computes its chain membership
+        # on the strict footing, and this report must leave out exactly what
+        # those figures leave out, not what the generous footing would.
+        chain_measure = legacy_measure(allow_indirect_from_config(config))
         for dimension, denom_name in DENOMINATOR_DIMENSION.items():
-            # The legacy blended footing, which is still what this project's
-            # own chained figures are computed on (REQ-d00274-B): what is
-            # reported must be exactly what those figures leave out.
-            denom = denominator_labels(rollup, dimension, measure="indirect")
+            denom = denominator_labels(rollup, dimension, measure=chain_measure)
             if denom is None:  # pragma: no cover - chained dimensions only
                 continue
             num_dim = authored_dimension(rollup, dimension)

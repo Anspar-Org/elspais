@@ -756,8 +756,9 @@ def marker_verified_project(tmp_path):
 
     A blanket reference credits every assertion INDIRECTly but none
     DIRECTly, so `tested_and_passing(rollup).indirect > .direct` -- the
-    trace 'verified' cell must show the generous (indirect) count with the
-    `~` marker appended (REQ-d00258-A).
+    trace 'verified' cell must headline the total (REQ-d00069-N), with the
+    immediate-direct and immediate-indirect measure columns showing which
+    measure carried the evidence rather than a `~` marker (REQ-d00258-J).
     """
     project = tmp_path / "project"
     (project / "spec").mkdir(parents=True)
@@ -874,8 +875,9 @@ def marker_carried_project(tmp_path):
     (whole-requirement) `# Verifies: REQ-d00002` in target 'b'.
 
     Under a `--targets a` selective run, target 'b' is carried (baseline) AND
-    its verified evidence is indirect-only, so the trace verified cell must
-    compose both markers in order: `count (pct%) ~ (baseline)`.
+    its verified evidence is whole-requirement-only, so the trace verified
+    cell must compose the total with the baseline suffix: `count (pct%)
+    (baseline)` -- no `~` marker (REQ-d00258-J).
     """
     project = tmp_path / "project"
     (project / "spec").mkdir(parents=True)
@@ -886,7 +888,7 @@ def marker_carried_project(tmp_path):
         "# Verifies: REQ-d00001-A\ndef test_a():\n    pass\n", encoding="utf-8"
     )
     # Blanket (whole-requirement) ref: credits REQ-d00002's assertions
-    # INDIRECTly only, so the `~` marker fires alongside `(baseline)`.
+    # INDIRECTly only, via the immediate-indirect measure.
     (project / "tests" / "test_b.py").write_text(
         "# Verifies: REQ-d00002\ndef test_b():\n    pass\n", encoding="utf-8"
     )
@@ -905,14 +907,20 @@ def marker_carried_project(tmp_path):
 
 
 class TestTraceFooting:
-    """Verifies REQ-d00258-A, REQ-d00258-B, REQ-d00258-E: generous-footing
-    headline counts get a `~` marker when evidence isn't fully direct, the
-    reporting vocabulary reads Passing/UAT Covered/UAT Passed (no
-    "Validated"), and aggregate-only line coverage never renders a
-    misleading direct-attribution count."""
+    """Verifies REQ-d00258-A, REQ-d00258-B, REQ-d00258-E, REQ-d00258-J:
+    dimensions headline the per-*Assertion* TOTAL (REQ-d00069-N) with the
+    four measures behind it published as their own columns rather than a
+    caveat marker, the reporting vocabulary reads Passing/UAT Covered/UAT
+    Passed (no "Validated"), and aggregate-only line coverage never renders
+    a misleading direct-attribution count."""
 
-    # Verifies: REQ-d00258-A
-    def test_indirect_only_coverage_headlines_with_marker(self, marker_verified_project):
+    # Verifies: REQ-d00069-N, REQ-d00258-A, REQ-d00258-J
+    def test_whole_requirement_only_coverage_headlines_the_total(self, marker_verified_project):
+        """A blanket (whole-requirement) `Verifies:` credits only the
+        immediate-indirect measure; the headline is still the total (equal
+        to that measure here), and no `~` stands in for the fact that no
+        citation named the *Assertion* directly -- the immediate-direct and
+        immediate-indirect columns say that on their own."""
         from elspais.commands.trace import _get_node_data
         from elspais.graph.metrics import fmt_assertion_count, tested_and_passing
 
@@ -922,8 +930,12 @@ class TestTraceFooting:
         assert dim.indirect > dim.direct + 1e-9
 
         data = _get_node_data(node, graph)
-        assert data["verified"].rstrip().endswith("~")
-        assert data["verified"].startswith(f"{fmt_assertion_count(dim.indirect)}/{dim.total}")
+        assert "~" not in data["verified"]
+        pct = round(dim.covered / dim.total * 100)
+        assert data["verified"] == f"{fmt_assertion_count(dim.covered)}/{dim.total} ({pct}%)"
+        assert data["verified_immediate_direct"].startswith("0/")
+        indirect_str = fmt_assertion_count(dim.indirect)
+        assert data["verified_immediate_indirect"].startswith(f"{indirect_str}/")
 
     # Verifies: REQ-d00258-B
     def test_headers_use_passing_vocabulary(self):
@@ -987,9 +999,11 @@ class TestTraceFooting:
         assert data["lcov_tested_labels"] != "-"
 
     # Verifies: REQ-d00258-A, REQ-d00254-I
-    def test_marker_composes_with_baseline_suffix(self, marker_carried_project):
-        """Indirect-only AND carried verified evidence must compose the exact
-        order `count (pct%) ~ (baseline)`."""
+    # Verifies: REQ-d00069-N, REQ-d00258-A, REQ-d00258-J, REQ-d00254-I
+    def test_baseline_suffix_composes_with_the_total_headline(self, marker_carried_project):
+        """Whole-requirement-only AND carried verified evidence must compose
+        the exact order `count (pct%) (baseline)` -- no `~` stands in for the
+        immediate-indirect-only evidence (REQ-d00258-J)."""
         from elspais.commands.trace import _get_node_data
 
         graph = _build_project_graph(marker_carried_project, targets=["a"])
@@ -1000,7 +1014,7 @@ class TestTraceFooting:
         assert rollup.verified.indirect > 0
 
         data = _get_node_data(node, graph)
-        assert data["verified"] == "1/1 (100%) ~ (baseline)"
+        assert data["verified"] == "1/1 (100%) (baseline)"
 
 
 _BREAKDOWN_CONFIG = """\
@@ -1235,3 +1249,15 @@ class TestTraceTestedBreakdown:
         assert row[tested_idx] == "3/3 (100%)"
         assert row[tested_idx + 1 : tested_idx + 4] == ["1", "1", "1"]
         assert "1P" not in out
+
+    # Verifies: REQ-d00069-L, REQ-d00258-A
+    def test_csv_carries_a_column_per_measure(self, tested_breakdown_project):
+        """REQ-d00258-A: a reader can see what evidence produced a total --
+        the four measures behind Tested are columns of their own."""
+        from elspais.commands.trace import format_csv
+
+        graph = _build_project_graph(tested_breakdown_project)
+        out = "\n".join(format_csv(graph))
+        header = out.splitlines()[0].split(",")
+        for col in ("Tested", "Tested Immediate Direct", "Tested Rolled Direct"):
+            assert col in header

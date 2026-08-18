@@ -109,9 +109,22 @@ def _render(data: dict, fmt: str) -> str:
         return _render_text(data)
 
 
-def _marker(covered: float, direct: float) -> str:
-    """REQ-d00258-A: `~` flags a count whose evidence is not fully direct."""
-    return " ~" if covered > direct + 1e-9 else ""
+# Implements: REQ-d00069-L, REQ-d00258-A, REQ-d00258-J
+# The four measures behind a dimension's headline total, in health.py's
+# vocabulary (check_dimension_coverage): "cited by name here" for what a
+# citation named and attached directly, "whole-requirement" for a citation
+# that named only the requirement, and "conducted" for what a `Refines:`
+# chain carries up from a refining requirement's own evidence. Published
+# beside the total rather than behind a caveat marker (REQ-d00258-J).
+def _measures_line(lv: dict, prefix: str) -> str:
+    imm_d = fmt_assertion_count(lv[f"{prefix}_immediate_direct"])
+    imm_i = fmt_assertion_count(lv[f"{prefix}_immediate_indirect"])
+    roll_d = fmt_assertion_count(lv[f"{prefix}_rolled_direct"])
+    roll_i = fmt_assertion_count(lv[f"{prefix}_rolled_indirect"])
+    return (
+        f"cited by name here: {imm_d}, whole-requirement: {imm_i}, "
+        f"conducted direct: {roll_d}, conducted indirect: {roll_i}"
+    )
 
 
 # Implements: REQ-d00258-O
@@ -149,25 +162,29 @@ def _render_text(data: dict) -> str:
             continue
         ta = lv["total_assertions"]
         lines.append(f"  {lv['level']}: {lv['total']} requirements, {ta} assertions")
+        # Implements: REQ-d00069-N, REQ-d00258-A, REQ-d00258-J
+        # The headline is the per-*Assertion* TOTAL (the greatest of the
+        # four measures); the measures line beneath it is what a reader
+        # checks instead of a caveat marker (REQ-d00258-J).
         lines.append(
-            f"    Implemented: {fmt_assertion_count(lv['implemented_assertions'])}/{ta}"
-            f" ({_pct(lv['implemented_assertions'], ta):.1f}%)"
-            f"{_marker(lv['implemented_assertions'], lv['implemented_direct'])}"
+            f"    Implemented: {fmt_assertion_count(lv['implemented_total_covered'])}/{ta}"
+            f" ({_pct(lv['implemented_total_covered'], ta):.1f}%)"
         )
+        lines.append(f"      ({_measures_line(lv, 'implemented')})")
         # Implements: REQ-d00258-O
         # The breakdown qualifies Tested rather than standing beside it, so it
         # rides on the Tested line and adds no coverage term of its own.
         lines.append(
-            f"    Tested:      {fmt_assertion_count(lv['tested_assertions'])}/{ta}"
-            f" ({_pct(lv['tested_assertions'], ta):.1f}%)"
-            f"{_marker(lv['tested_assertions'], lv['tested_direct'])}"
+            f"    Tested:      {fmt_assertion_count(lv['tested_total_covered'])}/{ta}"
+            f" ({_pct(lv['tested_total_covered'], ta):.1f}%)"
             f"{_tested_breakdown(lv)}"
         )
+        lines.append(f"      ({_measures_line(lv, 'tested')})")
         lines.append(
-            f"    Passing:     {fmt_assertion_count(lv['passing_assertions'])}/{ta}"
-            f" ({_pct(lv['passing_assertions'], ta):.1f}%){carry_marker}"
-            f"{_marker(lv['passing_assertions'], lv['passing_direct'])}"
+            f"    Passing:     {fmt_assertion_count(lv['passing_total_covered'])}/{ta}"
+            f" ({_pct(lv['passing_total_covered'], ta):.1f}%){carry_marker}"
         )
+        lines.append(f"      ({_measures_line(lv, 'passing')})")
 
     excluded = data.get("excluded", {})
     if excluded:
@@ -181,7 +198,7 @@ def _render_text(data: dict) -> str:
     # label matches the other coverage columns. `!` marks a row whose library
     # suite has failing results -- the covered figure alone cannot say whether
     # an uncounted assertion failed or was never tested, so the marker
-    # (footnoted below, like `~`/`*`) is the only red signal.
+    # (footnoted below, like `*`) is the only red signal.
     integrations = data.get("integrations") or []
     if integrations:
         any_failing = any(row.get("has_failures") for row in integrations)
@@ -241,21 +258,25 @@ def _render_markdown(data: dict) -> str:
     lines.append("|-------|-------------|------------|-------------|--------|---------|")
     for lv in data["levels"]:
         ta = lv["total_assertions"]
-        ia = lv["implemented_assertions"]
-        ta_tested = lv["tested_assertions"]
-        pa = lv["passing_assertions"]
+        # Implements: REQ-d00069-N, REQ-d00258-A, REQ-d00258-J
+        # The headline is the per-*Assertion* TOTAL; the measures line
+        # beneath it (in the same cell) is what a reader checks instead of
+        # a caveat marker (REQ-d00258-J).
+        ia = lv["implemented_total_covered"]
+        ta_tested = lv["tested_total_covered"]
+        pa = lv["passing_total_covered"]
         impl = (
             f"{fmt_assertion_count(ia)}/{ta} ({_pct(ia, ta):.0f}%)"
-            f"{_marker(ia, lv['implemented_direct'])}"
+            f"<br>({_measures_line(lv, 'implemented')})"
         )
         tested = (
             f"{fmt_assertion_count(ta_tested)}/{ta} ({_pct(ta_tested, ta):.0f}%)"
-            f"{_marker(ta_tested, lv['tested_direct'])}"
             f"{_tested_breakdown(lv)}"
+            f"<br>({_measures_line(lv, 'tested')})"
         )
         pas = (
             f"{fmt_assertion_count(pa)}/{ta} ({_pct(pa, ta):.0f}%){carry_marker}"
-            f"{_marker(pa, lv['passing_direct'])}"
+            f"<br>({_measures_line(lv, 'passing')})"
         )
         lines.append(f"| {lv['level']} | {lv['total']} | {ta} | {impl} | {tested} | {pas} |")
 
@@ -320,47 +341,51 @@ def _render_json(data: dict) -> str:
     return json.dumps(data, indent=2) + "\n"
 
 
+# Implements: REQ-d00069-L, REQ-d00258-A
+# The four measure-column suffixes and their headers, shared by every
+# dimension's CSV columns -- one place naming them so the header row and the
+# data row cannot drift apart.
+_CSV_MEASURE_COLUMNS: list[tuple[str, str]] = [
+    ("_immediate_direct", "Immediate Direct"),
+    ("_immediate_indirect", "Immediate Indirect"),
+    ("_rolled_direct", "Rolled Direct"),
+    ("_rolled_indirect", "Rolled Indirect"),
+]
+
+
 def _render_csv(data: dict) -> str:
     buf = io.StringIO()
     writer = csv.writer(buf)
-    writer.writerow(
-        [
-            "Level",
-            "Requirements",
-            "Assertions",
-            "Implemented",
-            "Implemented %",
-            "Tested",
-            "Tested %",
-            "Tested Passed",
-            "Tested Failed",
-            "Tested Awaiting",
-            "Passing",
-            "Passing %",
-        ]
-    )
+    header = ["Level", "Requirements", "Assertions"]
+    for prefix, label in (("implemented", "Implemented"), ("tested", "Tested")):
+        header.extend([label, f"{label} %"])
+        if prefix == "tested":
+            # Implements: REQ-d00258-O
+            header.extend(["Tested Passed", "Tested Failed", "Tested Awaiting"])
+        header.extend(f"{label} {m_label}" for _suffix, m_label in _CSV_MEASURE_COLUMNS)
+    header.extend(["Passing", "Passing %"])
+    header.extend(f"Passing {m_label}" for _suffix, m_label in _CSV_MEASURE_COLUMNS)
+    writer.writerow(header)
+
     for lv in data["levels"]:
         ta = lv["total_assertions"]
-        ia = lv["implemented_assertions"]
-        te = lv["tested_assertions"]
-        pa = lv["passing_assertions"]
-        writer.writerow(
-            [
-                lv["level"],
-                lv["total"],
-                ta,
-                ia,
-                _pct(ia, ta),
-                te,
-                _pct(te, ta),
-                # Implements: REQ-d00258-O
-                lv.get("tested_passed", 0),
-                lv.get("tested_failed", 0),
-                lv.get("tested_awaiting", 0),
-                pa,
-                _pct(pa, ta),
-            ]
+        # Implements: REQ-d00069-N, REQ-d00258-A, REQ-d00258-J
+        # The headline is the per-*Assertion* TOTAL; the measure columns
+        # are what a reader reads instead of a caveat marker (REQ-d00258-J).
+        ia = lv["implemented_total_covered"]
+        te = lv["tested_total_covered"]
+        pa = lv["passing_total_covered"]
+        row = [lv["level"], lv["total"], ta]
+        row.extend([ia, _pct(ia, ta)])
+        row.extend(lv[f"implemented{suffix}"] for suffix, _label in _CSV_MEASURE_COLUMNS)
+        row.extend([te, _pct(te, ta)])
+        row.extend(
+            [lv.get("tested_passed", 0), lv.get("tested_failed", 0), lv.get("tested_awaiting", 0)]
         )
+        row.extend(lv[f"tested{suffix}"] for suffix, _label in _CSV_MEASURE_COLUMNS)
+        row.extend([pa, _pct(pa, ta)])
+        row.extend(lv[f"passing{suffix}"] for suffix, _label in _CSV_MEASURE_COLUMNS)
+        writer.writerow(row)
 
     # Implements: REQ-d00254-I
     # Structured carried-results counts (no asterisk -- machine format).

@@ -53,10 +53,11 @@ Example chain:
 
   **Refines**    - Adds detail to parent without claiming satisfaction
                The edge grants no coverage by itself, but a refining
-               requirement conducts its own coverage up to the parent.
-               Naming an assertion credits that assertion on both
-               footings; refining the whole requirement credits every
-               assertion on the generous footing only.
+               requirement conducts its own coverage up to the parent as
+               *rolled-up* measures (the *direct*/*indirect* axis carries
+               through unchanged, REQ-d00069-L). Naming an assertion
+               credits it as rolled-direct; refining the whole requirement
+               credits every assertion as rolled-indirect only.
 
   **Integrates** - Satisfaction is provided by a requirement in a
                configured associate (external library) repo. Coverage
