@@ -33,6 +33,7 @@ from elspais.graph.parsers.patterns import JNY_ID_PATTERN
 from elspais.mcp.server import (
     _attach_version,
     _automatic_save_record,
+    _executable_difference,
     _get_assertion_code_map,
     _get_assertion_refines_map,
     _get_assertion_test_map,
@@ -1182,6 +1183,10 @@ async def api_dirty(request: Request) -> JSONResponse:
     record = _automatic_save_record(state.repo_root)
     if record is not None:
         body["automatic_save"] = record
+    # Implements: REQ-o00077-A
+    difference = _executable_difference()
+    if difference is not None:
+        body["executable_difference"] = difference
     # Implements: REQ-p00083-F
     notice = _lost_changes_notice(state.repo_root)
     if notice is not None:
@@ -1228,6 +1233,12 @@ async def api_check_freshness(request: Request) -> JSONResponse:
             # The poll every client already runs, so a save the daemon
             # performed reaches the next client without it having to ask.
             "automatic_save": _automatic_save_record(state.repo_root),
+            # Implements: REQ-o00077-A
+            # Beside the content-staleness answer above, never merged
+            # into it: "the tree's files moved" and "the program serving
+            # them moved" are different conditions with different
+            # remedies, and one cannot stand in for the other.
+            "executable_difference": _executable_difference(),
             # Implements: REQ-p00083-F
             # Same poll, same reason: a process that died holding changes
             # reaches the next client without it having to ask.

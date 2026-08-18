@@ -843,6 +843,10 @@ def _get_graph_status(
     record = _automatic_save_record(working_dir)
     if record is not None:
         status["automatic_save"] = record
+    # Implements: REQ-o00077-A
+    difference = _executable_difference()
+    if difference is not None:
+        status["executable_difference"] = difference
     notice = _lost_changes_notice(working_dir)
     if notice is not None:
         status["lost_changes"] = notice
@@ -1773,6 +1777,10 @@ def _build_base_workspace_info(working_dir: Path, config: dict[str, Any]) -> dic
     record = _automatic_save_record(working_dir)
     if record is not None:
         info["automatic_save"] = record
+    # Implements: REQ-o00077-A
+    difference = _executable_difference()
+    if difference is not None:
+        info["executable_difference"] = difference
     # Implements: REQ-p00083-F
     notice = _lost_changes_notice(working_dir)
     if notice is not None:
@@ -1781,6 +1789,19 @@ def _build_base_workspace_info(working_dir: Path, config: dict[str, Any]) -> dic
 
 
 # Implements: REQ-p00083-C
+# Implements: REQ-o00077-A
+def _executable_difference() -> dict[str, str] | None:
+    """What this process runs versus what is installed, for status surfaces.
+
+    Reported to every client that asks how things stand, not only to one
+    being refused: a client reading answers from a superseded program
+    has no other way to learn that is what it is reading.
+    """
+    from elspais.mcp import executable
+
+    return executable.difference()
+
+
 def _automatic_save_record(working_dir: Path | str | None) -> dict[str, Any] | None:
     """The outstanding record of a save the daemon performed, if any.
 
@@ -2900,6 +2921,67 @@ def _guard_shutdown(state: Any) -> dict[str, Any] | None:
             "Nothing was changed. Reconnect — a new server will be started on "
             "demand — and re-apply against the state you read there."
         ),
+    }
+
+
+#: The one request that stays available while the installed program has
+#: moved and this process holds work nothing else can see. It is what
+#: REQ-o00077-B keeps open so that REQ-o00077-C cannot trap the work it
+#: is protecting.
+_PERSIST_TOOLS = frozenset({"save_mutations"})
+
+
+# Implements: REQ-o00077-A, REQ-o00077-B, REQ-o00077-C
+def _guard_executable_drift(state: Any, tool_name: str) -> dict[str, Any] | None:
+    """Refuse a call this process would answer from a superseded program.
+
+    Third member of the guard family, and the one whose condition is
+    about this process rather than about the graph. It fires only while
+    both halves hold: the program has been replaced beneath us, and we
+    hold changes that exist nowhere else. Either alone is somebody
+    else's business -- a replaced program with nothing pending is
+    REQ-o00077-D's, and pending work under the program we started with
+    is not a problem at all.
+
+    Answering from the client's own program is normally available and
+    would be the better remedy, but not here: it would answer from a
+    graph these changes are missing from. Replacing this process is the
+    other remedy and is equally closed, because it would end the process
+    while it still holds them. What is left is to stop answering, and to
+    say so in the refusal -- which is the disclosure REQ-o00077-A asks
+    for, delivered to the client that would otherwise have acted on the
+    answer.
+    """
+    if tool_name in _PERSIST_TOOLS:
+        return None
+    from elspais.mcp import executable
+
+    if executable.watcher().settled_difference is None:
+        return None
+    try:
+        pending = len(state["graph"].mutation_log.tail(0))
+    except Exception:  # noqa: BLE001
+        # Unable to establish whether anything is held. Say nothing:
+        # this guard exists to protect held work, and a reading it could
+        # not take is not evidence that any is held.
+        return None
+    if pending == 0:
+        return None
+    return {
+        "success": False,
+        "code": "executable_changed",
+        "error": (
+            f"elspais has been reinstalled since this server started, and this "
+            f"server holds {pending} unsaved change(s) that exist nowhere else. "
+            f"Answers from here would come from the program as it was, so they "
+            f"are refused."
+        ),
+        "hint": (
+            "Nothing was changed. Call save_mutations to write what is held -- "
+            "that request is still accepted -- then reconnect this MCP server "
+            "to pick up the current program."
+        ),
+        "held_mutations": pending,
     }
 
 
@@ -5881,8 +5963,23 @@ def create_server(
             print(f"CONFIG ERROR: {e}", file=sys.stderr)
             graph = FederatedGraph.empty(name="<unconfigured>")
 
+    # Implements: REQ-o00077-A, REQ-o00077-B, REQ-o00077-C
+    # Every tool call reaches the transport through ``call_tool``, so the
+    # rule lands there rather than on each tool: a per-tool opt-in is one
+    # a later tool forgets, and REQ-o00077-C is stated over all of them at
+    # once. Subclassed rather than patched onto the instance because
+    # ``_setup_handlers`` binds this method during construction, and a
+    # replacement installed afterwards is never the one the transport
+    # holds.
+    class _ExecutableGuardedMCP(FastMCP):
+        async def call_tool(self, name: str, arguments: dict[str, Any]) -> Any:
+            blocked = _guard_executable_drift(_state, name)
+            if blocked is not None:
+                return blocked
+            return await super().call_tool(name, arguments)
+
     # Create server with instructions for AI agents (REQ-d00065)
-    mcp = FastMCP("elspais", instructions=MCP_SERVER_INSTRUCTIONS)
+    mcp = _ExecutableGuardedMCP("elspais", instructions=MCP_SERVER_INSTRUCTIONS)
 
     # Store graph in closure for tools. _state is the process-wide shared
     # holder when one is passed (unified daemon): every ``_state["graph"]``
@@ -7583,6 +7680,14 @@ def run_server(
         # of a dead process and clear it, reporting a loss that never
         # happened and erasing the record of one that might. The HTTP
         # servers are one per repo and can own it unambiguously.
+        # Implements: REQ-o00077-A
+        # A stdio server is the longest-lived reader of a superseded
+        # program there is: it is spawned once when its client's session
+        # begins and is never acquired again, so an acquisition-time
+        # check never judges it a second time however long it runs.
+        from elspais.mcp.executable import watcher as _executable_watcher
+
+        _executable_watcher().start()
         try:
             mcp.run(transport="stdio")
         finally:
@@ -7661,6 +7766,14 @@ def run_server(
                 server_type="daemon",
                 client_pid=client_pid,
             )
+
+        # Implements: REQ-o00077-A
+        # Started for every daemon, not only one with a recorded client:
+        # the program moving beneath a process has nothing to do with
+        # who asked for that process.
+        from elspais.mcp.executable import watcher as _executable_watcher
+
+        _executable_watcher().start()
 
         if client_pid is not None:
             from elspais.server.client_watch import (
