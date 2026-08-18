@@ -3,7 +3,7 @@
 # Implements: REQ-o00051-E, REQ-o00051-F
 # Implements: REQ-d00050-A, REQ-d00050-B, REQ-d00050-C, REQ-d00050-D, REQ-d00050-E
 # Implements: REQ-d00051-A, REQ-d00051-B, REQ-d00051-C, REQ-d00051-D
-# Implements: REQ-d00051-E, REQ-d00051-F
+# Implements: REQ-d00051-F
 # Implements: REQ-d00055-A, REQ-d00055-B, REQ-d00055-C, REQ-d00055-D, REQ-d00055-E
 # Implements: REQ-d00069-A, REQ-d00069-B, REQ-d00069-D
 # Implements: REQ-d00215-A+B+C+D+E
@@ -25,7 +25,6 @@ Usage:
 from __future__ import annotations
 
 import functools
-import re
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -40,13 +39,6 @@ def _validate_config(config: dict[str, Any]) -> ElspaisConfig:
     from elspais.config import validate_config
 
     return validate_config(config)
-
-
-# Implements: REQ-p00016
-_NA_PATTERN = re.compile(
-    r"([\w-]+-[A-Z0-9]+)\s+SHALL\s+be\s+NOT\s+APPLICABLE",
-    re.IGNORECASE,
-)
 
 
 # Implements: REQ-d00254-A+B+F
@@ -527,32 +519,6 @@ def collect_topics(graph: FederatedGraph) -> list[str]:
     return sorted(all_topics)
 
 
-def get_implementation_status(node: GraphNode) -> str:
-    """Get implementation status for a requirement node.
-
-    Args:
-        node: The GraphNode to check.
-
-    Reports on the per-*Assertion* total (REQ-d00069-N) -- the greatest of the
-    four measures per *Assertion* -- because this is a reporting figure and
-    REQ-d00258-A headlines the total.
-
-    Returns:
-        'Full': every assertion covered on some measure
-        'Partial': some coverage on some measure
-        'Unimplemented': no coverage on any measure
-    """
-    rollup = node.get_metric("rollup_metrics")
-    dim = rollup.implemented if rollup else None
-    pct = (dim.covered / dim.total * 100) if dim and dim.total else 0.0
-    if pct >= 100:
-        return "Full"
-    elif pct > 0:
-        return "Partial"
-    else:
-        return "Unimplemented"
-
-
 def count_by_coverage(
     graph: FederatedGraph,
     config: dict | None = None,
@@ -854,6 +820,30 @@ def _compute_code_tested(
         has_any_coverage = True
         break  # Just checking existence
 
+    # Implements: REQ-d00258-E
+    # Whether the ingested coverage carried per-test contexts is a fact about
+    # the TOOLING, established at ingestion: the factory sets `line_contexts`
+    # only when the parser returned a non-empty contexts map, and aggregate-only
+    # formats return none. Read here so a surface can tell "the question was
+    # never asked" from "the answer is zero" instead of inferring it from a
+    # count that means both.
+    has_any_contexts = False
+    for edge in node.iter_outgoing_edges():
+        if edge.kind != EdgeKind.IMPLEMENTS:
+            continue
+        target = edge.target
+        if target.kind != NodeKind.CODE:
+            continue
+        fn = target.file_node()
+        if fn is None:
+            continue
+        rel_path = fn.get_field("relative_path")
+        if not rel_path or rel_path not in lines_by_file:
+            continue
+        if fn.get_field("line_contexts"):
+            has_any_contexts = True
+            break
+
     if has_any_coverage:
         # Build file_node cache for coverage lookup
         file_coverage: dict[str, dict[int, int]] = {}
@@ -896,6 +886,8 @@ def _compute_code_tested(
         total_lines=len(impl_lines),
         attributed_lines=direct_count,
         covered_lines=indirect_count,
+        has_measurement=has_any_coverage,
+        has_contexts=has_any_contexts,
     )
 
 
@@ -1469,7 +1461,7 @@ def annotate_coverage(
                 else:
                     # Blanket `Implements: REQ` (no assertion suffix) on CODE:
                     # a whole-requirement implementation reference credits ALL
-                    # assertions at full value into the INDIRECT footing, mirroring
+                    # assertions at full value into the INDIRECT measures, mirroring
                     # TEST_INDIRECT (whole-req Verifies) and INFERRED (child REQ).
                     # REQ-d00069-B closes the prior asymmetry (this had no else).
                     for label in assertion_labels:
@@ -2201,7 +2193,6 @@ __all__ = [
     "count_by_git_status",
     "count_implementation_files",
     "collect_topics",
-    "get_implementation_status",
     "annotate_coverage",
     "annotate_journey_verification",
     "JourneyVerification",

@@ -344,10 +344,10 @@ def named_labels(dim: CoverageDimension) -> set[str]:
     """Assertions this dimension's evidence NAMES, as opposed to reaches.
 
     Assertion-targeted evidence names an *Assertion*. Whole-requirement
-    (blanket) evidence names the requirement, and the generous footing then
-    extends its credit to every *Assertion* -- so the generous per-label map
-    answers "which assertions does the credit reach", which is a different
-    question from "which assertions did somebody write down".
+    (blanket) evidence names the requirement, and the indirect measures extend
+    its credit to every *Assertion* -- so those measures answer "which
+    assertions does the credit reach", which is a different question from
+    "which assertions did somebody write down".
 
     REQ-d00274-A is about the second question. Reading the first would report an
     *Assertion* nobody named as though evidence had been aimed at it, and would
@@ -474,9 +474,9 @@ def iter_uncredited_evidence(
     A chained dimension counts only the assertions its denominator dimension
     covers, so evidence can name an *Assertion* outside that set and contribute
     to nothing. The denominator is read through the same helper the tier uses, so
-    what is reported is exactly what the project's own figures leave out,
-    whichever footing it configured (REQ-d00274-B). The numerator is what the
-    evidence NAMES (REQ-d00274-A), which is not a question of footing: an
+    what is reported is exactly what the project's own figures leave out, on
+    the measure they are computed on (REQ-d00274-B). The numerator is what the
+    evidence NAMES (REQ-d00274-A), which is not a question of measure: an
     *Assertion* reached only because blanket evidence was extended to it was
     named by nobody, and is reported through its requirement under
     REQ-d00274-F if the dimension counts nothing of that requirement at all.
@@ -494,7 +494,7 @@ def iter_uncredited_evidence(
         # The measure the chained tier figures (tier_buckets, relative_tier,
         # the viewer badges) are actually computed on (REQ-d00274-B): this
         # report must leave out exactly what those figures leave out, so it
-        # reads the same headline measure they do rather than a footing of
+        # reads the same headline measure they do rather than a measure of
         # its own.
         chain_measure = HEADLINE_MEASURE
         for dimension, denom_name in DENOMINATOR_DIMENSION.items():
@@ -808,16 +808,19 @@ class LineAggregate:
     req_count: int = 0
     req_with_covered: int = 0
     req_with_attribution: int = 0
+    has_measurement: bool = False
+    has_contexts: bool = False
 
     @property
     def has_attribution(self) -> bool:
-        """Whether ANY line carried a naming context (REQ-d00258-E).
+        """Whether the ingested coverage can produce an attribution figure.
 
-        Aggregate-only coverage tooling records no per-test context, so it
-        cannot produce an attribution figure; a surface reads this to render
-        nothing rather than a misleading zero.
+        Mirrors :attr:`LineCoverage.has_attribution` so the whole-graph answer
+        and the per-requirement one are the same question (REQ-d00258-E): the
+        suppression keys on whether the tooling recorded per-test contexts at
+        all, not on whether the resulting count came out above zero.
         """
-        return self.attributed_lines > 0
+        return self.has_contexts
 
 
 # Implements: REQ-d00254-B
@@ -852,6 +855,11 @@ def aggregate_line_coverage(
             agg.req_with_covered += 1
         if lines.attributed_lines > 0:
             agg.req_with_attribution += 1
+        # Implements: REQ-d00258-E
+        # What the tooling provided is an OR across the estate: one target
+        # measured, or one carrying contexts, means the question was asked.
+        agg.has_measurement = agg.has_measurement or lines.has_measurement
+        agg.has_contexts = agg.has_contexts or lines.has_contexts
     return agg
 
 

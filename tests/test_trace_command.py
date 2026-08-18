@@ -960,6 +960,55 @@ def code_tested_no_attribution_project(tmp_path):
 
 
 @pytest.fixture
+def code_tested_context_carrying_project(tmp_path):
+    """On-disk project whose coverage DOES carry per-test contexts, but where
+    no context names a test verifying REQ-d00001.
+
+    The sibling of ``code_tested_no_attribution_project``: identical shape,
+    context-carrying tooling instead of aggregate-only. Under REQ-d00258-E the
+    suppression keys on what the tooling provided, so here the attribution
+    question WAS asked and its answer is zero -- the trace cell must render
+    ``0/N``, not ``n/a``.
+    """
+    project = tmp_path / "project"
+    (project / "spec").mkdir(parents=True)
+    (project / "spec" / "reqs.md").write_text(_CODE_TESTED_SPEC, encoding="utf-8")
+
+    (project / "src").mkdir(parents=True)
+    (project / "src" / "main.py").write_text(
+        "# Implements: REQ-d00001\nx = 1\ny = 2\nz = 3\n", encoding="utf-8"
+    )
+
+    (project / "coverage").mkdir(parents=True)
+    (project / "coverage" / "coverage.json").write_text(
+        json.dumps(
+            {
+                "files": {
+                    "src/main.py": {
+                        "executed_lines": [1, 2, 3, 4],
+                        "missing_lines": [],
+                        "summary": {"num_statements": 4, "covered_lines": 4},
+                        # Contexts recorded, but the test they name verifies
+                        # nothing in this project.
+                        "contexts": {
+                            "2": ["tests/test_unrelated.py::test_other|run"],
+                            "3": ["tests/test_unrelated.py::test_other|run"],
+                        },
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    (project / ".elspais.toml").write_text(
+        _CODE_TESTED_CONFIG.replace("coverage/lcov.info", "coverage/coverage.json"),
+        encoding="utf-8",
+    )
+    return project
+
+
+@pytest.fixture
 def marker_carried_project(tmp_path):
     """Two-target project where REQ-d00002 is verified only through a blanket
     (whole-requirement) `# Verifies: REQ-d00002` in target 'b'.
@@ -1067,6 +1116,33 @@ class TestTraceFooting:
         data = _get_node_data(node, graph, assertion_labels=True)
         assert data["code_tested_labels"] == "n/a"
         assert data["code_tested_pct"] == "n/a"
+
+    # Verifies: REQ-d00258-E
+    def test_code_tested_with_contexts_but_no_verifying_test_is_zero_of_n(
+        self, code_tested_context_carrying_project
+    ):
+        """Where the tooling DID record per-test contexts, a zero attribution
+        count is a real answer and must be rendered as `0/N`.
+
+        This is the other half of REQ-d00258-E: the suppression is about what
+        the tooling provides, not about how the count came out. Rendering
+        `n/a` here would hide implementation no verifying test reaches, which
+        is exactly the fact worth surfacing."""
+        from elspais.commands.trace import _get_node_data
+
+        graph = _build_project_graph(code_tested_context_carrying_project, targets=None)
+        node = graph.find_by_id("REQ-d00001")
+        rollup = node.get_metric("rollup_metrics")
+        assert rollup.code_tested.has_contexts is True
+        assert rollup.code_tested.attributed_lines == 0
+
+        data = _get_node_data(node, graph)
+        assert data["code_tested"].startswith("0/")
+        assert data["code_tested"] != "n/a"
+
+        labelled = _get_node_data(node, graph, assertion_labels=True)
+        assert labelled["code_tested_labels"].startswith("0/")
+        assert labelled["code_tested_pct"] == "0%"
 
     # Verifies: REQ-d00258-E
     def test_lcov_tested_labels_empty_set_renders_zero_of_total(

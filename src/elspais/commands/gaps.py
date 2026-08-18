@@ -168,8 +168,8 @@ def collect_gaps(
 
         # Testing gap (untested): an assertion is a testing gap iff it is
         # IMPLEMENTED but not tested to ~100% (relative denominator,
-        # REQ-d00258, REQ-d00069-J), both read on the strict footing
-        # (REQ-d00258-M). A wholly-UNIMPLEMENTED assertion is NOT a
+        # REQ-d00258, REQ-d00069-J), both read on the immediate direct
+        # measure (REQ-d00258-M). A wholly-UNIMPLEMENTED assertion is NOT a
         # testing gap -- there is nothing built to test yet. Such a REQ still
         # surfaces as an implementation gap in the ``uncovered`` section above,
         # so narrowing here never silently drops an unbuilt requirement.
@@ -242,8 +242,8 @@ def _uncovered_assertions(
     assertion_nodes: list[Any],
     dimension: str,
     restrict_to_dimension: str | None = None,
-) -> list[tuple[str, float]]:
-    """Return (id, fraction) pairs for assertions not ~fully covered for a dimension.
+) -> list[tuple[str, str, float]]:
+    """Return (id, label, fraction) triples for assertions not ~fully covered.
 
     Reads the dimension's IMMEDIATE DIRECT measure (REQ-d00258-M): a gap
     surface reports what is left to do, so an *Assertion* is a gap unless a
@@ -254,8 +254,9 @@ def _uncovered_assertions(
     *Assertion*", which is the question this list exists to ask.
 
     The fraction map is keyed by assertion *label* (e.g. ``A``), so each node
-    is looked up by its label while the returned pairs report assertion *IDs*
-    (e.g. ``REQ-100-A``), which is what gap entries and their renderers expect.
+    is looked up by its label while the returned triples carry the assertion
+    *ID* (e.g. ``REQ-100-A``) alongside that label, which is what gap entries
+    and their renderers expect.
     An *Assertion* counts as covered only when its fraction reaches ~1.0; a
     partially covered one (0 < fraction < 1, e.g. a journey verified in part)
     is still reported as a gap, with its fraction carried along so renderers

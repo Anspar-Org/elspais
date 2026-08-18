@@ -154,6 +154,13 @@ def _render_text(data: dict) -> str:
     lines.append("")
     lines.append("Summary by Level")
     lines.append("-" * 60)
+    # Implements: REQ-d00258-A
+    # Without this the natural read of a headline above four measures is that
+    # the measures sum to it. They do not: they are four readings of the same
+    # assertions, and the headline takes the greatest of them per *Assertion*.
+    # Said once here rather than per level, so it is a caption and not noise.
+    lines.append("  (each headline counts an assertion once, at the greatest of")
+    lines.append("   its four measures; the measures overlap and do not sum)")
     for lv in data["levels"]:
         if lv["total"] == 0:
             continue
@@ -250,6 +257,13 @@ def _render_markdown(data: dict) -> str:
 
     # Level summary
     lines.append("## Summary by Level")
+    lines.append("")
+    # Implements: REQ-d00258-A -- see the text renderer: the measures beneath
+    # each headline are four readings of the same assertions, not parts of it.
+    lines.append(
+        "*Each headline counts an assertion once, at the greatest of its four"
+        " measures; the measures overlap and do not sum.*"
+    )
     lines.append("")
     lines.append("| Level | Requirements | Assertions | Implemented | Tested | Passing |")
     lines.append("|-------|-------------|------------|-------------|--------|---------|")

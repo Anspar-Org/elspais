@@ -624,7 +624,7 @@ function buildAssertionHtml(nodeId, a, data) {
                 'style="font-size:0.6rem;color:var(--secondary-text);font-style:italic;">' +
                 escapeHtml(inheritedText) + '</span>';
         } else {
-            h += '<span class="assertion-no-coverage" title="No coverage on either footing" style="font-size:0.6rem;color:var(--secondary-text);opacity:0.5;">no coverage</span>';
+            h += '<span class="assertion-no-coverage" title="No coverage on any measure" style="font-size:0.6rem;color:var(--secondary-text);opacity:0.5;">no coverage</span>';
         }
     }
     h += '</span>'; // close .assertion-badges-area
@@ -1881,14 +1881,14 @@ function renderAssertionCode(panel, reqId, label, data) {
     }
 
     if (wholeReqRefs.length > 0) {
-        html += '<div class="assertion-test-subheader">Whole-requirement references (~)</div>';
+        html += '<div class="assertion-test-subheader">Whole-requirement references</div>';
         for (var j = 0; j < wholeReqRefs.length; j++) {
             html += renderCodeRefItem(wholeReqRefs[j]);
         }
     }
 
     if (refinesRefs.length > 0) {
-        html += '<div class="assertion-test-subheader">Implemented via refinement (~)</div>';
+        html += '<div class="assertion-test-subheader">Implemented via refinement</div>';
         for (var k = 0; k < refinesRefs.length; k++) {
             var r = refinesRefs[k];
             html += '<div class="assertion-test-item">';
@@ -2226,7 +2226,7 @@ function toggleReqLevelLinks(badge, reqId, dimKey, assertLinkKey) {
     var html = _renderReqLinkItems(links);
     if (refinedLinks.length > 0) {
         html += '<div style="font-style:italic;color:var(--secondary-text);font-size:0.72rem;margin-top:' +
-            (links.length ? '6px' : '0') + ';">Implemented via refinement (~)</div>';
+            (links.length ? '6px' : '0') + ';">Implemented via refinement</div>';
         html += _renderReqLinkItems(refinedLinks);
     }
     panel.innerHTML = html;

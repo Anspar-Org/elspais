@@ -2532,7 +2532,11 @@ def check_dimension_coverage(
             requirement levels are counted (see ``aggregate_dimension``).
         message_suffix: Optional clarifying text appended to the message.
     """
-    from elspais.graph.aggregation import MEASURE_WORDS, aggregate_dimension
+    from elspais.graph.aggregation import (
+        MEASURE_WORDS,
+        WORK_LIST_MEASURE,
+        aggregate_dimension,
+    )
     from elspais.graph.metrics import fmt_assertion_count
 
     dim_labels = {
@@ -2571,7 +2575,7 @@ def check_dimension_coverage(
     }
     # The immediate direct measure is also the one the work-listing surfaces
     # answer on (REQ-d00258-M), so it is named first below.
-    cited_assertions = measures["immediate_direct"]
+    cited_assertions = measures[WORK_LIST_MEASURE]
 
     def _pct(value: float) -> float:
         return (value / total_assertions * 100) if total_assertions > 0 else 0.0
@@ -2602,9 +2606,14 @@ def check_dimension_coverage(
         f"{fmt_assertion_count(value)}/{total_assertions} {MEASURE_WORDS[name]}"
         f" ({_pct(value):.0f}%)"
         for name, value in measures.items()
-        if name == "immediate_direct" or value > 1e-9
+        if name == WORK_LIST_MEASURE or value > 1e-9
     ]
-    msg_parts.append("of which " + ", ".join(measure_parts))
+    # The measures are independent readings of the same assertions, not parts
+    # of the total: each is counted over ALL assertions, they overlap freely,
+    # and they neither sum nor nest inside the total (which takes the greatest
+    # per *Assertion*). "of which" claimed a partition none of that supports,
+    # so the figures are introduced as the separate readings they are.
+    msg_parts.append("by measure: " + ", ".join(measure_parts))
     # Implements: REQ-d00258-O
     if dimension == "tested" and (agg.tested_passed + agg.tested_failed + agg.tested_awaiting):
         msg_parts.append(
@@ -2651,29 +2660,55 @@ def check_line_coverage(graph, config=None, level_filter=None) -> HealthCheck:
     *Traceability*, and putting them through one function would invite the two
     counts to be read as the same kind of number (REQ-d00254-B).
 
-    Per-test attribution is rendered only when the tooling produced it. Where
-    coverage arrives aggregate-only there is no context to attribute a line to
-    a test, and a zero would read as "no test exercises this" rather than "the
-    question was not asked" (REQ-d00258-E).
+    Nothing is reported that the ingested data cannot answer. Where no coverage
+    run was ingested at all there is no covered figure to give, and "0/N lines
+    covered" would read as "the tests reached none of this". Where coverage
+    arrives aggregate-only there is no context to attribute a line to a test,
+    and a zero would read as "no test exercises this" rather than "the question
+    was not asked" (REQ-d00258-E).
     """
     from elspais.graph.aggregation import aggregate_line_coverage
 
     agg = aggregate_line_coverage(graph, config=config, level_filter=level_filter)
     covered_pct = (agg.covered_lines / agg.total_lines * 100) if agg.total_lines else 0.0
 
+    details: dict[str, object] = {
+        "dimension": "code_tested",
+        "total_lines": agg.total_lines,
+        "has_measurement": agg.has_measurement,
+        "has_contexts": agg.has_contexts,
+        "total_requirements": agg.req_count,
+    }
+    # Implements: REQ-d00258-E
+    # An unmeasured estate and a measured-but-unexecuted one are opposite
+    # facts, so they are reported in different words rather than through the
+    # same zero.
+    if not agg.has_measurement:
+        return HealthCheck(
+            name="code.code_tested",
+            passed=True,
+            message=(
+                f"Code Tested (line coverage): no line-coverage data ingested for"
+                f" {agg.total_lines} attributed implementation lines"
+                f" across {agg.req_count} REQs" + _excluded_note(graph, config=config)
+            ),
+            category="code",
+            severity="info",
+            details=details,
+        )
+
     msg_parts = [
         f"Code Tested (line coverage): {agg.req_with_covered}/{agg.req_count}"
         f" REQs with covered implementation lines",
         f"{agg.covered_lines:.0f}/{agg.total_lines} lines covered ({covered_pct:.0f}%)",
     ]
-    details: dict[str, object] = {
-        "dimension": "code_tested",
-        "total_lines": agg.total_lines,
-        "covered_lines": round(agg.covered_lines, 3),
-        "covered_pct": round(covered_pct, 1),
-        "total_requirements": agg.req_count,
-        "reqs_with_covered_lines": agg.req_with_covered,
-    }
+    details.update(
+        {
+            "covered_lines": round(agg.covered_lines, 3),
+            "covered_pct": round(covered_pct, 1),
+            "reqs_with_covered_lines": agg.req_with_covered,
+        }
+    )
     if agg.has_attribution:
         attributed_pct = (agg.attributed_lines / agg.total_lines * 100) if agg.total_lines else 0.0
         msg_parts.append(
@@ -2699,7 +2734,7 @@ def check_whole_req_only_coverage(graph, config=None) -> HealthCheck:
     """INFO: assertions whose IMPLEMENTED coverage is whole-requirement-only.
 
     Under REQ-d00069-B/J a blanket `Implements:`/`Refines:` fully credits every
-    assertion on the generous footing. That is intended, but it must be VISIBLE:
+    assertion on the indirect measures. That is intended, but it must be VISIBLE:
     this reports how load-bearing the blanket references are so a team can see
     how much green rests on whole-requirement evidence. INFO severity -- never
     fails the build. (REQ-d00258.)

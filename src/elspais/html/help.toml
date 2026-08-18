@@ -255,23 +255,30 @@ the traceability graph."""
 
 # ---------------------------------------------------------------------------
 # Coverage Severity (theme-catalog severity colors)
+#
+# Severity says how much a coverage STANDING matters, not what evidence
+# produced it. Each dimension maps its four standings (full / partial /
+# failing / missing) to a severity in `[rules.coverage.<dimension>]`, so the
+# same standing can matter differently on different dimensions -- an absent
+# UAT is `info` where implementation missing is `error`. The measures behind
+# a figure are a separate question, published beside it (REQ-d00258-A).
 # ---------------------------------------------------------------------------
 
 [severity.ok]
 label = "Ok"
-description = "Fully covered by direct evidence"
+description = "A standing this dimension treats as needing no attention (full, by default)"
 
 [severity.info]
 label = "Info"
-description = "Fully covered including indirect evidence"
+description = "A standing this dimension treats as worth noting but not a gap (an absent UAT, by default)"
 
 [severity.warning]
 label = "Warning"
-description = "Partially covered"
+description = "A standing this dimension treats as needing attention (partial, by default)"
 
 [severity.error]
 label = "Error"
-description = "No coverage or failures"
+description = "A standing this dimension treats as a gap or a failure (missing and failing, by default)"
 
 [severity.failing]
 label = "Failing"

@@ -266,10 +266,12 @@ def _get_node_data(node, graph: FederatedGraph, *, assertion_labels: bool = Fals
     def _fmt_code_tested(lines: LineCoverage) -> str:
         if lines.total_lines == 0 or not lines.has_attribution:
             # Aggregate-only tooling (e.g. lcov/coverage.json without per-test
-            # attribution) records no context naming a test, so it cannot
-            # produce an attribution count -- rendering "0/N (0%)" would
-            # misrepresent real (aggregate) coverage as no coverage at all
-            # (REQ-d00258-E).
+            # attribution), and an estate with no coverage ingested at all,
+            # record no context naming a test, so neither can produce an
+            # attribution count -- rendering "0/N (0%)" would say no test
+            # exercises this code when nothing was ever asked (REQ-d00258-E).
+            # Where contexts ARE present the cell reads "0/N": that is a real
+            # answer, and suppressing it would hide unattributed code.
             return "n/a"
         pct = round(lines.attributed_lines / lines.total_lines * 100)
         return f"{fmt_assertion_count(lines.attributed_lines)}/{lines.total_lines} ({pct}%)"
@@ -277,10 +279,9 @@ def _get_node_data(node, graph: FederatedGraph, *, assertion_labels: bool = Fals
     # Implements: REQ-d00258-A, REQ-d00258-J
     # (column_key, rollup_attr). All five dimensions headline on the
     # per-*Assertion* TOTAL (REQ-d00069-N, the greatest of an *Assertion*'s
-    # four measures) rather than either legacy blended footing, and no
-    # marker stands in for a measure the surface does not show -- the four
-    # measures behind the total are published as their own columns instead
-    # (below).
+    # four measures), and no marker stands in for a measure the surface does
+    # not show -- the four measures behind the total are published as their
+    # own columns instead (below).
     _DIMS = [
         ("implemented", "implemented"),
         ("tested", "tested"),
@@ -306,7 +307,11 @@ def _get_node_data(node, graph: FederatedGraph, *, assertion_labels: bool = Fals
     )
 
     if rollup:
-        from elspais.graph.aggregation import covered_labels, measure_total
+        from elspais.graph.aggregation import (
+            HEADLINE_MEASURE,
+            covered_labels,
+            measure_total,
+        )
         from elspais.graph.metrics import tested_and_passing, tested_partition
 
         for key, attr in _DIMS:
@@ -322,7 +327,7 @@ def _get_node_data(node, graph: FederatedGraph, *, assertion_labels: bool = Fals
             # marker standing in for a measure the cell does not show; the
             # four measures are published as their own columns below.
             if assertion_labels:
-                labels = covered_labels(dim, "total")
+                labels = covered_labels(dim, HEADLINE_MEASURE)
                 label_str = _compact_labels(labels) if labels else f"0/{dim.total}"
                 pct = round(dim.covered / dim.total * 100) if dim.total else 0
                 data[key] = f"{label_str} ({pct}%)" if dim.total else "n/a"

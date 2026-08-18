@@ -66,7 +66,7 @@ class CoverageSource(Enum):
     INFERRED = "inferred"  # REQ implements parent REQ (all assertions implied)
     INDIRECT = "indirect"  # transitive CODE->TEST evidence (provenance only)
     # CODE Implements whole REQ (blanket), all assertions implied; feeds
-    # `implemented` INDIRECT footing only (REQ-d00069-B)
+    # the `implemented` INDIRECT measures only (REQ-d00069-B)
     CODE_INDIRECT = "code_indirect"
     TEST_DIRECT = "test_direct"  # TEST verifies specific assertion (Verifies: REQ-xxx-A)
     TEST_INDIRECT = "test_indirect"  # TEST verifies whole REQ (Verifies: REQ-xxx)
@@ -230,21 +230,34 @@ class LineCoverage:
             per-test context data; aggregate-only coverage cannot produce it
             and leaves this at 0 (REQ-d00258-E).
         covered_lines: Lines any coverage run executed, whichever test did it.
+        has_measurement: Whether a coverage run measured these lines at all.
+            Recorded at ingestion, because a zero ``covered_lines`` otherwise
+            says two opposite things -- that no run reached this code, and that
+            no run was ever ingested.
+        has_contexts: Whether the ingested coverage carried per-test contexts.
+            Aggregate-only tooling records none, and without them no
+            attribution figure can be computed for any requirement
+            (REQ-d00258-E).
     """
 
     total_lines: int = 0
     attributed_lines: float = 0.0
     covered_lines: float = 0.0
+    has_measurement: bool = False
+    has_contexts: bool = False
 
     @property
     def has_attribution(self) -> bool:
-        """Whether per-test attribution data was available at all.
+        """Whether the coverage data can produce an attribution figure at all.
 
-        REQ-d00258-E: a tool fed aggregate-only coverage must render no
-        attribution figure rather than a misleading zero, and the two are told
-        apart by whether ANY line carries a naming context.
+        REQ-d00258-E keys the suppression on what the TOOLING provided: where
+        coverage arrives without per-test contexts there is nothing to
+        attribute a line to a test with, and a figure would be an answer to a
+        question never asked. Where contexts are present the figure is real
+        even at zero -- it says no verifying test executed these lines, which
+        is a fact worth reporting rather than suppressing.
         """
-        return self.attributed_lines > 0
+        return self.has_contexts
 
 
 def _dim(total: int = 0) -> CoverageDimension:

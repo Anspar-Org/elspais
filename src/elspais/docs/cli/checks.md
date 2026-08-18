@@ -322,11 +322,23 @@ results_file = "uat-results.csv"   # default
 ## Coverage Dimensions
 
 Coverage checks report six **dimensions**, each tracking how thoroughly
-requirements are implemented, tested, and validated. Every dimension has
-two tiers of confidence:
+requirements are implemented, tested, and validated. The five *Assertion*
+dimensions are each read on four independent **measures**, crossing what a
+citation named with where the evidence sits:
 
-- **direct** — the link names specific assertions (high confidence)
-- **indirect** — the link targets the whole requirement, implying all assertions (lower confidence)
+- **cited by name here** (immediate direct) — a citation on this requirement named the assertion
+- **whole-requirement** (immediate indirect) — a citation on this requirement named the requirement, implying every assertion
+- **conducted direct** (rolled direct) — a refining requirement's assertion-naming evidence, carried up a `Refines:` chain
+- **conducted indirect** (rolled indirect) — a refining requirement's whole-requirement evidence, carried up the same chain
+
+None is derived from another, and they overlap: an assertion can be covered on
+several at once. Beside them sits the **total** — each assertion counted once,
+at the greatest of its four measures — which is what a reporting surface
+headlines. Because the measures overlap, they do not sum to the total.
+
+The sixth dimension, `code_tested`, is measured in LINES rather than
+assertions and carries none of the four measures. It is reported in its own
+right and never folded into the *Assertion* dimensions (REQ-d00254-B).
 
 ### The six dimensions
 
@@ -404,9 +416,9 @@ the fraction.
 assertion counted once, at the greatest of its four measures -- what a citation
 named here, what whole-requirement evidence reached, and what `Refines:`
 conduction carried up in each of those two shapes. Work-list surfaces (`gaps`,
-`untested`, `unvalidated`) are the strict counterpart: they count only the
-immediate direct measure -- evidence that named the assertion -- so they can
-report work a tier calls done.
+`untested`, `unvalidated`) answer a different question and so read a different
+measure: they count only "cited by name here" -- evidence that named the
+assertion, attached to it -- so they can report work a tier calls done.
 
 **Evidence outside the denominator.** Measuring over the prior link means
 evidence can name an assertion the dimension does not count -- a test on an

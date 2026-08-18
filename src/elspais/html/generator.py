@@ -819,8 +819,8 @@ class HTMLGenerator:
         """Compute statistics for the header.
 
         REQ-d00258-C: level counts and assertion counts derive from the
-        shared aggregation module (graph/aggregation.py) on the generous
-        footing, so the viewer header agrees with CLI summary and MCP
+        shared aggregation module (graph/aggregation.py) on the per-*Assertion*
+        total, so the viewer header agrees with CLI summary and MCP
         get_project_summary. Node-kind tallies (CODE/TEST/RESULT) and the
         viewer-specific associated-repo count are simple index counts, not
         coverage rollups, and stay local.

@@ -209,9 +209,14 @@ class TestCheckLineCoverage:
         assert "attributed_lines" not in check.details
         assert "attributed_pct" not in check.details
 
-    def test_unmeasured_implementation_reports_zero_without_dividing_by_zero(self):
+    # Verifies: REQ-d00258-E
+    def test_unmeasured_implementation_is_said_rather_than_shown_as_zero(self):
+        """No coverage run ingested at all is not the same fact as a run that
+        reached nothing, so it must not be reported through the same zero:
+        "0/N lines covered" would read as a finding about the tests."""
         check = check_line_coverage(_graph(line_coverage=None))
         assert check.passed is True
-        assert "0/1 REQs with covered implementation lines" in check.message
-        assert "0/3 lines covered (0%)" in check.message
-        assert check.details["covered_pct"] == 0.0
+        assert "no line-coverage data ingested" in check.message
+        assert "lines covered" not in check.message
+        assert check.details["has_measurement"] is False
+        assert "covered_pct" not in check.details

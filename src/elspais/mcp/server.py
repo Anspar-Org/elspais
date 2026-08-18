@@ -4273,8 +4273,9 @@ def _get_assertion_code_map(
     # IMP drill-down provenance for INDIRECT coverage (REQ-d00064, REQ-d00069-L):
     # when the IMP badge is lit via whole-requirement evidence, the direct
     # code_refs above are empty. Surface the blanket Implements: CODE refs and
-    # the conducting Refines: requirements so the panel explains the `~` instead
-    # of reading "No references". Additive — code_refs / stats are unchanged.
+    # the conducting Refines: requirements so the panel names the
+    # whole-requirement and conducted evidence instead of reading
+    # "No references". Additive — code_refs / stats are unchanged.
     if edge_kind == "implements":
         all_labels = [label for _, label in assertions]
         wq_seen: dict[str, set[str]] = {label: set() for _, label in assertions}
@@ -4406,7 +4407,7 @@ def _get_uncovered_assertions(
     REQ-d00069-A: SHALL accept source parameter ('test', 'uat', 'both') to filter coverage source.
 
     Uses ``_iter_assertion_coverage`` to build the covered-labels set,
-    which correctly handles indirect coverage (tests with no
+    which correctly handles whole-requirement evidence (tests with no
     ``assertion_targets`` covering ALL assertions).
 
     Args:

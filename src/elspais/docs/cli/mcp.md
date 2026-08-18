@@ -112,6 +112,18 @@ Get full details for a single requirement.
     assertions      List of assertion objects {id, label, text}
     children        Child requirements (summaries)
     parents         Parent requirements (summaries)
+    coverage        Coverage figures, when the requirement carries a rollup
+                    (null otherwise):
+                    `total_assertions`, plus `implemented_total_covered` and
+                    `implemented_total_pct` — both the per-*Assertion* total
+                    of REQ-d00069-N, each assertion counted once at the
+                    greatest of its four measures. These two keys replaced
+                    `covered_assertions` and `referenced_pct`, which were
+                    named for a claim the total does not make (that a
+                    citation had named the assertions). To read what a
+                    citation named, ask `get_test_coverage` or
+                    `get_uncovered_assertions`, which answer on the
+                    immediate-direct measure.
 
   Example:
     get_requirement("REQ-p00001")
@@ -194,10 +206,7 @@ Get summary statistics for the project.
                              headlines -- plus the four REQ-d00069-L measures
                              behind it: `<dim>_immediate_direct`,
                              `<dim>_immediate_indirect`, `<dim>_rolled_direct`,
-                             `<dim>_rolled_indirect`. The legacy
-                             `<dim>_assertions`/`<dim>_direct` keys are still
-                             present but are no longer what any CLI surface
-                             reads.
+                             `<dim>_rolled_indirect`.
     changes                 Git change metrics:
       - uncommitted       Modified spec files
       - branch_changed    Changed vs main branch

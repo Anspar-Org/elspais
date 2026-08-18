@@ -243,6 +243,8 @@ def _count_uncovered_descendants(
     included_set: set[str],
 ) -> int:
     """Count leaf descendants (in included_set) with zero coverage."""
+    from elspais.graph.aggregation import WORK_LIST_MEASURE, measure_total
+
     count = 0
     visited: set[str] = set()
     queue: deque[str] = deque([node_id])
@@ -268,7 +270,7 @@ def _count_uncovered_descendants(
             # coverage of something refining it has had nothing written
             # against it by name.
             rollup = node.get_metric("rollup_metrics")
-            covered = sum(rollup.implemented.immediate_direct_by_label.values()) if rollup else 0.0
+            covered = measure_total(rollup.implemented, WORK_LIST_MEASURE) if rollup else 0.0
             if covered <= 0:
                 count += 1
         else:
