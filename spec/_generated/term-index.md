@@ -66,7 +66,7 @@
 - REQ-d00084:section:0
 - REQ-d00084:section:1
 - REQ-d00069:section:1
-- REQ-d00070:section:1
+- REQ-d00070:section:0
 - REQ-d00254:section:0
 - REQ-d00254:section:1
 - REQ-d00258:section:1

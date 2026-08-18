@@ -84,7 +84,7 @@
 | REQ-d00067 | Uncovered Assertions Tool Implementation                      | dev-mcp-tools.md        | c838e24d |
 | REQ-d00068 | Assertion Keyword Search Tool Implementation                  | dev-mcp-tools.md        | d552fda6 |
 | REQ-d00069 | Indirect Coverage Source                                      | dev-graph-core.md       | a8b306bc |
-| REQ-d00070 | Indirect Coverage Toggle Display                              | dev-graph-core.md       | a55fcb89 |
+| REQ-d00070 | Indirect Coverage Toggle Display                              | dev-graph-core.md       | 27a15cb2 |
 | REQ-d00071 | Unified Root vs Orphan Classification                         | dev-graph-core.md       | f2cb5f45 |
 | REQ-d00072 | Link Suggestion Core Engine                                   | dev-graph-core.md       | 9d57c2ad |
 | REQ-d00073 | Link Suggestion CLI Command                                   | dev-cli.md              | 975970c4 |

@@ -204,6 +204,8 @@ Whole-requirement tests (e.g., `test_implements_req_d00087` with no *Assertion* 
 
 ### Changelog
 
+- 2026-08-18 | a8b306bc | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: sync changelog hash
+- 2026-08-18 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: superseded — four published measures answer what the toggle asked; A was the only assertion ever built, and it fed a list nothing renders
 - 2026-08-18 | a8b306bc | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-18 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: scope the whole-requirement crediting rule to the immediate measures, leaving what it conducts to J (B)
 - 2026-08-18 | bbad16d5 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -225,33 +227,35 @@ Whole-requirement tests (e.g., `test_implements_req_d00087` with no *Assertion* 
 
 ## REQ-d00070: Indirect Coverage Toggle Display
 
-**Level**: dev | **Status**: Active | **Implements**: REQ-p00006
+**Level**: dev | **Status**: Superseded | **Implements**: REQ-p00006
 
-The interactive trace view SHALL provide a toggle to switch between strict and indirect coverage display modes.
+This requirement offered a reader a choice between two coverage views because only one could be shown at a time. Coverage is no longer measured as a pair of nested footings to choose between: it is four independent measures, each reported in its own right, with a total taken per *Assertion* (REQ-d00069-L, REQ-d00069-N). A surface now shows the total and makes the measures behind it available (REQ-d00258-A), so the question the toggle asked is answered without asking the reader to pick a mode first.
+
+The need its rationale named is met and not withdrawn: a strict *Traceability* view is the immediate direct measure, which is also what every work-listing surface answers on (REQ-d00258-M), and the progress-indicator view is the total.
 
 ### Assertions
 
-A. `TreeRow` SHALL include a `coverage_indirect` attribute computed from `indirect_referenced_pct` using the same thresholds as strict coverage (0=none, <100=partial, 100=full).
+A. [Removed - a per-row field derived from one of two nested footings. The measures a row reports are REQ-d00258-A, and what a work list answers on is REQ-d00258-M.]
 
-B. The template SHALL render a `data-coverage-indirect` attribute on each requirement row.
+B. [Removed - an attribute carrying the toggle's second mode. There is no second mode.]
 
-C. The template SHALL include a toggle control in the filter bar area to switch between strict and indirect coverage views.
+C. [Removed - the toggle itself. With every measure published there is nothing to switch between.]
 
-D. The default display SHALL show strict coverage (toggle OFF).
+D. [Removed - the toggle's default. There is no toggle.]
 
-E. The `has_failures` warning indicator SHALL display regardless of toggle state.
+E. [Removed - failures showing regardless of toggle state. That a failing *Assertion* reads failing whatever else credits it is REQ-d00258-G, which does not depend on a display mode.]
 
 ### Rationale
 
-Users need both a strict *Traceability* view (only *Assertion*-targeted tests count) and a progress indicator view (whole-requirement tests cover all assertions). A toggle lets users switch between modes without regenerating the trace.
+The toggle was the shape a two-footing model forced: with one number on screen and a second hidden behind it, a control had to exist to swap them, and a reader had to know which mode they were in before they could read a figure. Publishing the measures removes both the swap and the question.
 
-### Changelog
+Retiring this cost no working behaviour. A alone was built -- a `TreeRow.coverage_indirect` field feeding a list no template iterates -- while B, C and D were never implemented at all, so the view has never had the toggle this requirement described.
 
 - 2026-07-31 | a55fcb89 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 3e5b1766 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | 3e5b1766 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *Indirect Coverage Toggle Display* | **Hash**: a55fcb89
+*End* *Indirect Coverage Toggle Display* | **Hash**: 27a15cb2
 ---
 
 ## REQ-d00071: Unified Root vs Orphan Classification
