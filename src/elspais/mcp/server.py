@@ -64,6 +64,7 @@ from elspais.graph.aggregation import (
     covered_labels,
     is_covered,
     measure_by_label,
+    measure_total,
 )
 from elspais.graph.annotators import (
     annotate_graph_git_state,
@@ -4021,8 +4022,21 @@ def _get_test_coverage(graph: FederatedGraph, req_id: str) -> dict[str, Any]:
     uat_covered_count = len(covered_uat_assertion_ids)
     uat_referenced_pct = (uat_covered_count / total * 100) if total > 0 else 0.0
 
-    # Read uat_validated_pct from rollup_metrics if available
-    uat_validated_pct = rollup.uat_verified.indirect_pct if rollup is not None else 0.0
+    # Implements: REQ-d00258-M
+    # Read on the work-list measure, like every other figure this tool
+    # publishes. This is not a reporting surface headlining how far along the
+    # estate is (REQ-d00258-A) -- it is the tool REQ-d00258-M names, and its
+    # neighbouring `uat.covered_count`/`referenced_pct` already answer on that
+    # measure. A blanket journey lifting `validated_pct` to 100 beside a
+    # `referenced_pct` of 0 would have the same dict answer one question two
+    # ways.
+    uat_validated_pct = 0.0
+    if rollup is not None:
+        uat_verified = rollup.uat_verified
+        if uat_verified.total > 0:
+            uat_validated_pct = (
+                measure_total(uat_verified, WORK_LIST_MEASURE) / uat_verified.total * 100
+            )
 
     # Implements: REQ-d00258-O
     tested_breakdown: dict[str, int] | None = None

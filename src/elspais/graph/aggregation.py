@@ -257,21 +257,20 @@ def absolute_tier(dim: CoverageDimension, *, measure: str) -> str:
 
 
 def legacy_measure(allow_indirect: bool) -> str:
-    """The legacy footing name for a surface still configured by ``allow_indirect``.
+    """The legacy footing name for the retired ``allow_indirect`` setting.
 
-    The blended footings are what the un-migrated surfaces still publish, so
-    they name one rather than silently reading a measure their figures were
-    never computed on.
+    Nothing calls this: no surface selects a footing this way any more. Kept
+    only until the ``allow_indirect`` config key it serves is removed.
     """
     return "indirect" if allow_indirect else "direct"
 
 
 def allow_indirect_from_config(config: Any | None) -> bool:
-    """Extract ``[rules.coverage] allow_indirect`` from a config dict/model.
+    """Extract the retired ``[rules.coverage] allow_indirect`` from a config.
 
-    Defaults to True (generous footing) when absent. Accepts both the plain
-    config ``dict`` form and an already-parsed model, mirroring how
-    ``compute_coverage_tiers`` reads its coverage config.
+    Nothing calls this, and nothing reads the key it extracts. Kept only until
+    the key itself is removed. Accepts both the plain config ``dict`` form and
+    an already-parsed model.
     """
     if not config:
         return True

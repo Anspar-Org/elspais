@@ -222,8 +222,11 @@ measures.
     fraction     Its coverage on the measure the verdict was taken on;
                   0 means nothing names it, 0 < f < 1 means partial
                   evidence, and a listed gap can never read 1
-    measures     Per dimension asked about (`tested`, `uat_coverage`), the
-                  four measures of REQ-d00069-L behind the verdict:
+    measures     Keyed by dimension -- always just `tested` from
+                  get_test_coverage, and one entry per axis `source` asked
+                  about (`tested`, `uat_coverage`) from
+                  get_uncovered_assertions. Each holds the four measures of
+                  REQ-d00069-L behind the verdict:
                   immediate_direct, immediate_indirect, rolled_direct,
                   rolled_indirect. This is where whole-requirement and
                   conducted evidence stays visible.

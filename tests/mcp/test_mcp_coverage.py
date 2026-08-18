@@ -830,3 +830,54 @@ class TestProjectSummaryPublishesTheMeasures:
             self._levels(canonical_graph, canonical_config, tmp_path)
             == collect_coverage(canonical_graph, canonical_config)["levels"]
         )
+
+
+# Verifies: REQ-d00258-M, REQ-d00069-L
+class TestUatValidatedPctMeasure:
+    """``get_test_coverage``'s UAT figures answer on one measure.
+
+    The tool reports which assertions still need work (REQ-d00258-M), so every
+    figure in it -- ``uat.covered_count``/``referenced_pct`` and
+    ``uat.validated_pct`` alike -- counts evidence that named the *Assertion*.
+    A blanket journey must not lift one of them while leaving the other at
+    zero.
+    """
+
+    def _with_uat_verified(self, graph, immediate_direct):
+        from elspais.graph.metrics import CoverageDimension
+
+        rollup = graph.find_by_id("REQ-p00001").get_metric("rollup_metrics")
+        rollup.uat_verified = CoverageDimension(
+            total=3,
+            direct=len(immediate_direct),
+            indirect=3,
+            # A journey naming the requirement reaches every assertion on the
+            # legacy blended footing...
+            direct_pct_by_label=dict.fromkeys(immediate_direct, 1.0),
+            indirect_pct_by_label={"A": 1.0, "B": 1.0, "C": 1.0},
+            immediate_indirect_by_label={"A": 1.0, "B": 1.0, "C": 1.0},
+            # ...but named only these by name.
+            immediate_direct_by_label=dict.fromkeys(immediate_direct, 1.0),
+        )
+        return graph
+
+    def test_validated_pct_counts_only_assertions_a_journey_named(self, coverage_graph):
+        """Two of three assertions are reached only by whole-requirement
+        validation. They are not validated work; the figure says so."""
+        from elspais.mcp.server import _get_test_coverage
+
+        graph = self._with_uat_verified(coverage_graph, ["A"])
+        result = _get_test_coverage(graph, "REQ-p00001")
+
+        # 1 of 3 named -> 33.3, NOT the 100.0 the blended footing reports.
+        assert result["uat"]["validated_pct"] == 33.3
+
+    def test_validated_pct_reaches_full_when_every_assertion_is_named(self, coverage_graph):
+        """The figure is not merely deflated -- naming every assertion still
+        reaches 100."""
+        from elspais.mcp.server import _get_test_coverage
+
+        graph = self._with_uat_verified(coverage_graph, ["A", "B", "C"])
+        result = _get_test_coverage(graph, "REQ-p00001")
+
+        assert result["uat"]["validated_pct"] == 100.0
