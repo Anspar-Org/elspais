@@ -128,7 +128,10 @@ class ExecutableWatcher:
         self._baseline_value = baseline
         self._interval = interval_seconds
         self._settle_polls = max(1, settle_polls)
-        self._on_settled = on_settled
+        #: Called with the new identity when a run of changes settles.
+        #: Public because the response differs by how the process is
+        #: serving, and only the caller that started it knows which.
+        self.on_settled = on_settled
         self._candidate: str | None = None
         self._stable = 0
         self._settled: str | None = None
@@ -181,8 +184,8 @@ class ExecutableWatcher:
             if self._announced == current:
                 return None
             self._announced = current
-        if self._on_settled is not None:
-            self._on_settled(current)
+        if self.on_settled is not None:
+            self.on_settled(current)
         return current
 
     def start(self) -> None:

@@ -2985,6 +2985,60 @@ def _guard_executable_drift(state: Any, tool_name: str) -> dict[str, Any] | None
     }
 
 
+# Implements: REQ-o00077-D
+def renew_for_installed_program(
+    shared: Any,
+    graph_fn: Callable[[], Any],
+    exit_fn: Callable[[], None] | None = None,
+) -> str:
+    """Stand this process down so its tree is served by the installed program.
+
+    The decision is what happens unasked, not the re-serving: this
+    process commits to stopping and its record says so, and the
+    machinery a client already runs when it meets a stopping daemon
+    starts the successor. Standing one up from here would put two
+    processes in one working tree, which REQ-o00075-B forbids.
+
+    Divides the work with ``_guard_executable_drift`` on exactly the
+    question of whether anything is held. Nothing held is this routine's
+    case; work held is that guard's, because replacing the process would
+    end it while it still holds changes nothing else can see.
+
+    The count and the decision are one critical section under
+    ``write_lock``: a mutation landing before it is inside the count and
+    keeps this process alive, and one arriving after blocks until the
+    shutdown routine has raised the refusal flag.
+
+    Returns what it decided, so a caller can tell the cases apart:
+    ``"held"``, ``"unknown"``, ``"save_failed"`` or ``"standing_down"``.
+    """
+    with shared.write_lock:
+        try:
+            pending = len(graph_fn().mutation_log.tail(0))
+        except Exception:  # noqa: BLE001
+            # Standing down on a count that could not be taken risks
+            # ending a process that holds the only copy of somebody's
+            # work. Stay, and leave the guard to refuse.
+            return "unknown"
+        if pending:
+            return "held"
+        trigger = "the installed program changed and nothing was held here"
+        outcome = finalize_shutdown(shared, trigger=trigger)
+    report_shutdown_outcome(outcome, trigger)
+    if not outcome.get("success"):
+        # The routine keeps what it could not write and leaves this
+        # process usable. Stopping anyway would discard it.
+        return "save_failed"
+    # os._exit, not sys.exit: this runs on the watcher thread, where
+    # SystemExit unwinds that thread and leaves the process serving.
+    if exit_fn is None:
+        import os as _os_exit
+
+        exit_fn = lambda: _os_exit._exit(0)  # noqa: E731
+    exit_fn()
+    return "standing_down"
+
+
 # Implements: REQ-o00062-K
 def _owning_container(graph: Any, node_id: str) -> Any | None:
     """Resolve the surviving parent whose version a sub-node deletion reports.
@@ -7767,12 +7821,16 @@ def run_server(
                 client_pid=client_pid,
             )
 
-        # Implements: REQ-o00077-A
+        # Implements: REQ-o00077-A, REQ-o00077-D
         # Started for every daemon, not only one with a recorded client:
         # the program moving beneath a process has nothing to do with
         # who asked for that process.
         from elspais.mcp.executable import watcher as _executable_watcher
 
+        def _renew_on_settled_change(_installed: str) -> None:
+            renew_for_installed_program(state.shared, lambda: state.graph)
+
+        _executable_watcher().on_settled = _renew_on_settled_change
         _executable_watcher().start()
 
         if client_pid is not None:
