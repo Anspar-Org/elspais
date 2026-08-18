@@ -742,7 +742,7 @@ C. The severity of the report SHALL be what the project configures for it, and S
 
 D. The report SHALL name the file and the line the evidence was written on, and SHALL distinguish evidence that only names the *Assertion* from evidence that also carries a result.
 
-E. Reporting SHALL NOT alter what the evidence credits: the *Assertion* SHALL remain uncounted by that dimension, and the reported evidence SHALL NOT enter any coverage figure on either footing.
+E. Reporting SHALL NOT alter what the evidence credits: the *Assertion* SHALL remain uncounted by that dimension, and the reported evidence SHALL NOT enter any coverage figure on any measure.
 
 F. Where a dimension counts no *Assertion* of a requirement at all, the tool SHALL report that once for the requirement rather than once for each *Assertion* the evidence names.
 
@@ -750,17 +750,18 @@ F. Where a dimension counts no *Assertion* of a requirement at all, the tool SHA
 
 An error default is the honest reading of what the condition means. A test that names an *Assertion* nothing implements is one of two defects: the implementation exists and its `Implements:` reference was never written, or the test is aimed at an *Assertion* it does not exercise. Neither is a matter of style, and both cost the estate the same thing — a requirement that reads as untested when it is tested, or as tested when it is not. A warning would leave the author to decide which of those two they are looking at without telling them there is a decision to make.
 
-B ties the report to the project's own arithmetic rather than to a footing named once here, because the two must not be able to drift apart: a finding that an *Assertion* went uncounted is only true if that same *Assertion* is uncounted in the figures the project reads. Satisfying B is therefore a matter of reading one definition rather than restating it — a second statement of what a dimension counts is a second thing to keep in step, and the report would eventually contradict the numbers beside it. A dimension counting whole-requirement evidence is the ordinary case: an *Assertion* credited only that way is inside the dimension and a test naming it credits normally, so an estate that annotates implementation per requirement and tests per *Assertion* is not reported wholesale for a pattern the tool encourages elsewhere.
+B ties the report to the project's own arithmetic rather than to a measure named once here, because the two must not be able to drift apart: a finding that an *Assertion* went uncounted is only true if that same *Assertion* is uncounted in the figures the project reads. Satisfying B is therefore a matter of reading one definition rather than restating it — a second statement of what a dimension counts is a second thing to keep in step, and the report would eventually contradict the numbers beside it. A dimension counting whole-requirement evidence is the ordinary case: an *Assertion* credited only that way is inside the dimension and a test naming it credits normally, so an estate that annotates implementation per requirement and tests per *Assertion* is not reported wholesale for a pattern the tool encourages elsewhere.
 
-A and B divide the question between them. B settles what the dimension counts, which is the figures' business; A settles what the evidence names, which is not a matter of footing at all. Whole-requirement evidence names the requirement, and crediting it to every *Assertion* is the generous footing's doing rather than the author's, so an *Assertion* reached only that way was named by nobody and cannot be reported as though evidence were aimed at it. F is where such evidence is answered, against the requirement it did name.
+A and B divide the question between them. B settles what the dimension counts, which is the figures' business; A settles what the evidence names, which is not a matter of measure at all. Whole-requirement evidence names the requirement, and crediting it to every *Assertion* is the indirect measures' doing rather than the author's, so an *Assertion* reached only that way was named by nobody and cannot be reported as though evidence were aimed at it. F is where such evidence is answered, against the requirement it did name.
 
-This is not the question REQ-d00258-M answers. That assertion governs surfaces listing what remains to be done, which read the strict footing so an *Assertion* with no evidence naming it cannot hide behind its requirement's. Here the *Assertion* is not missing evidence; it has evidence that credits nothing.
+This is not the question REQ-d00258-M answers. That assertion governs surfaces listing what remains to be done, which read the immediate direct measure so an *Assertion* with no evidence naming it cannot hide behind its requirement's. Here the *Assertion* is not missing evidence; it has evidence that credits nothing.
 
 ### Changelog
 
+- 2026-08-18 | 2f1e6599 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-17 | b7624174 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: add missing changelog section
 
-*End* *Uncredited Coverage Evidence* | **Hash**: b7624174
+*End* *Uncredited Coverage Evidence* | **Hash**: 2f1e6599
 
 ## REQ-d00276: Tests Outside the Requirement Estate
 

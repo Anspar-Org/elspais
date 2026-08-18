@@ -833,9 +833,15 @@ class TestLineCoverageDoesNotCreditPassing:
             verified=CoverageDimension(total=1),
             lcov_tested=CoverageDimension(
                 total=1,
+                immediate_direct_by_label={"A": 1.0},
             ),
         )
         req.set_metric("rollup_metrics", rm)
+        # The guard only guards if the lcov credit is REAL: an empty
+        # lcov_tested would pass whether or not the code folded line coverage
+        # into Passing.
+        assert rm.lcov_tested.covered == 1.0
+        assert rm.verified.covered == 0.0
 
         data = collect_coverage(graph)
         dev = next(lv for lv in data["levels"] if lv["level"] == "DEV")

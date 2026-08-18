@@ -59,16 +59,30 @@ def test_a_partially_verified_journey_leaves_a_fraction_in_the_immediate_map():
     evidence itself is partial -- so uat_verified's immediate map must carry
     the verified-step ratio, not flatten it to whole.
     """
-    rollup = RollupMetrics(total_assertions=2)
-    rollup.populate_test_dimensions(
-        tested_direct_labels=set(),
-        tested_indirect_labels=set(),
-        verified_direct_labels=set(),
-        verified_indirect_labels=set(),
-        verified_failures=False,
-        uat_verified_direct_pct={"A": 0.5},
-        uat_verified_indirect_pct={},
-        uat_verified_failures=False,
-    )
-    assert rollup.uat_verified.immediate_direct_by_label == {"A": 0.5}
-    assert rollup.uat_verified.immediate_indirect_by_label == {"A": 0.5}
+
+    def _uat(direct_pct, indirect_pct):
+        rollup = RollupMetrics(total_assertions=2)
+        rollup.populate_test_dimensions(
+            tested_direct_labels=set(),
+            tested_indirect_labels=set(),
+            verified_direct_labels=set(),
+            verified_indirect_labels=set(),
+            verified_failures=False,
+            uat_verified_direct_pct=direct_pct,
+            uat_verified_indirect_pct=indirect_pct,
+            uat_verified_failures=False,
+        )
+        return rollup.uat_verified
+
+    # A journey naming the *Assertion* credits the DIRECT measure its ratio,
+    # and credits the indirect one nothing: no journey named the requirement.
+    named = _uat({"A": 0.5}, {})
+    assert named.immediate_direct_by_label == {"A": 0.5}
+    assert named.immediate_indirect_by_label == {}
+
+    # The mirror. A journey naming only the requirement credits the INDIRECT
+    # measure its ratio and the direct one nothing (REQ-d00069-L: no measure is
+    # defined in terms of another).
+    blanket = _uat({}, {"A": 0.5})
+    assert blanket.immediate_direct_by_label == {}
+    assert blanket.immediate_indirect_by_label == {"A": 0.5}

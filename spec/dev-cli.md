@@ -133,7 +133,7 @@ B. The command SHALL support column presets (`--preset minimal|standard|full`) c
 
 C. The command SHALL support independent detail flags (`--body`, `--assertions`, `--tests`) that control whether expanded rows appear beneath each requirement, orthogonal to column presets.
 
-D. The standard and full presets SHALL include per-requirement coverage columns Implemented (assertions with code evidence: Implements references, conducted, or inherited via INSTANCE/INTEGRATES), Tested (assertions with test references), and Passing (tested assertions whose own tests passed), each displayed as N/M (%) on the generous footing with the indirect-evidence marker per REQ-d00258-A.
+D. The standard and full presets SHALL include per-requirement coverage columns Implemented (assertions with code evidence: Implements references, conducted, or inherited via INSTANCE/INTEGRATES), Tested (assertions with test references), and Passing (tested assertions whose own tests passed), each displayed as N/M (%) on the total coverage of REQ-d00069-N, with the measures behind it available per REQ-d00258-A and no caveat marker standing in for one not shown.
 
 ### Rationale
 
@@ -141,6 +141,7 @@ A JSON graph output mode enables programmatic consumption of the full *Traceabil
 
 ### Changelog
 
+- 2026-08-18 | 3a6da144 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-17 | 66981b81 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | 1bd6bca1 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-02 | 64954432 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -148,7 +149,7 @@ A JSON graph output mode enables programmatic consumption of the full *Traceabil
 - 2026-05-11 | f8f0e0f2 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | f8f0e0f2 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *Trace Command* | **Hash**: 66981b81
+*End* *Trace Command* | **Hash**: 3a6da144
 ---
 
 ## REQ-d00085: Unified Report Composition
@@ -251,7 +252,7 @@ The `coverage` section SHALL produce a coverage report showing implemented, test
 
 A. The report SHALL group requirements by level (PRD, OPS, DEV) and show counts and percentages of requirements with code references, test references, and passing tests.
 
-B. The report SHALL compute per-requirement *Assertion* coverage: Implemented (assertions with code evidence: Implements references, conducted, or inherited via INSTANCE/INTEGRATES), Tested (assertions with test references), and Passing (tested assertions whose own tests passed), each on the generous footing with the indirect-evidence marker per REQ-d00258-A.
+B. The report SHALL compute per-requirement *Assertion* coverage: Implemented (assertions with code evidence: Implements references, conducted, or inherited via INSTANCE/INTEGRATES), Tested (assertions with test references), and Passing (tested assertions whose own tests passed), each on the total coverage of REQ-d00069-N, with the measures behind it available per REQ-d00258-A and no caveat marker standing in for one not shown.
 
 C. The report SHALL support `text`, `markdown`, `json`, and `csv` output formats.
 
@@ -263,13 +264,14 @@ Coverage data is already computed during graph construction but is only surfaced
 
 ### Changelog
 
+- 2026-08-18 | 0cca2a88 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-17 | 185b2d34 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | a12d2826 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-02 | a17871db | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 2fd4ab13 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | 2fd4ab13 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *Coverage Report Section* | **Hash**: 185b2d34
+*End* *Coverage Report Section* | **Hash**: 0cca2a88
 ---
 
 ## REQ-d00073: Link Suggestion CLI Command

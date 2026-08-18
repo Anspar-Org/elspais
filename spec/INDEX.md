@@ -97,9 +97,9 @@
 | REQ-d00080 | Diagnostic Command Exit Code Contract                         | dev-cli.md              | acc2aa77 |
 | REQ-d00081 | Multi-Assertion Reference Expansion                           | dev-cli.md              | b1812806 |
 | REQ-d00082 | Unified Reference Configuration                               | dev-cli.md              | f0808bb9 |
-| REQ-d00084 | Trace Command                                                 | dev-cli.md              | 66981b81 |
+| REQ-d00084 | Trace Command                                                 | dev-cli.md              | 3a6da144 |
 | REQ-d00085 | Unified Report Composition                                    | dev-cli.md              | 587285b0 |
-| REQ-d00086 | Coverage Report Section                                       | dev-cli.md              | 185b2d34 |
+| REQ-d00086 | Coverage Report Section                                       | dev-cli.md              | 0cca2a88 |
 | REQ-d00124 | Graph Analysis Engine                                         | dev-cli.md              | b153d5f6 |
 | REQ-d00125 | Analysis CLI Command                                          | dev-cli.md              | 474fa8af |
 | REQ-d00126 | FILE Node Data Model                                          | dev-graph-file-nodes.md | 070e173b |
@@ -184,7 +184,7 @@
 | REQ-d00271 | Diagnostic Code Vocabulary                                    | dev-cli.md              | 6f4019d1 |
 | REQ-d00272 | Reference Fault Classification                                | dev-graph-core.md       | d01290ac |
 | REQ-d00273 | Requirement Metadata Block                                    | dev-graph-file-nodes.md | 2d7e25e8 |
-| REQ-d00274 | Uncredited Coverage Evidence                                  | dev-graph-core.md       | b7624174 |
+| REQ-d00274 | Uncredited Coverage Evidence                                  | dev-graph-core.md       | 2f1e6599 |
 | REQ-d00275 | Whose Configuration Governs a Federated Answer                | dev-graph-federation.md | 9ab2ef7c |
 | REQ-d00276 | Tests Outside the Requirement Estate                          | dev-graph-core.md       | 922d1382 |
 

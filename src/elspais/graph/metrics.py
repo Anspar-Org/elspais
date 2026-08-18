@@ -378,8 +378,9 @@ class RollupMetrics:
             immediate_indirect_by_label=immediate_indirect,
         )
 
-        # UAT Coverage: direct = assertion-targeted (UAT_EXPLICIT),
-        #               indirect = all (UAT_EXPLICIT + UAT_INFERRED)
+        # UAT Coverage: direct == a journey named the *Assertion* (UAT_EXPLICIT),
+        # indirect == it named only the requirement (UAT_INFERRED). Disjoint by
+        # source, and neither defined in terms of the other (REQ-d00069-L).
         self.uat_coverage = CoverageDimension(
             total=n,
             immediate_direct_by_label=dict.fromkeys(uat_explicit_labels, 1.0),
@@ -428,26 +429,17 @@ class RollupMetrics:
             immediate_indirect_by_label=dict.fromkeys(verified_indirect_labels, 1.0),
         )
         self.verified.carried = verified_carried
-        # uat_verified is fractional (REQ-d00255-C): indirect (generous) footing
-        # is the per-label max of the direct and blanket fractions. direct /
-        # indirect are the sums of those fractions, so a partial journey yields
-        # a sub-total sum -> a "partial" tier and per-assertion standing.
-        uat_labels = set(uat_verified_direct_pct) | set(uat_verified_indirect_pct)
-        uat_indirect_pct_by_label = {
-            label: max(
-                uat_verified_direct_pct.get(label, 0.0),
-                uat_verified_indirect_pct.get(label, 0.0),
-            )
-            for label in uat_labels
-        }
-        # Implements: REQ-d00069-M
-        # uat_verified's direct/indirect_pct_by_label carry fractions (a
-        # partially-verified journey credits its verified-step ratio,
-        # REQ-d00255-C). Immediate coverage records that same strength --
-        # whole where the evidence is whole, partial where the evidence
-        # itself is partial -- so the immediate maps carry the fraction
-        # verbatim, not flattened to 1.0. A mean-of-refinements fraction is
-        # a different thing (rolled-up, conduction, Task 2).
+        # Implements: REQ-d00069-L, REQ-d00069-M
+        # The two measures record WHAT THE CITATION NAMED, and neither is
+        # defined in terms of the other: a journey naming the *Assertion*
+        # credits only the direct measure, a journey naming the requirement
+        # credits only the indirect one. Each carries the journey's verified
+        # fraction verbatim rather than flattened to 1.0 -- immediate coverage
+        # records the STRENGTH of the evidence attached, and a partially
+        # verified journey is partial evidence (REQ-d00255-C). Where both kinds
+        # of journey reach one *Assertion*, ``total_by_label`` takes the
+        # per-label maximum; folding that maximum INTO the indirect measure
+        # would make it report direct credit under the whole-requirement word.
         self.uat_verified = CoverageDimension(
             total=n,
             has_failures=uat_verified_failures,
@@ -456,7 +448,7 @@ class RollupMetrics:
                 lbl: f for lbl, f in uat_verified_direct_pct.items() if f > 0
             },
             immediate_indirect_by_label={
-                lbl: f for lbl, f in uat_indirect_pct_by_label.items() if f > 0
+                lbl: f for lbl, f in uat_verified_indirect_pct.items() if f > 0
             },
         )
 

@@ -48,10 +48,11 @@ json`/`csv` already satisfy without making the default table unreadable.
 each one directly: "cited by name here" (immediate-direct), "whole-requirement"
 (immediate-indirect), "conducted direct"/"conducted indirect" (the two
 rolled-up measures). These words are now the canonical names for the four
-REQ-d00069-L measures everywhere; the `health` coverage check's two
-comparable-looking figures are LEGACY BLENDED footings that predate this
-split and are labeled "legacy direct footing"/"legacy indirect footing" so
-they are not mistaken for the same quantities. The viewer uses the same four
+REQ-d00069-L measures everywhere, and the `health` coverage check prints them
+too: it headlines the same per-assertion total and lists the measures behind
+it under those same four words. Its "cited by name here" figure is shown even
+when it is zero, because that zero is what explains a `gaps` entry the check
+counts as covered. The viewer uses the same four
 names: a requirement's dimension badge and each per-assertion pill headline
 the total standing, and their hover text names all four measures behind it.
 There is no caveat marker standing in for a measure a surface does not show --

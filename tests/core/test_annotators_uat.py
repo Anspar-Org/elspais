@@ -171,3 +171,73 @@ class TestUatPerAssertionFailureAttribution:
 
         assert metrics.uat_verified.failing_labels == {"A", "B"}
         assert metrics.uat_verified.has_failures is True
+
+
+# Verifies: REQ-d00069-L
+# Verifies: REQ-d00069-M
+class TestUatVerifiedMeasuresAreIndependent:
+    """No measure of ``uat_verified`` is defined in terms of another.
+
+    REQ-d00069-L makes the four measures independent: the direct pair records
+    what a citation named by name, the indirect pair what named only the
+    requirement. Folding the direct fraction into the indirect map would make
+    the indirect measure report direct credit -- and every surface publishing
+    the measures (`trace --format csv/json`, the viewer pill and badge hovers,
+    the health coverage check) would print that credit under the
+    "whole-requirement" word.
+    """
+
+    @staticmethod
+    def _both_kinds_of_journey():
+        """One assertion reached by BOTH an assertion-targeted journey and a
+        whole-requirement one, each fully verified."""
+        from elspais.graph.annotators import JourneyVerification
+
+        req = make_requirement(
+            "REQ-p00001",
+            assertions=[
+                {"label": "A", "text": "assertion A"},
+                {"label": "B", "text": "assertion B"},
+            ],
+        )
+        named = make_journey("JNY-TST-001", validates=["REQ-p00001-A"])
+        whole = make_journey("JNY-TST-002", validates=["REQ-p00001"])
+        graph = build_graph(req, named, whole)
+        for jid, frac in (("JNY-TST-001", 1.0), ("JNY-TST-002", 0.5)):
+            graph.find_by_id(jid).set_metric(
+                "journey_verification",
+                JourneyVerification(
+                    tier="full" if frac == 1.0 else "partial",
+                    fully_verified=frac == 1.0,
+                    verified_steps=2 if frac == 1.0 else 1,
+                    total_steps=2,
+                ),
+            )
+        annotate_coverage(graph)
+        return graph.find_by_id("REQ-p00001").get_metric("rollup_metrics")
+
+    def test_indirect_reports_only_whole_requirement_evidence(self):
+        """A carries BOTH kinds of evidence. The indirect measure must report
+        only what the whole-requirement journey contributed (0.5), never the
+        stronger figure the assertion-targeted journey earned (1.0).
+
+        This fails against the retired ``max(direct, blanket)`` composition,
+        which wrote 1.0 here and so reported A as fully covered by
+        whole-requirement evidence that only half-verified it.
+        """
+        metrics = self._both_kinds_of_journey()
+        assert metrics.uat_verified.immediate_direct_by_label["A"] == 1.0
+        assert metrics.uat_verified.immediate_indirect_by_label["A"] == 0.5
+        # B is reached only by the whole-requirement journey, so it reads the
+        # same 0.5 there and nothing at all on the direct measure.
+        assert metrics.uat_verified.immediate_indirect_by_label["B"] == 0.5
+        assert "B" not in metrics.uat_verified.immediate_direct_by_label
+
+    def test_the_total_still_takes_the_stronger_evidence(self):
+        """Keeping the measures apart costs the headline nothing: the
+        per-*Assertion* total is their maximum (REQ-d00069-N), so A still
+        reads fully covered."""
+        metrics = self._both_kinds_of_journey()
+        assert metrics.uat_verified.total_by_label["A"] == 1.0
+        assert metrics.uat_verified.total_by_label["B"] == 0.5
+        assert metrics.uat_verified.covered == 1.5
