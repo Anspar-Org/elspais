@@ -204,6 +204,7 @@ Whole-requirement tests (e.g., `test_implements_req_d00087` with no *Assertion* 
 
 ### Changelog
 
+- 2026-08-18 | bbad16d5 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-18 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: immediate coverage records the strength of the evidence attached, whole where the evidence is whole and partial where the evidence is (M)
 - 2026-08-17 | 6de09e95 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-17 | 6ac9e8a6 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -217,7 +218,7 @@ Whole-requirement tests (e.g., `test_implements_req_d00087` with no *Assertion* 
 - 2026-05-11 | e9b5c3f1 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | e9b5c3f1 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *Indirect Coverage Source* | **Hash**: 6de09e95
+*End* *Indirect Coverage Source* | **Hash**: bbad16d5
 ---
 
 ## REQ-d00070: Indirect Coverage Toggle Display
