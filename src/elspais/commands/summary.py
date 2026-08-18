@@ -258,8 +258,9 @@ def _render_markdown(data: dict) -> str:
     # Level summary
     lines.append("## Summary by Level")
     lines.append("")
-    # Implements: REQ-d00258-A -- see the text renderer: the measures beneath
-    # each headline are four readings of the same assertions, not parts of it.
+    # Implements: REQ-d00258-A
+    # See the text renderer: the measures beneath each headline are four
+    # readings of the same assertions, not parts of it.
     lines.append(
         "*Each headline counts an assertion once, at the greatest of its four"
         " measures; the measures overlap and do not sum.*"

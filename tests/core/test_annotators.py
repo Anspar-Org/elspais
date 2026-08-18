@@ -3,7 +3,6 @@
 # Validates REQ-o00051-E, REQ-o00051-F
 # Validates REQ-d00050-A, REQ-d00050-B, REQ-d00050-C, REQ-d00050-D, REQ-d00050-E
 # Validates REQ-d00051-A, REQ-d00051-B, REQ-d00051-C, REQ-d00051-D
-# Validates REQ-d00051-E, REQ-d00051-F
 # Validates REQ-d00055-A, REQ-d00055-B, REQ-d00055-C, REQ-d00055-D, REQ-d00055-E
 """Tests for Graph Annotators."""
 

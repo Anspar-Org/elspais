@@ -157,7 +157,7 @@ that goes unanswered is visible as a decision rather than as an omission
 
   What counts as evidence naming an *Assertion* is the assertion-targeted kind. Whole-requirement evidence names the requirement, and the indirect measures extend its credit to every *Assertion* of it — so reading that extended set would report assertions nobody wrote down, on every estate that annotates by requirement, sending an author to look for an annotation that was never there. Blanket evidence is not thereby lost: it is reported against the requirement, which is what it named, whenever the dimension counts no *Assertion* of that requirement at all. One consequence is worth stating, because it looks like a gap and is not: the Passing link produces no findings on an estate whose passing evidence is whole-requirement, since nothing there names an individual *Assertion*.
 
-elspais's own estate carries 45 findings across twenty-eight requirements, so this repository sets the rule to `warning` for itself until they are answered one at a time; the finding is right in every case, and the setting records where the estate stands rather than a doubt about the check.
+elspais's own estate carries 42 findings across twenty-eight requirements, so this repository sets the rule to `warning` for itself until they are answered one at a time; the finding is right in every case, and the setting records where the estate stands rather than a doubt about the check.
 
 #### Coverage is four measures and a total, published on every surface
 
