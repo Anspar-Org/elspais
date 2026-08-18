@@ -164,7 +164,7 @@ The coverage annotation system SHALL support an INDIRECT coverage source for who
 
 A. `CoverageSource` enum SHALL include distinct test-evidence values -- `TEST_DIRECT` for an assertion-targeted `Verifies:` and `TEST_INDIRECT` for a whole-requirement `Verifies:` -- kept separate from implementation-evidence sources (`DIRECT`/`EXPLICIT`/`INFERRED`) so that a test that verifies an *Assertion* credits the Tested dimension only and never the Implemented dimension (REQ-d00084-D). (`INDIRECT` remains for the transitive CODE->TEST provenance path.)
 
-B. A whole-requirement (assertion-less) reference SHALL credit every *Assertion* of the target requirement in the indirect measure, at full value, and SHALL credit no direct measure. This SHALL hold for `Verifies:` (Tested), `Implements:` on CODE (Implemented), `Implements:`/`Refines:` from a child requirement, and `Validates:` from a journey alike -- a reference that names no *Assertion* names them all equally, whatever keyword carried it.
+B. A whole-requirement (assertion-less) reference SHALL credit every *Assertion* of the target requirement in its immediate indirect measure, at full value, and SHALL credit no immediate direct measure. This SHALL hold for `Verifies:` (Tested), `Implements:` on CODE (Implemented), `Implements:`/`Refines:` from a child requirement, and `Validates:` from a journey alike -- a reference that names no *Assertion* names them all equally, whatever keyword carried it. What such a reference conducts from a refining requirement is a separate question, answered by REQ-d00069-J.
 
 C. `RollupMetrics` SHALL track `validated_with_indirect` count for assertions validated when including INDIRECT sources.
 
@@ -204,6 +204,8 @@ Whole-requirement tests (e.g., `test_implements_req_d00087` with no *Assertion* 
 
 ### Changelog
 
+- 2026-08-18 | a8b306bc | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-18 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: scope the whole-requirement crediting rule to the immediate measures, leaving what it conducts to J (B)
 - 2026-08-18 | bbad16d5 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-18 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: immediate coverage records the strength of the evidence attached, whole where the evidence is whole and partial where the evidence is (M)
 - 2026-08-17 | 6de09e95 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -218,7 +220,7 @@ Whole-requirement tests (e.g., `test_implements_req_d00087` with no *Assertion* 
 - 2026-05-11 | e9b5c3f1 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | e9b5c3f1 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *Indirect Coverage Source* | **Hash**: bbad16d5
+*End* *Indirect Coverage Source* | **Hash**: a8b306bc
 ---
 
 ## REQ-d00070: Indirect Coverage Toggle Display
