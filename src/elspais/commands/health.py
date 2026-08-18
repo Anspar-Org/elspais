@@ -2608,6 +2608,7 @@ def check_whole_req_only_coverage(graph, config=None) -> HealthCheck:
     fails the build. (REQ-d00258.)
     """
     from elspais.graph import NodeKind
+    from elspais.graph.aggregation import measure_by_label
 
     findings: list[HealthFinding] = []
     total = 0
@@ -2616,10 +2617,16 @@ def check_whole_req_only_coverage(graph, config=None) -> HealthCheck:
         if rollup is None:
             continue
         dim = rollup.implemented
+        # Evidence ATTACHED to this requirement, on both immediate measures
+        # (REQ-d00069-L): an *Assertion* relies on whole-requirement evidence
+        # when the blanket citation reaches further than any citation naming
+        # it. Conducted coverage is a different fact and is not counted here --
+        # the message says "whole-requirement evidence", and it must be true.
+        immediate_direct = measure_by_label(dim, "immediate_direct")
         n = sum(
             1
-            for lbl, ind in dim.indirect_pct_by_label.items()
-            if ind > dim.direct_pct_by_label.get(lbl, 0.0) + 1e-9
+            for lbl, ind in measure_by_label(dim, "immediate_indirect").items()
+            if ind > immediate_direct.get(lbl, 0.0) + 1e-9
         )
         if n:
             total += n
@@ -3398,6 +3405,7 @@ def check_uat_coverage(
     # WHICH reqs are uncovered (no re-implementation of the sum walk).
     from elspais.config import status_expects_implementation
     from elspais.graph import NodeKind
+    from elspais.graph.aggregation import covered_labels
 
     # REQ-d00258-C: the uncovered-findings walk gates on the SAME coverage
     # inclusion resolver as ``aggregate_dimension`` above, so the sums and the
@@ -3408,7 +3416,11 @@ def check_uat_coverage(
         if not status_expects_implementation(cfg, node.status) or not level_filter(node.level):
             continue
         rollup = node.get_metric("rollup_metrics")
-        if rollup is None or rollup.uat_coverage.indirect <= 0:
+        # Evidence ATTACHED here (REQ-d00258-M): a journey validating the
+        # requirement counts however it cited it, while UAT coverage conducted
+        # from a refining requirement does not rescue a requirement no journey
+        # visits.
+        if rollup is None or not covered_labels(rollup.uat_coverage, "immediate"):
             uncovered.append(
                 HealthFinding(
                     message=f"{node.id}: no UAT validation (level expects_validation)",

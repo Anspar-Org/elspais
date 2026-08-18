@@ -2,9 +2,17 @@
 
 Implements: REQ-d00258-C
 CLI summary, MCP get_project_summary, and the viewer all read this module so
-identical questions receive identical answers. Counts use the generous
-footing (CoverageDimension.indirect) per REQ-d00069-L; the strict footing is
-carried alongside for detail/marker rendering.
+identical questions receive identical answers.
+
+Coverage is measured on the four measures of REQ-d00069-L -- what a citation
+named (direct/indirect) crossed with where the evidence sits (immediate/
+rolled-up) -- plus the per-*Assertion* total of REQ-d00069-N. Every helper
+here that scores coverage takes the measure it is scoring by name, so a
+figure and its denominator are always made of the same kind of evidence
+(REQ-d00258-I) and no surface can read a number without saying which one it
+asked for. A surface reporting what still needs doing reads
+``WORK_LIST_MEASURE`` (REQ-d00258-M); a surface reporting how far along the
+estate is headlines ``"total"`` (REQ-d00258-A).
 """
 
 from __future__ import annotations
@@ -51,30 +59,122 @@ DENOMINATOR_DIMENSION: dict[str, str] = {
 }
 
 
+# Implements: REQ-d00069-L, REQ-d00069-N
+# Every per-*Assertion* map a surface may score, by name. The four measures of
+# REQ-d00069-L are the primary entries; ``total`` is the per-*Assertion*
+# greatest of them (REQ-d00069-N) and ``immediate`` is the strongest evidence
+# ATTACHED here whichever a citation named -- neither is a fifth measure, both
+# are derived views a surface asks for by name. ``direct``/``indirect`` are the
+# legacy blended footings, still named here because the surfaces that have not
+# yet been migrated must still say which figure they are reading.
+_MEASURE_ATTRS: dict[str, str] = {
+    "immediate_direct": "immediate_direct_by_label",
+    "immediate_indirect": "immediate_indirect_by_label",
+    "rolled_direct": "rolled_direct_by_label",
+    "rolled_indirect": "rolled_indirect_by_label",
+    "direct": "direct_pct_by_label",
+    "indirect": "indirect_pct_by_label",
+}
+
+MEASURES: tuple[str, ...] = (
+    "immediate_direct",
+    "immediate_indirect",
+    "rolled_direct",
+    "rolled_indirect",
+)
+
+# Implements: REQ-d00258-M
+# The measure a surface reporting WHICH assertions need work reads: a citation
+# named the *Assertion* and the evidence is attached to it. Named once so
+# ``gaps``, the health coverage checks, and anything else answering "what is
+# left to do" cannot drift apart about what counts as done.
+WORK_LIST_MEASURE = "immediate_direct"
+
+# The measure a surface reporting how far along the estate is headlines
+# (REQ-d00258-A): each *Assertion* counted once, at the greatest of its four.
+HEADLINE_MEASURE = "total"
+
+
+def measure_by_label(dim: CoverageDimension, measure: str) -> dict[str, float]:
+    """The per-*Assertion* fractions of ``dim`` for ``measure``.
+
+    ONE resolution from a measure's name to its map, so a surface names the
+    measure it is reading and every surface reading that name gets the same
+    numbers (REQ-d00258-C).
+    """
+    if measure == "total":
+        return dim.total_by_label
+    if measure == "immediate":
+        # The stronger of the two immediate measures per *Assertion*: evidence
+        # attached HERE, whether its citation named the *Assertion* or only the
+        # requirement. Conducted value is deliberately absent -- this answers
+        # "is there evidence at this requirement at all".
+        out = dict(dim.immediate_direct_by_label)
+        for lbl, frac in dim.immediate_indirect_by_label.items():
+            if frac > out.get(lbl, 0.0):
+                out[lbl] = frac
+        return out
+    attr = _MEASURE_ATTRS.get(measure)
+    if attr is None:
+        raise ValueError(f"unknown coverage measure: {measure!r}")
+    return getattr(dim, attr)
+
+
+def measure_total(dim: CoverageDimension, measure: str) -> float:
+    """The summed coverage of ``dim`` in ``measure`` (an assertion count)."""
+    return sum(measure_by_label(dim, measure).values())
+
+
+def covered_labels(dim: CoverageDimension, measure: str) -> set[str]:
+    """Assertions with ANY coverage in ``measure``.
+
+    Read from the fractions rather than the dict keys: conduction seeds a 0.0
+    entry for every *Assertion* label, so a set built from the keys would count
+    an uncovered *Assertion* as covered (REQ-d00258-I).
+    """
+    return {lbl for lbl, frac in measure_by_label(dim, measure).items() if frac > 0}
+
+
+_COVERED_EPS = 1e-9
+
+
+def is_covered(fraction: float) -> bool:
+    """Whether a per-*Assertion* fraction counts as covered.
+
+    An *Assertion* is covered only at (approximately) its whole value; a
+    partially covered one is still work (REQ-d00258-M).
+    """
+    return fraction >= 1.0 - _COVERED_EPS
+
+
 # Implements: REQ-d00258-I
 def relative_tier(
     num_dim: CoverageDimension,
     denom_labels: set[str],
     *,
-    allow_indirect: bool = True,
+    measure: str,
 ) -> tuple[str, bool]:
-    """Tier of ``num_dim`` measured over the relative denominator ``denom_labels``.
+    """Tier of ``num_dim`` in ``measure``, over the denominator ``denom_labels``.
 
     Returns ``(tier, is_na)``. ``is_na`` is True when the denominator is empty
-    (nothing to measure -> ``missing`` at neutral severity, design §1/§2). A
-    failing label within the denominator wins (``failing``). ``allow_indirect``
-    selects the credited per-label fractions (Phase 4 threads the config).
+    (nothing to measure -> ``missing`` at neutral severity). A failing label
+    within the denominator wins (``failing``).
+
+    ``measure`` names which per-*Assertion* map is scored, and the caller is
+    required to say: the denominator was built from one measure, and scoring a
+    different one here would report a figure over a denominator made of another
+    kind of evidence (REQ-d00258-I).
 
     Single home for the relative-tier logic (REQ-d00258-C): both the badge
     projection (html/generator.py) and the requirement-level tier buckets read
     this one helper so identical questions receive identical answers.
     """
-    eps = 1e-9
+    eps = _COVERED_EPS
     if not denom_labels:
         return "missing", True
     if num_dim.failing_labels & denom_labels:
         return "failing", False
-    pct = num_dim.indirect_pct_by_label if allow_indirect else num_dim.direct_pct_by_label
+    pct = measure_by_label(num_dim, measure)
     covered = sum(min(pct.get(lbl, 0.0), 1.0) for lbl in denom_labels)
     n = len(denom_labels)
     if covered >= n - eps:
@@ -84,26 +184,43 @@ def relative_tier(
     return "missing", False
 
 
-def absolute_tier(dim: CoverageDimension, *, allow_indirect: bool = True) -> str:
-    """Absolute tier of a dimension, honoring ``allow_indirect``.
+def absolute_tier(dim: CoverageDimension, *, measure: str) -> str:
+    """Tier of a dimension in ``measure``, measured over ALL its assertions.
 
-    With ``allow_indirect=True`` this is exactly ``dim.tier`` (the generous
-    footing, REQ-d00069-L). With ``allow_indirect=False`` only DIRECT coverage
-    credits the state: a dimension covered solely via indirect conduction reads
-    ``missing`` (REQ-d00258, Phase 4). A failing dimension is ``failing`` either
-    way. The ``CoverageDimension.tier`` property is deliberately unchanged (it
-    remains the allow_indirect=True semantics used elsewhere).
+    A failing dimension is ``failing`` whatever the measure says. Otherwise the
+    measure's summed coverage is compared against the assertion count, so a
+    dimension reads ``full`` only when the named measure accounts for every
+    *Assertion*.
+
+    The two legacy footings are read from their own summed fields rather than
+    re-derived from the per-label maps, because those fields are the figures
+    the un-migrated surfaces publish and a dimension may carry one without the
+    other.
     """
-    if allow_indirect:
-        return dim.tier
-    eps = 1e-9
+    eps = _COVERED_EPS
     if dim.has_failures:
         return "failing"
-    if dim.total > 0 and dim.direct >= dim.total - eps:
+    if measure == "indirect":
+        covered: float = dim.indirect
+    elif measure == "direct":
+        covered = dim.direct
+    else:
+        covered = sum(min(v, 1.0) for v in measure_by_label(dim, measure).values())
+    if dim.total > 0 and covered >= dim.total - eps:
         return "full"
-    if dim.direct > eps:
+    if covered > eps:
         return "partial"
     return "missing"
+
+
+def legacy_measure(allow_indirect: bool) -> str:
+    """The legacy footing name for a surface still configured by ``allow_indirect``.
+
+    The blended footings are what the un-migrated surfaces still publish, so
+    they name one rather than silently reading a measure their figures were
+    never computed on.
+    """
+    return "indirect" if allow_indirect else "direct"
 
 
 def allow_indirect_from_config(config: Any | None) -> bool:
@@ -126,27 +243,29 @@ def allow_indirect_from_config(config: Any | None) -> bool:
     return bool(getattr(cov, "allow_indirect", True))
 
 
-def denominator_labels(rollup: RollupMetrics, dimension: str) -> set[str] | None:
+def denominator_labels(rollup: RollupMetrics, dimension: str, *, measure: str) -> set[str] | None:
     """The label set a chained dimension is measured over; None if absolute.
 
     The denominator is the set of labels ACTUALLY covered in the prior
-    dimension (fraction > 0), NOT every label present in the per-label map:
-    ``_conduct_refines_coverage`` seeds a 0.0 entry for every assertion label
+    dimension (fraction > 0) IN ``measure``, NOT every label present in the
+    per-label map: conduction seeds a 0.0 entry for every assertion label
     (incl. unimplemented ones), so building the set from the dict keys would
     silently make this "relative" chain absolute and disagree with the
-    gaps/MCP surfaces (which filter frac > 0). REQ-d00258-I.
+    gaps/MCP surfaces (which filter frac > 0).
+
+    The caller names the measure because the chain is measured WITHIN one
+    measure (REQ-d00258-I): Tested read on the immediate direct measure is the
+    coverage of the assertions immediately-directly implemented, so that a
+    figure and its denominator are made of the same kind of evidence.
 
     ONE definition, so the tier that reports a dimension and the check that
     reports evidence falling outside it cannot disagree about what the
     dimension counts (REQ-d00274-B).
-
     """
     denom_name = DENOMINATOR_DIMENSION.get(dimension)
     if denom_name is None:
         return None
-    return {
-        lbl for lbl, frac in getattr(rollup, denom_name).indirect_pct_by_label.items() if frac > 0
-    }
+    return covered_labels(getattr(rollup, denom_name), measure)
 
 
 def numerator_dimension(rollup: RollupMetrics, dimension: str) -> CoverageDimension:
@@ -177,22 +296,23 @@ def relative_tier_for(
     rollup: RollupMetrics,
     dimension: str,
     *,
-    allow_indirect: bool = True,
+    measure: str,
 ) -> tuple[str, bool]:
     """``(tier, is_na)`` for one dimension of a rollup, honoring the chain.
 
     For a chained dimension (in ``DENOMINATOR_DIMENSION``) the tier is measured
-    RELATIVELY over the label-set that qualified at the prior link. The
-    'verified' numerator is ``tested_and_passing`` (verified | lcov credit),
-    matching the badge projection -- NOT the raw ``rollup.verified`` dimension,
-    which would miss line-coverage credit. An absolute dimension (implemented,
-    uat_coverage) returns its own ``.tier`` and is never N/A.
+    RELATIVELY over the label-set that qualified at the prior link, and the
+    SAME ``measure`` is used on both sides of that ratio so the figure and its
+    denominator are made of the same kind of evidence (REQ-d00258-I). The
+    'verified' numerator is ``tested_and_passing``, matching the badge
+    projection. An absolute dimension (implemented, uat_coverage) is measured
+    over all its assertions and is never N/A.
     """
-    denom_labels = denominator_labels(rollup, dimension)
+    denom_labels = denominator_labels(rollup, dimension, measure=measure)
     if denom_labels is None:
-        return absolute_tier(getattr(rollup, dimension), allow_indirect=allow_indirect), False
+        return absolute_tier(getattr(rollup, dimension), measure=measure), False
     num_dim = numerator_dimension(rollup, dimension)
-    return relative_tier(num_dim, denom_labels, allow_indirect=allow_indirect)
+    return relative_tier(num_dim, denom_labels, measure=measure)
 
 
 # Implements: REQ-d00274-A, REQ-d00274-D
@@ -235,8 +355,13 @@ def named_labels(dim: CoverageDimension) -> set[str]:
     do so on every estate that annotates by requirement -- an author sent looking
     for an annotation that was never written. Blanket evidence is not thereby
     lost: it names the requirement, and REQ-d00274-F reports it there.
+
+    Read from the immediate direct measure (REQ-d00069-L): a value conducted
+    up a `Refines:` chain was written against the refining requirement, not
+    against this *Assertion*, so counting it here would report an annotation
+    nobody wrote, at a place nobody wrote it.
     """
-    return {lbl for lbl, frac in dim.direct_pct_by_label.items() if frac > 0}
+    return covered_labels(dim, "immediate_direct")
 
 
 @dataclass(frozen=True)
@@ -368,7 +493,10 @@ def iter_uncredited_evidence(
         if rollup is None or rollup.total_assertions == 0:
             continue
         for dimension, denom_name in DENOMINATOR_DIMENSION.items():
-            denom = denominator_labels(rollup, dimension)
+            # The legacy blended footing, which is still what this project's
+            # own chained figures are computed on (REQ-d00274-B): what is
+            # reported must be exactly what those figures leave out.
+            denom = denominator_labels(rollup, dimension, measure="indirect")
             if denom is None:  # pragma: no cover - chained dimensions only
                 continue
             num_dim = authored_dimension(rollup, dimension)
@@ -378,7 +506,7 @@ def iter_uncredited_evidence(
                 # for the requirement, not one per assertion (REQ-d00274-F).
                 # Blanket evidence is caught here and only here: it named the
                 # requirement, which is what this finding is about.
-                reached = {lbl for lbl, f in num_dim.indirect_pct_by_label.items() if f > 0}
+                reached = covered_labels(num_dim, "indirect")
                 if not reached:
                     continue
                 sources = _evidence_sources_for(rollup, dimension, reached)
@@ -417,9 +545,23 @@ def iter_uncredited_evidence(
 
 @dataclass
 class DimensionSums:
+    """One dimension's assertion-fraction sums for a level.
+
+    ``covered``/``direct`` are the LEGACY blended footings, kept until the
+    surfaces still reading them have moved. The four measures of REQ-d00069-L
+    and the per-*Assertion* total of REQ-d00069-N are carried alongside, each
+    in its own right, so a surface can report a figure and show the evidence
+    behind it (REQ-d00258-A).
+    """
+
     covered: float = 0.0
     direct: float = 0.0
     total: int = 0
+    immediate_direct: float = 0.0
+    immediate_indirect: float = 0.0
+    rolled_direct: float = 0.0
+    rolled_indirect: float = 0.0
+    total_covered: float = 0.0
 
 
 @dataclass
@@ -464,6 +606,14 @@ class DimensionAggregate:
     total: int = 0
     direct: float = 0.0
     covered: float = 0.0
+    # Implements: REQ-d00069-L, REQ-d00069-N
+    # The four measures and the per-*Assertion* total, each summed in its own
+    # right beside the legacy footings above.
+    immediate_direct: float = 0.0
+    immediate_indirect: float = 0.0
+    rolled_direct: float = 0.0
+    rolled_indirect: float = 0.0
+    total_covered: float = 0.0
     req_count: int = 0
     req_with_any: int = 0
     req_with_direct: int = 0
@@ -502,6 +652,12 @@ def _accumulate(sums: DimensionSums, dim: CoverageDimension) -> None:
     sums.covered += dim.indirect
     sums.direct += dim.direct
     sums.total += dim.total
+    # Implements: REQ-d00069-L, REQ-d00069-N
+    sums.immediate_direct += measure_total(dim, "immediate_direct")
+    sums.immediate_indirect += measure_total(dim, "immediate_indirect")
+    sums.rolled_direct += measure_total(dim, "rolled_direct")
+    sums.rolled_indirect += measure_total(dim, "rolled_indirect")
+    sums.total_covered += dim.covered
 
 
 def _counts_for_coverage(config: dict[str, Any] | None, status: str | None) -> bool:
@@ -615,6 +771,12 @@ def aggregate_dimension(
         agg.total += dim.total
         agg.direct += dim.direct
         agg.covered += dim.indirect
+        # Implements: REQ-d00069-L, REQ-d00069-N
+        agg.immediate_direct += measure_total(dim, "immediate_direct")
+        agg.immediate_indirect += measure_total(dim, "immediate_indirect")
+        agg.rolled_direct += measure_total(dim, "rolled_direct")
+        agg.rolled_indirect += measure_total(dim, "rolled_indirect")
+        agg.total_covered += dim.covered
         if dim.indirect > 0 or integrates:
             agg.req_with_any += 1
         if dim.direct > 0 or integrates:
@@ -648,7 +810,9 @@ def tier_buckets(
     shared ``status_expects_implementation`` resolver (REQ-d00258-C).
     Behavior-preserving for default config.
     """
-    allow_indirect = allow_indirect_from_config(config)
+    # The legacy blended footing this surface's figures are still computed
+    # on, named explicitly rather than defaulted (REQ-d00258-I).
+    measure = legacy_measure(allow_indirect_from_config(config))
     buckets = TierBuckets()
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
         if not _counts_for_coverage(config, node.status):
@@ -658,10 +822,26 @@ def tier_buckets(
         if rollup is None or getattr(rollup, dimension, None) is None:
             buckets.missing += 1
             continue
-        tier, _is_na = relative_tier_for(rollup, dimension, allow_indirect=allow_indirect)
+        tier, _is_na = relative_tier_for(rollup, dimension, measure=measure)
         bucket = TIER_TO_BUCKET.get(tier, "missing")
         setattr(buckets, bucket, getattr(buckets, bucket) + 1)
     return buckets
+
+
+# Implements: REQ-d00069-L, REQ-d00069-N, REQ-d00258-A
+def _measure_fields(prefix: str, sums: DimensionSums) -> dict[str, float]:
+    """One dimension's four measures plus its total, keyed for a payload.
+
+    Published beside the headline so a reader is never shown a figure without
+    being able to see what evidence produced it (REQ-d00258-A).
+    """
+    return {
+        f"{prefix}_immediate_direct": round(sums.immediate_direct, 3),
+        f"{prefix}_immediate_indirect": round(sums.immediate_indirect, 3),
+        f"{prefix}_rolled_direct": round(sums.rolled_direct, 3),
+        f"{prefix}_rolled_indirect": round(sums.rolled_indirect, 3),
+        f"{prefix}_total_covered": round(sums.total_covered, 3),
+    }
 
 
 # Implements: REQ-d00086-A, REQ-d00258-C
@@ -708,6 +888,11 @@ def collect_coverage(graph: Any, config: dict[str, Any] | None = None) -> dict[s
                 "tested_awaiting": agg.tested_awaiting,
                 "passing_assertions": round(agg.passing.covered, 3),
                 "passing_direct": round(agg.passing.direct, 3),
+                **_measure_fields("implemented", agg.implemented),
+                **_measure_fields("tested", agg.tested),
+                **_measure_fields("passing", agg.passing),
+                **_measure_fields("uat_covered", agg.uat_covered),
+                **_measure_fields("uat_passed", agg.uat_passed),
             }
         )
 
@@ -769,7 +954,10 @@ def collect_coverage(graph: Any, config: dict[str, Any] | None = None) -> dict[s
 
 __all__ = [
     "DENOMINATOR_DIMENSION",
+    "HEADLINE_MEASURE",
+    "MEASURES",
     "TIER_TO_BUCKET",
+    "WORK_LIST_MEASURE",
     "DimensionAggregate",
     "DimensionSums",
     "LevelAggregate",
@@ -779,6 +967,11 @@ __all__ = [
     "aggregate_by_level",
     "allow_indirect_from_config",
     "collect_coverage",
+    "covered_labels",
+    "is_covered",
+    "legacy_measure",
+    "measure_by_label",
+    "measure_total",
     "aggregate_dimension",
     "authored_dimension",
     "denominator_labels",

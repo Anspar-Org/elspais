@@ -1180,6 +1180,7 @@ class TestRefinesCoverageConduction:
 
     # Verifies: REQ-d00069-J
     # Verifies: REQ-d00258-A
+    # Verifies: REQ-d00258-M
     def test_partial_conducted_coverage_is_a_gap(self):
         """Partial conducted coverage (0 < f < 1) is still reported as a gap.
 
@@ -1188,10 +1189,11 @@ class TestRefinesCoverageConduction:
         own A tested, its own B untested), so its own rolled-up TESTED coverage
         is genuinely 0.5. Full credit (REQ-d00069-J) conducts that actual 0.5 --
         not an arbitrary 1/N-deflated fraction of a full 1.0 -- to each parent
-        assertion. The gaps surface treats an assertion as covered only at
-        ~1.0, so both A and B remain *testing* gaps -- they are IMPLEMENTED but
-        only partially tested (REQ-d00258's relative denominator: a testing gap
-        is implemented AND not tested).
+        assertion, which is what the reporting surfaces headline. The work
+        list answers the other question (REQ-d00258-M): no test names either
+        assertion and none is attached to PARENT, so both remain *testing*
+        gaps -- they are IMPLEMENTED and untested (REQ-d00258-I's relative
+        denominator: a testing gap is implemented AND not tested).
 
         Exercises the real ``collect_gaps`` entry point, which passes assertion
         nodes (IDs keyed by label) -- guarding against the regression where the
@@ -1234,24 +1236,12 @@ class TestRefinesCoverageConduction:
         assert metrics.tested.indirect_pct_by_label["A"] == pytest.approx(0.5)
         assert metrics.tested.indirect_pct_by_label["B"] == pytest.approx(0.5)
 
-        # Both assertion IDs of PARENT (partial coverage = gap).
-        parent = graph.find_by_id("PARENT")
-        from elspais.graph import NodeKind
-
-        parent_assertion_ids = {
-            c.id for c in parent.iter_children() if c.kind == NodeKind.ASSERTION
-        }
-
         data = collect_gaps(graph, set())
         untested = next(e for e in data.untested if e.req_id == "PARENT")
-        # REQ-d00069-J: assertions carry (id, label, fraction) triples so a partially
-        # conducted assertion (fraction 0.5 here) is distinguishable from one
-        # with no coverage at all.
-        assert {aid for aid, _label, _frac in untested.assertions} == parent_assertion_ids
-        # REQ-d00258-M: the gap surface answers on the strict footing. REQ-BLANK
-        # refines PARENT as a WHOLE (no assertion named), so its 0.5 conducts
-        # only to the generous footing -- nothing names PARENT-A or PARENT-B, and
-        # the gap list says so with 0.0. (An assertion-targeted `Refines: P/A`
-        # does carry its partial fraction strictly; see
-        # test_uncovered_assertions_carry_fractions.)
-        assert all(frac == pytest.approx(0.0) for _aid, _label, frac in untested.assertions)
+        # REQ-d00258-M: the work list reads the immediate direct measure. No
+        # test names PARENT-A or PARENT-B and none is attached to PARENT at
+        # all -- REQ-BLANK's 0.5 was conducted from below -- so every
+        # implemented assertion of PARENT is untested and the entry takes the
+        # whole-requirement form. The conducted 0.5 is not lost: it is what the
+        # reporting surfaces headline, asserted above.
+        assert untested.assertions == []

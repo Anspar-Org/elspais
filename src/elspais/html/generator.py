@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from elspais import __version__
-from elspais.graph.aggregation import absolute_tier, relative_tier
+from elspais.graph.aggregation import absolute_tier, legacy_measure, relative_tier
 from elspais.graph.parsers.patterns import JNY_ID_PATTERN
 from elspais.html.theme import get_catalog
 from elspais.utilities.patterns import INSTANCE_SEPARATOR
@@ -311,14 +311,17 @@ def compute_coverage_tiers(node: GraphNode, config: dict[str, Any] | None = None
     any_failing = False
     tip_parts: list[str] = []
 
+    # The legacy blended footing this surface's figures are still computed on,
+    # named rather than defaulted so the badge says which measure it scored
+    # (REQ-d00258-I).
+    measure = legacy_measure(cov_config.allow_indirect)
     for dim_key, dim, sev_cfg, prefix, denom in dim_map:
         if denom is None:
-            # absolute: measured over all assertions. When allow_indirect is
-            # False, only direct coverage credits the state (REQ-d00258, Phase 4).
-            tier = absolute_tier(dim, allow_indirect=cov_config.allow_indirect)
+            # absolute: measured over all assertions.
+            tier = absolute_tier(dim, measure=measure)
             is_na = False
         else:
-            tier, is_na = relative_tier(dim, denom, allow_indirect=cov_config.allow_indirect)
+            tier, is_na = relative_tier(dim, denom, measure=measure)
         # A `missing` tier that is N/A (empty relative denominator) is neutral:
         # nothing to measure, so it resolves to the `neutral` severity (GREY,
         # REQ-d00258-H) regardless of the dimension's configured `missing`

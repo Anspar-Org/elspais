@@ -304,7 +304,17 @@ class TestCheckUatCoverage:
         req = _make_req("REQ-d00001")
         metrics = RollupMetrics(
             total_assertions=2,
-            uat_coverage=CoverageDimension(total=2, direct=1, indirect=1),
+            uat_coverage=CoverageDimension(
+                total=2,
+                direct=1,
+                indirect=1,
+                # A journey names A: evidence attached to this requirement, so
+                # it is recorded in the immediate direct measure (REQ-d00069-L)
+                # -- which is what the gap walk reads (REQ-d00258-M).
+                direct_pct_by_label={"A": 1.0},
+                indirect_pct_by_label={"A": 1.0},
+                immediate_direct_by_label={"A": 1.0},
+            ),
         )
         req.set_metric("rollup_metrics", metrics)
 

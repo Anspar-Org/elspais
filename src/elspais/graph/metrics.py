@@ -876,6 +876,16 @@ def tested_and_passing(metrics: RollupMetrics) -> CoverageDimension:
     else:
         combined_indirect = vd.indirect
 
+    # Implements: REQ-d00069-L, REQ-d00258-N
+    # The four measures come through with the failing assertions removed, the
+    # same exclusion the scalar sums above apply: these maps ARE the Passing
+    # figures now, and an *Assertion* whose declared test returned a failure
+    # does not pass (REQ-d00258-N). The failure itself is not lost -- it is
+    # carried in ``failing_labels``, which is what a standing reads first
+    # (REQ-d00258-G).
+    def _passing_only(by_label: dict[str, float]) -> dict[str, float]:
+        return {lbl: frac for lbl, frac in by_label.items() if lbl not in failing}
+
     return CoverageDimension(
         total=vd.total,
         direct=combined_direct,
@@ -887,6 +897,10 @@ def tested_and_passing(metrics: RollupMetrics) -> CoverageDimension:
         direct_pct_by_label=direct_pct,
         indirect_pct_by_label=indirect_pct,
         carried=vd.carried,
+        immediate_direct_by_label=_passing_only(vd.immediate_direct_by_label),
+        immediate_indirect_by_label=_passing_only(vd.immediate_indirect_by_label),
+        rolled_direct_by_label=_passing_only(vd.rolled_direct_by_label),
+        rolled_indirect_by_label=_passing_only(vd.rolled_indirect_by_label),
     )
 
 

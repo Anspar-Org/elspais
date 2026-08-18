@@ -27,18 +27,23 @@ from elspais.graph.metrics import RollupMetrics
 
 
 # Verifies: REQ-d00069-J, REQ-d00258-A
-def test_uncovered_assertions_carry_fractions() -> None:
-    """_uncovered_assertions returns (id, fraction) pairs.
+# Verifies: REQ-d00258-M
+def test_conducted_coverage_leaves_an_uncited_assertion_a_gap() -> None:
+    """_uncovered_assertions reports an *Assertion* no citation names.
 
     The canonical hht-like fixture has no REFINES-conduction scenario, so this
-    builds a minimal REFINES scenario on the ``implemented`` dimension:
-    REQ-100 has assertions A-D; REQ-010 assertion-targeted-refines REQ-100-A
-    and is itself only half-covered (its own X implemented via CODE, Y not);
-    REQ-020 implements REQ-100-B directly. Full-weight conduction
-    (REQ-d00069-J) credits REQ-100-A with REQ-010's own actual coverage, 0.5
-    -- genuinely partial, since REQ-100-A has no local evidence of its own to
-    floor it at 1.0 (monotone max has nothing else to max against). B is
-    fully covered (1.0, excluded from the gap list), and C/D remain at 0.0.
+    builds a minimal one on the ``implemented`` dimension: REQ-100 has
+    assertions A-D; REQ-010 assertion-targeted-refines REQ-100-A and is itself
+    half-covered (its own X implemented via CODE, Y not); REQ-020 implements
+    REQ-100-B directly.
+
+    Conduction (REQ-d00069-J) credits REQ-100-A with REQ-010's own coverage,
+    and the estate summary counts that. This list does not: a gap surface
+    reads the immediate direct measure (REQ-d00258-M), and nobody has written
+    evidence naming REQ-100-A, so it is reported with no coverage at all --
+    however far along the requirement refining it may be. B, named by an
+    assertion-targeted `Implements:`, is not a gap; C and D were never cited
+    either.
     """
     from elspais.commands.gaps import _uncovered_assertions
     from elspais.graph.annotators import annotate_coverage
@@ -73,10 +78,11 @@ def test_uncovered_assertions_carry_fractions() -> None:
     uncov = _uncovered_assertions(metrics, assertion_nodes, "implemented")
     by_id = {aid: frac for aid, _label, frac in uncov}
 
-    partial = [(aid, f) for aid, _label, f in uncov if 0 < f < 1]
-    assert partial, "expected a partially-conducted assertion in fixture"
-    assert by_id["REQ-100-A"] == 0.5
-    assert "REQ-100-B" not in by_id  # fully covered (1.0) -- not a gap
+    # The conducted credit is real and reported elsewhere -- the work list
+    # simply does not read it.
+    assert metrics.implemented.rolled_direct_by_label["A"] == 0.5
+    assert by_id["REQ-100-A"] == 0.0  # nothing names A
+    assert "REQ-100-B" not in by_id  # named by an assertion-targeted reference
     assert by_id["REQ-100-C"] == 0.0
     assert by_id["REQ-100-D"] == 0.0
 
@@ -304,17 +310,19 @@ def _req_with_assertions(
         req.link(assertion, EdgeKind.STRUCTURES)
 
     def _dim(fractions: dict[str, float]) -> CoverageDimension:
-        # The supplied fractions model assertion-targeted (named) evidence, so
-        # they populate BOTH footings: the gap surfaces read the strict map
-        # (REQ-d00258-M) and the reporting surfaces read the generous one.
-        # Whole-requirement-only evidence is exercised separately, on a graph
-        # built from real references (TestStrictFootingGaps).
+        # The supplied fractions model assertion-targeted (named) evidence
+        # attached to this requirement, so they populate the IMMEDIATE DIRECT
+        # measure the gap surfaces read (REQ-d00258-M) as well as the legacy
+        # footings the reporting surfaces still read. Whole-requirement-only
+        # evidence and conducted coverage are exercised separately, on graphs
+        # built from real references.
         return CoverageDimension(
             total=len(labels),
             direct=sum(fractions.values()),
             indirect=sum(fractions.values()),
             direct_pct_by_label=dict(fractions),
             indirect_pct_by_label=dict(fractions),
+            immediate_direct_by_label=dict(fractions),
         )
 
     req.set_metric(
@@ -844,7 +852,7 @@ class TestStrictFootingGaps:
         assert agg.direct == pytest.approx(1.0)  # strict: B only
 
         rollup = blanket_evidence_graph.find_by_id("REQ-700").get_metric("rollup_metrics")
-        tier, is_na = relative_tier_for(rollup, "tested")
+        tier, is_na = relative_tier_for(rollup, "tested", measure="indirect")
         assert (tier, is_na) == ("full", False)
 
     # Verifies: REQ-d00258-M
