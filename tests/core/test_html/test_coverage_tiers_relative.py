@@ -37,8 +37,8 @@ def _dim(labels=(), *, total=5, failing=()):
         failing_labels=set(failing),
         direct_labels=set(labels),
         indirect_labels=set(labels),
-        direct_pct_by_label=dict.fromkeys(labels, 1.0),
-        indirect_pct_by_label=dict.fromkeys(labels, 1.0),
+        immediate_direct_by_label=dict.fromkeys(labels, 1.0),
+        immediate_indirect_by_label=dict.fromkeys(labels, 1.0),
     )
 
 
@@ -177,8 +177,8 @@ def _dim_with_zeros(covered=(), zeros=(), *, total=5, failing=()):
         failing_labels=set(failing),
         direct_labels=set(covered),
         indirect_labels=set(covered),
-        direct_pct_by_label=dict(pct),
-        indirect_pct_by_label=dict(pct),
+        immediate_direct_by_label=dict(pct),
+        immediate_indirect_by_label=dict(pct),
     )
 
 

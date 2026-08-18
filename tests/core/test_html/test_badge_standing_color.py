@@ -48,8 +48,8 @@ def _dim(pct_by_label, *, total, failing=()):
         failing_labels=set(failing),
         direct_labels=set(covered),
         indirect_labels=set(covered),
-        direct_pct_by_label=dict(pct),
-        indirect_pct_by_label=dict(pct),
+        immediate_direct_by_label=dict(pct),
+        immediate_indirect_by_label=dict(pct),
     )
 
 

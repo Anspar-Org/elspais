@@ -53,15 +53,15 @@ def _spread_rollup():
             total=5,
             direct=1,
             indirect=1,
-            direct_pct_by_label={"A": 1.0},
-            indirect_pct_by_label={"A": 1.0},
+            immediate_direct_by_label={"A": 1.0},
+            immediate_indirect_by_label={"A": 1.0},
         ),
         tested=CoverageDimension(
             total=5,
             direct=2,
             indirect=2,
-            direct_pct_by_label={"A": 1.0, "B": 1.0},
-            indirect_pct_by_label={"A": 1.0, "B": 1.0},
+            immediate_direct_by_label={"A": 1.0, "B": 1.0},
+            immediate_indirect_by_label={"A": 1.0, "B": 1.0},
         ),
         # A passes; B failed (not in the passing set) -> has_failures on the dim
         # (requirement-wide) and B in failing_labels (the assertion that failed).
@@ -71,15 +71,15 @@ def _spread_rollup():
             indirect=1,
             has_failures=True,
             failing_labels={"B"},
-            direct_pct_by_label={"A": 1.0},
-            indirect_pct_by_label={"A": 1.0},
+            immediate_direct_by_label={"A": 1.0},
+            immediate_indirect_by_label={"A": 1.0},
         ),
         uat_coverage=CoverageDimension(
             total=5,
             direct=2,
             indirect=2,
-            direct_pct_by_label={"C": 1.0, "D": 1.0},
-            indirect_pct_by_label={"C": 1.0, "D": 1.0},
+            immediate_direct_by_label={"C": 1.0, "D": 1.0},
+            immediate_indirect_by_label={"C": 1.0, "D": 1.0},
         ),
         # C fully verified (1.0); D partially verified (0.5) with NO failure ->
         # the machinery must project D to "partial"/yellow.
@@ -88,8 +88,8 @@ def _spread_rollup():
             direct=1,
             indirect=1.5,
             has_failures=False,
-            direct_pct_by_label={"C": 1.0},
-            indirect_pct_by_label={"C": 1.0, "D": 0.5},
+            immediate_direct_by_label={"C": 1.0},
+            immediate_indirect_by_label={"C": 1.0, "D": 0.5},
         ),
     )
 
@@ -138,13 +138,13 @@ class TestAssertionCoverageStates:
         rollup = RollupMetrics(
             total_assertions=1,
             tested=CoverageDimension(
-                total=1, direct=1, indirect=1, indirect_pct_by_label={"A": 1.0}
+                total=1, direct=1, indirect=1, immediate_indirect_by_label={"A": 1.0}
             ),
             verified=CoverageDimension(
                 total=1,
                 has_failures=failing,
                 failing_labels=({"A"} if failing else set()),
-                indirect_pct_by_label=({"A": frac} if frac > 0 else {}),
+                immediate_indirect_by_label=({"A": frac} if frac > 0 else {}),
             ),
         )
         node = _req_with_rollup(rollup, labels=("A",))
@@ -160,12 +160,12 @@ class TestAssertionCoverageStates:
         rollup = RollupMetrics(
             total_assertions=1,
             uat_coverage=CoverageDimension(
-                total=1, direct=1, indirect=1, indirect_pct_by_label={"A": 1.0}
+                total=1, direct=1, indirect=1, immediate_indirect_by_label={"A": 1.0}
             ),
             uat_verified=CoverageDimension(
                 total=1,
                 has_failures=False,
-                indirect_pct_by_label=({"A": frac} if frac > 0 else {}),
+                immediate_indirect_by_label=({"A": frac} if frac > 0 else {}),
             ),
         )
         node = _req_with_rollup(rollup, labels=("A",))
@@ -179,7 +179,7 @@ class TestAssertionCoverageStates:
                 total=2,
                 direct=0.0,
                 indirect=0.5,
-                indirect_pct_by_label={"A": 0.5},
+                immediate_indirect_by_label={"A": 0.5},
             ),
         )
         node = _req_with_rollup(rollup, labels=("A", "B"))
@@ -197,11 +197,11 @@ class TestAssertionCoverageStates:
         rollup = RollupMetrics(
             total_assertions=1,
             tested=CoverageDimension(
-                total=1, direct=1, indirect=1, indirect_pct_by_label={"A": 1.0}
+                total=1, direct=1, indirect=1, immediate_indirect_by_label={"A": 1.0}
             ),
             verified=CoverageDimension(total=1),  # no result-verified credit
             lcov_tested=CoverageDimension(
-                total=1, direct=1, indirect=1, indirect_pct_by_label={"A": 1.0}
+                total=1, direct=1, indirect=1, immediate_indirect_by_label={"A": 1.0}
             ),
         )
         node = _req_with_rollup(rollup, labels=("A",))
@@ -219,7 +219,7 @@ class TestAssertionCoverageStates:
                 total=2,
                 direct=2,
                 indirect=2,
-                indirect_pct_by_label={"A": 1.0, "B": 1.0},
+                immediate_indirect_by_label={"A": 1.0, "B": 1.0},
             ),
             # A failed (in failing_labels); B is merely partial (0.5), no own
             # failure. has_failures is requirement-wide (True), but failing_labels
@@ -228,7 +228,7 @@ class TestAssertionCoverageStates:
                 total=2,
                 has_failures=True,
                 failing_labels={"A"},
-                indirect_pct_by_label={"B": 0.5},
+                immediate_indirect_by_label={"B": 0.5},
             ),
         )
         node = _req_with_rollup(rollup, labels=("A", "B"))
@@ -245,13 +245,13 @@ class TestAssertionCoverageStates:
                 total=2,
                 direct=2,
                 indirect=2,
-                indirect_pct_by_label={"A": 1.0, "B": 1.0},
+                immediate_indirect_by_label={"A": 1.0, "B": 1.0},
             ),
             uat_verified=CoverageDimension(
                 total=2,
                 has_failures=True,
                 failing_labels={"A"},
-                indirect_pct_by_label={"B": 1.0},
+                immediate_indirect_by_label={"B": 1.0},
             ),
         )
         node = _req_with_rollup(rollup, labels=("A", "B"))
@@ -287,8 +287,8 @@ class TestRequirementAssertionConsistency:
                 total=3,
                 direct=3,
                 indirect=3,
-                direct_pct_by_label={"A": 1.0, "B": 1.0, "C": 1.0},
-                indirect_pct_by_label={"A": 1.0, "B": 1.0, "C": 1.0},
+                immediate_direct_by_label={"A": 1.0, "B": 1.0, "C": 1.0},
+                immediate_indirect_by_label={"A": 1.0, "B": 1.0, "C": 1.0},
             ),
         )
         node = _req_with_rollup(rollup, labels=("A", "B", "C"))
@@ -403,11 +403,10 @@ class TestApiNodePayload:
         assert acs["D"]["uat_verified"] == "partial"
         assert set(acs["E"].values()) == {"missing"}
 
-    def test_REQ_d00258_G_payload_includes_assertion_caveats(self):
-        """REQ-d00258-G: the /api/node payload also carries
-        assertion_coverage_caveats, keyed by assertion label with per-dimension
-        bool flags marking evidence that leans on whole-requirement (blanket)
-        credit rather than assertion-specific evidence (REQ-d00069-L)."""
+    def test_REQ_d00258_G_payload_carries_measures_not_caveats(self):
+        """REQ-d00258-G/J: the /api/node payload publishes the measures behind
+        each per-assertion standing, and carries no caveat map standing in for
+        a measure the pill does not show."""
         from starlette.testclient import TestClient
 
         from elspais.graph.federated import FederatedGraph
@@ -418,12 +417,8 @@ class TestApiNodePayload:
         rollup = RollupMetrics(total_assertions=2)
         rollup.implemented = CoverageDimension(
             total=2,
-            direct=1,
-            indirect=2,
-            direct_labels={"A"},
-            indirect_labels={"A", "B"},
-            direct_pct_by_label={"A": 1.0},
-            indirect_pct_by_label={"A": 1.0, "B": 1.0},
+            immediate_direct_by_label={"A": 1.0},
+            immediate_indirect_by_label={"A": 1.0, "B": 1.0},
         )
         graph = build_graph(
             make_requirement(
@@ -447,50 +442,92 @@ class TestApiNodePayload:
         resp = client.get("/api/node/REQ-p00001")
         assert resp.status_code == 200
         data = resp.json()
-        assert "assertion_coverage_caveats" in data
-        caveats = data["assertion_coverage_caveats"]
-        assert isinstance(caveats, dict)
-        assert caveats["A"]["implemented"] is False  # has direct evidence
-        assert caveats["B"]["implemented"] is True  # blanket-only -> ~
+        assert "assertion_coverage_caveats" not in data
+        measures = data["assertion_coverage_measures"]
+        # A was cited by name AND reached by the whole-requirement citation; B
+        # only by the latter. Each measure is reported in its own right.
+        assert "cited by name here: 100%" in measures["A"]["implemented"]
+        assert "whole-requirement: 100%" in measures["A"]["implemented"]
+        assert "cited by name here: 0%" in measures["B"]["implemented"]
+        assert "whole-requirement: 100%" in measures["B"]["implemented"]
+        # And no dimension badge carries a marker standing in for a measure.
+        for dim in data["coverage_dimensions"].values():
+            assert "marker" not in dim
 
 
-def test_REQ_d00069_L_caveat_true_for_blanket_only_assertion():
-    """An assertion covered only on the indirect footing is flagged caveated."""
-    from elspais.html.generator import compute_assertion_coverage_caveats
+# Verifies: REQ-d00069-L, REQ-d00069-N, REQ-d00258-G, REQ-d00258-J
+def test_REQ_d00258_G_pill_measures_name_what_produced_the_standing():
+    """A blanket-only assertion stands full, and says which measure did it.
+
+    The pill headlines the total standing; the phrase beside it names all four
+    measures, so a reader sees that A was cited by name and B was reached only
+    by a citation naming the whole requirement -- the distinction the retired
+    `~` caveat gestured at without stating (REQ-d00258-J).
+    """
+    from elspais.html.generator import compute_assertion_coverage_measures
 
     rollup = RollupMetrics(total_assertions=2)
     rollup.implemented = CoverageDimension(
         total=2,
-        direct=1,
-        indirect=2,
-        direct_labels={"A"},
-        indirect_labels={"A", "B"},
-        direct_pct_by_label={"A": 1.0},
-        indirect_pct_by_label={"A": 1.0, "B": 1.0},
+        immediate_direct_by_label={"A": 1.0},
+        immediate_indirect_by_label={"A": 1.0, "B": 1.0},
     )
     node = _req_with_rollup(rollup, labels=("A", "B"))
-    caveats = compute_assertion_coverage_caveats(node)
-    assert caveats["A"]["implemented"] is False  # has direct evidence
-    assert caveats["B"]["implemented"] is True  # blanket-only -> ~
+    states = compute_assertion_coverage_states(node, None)
+    measures = compute_assertion_coverage_measures(node)
+
+    assert states["A"]["implemented"] == "full"
+    assert states["B"]["implemented"] == "full"
+    assert "cited by name here: 100%" in measures["A"]["implemented"]
+    assert "cited by name here: 0%" in measures["B"]["implemented"]
+    assert "whole-requirement: 100%" in measures["B"]["implemented"]
+    assert "~" not in measures["B"]["implemented"]
 
 
-def test_REQ_d00258_G_states_honor_allow_indirect_strict():
-    """Under allow_indirect=false, a blanket-only assertion reads 'missing'
-    (strict footing), matching the header badge (no header/pill split)."""
+# Verifies: REQ-d00258-J
+def test_REQ_d00258_J_caveat_computation_is_gone():
+    """No surface can reach for a caveat that stands in for a measure."""
+    import elspais.html.generator as gen
+
+    assert not hasattr(gen, "compute_assertion_coverage_caveats")
+
+
+# Verifies: REQ-d00069-N, REQ-d00258-G
+def test_REQ_d00069_N_standing_reads_the_total_measure():
+    """A standing is the greatest of the *Assertion*'s four measures.
+
+    A is cited by name and complete; B is reached only by conduction from a
+    half-finished refinement. Total takes the greatest per *Assertion*, so B
+    reads partial rather than missing -- and neither reads more than whole.
+    """
     rollup = RollupMetrics(total_assertions=2)
     rollup.implemented = CoverageDimension(
         total=2,
-        direct=1,
-        indirect=2,
-        direct_labels={"A"},
-        indirect_labels={"A", "B"},
-        direct_pct_by_label={"A": 1.0},
-        indirect_pct_by_label={"A": 1.0, "B": 1.0},
+        immediate_direct_by_label={"A": 1.0},
+        rolled_direct_by_label={"B": 0.5},
+    )
+    node = _req_with_rollup(rollup, labels=("A", "B"))
+    states = compute_assertion_coverage_states(node, None)
+    assert states["A"]["implemented"] == "full"
+    assert states["B"]["implemented"] == "partial"
+
+
+# Verifies: REQ-d00258-G
+def test_REQ_d00258_G_standings_ignore_the_allow_indirect_setting():
+    """The standing is the total measure whatever `allow_indirect` says.
+
+    Honoring that setting here made the pill answer a different question from
+    the badge beside it; the measures behind the standing are now shown
+    instead of being credited or withheld by configuration.
+    """
+    rollup = RollupMetrics(total_assertions=2)
+    rollup.implemented = CoverageDimension(
+        total=2,
+        immediate_direct_by_label={"A": 1.0},
+        immediate_indirect_by_label={"A": 1.0, "B": 1.0},
     )
     node = _req_with_rollup(rollup, labels=("A", "B"))
     strict = {"rules": {"coverage": {"allow_indirect": False}}}
-    states = compute_assertion_coverage_states(node, strict)
-    assert states["A"]["implemented"] == "full"
-    assert states["B"]["implemented"] == "missing"  # blanket-only, strict
-    generous = compute_assertion_coverage_states(node, None)
-    assert generous["B"]["implemented"] == "full"  # generous default
+    assert compute_assertion_coverage_states(node, strict) == compute_assertion_coverage_states(
+        node, None
+    )

@@ -572,7 +572,7 @@ async def api_node(request: Request) -> JSONResponse:
     from elspais.html.generator import (
         DIMENSION_KEYS,
         DIMENSION_TIPS,
-        compute_assertion_coverage_caveats,
+        compute_assertion_coverage_measures,
         compute_assertion_coverage_states,
         compute_coverage_tiers,
     )
@@ -613,10 +613,10 @@ async def api_node(request: Request) -> JSONResponse:
                 entry: dict[str, Any] = {
                     "color": tiers.get(f"{prefix}_color", ""),
                     "tip": DIMENSION_TIPS.get(dim_key, ""),
+                    # The tip names the four measures behind the headline
+                    # standing (REQ-d00258-A); no marker stands in for a
+                    # measure the badge does not show (REQ-d00258-J).
                     "status_tip": tiers.get(f"{prefix}_tip", ""),
-                    # Per-dimension provenance caveat (REQ-d00069-L): "~" when the
-                    # dimension's evidence is not fully direct (indirect > direct).
-                    "marker": tiers.get(f"{prefix}_marker", ""),
                 }
                 # UAT dims carry the per-level expectation so the viewer can
                 # render a (red) UAT badge on a journey-less expects_validation
@@ -636,9 +636,10 @@ async def api_node(request: Request) -> JSONResponse:
             result["assertion_coverage_states"] = compute_assertion_coverage_states(
                 node, state.config
             )
-            # Per-assertion "leans on whole-requirement evidence" caveat (~),
-            # unified with the header ~ marker (REQ-d00069-L).
-            result["assertion_coverage_caveats"] = compute_assertion_coverage_caveats(node)
+            # The measures behind each per-assertion standing (REQ-d00069-L),
+            # phrased server-side so the pill can show what produced its
+            # standing instead of a caveat marker (REQ-d00258-G/J).
+            result["assertion_coverage_measures"] = compute_assertion_coverage_measures(node)
 
             # Reverse-traceability: what points AT this requirement (REQ-p00006-A)
             result["incoming_links"] = _compute_incoming_links(node)

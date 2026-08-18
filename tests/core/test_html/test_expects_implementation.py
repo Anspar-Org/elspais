@@ -108,8 +108,8 @@ class TestImplementedGapSeverityGated:
                 total=2,
                 direct=2,
                 indirect=2,
-                direct_pct_by_label={"A": 1.0, "B": 1.0},
-                indirect_pct_by_label={"A": 1.0, "B": 1.0},
+                immediate_direct_by_label={"A": 1.0, "B": 1.0},
+                immediate_indirect_by_label={"A": 1.0, "B": 1.0},
             ),
         )
         node = _req_with_rollup(rollup, status="Draft")

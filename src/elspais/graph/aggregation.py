@@ -83,6 +83,19 @@ MEASURES: tuple[str, ...] = (
     "rolled_indirect",
 )
 
+# Implements: REQ-d00258-A, REQ-d00258-J
+# The word each measure is reported under. ONE vocabulary, so a reader meets
+# the same four names on the CLI and in the viewer and never has to work out
+# whether two surfaces are talking about the same thing. Published beside a
+# figure rather than compressed into a caveat marker (REQ-d00258-J).
+MEASURE_WORDS: dict[str, str] = {
+    "immediate_direct": "cited by name here",
+    "immediate_indirect": "whole-requirement",
+    "rolled_direct": "conducted direct",
+    "rolled_indirect": "conducted indirect",
+}
+
+
 # Implements: REQ-d00258-M
 # The measure a surface reporting WHICH assertions need work reads: a citation
 # named the *Assertion* and the evidence is attached to it. Named once so

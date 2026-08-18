@@ -296,12 +296,3 @@ description = "A verifying result for this assertion failed"
 [coverage_standing.missing]
 label = "Missing"
 description = "No evidence for this assertion on this dimension"
-
-[coverage_caveat.indirect]
-label = "Indirect (~)"
-description = "Coverage credited via indirect evidence"
-long_description = """The trailing ~ marks credit that is not fully direct
-(indirect > direct) -- e.g. a link that named the whole requirement rather than
-the specific assertion, or REFINES-conducted coverage. The state color is
-unchanged; hover text always states the direct/indirect split. Set
-[rules.coverage] allow_indirect = false to require direct evidence."""

@@ -117,13 +117,10 @@ def _render(data: dict, fmt: str) -> str:
 # chain carries up from a refining requirement's own evidence. Published
 # beside the total rather than behind a caveat marker (REQ-d00258-J).
 def _measures_line(lv: dict, prefix: str) -> str:
-    imm_d = fmt_assertion_count(lv[f"{prefix}_immediate_direct"])
-    imm_i = fmt_assertion_count(lv[f"{prefix}_immediate_indirect"])
-    roll_d = fmt_assertion_count(lv[f"{prefix}_rolled_direct"])
-    roll_i = fmt_assertion_count(lv[f"{prefix}_rolled_indirect"])
-    return (
-        f"cited by name here: {imm_d}, whole-requirement: {imm_i}, "
-        f"conducted direct: {roll_d}, conducted indirect: {roll_i}"
+    from elspais.graph.aggregation import MEASURE_WORDS, MEASURES
+
+    return ", ".join(
+        f"{MEASURE_WORDS[m]}: {fmt_assertion_count(lv[f'{prefix}_{m}'])}" for m in MEASURES
     )
 
 

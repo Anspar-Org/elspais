@@ -1,17 +1,16 @@
 # Verifies: REQ-d00069-L
+# Verifies: REQ-d00069-N
+# Verifies: REQ-d00258-A
 # Verifies: REQ-d00258-J
-"""Hover provenance + per-dimension ``~`` caveat marker (Phase 4, Task 4.2).
+"""What a viewer coverage badge says about the evidence behind its standing.
 
-The badge STATE color no longer distinguishes direct from indirect coverage
-(Phase 1 collapsed full-direct/full-indirect into one green). This task surfaces
-the distinction as a CAVEAT instead: ``compute_coverage_tiers`` enriches each
-dimension's hover tip with a provenance clause (``Nn% direct[, Mm% indirect]``)
-and sets a per-dimension ``*_marker`` == "~" when ``indirect > direct + eps``
-(REQ-d00069-L). Under ``allow_indirect=False`` the indirect portion is annotated
-``(not credited)``.
+The badge STATE color does not distinguish what a citation named, and neither
+does a marker beside it: the caveat is retired (REQ-d00258-J). A badge
+headlines the TOTAL standing (REQ-d00069-N) and its hover text names all four
+measures behind that figure (REQ-d00258-A), in the one shared vocabulary.
 
-These tests pin ONLY the display projection -- the tip wording and the marker.
-They do NOT re-assert crediting (Task 4.1) or the metrics themselves.
+These tests pin ONLY the display projection -- the tip wording and the absence
+of a marker. They do NOT re-assert crediting or the metrics themselves.
 """
 
 from elspais.graph.GraphNode import GraphNode, NodeKind
@@ -19,17 +18,13 @@ from elspais.graph.metrics import CoverageDimension, RollupMetrics
 from elspais.html.generator import compute_coverage_tiers
 
 
-def _impl_dim(*, direct, indirect, total=1):
-    """An `implemented` (absolute) dimension with explicit direct/indirect
-    fractions over a single assertion label ``A``."""
+def _impl_dim(*, immediate_direct=0.0, immediate_indirect=0.0, rolled_direct=0.0, total=1):
+    """An `implemented` (absolute) dimension over a single assertion label ``A``."""
     return CoverageDimension(
         total=total,
-        direct=direct,
-        indirect=indirect,
-        direct_labels={"A"} if direct else set(),
-        indirect_labels={"A"} if indirect else set(),
-        direct_pct_by_label={"A": direct} if direct else {},
-        indirect_pct_by_label={"A": indirect} if indirect else {},
+        immediate_direct_by_label={"A": immediate_direct} if immediate_direct else {},
+        immediate_indirect_by_label={"A": immediate_indirect} if immediate_indirect else {},
+        rolled_direct_by_label={"A": rolled_direct} if rolled_direct else {},
     )
 
 
@@ -55,60 +50,71 @@ def _node(rollup, *, status="Active", level="DEV"):
     return n
 
 
-def _cfg(allow_indirect):
-    return {"rules": {"coverage": {"allow_indirect": allow_indirect}}}
+def test_REQ_d00258_A_tip_names_all_four_measures():
+    """Every measure is named on hover, including the ones reading zero.
+
+    A measure reported only when non-zero would leave a reader unable to tell
+    "no conducted evidence" from "conducted evidence not shown", which is the
+    ambiguity REQ-d00258-J exists to remove.
+    """
+    node = _node(_rollup(_impl_dim(immediate_direct=1.0)))
+    tip = compute_coverage_tiers(node)["impl_tip"]
+    for word in (
+        "cited by name here",
+        "whole-requirement",
+        "conducted direct",
+        "conducted indirect",
+    ):
+        assert word in tip, tip
 
 
-# ── Scenario (a): mixed direct+indirect -> marker "~", tip states both ──
+def test_REQ_d00069_L_tip_reports_each_measure_in_its_own_right():
+    """Two measures crediting the same assertion are each reported whole.
+
+    An assertion cited by name AND covered by a whole-requirement citation
+    reads 1 on both -- neither measure is the other's remainder.
+    """
+    node = _node(_rollup(_impl_dim(immediate_direct=1.0, immediate_indirect=1.0)))
+    tip = compute_coverage_tiers(node)["impl_tip"]
+    assert "cited by name here: 1" in tip, tip
+    assert "whole-requirement: 1" in tip, tip
+    assert "conducted direct: 0" in tip, tip
 
 
-def test_REQ_d00069_L_mixed_dimension_tip_and_marker():
-    """direct=0.4, indirect=1.0 over 1 assertion: tip states "40% direct" and
-    "60% indirect", ends with "~", and impl_marker == "~"."""
-    node = _node(_rollup(_impl_dim(direct=0.4, indirect=1.0)))
-    result = compute_coverage_tiers(node)
-    tip = result["impl_tip"]
-    assert "40% direct" in tip, tip
-    assert "60% indirect" in tip, tip
-    assert tip.rstrip().endswith("~"), tip
-    assert result["impl_marker"] == "~"
+def test_REQ_d00069_N_headline_standing_is_the_total_measure():
+    """The badge headlines total: the assertion covered twice is covered once.
+
+    Immediate-direct and immediate-indirect each credit the single assertion
+    fully; total takes the greatest per assertion, so the dimension reads
+    ``full`` and not double.
+    """
+    node = _node(_rollup(_impl_dim(immediate_direct=1.0, immediate_indirect=1.0)))
+    assert compute_coverage_tiers(node)["impl_tier"] == "full"
 
 
-# ── Scenario (b): fully direct -> no marker, no "~" ──
+def test_REQ_d00069_N_conducted_evidence_alone_reaches_full():
+    """Coverage conducted up a `Refines:` chain counts toward the headline.
+
+    Nothing is attached to this assertion, but a refining requirement's own
+    direct evidence conducts to it -- total is the greatest of the four, so the
+    badge reads ``full`` and names where that came from.
+    """
+    node = _node(_rollup(_impl_dim(rolled_direct=1.0)))
+    tiers = compute_coverage_tiers(node)
+    assert tiers["impl_tier"] == "full"
+    assert "conducted direct: 1" in tiers["impl_tip"], tiers["impl_tip"]
+    assert "cited by name here: 0" in tiers["impl_tip"], tiers["impl_tip"]
 
 
-def test_REQ_d00069_L_fully_direct_no_marker():
-    """direct=1.0, indirect=1.0: tip states "100% direct", no "~", empty marker."""
-    node = _node(_rollup(_impl_dim(direct=1.0, indirect=1.0)))
-    result = compute_coverage_tiers(node)
-    tip = result["impl_tip"]
-    assert "100% direct" in tip, tip
-    assert "~" not in tip, tip
-    assert "indirect" not in tip, tip
-    assert result["impl_marker"] == ""
+def test_REQ_d00258_J_no_caveat_marker_anywhere_in_the_payload():
+    """No dimension carries a `~`, in its tip or as a key of its own.
 
-
-# ── Scenario (c): allow_indirect=False, indirect-only -> "not credited" ──
-
-
-def test_REQ_d00258_indirect_only_not_credited_note():
-    """direct=0, indirect=0.6 under allow_indirect=False: the state is not
-    credited, so the provenance clause annotates the indirect portion
-    "(not credited)" and still carries the "~" caveat (indirect > direct)."""
-    node = _node(_rollup(_impl_dim(direct=0.0, indirect=0.6)))
-    result = compute_coverage_tiers(node, _cfg(False))
-    tip = result["impl_tip"]
-    assert "not credited" in tip, tip
-    assert "0% direct" in tip, tip
-    assert result["impl_marker"] == "~"
-
-
-def test_REQ_d00069_L_marker_key_present_for_every_dimension():
-    """Every dimension prefix exposes a ``*_marker`` key (backward-compatible
-    additive contract); a zero-coverage dimension has an empty marker."""
-    node = _node(_rollup(_impl_dim(direct=1.0, indirect=1.0)))
+    A marker standing in for a measure the badge does not show is exactly what
+    REQ-d00258-J forbids, now that the measures themselves are reported.
+    """
+    node = _node(_rollup(_impl_dim(immediate_indirect=1.0)))
     result = compute_coverage_tiers(node)
     for prefix in ("impl", "tested", "verified", "uat_cov", "uat_ver"):
-        assert f"{prefix}_marker" in result, prefix
-    # tested/verified/uat dims have zero coverage here -> no caveat.
-    assert result["tested_marker"] == ""
+        assert f"{prefix}_marker" not in result, prefix
+        assert "~" not in result[f"{prefix}_tip"], result[f"{prefix}_tip"]
+    assert "~" not in result["combined_tip"], result["combined_tip"]

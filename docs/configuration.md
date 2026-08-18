@@ -795,8 +795,8 @@ alternative for suites too small to worry about the JSON-report size cost.
 health-check exit behavior and the viewer's badge/legend colors. Tiers use
 the unified state vocabulary -- `full` / `partial` / `failing` / `missing`
 (the legacy `full_direct` / `full_indirect` / `none` keys are retired;
-`missing` replaces `none`, and the direct-vs-indirect quality is now a caveat,
-not a tier):
+`missing` replaces `none`, and the direct-vs-indirect quality is reported as
+its own measure rather than as a tier):
 
 ```toml
 [rules.coverage.implemented]
@@ -849,13 +849,15 @@ allow_indirect = true   # default
 
 Indirect coverage is evidence that named the whole requirement rather than the
 specific assertion (`Implements: REQ-xxx`), or that reached an assertion via
-`Refines:` conduction. When `allow_indirect = true` (default), indirect
-evidence credits a dimension's headline state, and a trailing `~` marker flags
-any state whose evidence is not fully direct (`indirect > direct`); hover text
-always states the direct/indirect split. When `false`, only **direct**
-assertion-level evidence lifts the state -- a requirement covered only
-indirectly reads `missing`/`partial`, and the indirect evidence is shown in
-hover as "not credited" so the fallback stays visible.
+`Refines:` conduction. This setting blends the two into one credited footing,
+and it governs only the surfaces that still read that blended footing.
+
+The viewer no longer reads it. Its badges and per-assertion pills headline the
+**total** measure -- each assertion counted once at the greatest of its four
+measures -- and name all four in the hover text ("cited by name here",
+"whole-requirement", "conducted direct", "conducted indirect"), so what
+produced a standing is shown rather than flagged with a marker. There is no
+`~` caveat in the viewer.
 
 #### `uncredited_evidence` (evidence that reaches no figure)
 

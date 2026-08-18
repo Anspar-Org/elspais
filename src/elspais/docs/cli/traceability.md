@@ -51,10 +51,12 @@ rolled-up measures). These words are now the canonical names for the four
 REQ-d00069-L measures everywhere; the `health` coverage check's two
 comparable-looking figures are LEGACY BLENDED footings that predate this
 split and are labeled "legacy direct footing"/"legacy indirect footing" so
-they are not mistaken for the same quantities. There is no caveat marker
-standing in for a measure a surface does not show -- where the difference
-between measures matters, the measures themselves are reported. See
-`elspais docs checks`
+they are not mistaken for the same quantities. The viewer uses the same four
+names: a requirement's dimension badge and each per-assertion pill headline
+the total standing, and their hover text names all four measures behind it.
+There is no caveat marker standing in for a measure a surface does not show --
+where the difference between measures matters, the measures themselves are
+reported. See `elspais docs checks`
 (*Coverage Dimensions*) for the model underneath this.
 
 **Relative denominators.** `Tested` and `Passing` measure against their own
