@@ -2609,3 +2609,69 @@ class TestBrowserFileMutations:
         )
 
         assert not js_errors, f"JS errors during the move flow: {js_errors}"
+
+
+# ---------------------------------------------------------------------------
+# Per-*Assertion* pill: the measures behind its standing (REQ-d00258-G)
+# ---------------------------------------------------------------------------
+
+
+class TestAssertionPillMeasures:
+    """A rendered pill makes the measures behind its standing readable.
+
+    The server payload carrying those measures is tested elsewhere; this is
+    the only place the wiring from that payload into the rendered pill is
+    exercised. Without it a pill could silently stop showing the measures --
+    or start showing a caveat again -- and nothing would go red.
+    """
+
+    # Verifies: REQ-d00258-G, REQ-d00258-J
+    def test_REQ_d00258_G_pill_title_names_the_measures_and_carries_no_caveat(
+        self, page, viewer_url
+    ):
+        """Open a covered requirement; read its per-*Assertion* pills.
+
+        REQ-d00258 is opened because it is covered on several dimensions in
+        this repository's own estate, so its assertions render pills at all.
+        The assertions here are about the pill, not about that coverage:
+        a pill states its standing, names the four measures behind it, and
+        carries no `~` and no caveat element (REQ-d00258-J).
+        """
+        # Not `networkidle`: this page polls its own server every 30s, so on a
+        # long-lived session viewer the network never goes quiet and the wait
+        # times out. Waiting for the entry point the test actually calls is
+        # both stricter and stable.
+        page.goto(viewer_url, wait_until="domcontentloaded", timeout=30_000)
+        page.wait_for_function("() => typeof window.openCard === 'function'", timeout=30_000)
+        page.evaluate("() => window.openCard('REQ-d00258')")
+
+        page.locator("#card-stack-body .card-assertion-wrapper").first.wait_for(
+            state="visible", timeout=10_000
+        )
+        pills = page.locator("#card-stack-body .assertion-badges-area button")
+        assert pills.count() > 0, "no per-assertion pills rendered for REQ-d00258"
+
+        titles = [pills.nth(i).get_attribute("title") or "" for i in range(pills.count())]
+        labels = [pills.nth(i).inner_text() for i in range(pills.count())]
+
+        # The measures reach the reader: at least one pill names them, and a
+        # pill that states a standing states them all.
+        with_standing = [t for t in titles if "standing: " in t]
+        assert with_standing, f"no pill title stated a coverage standing: {titles}"
+        for tip in with_standing:
+            for word in (
+                "cited by name here",
+                "whole-requirement",
+                "conducted direct",
+                "conducted indirect",
+            ):
+                assert word in tip, f"pill title omits {word!r}: {tip!r}"
+
+        # And nothing stands in for a measure it does not show (REQ-d00258-J).
+        for tip in titles:
+            assert "~" not in tip, f"pill title carries a caveat marker: {tip!r}"
+        for label in labels:
+            assert "~" not in label, f"pill label carries a caveat marker: {label!r}"
+        assert (
+            page.locator("#card-stack-body .dim-caveat").count() == 0
+        ), "a caveat element is still rendered in the card"
