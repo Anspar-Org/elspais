@@ -1,4 +1,4 @@
-# Verifies: REQ-o00074-A+B+C+D+E+G+H+I+J+K+M+O, REQ-o00075-B+E, REQ-p00083-A+C+D+H
+# Verifies: REQ-o00074-A+B+C+D+E+G+H+I+J+K+M+O, REQ-o00075-B, REQ-o00076-E, REQ-p00083-A+C+D+H
 """Daemon lifetime tests, verifying REQ-o00074 (Background Daemon Lifetime).
 
 A daemon started on behalf of a client is bound to that client at the
@@ -1713,7 +1713,7 @@ class TestRestartSaysWhatBecomesOfTheWork:
 
 
 class TestStoppingDaemonIsReplacedNotReused:
-    """Verifies REQ-o00075-B and REQ-o00075-E: what a client locates describes
+    """Verifies REQ-o00075-B and REQ-o00076-E: what a client locates describes
     the process it would reach, and one working tree is served by one process.
 
     A daemon that has committed to stopping still answers, so a liveness
@@ -1725,7 +1725,7 @@ class TestStoppingDaemonIsReplacedNotReused:
     its replacement. It never starts one alongside.
     """
 
-    def test_REQ_o00075_E_committed_stop_is_recorded_in_the_state_record(self, tmp_path):
+    def test_REQ_o00076_E_committed_stop_is_recorded_in_the_state_record(self, tmp_path):
         from elspais.mcp.daemon import daemon_is_stopping, get_daemon_info, write_daemon_json
         from elspais.mcp.shared_state import SharedServerState
 

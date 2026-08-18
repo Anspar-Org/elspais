@@ -77,7 +77,7 @@ class SharedServerState(dict):
         # statement that was otherwise missing (REQ-p00083-B).
         self._discard_requested = False
 
-    # Implements: REQ-o00075-B, REQ-o00075-E
+    # Implements: REQ-o00075-B, REQ-o00076-E
     def begin_shutdown(self) -> None:
         """Mark this process as shutting down. Irreversible by design.
 

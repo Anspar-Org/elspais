@@ -44,6 +44,17 @@ def pytest_configure(config):
     os.environ.setdefault("GIT_AUTHOR_NAME", "Test User")
     os.environ.setdefault("GIT_AUTHOR_EMAIL", "test@test.org")
 
+    # Declare this process as the client of every daemon the run
+    # starts. Without it the client handle resolves to whatever
+    # long-lived session invoked pytest — an editor, an agent session,
+    # a login shell — and a daemon bound to that outlives the run by
+    # hours while its idle timeout keeps re-arming, because a daemon
+    # with a live client does not reap itself. Set here rather than in
+    # a fixture so it precedes collection, and exported rather than
+    # passed so the elspais subprocesses the e2e helpers spawn declare
+    # the same client this process does.
+    os.environ["ELSPAIS_CLIENT_PID"] = str(os.getpid())
+
     config.addinivalue_line(
         "markers",
         "incremental: mark test class for sequential execution with xfail on prior failure",

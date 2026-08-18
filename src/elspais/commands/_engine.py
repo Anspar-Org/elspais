@@ -102,7 +102,7 @@ def _try_daemon(
     # 1. Try existing server (viewer or daemon — both use daemon.json)
     port = _get_daemon_port()
     if port:
-        # Implements: REQ-o00075-B, REQ-o00075-E
+        # Implements: REQ-o00075-B, REQ-o00076-E
         # A server that has committed to stopping still answers and still
         # refuses everything, so it is replaced rather than reused — and
         # only once it has actually gone, since a second process for one

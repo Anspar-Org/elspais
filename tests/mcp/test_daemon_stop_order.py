@@ -1,10 +1,10 @@
-# Verifies: REQ-o00075-B+E
-"""The order in which a daemon is stopped, verifying REQ-o00075.
+# Verifies: REQ-o00075-B, REQ-o00076-E
+"""The order in which a daemon is stopped.
 
-A daemon's state record is what clients use to find it (REQ-o00075-E),
-so the record must describe a process a client would reach and must be
-present for as long as one is serving. Removing it before the process it
-describes has exited breaks both halves at once: for that window the
+A daemon's state record is what clients use to find it, so it must go on
+describing the process they would actually reach (REQ-o00076-E) and must
+stand for as long as one is serving. Removing it before the process it
+describes has exited breaks both at once: for that window the
 record is absent while the daemon serves, so a second command starts a
 second process in one working tree (REQ-o00075-B), and a successor that
 boots first reads the predecessor's still-standing dirty sentinel as
@@ -33,8 +33,8 @@ def _write_record(repo_root: Path, pid: int, port: int = 65000) -> Path:
 
 
 class TestStopWaitsForTheProcess:
-    def test_REQ_o00075_E_record_outlives_the_process_it_describes(self, tmp_path):
-        """Validates REQ-o00075-E: the record is removed only once the
+    def test_REQ_o00076_E_record_outlives_the_process_it_describes(self, tmp_path):
+        """Validates REQ-o00076-E: the record is removed only once the
         process it describes is gone, so it never names a process a client
         cannot reach and never goes missing while one is serving."""
         proc = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
@@ -81,13 +81,13 @@ class TestStopWaitsForTheProcess:
             proc.kill()
             proc.wait()
 
-    def test_REQ_o00075_E_no_record_is_not_an_error(self, tmp_path):
-        """Validates REQ-o00075-E: stopping when nothing is serving reports
+    def test_REQ_o00076_E_no_record_is_not_an_error(self, tmp_path):
+        """Validates REQ-o00076-E: stopping when nothing is serving reports
         that nothing was stopped rather than failing."""
         assert stop_daemon(tmp_path) is StopOutcome.NOT_RUNNING
 
-    def test_REQ_o00075_E_unreaped_zombie_is_seen_as_gone_promptly(self):
-        """Validates REQ-o00075-E: a process that exited but was never
+    def test_REQ_o00076_E_unreaped_zombie_is_seen_as_gone_promptly(self):
+        """Validates REQ-o00076-E: a process that exited but was never
         reaped -- a zombie -- still answers kill(pid, 0), which is not
         enough on its own to tell "gone" from "still serving". The wait
         must see it as gone at once, not only once its own timeout has run
@@ -119,7 +119,7 @@ class TestStopWaitsForTheProcess:
 
 
 class TestTheStopperOwnsTheDeadline:
-    """Validates REQ-o00075-B and REQ-o00075-E: the deadline on a stop, and
+    """Validates REQ-o00075-B and REQ-o00076-E: the deadline on a stop, and
     the escalation when it passes, belong to whoever asked for the stop --
     the pattern every process supervisor uses. The daemon holds no deadline
     of its own, so a drain a held-open client keeps from finishing ends here
@@ -200,8 +200,8 @@ class TestTheStopperOwnsTheDeadline:
 
 
 class TestRecordIsNeverSeenHalfWritten:
-    def test_REQ_o00075_E_concurrent_reader_never_sees_a_torn_record(self, tmp_path):
-        """Validates REQ-o00075-E: what a client locates describes the process
+    def test_REQ_o00076_E_concurrent_reader_never_sees_a_torn_record(self, tmp_path):
+        """Validates REQ-o00076-E: what a client locates describes the process
         it would reach. A reader landing mid-write on a truncate-then-write
         sees invalid JSON, and this record's reader deletes it on that
         conclusion -- so a healthy daemon becomes undiscoverable while it is

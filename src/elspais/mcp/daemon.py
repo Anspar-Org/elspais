@@ -584,7 +584,7 @@ def clear_automatic_save(repo_root: Path) -> None:
         print(f"warning: could not retire the automatic-save record: {exc}", file=sys.stderr)
 
 
-# Implements: REQ-o00075-B, REQ-o00075-E
+# Implements: REQ-o00075-B, REQ-o00076-E
 def mark_daemon_stopping(repo_root: Path, pid: int | None = None) -> bool:
     """Record that the daemon described by the state record is stopping.
 
@@ -630,7 +630,7 @@ def mark_daemon_stopping(repo_root: Path, pid: int | None = None) -> bool:
         return False
 
 
-# Implements: REQ-o00075-E
+# Implements: REQ-o00076-E
 def daemon_is_stopping(info: dict | None) -> bool:
     """True when the record says its daemon has committed to stopping."""
     return bool(info and info.get("stopping"))
@@ -794,7 +794,7 @@ def start_daemon(
     raise RuntimeError("Daemon started but not responding to HTTP")
 
 
-# Implements: REQ-o00075-B, REQ-o00075-E
+# Implements: REQ-o00075-B, REQ-o00076-E
 class StopOutcome(str, enum.Enum):
     """What a stop attempt actually found, as three distinct facts.
 
@@ -1306,7 +1306,7 @@ def ensure_daemon(repo_root: Path, ttl_minutes: int | None = None) -> int:
     Restarts the daemon if its version or config hash doesn't match.
     """
     info = get_daemon_info(repo_root)
-    # Implements: REQ-o00075-B, REQ-o00075-E
+    # Implements: REQ-o00075-B, REQ-o00076-E
     # A daemon that has committed to stopping passes every liveness check
     # and refuses everything it is handed. Wait for it and start a fresh
     # one; do not hand it out, and do not start alongside it. The wait
