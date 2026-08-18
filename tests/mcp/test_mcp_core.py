@@ -1466,13 +1466,20 @@ class TestGetProjectSummary:
         from elspais.graph.metrics import CoverageDimension, RollupMetrics
         from elspais.mcp.server import _get_project_summary
 
-        # Annotate some nodes with coverage
+        # Annotate some nodes with coverage. The buckets are scored on the
+        # headline measure (REQ-d00258-A), so the per-*Assertion* maps are what
+        # the tiers read -- a citation naming each assertion.
         prd_node = sample_graph.find_by_id("REQ-p00001")
         prd_node.set_metric(
             "rollup_metrics",
             RollupMetrics(
                 total_assertions=2,
-                implemented=CoverageDimension(total=2, direct=2, indirect=2),
+                implemented=CoverageDimension(
+                    total=2,
+                    direct=2,
+                    indirect=2,
+                    immediate_direct_by_label={"A": 1.0, "B": 1.0},
+                ),
             ),
         )
 
@@ -1481,7 +1488,12 @@ class TestGetProjectSummary:
             "rollup_metrics",
             RollupMetrics(
                 total_assertions=2,
-                implemented=CoverageDimension(total=2, direct=1, indirect=1),
+                implemented=CoverageDimension(
+                    total=2,
+                    direct=1,
+                    indirect=1,
+                    immediate_direct_by_label={"A": 1.0},
+                ),
             ),
         )
 

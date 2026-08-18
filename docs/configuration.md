@@ -849,8 +849,12 @@ allow_indirect = true   # default
 
 Indirect coverage is evidence that named the whole requirement rather than the
 specific assertion (`Implements: REQ-xxx`), or that reached an assertion via
-`Refines:` conduction. This setting blends the two into one credited footing,
-and it governs only the surfaces that still read that blended footing.
+`Refines:` conduction. This setting blended the two into one credited footing.
+
+**No surface reads it any more, and the key is scheduled for removal.** Every
+reporting surface now headlines the **total** measure and every work-list
+surface reads the immediate direct measure; neither consults this setting.
+Setting it has no effect.
 
 The viewer no longer reads it. Its badges and per-assertion pills headline the
 **total** measure -- each assertion counted once at the greatest of its four

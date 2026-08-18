@@ -15,7 +15,13 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from elspais import __version__
-from elspais.graph.aggregation import HEADLINE_MEASURE, MEASURES, relative_tier_for
+from elspais.graph.aggregation import (
+    HEADLINE_MEASURE,
+    assertion_measures,
+    dimension_measures,
+    measure_phrase,
+    relative_tier_for,
+)
 from elspais.graph.parsers.patterns import JNY_ID_PATTERN
 from elspais.html.theme import get_catalog
 from elspais.utilities.patterns import INSTANCE_SEPARATOR
@@ -154,41 +160,6 @@ _TIER_DESCRIPTIONS: dict[str, str] = {
 
 # Ordered list of dimension keys (matches CoverageDimension attrs on RollupMetrics)
 DIMENSION_KEYS = ("implemented", "tested", "verified", "uat_coverage", "uat_verified")
-
-
-# Implements: REQ-d00069-L, REQ-d00069-N, REQ-d00258-A, REQ-d00258-J
-def dimension_measures(dim: CoverageDimension) -> dict[str, float]:
-    """The four measures of one dimension, as assertion counts.
-
-    What a citation named (direct / indirect) crossed with where the evidence
-    sits (immediate / conducted up a `Refines:` chain). Each is reported in its
-    own right; none is derived from another (REQ-d00069-L).
-    """
-    from elspais.graph.aggregation import measure_total
-
-    return {m: measure_total(dim, m) for m in MEASURES}
-
-
-def assertion_measures(dim: CoverageDimension, label: str) -> dict[str, float]:
-    """The four measures for ONE *Assertion* of a dimension, as fractions."""
-    from elspais.graph.aggregation import measure_by_label
-
-    return {m: measure_by_label(dim, m).get(label, 0.0) for m in MEASURES}
-
-
-def measure_phrase(values: dict[str, float], *, as_percent: bool = False) -> str:
-    """Render the four measures under their one shared vocabulary.
-
-    Built server-side, and from `MEASURE_WORDS`, so the viewer never composes a
-    second wording for the measures the CLI already names.
-    """
-    from elspais.graph.aggregation import MEASURE_WORDS
-    from elspais.graph.metrics import fmt_assertion_count
-
-    def _fmt(v: float) -> str:
-        return f"{round(100 * v)}%" if as_percent else fmt_assertion_count(v)
-
-    return ", ".join(f"{MEASURE_WORDS[m]}: {_fmt(values[m])}" for m in MEASURES)
 
 
 def _tier_to_severity(tier: str, severity_config: Any) -> str:

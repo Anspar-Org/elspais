@@ -58,6 +58,13 @@ except ImportError:
 from elspais.config import find_config_file, get_config
 from elspais.config.schema import ElspaisConfig
 from elspais.graph import NodeKind
+from elspais.graph.aggregation import (
+    WORK_LIST_MEASURE,
+    assertion_measures,
+    covered_labels,
+    is_covered,
+    measure_by_label,
+)
 from elspais.graph.annotators import (
     annotate_graph_git_state,
     count_by_coverage,
@@ -2468,13 +2475,18 @@ _FAQ_ENTRIES: list[dict[str, str]] = [
     },
     {
         "topic": "coverage",
-        "question": "What is the difference between direct and indirect coverage?",
+        "question": "What do the four coverage measures mean?",
         "answer": (
-            "Direct coverage: a test explicitly references a requirement via comment\n"
-            "or function name.\n"
-            "Indirect coverage: a test covers code that implements a requirement,\n"
-            "creating an inferred coverage chain (test -> code -> requirement).\n"
-            "Both contribute to the coverage percentage."
+            "Two axes. What a citation NAMED: direct (it named the assertion) vs\n"
+            "indirect (it named only the requirement). Where the evidence SITS:\n"
+            "immediate (attached to this requirement) vs rolled (conducted up a\n"
+            "`Refines:` chain from a refining requirement).\n"
+            "That gives immediate_direct, immediate_indirect, rolled_direct and\n"
+            "rolled_indirect. Reporting surfaces headline the TOTAL: per assertion,\n"
+            "the greatest of the four, so an assertion covered several ways counts\n"
+            "once. Work lists (get_uncovered_assertions, get_test_coverage, gaps)\n"
+            "read immediate_direct only -- an assertion nobody has written evidence\n"
+            "for is still work."
         ),
     },
     {
@@ -3853,16 +3865,23 @@ def _query_nodes(
 
 
 # Implements: REQ-d00069-J
-def _via_provenance(fraction: float) -> str | None:
-    """Provenance tag for an uncovered assertion's coverage fraction.
+# Implements: REQ-d00258-M, REQ-d00069-L
+def _gap_measures(rollup: Any, dimension: str, label: str) -> dict[str, float]:
+    """The four measures of one *Assertion*, for a gap the work list reports.
 
-    Returns ``"refines-conduction"`` when the fraction is partial
-    (0 < fraction < ~1.0, i.e. coverage conducted up a REFINES edge from a
-    not-fully-covered refiner), else ``None`` (no coverage at all, or ~fully
-    covered). Shared by every uncovered-detail assembly so the wording and
-    the covered threshold (1.0 - 1e-9) cannot drift between surfaces.
+    A gap is decided on the immediate direct measure (REQ-d00258-M), which
+    says nothing about whole-requirement evidence the requirement carries or
+    about coverage conducted up a `Refines:` chain. Publishing the four
+    measures beside the gap (REQ-d00258-J) keeps that evidence visible to the
+    caller without letting it decide the verdict, under the SAME vocabulary
+    the CLI and the viewer name them by (REQ-d00258-C).
     """
-    return "refines-conduction" if 0 < fraction < 1.0 - 1e-9 else None
+    dim = getattr(rollup, dimension, None) if rollup is not None else None
+    if dim is None:
+        from elspais.graph.aggregation import MEASURES
+
+        return dict.fromkeys(MEASURES, 0.0)
+    return {m: round(v, 4) for m, v in assertion_measures(dim, label).items()}
 
 
 def _get_test_coverage(graph: FederatedGraph, req_id: str) -> dict[str, Any]:
@@ -3901,21 +3920,22 @@ def _get_test_coverage(graph: FederatedGraph, req_id: str) -> dict[str, Any]:
     label_to_id = {label: aid for aid, label in assertions}
     rollup = node.get_metric("rollup_metrics")
 
-    def _fold_conducted(target_ids: set[str], dimension: str) -> None:
-        # REQ-d00069-J: an assertion covered only through a refining requirement
-        # has no direct incoming edge but does carry conducted coverage in its
-        # rollup dimension. Fold those in so it is not reported as a gap -- but
-        # only when conduction makes it ~fully covered. A partially covered
-        # assertion (0 < fraction < 1) remains a gap.
-        # REQ-d00258-M: read the STRICT map -- whole-requirement credit does
-        # not cover an assertion nothing names.
+    def _fold_immediate_direct(target_ids: set[str], dimension: str) -> None:
+        # Implements: REQ-d00258-M
+        # A citation that named the *Assertion*, with its evidence attached
+        # here, is what covers it. Coverage conducted up a `Refines:` chain was
+        # written against the refining requirement and whole-requirement
+        # evidence named no *Assertion* at all -- neither answers "has anybody
+        # written evidence for this *Assertion*", which is the question this
+        # work list exists to ask. An *Assertion* counts only at ~its whole
+        # value; a partially covered one is still work.
         if rollup is None:
             return
         dim = getattr(rollup, dimension, None)
         if dim is None:
             return
-        for label, frac in dim.direct_pct_by_label.items():
-            if frac >= 1.0 - 1e-9:
+        for label, frac in measure_by_label(dim, WORK_LIST_MEASURE).items():
+            if is_covered(frac):
                 aid = label_to_id.get(label)
                 if aid is not None:
                     target_ids.add(aid)
@@ -3942,24 +3962,31 @@ def _get_test_coverage(graph: FederatedGraph, req_id: str) -> dict[str, Any]:
             if label in label_to_id:
                 covered_assertion_ids.add(label_to_id[label])
 
-    _fold_conducted(covered_assertion_ids, "tested")
+    _fold_immediate_direct(covered_assertion_ids, "tested")
     covered_assertions = sorted(covered_assertion_ids)
     uncovered_assertions = sorted(set(assertion_ids) - covered_assertion_ids)
 
-    # REQ-d00069-J: annotate each uncovered assertion with its conducted
-    # fraction so a partially-conducted assertion (0 < fraction < 1) is
-    # distinguishable from one with no coverage at all (fraction 0.0). This
-    # is additive alongside ``uncovered_assertions`` -- that field keeps its
-    # existing flat id-list shape for backward compatibility.
+    # Annotate each uncovered assertion with the measure the verdict was taken
+    # on, so a partially-covered assertion (0 < fraction < 1) is
+    # distinguishable from one with no evidence naming it at all (0.0), and
+    # with the four measures behind it (REQ-d00258-J) so whole-requirement and
+    # conducted evidence stays visible without deciding the verdict. Read on
+    # the SAME measure as the verdict (REQ-d00258-M): an assertion listed as a
+    # gap can never read 100% covered.
     id_to_label = dict(assertions)
-    # Strict map (REQ-d00258-M): the annotation must agree with the verdict --
-    # an assertion listed as a gap can never read 100% covered.
-    tested_fractions = rollup.tested.direct_pct_by_label if rollup is not None else {}
+    tested_fractions = (
+        measure_by_label(rollup.tested, WORK_LIST_MEASURE) if rollup is not None else {}
+    )
     uncovered_detail = []
     for aid in uncovered_assertions:
-        frac = tested_fractions.get(id_to_label.get(aid, ""), 0.0)
+        label = id_to_label.get(aid, "")
+        frac = tested_fractions.get(label, 0.0)
         uncovered_detail.append(
-            {"id": aid, "fraction": round(frac, 4), "via": _via_provenance(frac)}
+            {
+                "id": aid,
+                "fraction": round(frac, 4),
+                "measures": {"tested": _gap_measures(rollup, "tested", label)},
+            }
         )
 
     total = len(assertion_ids)
@@ -3990,7 +4017,7 @@ def _get_test_coverage(graph: FederatedGraph, req_id: str) -> dict[str, Any]:
             }
         )
 
-    _fold_conducted(covered_uat_assertion_ids, "uat_coverage")
+    _fold_immediate_direct(covered_uat_assertion_ids, "uat_coverage")
     uat_covered_count = len(covered_uat_assertion_ids)
     uat_referenced_pct = (uat_covered_count / total * 100) if total > 0 else 0.0
 
@@ -4366,17 +4393,15 @@ def _get_uncovered_assertions(
     """
 
     def _axis_covered_labels(req_node: Any, kind: NodeKind, dimension: str) -> set[str]:
-        """Return labels ~fully covered on one axis (direct edges + conduction).
+        """Return labels ~fully covered on one axis, on the work-list measure.
 
-        Includes coverage conducted upward across REFINES edges (REQ-d00069-J):
-        an assertion covered only through a refining requirement has no direct
-        incoming edge, and is counted here only when conduction makes it
-        ~fully covered (rollup fraction ~1.0). A partial fraction (0 < f < 1)
-        stays a gap.
-
-        Strict footing (REQ-d00258-M): a whole-requirement reference names no
-        assertion, so it covers none of them here -- blanket edges are skipped
-        and the strict per-label map is read.
+        Implements: REQ-d00258-M. An *Assertion* is done when a citation named
+        it and the evidence is attached to it. A whole-requirement reference
+        named no *Assertion*, and coverage conducted up a `Refines:` chain was
+        written against the refining requirement -- an *Assertion* nobody has
+        written evidence for is still work, however finished the requirements
+        refining it are. Counted only at ~its whole value; a partially covered
+        one stays a gap.
         """
         covered: set[str] = set()
         for _node, labels in _iter_assertion_coverage(req_node, kind, direct_only=True):
@@ -4386,23 +4411,23 @@ def _get_uncovered_assertions(
             dim = getattr(rollup, dimension, None)
             if dim is not None:
                 covered.update(
-                    lbl for lbl, frac in dim.direct_pct_by_label.items() if frac >= 1.0 - 1e-9
+                    lbl
+                    for lbl, frac in measure_by_label(dim, WORK_LIST_MEASURE).items()
+                    if is_covered(frac)
                 )
         return covered
 
     def _implemented_labels(req_node: Any) -> set[str]:
-        """Return labels with any implementation evidence (fraction > 0).
+        """Return labels with any implementation evidence naming them.
 
         Reads the existing ``implemented`` projection -- no re-derivation. The
-        RELATIVE denominator (REQ-d00258): a *testing* gap is scoped to
+        RELATIVE denominator (REQ-d00258-I): a *testing* gap is scoped to
         assertions that are IMPLEMENTED, mirroring gaps.py's
         ``restrict_to_dimension="implemented"``. An unimplemented assertion has
         nothing built to test yet and is therefore not a testing gap.
 
-        Read on the strict footing (REQ-d00258-M), like the numerator: an
-        assertion whose only implementation evidence is whole-requirement
-        credit has nothing directly implementing it, so it does not enter the
-        tested denominator.
+        Read on the SAME measure as the numerator (REQ-d00258-I/M), so the
+        figure and its denominator are made of the same kind of evidence.
         """
         rollup = req_node.get_metric("rollup_metrics")
         if rollup is None:
@@ -4410,7 +4435,7 @@ def _get_uncovered_assertions(
         dim = getattr(rollup, "implemented", None)
         if dim is None:
             return set()
-        return {lbl for lbl, frac in dim.direct_pct_by_label.items() if frac > 0}
+        return covered_labels(dim, WORK_LIST_MEASURE)
 
     def _uncovered_labels_for_req(req_node: Any, all_labels: list[str]) -> set[str]:
         """Union of per-axis gaps for the requested ``source`` (REQ-d00258).
@@ -4433,36 +4458,47 @@ def _get_uncovered_assertions(
             uncovered.update(lbl for lbl in all_labels if lbl not in uat_covered)
         return uncovered
 
+    def _axis_dimensions() -> tuple[str, ...]:
+        """The dimensions this call's ``source`` is asking about."""
+        dims: list[str] = []
+        if source in ("test", "both"):
+            dims.append("tested")
+        if source in ("uat", "both"):
+            dims.append("uat_coverage")
+        return tuple(dims)
+
     def _fraction_for_label(req_node: Any, label: str) -> float:
-        # REQ-d00069-J: the strongest conducted fraction across the dimensions
-        # this call considers (per ``source``), for annotating an uncovered
-        # label with its "how close to covered" progress. Read on the same
-        # strict footing as the verdict (REQ-d00258-M) so a reported gap can
+        # The strongest work-list fraction across the dimensions this call
+        # considers, for annotating a gap with how far along it is. Read on the
+        # SAME measure as the verdict (REQ-d00258-M) so a reported gap can
         # never be annotated as fully covered.
         rollup = req_node.get_metric("rollup_metrics")
         if rollup is None:
             return 0.0
         fractions = []
-        if source in ("test", "both"):
-            dim = getattr(rollup, "tested", None)
+        for dimension in _axis_dimensions():
+            dim = getattr(rollup, dimension, None)
             if dim is not None:
-                fractions.append(dim.direct_pct_by_label.get(label, 0.0))
-        if source in ("uat", "both"):
-            dim = getattr(rollup, "uat_coverage", None)
-            if dim is not None:
-                fractions.append(dim.direct_pct_by_label.get(label, 0.0))
+                fractions.append(measure_by_label(dim, WORK_LIST_MEASURE).get(label, 0.0))
         return max(fractions) if fractions else 0.0
 
     def _uncovered_detail(req_node: Any, labels: list[str], id_by_label: dict[str, str]) -> list:
+        rollup = req_node.get_metric("rollup_metrics")
         detail = []
         for label in labels:
             frac = _fraction_for_label(req_node, label)
+            # The four measures behind the verdict, per dimension this call
+            # asked about (REQ-d00258-J): the whole-requirement and conducted
+            # evidence a gap does not count stays visible to the caller.
             detail.append(
                 {
                     "id": id_by_label.get(label),
                     "label": label,
                     "fraction": round(frac, 4),
-                    "via": _via_provenance(frac),
+                    "measures": {
+                        dimension: _gap_measures(rollup, dimension, label)
+                        for dimension in _axis_dimensions()
+                    },
                 }
             )
         return detail
@@ -7091,6 +7127,13 @@ def create_server(
 
         Use when: checking if a requirement has adequate test coverage, or finding
         which specific assertions still need tests written.
+
+        An assertion counts as covered when a citation NAMED it and the test
+        evidence is attached to it. A whole-requirement `Verifies:` is listed
+        under test_nodes but covers no assertion, and coverage conducted up a
+        `Refines:` chain was written against the refining requirement -- both
+        are published per assertion under uncovered_detail[].measures so you
+        can see them, neither closes the gap.
         """
         return _get_test_coverage(_state["graph"], req_id)
 
@@ -7102,6 +7145,13 @@ def create_server(
         """Find assertions that have no tests validating them.
 
         Use when: identifying test gaps — assertions that need tests written.
+
+        An assertion is a gap unless a citation named it and the evidence is
+        attached to it: whole-requirement evidence and coverage conducted up a
+        `Refines:` chain do not close it, and are published per assertion under
+        uncovered_detail[].measures instead. The test axis is scoped to
+        assertions that are implemented (nothing built yet is not a testing
+        gap); the UAT axis is unscoped.
 
         Args:
             req_id: Optional requirement ID to check. When None, scans ALL requirements.

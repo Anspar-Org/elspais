@@ -306,9 +306,9 @@ _FIELD_COMMENTS: dict[str, str] = {
     "rules.coverage.*.failing": "Has coverage but test results show failures",
     "rules.coverage.*.missing": "No coverage at all",
     "rules.coverage.allow_indirect": (
-        "true (default): indirect (REFINES-conducted/whole-req) evidence credits "
-        "a dimension's state; false: only direct assertion-level evidence credits "
-        "it (indirect shown as not-credited in hover)"
+        "no longer read by any surface and scheduled for removal; tiers score the "
+        "total measure (each assertion at the greatest of its four) and work lists "
+        "score evidence that named the assertion"
     ),
     "rules.coverage.uncredited_evidence": (
         'error (default): severity for the "tests.uncredited_evidence" check -- '

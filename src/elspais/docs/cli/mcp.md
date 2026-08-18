@@ -205,6 +205,29 @@ Get summary statistics for the project.
     orphan_count           Requirements without parents
     broken_reference_count References to non-existent requirements
 
+**get_test_coverage(req_id)** / **get_uncovered_assertions(req_id?, source?)**
+
+These two answer "what is left to do", so they read one measure: a citation
+NAMED the assertion and the evidence is attached to it (REQ-d00258-M). Neither
+whole-requirement evidence (a blanket `Verifies:`, which names no assertion)
+nor coverage conducted up a `Refines:` chain (written against the refining
+requirement) closes a gap, however much of either the requirement carries.
+This is deliberately stricter than the figures `get_project_summary` and the
+viewer headline, which count each assertion at the greatest of the four
+measures.
+
+  Each entry of `uncovered_detail` carries:
+    id           Assertion node ID
+    label        Assertion label (get_uncovered_assertions only)
+    fraction     Its coverage on the measure the verdict was taken on;
+                  0 means nothing names it, 0 < f < 1 means partial
+                  evidence, and a listed gap can never read 1
+    measures     Per dimension asked about (`tested`, `uat_coverage`), the
+                  four measures of REQ-d00069-L behind the verdict:
+                  immediate_direct, immediate_indirect, rolled_direct,
+                  rolled_indirect. This is where whole-requirement and
+                  conducted evidence stays visible.
+
 ## Concurrency Control
 
 One daemon serves several writers at once (MCP agents and the viewer GUI),

@@ -399,12 +399,13 @@ neutral severity (grey) rather than a red gap -- you cannot test what is not
 built. A failing in-denominator label is always `failing` (red), regardless of
 the fraction.
 
-**Direct vs indirect credit.** By default (`[rules.coverage] allow_indirect =
-true`) indirect evidence (a whole-requirement link, or `Refines:` conduction)
-credits the tier, and a trailing `~` flags any tier whose evidence is not fully
-direct. Set `allow_indirect = false` to require direct assertion-level evidence;
-indirect-only coverage then reads `missing`/`partial` and is shown as
-"not credited" in the viewer hover.
+**Which evidence credits a tier.** A tier is scored on the total measure: each
+assertion counted once, at the greatest of what a citation named here, what
+whole-requirement evidence reached, and what `Refines:` conduction carried up.
+The `[rules.coverage] allow_indirect` setting no longer selects a footing --
+nothing reads it, and the key is scheduled for removal. Work-list surfaces
+(`gaps`, `untested`, `unvalidated`) are the strict counterpart: they count only
+evidence that named the assertion, so they can report work a tier calls done.
 
 **Evidence outside the denominator.** Measuring over the prior link means
 evidence can name an assertion the dimension does not count -- a test on an
@@ -696,13 +697,14 @@ elspais checks untested           # Checklist + untested gaps
 
 Gap commands support `--format text` (default), `--format markdown`, and `--format json`.
 
-An assertion listed in a gap can carry a `— N% via refines-conduction`
-annotation (text/markdown) or a `fraction` field (json): a whole-requirement
-(blanket) `Refines:` conducts only a fraction of its refiner's own coverage
-up to the targeted parent assertion (REQ-d00069-J -- see `elspais docs
-graph-model` for the conduction model). A fraction of `0` (no annotation) is
-uncovered outright; `0 < fraction < 1` is partially conducted and still a
-gap, but distinguishable from zero coverage.
+An assertion listed in a gap can carry a `— N% direct` annotation
+(text/markdown) or a `fraction` field (json). A gap is decided on one measure:
+a citation named the assertion and the evidence is attached to it. A fraction
+of `0` (no annotation) means nothing names it at all; `0 < fraction < 1` means
+the evidence naming it is itself partial, still a gap but distinguishable from
+zero. Whole-requirement evidence and coverage conducted up a `Refines:` chain
+are counted by the summary and viewer figures but never close a gap here (see
+`elspais docs graph-model` for the conduction model).
 
 ## Prospective Reports (What-If Analysis)
 

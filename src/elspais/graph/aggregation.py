@@ -148,6 +148,36 @@ def covered_labels(dim: CoverageDimension, measure: str) -> set[str]:
     return {lbl for lbl, frac in measure_by_label(dim, measure).items() if frac > 0}
 
 
+# Implements: REQ-d00069-L, REQ-d00069-N, REQ-d00258-A, REQ-d00258-J
+def dimension_measures(dim: CoverageDimension) -> dict[str, float]:
+    """The four measures of one dimension, as assertion counts.
+
+    What a citation named (direct / indirect) crossed with where the evidence
+    sits (immediate / conducted up a `Refines:` chain). Each is reported in its
+    own right; none is derived from another (REQ-d00069-L).
+    """
+    return {m: measure_total(dim, m) for m in MEASURES}
+
+
+def assertion_measures(dim: CoverageDimension, label: str) -> dict[str, float]:
+    """The four measures for ONE *Assertion* of a dimension, as fractions."""
+    return {m: measure_by_label(dim, m).get(label, 0.0) for m in MEASURES}
+
+
+def measure_phrase(values: dict[str, float], *, as_percent: bool = False) -> str:
+    """Render the four measures under their one shared vocabulary.
+
+    Built from ``MEASURE_WORDS``, so no surface composes a second wording for
+    the measures another surface already names (REQ-d00258-C).
+    """
+    from elspais.graph.metrics import fmt_assertion_count
+
+    def _fmt(v: float) -> str:
+        return f"{round(100 * v)}%" if as_percent else fmt_assertion_count(v)
+
+    return ", ".join(f"{MEASURE_WORDS[m]}: {_fmt(values[m])}" for m in MEASURES)
+
+
 _COVERED_EPS = 1e-9
 
 
@@ -506,12 +536,11 @@ def iter_uncredited_evidence(
         if rollup is None or rollup.total_assertions == 0:
             continue
         # The measure the chained tier figures (tier_buckets, relative_tier,
-        # the viewer badges) are actually computed on -- the config-selected
-        # legacy footing, not a hardcoded one (REQ-d00274-B): a project that
-        # configures `allow_indirect = false` computes its chain membership
-        # on the strict footing, and this report must leave out exactly what
-        # those figures leave out, not what the generous footing would.
-        chain_measure = legacy_measure(allow_indirect_from_config(config))
+        # the viewer badges) are actually computed on (REQ-d00274-B): this
+        # report must leave out exactly what those figures leave out, so it
+        # reads the same headline measure they do rather than a footing of
+        # its own.
+        chain_measure = HEADLINE_MEASURE
         for dimension, denom_name in DENOMINATOR_DIMENSION.items():
             denom = denominator_labels(rollup, dimension, measure=chain_measure)
             if denom is None:  # pragma: no cover - chained dimensions only
@@ -823,13 +852,17 @@ def tier_buckets(
     absolute dimensions (implemented/uat_coverage) bucket by their own tier. A
     node with no rollup counts as ``missing``.
 
-    Coverage inclusion is gated by ``_counts_for_coverage(config, ...)`` -- the
-    shared ``status_expects_implementation`` resolver (REQ-d00258-C).
-    Behavior-preserving for default config.
+    Scored on the HEADLINE measure (REQ-d00258-A), which is what the viewer
+    badge and the CLI summary report, so these counts answer the badge's
+    question with the badge's answer (REQ-d00258-C). ``config`` still gates
+    which requirements are counted at all.
     """
-    # The legacy blended footing this surface's figures are still computed
-    # on, named explicitly rather than defaulted (REQ-d00258-I).
-    measure = legacy_measure(allow_indirect_from_config(config))
+    # Implements: REQ-d00258-A, REQ-d00258-C
+    # The headline measure: each *Assertion* counted once at the greatest of
+    # its four (REQ-d00069-N). The same measure the viewer badge and the CLI
+    # summary headline, so a requirement that badges FULL in one surface can
+    # never be counted PARTIAL by another asking the same question.
+    measure = HEADLINE_MEASURE
     buckets = TierBuckets()
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
         if not _counts_for_coverage(config, node.status):
@@ -973,6 +1006,7 @@ __all__ = [
     "DENOMINATOR_DIMENSION",
     "HEADLINE_MEASURE",
     "MEASURES",
+    "MEASURE_WORDS",
     "TIER_TO_BUCKET",
     "WORK_LIST_MEASURE",
     "DimensionAggregate",
@@ -982,16 +1016,19 @@ __all__ = [
     "UncreditedEvidence",
     "absolute_tier",
     "aggregate_by_level",
+    "assertion_measures",
     "allow_indirect_from_config",
     "collect_coverage",
     "covered_labels",
     "is_covered",
     "legacy_measure",
     "measure_by_label",
+    "measure_phrase",
     "measure_total",
     "aggregate_dimension",
     "authored_dimension",
     "denominator_labels",
+    "dimension_measures",
     "iter_uncredited_evidence",
     "named_labels",
     "numerator_dimension",

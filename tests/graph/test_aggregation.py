@@ -518,9 +518,12 @@ class TestAllowIndirect:
 
     The generous footing (``measure="indirect"``) credits whole-requirement
     evidence; the strict one (``measure="direct"``) credits only what a
-    citation named. Exercised for the absolute helper (``absolute_tier``), the
-    shared relative helper (``relative_tier_for``), and the requirement-level
-    ``tier_buckets`` rollup, which reads the config and names the footing.
+    citation named. Exercised for the absolute helper (``absolute_tier``) and
+    the shared relative helper (``relative_tier_for``), both of which score
+    whichever measure their caller names. No reporting surface still selects a
+    footing this way -- the requirement-level rollups score the headline
+    measure (REQ-d00258-A), which is covered by
+    ``TestTierBucketsAgreeWithTheBadge``.
     """
 
     def test_absolute_tier_indirect_only_true_full_false_missing(self):
@@ -581,9 +584,28 @@ class TestAllowIndirect:
             False,
         )
 
-    def test_tier_buckets_absolute_dim_config_false(self):
-        """`[rules.coverage] allow_indirect=false` moves an indirect-only
-        implemented req from the ``full`` bucket to ``missing``."""
+
+# Verifies: REQ-d00258-A, REQ-d00258-C
+class TestTierBucketsAgreeWithTheBadge:
+    """The requirement-level bucket counts answer the badge's question with the
+    badge's answer.
+
+    ``tier_buckets`` feeds the MCP project summary's coverage counts and
+    ``count_by_coverage``; the viewer badge tiers the same requirement from
+    ``compute_coverage_tiers``. Both score the headline measure (REQ-d00258-A),
+    so a requirement cannot badge FULL in one surface and be counted PARTIAL
+    or MISSING by another asking the same question (REQ-d00258-C) -- whatever
+    footing the project once configured.
+    """
+
+    _CONFIGS = [None, {"rules": {"coverage": {"allow_indirect": False}}}]
+
+    @pytest.mark.parametrize("config", _CONFIGS)
+    def test_whole_requirement_evidence_buckets_as_the_badge_tiers_it(self, config):
+        """Both assertions are reached only by evidence naming the requirement.
+        The badge counts that; so must the bucket."""
+        from elspais.html.generator import compute_coverage_tiers
+
         req = _make_req("REQ-d00010")
         req.set_metric(
             "rollup_metrics",
@@ -592,17 +614,17 @@ class TestAllowIndirect:
                 implemented=_dim({"A", "B"}, direct=set(), total=2),
             ),
         )
-        graph = _make_graph(req)
-        # No config -> allow_indirect defaults True -> the generous footing.
-        assert tier_buckets(graph, "implemented").full == 1
-        cfg = {"rules": {"coverage": {"allow_indirect": False}}}
-        b = tier_buckets(graph, "implemented", config=cfg)
-        assert b.missing == 1
-        assert b.full == 0
+        assert compute_coverage_tiers(req, config)["impl_tier"] == "full"
+        b = tier_buckets(_make_graph(req), "implemented", config=config)
+        assert b.full == 1
+        assert b.missing == 0
 
-    def test_tier_buckets_relative_dim_config_false(self):
-        """allow_indirect=false also moves an indirect-only tested req to
-        ``missing``."""
+    @pytest.mark.parametrize("config", _CONFIGS)
+    def test_chained_dimension_buckets_as_the_badge_tiers_it(self, config):
+        """The same agreement holds for a chained dimension measured over its
+        relative denominator."""
+        from elspais.html.generator import compute_coverage_tiers
+
         req = _make_req("REQ-d00011")
         req.set_metric(
             "rollup_metrics",
@@ -612,12 +634,10 @@ class TestAllowIndirect:
                 tested=_dim({"A", "B"}, direct=set(), total=2),
             ),
         )
-        graph = _make_graph(req)
-        assert tier_buckets(graph, "tested").full == 1
-        cfg = {"rules": {"coverage": {"allow_indirect": False}}}
-        b = tier_buckets(graph, "tested", config=cfg)
-        assert b.missing == 1
-        assert b.full == 0
+        assert compute_coverage_tiers(req, config)["tested_tier"] == "full"
+        b = tier_buckets(_make_graph(req), "tested", config=config)
+        assert b.full == 1
+        assert b.missing == 0
 
 
 # Verifies: REQ-d00258-C
@@ -905,16 +925,14 @@ class TestIterUncreditedEvidence:
         assert iter_uncredited_evidence(graph) == []
 
     # Verifies: REQ-d00274-B
-    def test_denominator_honors_the_project_configured_footing(self):
+    def test_denominator_follows_the_measure_the_figures_are_computed_on(self):
         """B: membership follows the SAME rule that produces the chained
-        figures under the project's own config, not a footing fixed in this
-        helper. A is implemented only indirectly (blanket evidence); on the
-        default (generous) footing the project's own Tested figure counts A,
-        so a `Verifies:` naming A reaches something and nothing is reported.
-        Under `allow_indirect=false` the project's own figures leave A out of
-        the Tested denominator, and a report fixed to the generous footing
-        would say nothing about evidence the project's own answers discard --
-        the silence REQ-d00274 exists to end."""
+        figures. Those figures are scored on the headline measure
+        (REQ-d00258-A), so an *Assertion* reached only by whole-requirement
+        implementation evidence IS in the Tested denominator -- a `Verifies:`
+        naming it reaches something and there is nothing to report. Reading a
+        narrower footing here would invent findings about evidence the
+        project's own answers do credit."""
         req = _make_req("REQ-d00017")
         req.set_metric(
             "rollup_metrics",
@@ -926,21 +944,12 @@ class TestIterUncreditedEvidence:
         )
         graph = _make_graph(req)
 
-        # Default config -> allow_indirect=True -> the generous footing counts
-        # A as implemented, so the Tested evidence naming A reaches it.
         assert iter_uncredited_evidence(graph) == []
-
-        # allow_indirect=false -> the project's own figures compute Tested's
-        # denominator on the strict footing, which does not count A.
+        # The retired `allow_indirect` key no longer moves this answer: the
+        # report reads the measure the figures are computed on, not a footing
+        # a config once selected.
         cfg = {"rules": {"coverage": {"allow_indirect": False}}}
-        items = iter_uncredited_evidence(graph, cfg)
-        assert len(items) == 1
-        assert items[0].dimension == "tested"
-        assert items[0].denominator == "implemented"
-        # The strict footing implements nothing at all, so this is the
-        # whole-dimension finding (REQ-d00274-F), not a per-label one.
-        assert items[0].assertion_label is None
-        assert items[0].labels == ("A",)
+        assert iter_uncredited_evidence(graph, cfg) == []
 
     def test_dimension_counts_no_assertion_reports_once_for_requirement(self):
         """F: nothing implemented at all -> one finding for the requirement,
