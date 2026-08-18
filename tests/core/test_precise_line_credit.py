@@ -6,9 +6,9 @@ specific Dart test() call) credits only ITS own assertion-targets: the
 passing result credits its assertions; the failing result flags only its own
 test without dragging down unrelated assertions.
 
-A source RESULT carrying ``match_scope = "file"`` keeps the existing
-file-level semantics: any failure in the file flags the whole file and
-withholds credit from all assertions (regression guard).
+A source RESULT that resolves no further than its file carries
+``match_scope = "file"``: it names every test written there and so names none
+of them, and contributes no verdict in either direction.
 """
 from __future__ import annotations
 
@@ -153,8 +153,8 @@ def graph_per_test_credit(resolver):
 def graph_file_scope_fallback(resolver):
     """Both results use match_scope=file (line=None -> fallback to all tests).
 
-    Mixed pass+fail: file-level semantics apply -- any failure withholds
-    credit from all assertions and flags has_failures.
+    Mixed pass+fail, and neither result resolved to a test: no verdict reaches
+    either assertion.
     """
     items = _dart_items(resolver)
     r_pass = make_test_result(
@@ -219,24 +219,27 @@ def test_per_test_match_scope_is_test_for_line_resolved_results(graph_per_test_c
 
 
 # ---------------------------------------------------------------------------
-# Regression: file-scope fallback semantics are preserved
+# A result that stopped at the file names no test
 # ---------------------------------------------------------------------------
 
 
-def test_file_scope_any_fail_withholds_all_credit(graph_file_scope_fallback):
-    """match_scope='file' results (line=None fallback): any failure in the
-    file withholds credit from all assertions and sets has_failures.
+# Verifies: REQ-d00254-A
+def test_file_scope_results_carry_no_verdict(graph_file_scope_fallback):
+    """match_scope='file' results (line=None fallback) credit nothing and
+    flag nothing.
 
-    This guards the semantics of test_edges_do_not_change_file_level_metric_semantics
-    in test_precise_result_links.py."""
+    A failing result in the file is not evidence against an assertion the
+    failing test never named, and a passing one beside it is not evidence for
+    it either. Both assertions are tested and awaiting a result."""
     m = graph_file_scope_fallback.find_by_id("REQ-p00001").get_metric("rollup_metrics")
-    assert m.verified.has_failures is True
-    assert (
-        m.verified.direct_pct_by_label.get("A", 0.0) == 0.0
-    ), "A should NOT be credited when the file-scope result set contains a failure"
-    assert (
-        m.verified.direct_pct_by_label.get("B", 0.0) == 0.0
-    ), "B should NOT be credited when the file-scope result set contains a failure"
+    # The `Verifies:` linkage is live for both assertions...
+    assert m.tested.direct_pct_by_label.get("A") == 1.0
+    assert m.tested.direct_pct_by_label.get("B") == 1.0
+    # ...and the results reached neither of them.
+    assert m.verified.has_failures is False
+    assert m.verified.failing_labels == set()
+    assert m.verified.direct_pct_by_label.get("A", 0.0) == 0.0
+    assert m.verified.direct_pct_by_label.get("B", 0.0) == 0.0
 
 
 def test_file_scope_match_scope_is_file_for_null_line(graph_file_scope_fallback):

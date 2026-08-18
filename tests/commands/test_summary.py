@@ -665,8 +665,9 @@ class TestSummaryIntegrations:
     # Verifies: REQ-d00252-F, REQ-d00258-B
     def test_REQ_d00258_B_integrations_header_is_passing(self, tmp_path):
         """The External integrations column header reads 'Passing', not the
-        old 'verified (no lcov)' -- the figures are now the tested_and_passing()
-        union (REQ-d00258-B), so the vocabulary matches the rest of the report."""
+        old 'verified (no lcov)' -- the figures come from tested_and_passing()
+        and the permitted display terms (REQ-d00258-B) name that dimension
+        'Passing', so the vocabulary matches the rest of the report."""
         fed = _federate_integrates(tmp_path)
         data = collect_coverage(fed, config=None)
         text = _render(data, "text")
@@ -677,12 +678,13 @@ class TestSummaryIntegrations:
         assert "passing" in text.lower()
         assert "Passing" in md
 
-    # Verifies: REQ-d00252-D, REQ-d00252-F, REQ-d00258-B
-    def test_REQ_d00252_F_lcov_only_library_propagates_in_summary(self, tmp_path):
+    # Verifies: REQ-d00252-D, REQ-d00252-F, REQ-d00258-N
+    def test_REQ_d00252_F_lcov_only_library_is_not_passing_in_summary(self, tmp_path):
         """A library requirement whose only evidence is lcov_tested credit (no
-        Verifies:-based result) still shows up as passing in the summary's
-        per-associate integrations table -- the union propagates through
-        federation, not just the raw verified dimension."""
+        Verifies:-based result) contributes nothing to the passing column of
+        the summary's per-associate integrations table. What propagates
+        through federation is what the library's declared tests returned, and
+        no test returned anything here -- so the row reads 0 of 1."""
         from elspais.graph.metrics import CoverageDimension
 
         dest = tmp_path / "proj"
@@ -701,6 +703,7 @@ class TestSummaryIntegrations:
             "rollup_metrics",
             RollupMetrics(
                 total_assertions=1,
+                verified=CoverageDimension(total=1),
                 lcov_tested=CoverageDimension(
                     total=1,
                     direct=1.0,
@@ -715,17 +718,17 @@ class TestSummaryIntegrations:
 
         data = collect_coverage(fed, config=None)
         by_name = {row["associate"]: row for row in data["integrations"]}
-        assert by_name["library"]["verified_covered"] >= 1
-        assert by_name["library"]["verified_total"] >= 1
+        assert by_name["library"]["verified_covered"] == 0
+        assert by_name["library"]["verified_total"] == 1
         assert by_name["library"]["has_failures"] is False
 
-    # Verifies: REQ-d00252-F, REQ-d00258-B
-    def test_REQ_d00258_B_library_failures_flagged_in_summary(self, tmp_path):
-        """A library assertion with a FAILING Verifies-result but full lcov
-        credit reads as covered in the union, so the covered/total figures
-        alone would show 100% passing. The summary must carry has_failures
-        through to the integrations row/total and mark the rendered table so
-        a red library suite is never displayed as clean."""
+    # Verifies: REQ-d00252-F, REQ-d00258-N
+    def test_REQ_d00258_N_library_failures_flagged_in_summary(self, tmp_path):
+        """A library with one passing and one failing declared test reads as
+        covered on the covered/total figures alone. The summary must carry
+        has_failures through to the integrations row/total and mark the
+        rendered table so a partly-red library suite is never displayed as
+        clean."""
         from elspais.graph.metrics import CoverageDimension
 
         dest = tmp_path / "proj"
@@ -743,23 +746,24 @@ class TestSummaryIntegrations:
         lib_req.set_metric(
             "rollup_metrics",
             RollupMetrics(
-                total_assertions=1,
-                verified=CoverageDimension(total=1, has_failures=True),
-                lcov_tested=CoverageDimension(
-                    total=1,
+                total_assertions=2,
+                verified=CoverageDimension(
+                    total=2,
                     direct=1.0,
                     indirect=1.0,
-                    direct_labels={"A"},
-                    indirect_labels={"A"},
-                    direct_pct_by_label={"A": 1.0},
-                    indirect_pct_by_label={"A": 1.0},
+                    has_failures=True,
+                    failing_labels={"A"},
+                    direct_labels={"B"},
+                    indirect_labels={"B"},
+                    direct_pct_by_label={"B": 1.0},
+                    indirect_pct_by_label={"B": 1.0},
                 ),
             ),
         )
 
         data = collect_coverage(fed, config=None)
         by_name = {row["associate"]: row for row in data["integrations"]}
-        assert by_name["library"]["verified_covered"] >= 1  # union covered
+        assert by_name["library"]["verified_covered"] >= 1  # B's pass reads covered
         assert by_name["library"]["has_failures"] is True
         assert data["integration_total"]["has_failures"] is True
 
@@ -773,12 +777,15 @@ class TestSummaryIntegrations:
         assert "failing test result" in md
 
 
-class TestTestedAndPassingUnion:
-    """Validates REQ-d00215-B: lcov_tested credit counts toward headline passing score."""
+# Verifies: REQ-d00258-N
+class TestLineCoverageDoesNotCreditPassing:
+    """The headline passing score counts what the declared tests returned;
+    line-coverage credit reaches it from nowhere (REQ-d00254-B)."""
 
-    def test_lcov_only_req_contributes_to_passing(self):
-        """A requirement with only lcov_tested credit (no verified) contributes
-        to passing_assertions."""
+    def test_lcov_only_req_does_not_contribute_to_passing(self):
+        """A requirement with only lcov_tested credit (no verified) adds
+        nothing to passing_assertions and is not counted among the
+        requirements with passing coverage."""
         from elspais.graph.metrics import CoverageDimension
 
         graph = _make_graph()
@@ -802,9 +809,9 @@ class TestTestedAndPassingUnion:
         data = collect_coverage(graph)
         dev = next(lv for lv in data["levels"] if lv["level"] == "DEV")
         assert (
-            dev["passing_assertions"] > 0
-        ), "lcov_tested credit must count toward headline passing"
-        assert dev["with_passing"] == 1
+            dev["passing_assertions"] == 0
+        ), "lcov_tested credit must not count toward headline passing"
+        assert dev["with_passing"] == 0
 
 
 class TestFreshTargetsWiring:

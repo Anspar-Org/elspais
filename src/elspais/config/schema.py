@@ -427,6 +427,12 @@ class CoverageConfig(_StrictModel):
     # and its `Implements:` reference was never written, or the test is aimed at
     # an assertion it does not exercise.
     uncredited_evidence: str = "error"
+    # Implements: REQ-d00276-C
+    # A test that failed and reaches no requirement. A warning by default: a
+    # repository legitimately carries tests for things it has written no
+    # requirement for, so the condition is not always a defect -- but a failure
+    # nobody can find through a requirement is one nobody will find at all.
+    external_test_failure: str = "warning"
     # Per-relationship label overrides (REQ-d00258). Keyed by relationship name
     # (implements/verifies/yields/validates/validated); resolved to dimension
     # labels via elspais.config.status_words.get_status_words().
@@ -532,6 +538,18 @@ class TestTargetConfig(_StrictModel):
     match: str = "source"  # "source" | "aggregate"
     credit_coverage: str = "off"  # "off" | "tested" | "verified" (lcov_tested dimension)
     min_coverage_fraction: float = 0.0  # [0.0, 1.0]
+    # Implements: REQ-d00254-O
+    # The origin this target's reporter counts lines from, when the producer
+    # departs from the format's convention. Unset means the reporter's own
+    # declared origin.
+    line_base: int | None = None
+
+    @field_validator("line_base")
+    @classmethod
+    def _check_line_base(cls, v: int | None) -> int | None:
+        if v is not None and v not in (0, 1):
+            raise ValueError("line_base must be 0 or 1")
+        return v
 
     @field_validator("match")
     @classmethod

@@ -102,6 +102,19 @@ def _ingest_target_results(
 
     parser = spec.parser_factory()
     records = parser.parse(results_text, source_path)
+
+    # Implements: REQ-d00254-O
+    # Normalise the producer's line origin to the tool's own numbering, once,
+    # here. Everything downstream -- binding a result to the test at a line,
+    # and pointing a reader at that line -- can then treat a line as a line.
+    # `result_line` is this module's own count of lines in the results
+    # artifact and is already 1-based, so it is left alone.
+    line_shift = 1 - (target.line_base if target.line_base is not None else spec.line_base)
+    if line_shift:
+        for rec in records:
+            for key in ("line", "root_line"):
+                if isinstance(rec.get(key), int):
+                    rec[key] = rec[key] + line_shift
     repo_root_resolved = Path(repo_root).resolve()
     count = 0
     for rec in records:

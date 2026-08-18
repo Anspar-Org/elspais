@@ -528,11 +528,13 @@ class TestIndirectWithExistingSources:
 
 
 class TestTransitiveCoverageThroughCode:
-    """Tests that TEST->CODE->REQUIREMENT provides indirect coverage.
+    """Tests what TEST->CODE->REQUIREMENT does, and what it deliberately does not.
 
-    When a CODE node implements a REQUIREMENT and a TEST validates that CODE,
-    the TEST provides INDIRECT coverage to the REQUIREMENT's assertions through
-    the transitive chain: REQUIREMENT <- CODE <- TEST <- TEST_RESULT.
+    When a CODE node implements a REQUIREMENT and a TEST verifies that CODE,
+    the chain REQUIREMENT <- CODE <- TEST <- TEST_RESULT records INDIRECT
+    contributions in ``assertion_coverage`` as provenance (REQ-d00069-A/E).
+    It does NOT carry the result's verdict into any *Traceability* dimension:
+    the test named the CODE, not the *Assertion* (REQ-d00258-N).
     """
 
     def _build_chain(self, *, with_result=True, result_status="passed", assertion_targets=None):
@@ -628,23 +630,41 @@ class TestTransitiveCoverageThroughCode:
         b_contribs = metrics.assertion_coverage.get("B", [])
         assert len(b_contribs) == 0
 
-    # Verifies: REQ-d00069-F
-    def test_transitive_with_passing_result_validates_indirect(self):
-        """Passing TEST_RESULT via CODE chain marks assertions as indirectly validated."""
+    # Verifies: REQ-d00069-F, REQ-d00258-N
+    def test_transitive_passing_result_credits_no_passing_coverage(self):
+        """A result reached through the CODE rather than through the test
+        credits nothing. This test named the CODE, never the *Assertion*, so
+        its verdict says the implementing code was exercised -- not that any
+        assertion was checked. The INDIRECT contributions survive as
+        provenance (REQ-d00069-A); only the credit is withdrawn."""
         graph, req, code, test, result = self._build_chain(result_status="passed")
         annotate_coverage(graph)
 
         metrics = req.get_metric("rollup_metrics")
-        assert metrics.verified.indirect == 2  # Both A and B
+        assert metrics.verified.indirect == 0
+        for label in ["A", "B"]:
+            contribs = metrics.assertion_coverage.get(label, [])
+            assert any(c.source_type == CoverageSource.INDIRECT for c in contribs)
 
-    # Verifies: REQ-d00069-F
-    def test_transitive_with_failing_result_marks_failure(self):
-        """Failed TEST_RESULT via CODE chain sets has_failures."""
+    # Verifies: REQ-d00069-F, REQ-d00258-N
+    def test_transitive_failing_result_does_not_flag_the_requirement(self):
+        """The mirror of the crediting rule: a failing result reached through
+        the CODE flags no *Traceability* dimension either, because it makes no
+        claim about any *Assertion*.
+
+        The failure is not lost. A RESULT node with a failing status is
+        reported by the `tests.results` health check, which scans every RESULT
+        in the graph regardless of traceability and makes `elspais checks`
+        exit non-zero, naming the test. What the requirement's own coverage no
+        longer does is attribute that failure to assertions nobody aimed the
+        test at.
+        """
         graph, req, code, test, result = self._build_chain(result_status="failed")
         annotate_coverage(graph)
 
         metrics = req.get_metric("rollup_metrics")
-        assert metrics.verified.has_failures is True
+        assert metrics.verified.has_failures is False
+        assert metrics.verified.failing_labels == set()
 
     # Verifies: REQ-d00069-E
     def test_transitive_without_result_still_covers(self):
@@ -657,7 +677,8 @@ class TestTransitiveCoverageThroughCode:
         for label in ["A", "B"]:
             contribs = metrics.assertion_coverage.get(label, [])
             assert any(c.source_type == CoverageSource.INDIRECT for c in contribs)
-        # But verified.indirect should be 0 (no passing result)
+        # And `verified` stays at 0 -- here because nothing returned a verdict
+        # at all, which the with-result case reaches for its own reason.
         assert metrics.verified.indirect == 0
 
     # Verifies: REQ-d00069-E
@@ -750,8 +771,9 @@ class TestTransitiveCoverageThroughCode:
         for label in ["A", "B"]:
             contribs = metrics.assertion_coverage.get(label, [])
             assert any(c.source_type == CoverageSource.INDIRECT for c in contribs)
-        # And verified.indirect captures them (since there's a passing result)
-        assert metrics.verified.indirect == 2
+        # But `verified` captures none of them: a passing result reached
+        # through the CODE credits no *Traceability* dimension (REQ-d00258-N).
+        assert metrics.verified.indirect == 0
 
     # Verifies: REQ-d00069-E
     def test_transitive_multiple_code_nodes(self):

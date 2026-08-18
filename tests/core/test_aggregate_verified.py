@@ -1,5 +1,14 @@
 # Verifies: REQ-d00254-A
-"""Aggregate-green fallback credits verified for unmatched // Verifies: edges (CUR-1533)."""
+"""A test with no result of its own draws no verdict from its application.
+
+The test node below declares ``Verifies:`` and is scanned, so its assertion is
+tested; what never arrives is a result naming that test. The application it
+belongs to reports green, red, or nothing at all, and none of the three says
+anything about this test -- the assertion stays awaiting a result in every
+case.
+"""
+
+import pytest
 
 from elspais.graph.annotators import CoverageCreditConfig, annotate_coverage
 from tests.core.graph_test_helpers import (
@@ -22,7 +31,7 @@ def _build(result_status):
     )
     contents = [req, test]
     if result_status is not None:
-        # A RESULT that does NOT match the TEST node's id (Dart can't match).
+        # A RESULT belonging to the same application, but naming another test.
         contents.append(
             make_test_result(
                 "r1",
@@ -34,33 +43,34 @@ def _build(result_status):
     return build_graph(*contents)
 
 
-def test_unmatched_verified_credited_when_app_green():
-    g = _build("passed")
+@pytest.mark.parametrize("app_status", ["passed", "failed", None])
+def test_app_verdict_never_reaches_a_test_of_its_own(app_status):
+    """Green, red and silent all leave the assertion awaiting a result.
+
+    ``unmatched_credit = "verified"`` is armed and the application's aggregate
+    status is computed, so the arming is not what withholds the credit: the
+    verdict simply belongs to other tests.
+    """
+    g = _build(app_status)
     annotate_coverage(g, CREDIT)
     m = g.find_by_id("REQ-p00001").get_metric("rollup_metrics")
-    assert m.verified.direct_pct_by_label.get("A") == 1.0
+
+    # The `Verifies:` linkage is live -- this assertion IS tested.
+    assert m.tested.direct_pct_by_label.get("A") == 1.0
+    # ...and no verdict was inferred for it, in either direction.
+    assert m.verified.direct == 0.0
+    assert m.verified.indirect == 0.0
     assert m.verified.has_failures is False
     # lcov_tested untouched (separate dimension)
     assert m.lcov_tested.indirect == 0.0
 
 
-def test_unmatched_flagged_when_app_red():
-    g = _build("failed")
-    annotate_coverage(g, CREDIT)
-    m = g.find_by_id("REQ-p00001").get_metric("rollup_metrics")
-    assert m.verified.has_failures is True
-
-
-def test_no_results_stays_tested_only():
-    g = _build(None)
-    annotate_coverage(g, CREDIT)
-    m = g.find_by_id("REQ-p00001").get_metric("rollup_metrics")
-    assert m.tested.direct_pct_by_label.get("A") == 1.0  # // Verifies: linkage present
-    assert m.verified.direct == 0.0  # no app status -> no aggregate credit
-
-
-def test_default_off_no_credit():
+def test_unarmed_credit_is_no_different():
+    """Without the aggregate credit configured at all, the answer is the same
+    -- there is no configuration under which a sibling's verdict is borrowed."""
     g = _build("passed")
-    annotate_coverage(g)  # no credit config -> off
+    annotate_coverage(g)  # no credit config
     m = g.find_by_id("REQ-p00001").get_metric("rollup_metrics")
+    assert m.tested.direct_pct_by_label.get("A") == 1.0
     assert m.verified.direct == 0.0
+    assert m.verified.has_failures is False

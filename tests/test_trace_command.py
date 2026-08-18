@@ -1088,8 +1088,8 @@ Validates: REQ-d00001-A
 _BREAKDOWN_JUNIT = """\
 <?xml version="1.0" encoding="UTF-8"?>
 <testsuite name="suite" tests="2">
-  <testcase name="test_a" classname="tests.test_a" file="tests/test_a.py" time="0.01"/>
-  <testcase name="test_b" classname="tests.test_b" file="tests/test_b.py" time="0.01">
+  <testcase name="test_a" classname="tests.test_a" file="tests/test_a.py" line="1" time="0.01"/>
+  <testcase name="test_b" classname="tests.test_b" file="tests/test_b.py" line="1" time="0.01">
     <failure message="boom">boom</failure>
   </testcase>
 </testsuite>
@@ -1104,6 +1104,12 @@ def tested_breakdown_project(tmp_path):
     test whose result never arrived -- so the Tested breakdown reads 1P 1F 1A
     (REQ-d00258-O). A journey validates A, so the requirement also has a row to
     render under the UAT preset (which shows no Tested column).
+
+    Each `<testcase>` carries the line of its own `def` in the JUnit reporter's
+    own 0-based origin, so its result resolves to that one test. Without it the
+    results would bind at file scope, naming every test in the file and so none
+    of them, and all three assertions would read as awaiting a result
+    (REQ-d00254-A).
     """
     project = tmp_path / "project"
     (project / "spec").mkdir(parents=True)

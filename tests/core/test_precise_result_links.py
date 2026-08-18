@@ -1,13 +1,13 @@
 # Verifies: REQ-d00254-G
 """Source matching wires real RESULT->TEST YIELDS edges.
 
-Part B (CUR-1533) credited the ``verified`` *metric* for ``match = "source"``
-results via a source_file path-index in the annotator, but never created the
-RESULT->TEST graph edges that ``match = "source"`` promises ("file-granular
-RESULT->TEST verification by real path"). The viewer's per-assertion test map
-(``_get_assertion_test_map`` -> ``_serialize_test_info``) reads a TEST node's
-RESULT *children*, so without those edges the per-assertion VER panel is always
-empty even when the metric shows verified. These tests pin the edges into place.
+``match = "source"`` resolves a result by the real path of the test file that
+produced it, and the edge it wires is what the viewer reads: the per-assertion
+test map (``_get_assertion_test_map`` -> ``_serialize_test_info``) walks a TEST
+node's RESULT *children*, so without those edges the VER panel is empty. These
+tests pin the edges into place, and pin them apart from crediting -- an edge
+shows a reader what ran, and only a result that resolved to the test itself
+carries a verdict about that test's assertions.
 """
 
 from __future__ import annotations
@@ -76,10 +76,12 @@ def test_precise_result_non_matching_file_does_not_link():
     assert result_children == []
 
 
-def test_edges_do_not_change_file_level_metric_semantics():
-    """REQ-d00254-G stays file-level: any failure in a precise file flags it and
-    withholds credit, even though the passing RESULT is now a TEST child for the
-    viewer. The edges are presentation; crediting runs through source_file_index."""
+# Verifies: REQ-d00254-A
+def test_edges_are_presentation_and_carry_no_verdict():
+    """The YIELDS edges exist for the viewer, and crediting is a separate
+    question they do not answer. Both results bound at file scope, so neither
+    the pass nor the failure reaches the assertion: it is tested, and awaiting
+    a result."""
     req = make_requirement("REQ-p00001", assertions=[{"label": "A", "text": "SHALL A"}])
     test = make_test_ref(verifies=["REQ-p00001-A"], source_path=FILE, start_line=1)
     passed = make_test_result("ok", status="passed", source_file=FILE, match="source")
@@ -91,8 +93,9 @@ def test_edges_do_not_change_file_level_metric_semantics():
     res_ids = {c.id for c in test_node.iter_children() if c.kind == NodeKind.RESULT}
     assert res_ids == {"ok", "bad"}
 
-    # But the metric follows file-level G: any failure flags, no credit.
+    # But neither result named the test, so neither says anything about A.
     annotate_coverage(g, CoverageCreditConfig())
     m = g.find_by_id("REQ-p00001").get_metric("rollup_metrics")
-    assert m.verified.has_failures is True
+    assert m.tested.direct_pct_by_label.get("A") == 1.0
+    assert m.verified.has_failures is False
     assert m.verified.direct_pct_by_label.get("A", 0.0) == 0.0

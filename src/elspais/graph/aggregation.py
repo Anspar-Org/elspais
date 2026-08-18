@@ -201,6 +201,19 @@ def relative_tier_for(
 # assertion nothing counted. 'verified' is carried by the same test nodes as
 # 'tested'; line-coverage credit contributes no node at all, which is why a
 # finding may resolve no source and must still be reported.
+# The evidence kinds whose source node can be named for each dimension.
+#
+# 'verified' is deliberately absent, and its chain link is unreachable in
+# practice rather than merely unexercised: a RESULT contributes a verdict and
+# nothing else, taking its labels from the declaration that produced it -- the
+# same list that credits `tested`. One edge, two consumers, so a result cannot
+# name an *Assertion* its declaration did not. Measured over this estate
+# (2026-08-17): of 136 requirements carrying Passing evidence that names
+# individual assertions, zero name a label outside the Tested denominator.
+#
+# The general loop is kept anyway. An exclusion here costs one iteration to
+# skip and stops being correct the moment the two populations diverge; it has
+# been written twice before, on two different and both wrong justifications.
 _EVIDENCE_SOURCES: dict[str, frozenset[CoverageSource]] = {
     "tested": frozenset({CoverageSource.TEST_DIRECT, CoverageSource.TEST_INDIRECT}),
     "uat_verified": frozenset({CoverageSource.UAT_EXPLICIT, CoverageSource.UAT_INFERRED}),

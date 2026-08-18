@@ -2762,6 +2762,87 @@ def check_uncredited_evidence(
     )
 
 
+# Implements: REQ-d00276-A, REQ-d00276-B, REQ-d00276-C, REQ-d00276-D
+def check_external_tests(
+    graph: FederatedGraph, config: dict[str, Any] | None = None
+) -> HealthCheck:
+    """Report the tests that reach no requirement, by what they returned.
+
+    Coverage answers for requirements, so a test belonging to none is absent
+    from every figure -- it runs, it passes or fails, and nothing says so. The
+    two states are different problems: a failing test outside the estate is
+    usually a defect in the test, and cannot be found through any requirement
+    because it hangs off none; a passing one is work the estate cannot see.
+
+    Read-only with respect to coverage: this reports a population the figures
+    are not measuring, and does not move them (REQ-d00276-A).
+    """
+    from elspais.graph import NodeKind as NK
+    from elspais.graph.aggregation import EvidenceResult, _evidence_result
+
+    typed = _validate_config(config or {})
+    severity = typed.rules.coverage.external_test_failure
+
+    passed: list[GraphNode] = []
+    failed: list[GraphNode] = []
+    awaiting: list[GraphNode] = []
+    for test in graph.iter_unlinked(NK.TEST):
+        verdict, _ = _evidence_result(graph, (test.id,))
+        if verdict is EvidenceResult.FAILED:
+            failed.append(test)
+        elif verdict is EvidenceResult.PASSED:
+            passed.append(test)
+        else:
+            awaiting.append(test)
+
+    total = len(passed) + len(failed) + len(awaiting)
+    if total == 0:
+        return HealthCheck(
+            name="tests.external",
+            passed=True,
+            message="Every test reaches a requirement",
+            category="tests",
+            severity="info",
+        )
+
+    # A failing test is what the configured severity is about; a passing or
+    # unrun one outside the estate is disclosed, never failed on (REQ-d00276-C).
+    findings = []
+    for verdict_word, nodes in (
+        ("failed", failed),
+        ("passed", passed),
+        ("awaiting a result", awaiting),
+    ):
+        for test in nodes:
+            file_path, line = _fault_location(graph, test.id, None)
+            findings.append(
+                HealthFinding(
+                    message=(
+                        f"{test.get_label() or test.id} ({verdict_word}) " "reaches no requirement"
+                    ),
+                    node_id=test.id,
+                    file_path=file_path,
+                    line=line,
+                )
+            )
+    return HealthCheck(
+        name="tests.external",
+        passed=not failed or severity == "ok",
+        message=(
+            f"{total} test(s) reach no requirement: "
+            f"{len(passed)} passed, {len(failed)} failed, {len(awaiting)} awaiting a result"
+        ),
+        category="tests",
+        severity=severity if failed else "info",
+        details={
+            "passed": len(passed),
+            "failed": len(failed),
+            "awaiting_result": len(awaiting),
+        },
+        findings=findings,
+    )
+
+
 def check_code_coverage(
     graph: FederatedGraph,
     exclude_status: set[str] | None = None,
@@ -3521,6 +3602,7 @@ def run_test_checks(
         check_dimension_coverage(graph, "verified", exclude_status=exclude_status, config=config),
         check_uncredited_evidence(graph, config),
         check_unlinked_tests(graph),
+        check_external_tests(graph, config),
         check_test_results(graph, config=config),
         check_test_results_stale(graph),
         _check_status_references(

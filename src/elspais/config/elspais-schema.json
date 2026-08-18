@@ -296,6 +296,11 @@
           "title": "Uncredited Evidence",
           "type": "string"
         },
+        "external_test_failure": {
+          "default": "warning",
+          "title": "External Test Failure",
+          "type": "string"
+        },
         "status_words": {
           "additionalProperties": {
             "type": "string"
@@ -1046,6 +1051,18 @@
           "default": 0.0,
           "title": "Min Coverage Fraction",
           "type": "number"
+        },
+        "line_base": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Line Base"
         }
       },
       "required": [

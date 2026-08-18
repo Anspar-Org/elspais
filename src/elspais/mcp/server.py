@@ -524,14 +524,14 @@ def _serialize_node_generic(node: Any, graph: FederatedGraph | None = None) -> d
                     "covered_fraction": rollup.covered_fraction,
                 }
         # CUR-1419: consumer REQs declaring `Integrates:` inherit the
-        # library node's implemented/passing coverage (result-verified or
-        # line-coverage-credited union, REQ-d00258-N) across INTEGRATES
+        # library node's implemented/passing coverage (REQ-d00258-N: what the
+        # library's declared tests returned) across INTEGRATES
         # edges. Surface the live overlay so viewers can show inherited
         # status. Skip when there are no integrations to avoid noise.
         # `verified_*` key names are the wire contract (semantics: the
-        # passing union); `has_failures` flags a red library suite whose
-        # covered count can still read full via the union's per-assertion
-        # max().
+        # Passing dimension); `has_failures` flags a red library suite, which
+        # the covered figure alone cannot distinguish from one whose
+        # assertions were never tested.
         from elspais.graph.metrics import integrates_rollup
 
         irollup = integrates_rollup(node)

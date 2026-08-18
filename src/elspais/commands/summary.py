@@ -175,13 +175,13 @@ def _render_text(data: dict) -> str:
         lines.append(f"  ({', '.join(parts)} not included in coverage)")
 
     # REQ-d00252-F: External integrations grouped by owning associate.
-    # "Passing" (REQ-d00258-B vocabulary, REQ-d00258-N union):
-    # integrates_by_associate() now folds
-    # the library node's tested_and_passing() union (result-verified OR
-    # line-coverage-credited) into these figures, so the label matches the
-    # other coverage columns. `!` marks a row whose library suite has failing
-    # results -- the union's covered count can still read full in that case,
-    # so the marker (footnoted below, like `~`/`*`) is the only red signal.
+    # "Passing" (REQ-d00258-B vocabulary, REQ-d00258-N):
+    # integrates_by_associate() folds the library node's
+    # tested_and_passing() Passing dimension into these figures, so the
+    # label matches the other coverage columns. `!` marks a row whose library
+    # suite has failing results -- the covered figure alone cannot say whether
+    # an uncounted assertion failed or was never tested, so the marker
+    # (footnoted below, like `~`/`*`) is the only red signal.
     integrations = data.get("integrations") or []
     if integrations:
         any_failing = any(row.get("has_failures") for row in integrations)
@@ -266,13 +266,13 @@ def _render_markdown(data: dict) -> str:
         lines.append(f"*{', '.join(parts)} not included in coverage.*")
 
     # REQ-d00252-F: External integrations grouped by owning associate.
-    # "Passing" (REQ-d00258-B vocabulary, REQ-d00258-N union):
-    # integrates_by_associate() now folds
-    # the library node's tested_and_passing() union (result-verified OR
-    # line-coverage-credited) into these figures, so the label matches the
-    # other coverage columns. `!` marks a row whose library suite has failing
-    # results -- the union's covered count can still read full in that case,
-    # so the marker (footnoted below, like `*`) is the only red signal.
+    # "Passing" (REQ-d00258-B vocabulary, REQ-d00258-N):
+    # integrates_by_associate() folds the library node's tested_and_passing()
+    # Passing dimension into these figures, so the label matches the other
+    # coverage columns. `!` marks a row whose library suite has failing
+    # results -- the covered figure alone cannot say whether an uncounted
+    # assertion failed or was never tested, so the marker (footnoted below,
+    # like `*`) is the only red signal.
     integrations = data.get("integrations") or []
     if integrations:
         any_failing = any(row.get("has_failures") for row in integrations)

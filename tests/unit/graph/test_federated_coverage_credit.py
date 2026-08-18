@@ -400,7 +400,7 @@ enabled = true
 name = "pytest"
 reporter = "junit"
 results = "results/*.xml"
-match = "aggregate"
+match = "source"
 cwd = "tests"
 
 [associates.plib]
@@ -463,13 +463,13 @@ POLICY_JUNIT = """<?xml version="1.0" encoding="utf-8"?>
 
 @pytest.fixture(scope="module")
 def policy_federation(tmp_path_factory):
-    """A consumer that credits aggregate app-green, and a library that does not.
+    """A consumer that ingests results, and a library that declares no target.
 
-    Both repositories keep their tests in ``tests/``, so the consumer's app
-    directory names the library's test files too -- the shape in which a
-    consumer's crediting policy leaks across the boundary. They deliberately
-    use the SAME relative test path, which is one node id in two repositories:
-    ownership of such a file cannot be read off the id alone.
+    Both repositories keep their tests in ``tests/``, and deliberately use the
+    SAME relative test path -- one file name in two repositories, whose
+    ownership cannot be read off the path alone. That is the shape in which a
+    consumer's results would leak across the boundary and credit a library
+    test the consumer never ran.
     """
     base = tmp_path_factory.mktemp("credit_policy")
     lib = make_repo(base, "plib", namespace="PLIB", config_text=POLICY_LIB_TOML)
@@ -492,9 +492,10 @@ def policy_federation(tmp_path_factory):
 
 # Verifies: REQ-d00261-E
 def test_consumer_crediting_policy_stops_at_the_boundary(policy_federation):
-    """The library declares no test targets, so no aggregate app-green credit
-    applies to it. Joining a federation whose consumer does declare one must
-    not change that: membership alone credits nothing."""
+    """The library declares no test targets, so no result of the consumer's
+    credits its test -- not even the one written at the identical relative
+    path. Joining a federation whose consumer does ingest results must not
+    change that: membership alone credits nothing."""
     app, lib = policy_federation
     alone_metrics = _metrics(build_graph(repo_root=lib), "PLIB-d00001")
     federated_metrics = _metrics(build_graph(repo_root=app), "PLIB-d00001")
@@ -507,8 +508,10 @@ def test_consumer_crediting_policy_stops_at_the_boundary(policy_federation):
 # Verifies: REQ-d00261-E
 def test_consumer_keeps_its_own_crediting_policy(policy_federation):
     """The consumer's own requirement still receives the credit its own
-    target declares -- the policy is scoped to its repository, not switched
-    off."""
+    target's results justify -- the policy is scoped to its repository, not
+    switched off. The result resolves to the consumer's own test, so the
+    credit is the assertion that test names."""
     app, _lib = policy_federation
     metrics = _metrics(build_graph(repo_root=app), "PAPP-d00001")
-    assert metrics.verified.indirect == 1.0
+    assert metrics.verified.direct_pct_by_label["A"] == 1.0
+    assert metrics.verified.direct == 1.0

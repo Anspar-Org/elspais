@@ -306,8 +306,8 @@ def _get_node_data(node, graph: FederatedGraph, *, assertion_labels: bool = Fals
 
         for key, attr, use_ind_count, use_ind_labels in _DIMS:
             # Implements: REQ-d00258-A, REQ-d00258-N
-            # "Passing" (the verified column) is the union of result-verified
-            # and line-coverage-credited evidence.
+            # "Passing" (the verified column) counts what the declared tests
+            # returned, excluding an assertion its own tests failed.
             dim: CoverageDimension = (
                 tested_and_passing(rollup) if key == "verified" else getattr(rollup, attr)
             )

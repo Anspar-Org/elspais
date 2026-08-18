@@ -187,8 +187,13 @@ class TestAssertionCoverageStates:
         assert states["A"]["implemented"] == "partial"
         assert states["B"]["implemented"] == "missing"
 
-    def test_REQ_d00258_G_verified_uses_lcov_union(self):
-        """Passing state credits line-coverage evidence via tested_and_passing()."""
+    # Verifies: REQ-d00258-N
+    def test_REQ_d00258_N_verified_standing_ignores_lcov_credit(self):
+        """The per-assertion Passing standing reads ``tested_and_passing()``,
+        which counts only what a test declared against the assertion returned.
+        A tested assertion whose implementing lines were executed but whose
+        test returned no verdict stands MISSING on Passing, while its Tested
+        standing is unaffected."""
         rollup = RollupMetrics(
             total_assertions=1,
             tested=CoverageDimension(
@@ -201,7 +206,8 @@ class TestAssertionCoverageStates:
         )
         node = _req_with_rollup(rollup, labels=("A",))
         states = compute_assertion_coverage_states(node)
-        assert states["A"]["verified"] == "full"
+        assert states["A"]["verified"] == "missing"
+        assert states["A"]["tested"] == "full"
 
     def test_REQ_d00258_G_failing_sibling_does_not_redden_partial(self):
         """A failing assertion A must not push a partial (non-failing) sibling B

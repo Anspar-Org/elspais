@@ -1,23 +1,27 @@
 """JUnit XML parser for test results.
 
-This parser extracts test results from JUnit XML format files.
-Matches a result to its test by recorded identity.
+Extracts test results from JUnit XML and records where each test lives, so a
+result can be bound to the test that produced it.
 
 Source-file binding
 -------------------
-Standard pytest/JUnit XML has no per-test source path, so the classname is
-used to synthesize a Python ``test:...::...`` ``test_id`` that a scanned
-``.py`` test node can match (the YIELDS branch in the builder).
+A per-``<testcase>`` ``file`` attribute names the test's real source file.
+When present it becomes the result's ``source_path``, so ``match = "source"``
+binds the result to the scanned test node by path, and the classname-derived
+``test_id`` is dropped: a classname is a Python module path, and it can never
+name a ``.spec.ts`` or any other non-Python test.
 
-For non-Python producers (e.g. Playwright ``.spec.ts``), a per-``<testcase>``
-``file`` attribute names the real source file.  When present, it is preferred
-as the result's ``source_path`` (so ``match = "source"`` binds the result to
-the scanned test node by path) and the classname-derived ``test_id`` is
-dropped (set to ``None``) -- a ``.py`` module id could never match a
-``.spec.ts`` node, and a non-None ``test_id`` would route the result to the
-doomed YIELDS branch instead of source matching.  An optional ``line``
-attribute is exposed as the result's ``line`` field.  Producers whose JUnit
-reporter omits ``file`` behave exactly as before (fully backward-compatible).
+Where no ``file`` attribute is written, the classname is all there is, and it
+is used to synthesize a Python ``test:...::...`` ``test_id`` for a scanned
+``.py`` test node to match.
+
+Line origin
+-----------
+The ``line`` attribute is a pytest extension -- standard JUnit XML carries no
+line at all -- and pytest counts it from zero, at the first line of the
+decorated definition. The reporter declares that origin (REQ-d00254-O) and
+ingestion normalises it, so the ``line`` a result carries downstream is
+counted from one, like every other line in the graph.
 """
 
 from __future__ import annotations
@@ -182,13 +186,12 @@ class JUnitXMLParser:
                     status = "skipped"
                     message = skipped.get("message") or skipped.text
 
-                # A per-testcase `file` attribute (e.g. Playwright JUnit) names
-                # the real source file. Prefer it as the result's source path so
-                # `match="source"` can bind the result to the scanned test node,
-                # and DROP the classname-derived test_id (which assumes a Python
-                # `.py` module path and can never match a `.spec.ts`) so the
-                # builder takes its source-location matching path instead of a
-                # doomed test_id YIELDS.
+                # A per-testcase `file` attribute names the test's real source
+                # file. It becomes the result's source path, so the result binds
+                # to the scanned test node by path and line, and the
+                # classname-derived test_id is dropped: a classname is a Python
+                # module path and names nothing in a `.spec.ts` or any other
+                # non-Python test file.
                 file_attr = testcase.get("file")
                 result_source = file_attr or source_path
                 line_attr = testcase.get("line")

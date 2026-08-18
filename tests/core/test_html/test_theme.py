@@ -469,15 +469,16 @@ class TestSeverityCatalog:
         assert tiers["verified_tier"] == "failing"
         assert tiers["combined_bucket"] == "failing"
 
-    # Verifies: REQ-d00258-B
-    def test_passing_badge_credits_lcov_only_coverage(self):
-        """A requirement fully credited via lcov only (no `Verifies:` refs at
-        all) must still show a full "Passing" badge -- the 'verified' slot in
-        compute_coverage_tiers is `tested_and_passing(rollup)`, the union of
-        `verified` and `lcov_tested` (REQ-d00258-B), not the raw `verified`
-        dimension. combined_bucket must not degrade to 'partial' solely
-        because the evidence came from line coverage rather than a Verifies:
-        reference."""
+    # Verifies: REQ-d00258-N
+    def test_passing_badge_does_not_credit_lcov_only_coverage(self):
+        """A requirement credited via lcov only (no `Verifies:` refs at all)
+        must show a MISSING "Passing" badge. The 'verified' slot in
+        compute_coverage_tiers is `tested_and_passing(rollup)`, which counts
+        only what a test declared against an assertion returned; line
+        coverage credits no *Traceability* dimension (REQ-d00254-B). The
+        requirement is fully implemented and fully tested with nothing having
+        returned a verdict, so combined_bucket degrades to 'partial' -- which
+        is the honest reading, not a defect in the badge."""
         from elspais.graph.metrics import CoverageDimension, RollupMetrics
         from elspais.html.generator import compute_coverage_tiers
 
@@ -499,8 +500,8 @@ class TestSeverityCatalog:
             ),
             # No Verifies: coverage at all on this dimension...
             verified=CoverageDimension(total=2, direct=0, indirect=0),
-            # ...but full line-coverage credit via lcov_tested (label-keyed so
-            # tested_and_passing() credits the tested denominator labels).
+            # ...and full line-coverage credit, label-keyed over exactly the
+            # tested denominator labels, which still reaches Passing nowhere.
             lcov_tested=CoverageDimension(
                 total=2,
                 direct=2,
@@ -512,8 +513,8 @@ class TestSeverityCatalog:
         node = self._make_active_node_with_metrics(rollup)
         tiers = compute_coverage_tiers(node)
 
-        assert tiers["verified_tier"] == "full"
-        assert tiers["combined_bucket"] == "full"
+        assert tiers["verified_tier"] == "missing"
+        assert tiers["combined_bucket"] == "partial"
 
     # Verifies: REQ-d00258-F
     def test_expects_validation_uat_none_is_red_and_drags(self):

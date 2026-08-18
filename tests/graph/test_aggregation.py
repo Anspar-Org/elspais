@@ -103,10 +103,14 @@ class TestAggregateByLevel:
         assert levels["DEV"].implemented.covered == pytest.approx(expected_impl)
         assert levels["DEV"].implemented.total == expected_total
 
-    def test_passing_uses_union_dimension(self, canonical_graph, canonical_config):
+    # Verifies: REQ-d00258-N
+    def test_passing_never_exceeds_tested(self, canonical_graph, canonical_config):
+        """Passing counts a subset of the assertions Tested counts, so the two
+        figures stay comparable on the same footing. Crediting evidence no test
+        declared -- line coverage, or a result reached through the code --
+        broke this: Passing could name an assertion Tested never did."""
         levels = aggregate_by_level(canonical_graph, canonical_config)
         for lv in levels:
-            # passing can never exceed tested on the same footing
             assert lv.passing.covered <= lv.tested.covered + 1e-9
 
 
@@ -317,19 +321,21 @@ class TestRelativeTierFor:
         )
         assert relative_tier_for(rollup, "tested") == ("missing", True)
 
-    def test_verified_uses_tested_and_passing_union(self):
-        """The 'verified' numerator is tested_and_passing (verified | lcov),
-        NOT the raw verified dimension -- lcov-only credit still counts."""
+    # Verifies: REQ-d00258-N
+    def test_verified_ignores_line_coverage_credit(self):
+        """Line coverage credits no *Traceability* dimension, so an assertion
+        whose only evidence is line coverage leaves Passing a gap -- while
+        `lcov_tested` still reads full in its own right (REQ-d00254-B)."""
         rollup = RollupMetrics(
             total_assertions=1,
             tested=_dim({"A"}, total=1),
             verified=_dim(set(), total=1),  # no // Verifies: result
-            lcov_tested=_dim({"A"}, total=1),  # but line-coverage credits A
+            lcov_tested=_dim({"A"}, total=1),  # line coverage reached A's code
         )
-        # denom = tested labels {A}; union credits A -> full.
-        assert relative_tier_for(rollup, "verified") == ("full", False)
-        # Raw verified alone would be a gap.
-        assert rollup.verified.tier == "missing"
+        # denom = tested labels {A}; nothing declared against A passed -> gap.
+        assert relative_tier_for(rollup, "verified") == ("missing", False)
+        # The line-coverage dimension keeps its own, undiminished answer.
+        assert rollup.lcov_tested.tier == "full"
 
     def test_absolute_dimension_returns_dim_tier(self):
         """A dimension NOT in the denominator map returns the absolute
@@ -711,69 +717,80 @@ class TestDenominatorLabelsAbsoluteDimensions:
 # Verifies: REQ-d00258-I
 class TestNumeratorDimension:
     """The dimension the tier figures measure for a chained link -- 'verified'
-    reads the tested_and_passing union, not the raw verified dimension."""
+    reads ``tested_and_passing``, not the raw verified dimension."""
 
     def test_tested_numerator_is_the_tested_dimension(self):
         rollup = RollupMetrics(total_assertions=1, tested=_dim({"A"}, total=1))
         assert numerator_dimension(rollup, "tested") is rollup.tested
 
-    def test_verified_numerator_unions_verified_and_lcov(self):
-        # verified alone credits nothing; lcov_tested credits A -- the union
-        # (tested_and_passing) must see A, so the raw `.verified` dimension is
-        # NOT what gets read.
+    # Verifies: REQ-d00258-N
+    def test_verified_numerator_ignores_line_coverage_credit(self):
+        # verified credits nothing; lcov_tested credits A. Passing counts only
+        # what a declared test returned, so the numerator must not see A.
         rollup = RollupMetrics(
             total_assertions=1,
             verified=_dim(set(), total=1),
             lcov_tested=_dim({"A"}, total=1),
         )
         num = numerator_dimension(rollup, "verified")
+        assert {lbl for lbl, f in num.indirect_pct_by_label.items() if f > 0} == set()
+
+    def test_verified_numerator_drops_a_failing_assertion_from_the_figures(self):
+        """Still not the raw `.verified` dimension: an assertion a declared
+        test reported failing keeps its per-label credit (REQ-d00258-G) but is
+        excluded from the Passing figures, which raw `.verified` is not."""
+        rollup = RollupMetrics(
+            total_assertions=2,
+            verified=_dim({"A", "B"}, total=2, failing={"A"}),
+        )
+        num = numerator_dimension(rollup, "verified")
         assert num is not rollup.verified
-        assert {lbl for lbl, f in num.indirect_pct_by_label.items() if f > 0} == {"A"}
+        assert num.indirect == 1.0
+        assert rollup.verified.indirect == 2.0
 
 
 # Verifies: REQ-d00274-A
 # Verifies: REQ-d00274-D
 class TestAuthoredDimension:
-    """``authored_dimension`` reads only evidence somebody WROTE against an
-    *Assertion* -- unlike ``numerator_dimension``, it does not union in
-    line-coverage credit for 'verified'. Line-coverage credit names no
-    *Assertion* (REQ-d00274-A) and has no file/line to report (REQ-d00274-D):
-    it belongs in the figures, not in a report about what an author
-    annotated."""
+    """``authored_dimension`` reads the evidence somebody WROTE against an
+    *Assertion*, undiminished. It differs from ``numerator_dimension`` for
+    'verified', whose figures exclude an *Assertion* a declared test reported
+    failing: the report is about what an author annotated (REQ-d00274-A) and
+    at which file and line (REQ-d00274-D), not about what the figures count."""
 
     def test_verified_is_the_raw_verified_dimension(self):
         rollup = RollupMetrics(total_assertions=1, verified=_dim({"A"}, total=1))
         assert authored_dimension(rollup, "verified") is rollup.verified
 
-    def test_lcov_only_credit_is_invisible_to_authored_but_visible_to_numerator(self):
-        """The whole point of the helper: lcov_tested credits A while verified
-        credits nothing -- authored_dimension must not see A, while
-        numerator_dimension (which unions lcov in) must."""
+    def test_a_failing_assertion_stays_visible_to_authored_but_not_to_numerator(self):
+        """The two helpers must not be collapsed into one. A `Verifies:` result
+        was written against A and it failed: authored_dimension still sees the
+        evidence an author wrote, while numerator_dimension excludes A from the
+        Passing figures (REQ-d00258-N)."""
         rollup = RollupMetrics(
-            total_assertions=1,
-            verified=_dim(set(), total=1),
-            lcov_tested=_dim({"A"}, total=1),
+            total_assertions=2,
+            verified=_dim({"A", "B"}, total=2, failing={"A"}),
         )
         authored = authored_dimension(rollup, "verified")
-        assert {lbl for lbl, f in authored.indirect_pct_by_label.items() if f > 0} == set()
+        assert authored.indirect == 2.0
 
         numerator = numerator_dimension(rollup, "verified")
-        assert {lbl for lbl, f in numerator.indirect_pct_by_label.items() if f > 0} == {"A"}
+        assert numerator.indirect == 1.0
 
 
 # Verifies: REQ-d00274-A
 # Verifies: REQ-d00274-D
-class TestIterUncreditedEvidenceExcludesLineCoverageCredit:
+class TestIterUncreditedEvidenceReadsAuthoredEvidence:
     """``iter_uncredited_evidence`` reads ``authored_dimension``, not
-    ``numerator_dimension``, so line-coverage-only credit for 'verified' --
-    nobody wrote it against an *Assertion*, and there is no file/line to
-    report it at -- never produces a finding. Evidence somebody actually
-    wrote (a `Verifies:` result) for the identical shape still does, so the
-    exclusion is specific to line-coverage credit rather than a silent hole
-    in the whole 'verified' link.
+    ``numerator_dimension``.
 
-    Regression guard: this must fail if the scan goes back to reading
-    ``numerator_dimension`` for 'verified'.
+    Two things follow, and each has a test here. Line-coverage credit is
+    nobody's annotation and has no file/line to report it at, so it never
+    produces a finding -- while a `Verifies:` result of the identical shape
+    does. And an *Assertion* a declared test reported failing is still
+    evidence an author wrote, so it is still reported, even though the
+    Passing figures exclude it (REQ-d00258-N); that last case is the
+    regression guard against the two helpers being collapsed into one.
     """
 
     def test_lcov_only_credit_outside_denominator_produces_no_finding(self):
@@ -810,6 +827,27 @@ class TestIterUncreditedEvidenceExcludesLineCoverageCredit:
         assert len(items) == 1
         assert items[0].dimension == "verified"
         assert items[0].denominator == "tested"
+        assert items[0].assertion_label == "A"
+
+    # Verifies: REQ-d00258-N
+    def test_failing_written_evidence_outside_denominator_still_fires(self):
+        """The discriminator that keeps the two helpers apart: the `Verifies:`
+        result naming A FAILED, so the Passing figures exclude A. The author
+        still wrote it, so it is still reported as evidence reaching nothing.
+        Reading ``numerator_dimension`` here would lose the finding."""
+        req = _make_req("REQ-d00016")
+        req.set_metric(
+            "rollup_metrics",
+            RollupMetrics(
+                total_assertions=2,
+                implemented=_dim({"B"}, total=2),
+                tested=_dim({"B"}, total=2),
+                verified=_dim({"A"}, total=2, failing={"A"}),
+            ),
+        )
+        graph = _make_graph(req)
+        items = iter_uncredited_evidence(graph)
+        assert len(items) == 1
         assert items[0].assertion_label == "A"
 
 

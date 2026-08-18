@@ -563,20 +563,18 @@ class IntegratesRollup:
     # non-integer. Totals are assertion counts and stay int.
     implemented_covered: float
     implemented_total: int
-    # NOTE (REQ-d00258-N): despite the field name (kept for MCP/GUI wire
-    # compatibility -- see `integrates_rollup()`), these are NOT the raw
-    # `verified` dimension. They are the "passing" union of result-verified
-    # and line-coverage-credited evidence (`tested_and_passing()`), so a
-    # library requirement whose only evidence is lcov credit still propagates
-    # to integrating consumers.
+    # NOTE (REQ-d00258-N): the field name is kept for MCP/GUI wire
+    # compatibility (see `integrates_rollup()`); the value is the Passing
+    # dimension from `tested_and_passing()`, which counts what the library's
+    # own declared tests returned and excludes an assertion any of them
+    # failed.
     verified_covered: float
     verified_total: int
-    # True if any integrated library node's passing union reports a failure.
-    # The union's covered count uses max() per assertion, so an assertion with
-    # a FAILING Verifies-result but full lcov credit still reads as covered --
-    # this flag is the only signal that the library suite is red, and every
-    # surface showing the covered/total figures must surface it too
-    # (REQ-d00258-N).
+    # True if any integrated library node's Passing dimension reports a
+    # failure. A failing assertion is excluded from the covered figure rather
+    # than counted, but the figure alone cannot distinguish "failed" from
+    # "never tested", so every surface showing covered/total must surface this
+    # flag too (REQ-d00258-N).
     has_failures: bool = False
 
     @property
@@ -605,12 +603,9 @@ def integrates_rollup(node: GraphNode) -> IntegratesRollup:
 
     For each outgoing INTEGRATES edge (consumer REQ -> library node), read the
     library node's finalized ``rollup_metrics`` (computed in its own repo) and
-    fold its implemented dimension and its *passing* union in. "Passing" is
-    the result-verified-or-line-coverage-credited union computed by
-    :func:`tested_and_passing` (REQ-d00258-N) -- not the raw ``verified``
-    dimension -- so a library requirement whose only evidence is lcov credit
-    (e.g. an aggregate-tooling repo with no `Verifies:`-based results) still
-    propagates as passing coverage to the consumer. A consumer REQ with no
+    fold its implemented and Passing dimensions in. "Passing" is
+    :func:`tested_and_passing` (REQ-d00258-N): what the library's own declared
+    tests returned, with a failing assertion excluded. A consumer REQ with no
     INTEGRATES edges yields all zeros.
     """
     from elspais.graph.relations import EdgeKind
@@ -649,13 +644,13 @@ class AssociateIntegration:
     implemented_covered: float
     implemented_total: int
     # NOTE (REQ-d00258-N): the "verified" field name is kept for MCP/summary
-    # wire compatibility, but the value is the "passing" union (result-verified
-    # or line-coverage-credited, `tested_and_passing()`), not raw `verified`.
+    # wire compatibility; the value is the Passing dimension
+    # (`tested_and_passing()`), which excludes a failing assertion.
     verified_covered: float
     verified_total: int
     # True if any integrated library node under this associate reports a
-    # failing result in the passing union -- the covered figures alone can
-    # read full even when the library suite is red (see IntegratesRollup).
+    # failing result -- the covered figure alone cannot say whether an
+    # uncounted assertion failed or was never tested (see IntegratesRollup).
     has_failures: bool = False
 
 
@@ -665,9 +660,8 @@ def integrates_by_associate(graph) -> list[AssociateIntegration]:
 
     Scans every INTEGRATES edge in the federation (consumer REQ -> library REQ),
     groups by the owning associate repo of the target library node, and sums the
-    inherited implemented coverage plus the *passing* union (REQ-d00258-N
-    `tested_and_passing()`: result-verified or line-coverage-credited), read
-    live from each target's ``rollup_metrics``. Returns one entry per
+    inherited implemented coverage plus the Passing dimension (REQ-d00258-N,
+    `tested_and_passing()`), read live from each target's ``rollup_metrics``. Returns one entry per
     associate, sorted by associate name. A federation total is the caller's
     concern (see :func:`integrates_total`). ``graph`` is a FederatedGraph.
     """
@@ -751,67 +745,56 @@ def integrates_total(items: list[AssociateIntegration]) -> AssociateIntegration:
 
 
 # Implements: REQ-d00254-B
+# Implements: REQ-d00258-N
 def tested_and_passing(metrics: RollupMetrics) -> CoverageDimension:
-    """The Passing dimension, from `verified` and `lcov_tested` together.
+    """The Passing dimension: what the declared tests themselves returned.
 
-    An *Assertion* passes when at least one of the two kinds of evidence says
-    it passed and neither says it failed (REQ-d00258-N). Per-assertion
-    fractions are the max across the two dimensions (not summed), and an
-    *Assertion* either source reports failing contributes nothing to the
-    passing figures however much credit the other source gave it: line
-    coverage never observes a verdict, so a failing test still executes lines
-    and would otherwise be counted as passing by the source that cannot tell.
+    An *Assertion* passes when a test declared against it returned a passing
+    result and none returned a failure (REQ-d00258-N). Line coverage is not
+    consulted. Executing a line of the code that implements an *Assertion*
+    says the code was reached; it does not say the *Assertion* was checked,
+    and a test can always carry its own `Verifies:`, so an *Assertion*
+    reported as passing without one would be reporting an annotation nobody
+    wrote. ``lcov_tested`` remains its own dimension, reported beside these
+    (REQ-d00254-B).
 
-    Its per-label fractions are kept as they were credited, so the evidence
-    remains readable and the failing *Assertion* renders under its own
-    standing (REQ-d00258-G) rather than disappearing.
+    Per-label fractions are kept as they were credited, so a failing
+    *Assertion* still renders under its own standing (REQ-d00258-G) rather
+    than disappearing; it contributes nothing to the figures.
 
-    When per-label dicts are populated the figures are label-keyed; when they
-    are absent (e.g. in simplified test fixtures) the raw direct/indirect
-    scalars are combined via max, which cannot attribute a failure to an
-    *Assertion* and so does not exclude one.
+    The name is kept because every reporting surface reaches Passing through
+    it, and there is one place to change if what Passing counts changes again.
     """
     vd = metrics.verified
-    lt = metrics.lcov_tested
-    total = max(vd.total, lt.total)
+    failing = set(vd.failing_labels)
 
-    def merge(a: dict[str, float], b: dict[str, float]) -> dict[str, float]:
-        out = dict(a)
-        for k, val in b.items():
-            out[k] = max(out.get(k, 0.0), val)
-        return out
-
-    direct_pct = merge(vd.direct_pct_by_label, lt.direct_pct_by_label)
-    indirect_pct = merge(vd.indirect_pct_by_label, lt.indirect_pct_by_label)
-
-    # Implements: REQ-d00258-N
-    failing = set(vd.failing_labels) | set(lt.failing_labels)
+    direct_pct = dict(vd.direct_pct_by_label)
+    indirect_pct = dict(vd.indirect_pct_by_label)
 
     # Fall back to raw scalars when no per-label data is present (e.g. simplified
-    # test fixtures that don't populate direct_pct_by_label).
+    # test fixtures that don't populate direct_pct_by_label), which cannot
+    # attribute a failure to an *Assertion* and so does not exclude one.
     if direct_pct:
         combined_direct = sum(v for lbl, v in direct_pct.items() if lbl not in failing)
     else:
-        combined_direct = max(vd.direct, lt.direct)
+        combined_direct = vd.direct
 
     if indirect_pct:
         combined_indirect = sum(v for lbl, v in indirect_pct.items() if lbl not in failing)
     else:
-        combined_indirect = max(vd.indirect, lt.indirect)
+        combined_indirect = vd.indirect
 
     return CoverageDimension(
-        total=total,
+        total=vd.total,
         direct=combined_direct,
         indirect=combined_indirect,
-        has_failures=vd.has_failures or lt.has_failures,
-        # Per-assertion failure attribution is the union of both sources'
-        # failing labels, so the "passing" standing reads red only for the
-        # assertions that actually failed (REQ-d00258-G).
+        has_failures=vd.has_failures,
         failing_labels=failing,
         direct_labels=set(direct_pct),
         indirect_labels=set(indirect_pct),
         direct_pct_by_label=direct_pct,
         indirect_pct_by_label=indirect_pct,
+        carried=vd.carried,
     )
 
 
@@ -844,9 +827,9 @@ def tested_partition(metrics: RollupMetrics) -> TestedPartition:
     """Partition a requirement's tested assertions into the three states.
 
     The tested set is read on the generous footing, matching the Tested figure
-    this breaks down (REQ-d00258-A). An *Assertion* is failing when either kind
-    of passing evidence reports it so, passing when some passing evidence
-    credits it and none reports it failing, and awaiting a result otherwise --
+    this breaks down (REQ-d00258-A). An *Assertion* is failing when a test
+    declared against it reported a failure, passing when such a test reported a
+    pass and none reported a failure, and awaiting a result otherwise --
     which covers a test that has not run, one whose results were never
     ingested, and one that returned no verdict.
     """

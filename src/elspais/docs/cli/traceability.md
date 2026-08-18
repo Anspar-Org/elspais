@@ -45,14 +45,20 @@ empty `Tested`/`Passing` denominator as neutral `missing` (grey), never a red
 gap -- the "not all built" story lives on the `Implemented` column. A failing
 in-denominator label always reads `failing` (red).
 
-**What Passing takes.** The `Passing` column (dimension key `verified`) draws
-on two kinds of evidence: a passing `Verifies:` test result (`verified`), or a
-covered `Implements:` line under a target with `credit_coverage = "verified"`
-(`lcov_tested`). Either alone is enough to count as passing, and neither may
-report the assertion failing -- line coverage never sees a verdict, so a
-failing test still executes lines, and an assertion its result failed on is
-excluded however much line credit it earned. See `tested_and_passing()` in
-`graph/metrics.py`.
+**What Passing takes.** The `Passing` column (dimension key `verified`) counts
+an assertion when a test *declared against that assertion* returned a passing
+result, and none returned a failure. Nothing else credits it. Line coverage of
+the code implementing an assertion does not: executing a line says the code was
+reached, not that the assertion was checked, and a test can always carry its
+own `Verifies:` -- so an assertion reported as passing without one would be
+reporting an annotation nobody wrote. Passing is therefore always a subset of
+Tested.
+
+**Line coverage is its own dimension.** `Code Tested` and `LCOV Tested` report
+how much of the implementation a run exercised. That is worth knowing and it is
+reported in its own right, beside the traceability columns and never folded
+into them. `credit_coverage` on a target governs whether that dimension is
+computed at all; it no longer credits any traceability dimension.
 
 **The Tested breakdown.** Every tested assertion is in exactly one of three
 states, and all three are reported alongside the Tested figure: passed,

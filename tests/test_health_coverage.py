@@ -11,6 +11,7 @@ from elspais.commands.health import (
     _excluded_note,
     check_code_coverage,
     check_dimension_coverage,
+    check_external_tests,
     check_test_coverage,
     check_uat_coverage,
     check_uat_results,
@@ -1150,3 +1151,166 @@ class TestTestedBreakdownInHealth:
         assert check.details["tested_passed"] == 0
         assert check.details["tested_failed"] == 0
         assert check.details["tested_awaiting"] == 0
+
+
+class TestCheckExternalTests:
+    """REQ-d00276: tests reaching no requirement are reported as their own
+    set, split by what each returned, located at file and line, and failing
+    the check only where one of them failed."""
+
+    @staticmethod
+    def _graph(*outside: tuple[str, int, str | None]):
+        """A requirement with one test of its own, plus the given outsiders.
+
+        Each outsider is ``(path, line, status)``; a status of None means that
+        test produced no RESULT node at all. ``tests/test_in.py`` always names
+        the requirement, so the estate is never empty and an outsider is
+        reported for reaching no requirement rather than for being the only
+        test there is.
+        """
+        from tests.core.graph_test_helpers import (
+            build_graph,
+            make_requirement,
+            make_test_ref,
+            make_test_result,
+        )
+
+        contents = [
+            make_requirement(
+                "REQ-100",
+                level="PRD",
+                assertions=[{"label": "A", "text": "a"}],
+            ),
+            make_test_ref(
+                verifies=["REQ-100-A"],
+                source_path="tests/test_in.py",
+                start_line=3,
+                end_line=4,
+            ),
+        ]
+        for index, (path, line, status) in enumerate(outside):
+            contents.append(
+                make_test_ref(verifies=[], source_path=path, start_line=line, end_line=line + 1)
+            )
+            if status is not None:
+                contents.append(
+                    make_test_result(
+                        f"result-{index}",
+                        status=status,
+                        test_id=f"test:{path}:{line}",
+                        match="source",
+                    )
+                )
+        return build_graph(*contents)
+
+    # Verifies: REQ-d00276-A, REQ-d00276-C
+    def test_failing_outsider_fails_the_check_at_the_configured_severity(self):
+        """C: a failing test outside the estate is reported at the severity
+        the project sets for it."""
+        check = check_external_tests(
+            self._graph(("tests/test_out.py", 9, "failed")),
+            {"rules": {"coverage": {"external_test_failure": "error"}}},
+        )
+
+        assert check.name == "tests.external"
+        assert check.category == "tests"
+        assert check.severity == "error"
+        assert check.passed is False
+
+    # Verifies: REQ-d00276-C
+    def test_warning_is_the_severity_when_nothing_is_configured(self):
+        """C: the project configuring nothing gets a warning, not silence and
+        not an error."""
+        check = check_external_tests(self._graph(("tests/test_out.py", 9, "failed")), {})
+
+        assert check.severity == "warning"
+        assert check.passed is False
+
+    # Verifies: REQ-d00276-A, REQ-d00276-C
+    @pytest.mark.parametrize("status", ["passed", None], ids=["passed", "awaiting"])
+    def test_outsider_that_did_not_fail_is_reported_without_failing(self, status):
+        """A/C: a passing test outside the estate, and one still awaiting a
+        result, are both disclosed -- neither is a defect to fail on."""
+        check = check_external_tests(self._graph(("tests/test_out.py", 9, status)), {})
+
+        assert check.passed is True
+        assert check.severity == "info"
+        assert len(check.findings) == 1
+        assert "tests/test_out.py" in check.findings[0].file_path
+
+    # Verifies: REQ-d00276-B
+    def test_counts_split_by_what_each_test_returned(self):
+        """B: passed, failed and awaiting are three states, counted apart."""
+        check = check_external_tests(
+            self._graph(
+                ("tests/test_p.py", 3, "passed"),
+                ("tests/test_f.py", 5, "failed"),
+                ("tests/test_n.py", 7, None),
+                ("tests/test_p2.py", 11, "passed"),
+            ),
+            {},
+        )
+
+        assert check.details == {"passed": 2, "failed": 1, "awaiting_result": 1}
+        assert "2 passed, 1 failed, 1 awaiting a result" in check.message
+        assert len(check.findings) == 4
+
+    # Verifies: REQ-d00276-B, REQ-d00276-D
+    def test_each_finding_names_its_file_line_and_verdict(self):
+        """B/D: a reader is sent to the test the wording describes."""
+        check = check_external_tests(
+            self._graph(
+                ("tests/test_p.py", 3, "passed"),
+                ("tests/test_f.py", 5, "failed"),
+                ("tests/test_n.py", 7, None),
+            ),
+            {},
+        )
+
+        located = {(f.file_path, f.line): f.message for f in check.findings}
+        assert "(passed)" in located[("tests/test_p.py", 3)]
+        assert "(failed)" in located[("tests/test_f.py", 5)]
+        assert "(awaiting a result)" in located[("tests/test_n.py", 7)]
+
+    # Verifies: REQ-d00276-C
+    def test_configuring_ok_suppresses_the_failure_but_not_the_report(self):
+        """C: a project may decide a failing outsider is not its problem; the
+        set is still reported."""
+        check = check_external_tests(
+            self._graph(("tests/test_out.py", 9, "failed")),
+            {"rules": {"coverage": {"external_test_failure": "ok"}}},
+        )
+
+        assert check.passed is True
+        assert check.details["failed"] == 1
+        assert len(check.findings) == 1
+
+    # Verifies: REQ-d00276-A
+    def test_every_test_reaching_a_requirement_passes_and_says_so(self):
+        """A: with no such set to report, the check says the estate covers
+        every test rather than reporting an empty one."""
+        check = check_external_tests(self._graph(), {})
+
+        assert check.passed is True
+        assert check.severity == "info"
+        assert check.message == "Every test reaches a requirement"
+        assert check.findings == []
+
+    # Verifies: REQ-d00276-A
+    def test_reporting_moves_no_coverage_figure(self):
+        """A: the check is read-only with respect to coverage -- an outsider
+        neither credits nor discredits the requirement it does not name."""
+        from elspais.graph.annotators import annotate_coverage
+
+        graph = self._graph(("tests/test_out.py", 9, "failed"))
+        annotate_coverage(graph)
+        before = graph.find_by_id("REQ-100").get_metric("rollup_metrics")
+        snapshot = (before.tested.direct, before.verified.direct, before.verified.has_failures)
+
+        check_external_tests(graph, {})
+
+        after = graph.find_by_id("REQ-100").get_metric("rollup_metrics")
+        assert (after.tested.direct, after.verified.direct, after.verified.has_failures) == snapshot
+        # The outsider's failure is genuinely outside the figure it left alone.
+        assert after.verified.has_failures is False
+        assert after.tested.direct == 1.0

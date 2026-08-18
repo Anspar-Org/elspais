@@ -36,6 +36,7 @@
 - REQ-d00272-G
 - REQ-d00272-J
 - REQ-d00272-O
+- REQ-d00254-B
 - REQ-d00255-D
 - REQ-d00204-G
 - REQ-d00252-B
@@ -66,6 +67,9 @@
 - REQ-d00084:section:1
 - REQ-d00069:section:1
 - REQ-d00070:section:1
+- REQ-d00254:section:0
+- REQ-d00254:section:1
+- REQ-d00258:section:1
 - REQ-d00261:section:1
 - REQ-d00269:section:0
 - REQ-d00269:section:1

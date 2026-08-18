@@ -308,6 +308,16 @@ def ast_prescan(
     """
     tree = ast.parse(source)
 
+    # Implements: REQ-d00254-O
+    # Where a test starts, in the same terms the runner uses. pytest reports a
+    # test at the first line of its decorated definition, so a decorated test
+    # is reported at its first decorator, not at `def`. Reading `def` here
+    # would disagree with every result pytest writes for a decorated test --
+    # which is every parametrized one -- and the result would bind to the file
+    # instead of to the test that produced it.
+    def _start_line(item) -> int:
+        return item.decorator_list[0].lineno if item.decorator_list else item.lineno
+
     # Collect all test functions with their enclosing class
     # (lineno, end_lineno, func_name, class_name)
     func_ranges: list[tuple[int, int, str, str | None]] = []
@@ -324,8 +334,9 @@ def ast_prescan(
                     if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
                         if item.name.startswith("test_"):
                             end = item.end_lineno or item.lineno
-                            func_ranges.append((item.lineno, end, item.name, node.name))
-                            all_test_funcs.append((item.lineno, item.name, node.name))
+                            start = _start_line(item)
+                            func_ranges.append((start, end, item.name, node.name))
+                            all_test_funcs.append((start, item.name, node.name))
         elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             if not first_def_line:
                 first_def_line = node.lineno
@@ -342,8 +353,8 @@ def ast_prescan(
                 first_def_line = node.lineno
             if node.name.startswith("test_"):
                 end = node.end_lineno or node.lineno
-                func_ranges.append((node.lineno, end, node.name, None))
-                all_test_funcs.append((node.lineno, node.name, None))
+                func_ranges.append((_start_line(node), end, node.name, None))
+                all_test_funcs.append((_start_line(node), node.name, None))
 
     # Sort by line number for consistent ordering
     func_ranges.sort(key=lambda x: x[0])

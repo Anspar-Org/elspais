@@ -290,10 +290,10 @@ def compute_coverage_tiers(node: GraphNode, config: dict[str, Any] | None = None
 
     # Map dimension key → (CoverageDimension, CoverageSeverityConfig, prefix,
     # denom-label-set-or-None-for-absolute).
-    # "verified" (rendered as the "Passing" badge) uses tested_and_passing(),
-    # the union of result-verified and line-coverage-credited evidence
-    # (REQ-d00258-N) -- NOT the raw `rollup.verified` dimension, which would
-    # miss lcov-only credit and understate the badge/bucket.
+    # "verified" (rendered as the "Passing" badge) uses tested_and_passing()
+    # (REQ-d00258-N): what the declared tests returned, with an assertion its
+    # own tests failed excluded from the figures. Line coverage credits
+    # nothing here; it is reported as its own dimension (REQ-d00254-B).
     dim_map = [
         ("implemented", rollup.implemented, cov_config.implemented, "impl", None),
         ("tested", rollup.tested, cov_config.tested, "tested", impl_labels),

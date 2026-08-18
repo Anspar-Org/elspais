@@ -498,13 +498,13 @@ One class has no purchase here and is left visibly uncovered rather than answere
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-o00051
 
-Test verification evidence SHALL be attributed per test as it is scanned, ingested from configured test targets, and credited through two complementary paths: aggregate app-green status for unmatched test-file edges, and line-coverage fraction for implementation-code edges; both are tracked as separate dimensions distinct from direct `Verifies:` evidence.
+Test verification evidence SHALL be attributed per test as it is scanned and ingested from configured test targets. Line coverage of implementation code is measured alongside it as its own dimension, answering a different question from *Traceability* and never standing in for it.
 
 ### Assertions
 
-A. When a test-file edge has no matching result record, the annotator SHALL consult the per-app green/red signal derived from result nodes whose source path falls within the same app directory. A green app SHALL credit the assertion as verified; a red app SHALL flag the requirement as having failures.
+A. Where no result record binds to a test, that test SHALL contribute no verdict, and the assertions it declares SHALL be reported as awaiting a result. No verdict SHALL be inferred for a test from the results of other tests -- neither from the file it is written in nor from the application it belongs to.
 
-B. The annotator SHALL compute a separate `lcov_tested` dimension by measuring the fraction of implementation lines (from `Implements:` edges) covered by execution data. When the fraction meets or exceeds the configured minimum, the relevant assertions SHALL be credited in `lcov_tested`, which feeds into the `tested_and_passing` union score alongside `verified`.
+B. The annotator SHALL compute a separate `lcov_tested` dimension by measuring the fraction of implementation lines (from `Implements:` edges) covered by execution data. When the fraction meets or exceeds the configured minimum, the relevant assertions SHALL be credited in `lcov_tested`. That dimension SHALL be reported in its own right and SHALL NOT credit any *Traceability* coverage dimension.
 
 C. The configuration surface SHALL express test result and coverage ingestion via `[[scanning.test.targets]]` entries, each declaring how a target's results and coverage are produced (`command`) and ingested (`reporter`, `results`, `coverage`, `match`, `credit_coverage`, `min_coverage_fraction`). User documentation SHALL include a `test-targets` topic describing the target model, the available reporters, and a worked Flutter recipe.
 
@@ -514,7 +514,7 @@ E. A reporter registry SHALL map each `reporter` format name to a parser and an 
 
 F. For each configured target, the system SHALL obtain the reporter's output (captured from the command's stdout for stdout-channel reporters, or read from the `results` glob for file-channel reporters), build RESULT nodes carrying the real test-file path (`source_file`, repo-relative) and the target's `match` mode, and ingest the target's `coverage` file. Coverage crediting SHALL be derived from the targets' `credit_coverage`/`min_coverage_fraction`. File-channel results SHALL additionally record where each result was recorded — the results artifact's repo-relative path and, when derivable from the artifact (e.g. one JUnit `<testcase>` per line), the per-result line — as provenance distinct from the test's source path, and result links in reporting surfaces SHALL point at that artifact location.
 
-G. Each target SHALL select its result-to-test matching via `match`: `source` SHALL bind each result at the most precise scope available — first step scope, when the result's recorded test name embeds exactly one journey-step reference (in the configured reference form) that resolves to a step whose verifying test(s) live in the result's source file; then test scope, resolving the result's real source-file path and `test()` source line to the specific test node at that `(path, line)`; and only then file granularity (all passing credits the file's `Verifies:` assertions; any failure flags them). Step- and test-scoped results SHALL credit per test, never via the file-level all-pass/any-fail rule. `aggregate` SHALL use the per-app green/red engine.
+G. Each target SHALL select its result-to-test matching via `match`: `source` SHALL bind each result at the most precise scope available — first step scope, when the result's recorded test name embeds exactly one journey-step reference (in the configured reference form) that resolves to a step whose verifying test(s) live in the result's source file; then test scope, resolving the result's real source-file path and `test()` source line to the specific test node at that `(path, line)`. A result that binds at neither scope SHALL credit nothing. `aggregate` SHALL derive the per-app green/red signal, which informs the line-coverage dimension only.
 
 H. `elspais checks --run-tests` SHALL accept a `--targets` selector naming a subset of `[[scanning.test.targets]]` to execute; an unknown target name SHALL be an error, and an absent selector SHALL execute all targets. The same `--targets` flag on `summary`/`trace` SHALL mark provenance without executing anything.
 
@@ -530,7 +530,13 @@ M. The system SHALL exchange prescan data with a configured external test-presca
 
 N. Where an external test-prescan command returns attribution records for a scanned test file, the system SHALL bind that file's tests from those records in preference to the system's built-in attribution.
 
+O. A line number a reporter records SHALL be read in the origin that reporter counts from. That origin SHALL be declared with the reporter and SHALL be overridable per target, and a recorded line SHALL be normalised to the numbering the tool uses for source lines before it is matched against a test or shown to a reader.
+
 ### Rationale
+
+A line number means nothing without its origin, and producers disagree: the `line` attribute pytest writes into JUnit XML counts from zero, while the tool numbers source lines from one. Read as though they agreed, every such result missed the test it named by exactly one line and bound at file granularity instead -- which the file-granular inference then papered over, so the disagreement never surfaced as an error. Declaring the origin with the reporter puts the knowledge where the format is known rather than in each project's config, and the per-target override is for a producer that departs from its format's convention. Normalising once, at ingestion, is what keeps the rest of the system able to treat a line as a line -- to match on it, and to point a reader at it.
+
+A test that returned no result is awaiting one, and nothing else is known about it. The inference this replaces -- reading a verdict for one test off the results of its neighbours, in the same file or the same application -- was built to work around test files that supposedly could not carry their own `Verifies:` annotation. They can, in every language the tool reads tests in, so the workaround bought nothing and cost the distinction: a deselected tier, an unbuilt target and a crashed runner all left their assertions reported as passing on the strength of tests that say nothing about them. Its failing half was worse, blaming an *Assertion* for a sibling test's failure, which REQ-d00258-G forbids one level down. Aggregate results still say something real about an application, and that is where they are read: the line-coverage dimension, which measures the code rather than the *Traceability*.
 
 K states the outcome the scanning side owes the crediting side: without per-test identity and extent, the line-level dimensions computed here have nothing to intersect implementation ranges against, and a framework's tests can only ever be credited at file granularity. The obligation is deliberately language-neutral — it fixes what attribution must yield, not whether a given language earns built-in support or is served through an external command.
 
@@ -542,6 +548,11 @@ N resolves per file, not per configuration, because both routes are routinely li
 
 ### Changelog
 
+- 2026-08-17 | b7f71d81 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-17 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: a reporter's line numbers are read in the origin it counts from, declared with the reporter and normalised at ingestion (O)
+- 2026-08-17 | 11ca8985 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms, update hash
+- 2026-08-17 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: a test with no result of its own contributes no verdict; no verdict is inferred from other tests in the file or the application (A, G)
+- 2026-08-17 | 87077749 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms, update hash
 - 2026-08-03 | 22faeb40 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-02 | cbd59482 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | ea4e01b1 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -555,7 +566,7 @@ N resolves per file, not per configuration, because both routes are routinely li
 - 2026-06-20 | 98120740 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-06-20 | 00000000 | - | Michael Lewis (<michael@anspar.org>) | CUR-1533: initial
 
-*End* *Test Evidence: Attribution, Ingestion, and Coverage Crediting* | **Hash**: 22faeb40
+*End* *Test Evidence: Attribution, Ingestion, and Coverage Crediting* | **Hash**: b7f71d81
 
 ---
 
@@ -647,11 +658,15 @@ L. A per-status `expects_implementation` flag SHALL declare whether a requiremen
 
 M. A surface that reports which assertions need work (`gaps`, the health coverage checks, and the MCP uncovered-*Assertion* and test-coverage tools) SHALL determine gaps on the strict footing per REQ-d00069-L, so that an *Assertion* with no evidence naming it is reported however much whole-requirement evidence its requirement carries.
 
-N. Passing SHALL require at least one of result-verified and line-coverage-credited evidence to indicate passing, and neither to indicate failing.
+N. Passing SHALL count an *Assertion* only where a test declared against that *Assertion* returned a passing result, and no such test returned a failure. Evidence that no test named the *Assertion* -- line coverage of the code implementing it, or a result reached through the code rather than through the test -- SHALL NOT credit Passing.
 
 O. Tested SHALL be reported with a breakdown of the assertions it counts into those that passed, those that failed, and those awaiting a result, and the three counts SHALL together account for every tested *Assertion*. The breakdown qualifies the Tested figure and SHALL NOT introduce a coverage dimension of its own.
 
 ### Rationale
+
+N draws the line between measuring a requirement's tests and measuring its code. A test that names an *Assertion* and passes is the only thing that says that *Assertion* passes; that a line of implementing code ran during some test run says the code was reached, which is a different fact about a different subject. Crediting the second as the first was a workaround for an inability that does not exist: a test can carry its `Verifies:` in every language the tool reads tests in, so an *Assertion* reported as passing without one is reporting an annotation nobody wrote. It also broke the chain -- Passing could credit an *Assertion* Tested did not, leaving the two figures incomparable and the excess unexplainable to a reader.
+
+Line coverage is kept and reported in its own right, because how much of the implementation a run exercised is worth knowing. It answers about lines, not about assertions, and REQ-d00254-B keeps it there: a dimension beside the *Traceability* ones, never folded into them. Correlating executable lines with the assertions they implement is a coherent thing to want, and would remain a separate dimension if it were ever built.
 
 O says a tested *Assertion* is always in exactly one of three states, and that a reader is told all three. Passing alone leaves the remainder ambiguous: an *Assertion* absent from it either failed or never returned a verdict, and those call for opposite actions -- one is a defect to fix, the other a run to complete or ingest. An estate can be entirely green on Passing while most of its tests never ran, and until the three are counted together nothing says so. They break Tested down rather than standing beside it, because each one is a tested *Assertion* seen from closer up, not a further dimension of coverage.
 
@@ -659,10 +674,12 @@ A reports how the estate is doing and M reports what is left to do; the two ques
 
 ### Changelog
 
+- 2026-08-17 | c0428191 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms, update hash
 - 2026-08-17 | 0f7c5cf2 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-17 | 2371dd44 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-11 | e0925092 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-17 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: state the display terms as the permitted set rather than a count (B); give Passing its own assertion, requiring one kind of evidence to indicate passing and neither to indicate failing (N); partition Tested into passed, failed and awaiting a result as a breakdown of it (O)
+- 2026-08-17 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: Passing counts only a declared test's own passing result; line coverage credits no traceability dimension (N)
 - 2026-08-11 | 5270fa45 | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: gap surfaces answer on the strict footing (M)
 - 2026-07-31 | 5270fa45 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-07 | 90053f29 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -674,7 +691,7 @@ A reports how the estate is doing and M reports what is left to do; the two ques
 - 2026-07-03 | c843c727 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-02 | be97c170 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: add missing changelog section
 
-*End* *Reporting Surface Consistency* | **Hash**: 0f7c5cf2
+*End* *Reporting Surface Consistency* | **Hash**: c0428191
 
 ---
 
@@ -713,3 +730,29 @@ This is not the question REQ-d00258-M answers. That assertion governs surfaces l
 - 2026-08-17 | b7624174 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: add missing changelog section
 
 *End* *Uncredited Coverage Evidence* | **Hash**: b7624174
+
+## REQ-d00276: Tests Outside the Requirement Estate
+
+**Level**: dev | **Status**: Draft | **Implements**: REQ-p00015
+
+A test that no requirement claims still runs, and still passes or fails. Nothing about it reaches a coverage figure, because coverage answers for requirements and this test belongs to none. This requirement obliges the tool to report those tests as a set of their own, so that work happening outside the estate reads as work rather than as silence.
+
+### Assertions
+
+A. Tests that reach no requirement SHALL be reported together as their own set, and reporting them SHALL NOT credit or discredit any coverage figure.
+
+B. The report SHALL say what each such test returned, distinguishing one that passed, one that failed, and one awaiting a result.
+
+C. A failing test that reaches no requirement SHALL be reported at the severity the project configures for it, and SHALL be a warning where the project configures nothing.
+
+D. The report SHALL name the file and the line each reported test was written at.
+
+### Rationale
+
+The two states this set holds are different problems wearing one shape. A test that fails and belongs to nothing is most often a defect in the test itself -- aimed at something that no longer exists, or never named what it was for -- and it cannot be found through any requirement, because it hangs off none. A test that passes and belongs to nothing is work the estate cannot see: either its `Verifies:` was never written, or it exercises something no requirement claims, and which of those it is only the author can say.
+
+Neither belongs in a coverage figure, and putting them there is what the figures exist to avoid: a set of tests that reaches no requirement is exactly the population coverage is not measuring. Reporting them separately is the only way both facts stay true at once -- the figures stay about requirements, and the tests stop being invisible.
+
+C defaults to warning rather than error because the condition is not always a defect. A repository legitimately carries tests for things it has not written requirements for. What is not legitimate is not knowing.
+
+*End* *Tests Outside the Requirement Estate* | **Hash**: 922d1382

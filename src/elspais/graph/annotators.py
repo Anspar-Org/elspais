@@ -1135,17 +1135,14 @@ def _compute_lcov_tested(
     if not indirect_pct:
         return
 
-    has_failures = any(
-        file_credit[rel].assertion_credit == "verified"
-        and file_app.get(rel)
-        and app_status_by_owner.get(file_owner.get(rel), {}).get(file_app[rel]) == "red"
-        for rel in file_cov
-    )
-
-    # A red app is a whole-application failure signal, so it attributes to every
-    # lcov-credited assertion (there is no per-assertion granularity in app
-    # status); an assertion with no lcov credit stays unblamed (REQ-d00258-G).
-    failing_labels = set(indirect_pct) if has_failures else set()
+    # Implements: REQ-d00254-A, REQ-d00254-B
+    # No failure flag. A red application is one aggregate verdict, and
+    # attributing it to every lcov-credited *Assertion* blames assertions no
+    # failing test named -- the inference this dimension is no longer allowed
+    # to make. Line coverage measures which lines a run executed; whether that
+    # run's tests passed is the results' business, reported there.
+    has_failures = False
+    failing_labels: set[str] = set()
 
     metrics.lcov_tested = CoverageDimension(
         total=len(labels),
@@ -1366,33 +1363,6 @@ def annotate_coverage(
     app_status_by_owner = _compute_app_status_by_owner(graph, policy)
     region_cache: dict = {}
 
-    # Build a per-file index of RESULT nodes with match=="source" (Task 5).
-    # Maps repo-relative source_file -> list of status strings (lowercased).
-    # Exclude precisely-resolved results (match_scope "test" or "step"):
-    # those credit inline (below) rather than via file-level all-pass/any-fail
-    # semantics.
-    #
-    # source_file_carried (CUR-1557) is a parallel map recording whether
-    # EVERY contributing RESULT for that source file was carried (baseline).
-    # It's file-granular (not per-status) since source_file_index itself only
-    # retains status strings, not node identity; a file with a mix of
-    # carried/fresh results is treated as NOT fully carried (safe default:
-    # under-claim "carried" rather than mislabel fresh coverage as baseline).
-    source_file_index: dict[str, list[str]] = {}
-    _source_file_carried_flags: dict[str, list[bool]] = {}
-    for r in graph.nodes_by_kind(NodeKind.RESULT):
-        if (r.get_field("match") or "") == "source" and r.get_field("match_scope") not in (
-            "test",
-            "step",
-        ):
-            sf = r.get_field("source_file")
-            if sf:
-                source_file_index.setdefault(sf, []).append((r.get_field("status") or "").lower())
-                _source_file_carried_flags.setdefault(sf, []).append(bool(r.get_field("carried")))
-    source_file_carried: dict[str, bool] = {
-        sf: all(flags) for sf, flags in _source_file_carried_flags.items()
-    }
-
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
 
         metrics = RollupMetrics()
@@ -1532,8 +1502,16 @@ def annotate_coverage(
                                     )
                                 )
 
-                        # Track for RESULT lookup (use CODE's assertion_targets)
-                        test_nodes_for_result_lookup.append((transitive_test, None))
+                        # Implements: REQ-d00258-N
+                        # Deliberately NOT registered for result lookup. This
+                        # test names the CODE, not the *Assertion*: its verdict
+                        # says the implementing code was exercised, which is
+                        # not the same claim as the *Assertion* having been
+                        # checked. Registering it credited Passing for every
+                        # assertion of the requirement -- so Passing could
+                        # exceed Tested, on evidence no author aimed anywhere.
+                        # The INDIRECT contributions above remain, as
+                        # provenance (REQ-d00069-A).
 
             elif target_kind == NodeKind.REQUIREMENT:
                 # Child REQ implements this REQ
@@ -1594,14 +1572,13 @@ def annotate_coverage(
         verified_saw_signal = False
         verified_all_carried = True
         for test_node, assertion_targets in test_nodes_for_result_lookup:
-            saw_result = False
             for result in test_node.iter_children():
                 if result.kind != NodeKind.RESULT:
                     continue
                 # Implements: REQ-d00254-G
-                # Skip inline only for FILE-scope source-match results (credited
-                # via source_file_index below: all-pass credits / any-fail flags
-                # the whole file). Precisely-resolved source results
+                # A source-match result that resolved to neither a step nor a
+                # test bound at file granularity only, so it names no test and
+                # credits nothing. Precisely-resolved source results
                 # (match_scope "test" or "step") credit inline like test_id
                 # results: their pass credits their assertions; their fail
                 # flags only their own test.
@@ -1611,7 +1588,6 @@ def annotate_coverage(
                     and result.get_field("match_scope") not in ("test", "step")
                 ):
                     continue
-                saw_result = True
                 status = (result.get_field("status", "") or "").lower()
                 if status in ("passed", "pass", "success"):
                     if assertion_targets:
@@ -1630,64 +1606,17 @@ def annotate_coverage(
                     verified_saw_signal = True
                     if not (result.get_field("carried") or False):
                         verified_all_carried = False
-            if not saw_result:
-                fn = test_node.file_node()
-                rel = fn.get_field("relative_path") if fn else None
-                # Implements: REQ-d00254-G
-                # Source-match file-granular path: match RESULT nodes by source_file.
-                if rel and rel in source_file_index:
-                    statuses = source_file_index[rel]
-                    if any(s in ("failed", "fail", "failure", "error") for s in statuses):
-                        has_failures = True
-                        verified_failing_labels |= _failing_targets(
-                            assertion_targets, assertion_labels
-                        )
-                        verified_saw_signal = True
-                        if not source_file_carried.get(rel, False):
-                            verified_all_carried = False
-                    elif any(
-                        s in ("passed", "pass", "success") for s in statuses
-                    ):  # >=1 passed, none failed
-                        if assertion_targets:
-                            for label in assertion_targets:
-                                if label in assertion_labels:
-                                    validated_labels.add(label)
-                        else:
-                            for label in assertion_labels:
-                                validated_indirect_labels.add(label)
-                        verified_saw_signal = True
-                        if not source_file_carried.get(rel, False):
-                            verified_all_carried = False
-                # The settings that decide this come from the repository
-                # holding the test, and so does the app status it is read
-                # against: a consumer's aggregate green says nothing about a
-                # library's tests (REQ-d00261-E).
-                elif policy.for_node(fn or test_node).unmatched_credit == "verified":
-                    # Aggregate app-green path: derived from per-app green/red
-                    # status, not a specific RESULT node, so carried-ness can't
-                    # be recovered precisely here. Per the safe-ambiguity rule
-                    # (CUR-1557), default this signal to fresh rather than risk
-                    # mislabeling fresh coverage as "(baseline)".
-                    owner = policy.owner_of(fn or test_node)
-                    app = _match_app_dir(rel, policy.for_owner(owner).app_dirs)
-                    st = app_status_by_owner.get(owner, {}).get(app) if app else None
-                    if st == "green":
-                        if assertion_targets:
-                            for label in assertion_targets:
-                                if label in assertion_labels:
-                                    validated_labels.add(label)
-                        else:
-                            for label in assertion_labels:
-                                validated_indirect_labels.add(label)
-                        verified_saw_signal = True
-                        verified_all_carried = False
-                    elif st == "red":
-                        has_failures = True
-                        verified_failing_labels |= _failing_targets(
-                            assertion_targets, assertion_labels
-                        )
-                        verified_saw_signal = True
-                        verified_all_carried = False
+            # Implements: REQ-d00254-A
+            # A test with no result of its own contributes no verdict, and its
+            # assertions are awaiting one. No verdict is inferred from the
+            # results of OTHER tests -- not from the file this test is written
+            # in, and not from the application it belongs to. That inference
+            # existed for test files that supposedly could not carry their own
+            # `Verifies:`; they can, so it bought nothing and cost the
+            # distinction REQ-d00258-O reports: a deselected tier, an unbuilt
+            # target and a crashed runner all read as passing. Its failing half
+            # blamed an *Assertion* for a sibling test's failure, which
+            # REQ-d00258-G forbids one level down.
 
         # Implements: REQ-d00069-A, REQ-d00255-C, REQ-d00256
         # UAT roll-up: source each validating journey's verdict from its
