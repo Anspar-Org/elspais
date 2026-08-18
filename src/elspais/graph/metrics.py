@@ -137,6 +137,18 @@ class CoverageDimension:
             ``tier``, which is driven solely by ``has_failures``/coverage.
             Only meaningful on the ``verified`` dimension; other dimensions
             leave this at its default (``False``).
+        immediate_direct_by_label: Per-assertion immediate-direct credit
+            (whole or absent, REQ-d00069-M) -- a citation named this
+            *Assertion* and the evidence is attached here.
+        immediate_indirect_by_label: Per-assertion immediate-indirect credit
+            (whole or absent) -- a citation named only the requirement and
+            the evidence is attached here.
+        rolled_direct_by_label: Per-assertion rolled-up-direct credit (MAY
+            be fractional, REQ-d00069-M) -- conducted from a refining
+            requirement's own direct coverage.
+        rolled_indirect_by_label: Per-assertion rolled-up-indirect credit
+            (MAY be fractional) -- conducted from a refining requirement's
+            own indirect coverage.
     """
 
     total: int = 0
@@ -149,6 +161,15 @@ class CoverageDimension:
     direct_pct_by_label: dict[str, float] = field(default_factory=dict)
     indirect_pct_by_label: dict[str, float] = field(default_factory=dict)
     carried: bool = False
+
+    # Implements: REQ-d00069-L
+    # The four measures. Two axes: what a citation named (direct/indirect),
+    # and whether the evidence is attached here or conducted from a refining
+    # requirement (immediate/rolled). None is defined in terms of another.
+    immediate_direct_by_label: dict[str, float] = field(default_factory=dict)
+    immediate_indirect_by_label: dict[str, float] = field(default_factory=dict)
+    rolled_direct_by_label: dict[str, float] = field(default_factory=dict)
+    rolled_indirect_by_label: dict[str, float] = field(default_factory=dict)
 
     @property
     def direct_pct(self) -> float:
@@ -175,6 +196,47 @@ class CoverageDimension:
         if self.direct > eps or self.indirect > eps:
             return "partial"
         return "missing"
+
+    @property
+    def immediate_direct(self) -> float:
+        return sum(self.immediate_direct_by_label.values())
+
+    @property
+    def immediate_indirect(self) -> float:
+        return sum(self.immediate_indirect_by_label.values())
+
+    @property
+    def rolled_direct(self) -> float:
+        return sum(self.rolled_direct_by_label.values())
+
+    @property
+    def rolled_indirect(self) -> float:
+        return sum(self.rolled_indirect_by_label.values())
+
+    # Implements: REQ-d00069-N
+    @property
+    def total_by_label(self) -> dict[str, float]:
+        """Per *Assertion*, the greatest of its four measures.
+
+        Taken per *Assertion* rather than summed across measures: an
+        *Assertion* covered three ways is one covered *Assertion*, so this
+        can never exceed the requirement's assertion count.
+        """
+        out: dict[str, float] = {}
+        for src in (
+            self.immediate_direct_by_label,
+            self.immediate_indirect_by_label,
+            self.rolled_direct_by_label,
+            self.rolled_indirect_by_label,
+        ):
+            for label, frac in src.items():
+                if frac > out.get(label, 0.0):
+                    out[label] = frac
+        return out
+
+    @property
+    def covered(self) -> float:
+        return sum(self.total_by_label.values())
 
 
 def _dim(total: int = 0) -> CoverageDimension:
@@ -292,6 +354,12 @@ class RollupMetrics:
         #              indirect = all (DIRECT + EXPLICIT + INFERRED)
         impl_direct = direct_labels | explicit_labels
         impl_indirect = impl_direct | inferred_labels | code_indirect_labels
+        # Implements: REQ-d00069-B, REQ-d00069-M
+        # Immediate evidence is whole or absent: a citation either named the
+        # *Assertion* or named its requirement. Fractions belong to
+        # conduction, which fills the rolled maps later.
+        immediate_direct = dict.fromkeys(impl_direct, 1.0)
+        immediate_indirect = dict.fromkeys(inferred_labels | code_indirect_labels, 1.0)
         self.implemented = CoverageDimension(
             total=n,
             direct=len(impl_direct),
@@ -300,6 +368,8 @@ class RollupMetrics:
             indirect_labels=set(impl_indirect),
             direct_pct_by_label=dict.fromkeys(impl_direct, 1.0),
             indirect_pct_by_label=dict.fromkeys(impl_indirect, 1.0),
+            immediate_direct_by_label=immediate_direct,
+            immediate_indirect_by_label=immediate_indirect,
         )
 
         # UAT Coverage: direct = assertion-targeted (UAT_EXPLICIT),
@@ -312,6 +382,8 @@ class RollupMetrics:
             indirect_labels=set(uat_all),
             direct_pct_by_label=dict.fromkeys(uat_explicit_labels, 1.0),
             indirect_pct_by_label=dict.fromkeys(uat_all, 1.0),
+            immediate_direct_by_label=dict.fromkeys(uat_explicit_labels, 1.0),
+            immediate_indirect_by_label=dict.fromkeys(uat_inferred_labels, 1.0),
         )
 
         # tested, verified, uat_verified are populated by annotate_coverage()
@@ -352,6 +424,8 @@ class RollupMetrics:
             indirect_labels=set(tested_all),
             direct_pct_by_label=dict.fromkeys(tested_direct_labels, 1.0),
             indirect_pct_by_label=dict.fromkeys(tested_all, 1.0),
+            immediate_direct_by_label=dict.fromkeys(tested_direct_labels, 1.0),
+            immediate_indirect_by_label=dict.fromkeys(tested_indirect_labels, 1.0),
         )
         verified_all = verified_direct_labels | verified_indirect_labels
         self.verified = CoverageDimension(
@@ -364,6 +438,8 @@ class RollupMetrics:
             indirect_labels=set(verified_all),
             direct_pct_by_label=dict.fromkeys(verified_direct_labels, 1.0),
             indirect_pct_by_label=dict.fromkeys(verified_all, 1.0),
+            immediate_direct_by_label=dict.fromkeys(verified_direct_labels, 1.0),
+            immediate_indirect_by_label=dict.fromkeys(verified_indirect_labels, 1.0),
         )
         self.verified.carried = verified_carried
         # uat_verified is fractional (REQ-d00255-C): indirect (generous) footing
@@ -378,6 +454,12 @@ class RollupMetrics:
             )
             for label in uat_labels
         }
+        # Implements: REQ-d00069-M
+        # uat_verified's direct/indirect_pct_by_label carry fractions (a
+        # partially-verified journey credits its verified-step ratio,
+        # REQ-d00255-C) -- but immediate coverage is whole or absent, so the
+        # immediate maps record 1.0 for any assertion with a nonzero
+        # fraction; the fraction itself belongs to conduction (Task 2).
         self.uat_verified = CoverageDimension(
             total=n,
             direct=sum(uat_verified_direct_pct.values()),
@@ -388,6 +470,12 @@ class RollupMetrics:
             indirect_labels={lbl for lbl, f in uat_indirect_pct_by_label.items() if f > 0},
             direct_pct_by_label=dict(uat_verified_direct_pct),
             indirect_pct_by_label=uat_indirect_pct_by_label,
+            immediate_direct_by_label=dict.fromkeys(
+                (lbl for lbl, f in uat_verified_direct_pct.items() if f > 0), 1.0
+            ),
+            immediate_indirect_by_label=dict.fromkeys(
+                (lbl for lbl, f in uat_indirect_pct_by_label.items() if f > 0), 1.0
+            ),
         )
 
 
