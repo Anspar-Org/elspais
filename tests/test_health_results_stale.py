@@ -1,5 +1,6 @@
 # Verifies: REQ-d00249-D, REQ-d00249-E, REQ-p00019-J
 """Missing-results and staleness behavior in tests.results / tests.results_stale."""
+
 from __future__ import annotations
 
 import copy
@@ -81,7 +82,7 @@ def test_missing_results_fails_with_warning(tmp_path: Path):
     assert chk.severity == "warning"
 
 
-# Verifies: REQ-d00249-D, REQ-p00019-J
+# Verifies: REQ-d00249-D, REQ-p00019-J, REQ-d00275-C
 def test_associate_targets_reported_when_host_configures_none():
     """Where results live is the member's fact, not the invoking project's.
 

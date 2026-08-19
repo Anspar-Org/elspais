@@ -457,7 +457,7 @@ A concurrency version is derived from a node's content and its outgoing *Traceab
 
 ## REQ-d00275: Whose Configuration Governs a Federated Answer
 
-**Level**: dev | **Status**: Draft | **Implements**: REQ-p00005
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00005
 
 A federated answer is computed from several repositories, each carrying its own configuration. This requirement settles which of those configurations decides each part of the answer, so that the same estate does not answer differently depending on where the tool was invoked without saying that it did.
 
@@ -482,5 +482,9 @@ C is the boundary that keeps A from swallowing what is not a rule. Where a repos
 The rules by which a repository's own content is judged well-formed -- its hierarchy, its format conventions, its changelog policy -- are not covered here and stay where REQ-d00204-A puts them, with the repository whose content is being judged. The line A draws is between judging a finding and judging the content a finding is about.
 
 D exists because A is silent by construction. A setting the invoking project chose governs a member whose maintainer never chose it, and where the two differ the member's own repository would have reported something else. Undisclosed, a finding silenced by the invoking configuration is indistinguishable from a finding that was never there, which is the omission the anti-pattern template names. It cannot fail the run, because the difference is not a defect: federations are assembled from repositories that legitimately configure themselves differently.
+
+### Changelog
+
+- 2026-08-19 | 9ab2ef7c | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: add missing changelog section
 
 *End* *Whose Configuration Governs a Federated Answer* | **Hash**: 9ab2ef7c

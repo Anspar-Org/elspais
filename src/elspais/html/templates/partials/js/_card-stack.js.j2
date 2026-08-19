@@ -1525,8 +1525,9 @@ function _buildTermsRegex() {
     editState.termsRegex = new RegExp('\\b(' + escaped.join('|') + ')\\b', 'gi');
 }
 
-// Implements: REQ-d00245-B — delegated click handler for .defined-term spans.
-// Scoped to document.body so clicks land for terms surfaced anywhere —
+// Implements: REQ-d00245-B
+// Delegated click handler for .defined-term spans, scoped to document.body
+// so clicks land for terms surfaced anywhere —
 // card stack, file-viewer Rendered pane, etc.
 document.addEventListener('DOMContentLoaded', function() {
     document.body.addEventListener('click', function(e) {

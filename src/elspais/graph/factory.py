@@ -369,6 +369,15 @@ def _run_prescan_command(
 
 # Default file patterns for [directories].code scanning.
 # Covers all languages listed in the multi-language comment support table.
+#
+# Jinja templates are included because a template is where a viewer's
+# JavaScript is written -- the code is real, the annotations in it are real,
+# and leaving the extension out meant every one of them was invisible while
+# the requirements they implement read as unimplemented. What a `.j2` file
+# holds is decided by the comment markers found in it, exactly as for any
+# other extension: a `//` line in a `.js.j2` reads, and a `/* */` block in a
+# `.css.j2` does not, which is the block-comment gap and not specific to
+# templates.
 DEFAULT_CODE_PATTERNS = [
     "*.py",
     "*.js",
@@ -397,6 +406,7 @@ DEFAULT_CODE_PATTERNS = [
     "*.tf",
     "*.tfvars",
     "*.hcl",
+    "*.j2",
 ]
 
 

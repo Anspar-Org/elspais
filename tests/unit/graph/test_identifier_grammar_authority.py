@@ -393,10 +393,9 @@ def test_matcher_and_resolver_agree_after_normalization(variant: str) -> None:
     strings and the severity of a broken reference depends on which was asked.
     """
     resolver = build_resolver(NUMERIC)
-    assert _matcher_recognises(resolver, variant), (
-        f"{variant!r} is not a case variant the matcher recognises, so it cannot "
-        f"test the agreement"
-    )
+    assert _matcher_recognises(
+        resolver, variant
+    ), f"{variant!r} is not a case variant the matcher recognises, so it cannot test the agreement"
 
     normalized = resolver.normalize_ref(variant)
 
@@ -571,9 +570,9 @@ def test_a_component_style_folds_onto_the_templates_own_separators(
     extracted = reader.extract_underscored_ref(function_name)
 
     assert extracted == expected
-    assert resolver.is_local_id(extracted), (
-        f"the reader picked {extracted!r} out of {function_name!r} but the " f"resolver refuses it"
-    )
+    assert resolver.is_local_id(
+        extracted
+    ), f"the reader picked {extracted!r} out of {function_name!r} but the resolver refuses it"
 
 
 @pytest.mark.parametrize(
@@ -635,3 +634,71 @@ def test_component_regex_honours_an_alternate_internal_separator(
         # Without the parameter the style's own character is what is demanded.
         assert re.fullmatch(component_regex(comp), "data-export")
         assert not re.fullmatch(component_regex(comp), "data_export")
+
+
+# ---------------------------------------------------------------------------
+# A federated reader reads each identifier under its owner's grammar.
+# ---------------------------------------------------------------------------
+#
+# The two members below disagree about every part of the grammar a reference
+# passes through: the namespace, whether a dash separates the level letter
+# from the component, how wide the component is, the character that opens the
+# assertion labels, and the character that joins two of them. Neither
+# member's grammar can spell the other's identifier, so reading one under the
+# invoking repository's rules is not a stricter reading -- it is no reading
+# at all, and the reference comes back in whatever spelling it was written.
+
+FED_ALPHA = _config(
+    namespace="ALP",
+    canonical="{namespace}-{level.letter}{component}",
+    component={"style": "numeric", "digits": 5, "leading_zeros": True},
+    assertions={"label_style": "uppercase", "separator": "-", "multi_separator": "+"},
+)
+
+FED_BETA = _config(
+    namespace="BET",
+    canonical="{namespace}-{level.letter}-{component}",
+    component={"style": "numeric", "digits": 3, "leading_zeros": True},
+    assertions={"label_style": "uppercase", "separator": "/", "multi_separator": "&"},
+)
+
+
+@pytest.mark.parametrize(
+    "written, canonical",
+    [
+        # ALPHA's own, in a spelling only ALPHA's grammar repairs.
+        ("alp-d00001-a", "ALP-d00001-A"),
+        ("ALP-d00001-a+b", "ALP-d00001-A+B"),
+        # BETA's own, spelled with the separators only BETA configures.
+        ("bet-p-007/c", "BET-p-007/C"),
+        ("BET-p-007/a&b", "BET-p-007/A&B"),
+    ],
+)
+def test_an_identifier_reads_the_same_from_either_member_of_the_federation(
+    written: str, canonical: str
+) -> None:
+    # Verifies: REQ-d00275-B
+    """The owner's grammar settles a reference, not the invoking repository's.
+
+    The same federation is read twice, once from each member, and the pair of
+    answers is compared with the spelling the owning repository's own resolver
+    produces. A reader that applied its own member's grammar would leave the
+    foreign reference exactly as written -- its label uncased, its multi-
+    assertion separator unread -- so the two invocations would disagree about
+    what one estate calls one requirement.
+    """
+    alpha, beta = build_resolver(FED_ALPHA), build_resolver(FED_BETA)
+    owner = next(r for r in (alpha, beta) if r.is_local_id(r.normalize_ref(written)))
+
+    from_alpha = FederatedIdReader(alpha, [beta]).normalize(written)
+    from_beta = FederatedIdReader(beta, [alpha]).normalize(written)
+
+    assert owner.normalize_ref(written) == canonical
+    assert from_alpha == canonical, (
+        f"{written!r} read from the ALPHA side came back as {from_alpha!r}; "
+        f"its owner spells it {canonical!r}"
+    )
+    assert from_beta == canonical, (
+        f"{written!r} read from the BETA side came back as {from_beta!r}; "
+        f"its owner spells it {canonical!r}"
+    )
