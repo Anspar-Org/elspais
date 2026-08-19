@@ -226,6 +226,70 @@ class TestUncoveredDependents:
         assert parent_score.uncovered_dependents == 0
 
 
+class TestUncoveredDependentsMeasure:
+    """Validates REQ-d00258-M: "uncovered" is asked on the immediate direct measure.
+
+    ``uncovered_dependents`` ranks a requirement by how much UNDONE work hangs
+    off it. A leaf credited only by whole-requirement evidence, or only by the
+    coverage of something refining it, has had nothing written against it by
+    name -- so it is still undone work and must still be counted, however high
+    its headline total reads.
+    """
+
+    def _leaf_with(self, graph, node_id, **measures):
+        """A leaf requirement whose ``implemented`` carries only ``measures``."""
+        from elspais.graph.metrics import CoverageDimension, RollupMetrics
+
+        node = _add_node(graph, node_id, level="DEV")
+        node.set_metric(
+            "rollup_metrics",
+            RollupMetrics(
+                total_assertions=1,
+                implemented=CoverageDimension(total=1, **measures),
+            ),
+        )
+        return node
+
+    # Verifies: REQ-d00258-M
+    def test_REQ_d00258_M_leaf_covered_only_as_a_whole_is_still_uncovered(self):
+        graph = _make_graph()
+        parent = _add_node(graph, "REQ-P", level="PRD", is_root=True, referenced_pct=100)
+        leaf = self._leaf_with(graph, "REQ-BLANKET", immediate_indirect_by_label={"A": 1.0})
+        parent.link(leaf, EdgeKind.IMPLEMENTS)
+
+        # Its headline total is full -- and it is still work.
+        assert leaf.get_metric("rollup_metrics").implemented.covered == 1.0
+
+        report = analyze_foundations(graph)
+        parent_score = next(s for s in report.ranked_nodes if s.node_id == "REQ-P")
+        assert parent_score.uncovered_dependents == 1
+
+    # Verifies: REQ-d00258-M
+    def test_REQ_d00258_M_leaf_covered_only_by_conduction_is_still_uncovered(self):
+        graph = _make_graph()
+        parent = _add_node(graph, "REQ-P", level="PRD", is_root=True, referenced_pct=100)
+        leaf = self._leaf_with(graph, "REQ-CONDUCTED", rolled_direct_by_label={"A": 1.0})
+        parent.link(leaf, EdgeKind.IMPLEMENTS)
+
+        assert leaf.get_metric("rollup_metrics").implemented.covered == 1.0
+
+        report = analyze_foundations(graph)
+        parent_score = next(s for s in report.ranked_nodes if s.node_id == "REQ-P")
+        assert parent_score.uncovered_dependents == 1
+
+    # Verifies: REQ-d00258-M
+    def test_REQ_d00258_M_leaf_cited_by_name_is_not_uncovered(self):
+        """The positive control: the measure the count DOES read."""
+        graph = _make_graph()
+        parent = _add_node(graph, "REQ-P", level="PRD", is_root=True, referenced_pct=100)
+        leaf = self._leaf_with(graph, "REQ-NAMED", immediate_direct_by_label={"A": 1.0})
+        parent.link(leaf, EdgeKind.IMPLEMENTS)
+
+        report = analyze_foundations(graph)
+        parent_score = next(s for s in report.ranked_nodes if s.node_id == "REQ-P")
+        assert parent_score.uncovered_dependents == 0
+
+
 # ---------------------------------------------------------------------------
 # TestCompositeScore  (REQ-d00124-D)
 # ---------------------------------------------------------------------------
@@ -397,9 +461,9 @@ class TestActionableLeaves:
         # Leaf under important parent should rank higher (earlier index)
         idx_imp = leaf_ids.index("REQ-LEAF-IMP")
         idx_min = leaf_ids.index("REQ-LEAF-MIN")
-        assert idx_imp < idx_min, (
-            f"Expected REQ-LEAF-IMP (idx {idx_imp}) to rank before " f"REQ-LEAF-MIN (idx {idx_min})"
-        )
+        assert (
+            idx_imp < idx_min
+        ), f"Expected REQ-LEAF-IMP (idx {idx_imp}) to rank before REQ-LEAF-MIN (idx {idx_min})"
 
     def test_REQ_d00124_F_covered_leaves_included(self):
         """All leaves appear in actionable_leaves regardless of coverage."""

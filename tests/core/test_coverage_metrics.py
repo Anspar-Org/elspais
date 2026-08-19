@@ -10,6 +10,7 @@ from elspais.graph.aggregation import (
     measure_by_label,
 )
 from elspais.graph.annotators import annotate_coverage
+from elspais.graph.GraphNode import NodeKind
 from elspais.graph.metrics import CoverageContribution, CoverageSource, RollupMetrics
 from tests.core.graph_test_helpers import (
     build_graph,
@@ -250,6 +251,146 @@ class TestAnnotateCoverageRefines:
         assert metrics.total_assertions == 1
         assert metrics.implemented.covered == 0  # REFINES doesn't count
         assert metrics.implemented.covered_pct == 0.0
+
+    # Verifies: REQ-d00069-J
+    def test_a_refines_chain_conducts_the_mean_of_means_at_every_level(self):
+        """A four-level `Refines:` chain conducts a mean of means, not a flat figure.
+
+        Chain (each link an assertion-targeted `Refines:` naming the A of the
+        level above): REQ-002 -> REQ-001-A -> REQ-010-A -> REQ-100-A. Every
+        requirement has assertions A and B; only REQ-002's two assertions carry
+        immediate direct evidence, from one `Implements:` naming them both.
+
+        Derived by hand from REQ-d00069-J -- "the value conducted is the mean,
+        in that measure, of the contributing requirements' own coverage, a
+        requirement's coverage being the mean over its assertions", an
+        assertion's coverage in a measure being the greater of what is attached
+        to it and what is conducted into it:
+
+          REQ-002 own direct = mean(A=1.0, B=1.0)          = 1.0
+          -> conducted into REQ-001-A (the only assertion its citation names)
+          REQ-001 own direct = mean(A=max(0,1.0), B=0)     = 0.5
+          -> conducted into REQ-010-A
+          REQ-010 own direct = mean(A=max(0,0.5), B=0)     = 0.25
+          -> conducted into REQ-100-A
+
+        The halving at each level is the mean-over-assertions step. A flattened
+        walk (crediting the top with the chain's leaf evidence directly) would
+        read 1.0 at every level; a double-counting one would exceed 1.0.
+        """
+        graph = build_graph(
+            make_requirement(
+                "REQ-100",
+                level="PRD",
+                assertions=[{"label": "A", "text": "a"}, {"label": "B", "text": "b"}],
+            ),
+            make_requirement(
+                "REQ-010",
+                level="OPS",
+                refines=["REQ-100-A"],
+                assertions=[{"label": "A", "text": "a"}, {"label": "B", "text": "b"}],
+            ),
+            make_requirement(
+                "REQ-001",
+                level="DEV",
+                refines=["REQ-010-A"],
+                assertions=[{"label": "A", "text": "a"}, {"label": "B", "text": "b"}],
+            ),
+            make_requirement(
+                "REQ-002",
+                level="DEV",
+                refines=["REQ-001-A"],
+                assertions=[{"label": "A", "text": "a"}, {"label": "B", "text": "b"}],
+            ),
+            make_code_ref(implements=["REQ-002-A", "REQ-002-B"], source_path="src/leaf.py"),
+        )
+
+        annotate_coverage(graph)
+
+        conducted = {}
+        for req_id in ("REQ-100", "REQ-010", "REQ-001", "REQ-002"):
+            dim = graph.find_by_id(req_id).get_metric("rollup_metrics").implemented
+            conducted[req_id] = dict(dim.rolled_direct_by_label)
+            # Direct conducts into direct only, so nothing lands in the rolled
+            # INDIRECT measure -- no measure is composed of another.
+            assert dict(dim.rolled_indirect_by_label) == {}, req_id
+
+        assert conducted["REQ-001"] == pytest.approx({"A": 1.0})
+        assert conducted["REQ-010"] == pytest.approx({"A": 0.5})
+        assert conducted["REQ-100"] == pytest.approx({"A": 0.25})
+        # The leaf is where the evidence is attached; nothing refines it.
+        assert conducted["REQ-002"] == {}
+
+    # Verifies: REQ-d00069-J
+    def test_conduction_round_a_cycle_does_not_depend_on_annotation_order(self):
+        """The conducted value is a property of the graph, not of where the walk began.
+
+        REQ-d00069-J defines what is conducted as a mean over the graph, so two
+        builds of the SAME graph must agree whatever order the requirements are
+        annotated in. REQ-001 and REQ-002 refine each other's A, forming a
+        cycle; REQ-001's own assertions carry immediate direct evidence.
+
+        The exact figures below reflect how the walk degrades a cycle (it
+        refuses to re-enter a requirement already on its path and conducts 0 for
+        it), which no assertion legislates -- what REQ-d00069-J does bind is
+        that one graph yields one answer. Both are asserted: cross-order
+        equality alone would also hold if both orders were equally wrong.
+        """
+
+        def build(reversed_order: bool):
+            first = make_requirement(
+                "REQ-001",
+                level="DEV",
+                refines=["REQ-002-A"],
+                assertions=[{"label": "A", "text": "a"}, {"label": "B", "text": "b"}],
+            )
+            second = make_requirement(
+                "REQ-002",
+                level="DEV",
+                refines=["REQ-001-A"],
+                assertions=[{"label": "A", "text": "a"}, {"label": "B", "text": "b"}],
+            )
+            reqs = [second, first] if reversed_order else [first, second]
+            graph = build_graph(
+                *reqs,
+                make_code_ref(implements=["REQ-001-A", "REQ-001-B"], source_path="src/one.py"),
+            )
+            annotate_coverage(graph)
+            return graph
+
+        forward = build(reversed_order=False)
+        backward = build(reversed_order=True)
+
+        # Guard the lever: if the two builds ever iterate requirements in the
+        # same order, this test stops testing anything at all.
+        def order_of(graph):
+            return [n.id for n in graph.nodes_by_kind(NodeKind.REQUIREMENT)]
+
+        assert order_of(forward) == ["REQ-001", "REQ-002"]
+        assert order_of(backward) == ["REQ-002", "REQ-001"]
+
+        def conducted(graph):
+            return {
+                req_id: (
+                    dict(
+                        graph.find_by_id(req_id)
+                        .get_metric("rollup_metrics")
+                        .implemented.rolled_direct_by_label
+                    ),
+                    dict(
+                        graph.find_by_id(req_id)
+                        .get_metric("rollup_metrics")
+                        .implemented.rolled_indirect_by_label
+                    ),
+                )
+                for req_id in ("REQ-001", "REQ-002")
+            }
+
+        assert conducted(forward) == conducted(backward)
+        assert conducted(forward) == {
+            "REQ-001": ({"A": 0.5}, {}),
+            "REQ-002": ({"A": 1.0}, {}),
+        }
 
 
 class TestImplementedExcludesTestVerifies:

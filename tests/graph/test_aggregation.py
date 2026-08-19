@@ -116,6 +116,84 @@ class TestAggregateByLevel:
             assert lv.passing.total_covered <= lv.tested.total_covered + 1e-9
 
 
+class TestFullyConductedAssertionCountsButStaysWork:
+    """One assertion, two verdicts: counted by the headline, still a gap.
+
+    REQ-100-A has NO evidence naming it. Everything it is credited with is
+    conducted up a `Refines:` chain from REQ-010, whose own single assertion is
+    implemented by name -- so REQ-010's own coverage is 1.0 and the whole of it
+    lands on REQ-100-A (the only assertion its citation names). REQ-100-B is
+    implemented by an assertion-targeted reference, so the requirement is not
+    excluded from the per-assertion gap listing for want of any code at all.
+
+    That the SAME assertion reads covered on the headline total (REQ-d00069-N,
+    reported per REQ-d00258-A) and reads as work on the immediate direct
+    measure (REQ-d00258-M) is the whole point of keeping the two measures
+    apart, and is what this pins.
+    """
+
+    @pytest.fixture
+    def config(self):
+        return {
+            "project": {"name": "test", "namespace": "REQ"},
+            "levels": {"prd": {"rank": 1}, "ops": {"rank": 2}, "dev": {"rank": 3}},
+        }
+
+    @pytest.fixture
+    def graph(self, config):
+        tg = build_graph(
+            make_requirement(
+                "REQ-100",
+                level="PRD",
+                assertions=[{"label": "A", "text": "a"}, {"label": "B", "text": "b"}],
+            ),
+            make_requirement(
+                "REQ-010",
+                level="OPS",
+                refines=["REQ-100-A"],
+                assertions=[{"label": "X", "text": "x"}],
+            ),
+            make_code_ref(implements=["REQ-010-X"], source_path="src/x.py"),
+            make_code_ref(implements=["REQ-100-B"], source_path="src/b.py"),
+        )
+        annotate_coverage(tg)
+        return FederatedGraph.from_single(tg, config=config, repo_root=Path("."))
+
+    # Verifies: REQ-d00069-N
+    def test_the_conducted_assertion_is_covered_on_the_headline_total(self, graph):
+        dim = graph.find_by_id("REQ-100").get_metric("rollup_metrics").implemented
+        # Nothing names A; all of its credit is conducted.
+        assert "A" not in dim.immediate_direct_by_label
+        assert "A" not in dim.immediate_indirect_by_label
+        assert dim.rolled_direct_by_label["A"] == pytest.approx(1.0)
+        # The total is the greatest of the four measures per assertion.
+        assert dim.total_by_label["A"] == pytest.approx(1.0)
+        assert dim.covered == pytest.approx(2.0)
+
+    # Verifies: REQ-d00258-A, REQ-d00069-N
+    def test_a_reporting_surface_counts_the_conducted_assertion(self, graph, config):
+        levels = {lv.level: lv for lv in aggregate_by_level(graph, config)}
+        prd = levels["PRD"]
+        assert prd.implemented.total == 2
+        # Both assertions counted: B by its own citation, A by conduction.
+        assert prd.implemented.total_covered == pytest.approx(2.0)
+        assert prd.implemented.rolled_direct == pytest.approx(1.0)
+        assert prd.implemented.immediate_direct == pytest.approx(1.0)
+
+    # Verifies: REQ-d00258-M
+    def test_the_same_assertion_is_still_a_gap_on_the_work_list(self, graph, config):
+        from elspais.commands.gaps import collect_gaps
+
+        dim = graph.find_by_id("REQ-100").get_metric("rollup_metrics").implemented
+        assert covered_labels(dim, WORK_LIST_MEASURE) == {"B"}
+
+        data = collect_gaps(graph, exclude_status=set(), config=config)
+        entry = next(e for e in data.uncovered if e.req_id == "REQ-100")
+        # A is listed, at a fraction of 0.0 -- the conducted credit plays no
+        # part in what a work list reports.
+        assert [(label, frac) for _aid, label, frac in entry.assertions] == [("A", 0.0)]
+
+
 class TestLevelKeys:
     """REQ-d00258-C: a [levels] key missing `rank` still aggregates -- it
     sorts after ranked keys instead of being silently dropped."""
