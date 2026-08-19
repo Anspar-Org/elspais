@@ -588,12 +588,10 @@ def _evidence_result(graph: Any, source_ids: tuple[str, ...]) -> tuple[EvidenceR
     test reaches two ways: no RESULT of its own -- declared and not run, or run
     and not ingested -- and a RESULT whose status is neither a pass nor a fail,
     such as a skipped one. Neither is reported as a failure it never returned.
-    Those two are NOT told apart anywhere today: ``tested_partition`` counts
-    both into its "awaiting a result" bucket, and no surface distinguishes a
-    test that never ran from one that ran and returned nothing. Saying so here
-    rather than deferring to a partition that does not perform the split --
-    the information is lost, and a reader looking for it should learn that
-    from the first place they look.
+    Both fall into "awaiting a result" and are deliberately NOT told apart:
+    a skipped test and a test that does not exist produce the same result,
+    which is none. Whether the tests exist at all is a different question,
+    and Tested is the measure that answers it.
     """
     passed_at: str | None = None
     for source_id in source_ids:

@@ -214,15 +214,21 @@ def test_partition_ignores_an_assertion_outside_the_tested_set():
 
 # Verifies: REQ-d00258-O
 @pytest.mark.parametrize("fraction", [0.25, 0.5, 1.0])
-def test_partition_counts_a_partially_credited_assertion_once(fraction):
-    """Counts assertions, not fractional credit: a partly-credited assertion is
-    still one assertion, and it is the assertion that passed."""
+def test_partition_carries_a_partly_credited_assertion_at_its_credit(fraction):
+    """The breakdown is in the SAME units as the figure it qualifies.
+
+    Tested is a sum of per-*Assertion* fractions, so the three buckets sum to
+    it only if each *Assertion* contributes its tested CREDIT. Which bucket is
+    still binary -- the *Assertion* passed -- but how much it carries is the
+    coverage it has, not a whole assertion it does not.
+    """
     m = RollupMetrics(total_assertions=1)
     m.tested = _dim({"A": fraction}, total=1)
     m.verified = _dim({"A": fraction}, total=1)
 
     part = tested_partition(m)
-    assert (part.passed, part.failed, part.awaiting) == (1, 0, 0)
+    assert (part.passed, part.failed, part.awaiting) == (fraction, 0.0, 0.0)
+    assert part.passed + part.failed + part.awaiting == m.tested.covered
 
 
 # Verifies: REQ-d00258-O

@@ -343,11 +343,17 @@ def _get_node_data(node, graph: FederatedGraph, *, assertion_labels: bool = Fals
         # places it: the table appends it, CSV gives it columns of its own.
         # Empty when nothing is tested -- there is no breakdown of an empty set.
         part = tested_partition(rollup)
-        data["tested_passed"] = part.passed
-        data["tested_failed"] = part.failed
-        data["tested_awaiting"] = part.awaiting
+        # Formatted here rather than left raw: these reach CSV columns of
+        # their own, and an assertion count reads the same way on every
+        # surface -- fractional where the credit is, whole where it is.
+        data["tested_passed"] = fmt_assertion_count(part.passed)
+        data["tested_failed"] = fmt_assertion_count(part.failed)
+        data["tested_awaiting"] = fmt_assertion_count(part.awaiting)
         data["tested_breakdown"] = (
-            f"[{part.passed}P {part.failed}F {part.awaiting}A]" if part.tested else ""
+            f"[{fmt_assertion_count(part.passed)}P {fmt_assertion_count(part.failed)}F "
+            f"{fmt_assertion_count(part.awaiting)}A]"
+            if part.tested
+            else ""
         )
 
         ct = rollup.code_tested

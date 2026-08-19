@@ -186,7 +186,7 @@ def compute_coverage_tiers(node: GraphNode, config: dict[str, Any] | None = None
     """
     from elspais.config.schema import CoverageConfig, CoverageSeverityConfig
     from elspais.config.status_words import get_status_words
-    from elspais.graph.metrics import tested_partition
+    from elspais.graph.metrics import fmt_assertion_count, tested_partition
 
     empty: dict[str, Any] = {
         "impl_color": "",
@@ -359,8 +359,9 @@ def compute_coverage_tiers(node: GraphNode, config: dict[str, Any] | None = None
             part = tested_partition(rollup)
             if part.tested:
                 tip += (
-                    f" — {part.passed} passed, {part.failed} failed,"
-                    f" {part.awaiting} awaiting a result"
+                    f" — {fmt_assertion_count(part.passed)} passed, "
+                    f"{fmt_assertion_count(part.failed)} failed,"
+                    f" {fmt_assertion_count(part.awaiting)} awaiting a result"
                 )
 
         result[f"{prefix}_color"] = color

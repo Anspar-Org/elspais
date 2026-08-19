@@ -137,7 +137,13 @@ def _tested_breakdown(lv: dict) -> str:
     awaiting = lv.get("tested_awaiting", 0)
     if passed + failed + awaiting == 0:
         return ""
-    return f"  [{passed} passed, {failed} failed, {awaiting} awaiting a result]"
+    # Rendered through the shared assertion-count formatter: the breakdown is
+    # in the same fractional units as the Tested figure it qualifies
+    # (REQ-d00258-O), and a whole number still reads whole.
+    return (
+        f"  [{fmt_assertion_count(passed)} passed, {fmt_assertion_count(failed)} failed, "
+        f"{fmt_assertion_count(awaiting)} awaiting a result]"
+    )
 
 
 def _render_text(data: dict) -> str:
@@ -392,7 +398,13 @@ def _render_csv(data: dict) -> str:
         row.extend(lv[f"implemented{suffix}"] for suffix, _label in _CSV_MEASURE_COLUMNS)
         row.extend([te, _pct(te, ta)])
         row.extend(
-            [lv.get("tested_passed", 0), lv.get("tested_failed", 0), lv.get("tested_awaiting", 0)]
+            [
+                # Same units and same formatting as every other assertion
+                # count: fractional where the credit is, whole where it is.
+                fmt_assertion_count(lv.get("tested_passed", 0)),
+                fmt_assertion_count(lv.get("tested_failed", 0)),
+                fmt_assertion_count(lv.get("tested_awaiting", 0)),
+            ]
         )
         row.extend(lv[f"tested{suffix}"] for suffix, _label in _CSV_MEASURE_COLUMNS)
         row.extend([pa, _pct(pa, ta)])

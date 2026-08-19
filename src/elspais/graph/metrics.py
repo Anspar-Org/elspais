@@ -909,14 +909,23 @@ class TestedPartition:
     *Assertion* missing from it either failed or never returned a verdict, and
     those ask for opposite things of a reader.
 
-    Counts assertions rather than fractional credit. A partially-credited
-    *Assertion* is still one *Assertion*, and it is the *Assertion* that
-    passed, failed, or is waiting.
+    Measured in the SAME units as the figure it breaks down. Tested is a sum
+    of per-*Assertion* fractions (REQ-d00069-M), so a breakdown counted in
+    whole assertions could not "together account for every tested *Assertion*"
+    as REQ-d00258-O requires -- a headline of 2.5 against a breakdown summing
+    to 3 accounts for nothing. Each tested *Assertion* contributes its TESTED
+    credit to exactly one of the three.
+
+    Which bucket is a property of the *Assertion* and is binary: it passed, it
+    failed, or nothing came back (REQ-d00277-C). How much it contributes is
+    its Tested credit. So a partly-tested *Assertion* whose test passed adds
+    its partial credit to ``passed`` -- the state is not partial, the coverage
+    is.
     """
 
-    passed: int
-    failed: int
-    awaiting: int
+    passed: float
+    failed: float
+    awaiting: float
 
     @property
     def tested(self) -> int:
@@ -935,16 +944,20 @@ def tested_partition(metrics: RollupMetrics) -> TestedPartition:
     which covers a test that has not run, one whose results were never
     ingested, and one that returned no verdict.
     """
-    tested_labels = {lbl for lbl, frac in metrics.tested.total_by_label.items() if frac > 0}
+    tested_by_label = {lbl: frac for lbl, frac in metrics.tested.total_by_label.items() if frac > 0}
     passing = tested_and_passing(metrics)
     passing_by_label = passing.total_by_label
-    failed = tested_labels & set(passing.failing_labels)
-    passed = {lbl for lbl in tested_labels - failed if passing_by_label.get(lbl, 0.0) > 0}
-    return TestedPartition(
-        passed=len(passed),
-        failed=len(failed),
-        awaiting=len(tested_labels) - len(failed) - len(passed),
-    )
+    failing = set(passing.failing_labels)
+
+    passed = failed = awaiting = 0.0
+    for label, tested_credit in tested_by_label.items():
+        if label in failing:
+            failed += tested_credit
+        elif passing_by_label.get(label, 0.0) > 0:
+            passed += tested_credit
+        else:
+            awaiting += tested_credit
+    return TestedPartition(passed=passed, failed=failed, awaiting=awaiting)
 
 
 __all__ = [

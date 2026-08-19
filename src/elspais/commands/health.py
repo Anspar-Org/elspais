@@ -2617,8 +2617,9 @@ def check_dimension_coverage(
     # Implements: REQ-d00258-O
     if dimension == "tested" and (agg.tested_passed + agg.tested_failed + agg.tested_awaiting):
         msg_parts.append(
-            f"{agg.tested_passed} passed / {agg.tested_failed} failed / "
-            f"{agg.tested_awaiting} awaiting a result"
+            f"{fmt_assertion_count(agg.tested_passed)} passed / "
+            f"{fmt_assertion_count(agg.tested_failed)} failed / "
+            f"{fmt_assertion_count(agg.tested_awaiting)} awaiting a result"
         )
     if has_any_failures:
         msg_parts.append("FAILURES DETECTED")
