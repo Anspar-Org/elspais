@@ -602,6 +602,15 @@ def mcp_command(args: argparse.Namespace) -> int:
         return 1
 
 
+#: What an http registration names when the address cannot be written
+#: down. Deliberately carries no default: an unset variable is reported
+#: by the client as a missing variable, which names the cause -- the
+#: shell never ran `eval "$(elspais mcp env)"`. A default address would
+#: instead fail as a refused connection, naming a symptom and sending
+#: the reader to look at the daemon.
+_ADDRESS_VARIABLE = "${ELSPAIS_MCP_URL}"
+
+
 def _claude_env() -> dict[str, str]:
     """Return env dict with Claude nesting guards removed.
 
@@ -618,13 +627,58 @@ def _claude_env() -> dict[str, str]:
 
 
 # Implements: REQ-o00076-K
+def _http_registration_url(global_scope: bool) -> str:
+    """The address to register, literal where one registration means one tree.
+
+    A registration scoped to a single project names one working tree, and
+    that tree's address is settled and survives the process serving it
+    (REQ-o00076-K), so it can be written down. Nothing then has to be
+    arranged before the client is launched.
+
+    A registration shared by every project cannot be written down, because
+    the address it needs differs by which tree the client was started in.
+    There the variable is the answer, and the shell supplies it.
+
+    Reserving the address does not start anything. Registering a client
+    says where a tree will be served, not that it is being served now,
+    and an install that spawned a daemon as a side effect would start one
+    on a machine that was only being set up.
+
+    Falls back to the variable when no address can be settled, which
+    happens when there is no working tree to settle one for. A literal
+    that was wrong would be worse than a variable that has to be set.
+    """
+    if global_scope:
+        return _ADDRESS_VARIABLE
+
+    from elspais.config import find_git_root
+
+    repo_root = find_git_root()
+    if repo_root is None:
+        return _ADDRESS_VARIABLE
+
+    from elspais.mcp.daemon import free_port, reserve_port, reserved_port
+
+    port = reserved_port(repo_root)
+    if port is None:
+        # First registration for this tree: settle an address now so the
+        # client can be told one, and let the daemon bind it when it
+        # eventually starts.
+        port = free_port()
+        reserve_port(repo_root, port)
+    return f"http://127.0.0.1:{port}/mcp"
+
+
+# Implements: REQ-o00076-K
 def _mcp_install(global_scope: bool = False, transport: str = "http") -> int:
     """Register elspais MCP server with Claude Code.
 
-    Over http the client is registered against a variable rather than a
-    literal address, because the address belongs to a working tree and
-    one registration may serve several. The shell supplies it:
-    ``eval "$(elspais mcp env)"`` before launching the client.
+    Over http a project-scoped registration names this working tree's
+    address outright, so nothing has to be arranged before the client is
+    launched. A ``--global`` registration cannot: the address it needs
+    differs by which tree the client was started in, so it names a
+    variable and the shell supplies it with
+    ``eval "$(elspais mcp env)"``.
 
     http is the better connection and is the default. The client then
     shares one graph with the CLI and the viewer, and a daemon that is
@@ -655,12 +709,7 @@ def _mcp_install(global_scope: bool = False, transport: str = "http") -> int:
     if global_scope:
         cmd.extend(["--scope", "user"])
     if transport == "http":
-        # Deliberately no default. An unset variable is reported by the
-        # client as a missing variable, which names the cause -- the
-        # shell never ran `eval "$(elspais mcp env)"`. A default address
-        # would instead fail as a refused connection, which names a
-        # symptom and sends the reader looking at the daemon.
-        cmd.append("${ELSPAIS_MCP_URL}")
+        cmd.append(_http_registration_url(global_scope))
     else:
         cmd.extend(["--", "elspais", "mcp", "serve"])
 

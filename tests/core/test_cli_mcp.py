@@ -8,12 +8,14 @@ import json
 import os
 import shutil
 import subprocess
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from elspais.cli import (
     _claude_desktop_config_path,
+    _http_registration_url,
     _mcp_install,
     _mcp_install_desktop,
     _mcp_uninstall,
@@ -29,6 +31,166 @@ _skip_e2e = pytest.mark.skipif(
     reason="requires claude and elspais on PATH, cannot run inside Claude Code session",
 )
 
+_STANDIN_PORT = 49999
+
+
+@pytest.fixture(autouse=True)
+def address_seam(monkeypatch):
+    """Stand in for everything that settles a tree's address.
+
+    Working out where a tree is reached touches the machine the tests run
+    on: it reads and writes that tree's reservation record, and the
+    launcher it used to go through would leave a serving process behind.
+    None of that belongs to a test of what gets registered, and a test
+    that reserved an address in the developer's own tree would move the
+    address that tree is really reached at. So every part of the seam is
+    replaced here for the whole module -- including the launcher, which
+    the registration path must never reach at all -- and the tests that
+    care about an address drive it through the returned handle.
+    """
+    seam = SimpleNamespace(
+        reserved=MagicMock(return_value=_STANDIN_PORT),
+        free=MagicMock(return_value=_STANDIN_PORT),
+        reserve=MagicMock(),
+        ensure=MagicMock(side_effect=AssertionError("registering must not start a daemon")),
+    )
+    monkeypatch.setattr("elspais.mcp.daemon.reserved_port", seam.reserved)
+    monkeypatch.setattr("elspais.mcp.daemon.free_port", seam.free)
+    monkeypatch.setattr("elspais.mcp.daemon.reserve_port", seam.reserve)
+    monkeypatch.setattr("elspais.mcp.daemon.ensure_daemon", seam.ensure)
+    return seam
+
+
+class TestHttpRegistrationUrl:
+    """What an http registration names, and when it can name an address.
+
+    A registration is written once and read at every launch, so what it
+    names decides whether a client that never re-reads its configuration
+    can still reach the tree it is working in.
+    """
+
+    # Verifies: REQ-o00076-K
+    def test_REQ_o00076_K_project_scope_names_the_trees_own_address(
+        self, address_seam, monkeypatch, tmp_path
+    ):
+        """Validates REQ-o00076-K: a registration bound to one project
+        names one working tree, and the address of a tree outlives the
+        process serving it -- a replacement is reached where its
+        predecessor was. An address that stable can be written down,
+        which is what spares the client arranging anything before it is
+        launched. The address written is this tree's, so the reservation
+        consulted is the one belonging to the root that was found.
+        """
+        monkeypatch.setattr("elspais.config.find_git_root", lambda *args: tmp_path)
+        address_seam.reserved.return_value = 52101
+
+        url = _http_registration_url(global_scope=False)
+
+        assert url == "http://127.0.0.1:52101/mcp"
+        address_seam.reserved.assert_called_once_with(tmp_path)
+
+    # Verifies: REQ-o00076-K
+    def test_REQ_o00076_K_an_existing_reservation_is_reused_not_replaced(
+        self, address_seam, monkeypatch, tmp_path
+    ):
+        """Validates REQ-o00076-K: the whole worth of a written-down
+        address is that it does not move. A tree that already has one
+        must be registered at that one, so nothing goes looking for a
+        fresh port and nothing overwrites what is on record -- either
+        would hand a second client a different address for the same tree
+        and strand the first client's configuration.
+        """
+        monkeypatch.setattr("elspais.config.find_git_root", lambda *args: tmp_path)
+        address_seam.reserved.return_value = 52101
+
+        url = _http_registration_url(global_scope=False)
+
+        assert url == "http://127.0.0.1:52101/mcp"
+        address_seam.free.assert_not_called()
+        address_seam.reserve.assert_not_called()
+
+    # Verifies: REQ-o00076-K
+    def test_REQ_o00076_K_a_first_registration_settles_an_address_and_keeps_it(
+        self, address_seam, monkeypatch, tmp_path
+    ):
+        """Validates REQ-o00076-K: a tree being registered for the first
+        time has no address yet, so one is chosen from what is free. It
+        is of no use unless it is kept: an address recomputed on each
+        reading would differ every time it was asked for, which is
+        precisely the moving address the assertion forbids. Recording it
+        is what makes the second answer the same as the first.
+        """
+        monkeypatch.setattr("elspais.config.find_git_root", lambda *args: tmp_path)
+        recorded: dict = {}
+        address_seam.reserve.side_effect = lambda root, port: recorded.__setitem__(root, port)
+        address_seam.reserved.side_effect = recorded.get
+        address_seam.free.return_value = 53311
+
+        first = _http_registration_url(global_scope=False)
+        second = _http_registration_url(global_scope=False)
+
+        assert first == "http://127.0.0.1:53311/mcp"
+        assert second == first
+        address_seam.free.assert_called_once()
+        address_seam.reserve.assert_called_once_with(tmp_path, 53311)
+
+    # Verifies: REQ-o00076-K
+    def test_REQ_o00076_K_global_scope_names_the_variable_and_settles_nothing(
+        self, address_seam, monkeypatch, tmp_path
+    ):
+        """Validates REQ-o00076-K: one registration shared by every
+        project cannot name an address, because the address a client
+        needs is decided by the tree it was started in and that is not
+        known when the registration is written. The variable defers the
+        answer to the shell that launches the client. The tree the
+        install happened to run in must not be consulted either --
+        reserving its address would settle a tree nobody asked about on
+        behalf of a registration that will never name it.
+        """
+        monkeypatch.setattr("elspais.config.find_git_root", lambda *args: tmp_path)
+
+        url = _http_registration_url(global_scope=True)
+
+        assert url == "${ELSPAIS_MCP_URL}"
+        address_seam.reserved.assert_not_called()
+        address_seam.reserve.assert_not_called()
+
+    # Verifies: REQ-o00076-K
+    def test_REQ_o00076_K_falls_back_to_the_variable_outside_a_repository(
+        self, address_seam, monkeypatch
+    ):
+        """Validates REQ-o00076-K: with no repository around the install
+        there is no working tree whose address could be written down, so
+        there is nothing to write. The variable is the honest answer --
+        an invented literal would send the client to a port nothing
+        serves, which is worse than a variable the shell has to fill in.
+        """
+        monkeypatch.setattr("elspais.config.find_git_root", lambda *args: None)
+
+        url = _http_registration_url(global_scope=False)
+
+        assert url == "${ELSPAIS_MCP_URL}"
+        address_seam.reserved.assert_not_called()
+        address_seam.free.assert_not_called()
+
+    # Verifies: REQ-o00076-K
+    def test_REQ_o00076_K_registering_never_starts_a_serving_process(
+        self, address_seam, monkeypatch, tmp_path
+    ):
+        """Validates REQ-o00076-K: settling an address says where a tree
+        will be served, not that it is being served now. A machine being
+        set up would otherwise be left running a daemon nobody asked for,
+        for a tree whose graph nobody has read. The address is reserved
+        rather than obtained from a running process precisely so the two
+        can be separated, and the launcher here fails the test if the
+        registration path reaches it.
+        """
+        monkeypatch.setattr("elspais.config.find_git_root", lambda *args: tmp_path)
+
+        assert _http_registration_url(global_scope=False).startswith("http://127.0.0.1:")
+        assert _http_registration_url(global_scope=True) == "${ELSPAIS_MCP_URL}"
+        address_seam.ensure.assert_not_called()
+
 
 class TestMcpInstallLocal:
     """test_mcp_install_local — verifies correct claude mcp add command."""
@@ -36,23 +198,25 @@ class TestMcpInstallLocal:
     @patch("subprocess.run")
     @patch("shutil.which")
     # Verifies: REQ-d00214-A, REQ-o00076-K
-    def test_REQ_o00076_K_install_registers_the_address_variable_by_default(
-        self, mock_which, mock_run
+    def test_REQ_o00076_K_install_registers_this_trees_address_by_default(
+        self, mock_which, mock_run, address_seam, monkeypatch, tmp_path
     ):
-        """Validates REQ-o00076-K: a client registered once must go on
-        reaching this working tree after the process serving it has been
-        replaced. A literal port baked into the registration cannot do
-        that -- a client that expands its configuration only at launch
-        would keep dialling an address nothing answers at. Registering
-        the variable instead defers the answer to the shell that starts
-        the client, so each launch picks up whatever address the tree is
-        being served at now. The transport is deliberately not passed
-        here: http being the default is the behaviour under test, since a
-        stdio default would put every client back on a private process
-        that nothing renews.
+        """Validates REQ-o00076-K: a registration made for one project
+        names that project's tree, and the address of a tree survives the
+        process serving it -- a replacement is reached where its
+        predecessor was. So the address can be written into the
+        registration outright, and a client that expands its
+        configuration only once still reaches whatever serves the tree
+        later. Registering it is what spares the reader arranging
+        anything in the shell before launching the client. The transport
+        is deliberately not passed here: http being the default is part
+        of the behaviour under test, since a stdio default would put
+        every client back on a private process that nothing renews.
         """
         mock_which.side_effect = lambda name: f"/usr/bin/{name}"
         mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+        monkeypatch.setattr("elspais.config.find_git_root", lambda *args: tmp_path)
+        address_seam.reserved.return_value = 53007
 
         result = _mcp_install(global_scope=False)
 
@@ -66,16 +230,19 @@ class TestMcpInstallLocal:
             "elspais",
             "--transport",
             "http",
-            "${ELSPAIS_MCP_URL}",
+            "http://127.0.0.1:53007/mcp",
         ]
 
     @patch("subprocess.run")
     @patch("shutil.which")
-    # Verifies: REQ-d00214-A
-    def test_mcp_install_local_stdio(self, mock_which, mock_run):
+    # Verifies: REQ-d00214-A, REQ-o00076-K
+    def test_mcp_install_local_stdio(self, mock_which, mock_run, address_seam):
         """A client that cannot speak http is still registered as a server
         command it owns, so asking for stdio produces the `--` separated
-        invocation rather than an address.
+        invocation rather than an address. It owns the process outright,
+        so no tree's address is settled on its behalf -- reserving one
+        for a client that will never dial it would claim a port nothing
+        is going to serve.
         """
         mock_which.side_effect = lambda name: f"/usr/bin/{name}"
         mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
@@ -83,6 +250,8 @@ class TestMcpInstallLocal:
         result = _mcp_install(global_scope=False, transport="stdio")
 
         assert result == 0
+        address_seam.reserved.assert_not_called()
+        address_seam.reserve.assert_not_called()
         cmd = mock_run.call_args[0][0]
         assert cmd == [
             "/usr/bin/claude",
@@ -126,6 +295,40 @@ class TestMcpInstallGlobal:
         cmd = mock_run.call_args[0][0]
         assert "--scope" in cmd
         assert "user" in cmd
+
+    @patch("subprocess.run")
+    @patch("shutil.which")
+    # Verifies: REQ-d00214-A, REQ-o00076-K
+    def test_REQ_o00076_K_global_install_registers_the_address_variable(
+        self, mock_which, mock_run, address_seam, monkeypatch, tmp_path
+    ):
+        """Validates REQ-o00076-K: a registration installed for every
+        project is read by clients started in trees this install knows
+        nothing about, each reached at its own address. The one thing it
+        can name is the variable those clients' shells fill in, and the
+        tree the install ran in gets no say -- writing its address here
+        would point every other project at it.
+        """
+        mock_which.side_effect = lambda name: f"/usr/bin/{name}"
+        mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+        monkeypatch.setattr("elspais.config.find_git_root", lambda *args: tmp_path)
+
+        result = _mcp_install(global_scope=True)
+
+        assert result == 0
+        cmd = mock_run.call_args[0][0]
+        assert cmd == [
+            "/usr/bin/claude",
+            "mcp",
+            "add",
+            "elspais",
+            "--transport",
+            "http",
+            "--scope",
+            "user",
+            "${ELSPAIS_MCP_URL}",
+        ]
+        address_seam.reserve.assert_not_called()
 
     @patch("subprocess.run")
     @patch("shutil.which")
@@ -485,11 +688,12 @@ class TestMcpInstallDesktop:
 class TestMcpEnv:
     """`elspais mcp env` — the shell's half of the address variable.
 
-    Installation registers `${ELSPAIS_MCP_URL}` rather than a literal
-    port, which only reaches a daemon if something fills the variable in
-    at launch. That something is this command, evaluated by the shell
-    that starts the client, which is why its output has to be exactly
-    what a shell will accept and why nothing else may reach stdout.
+    A registration shared by every project names `${ELSPAIS_MCP_URL}`
+    rather than any one tree's address, and only reaches a daemon if
+    something fills the variable in at launch. That something is this
+    command, evaluated by the shell that starts the client, which is why
+    its output has to be exactly what a shell will accept and why nothing
+    else may reach stdout.
     """
 
     # Verifies: REQ-o00076-K

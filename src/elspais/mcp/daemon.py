@@ -359,6 +359,21 @@ def _port_record_path(repo_root: Path) -> Path:
     return _daemon_dir(repo_root) / "daemon-port.json"
 
 
+def free_port() -> int:
+    """An address nothing is listening on, for a tree that has none yet.
+
+    Binding and releasing is how a free one is found; something else can
+    take it in between, which is why the daemon checks again when it
+    binds for real and reports where it actually went.
+    """
+    import socket
+
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        s.bind(("127.0.0.1", 0))
+        return int(s.getsockname()[1])
+
+
 # Implements: REQ-o00076-K
 def reserved_port(repo_root: Path) -> int | None:
     """The address this working tree is reached at, or None if never set.

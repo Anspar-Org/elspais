@@ -30,9 +30,16 @@ daemon being replaced: an http client reconnects to the same address,
 where a stdio server is a process the client owns and nothing restarts
 once it exits.
 
-An http registration names a variable rather than a literal address,
-because the address belongs to a working tree and one registration may
-serve several. Supply it from the shell that launches the client:
+Installed for one project (the default), the registration names this
+working tree's address outright and there is nothing to arrange -- just
+launch the client. Each working tree keeps its own address, so parallel
+sessions in different worktrees do not collide, and the address is held
+for that tree even while nothing is serving it: restart the daemon, or
+stop and start it, and the same address answers.
+
+Installed with `--global`, one registration serves every project, so it
+cannot name any single tree's address. It names a variable instead, and
+the shell that launches the client supplies it:
 
   $ eval "$(elspais mcp env)"
   $ claude
@@ -40,10 +47,11 @@ serve several. Supply it from the shell that launches the client:
 `elspais mcp env` starts the daemon for the working tree you are in if
 none is running, then prints `export ELSPAIS_MCP_URL=...` for the shell
 to apply. (It prints rather than exports because no process can set a
-variable in the shell that started it.) Each working tree keeps its own
-address, so parallel sessions in different worktrees do not collide, and
-the address is held for that tree even while nothing is serving it --
-restart the daemon, or stop and start it, and the same address answers.
+variable in the shell that started it.)
+
+If a tree's reserved address is ever taken by something else, the daemon
+says so and serves elsewhere; re-running `elspais mcp install` records
+the new address.
 
 Running `elspais mcp install` again replaces whatever is registered, so
 switching between the two is one command either way.
