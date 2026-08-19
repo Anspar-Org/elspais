@@ -550,38 +550,29 @@ change_order = false
 min_length = 3
 ```
 
-## Environment Variable Overrides
+## Tool Environment Variables
 
-Configuration values can be overridden with environment variables:
+The environment does not supply configuration. Every setting comes from
+`.elspais.toml`, with `.elspais.local.toml` merged over it for values that
+differ per machine (associate paths, most often) — and `elspais associate`
+registers those without editing either file by hand.
 
-```bash
-# Pattern: ELSPAIS_<SECTION>_<KEY>
-# Single underscore (_) separates sections: SECTION_KEY -> section.key
-# Double underscore (__) is a literal underscore: KEY__NAME -> key_name
-ELSPAIS_PROJECT_NAMESPACE=PRD
-ELSPAIS_PROJECT_NAME=my-project
+Two variables the tool reads directly, neither of which is a setting:
 
-# Booleans are parsed automatically
-ELSPAIS_VALIDATION_ALLOW__UNRESOLVED__CROSS__REPO=false
+`ELSPAIS_VERSION` pins the minimum CLI version.
 
-# JSON list values
-ELSPAIS_SCANNING_SKIP='["node_modules", ".git"]'
-```
-
-Reserved (never treated as config overrides): `ELSPAIS_VERSION`
-(min-CLI-version pin) and `ELSPAIS_CLIENT_PID` (a session/IDE declares
-itself the client of implicitly auto-started daemons, tying the daemon's
-lifetime to that process — see the `cli_ttl` comment above). The value
-must be a process id, not a label or name: the client-liveness rule needs
-a handle whose disappearance it can observe without the client's
-cooperation, and a process id can be tested by signalling it while an
-arbitrary string cannot — a label never disappears, so it could never end
-the daemon's watch on that client. A set `ELSPAIS_CLIENT_PID` is decisive:
-a value that is not a usable PID (not an integer, or a PID that is
-already dead) means "no session identity", not "fall back to the other
-checks" — and the daemon reports that once on stderr rather than silently
-falling through. The former name, `ELSPAIS_SPAWNER_PID`, is still honoured
-for callers that set it.
+`ELSPAIS_CLIENT_PID` lets a session or IDE declare itself the client of an
+implicitly auto-started daemon, tying the daemon's lifetime to that process —
+see the `cli_ttl` comment above. The value must be a process id, not a label
+or name: the client-liveness rule needs a handle whose disappearance it can
+observe without the client's cooperation, and a process id can be tested by
+signalling it while an arbitrary string cannot — a label never disappears, so
+it could never end the daemon's watch on that client. A set
+`ELSPAIS_CLIENT_PID` is decisive: a value that is not a usable PID (not an
+integer, or a PID that is already dead) means "no session identity", not "fall
+back to the other checks" — and the daemon reports that once on stderr rather
+than silently falling through. The former name, `ELSPAIS_SPAWNER_PID`, is
+still honoured for callers that set it.
 
 ## Minimal Configuration Examples
 

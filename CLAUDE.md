@@ -135,7 +135,7 @@ the following function, but a _Traceability_ keyword inside one is never read.
 - `test_e2e_standard` — standard IDs (REQ-p/o/d), uppercase assertions, 3-tier hierarchy, testing+code enabled
 - `test_e2e_fda_numeric` — FDA-style IDs (PRD-/OPS-/DEV-), numeric-0 assertions, custom statuses, require_rationale
 - `test_e2e_named_custom` — named-component IDs, numeric-1 assertions, custom hierarchy, SHALL=false, comma separator
-- `test_e2e_jira_edge` — Jira-style variable-length IDs, zero-padded assertions, status_roles, complex dirs, env overrides
+- `test_e2e_jira_edge` — Jira-style variable-length IDs, zero-padded assertions, status_roles, complex dirs
 - `test_e2e_associated` — multi-repo with associates (standard core + FDA associate)
 - `test_e2e_special` — tests needing truly unique setup (init, lifecycle from scratch, specific error states)
 

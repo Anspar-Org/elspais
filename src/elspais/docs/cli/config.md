@@ -400,16 +400,11 @@ The schema is derived from the Pydantic `ElspaisConfig` model and includes
 a `$schema` self-reference for IDE autocompletion. A committed copy lives at
 `src/elspais/config/elspais-schema.json` and is kept in sync via CI.
 
-## Environment Variable Overrides
+## Where Configuration Comes From
 
-Any config key can be overridden via environment variables:
+Every setting comes from `.elspais.toml`, with `.elspais.local.toml` merged
+over it for values that differ per machine. The environment supplies no
+configuration: `ELSPAIS_VERSION` and `ELSPAIS_CLIENT_PID` are read directly
+by the code that wants them and are not settings.
 
-  ELSPAIS_PROJECT_NAMESPACE=MYREQ elspais checks
-  ELSPAIS_SCANNING_TEST_ENABLED=true elspais checks
-
-**Conversion:**
-  `ELSPAIS_PROJECT_NAMESPACE` -> `project.namespace`
-  `ELSPAIS_SCANNING_TEST_ENABLED` -> `scanning.test.enabled`
-
-Rule: Remove `ELSPAIS_`, lowercase, single underscores become dots.
-Use double underscore (`__`) for a literal underscore in key names.
+To register an associate without editing either file, use `elspais associate`.

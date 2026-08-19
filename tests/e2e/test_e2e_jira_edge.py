@@ -236,24 +236,6 @@ class TestComplexDirectoryStructure:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.e2e
-class TestEnvVarOverrides:
-    """Configuration can be overridden via ELSPAIS_* env vars."""
-
-    def test_env_override_project_name(self, project):
-        result = run_elspais(
-            "config",
-            "show",
-            "--format",
-            "json",
-            cwd=project,
-            env={"ELSPAIS_PROJECT_NAME": "env-overridden"},
-        )
-        assert result.returncode == 0, f"config show failed: {result.stderr}"
-        data = json.loads(result.stdout)
-        assert "project" in data
-
-
 # ---------------------------------------------------------------------------
 # TestAllowStructuralOrphansConfig (from test_e2e_config_variations.py)
 # ---------------------------------------------------------------------------

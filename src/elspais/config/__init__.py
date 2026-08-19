@@ -9,7 +9,6 @@ Exports:
 from __future__ import annotations
 
 import fnmatch
-import os
 import re
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -202,8 +201,6 @@ def load_config(config_path: Path) -> dict[str, Any]:
         _local_project_namespace = _local_project.get("namespace")
         merged = _merge_configs(merged, local_config)
         _override_levels(merged, local_config)
-
-    merged = _apply_env_overrides(merged)
 
     # Version-gated sequential migration
     version = int(merged.get("version", 1))
@@ -409,82 +406,6 @@ def _merge_configs(base: dict[str, Any], override: dict[str, Any]) -> dict[str, 
     return result
 
 
-def _try_parse_env_value(value: str) -> Any:
-    """Parse an environment variable value with type inference.
-
-    Attempts to interpret the string as a richer Python type:
-    - JSON arrays/objects (starts with ``[`` or ``{``)
-    - Booleans (``true``/``false``, case-insensitive)
-    - Falls back to plain string
-
-    Args:
-        value: Raw environment variable string.
-
-    Returns:
-        Parsed Python value (list, dict, bool, or str).
-    """
-    import json
-
-    # JSON array or object
-    if value.startswith("[") or value.startswith("{"):
-        try:
-            return json.loads(value)
-        except json.JSONDecodeError:
-            return value
-
-    # Boolean
-    if value.lower() == "true":
-        return True
-    if value.lower() == "false":
-        return False
-
-    # Numeric (int or float)
-    numeric = _try_parse_numeric(value)
-    if numeric is not None:
-        return numeric
-
-    return value
-
-
-# Env vars reserved by the tool itself — must NOT be treated as config overrides.
-# ELSPAIS_VERSION is the min-CLI-version pin consumed by utilities/version_check.py;
-# it would otherwise collide with the config's top-level `version` (schema format int).
-# ELSPAIS_CLIENT_PID (and its former name ELSPAIS_SPAWNER_PID, still
-# honoured) is the client-identity declaration consumed by mcp/daemon.py
-# (resolve_client_pid); there is no `client` config section.
-_RESERVED_ENV_VARS = frozenset({"ELSPAIS_VERSION", "ELSPAIS_CLIENT_PID", "ELSPAIS_SPAWNER_PID"})
-
-
-def _apply_env_overrides(config: dict[str, Any]) -> dict[str, Any]:
-    """Apply environment variable overrides.
-
-    Looks for ELSPAIS_* environment variables.  Values are parsed via
-    ``_try_parse_env_value`` so that JSON lists, booleans, and plain
-    strings are all handled correctly.
-
-    Tool-reserved vars in ``_RESERVED_ENV_VARS`` are skipped.
-
-    Args:
-        config: Configuration dictionary.
-
-    Returns:
-        Configuration with environment overrides applied.
-    """
-    # Example: ELSPAIS_PATTERNS_PREFIX=MYREQ
-    # Example: ELSPAIS_ASSOCIATES_PATHS='["/path/to/repo"]'
-    for key, value in os.environ.items():
-        if key.startswith("ELSPAIS_") and key not in _RESERVED_ENV_VARS:
-            # Convert ELSPAIS_PATTERNS_PREFIX to patterns.prefix
-            # Single _ = section separator, __ = literal underscore in key
-            # e.g., ELSPAIS_VALIDATION_STRICT__HIERARCHY -> validation.strict_hierarchy
-            config_key = (
-                key[8:].lower().replace("__", "\x00").replace("_", ".").replace("\x00", "_")
-            )
-            _set_nested(config, config_key, _try_parse_env_value(value))
-
-    return config
-
-
 def _set_nested(data: dict[str, Any], key: str, value: Any) -> None:
     """Set a value at a nested key path."""
     parts = key.split(".")
@@ -595,27 +516,10 @@ def get_config(
             # a reader to look for a syntax error sends them hunting for
             # something that is usually not there. The exception above says
             # which setting and why.
-            # Every ELSPAIS_* variable that is not tool-reserved is applied as
-            # a config override, so a setting the schema refuses may never
-            # have been written in the file at all. Naming the file alone
-            # sends a reader to edit something that does not contain the
-            # offending key. The variables are listed, not guessed between:
-            # which one the schema refused is in the message above.
-            env_overrides = sorted(
-                k for k in os.environ if k.startswith("ELSPAIS_") and k not in _RESERVED_ENV_VARS
-            )
-            env_note = (
-                f"\nNote: {', '.join(env_overrides)} "
-                f"{'is' if len(env_overrides) == 1 else 'are'} applied as config "
-                f"override(s), so the setting may come from the environment rather "
-                f"than from {resolved_path.name}."
-                if env_overrides
-                else ""
-            )
             raise ValueError(
                 f"Failed to read config file {resolved_path}: {e}\n"
                 f"Correct the reported setting in {resolved_path.name}, or see "
-                f"`elspais docs config` for what it accepts.{env_note}"
+                f"`elspais docs config` for what it accepts."
             ) from e
     else:
         # Return defaults (no config file found)
