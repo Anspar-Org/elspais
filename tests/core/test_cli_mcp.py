@@ -245,6 +245,169 @@ class TestMcpInstallErrors:
         assert "'claude' not found" in captured.err
 
 
+class TestMcpInstallReplacesExisting:
+    """test_mcp_install_replaces_existing — verifies a name the client
+    already holds is re-registered rather than reported as a conflict.
+    """
+
+    @staticmethod
+    def _result(returncode: int, stderr: str = "") -> MagicMock:
+        return MagicMock(returncode=returncode, stdout="", stderr=stderr)
+
+    @patch("subprocess.run")
+    @patch("shutil.which")
+    # Verifies: REQ-d00214-A
+    def test_mcp_install_does_not_remove_when_add_succeeds(self, mock_which, mock_run):
+        """A registration that lands first time is the ordinary case, and
+        nothing is removed on the way -- removal happens only after the
+        client has said the name is taken.
+        """
+        mock_which.side_effect = lambda name: f"/usr/bin/{name}"
+        mock_run.return_value = self._result(0)
+
+        result = _mcp_install(global_scope=False)
+
+        assert result == 0
+        mock_run.assert_called_once()
+        cmd = mock_run.call_args[0][0]
+        assert "add" in cmd
+        assert "remove" not in cmd
+
+    @pytest.mark.parametrize(
+        "stderr_text",
+        [
+            "MCP server elspais already exists",
+            "MCP server elspais Already Exists",
+            "MCP SERVER ELSPAIS ALREADY EXISTS in local config",
+        ],
+    )
+    @patch("subprocess.run")
+    @patch("shutil.which")
+    # Verifies: REQ-d00214-A
+    def test_mcp_install_replaces_existing_registration(
+        self, mock_which, mock_run, stderr_text, capsys
+    ):
+        """Re-running install is how transport is changed, and the client
+        refuses a name it already holds. The taken name is removed and the
+        add retried, so the caller gets the registration it asked for
+        instead of a conflict it would resolve by hand. The client's
+        wording is not fixed, so the match reads the message case-blind.
+        """
+        mock_which.side_effect = lambda name: f"/usr/bin/{name}"
+        mock_run.side_effect = [
+            self._result(1, stderr_text),
+            self._result(0),
+            self._result(0),
+        ]
+
+        result = _mcp_install(global_scope=False)
+
+        assert result == 0
+        assert mock_run.call_count == 3
+        first_add = mock_run.call_args_list[0][0][0]
+        removal = mock_run.call_args_list[1][0][0]
+        retry_add = mock_run.call_args_list[2][0][0]
+        assert removal == ["/usr/bin/claude", "mcp", "remove", "elspais", "-s", "local"]
+        assert first_add[:4] == ["/usr/bin/claude", "mcp", "add", "elspais"]
+        assert retry_add == first_add
+        captured = capsys.readouterr()
+        assert "Replaced the existing elspais MCP registration." in captured.out
+
+    @patch("subprocess.run")
+    @patch("shutil.which")
+    # Verifies: REQ-d00214-A
+    def test_mcp_install_replacement_uses_the_requested_scope(self, mock_which, mock_run):
+        """The registration being replaced is the one in the scope being
+        installed into, so a user-scope install must remove the user-scope
+        entry -- removing the local one would leave the conflict in place.
+        """
+        mock_which.side_effect = lambda name: f"/usr/bin/{name}"
+        mock_run.side_effect = [
+            self._result(1, "already exists"),
+            self._result(0),
+            self._result(0),
+        ]
+
+        result = _mcp_install(global_scope=True)
+
+        assert result == 0
+        removal = mock_run.call_args_list[1][0][0]
+        assert removal == ["/usr/bin/claude", "mcp", "remove", "elspais", "-s", "user"]
+        for index in (0, 2):
+            add_cmd = mock_run.call_args_list[index][0][0]
+            assert add_cmd[add_cmd.index("--scope") + 1] == "user"
+
+    @patch("subprocess.run")
+    @patch("shutil.which")
+    # Verifies: REQ-d00214-G
+    def test_mcp_install_leaves_registration_alone_on_other_errors(
+        self, mock_which, mock_run, capsys
+    ):
+        """Removal is conditional on the name being taken, never
+        speculative: a failure for any other reason must leave whatever
+        was registered exactly as it was.
+        """
+        mock_which.side_effect = lambda name: f"/usr/bin/{name}"
+        mock_run.side_effect = [self._result(1, "connection refused")]
+
+        result = _mcp_install(global_scope=False)
+
+        assert result == 1
+        assert mock_run.call_count == 1
+        assert "remove" not in mock_run.call_args_list[0][0][0]
+        captured = capsys.readouterr()
+        assert "connection refused" in captured.err
+
+    @patch("subprocess.run")
+    @patch("shutil.which")
+    # Verifies: REQ-d00214-G
+    def test_mcp_install_reports_a_removal_that_failed(self, mock_which, mock_run, capsys):
+        """When the taken name cannot be removed there is nothing to retry
+        against, so the add is not reattempted and both failures are
+        reported -- the conflict and the reason it could not be cleared.
+        """
+        mock_which.side_effect = lambda name: f"/usr/bin/{name}"
+        mock_run.side_effect = [
+            self._result(1, "server elspais already exists"),
+            self._result(1, "no write access to the config"),
+        ]
+
+        result = _mcp_install(global_scope=False)
+
+        assert result == 1
+        assert mock_run.call_count == 2
+        captured = capsys.readouterr()
+        assert "server elspais already exists" in captured.err
+        assert "no write access to the config" in captured.err
+
+    @patch("subprocess.run")
+    @patch("shutil.which")
+    # Verifies: REQ-d00214-G
+    def test_mcp_install_says_nothing_is_registered_when_the_retry_fails(
+        self, mock_which, mock_run, capsys
+    ):
+        """The old registration is already gone by the time the retry
+        runs, so a failed retry leaves nothing registered at all. A caller
+        who read only "failed" would assume the old one survived and never
+        think to register again, so the state is stated outright.
+        """
+        mock_which.side_effect = lambda name: f"/usr/bin/{name}"
+        mock_run.side_effect = [
+            self._result(1, "already exists"),
+            self._result(0),
+            self._result(1, "transport not supported"),
+        ]
+
+        result = _mcp_install(global_scope=False)
+
+        assert result == 1
+        assert mock_run.call_count == 3
+        captured = capsys.readouterr()
+        assert "transport not supported" in captured.err
+        assert "nothing is registered" in captured.err
+        assert "Re-run" in captured.err
+
+
 class TestDesktopConfigPath:
     """test_desktop_config_path — verifies platform detection."""
 

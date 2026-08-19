@@ -630,6 +630,9 @@ def _mcp_install(global_scope: bool = False, transport: str = "http") -> int:
     shares one graph with the CLI and the viewer, and a daemon that is
     replaced is reconnected to rather than lost -- a stdio server is a
     process the client owns, which nothing restarts once it exits.
+
+    Running this again replaces whatever is registered, which is what
+    changing transport requires.
     """
     import shutil
     import subprocess
@@ -661,7 +664,49 @@ def _mcp_install(global_scope: bool = False, transport: str = "http") -> int:
     else:
         cmd.extend(["--", "elspais", "mcp", "serve"])
 
+    scope = "user" if global_scope else "local"
     result = subprocess.run(cmd, capture_output=True, text=True, env=_claude_env())
+
+    # Installing is how a registration is changed -- switching transport
+    # is the ordinary reason to run this twice -- and the client refuses
+    # to add a name it already holds. Replace it rather than report a
+    # conflict the caller would resolve by hand with the very command
+    # this one wraps.
+    #
+    # The existing registration is removed only after the client has said
+    # the name is taken, never speculatively, so a run that fails for any
+    # other reason leaves what was there in place.
+    if result.returncode != 0 and "already exists" in result.stderr.lower():
+        removal = subprocess.run(
+            [claude, "mcp", "remove", "elspais", "-s", scope],
+            capture_output=True,
+            text=True,
+            env=_claude_env(),
+        )
+        if removal.returncode != 0:
+            print(f"Error: {result.stderr.strip()}", file=sys.stderr)
+            print(
+                f"The existing registration could not be removed either: "
+                f"{removal.stderr.strip()}",
+                file=sys.stderr,
+            )
+            return 1
+        result = subprocess.run(cmd, capture_output=True, text=True, env=_claude_env())
+        if result.returncode != 0:
+            # The previous registration is gone and the new one did not
+            # land, which leaves nothing registered. Say so plainly:
+            # a caller who reads "failed" and assumes the old one
+            # survived will not think to re-register.
+            print(f"Error: {result.stderr.strip()}", file=sys.stderr)
+            print(
+                "The previous elspais registration was removed to make way for "
+                "this one, so nothing is registered now. Re-run this command "
+                "once the error above is resolved.",
+                file=sys.stderr,
+            )
+            return 1
+        print("Replaced the existing elspais MCP registration.")
+
     if result.returncode != 0:
         print(f"Error: {result.stderr.strip()}", file=sys.stderr)
         return 1

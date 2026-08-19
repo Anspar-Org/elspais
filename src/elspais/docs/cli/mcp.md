@@ -45,6 +45,9 @@ address, so parallel sessions in different worktrees do not collide, and
 the address is held for that tree even while nothing is serving it --
 restart the daemon, or stop and start it, and the same address answers.
 
+Running `elspais mcp install` again replaces whatever is registered, so
+switching between the two is one command either way.
+
 Use **stdio** (`elspais mcp install --transport stdio`) for a client that
 cannot speak http. A stdio server holds its own private graph: mutations
 made through it are not visible to the CLI or the viewer until they are
