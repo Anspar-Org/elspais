@@ -15,6 +15,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from typing import NamedTuple
 from urllib.error import HTTPError, URLError
 from urllib.request import urlopen
 
@@ -231,6 +232,7 @@ def get_cli_ttl(repo_root: Path | None = None) -> int:
         return _DEFAULT_TTL
 
 
+# Implements: REQ-o00076-D, REQ-o00076-H
 def write_daemon_json(
     repo_root: Path,
     pid: int,
@@ -263,6 +265,14 @@ def write_daemon_json(
     config_path = repo_root / ".elspais.toml"
     config_hash = compute_config_hash(config_path) if config_path.is_file() else ""
 
+    # Implements: REQ-o00076-I
+    # The recorded version moves only when somebody bumps it, so between
+    # bumps it cannot tell a client that the daemon is running different
+    # code. This does, and it is written once: what a process is running
+    # cannot change while it runs, so unlike the config hash it is never
+    # refreshed.
+    from elspais.mcp.executable import compute_executable_hash
+
     info: dict = {
         "pid": pid,
         "port": port,
@@ -270,9 +280,15 @@ def write_daemon_json(
         "started_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
         "version": __version__,
         "config_hash": config_hash,
+        "executable_hash": compute_executable_hash(),
         "type": server_type,
     }
-    # Implements: REQ-o00074-B, REQ-o00074-C
+    # Implements: REQ-o00074-B, REQ-o00074-C, REQ-o00076-H
+    # Recording the client is also what keeps the two origins apart: a
+    # process started on behalf of a client carries one, and one started
+    # at an operator's request carries none, so which brought it into
+    # existence stays answerable from the record for as long as it runs
+    # rather than being inferred afterwards.
     if client_pid is not None:
         info["client_pid"] = client_pid
         # A list of process ids cannot answer "who is this daemon watching"
@@ -666,8 +682,16 @@ def replace_stopping_daemon(repo_root: Path, info: dict, timeout: float = 20.0) 
     return True
 
 
+# Implements: REQ-o00076-C, REQ-o00076-D
 def get_daemon_info(repo_root: Path) -> dict | None:
     """Read daemon.json and verify the process is alive.
+
+    A client arranges nothing in advance: it reads the record kept at a
+    known place under the working tree it is operating in, so a session
+    that never started a daemon reaches the same one as the session that
+    did. The record stands for as long as a process is serving, and a
+    record naming a process that is gone is removed rather than
+    returned.
 
     Returns dict with pid/port/repo_root/started_at, or None if
     the daemon is not running or the state file is stale.
@@ -879,6 +903,87 @@ def stop_daemon(repo_root: Path, wait: bool = True, timeout: float = 20.0) -> St
     return StopOutcome.STOPPED
 
 
+# Implements: REQ-o00076-I
+class ServingDifference(NamedTuple):
+    """How a serving process differs from the client that wants to use it.
+
+    The one authority for that question, asked by every caller that acts
+    on the answer. Two callers deciding it separately would hand a client
+    a different daemon depending on which of them reached it first.
+
+    Version and program are both carried because neither implies the
+    other: a version moves only when somebody bumps it, and a program
+    moves whenever the tool is reinstalled, which between bumps is the
+    only one of the two that says anything.
+    """
+
+    version: str | None  # the daemon's, when it differs from ours
+    executable: bool
+    config: bool
+
+    def __bool__(self) -> bool:
+        return bool(self.version or self.executable or self.config)
+
+    def describe(self) -> str:
+        """The difference in words, for a client being handed this daemon."""
+        parts = []
+        if self.version:
+            from elspais import __version__
+
+            parts.append(f"it is elspais {self.version} and you are {__version__}")
+        if self.executable:
+            parts.append("it is running a different installation of elspais than you are")
+        if self.config:
+            parts.append("it was started with a configuration that has since changed")
+        if len(parts) > 1:
+            return ", and ".join([", ".join(parts[:-1]), parts[-1]])
+        return parts[0] if parts else ""
+
+
+# Implements: REQ-o00076-I
+def serving_difference(info: dict | None, repo_root: Path) -> ServingDifference:
+    """Compare the daemon a record describes against this client.
+
+    A field the record does not carry is not a difference: a daemon
+    written by an older elspais records no program identity, and reading
+    its absence as a mismatch would restart every such daemon on the
+    first command that met it.
+    """
+    if not info:
+        return ServingDifference(None, False, False)
+    from elspais import __version__
+    from elspais.mcp.executable import compute_executable_hash
+
+    daemon_version = info.get("version")
+    recorded_program = info.get("executable_hash")
+    return ServingDifference(
+        version=daemon_version if daemon_version and daemon_version != __version__ else None,
+        executable=bool(recorded_program) and recorded_program != compute_executable_hash(),
+        config=_config_hash_stale(info, repo_root),
+    )
+
+
+# Implements: REQ-o00076-J
+def notify_serving_difference(difference: ServingDifference, because: str) -> None:
+    """Tell a client it is about to be answered by something unlike itself.
+
+    Stated rather than refused: declining would make the daemon a
+    dependency, which REQ-o00075-G forbids, and standing a second one
+    beside it is what REQ-o00075-B forbids. Saying so is what is left,
+    and a client told which program answered it can judge what that is
+    worth.
+    """
+    described = difference.describe()
+    if not described:
+        return
+    print(
+        f"warning: the daemon serving this working tree is not what you would "
+        f"have run -- {described}. It {because}, so answers below come from it. "
+        f"Run `elspais daemon restart` once it is free.",
+        file=sys.stderr,
+    )
+
+
 def _config_hash_stale(info: dict, repo_root: Path) -> bool:
     """Check if the daemon's config hash is stale.
 
@@ -916,6 +1021,20 @@ def get_daemon_mutation_count(info: dict) -> int | None:
     return None
 
 
+def daemon_has_unsaved_work(info: dict) -> bool:
+    """True when the daemon described by ``info`` holds unsaved changes.
+
+    Reads the count through the one probe that asks for it, rather than
+    asking the same endpoint a second way.
+
+    A daemon that cannot be reached reads as holding nothing. That is not
+    a guess about its contents: this decides only whether to leave a
+    daemon alone, and a daemon nothing can reach is one that ``stop``
+    will find already gone.
+    """
+    return (get_daemon_mutation_count(info) or 0) > 0
+
+
 # Implements: REQ-o00074-E
 def attach_client(info: dict, pid: int | None) -> bool:
     """Tell a running daemon that this session is now one of its clients.
@@ -944,7 +1063,7 @@ def attach_client(info: dict, pid: int | None) -> bool:
         return False
 
 
-# Implements: REQ-o00074-E, REQ-o00074-N
+# Implements: REQ-o00074-E, REQ-o00074-N, REQ-o00076-B
 def ensure_client_registered(repo_root: Path, info: dict | None) -> bool:
     """Register this session as a client of a daemon it did not start.
 
@@ -1155,6 +1274,7 @@ def wait_for_daemon_exit(info: dict, timeout: float = 20.0) -> bool:
     return False
 
 
+# Implements: REQ-o00076-G
 def restart_daemon(
     repo_root: Path,
     discard_changes: bool = False,
@@ -1301,9 +1421,15 @@ def restart_daemon(
 def ensure_daemon(repo_root: Path, ttl_minutes: int | None = None) -> int:
     """Return port of a running daemon, starting one if needed.
 
+    A daemon is handed out only when it is what this caller would itself
+    have run -- same version, same installed program, same configuration.
+    One that differs is replaced, except where replacing it would cost
+    more than the difference: a daemon holding unsaved changes is left
+    alone and the caller is told what it is using, because those changes
+    exist nowhere else and answers from an older program do not.
+
     Reads ``cli_ttl`` from config if ttl_minutes is not provided.
     Raises RuntimeError if cli_ttl=0 (daemon disabled) and no daemon running.
-    Restarts the daemon if its version or config hash doesn't match.
     """
     info = get_daemon_info(repo_root)
     # Implements: REQ-o00075-B, REQ-o00076-E
@@ -1321,30 +1447,28 @@ def ensure_daemon(repo_root: Path, ttl_minutes: int | None = None) -> int:
             )
         info = None
     if info:
-        # Version check: restart if daemon is from a different elspais version
-        from elspais import __version__
-
-        daemon_version = info.get("version")
-        if daemon_version and daemon_version != __version__:
-            if not stop_daemon(repo_root).is_gone:
-                # It is still serving. An out-of-date daemon answering is
-                # better than two daemons answering differently. This
-                # session is about to use it in place of the fresh one it
-                # could not start, so it registers as a client the same
-                # way the reuse path below does.
+        # Implements: REQ-o00076-I, REQ-o00076-J
+        difference = serving_difference(info, repo_root)
+        if difference:
+            # A daemon holding work nothing else can see is not restarted
+            # to fix a difference in what it is running. Restarting forces
+            # an unasked save of somebody else's in-progress session, and
+            # loses the work outright if that save fails or the process
+            # has to be killed. Answers from an older program are
+            # recoverable; that work is not.
+            if daemon_has_unsaved_work(info):
+                notify_serving_difference(difference, "is holding unsaved changes")
                 ensure_client_registered(repo_root, info)
                 return info["port"]
-            # Fall through to start a fresh daemon
-        elif _config_hash_stale(info, repo_root):
             if not stop_daemon(repo_root).is_gone:
-                # It is still serving. An out-of-date daemon answering is
-                # better than two daemons answering differently. This
-                # session is about to use it in place of the fresh one it
-                # could not start, so it registers as a client the same
-                # way the reuse path below does.
+                # It is still serving. One daemon answering out of date is
+                # better than two answering differently, so this session
+                # uses it in place of the fresh one it could not start --
+                # and is told what it is using.
+                notify_serving_difference(difference, "would not stop")
                 ensure_client_registered(repo_root, info)
                 return info["port"]
-            # Fall through to start a fresh daemon
+            # Gone. Fall through and start one from the current program.
         else:
             # Implements: REQ-o00074-E
             # Reusing a daemon somebody else started makes this session
@@ -1361,6 +1485,7 @@ def ensure_daemon(repo_root: Path, ttl_minutes: int | None = None) -> int:
     if ttl_minutes == 0:
         raise RuntimeError("Daemon auto-launch disabled (cli_ttl=0)")
 
+    # Implements: REQ-o00076-F
     # Implicit spawn on behalf of a CLI/session: tie the daemon's
     # lifetime to that session so it cannot outlive it. Explicit starts
     # (elspais daemon, manual mcp serve, viewer) do not pass a

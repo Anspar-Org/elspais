@@ -30,8 +30,14 @@ from collections.abc import Callable
 from typing import Any
 
 
+# Implements: REQ-o00076-A
 class SharedServerState(dict):
     """Dict-shaped holder for graph/config plus the write lock.
+
+    Holding one graph behind one lock is what lets a process serve
+    several clients at the same time rather than one after another: two
+    writers act on the same graph, and neither acts on one the other
+    cannot see.
 
     There is exactly one of these per server process; MCP tool closures
     and AppState both hold a reference to the same instance, so a swap

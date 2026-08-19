@@ -12,8 +12,14 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 
+# Implements: REQ-o00076-C
 def _get_daemon_port() -> int | None:
-    """Get port of a running daemon, if any."""
+    """Get port of a running daemon, if any.
+
+    Located from the working tree the command is running in, with
+    nothing agreed in advance: no port is configured, passed or
+    remembered between commands.
+    """
     try:
         from elspais.config import find_git_root
         from elspais.mcp.daemon import get_daemon_info

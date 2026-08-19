@@ -121,15 +121,18 @@ def _try_daemon(
             port = None
 
     if port:
-        # Implements: REQ-p00004-J, REQ-p00015-G
-        # Staleness checks: version mismatch or config edited
-        # since the daemon captured its config hash. Warn-and-serve if the
-        # daemon holds unsaved work; restart if clean.
-        from elspais import __version__
+        # Implements: REQ-p00004-J, REQ-p00015-G, REQ-o00076-I, REQ-o00076-J
+        # What differs, and whether a difference may be acted on, are both
+        # asked through the one authority in mcp/daemon.py, which
+        # ensure_daemon asks too. Two callers deciding this separately
+        # would hand a client a different daemon depending on which of
+        # them reached it first.
         from elspais.mcp.daemon import (
-            _config_hash_stale,
+            daemon_has_unsaved_work,
             ensure_client_registered,
             get_daemon_info,
+            notify_serving_difference,
+            serving_difference,
         )
 
         info = get_daemon_info(repo_root)
@@ -138,28 +141,16 @@ def _try_daemon(
         # every command, so it is where such a session has to announce
         # itself; otherwise the daemon watches only whoever started it.
         ensure_client_registered(repo_root, info)
-        daemon_version = info.get("version") if info else None
-        version_mismatch = bool(daemon_version and daemon_version != __version__)
-        config_stale = info is not None and _config_hash_stale(info, repo_root)
+        difference = serving_difference(info, repo_root)
 
-        if version_mismatch or config_stale:
-            # Check if daemon has unsaved mutations before skipping
-            dirty = _try_port(port, "/api/dirty", {}, "GET")
-            has_unsaved = dirty is not None and dirty.get("dirty", False)
-            if has_unsaved:
-                # Use stale daemon — can't restart without losing work
-                import sys
-
-                if version_mismatch:
-                    reason = f"daemon version {daemon_version} != CLI {__version__}"
-                else:
-                    reason = "daemon was started with an older configuration"
-                print(
-                    f"Warning: {reason} (unsaved changes prevent restart)",
-                    file=sys.stderr,
-                )
+        if difference:
+            if info is not None and daemon_has_unsaved_work(info):
+                # Restarting would force an unasked save of somebody's
+                # in-progress session, and lose it outright if that save
+                # failed. Answers from an older program are recoverable;
+                # that work is not.
+                notify_serving_difference(difference, "is holding unsaved changes")
             else:
-                # Safe to restart — no unsaved work
                 from elspais.mcp.daemon import stop_daemon
 
                 stop_daemon(repo_root)
@@ -169,12 +160,16 @@ def _try_daemon(
             result = _try_port(port, endpoint, params, "GET")
             if result is not None:
                 source = _build_daemon_source(port)
-                if version_mismatch:
+                if difference.version:
+                    from elspais import __version__
+
                     source["version_mismatch"] = {
-                        "daemon": daemon_version,
+                        "daemon": difference.version,
                         "cli": __version__,
                     }
-                if config_stale:
+                if difference.executable:
+                    source["executable_mismatch"] = True
+                if difference.config:
                     source["config_stale"] = True
                 return result, source
 
