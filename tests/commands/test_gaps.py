@@ -14,6 +14,7 @@ from elspais.commands.gaps import (
     render_gap_markdown,
     render_gap_text,
 )
+from elspais.graph.aggregation import work_verdict
 from elspais.graph.builder import TraceGraph
 from elspais.graph.federated import FederatedGraph
 from elspais.graph.GraphNode import GraphNode, NodeKind  # noqa: N817
@@ -75,7 +76,10 @@ def test_conducted_coverage_leaves_an_uncited_assertion_a_gap() -> None:
         if child.kind == NodeKind.ASSERTION
     ]
 
-    uncov = _uncovered_assertions(metrics, assertion_nodes, "implemented")
+    verdict = work_verdict(
+        metrics, "implemented", [a.get_field("label", "") for a in assertion_nodes]
+    )
+    uncov = _uncovered_assertions(verdict, assertion_nodes)
     by_id = {aid: frac for aid, _label, frac in uncov}
 
     # The conducted credit is real and reported elsewhere -- the work list

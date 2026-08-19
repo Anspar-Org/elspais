@@ -17,6 +17,7 @@ estate is headlines ``"total"`` (REQ-d00258-A).
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
@@ -240,6 +241,84 @@ def absolute_tier(dim: CoverageDimension, *, measure: str) -> str:
     if covered > eps:
         return "partial"
     return "missing"
+
+
+# Implements: REQ-d00258-C, REQ-d00258-M
+@dataclass(frozen=True)
+class WorkVerdict:
+    """What a dimension leaves to do at one requirement.
+
+    ``attached`` answers a different question from ``uncovered`` and neither
+    stands in for the other. ``attached`` is whether ANY evidence for this
+    dimension sits at this requirement -- read on the immediate measures, so
+    a citation that named only the requirement counts and coverage conducted
+    from a refining requirement does not. ``uncovered`` is which assertions
+    no citation named, read on the work-list measure (REQ-d00258-M), each
+    with the fraction it did reach.
+
+    A requirement with nothing attached and one with a blanket citation are
+    different situations calling for different words, which is why a surface
+    that reads only the first reports nothing about the second.
+
+    The fraction is carried because the surfaces consume this differently and
+    both readings are taken from the one computation: a worklist distinguishes
+    an *Assertion* with no evidence at all from one partly covered, since
+    those are different work, while a gate reduces the same verdict to a tier
+    and never looks at the fraction. Recomputing either from the other is how
+    the two come to disagree.
+    """
+
+    attached: bool
+    uncovered: dict[str, float]
+
+    @property
+    def needs_work(self) -> bool:
+        """Whether any *Assertion* still wants evidence naming it."""
+        return bool(self.uncovered)
+
+
+# Implements: REQ-d00258-C, REQ-d00258-M
+def work_verdict(
+    rollup: RollupMetrics | None,
+    dimension: str,
+    labels: Iterable[str],
+    *,
+    restrict_to_dimension: str | None = None,
+) -> WorkVerdict:
+    """The one verdict every work-listing surface reaches.
+
+    ``gaps``, the health coverage checks and the MCP work-list tools all ask
+    the same question of the same data, so they ask it HERE. Deriving it at
+    each call site is how two surfaces bound by one assertion came to
+    disagree -- one listing a requirement's uncovered assertions while the
+    other passed it green.
+
+    ``labels`` are the requirement's *Assertion* labels; an *Assertion* with
+    no entry in the fraction map is uncovered, not absent, so the caller has
+    to say which exist. ``restrict_to_dimension`` applies the relative
+    denominator of REQ-d00258-I, read on the same measure as the numerator.
+    """
+    if rollup is None:
+        return WorkVerdict(attached=False, uncovered=dict.fromkeys(labels, 0.0))
+
+    dim = getattr(rollup, dimension, None)
+    if dim is None:
+        return WorkVerdict(attached=False, uncovered=dict.fromkeys(labels, 0.0))
+
+    candidates = set(labels)
+    if restrict_to_dimension is not None:
+        prior = getattr(rollup, restrict_to_dimension, None)
+        candidates &= covered_labels(prior, WORK_LIST_MEASURE) if prior is not None else set()
+
+    fractions = measure_by_label(dim, WORK_LIST_MEASURE)
+    return WorkVerdict(
+        attached=bool(covered_labels(dim, "immediate")),
+        uncovered={
+            lbl: fractions.get(lbl, 0.0)
+            for lbl in candidates
+            if not is_covered(fractions.get(lbl, 0.0))
+        },
+    )
 
 
 def denominator_labels(rollup: RollupMetrics, dimension: str, *, measure: str) -> set[str] | None:

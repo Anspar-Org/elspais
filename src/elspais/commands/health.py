@@ -2957,7 +2957,7 @@ def check_external_tests(
             findings.append(
                 HealthFinding(
                     message=(
-                        f"{test.get_label() or test.id} ({verdict_word}) " "reaches no requirement"
+                        f"{test.get_label() or test.id} ({verdict_word}) reaches no requirement"
                     ),
                     node_id=test.id,
                     file_path=file_path,
@@ -3533,7 +3533,8 @@ def check_uat_coverage(
     # WHICH reqs are uncovered (no re-implementation of the sum walk).
     from elspais.config import status_expects_implementation
     from elspais.graph import NodeKind
-    from elspais.graph.aggregation import covered_labels
+    from elspais.graph.aggregation import work_verdict
+    from elspais.graph.relations import EdgeKind
 
     # REQ-d00258-C: the uncovered-findings walk gates on the SAME coverage
     # inclusion resolver as ``aggregate_dimension`` above, so the sums and the
@@ -3544,11 +3545,18 @@ def check_uat_coverage(
         if not status_expects_implementation(cfg, node.status) or not level_filter(node.level):
             continue
         rollup = node.get_metric("rollup_metrics")
-        # Evidence ATTACHED here (REQ-d00258-M): a journey validating the
-        # requirement counts however it cited it, while UAT coverage conducted
-        # from a refining requirement does not rescue a requirement no journey
-        # visits.
-        if rollup is None or not covered_labels(rollup.uat_coverage, "immediate"):
+        # Implements: REQ-d00258-C, REQ-d00258-M
+        # The verdict is ``work_verdict``, the same one ``gaps unvalidated``
+        # reaches, so the two cannot disagree about a requirement: a blanket
+        # journey used to satisfy this check while gaps listed the assertions
+        # it named none of.
+        labels = [
+            child.get_field("label", "")
+            for child in node.iter_children(edge_kinds={EdgeKind.STRUCTURES})
+            if child.kind == NodeKind.ASSERTION
+        ]
+        verdict = work_verdict(rollup, "uat_coverage", labels)
+        if not verdict.attached:
             uncovered.append(
                 HealthFinding(
                     message=(
@@ -3556,6 +3564,17 @@ def check_uat_coverage(
                         f"its assertions -- UAT coverage conducted from a refining "
                         f"requirement is not validation of this one "
                         f"(level expects_validation)"
+                    ),
+                    node_id=node.id,
+                )
+            )
+        elif verdict.needs_work:
+            named = ", ".join(sorted(verdict.uncovered))
+            uncovered.append(
+                HealthFinding(
+                    message=(
+                        f"{node.id}: a journey names this requirement but not "
+                        f"assertion(s) {named} (level expects_validation)"
                     ),
                     node_id=node.id,
                 )
