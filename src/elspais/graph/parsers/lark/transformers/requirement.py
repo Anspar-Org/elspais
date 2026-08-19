@@ -19,6 +19,7 @@ from lark import Token, Tree
 
 # Implements: REQ-d00246-B
 from elspais.graph.parsers import ParsedContent
+from elspais.graph.parsers.continuation import fold_continuation
 from elspais.graph.parsers.patterns import (
     ACTOR_PATTERN as _ACTOR_RE,
 )
@@ -231,12 +232,20 @@ class RequirementTransformer:
         # Implements: REQ-p00014-E
         is_template = False
 
+        # Implements: REQ-d00269-H
+        meta_continuations, folded_lines = self._fold_metadata_continuations(node.children[1:])
+
         for child in node.children[1:]:
             if not isinstance(child, Tree):
                 continue
+            # A line folded into a reference list above it is that list's
+            # content, not preamble prose; emitting it twice would render it
+            # twice.
+            if id(child) in folded_lines:
+                continue
 
             if child.data == "metadata_line":
-                meta = self._extract_metadata(child)
+                meta = self._extract_metadata(child, meta_continuations)
                 if meta.get("level"):
                     resolved = self.resolver.resolve_level(meta["level"])
                     level = resolved if resolved is not None else meta["level"]
@@ -379,7 +388,9 @@ class RequirementTransformer:
     # Metadata extraction from pre-classified tokens
     # ------------------------------------------------------------------
 
-    def _extract_metadata(self, node: Tree) -> dict[str, Any]:
+    def _extract_metadata(
+        self, node: Tree, continuations: dict[int, str] | None = None
+    ) -> dict[str, Any]:
         """Extract metadata fields from a metadata_line tree node.
 
         Field terminals match flexible patterns with optional markdown
@@ -390,7 +401,11 @@ class RequirementTransformer:
         for child in node.children:
             if isinstance(child, Token):
                 text = str(child).strip()
-                val = self._extract_field_value(text)
+                # Implements: REQ-d00269-H
+                # A list continued onto the lines below reads as the joined
+                # text, so the reader divides one list rather than seeing a
+                # separator with nothing after it.
+                val = (continuations or {}).get(id(child)) or self._extract_field_value(text)
                 if child.type == "LEVEL_FIELD":
                     result["level"] = val
                 elif child.type == "STATUS_FIELD":
@@ -1101,6 +1116,61 @@ class RequirementTransformer:
             if hasattr(token, "line") and token.line < first:  # type: ignore[attr-defined]
                 first = token.line  # type: ignore[attr-defined]
         return first if first < 999999999 else 0
+
+    _REF_FIELD_TYPES = (
+        "IMPLEMENTS_FIELD",
+        "REFINES_FIELD",
+        "SATISFIES_FIELD",
+        "INTEGRATES_FIELD",
+    )
+
+    # Implements: REQ-d00269-H
+    def _fold_metadata_continuations(self, children: list[Any]) -> tuple[dict[int, str], set[int]]:
+        """The text each metadata reference list gains from the lines below
+        it, and the ``body_line`` nodes that text was taken from.
+
+        Continuation itself is ``fold_continuation`` -- the one reading of
+        REQ-d00269-H, shared with comment blocks. What this adds is what a
+        metadata block's lines are: which field can continue, and how to read
+        a following line's content.
+
+        Only the LAST field of a metadata line can continue one. A field with
+        another after it on the line is closed by the field separator, so the
+        list's content ends there and no later line holds more of it; the
+        separator introduced nothing and is reported as such.
+        """
+        extra: dict[int, str] = {}
+        consumed: set[int] = set()
+
+        def _line_of(node: Tree) -> int:
+            return self._extract_text_from_body_line(node)[0]
+
+        def _content_of(node: Tree) -> str | None:
+            if not (isinstance(node, Tree) and node.data == "body_line"):
+                return None
+            return self._extract_text_from_body_line(node)[1]
+
+        for idx, child in enumerate(children):
+            if not (isinstance(child, Tree) and child.data == "metadata_line"):
+                continue
+            tokens = [c for c in child.children if isinstance(c, Token)]
+            if not tokens or tokens[-1].type not in self._REF_FIELD_TYPES:
+                continue
+            token = tokens[-1]
+            value = self._extract_field_value(str(token).strip())
+
+            joined, folded, _last = fold_continuation(
+                value,
+                self._last_line(child),
+                [c for c in children[idx + 1 :] if isinstance(c, Tree)],
+                line_of=_line_of,
+                content_of=_content_of,
+            )
+            if folded:
+                extra[id(token)] = joined
+                consumed.update(id(node) for node in folded)
+
+        return extra, consumed
 
     def _last_line(self, node: Tree) -> int:
         """Get the last line number from a tree node."""

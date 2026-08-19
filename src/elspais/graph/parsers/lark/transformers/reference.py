@@ -36,6 +36,7 @@ from typing import TYPE_CHECKING, Any
 from lark import Tree
 
 from elspais.graph.parsers import ParsedContent
+from elspais.graph.parsers.continuation import fold_continuation
 from elspais.graph.parsers.patterns import (
     JOURNEY_REF_PATTERN as _JOURNEY_REF_RE,
 )
@@ -706,9 +707,11 @@ class ReferenceTransformer:
         classified nodes rather than by teaching the grammar a second way to
         divide a reference list.
 
-        Only a line of the *same comment block* may continue one, and two
-        exclusions keep continuation from overriding something already
-        decided (REQ-d00269-H):
+        Continuation itself is ``fold_continuation`` -- the one reading of
+        REQ-d00269-H, shared with requirement metadata. What this adds is
+        what a comment block's lines are, and that a quoted line holds no
+        reference content. H's two exclusions are applied by the shared
+        routine, and one of them also holds structurally here:
 
         - A line whose own first content is a keyword lexes as
           ``single_ref``/``unresolved_ref``/``block_header``, never as a
@@ -727,7 +730,6 @@ class ReferenceTransformer:
         quoted line means.
         """
         openers = ("single_ref", "unresolved_ref")
-        n = len(children)
         for idx, child in enumerate(children):
             if not (isinstance(child, Tree) and child.data in openers):
                 continue
@@ -737,33 +739,33 @@ class ReferenceTransformer:
             if not opener_text.rstrip().endswith(REF_LIST_SEPARATOR):
                 continue
 
-            extraction = opener_text.rstrip()
-            raw_lines = [opener_text]
-            last_line = self._token_line(child)
-            j = idx + 1
-            while j < n and extraction.endswith(REF_LIST_SEPARATOR):
-                nxt = children[j]
-                if not (isinstance(nxt, Tree) and nxt.data in ("block_ref", "other_line")):
-                    break
-                if self._token_line(nxt) != last_line + 1:
-                    break
-                if self._token_line(nxt) in self.quoted_lines:
-                    break
-                candidate_text = self._token_text(nxt)
-                body = self._comment_body_or_none(candidate_text)
-                if body is None:
-                    break
-                extraction = f"{extraction} {body}"
-                raw_lines.append(candidate_text)
-                self._consumed.add(id(nxt))
-                last_line = self._token_line(nxt)
-                j += 1
+            def _content_of(node: Any) -> str | None:
+                if not (isinstance(node, Tree) and node.data in ("block_ref", "other_line")):
+                    return None
+                # A quoted line is displayed text, not a declaration
+                # (REQ-d00269-E), so it holds no reference content to continue
+                # a list with.
+                if self._token_line(node) in self.quoted_lines:
+                    return None
+                return self._comment_body_or_none(self._token_text(node))
 
-            if len(raw_lines) > 1:
+            extraction, folded, last_line = fold_continuation(
+                opener_text,
+                self._token_line(child),
+                [c for c in children[idx + 1 :] if isinstance(c, Tree)],
+                line_of=self._token_line,
+                content_of=_content_of,
+            )
+
+            if folded:
+                for node in folded:
+                    self._consumed.add(id(node))
                 key = id(child)
                 self._joined_text[key] = extraction
                 self._joined_end_line[key] = last_line
-                self._joined_raw[key] = "\n".join(raw_lines)
+                self._joined_raw[key] = "\n".join(
+                    [opener_text] + [self._token_text(node) for node in folded]
+                )
 
     def _comment_body_or_none(self, text: str) -> str | None:
         """The content after *text*'s comment marker, or None.

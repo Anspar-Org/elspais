@@ -15,11 +15,19 @@ a reference by the rule under test.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from elspais.config.schema import ElspaisConfig
+from elspais.graph.factory import build_graph
+from elspais.graph.GraphNode import make_file_id
 from elspais.graph.parsers.lark import FileDispatcher
+from elspais.graph.reference_faults import FaultCode
+from elspais.graph.relations import EdgeKind
+from elspais.graph.render import render_file
 from elspais.utilities.patterns import IdPatternConfig, IdResolver
+from tests.core.graph_test_helpers import grammar_for
 
 
 def _validated(config: dict) -> dict:
@@ -405,3 +413,379 @@ class TestATargetHoldingMoreThanReferencesIsUnresolved:
         source = f"# Implements: {target}\ndef impl():\n    pass\n"
 
         assert _implements(dispatcher, source) == [target]
+
+
+def _spec_requirement(dispatcher: FileDispatcher, source: str) -> dict:
+    """The ``parsed_data`` of the one *Requirement* a spec source holds."""
+    requirements = [
+        parsed
+        for parsed in dispatcher.dispatch_spec(source, "spec/demo.md")
+        if parsed.content_type == "requirement"
+    ]
+    assert len(requirements) == 1, f"fixture must hold exactly one requirement; got {requirements}"
+    return requirements[0].parsed_data
+
+
+def _spec_source(metadata: str, *, body: str = "Body text here.") -> str:
+    """A one-requirement spec file whose metadata block is ``metadata``."""
+    return f"# REQ-d00002: Demo\n\n{metadata}\n\n{body}\n"
+
+
+def _trailing_separator_verdicts(parsed: dict) -> list:
+    """Every verdict the parse recorded naming the trailing-separator fault."""
+    return [
+        key
+        for key, (_fault_class, codes) in parsed.get("reference_verdicts", {}).items()
+        if FaultCode.TRAILING_SEPARATOR in codes
+    ]
+
+
+class TestAMetadataListContinuesOntoTheNextLine:
+    """Validates REQ-d00269-H over a *Requirement*'s metadata block.
+
+    H names two places a list may continue: "the next line of the same
+    comment block, or the next line of the same metadata block". Only the
+    first was built, so a metadata list ending with the separator dropped
+    everything below it -- and reported the separator as one that introduced
+    nothing while a continuation line sat directly beneath it, sending its
+    author to delete the comma and leave the dropped references dead.
+
+    Continuation is a line-joining concern, so the strongest statement of it
+    is equivalence: a folded list binds exactly what the same list written on
+    one line binds.
+    """
+
+    _KEYWORDS = [
+        pytest.param("Implements", "implements", id="implements"),
+        pytest.param("Refines", "refines", id="refines"),
+    ]
+
+    # Verifies: REQ-d00269-H
+    @pytest.mark.parametrize(("keyword", "field"), _KEYWORDS)
+    def test_REQ_d00269_H_a_folded_list_binds_what_the_one_line_form_binds(
+        self, dispatcher: FileDispatcher, keyword: str, field: str
+    ) -> None:
+        folded = _spec_requirement(
+            dispatcher,
+            _spec_source(f"**Level**: dev\n**{keyword}**: REQ-d00001-A,\nREQ-d00001-B"),
+        )
+        one_line = _spec_requirement(
+            dispatcher,
+            _spec_source(f"**Level**: dev\n**{keyword}**: REQ-d00001-A, REQ-d00001-B"),
+        )
+
+        assert folded[field] == ["REQ-d00001-A", "REQ-d00001-B"]
+        assert folded[field] == one_line[field]
+
+    # Verifies: REQ-d00269-H
+    def test_REQ_d00269_H_a_folded_list_reports_no_trailing_separator(
+        self, dispatcher: FileDispatcher
+    ) -> None:
+        """H's third sentence conditions the report on having no line to
+        continue onto. Reporting it anyway is the misleading half of the
+        defect: the author is told to delete the separator, which is the one
+        edit that turns a recoverable list into a silently truncated one.
+        """
+        parsed = _spec_requirement(
+            dispatcher,
+            _spec_source("**Level**: dev\n**Implements**: REQ-d00001-A,\nREQ-d00001-B"),
+        )
+
+        assert _trailing_separator_verdicts(parsed) == []
+
+    # Verifies: REQ-d00269-H
+    def test_REQ_d00269_H_a_chain_of_three_lines_binds_every_reference(
+        self, dispatcher: FileDispatcher
+    ) -> None:
+        parsed = _spec_requirement(
+            dispatcher,
+            _spec_source(
+                "**Level**: dev\n**Implements**: REQ-d00001-A,\nREQ-d00001-B,\nREQ-d00001-C"
+            ),
+        )
+
+        assert parsed["implements"] == ["REQ-d00001-A", "REQ-d00001-B", "REQ-d00001-C"]
+
+    # Verifies: REQ-d00269-H
+    def test_REQ_d00269_H_a_list_ending_the_metadata_block_still_folds(
+        self, dispatcher: FileDispatcher
+    ) -> None:
+        """The ordinary spelling in this estate puts the whole metadata block
+        on one pipe-separated line, so the continued list is the last field
+        of that line rather than a line of its own.
+        """
+        parsed = _spec_requirement(
+            dispatcher,
+            _spec_source(
+                "**Level**: dev | **Status**: Active | **Implements**: REQ-d00001-A,\nREQ-d00001-B"
+            ),
+        )
+
+        assert parsed["implements"] == ["REQ-d00001-A", "REQ-d00001-B"]
+        assert parsed["status"] == "Active"
+
+    # Verifies: REQ-d00269-H
+    def test_REQ_d00269_H_a_folded_line_is_not_also_preamble_text(
+        self, dispatcher: FileDispatcher
+    ) -> None:
+        """A line read as the list's content is not also prose: emitting it
+        both ways would render the references a second time as body text.
+        """
+        parsed = _spec_requirement(
+            dispatcher,
+            _spec_source("**Level**: dev\n**Implements**: REQ-d00001-A,\nREQ-d00001-B"),
+        )
+
+        preamble = [s["content"] for s in parsed["sections"] if s["heading"] == "preamble"]
+        assert preamble == ["Body text here."]
+
+
+class TestALineThatMayNotContinueAMetadataList:
+    """Validates REQ-d00269-H's two exclusions over a metadata block.
+
+    Neither a line holding no content nor a line whose own first content is a
+    *Traceability* keyword may continue a list. In both cases the list ends
+    where it was written, binds what it holds, and -- H's third sentence --
+    the separator that introduced nothing is reported.
+    """
+
+    # Verifies: REQ-d00269-H
+    def test_REQ_d00269_H_a_blank_line_does_not_continue_a_list(
+        self, dispatcher: FileDispatcher
+    ) -> None:
+        parsed = _spec_requirement(
+            dispatcher,
+            _spec_source(
+                "**Level**: dev\n**Implements**: REQ-d00001-A,",
+                body="REQ-d00001-B\n\nBody text here.",
+            ),
+        )
+
+        assert parsed["implements"] == ["REQ-d00001-A"]
+        assert _trailing_separator_verdicts(parsed), "the separator must still be reported"
+
+    # Verifies: REQ-d00269-H
+    def test_REQ_d00269_H_a_line_opening_with_a_keyword_does_not_continue_a_list(
+        self, dispatcher: FileDispatcher
+    ) -> None:
+        """The second declaration is a declaration, not an item holding a
+        space: it binds its own references, and the list above it ends.
+        """
+        parsed = _spec_requirement(
+            dispatcher,
+            _spec_source(
+                "**Level**: dev\n**Implements**: REQ-d00001-A,\n**Refines**: REQ-d00001-B"
+            ),
+        )
+
+        assert parsed["implements"] == ["REQ-d00001-A"]
+        assert parsed["refines"] == ["REQ-d00001-B"]
+        assert _trailing_separator_verdicts(parsed), "the separator must still be reported"
+
+    # Verifies: REQ-d00269-H, REQ-d00269-E
+    @pytest.mark.parametrize(
+        "continuation",
+        [
+            pytest.param("**Verifies**: REQ-d00001-B", id="emphasised"),
+            pytest.param("Verifies: REQ-d00001-B", id="plain"),
+            pytest.param("verifies: REQ-d00001-B", id="lowercase"),
+        ],
+    )
+    def test_REQ_d00269_H_a_keyword_a_metadata_block_does_not_hold_still_excludes(
+        self, dispatcher: FileDispatcher, continuation: str
+    ) -> None:
+        """``Verifies`` is not a *Requirement* metadata field, so this line is
+        read as prose rather than as another field -- the path where H's
+        keyword exclusion is actually decided rather than settled by the
+        grammar's shape. What a keyword is does not depend on its case
+        (REQ-d00269-E), so the lowercase spelling excludes the line too.
+        """
+        parsed = _spec_requirement(
+            dispatcher,
+            _spec_source(f"**Level**: dev\n**Implements**: REQ-d00001-A,\n{continuation}"),
+        )
+
+        assert parsed["implements"] == ["REQ-d00001-A"]
+        assert _trailing_separator_verdicts(parsed), "the separator must still be reported"
+        preamble = [s["content"] for s in parsed["sections"] if s["heading"] == "preamble"]
+        assert preamble == [f"{continuation}\n\nBody text here."]
+
+
+_ROUNDTRIP_CONFIG = """\
+[project]
+name = "metadata-continuation"
+namespace = "REQ"
+
+[scanning.spec]
+directories = ["spec"]
+"""
+
+# The consumer's ``Implements`` list is folded across two physical lines.
+# Its targets are authored in the same file, so the rendered list is derived
+# from live edges rather than from a resurrected broken-reference field.
+_ROUNDTRIP_SPEC = """\
+# Continuation Round-Trip Fixture
+
+## REQ-p00001: First Anchor
+
+**Level**: PRD | **Status**: Active | **Implements**: -
+
+The first anchor SHALL anchor the hierarchy.
+
+### Assertions
+
+A. The first anchor SHALL expose capability alpha.
+
+*End* *First Anchor* | **Hash**: 00000000
+
+---
+
+## REQ-p00002: Second Anchor
+
+**Level**: PRD | **Status**: Active | **Implements**: -
+
+The second anchor SHALL anchor the hierarchy.
+
+### Assertions
+
+A. The second anchor SHALL expose capability beta.
+
+*End* *Second Anchor* | **Hash**: 00000000
+
+---
+
+## REQ-o00001: Folded Implementer
+
+**Level**: OPS | **Status**: Active | **Implements**: REQ-p00001,
+REQ-p00002
+
+The implementer SHALL cite both anchors across two lines.
+
+### Assertions
+
+A. The implementer SHALL do its work.
+
+*End* *Folded Implementer* | **Hash**: 00000000
+
+---
+"""
+
+
+# The same fixture citing ASSERTIONS rather than whole requirements. Rendering
+# a labelled citation has to compose an identifier, which needs the configured
+# assertion separator -- so this is the shape that exercises the round-trip's
+# harder half rather than assuming it behaves like the unlabelled one.
+_ROUNDTRIP_SPEC_LABELLED = _ROUNDTRIP_SPEC.replace(
+    "**Implements**: REQ-p00001,\nREQ-p00002",
+    "**Implements**: REQ-p00001-A,\nREQ-p00002-A",
+)
+
+# A citation naming an *Assertion* does NOT produce an edge to the assertion
+# node: it produces an edge to the owning requirement carrying the labels in
+# ``assertion_targets``. The pair is asserted rather than a composed
+# identifier, because spelling one needs the configured separators and a test
+# has no business composing an identifier by hand.
+_ROUNDTRIP_TARGETS = {
+    "whole-requirement": (
+        {("REQ-p00001", ()), ("REQ-p00002", ())},
+        _ROUNDTRIP_SPEC,
+    ),
+    "assertion-labelled": (
+        {("REQ-p00001", ("A",)), ("REQ-p00002", ("A",))},
+        _ROUNDTRIP_SPEC_LABELLED,
+    ),
+}
+
+
+def _implements_citations(graph, node_id: str) -> set[tuple[str, tuple[str, ...]]]:
+    """Each IMPLEMENTS citation the named *Requirement* declared, as the
+    requirement it named paired with the assertion labels it named on it."""
+    node = graph.find_by_id(node_id)
+    assert node is not None, f"fixture node {node_id} is missing"
+    return {
+        (edge.source.id, tuple(edge.assertion_targets))
+        for edge in node.iter_incoming_edges()
+        if edge.kind is EdgeKind.IMPLEMENTS
+    }
+
+
+def _build_continuation_graph(root: Path, spec_text: str = _ROUNDTRIP_SPEC):
+    (root / ".elspais.toml").write_text(_ROUNDTRIP_CONFIG, encoding="utf-8")
+    spec_dir = root / "spec"
+    spec_dir.mkdir(exist_ok=True)
+    (spec_dir / "reqs.md").write_text(spec_text, encoding="utf-8")
+    return build_graph(
+        config_path=root / ".elspais.toml",
+        repo_root=root,
+        scan_code=False,
+        scan_tests=False,
+    )
+
+
+def _implements_targets(graph, node_id: str) -> set[str]:
+    """Every *Assertion* the named *Requirement*'s IMPLEMENTS edges reach.
+
+    Storage inverts the declaration direction, so the cited node is the
+    edge's source: the citing requirement's INCOMING IMPLEMENTS edges are
+    the ones its own ``Implements`` list declared.
+    """
+    node = graph.find_by_id(node_id)
+    assert node is not None, f"fixture node {node_id} is missing"
+    return {
+        edge.source.id for edge in node.iter_incoming_edges() if edge.kind is EdgeKind.IMPLEMENTS
+    }
+
+
+class TestAFoldedMetadataListSurvivesARoundTrip:
+    """Validates REQ-d00269-H: a folded list is readable, renderable and
+    re-readable.
+
+    Reading the continuation is only half the obligation -- a list the tool
+    reads but cannot write back would lose the references on the next save.
+    The rendered form collapses onto one line, which is the intended
+    canonicalization and not a defect, so what is held here is the set of
+    references, not the line breaks.
+    """
+
+    @pytest.mark.parametrize(
+        ("expected", "spec_text"),
+        list(_ROUNDTRIP_TARGETS.values()),
+        ids=list(_ROUNDTRIP_TARGETS),
+    )
+    # Verifies: REQ-d00269-H
+    def test_REQ_d00269_H_a_folded_list_binds_both_targets_in_the_graph(
+        self, tmp_path: Path, expected: set[str], spec_text: str
+    ) -> None:
+        graph = _build_continuation_graph(tmp_path, spec_text)
+
+        assert _implements_citations(graph, "REQ-o00001") == expected
+
+    @pytest.mark.parametrize(
+        ("expected", "spec_text"),
+        list(_ROUNDTRIP_TARGETS.values()),
+        ids=list(_ROUNDTRIP_TARGETS),
+    )
+    # Verifies: REQ-d00269-H
+    def test_REQ_d00269_H_a_folded_list_re_parses_to_the_same_references(
+        self, tmp_path: Path, expected: set[str], spec_text: str
+    ) -> None:
+        graph = _build_continuation_graph(tmp_path, spec_text)
+        file_node = graph.find_by_id(make_file_id("REQ", "spec/reqs.md"))
+        assert file_node is not None, "the fixture's FILE node is missing"
+
+        # A labelled citation cannot be spelled without the configured
+        # assertion separator, so the resolver is required rather than
+        # optional here (``GrammarUnavailable`` otherwise).
+        rendered = render_file(file_node, resolver=grammar_for("REQ"))
+        rebuilt_root = tmp_path / "rebuilt"
+        (rebuilt_root / "spec").mkdir(parents=True)
+        (rebuilt_root / ".elspais.toml").write_text(_ROUNDTRIP_CONFIG, encoding="utf-8")
+        (rebuilt_root / "spec" / "reqs.md").write_text(rendered, encoding="utf-8")
+        rebuilt = build_graph(
+            config_path=rebuilt_root / ".elspais.toml",
+            repo_root=rebuilt_root,
+            scan_code=False,
+            scan_tests=False,
+        )
+
+        assert _implements_citations(rebuilt, "REQ-o00001") == expected
