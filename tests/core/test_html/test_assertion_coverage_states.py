@@ -17,7 +17,6 @@ from elspais.html.generator import (
     _standing_color,
     compute_assertion_coverage_states,
     compute_coverage_tiers,
-    standing_class_map,
 )
 
 
@@ -311,18 +310,6 @@ class TestCoverageStandingCatalog:
             entry = catalog.by_key(f"coverage_standing.{standing}")
             assert entry.color_key  # non-empty configured color
             assert entry.css_class
-
-    def test_REQ_d00258_G_standing_class_map_resolves_from_catalog(self):
-        """standing_class_map() returns exactly the catalog's css_class per
-        standing -- so changing the catalog changes the rendered class (colors
-        are config-driven, not baked in)."""
-        from elspais.html.theme import get_catalog
-
-        catalog = get_catalog()
-        mapping = standing_class_map()
-        assert set(mapping) == set(COVERAGE_STANDINGS)
-        for standing in COVERAGE_STANDINGS:
-            assert mapping[standing] == catalog.by_key(f"coverage_standing.{standing}").css_class
 
     def test_REQ_d00258_G_standings_appear_in_legend(self):
         from elspais.html.theme import get_catalog

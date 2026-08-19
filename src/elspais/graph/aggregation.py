@@ -412,9 +412,11 @@ def denominator_labels(rollup: RollupMetrics, dimension: str, *, measure: str) -
 def numerator_dimension(rollup: RollupMetrics, dimension: str) -> CoverageDimension:
     """The dimension whose coverage is measured for ``dimension``.
 
-    'verified' measures ``tested_and_passing`` (verified | lcov credit), matching
-    the badge projection -- NOT the raw ``rollup.verified`` dimension, which would
-    miss line-coverage credit.
+    'verified' measures ``tested_and_passing``, matching the badge projection
+    rather than the raw ``rollup.verified`` dimension: an *Assertion* whose
+    declared test returned a failure does not pass, and only the former
+    removes it. Line coverage is NOT consulted -- it credits no *Traceability*
+    dimension (REQ-d00254-B, REQ-d00277-C).
     """
     return tested_and_passing(rollup) if dimension == "verified" else getattr(rollup, dimension)
 
@@ -586,8 +588,12 @@ def _evidence_result(graph: Any, source_ids: tuple[str, ...]) -> tuple[EvidenceR
     test reaches two ways: no RESULT of its own -- declared and not run, or run
     and not ingested -- and a RESULT whose status is neither a pass nor a fail,
     such as a skipped one. Neither is reported as a failure it never returned.
-    Separating those two is the business of the Passing/Failing/No-result
-    partition, not of a report about evidence crediting nothing.
+    Those two are NOT told apart anywhere today: ``tested_partition`` counts
+    both into its "awaiting a result" bucket, and no surface distinguishes a
+    test that never ran from one that ran and returned nothing. Saying so here
+    rather than deferring to a partition that does not perform the split --
+    the information is lost, and a reader looking for it should learn that
+    from the first place they look.
     """
     passed_at: str | None = None
     for source_id in source_ids:

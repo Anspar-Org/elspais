@@ -2740,7 +2740,7 @@ def check_whole_req_only_coverage(graph, config=None) -> HealthCheck:
     fails the build. (REQ-d00258.)
     """
     from elspais.graph import NodeKind
-    from elspais.graph.aggregation import measure_by_label
+    from elspais.graph.aggregation import WORK_LIST_MEASURE, measure_by_label
 
     findings: list[HealthFinding] = []
     total = 0
@@ -2754,7 +2754,7 @@ def check_whole_req_only_coverage(graph, config=None) -> HealthCheck:
         # when the blanket citation reaches further than any citation naming
         # it. Conducted coverage is a different fact and is not counted here --
         # the message says "whole-requirement evidence", and it must be true.
-        immediate_direct = measure_by_label(dim, "immediate_direct")
+        immediate_direct = measure_by_label(dim, WORK_LIST_MEASURE)
         n = sum(
             1
             for lbl, ind in measure_by_label(dim, "immediate_indirect").items()

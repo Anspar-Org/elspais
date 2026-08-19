@@ -595,10 +595,27 @@ def get_config(
             # a reader to look for a syntax error sends them hunting for
             # something that is usually not there. The exception above says
             # which setting and why.
+            # Every ELSPAIS_* variable that is not tool-reserved is applied as
+            # a config override, so a setting the schema refuses may never
+            # have been written in the file at all. Naming the file alone
+            # sends a reader to edit something that does not contain the
+            # offending key. The variables are listed, not guessed between:
+            # which one the schema refused is in the message above.
+            env_overrides = sorted(
+                k for k in os.environ if k.startswith("ELSPAIS_") and k not in _RESERVED_ENV_VARS
+            )
+            env_note = (
+                f"\nNote: {', '.join(env_overrides)} "
+                f"{'is' if len(env_overrides) == 1 else 'are'} applied as config "
+                f"override(s), so the setting may come from the environment rather "
+                f"than from {resolved_path.name}."
+                if env_overrides
+                else ""
+            )
             raise ValueError(
                 f"Failed to read config file {resolved_path}: {e}\n"
                 f"Correct the reported setting in {resolved_path.name}, or see "
-                f"`elspais docs config` for what it accepts."
+                f"`elspais docs config` for what it accepts.{env_note}"
             ) from e
     else:
         # Return defaults (no config file found)

@@ -7,7 +7,7 @@ from elspais.graph.metrics import CoverageContribution, CoverageSource, RollupMe
 class TestUATRollupMetrics:
     """Validates REQ-d00069-A: UAT metrics fields in RollupMetrics."""
 
-    def test_rollup_metrics_has_uat_coverage_indirect_REQ_d00069_A(self):
+    def test_rollup_metrics_has_uat_coverage_immediate_direct_REQ_d00069_A(self):
         """RollupMetrics has uat_coverage.covered defaulting to 0."""
         m = RollupMetrics()
         assert m.uat_coverage.covered == 0
@@ -17,12 +17,12 @@ class TestUATRollupMetrics:
         m = RollupMetrics()
         assert m.uat_coverage.immediate_direct == 0
 
-    def test_rollup_metrics_has_uat_coverage_indirect_pct_REQ_d00069_A(self):
+    def test_rollup_metrics_has_uat_coverage_covered_pct_REQ_d00069_A(self):
         """RollupMetrics has uat_coverage.covered_pct defaulting to 0.0."""
         m = RollupMetrics()
         assert m.uat_coverage.covered_pct == 0.0
 
-    def test_rollup_metrics_has_uat_verified_indirect_REQ_d00069_A(self):
+    def test_rollup_metrics_has_uat_verified_immediate_direct_REQ_d00069_A(self):
         """RollupMetrics has uat_verified.covered defaulting to 0."""
         m = RollupMetrics()
         assert m.uat_verified.covered == 0
@@ -32,7 +32,7 @@ class TestUATRollupMetrics:
         m = RollupMetrics()
         assert m.uat_verified.has_failures is False
 
-    def test_rollup_metrics_has_uat_verified_indirect_pct_REQ_d00069_A(self):
+    def test_rollup_metrics_has_uat_verified_covered_pct_REQ_d00069_A(self):
         """RollupMetrics has uat_verified.covered_pct defaulting to 0.0."""
         m = RollupMetrics()
         assert m.uat_verified.covered_pct == 0.0

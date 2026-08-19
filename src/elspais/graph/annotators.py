@@ -1785,9 +1785,16 @@ def _conduct_refines_coverage(graph: FederatedGraph) -> None:
         label: str,
         dim_name: str,
         visiting: frozenset[str],
-    ) -> tuple[float, float]:
-        """The (direct, indirect) values conducted INTO ``label`` of ``req``."""
+    ) -> tuple[float, float, bool]:
+        """The (direct, indirect) values conducted INTO ``label`` of ``req``,
+        and whether the answer was truncated by the cycle guard.
+
+        The third element rides along so a truncated answer is never cached:
+        it is an artefact of WHERE the walk started, not a property of the
+        requirement.
+        """
         contributions: list[tuple[float, float]] = []
+        truncated = False
         for edge in req.iter_outgoing_edges():
             if not edge.kind.conducts_coverage():
                 continue
@@ -1796,9 +1803,11 @@ def _conduct_refines_coverage(graph: FederatedGraph) -> None:
             # names only the requirement (REQ-d00069-J).
             if edge.assertion_targets and label not in edge.assertion_targets:
                 continue
-            contributions.append(req_measures(edge.target, dim_name, visiting))
+            direct, indirect, was_truncated = req_measures(edge.target, dim_name, visiting)
+            contributions.append((direct, indirect))
+            truncated = truncated or was_truncated
         if not contributions:
-            return 0.0, 0.0
+            return 0.0, 0.0, truncated
         # Same measure into the same measure (REQ-d00069-J): the citation shape
         # decided which assertions receive a value, above; it does not decide
         # which measure the value belongs to. Equal weight per incoming edge.
@@ -1806,39 +1815,55 @@ def _conduct_refines_coverage(graph: FederatedGraph) -> None:
         return (
             sum(c[0] for c in contributions) / count,
             sum(c[1] for c in contributions) / count,
+            truncated,
         )
 
     def req_measures(
         req: GraphNode, dim_name: str, visiting: frozenset[str]
-    ) -> tuple[float, float]:
+    ) -> tuple[float, float, bool]:
         """A requirement's own (direct, indirect) coverage, for conducting up.
 
         Per REQ-d00069-J it is the mean over the requirement's assertions of
         that *Assertion*'s coverage in the measure being conducted, an
         *Assertion*'s coverage in a measure being the greater of what is
-        attached to it and what is conducted into it (REQ-d00069-N).
+        attached to it and what is conducted into it -- the greater of TWO
+        values within ONE measure, since each measure conducts into itself
+        (REQ-d00069-J). This is not REQ-d00069-N's total, which is the
+        greatest of an *Assertion*'s four measures and is never conducted.
         """
         key = (dim_name, req.id)
         cached = measure_memo.get(key)
         if cached is not None:
-            return cached
+            return cached[0], cached[1], False
         if req.id in visiting:
-            return 0.0, 0.0  # cycle guard -- valid graphs are DAGs
+            # Cycle guard. The zero is not this requirement's coverage; it is
+            # the walk refusing to re-enter a requirement already on the path.
+            # It is reported as TRUNCATED so no caller caches it, directly or
+            # as a contribution to its own answer.
+            return 0.0, 0.0, True
         labels = labels_by_req.get(req.id)
         if not labels:
             measure_memo[key] = (0.0, 0.0)
-            return 0.0, 0.0
+            return 0.0, 0.0, False
         imm_direct, imm_indirect = immediate[req.id][dim_name]
         inner = visiting | {req.id}
         direct_total = 0.0
         indirect_total = 0.0
+        truncated = False
         for lbl in labels:
-            rolled_d, rolled_i = rolled_values(req, lbl, dim_name, inner)
+            rolled_d, rolled_i, was_truncated = rolled_values(req, lbl, dim_name, inner)
             direct_total += max(imm_direct.get(lbl, 0.0), rolled_d)
             indirect_total += max(imm_indirect.get(lbl, 0.0), rolled_i)
+            truncated = truncated or was_truncated
         value = (direct_total / len(labels), indirect_total / len(labels))
-        measure_memo[key] = value
-        return value
+        # A value that depended on the cycle guard is NOT memoized. The memo is
+        # keyed by (dimension, requirement) alone, so caching a truncated answer
+        # would hand it to a later walk that entered from somewhere else and
+        # would not have truncated -- which is how the numbers came to depend on
+        # which requirement the walk happened to start from.
+        if not truncated:
+            measure_memo[key] = value
+        return value[0], value[1], truncated
 
     eps = 1e-9
     for req in reqs:

@@ -67,7 +67,7 @@ def test_failing_label_outside_denominator_does_not_win():
     assert relative_tier(dim, {"A", "B"}, measure="total") == ("partial", False)
 
 
-def test_allow_indirect_true_credits_blanket_coverage():
+def test_whole_requirement_citation_credits_every_assertion():
     """Indirect-only coverage counts when measure="total" (the default)."""
     # A credited only indirectly (blanket), no direct fraction.
     dim = _tested({"A", "B"}, direct=set())

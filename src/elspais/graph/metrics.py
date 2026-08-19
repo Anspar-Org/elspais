@@ -298,11 +298,6 @@ class LineCoverage:
         return self.has_contexts
 
 
-def _dim(total: int = 0) -> CoverageDimension:
-    """Factory helper for default CoverageDimension with total pre-set."""
-    return CoverageDimension(total=total)
-
-
 def fmt_assertion_count(value: float) -> str:
     """Format a (possibly fractional) covered-assertion count for display.
 

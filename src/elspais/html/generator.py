@@ -50,17 +50,11 @@ class TreeRow:
     is_changed: bool
     is_uncommitted: bool
     is_unsaved: bool
-    is_roadmap: bool
-    is_code: bool
-    is_test: bool  # TEST node for traceability
-    is_test_result: bool  # RESULT node (test execution result)
     has_children: bool
     has_failures: bool
     is_associated: bool  # From sponsor/associated repository
     validation_color: str = ""  # val-green/val-yellow-green/val-yellow/val-red/val-orange or ""
     validation_tip: str = ""  # Hover tooltip explaining the validation color
-    source_file: str = ""  # Relative path to source file
-    source_line: int = 0  # Line number in source file
     result_status: str = ""  # For RESULT: passed/failed/error/skipped
 
 
@@ -423,24 +417,6 @@ def _standing_color(standing: str) -> str:
         return get_catalog().by_key(f"coverage_standing.{standing}").color_key
     except KeyError:
         return ""
-
-
-def standing_class_map() -> dict[str, str]:
-    """Return ``{standing: css_class}`` resolved from the theme catalog.
-
-    Used to hand the viewer a config-driven standing->class lookup so the client
-    colors per-assertion badges without any hard-coded color logic of its own.
-    """
-    from elspais.html.theme import get_catalog
-
-    catalog = get_catalog()
-    out: dict[str, str] = {}
-    for standing in COVERAGE_STANDINGS:
-        try:
-            out[standing] = catalog.by_key(f"coverage_standing.{standing}").css_class
-        except KeyError:
-            out[standing] = ""
-    return out
 
 
 def compute_assertion_coverage_states(
@@ -1020,10 +996,6 @@ class HTMLGenerator:
                 else parent_assertions
             )
 
-            # Get source location
-            source_file = node.file_node().get_field("relative_path") if node.file_node() else ""
-            source_line = node.get_field("parse_line") or 0
-
             # Get result status for RESULT nodes
             result_status = ""
             if is_test_result:
@@ -1066,15 +1038,9 @@ class HTMLGenerator:
                 is_uncommitted=node.get_metric("is_uncommitted", False)
                 or node.get_metric("is_untracked", False),
                 is_unsaved=False,
-                is_roadmap=is_roadmap(node),
-                is_code=is_code,
-                is_test=is_test,
-                is_test_result=is_test_result,
                 has_children=node_has_children,
                 has_failures=has_failures,
                 is_associated=self._is_associated(node) if not is_impl_node else False,
-                source_file=source_file,
-                source_line=source_line,
                 result_status=result_status,
             )
 
@@ -1157,9 +1123,6 @@ class HTMLGenerator:
             if node.id in visited_node_ids:
                 continue
 
-            source_file = node.file_node().get_field("relative_path") if node.file_node() else ""
-            source_line = node.get_field("parse_line") or 0
-
             row = TreeRow(
                 id=f"{node.id}_0_root",
                 display_id=node.id,
@@ -1175,15 +1138,9 @@ class HTMLGenerator:
                 is_changed=False,
                 is_uncommitted=False,
                 is_unsaved=False,
-                is_roadmap=False,
-                is_code=False,
-                is_test=True,
-                is_test_result=False,
                 has_children=has_test_result_children(node),
                 has_failures=False,
                 is_associated=False,
-                source_file=source_file,
-                source_line=source_line,
                 result_status="",
             )
             rows.append(row)
@@ -1192,10 +1149,6 @@ class HTMLGenerator:
             # Render RESULT children under this TEST node
             for child in node.iter_children():
                 if child.kind == NodeKind.RESULT:
-                    child_source_file = (
-                        child.file_node().get_field("relative_path") if child.file_node() else ""
-                    )
-                    child_source_line = child.get_field("parse_line") or 0
                     child_result_status = (child.get_field("status", "") or "").lower()
 
                     child_row = TreeRow(
@@ -1213,15 +1166,9 @@ class HTMLGenerator:
                         is_changed=False,
                         is_uncommitted=False,
                         is_unsaved=False,
-                        is_roadmap=False,
-                        is_code=False,
-                        is_test=False,
-                        is_test_result=True,
                         has_children=False,
                         has_failures=child_result_status in ("failed", "fail", "failure", "error"),
                         is_associated=False,
-                        source_file=child_source_file,
-                        source_line=child_source_line,
                         result_status=child_result_status,
                     )
                     rows.append(child_row)
@@ -1232,8 +1179,6 @@ class HTMLGenerator:
             if node.id in visited_node_ids:
                 continue
 
-            source_file = node.file_node().get_field("relative_path") if node.file_node() else ""
-            source_line = node.get_field("parse_line") or 0
             result_status = (node.get_field("status", "") or "").lower()
 
             # Create a short display ID from test name
@@ -1265,15 +1210,9 @@ class HTMLGenerator:
                 is_changed=False,
                 is_uncommitted=False,
                 is_unsaved=False,
-                is_roadmap=False,
-                is_code=False,
-                is_test=False,
-                is_test_result=True,
                 has_children=False,
                 has_failures=result_status in ("failed", "fail", "failure", "error"),
                 is_associated=False,
-                source_file=source_file,
-                source_line=source_line,
                 result_status=result_status,
             )
             rows.append(row)
