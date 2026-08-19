@@ -2410,11 +2410,12 @@ _CONCURRENCY_PROTOCOL = (
     '   mutation-log tip (current_tip from get_mutation_log(); "" = nothing\n'
     "   pending). On mutation_log_conflict, review 'unseen' before retrying.\n"
     "5. On executable_changed: elspais was reinstalled since this server\n"
-    "   started, so it is answering from the older program. Nothing was\n"
-    "   applied. save_mutations is still accepted and is the only thing\n"
-    "   that is — call it if held_mutations is above zero, then reconnect\n"
-    "   this server (/mcp in Claude Code) to pick up the current program.\n"
-    "   Retrying without reconnecting returns the same rejection.\n"
+    "   started, so it is answering from the older program, and this one\n"
+    "   cannot renew itself without ending your session with it. Nothing\n"
+    "   was applied. Reconnect this server (/mcp in Claude Code) to pick\n"
+    "   up the current program; retrying without reconnecting returns the\n"
+    "   same rejection. A daemon reached over http never returns this — it\n"
+    "   renews itself and you reconnect to the same address.\n"
     "\n"
     'Full protocol: docs("concurrency"); quick answers: faq("concurrency").'
 )
@@ -2580,13 +2581,14 @@ _FAQ_ENTRIES: list[dict[str, str]] = [
             "elspais was reinstalled since this server started, so it is still\n"
             "answering from the program it loaded. That happens routinely when\n"
             "the tree you are editing is elspais's own source. Nothing you sent\n"
-            "was applied. A daemon stands itself down and is replaced without\n"
-            "you noticing; a stdio MCP server cannot, because exiting would take\n"
-            "its tools out of your session and nothing would restart it. So it\n"
-            "refuses everything except save_mutations instead. Call that if the\n"
-            "rejection reports held_mutations above zero, then reconnect the\n"
-            "server (/mcp in Claude Code). This is unrelated to your spec files\n"
-            "going stale, and is reported separately as executable_difference."
+            "was applied. A daemon renews itself when this happens — it writes\n"
+            "whatever it holds, restarts from the current program and serves at\n"
+            "the same address — so you will not see this from one. A stdio MCP\n"
+            "server cannot renew itself, because exiting would take its tools\n"
+            "out of your session and nothing would restart it, so it refuses and\n"
+            "asks to be reconnected (/mcp in Claude Code). This is unrelated to\n"
+            "your spec files going stale, which is reported separately as\n"
+            "executable_difference and answered by rebuilding."
         ),
     },
     {
@@ -2946,81 +2948,48 @@ def _guard_shutdown(state: Any) -> dict[str, Any] | None:
     }
 
 
-#: The one request that stays available while the installed program has
-#: moved and this process holds work nothing else can see. It is what
-#: REQ-o00077-B keeps open so that REQ-o00077-C cannot trap the work it
-#: is protecting.
-_PERSIST_TOOLS = frozenset({"save_mutations"})
-
-
-# Implements: REQ-o00077-A, REQ-o00077-B, REQ-o00077-C, REQ-o00077-F
+# Implements: REQ-o00077-A, REQ-o00077-F
 def _guard_executable_drift(state: Any, tool_name: str) -> dict[str, Any] | None:
-    """Refuse a call this process would answer from a superseded program.
+    """Refuse a call this process cannot renew itself out of.
 
     Third member of the guard family, and the one whose condition is
-    about this process rather than about the graph. It fires only while
-    both halves hold: the program has been replaced beneath us, and we
-    hold changes that exist nowhere else. Either alone is somebody
-    else's business -- a replaced program with nothing pending is
-    REQ-o00077-D's, and pending work under the program we started with
-    is not a problem at all.
+    about this process rather than about the graph. It fires only where
+    REQ-o00077-D cannot be met: the program beneath this process has been
+    superseded, and renewing it would end the session of the client
+    asking, because that client reaches this process over a connection it
+    owns rather than by an address it can dial again.
 
-    Answering from the client's own program is normally available and
-    would be the better remedy, but not here: it would answer from a
-    graph these changes are missing from. Replacing this process is the
-    other remedy and is equally closed, because it would end the process
-    while it still holds them. What is left is to stop answering, and to
-    say so in the refusal -- which is the disclosure REQ-o00077-A asks
-    for, delivered to the client that would otherwise have acted on the
-    answer.
+    A process that CAN renew itself never reaches a refusal here,
+    whatever it is holding. Held changes are carried across a renewal
+    rather than standing in the way of one, so they are not this guard's
+    business and are not counted here.
+
+    The refusal is also the disclosure REQ-o00077-A asks for, delivered
+    to the client that would otherwise have acted on the answer, and it
+    names what renews the process because a client holding a working
+    connection can act on an instruction.
     """
-    if tool_name in _PERSIST_TOOLS:
-        return None
     from elspais.mcp import executable
 
     if executable.watcher().settled_difference is None:
         return None
-    try:
-        pending = len(state["graph"].mutation_log.tail(0))
-    except Exception:  # noqa: BLE001
-        # Unable to establish whether anything is held. Say nothing:
-        # this guard exists to protect held work, and a reading it could
-        # not take is not evidence that any is held.
+    if state is not None and state.get("renewable_unasked"):
+        # REQ-o00077-D's case: this process renews itself, so the client
+        # never learns there was anything to refuse.
         return None
-    if pending == 0 and state.get("renewable_unasked"):
-        # REQ-o00077-D's case: this process can be replaced without
-        # ending anyone's session, so it stands down instead of
-        # refusing, and the client never learns there was anything to
-        # refuse.
-        return None
-    renew = "Reconnect this MCP server (in Claude Code, /mcp) to pick up the " "current program."
-    if pending == 0:
-        # Implements: REQ-o00077-F
-        return {
-            "success": False,
-            "code": "executable_changed",
-            "error": (
-                "elspais has been reinstalled since this server started. Answers "
-                "from here would come from the program as it was, so they are "
-                "refused."
-            ),
-            "hint": f"Nothing was changed, and nothing is held here. {renew}",
-            "held_mutations": 0,
-        }
     return {
         "success": False,
         "code": "executable_changed",
         "error": (
-            f"elspais has been reinstalled since this server started, and this "
-            f"server holds {pending} unsaved change(s) that exist nowhere else. "
-            f"Answers from here would come from the program as it was, so they "
-            f"are refused."
+            "elspais has been reinstalled since this server started. Answers "
+            "from here would come from the program as it was, so they are "
+            "refused. This server cannot renew itself without ending your "
+            "session with it."
         ),
         "hint": (
-            f"Nothing was changed. Call save_mutations to write what is held -- "
-            f"that request is still accepted -- then {renew[0].lower()}{renew[1:]}"
+            "Nothing was changed. Reconnect this MCP server (in Claude Code, "
+            "/mcp) to pick up the current program."
         ),
-        "held_mutations": pending,
     }
 
 
@@ -3028,54 +2997,81 @@ def _guard_executable_drift(state: Any, tool_name: str) -> dict[str, Any] | None
 def renew_for_installed_program(
     shared: Any,
     graph_fn: Callable[[], Any],
-    exit_fn: Callable[[], None] | None = None,
+    exec_fn: Callable[[], None] | None = None,
 ) -> str:
-    """Stand this process down so its tree is served by the installed program.
+    """Serve this tree from the program now installed, carrying held work.
 
-    The decision is what happens unasked, not the re-serving: this
-    process commits to stopping and its record says so, and the
-    machinery a client already runs when it meets a stopping daemon
-    starts the successor. Standing one up from here would put two
-    processes in one working tree, which REQ-o00075-B forbids.
+    Renews rather than stops. A process that merely stopped would answer
+    the half of REQ-o00077-D about no longer serving from a superseded
+    program while failing the half about the tree going on being served,
+    and a client that reaches this process by address rather than by
+    launching it would simply lose the tool.
 
-    Divides the work with ``_guard_executable_drift`` on exactly the
-    question of whether anything is held. Nothing held is this routine's
-    case; work held is that guard's, because replacing the process would
-    end it while it still holds changes nothing else can see.
+    Changes held here exist nowhere else, so they are written before the
+    process is replaced. Writing them is enough to preserve them; the
+    record of what was done goes with the process that did it, so they
+    can no longer be undone, which is the same thing that happens
+    whenever a process stops for any other reason. The unasked write
+    leaves the record that exists for exactly that purpose.
 
-    The count and the decision are one critical section under
-    ``write_lock``: a mutation landing before it is inside the count and
-    keeps this process alive, and one arriving after blocks until the
-    shutdown routine has raised the refusal flag.
+    Replacing the process image keeps its identity -- same pid, so the
+    state record still describes it, and the reserved address is bound
+    again by the same act. In-flight requests are lost, which over a
+    transport where each request stands alone reaches the client as a
+    failure it retries rather than as an answer that never comes.
 
-    Returns what it decided, so a caller can tell the cases apart:
-    ``"held"``, ``"unknown"``, ``"save_failed"`` or ``"standing_down"``.
+    Returns what it decided: ``"unknown"``, ``"save_failed"`` or
+    ``"renewing"``. Never returns after a real replacement.
     """
     with shared.write_lock:
         try:
             pending = len(graph_fn().mutation_log.tail(0))
         except Exception:  # noqa: BLE001
-            # Standing down on a count that could not be taken risks
-            # ending a process that holds the only copy of somebody's
-            # work. Stay, and leave the guard to refuse.
+            # Renewing on a count that could not be taken risks replacing
+            # a process holding the only copy of somebody's work before
+            # it has been written. Stay as we are.
             return "unknown"
         if pending:
-            return "held"
-        trigger = "the installed program changed and nothing was held here"
-        outcome = finalize_shutdown(shared, trigger=trigger)
-    report_shutdown_outcome(outcome, trigger)
-    if not outcome.get("success"):
-        # The routine keeps what it could not write and leaves this
-        # process usable. Stopping anyway would discard it.
-        return "save_failed"
-    # os._exit, not sys.exit: this runs on the watcher thread, where
-    # SystemExit unwinds that thread and leaves the process serving.
-    if exit_fn is None:
-        import os as _os_exit
+            outcome = persist_pending(
+                shared,
+                automatic=True,
+                trigger="the installed program changed and this server is renewing itself",
+            )
+            if not outcome.get("success"):
+                import sys as _sys_warn
 
-        exit_fn = lambda: _os_exit._exit(0)  # noqa: E731
-    exit_fn()
-    return "standing_down"
+                # Keep what could not be written and go on serving.
+                # Replacing the process now would take the work with it.
+                print(
+                    f"warning: elspais was reinstalled, but the {pending} unsaved "
+                    f"change(s) held here could not be written "
+                    f"({outcome.get('error')}). This server is NOT renewing itself, "
+                    f"so it goes on answering from the program it started with. "
+                    f"Save through it and restart it once the error above is fixed.",
+                    file=_sys_warn.stderr,
+                    flush=True,
+                )
+                return "save_failed"
+        (exec_fn or _replace_process_image)()
+    return "renewing"
+
+
+# Implements: REQ-o00077-D
+def _replace_process_image() -> None:
+    """Run this process again, from the program now installed.
+
+    ``-m elspais`` rather than the argv this process was launched with,
+    because a console script and a module invocation reach here alike and
+    only the module form is certain to exist. The environment carries
+    over untouched, so the successor keeps the same state record and the
+    same client binding.
+    """
+    import os as _os
+    import sys as _sys
+
+    _sys.stderr.write("elspais was reinstalled; renewing this server from it.\n")
+    _sys.stderr.flush()
+    _os.execv(_sys.executable, [_sys.executable, "-m", "elspais", *_sys.argv[1:]])
 
 
 # Implements: REQ-o00062-K
@@ -7888,24 +7884,26 @@ def run_server(
             )
 
         # Implements: REQ-o00077-A, REQ-o00077-D
-        # Started for every daemon, not only one with a recorded client:
-        # the program moving beneath a process has nothing to do with
-        # who asked for that process.
+        # Watched for every daemon, not only one with a recorded client:
+        # the program moving beneath a process has nothing to do with who
+        # asked for that process. Watched only where it can move at all,
+        # so an installation fixed until it is replaced pays nothing.
+        #
+        # A client reaches this process by an address it can dial again,
+        # so replacing the process costs it nothing it cannot recover.
+        # That is what earns the silent renewal here, and REQ-o00077-F's
+        # refusal on a transport where it is not true.
+        from elspais.mcp.executable import installation_can_change
         from elspais.mcp.executable import watcher as _executable_watcher
 
-        # Implements: REQ-o00077-D
-        # A client reaches this process over a connection it did not
-        # create and can re-establish at will, so replacing the process
-        # costs it nothing it cannot recover. That is what earns D's
-        # silence here and F's refusal on a transport where it is not
-        # true.
         state.shared["renewable_unasked"] = True
 
         def _renew_on_settled_change(_installed: str) -> None:
             renew_for_installed_program(state.shared, lambda: state.graph)
 
-        _executable_watcher().on_settled = _renew_on_settled_change
-        _executable_watcher().start()
+        if installation_can_change():
+            _executable_watcher().on_settled = _renew_on_settled_change
+            _executable_watcher().start()
 
         if client_pid is not None:
             from elspais.server.client_watch import (

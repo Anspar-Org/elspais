@@ -226,14 +226,23 @@ is reported separately: `executable_difference` appears on
 `/api/check-freshness`, naming what the server is running and what is
 now installed.
 
-A daemon in that state stands itself down once it holds nothing unsaved,
-and the next command starts a fresh one; you will not normally see it. A
-**stdio** MCP server cannot do that -- exiting would remove its tools
-from your session, and nothing restarts it -- so instead every call
-except `save_mutations` is refused with `executable_changed`. Nothing was
-applied. Call `save_mutations` if the reply reports `held_mutations`
-above zero, then reconnect the server (`/mcp` in Claude Code) to pick up
-the current program.
+A daemon in that state renews itself: it writes anything it is holding,
+replaces its own process image with the current program, and goes on
+serving at the same address. You will not normally see it happen. The
+write is unasked, so it leaves the same `automatic_save` record any
+unasked save leaves; what it cannot preserve is the ability to undo those
+changes, because the mutation log goes with the process that held it.
+
+A **stdio** MCP server cannot renew itself -- its client reaches it over
+a connection that client owns, and exiting would remove its tools from
+your session with nothing to restart it. So it refuses instead, with
+`executable_changed`. Nothing was applied; reconnect the server (`/mcp`
+in Claude Code) to pick up the current program.
+
+None of this applies to an installation whose files are fixed until it is
+replaced wholesale. It arises only where the install resolves to a working
+tree, so that editing a source file installs a new program by the same
+act.
 
 `/api/check-freshness` therefore reports two independent signals:
 

@@ -627,44 +627,45 @@ An address that survives replacement must also survive there being nothing to re
 
 **Level**: ops | **Status**: Active | **Implements**: REQ-o00075
 
-The tool SHALL keep what a serving process answers from in step with the program the tool is installed from, for as long as it serves.
+Where the tool is installed such that its program can change while a process is running, the tool SHALL keep what a serving process answers from in step with the program now installed, for as long as it serves.
 
 ### Assertions
 
 A. While a serving process answers from a program that differs from the one the tool is now installed from, the tool SHALL disclose that difference to the clients it is serving.
 
-B. Such a process SHALL go on accepting the request to persist changes it holds that exist nowhere else.
+B. [Removed - protected the request to persist from assertion C, which is itself removed. A process that carries held changes across a renewal never traps them, so there is nothing left to protect.]
 
-C. While such a process holds changes that exist nowhere else, it SHALL decline the other requests it would otherwise answer.
+C. [Removed - treated held changes as a reason to stop answering. They are a reason to take care over a renewal, not to refuse one, and D now says so.]
 
-D. While such a process holds no changes that exist nowhere else and can be replaced without ending the session of a client it is serving, its working tree SHALL become served from the program the tool is now installed from, without a client having to ask.
+D. When the program such a process is running is superseded, its working tree SHALL go on being served, from the program now installed, without a client having to ask and without discarding changes the process holds that exist nowhere else.
 
 E. A run of changes to that program arriving together SHALL cause at most one response.
 
-F. While such a process cannot be replaced without ending the session of a client it is serving, it SHALL decline the other requests it would otherwise answer, and SHALL name the action that renews it.
+F. Where D cannot be met without ending the session of a client the process is serving, it SHALL decline the other requests it would otherwise answer, and SHALL name the action that renews it.
 
 ### Rationale
 
 A process that outlives the commands using it goes on answering from the program it loaded when it started, and no process can re-read its own program. This requirement is what that process owes the clients it is already serving once the tool has been installed afresh beneath it.
 
-Two different things go stale in a process that serves a working tree, and they are not one condition. The content the tool traces — the specifications, code and tests the tree holds — changes constantly, and a serving process answers that by rebuilding its graph from what the tree now holds. The program the tool itself runs is not traced but installed, and it can fall out of step only because a process outlives the installation it started from. Merging the two would let a rebuild report a difference no rebuild can repair, or an installed-program difference suppress a rebuild that was owed; they are reported and acted on separately for that reason.
+Two different things go stale in a process that serves a working tree, and they are not one condition. The content the tool traces — the specifications, code and tests the tree holds — changes constantly, and a serving process answers that by rebuilding its graph from what the tree now holds. The program the tool itself runs is not traced but installed, and no rebuild reaches it. So the two never share a remedy: a graph that has fallen behind its files is rebuilt and never renews the process, and a superseded program is renewed and is not a rebuild. Merging them would let one report a difference it cannot repair, or suppress a remedy that was owed.
+
+This requirement therefore binds only where the installed program can move beneath a running process at all. An installation whose files are fixed until it is replaced wholesale cannot go stale this way, and a process running from one is asked for nothing here. The case that remains is an installation that resolves to a working tree, where editing a source file installs a new program by the same act -- which is the ordinary way the tool's own developers work, and the only way this arises.
 
 REQ-o00076-I governs what a client is handed when it acquires a process, and is judged at that moment; this one governs the process a client is already holding. Code and configuration are named together there, and separating them here is what the difference between them demands: a configuration that has moved is answered by rebuilding from the configuration on disk, and a program that has moved cannot be answered that way at all. The case this exists for is a working tree whose contents are the tool's own source and which the tool is installed from, where the ordinary act of editing the tree reinstalls the program beneath every process serving it. The client most exposed is the one least able to notice — a session that acquired a process once and goes on using it for hours without ever acquiring again, and for which an acquisition-time rule never fires.
 
-Assertion C is the strong one, and it is confined to the case where the process holds changes nothing else can see. Both of the remedies otherwise available are closed there: answering from the client's own program would answer from a graph those changes are missing from, and replacing the process would end it while it still holds them. What is left is to stop answering questions whose answers would come from a program the client is not running. Assertion B is what keeps that from becoming a way to lose work, since a process that will not accept the request to write what it holds has trapped it.
+Assertion D renews rather than stops, and that distinction is the whole of it. A process that stopped would satisfy the half of the sentence about no longer answering from a superseded program while failing the half about the tree going on being served, and a client that cannot start one for itself -- which is any client that reaches a process by address rather than by launching it -- would simply lose the tool.
 
-C declines where REQ-o00075-G refuses to let the process become a dependency, and the two stand together rather than in conflict. G keeps every operation reachable without a serving process at all, and a client told to persist and acquire again has been told how to reach exactly that. A refusal that is finite and names its own remedy is not a dependency; one that leaves a client with nowhere to go would be.
+Changes the process holds are carried across rather than treated as a reason to refuse. They exist nowhere else, so they must not be discarded; but writing them is enough to preserve them, and a renewal that writes first loses nothing that matters. What it does lose is the ability to undo them, since the record of what was done goes with the process that did it. That is accepted: the changes themselves survive on disk, which is what the work was for, and this is already what happens whenever a process stops for any other reason. The unasked write is disclosed by the record that already exists for exactly that purpose.
 
-Assertion D covers the case where nothing is at risk, and it acts without being asked because the client that most needs it is the one that will never ask. Whether the tree comes to be served by a replacement process or by the same one renewed is not fixed here.
+D acts without being asked because the client that most needs it is the one that will never ask. Whether the tree comes to be served by a replacement process or by the same one renewed is not fixed here; what matters is that a client which had a working process still has one.
 
-D is conditioned because for some processes no such replacement exists. Where a client reaches a process over a connection that client owns, the process cannot be replaced without that connection ending, and a connection that ends takes the tool away from the client until the client re-establishes it — which costs more than the difference D exists to remove. Assertion F is what those processes do instead. Naming the action that renews it is the whole of F's value: a client left holding a working connection and an instruction can act on it, where one whose connection vanished mid-task can only discover that it has.
-
-F and C reach the same behaviour from opposite conditions, and that is deliberate. Such a process answers the same way whether it holds work or not, so a client meets one rule rather than two, and neither a wrong answer given confidently nor a tool that quietly disappeared is among the outcomes.
+Assertion F is for the processes where that cannot be arranged. Where a client reaches a process over a connection that client owns rather than by an address it can dial again, renewing the process ends the connection, and a connection that ends takes the tool away until the client re-establishes it -- which costs more than the difference D exists to remove. Naming the action that renews it is the whole of F's value: a client left holding a working connection and an instruction can act on it, where one whose connection vanished mid-task can only discover that it has.
 
 Assertion E exists because a change is rarely one file. An editor writing out a directory, a branch being switched, a build emitting sources — each is one act that arrives as many separate events, and answering each in turn would disturb a serving process repeatedly while the program beneath it was still moving. Counting responses rather than events is what makes D safe to perform unasked, and it bounds the disturbance by the change rather than by the file count.
 
 ### Changelog
 
+- 2026-08-18 | 2dfa09e9 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-18 | b6acd5d0 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-18 | 8ef6d965 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-18 | eaea87c6 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -672,4 +673,4 @@ Assertion E exists because a change is rarely one file. An editor writing out a 
 - 2026-08-18 | bfd8a2aa | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-18 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: state what a serving process owes its clients when its program code changes beneath it
 
-*End* *Serving From the Installed Program* | **Hash**: b6acd5d0
+*End* *Serving From the Installed Program* | **Hash**: 2dfa09e9

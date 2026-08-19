@@ -51,6 +51,35 @@ def installed_root() -> Path:
     return Path(elspais.__file__).resolve().parent
 
 
+def installation_can_change() -> bool:
+    """True where the installed program can move while a process runs.
+
+    An installation whose files are fixed until it is replaced wholesale
+    cannot go stale beneath a running process, so nothing here applies to
+    one and no process running from one pays to watch for it. What
+    remains is an installation that resolves to a working tree, where
+    editing a source file installs a new program by the same act.
+
+    Read from the packaging metadata rather than guessed at: a tree that
+    merely happens to sit beside the package is not what the tool is
+    running.
+    """
+    from importlib.metadata import PackageNotFoundError, distribution
+
+    try:
+        recorded = distribution("elspais").read_text("direct_url.json")
+    except (PackageNotFoundError, OSError):
+        return False
+    if not recorded:
+        return False
+    try:
+        import json
+
+        return bool(json.loads(recorded).get("dir_info", {}).get("editable"))
+    except (ValueError, AttributeError):
+        return False
+
+
 # Implements: REQ-o00077-A
 def compute_executable_hash(root: Path | None = None) -> str:
     """Digest every file the tool is installed from.
