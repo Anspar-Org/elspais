@@ -73,6 +73,7 @@ from elspais.commands.args import (
     LinkArgs,
     LinkSuggestArgs,
     McpArgs,
+    McpEnvArgs,
     McpInstallArgs,
     McpServeArgs,
     McpUninstallArgs,
@@ -196,6 +197,7 @@ def _to_namespace(global_args: GlobalArgs) -> argparse.Namespace:
             McpServeArgs: "serve",
             McpInstallArgs: "install",
             McpUninstallArgs: "uninstall",
+            McpEnvArgs: "env",
         }
         ns.mcp_action = _MCP_MAP.get(type(cmd.action), None)
         if hasattr(cmd.action, "__dataclass_fields__"):
@@ -543,9 +545,13 @@ def version_command(args: argparse.Namespace) -> int:
 
 def mcp_command(args: argparse.Namespace) -> int:
     """Handle MCP server commands."""
+    if args.mcp_action == "env":
+        from elspais.commands.daemon_cmd import run_env
+
+        return run_env(args)
     if args.mcp_action == "install":
         desktop = getattr(args, "desktop", False)
-        rc = _mcp_install(global_scope=args.global_scope)
+        rc = _mcp_install(global_scope=args.global_scope, transport=args.transport)
         if desktop:
             rc_desktop = _mcp_install_desktop()
             if rc == 0:
@@ -611,8 +617,20 @@ def _claude_env() -> dict[str, str]:
     return env
 
 
-def _mcp_install(global_scope: bool = False) -> int:
-    """Register elspais MCP server with Claude Code."""
+# Implements: REQ-o00076-K
+def _mcp_install(global_scope: bool = False, transport: str = "http") -> int:
+    """Register elspais MCP server with Claude Code.
+
+    Over http the client is registered against a variable rather than a
+    literal address, because the address belongs to a working tree and
+    one registration may serve several. The shell supplies it:
+    ``eval "$(elspais mcp env)"`` before launching the client.
+
+    http is the better connection and is the default. The client then
+    shares one graph with the CLI and the viewer, and a daemon that is
+    replaced is reconnected to rather than lost -- a stdio server is a
+    process the client owns, which nothing restarts once it exits.
+    """
     import shutil
     import subprocess
 
@@ -630,10 +648,18 @@ def _mcp_install(global_scope: bool = False) -> int:
         print("Error: 'elspais' not found on PATH.", file=sys.stderr)
         return 1
 
-    cmd = [claude, "mcp", "add", "elspais", "--transport", "stdio"]
+    cmd = [claude, "mcp", "add", "elspais", "--transport", transport]
     if global_scope:
         cmd.extend(["--scope", "user"])
-    cmd.extend(["--", "elspais", "mcp", "serve"])
+    if transport == "http":
+        # Deliberately no default. An unset variable is reported by the
+        # client as a missing variable, which names the cause -- the
+        # shell never ran `eval "$(elspais mcp env)"`. A default address
+        # would instead fail as a refused connection, which names a
+        # symptom and sends the reader looking at the daemon.
+        cmd.append("${ELSPAIS_MCP_URL}")
+    else:
+        cmd.extend(["--", "elspais", "mcp", "serve"])
 
     result = subprocess.run(cmd, capture_output=True, text=True, env=_claude_env())
     if result.returncode != 0:

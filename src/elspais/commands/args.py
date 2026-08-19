@@ -821,6 +821,11 @@ class McpInstallArgs:
     desktop: bool = False
     """Also install into Claude Desktop."""
 
+    transport: Literal["http", "stdio"] = "http"
+    """How the client reaches elspais. http shares one graph with the CLI and the
+    viewer and survives the daemon restarting; stdio holds a private graph and is
+    for clients that cannot speak http."""
+
 
 @dataclasses.dataclass
 class McpUninstallArgs:
@@ -833,10 +838,25 @@ class McpUninstallArgs:
     """Also remove from Claude Desktop."""
 
 
+@dataclasses.dataclass
+class McpEnvArgs:
+    """Print shell assignments naming where this working tree is served.
+
+    Meant to be evaluated by the shell that will launch the client:
+    ``eval "$(elspais mcp env)"``. A process cannot set a variable in the
+    shell that started it, so the assignments are printed for the shell
+    to apply -- the same arrangement ssh-agent and direnv use.
+    """
+
+    no_start: bool = False
+    """Report only an already-running daemon rather than starting one."""
+
+
 McpAction = (
     Annotated[McpServeArgs, tyro.conf.subcommand("serve")]
     | Annotated[McpInstallArgs, tyro.conf.subcommand("install")]
     | Annotated[McpUninstallArgs, tyro.conf.subcommand("uninstall")]
+    | Annotated[McpEnvArgs, tyro.conf.subcommand("env")]
 )
 
 

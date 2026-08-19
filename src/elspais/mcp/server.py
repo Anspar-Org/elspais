@@ -7826,12 +7826,39 @@ def run_server(
                 clients_alive=_clients_alive,
             )
 
-        # Resolve ephemeral port if port=0
-        if port == 0:
+        def _free_port() -> int:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                 s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
                 s.bind(("127.0.0.1", 0))
-                port = s.getsockname()[1]
+                return int(s.getsockname()[1])
+
+        # Resolve ephemeral port if port=0
+        if port == 0:
+            port = _free_port()
+        else:
+            # Implements: REQ-o00076-K, REQ-o00075-G
+            # A requested address that something else holds is not a
+            # reason to refuse to serve: the tool must work whether or
+            # not this process can be reached where a client expected.
+            # Serving somewhere else and saying so leaves the CLI and the
+            # viewer unaffected -- they read the record -- and tells a
+            # client that resolved the old address why it will not answer.
+            try:
+                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+                    probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                    probe.bind(("127.0.0.1", port))
+            except OSError:
+                import sys as _sys
+
+                taken, port = port, _free_port()
+                print(
+                    f"warning: port {taken} is reserved for this working tree but is "
+                    f"in use, so this daemon is serving on {port} instead. Commands "
+                    f"and the viewer are unaffected. A client configured for "
+                    f"{taken} will not reach it until that port is free and the "
+                    f"daemon is restarted.",
+                    file=_sys.stderr,
+                )
 
         # Client liveness: set for implicitly spawned daemons only (env
         # written by daemon.start_daemon). Explicit starts (manual serve,

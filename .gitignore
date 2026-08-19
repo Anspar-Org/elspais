@@ -97,6 +97,10 @@ traceability_matrix.html
 # describes this checkout's working tree, not something to share.
 .elspais/automatic-save.json
 **/.elspais/automatic-save.json
+# The address a working tree is served at. Machine-local, and not matched
+# by the daemon.* patterns above.
+.elspais/daemon-port.json
+**/.elspais/daemon-port.json
 
 # Sentinels for changes a server is holding, and for changes a dead one
 # was holding. Same reason: one checkout's process state.

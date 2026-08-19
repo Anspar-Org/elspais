@@ -1,7 +1,9 @@
-"""Tests for elspais mcp install/uninstall subcommands."""
+# Verifies: REQ-d00214-A+B+C+D+E+F+G, REQ-o00076-K
+"""Tests for elspais mcp install/uninstall/env subcommands."""
 
 from __future__ import annotations
 
+import argparse
 import json
 import os
 import shutil
@@ -17,6 +19,7 @@ from elspais.cli import (
     _mcp_uninstall,
     _mcp_uninstall_desktop,
 )
+from elspais.commands.daemon_cmd import run_env
 
 _has_claude = shutil.which("claude") is not None
 _has_elspais = shutil.which("elspais") is not None
@@ -32,8 +35,22 @@ class TestMcpInstallLocal:
 
     @patch("subprocess.run")
     @patch("shutil.which")
-    # Verifies: REQ-d00214-A
-    def test_mcp_install_local(self, mock_which, mock_run):
+    # Verifies: REQ-d00214-A, REQ-o00076-K
+    def test_REQ_o00076_K_install_registers_the_address_variable_by_default(
+        self, mock_which, mock_run
+    ):
+        """Validates REQ-o00076-K: a client registered once must go on
+        reaching this working tree after the process serving it has been
+        replaced. A literal port baked into the registration cannot do
+        that -- a client that expands its configuration only at launch
+        would keep dialling an address nothing answers at. Registering
+        the variable instead defers the answer to the shell that starts
+        the client, so each launch picks up whatever address the tree is
+        being served at now. The transport is deliberately not passed
+        here: http being the default is the behaviour under test, since a
+        stdio default would put every client back on a private process
+        that nothing renews.
+        """
         mock_which.side_effect = lambda name: f"/usr/bin/{name}"
         mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
 
@@ -41,6 +58,31 @@ class TestMcpInstallLocal:
 
         assert result == 0
         mock_run.assert_called_once()
+        cmd = mock_run.call_args[0][0]
+        assert cmd == [
+            "/usr/bin/claude",
+            "mcp",
+            "add",
+            "elspais",
+            "--transport",
+            "http",
+            "${ELSPAIS_MCP_URL}",
+        ]
+
+    @patch("subprocess.run")
+    @patch("shutil.which")
+    # Verifies: REQ-d00214-A
+    def test_mcp_install_local_stdio(self, mock_which, mock_run):
+        """A client that cannot speak http is still registered as a server
+        command it owns, so asking for stdio produces the `--` separated
+        invocation rather than an address.
+        """
+        mock_which.side_effect = lambda name: f"/usr/bin/{name}"
+        mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+
+        result = _mcp_install(global_scope=False, transport="stdio")
+
+        assert result == 0
         cmd = mock_run.call_args[0][0]
         assert cmd == [
             "/usr/bin/claude",
@@ -277,6 +319,65 @@ class TestMcpInstallDesktop:
         assert "Unsupported platform" in capsys.readouterr().err
 
 
+class TestMcpEnv:
+    """`elspais mcp env` — the shell's half of the address variable.
+
+    Installation registers `${ELSPAIS_MCP_URL}` rather than a literal
+    port, which only reaches a daemon if something fills the variable in
+    at launch. That something is this command, evaluated by the shell
+    that starts the client, which is why its output has to be exactly
+    what a shell will accept and why nothing else may reach stdout.
+    """
+
+    # Verifies: REQ-o00076-K
+    def test_REQ_o00076_K_env_prints_shell_assignments_for_the_serving_address(
+        self, tmp_path, capsys
+    ):
+        """Validates REQ-o00076-K: a client that only expands environment
+        variables learns the address of the process serving this tree from
+        a shell that read it for them. The output is consumed by `eval`,
+        so it must carry the address the daemon is actually reachable at
+        and nothing a shell would choke on -- a diagnostic on stdout would
+        be executed as a command.
+        """
+        args = argparse.Namespace(no_start=False)
+
+        with (
+            patch("elspais.commands.daemon_cmd.find_git_root", return_value=tmp_path),
+            patch("elspais.mcp.daemon.ensure_daemon", return_value=54321) as ensure,
+        ):
+            rc = run_env(args)
+
+        assert rc == 0
+        ensure.assert_called_once_with(tmp_path)
+        out = capsys.readouterr().out
+        assert "export ELSPAIS_MCP_URL=http://127.0.0.1:54321/mcp" in out
+        assert "export ELSPAIS_MCP_PORT=54321" in out
+
+    # Verifies: REQ-o00076-K
+    def test_REQ_o00076_K_env_reports_no_address_rather_than_inventing_one(self, tmp_path, capsys):
+        """Validates REQ-o00076-K: asked not to start anything, the command
+        can only report an address if one is already being served. When no
+        process serves this tree there is no address to hand out, and the
+        honest answer is a non-zero status with an empty stdout -- anything
+        printed there would be evaluated by the caller's shell and would
+        point a client at a port nothing answers on.
+        """
+        args = argparse.Namespace(no_start=True)
+
+        with (
+            patch("elspais.commands.daemon_cmd.find_git_root", return_value=tmp_path),
+            patch("elspais.mcp.daemon.get_daemon_info", return_value=None),
+            patch("elspais.mcp.daemon.ensure_daemon", side_effect=AssertionError("must not start")),
+        ):
+            rc = run_env(args)
+
+        assert rc != 0
+        captured = capsys.readouterr()
+        assert captured.out == ""
+        assert "No daemon" in captured.err
+
+
 class TestMcpUninstallDesktop:
     """test_mcp_uninstall_desktop — verifies config entry removal."""
 
@@ -360,10 +461,17 @@ def claude_mcp_list():
 _mcp_uninstall(global_scope=True)
 
 try:
+    # Default (http): registered against the address variable, not a command.
     rc = _mcp_install(global_scope=True)
     assert rc == 0, f"install failed with rc={rc}"
     listing = claude_mcp_list()
     assert "elspais" in listing, f"elspais not in listing: {listing}"
+    _mcp_uninstall(global_scope=True)
+
+    # stdio: still registered as a server command the client owns.
+    rc = _mcp_install(global_scope=True, transport="stdio")
+    assert rc == 0, f"stdio install failed with rc={rc}"
+    listing = claude_mcp_list()
     assert "elspais mcp serve" in listing, f"serve not in listing: {listing}"
 finally:
     _mcp_uninstall(global_scope=True)

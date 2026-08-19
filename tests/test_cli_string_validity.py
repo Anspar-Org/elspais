@@ -265,7 +265,11 @@ def subcommand_specs() -> dict[str, SubcommandSpec]:
 # where we'd stop slightly early, which doesn't harm flag validation.
 # `#` terminates shell comments in code-block examples (e.g. `$ elspais X
 # # Short description`).
-_TERMINATORS = set("`\"'|\n#")
+# `)` closes a shell command substitution — `eval "$(elspais mcp env)"` — and
+# cannot occur inside a real elspais token, so treating it as a terminator
+# costs nothing and stops the closing paren being read as part of the last
+# word (which made `env)` look like an unknown action).
+_TERMINATORS = set("`\"'|\n#)")
 
 # A real CLI flag looks like `-<letter>` or `--<letter>...`.
 # This explicitly rejects `-->` (HTML comment close), `--` (argparse

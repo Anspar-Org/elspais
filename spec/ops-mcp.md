@@ -591,6 +591,8 @@ I. When a client requires the process serving its working tree, that process SHA
 
 J. If the process serving a working tree cannot be made to serve from the same program code and configuration as the client requiring it, then the tool SHALL disclose that difference to that client.
 
+K. When the process serving a working tree is replaced, a client SHALL reach the replacement at the address it reached the previous process at.
+
 ### Rationale
 
 A client and the process serving it meet at one point — the client asks which process serves its working tree, and acts on the answer. Everything here is a property of that meeting: that it can happen at all, that the answer is true, and that what answers is what the client would have run. That a process exists and that exactly one of them serves a tree is REQ-o00075's subject and is not restated.
@@ -605,14 +607,21 @@ Assertion I governs what a client is handed when it acquires the process, not wh
 
 Assertions F and G separate the two ways a process comes into existence because they carry different consequences downstream, and H makes the difference answerable rather than inferred. What those consequences are — chiefly that the two origins carry different lifetimes — is REQ-o00074's subject.
 
+Assertion K is what lets a client outlive the process it is talking to. Assertions C and E have a client ask which process serves its tree and act on the answer, which is enough for a client that can ask again; not every client can. One that resolves the address once — when it is configured, or when its session begins — and then holds it for hours has no way to learn that the answer has changed, and reaches for whatever it was told the first time. An address that moved leaves such a client unable to reach a process that is running and willing to serve it.
+
+K is therefore what decides which side of REQ-o00077-D a client falls on. A process reachable at an address that survives its replacement can be replaced without ending that client's session, which is what D asks; a process whose address goes with it cannot, and its clients are owed REQ-o00077-F's refusal instead. Making an address survive is thus not a convenience — it is what buys a whole class of client the silent renewal D describes.
+
+An address that survives replacement must also survive there being nothing to replace. The record naming the process currently serving a tree is removed when none is, which is what E requires of it; the address a tree is reached at is a different fact with a different lifetime, and holding the two separately is what lets a tree be reached in the same place after serving has stopped and begun again.
+
 ### Changelog
 
+- 2026-08-18 | 32c4639b | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-18 | cd6333aa | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: sync changelog hash
 - 2026-08-18 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: state each obligation a client relies on when it reaches the serving process as its own assertion
 - 2026-08-18 | cd6333aa | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-18 | d2a0addf | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash, add missing changelog section
 
-*End* *Reaching the Serving Process* | **Hash**: cd6333aa
+*End* *Reaching the Serving Process* | **Hash**: 32c4639b
 
 ## REQ-o00077: Serving From the Installed Program
 

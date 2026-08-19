@@ -20,6 +20,40 @@ manual CLI usage.
 
   $ elspais mcp serve
 
+## Two Ways To Connect, and Which To Prefer
+
+`elspais mcp install` registers an **http** connection by default. Prefer
+it. Over http the client talks to the same daemon the CLI and the viewer
+use, so all three see one graph -- a change made through MCP is visible
+to `elspais` commands immediately, and vice versa. It also survives the
+daemon being replaced: an http client reconnects to the same address,
+where a stdio server is a process the client owns and nothing restarts
+once it exits.
+
+An http registration names a variable rather than a literal address,
+because the address belongs to a working tree and one registration may
+serve several. Supply it from the shell that launches the client:
+
+  $ eval "$(elspais mcp env)"
+  $ claude
+
+`elspais mcp env` starts the daemon for the working tree you are in if
+none is running, then prints `export ELSPAIS_MCP_URL=...` for the shell
+to apply. (It prints rather than exports because no process can set a
+variable in the shell that started it.) Each working tree keeps its own
+address, so parallel sessions in different worktrees do not collide, and
+the address is held for that tree even while nothing is serving it --
+restart the daemon, or stop and start it, and the same address answers.
+
+Use **stdio** (`elspais mcp install --transport stdio`) for a client that
+cannot speak http. A stdio server holds its own private graph: mutations
+made through it are not visible to the CLI or the viewer until they are
+saved to disk, and it goes on answering from the elspais it loaded at
+startup for as long as the session lasts. If elspais is reinstalled
+beneath it -- which, in a tree elspais is installed from, is what editing
+a file amounts to -- it says so and asks to be reconnected. See
+`docs("concurrency")` for what it reports and why.
+
 ## Available Tools
 
 ### Graph Status & Control

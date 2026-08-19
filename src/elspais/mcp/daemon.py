@@ -355,6 +355,45 @@ def _daemon_dir(repo_root: Path) -> Path:
     return repo_root / ".elspais"
 
 
+def _port_record_path(repo_root: Path) -> Path:
+    return _daemon_dir(repo_root) / "daemon-port.json"
+
+
+# Implements: REQ-o00076-K
+def reserved_port(repo_root: Path) -> int | None:
+    """The address this working tree is reached at, or None if never set.
+
+    Kept apart from ``daemon.json`` because it is a different fact with a
+    different lifetime. That record names the process serving this tree
+    now and is removed when none is (REQ-o00076-E); this one names where
+    the tree is reached, and has to outlive there being nothing to reach
+    -- otherwise a client that resolved the address once could not find
+    the tree again after serving stopped and started.
+    """
+    try:
+        port = json.loads(_port_record_path(repo_root).read_text()).get("port")
+    except (OSError, json.JSONDecodeError, AttributeError):
+        return None
+    return port if isinstance(port, int) and 0 < port < 65536 else None
+
+
+# Implements: REQ-o00076-K
+def reserve_port(repo_root: Path, port: int) -> None:
+    """Record the address this working tree is to be reached at.
+
+    Best effort: a tree whose reservation cannot be written still gets
+    served, on whatever address it was given. What it loses is only the
+    guarantee that the address survives a replacement, which is a
+    degradation and not a failure.
+    """
+    path = _port_record_path(repo_root)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        _write_json_atomic(path, {"port": port})
+    except OSError as exc:
+        print(f"warning: could not record this tree's daemon port: {exc}", file=sys.stderr)
+
+
 def _write_json_atomic(path: Path, payload: dict) -> None:
     """Replace a state record without a reader ever seeing it half-written.
 
@@ -769,7 +808,13 @@ def start_daemon(
         "--transport",
         "streamable-http",
         "--port",
-        "0",
+        # Implements: REQ-o00076-K
+        # The address this tree was last reached at, so a client that
+        # resolved it once still reaches the replacement. 0 asks for any
+        # free port, which is what a tree that has never been served
+        # gets; the server falls back to that too if the reservation is
+        # occupied, and the port actually bound is recorded below.
+        str(reserved_port(repo_root) or 0),
         "--ttl",
         str(serve_ttl),
     ]
@@ -811,6 +856,13 @@ def start_daemon(
     while time.time() < deadline:
         try:
             with urlopen(f"http://127.0.0.1:{port}/api/check-freshness", timeout=2):
+                # Implements: REQ-o00076-K
+                # Recorded from what was actually bound rather than what
+                # was asked for, so a tree whose reservation was occupied
+                # settles on the address it really answers at instead of
+                # one it does not.
+                if reserved_port(repo_root) != port:
+                    reserve_port(repo_root, port)
                 return port
         except (URLError, OSError):
             time.sleep(0.2)
