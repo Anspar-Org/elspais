@@ -147,26 +147,51 @@ class RefItem:
 
 
 # Implements: REQ-d00269-G, REQ-d00272-K
+# Implements: REQ-d00272-K
+#: The classes that mean the reader itself refused the item, as against the
+#: later classes that mean it read cleanly and named something this graph does
+#: not hold. Only the first kind withholds a relationship at reading time: an
+#: UNKNOWN_* item is a resolution question, and a keyword resolving its own
+#: targets -- ``Satisfies:`` through template instantiation, ``Integrates:``
+#: through the federation -- answers it there, where a foreign identifier is
+#: the expected case rather than a defect.
+_UNREAD_CLASSES: frozenset[FaultClass] = frozenset({FaultClass.MALFORMED, FaultClass.FORBIDDEN})
+
+
+def reader_refused(verdict: tuple[FaultClass, tuple[str, ...]] | None) -> bool:
+    """Whether *verdict* is the reader declining to let an item bind."""
+    return verdict is not None and verdict[0] in _UNREAD_CLASSES
+
+
 def refs_and_verdicts(
     items: list[RefItem],
-) -> tuple[list[str], dict[str, tuple[FaultClass, tuple[str, ...]]]]:
+    keyword: str,
+) -> tuple[list[str], dict[tuple[str, str], tuple[FaultClass, tuple[str, ...]]]]:
     """Split a ``parse_ref_list`` result into the shape every caller needs.
 
     ``refs`` keeps one entry per item -- resolved where an item read, raw
     where it did not, so a faulted item survives to be reported instead of
-    vanishing.  ``verdicts`` is keyed by raw text (the form that reaches the
-    builder as a pending link's target) and carries every item's class and
-    codes, INCLUDING a resolved item's -- an item that read cleanly but was
-    later found to repeat a target it shares with a sibling has its
-    ``resolved`` cleared and its verdict set to ``FORBIDDEN``/
-    ``DUPLICATE_ITEM`` by ``parse_ref_list`` itself, and that verdict must
-    still reach the builder alongside its raw text. One reading, so every
-    surface that divides a reference list -- code/test annotations, spec
-    metadata, journey ``Validates:`` -- hands its builder the identical
-    shape rather than three near-identical transforms of the same list.
+    vanishing.  ``verdicts`` carries every item's class and codes, INCLUDING
+    a resolved item's -- an item that read cleanly but was later found to
+    repeat a target it shares with a sibling has its ``resolved`` cleared
+    and its verdict set to ``FORBIDDEN``/``DUPLICATE_ITEM`` by
+    ``parse_ref_list`` itself, and that verdict must still reach the builder
+    alongside its raw text. One reading, so every surface that divides a
+    reference list -- code/test annotations, spec metadata, journey
+    ``Validates:`` -- hands its builder the identical shape rather than
+    three near-identical transforms of the same list.
+
+    The key is the *Traceability* keyword the list was written under paired
+    with the item's raw text, because a verdict answers for the reference it
+    was read from and for no other. A requirement naming one target under
+    two keywords writes two items, and a fault found in one of them decides
+    that one: a repeated target under ``Refines:`` says nothing about a
+    clean ``Implements:`` to the same target (REQ-d00272-K).
     """
     refs = [i.resolved or i.raw for i in items if i.raw]
-    verdicts = {i.raw: (i.fault_class, i.codes) for i in items if i.fault_class is not None}
+    verdicts = {
+        (keyword, i.raw): (i.fault_class, i.codes) for i in items if i.fault_class is not None
+    }
     return refs, verdicts
 
 

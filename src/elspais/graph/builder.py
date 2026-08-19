@@ -40,6 +40,7 @@ from elspais.graph.reference_faults import (
     ReferenceFault,
     StyleFinding,
     UndeclaredRelationship,
+    reader_refused,
 )
 from elspais.graph.relations import EdgeKind, Stereotype
 from elspais.graph.render import format_definition_block, render_end_marker
@@ -3628,7 +3629,7 @@ class GraphBuilder:
         # queued the link carries none), consulted only if the target turns
         # out missing when links are resolved.
         self._pending_links: list[
-            tuple[str, str, EdgeKind, dict[str, tuple[FaultClass, tuple[str, ...]]]]
+            tuple[str, str, EdgeKind, dict[tuple[str, str], tuple[FaultClass, tuple[str, ...]]]]
         ] = []
         # Implements: REQ-d00254-G
         # Source RESULT->TEST links for test_id-less reporters (e.g. flutter-
@@ -3644,7 +3645,10 @@ class GraphBuilder:
         # Implements: REQ-d00222-A
         self._pending_terms: list[tuple[str, dict]] = []  # (node_id, parsed_data)
         # Implements: REQ-p00014-B
-        self._satisfies_links: list[tuple[str, str]] = []  # (declaring_id, template_id)
+        # (declaring_id, template_id, the verdict dict its reference list carried)
+        self._satisfies_links: list[
+            tuple[str, str, dict[tuple[str, str], tuple[FaultClass, tuple[str, ...]]]]
+        ] = []
         # Detection: broken references
         self._broken_references: list[ReferenceFault] = []
         # Implements: REQ-d00272-G
@@ -3903,6 +3907,18 @@ class GraphBuilder:
             "satisfies_refs": data.get("satisfies", []),
             # Implements: REQ-d00252
             "integrates_refs": data.get("integrates", []),
+            # Implements: REQ-d00272-K
+            # The raw items the reader refused. They stay in
+            # ``integrates_refs`` so rendering returns the author's own text
+            # unchanged, and are named here so the federation pass wires no
+            # relationship for an item whose verdict already withheld one.
+            "integrates_refused": sorted(
+                {
+                    raw
+                    for (kw, raw), verdict in (data.get("reference_verdicts") or {}).items()
+                    if kw == EdgeKind.INTEGRATES.value and reader_refused(verdict)
+                }
+            ),
             "heading_level": data.get("heading_level", 2),
             "assertions_heading_level": data.get("assertions_heading_level"),
             "changelog_heading_level": data.get("changelog_heading_level"),
@@ -4103,9 +4119,32 @@ class GraphBuilder:
         for refine_ref in data.get("refines", []):
             self._pending_links.append((req_id, refine_ref, EdgeKind.REFINES, req_verdicts))
 
-        # Implements: REQ-p00014-B
+        # Implements: REQ-p00014-B, REQ-d00272-K
+        # The verdict its item carried rides along exactly as it does for
+        # Implements and Refines: a Satisfies target reads through the one
+        # reader, so a malformed or repeated item is classified the same way
+        # here as under any other keyword.
         for sat_ref in data.get("satisfies", []):
-            self._satisfies_links.append((req_id, sat_ref))
+            self._satisfies_links.append((req_id, sat_ref, req_verdicts))
+
+        # Implements: REQ-d00252, REQ-d00272-K
+        # An Integrates item the reader refused is reported here, under the
+        # class the reader reached. Its target is resolved by the federation
+        # pass rather than by pending-link resolution, so without this the
+        # refusal reaches no surface at all.
+        for (kw, raw), verdict in req_verdicts.items():
+            if kw != EdgeKind.INTEGRATES.value or not reader_refused(verdict):
+                continue
+            fault_class, codes = verdict
+            self._broken_references.append(
+                ReferenceFault(
+                    source_id=req_id,
+                    target_id=raw,
+                    edge_kind=EdgeKind.INTEGRATES.value,
+                    fault_class=fault_class,
+                    codes=codes,
+                )
+            )
 
         # Implements: REQ-p00014-E
         # Author-declared TEMPLATE marker: stamp the REQ and its assertions
@@ -4537,7 +4576,10 @@ class GraphBuilder:
 
     # Implements: REQ-d00252-K
     def _fault_verdict(
-        self, target_id: str, verdicts: dict[str, tuple[FaultClass, tuple[str, ...]]]
+        self,
+        target_id: str,
+        keyword: str,
+        verdicts: dict[tuple[str, str], tuple[FaultClass, tuple[str, ...]]],
     ) -> tuple[FaultClass, tuple[str, ...]]:
         """The class and codes for *target_id*, from its parsed verdict or
         resolution.
@@ -4558,8 +4600,8 @@ class GraphBuilder:
         path, would name a defect an item that parsed perfectly and is simply
         absent does not have.
         """
-        if target_id in verdicts:
-            return verdicts[target_id]
+        if (keyword, target_id) in verdicts:
+            return verdicts[(keyword, target_id)]
         return self._resolution_class(target_id), ()
 
     # Implements: REQ-d00272-A, REQ-d00272-J
@@ -4568,7 +4610,7 @@ class GraphBuilder:
         source_id: str,
         keyword: str,
         targets: list[str],
-        verdicts: dict[str, tuple[FaultClass, tuple[str, ...]]],
+        verdicts: dict[tuple[str, str], tuple[FaultClass, tuple[str, ...]]],
         file_kind: str,
     ) -> list[ReferenceFault]:
         """The faults a keyword *file_kind* may not use produces for *targets*.
@@ -4586,8 +4628,8 @@ class GraphBuilder:
         """
         faults: list[ReferenceFault] = []
         for raw_target in targets:
-            if raw_target in verdicts:
-                fault_class, codes = verdicts[raw_target]
+            if (keyword, raw_target) in verdicts:
+                fault_class, codes = verdicts[(keyword, raw_target)]
                 faults.append(
                     ReferenceFault(
                         source_id=source_id,
@@ -4626,10 +4668,39 @@ class GraphBuilder:
         # Collect all template roots first (a template may be referenced
         # by multiple declaring reqs)
         template_roots: dict[str, list[str]] = {}  # template_id -> [declaring_ids]
-        for declaring_id, template_id in self._satisfies_links:
+        # Implements: REQ-d00272-K
+        # An item its reader already refused never reaches template lookup:
+        # its verdict decided it binds nothing, and finding the node anyway
+        # would return the relationship the verdict withheld. It is reported
+        # under the class the reader reached, not the resolution-stage one.
+        #
+        # One entry per refused ITEM, not per (declaring, target) pair: the
+        # commonest reason an item is refused is that it repeats a sibling,
+        # and every instance of a repeat is reported. Keyed by the pair, the
+        # instances would collapse into the one report that keeping the first
+        # instance already produces -- the silence this assertion exists to
+        # remove.
+        refused_items: list[tuple[str, str, FaultClass, tuple[str, ...]]] = []
+        for declaring_id, template_id, verdicts in self._satisfies_links:
+            refused = verdicts.get((EdgeKind.SATISFIES.value, template_id))
+            if reader_refused(refused):
+                assert refused is not None
+                refused_items.append((declaring_id, template_id, refused[0], refused[1]))
+                continue
             # Handle assertion-level satisfies: strip assertion suffix to find root
             # but keep the full ref for later use
             template_roots.setdefault(template_id, []).append(declaring_id)
+
+        for declaring_id, template_id, fault_class, codes in refused_items:
+            self._broken_references.append(
+                ReferenceFault(
+                    source_id=declaring_id,
+                    target_id=template_id,
+                    edge_kind=EdgeKind.SATISFIES.value,
+                    fault_class=fault_class,
+                    codes=codes,
+                )
+            )
 
         # CUR-1353 Phase 2 (single-REQ scope): a template is one REQ root plus
         # its directly-attached assertions. We do NOT pre-resolve REFINES into
@@ -4683,7 +4754,7 @@ class GraphBuilder:
 
         # Sub-pass 2: Clone & link. Skip any satisfies-link whose template was
         # rejected in sub-pass 1 (template_roots[t] emptied).
-        cloneable_links = [(d, t) for d, t in self._satisfies_links if template_roots.get(t)]
+        cloneable_links = [(d, t) for d, t, _v in self._satisfies_links if template_roots.get(t)]
         for declaring_id, template_id in cloneable_links:
             template_node = self._nodes.get(template_id)
             declaring_node = self._nodes.get(declaring_id)
@@ -4930,10 +5001,10 @@ class GraphBuilder:
         # its one verdict resolves to one link that reports (or refuses to
         # bind) the item exactly as the reader classified it.
         expanded_links: list[
-            tuple[str, str, EdgeKind, dict[str, tuple[FaultClass, tuple[str, ...]]]]
+            tuple[str, str, EdgeKind, dict[tuple[str, str], tuple[FaultClass, tuple[str, ...]]]]
         ] = []
         for source_id, target_id, edge_kind, verdicts in self._pending_links:
-            if target_id in verdicts:
+            if (edge_kind.value, target_id) in verdicts:
                 expanded_links.append((source_id, target_id, edge_kind, verdicts))
                 continue
             for resolved_target in self._expand_multi_assertion(target_id):
@@ -4953,7 +5024,9 @@ class GraphBuilder:
             # is what makes it a duplicate rather than a typo), so
             # ``self._nodes.get(target_id)`` finds the real node and would
             # bind it were this check skipped (REQ-d00272-K).
-            target = None if target_id in verdicts else self._nodes.get(target_id)
+            target = (
+                None if (edge_kind.value, target_id) in verdicts else self._nodes.get(target_id)
+            )
 
             if source and target:
                 # Implements: REQ-p00014-G
@@ -5098,7 +5171,7 @@ class GraphBuilder:
                 # an item no grammar accounted for has one, so a target that
                 # matched but names no node here falls back to the
                 # resolution-stage decision (REQ-p00014-R).
-                fault_class, codes = self._fault_verdict(target_id, verdicts)
+                fault_class, codes = self._fault_verdict(target_id, edge_kind.value, verdicts)
                 self._broken_references.append(
                     ReferenceFault(
                         source_id=source_id,

@@ -188,14 +188,14 @@ def foo(): pass
         results = _parse_code(content, resolver, code_parser)
         refs = [r for r in results if r.content_type == "code_ref"]
         assert len(refs) == 1
-        assert "REQ-p00001" in refs[0].parsed_data["implements"], (
-            "the item that resolved must still bind; got " f"{refs[0].parsed_data['implements']}"
-        )
+        assert (
+            "REQ-p00001" in refs[0].parsed_data["implements"]
+        ), f"the item that resolved must still bind; got {refs[0].parsed_data['implements']}"
         assert "GARBAGE-999" in refs[0].parsed_data["implements"], (
             "the faulted item stays in the list so the builder can report "
             f"it as a broken reference; got {refs[0].parsed_data['implements']}"
         )
-        assert "GARBAGE-999" in refs[0].parsed_data["reference_verdicts"], (
+        assert ("implements", "GARBAGE-999") in refs[0].parsed_data["reference_verdicts"], (
             "the faulted item's verdict must reach the builder; got "
             f"{refs[0].parsed_data['reference_verdicts']}"
         )
@@ -309,7 +309,7 @@ class TestTestRefParsing:
             "the faulted item must still reach a reportable entry, not "
             f"vanish once salvaged from the default; got {file_level[0].parsed_data}"
         )
-        assert "GARBAGE-999" in file_level[0].parsed_data["reference_verdicts"], (
+        assert ("verifies", "GARBAGE-999") in file_level[0].parsed_data["reference_verdicts"], (
             "its verdict must ride alongside so the builder can report it "
             f"as a broken reference; got {file_level[0].parsed_data}"
         )
@@ -384,8 +384,11 @@ def test_a_stray_leading_asterisk_on_the_target_does_not_bind(parse_code):
     assert len(refs) == 1
     verdicts = refs[0].parsed_data.get("reference_verdicts", {})
     assert (
-        "*REQ-d00001" in verdicts
-    ), f"the stray asterisk must survive verbatim in the reported target; got {verdicts}"
+        "implements",
+        "*REQ-d00001",
+    ) in verdicts, (
+        f"the stray asterisk must survive verbatim in the reported target; got {verdicts}"
+    )
 
 
 # Verifies: REQ-d00272-G
@@ -410,7 +413,7 @@ def test_a_keyword_introducing_nothing_is_admitted_and_reported(parse_code):
 # Verifies: REQ-d00269-H
 def test_a_trailing_separator_continues_onto_the_next_comment_line(parse_code):
     result = parse_code(
-        "# Implements: REQ-d00001,\n" "#             REQ-d00002\n" "def f():\n    return 1\n"
+        "# Implements: REQ-d00001,\n#             REQ-d00002\ndef f():\n    return 1\n"
     )
     refs = _all_refs(result)
     assert "REQ-d00001" in refs
@@ -429,7 +432,7 @@ def test_a_continuation_without_a_separator_is_an_orphan(parse_code):
     -- and is reported as an orphan, not merely absent from the refs.
     """
     result = parse_code(
-        "# Implements: REQ-d00001\n" "#             REQ-d00002\n" "def f():\n    return 1\n"
+        "# Implements: REQ-d00001\n#             REQ-d00002\ndef f():\n    return 1\n"
     )
     refs = _all_refs(result)
     assert "REQ-d00001" in refs
@@ -463,7 +466,7 @@ def test_an_informal_citation_produces_no_relationship(parse_code):
     """Prose citing a requirement is evidence of intent, and inferring an
     edge from intent is the failure this vocabulary exists to prevent."""
     results, tx = parse_code(
-        "# REQ-d00001: the code below answers to this, informally.\n" "def f():\n    return 1\n"
+        "# REQ-d00001: the code below answers to this, informally.\ndef f():\n    return 1\n"
     )
     assert not _all_refs((results, tx)), "an informal citation must bind nothing"
     assert len(tx.undeclared) == 1
@@ -484,7 +487,7 @@ def test_a_comment_a_keyword_introduces_is_not_an_informal_citation(parse_code):
 def test_a_comment_continuing_a_list_is_not_an_informal_citation(parse_code):
     """A continuation line is an item of its list, not a citation of its own."""
     results, tx = parse_code(
-        "# Implements: REQ-d00001,\n" "#             REQ-d00002\n" "def f():\n    return 1\n"
+        "# Implements: REQ-d00001,\n#             REQ-d00002\ndef f():\n    return 1\n"
     )
     refs = _all_refs((results, tx))
     assert "REQ-d00001" in refs and "REQ-d00002" in refs
@@ -500,7 +503,7 @@ def test_a_folded_continuation_preserves_the_original_lines_for_rendering(parse_
     form used only to parse the keyword's target.
     """
     results, _tx = parse_code(
-        "# Implements: REQ-d00001,\n" "#             REQ-d00002\n" "def f():\n    return 1\n"
+        "# Implements: REQ-d00001,\n#             REQ-d00002\ndef f():\n    return 1\n"
     )
     refs = [r for r in results if r.content_type == "code_ref"]
     assert len(refs) == 1
@@ -520,7 +523,7 @@ def test_a_continuation_candidate_need_not_be_identifier_shaped(parse_code):
     refuses to guess: the item is read and reported, never bound.
     """
     results, tx = parse_code(
-        "# Implements: REQ-d00001,\n" "#             XREQ-d00002\n" "def f():\n    return 1\n"
+        "# Implements: REQ-d00001,\n#             XREQ-d00002\ndef f():\n    return 1\n"
     )
     refs = _all_refs((results, tx))
     assert "REQ-d00001" in refs
@@ -532,7 +535,7 @@ def test_a_continuation_candidate_need_not_be_identifier_shaped(parse_code):
         r
         for r in results
         if r.content_type == "code_ref"
-        and "XREQ-d00002" in r.parsed_data.get("reference_verdicts", {})
+        and ("implements", "XREQ-d00002") in r.parsed_data.get("reference_verdicts", {})
     ]
     assert verdicted, f"XREQ-d00002 must be reported as a faulted item; got {results}"
 

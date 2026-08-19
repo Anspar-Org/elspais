@@ -26,6 +26,7 @@ from elspais.graph.reference_faults import (
     ReferenceFault,
     StyleFinding,
     UndeclaredRelationship,
+    reader_refused,
 )
 from elspais.graph.relations import EdgeKind
 
@@ -1736,6 +1737,15 @@ class FederatedGraph:
                     if claim is not None:
                         target_repo_name, target_id_canonical = claim
                 if target_repo_name is None:
+                    # Implements: REQ-d00272-A, REQ-d00272-B
+                    # An item the reader itself refused keeps the class it
+                    # reached. Reading is staged, and this rewrite speaks for
+                    # a later stage than an unread item got to: text that is
+                    # not an identifier cannot name a repository, declared or
+                    # otherwise, so describing it as one names a cause the
+                    # input does not determine.
+                    if reader_refused((br.fault_class, br.codes)):
+                        continue
                     # Missing-associate: no associated repo claims this
                     # target ID. Emit a typed diagnostic naming the
                     # currently-available associates so the author knows
@@ -1894,7 +1904,15 @@ class FederatedGraph:
             if source_entry.graph is None:
                 continue
             for req in list(source_entry.graph.iter_by_kind(NodeKind.REQUIREMENT)):
+                # Implements: REQ-d00272-K
+                # An item the reader refused binds nothing. The builder has
+                # already reported it under the class the reader reached;
+                # resolving it here would return the relationship the verdict
+                # withheld, and report it a second time as unresolved.
+                refused = set(req.get_field("integrates_refused") or [])
                 for raw in req.get_field("integrates_refs") or []:
+                    if raw in refused:
+                        continue
                     self._wire_one_integrates(source_entry, req.id, raw)
 
     # Implements: REQ-d00252

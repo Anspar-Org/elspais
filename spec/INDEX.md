@@ -85,7 +85,7 @@
 | REQ-d00066 | Test Coverage Tool Implementation                             | dev-mcp-tools.md        | 8a9b0217 |
 | REQ-d00067 | Uncovered Assertions Tool Implementation                      | dev-mcp-tools.md        | c838e24d |
 | REQ-d00068 | Assertion Keyword Search Tool Implementation                  | dev-mcp-tools.md        | d552fda6 |
-| REQ-d00069 | Indirect Coverage Source                                      | dev-graph-core.md       | a8b306bc |
+| REQ-d00069 | Indirect Coverage Source                                      | dev-graph-core.md       | 665b798a |
 | REQ-d00070 | Indirect Coverage Toggle Display                              | dev-graph-core.md       | 27a15cb2 |
 | REQ-d00071 | Unified Root vs Orphan Classification                         | dev-graph-core.md       | f2cb5f45 |
 | REQ-d00072 | Link Suggestion Core Engine                                   | dev-graph-core.md       | 9d57c2ad |
@@ -99,9 +99,9 @@
 | REQ-d00080 | Diagnostic Command Exit Code Contract                         | dev-cli.md              | acc2aa77 |
 | REQ-d00081 | Multi-Assertion Reference Expansion                           | dev-cli.md              | b1812806 |
 | REQ-d00082 | Unified Reference Configuration                               | dev-cli.md              | f0808bb9 |
-| REQ-d00084 | Trace Command                                                 | dev-cli.md              | 3a6da144 |
+| REQ-d00084 | Trace Command                                                 | dev-cli.md              | 67887c51 |
 | REQ-d00085 | Unified Report Composition                                    | dev-cli.md              | 587285b0 |
-| REQ-d00086 | Coverage Report Section                                       | dev-cli.md              | 0cca2a88 |
+| REQ-d00086 | Coverage Report Section                                       | dev-cli.md              | 4559fce7 |
 | REQ-d00124 | Graph Analysis Engine                                         | dev-cli.md              | b153d5f6 |
 | REQ-d00125 | Analysis CLI Command                                          | dev-cli.md              | 474fa8af |
 | REQ-d00126 | FILE Node Data Model                                          | dev-graph-file-nodes.md | 070e173b |
@@ -171,7 +171,7 @@
 | REQ-d00255 | Test-to-Journey UAT Verification                              | dev-graph-core.md       | ab5cb648 |
 | REQ-d00256 | Step-Level UAT Verification                                   | dev-graph-core.md       | 8bf40a7c |
 | REQ-d00257 | UAT-Scoped Traceability Report                                | dev-graph-core.md       | 2a8aab8b |
-| REQ-d00258 | Reporting Surface Consistency                                 | dev-graph-core.md       | e6e17ee9 |
+| REQ-d00258 | Reporting Surface Consistency                                 | dev-graph-core.md       | 879012b7 |
 | REQ-d00259 | Requirement Format Reference Command                          | dev-cli.md              | c3b67490 |
 | REQ-d00260 | Workspace Registry and Federated View Assembly                | dev-graph-federation.md | 510a0f67 |
 | REQ-d00261 | Federation Role Model                                         | dev-graph-federation.md | fb8db8a9 |
@@ -189,6 +189,7 @@
 | REQ-d00274 | Uncredited Coverage Evidence                                  | dev-graph-core.md       | 2f1e6599 |
 | REQ-d00275 | Whose Configuration Governs a Federated Answer                | dev-graph-federation.md | 9ab2ef7c |
 | REQ-d00276 | Tests Outside the Requirement Estate                          | dev-graph-core.md       | 922d1382 |
+| REQ-d00277 | Coverage Dimensions                                           | dev-graph-core.md       | b097dcd7 |
 
 ## User Journeys
 

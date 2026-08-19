@@ -151,7 +151,7 @@ class JourneyParser:
         validates_match = self.VALIDATES_PATTERN.search(text)
         if validates_match:
             items = self.reader.parse_ref_list(validates_match.group("validates"))
-            refs, verdicts = refs_and_verdicts(items)
+            refs, verdicts = refs_and_verdicts(items, "validates")
             data["validates"] = refs
             data["reference_verdicts"] = verdicts
 

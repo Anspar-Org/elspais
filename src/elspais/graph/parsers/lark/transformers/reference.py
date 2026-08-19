@@ -550,7 +550,7 @@ class ReferenceTransformer:
             # on the admitted path -- reporting the refusal for it would name
             # a later stage than reading actually reached.
             items = read_reference_list(self.reader, text)
-            targets, verdicts = refs_and_verdicts(items)
+            targets, verdicts = refs_and_verdicts(items, keyword)
             if not targets:
                 return None
             func_name, class_name, func_line, func_end_line = self._forbidden_line_context(line_num)
@@ -618,7 +618,7 @@ class ReferenceTransformer:
         # every malformed item vanish -- the defect this work exists to
         # remove.  Its verdict rides alongside so the builder can stamp the
         # class rather than re-deriving it.
-        refs, verdicts = refs_and_verdicts(items)
+        refs, verdicts = refs_and_verdicts(items, keyword)
         if not refs:
             return None
 

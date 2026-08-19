@@ -6,6 +6,7 @@ import pytest
 
 from elspais.config import load_config
 from elspais.graph.reference_faults import FaultClass, FaultCode, ReferenceFault
+from elspais.graph.relations import EdgeKind
 from elspais.utilities.patterns import FederatedIdReader, build_resolver
 
 
@@ -330,7 +331,7 @@ def test_a_keyword_a_test_file_may_not_use_is_refused_not_passed_over(tmp_path, 
     tests_dir = tmp_path / "tests"
     tests_dir.mkdir()
     (tests_dir / "test_m.py").write_text(
-        "# Implements: REQ-d00001-A\n" "def test_f():\n" "    assert True\n"
+        "# Implements: REQ-d00001-A\ndef test_f():\n    assert True\n"
     )
     config_path = tmp_path / ".elspais.toml"
     graph = build_graph(
@@ -388,9 +389,9 @@ def test_a_duplicated_existing_target_binds_nothing_and_reports_twice(tmp_path, 
     assert node is not None
     from elspais.graph.relations import EdgeKind
 
-    assert not any(node.iter_edges_by_kind(EdgeKind.IMPLEMENTS)), (
-        "a duplicated target must produce no relationship, even though the " "target itself exists"
-    )
+    assert not any(
+        node.iter_edges_by_kind(EdgeKind.IMPLEMENTS)
+    ), "a duplicated target must produce no relationship, even though the target itself exists"
     faults = [f for f in graph.broken_references() if f.target_id == "REQ-d00001"]
     assert len(faults) == 2, f"expected one fault per instance, got {faults}"
     assert all(f.fault_class is FaultClass.FORBIDDEN for f in faults)
@@ -519,6 +520,140 @@ def test_a_duplicated_refines_reference_binds_nothing_and_reports_twice(tmp_path
     assert all(FaultCode.DUPLICATE_ITEM in f.codes for f in faults)
 
 
+# Verifies: REQ-d00272-K
+@pytest.mark.parametrize(
+    "duplicated_field,clean_field,duplicated_kind,clean_kind",
+    [
+        ("refines", "implements", EdgeKind.REFINES, EdgeKind.IMPLEMENTS),
+        ("implements", "refines", EdgeKind.IMPLEMENTS, EdgeKind.REFINES),
+    ],
+)
+def test_a_duplicate_under_one_keyword_leaves_another_keywords_clean_reference_binding(
+    tmp_path, repo_root, duplicated_field, clean_field, duplicated_kind, clean_kind
+):
+    """A verdict answers for the reference it was read from and no other.
+
+    Both metadata lines name REQ-d00001: one repeats it (and so binds
+    nothing), the other names it once and cleanly. Judging the clean item by
+    the repeated one's verdict loses a relationship its author spelled
+    correctly, and loses it silently -- nothing is reported about the
+    keyword that was written properly.
+    """
+    fields = {
+        duplicated_field: "REQ-d00001, REQ-d00001",
+        clean_field: "REQ-d00001",
+    }
+    graph = _spec_project(tmp_path, repo_root, **fields)
+    node = graph.find_by_id("REQ-d00001")
+    assert node is not None
+
+    clean_edges = [e for e in node.iter_edges_by_kind(clean_kind) if e.target.id == "REQ-d00002"]
+    assert len(clean_edges) == 1, (
+        f"the clean **{clean_field.title()}**: names REQ-d00001 once and must bind; "
+        f"got {[(e.kind.value, e.target.id) for e in node.iter_outgoing_edges()]}"
+    )
+
+    dup_edges = [e for e in node.iter_edges_by_kind(duplicated_kind) if e.target.id == "REQ-d00002"]
+    assert dup_edges == [], "the repeated keyword's items must still bind nothing"
+
+    faults = [f for f in graph.broken_references() if f.target_id == "REQ-d00001"]
+    assert len(faults) == 2, f"one report per repeated instance, and no more; got {faults}"
+    assert all(
+        f.edge_kind == duplicated_field for f in faults
+    ), f"only the repeating keyword is at fault; got {[f.edge_kind for f in faults]}"
+    assert all(FaultCode.DUPLICATE_ITEM in f.codes for f in faults)
+
+
+def _satisfies_project(tmp_path, repo_root, satisfies: str):
+    """A project with a template requirement (REQ-d00001) and a second
+    requirement (REQ-d00002) whose **Satisfies**: carries the string under
+    test."""
+    from elspais.config import load_config
+    from elspais.graph.factory import build_graph
+
+    (tmp_path / ".elspais.toml").write_text((repo_root / ".elspais.toml").read_text())
+    spec = tmp_path / "spec"
+    spec.mkdir(exist_ok=True)
+    (spec / "r.md").write_text(
+        "# REQ-d00001: Thing\n\n"
+        "**Level**: dev | **Status**: Active | **Implements**: - | **Template**\n\n"
+        "## Assertions\n\n"
+        "A. The system SHALL do a thing.\n\n"
+        "*End* *Thing* | **Hash**: 00000000\n"
+        "---\n"
+        "# REQ-d00002: Other\n\n"
+        f"**Level**: dev | **Status**: Active | **Implements**: - | **Satisfies**: {satisfies}\n\n"
+        "## Assertions\n\n"
+        "A. The system SHALL do a third thing.\n\n"
+        "*End* *Other* | **Hash**: 00000000\n"
+    )
+    config_path = tmp_path / ".elspais.toml"
+    return build_graph(
+        load_config(config_path),
+        config_path=config_path,
+        repo_root=tmp_path,
+        scan_code=False,
+        scan_tests=False,
+    )
+
+
+# Verifies: REQ-d00272-A, REQ-d00272-B
+def test_a_malformed_satisfies_target_keeps_the_class_reading_reached(tmp_path, repo_root):
+    """A ``Satisfies:`` target is resolved across the federation, and the
+    missing-associate branch that runs when nobody claims it speaks for a
+    later stage of reading than an unread item ever got to. An item holding a
+    space was never written as an identifier, so it names no repository --
+    declared or undeclared -- and reporting it as one sends its author to
+    configure an associate that would not fix anything.
+    """
+    graph = _satisfies_project(tmp_path, repo_root, "not a reference")
+    faults = [
+        f
+        for f in graph.broken_references()
+        if f.edge_kind == EdgeKind.SATISFIES.value and "not a reference" in f.target_id
+    ]
+    assert len(faults) == 1, f"the refused item is reported once; got {faults}"
+    assert faults[0].fault_class is FaultClass.MALFORMED, (
+        "stage 0 must not be reported as stage 1; got "
+        f"{faults[0].fault_class} with {faults[0].codes}"
+    )
+    assert FaultCode.NOT_AN_IDENTIFIER in faults[0].codes
+    assert faults[0].presumed_foreign is False, (
+        "text that is not an identifier belongs to no repository, so it is "
+        "not a reference presumed to live in one"
+    )
+
+
+# Verifies: REQ-d00272-K
+def test_a_duplicated_satisfies_reference_instantiates_no_template(tmp_path, repo_root):
+    """``Satisfies:`` resolves through template instantiation rather than
+    pending-link resolution, so it needs its own refusal: an item the reader
+    refused names a real template, and looking it up anyway would clone the
+    subtree the verdict withheld -- once for a list its author repeated, or
+    twice were the repeat collapsed nowhere.
+    """
+    instantiated = _satisfies_project(tmp_path, repo_root, "REQ-d00001")
+    assert instantiated.find_by_id("REQ-d00002::REQ-d00001") is not None, (
+        "a clean Satisfies must still instantiate -- otherwise the duplicate "
+        "case below proves nothing"
+    )
+
+    graph = _satisfies_project(tmp_path, repo_root, "REQ-d00001, REQ-d00001")
+    assert (
+        graph.find_by_id("REQ-d00002::REQ-d00001") is None
+    ), "a repeated target produces no relationship, so no instance exists"
+    faults = [
+        f
+        for f in graph.broken_references()
+        if f.target_id == "REQ-d00001" and f.edge_kind == EdgeKind.SATISFIES.value
+    ]
+    assert len(faults) == 2, (
+        "every instance of the repeat is reported -- collapsing them to one "
+        f"leaves the others as silent as keeping the first would; got {faults}"
+    )
+    assert all(FaultCode.DUPLICATE_ITEM in f.codes for f in faults)
+
+
 # Verifies: REQ-d00272-A, REQ-d00272-C
 def test_a_malformed_journey_validates_reference_is_not_reported_as_a_missing_requirement(
     tmp_path, repo_root
@@ -578,9 +713,9 @@ def test_a_duplicated_multi_assertion_reference_binds_nothing_and_reports_each_i
     )
     node = graph.find_by_id("REQ-d00001")
     assert node is not None
-    assert not any(node.iter_edges_by_kind(EdgeKind.IMPLEMENTS)), (
-        "a duplicated multi-assertion target must produce no relationship, " "for either label"
-    )
+    assert not any(
+        node.iter_edges_by_kind(EdgeKind.IMPLEMENTS)
+    ), "a duplicated multi-assertion target must produce no relationship, for either label"
     faults = [f for f in graph.broken_references() if "REQ-d00001" in f.target_id]
     assert len(faults) == 2, f"expected one fault per instance, got {faults}"
     assert all(f.fault_class is FaultClass.FORBIDDEN for f in faults)

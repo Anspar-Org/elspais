@@ -184,7 +184,7 @@ J. A `Refines:` relationship SHALL NOT contribute coverage by itself; it SHALL c
 
 K. The system SHALL report coverage gaps on template instance nodes through the standard coverage mechanisms. Instance nodes are normal graph nodes and participate in existing health checks.
 
-L. Coverage SHALL be measured on two independent axes per dimension. The first axis is what a citation named: *direct* where it named the *Assertion* it credits, *indirect* where it named only the requirement and is therefore attributed equally to every *Assertion* of it. The second axis is where the evidence sits: *immediate* where it is attached to what is being reported, and *rolled-up* where it is conducted from a refining requirement, in which case the first axis describes the refining requirement's own evidence. The four measures they yield SHALL each be reported in their own right, and none SHALL be defined in terms of another.
+L. Coverage SHALL be measured on two independent axes per dimension. The first axis is what a citation named: *direct* where it named the *Assertion* it credits, *indirect* where it named only the requirement and is therefore attributed equally to every *Assertion* of it. The second axis is where the evidence sits: *immediate* where it is attached to what is being reported, and *rolled-up* where it is conducted from a refining requirement, in which case the first axis describes the refining requirement's own evidence. Each measure the axes yield SHALL be measured from the evidence itself and reported in its own right.
 
 M. An *Assertion*'s immediate coverage SHALL record the strength of the evidence attached to it. That strength SHALL be whole wherever the evidence is whole, a citation either naming the *Assertion* or not; it MAY be partial where the evidence itself is partial, as a journey verified in part credits in proportion to its verification (REQ-d00255-C). Rolled-up coverage MAY likewise be fractional, being the mean of the coverage of the requirements refining it, so that a partially finished refinement reads as partially done.
 
@@ -204,6 +204,7 @@ Whole-requirement tests (e.g., `test_implements_req_d00087` with no *Assertion* 
 
 ### Changelog
 
+- 2026-08-19 | 665b798a | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-18 | a8b306bc | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: sync changelog hash
 - 2026-08-18 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: superseded — four published measures answer what the toggle asked; A was the only assertion ever built, and it fed a list nothing renders
 - 2026-08-18 | a8b306bc | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -222,7 +223,7 @@ Whole-requirement tests (e.g., `test_implements_req_d00087` with no *Assertion* 
 - 2026-05-11 | e9b5c3f1 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | e9b5c3f1 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *Indirect Coverage Source* | **Hash**: a8b306bc
+*End* *Indirect Coverage Source* | **Hash**: 665b798a
 ---
 
 ## REQ-d00070: Indirect Coverage Toggle Display
@@ -655,11 +656,11 @@ Reporting surfaces (trace, summary, MCP project summary, HTML viewer) SHALL pres
 
 ### Assertions
 
-A. All reporting surfaces (trace, summary, MCP project summary, HTML viewer) SHALL headline total coverage (REQ-d00069-N) and SHALL make the measures behind it available, so that a reader is never shown a figure without being able to see what evidence produced it.
+A. A surface reporting a coverage figure SHALL headline total coverage (REQ-d00069-N) and SHALL make the measures behind it available, so that a reader is never shown a figure without being able to see what evidence produced it.
 
-B. The coverage display terms available to a reporting surface SHALL be Implemented, Tested, Passing, UAT Covered, and UAT Passed, and no other word SHALL denote a coverage dimension.
+B. [Removed - a fixed set of display words, which REQ-d00258-K had already made configurable per project. Each dimension is now stated on its own in REQ-d00277, so one can be added, redefined or withdrawn without rewriting a list.]
 
-C. The CLI summary, the MCP project summary, and the viewer SHALL derive their coverage statistics from a single shared aggregation so identical questions receive identical answers.
+C. A surface reporting a coverage figure or reaching a coverage verdict SHALL derive it from the one shared aggregation, so that two surfaces asked the same question give the same answer.
 
 D. Viewer coverage badge colors SHALL resolve from the coverage standing through the theme catalog by standing name — the same resolution for requirement dimension badges and per-*Assertion* badges — so a given standing is one color on every surface (full green, partial yellow, failing red), never through hard-coded color values and never recolored by the dimension's configured severity. A missing standing SHALL render red only when it is a required gap (its resolved severity is error) and grey otherwise. Severity SHALL govern combined-bucket dragging and the checks gate, not the badge color for the full, partial, and failing standings. The coverage standings SHALL appear in the viewer Legend.
 
@@ -671,7 +672,7 @@ G. The viewer SHALL assign each *Assertion* a semantic coverage *standing* (full
 
 H. The requirement-level coverage tier, the per-*Assertion* coverage standing, and the viewer filter bucket SHALL be drawn from one shared set of coverage state names — full, partial, failing, and missing — so that a given coverage condition maps to the same state word on every surface. The prior split of the full state into separate direct and indirect states SHALL NOT reappear as distinct tier states.
 
-I. Tested SHALL be measured as the coverage of the implemented assertions, Passing as the coverage of the tested assertions, and UAT Passed as the coverage of the UAT-covered assertions, each chain measured within one measure so that a figure and its denominator are made of the same kind of evidence. A chained dimension whose denominator is empty SHALL read missing at neutral severity -- neither a reported gap nor error-colored -- and SHALL NOT drag the requirement's combined coverage bucket. A failing result on any assertion within a dimension's denominator SHALL render that dimension failing regardless of the covered fraction.
+I. A chained dimension (REQ-d00277) SHALL be measured within one measure, so that a figure and its denominator are made of the same kind of evidence. A chained dimension whose denominator is empty SHALL read missing at neutral severity -- neither a reported gap nor error-colored -- and SHALL NOT drag the requirement's combined coverage bucket. A failing result on any assertion within a dimension's denominator SHALL render that dimension failing regardless of the covered fraction.
 
 J. A surface SHALL NOT annotate a coverage figure with a caveat standing in for a measure it did not show. Where the difference between measures matters, the measures themselves SHALL be reported (REQ-d00069-L).
 
@@ -679,9 +680,9 @@ K. The coverage dimension labels SHALL be derived from a single configurable map
 
 L. A per-status `expects_implementation` flag SHALL declare whether a requirement in that status is expected to have implementation; its default SHALL be derived from the status's role, so that active-role statuses expect implementation and others do not. When a status does not expect implementation, absent implementation SHALL be neither flagged as a gap, nor error-colored, nor counted against aggregate implemented coverage. All surfaces SHALL resolve this flag through a single shared helper, and it SHALL supersede the coverage-exclusion role when determining coverage inclusion.
 
-M. A surface that reports which assertions need work (`gaps`, the health coverage checks, and the MCP uncovered-*Assertion* and test-coverage tools) SHALL read the immediate direct measure, so that an *Assertion* no citation names is reported however much whole-requirement evidence its requirement carries and however finished the requirements refining it are.
+M. A surface reporting which assertions need work SHALL read the immediate direct measure, so that an *Assertion* no citation names is reported however much whole-requirement evidence its requirement carries and however finished the requirements refining it are.
 
-N. Passing SHALL count an *Assertion* only where a test declared against that *Assertion* returned a passing result, and no such test returned a failure. Evidence that no test named the *Assertion* -- line coverage of the code implementing it, or a result reached through the code rather than through the test -- SHALL NOT credit Passing.
+N. [Removed - moved to REQ-d00277-C, where every coverage dimension is defined. Two authorities for what Passing counts is the duplication that split exists to remove.]
 
 O. Tested SHALL be reported with a breakdown of the assertions it counts into those that passed, those that failed, and those awaiting a result, and the three counts SHALL together account for every tested *Assertion*. The breakdown qualifies the Tested figure and SHALL NOT introduce a coverage dimension of its own.
 
@@ -701,6 +702,7 @@ A reports how the estate is doing and M reports what is left to do; the two ques
 
 ### Changelog
 
+- 2026-08-19 | 879012b7 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-18 | e6e17ee9 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-18 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: a per-assertion pill shows the measures behind its standing rather than a caveat standing in for one (G)
 - 2026-08-17 | cc6480b3 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -722,7 +724,7 @@ A reports how the estate is doing and M reports what is left to do; the two ques
 - 2026-07-03 | c843c727 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-02 | be97c170 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: add missing changelog section
 
-*End* *Reporting Surface Consistency* | **Hash**: e6e17ee9
+*End* *Reporting Surface Consistency* | **Hash**: 879012b7
 
 ---
 
@@ -788,3 +790,41 @@ Neither belongs in a coverage figure, and putting them there is what the figures
 C defaults to warning rather than error because the condition is not always a defect. A repository legitimately carries tests for things it has not written requirements for. What is not legitimate is not knowing.
 
 *End* *Tests Outside the Requirement Estate* | **Hash**: 922d1382
+
+---
+
+## REQ-d00277: Coverage Dimensions
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-d00069
+
+Each coverage dimension answers a different question about a requirement, conferred by a different relationship and read for a different purpose. They are stated one at a time so that one can be added, redefined or withdrawn without disturbing the others.
+
+### Assertions
+
+A. Implemented SHALL count an *Assertion* credited by an `Implements:` citation, by coverage conducted to it, or inherited through an INSTANCE or INTEGRATES relationship, measured over every *Assertion* of the requirement.
+
+B. Tested SHALL count an *Assertion* credited by a `Verifies:` citation, measured over the assertions Implemented counts.
+
+C. Passing SHALL count only an *Assertion* where a test declared against that *Assertion* returned a passing result and no such test returned a failure, measured over the assertions Tested counts.
+
+D. UAT Covered SHALL count an *Assertion* a journey `Validates:`, measured over every *Assertion* of the requirement.
+
+E. UAT Passed SHALL count an *Assertion* whose validating journey returned a passing result, measured over the assertions UAT Covered counts.
+
+### Rationale
+
+A dimension is a question, not a label. Implemented asks whether anything was built; Tested whether what was built is exercised; Passing whether the exercise succeeded. UAT Covered and UAT Passed ask that same pair of a user journey. A reader choosing between them is choosing which question to ask, so each is stated on its own and none is defined as a variation of another.
+
+The denominator is part of the definition. Tested measured over every *Assertion* would report an estate as untested when it is merely unbuilt, and those two call for different work.
+
+A single failure is decisive for the *Assertion* it lands on: C requires that no declared test returned a failure, because a passing sibling test does not retract a failure a test reported. How a failure reaches the requirement as a whole is a reporting rule, not a definition, and stays with the surfaces (REQ-d00258-I).
+
+The magnitude a dimension credits is governed by REQ-d00069-M, so a journey verified in part credits in proportion without any dimension restating the rule.
+
+The word each dimension is reported under is configurable (REQ-d00258-K); the names used here are the defaults, not the definitions.
+
+### Changelog
+
+- 2026-08-19 | b097dcd7 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash, add missing changelog section
+
+*End* *Coverage Dimensions* | **Hash**: b097dcd7

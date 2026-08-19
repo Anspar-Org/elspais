@@ -141,6 +141,67 @@ class TestIntegratesUnresolved:
         assert matches[0].presumed_foreign is False
 
 
+class TestIntegratesRefusedByReader:
+    """An ``Integrates:`` target its reader refused wires nothing and is
+    reported under the class the reader reached -- while a target that read
+    cleanly and is merely foreign keeps wiring, since foreign is what an
+    ``Integrates:`` target is for."""
+
+    def _retarget(self, tmp_path, target: str):
+        app_root = _copy_full(tmp_path)
+        spec = app_root / "spec" / "dev-app.md"
+        spec.write_text(
+            spec.read_text().replace("**Integrates**: LIB-d00007", f"**Integrates**: {target}")
+        )
+        return app_root
+
+    # Verifies: REQ-d00272-A, REQ-d00272-B
+    def test_a_malformed_integrates_target_is_reported_as_malformed(self, tmp_path):
+        """An item holding a space was never written as an identifier, so it
+        must not be reported as naming a repository -- configured or not."""
+        from elspais.graph.reference_faults import FaultClass, FaultCode
+
+        app_root = self._retarget(tmp_path, "not a reference")
+        fed = _federate(app_root)
+        brs = fed._repos["app"].graph._broken_references
+        matches = [b for b in brs if b.target_id == "not a reference"]
+        assert len(matches) == 1, f"the refused item must be reported once; got {brs}"
+        assert matches[0].fault_class is FaultClass.MALFORMED
+        assert FaultCode.NOT_AN_IDENTIFIER in matches[0].codes
+        assert (
+            matches[0].presumed_foreign is False
+        ), "an item that never read as an identifier names no foreign repository"
+
+    # Verifies: REQ-d00252-A
+    def test_a_malformed_integrates_target_wires_nothing_and_renders_verbatim(self, tmp_path):
+        app_root = self._retarget(tmp_path, "not a reference")
+        fed = _federate(app_root)
+        app_req = fed._repos["app"].graph._index["APP-d00001"]
+        assert _outgoing_integrates(app_req) == []
+        assert "not a reference" in render_node(app_req), (
+            "the author's own text is stored and rendered back unchanged, "
+            "whatever verdict it carried"
+        )
+
+    # Verifies: REQ-d00252-D
+    def test_a_target_the_reader_merely_could_not_claim_still_wires(self, tmp_path):
+        """The app's own grammar does not claim the ``LIB`` namespace, so the
+        reader's verdict on an ordinary library target is
+        ``UNKNOWN_NAMESPACE``. That is the EXPECTED state of an
+        ``Integrates:`` target -- the federation, not the reader, decides who
+        owns it -- so treating it as a refusal would silently unwire every
+        working integration."""
+        app_root = _copy_full(tmp_path)
+        fed = _federate(app_root)
+        app_req = fed._repos["app"].graph._index["APP-d00001"]
+        assert app_req.get_field("integrates_refused") in (
+            None,
+            [],
+        ), f"a foreign target is not a refused one; got {app_req.get_field('integrates_refused')}"
+        edges = _outgoing_integrates(app_req)
+        assert [e.target.id for e in edges] == ["LIB-d00007"]
+
+
 class TestIntegratesSameRepo:
     """Validates REQ-d00252-C: a same-repo target is an external-only violation."""
 
@@ -234,9 +295,9 @@ class TestIntegratesHierarchyLevels:
         offending = [
             v for v in violations if v["child"] == "LIB-p00001" and v["parent"] == "APP-d00001"
         ]
-        assert offending == [], (
-            "INTEGRATES edge wrongly flagged as a hierarchy-level deviation: " f"{offending}"
-        )
+        assert (
+            offending == []
+        ), f"INTEGRATES edge wrongly flagged as a hierarchy-level deviation: {offending}"
         assert violations == []
         assert res.message == "All requirements follow hierarchy rules"
 

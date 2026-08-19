@@ -981,9 +981,9 @@ Body text.
         )
         sections = d["sections"]
         headings = [s.get("heading") for s in sections]
-        assert "Assertions Foo" in headings, (
-            f"'## Assertions Foo' must be a named section. " f"Got headings: {headings}"
-        )
+        assert (
+            "Assertions Foo" in headings
+        ), f"'## Assertions Foo' must be a named section. Got headings: {headings}"
 
     def test_named_section_about_assertions_with_decoration_still_named(self):
         """Regression test for negative-lookahead tightness: a named
@@ -1093,8 +1093,6 @@ class TestLarkPerformance:
         Typical observed time: ~10 ms (mean), max ~11 ms in 10-run cold
         measurements. Headroom of >10x over normal max.
         """
-        import time
-
         # Generate a large synthetic spec file
         lines = []
         for i in range(50):
@@ -1117,10 +1115,21 @@ class TestLarkPerformance:
         content = "\n".join(lines) + "\n"
         assert len(content.splitlines()) > 700
 
-        t0 = time.perf_counter()
-        self.parser.parse(content)
-        elapsed = time.perf_counter() - t0
+        # The fastest of several runs, not a single one. What this guards
+        # against -- a systemic blowup -- is slow on EVERY run, so the best
+        # run detects it just as surely; a single timed run additionally
+        # measures whatever GC or scheduling the rest of the suite happens to
+        # be doing, which is not a property of the parser. Measured margin is
+        # ~4.6 ms against the 150 ms bar, so only a systemic change closes it.
+        elapsed = min(self._timed_parse(content) for _ in range(5))
         n_lines = len(content.splitlines())
         assert (
             elapsed < 0.150
-        ), f"LALR parser took {elapsed*1000:.2f}ms on {n_lines} lines (threshold 150ms)"
+        ), f"LALR parser took {elapsed * 1000:.2f}ms on {n_lines} lines (threshold 150ms)"
+
+    def _timed_parse(self, content: str) -> float:
+        import time
+
+        t0 = time.perf_counter()
+        self.parser.parse(content)
+        return time.perf_counter() - t0
