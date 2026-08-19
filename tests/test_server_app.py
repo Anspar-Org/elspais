@@ -18,6 +18,7 @@ import pytest
 from starlette.testclient import TestClient
 
 from elspais.graph import GraphNode, NodeKind
+from elspais.graph.annotators import annotate_coverage
 from elspais.graph.builder import TraceGraph
 from elspais.graph.federated import FederatedGraph, RepoEntry
 from elspais.graph.GraphNode import FileType, make_file_id
@@ -206,7 +207,12 @@ def coverage_graph():
         id="test:test_encrypt.py::test_encrypt", kind=NodeKind.TEST, label="test_encrypt"
     )
     test_node._content = {"file": "test_encrypt.py", "name": "test_encrypt"}
-    assertion_a.link(test_node, EdgeKind.VERIFIES)
+    # The builder hangs a citation on the OWNING REQUIREMENT carrying the
+    # assertion labels it named, not on the assertion node -- that is the
+    # shape the coverage computation reads (REQ-d00269-B). Wiring it to the
+    # assertion instead produces a graph whose listing and whose figures
+    # disagree, which no build can produce.
+    req_node.link(test_node, EdgeKind.VERIFIES, ["A"])
 
     # Test result
     result_node = GraphNode(id="result:test_encrypt", kind=NodeKind.RESULT, label="passed")
@@ -221,7 +227,14 @@ def coverage_graph():
         "test:test_encrypt.py::test_encrypt": test_node,
         "result:test_encrypt": result_node,
     }
-    return _wrap(graph, Path("/test/repo"))
+    # The coverage endpoints report their figures from ``rollup_metrics``
+    # (REQ-d00258-C), which a served graph always carries because building one
+    # annotates it. Annotating here keeps the fixture a graph the viewer could
+    # actually be handed, rather than one whose figures are absent for a
+    # reason no real caller reproduces.
+    wrapped = _wrap(graph, Path("/test/repo"))
+    annotate_coverage(wrapped)
+    return wrapped
 
 
 @pytest.fixture

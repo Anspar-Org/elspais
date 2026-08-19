@@ -53,6 +53,19 @@ TIER_TO_BUCKET: dict[str, str] = {
 # Tested over IMPLEMENTED labels, Passing (verified) over TESTED labels,
 # UAT-Passed over UAT-COVERED labels. ``implemented`` and ``uat_coverage`` are
 # ABSOLUTE (measured over all assertions) and deliberately absent from this map.
+# Implements: REQ-d00277
+# The coverage dimensions, in the order a reader meets them: each answers a
+# different question, conferred by a different relationship. Named once so a
+# surface reporting "every dimension" cannot report a different set from the
+# one the requirement defines.
+COVERAGE_DIMENSIONS: tuple[str, ...] = (
+    "implemented",
+    "tested",
+    "verified",
+    "uat_coverage",
+    "uat_verified",
+)
+
 DENOMINATOR_DIMENSION: dict[str, str] = {
     "tested": "implemented",
     "verified": "tested",
@@ -1101,6 +1114,7 @@ def collect_coverage(graph: Any, config: dict[str, Any] | None = None) -> dict[s
 
 
 __all__ = [
+    "COVERAGE_DIMENSIONS",
     "DENOMINATOR_DIMENSION",
     "HEADLINE_MEASURE",
     "MEASURES",

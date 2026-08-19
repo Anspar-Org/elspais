@@ -59,9 +59,13 @@ from elspais.config import find_config_file, get_config
 from elspais.config.schema import ElspaisConfig
 from elspais.graph import NodeKind
 from elspais.graph.aggregation import (
+    COVERAGE_DIMENSIONS,
+    HEADLINE_MEASURE,
+    MEASURES,
     WORK_LIST_MEASURE,
     assertion_measures,
     covered_labels,
+    dimension_measures,
     is_covered,
     measure_by_label,
     measure_total,
@@ -4258,6 +4262,42 @@ def _get_test_coverage(graph: FederatedGraph, req_id: str) -> dict[str, Any]:
     }
 
 
+# Implements: REQ-d00258-A, REQ-d00258-C
+def _dimension_figures(node: Any, dimension: str) -> dict[str, Any]:
+    """The coverage figures for one dimension of one requirement.
+
+    Read from ``rollup_metrics`` through the one shared aggregation, so a
+    figure this surface reports is the figure every other surface reports
+    (REQ-d00258-C). Counting the assertions that happen to have an edge
+    listed beside them answers a different question -- whether anything cites
+    them -- and gives a different number: it cannot see coverage conducted up
+    a `Refines:` chain, cannot see that a citation named the requirement
+    rather than the *Assertion*, and counts a partly covered *Assertion*
+    whole.
+
+    The headline is the per-*Assertion* total and the four measures are
+    published beside it, so a reader can see what evidence produced it
+    (REQ-d00258-A) rather than being handed one number to trust.
+    """
+    total = sum(1 for child in node.iter_children() if child.kind == NodeKind.ASSERTION)
+    rollup = node.get_metric("rollup_metrics")
+    dim = getattr(rollup, dimension, None) if rollup is not None else None
+    if dim is None:
+        return {
+            "total_assertions": total,
+            "covered_count": 0.0,
+            "referenced_pct": 0.0,
+            "measures": dict.fromkeys(MEASURES, 0.0),
+        }
+    covered = float(measure_total(dim, HEADLINE_MEASURE))
+    return {
+        "total_assertions": total,
+        "covered_count": round(covered, 2),
+        "referenced_pct": round((covered / total * 100) if total > 0 else 0.0, 1),
+        "measures": {m: round(v, 2) for m, v in dimension_measures(dim).items()},
+    }
+
+
 def _get_assertion_test_map(graph: FederatedGraph, req_id: str) -> dict[str, Any]:
     """Build per-assertion test coverage map for a requirement.
 
@@ -4304,17 +4344,11 @@ def _get_assertion_test_map(graph: FederatedGraph, req_id: str) -> dict[str, Any
             seen_per_assertion[label].add(test_node.id)
             assertion_tests[label]["tests"].append(info)
 
-    total = len(assertions)
-    covered_count = sum(1 for label in assertion_tests if assertion_tests[label]["tests"])
-    referenced_pct = (covered_count / total * 100) if total > 0 else 0.0
-
     return {
         "success": True,
         "req_id": req_id,
         "assertion_tests": assertion_tests,
-        "total_assertions": total,
-        "covered_count": covered_count,
-        "referenced_pct": round(referenced_pct, 1),
+        **_dimension_figures(node, "tested"),
     }
 
 
@@ -4365,17 +4399,11 @@ def _get_assertion_uat_map(graph: FederatedGraph, req_id: str) -> dict[str, Any]
             seen_per_assertion[label].add(jny_node.id)
             assertion_journeys[label]["journeys"].append(info)
 
-    total = len(assertions)
-    covered_count = sum(1 for label in assertion_journeys if assertion_journeys[label]["journeys"])
-    referenced_pct = (covered_count / total * 100) if total > 0 else 0.0
-
     return {
         "success": True,
         "req_id": req_id,
         "assertion_journeys": assertion_journeys,
-        "total_assertions": total,
-        "covered_count": covered_count,
-        "referenced_pct": round(referenced_pct, 1),
+        **_dimension_figures(node, "uat_coverage"),
     }
 
 
@@ -4481,17 +4509,11 @@ def _get_assertion_code_map(
                     rf_seen[label].add(tgt.id)
                     assertion_code[label]["refines_refs"].append(dict(rinfo))
 
-    total = len(assertions)
-    covered_count = sum(1 for label in assertion_code if assertion_code[label]["code_refs"])
-    referenced_pct = (covered_count / total * 100) if total > 0 else 0.0
-
     return {
         "success": True,
         "req_id": req_id,
         "assertion_code": assertion_code,
-        "total_assertions": total,
-        "covered_count": covered_count,
-        "referenced_pct": round(referenced_pct, 1),
+        **_dimension_figures(node, "implemented"),
     }
 
 
@@ -5079,33 +5101,43 @@ _SUBTREE_EDGE_DEFAULTS: dict[NodeKind, set[EdgeKind]] = {
 }
 
 
+# Implements: REQ-d00258-A, REQ-d00258-C, REQ-d00277
 def _compute_coverage_summary(req_node: Any) -> dict[str, Any]:
-    """Lightweight coverage summary reusing _iter_assertion_coverage().
+    """Coverage for one requirement, every dimension, from the one shared
+    aggregation.
 
-    REQ-d00075-B: Returns {total, covered, pct}.
+    This used to count the assertions reached by any TEST or CODE edge and
+    call the result "covered". That merged Implemented and Tested under one
+    word -- two dimensions answering different questions (REQ-d00277) -- and
+    read none of the four measures, so it saw neither coverage conducted up a
+    `Refines:` chain nor whether a citation named the *Assertion* or only its
+    requirement, and counted a partly covered *Assertion* whole. The figure
+    it produced was not comparable with any other surface's.
+
+    Each dimension is reported in its own right, headlined on the
+    per-*Assertion* total with its four measures beside it (REQ-d00258-A).
     """
-    # Count total assertions
-    total = 0
-    for child in req_node.iter_children():
-        if child.kind == NodeKind.ASSERTION:
-            total += 1
+    total = sum(1 for child in req_node.iter_children() if child.kind == NodeKind.ASSERTION)
+    rollup = req_node.get_metric("rollup_metrics")
 
-    if total == 0:
-        return {"total": 0, "covered": 0, "pct": 0.0}
+    dimensions: dict[str, Any] = {}
+    for name in COVERAGE_DIMENSIONS:
+        dim = getattr(rollup, name, None) if rollup is not None else None
+        if dim is None:
+            dimensions[name] = {
+                "covered": 0.0,
+                "pct": 0.0,
+                "measures": dict.fromkeys(MEASURES, 0.0),
+            }
+            continue
+        covered = float(measure_total(dim, HEADLINE_MEASURE))
+        dimensions[name] = {
+            "covered": round(covered, 2),
+            "pct": round((covered / total * 100) if total > 0 else 0.0, 1),
+            "measures": {m: round(v, 2) for m, v in dimension_measures(dim).items()},
+        }
 
-    # Collect covered assertion labels from both TEST and CODE edges
-    covered_labels: set[str] = set()
-    for _node, labels in _iter_assertion_coverage(req_node, NodeKind.TEST):
-        covered_labels.update(labels)
-    for _node, labels in _iter_assertion_coverage(req_node, NodeKind.CODE):
-        covered_labels.update(labels)
-
-    covered = len(covered_labels)
-    return {
-        "total": total,
-        "covered": covered,
-        "pct": round(covered / total * 100, 1) if total > 0 else 0.0,
-    }
+    return {"total_assertions": total, "dimensions": dimensions}
 
 
 def _collect_subtree(
@@ -5189,9 +5221,25 @@ def _subtree_to_markdown(
             level_str = node.get_field("level", "")
             status = node.get_field("status", "")
             title = node.get_label()
-            # Coverage summary (REQ-o00067-F)
+            # Coverage summary (REQ-o00067-F). Each dimension is NAMED rather
+            # than merged under a bare "covered": that word used to stand for
+            # a union of Implemented and Tested, which answer different
+            # questions (REQ-d00277), so a requirement nothing implements read
+            # the same as one nothing tests. The three *Traceability*
+            # dimensions are shown here; the structured formats carry every
+            # dimension and the measures behind each (REQ-d00258-A).
             cov = _compute_coverage_summary(node)
-            cov_str = f" [{cov['covered']}/{cov['total']} covered, {cov['pct']}%]"
+            total_a = cov["total_assertions"]
+            cov_str = " [{}]".format(
+                ", ".join(
+                    f"{word} {cov['dimensions'][dim]['covered']}/{total_a}"
+                    for dim, word in (
+                        ("implemented", "Implemented"),
+                        ("tested", "Tested"),
+                        ("verified", "Passing"),
+                    )
+                )
+            )
             lines.append(
                 f"{indent}{'#' * min(depth_level + 1, 6)} {node.id}: {title} "
                 f"({level_str}, {status}){cov_str}"
@@ -7599,6 +7647,13 @@ def create_server(
             include_kinds: Comma-separated NodeKind values to include.
                 Empty string uses conservative defaults per root kind.
             format: 'markdown', 'flat', or 'nested'.
+
+        Coverage: each requirement entry carries `total_assertions` and a
+        `dimensions` map with one entry per coverage dimension (REQ-d00277),
+        each headlining the per-*Assertion* total with the four measures
+        beside it (REQ-d00258-A). Counts are real numbers, since a journey
+        verified in part credits in proportion. There is no single "covered"
+        figure: Implemented and Tested answer different questions.
         """
         return _get_subtree(
             _state["graph"],

@@ -19,6 +19,7 @@ from pathlib import Path
 import pytest
 
 from elspais.graph import EdgeKind, GraphNode, NodeKind
+from elspais.graph.annotators import annotate_coverage
 from elspais.graph.builder import TraceGraph
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -126,7 +127,9 @@ def subtree_graph():
         label="test_encryption",
     )
     test_node._content = {"file": "test_enc.py", "name": "test_encryption"}
-    assertion_a.link(test_node, EdgeKind.VERIFIES)
+    # Carried on the OWNING REQUIREMENT with the label it named (REQ-d00269-B),
+    # which is the shape the coverage computation reads.
+    req_prd.link(test_node, EdgeKind.VERIFIES, assertion_targets=["A"])
 
     # Register all nodes in graph index
     graph._index = {
@@ -142,6 +145,9 @@ def subtree_graph():
     }
     graph._roots = [req_prd]
 
+    # The coverage figures read ``rollup_metrics`` (REQ-d00258-C), which a
+    # served graph always carries.
+    annotate_coverage(graph)
     return graph
 
 
@@ -277,10 +283,15 @@ class TestComputeCoverageSummary:
         req_prd = subtree_graph._index["REQ-p00001"]
         result = _compute_coverage_summary(req_prd)
 
-        # REQ-p00001 has 2 assertions (A, B); assertion A is covered by a test
-        assert result["total"] == 2
-        assert result["covered"] == 1
-        assert result["pct"] == 50.0
+        # REQ-p00001 has 2 assertions (A, B); a test names A.
+        # Each dimension is reported in its own right (REQ-d00277): a test
+        # credits Tested, and says nothing about whether anything is built.
+        assert result["total_assertions"] == 2
+        assert result["dimensions"]["tested"]["covered"] == 1.0
+        assert result["dimensions"]["tested"]["pct"] == 50.0
+        # The measures behind the figure travel with it (REQ-d00258-A), and a
+        # citation naming the assertion lands in the immediate direct measure.
+        assert result["dimensions"]["tested"]["measures"]["immediate_direct"] == 1.0
 
     def test_REQ_d00075_B_coverage_no_tests(self, subtree_graph):
         """REQ-d00075-B: Requirement with no tests returns zero coverage."""
@@ -289,10 +300,10 @@ class TestComputeCoverageSummary:
         req_dev = subtree_graph._index["REQ-d00020"]
         result = _compute_coverage_summary(req_dev)
 
-        # REQ-d00020 has 2 assertions (D, E); none covered
-        assert result["total"] == 2
-        assert result["covered"] == 0
-        assert result["pct"] == 0.0
+        # REQ-d00020 has 2 assertions (D, E); nothing cites either.
+        assert result["total_assertions"] == 2
+        assert result["dimensions"]["tested"]["covered"] == 0.0
+        assert result["dimensions"]["tested"]["pct"] == 0.0
 
     def test_REQ_d00075_B_coverage_no_assertions(self):
         """REQ-d00075-B: Requirement with no assertions returns zero totals."""
@@ -307,9 +318,16 @@ class TestComputeCoverageSummary:
 
         result = _compute_coverage_summary(bare_req)
 
-        assert result["total"] == 0
-        assert result["covered"] == 0
-        assert result["pct"] == 0.0
+        assert result["total_assertions"] == 0
+        # Every dimension is reported, each reading zero rather than absent.
+        assert set(result["dimensions"]) == {
+            "implemented",
+            "tested",
+            "verified",
+            "uat_coverage",
+            "uat_verified",
+        }
+        assert all(d["covered"] == 0.0 and d["pct"] == 0.0 for d in result["dimensions"].values())
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -356,24 +374,14 @@ class TestSubtreeToMarkdown:
         collected = _collect_subtree(subtree_graph, "REQ-p00001")
         md = _subtree_to_markdown(collected, subtree_graph)
 
-        # Coverage stats for PRD (1/2 covered, 50.0%)
-        assert "1/2 covered" in md
-        assert "50.0%" in md
+        # Each dimension is named and reported in its own right (REQ-d00277):
+        # a bare "covered" used to stand for a union of Implemented and Tested,
+        # which answer different questions. REQ-p00001 is named by a test but
+        # by no implementation, and only the named dimensions can say so.
+        assert "Implemented 0.0/2, Tested 1.0/2, Passing 0.0/2" in md
 
-        # Coverage stats for OPS (0/1 covered, 0.0%)
-        assert "0/1 covered" in md
-
-        # Coverage stats for DEV (0/2 covered, 0.0%)
-        assert "0/2 covered" in md
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Tests for _subtree_to_flat() - REQ-d00075-D
-# ─────────────────────────────────────────────────────────────────────────────
-
-
-class TestSubtreeToFlat:
-    """Validates REQ-d00075-D: Flat JSON format."""
+        # REQ-o00010 (1 assertion, cited by REQ-d00020's blanket Implements)
+        assert "Implemented 1.0/1" in md
 
     def test_REQ_d00075_D_flat_structure(self, subtree_graph):
         """REQ-d00075-D: Flat output has root_id, nodes, edges, stats keys."""

@@ -16,6 +16,7 @@ from pathlib import Path
 import pytest
 
 from elspais.graph import EdgeKind, GraphNode, NodeKind
+from elspais.graph.annotators import annotate_coverage
 from elspais.graph.builder import TraceGraph
 
 # -----------------------------------------------------------------------------
@@ -89,7 +90,11 @@ def assertion_map_graph():
         "parse_end_line": None,
     }
     wire_file_parent(test_node, "tests/test_encryption.py", line=10, graph=graph)
-    assertion_a.link(test_node, EdgeKind.VERIFIES)
+    # A citation is carried on the OWNING REQUIREMENT with the labels it named
+    # (REQ-d00269-B) -- the shape the coverage computation reads. Hanging it on
+    # the assertion produces a graph whose listing and whose figures disagree,
+    # which no build can produce.
+    req_node.link(test_node, EdgeKind.VERIFIES, assertion_targets=["A"])
 
     result_node = GraphNode(
         id="result:test_encryption.py::test_data_encrypted",
@@ -182,6 +187,9 @@ def assertion_map_graph():
     }
     graph._roots = [req_node, req_node2]
 
+    # The coverage figures are read from ``rollup_metrics`` (REQ-d00258-C),
+    # which a served graph always carries.
+    annotate_coverage(graph)
     return graph
 
 
@@ -362,8 +370,18 @@ class TestGetAssertionTestMap:
         assert result["req_id"] == "REQ-p00001"
         assert isinstance(result["assertion_tests"], dict)
         assert isinstance(result["total_assertions"], int)
-        assert isinstance(result["covered_count"], int)
+        # Coverage is fractional: a journey verified in part credits in
+        # proportion (REQ-d00069-M), so a covered count is a real number and
+        # pinning it to int would pin the opposite of what the measures say.
+        assert isinstance(result["covered_count"], float)
         assert isinstance(result["referenced_pct"], float)
+        # The measures behind the figure travel with it (REQ-d00258-A).
+        assert set(result["measures"]) == {
+            "immediate_direct",
+            "immediate_indirect",
+            "rolled_direct",
+            "rolled_indirect",
+        }
 
     def test_REQ_d00066_F_non_requirement_node_returns_error(self, assertion_map_graph):
         """REQ-d00066-F: SHALL return error when node exists but is not a requirement."""
