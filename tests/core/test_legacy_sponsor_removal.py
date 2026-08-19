@@ -29,9 +29,9 @@ class TestLegacySymbolsRemoved:
     def test_REQ_p00005_legacy_symbol_not_in_module(self, symbol: str):
         # Reload to pick up any changes made during the test session
         mod = importlib.reload(associates_mod)
-        assert not hasattr(
-            mod, symbol
-        ), f"{symbol} should have been removed from elspais.associates"
+        assert not hasattr(mod, symbol), (
+            f"{symbol} should have been removed from elspais.associates"
+        )
 
 
 class TestBuildGraphLegacyParamRemoved:

@@ -10,6 +10,7 @@ resolution path in builder.py wires TEST -> STEP and TEST -> JOURNEY
 VERIFIES edges correctly, and that unknown step refs become
 BrokenReferences.
 """
+
 from __future__ import annotations
 
 import shutil
@@ -260,9 +261,9 @@ def test_step_verifying_tests_include_file_and_line(tmp_path):
         assert "file" in vt, f"verifying_tests entry missing 'file': {vt}"
         assert "line" in vt, f"verifying_tests entry missing 'line': {vt}"
         assert vt["file"], f"'file' should be a repo-relative path, got {vt!r}"
-        assert not Path(
-            vt["file"]
-        ).is_absolute(), f"'file' must be repo-relative, got absolute {vt['file']!r}"
+        assert not Path(vt["file"]).is_absolute(), (
+            f"'file' must be repo-relative, got absolute {vt['file']!r}"
+        )
         assert vt["file"].startswith("tests/"), vt["file"]
         assert isinstance(vt["line"], int) and vt["line"] >= 1, vt
         # Aggregated pass/fail status preserved alongside the new fields.

@@ -303,12 +303,12 @@ def test_fix_command_aborts_when_duplicates_exist(tmp_path: Path, capsys) -> Non
     captured = capsys.readouterr()
     stderr = captured.err
     assert "REQ-d00001" in stderr, f"stderr should name the colliding canonical ID; got: {stderr!r}"
-    assert (
-        "dev-file-a.md" in stderr
-    ), f"stderr should list file A as a colliding source; got: {stderr!r}"
-    assert (
-        "dev-file-b.md" in stderr
-    ), f"stderr should list file B as a colliding source; got: {stderr!r}"
+    assert "dev-file-a.md" in stderr, (
+        f"stderr should list file A as a colliding source; got: {stderr!r}"
+    )
+    assert "dev-file-b.md" in stderr, (
+        f"stderr should list file B as a colliding source; got: {stderr!r}"
+    )
 
 
 # Verifies: REQ-d00085-I
@@ -405,24 +405,24 @@ def test_render_save_skips_files_in_duplicates(tmp_path: Path) -> None:
     )
 
     skipped_text = "\n".join(result.get("skipped", []))
-    assert (
-        "dev-file-a.md" in skipped_text
-    ), f"file A must appear in skipped list; got: {result.get('skipped')!r}"
-    assert (
-        "dev-file-b.md" in skipped_text
-    ), f"file B must appear in skipped list; got: {result.get('skipped')!r}"
+    assert "dev-file-a.md" in skipped_text, (
+        f"file A must appear in skipped list; got: {result.get('skipped')!r}"
+    )
+    assert "dev-file-b.md" in skipped_text, (
+        f"file B must appear in skipped list; got: {result.get('skipped')!r}"
+    )
 
     # Duplicate-skipped files are also reported as errors so callers can
     # detect the failure programmatically. ``success`` must be False and
     # the mutation log must be preserved — losing queued mutations because
     # of a duplicate elsewhere in the project would silently destroy work.
     assert result["success"] is False, (
-        "render_save must report success=False when duplicate collisions " "prevented any save"
+        "render_save must report success=False when duplicate collisions prevented any save"
     )
     errors_text = "\n".join(result.get("errors", []))
-    assert (
-        "duplicate" in errors_text.lower()
-    ), f"errors must mention the duplicate condition; got: {result.get('errors')!r}"
+    assert "duplicate" in errors_text.lower(), (
+        f"errors must mention the duplicate condition; got: {result.get('errors')!r}"
+    )
     after_log_len = sum(1 for _ in graph.mutation_log.iter_entries())
     assert after_log_len == before_log_len, (
         f"mutation log must be preserved when duplicates blocked all saves "

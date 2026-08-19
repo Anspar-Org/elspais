@@ -3,6 +3,7 @@
 
 Validates REQ-p00080-A: The tool SHALL provide an elspais pdf CLI command.
 """
+
 from __future__ import annotations
 
 import sys
@@ -379,9 +380,9 @@ class TestPandocReportedOmissions:
             f"a document pandoc dropped an image from was reported as an "
             f"unqualified success: {captured.out!r}"
         )
-        assert (
-            "art/photo.webp" in captured.err
-        ), f"the dropped resource was not named to the operator: {captured.err!r}"
+        assert "art/photo.webp" in captured.err, (
+            f"the dropped resource was not named to the operator: {captured.err!r}"
+        )
 
     # Verifies: REQ-p00080-K
     def test_REQ_p00080_K_reference_reported_by_both_sources_counts_once(self, tmp_path, capsys):
@@ -414,5 +415,5 @@ class TestPandocReportedOmissions:
         captured = capsys.readouterr()
         assert rc == 0
         assert "INCOMPLETE: 1 reference omitted" in captured.out, (
-            f"one reference reported by two sources must count once: " f"{captured.out!r}"
+            f"one reference reported by two sources must count once: {captured.out!r}"
         )

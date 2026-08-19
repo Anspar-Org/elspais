@@ -3,6 +3,7 @@
 
 Tests is_reachable_to_requirement(), iter_unlinked(), and iter_structural_orphans().
 """
+
 from __future__ import annotations
 
 from elspais.graph.builder import TraceGraph

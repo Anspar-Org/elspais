@@ -290,9 +290,9 @@ class TestFederationBuild:
             "Expected exactly one error-state RepoEntry (graph=None) "
             f"for the missing associate, got {len(error_entries)}"
         )
-        assert (
-            error_entries[0].error is not None
-        ), "Error-state RepoEntry should have a human-readable error message"
+        assert error_entries[0].error is not None, (
+            "Error-state RepoEntry should have a human-readable error message"
+        )
 
     def test_REQ_d00203_D_strict_raises_on_missing_associate(
         self, missing_assoc_repo: Path
@@ -320,8 +320,7 @@ class TestFederationBuild:
 
         # The root repo entry should match root_dir
         assert fed.repo_root == root_dir, (
-            f"FederatedGraph.repo_root should be the root repo ({root_dir}), "
-            f"got {fed.repo_root}"
+            f"FederatedGraph.repo_root should be the root repo ({root_dir}), got {fed.repo_root}"
         )
 
     # Verifies: REQ-d00203-B, REQ-d00202-D
@@ -379,7 +378,7 @@ class TestCrossGraphWiring:
 
         parent_ids = {p.id for p in dev_node.iter_parents(edge_kinds={EdgeKind.IMPLEMENTS})}
         assert "ASSOC-p00001" in parent_ids, (
-            f"Expected ROOT-d00001 to implement ASSOC-p00001, " f"but parents are: {parent_ids}"
+            f"Expected ROOT-d00001 to implement ASSOC-p00001, but parents are: {parent_ids}"
         )
 
     def test_cross_graph_broken_ref_resolved(self, two_repos: dict[str, Path]) -> None:
@@ -396,7 +395,7 @@ class TestCrossGraphWiring:
         broken = fed.broken_references()
         broken_targets = {br.target_id for br in broken}
         assert "ASSOC-p00001" not in broken_targets, (
-            f"ASSOC-p00001 should not be a broken reference, " f"but found: {broken}"
+            f"ASSOC-p00001 should not be a broken reference, but found: {broken}"
         )
 
     def test_id_conflict_raises(self, tmp_path: Path) -> None:
@@ -538,12 +537,12 @@ class TestCrossGraphWiring:
         )
 
         # Both sub-graphs merged: requirements from each repo are findable.
-        assert (
-            fed.find_by_id("ROOT-d00001") is not None
-        ), "Root DEV requirement not found after federated build"
-        assert (
-            fed.find_by_id("ASSOC-p00001") is not None
-        ), "Associate PRD requirement not found after federated build"
+        assert fed.find_by_id("ROOT-d00001") is not None, (
+            "Root DEV requirement not found after federated build"
+        )
+        assert fed.find_by_id("ASSOC-p00001") is not None, (
+            "Associate PRD requirement not found after federated build"
+        )
 
         # Confirm the shared-path REMAINDER actually existed in at least
         # one sub-graph (proves the scenario reproduces the pre-fix bug).
@@ -675,9 +674,9 @@ def _implemented(fed, req_id: str):
     assert node is not None, f"{req_id} is not in the graph"
     metrics = node.get_metric("rollup_metrics")
     assert metrics is not None, f"{req_id} carries no rollup_metrics at all"
-    assert (
-        metrics.total_assertions == 2
-    ), f"{req_id} should hold two assertions, got {metrics.total_assertions}"
+    assert metrics.total_assertions == 2, (
+        f"{req_id} should hold two assertions, got {metrics.total_assertions}"
+    )
     return metrics.implemented
 
 
@@ -731,9 +730,9 @@ class TestCoverageAnnotatedInEveryBuildShape:
         fed = build_graph(repo_root=coverage_repos["orphan"])
 
         entries = list(fed.iter_repos())
-        assert [e.name for e in entries if e.graph is None] == [
-            "ghost"
-        ], "fixture must produce exactly one associate that failed to load"
+        assert [e.name for e in entries if e.graph is None] == ["ghost"], (
+            "fixture must produce exactly one associate that failed to load"
+        )
         _assert_a_implemented(fed, "ORPHAN-d00001")
 
     # Verifies: REQ-d00269-A
@@ -787,9 +786,9 @@ class TestRootRepoReportsItsOrigin:
 
         # The planner may normalize the URL it detects, so what is asserted
         # is that an origin was detected at all and that it names this repo.
-        assert (
-            entries["app"].git_origin is not None
-        ), "the host repository reported no origin, so no surface can report one for it"
+        assert entries["app"].git_origin is not None, (
+            "the host repository reported no origin, so no surface can report one for it"
+        )
         assert "example.com/app" in entries["app"].git_origin
         assert entries["lib"].git_origin is not None
         assert "example.com/lib" in entries["lib"].git_origin
@@ -803,9 +802,9 @@ class TestRootRepoReportsItsOrigin:
         entries = list(fed.iter_repos())
 
         assert [e.name for e in entries] == ["solo"]
-        assert (
-            entries[0].git_origin is not None
-        ), "a project with no associates reported no origin for its own repository"
+        assert entries[0].git_origin is not None, (
+            "a project with no associates reported no origin for its own repository"
+        )
         assert "example.com/solo" in entries[0].git_origin
 
     # Verifies: REQ-d00206-A

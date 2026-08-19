@@ -626,7 +626,9 @@ def canonicalize_node_terms(
 
 
 def _mark_req_dirty(
-    node, reason: str, replacements: list[tuple[str, str]] | None = None  # noqa: ANN001
+    node,
+    reason: str,
+    replacements: list[tuple[str, str]] | None = None,  # noqa: ANN001
 ) -> None:
     """Walk up to the parent REQUIREMENT and mark it parse_dirty."""
     from elspais.graph.relations import EdgeKind

@@ -11,6 +11,7 @@ Checks the elspais setup on this machine:
 - Associate path resolution
 - Local config overrides
 """
+
 from __future__ import annotations
 
 import argparse

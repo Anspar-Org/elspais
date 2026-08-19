@@ -137,8 +137,7 @@ name a platform requirement directly:
 
 ```python
 # Verifies: CAL-d00007-B
-def test_scheduling_window():
-    ...
+def test_scheduling_window(): ...
 ```
 
 Each repository keeps its own identifier configuration; the scan simply

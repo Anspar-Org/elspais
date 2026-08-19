@@ -444,9 +444,9 @@ C. Third assertion in group B.
         info = [
             (s.get("heading"), s.get("heading_style"), s.get("heading_level")) for s in sections
         ]
-        assert (
-            len(h4_named) == 2
-        ), f"Expected 2 H4 named sections (heading_style=None), got {len(h4_named)}: {info}"
+        assert len(h4_named) == 2, (
+            f"Expected 2 H4 named sections (heading_style=None), got {len(h4_named)}: {info}"
+        )
         headings = [s["heading"] for s in h4_named]
         assert headings == [
             "Group A",
@@ -514,9 +514,9 @@ C. Third assertion.
         )
         hash_sec = next((s for s in sections if s.get("heading") == "Hash"), None)
         assert hash_sec is not None
-        assert (
-            hash_sec.get("heading_level") == 3
-        ), f"### Hash section should have heading_level=3, got {hash_sec.get('heading_level')!r}"
+        assert hash_sec.get("heading_level") == 3, (
+            f"### Hash section should have heading_level=3, got {hash_sec.get('heading_level')!r}"
+        )
 
 
 class TestLarkCaseInsensitiveHeaders:
@@ -981,9 +981,9 @@ Body text.
         )
         sections = d["sections"]
         headings = [s.get("heading") for s in sections]
-        assert (
-            "Assertions Foo" in headings
-        ), f"'## Assertions Foo' must be a named section. Got headings: {headings}"
+        assert "Assertions Foo" in headings, (
+            f"'## Assertions Foo' must be a named section. Got headings: {headings}"
+        )
 
     def test_named_section_about_assertions_with_decoration_still_named(self):
         """Regression test for negative-lookahead tightness: a named
@@ -1123,9 +1123,9 @@ class TestLarkPerformance:
         # ~4.6 ms against the 150 ms bar, so only a systemic change closes it.
         elapsed = min(self._timed_parse(content) for _ in range(5))
         n_lines = len(content.splitlines())
-        assert (
-            elapsed < 0.150
-        ), f"LALR parser took {elapsed * 1000:.2f}ms on {n_lines} lines (threshold 150ms)"
+        assert elapsed < 0.150, (
+            f"LALR parser took {elapsed * 1000:.2f}ms on {n_lines} lines (threshold 150ms)"
+        )
 
     def _timed_parse(self, content: str) -> float:
         import time

@@ -5,6 +5,7 @@ Verifies that requirements with no assertions are flagged as not testable,
 that the check passes when all requirements have assertions, and that
 severity is configurable via [rules.format].no_assertions_severity.
 """
+
 from __future__ import annotations
 
 from pathlib import Path

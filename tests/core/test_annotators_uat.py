@@ -1,5 +1,6 @@
 # Verifies: REQ-d00069-A
 """Tests for UAT coverage annotation via JNY Validates edges."""
+
 from elspais.graph.aggregation import absolute_tier
 from elspais.graph.annotators import annotate_coverage
 from tests.core.graph_test_helpers import build_graph, make_journey, make_requirement

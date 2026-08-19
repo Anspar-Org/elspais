@@ -476,9 +476,9 @@ class TestSubtreeToNested:
 
         # But children of children should be empty (depth limit reached)
         for child in result["children"]:
-            assert (
-                child["children"] == []
-            ), f"Child {child['id']} should have no children at depth_limit=1"
+            assert child["children"] == [], (
+                f"Child {child['id']} should have no children at depth_limit=1"
+            )
 
 
 # ─────────────────────────────────────────────────────────────────────────────

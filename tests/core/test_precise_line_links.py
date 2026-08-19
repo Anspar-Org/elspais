@@ -8,6 +8,7 @@ This tests the Task-3 extension to the source resolver in ``build()``:
   * ``tests_by_file_line[(rel_path, parse_line)]`` for O(1) single-test lookup.
   * ``match_scope`` field: "test" for a line-resolved link, "file" for fallback.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -170,12 +171,12 @@ def test_line_matched_result_links_only_own_test(graph_line_matched):
 
     la = test_a.get_field("parse_line")
     lb = test_b.get_field("parse_line")
-    assert a_result_ids == {
-        "r1"
-    }, f"test_a (parse_line={la}) should link only r1, got {a_result_ids}"
-    assert b_result_ids == {
-        "r2"
-    }, f"test_b (parse_line={lb}) should link only r2, got {b_result_ids}"
+    assert a_result_ids == {"r1"}, (
+        f"test_a (parse_line={la}) should link only r1, got {a_result_ids}"
+    )
+    assert b_result_ids == {"r2"}, (
+        f"test_b (parse_line={lb}) should link only r2, got {b_result_ids}"
+    )
 
 
 def test_line_matched_result_not_in_other_test(graph_line_matched):
@@ -196,12 +197,12 @@ def test_match_scope_is_test_for_line_resolved(graph_line_matched):
     r2 = graph_line_matched.find_by_id("r2")
     assert r1 is not None
     assert r2 is not None
-    assert (
-        r1.get_field("match_scope") == "test"
-    ), f"r1 match_scope should be 'test', got {r1.get_field('match_scope')!r}"
-    assert (
-        r2.get_field("match_scope") == "test"
-    ), f"r2 match_scope should be 'test', got {r2.get_field('match_scope')!r}"
+    assert r1.get_field("match_scope") == "test", (
+        f"r1 match_scope should be 'test', got {r1.get_field('match_scope')!r}"
+    )
+    assert r2.get_field("match_scope") == "test", (
+        f"r2 match_scope should be 'test', got {r2.get_field('match_scope')!r}"
+    )
 
 
 def test_line_matched_edge_kind_is_yields(graph_line_matched):
@@ -225,18 +226,18 @@ def test_null_line_falls_back_to_all_tests(graph_fallback):
     assert len(tests) == 2, f"expected 2 TEST nodes, got {len(tests)}"
     for test_node in tests:
         result_ids = {c.id for c in test_node.iter_children() if c.kind == NodeKind.RESULT}
-        assert (
-            "r3" in result_ids
-        ), f"r3 should be a child of {test_node.id} (fallback), got {result_ids}"
+        assert "r3" in result_ids, (
+            f"r3 should be a child of {test_node.id} (fallback), got {result_ids}"
+        )
 
 
 def test_match_scope_is_file_for_null_line(graph_fallback):
     """A fallback precise result (line=None) carries match_scope='file'."""
     r3 = graph_fallback.find_by_id("r3")
     assert r3 is not None
-    assert (
-        r3.get_field("match_scope") == "file"
-    ), f"r3 match_scope should be 'file', got {r3.get_field('match_scope')!r}"
+    assert r3.get_field("match_scope") == "file", (
+        f"r3 match_scope should be 'file', got {r3.get_field('match_scope')!r}"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -250,15 +251,15 @@ def test_nonmatch_line_falls_back_to_all_tests(graph_nonmatch_line):
     assert len(tests) == 2, f"expected 2 TEST nodes, got {len(tests)}"
     for test_node in tests:
         result_ids = {c.id for c in test_node.iter_children() if c.kind == NodeKind.RESULT}
-        assert (
-            "r4" in result_ids
-        ), f"r4 should be a child of {test_node.id} (line-mismatch fallback), got {result_ids}"
+        assert "r4" in result_ids, (
+            f"r4 should be a child of {test_node.id} (line-mismatch fallback), got {result_ids}"
+        )
 
 
 def test_match_scope_is_file_for_nonmatch_line(graph_nonmatch_line):
     """A precise result with a non-matching line carries match_scope='file'."""
     r4 = graph_nonmatch_line.find_by_id("r4")
     assert r4 is not None
-    assert (
-        r4.get_field("match_scope") == "file"
-    ), f"r4 match_scope should be 'file', got {r4.get_field('match_scope')!r}"
+    assert r4.get_field("match_scope") == "file", (
+        f"r4 match_scope should be 'file', got {r4.get_field('match_scope')!r}"
+    )

@@ -7,6 +7,7 @@ These tests hold the reporting surfaces to that wider set: a repository
 reached through a chain is counted when it is healthy and named -- with
 its path and the reason -- when it is not.
 """
+
 from __future__ import annotations
 
 from pathlib import Path

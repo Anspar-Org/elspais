@@ -63,9 +63,9 @@ def test_an_unreadable_item_survives_alongside_a_readable_one():
     assert typo_item.resolved is None
     assert typo_item.fault_class is not None
     good_item = items[0]
-    assert good_item.resolved is not None and good_item.resolved.startswith(
-        "REQ-p00001"
-    ), f"the readable reference must survive alongside it; got {items}"
+    assert good_item.resolved is not None and good_item.resolved.startswith("REQ-p00001"), (
+        f"the readable reference must survive alongside it; got {items}"
+    )
 
 
 # Verifies: REQ-p00014-T

@@ -227,9 +227,9 @@ class TestMCPFDAStyle:
             assert "ancestors" in result
             ancestor_ids = [a.get("id", "") for a in result["ancestors"]]
             # DEV-00001 -> OPS-00001 -> PRD-00001
-            assert (
-                "PRD-00001" in ancestor_ids or "OPS-00001" in ancestor_ids
-            ), f"Expected PRD-00001 or OPS-00001 in ancestors, got: {ancestor_ids}"
+            assert "PRD-00001" in ancestor_ids or "OPS-00001" in ancestor_ids, (
+                f"Expected PRD-00001 or OPS-00001 in ancestors, got: {ancestor_ids}"
+            )
         finally:
             stop_mcp(proc)
 

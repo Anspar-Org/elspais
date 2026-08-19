@@ -107,9 +107,9 @@ class TestAssociatedConfigValidation:
         """
         content = generate_config("associated", associated_prefix="TST")
         parsed = tomlkit.parse(content)
-        assert (
-            "version" in parsed
-        ), "Generated associated config must include top-level 'version' key"
+        assert "version" in parsed, (
+            "Generated associated config must include top-level 'version' key"
+        )
 
     def test_REQ_d00209_B_associated_different_prefixes(self) -> None:
         """Associated config must work with various prefix values."""
@@ -239,17 +239,17 @@ class TestGeneratedComments:
         content = generate_config("core")
         comment_lines = [line for line in content.splitlines() if line.strip().startswith("#")]
         # With per-field comments, expect at least one comment per schema field
-        assert (
-            len(comment_lines) >= 40
-        ), f"Expected at least 40 comment lines (per-field), got {len(comment_lines)}"
+        assert len(comment_lines) >= 40, (
+            f"Expected at least 40 comment lines (per-field), got {len(comment_lines)}"
+        )
 
     def test_REQ_d00209_D_associated_config_has_comments(self) -> None:
         """Associated config must contain comment lines."""
         content = generate_config("associated", associated_prefix="TST")
         comment_lines = [line for line in content.splitlines() if line.strip().startswith("#")]
-        assert (
-            len(comment_lines) >= 3
-        ), f"Expected at least 3 comment lines, got {len(comment_lines)}"
+        assert len(comment_lines) >= 3, (
+            f"Expected at least 3 comment lines, got {len(comment_lines)}"
+        )
 
     def test_REQ_d00209_D_core_comments_describe_sections(self) -> None:
         """Core config comments should include descriptive text, not just markers."""
@@ -260,9 +260,9 @@ class TestGeneratedComments:
             for line in content.splitlines()
             if line.strip().startswith("#") and len(line.strip()) > 2
         ]
-        assert (
-            len(descriptive_comments) >= 3
-        ), f"Expected at least 3 descriptive comments, got {len(descriptive_comments)}"
+        assert len(descriptive_comments) >= 3, (
+            f"Expected at least 3 descriptive comments, got {len(descriptive_comments)}"
+        )
 
     def test_REQ_d00209_D_no_commented_out_fields(self) -> None:
         """All schema fields appear as real values, none commented out."""
@@ -303,9 +303,9 @@ class TestGeneratedComments:
             if line.startswith("[") and not line.startswith("[[") and "." not in line.split("]")[0]
         )
         # At least half the sections should have comments
-        assert (
-            sections_with_comments >= total_sections // 2
-        ), f"Only {sections_with_comments}/{total_sections} sections have comments"
+        assert sections_with_comments >= total_sections // 2, (
+            f"Only {sections_with_comments}/{total_sections} sections have comments"
+        )
 
 
 class TestTermsConfigInTemplate:

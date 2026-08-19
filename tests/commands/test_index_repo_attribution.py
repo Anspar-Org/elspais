@@ -157,8 +157,7 @@ class TestSingleRepoBucketsByName:
             "for foreign or unmatched files. After fix, it must never appear."
         )
         assert "Unattributed" not in content, (
-            "Single-repo with all nodes owned by 'root' must NOT produce an "
-            "'Unattributed' bucket."
+            "Single-repo with all nodes owned by 'root' must NOT produce an 'Unattributed' bucket."
         )
         # Single-repo INDEX.md historically renders without a per-repo
         # subsection (subsections only appear when multiple repos contribute).
@@ -200,9 +199,9 @@ class TestFederatedMultiRepoBuckets:
             "Foreign-repo REQ must NOT bucket as 'Unknown Source'. "
             "It belongs under its owning repo's name ('callisto')."
         )
-        assert (
-            "callisto" in content
-        ), "REQ-CAL-p00001 must surface under a 'callisto' section label."
+        assert "callisto" in content, (
+            "REQ-CAL-p00001 must surface under a 'callisto' section label."
+        )
         # The labels 'root' and 'callisto' should appear distinctly — the
         # foreign REQ should not be lumped with the primary's section.
         assert "root" in content
@@ -286,7 +285,7 @@ class TestUnattributedBucket:
         root_before_orphan = content.rfind("root", 0, orphan_idx)
         assert unatt_before_orphan != -1, "Expected 'Unattributed' label to precede REQ-p00002."
         assert unatt_before_orphan > root_before_orphan, (
-            "REQ-p00002 must be rendered under the 'Unattributed' bucket, " "not under 'root'."
+            "REQ-p00002 must be rendered under the 'Unattributed' bucket, not under 'root'."
         )
 
 

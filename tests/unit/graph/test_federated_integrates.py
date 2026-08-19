@@ -168,9 +168,9 @@ class TestIntegratesRefusedByReader:
         assert len(matches) == 1, f"the refused item must be reported once; got {brs}"
         assert matches[0].fault_class is FaultClass.MALFORMED
         assert FaultCode.NOT_AN_IDENTIFIER in matches[0].codes
-        assert (
-            matches[0].presumed_foreign is False
-        ), "an item that never read as an identifier names no foreign repository"
+        assert matches[0].presumed_foreign is False, (
+            "an item that never read as an identifier names no foreign repository"
+        )
 
     # Verifies: REQ-d00252-A
     def test_a_malformed_integrates_target_wires_nothing_and_renders_verbatim(self, tmp_path):
@@ -295,9 +295,9 @@ class TestIntegratesHierarchyLevels:
         offending = [
             v for v in violations if v["child"] == "LIB-p00001" and v["parent"] == "APP-d00001"
         ]
-        assert (
-            offending == []
-        ), f"INTEGRATES edge wrongly flagged as a hierarchy-level deviation: {offending}"
+        assert offending == [], (
+            f"INTEGRATES edge wrongly flagged as a hierarchy-level deviation: {offending}"
+        )
         assert violations == []
         assert res.message == "All requirements follow hierarchy rules"
 
@@ -434,9 +434,9 @@ class TestIntegratesHierarchyLevels:
         offending = [
             v for v in violations if v["child"] == "REPO-p00001" and v["parent"] == "REPO-d00001"
         ]
-        assert (
-            len(offending) == 1
-        ), f"genuine same-repo level violation not detected; violations={violations}"
+        assert len(offending) == 1, (
+            f"genuine same-repo level violation not detected; violations={violations}"
+        )
 
 
 # A levels block for the multi-assertion federation below, which needs code

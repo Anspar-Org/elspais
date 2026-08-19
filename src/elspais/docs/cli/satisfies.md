@@ -77,15 +77,13 @@ write the composite ID:
 ```python
 # library/src/dispatch.py
 # Implements: LIB-p00001-A
-def parse(payload):
-    ...
+def parse(payload): ...
 ```
 
 ```python
 # library/tests/test_dispatch.py
 # Verifies: LIB-p00001-A
-def test_parse_rejects_empty():
-    ...
+def test_parse_rejects_empty(): ...
 ```
 
 This evidence applies to **every satisfier** of the template. Every instance

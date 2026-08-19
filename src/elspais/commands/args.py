@@ -9,6 +9,7 @@ use Annotated[Union[...], tyro.conf.subcommand(...)] patterns.
 Phase 3 of CONFIG-SCHEMA: these dataclasses will replace argparse
 in cli.py via tyro.cli(GlobalArgs).
 """
+
 from __future__ import annotations
 
 import dataclasses
@@ -1147,8 +1148,7 @@ def generate_help(version: str) -> str:
                     doc += f" ({', '.join(sub_names)})"
 
         assert name in COMMAND_GROUPS, (
-            f"Subcommand {name!r} missing from COMMAND_GROUPS — "
-            f"add it to elspais/commands/args.py"
+            f"Subcommand {name!r} missing from COMMAND_GROUPS — add it to elspais/commands/args.py"
         )
         commands.append((name, doc))
 

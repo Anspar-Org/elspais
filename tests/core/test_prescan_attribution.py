@@ -378,9 +378,9 @@ def test_external_records_take_precedence_per_file(tmp_path, dispatcher):
         ("Suite", "scenario_one", 1),
         ("Suite", "scenario_two", 6),
     ], "external records did not take precedence for the reported file"
-    assert [_identity(r.parsed_data) for r in uncovered] == [
-        (None, "test_gamma", 1)
-    ], "built-in attribution was lost for the file the command did not report on"
+    assert [_identity(r.parsed_data) for r in uncovered] == [(None, "test_gamma", 1)], (
+        "built-in attribution was lost for the file the command did not report on"
+    )
 
 
 def _built_test_node_ids(project: Path, command: str) -> set[str]:

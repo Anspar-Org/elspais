@@ -436,9 +436,9 @@ coverage = ".coverage"
 
         line_contexts = file_node.get_field("line_contexts")
         assert line_contexts is not None
-        assert any(
-            "test_work" in c for c in line_contexts.get(2, [])
-        ), f"expected test_work context on line 2, got {line_contexts}"
+        assert any("test_work" in c for c in line_contexts.get(2, [])), (
+            f"expected test_work context on line 2, got {line_contexts}"
+        )
 
     # Verifies: REQ-d00254-G, REQ-d00258-E
     def test_coverage_sqlite_unresolvable_file_contexts_not_materialized(
@@ -511,9 +511,9 @@ coverage = ".coverage"
         )
 
         assert str(code_path) in queried, "resolvable file's contexts should be read"
-        assert (
-            str(outside_path) not in queried
-        ), "unresolvable measured file's contexts must never be materialized"
+        assert str(outside_path) not in queried, (
+            "unresolvable measured file's contexts must never be materialized"
+        )
 
         # And the resolvable file's annotation still works end-to-end.
         file_node = graph.find_by_id(make_file_id("REQ", "src/main.py"))

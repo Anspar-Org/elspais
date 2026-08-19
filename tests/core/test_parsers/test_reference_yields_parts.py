@@ -195,6 +195,6 @@ def test_test_function_name_reference_is_read_as_parts(tmp_path):
         "'test_widget_REQ_p42_A'; the reference read out of the name was handed back "
         "as matched text rather than as the parts its grammar defines."
     )
-    assert not any(
-        "_" in target or "p42" in target for target in _broken(graph)
-    ), f"Underscore-notation text leaked through as a reference: {_broken(graph)}"
+    assert not any("_" in target or "p42" in target for target in _broken(graph)), (
+        f"Underscore-notation text leaked through as a reference: {_broken(graph)}"
+    )

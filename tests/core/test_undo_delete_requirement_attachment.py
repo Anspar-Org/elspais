@@ -117,9 +117,9 @@ class TestUndoDeleteRequirementRestoresAttachment:
 
         graph.undo_last()
         for label in ASSERTION_LABELS:
-            assert (
-                graph.find_by_id(f"{TARGET_ID}-{label}") is not None
-            ), f"{TARGET_ID}-{label} not restored by undo"
+            assert graph.find_by_id(f"{TARGET_ID}-{label}") is not None, (
+                f"{TARGET_ID}-{label} not restored by undo"
+            )
 
     def test_REQ_o00062_P_undo_restores_requirement_to_rendered_file(
         self, requirement_graph_from_disk

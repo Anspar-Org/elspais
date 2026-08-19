@@ -7,6 +7,7 @@
 All logic delegates to pure functions in ``elspais.mcp.server``.
 State is accessed via ``request.app.state.app_state`` (an AppState instance).
 """
+
 from __future__ import annotations
 
 import functools

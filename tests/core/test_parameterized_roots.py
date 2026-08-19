@@ -221,9 +221,9 @@ class TestFileNodesExcludedFromDefault:
         # Confirm they are not in default roots
         default_root_ids = {n.id for n in graph.iter_roots()}
         file_ids = {n.id for n in file_nodes}
-        assert default_root_ids.isdisjoint(
-            file_ids
-        ), "FILE nodes should not appear in default iter_roots()"
+        assert default_root_ids.isdisjoint(file_ids), (
+            "FILE nodes should not appear in default iter_roots()"
+        )
 
     def test_REQ_d00130_F_root_count_unchanged(self, tmp_path: Path) -> None:
         """root_count() continues to reflect only non-FILE roots."""

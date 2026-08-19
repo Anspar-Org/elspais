@@ -100,9 +100,9 @@ class TestTermsIntegration:
         """TraceGraph() has _terms attribute of type TermDictionary."""
         graph = TraceGraph(repo_root=Path("."))
         assert hasattr(graph, "_terms"), "TraceGraph must have _terms attribute"
-        assert isinstance(
-            graph._terms, TermDictionary
-        ), f"_terms must be TermDictionary, got {type(graph._terms)}"
+        assert isinstance(graph._terms, TermDictionary), (
+            f"_terms must be TermDictionary, got {type(graph._terms)}"
+        )
 
     def test_REQ_d00222_A_builder_creates_remainder_for_definition(self):
         """GraphBuilder.add_parsed_content with content_type='definition_block'
@@ -119,9 +119,9 @@ class TestTermsIntegration:
 
         # Find the REMAINDER node created for the definition
         remainder_nodes = list(graph.iter_by_kind(NodeKind.REMAINDER))
-        assert (
-            len(remainder_nodes) >= 1
-        ), "Expected at least one REMAINDER node for definition_block"
+        assert len(remainder_nodes) >= 1, (
+            "Expected at least one REMAINDER node for definition_block"
+        )
 
         # At least one should have content_type="definition_block"
         def_nodes = [
@@ -188,9 +188,9 @@ class TestTermsIntegration:
         entry = graph._terms.lookup("Audit Trail")
         assert entry is not None, "Term should be in _terms"
         expected_id = make_file_id("REQ", "spec/glossary.md")
-        assert (
-            entry.defined_in == expected_id
-        ), f"defined_in should be FILE node ID, got '{entry.defined_in}'"
+        assert entry.defined_in == expected_id, (
+            f"defined_in should be FILE node ID, got '{entry.defined_in}'"
+        )
 
     def test_REQ_d00222_B_defined_in_points_to_requirement(self):
         """For requirement-level definitions, defined_in is the requirement ID."""
@@ -231,9 +231,9 @@ class TestTermsIntegration:
 
         entry = graph._terms.lookup("Electronic Signature")
         assert entry is not None, "Term should be in _terms"
-        assert (
-            entry.defined_in == "REQ-p00001"
-        ), f"defined_in should be requirement ID, got '{entry.defined_in}'"
+        assert entry.defined_in == "REQ-p00001", (
+            f"defined_in should be requirement ID, got '{entry.defined_in}'"
+        )
 
 
 class TestTermRefWrongMarking:
@@ -313,9 +313,9 @@ class TestBuilderNamespaceOnTermEntry:
 
         entry = graph._terms.lookup("Electronic Record")
         assert entry is not None, "Term should exist in _terms"
-        assert (
-            entry.namespace == "MYREPO"
-        ), f"TermEntry.namespace should be 'MYREPO', got '{entry.namespace}'"
+        assert entry.namespace == "MYREPO", (
+            f"TermEntry.namespace should be 'MYREPO', got '{entry.namespace}'"
+        )
 
     def test_REQ_d00222_D_namespace_set_on_requirement_level_definition(self) -> None:
         """Requirement-level definitions also get namespace from GraphBuilder."""
@@ -355,9 +355,9 @@ class TestBuilderNamespaceOnTermEntry:
 
         entry = graph._terms.lookup("Electronic Signature")
         assert entry is not None, "Term should exist in _terms"
-        assert (
-            entry.namespace == "PARTNER"
-        ), f"TermEntry.namespace should be 'PARTNER', got '{entry.namespace}'"
+        assert entry.namespace == "PARTNER", (
+            f"TermEntry.namespace should be 'PARTNER', got '{entry.namespace}'"
+        )
 
 
 # =============================================================================
@@ -473,9 +473,9 @@ def test_REQ_d00238_A_full_pipeline_definitions_to_health_checks():
     # 4. Verify references populated
     entry = td.lookup("widget")
     assert entry is not None
-    assert (
-        len(entry.references) >= 3
-    ), f"Expected at least 3 references, got {len(entry.references)}"
+    assert len(entry.references) >= 3, (
+        f"Expected at least 3 references, got {len(entry.references)}"
+    )
 
     # Verify marked reference
     marked_refs = [r for r in entry.references if r.marked]
@@ -546,9 +546,9 @@ def test_REQ_d00237_D_scan_detects_no_false_positives_for_partial_matches():
 
     entry = td.lookup("term")
     assert entry is not None
-    assert (
-        len(entry.references) == 0
-    ), "Partial match 'terminology' should not produce a reference for 'term'"
+    assert len(entry.references) == 0, (
+        "Partial match 'terminology' should not produce a reference for 'term'"
+    )
 
 
 # Verifies: REQ-d00240-A
@@ -807,9 +807,9 @@ def test_REQ_d00237_F_unmarked_check_skips_embedded_ref():
 
     unmarked = [c for c in result if c.name == "terms.unmarked"]
     assert len(unmarked) == 1
-    assert (
-        unmarked[0].passed is True
-    ), f"embedded ref must not be flagged unmarked, findings: {unmarked[0].findings}"
+    assert unmarked[0].passed is True, (
+        f"embedded ref must not be flagged unmarked, findings: {unmarked[0].findings}"
+    )
 
 
 # Verifies: REQ-d00237-F
@@ -852,9 +852,9 @@ def test_REQ_d00237_F_canonical_form_check_skips_embedded_ref():
 
     result = check_term_canonical_form(list(td.iter_all()))
     assert result.name == "terms.canonical_form"
-    assert (
-        result.passed is True
-    ), f"embedded ref must not be non-canonical, findings: {result.findings}"
+    assert result.passed is True, (
+        f"embedded ref must not be non-canonical, findings: {result.findings}"
+    )
 
 
 # Verifies: REQ-d00237-F

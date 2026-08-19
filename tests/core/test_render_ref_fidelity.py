@@ -316,10 +316,10 @@ class TestBrokenRefRenderPreservation:
         file_node = _node(fidelity_graph, make_file_id("REQ", "spec/reqs.md"))
         content = render_file(file_node, resolver=grammar_for("REQ"))
         assert content.count("REQ-p77777") == 2, (
-            "the mixed requirement's broken Implements entry was dropped " "from the file rewrite"
+            "the mixed requirement's broken Implements entry was dropped from the file rewrite"
         )
         assert content.count("REQ-o77777") == 2, (
-            "the mixed requirement's broken Refines entry was dropped " "from the file rewrite"
+            "the mixed requirement's broken Refines entry was dropped from the file rewrite"
         )
 
     def test_REQ_d00132_G_partial_multi_assertion_keeps_broken_expansion(self, fidelity_graph):
@@ -328,7 +328,7 @@ class TestBrokenRefRenderPreservation:
         rendered = render_node(child, resolver=grammar_for("REQ"))
         assert "REQ-p00001-A" in rendered
         assert "REQ-p00001-Z" in rendered, (
-            "the resolved A expansion evicted the broken Z expansion from " "the render"
+            "the resolved A expansion evicted the broken Z expansion from the render"
         )
 
 
@@ -349,7 +349,7 @@ class TestMutationBrokenRefLeftovers:
         rendered = render_node(child)
         assert "REQ-p77777" not in rendered, "the resolved leftover must stop rendering"
         assert rendered.count("REQ-p00001") == 1, (
-            "the fixed ref must render exactly once -- not duplicated by a " "stale leftover entry"
+            "the fixed ref must render exactly once -- not duplicated by a stale leftover entry"
         )
 
     def test_REQ_d00132_G_undo_fix_broken_reference_restores_broken_ref(self, fidelity_graph):
@@ -607,7 +607,7 @@ class TestRenameRetargetsAssertionSuffixedBrokenRefs:
 
         rendered = render_node(_node(fidelity_graph, "REQ-o00007"), resolver=grammar_for("REQ"))
         assert "REQ-p00009-A" in rendered, "the edge-derived expansion must follow the rename"
-        assert (
-            "REQ-p00009-Z" in rendered
-        ), "the broken expansion's leftover still cites the old parent ID"
+        assert "REQ-p00009-Z" in rendered, (
+            "the broken expansion's leftover still cites the old parent ID"
+        )
         assert "REQ-p00001-Z" not in rendered

@@ -1,5 +1,6 @@
 # Verifies: REQ-d00249-A, REQ-d00249-C
 """Argument-parsing tests for `elspais checks --run-tests/--fail-fast`."""
+
 from __future__ import annotations
 
 import tyro

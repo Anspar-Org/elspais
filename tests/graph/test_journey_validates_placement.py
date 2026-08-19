@@ -196,13 +196,13 @@ def test_REQ_p00014_V_section_declaration_produces_no_validates_edge(tmp_path):
     graph = _build(_make_project(tmp_path, _JOURNEY_SECTION_FORM))
 
     assert _validates_targets(graph) == [], (
-        "A declaration outside the journey's metadata must produce no " "validation relationship"
+        "A declaration outside the journey's metadata must produce no validation relationship"
     )
     requirement = graph.find_by_id("REQ-p00001")
     assert requirement is not None
-    assert not any(
-        edge.kind == EdgeKind.VALIDATES for edge in requirement.iter_outgoing_edges()
-    ), "the cited requirement must not gain UAT credit from a misplaced declaration"
+    assert not any(edge.kind == EdgeKind.VALIDATES for edge in requirement.iter_outgoing_edges()), (
+        "the cited requirement must not gain UAT credit from a misplaced declaration"
+    )
 
 
 # Verifies: REQ-p00014-R, REQ-p00014-V
@@ -223,9 +223,9 @@ def test_REQ_p00014_R_section_declaration_is_reported_as_a_broken_reference(tmp_
         "the declaration the builder refused to read must be reported exactly "
         f"once against the journey that made it; got {graph.broken_references()}"
     )
-    assert (
-        "REQ-p00001" in reported[0].target_id
-    ), f"the report must name what was declared; got {reported[0].target_id!r}"
+    assert "REQ-p00001" in reported[0].target_id, (
+        f"the report must name what was declared; got {reported[0].target_id!r}"
+    )
     # Substance, not wording: the author needs to learn where the declaration
     # belongs, and the exact sentence is free to drift.
     assert "metadata" in reported[0].diagnostic.lower(), (
@@ -255,9 +255,9 @@ def test_REQ_p00017_B_rename_reconciles_a_citing_journey(sep, multi, tmp_path):
 
     journey = graph.find_by_id("JNY-001")
     rendered = render_file(journey.file_node())
-    assert (
-        f"REQ-p00002{sep}A{multi}B" in rendered
-    ), f"the rendered journey file must cite the new identifier; got {rendered!r}"
+    assert f"REQ-p00002{sep}A{multi}B" in rendered, (
+        f"the rendered journey file must cite the new identifier; got {rendered!r}"
+    )
     assert "REQ-p00001" not in rendered, (
         "the journey's cached body still names the former identifier -- saving "
         f"would write it back to disk; got {rendered!r}"

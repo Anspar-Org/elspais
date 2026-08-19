@@ -146,9 +146,9 @@ class TestTraceabilityEdgeKinds:
         reached = {n.id for n in center.walk(edge_kinds=TRACEABILITY_EDGE_KINDS)}
 
         for kind, s in sinks.items():
-            assert (
-                s.id in reached
-            ), f"TRACEABILITY_EDGE_KINDS missing {kind.value}: {s.id} unreached."
+            assert s.id in reached, (
+                f"TRACEABILITY_EDGE_KINDS missing {kind.value}: {s.id} unreached."
+            )
         assert struct_sink.id not in reached, "TRACEABILITY_EDGE_KINDS must exclude STRUCTURES."
 
     @pytest.mark.parametrize("kind", TRACEABILITY_KINDS)
@@ -157,9 +157,9 @@ class TestTraceabilityEdgeKinds:
         dst = _node(f"dst-{kind.value}", NodeKind.REQUIREMENT)
         src.link(dst, kind)
         children = list(src.iter_children(edge_kinds=TRACEABILITY_EDGE_KINDS))
-        assert (
-            dst in children
-        ), f"TRACEABILITY_EDGE_KINDS missing {kind.value} -- child not reached."
+        assert dst in children, (
+            f"TRACEABILITY_EDGE_KINDS missing {kind.value} -- child not reached."
+        )
 
 
 # --------------------------------------------------------------------------- #

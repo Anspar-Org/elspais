@@ -94,9 +94,9 @@ class TestTermsTabRendering:
         resp = client.get("/")
         assert resp.status_code == 200
         html = resp.text
-        assert (
-            'data-kind="terms"' in html
-        ), 'Expected a nav-tab button with data-kind="terms" in the rendered HTML'
+        assert 'data-kind="terms"' in html, (
+            'Expected a nav-tab button with data-kind="terms" in the rendered HTML'
+        )
         # The button text should contain "Terms"
         # Look for the pattern: data-kind="terms" ... >Terms<
         assert ">Terms<" in html, "Expected button text 'Terms' in the nav-tab button"
@@ -107,9 +107,9 @@ class TestTermsTabRendering:
         resp = client.get("/")
         assert resp.status_code == 200
         html = resp.text
-        assert (
-            "switchNavTab('terms')" in html
-        ), "Expected onclick handler switchNavTab('terms') in the rendered HTML"
+        assert "switchNavTab('terms')" in html, (
+            "Expected onclick handler switchNavTab('terms') in the rendered HTML"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -151,8 +151,8 @@ class TestTermsNavControls:
         # that checks for 'terms' tab and hides controls.
         # We check for the key indicators:
         # 1. The JS references 'terms' in tab-switching logic
-        assert (
-            "'terms'" in html or '"terms"' in html
-        ), "Expected JS code referencing 'terms' tab kind"
+        assert "'terms'" in html or '"terms"' in html, (
+            "Expected JS code referencing 'terms' tab kind"
+        )
         # 2. The JS hides view-mode-toggle for terms tab
         assert "view-mode-toggle" in html, "Expected JS reference to view-mode-toggle element"

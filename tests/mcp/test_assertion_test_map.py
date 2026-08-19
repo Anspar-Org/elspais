@@ -341,9 +341,9 @@ class TestGetAssertionTestMap:
         encryption_ids = [
             t["id"] for t in a_tests if t["id"] == "test:test_encryption.py::test_data_encrypted"
         ]
-        assert (
-            len(encryption_ids) == 1
-        ), "Same test reached via both patterns should not be duplicated"
+        assert len(encryption_ids) == 1, (
+            "Same test reached via both patterns should not be duplicated"
+        )
 
     def test_REQ_d00066_D_test_entry_fields(self, assertion_map_graph):
         """REQ-d00066-D: SHALL include id, label, file, line, and results in test entries."""

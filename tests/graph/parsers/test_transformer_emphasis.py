@@ -205,15 +205,15 @@ class TestJourneyMetadataEmphasis:
 """
         results = _parse(content, resolver)
         jny = _first_journey(results)
-        assert (
-            jny.get("actor") == "Sarah (Site 101)"
-        ), f"actor wrapped in '**...**' must be unwrapped, got {jny.get('actor')!r}"
-        assert (
-            jny.get("goal") == "Submit a clean enrollment form"
-        ), f"goal wrapped in '**...**' must be unwrapped, got {jny.get('goal')!r}"
-        assert (
-            jny.get("context") == "Pre-screening visit"
-        ), f"context wrapped in '**...**' must be unwrapped, got {jny.get('context')!r}"
+        assert jny.get("actor") == "Sarah (Site 101)", (
+            f"actor wrapped in '**...**' must be unwrapped, got {jny.get('actor')!r}"
+        )
+        assert jny.get("goal") == "Submit a clean enrollment form", (
+            f"goal wrapped in '**...**' must be unwrapped, got {jny.get('goal')!r}"
+        )
+        assert jny.get("context") == "Pre-screening visit", (
+            f"context wrapped in '**...**' must be unwrapped, got {jny.get('context')!r}"
+        )
 
     # Verifies: REQ-d00246-B
     def test_REQ_d00246_B_journey_actor_plain_value_unchanged(self, resolver: IdResolver) -> None:
@@ -227,12 +227,12 @@ class TestJourneyMetadataEmphasis:
 """
         results = _parse(content, resolver)
         jny = _first_journey(results)
-        assert (
-            jny.get("actor") == "Plain Name"
-        ), f"Plain value must pass through unchanged, got {jny.get('actor')!r}"
-        assert (
-            jny.get("goal") == "A simple goal"
-        ), f"Plain goal must pass through unchanged, got {jny.get('goal')!r}"
+        assert jny.get("actor") == "Plain Name", (
+            f"Plain value must pass through unchanged, got {jny.get('actor')!r}"
+        )
+        assert jny.get("goal") == "A simple goal", (
+            f"Plain goal must pass through unchanged, got {jny.get('goal')!r}"
+        )
 
     # Verifies: REQ-d00246-B
     def test_REQ_d00246_B_journey_actor_underscore_wrapped(self, resolver: IdResolver) -> None:
@@ -246,9 +246,9 @@ Goal: Plain goal
 """
         results = _parse(content, resolver)
         jny = _first_journey(results)
-        assert (
-            jny.get("actor") == "Bold User"
-        ), f"Value wrapped in '__...__' must be unwrapped, got {jny.get('actor')!r}"
+        assert jny.get("actor") == "Bold User", (
+            f"Value wrapped in '__...__' must be unwrapped, got {jny.get('actor')!r}"
+        )
 
     # Verifies: REQ-d00246-B
     def test_REQ_d00246_B_journey_actor_unbalanced_value_intact(self, resolver: IdResolver) -> None:

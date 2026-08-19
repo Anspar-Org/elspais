@@ -57,7 +57,7 @@ class TestExtractPythonImports:
 
     # Verifies: REQ-d00072-B
     def test_stops_at_code(self):
-        content = "from os import path\n" "\n" "def main():\n" "    import inside_func\n"
+        content = "from os import path\n\ndef main():\n    import inside_func\n"
         result = extract_python_imports(content)
         assert result == ["os"]
 
@@ -85,9 +85,7 @@ class TestExtractPythonImports:
 
     def test_from_import_with_parens(self):
         """Multi-line from import using parentheses."""
-        content = (
-            "from elspais.graph.builder import (\n" "    TraceGraph,\n" "    GraphBuilder,\n" ")\n"
-        )
+        content = "from elspais.graph.builder import (\n    TraceGraph,\n    GraphBuilder,\n)\n"
         result = extract_python_imports(content)
         assert "elspais.graph.builder" in result
 
@@ -137,13 +135,13 @@ class TestExtractPythonImports:
 
     def test_single_line_docstring_skipped(self):
         """Single-line triple-quoted docstring doesn't break parsing."""
-        content = '"""Short docstring."""\n' "\n" "import os\n"
+        content = '"""Short docstring."""\n\nimport os\n'
         result = extract_python_imports(content)
         assert "os" in result
 
     def test_single_quote_docstring(self):
         """Single-quote triple docstrings are handled too."""
-        content = "'''Module docs.\n" "\n" "Description.\n" "'''\n" "\n" "import os\n"
+        content = "'''Module docs.\n\nDescription.\n'''\n\nimport os\n"
         result = extract_python_imports(content)
         assert "os" in result
 

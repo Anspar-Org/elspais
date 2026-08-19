@@ -1,5 +1,6 @@
 # Verifies: REQ-d00252
 """Validates REQ-d00252-B: Integrates: in non-spec files creates no edge."""
+
 import subprocess
 import textwrap
 from pathlib import Path

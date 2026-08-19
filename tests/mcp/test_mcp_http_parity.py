@@ -238,7 +238,7 @@ class TestHttpMutationsAreReachableOverMcp:
         }
 
         assert not missing, (
-            "HTTP mutations unreachable over MCP (route -> missing tool): " f"{missing}"
+            f"HTTP mutations unreachable over MCP (route -> missing tool): {missing}"
         )
 
     def test_REQ_o00062_O_mcp_may_exceed_http(self, tools):

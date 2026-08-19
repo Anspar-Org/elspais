@@ -6,6 +6,7 @@ Single home for the "may a mutation create a spec file at this path" check,
 shared by the viewer HTTP route and the MCP move tool so both surfaces accept
 and reject identically (REQ-o00062-O).
 """
+
 from __future__ import annotations
 
 import fnmatch

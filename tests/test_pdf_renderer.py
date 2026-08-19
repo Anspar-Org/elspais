@@ -8,6 +8,7 @@ which is required when assembled markdown references images by relative
 path -- without it, pandoc would resolve relatives against the temp
 markdown file's directory and miss every image.
 """
+
 from __future__ import annotations
 
 import os
@@ -87,9 +88,9 @@ class TestResourcePathFlag:
         assert rc == 0
         cmd = captured["cmd"]
         matches = [a for a in cmd if isinstance(a, str) and a.startswith("--resource-path")]
-        assert matches == [
-            expected
-        ], f"Expected exactly one --resource-path arg equal to {expected!r}, got: {matches}"
+        assert matches == [expected], (
+            f"Expected exactly one --resource-path arg equal to {expected!r}, got: {matches}"
+        )
 
     def test_REQ_p00080_C_empty_resource_paths_omits_flag(self, tmp_path):
         """An empty list (falsy) should be treated the same as None and
@@ -132,8 +133,7 @@ class TestPandocWarningsSurfaced:
     def test_REQ_p00080_K_pandoc_stderr_echoed_on_success(self, tmp_path, capsys):
         """A warning emitted alongside rc=0 is written to sys.stderr."""
         warning = (
-            "[WARNING] Could not fetch resource missing/nope.png: "
-            "replacing image with description"
+            "[WARNING] Could not fetch resource missing/nope.png: replacing image with description"
         )
 
         bundled = (
@@ -218,7 +218,7 @@ class TestUnfetchedResourceCollection:
 
         assert rc == 0, "the collector must not change the exit-code contract"
         assert unfetched == ["art/photo.webp", "figures/chart"], (
-            f"expected both unfetchable resources, in report order, got " f"{unfetched!r}"
+            f"expected both unfetchable resources, in report order, got {unfetched!r}"
         )
 
     # Verifies: REQ-p00080-K
@@ -285,7 +285,7 @@ class TestSuccessfulCompileNoiseFilter:
         assert rc == 0
         assert "Could not fetch resource art/photo.webp" in captured.err
         assert "Emergency stop" not in captured.err, (
-            f"engine noise drowned the real warning on a successful compile: " f"{captured.err!r}"
+            f"engine noise drowned the real warning on a successful compile: {captured.err!r}"
         )
         assert "kpathsea" not in captured.err
         assert "Transcript written" not in captured.err

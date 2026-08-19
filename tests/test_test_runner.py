@@ -1,5 +1,6 @@
 # Verifies: REQ-d00249-A, REQ-d00249-B, REQ-d00249-C
 """Unit tests for the test-target dispatcher."""
+
 from __future__ import annotations
 
 from pathlib import Path

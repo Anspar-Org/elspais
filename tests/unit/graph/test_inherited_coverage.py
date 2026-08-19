@@ -197,12 +197,12 @@ def test_satisfier_rollup_combines_own_and_inherited(tmp_path: Path) -> None:
     # Rollup should report partial: covered=1, total=2.
     rollup = satisfier_rollup(satisfier)
     assert rollup.total == 2, f"expected own+template = 2 assertions, got total={rollup.total}"
-    assert (
-        rollup.covered == 1
-    ), f"expected exactly the template covered, got covered={rollup.covered}"
-    assert (
-        0 < rollup.covered_fraction < 1.0
-    ), f"expected partial fraction, got {rollup.covered_fraction!r}"
+    assert rollup.covered == 1, (
+        f"expected exactly the template covered, got covered={rollup.covered}"
+    )
+    assert 0 < rollup.covered_fraction < 1.0, (
+        f"expected partial fraction, got {rollup.covered_fraction!r}"
+    )
 
 
 def _build_multi(tmp_path: Path):
@@ -367,6 +367,6 @@ def test_satisfier_rollup_with_multi_template_satisfaction(tmp_path: Path) -> No
         f"expected covered=3 (own A covered + LIB-p00001-A inherited + LIB-p00002-A inherited), "
         f"got covered={rollup.covered}"
     )
-    assert (
-        abs(rollup.covered_fraction - 0.75) < 0.001
-    ), f"expected covered_fraction=0.75, got {rollup.covered_fraction!r}"
+    assert abs(rollup.covered_fraction - 0.75) < 0.001, (
+        f"expected covered_fraction=0.75, got {rollup.covered_fraction!r}"
+    )

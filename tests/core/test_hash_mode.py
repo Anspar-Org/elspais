@@ -163,9 +163,9 @@ class TestNormalizedTextMode:
         graph._recompute_requirement_hash(parent)
 
         hash_after = parent.get_field("hash")
-        assert (
-            hash_before == hash_after
-        ), "Non-assertion body text change should NOT affect hash in normalized-text mode"
+        assert hash_before == hash_after, (
+            "Non-assertion body text change should NOT affect hash in normalized-text mode"
+        )
 
     # Verifies: REQ-d00131-J
     def test_hash_mode_normalized_assertion_text_change_hash_changes(self):
@@ -182,9 +182,9 @@ class TestNormalizedTextMode:
         graph.update_assertion("REQ-p00001-A", "The system SHALL reject invalid input.")
 
         hash_after = parent.get_field("hash")
-        assert (
-            hash_before != hash_after
-        ), "Assertion text change SHOULD affect hash in normalized-text mode"
+        assert hash_before != hash_after, (
+            "Assertion text change SHOULD affect hash in normalized-text mode"
+        )
 
     # Verifies: REQ-d00131-J
     def test_hash_mode_normalized_assertion_reorder_hash_changes(self):
@@ -202,9 +202,9 @@ class TestNormalizedTextMode:
         graph.rename_assertion("REQ-p00001-A", "X")
 
         hash_after = parent.get_field("hash")
-        assert (
-            hash_before != hash_after
-        ), "Assertion label rename SHOULD affect hash in normalized-text mode"
+        assert hash_before != hash_after, (
+            "Assertion label rename SHOULD affect hash in normalized-text mode"
+        )
 
     # Verifies: REQ-d00131-J
     def test_hash_mode_normalized_trailing_space_hash_unchanged(self):
@@ -257,9 +257,9 @@ class TestNormalizedTextMode:
 
         hash_clean = parent_clean.get_field("hash")
         hash_trailing = parent_trailing.get_field("hash")
-        assert (
-            hash_clean == hash_trailing
-        ), "Trailing whitespace should NOT affect hash in normalized-text mode"
+        assert hash_clean == hash_trailing, (
+            "Trailing whitespace should NOT affect hash in normalized-text mode"
+        )
 
     # Verifies: REQ-d00131-J
     def test_hash_mode_normalized_case_change_hash_changes(self):
@@ -277,9 +277,9 @@ class TestNormalizedTextMode:
         graph.update_assertion("REQ-p00001-A", "the system shall validate input.")
         hash_lower = parent.get_field("hash")
 
-        assert (
-            hash_upper != hash_lower
-        ), "Case change in assertion text SHOULD affect hash in normalized-text mode"
+        assert hash_upper != hash_lower, (
+            "Case change in assertion text SHOULD affect hash in normalized-text mode"
+        )
 
     # Verifies: REQ-d00131-J
     def test_hash_mode_normalized_hash_matches_compute_normalized_hash(self):
@@ -316,9 +316,9 @@ class TestNormalizedTextMode:
         graph.add_assertion("REQ-p00001", "The system SHALL notify users.")
         hash_after = parent.get_field("hash")
 
-        assert (
-            hash_before != hash_after
-        ), "Adding an assertion SHOULD change the hash in normalized-text mode"
+        assert hash_before != hash_after, (
+            "Adding an assertion SHOULD change the hash in normalized-text mode"
+        )
 
     # Verifies: REQ-d00131-J
     def test_hash_mode_normalized_delete_assertion_changes_hash(self):
@@ -331,9 +331,9 @@ class TestNormalizedTextMode:
         graph.delete_assertion("REQ-p00001-A", compact=False)
         hash_after = parent.get_field("hash")
 
-        assert (
-            hash_before != hash_after
-        ), "Deleting an assertion SHOULD change the hash in normalized-text mode"
+        assert hash_before != hash_after, (
+            "Deleting an assertion SHOULD change the hash in normalized-text mode"
+        )
 
 
 class TestHashModeDifference:

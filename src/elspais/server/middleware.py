@@ -1,5 +1,6 @@
 # Implements: REQ-d00010-A
 """Starlette middleware for the elspais server."""
+
 from __future__ import annotations
 
 import json

@@ -326,15 +326,15 @@ class TestLcovTestedTrace:
             rollup: RollupMetrics | None = node.get_metric("rollup_metrics")
             if rollup and rollup.lcov_tested.total > 0:
                 # Nodes with lcov data must render as "lcov NN%"
-                assert re.match(
-                    r"lcov \d+%$", data["lcov_tested"]
-                ), f"Unexpected lcov_tested format for {node.id}: {data['lcov_tested']!r}"
+                assert re.match(r"lcov \d+%$", data["lcov_tested"]), (
+                    f"Unexpected lcov_tested format for {node.id}: {data['lcov_tested']!r}"
+                )
                 has_lcov_node = True
             else:
                 # Nodes without lcov data must render as "n/a"
-                assert (
-                    data["lcov_tested"] == "n/a"
-                ), f"Expected 'n/a' for {node.id} but got: {data['lcov_tested']!r}"
+                assert data["lcov_tested"] == "n/a", (
+                    f"Expected 'n/a' for {node.id} but got: {data['lcov_tested']!r}"
+                )
 
         # At least one node must have lcov data in the canonical graph
         # (the canonical graph includes LCOV result fixtures)
@@ -359,12 +359,12 @@ class TestLcovTestedTrace:
         """lcov_tested column is present in the standard and full preset definitions."""
         from elspais.commands.trace import REPORT_PRESETS
 
-        assert (
-            "lcov_tested" in REPORT_PRESETS["standard"].columns
-        ), "lcov_tested must be in standard preset columns"
-        assert (
-            "lcov_tested" in REPORT_PRESETS["full"].columns
-        ), "lcov_tested must be in full preset columns"
+        assert "lcov_tested" in REPORT_PRESETS["standard"].columns, (
+            "lcov_tested must be in standard preset columns"
+        )
+        assert "lcov_tested" in REPORT_PRESETS["full"].columns, (
+            "lcov_tested must be in full preset columns"
+        )
 
 
 class TestTraceFreshTargets:

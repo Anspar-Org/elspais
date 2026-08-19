@@ -219,7 +219,7 @@ class TestLinkTestsToCode:
         test_dir = tmp_path / "tests"
         test_dir.mkdir()
         (test_dir / "test_auth.py").write_text(
-            "from elspais.auth import authenticate\n\n" "def test_authenticate():\n    pass\n"
+            "from elspais.auth import authenticate\n\ndef test_authenticate():\n    pass\n"
         )
 
         # Build graph with CODE and TEST nodes
@@ -261,7 +261,7 @@ class TestLinkTestsToCode:
         test_dir = tmp_path / "tests"
         test_dir.mkdir()
         (test_dir / "test_auth.py").write_text(
-            "from elspais.auth import authenticate\n\n" "def test_authenticate():\n    pass\n"
+            "from elspais.auth import authenticate\n\ndef test_authenticate():\n    pass\n"
         )
 
         graph = TraceGraph(repo_root=tmp_path)
@@ -343,8 +343,7 @@ class TestLinkTestsToCode:
         test_dir = tmp_path / "tests"
         test_dir.mkdir()
         (test_dir / "test_missing.py").write_text(
-            "from nonexistent_pkg.auth import authenticate\n\n"
-            "def test_authenticate():\n    pass\n"
+            "from nonexistent_pkg.auth import authenticate\n\ndef test_authenticate():\n    pass\n"
         )
 
         graph = TraceGraph(repo_root=tmp_path)
@@ -396,7 +395,7 @@ class TestLinkTestsToCode:
         src_dir = tmp_path / "src" / "elspais"
         src_dir.mkdir(parents=True)
         (src_dir / "__init__.py").write_text("")
-        (src_dir / "auth.py").write_text("def login():\n    pass\n\n" "def logout():\n    pass\n")
+        (src_dir / "auth.py").write_text("def login():\n    pass\n\ndef logout():\n    pass\n")
 
         test_dir = tmp_path / "tests"
         test_dir.mkdir()

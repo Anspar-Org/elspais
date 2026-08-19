@@ -72,9 +72,9 @@ class TestSingleBlockOwnsWholeFile:
 
         rollup: RollupMetrics = g.find_by_id("REQ-p00001").get_metric("rollup_metrics")
         assert rollup is not None
-        assert "A" in covered_labels(
-            rollup.lcov_tested, "total"
-        ), "Assertion A should be credited via block-scoped attribution"
+        assert "A" in covered_labels(rollup.lcov_tested, "total"), (
+            "Assertion A should be credited via block-scoped attribution"
+        )
         assert rollup.lcov_tested.covered > 0, "indirect coverage should be > 0"
 
     def test_single_block_code_tested_indirect(self):
@@ -183,12 +183,12 @@ class TestBoundaryDetection:
 
         rollup: RollupMetrics = g.find_by_id("REQ-p00001").get_metric("rollup_metrics")
         assert rollup is not None
-        assert "A" in covered_labels(
-            rollup.lcov_tested, "total"
-        ), "A in same block should be credited"
-        assert "B" in covered_labels(
-            rollup.lcov_tested, "total"
-        ), "B in same block should be credited"
+        assert "A" in covered_labels(rollup.lcov_tested, "total"), (
+            "A in same block should be credited"
+        )
+        assert "B" in covered_labels(rollup.lcov_tested, "total"), (
+            "B in same block should be credited"
+        )
 
     def test_executable_line_strictly_between_splits_blocks(self):
         """An executable line strictly between markers causes a block split."""
@@ -257,9 +257,9 @@ class TestFunctionRangeWins:
 
         rollup: RollupMetrics = g.find_by_id("REQ-p00001").get_metric("rollup_metrics")
         assert rollup is not None
-        assert "A" in covered_labels(
-            rollup.lcov_tested, "total"
-        ), "Range-based attribution should still work for multi-line refs"
+        assert "A" in covered_labels(rollup.lcov_tested, "total"), (
+            "Range-based attribution should still work for multi-line refs"
+        )
         assert rollup.lcov_tested.covered > 0
 
 
@@ -289,9 +289,9 @@ class TestNoCoverageData:
 
         rollup: RollupMetrics = g.find_by_id("REQ-p00001").get_metric("rollup_metrics")
         assert rollup is not None
-        assert (
-            covered_labels(rollup.lcov_tested, "total") == set()
-        ), "No line_coverage means no credit"
+        assert covered_labels(rollup.lcov_tested, "total") == set(), (
+            "No line_coverage means no credit"
+        )
         assert rollup.lcov_tested.covered == 0.0
         assert rollup.code_tested.covered_lines == 0
 

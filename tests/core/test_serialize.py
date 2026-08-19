@@ -344,9 +344,9 @@ class TestSerializeMetricsFiltering:
         result = serialize_node(node)
 
         assert "metrics" in result
-        assert (
-            "rollup_metrics" not in result["metrics"]
-        ), "RollupMetrics object should be filtered out of serialized metrics"
+        assert "rollup_metrics" not in result["metrics"], (
+            "RollupMetrics object should be filtered out of serialized metrics"
+        )
 
     def test_REQ_d00055_D_referenced_pct_included_in_serialization(self):
         """referenced_pct (float scalar) SHOULD appear in serialized output."""
@@ -367,15 +367,15 @@ class TestSerializeMetricsFiltering:
         result = serialize_node(node)
 
         assert "metrics" in result
-        assert (
-            result["metrics"]["referenced_pct"] == 75.0
-        ), "referenced_pct should be preserved in serialized output"
-        assert (
-            result["metrics"]["is_uncommitted"] is True
-        ), "Boolean metrics should be preserved in serialized output"
-        assert (
-            result["metrics"]["total_tests"] == 3
-        ), "Integer metrics should be preserved in serialized output"
+        assert result["metrics"]["referenced_pct"] == 75.0, (
+            "referenced_pct should be preserved in serialized output"
+        )
+        assert result["metrics"]["is_uncommitted"] is True, (
+            "Boolean metrics should be preserved in serialized output"
+        )
+        assert result["metrics"]["total_tests"] == 3, (
+            "Integer metrics should be preserved in serialized output"
+        )
 
     def test_REQ_d00055_D_serialized_metrics_are_json_safe(self):
         """All metrics in serialized output must be JSON-serializable scalar types."""

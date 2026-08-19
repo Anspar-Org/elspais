@@ -331,8 +331,7 @@ class TestAssertionBlankLinePreservation:
         text = _assertion_text(graph, "REQ-d00001-A")
 
         assert "listed:\n\n| Priority" in text, (
-            "The blank line before the table was lost at parse time; "
-            f"assertion text was:\n{text!r}"
+            f"The blank line before the table was lost at parse time; assertion text was:\n{text!r}"
         )
 
     def test_blank_line_before_table_survives_fix(self, tmp_path):
@@ -380,7 +379,7 @@ class TestAssertionBlankLinePreservation:
         text = _assertion_text(graph, "REQ-d00002-A")
 
         assert "\n\n\n" in text, (
-            "Both interior blank lines must be preserved; assertion text was:\n" f"{text!r}"
+            f"Both interior blank lines must be preserved; assertion text was:\n{text!r}"
         )
 
     def test_trailing_blank_lines_are_still_stripped(self, tmp_path):
@@ -397,7 +396,7 @@ class TestAssertionBlankLinePreservation:
             f"assertion text was:\n{text!r}"
         )
         assert text.endswith("The continuation line that ends the assertion."), (
-            "The assertion text must end at its last content line; got:\n" f"{text!r}"
+            f"The assertion text must end at its last content line; got:\n{text!r}"
         )
 
 
@@ -447,8 +446,7 @@ class TestRewriteTouchesNothingItWasNotAskedTo:
 
         after_end = next(ln for ln in after.splitlines() if ln.startswith(target_end))
         assert HASH_SEGMENT_RE.search(after_end) and after_end.startswith(target_end), (
-            "REQ-p00002's *End* line must differ only by the added Hash "
-            f"segment; got {after_end!r}"
+            f"REQ-p00002's *End* line must differ only by the added Hash segment; got {after_end!r}"
         )
 
     def test_rewrite_preserves_vertical_whitespace_outside_requirements(self, tmp_path):

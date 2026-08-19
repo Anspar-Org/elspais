@@ -8,6 +8,7 @@ Validates:
 - REQ-p00080-E: Page breaks before requirements
 - REQ-p00080-F: Overview PDF filtering
 """
+
 from __future__ import annotations
 
 import sys
@@ -902,7 +903,7 @@ class TestImagePathResolution:
         asm, root = _image_asm(tmp_path)
         (root / "spec").mkdir()
         (root / "spec" / "z.md").write_text(
-            "# Z\n\n![gone](missing/nope.png)\n\n" "![web](https://example.com/pic.png)\n",
+            "# Z\n\n![gone](missing/nope.png)\n\n![web](https://example.com/pic.png)\n",
             encoding="utf-8",
         )
 
@@ -977,9 +978,9 @@ class TestUnresolvableAssetDiagnostics:
         assert diag.source_file == "spec/z.md"
         assert diag.searched, "diagnostic must record the locations searched"
         expected = str((root / "spec" / "missing" / "nope.png").resolve())
-        assert (
-            expected in diag.searched
-        ), f"source-directory candidate {expected!r} missing from {diag.searched!r}"
+        assert expected in diag.searched, (
+            f"source-directory candidate {expected!r} missing from {diag.searched!r}"
+        )
 
     # Verifies: REQ-p00080-I
     def test_REQ_p00080_I_url_reference_is_not_reported(self, tmp_path):
@@ -1153,9 +1154,9 @@ class TestUnreadableSourceFileDiagnostics:
         # _wrap() names the federation-of-one from [project].name.
         assert diag.repo == "test"
         assert diag.searched, "diagnostic must record the locations searched"
-        assert any(
-            "spec/prd-absent.md" in location for location in diag.searched
-        ), f"no candidate location names the missing file: {diag.searched!r}"
+        assert any("spec/prd-absent.md" in location for location in diag.searched), (
+            f"no candidate location names the missing file: {diag.searched!r}"
+        )
         assert diag.cause, "diagnostic must state why the file could not be read"
         assert diag.remedy, "diagnostic must state the action available"
 
@@ -1180,12 +1181,11 @@ class TestUnreadableSourceFileDiagnostics:
         assert diag.reference == "spec/prd-gone.md"
         assert diag.source_file == ""
         assert diag.repo == "assoc", (
-            f"the file was expected in the associate repo, but the diagnostic "
-            f"names {diag.repo!r}"
+            f"the file was expected in the associate repo, but the diagnostic names {diag.repo!r}"
         )
-        assert any(
-            str(assoc_dir) in location for location in diag.searched
-        ), f"associate repo root missing from searched locations: {diag.searched!r}"
+        assert any(str(assoc_dir) in location for location in diag.searched), (
+            f"associate repo root missing from searched locations: {diag.searched!r}"
+        )
 
     # Verifies: REQ-p00080-J
     def test_REQ_p00080_J_missing_file_reported_once(self, tmp_path):
@@ -1206,8 +1206,7 @@ class TestUnreadableSourceFileDiagnostics:
 
         source_file_diags = [d for d in asm.iter_diagnostics() if d.kind == "source-file"]
         assert len(source_file_diags) == 1, (
-            f"expected one source-file diagnostic for one missing file, got "
-            f"{source_file_diags!r}"
+            f"expected one source-file diagnostic for one missing file, got {source_file_diags!r}"
         )
         assert source_file_diags[0].reference == "spec/prd-assoc.md"
         assert source_file_diags[0].repo == "assoc"
@@ -1222,8 +1221,7 @@ class TestUnreadableSourceFileDiagnostics:
 
         assert lines, "expected the associate file to render"
         assert asm.diagnostic_count() == 0, (
-            f"a readable file must not be reported: "
-            f"{[d.reference for d in asm.iter_diagnostics()]}"
+            f"a readable file must not be reported: {[d.reference for d in asm.iter_diagnostics()]}"
         )
 
     # Verifies: REQ-p00080-J
@@ -1246,7 +1244,7 @@ class TestUnreadableSourceFileDiagnostics:
         source_file_diags = [d for d in asm.iter_diagnostics() if d.kind == "source-file"]
         assert source_file_diags, "the vanished repo's file was omitted without a word"
         assert any(d.reference == "spec/prd-assoc.md" for d in source_file_diags), (
-            f"the omitted file was not named: " f"{[d.reference for d in source_file_diags]}"
+            f"the omitted file was not named: {[d.reference for d in source_file_diags]}"
         )
         assert any(d.repo == "assoc" for d in source_file_diags), (
             f"the repository the file was expected in was not named: "
@@ -1304,13 +1302,13 @@ class TestCrossRepoTopicIndexInAssembledDocument:
         shared_lines = [ln for ln in output.split("\n") if ln.startswith("**shared-topic**")]
         assert len(shared_lines) == 1, f"expected one shared-topic index line: {shared_lines!r}"
         line = shared_lines[0]
-        assert (
-            "[assoc] [REQ-p00099](#REQ-p00099)" in line
-        ), f"associate entry not annotated on the shared line: {line!r}"
+        assert "[assoc] [REQ-p00099](#REQ-p00099)" in line, (
+            f"associate entry not annotated on the shared line: {line!r}"
+        )
         assert "[REQ-p00001](#REQ-p00001)" in line, f"host entry missing: {line!r}"
-        assert (
-            "[root] [REQ-p00001]" not in line
-        ), f"host repo entry must render bare, not annotated: {line!r}"
+        assert "[root] [REQ-p00001]" not in line, (
+            f"host repo entry must render bare, not annotated: {line!r}"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -1349,8 +1347,7 @@ class TestPercentEncodedImageReferences:
         joined = "\n".join(asm._render_file("spec/x.md"))
 
         assert f"![x]({img.resolve()})" in joined, (
-            f"the decoded file exists on disk but the reference was not "
-            f"rewritten to it: {joined!r}"
+            f"the decoded file exists on disk but the reference was not rewritten to it: {joined!r}"
         )
         assert asm.diagnostic_count() == 0, (
             f"a reference pandoc resolves without difficulty was reported as "
@@ -1423,7 +1420,7 @@ class TestFencedCodeBlockReferences:
             f"reference: {[d.reference for d in asm.iter_diagnostics()]}"
         )
         assert sample in joined.split("\n"), (
-            f"the fenced sample line must survive verbatim; rendered output " f"was {joined!r}"
+            f"the fenced sample line must survive verbatim; rendered output was {joined!r}"
         )
 
     # Verifies: REQ-p00080-I
@@ -1438,23 +1435,17 @@ class TestFencedCodeBlockReferences:
         img = root / "spec" / "img" / "real.png"
         img.write_bytes(b"\x89PNG")
         (root / "spec" / "doc.md").write_text(
-            "# Doc\n"
-            "\n"
-            "![real](img/real.png)\n"
-            "\n"
-            "```markdown\n"
-            "![real](img/real.png)\n"
-            "```\n",
+            "# Doc\n\n![real](img/real.png)\n\n```markdown\n![real](img/real.png)\n```\n",
             encoding="utf-8",
         )
 
         lines = asm._render_file("spec/doc.md")
 
         assert f"![real]({img.resolve()})" in lines, (
-            f"the prose reference must still be rewritten to an absolute " f"path: {lines!r}"
+            f"the prose reference must still be rewritten to an absolute path: {lines!r}"
         )
         assert "![real](img/real.png)" in lines, (
-            f"the fenced sample must keep the relative path the author wrote: " f"{lines!r}"
+            f"the fenced sample must keep the relative path the author wrote: {lines!r}"
         )
         assert asm.diagnostic_count() == 0
 
@@ -1473,7 +1464,7 @@ class TestFencedCodeBlockReferences:
 
         refs = [d.reference for d in asm.iter_diagnostics()]
         assert "path/to/your-image.png" not in refs, (
-            f"a reference inside a ~~~ fence was reported as omitted: " f"{refs!r}"
+            f"a reference inside a ~~~ fence was reported as omitted: {refs!r}"
         )
         assert "also/missing.png" in refs, (
             f"the fence must close at the second ~~~ so the prose reference "
@@ -1631,9 +1622,9 @@ class TestUnloadableRepositoryDiagnostics:
         assert diag.reference == "assoc"
         assert diag.source_file == "", "the omitted thing IS the repository"
         assert diag.repo == "assoc"
-        assert any(
-            str(missing_root) in location for location in diag.searched
-        ), f"the configured root is missing from the searched locations: {diag.searched!r}"
+        assert any(str(missing_root) in location for location in diag.searched), (
+            f"the configured root is missing from the searched locations: {diag.searched!r}"
+        )
         assert diag.cause, "the diagnostic must state why the repository is absent"
         assert "associate" in diag.remedy.lower(), (
             f"the remedy must point at the associate configuration, which is "
@@ -1706,19 +1697,18 @@ class TestUnterminatedCodeFenceDiagnostics:
         )
         diag = fence_diags[0]
         assert diag.reference == "spec/doc.md", (
-            f"the diagnostic must name the spec file holding the unclosed "
-            f"fence: {diag.reference!r}"
+            f"the diagnostic must name the spec file holding the unclosed fence: {diag.reference!r}"
         )
-        assert (
-            diag.source_file == "spec/doc.md"
-        ), f"the declaring file is the same file: {diag.source_file!r}"
+        assert diag.source_file == "spec/doc.md", (
+            f"the declaring file is the same file: {diag.source_file!r}"
+        )
         assert diag.cause, "the diagnostic must state why the region is unanalysable"
         assert diag.remedy, "the diagnostic must state the action available"
 
         # Degraded, not aborted: the file still renders.
-        assert (
-            "PROSE AFTER THE RUNAWAY FENCE" in joined
-        ), f"an unterminated fence must not cost the rest of the file: {joined!r}"
+        assert "PROSE AFTER THE RUNAWAY FENCE" in joined, (
+            f"an unterminated fence must not cost the rest of the file: {joined!r}"
+        )
 
     # Verifies: REQ-p00080-I
     def test_REQ_p00080_I_balanced_fences_report_nothing(self, tmp_path):
@@ -1823,7 +1813,7 @@ class TestIndentedCodeBlockReferences:
             f"an omitted reference: {[d.reference for d in asm.iter_diagnostics()]}"
         )
         assert sample in lines, (
-            f"the indented sample line must survive verbatim; rendered output " f"was {lines!r}"
+            f"the indented sample line must survive verbatim; rendered output was {lines!r}"
         )
 
     # Verifies: REQ-p00080-I
@@ -1839,23 +1829,17 @@ class TestIndentedCodeBlockReferences:
         img = root / "spec" / "img" / "real.png"
         img.write_bytes(b"\x89PNG")
         (root / "spec" / "doc.md").write_text(
-            "# Doc\n"
-            "\n"
-            "![real](img/real.png)\n"
-            "\n"
-            "Write it like this:\n"
-            "\n"
-            "    ![real](img/real.png)\n",
+            "# Doc\n\n![real](img/real.png)\n\nWrite it like this:\n\n    ![real](img/real.png)\n",
             encoding="utf-8",
         )
 
         lines = asm._render_file("spec/doc.md")
 
         assert f"![real]({img.resolve()})" in lines, (
-            f"the prose reference must still be rewritten to an absolute " f"path: {lines!r}"
+            f"the prose reference must still be rewritten to an absolute path: {lines!r}"
         )
         assert "    ![real](img/real.png)" in lines, (
-            f"the indented sample must keep the relative path the author " f"wrote: {lines!r}"
+            f"the indented sample must keep the relative path the author wrote: {lines!r}"
         )
         assert asm.diagnostic_count() == 0
 
@@ -1906,9 +1890,9 @@ class TestIndentedCodeBlockReferences:
         asm._render_file("spec/doc.md")
 
         refs = [d.reference for d in asm.iter_diagnostics()]
-        assert (
-            "missing/one.png" not in refs
-        ), f"a reference inside the indented block was reported: {refs!r}"
+        assert "missing/one.png" not in refs, (
+            f"a reference inside the indented block was reported: {refs!r}"
+        )
         assert "missing/two.png" not in refs, (
             f"the indented block must continue across a blank line, so the "
             f"second sample is still inside it: {refs!r}"
@@ -1929,7 +1913,7 @@ class TestIndentedCodeBlockReferences:
         asm, root = _image_asm(tmp_path)
         (root / "spec").mkdir()
         (root / "spec" / "doc.md").write_text(
-            "# Doc\n" "\n" "- first item\n" "\n" "    ![gone](missing/list.png)\n",
+            "# Doc\n\n- first item\n\n    ![gone](missing/list.png)\n",
             encoding="utf-8",
         )
 
@@ -1952,10 +1936,7 @@ class TestIndentedCodeBlockReferences:
         asm, root = _image_asm(tmp_path)
         (root / "spec").mkdir()
         (root / "spec" / "doc.md").write_text(
-            "# Doc\n"
-            "\n"
-            "This sentence runs on to the next line\n"
-            "    ![gone](missing/lazy.png)\n",
+            "# Doc\n\nThis sentence runs on to the next line\n    ![gone](missing/lazy.png)\n",
             encoding="utf-8",
         )
 

@@ -393,9 +393,9 @@ def test_matcher_and_resolver_agree_after_normalization(variant: str) -> None:
     strings and the severity of a broken reference depends on which was asked.
     """
     resolver = build_resolver(NUMERIC)
-    assert _matcher_recognises(
-        resolver, variant
-    ), f"{variant!r} is not a case variant the matcher recognises, so it cannot test the agreement"
+    assert _matcher_recognises(resolver, variant), (
+        f"{variant!r} is not a case variant the matcher recognises, so it cannot test the agreement"
+    )
 
     normalized = resolver.normalize_ref(variant)
 
@@ -570,9 +570,9 @@ def test_a_component_style_folds_onto_the_templates_own_separators(
     extracted = reader.extract_underscored_ref(function_name)
 
     assert extracted == expected
-    assert resolver.is_local_id(
-        extracted
-    ), f"the reader picked {extracted!r} out of {function_name!r} but the resolver refuses it"
+    assert resolver.is_local_id(extracted), (
+        f"the reader picked {extracted!r} out of {function_name!r} but the resolver refuses it"
+    )
 
 
 @pytest.mark.parametrize(

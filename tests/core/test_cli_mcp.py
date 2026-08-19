@@ -808,9 +808,9 @@ class TestMcpInstallE2E:
             timeout=30,
             start_new_session=True,
         )
-        assert (
-            result.returncode == 0
-        ), f"MCP install/uninstall e2e failed:\n{result.stdout}\n{result.stderr}"
+        assert result.returncode == 0, (
+            f"MCP install/uninstall e2e failed:\n{result.stdout}\n{result.stderr}"
+        )
 
 
 _E2E_MCP_SCRIPT = """\

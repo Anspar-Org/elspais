@@ -159,8 +159,7 @@ In Python, JavaScript, Go, etc., use comments:
 
 ```python
 # Implements: REQ-d00001-A
-def hash_password(plain: str) -> str:
-    ...
+def hash_password(plain: str) -> str: ...
 ```
 
 Or:
@@ -174,15 +173,13 @@ function hashPassword(plain) { ... }
 Reference requirement IDs in test function names:
 
 ```python
-def test_REQ_d00001_A_bcrypt_cost():
-    ...
+def test_REQ_d00001_A_bcrypt_cost(): ...
 ```
 
 Or with comments:
 ```python
 # Tests: REQ-d00001-A
-def test_password_uses_bcrypt():
-    ...
+def test_password_uses_bcrypt(): ...
 ```
 
 ## Coverage Indicators

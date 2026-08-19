@@ -98,9 +98,9 @@ class TestFileNodeCreation:
 
         file_ids = [n.id for n in file_nodes]
         expected_id = make_file_id(NAMESPACE, "spec/reqs.md")
-        assert (
-            expected_id in file_ids
-        ), f"Expected FILE node with ID '{expected_id}', got: {file_ids}"
+        assert expected_id in file_ids, (
+            f"Expected FILE node with ID '{expected_id}', got: {file_ids}"
+        )
 
     def test_REQ_d00128_A_code_file_gets_file_node(self, tmp_path: Path) -> None:
         """A scanned code file produces a FILE node with file:<namespace>:<relative-path> ID."""
@@ -117,9 +117,9 @@ class TestFileNodeCreation:
         file_nodes = list(graph.nodes_by_kind(NodeKind.FILE))
         file_ids = [n.id for n in file_nodes]
         expected_id = make_file_id(NAMESPACE, "src/main.py")
-        assert (
-            expected_id in file_ids
-        ), f"Expected FILE node with ID '{expected_id}', got: {file_ids}"
+        assert expected_id in file_ids, (
+            f"Expected FILE node with ID '{expected_id}', got: {file_ids}"
+        )
 
     def test_REQ_d00128_A_file_node_kind_is_file(self, tmp_path: Path) -> None:
         """FILE nodes have kind == NodeKind.FILE."""
@@ -287,9 +287,9 @@ class TestContainsEdges:
 
         contains_children = list(file_node.iter_children(edge_kinds={EdgeKind.CONTAINS}))
         child_kinds = [c.kind for c in contains_children]
-        assert (
-            NodeKind.REQUIREMENT in child_kinds
-        ), f"FILE should CONTAINS a REQUIREMENT, got kinds: {child_kinds}"
+        assert NodeKind.REQUIREMENT in child_kinds, (
+            f"FILE should CONTAINS a REQUIREMENT, got kinds: {child_kinds}"
+        )
 
     def test_REQ_d00128_D_file_contains_code(self, tmp_path: Path) -> None:
         """FILE node has CONTAINS edge to CODE node."""
@@ -350,9 +350,9 @@ class TestContainsEdgeMetadata:
 
         for edge in file_node.iter_outgoing_edges():
             if edge.kind == EdgeKind.CONTAINS:
-                assert (
-                    "start_line" in edge.metadata
-                ), f"CONTAINS edge to {edge.target.id} missing start_line metadata"
+                assert "start_line" in edge.metadata, (
+                    f"CONTAINS edge to {edge.target.id} missing start_line metadata"
+                )
                 assert isinstance(edge.metadata["start_line"], int)
                 break
         else:
@@ -375,9 +375,9 @@ class TestContainsEdgeMetadata:
 
         for edge in file_node.iter_outgoing_edges():
             if edge.kind == EdgeKind.CONTAINS:
-                assert (
-                    "render_order" in edge.metadata
-                ), f"CONTAINS edge to {edge.target.id} missing render_order"
+                assert "render_order" in edge.metadata, (
+                    f"CONTAINS edge to {edge.target.id} missing render_order"
+                )
                 assert isinstance(edge.metadata["render_order"], float)
                 break
         else:
@@ -425,16 +425,16 @@ The system SHALL do thing two.
         assert file_node is not None
 
         contains_edges = [e for e in file_node.iter_outgoing_edges() if e.kind == EdgeKind.CONTAINS]
-        assert (
-            len(contains_edges) >= 2
-        ), f"Expected at least 2 CONTAINS edges, got {len(contains_edges)}"
+        assert len(contains_edges) >= 2, (
+            f"Expected at least 2 CONTAINS edges, got {len(contains_edges)}"
+        )
 
         orders = sorted(e.metadata["render_order"] for e in contains_edges)
         # Should be monotonically increasing (based on start_line)
         for i in range(1, len(orders)):
-            assert (
-                orders[i] > orders[i - 1]
-            ), f"render_order not increasing: {orders[i - 1]} -> {orders[i]} at position {i}"
+            assert orders[i] > orders[i - 1], (
+                f"render_order not increasing: {orders[i - 1]} -> {orders[i]} at position {i}"
+            )
 
 
 class TestAssertionsNotContained:
@@ -479,9 +479,9 @@ class TestAssertionsNotContained:
 
         structures_children = list(req_node.iter_children(edge_kinds={EdgeKind.STRUCTURES}))
         assertion_children = [c for c in structures_children if c.kind == NodeKind.ASSERTION]
-        assert (
-            len(assertion_children) > 0
-        ), "ASSERTIONs should be STRUCTURES children of REQUIREMENT"
+        assert len(assertion_children) > 0, (
+            "ASSERTIONs should be STRUCTURES children of REQUIREMENT"
+        )
 
     def test_REQ_d00128_F_section_remainder_not_contained_by_file(self, tmp_path: Path) -> None:
         """Requirement-level REMAINDER sections are NOT CONTAINS children of FILE."""
@@ -532,9 +532,9 @@ class TestRemainderParserRegistration:
         remainder_children = [c for c in contains_children if c.kind == NodeKind.REMAINDER]
         # The spec file has a "# Test Requirements" heading and "---" separator
         # which are not claimed by RequirementParser, so RemainderParser should claim them
-        assert (
-            len(remainder_children) > 0
-        ), "RemainderParser should produce REMAINDER nodes for unclaimed lines in spec files"
+        assert len(remainder_children) > 0, (
+            "RemainderParser should produce REMAINDER nodes for unclaimed lines in spec files"
+        )
 
     def test_REQ_d00128_G_code_files_have_coarse_remainder(self, tmp_path: Path) -> None:
         """Code files produce coarse REMAINDER nodes (one per file, not per line)."""
@@ -554,9 +554,9 @@ class TestRemainderParserRegistration:
         contains_children = list(file_node.iter_children(edge_kinds={EdgeKind.CONTAINS}))
         remainder_children = [c for c in contains_children if c.kind == NodeKind.REMAINDER]
         # Code files use coarse grouping: all unclaimed lines merge into one remainder
-        assert (
-            len(remainder_children) <= 1
-        ), f"Code files should have at most 1 coarse REMAINDER, got {len(remainder_children)}"
+        assert len(remainder_children) <= 1, (
+            f"Code files should have at most 1 coarse REMAINDER, got {len(remainder_children)}"
+        )
 
 
 class TestExistingBehaviorUnaffected:

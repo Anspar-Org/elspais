@@ -83,9 +83,9 @@ class TestSatisfiesResolve:
 
         assert not check.passed, "Expected fail for unresolved Satisfies target"
         assert check.name == "spec.satisfies_resolve"
-        assert (
-            check.severity == "warning"
-        ), f"Severity should match implements/refines (warning), got: {check.severity}"
+        assert check.severity == "warning", (
+            f"Severity should match implements/refines (warning), got: {check.severity}"
+        )
         assert len(check.findings) >= 1
         finding = check.findings[0]
         assert isinstance(finding, HealthFinding)
@@ -117,9 +117,9 @@ class TestSatisfiesResolve:
 
         # Only one unresolved should be reported (REQ-NONEXISTENT)
         unresolved = check.details.get("unresolved", [])
-        assert (
-            len(unresolved) == 1
-        ), f"Expected exactly one unresolved target, got {len(unresolved)}: {unresolved}"
+        assert len(unresolved) == 1, (
+            f"Expected exactly one unresolved target, got {len(unresolved)}: {unresolved}"
+        )
         assert unresolved[0]["from"] == "REQ-p00002"
         assert unresolved[0]["to"] == "REQ-NONEXISTENT"
 

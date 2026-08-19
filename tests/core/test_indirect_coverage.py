@@ -857,7 +857,7 @@ class TestFactoryIntegration:
         src_dir = tmp_path / "src"
         src_dir.mkdir()
         (src_dir / "auth.py").write_text(
-            "# Implements: REQ-p00001\n" "def authenticate():\n" "    pass\n"
+            "# Implements: REQ-p00001\ndef authenticate():\n    pass\n"
         )
 
         # Create a test file that imports the source module
@@ -910,7 +910,7 @@ class TestFactoryIntegration:
         src_dir = tmp_path / "src"
         src_dir.mkdir()
         (src_dir / "auth.py").write_text(
-            "# Implements: REQ-p00001\n" "def authenticate():\n" "    pass\n"
+            "# Implements: REQ-p00001\ndef authenticate():\n    pass\n"
         )
 
         (spec_dir / "requirements.md").write_text(
@@ -960,7 +960,7 @@ class TestFactoryIntegration:
         test_dir = tmp_path / "tests"
         test_dir.mkdir()
         (test_dir / "test_auth.py").write_text(
-            "# Verifies: REQ-p00001\n" "def test_authenticate():\n" "    pass\n"
+            "# Verifies: REQ-p00001\ndef test_authenticate():\n    pass\n"
         )
 
         (spec_dir / "requirements.md").write_text(

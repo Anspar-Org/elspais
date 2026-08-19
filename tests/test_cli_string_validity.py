@@ -409,8 +409,7 @@ class Finding:
             )
         else:
             body = (
-                f"`elspais {self.subcommand} ... {self.token}`  — "
-                f"positional not in allowed choices"
+                f"`elspais {self.subcommand} ... {self.token}`  — positional not in allowed choices"
             )
         return f"  {head}  {body}  (context: {self.context!r})"
 

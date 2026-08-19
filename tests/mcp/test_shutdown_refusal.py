@@ -171,9 +171,9 @@ class TestBothSurfacesRefuseWritesAfterTheDecision:
         assert result["code"] == "server_shutting_down"
         assert set(result) == REFUSAL_KEYS, f"refusal body drifted: {sorted(result)}"
         assert len(app_state.graph.mutation_log) == before, "a refused write reached the log"
-        assert (
-            app_state.graph.find_by_id(REQ).get_field("title") != "Written during the drain"
-        ), "a refused write reached the node"
+        assert app_state.graph.find_by_id(REQ).get_field("title") != "Written during the drain", (
+            "a refused write reached the node"
+        )
 
     def test_REQ_o00074_I_http_refuses_a_write_with_409(self, app_state, client):
         version = _version(app_state, REQ)
@@ -293,9 +293,9 @@ class TestEveryWriteSurfaceTakesTheGuard:
         }
         for name, kwargs in calls.items():
             result = tools[name](**kwargs)
-            assert (
-                result.get("code") == "server_shutting_down"
-            ), f"{name} did not refuse a write after the shutdown decision: {result}"
+            assert result.get("code") == "server_shutting_down", (
+                f"{name} did not refuse a write after the shutdown decision: {result}"
+            )
 
     def test_REQ_o00062_O_guard_reports_nothing_when_the_server_is_serving(self, app_state):
         from elspais.mcp.server import _guard_shutdown
@@ -431,9 +431,9 @@ class TestOneRoutineAccountsForTheWorkOnEveryStopPath:
 
         app_state.shared.begin_shutdown()  # what handle_exit does, and all it does
         assert app_state.shared.is_shutting_down is True
-        assert (
-            app_state.shared.shutdown_finalized is False
-        ), "raising the refusal flag was mistaken for having accounted for the work"
+        assert app_state.shared.shutdown_finalized is False, (
+            "raising the refusal flag was mistaken for having accounted for the work"
+        )
 
         outcome = finalize_shutdown(app_state.shared, trigger="the server stopped serving requests")
 
@@ -455,9 +455,9 @@ class TestOneRoutineAccountsForTheWorkOnEveryStopPath:
         assert outcome["success"] is True
         assert outcome["pending"] == 0
         assert outcome["saved"] is False, "a stop with nothing pending performed a save"
-        assert (
-            not record_path.exists()
-        ), "a stop that saved nothing announced a save to the next client"
+        assert not record_path.exists(), (
+            "a stop that saved nothing announced a save to the next client"
+        )
 
     # Verifies: REQ-p00083-H
     def test_REQ_o00074_J_stopping_with_nothing_pending_retires_no_record(self, app_state, project):
@@ -474,9 +474,9 @@ class TestOneRoutineAccountsForTheWorkOnEveryStopPath:
         outcome = finalize_shutdown(app_state.shared, trigger="the server stopped serving requests")
 
         assert outcome["saved"] is False
-        assert (
-            record_path.read_bytes() == before
-        ), "a stop that saved nothing rewrote or retired a record it did not supersede"
+        assert record_path.read_bytes() == before, (
+            "a stop that saved nothing rewrote or retired a record it did not supersede"
+        )
 
 
 class TestAFailedStopKeepsTheWorkAndTheProcess:
@@ -510,13 +510,13 @@ class TestAFailedStopKeepsTheWorkAndTheProcess:
         assert failed["success"] is False
         assert failed["finalized"] is False
         assert "read-only file system" in failed["error"]
-        assert (
-            app_state.shared.is_shutting_down is False
-        ), "a failed save refused the client saves that were the way out of it"
+        assert app_state.shared.is_shutting_down is False, (
+            "a failed save refused the client saves that were the way out of it"
+        )
         assert app_state.shared.shutdown_finalized is False
-        assert (
-            len(app_state.graph.mutation_log.tail(0)) == pending_before
-        ), "a failed save dropped the work it could not write"
+        assert len(app_state.graph.mutation_log.tail(0)) == pending_before, (
+            "a failed save dropped the work it could not write"
+        )
         assert title not in spec.read_text()
 
         # The next stop path tries again, and succeeds.
@@ -580,9 +580,9 @@ class TestIdleTimeoutStopsThroughTheSameRoutine:
         assert title in spec.read_text(), "the idle timeout stopped a daemon holding unsaved work"
         record = read_automatic_save(project)
         assert record is not None
-        assert (
-            record["trigger"] == "the idle timeout expired"
-        ), f"the idle timeout did not record what triggered it: {record}"
+        assert record["trigger"] == "the idle timeout expired", (
+            f"the idle timeout did not record what triggered it: {record}"
+        )
         assert app_state.shared.is_shutting_down is True
         assert exits == [0], f"the idle timeout did not end the process directly: {exits}"
 
@@ -681,12 +681,12 @@ class TestAnInstructedDiscardIsHonoured:
         payload = resp.json()
         assert payload["discarded"] is True, payload
         assert payload["saved"] is False, "the discard was overridden and the work written anyway"
-        assert (
-            spec.read_bytes() == before
-        ), "the work the operator said to throw away reached disk anyway"
-        assert (
-            read_automatic_save(project) is None
-        ), "a save that never happened was announced to the next client"
+        assert spec.read_bytes() == before, (
+            "the work the operator said to throw away reached disk anyway"
+        )
+        assert read_automatic_save(project) is None, (
+            "a save that never happened was announced to the next client"
+        )
         assert stop_is_not_carried_out.scheduled, "the process was not actually going to stop"
 
     def test_REQ_o00074_I_stopping_without_the_instruction_still_saves(
@@ -708,9 +708,9 @@ class TestAnInstructedDiscardIsHonoured:
         payload = resp.json()
         assert payload["saved"] is True, payload
         assert payload["discarded"] is False
-        assert (
-            title in spec.read_text()
-        ), "an ordinary stop destroyed the work the process was holding"
+        assert title in spec.read_text(), (
+            "an ordinary stop destroyed the work the process was holding"
+        )
         record = read_automatic_save(project)
         assert record is not None, "the process saved without saying it had"
         assert record["saved_by"] == "daemon"
@@ -741,9 +741,9 @@ class TestAnInstructedDiscardIsHonoured:
         assert payload["current_tip"] == _tip(client)
         assert [entry["id"] for entry in payload["unseen"]] == [_tip(client)]
 
-        assert (
-            app_state.shared.is_shutting_down is False
-        ), "a refused stop request stopped the process anyway"
+        assert app_state.shared.is_shutting_down is False, (
+            "a refused stop request stopped the process anyway"
+        )
         assert app_state.shared.shutdown_finalized is False
         assert stop_is_not_carried_out.scheduled == [], "a refused stop was set in motion"
         assert len(app_state.graph.mutation_log) == 1, "the refused discard ran anyway"

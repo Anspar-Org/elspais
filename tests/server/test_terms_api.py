@@ -515,5 +515,5 @@ class TestTermRepoNameAndPath:
         # Every reference carries the REQ-prefix, not the host-side handle.
         namespaces = {ref.namespace for ref in merged.references}
         assert namespaces == {"ASSOC"}, (
-            f"TermRef.namespace should be the REQ-prefix 'ASSOC', " f"got {namespaces!r}"
+            f"TermRef.namespace should be the REQ-prefix 'ASSOC', got {namespaces!r}"
         )

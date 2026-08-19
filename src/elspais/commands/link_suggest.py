@@ -128,8 +128,7 @@ def _output_text(suggestions: list) -> None:
     medium = sum(1 for s in suggestions if s.confidence_band == "medium")
     low = sum(1 for s in suggestions if s.confidence_band == "low")
     print(
-        f"Found {len(suggestions)} suggestions: "
-        f"{high} high, {medium} medium, {low} low confidence"
+        f"Found {len(suggestions)} suggestions: {high} high, {medium} medium, {low} low confidence"
     )
 
 

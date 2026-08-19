@@ -41,17 +41,17 @@ class TestFixtureHealthE2E:
         )
 
         data = json.loads(result.stdout)
-        assert (
-            data["summary"]["failed"] == 0
-        ), f"Fixture {fixture_dir.name} has {data['summary']['failed']} error(s)"
+        assert data["summary"]["failed"] == 0, (
+            f"Fixture {fixture_dir.name} has {data['summary']['failed']} error(s)"
+        )
 
     def test_REQ_p00002_health_text_output(self, fixture_dir) -> None:
         """elspais health produces readable text output."""
         result = run_elspais("checks", "--lenient", cwd=fixture_dir)
 
-        assert (
-            result.returncode == 0
-        ), f"elspais health failed on {fixture_dir.name}:\n{result.stderr}"
+        assert result.returncode == 0, (
+            f"elspais health failed on {fixture_dir.name}:\n{result.stderr}"
+        )
         # Text output should contain section headers
         assert "SPEC" in result.stdout or "spec" in result.stdout.lower()
 
@@ -71,7 +71,7 @@ class TestFixtureHealthE2E:
         """elspais health supports multiple output formats without crashing."""
         for fmt in ("text", "json", "markdown", "junit", "sarif"):
             result = run_elspais("checks", "--format", fmt, "--lenient", cwd=fixture_dir)
-            assert (
-                result.returncode == 0
-            ), f"Format {fmt} failed on {fixture_dir.name}:\n{result.stderr}"
+            assert result.returncode == 0, (
+                f"Format {fmt} failed on {fixture_dir.name}:\n{result.stderr}"
+            )
             assert len(result.stdout) > 0, f"Format {fmt} produced empty output"

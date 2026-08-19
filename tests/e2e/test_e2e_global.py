@@ -147,9 +147,9 @@ class TestRules:
         result = run_elspais("rules", "list")
         assert result.returncode == 0
         output = result.stdout.lower()
-        assert any(
-            term in output for term in ["implements", "->", "rule", "hierarchy"]
-        ), f"Expected hierarchy rule content in: {result.stdout[:200]}"
+        assert any(term in output for term in ["implements", "->", "rule", "hierarchy"]), (
+            f"Expected hierarchy rule content in: {result.stdout[:200]}"
+        )
 
 
 class TestHealth:
@@ -432,9 +432,9 @@ class TestHealthSelfValidation:
         result = run_elspais("checks", "--format", "json", "--lenient")
         assert result.returncode == 0
         data = json.loads(result.stdout)
-        assert (
-            data["summary"]["failed"] == 0
-        ), f"Expected 0 failures, got {data['summary']['failed']}"
+        assert data["summary"]["failed"] == 0, (
+            f"Expected 0 failures, got {data['summary']['failed']}"
+        )
 
     def test_REQ_p00013_C_health_is_healthy(self):
         result = run_elspais("checks", "--format", "json", "--lenient")
@@ -463,9 +463,9 @@ class TestSummarySelfValidation:
     def test_REQ_p00013_C_summary_has_all_levels(self, summary_data):
         level_names = {entry["level"] for entry in summary_data["levels"]}
         for expected in ("PRD", "OPS", "DEV"):
-            assert (
-                expected in level_names
-            ), f"Missing level {expected} in summary; found {level_names}"
+            assert expected in level_names, (
+                f"Missing level {expected} in summary; found {level_names}"
+            )
 
     def test_REQ_p00013_C_summary_nonzero_counts(self, summary_data):
         for entry in summary_data["levels"]:
@@ -548,9 +548,9 @@ class TestHealthSummaryConsistency:
         summary_data2 = json.loads(summary_result2.stdout)
         levels2 = summary_data2.get("levels", [])
         summary_total2 = sum(lvl.get("total", 0) for lvl in levels2)
-        assert (
-            summary_total == summary_total2
-        ), f"Summary totals differ between runs: {summary_total} vs {summary_total2}"
+        assert summary_total == summary_total2, (
+            f"Summary totals differ between runs: {summary_total} vs {summary_total2}"
+        )
 
 
 class TestSummaryIdempotent:

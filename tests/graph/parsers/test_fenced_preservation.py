@@ -204,15 +204,15 @@ class TestMultipleFenceMarkers:
         )
         results = _parse(spec, resolver)
         all_text = _all_remainder_text(results)
-        assert (
-            "BACKTICK_PAYLOAD_LINE_1" in all_text
-        ), f"Backtick-fence payload line 1 lost. REMAINDERs: {_remainder_texts(results)!r}"
-        assert (
-            "BACKTICK_PAYLOAD_LINE_2" in all_text
-        ), f"Backtick-fence payload line 2 lost. REMAINDERs: {_remainder_texts(results)!r}"
-        assert (
-            "<!-- fenced -->" not in all_text
-        ), f"Neutralization placeholder leaked. REMAINDERs: {_remainder_texts(results)!r}"
+        assert "BACKTICK_PAYLOAD_LINE_1" in all_text, (
+            f"Backtick-fence payload line 1 lost. REMAINDERs: {_remainder_texts(results)!r}"
+        )
+        assert "BACKTICK_PAYLOAD_LINE_2" in all_text, (
+            f"Backtick-fence payload line 2 lost. REMAINDERs: {_remainder_texts(results)!r}"
+        )
+        assert "<!-- fenced -->" not in all_text, (
+            f"Neutralization placeholder leaked. REMAINDERs: {_remainder_texts(results)!r}"
+        )
 
     # Verifies: REQ-d00247-A
     def test_REQ_d00247_A_tilde_fence_preserves_content(self, resolver: IdResolver) -> None:
@@ -233,15 +233,15 @@ class TestMultipleFenceMarkers:
         )
         results = _parse(spec, resolver)
         all_text = _all_remainder_text(results)
-        assert (
-            "TILDE_PAYLOAD_LINE_1" in all_text
-        ), f"Tilde-fence payload line 1 lost. REMAINDERs: {_remainder_texts(results)!r}"
-        assert (
-            "TILDE_PAYLOAD_LINE_2" in all_text
-        ), f"Tilde-fence payload line 2 lost. REMAINDERs: {_remainder_texts(results)!r}"
-        assert (
-            "<!-- fenced -->" not in all_text
-        ), f"Neutralization placeholder leaked. REMAINDERs: {_remainder_texts(results)!r}"
+        assert "TILDE_PAYLOAD_LINE_1" in all_text, (
+            f"Tilde-fence payload line 1 lost. REMAINDERs: {_remainder_texts(results)!r}"
+        )
+        assert "TILDE_PAYLOAD_LINE_2" in all_text, (
+            f"Tilde-fence payload line 2 lost. REMAINDERs: {_remainder_texts(results)!r}"
+        )
+        assert "<!-- fenced -->" not in all_text, (
+            f"Neutralization placeholder leaked. REMAINDERs: {_remainder_texts(results)!r}"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -302,9 +302,9 @@ class TestFenceWithRequirementExample:
             f"neutralization is broken. Found requirement IDs: {req_ids!r}"
         )
         # Sanity: the real requirement IS parsed.
-        assert (
-            "REQ-p00001" in req_ids
-        ), f"Real requirement 'REQ-p00001' was not parsed. Found IDs: {req_ids!r}"
+        assert "REQ-p00001" in req_ids, (
+            f"Real requirement 'REQ-p00001' was not parsed. Found IDs: {req_ids!r}"
+        )
 
     # Verifies: REQ-d00247-A
     def test_REQ_d00247_A_fenced_example_req_text_preserved_in_remainder(
@@ -355,15 +355,15 @@ class TestBlankLinesInFence:
         )
         results = _parse(spec, resolver)
         all_text = _all_remainder_text(results)
-        assert (
-            "FENCE_LINE_BEFORE_BLANK" in all_text
-        ), f"Pre-blank fence line lost. REMAINDERs: {_remainder_texts(results)!r}"
-        assert (
-            "FENCE_LINE_AFTER_BLANK" in all_text
-        ), f"Post-blank fence line lost. REMAINDERs: {_remainder_texts(results)!r}"
-        assert (
-            "<!-- fenced -->" not in all_text
-        ), f"Neutralization placeholder leaked. REMAINDERs: {_remainder_texts(results)!r}"
+        assert "FENCE_LINE_BEFORE_BLANK" in all_text, (
+            f"Pre-blank fence line lost. REMAINDERs: {_remainder_texts(results)!r}"
+        )
+        assert "FENCE_LINE_AFTER_BLANK" in all_text, (
+            f"Post-blank fence line lost. REMAINDERs: {_remainder_texts(results)!r}"
+        )
+        assert "<!-- fenced -->" not in all_text, (
+            f"Neutralization placeholder leaked. REMAINDERs: {_remainder_texts(results)!r}"
+        )
         # The original three fence-content lines (non-blank, blank, non-blank)
         # must appear together across the joined REMAINDER stream as the
         # original literal text. (Blank lines may legitimately split the
@@ -413,12 +413,12 @@ class TestCrlfLineEndings:
         spec = prefix + fence_block_crlf
         results = _parse(spec, resolver)
         all_text = _all_remainder_text(results)
-        assert (
-            "CRLF_FENCE_PAYLOAD" in all_text
-        ), f"CRLF fence payload lost. REMAINDERs: {_remainder_texts(results)!r}"
-        assert (
-            "<!-- fenced -->" not in all_text
-        ), f"Neutralization placeholder leaked. REMAINDERs: {_remainder_texts(results)!r}"
+        assert "CRLF_FENCE_PAYLOAD" in all_text, (
+            f"CRLF fence payload lost. REMAINDERs: {_remainder_texts(results)!r}"
+        )
+        assert "<!-- fenced -->" not in all_text, (
+            f"Neutralization placeholder leaked. REMAINDERs: {_remainder_texts(results)!r}"
+        )
         # The trailing `\r` from the original CRLF line should still be present
         # somewhere in REMAINDER raw_text -- it is part of the original source.
         assert "CRLF_FENCE_PAYLOAD\r" in all_text, (
@@ -456,15 +456,15 @@ class TestUnclosedFence:
         # Parse should succeed (no exception).
         results = _parse(spec, resolver)
         all_text = _all_remainder_text(results)
-        assert (
-            "UNCLOSED_FENCE_PAYLOAD_LINE_1" in all_text
-        ), f"Unclosed-fence payload line 1 lost. REMAINDERs: {_remainder_texts(results)!r}"
-        assert (
-            "UNCLOSED_FENCE_PAYLOAD_LINE_2" in all_text
-        ), f"Unclosed-fence payload line 2 lost. REMAINDERs: {_remainder_texts(results)!r}"
-        assert (
-            "<!-- fenced -->" not in all_text
-        ), f"Neutralization placeholder leaked. REMAINDERs: {_remainder_texts(results)!r}"
+        assert "UNCLOSED_FENCE_PAYLOAD_LINE_1" in all_text, (
+            f"Unclosed-fence payload line 1 lost. REMAINDERs: {_remainder_texts(results)!r}"
+        )
+        assert "UNCLOSED_FENCE_PAYLOAD_LINE_2" in all_text, (
+            f"Unclosed-fence payload line 2 lost. REMAINDERs: {_remainder_texts(results)!r}"
+        )
+        assert "<!-- fenced -->" not in all_text, (
+            f"Neutralization placeholder leaked. REMAINDERs: {_remainder_texts(results)!r}"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -496,12 +496,12 @@ class TestNoFenceBaseline:
         )
         results = _parse(spec, resolver)
         all_text = _all_remainder_text(results)
-        assert (
-            "PLAIN_REMAINDER_PAYLOAD line one." in all_text
-        ), f"Plain REMAINDER line 1 lost. REMAINDERs: {_remainder_texts(results)!r}"
-        assert (
-            "PLAIN_REMAINDER_PAYLOAD line two." in all_text
-        ), f"Plain REMAINDER line 2 lost. REMAINDERs: {_remainder_texts(results)!r}"
+        assert "PLAIN_REMAINDER_PAYLOAD line one." in all_text, (
+            f"Plain REMAINDER line 1 lost. REMAINDERs: {_remainder_texts(results)!r}"
+        )
+        assert "PLAIN_REMAINDER_PAYLOAD line two." in all_text, (
+            f"Plain REMAINDER line 2 lost. REMAINDERs: {_remainder_texts(results)!r}"
+        )
         assert "<!-- fenced -->" not in all_text, (
             f"Neutralization placeholder somehow appeared in fence-free spec. "
             f"REMAINDERs: {_remainder_texts(results)!r}"

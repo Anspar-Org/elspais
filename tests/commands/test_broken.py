@@ -1,5 +1,6 @@
 # Verifies: REQ-d00085
 """Tests for broken references mini-report command."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -163,11 +164,11 @@ class TestRenderBrokenText:
         diag_lines = [ln for ln in output.split("\n") if diag in ln]
         assert diag_lines, f"diagnostic not found on any line: {output!r}"
         assert diag_lines[0].strip() == diag, (
-            f"diagnostic line should contain only the diagnostic text, " f"got: {diag_lines[0]!r}"
+            f"diagnostic line should contain only the diagnostic text, got: {diag_lines[0]!r}"
         )
-        assert diag_lines[0].startswith(
-            "      "
-        ), f"diagnostic line should be indented, got: {diag_lines[0]!r}"
+        assert diag_lines[0].startswith("      "), (
+            f"diagnostic line should be indented, got: {diag_lines[0]!r}"
+        )
 
     def test_no_diagnostic_line_when_empty(self) -> None:
         # Verifies: REQ-d00085

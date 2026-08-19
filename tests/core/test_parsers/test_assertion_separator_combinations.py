@@ -184,9 +184,9 @@ def test_separator_combinations_parse_targeted_refs(sep, multi, ref, expected_la
         f"multi={multi!r}); got a blanket edge with empty assertion_targets "
         f"instead (the assertion suffix was dropped during extraction)."
     )
-    assert sorted(all_targets) == sorted(
-        expected_labels
-    ), f"Expected assertion_targets {expected_labels}, got {sorted(all_targets)}"
+    assert sorted(all_targets) == sorted(expected_labels), (
+        f"Expected assertion_targets {expected_labels}, got {sorted(all_targets)}"
+    )
 
 
 # Verifies: REQ-d00082-E, REQ-p00014-T
@@ -267,9 +267,9 @@ def test_journey_dash_style_ref_under_slash_config_is_hard_broken(tmp_path):
     assert jny is not None, "JNY-T-01 should be in the graph"
 
     journey_broken = [br for br in graph.broken_references() if br.source_id == jny.id]
-    assert (
-        len(journey_broken) == 1
-    ), f"Expected exactly one broken ref from {jny.id}, got {journey_broken}"
+    assert len(journey_broken) == 1, (
+        f"Expected exactly one broken ref from {jny.id}, got {journey_broken}"
+    )
     br = journey_broken[0]
 
     assert br.target_id == dash_style_ref
@@ -280,9 +280,9 @@ def test_journey_dash_style_ref_under_slash_config_is_hard_broken(tmp_path):
     )
     assert br.fault_class is FaultClass.MALFORMED
     assert FaultCode.SYNTAX_ERROR in br.codes
-    assert (
-        FaultCode.IDENTIFIER_WITH_TRAILING_TEXT in br.codes
-    ), f"Expected the specific code that now names the cause, got {br.codes!r}"
+    assert FaultCode.IDENTIFIER_WITH_TRAILING_TEXT in br.codes, (
+        f"Expected the specific code that now names the cause, got {br.codes!r}"
+    )
 
     # The other half of what names a cause: where the reference was written.
     file_path, line = _fault_location(graph, br.source_id, br.line)
@@ -452,9 +452,9 @@ def test_code_comment_off_config_residue_is_a_broken_reference(tmp_path):
     )
 
     code_broken = [br for br in graph.broken_references() if br.source_id == code_id]
-    assert (
-        len(code_broken) == 1
-    ), f"Expected exactly one broken reference from the code node, got {code_broken}"
+    assert len(code_broken) == 1, (
+        f"Expected exactly one broken reference from the code node, got {code_broken}"
+    )
     br = code_broken[0]
     assert br.target_id == "REQ-o-storageRules/Z", (
         "The broken reference must carry the whole malformed token, not the "
@@ -487,9 +487,9 @@ def test_spec_and_code_contexts_agree_on_the_same_malformed_reference(tmp_path):
     }
     code_targets = {br.target_id for br in graph.broken_references() if br.source_id == code_id}
 
-    assert spec_targets == {
-        ref
-    }, f"Spec metadata context should already report {ref!r} broken; got {spec_targets}"
+    assert spec_targets == {ref}, (
+        f"Spec metadata context should already report {ref!r} broken; got {spec_targets}"
+    )
     assert code_targets == spec_targets, (
         "The code-comment context must reach the same verdict as the spec "
         f"context for the same reference string; spec reported {spec_targets}, "
@@ -530,9 +530,9 @@ def test_test_comment_off_config_residue_is_a_broken_reference(tmp_path):
     )
 
     test_broken = [br for br in graph.broken_references() if br.source_id == test_id]
-    assert [br.target_id for br in test_broken] == [
-        "REQ-p-widget/Z"
-    ], f"Expected one broken reference carrying the whole malformed token, got {test_broken}"
+    assert [br.target_id for br in test_broken] == ["REQ-p-widget/Z"], (
+        f"Expected one broken reference carrying the whole malformed token, got {test_broken}"
+    )
 
 
 # Verifies: REQ-p00014-T, REQ-d00082-E
@@ -557,12 +557,12 @@ def test_slash_configured_repo_still_parses_slash_suffix(tmp_path):
         if edge.kind == EdgeKind.IMPLEMENTS and edge.target.id == code_id:
             targets.extend(edge.assertion_targets)
 
-    assert sorted(targets) == [
-        "A"
-    ], f"Expected a targeted IMPLEMENTS edge for assertion A, got {sorted(targets)}"
-    assert not [
-        br for br in graph.broken_references() if br.source_id == code_id
-    ], "A correctly-styled reference under the configured separator must not be reported broken"
+    assert sorted(targets) == ["A"], (
+        f"Expected a targeted IMPLEMENTS edge for assertion A, got {sorted(targets)}"
+    )
+    assert not [br for br in graph.broken_references() if br.source_id == code_id], (
+        "A correctly-styled reference under the configured separator must not be reported broken"
+    )
 
 
 # Verifies: REQ-p00014-T, REQ-d00082-E
@@ -615,12 +615,12 @@ def test_bare_requirement_reference_stays_a_blanket_edge(tmp_path):
         if edge.kind == EdgeKind.IMPLEMENTS and edge.target.id == code_id
     ]
     assert len(blanket) == 1, f"Expected one blanket IMPLEMENTS edge, got {blanket}"
-    assert (
-        blanket[0].assertion_targets == []
-    ), f"Expected a blanket edge with no assertion targets, got {blanket[0].assertion_targets}"
-    assert (
-        not graph.broken_references()
-    ), f"A bare requirement reference must not be reported broken; got {graph.broken_references()}"
+    assert blanket[0].assertion_targets == [], (
+        f"Expected a blanket edge with no assertion targets, got {blanket[0].assertion_targets}"
+    )
+    assert not graph.broken_references(), (
+        f"A bare requirement reference must not be reported broken; got {graph.broken_references()}"
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -762,7 +762,7 @@ def test_journey_validates_line_is_written_back_in_the_configured_spelling(sep, 
     header_block = body.split("\n\n")[0]
 
     assert "**Goal**: Use widgets thoroughly" in header_block, (
-        "the header block should be the reconstructed one; got " f"{header_block!r}"
+        f"the header block should be the reconstructed one; got {header_block!r}"
     )
     assert f"Validates: REQ-p00001{sep}A{multi}B" in header_block, (
         f"The derived Validates line must use the configured separators "
@@ -772,5 +772,5 @@ def test_journey_validates_line_is_written_back_in_the_configured_spelling(sep, 
         if (other_sep, other_multi) == (sep, multi):
             continue
         assert f"REQ-p00001{other_sep}A{other_multi}B" not in header_block, (
-            "No spelling but this repository's own may be written back; got " f"{header_block!r}"
+            f"No spelling but this repository's own may be written back; got {header_block!r}"
         )

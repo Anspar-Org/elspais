@@ -6,6 +6,7 @@ requirement metadata, journey metadata, edge keywords, the changelog
 section header, or multi-assertion ID suffixes import from here rather
 than inlining their own pattern.
 """
+
 from __future__ import annotations
 
 import re

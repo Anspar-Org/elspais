@@ -10,6 +10,7 @@ A source RESULT that resolves no further than its file carries
 ``match_scope = "file"``: it names every test written there and so names none
 of them, and contributes no verdict in either direction.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -185,17 +186,17 @@ def test_per_test_pass_credits_only_its_assertions(graph_per_test_credit):
     """Assertion A is credited because test-A (match_scope='test') passed,
     even though test-B failed."""
     m = graph_per_test_credit.find_by_id("REQ-p00001").get_metric("rollup_metrics")
-    assert (
-        m.verified.total_by_label.get("A", 0.0) == 1.0
-    ), "A should be credited since r_pass (match_scope='test') passed for test-A"
+    assert m.verified.total_by_label.get("A", 0.0) == 1.0, (
+        "A should be credited since r_pass (match_scope='test') passed for test-A"
+    )
 
 
 def test_per_test_fail_does_not_credit_its_own_assertion(graph_per_test_credit):
     """Assertion B is NOT credited because test-B (match_scope='test') failed."""
     m = graph_per_test_credit.find_by_id("REQ-p00001").get_metric("rollup_metrics")
-    assert (
-        m.verified.total_by_label.get("B", 0.0) == 0.0
-    ), "B should not be credited since r_fail (match_scope='test') failed for test-B"
+    assert m.verified.total_by_label.get("B", 0.0) == 0.0, (
+        "B should not be credited since r_fail (match_scope='test') failed for test-B"
+    )
 
 
 def test_per_test_failure_sets_has_failures(graph_per_test_credit):
@@ -210,12 +211,12 @@ def test_per_test_match_scope_is_test_for_line_resolved_results(graph_per_test_c
     r_fail = graph_per_test_credit.find_by_id("r_fail")
     assert r_pass is not None
     assert r_fail is not None
-    assert (
-        r_pass.get_field("match_scope") == "test"
-    ), f"r_pass should have match_scope='test', got {r_pass.get_field('match_scope')!r}"
-    assert (
-        r_fail.get_field("match_scope") == "test"
-    ), f"r_fail should have match_scope='test', got {r_fail.get_field('match_scope')!r}"
+    assert r_pass.get_field("match_scope") == "test", (
+        f"r_pass should have match_scope='test', got {r_pass.get_field('match_scope')!r}"
+    )
+    assert r_fail.get_field("match_scope") == "test", (
+        f"r_fail should have match_scope='test', got {r_fail.get_field('match_scope')!r}"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -248,9 +249,9 @@ def test_file_scope_match_scope_is_file_for_null_line(graph_file_scope_fallback)
     r_fail = graph_file_scope_fallback.find_by_id("r_fail2")
     assert r_pass is not None
     assert r_fail is not None
-    assert (
-        r_pass.get_field("match_scope") == "file"
-    ), f"r_pass2 should have match_scope='file', got {r_pass.get_field('match_scope')!r}"
-    assert (
-        r_fail.get_field("match_scope") == "file"
-    ), f"r_fail2 should have match_scope='file', got {r_fail.get_field('match_scope')!r}"
+    assert r_pass.get_field("match_scope") == "file", (
+        f"r_pass2 should have match_scope='file', got {r_pass.get_field('match_scope')!r}"
+    )
+    assert r_fail.get_field("match_scope") == "file", (
+        f"r_fail2 should have match_scope='file', got {r_fail.get_field('match_scope')!r}"
+    )

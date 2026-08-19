@@ -4,6 +4,7 @@
 Decision logic (when to use daemon vs local) lives in ``_engine.py``.
 This module only provides low-level HTTP helpers.
 """
+
 from __future__ import annotations
 
 import json

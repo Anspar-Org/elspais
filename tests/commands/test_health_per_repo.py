@@ -96,9 +96,9 @@ class TestHealthFindingRepoField:
         """HealthFinding dataclass has a `repo` field that defaults to None."""
         finding = HealthFinding(message="test finding")
         # The `repo` field should exist and default to None
-        assert hasattr(
-            finding, "repo"
-        ), "HealthFinding must have a 'repo' field for per-repo attribution"
+        assert hasattr(finding, "repo"), (
+            "HealthFinding must have a 'repo' field for per-repo attribution"
+        )
         assert finding.repo is None
 
     def test_REQ_d00204_D_health_finding_repo_field_settable(self) -> None:

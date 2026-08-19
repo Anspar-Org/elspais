@@ -333,9 +333,9 @@ class TestDeprecationErrorText:
         msg = self._capture_error("named", pattern="[A-Za-z][A-Za-z0-9]+")
         case_styles = ["camelCase", "PascalCase", "snake_case", "kebab-case"]
         present = [s for s in case_styles if s in msg]
-        assert (
-            len(present) >= 2
-        ), f"Expected >=2 case-style names in error, got {present!r}. msg={msg}"
+        assert len(present) >= 2, (
+            f"Expected >=2 case-style names in error, got {present!r}. msg={msg}"
+        )
 
     def test_alphanumeric_error_mentions_legacy_pattern(self):
         # Verifies: REQ-d00251-D
@@ -470,12 +470,12 @@ class TestAmbiguityRejection:
             ElspaisConfig.model_validate(payload)
         msg = str(excinfo.value)
         assert "separator" in msg, f"Rejection must name the offending field. msg={msg}"
-        assert (
-            f'"{separator}"' in msg
-        ), f"Rejection must name the character {separator!r}. msg={msg}"
-        assert (
-            style in msg and label_style in msg
-        ), f"Rejection must name the styles that make {separator!r} legal. msg={msg}"
+        assert f'"{separator}"' in msg, (
+            f"Rejection must name the character {separator!r}. msg={msg}"
+        )
+        assert style in msg and label_style in msg, (
+            f"Rejection must name the styles that make {separator!r} legal. msg={msg}"
+        )
 
         # The suggested replacement has to actually clear the conflict.
         suggestion = _suggested_replacement(msg)
@@ -496,9 +496,9 @@ class TestAmbiguityRejection:
             ElspaisConfig.model_validate(payload)
         msg = str(excinfo.value)
         assert "multi_separator" in msg, f"Rejection must name the offending field. msg={msg}"
-        assert (
-            f'"{multi_separator}"' in msg
-        ), f"Rejection must name the character {multi_separator!r}. msg={msg}"
+        assert f'"{multi_separator}"' in msg, (
+            f"Rejection must name the character {multi_separator!r}. msg={msg}"
+        )
         assert label_style in msg, f"Rejection must name the label style. msg={msg}"
 
         suggestion = _suggested_replacement(msg)
@@ -549,8 +549,7 @@ class TestComponentRegexHelper:
         regex_str = component_regex(cf)
         m = _re.fullmatch(regex_str, probe)
         assert (m is not None) == expected, (
-            f"style={style!r} probe={probe!r}: expected match={expected}, "
-            f"got regex={regex_str!r}"
+            f"style={style!r} probe={probe!r}: expected match={expected}, got regex={regex_str!r}"
         )
 
     def test_helper_returns_numeric_regex(self):

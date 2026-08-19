@@ -10,7 +10,7 @@
 #   4. Secret detection (gitleaks)
 #   5. Documentation sync tests
 #
-# Pre-commit already handles: lint, black, markdown, unit tests,
+# Pre-commit already handles: lint, format, markdown, unit tests,
 # elspais fix, commit message format.
 #
 # PR-aware blocking:

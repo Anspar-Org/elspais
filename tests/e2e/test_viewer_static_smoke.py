@@ -13,6 +13,7 @@ ingests a JUnit ``results.xml`` linked to its journey-step tests, so building it
 graph produces RESULT nodes parented under TEST nodes -- exactly the render path
 that regressed.
 """
+
 from __future__ import annotations
 
 import shutil
@@ -42,12 +43,12 @@ class TestViewerStaticRunsWithoutErrors:
     # Verifies: REQ-p00006-A
     def test_static_viewer_renders_with_test_results(self, results_project):
         result = run_elspais("viewer", "--static", cwd=results_project)
-        assert (
-            result.returncode == 0
-        ), f"viewer --static exited {result.returncode}: {result.stderr}"
+        assert result.returncode == 0, (
+            f"viewer --static exited {result.returncode}: {result.stderr}"
+        )
         # `viewer --static` prints "Generated:" even when rendering raised, so a
         # non-empty, HTML-shaped payload is the real success signal.
         assert "<!DOCTYPE html" in result.stdout, "static viewer produced no HTML"
-        assert (
-            len(result.stdout) > 1000
-        ), f"static viewer output suspiciously small ({len(result.stdout)} bytes)"
+        assert len(result.stdout) > 1000, (
+            f"static viewer output suspiciously small ({len(result.stdout)} bytes)"
+        )

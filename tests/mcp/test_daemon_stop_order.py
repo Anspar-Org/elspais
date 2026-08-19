@@ -194,9 +194,9 @@ class TestTheStopperOwnsTheDeadline:
             signal_module.SIGTERM,
             signal_module.SIGKILL,
         ], f"the stop did not ask before it escalated: {marks}"
-        assert (
-            marks[1][1] - marks[0][1] >= wait_seconds
-        ), f"the kill arrived before the wait was over: {marks}"
+        assert marks[1][1] - marks[0][1] >= wait_seconds, (
+            f"the kill arrived before the wait was over: {marks}"
+        )
 
 
 class TestRecordIsNeverSeenHalfWritten:

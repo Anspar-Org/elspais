@@ -395,9 +395,9 @@ class TestNodeFiltering:
         for ns in report.ranked_nodes:
             node = graph.find_by_id(ns.node_id)
             assert node is not None
-            assert (
-                node.kind == NodeKind.REQUIREMENT
-            ), f"Node {ns.node_id} is {node.kind}, expected REQUIREMENT"
+            assert node.kind == NodeKind.REQUIREMENT, (
+                f"Node {ns.node_id} is {node.kind}, expected REQUIREMENT"
+            )
 
     def test_REQ_d00124_E_assertions_count_toward_uncovered(self):
         """Uncovered assertions should feed into parent requirement's
@@ -461,9 +461,9 @@ class TestActionableLeaves:
         # Leaf under important parent should rank higher (earlier index)
         idx_imp = leaf_ids.index("REQ-LEAF-IMP")
         idx_min = leaf_ids.index("REQ-LEAF-MIN")
-        assert (
-            idx_imp < idx_min
-        ), f"Expected REQ-LEAF-IMP (idx {idx_imp}) to rank before REQ-LEAF-MIN (idx {idx_min})"
+        assert idx_imp < idx_min, (
+            f"Expected REQ-LEAF-IMP (idx {idx_imp}) to rank before REQ-LEAF-MIN (idx {idx_min})"
+        )
 
     def test_REQ_d00124_F_covered_leaves_included(self):
         """All leaves appear in actionable_leaves regardless of coverage."""

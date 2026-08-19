@@ -1529,18 +1529,18 @@ class TestStructuresEdgeRenderOrder:
         ]
 
         # Should have at least 2 STRUCTURES children (assertions)
-        assert (
-            len(structures_edges) >= 2
-        ), f"Expected at least 2 STRUCTURES edges, got {len(structures_edges)}"
+        assert len(structures_edges) >= 2, (
+            f"Expected at least 2 STRUCTURES edges, got {len(structures_edges)}"
+        )
 
         # Every STRUCTURES edge must have render_order in metadata
         for edge in structures_edges:
-            assert (
-                "render_order" in edge.metadata
-            ), f"STRUCTURES edge to {edge.target.id} missing render_order metadata"
-            assert isinstance(
-                edge.metadata["render_order"], float
-            ), f"render_order should be float, got {type(edge.metadata['render_order'])}"
+            assert "render_order" in edge.metadata, (
+                f"STRUCTURES edge to {edge.target.id} missing render_order metadata"
+            )
+            assert isinstance(edge.metadata["render_order"], float), (
+                f"render_order should be float, got {type(edge.metadata['render_order'])}"
+            )
 
         # render_order values must be monotonically increasing
         orders = [e.metadata["render_order"] for e in structures_edges]
@@ -1594,9 +1594,9 @@ def test_add_assertion_sets_render_order():
             break
 
     assert new_edge is not None, "New assertion edge not found"
-    assert (
-        "render_order" in new_edge.metadata
-    ), "render_order missing from new STRUCTURES edge metadata"
+    assert "render_order" in new_edge.metadata, (
+        "render_order missing from new STRUCTURES edge metadata"
+    )
     assert new_edge.metadata["render_order"] > max_existing, (
         f"New render_order {new_edge.metadata['render_order']} should be > "
         f"max existing {max_existing}"

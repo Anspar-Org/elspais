@@ -373,9 +373,9 @@ class TestCrossRepoCloneShape:
         # using br.target_id instead of orig.id when constructing clone_id.
         canonical_composite = fed.find_by_id("APP-p00001::LIB-p00001")
         non_canonical_composite = fed.find_by_id("APP-p00001::LIB-p1")
-        assert (
-            canonical_composite is not None
-        ), "expected canonical composite APP-p00001::LIB-p00001 to exist"
+        assert canonical_composite is not None, (
+            "expected canonical composite APP-p00001::LIB-p00001 to exist"
+        )
         assert non_canonical_composite is None, (
             "non-canonical composite APP-p00001::LIB-p1 must NOT exist "
             "(would indicate a shadow ownership entry)"
@@ -607,9 +607,9 @@ class TestClaimForResolverProbe:
         # And a second probe still doesn't rebuild.
         fed._claim_for("LIB-p1")
         for name, resolver in pre_call.items():
-            assert (
-                fed._resolver_cache[name] is resolver
-            ), f"second _claim_for rebuilt the IdResolver for repo {name!r}."
+            assert fed._resolver_cache[name] is resolver, (
+                f"second _claim_for rebuilt the IdResolver for repo {name!r}."
+            )
 
     def test_claim_for_returns_none_when_no_repo_claims(self, tmp_path: Path) -> None:
         """``_claim_for`` returns ``None`` when the ID parses for no associated repo.
@@ -713,9 +713,9 @@ class TestFederatedDiagnostics:
         assert "EVS-p00001" in diag, f"target ID missing from diagnostic: {diag!r}"
         assert "[associates" in diag, f"[associates hint missing: {diag!r}"
         assert ".elspais.toml" in diag, f".elspais.toml hint missing: {diag!r}"
-        assert (
-            "No associates declared" in diag
-        ), f"expected 'No associates declared' phrasing when no associates exist: {diag!r}"
+        assert "No associates declared" in diag, (
+            f"expected 'No associates declared' phrasing when no associates exist: {diag!r}"
+        )
 
     def test_missing_associate_diagnostic_with_other_associates(self, tmp_path: Path) -> None:
         """When other associates exist, diagnostic names them.

@@ -4,6 +4,7 @@
 Validates REQ-p00001-A: CLI entry point shell completion generation, installation,
 and uninstallation with idempotent RC file management.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -96,8 +97,7 @@ class TestRemoveArgcompleteLines:
     def test_REQ_p00001_A_removes_tab_completion_comment(self, tmp_path: Path) -> None:
         rc = tmp_path / ".bashrc"
         rc.write_text(
-            "# elspais shell tab-completion setup\n"
-            'eval "$(register-python-argcomplete elspais)"\n'
+            '# elspais shell tab-completion setup\neval "$(register-python-argcomplete elspais)"\n'
         )
         removed = _remove_argcomplete_lines(rc)
         assert removed == 2
@@ -329,7 +329,7 @@ class TestCmdInstall:
     ) -> None:
         cfg = self._patch(monkeypatch, tmp_path, "zsh")
         rc_file = Path(cfg["rc_file"])  # type: ignore[arg-type]
-        rc_file.write_text("# existing\n" 'eval "$(register-python-argcomplete elspais)"\n')
+        rc_file.write_text('# existing\neval "$(register-python-argcomplete elspais)"\n')
 
         result = cmd_install("zsh")
         assert result == 0
@@ -416,7 +416,7 @@ class TestCmdUninstall:
         cfg = self._patch(monkeypatch, tmp_path, "zsh")
         rc_file = Path(cfg["rc_file"])  # type: ignore[arg-type]
         rc_file.write_text(
-            "# Autocompletion for elspais\n" 'eval "$(register-python-argcomplete elspais)"\n'
+            '# Autocompletion for elspais\neval "$(register-python-argcomplete elspais)"\n'
         )
 
         result = cmd_uninstall("zsh")

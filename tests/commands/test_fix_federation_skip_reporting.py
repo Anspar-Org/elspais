@@ -5,6 +5,7 @@ Validates REQ-d00253-F: with federation.write_associates=false, every
 fix-report line for an associate-owned node is prefixed [skipping] (both
 "Fixing" and dry-run "Would fix" reports); primary-repo lines stay plain.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -140,9 +141,9 @@ class TestFixAssociateSkipReporting:
         lines = capsys.readouterr().out.splitlines()
 
         # Primary-repo fixable node is still reported plainly.
-        assert any(
-            line.startswith(f"{verb} REQ-p00001") for line in lines
-        ), f"primary-repo node must keep its plain '{verb}' line; got:\n" + "\n".join(lines)
+        assert any(line.startswith(f"{verb} REQ-p00001") for line in lines), (
+            f"primary-repo node must keep its plain '{verb}' line; got:\n" + "\n".join(lines)
+        )
 
         # The report must never claim work on associate-owned content that
         # will not be written (write_associates defaults to false).
@@ -163,13 +164,13 @@ class TestFixAssociateSkipReporting:
         # Ground truth on disk: the associate file is never written, so the
         # report above is the only honest description of what happened.
         associate_content = (associate / "spec" / "lib.md").read_text()
-        assert (
-            _STALE_ASSOCIATE_HASH in associate_content
-        ), "associate file must remain untouched (write_associates=false)"
+        assert _STALE_ASSOCIATE_HASH in associate_content, (
+            "associate file must remain untouched (write_associates=false)"
+        )
         primary_content = (primary / "spec" / "core.md").read_text()
         if dry_run:
             assert _STALE_PRIMARY_HASH in primary_content, "dry-run must not write files"
         else:
-            assert (
-                _STALE_PRIMARY_HASH not in primary_content
-            ), "primary repo fix must actually be applied"
+            assert _STALE_PRIMARY_HASH not in primary_content, (
+                "primary repo fix must actually be applied"
+            )

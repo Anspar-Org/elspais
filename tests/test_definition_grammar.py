@@ -245,15 +245,14 @@ A. First assertion
                     break
 
         assert def_data is not None, (
-            f"No definition_block data found. content_types: "
-            f"{[r.content_type for r in results]}"
+            f"No definition_block data found. content_types: {[r.content_type for r in results]}"
         )
-        assert (
-            def_data.get("term") == "Electronic Record"
-        ), f"Expected term='Electronic Record', got {def_data.get('term')!r}"
-        assert "combination" in def_data.get(
-            "definition", ""
-        ), f"Expected definition containing 'combination', got {def_data.get('definition')!r}"
+        assert def_data.get("term") == "Electronic Record", (
+            f"Expected term='Electronic Record', got {def_data.get('term')!r}"
+        )
+        assert "combination" in def_data.get("definition", ""), (
+            f"Expected definition containing 'combination', got {def_data.get('definition')!r}"
+        )
 
     def test_REQ_d00221_B_collection_flag(self, resolver):
         """Definition with ': Collection: true' has collection=True in parsed_data."""
@@ -285,12 +284,11 @@ A. First assertion
                     break
 
         assert def_data is not None, (
-            f"No definition_block data found. content_types: "
-            f"{[r.content_type for r in results]}"
+            f"No definition_block data found. content_types: {[r.content_type for r in results]}"
         )
-        assert (
-            def_data.get("collection") is True
-        ), f"Expected collection=True, got {def_data.get('collection')!r}"
+        assert def_data.get("collection") is True, (
+            f"Expected collection=True, got {def_data.get('collection')!r}"
+        )
 
     def test_REQ_d00221_B_indexed_flag(self, resolver):
         """Definition with ': Indexed: false' has indexed=False in parsed_data."""
@@ -322,12 +320,11 @@ A. First assertion
                     break
 
         assert def_data is not None, (
-            f"No definition_block data found. content_types: "
-            f"{[r.content_type for r in results]}"
+            f"No definition_block data found. content_types: {[r.content_type for r in results]}"
         )
-        assert (
-            def_data.get("indexed") is False
-        ), f"Expected indexed=False, got {def_data.get('indexed')!r}"
+        assert def_data.get("indexed") is False, (
+            f"Expected indexed=False, got {def_data.get('indexed')!r}"
+        )
 
     def test_REQ_d00221_B_multiline_definition(self, resolver):
         """Definition with multiple ': ' lines has joined definition text."""
@@ -360,16 +357,15 @@ A. First assertion
                     break
 
         assert def_data is not None, (
-            f"No definition_block data found. content_types: "
-            f"{[r.content_type for r in results]}"
+            f"No definition_block data found. content_types: {[r.content_type for r in results]}"
         )
         definition_text = def_data.get("definition", "")
-        assert (
-            "combination" in definition_text
-        ), f"Expected 'combination' in definition, got {definition_text!r}"
-        assert (
-            "regulatory" in definition_text
-        ), f"Expected 'regulatory' in definition (multiline join), got {definition_text!r}"
+        assert "combination" in definition_text, (
+            f"Expected 'combination' in definition, got {definition_text!r}"
+        )
+        assert "regulatory" in definition_text, (
+            f"Expected 'regulatory' in definition (multiline join), got {definition_text!r}"
+        )
 
     # -- REQ-d00221-A: hanging-indent continuation line support ----------------
 
@@ -404,8 +400,7 @@ A. First assertion
                     break
 
         assert def_data is not None, (
-            f"No definition_block data found. content_types: "
-            f"{[r.content_type for r in results]}"
+            f"No definition_block data found. content_types: {[r.content_type for r in results]}"
         )
         definition = def_data.get("definition", "")
         # All three lines must appear in the joined definition text.
@@ -444,21 +439,21 @@ A. First assertion
                 req_defs = r.parsed_data.get("definitions", [])
 
         all_def_data = [r.parsed_data for r in def_blocks] + list(req_defs)
-        assert (
-            len(all_def_data) == 1
-        ), f"Expected exactly one definition_block, got {len(all_def_data)}"
+        assert len(all_def_data) == 1, (
+            f"Expected exactly one definition_block, got {len(all_def_data)}"
+        )
 
         def_data = all_def_data[0]
-        assert (
-            def_data.get("term") == "Email Address"
-        ), f"Expected term='Email Address', got {def_data.get('term')!r}"
+        assert def_data.get("term") == "Email Address", (
+            f"Expected term='Email Address', got {def_data.get('term')!r}"
+        )
         definition = def_data.get("definition", "")
         assert "unique technical identifier" in definition
         assert "primary User ID for authentication" in definition
         # Reference Term must be parsed cleanly, not polluted with continuation text.
         ref_term = def_data.get("reference_term", "")
         assert ref_term == "Registered Notification Address", (
-            f"Expected reference_term='Registered Notification Address', " f"got {ref_term!r}"
+            f"Expected reference_term='Registered Notification Address', got {ref_term!r}"
         )
 
     def test_REQ_d00221_A_reference_type_with_structured_fields(self, resolver):
@@ -493,26 +488,25 @@ A. First assertion
                     break
 
         assert def_data is not None, (
-            f"No definition_block data found. content_types: "
-            f"{[r.content_type for r in results]}"
+            f"No definition_block data found. content_types: {[r.content_type for r in results]}"
         )
-        assert (
-            def_data.get("is_reference") is True
-        ), f"Expected is_reference=True, got {def_data.get('is_reference')!r}"
+        assert def_data.get("is_reference") is True, (
+            f"Expected is_reference=True, got {def_data.get('is_reference')!r}"
+        )
         ref_fields = def_data.get("reference_fields") or {}
-        assert (
-            ref_fields.get("title") == "IT Security and Privacy"
-        ), f"Expected title='IT Security and Privacy', got {ref_fields.get('title')!r}"
-        assert (
-            ref_fields.get("version") == "ISO/IEC 24760-1:2019"
-        ), f"Expected version='ISO/IEC 24760-1:2019', got {ref_fields.get('version')!r}"
-        assert (
-            ref_fields.get("url") == "https://www.iso.org"
-        ), f"Expected url='https://www.iso.org', got {ref_fields.get('url')!r}"
+        assert ref_fields.get("title") == "IT Security and Privacy", (
+            f"Expected title='IT Security and Privacy', got {ref_fields.get('title')!r}"
+        )
+        assert ref_fields.get("version") == "ISO/IEC 24760-1:2019", (
+            f"Expected version='ISO/IEC 24760-1:2019', got {ref_fields.get('version')!r}"
+        )
+        assert ref_fields.get("url") == "https://www.iso.org", (
+            f"Expected url='https://www.iso.org', got {ref_fields.get('url')!r}"
+        )
         # No prose definition -- only metadata.
-        assert (
-            def_data.get("definition", "") == ""
-        ), f"Expected empty definition, got {def_data.get('definition')!r}"
+        assert def_data.get("definition", "") == "", (
+            f"Expected empty definition, got {def_data.get('definition')!r}"
+        )
 
     def test_REQ_d00221_A_continuation_on_metadata_line(self, resolver):
         """Continuation line after a '<key>: <val>' metadata line joins into the value."""
@@ -544,14 +538,13 @@ A. First assertion
                     break
 
         assert def_data is not None, (
-            f"No definition_block data found. content_types: "
-            f"{[r.content_type for r in results]}"
+            f"No definition_block data found. content_types: {[r.content_type for r in results]}"
         )
         title = (def_data.get("reference_fields") or {}).get("title", "")
         assert "A long title" in title, f"Expected 'A long title' in title, got {title!r}"
-        assert (
-            "continues on the next line" in title
-        ), f"Expected continuation text in title, got {title!r}"
+        assert "continues on the next line" in title, (
+            f"Expected continuation text in title, got {title!r}"
+        )
 
     # -- format_definition_block renderer --------------------------------------
 
@@ -565,13 +558,13 @@ A. First assertion
         }
         out = format_definition_block(data)
         # Canonical shape: term line, then ': first', then '  second', '  third'.
-        assert (
-            "\n: first\n  second\n  third" in out
-        ), f"Expected hanging-indent shape in output, got {out!r}"
+        assert "\n: first\n  second\n  third" in out, (
+            f"Expected hanging-indent shape in output, got {out!r}"
+        )
         # Term must appear as its own (first) line.
-        assert out.startswith(
-            "Electronic Record\n"
-        ), f"Expected output to start with term line, got {out!r}"
+        assert out.startswith("Electronic Record\n"), (
+            f"Expected output to start with term line, got {out!r}"
+        )
 
     def test_format_definition_block_reference_fields(self):
         """Reference entry renders ': Reference' + ': Title: ...' + ': URL: <...>' lines."""
@@ -590,12 +583,12 @@ A. First assertion
         out = format_definition_block(data)
         lines = out.split("\n")
         assert ": Reference" in lines, f"Expected ': Reference' line in output, got {out!r}"
-        assert (
-            ": Title: IT Security and Privacy" in lines
-        ), f"Expected title line in output, got {out!r}"
-        assert (
-            ": Version: ISO/IEC 24760-1:2019" in lines
-        ), f"Expected version line in output, got {out!r}"
-        assert (
-            ": URL: <https://www.iso.org>" in lines
-        ), f"Expected URL line with angle brackets in output, got {out!r}"
+        assert ": Title: IT Security and Privacy" in lines, (
+            f"Expected title line in output, got {out!r}"
+        )
+        assert ": Version: ISO/IEC 24760-1:2019" in lines, (
+            f"Expected version line in output, got {out!r}"
+        )
+        assert ": URL: <https://www.iso.org>" in lines, (
+            f"Expected URL line with angle brackets in output, got {out!r}"
+        )

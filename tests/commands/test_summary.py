@@ -845,9 +845,9 @@ class TestLineCoverageDoesNotCreditPassing:
 
         data = collect_coverage(graph)
         dev = next(lv for lv in data["levels"] if lv["level"] == "DEV")
-        assert (
-            dev["passing_total_covered"] == 0
-        ), "lcov_tested credit must not count toward headline passing"
+        assert dev["passing_total_covered"] == 0, (
+            "lcov_tested credit must not count toward headline passing"
+        )
         assert dev["with_passing"] == 0
 
 

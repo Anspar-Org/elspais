@@ -181,15 +181,16 @@ class TestTemplateProvenanceInRenderedHTML:
         clone = nodes[clone_id]
 
         props = clone.get("properties") or {}
-        assert (
-            props.get("template_repo") == "library"
-        ), f"expected template_repo='library' on INSTANCE clone, got {props.get('template_repo')!r}"
-        assert (
-            props.get("template_id") == "LIB-p00001"
-        ), f"expected template_id='LIB-p00001' on INSTANCE clone, got {props.get('template_id')!r}"
-        assert (
-            props.get("stereotype") or ""
-        ).lower() == "instance", f"expected stereotype='instance', got {props.get('stereotype')!r}"
+        assert props.get("template_repo") == "library", (
+            f"expected template_repo='library' on INSTANCE clone, "
+            f"got {props.get('template_repo')!r}"
+        )
+        assert props.get("template_id") == "LIB-p00001", (
+            f"expected template_id='LIB-p00001' on INSTANCE clone, got {props.get('template_id')!r}"
+        )
+        assert (props.get("stereotype") or "").lower() == "instance", (
+            f"expected stereotype='instance', got {props.get('stereotype')!r}"
+        )
 
     def test_template_repo_and_id_present_in_raw_html(self, federation):
         """User-visible content: 'library' repo name and 'LIB-p00001' anchor in the HTML."""
@@ -212,12 +213,12 @@ class TestTemplateProvenanceInRenderedHTML:
             props = nodes[rid].get("properties") or {}
             got_repo = props.get("template_repo")
             got_id = props.get("template_id")
-            assert (
-                "template_repo" not in props
-            ), f"concrete REQ {rid} should not carry template_repo, got {got_repo!r}"
-            assert (
-                "template_id" not in props
-            ), f"concrete REQ {rid} should not carry template_id, got {got_id!r}"
+            assert "template_repo" not in props, (
+                f"concrete REQ {rid} should not carry template_repo, got {got_repo!r}"
+            )
+            assert "template_id" not in props, (
+                f"concrete REQ {rid} should not carry template_id, got {got_id!r}"
+            )
 
     def test_instance_assertion_child_entry_has_inherited_coverage(self, federation):
         """Cloned-assertion children entries include inherited_coverage + template_id."""
@@ -235,13 +236,13 @@ class TestTemplateProvenanceInRenderedHTML:
         # instead of the generic "no direct coverage" hint.
         a = assertion_entries[0]
         assert "inherited_coverage" in a, f"expected inherited_coverage on cloned child, got {a!r}"
-        assert (
-            a.get("template_repo") == "library"
-        ), f"expected child template_repo='library', got {a.get('template_repo')!r}"
+        assert a.get("template_repo") == "library", (
+            f"expected child template_repo='library', got {a.get('template_repo')!r}"
+        )
         # Template assertion ID is reachable via the outbound INSTANCE edge.
-        assert (a.get("template_id") or "").startswith(
-            "LIB-p00001-"
-        ), f"expected child template_id LIB-p00001-..., got {a.get('template_id')!r}"
+        assert (a.get("template_id") or "").startswith("LIB-p00001-"), (
+            f"expected child template_id LIB-p00001-..., got {a.get('template_id')!r}"
+        )
         # The library CODE provides exactly one direct cover for LIB-p00001-A,
         # so the inherited count on the cloned A is 1.
         if a.get("label") == "A":
@@ -350,20 +351,19 @@ class TestPhase11SatisfierRollupSerialized:
         props = nodes[sat_id].get("properties") or {}
 
         assert "satisfier_rollup" in props, (
-            f"expected satisfier_rollup on satisfier REQ {sat_id}, "
-            f"got props keys: {sorted(props)}"
+            f"expected satisfier_rollup on satisfier REQ {sat_id}, got props keys: {sorted(props)}"
         )
         sr = props["satisfier_rollup"]
         # Fixture: APP-p00001 has 1 own assertion (A, uncovered) and
         # SATISFIES LIB-p00001 (1 template assertion, covered by lib.py).
         # So rollup = covered=1 / total=2.
         assert sr["total"] == 2, f"expected total=2 (1 own + 1 inherited), got {sr['total']}"
-        assert (
-            sr["covered"] == 1
-        ), f"expected covered=1 (template assertion only), got {sr['covered']}"
-        assert (
-            0.0 < sr["covered_fraction"] < 1.0
-        ), f"expected partial covered_fraction in (0,1), got {sr['covered_fraction']}"
+        assert sr["covered"] == 1, (
+            f"expected covered=1 (template assertion only), got {sr['covered']}"
+        )
+        assert 0.0 < sr["covered_fraction"] < 1.0, (
+            f"expected partial covered_fraction in (0,1), got {sr['covered_fraction']}"
+        )
 
     def test_non_satisfier_req_has_no_rollup(self, federation):
         """REQs without outbound SATISFIES edges must not carry the field."""
@@ -418,7 +418,7 @@ class TestPhase11SatisfierRollupRendered:
         # --- Positive: satisfier REQ carries a well-shaped rollup ---------
         sat_id = "APP-p00001"
         assert sat_id in node_index, (
-            f"{sat_id} missing from node-index; available (first 10): " f"{sorted(node_index)[:10]}"
+            f"{sat_id} missing from node-index; available (first 10): {sorted(node_index)[:10]}"
         )
         props = node_index[sat_id].get("properties") or {}
         rollup = props.get("satisfier_rollup")
@@ -453,9 +453,9 @@ class TestPhase11SatisfierRollupRendered:
             f"got {rollup['covered_fraction']!r}"
         )
         # 1/2 specifically, with float tolerance.
-        assert (
-            abs(rollup["covered_fraction"] - 0.5) < 1e-9
-        ), f"expected covered_fraction ~= 0.5 (1 of 2), got {rollup['covered_fraction']!r}"
+        assert abs(rollup["covered_fraction"] - 0.5) < 1e-9, (
+            f"expected covered_fraction ~= 0.5 (1 of 2), got {rollup['covered_fraction']!r}"
+        )
 
         # --- Counter-check: non-satisfier REQs do NOT carry the field ---
         # LIB-p00001 is a Template; it has no outbound SATISFIES edges, so

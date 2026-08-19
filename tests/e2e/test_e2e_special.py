@@ -84,9 +84,9 @@ class TestInitTemplate:
         assert init_result.returncode == 0, f"init failed: {init_result.stderr}"
 
         config_result = run_elspais("config", "show", cwd=tmp_path)
-        assert (
-            config_result.returncode == 0
-        ), f"config show failed after init: {config_result.stderr}"
+        assert config_result.returncode == 0, (
+            f"config show failed after init: {config_result.stderr}"
+        )
         assert len(config_result.stdout.strip()) > 0, "config show produced no output"
 
 
@@ -770,9 +770,9 @@ class TestDaemonClientLiveness:
             assert result.returncode == 0, result.stderr
             assert daemon_json.exists()
             info = json.loads(daemon_json.read_text())
-            assert (
-                "client_pid" not in info
-            ), f"explicitly restarted daemon must not be session-tied: {info}"
+            assert "client_pid" not in info, (
+                f"explicitly restarted daemon must not be session-tied: {info}"
+            )
             # And it stays up: no watchdog is running.
             time.sleep(1.5)
             os.kill(info["pid"], 0)
@@ -930,9 +930,9 @@ class TestDaemonClientLiveness:
 
             info = json.loads(daemon_json.read_text())
             assert info["pid"] == daemon_pid, "the second client restarted the daemon"
-            assert _recorded_pids(info) == sorted(
-                [starter.pid, adopter.pid]
-            ), f"the adopting client was not published in the state record: {info}"
+            assert _recorded_pids(info) == sorted([starter.pid, adopter.pid]), (
+                f"the adopting client was not published in the state record: {info}"
+            )
 
             # The starter exits. The daemon must not stop underneath the
             # client that is actually using it.
@@ -1126,9 +1126,9 @@ class TestDaemonClientLiveness:
 
             info = json.loads(daemon_json.read_text())
             assert info["pid"] == daemon_pid, "the second invocation restarted the daemon"
-            assert _recorded_pids(info) == sorted(
-                [starter.pid, adopter.pid]
-            ), f"the CLI reused the daemon without becoming one of its clients: {info}"
+            assert _recorded_pids(info) == sorted([starter.pid, adopter.pid]), (
+                f"the CLI reused the daemon without becoming one of its clients: {info}"
+            )
         finally:
             starter.kill()
             adopter.kill()
@@ -1238,23 +1238,23 @@ class TestStoppingALiveDaemonAccountsForItsWork:
             title = "Feature One Thrown Away"
             _apply_pending_title(info, title)
             assert title not in spec.read_text()
-            assert (
-                tmp_path / ".elspais" / "unsaved-changes"
-            ).exists(), "a daemon holding an unwritten change said nothing outside itself"
+            assert (tmp_path / ".elspais" / "unsaved-changes").exists(), (
+                "a daemon holding an unwritten change said nothing outside itself"
+            )
 
             result = run_elspais("daemon", "--discard-changes", cwd=tmp_path)
 
             assert result.returncode == 0, result.stderr + result.stdout
             assert _await_exit(daemon_pid), "the daemon told to discard never stopped"
-            assert (
-                title not in spec.read_text()
-            ), "the work the operator said to throw away was written anyway"
-            assert not (
-                tmp_path / ".elspais" / "automatic-save.json"
-            ).exists(), "a save that never happened was announced to the next client"
+            assert title not in spec.read_text(), (
+                "the work the operator said to throw away was written anyway"
+            )
+            assert not (tmp_path / ".elspais" / "automatic-save.json").exists(), (
+                "a save that never happened was announced to the next client"
+            )
             assert not (tmp_path / ".elspais" / "unsaved-changes").exists()
             assert not (tmp_path / ".elspais" / "lost-changes").exists(), (
-                "a discard the operator asked for was reported to the successor as " "work lost"
+                "a discard the operator asked for was reported to the successor as work lost"
             )
             daemon_pid = json.loads((tmp_path / ".elspais" / "daemon.json").read_text())["pid"]
         finally:
@@ -1292,9 +1292,9 @@ class TestStoppingALiveDaemonAccountsForItsWork:
             assert payload["discarded"] is False
 
             assert _await_exit(daemon_pid), "the daemon asked to stop never stopped"
-            assert (
-                title in spec.read_text()
-            ), "a stop nobody qualified destroyed the work the daemon held"
+            assert title in spec.read_text(), (
+                "a stop nobody qualified destroyed the work the daemon held"
+            )
             record = json.loads((tmp_path / ".elspais" / "automatic-save.json").read_text())
             assert record["saved_by"] == "daemon"
             assert record["mutation_count"] == 1
@@ -1339,9 +1339,9 @@ class TestStoppingALiveDaemonAccountsForItsWork:
             record = json.loads(record_path.read_text())
             assert record["saved_by"] == "daemon"
             assert record["mutation_count"] == 1
-            assert not (
-                tmp_path / ".elspais" / "unsaved-changes"
-            ).exists(), "the work is on disk and the record still says it is held in memory"
+            assert not (tmp_path / ".elspais" / "unsaved-changes").exists(), (
+                "the work is on disk and the record still says it is held in memory"
+            )
         finally:
             client.kill()
             if daemon_pid is not None:

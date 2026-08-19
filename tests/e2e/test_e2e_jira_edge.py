@@ -119,9 +119,9 @@ class TestZeroPaddedNumericAssertions:
     def test_zero_padded_labels_health_passes(self, project):
         # PROJ-3 has 3 assertions labeled 00, 01, 02
         result = run_elspais("checks", "--lenient", cwd=project)
-        assert (
-            result.returncode == 0
-        ), f"health failed with zero-padded assertions: {result.stderr}\n{result.stdout}"
+        assert result.returncode == 0, (
+            f"health failed with zero-padded assertions: {result.stderr}\n{result.stdout}"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -254,9 +254,9 @@ class TestAllowStructuralOrphansConfig:
             (c for c in data["checks"] if c["name"] == "spec.structural_orphans"), None
         )
         if orphan_check:
-            assert orphan_check[
-                "passed"
-            ], f"Orphan check should pass with allow_structural_orphans=True: {orphan_check}"
+            assert orphan_check["passed"], (
+                f"Orphan check should pass with allow_structural_orphans=True: {orphan_check}"
+            )
 
     def test_orphan_check_runs_when_disallowed(self, tmp_path):
         """When allow_structural_orphans=False, orphan check should run (not be skipped)."""

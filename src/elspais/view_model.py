@@ -11,6 +11,7 @@ static ``viewer --static`` path can build its view model without the server
 dependencies. It previously lived in ``elspais.server.routes_ui``, which imports
 starlette at module top level — dragging starlette into the static path (CUR-1698).
 """
+
 from __future__ import annotations
 
 from typing import Any

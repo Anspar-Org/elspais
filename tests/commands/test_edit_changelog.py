@@ -138,7 +138,7 @@ class TestEditChangelog:
         # Changelog section must exist with the initial entry
         assert "## Changelog" in content, "Draft->Active transition must add a ## Changelog section"
         assert "First approved version" in content, (
-            "Draft->Active changelog entry must contain " "'First approved version'"
+            "Draft->Active changelog entry must contain 'First approved version'"
         )
 
     @patch("elspais.utilities.git.get_author_info", return_value=MOCK_AUTHOR)

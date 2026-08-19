@@ -7,6 +7,7 @@ in ``elspais.mcp.server``. No graph logic is duplicated here.
 
 State is stored on ``app.state.app_state`` as an ``AppState`` instance.
 """
+
 from __future__ import annotations
 
 import contextlib

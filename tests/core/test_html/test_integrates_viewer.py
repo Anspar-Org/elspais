@@ -179,9 +179,9 @@ class TestIntegratesRollupSerialized:
         cid = "APP-p00001"
         assert cid in nodes, f"expected consumer {cid} in node-index; got {sorted(nodes)[:10]}"
         props = nodes[cid].get("properties") or {}
-        assert (
-            "integrates_rollup" in props
-        ), f"expected integrates_rollup on consumer {cid}; properties keys: {sorted(props)}"
+        assert "integrates_rollup" in props, (
+            f"expected integrates_rollup on consumer {cid}; properties keys: {sorted(props)}"
+        )
         assert props["integrates_rollup"] == {
             "implemented_covered": 1,
             "implemented_total": 1,
@@ -248,9 +248,9 @@ class TestIntegratesRollupRendered:
             "expected 'Integrated coverage:' label in rendered HTML "
             "(integrates rollup card row not wired in)"
         )
-        assert (
-            "integrates-rollup" in html
-        ), "expected 'integrates-rollup' CSS class in rendered HTML"
+        assert "integrates-rollup" in html, (
+            "expected 'integrates-rollup' CSS class in rendered HTML"
+        )
 
 
 class TestIntegratesRelationshipRendered:
@@ -316,7 +316,7 @@ class TestIntegratesEdgeBadge:
         entry = integrates[0]
         assert entry.label == "Integrates", f"expected label 'Integrates', got {entry.label!r}"
         assert entry.description, "expected non-empty description on integrates edge badge"
-        assert (
-            entry.long_description
-        ), "expected non-empty long_description on integrates edge badge"
+        assert entry.long_description, (
+            "expected non-empty long_description on integrates edge badge"
+        )
         assert entry.css_class, "expected non-empty css_class on integrates edge badge"

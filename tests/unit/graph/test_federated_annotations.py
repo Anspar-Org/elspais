@@ -158,7 +158,7 @@ class TestSiblingIdentifiersAreRecognised:
         """
         consumer = _federation(
             tmp_path,
-            code=("# Implements: BBB-d00002-A, DDD-d00005-A\n" "def both():\n" "    pass\n"),
+            code=("# Implements: BBB-d00002-A, DDD-d00005-A\ndef both():\n    pass\n"),
         )
 
         federated = build_graph(repo_root=consumer)
@@ -277,9 +277,7 @@ class TestUnresolvableReferencesAreReported:
         """
         consumer = _federation(
             tmp_path,
-            code=(
-                "# Implements: the caching strategy described above\n" "def cache():\n" "    pass\n"
-            ),
+            code=("# Implements: the caching strategy described above\ndef cache():\n    pass\n"),
         )
 
         federated = build_graph(repo_root=consumer)

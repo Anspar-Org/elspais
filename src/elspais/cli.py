@@ -6,6 +6,7 @@ elspais.cli - Command-line interface.
 Main entry point for the elspais CLI tool.
 Uses Tyro for declarative CLI generation from dataclass definitions.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -735,8 +736,7 @@ def _mcp_install(global_scope: bool = False, transport: str = "http") -> int:
         if removal.returncode != 0:
             print(f"Error: {result.stderr.strip()}", file=sys.stderr)
             print(
-                f"The existing registration could not be removed either: "
-                f"{removal.stderr.strip()}",
+                f"The existing registration could not be removed either: {removal.stderr.strip()}",
                 file=sys.stderr,
             )
             return 1

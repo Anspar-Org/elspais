@@ -178,9 +178,9 @@ def test_render_save_ownership_map_path(monkeypatch, write_associates, expect_as
     if expect_associate_written:
         assert any("b.md" in w for w in written), "associate file should be written when enabled"
     else:
-        assert not any(
-            "b.md" in w for w in written
-        ), "associate must be skipped (ownership-map path)"
+        assert not any("b.md" in w for w in written), (
+            "associate must be skipped (ownership-map path)"
+        )
 
 
 class TestRenderSaveRealFederationSamePath:
@@ -236,7 +236,7 @@ class TestRenderSaveRealFederationSamePath:
         )
         # 2. The primary's same-path file must not have been rewritten.
         assert primary_spec.read_bytes() == primary_before, (
-            "the primary repo's same-named file must be untouched by an " "associate-owned edit"
+            "the primary repo's same-named file must be untouched by an associate-owned edit"
         )
 
     # Verifies: REQ-d00253-B
@@ -254,9 +254,9 @@ class TestRenderSaveRealFederationSamePath:
         # 3. Default write_associates=False refuses the write entirely.
         render_save(graph, repo_root=primary)
 
-        assert (
-            associate_spec.read_bytes() == associate_before
-        ), "an associate-owned edit must not be written with write_associates=False"
-        assert (
-            primary_spec.read_bytes() == primary_before
-        ), "refusing the associate write must not divert it into the primary repo"
+        assert associate_spec.read_bytes() == associate_before, (
+            "an associate-owned edit must not be written with write_associates=False"
+        )
+        assert primary_spec.read_bytes() == primary_before, (
+            "refusing the associate write must not divert it into the primary repo"
+        )

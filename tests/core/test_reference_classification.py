@@ -389,9 +389,9 @@ def test_a_duplicated_existing_target_binds_nothing_and_reports_twice(tmp_path, 
     assert node is not None
     from elspais.graph.relations import EdgeKind
 
-    assert not any(
-        node.iter_edges_by_kind(EdgeKind.IMPLEMENTS)
-    ), "a duplicated target must produce no relationship, even though the target itself exists"
+    assert not any(node.iter_edges_by_kind(EdgeKind.IMPLEMENTS)), (
+        "a duplicated target must produce no relationship, even though the target itself exists"
+    )
     faults = [f for f in graph.broken_references() if f.target_id == "REQ-d00001"]
     assert len(faults) == 2, f"expected one fault per instance, got {faults}"
     assert all(f.fault_class is FaultClass.FORBIDDEN for f in faults)
@@ -558,9 +558,9 @@ def test_a_duplicate_under_one_keyword_leaves_another_keywords_clean_reference_b
 
     faults = [f for f in graph.broken_references() if f.target_id == "REQ-d00001"]
     assert len(faults) == 2, f"one report per repeated instance, and no more; got {faults}"
-    assert all(
-        f.edge_kind == duplicated_field for f in faults
-    ), f"only the repeating keyword is at fault; got {[f.edge_kind for f in faults]}"
+    assert all(f.edge_kind == duplicated_field for f in faults), (
+        f"only the repeating keyword is at fault; got {[f.edge_kind for f in faults]}"
+    )
     assert all(FaultCode.DUPLICATE_ITEM in f.codes for f in faults)
 
 
@@ -639,9 +639,9 @@ def test_a_duplicated_satisfies_reference_instantiates_no_template(tmp_path, rep
     )
 
     graph = _satisfies_project(tmp_path, repo_root, "REQ-d00001, REQ-d00001")
-    assert (
-        graph.find_by_id("REQ-d00002::REQ-d00001") is None
-    ), "a repeated target produces no relationship, so no instance exists"
+    assert graph.find_by_id("REQ-d00002::REQ-d00001") is None, (
+        "a repeated target produces no relationship, so no instance exists"
+    )
     faults = [
         f
         for f in graph.broken_references()
@@ -713,9 +713,9 @@ def test_a_duplicated_multi_assertion_reference_binds_nothing_and_reports_each_i
     )
     node = graph.find_by_id("REQ-d00001")
     assert node is not None
-    assert not any(
-        node.iter_edges_by_kind(EdgeKind.IMPLEMENTS)
-    ), "a duplicated multi-assertion target must produce no relationship, for either label"
+    assert not any(node.iter_edges_by_kind(EdgeKind.IMPLEMENTS)), (
+        "a duplicated multi-assertion target must produce no relationship, for either label"
+    )
     faults = [f for f in graph.broken_references() if "REQ-d00001" in f.target_id]
     assert len(faults) == 2, f"expected one fault per instance, got {faults}"
     assert all(f.fault_class is FaultClass.FORBIDDEN for f in faults)

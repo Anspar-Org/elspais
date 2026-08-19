@@ -6,6 +6,7 @@ Uses Tyro's built-in completion backend to generate bash/zsh/tcsh
 completion scripts, installs them to standard shell locations, and
 idempotently updates shell RC files.
 """
+
 from __future__ import annotations
 
 import glob
@@ -28,9 +29,7 @@ _SHELL_CONFIG: dict[str, dict[str, Path | str | None]] = {
         "script_path": Path.home() / ".zfunc" / "_elspais",
         "rc_file": Path.home() / ".zshrc",
         "rc_block": (
-            "# elspais shell completion\n"
-            "fpath=(~/.zfunc $fpath)\n"
-            "autoload -Uz compinit && compinit"
+            "# elspais shell completion\nfpath=(~/.zfunc $fpath)\nautoload -Uz compinit && compinit"
         ),
     },
     "tcsh": {
@@ -200,7 +199,7 @@ def cmd_install(shell: str | None) -> int:
         shell = _detect_shell()
         if shell is None:
             print(
-                "Could not detect shell from $SHELL. " "Specify one with --shell {bash,zsh,tcsh}.",
+                "Could not detect shell from $SHELL. Specify one with --shell {bash,zsh,tcsh}.",
                 file=sys.stderr,
             )
             return 1
@@ -257,7 +256,7 @@ def cmd_uninstall(shell: str | None) -> int:
         shell = _detect_shell()
         if shell is None:
             print(
-                "Could not detect shell from $SHELL. " "Specify one with --shell {bash,zsh,tcsh}.",
+                "Could not detect shell from $SHELL. Specify one with --shell {bash,zsh,tcsh}.",
                 file=sys.stderr,
             )
             return 1

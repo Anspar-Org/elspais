@@ -48,9 +48,9 @@ allowed_implements = [
         result = parse_toml(toml_content)
 
         allowed = result["rules"]["hierarchy"]["allowed_implements"]
-        assert isinstance(
-            allowed, list
-        ), f"Expected list, got {type(allowed).__name__}: {allowed!r}"
+        assert isinstance(allowed, list), (
+            f"Expected list, got {type(allowed).__name__}: {allowed!r}"
+        )
         assert allowed == ["dev -> ops, prd", "ops -> prd"]
 
     def test_REQ_p00002_A_comma_in_string_array(self):

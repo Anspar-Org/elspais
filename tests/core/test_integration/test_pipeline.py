@@ -303,9 +303,9 @@ class TestMultiAssertionPipelineExpansion:
         assert p00001 is not None
 
         # Code node should be a child of p00001 (via assertion target resolution)
-        assert code_node.has_parent(
-            p00001
-        ), "CODE node should have REQ-p00001 as parent via assertion resolution"
+        assert code_node.has_parent(p00001), (
+            "CODE node should have REQ-p00001 as parent via assertion resolution"
+        )
 
         # Collect assertion targets across all edges from p00001 to the code node.
         # Both assertions A and B should be resolved from the code references.
@@ -353,15 +353,15 @@ class TestMultiAssertionPipelineExpansion:
 
         # With no expansion, the literal "REQ-p00001-A+B+C" won't match
         # any node, so o00001 should NOT be a child of p00001
-        assert not o00001.has_parent(
-            p00001
-        ), "With empty separator, multi-assertion should NOT expand"
+        assert not o00001.has_parent(p00001), (
+            "With empty separator, multi-assertion should NOT expand"
+        )
 
         # The broken reference should be recorded
         broken = graph.broken_references()
         literal_targets = [br.target_id for br in broken]
         assert "REQ-p00001-A+B+C" in literal_targets, (
-            f"Expected broken reference for literal 'REQ-p00001-A+B+C', " f"got {literal_targets}"
+            f"Expected broken reference for literal 'REQ-p00001-A+B+C', got {literal_targets}"
         )
 
 
@@ -519,7 +519,7 @@ The system SHALL store event records.
             for assertion_id in expected_assertion_ids:
                 node = graph.find_by_id(assertion_id)
                 assert node is not None, (
-                    f"Assertion node {assertion_id!r} should exist " f"(separator={assert_sep!r})"
+                    f"Assertion node {assertion_id!r} should exist (separator={assert_sep!r})"
                 )
                 assert node.kind == NodeKind.ASSERTION
 

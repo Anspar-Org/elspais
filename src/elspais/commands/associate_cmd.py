@@ -5,6 +5,7 @@ elspais.commands.associate_cmd - Manage associate repository links.
 Provides subcommands to link, unlink, list, and auto-discover
 associate repositories.
 """
+
 from __future__ import annotations
 
 import argparse

@@ -5,6 +5,7 @@ Tests check_structural_orphans(), check_unlinked_tests(), check_unlinked_code(),
 check_reference_class(), config backward compatibility for allow_orphans, and
 the code.no_traceability wiring in run_code_checks() (REQ-d00241).
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -885,9 +886,9 @@ allow_structural_orphans = true
 
         checks = run_spec_checks(_wrap(graph, config), config)
         structural_check = next(c for c in checks if c.name == "spec.structural_orphans")
-        assert (
-            structural_check.passed
-        ), "allow_structural_orphans=true should skip structural orphan check"
+        assert structural_check.passed, (
+            "allow_structural_orphans=true should skip structural orphan check"
+        )
 
     def test_REQ_d00085_allow_structural_orphans_false_runs_check(self, tmp_path: Path) -> None:
         """allow_structural_orphans=false runs the check regardless of allow_orphans."""
@@ -918,6 +919,6 @@ allow_structural_orphans = false
 
         checks = run_spec_checks(_wrap(graph, config), config)
         structural_check = next(c for c in checks if c.name == "spec.structural_orphans")
-        assert (
-            not structural_check.passed
-        ), "allow_structural_orphans=false should run structural orphan check"
+        assert not structural_check.passed, (
+            "allow_structural_orphans=false should run structural orphan check"
+        )

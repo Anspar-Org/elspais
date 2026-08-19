@@ -3,6 +3,7 @@
 
 Tests for target-driven result ingestion via the reporter registry.
 """
+
 from __future__ import annotations
 
 from pathlib import Path

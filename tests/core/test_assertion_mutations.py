@@ -1,6 +1,7 @@
 # Validates REQ-o00062-B, REQ-o00062-D, REQ-o00062-E, REQ-o00062-F
 # Verifies: REQ-o00062-R
 """Tests for assertion mutation operations (rename, update, add, delete)."""
+
 from __future__ import annotations
 
 import re
@@ -840,20 +841,20 @@ class TestAssertionPlacementInSeries:
         block = _requirement_block((repo_root / spec_file).read_text(), req_id)
 
         assertions_headings = list(re.finditer(r"^#+ Assertions\s*$", block, re.MULTILINE))
-        assert (
-            len(assertions_headings) == 1
-        ), "the requirement must render exactly one Assertions block"
-        assert block.index(new_text) > block.index(
-            last_existing_text
-        ), "the new assertion must render after the existing ones"
+        assert len(assertions_headings) == 1, (
+            "the requirement must render exactly one Assertions block"
+        )
+        assert block.index(new_text) > block.index(last_existing_text), (
+            "the new assertion must render after the existing ones"
+        )
         # The first heading after the Assertions block — the trailing section
         # the new assertion must not have jumped past.
         after_assertions = assertions_headings[0].end()
         trailing = re.search(r"^#+ (?!Assertions)\w+", block[after_assertions:], re.MULTILINE)
         assert trailing is not None, "fixture must have a trailing section after the assertions"
-        assert (
-            block.index(new_text) < after_assertions + trailing.start()
-        ), "the new assertion must render before the trailing section"
+        assert block.index(new_text) < after_assertions + trailing.start(), (
+            "the new assertion must render before the trailing section"
+        )
 
     @pytest.mark.parametrize("fixture,req_id,spec_file", _PLACEMENT_CASES)
     # Verifies: REQ-o00062-R
@@ -873,9 +874,9 @@ class TestAssertionPlacementInSeries:
         _, rebuilt = _root_graph(repo_root)
         after = _assertion_labels(rebuilt, req_id)
 
-        assert set(before) <= set(
-            after
-        ), f"assertions lost on re-parse: {sorted(set(before) - set(after))}"
+        assert set(before) <= set(after), (
+            f"assertions lost on re-parse: {sorted(set(before) - set(after))}"
+        )
         assert new_label in after
         assert after == before + [new_label], "rendered order must be label order for the whole run"
 
@@ -894,12 +895,12 @@ class TestAssertionPlacementInSeries:
 
         entry = graph.add_assertion(req_id, "The system SHALL archive backups offsite.")
 
-        assert (
-            entry.after_state["label"] == expected
-        ), "the mutation must report the label it assigned"
-        assert _assertion_labels(graph, req_id) == before + [
-            expected
-        ], "the assigned label must follow the existing series, leaving no gap"
+        assert entry.after_state["label"] == expected, (
+            "the mutation must report the label it assigned"
+        )
+        assert _assertion_labels(graph, req_id) == before + [expected], (
+            "the assigned label must follow the existing series, leaving no gap"
+        )
 
     # Verifies: REQ-o00062-R
     def test_REQ_o00062_R_first_assertion_takes_the_first_label(self):
@@ -912,6 +913,6 @@ class TestAssertionPlacementInSeries:
         entry = graph.add_assertion("REQ-p00001", "The system SHALL do the first thing.")
 
         assert entry.after_state["label"] == "A"
-        assert _assertion_labels(graph, "REQ-p00001") == [
-            "A"
-        ], "the first assertion must take the first label in the series"
+        assert _assertion_labels(graph, "REQ-p00001") == ["A"], (
+            "the first assertion must take the first label in the series"
+        )

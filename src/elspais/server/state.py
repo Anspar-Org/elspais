@@ -4,6 +4,7 @@
 Holds the in-memory FederatedGraph, config, and file mtime snapshot.
 Detects spec file changes and rebuilds automatically.
 """
+
 from __future__ import annotations
 
 import sys

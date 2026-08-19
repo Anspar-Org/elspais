@@ -86,12 +86,11 @@ def test_assertions_too_shallow_marks_section_header_depth(
     reasons = node.get_field("parse_dirty_reasons") or []
     if expect_fixable_flag:
         assert "section_header_depth" in reasons, (
-            f"Expected `section_header_depth` in {reasons} " f"for req_d={req_d}, sec_d={sec_d}"
+            f"Expected `section_header_depth` in {reasons} for req_d={req_d}, sec_d={sec_d}"
         )
     else:
         assert "section_header_depth" not in reasons, (
-            f"Did not expect `section_header_depth` in {reasons} "
-            f"for req_d={req_d}, sec_d={sec_d}"
+            f"Did not expect `section_header_depth` in {reasons} for req_d={req_d}, sec_d={sec_d}"
         )
 
 
@@ -137,13 +136,13 @@ def test_h6_req_with_assertions_is_unfixable(tmp_path):
     graph = _build(tmp_path, spec)
     node = _find_req(graph, "REQ-d00001")
     unfixable = node.get_field("parse_unfixable_reasons") or []
-    assert (
-        "section_header_depth_unfixable" in unfixable
-    ), f"Expected unfixable flag; got parse_unfixable_reasons={unfixable}"
+    assert "section_header_depth_unfixable" in unfixable, (
+        f"Expected unfixable flag; got parse_unfixable_reasons={unfixable}"
+    )
     fixable_reasons = node.get_field("parse_dirty_reasons") or []
-    assert (
-        "section_header_depth" not in fixable_reasons
-    ), f"Unfixable case must NOT also be in fixable reasons; got {fixable_reasons}"
+    assert "section_header_depth" not in fixable_reasons, (
+        f"Unfixable case must NOT also be in fixable reasons; got {fixable_reasons}"
+    )
 
 
 def test_h6_req_without_section_blocks_is_clean(tmp_path):

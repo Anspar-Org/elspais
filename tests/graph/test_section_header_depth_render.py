@@ -89,7 +89,7 @@ def test_assertions_render_depth(tmp_path, req_d, stored_d, expected_d):
     rendered = _render(node)
     expected_header = "#" * expected_d + " Assertions"
     assert expected_header in rendered, (
-        f"Expected header `{expected_header}` not found in rendered output.\n" f"Got:\n{rendered}"
+        f"Expected header `{expected_header}` not found in rendered output.\nGot:\n{rendered}"
     )
 
 
@@ -144,9 +144,9 @@ def test_hash_heading_inside_assertions_becomes_named_section(tmp_path):
     # ### Core is a named section rendered at min(stored=3, req+1=3)=H3
     assert "### Core" in rendered, f"Expected `### Core` (named section at H3) in:\n{rendered}"
     # The assertions block is empty so ## Assertions is not rendered
-    assert (
-        "Assertions" not in rendered
-    ), f"Assertions block should be absent (empty); found in:\n{rendered}"
+    assert "Assertions" not in rendered, (
+        f"Assertions block should be absent (empty); found in:\n{rendered}"
+    )
 
 
 def test_h1_req_h2_assertions_unchanged(tmp_path):

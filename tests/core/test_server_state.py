@@ -1,5 +1,6 @@
 # Verifies: REQ-d00010, REQ-p00004-O, REQ-p00015-B, REQ-p00015-F, REQ-p00015-G
 """Tests for server state management and auto-refresh."""
+
 import time
 from pathlib import Path
 
@@ -643,9 +644,9 @@ A. The system SHALL leave no staleness a completed reload already absorbed.
             "the freshness check after a completed MCP refresh reported the "
             "change the refresh already absorbed, and rebuilt a second time"
         )
-        assert (
-            state.build_time == build_time_after_refresh
-        ), "build_time moved after the refresh with nothing changed on disk"
+        assert state.build_time == build_time_after_refresh, (
+            "build_time moved after the refresh with nothing changed on disk"
+        )
 
     def test_REQ_p00004_O_mcp_refresh_syncs_daemon_config_hash(self, tmp_path):
         """A refresh that re-read an edited config must leave daemon.json's
@@ -837,9 +838,9 @@ class TestDaemonFingerprintIsStampedOnlyByItsOwner:
         recorded = json.loads(daemon_json.read_text())["config_hash"]
         time.sleep(0.05)
         config_path.write_text(_MINIMAL_CONFIG.replace('name = "test"', 'name = "renamed-on-disk"'))
-        assert recorded != compute_config_hash(
-            config_path
-        ), "fixture must present a genuinely stale recorded config hash"
+        assert recorded != compute_config_hash(config_path), (
+            "fixture must present a genuinely stale recorded config hash"
+        )
         return recorded
 
     # Verifies: REQ-p00004-O, REQ-p00015-G

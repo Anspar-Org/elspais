@@ -5,6 +5,7 @@ elspais.associates - Associate repository configuration and discovery.
 Provides functions for discovering associate repositories from their
 .elspais.toml config and resolving associate spec directories.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass

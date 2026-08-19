@@ -75,12 +75,12 @@ def test_in_repo_satisfies_marked_template_produces_clones():
         from elspais.graph.factory import build_graph
 
         graph = build_graph(repo_root=repo)
-        assert (
-            graph.find_by_id("URS-p00002::URS-p00001") is not None
-        ), "in-repo INSTANCE clone (root) missing"
-        assert (
-            graph.find_by_id("URS-p00002::URS-p00001-A") is not None
-        ), "in-repo INSTANCE clone (assertion) missing"
+        assert graph.find_by_id("URS-p00002::URS-p00001") is not None, (
+            "in-repo INSTANCE clone (root) missing"
+        )
+        assert graph.find_by_id("URS-p00002::URS-p00001-A") is not None, (
+            "in-repo INSTANCE clone (assertion) missing"
+        )
     finally:
         import shutil
 
@@ -114,13 +114,13 @@ def test_in_repo_satisfies_unmarked_target_emits_broken_ref():
         from elspais.graph.factory import build_graph
 
         graph = build_graph(repo_root=repo)
-        assert (
-            graph.find_by_id("URS-p00002::URS-p00001") is None
-        ), "Unexpected: clone created against unmarked target"
+        assert graph.find_by_id("URS-p00002::URS-p00001") is None, (
+            "Unexpected: clone created against unmarked target"
+        )
         brs = list(graph.broken_references())
         marker_diag = [br for br in brs if "not marked **Template**" in (br.diagnostic or "")]
         assert marker_diag, (
-            f"Expected diagnostic naming **Template**; " f"got: {[br.diagnostic for br in brs]}"
+            f"Expected diagnostic naming **Template**; got: {[br.diagnostic for br in brs]}"
         )
     finally:
         import shutil
@@ -157,12 +157,12 @@ def test_in_repo_satisfies_bare_form_also_works():
         from elspais.graph.factory import build_graph
 
         graph = build_graph(repo_root=repo)
-        assert (
-            graph.find_by_id("URS-p00002::URS-p00001") is not None
-        ), "bare Satisfies: form should produce INSTANCE clone"
-        assert (
-            graph.find_by_id("URS-p00002::URS-p00001-A") is not None
-        ), "bare Satisfies: form should produce INSTANCE assertion"
+        assert graph.find_by_id("URS-p00002::URS-p00001") is not None, (
+            "bare Satisfies: form should produce INSTANCE clone"
+        )
+        assert graph.find_by_id("URS-p00002::URS-p00001-A") is not None, (
+            "bare Satisfies: form should produce INSTANCE assertion"
+        )
     finally:
         import shutil
 

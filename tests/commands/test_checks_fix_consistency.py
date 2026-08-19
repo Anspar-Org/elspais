@@ -61,7 +61,7 @@ A. The system SHALL do the first thing.
 
 B. The system SHALL do the second thing.
 
-{changelogs['REQ-p00001']}*End* *First Requirement* | **Hash**: {hashes['REQ-p00001']}
+{changelogs["REQ-p00001"]}*End* *First Requirement* | **Hash**: {hashes["REQ-p00001"]}
 ---
 
 # REQ-p00002: Second Requirement
@@ -72,7 +72,7 @@ B. The system SHALL do the second thing.
 
 A. The system SHALL do another thing.
 
-{changelogs['REQ-p00002']}*End* *Second Requirement* | **Hash**: {hashes['REQ-p00002']}
+{changelogs["REQ-p00002"]}*End* *Second Requirement* | **Hash**: {hashes["REQ-p00002"]}
 ---
 """
     )
@@ -148,10 +148,9 @@ class TestChecksFixConsistency:
         failing = [c for c in checks if not c.passed and c.severity == "error"]
         warnings = [c for c in checks if not c.passed and c.severity == "warning"]
 
-        assert (
-            not failing
-        ), "Clean fixture should produce no failing spec checks, got: " + ", ".join(
-            f"{c.name}: {c.message}" for c in failing
+        assert not failing, (
+            "Clean fixture should produce no failing spec checks, got: "
+            + ", ".join(f"{c.name}: {c.message}" for c in failing)
         )
         assert not warnings, "Clean fixture should produce no spec warnings, got: " + ", ".join(
             f"{c.name}: {c.message}" for c in warnings

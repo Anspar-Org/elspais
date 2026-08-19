@@ -4,6 +4,7 @@ elspais.commands.init - Initialize configuration command.
 
 Creates .elspais.toml configuration file.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -204,7 +205,7 @@ _FIELD_COMMENTS: dict[str, str] = {
     "levels.*.display_name": "Human-readable name for reports",
     "levels.*.implements": "Which levels this level can implement (list of level names)",
     "levels.*.color": (
-        'Optional badge color (hex "#RRGGBB"); omit for a deterministic ' "hash-derived color"
+        'Optional badge color (hex "#RRGGBB"); omit for a deterministic hash-derived color'
     ),
     "levels.*.expects_validation": (
         "Set true for levels that should have a user-journey validating them; "

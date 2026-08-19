@@ -1,5 +1,6 @@
 # Verifies: REQ-d00069-A, REQ-d00258-A
 """Tests for MCP UAT coverage tools."""
+
 from elspais.graph.annotators import annotate_coverage
 from tests.core.graph_test_helpers import (
     build_graph,

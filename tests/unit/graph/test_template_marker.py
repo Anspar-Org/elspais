@@ -200,9 +200,9 @@ class TestTemplateStereotypeSeat:
         assertion_nodes = [c for c in root.iter_children() if c.kind == NodeKind.ASSERTION]
         assert len(assertion_nodes) == 2
         for a in assertion_nodes:
-            assert (
-                a.get_field("stereotype") == Stereotype.TEMPLATE
-            ), f"Assertion {a.id} should inherit TEMPLATE stereotype"
+            assert a.get_field("stereotype") == Stereotype.TEMPLATE, (
+                f"Assertion {a.id} should inherit TEMPLATE stereotype"
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -234,9 +234,9 @@ class TestTemplateRoundTripRender:
         rendered = render_node(node)
         # The metadata line is the third line (header, blank, metadata).
         meta_line = next(line for line in rendered.split("\n") if line.startswith("**Level**:"))
-        assert (
-            "**Template**" in meta_line
-        ), f"Expected '**Template**' on metadata line, got: {meta_line!r}"
+        assert "**Template**" in meta_line, (
+            f"Expected '**Template**' on metadata line, got: {meta_line!r}"
+        )
 
     # Verifies: REQ-p00014-E
     def test_render_omits_template_marker_for_concrete(self) -> None:
@@ -257,9 +257,9 @@ class TestTemplateRoundTripRender:
         assert node.get_field("stereotype") == Stereotype.CONCRETE
 
         rendered = render_node(node)
-        assert (
-            "**Template**" not in rendered
-        ), f"CONCRETE REQ rendering should not include **Template**: {rendered!r}"
+        assert "**Template**" not in rendered, (
+            f"CONCRETE REQ rendering should not include **Template**: {rendered!r}"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -321,9 +321,9 @@ class TestSatisfiesAcceptedInBothForms:
 
         rendered = render_node(node)
         # Canonical output uses bold form.
-        assert (
-            "**Satisfies**: REQ-p80001" in rendered
-        ), f"Expected canonical '**Satisfies**: ...' in output, got: {rendered!r}"
+        assert "**Satisfies**: REQ-p80001" in rendered, (
+            f"Expected canonical '**Satisfies**: ...' in output, got: {rendered!r}"
+        )
         # And the bare form should NOT appear (would mean we double-rendered or
         # left the legacy line).
         for line in rendered.split("\n"):

@@ -188,9 +188,9 @@ def foo(): pass
         results = _parse_code(content, resolver, code_parser)
         refs = [r for r in results if r.content_type == "code_ref"]
         assert len(refs) == 1
-        assert (
-            "REQ-p00001" in refs[0].parsed_data["implements"]
-        ), f"the item that resolved must still bind; got {refs[0].parsed_data['implements']}"
+        assert "REQ-p00001" in refs[0].parsed_data["implements"], (
+            f"the item that resolved must still bind; got {refs[0].parsed_data['implements']}"
+        )
         assert "GARBAGE-999" in refs[0].parsed_data["implements"], (
             "the faulted item stays in the list so the builder can report "
             f"it as a broken reference; got {refs[0].parsed_data['implements']}"
@@ -456,9 +456,9 @@ def test_a_bare_identifier_comment_is_never_silent(parse_code):
     # Round-trip fidelity is absolute: the line is reported AND still
     # renders back verbatim through the remainder gatherer, never dropped.
     remainder = [r for r in results if r.content_type == "remainder"]
-    assert any(
-        "#   REQ-d00001" in r.raw_text for r in remainder
-    ), f"the line must survive verbatim in a remainder; got {remainder}"
+    assert any("#   REQ-d00001" in r.raw_text for r in remainder), (
+        f"the line must survive verbatim in a remainder; got {remainder}"
+    )
 
 
 # Verifies: REQ-d00272-O

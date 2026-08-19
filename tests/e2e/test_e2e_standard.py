@@ -191,9 +191,9 @@ class TestHealthScopeFlags:
         assert result.returncode == 0
         data = json.loads(result.stdout)
         categories = {c["category"] for c in data["checks"]}
-        assert categories == {
-            "terms"
-        }, f"--terms should produce only terms-category checks, got {categories}"
+        assert categories == {"terms"}, (
+            f"--terms should produce only terms-category checks, got {categories}"
+        )
 
 
 class TestSummaryCounts:
@@ -1007,9 +1007,9 @@ class TestStandardCLIMutations:
 
         result = run_elspais("fix", "--dry-run", cwd=project)
         assert result.returncode == 0, f"fix --dry-run failed: {result.stderr}"
-        assert (
-            "REQ-d00299" in result.stdout
-        ), f"Expected REQ-d00299 in dry-run output.\nstdout: {result.stdout}"
+        assert "REQ-d00299" in result.stdout, (
+            f"Expected REQ-d00299 in dry-run output.\nstdout: {result.stdout}"
+        )
         assert "canonicalize section header depth" in result.stdout, (
             f"Expected 'canonicalize section header depth' in dry-run output.\n"
             f"stdout: {result.stdout}"
@@ -1023,9 +1023,9 @@ class TestStandardCLIMutations:
         content = spec.read_text()
         assert "XXXXXXXX" in content, "Pre-fix: expected XXXXXXXX placeholder hash"
         assert "## REQ-d00299:" in content, "Pre-fix: expected REQ-d00299 H2 header"
-        assert (
-            content.count("\n## Assertions") == 2
-        ), "Pre-fix: expected two ## Assertions (one correct at H1 req, one too-shallow at H2 req)"
+        assert content.count("\n## Assertions") == 2, (
+            "Pre-fix: expected two ## Assertions (one correct at H1 req, one too-shallow at H2 req)"
+        )
 
         result = run_elspais("fix", cwd=project)
         assert result.returncode == 0, f"fix failed: {result.stderr}"
@@ -1864,9 +1864,9 @@ class TestMCPOptimisticConcurrency:
 
         # The refused write must not have landed: A's title is intact.
         req = mcp_call(mcp_server, "get_requirement", {"req_id": self.NODE})
-        assert (
-            req["title"] == "Title From Client A"
-        ), f"stale write leaked through the guard: title is {req['title']!r}"
+        assert req["title"] == "Title From Client A", (
+            f"stale write leaked through the guard: title is {req['title']!r}"
+        )
         self.state["conflict"] = conflict
 
     def test_03_REQ_o00062_J_conflict_carries_current_version_and_state(self, project, mcp_server):
@@ -1932,9 +1932,9 @@ class TestVersionTokensSurviveRefresh:
         assert refresh.get("success") is not False, f"refresh refused: {refresh}"
 
         # The rebuilt graph reports the same content-derived token...
-        assert (
-            _version_of(mcp_server, self.NODE) == token
-        ), "rebuilding from unchanged files must not change version tokens"
+        assert _version_of(mcp_server, self.NODE) == token, (
+            "rebuilding from unchanged files must not change version tokens"
+        )
 
         # ...and, decisively, a mutation guarded by the PRE-refresh token
         # succeeds against the rebuilt graph.
@@ -1947,9 +1947,9 @@ class TestVersionTokensSurviveRefresh:
                 "if_version": token,
             },
         )
-        assert result.get(
-            "success"
-        ), f"pre-refresh token was invalidated by a no-op rebuild: {result}"
+        assert result.get("success"), (
+            f"pre-refresh token was invalidated by a no-op rebuild: {result}"
+        )
 
         _undo(mcp_server)
         restored = mcp_call(mcp_server, "get_requirement", {"req_id": self.NODE})
@@ -1980,9 +1980,9 @@ class TestRunTestsFlag:
             result_path.unlink()
         # Use --tests scope to avoid spec-level errors from the shared (mutated) project.
         out = run_elspais("checks", "--run-tests", "--tests", "--lenient", cwd=scratch)
-        assert (
-            out.returncode == 0
-        ), f"checks --run-tests failed: stdout={out.stdout!r} stderr={out.stderr!r}"
+        assert out.returncode == 0, (
+            f"checks --run-tests failed: stdout={out.stdout!r} stderr={out.stderr!r}"
+        )
         assert result_path.exists(), "stub runner did not write expected result file"
 
     def test_run_tests_banner_in_output(self, tmp_path, project):
@@ -2034,9 +2034,9 @@ class TestRunTestsFlag:
         out = run_elspais(
             "checks", "--run-tests", "--targets", "a", "--tests", "--lenient", cwd=scratch
         )
-        assert (
-            out.returncode == 0
-        ), f"checks --run-tests --targets a failed: stdout={out.stdout!r} stderr={out.stderr!r}"
+        assert out.returncode == 0, (
+            f"checks --run-tests --targets a failed: stdout={out.stdout!r} stderr={out.stderr!r}"
+        )
         assert marker_a.exists(), "selected target 'a' did not run"
         assert not marker_b.exists(), "unselected target 'b' ran despite --targets a"
 
@@ -2132,9 +2132,9 @@ class TestStaleResultsWarning:
         self._build_stale_project(scratch, project)
         out = run_elspais("checks", "--tests", "--format", "json", "--lenient", cwd=scratch)
         # --lenient mutes exit code; the check is still in the report.
-        assert (
-            out.returncode == 0
-        ), f"checks --tests --lenient failed: stdout={out.stdout!r} stderr={out.stderr!r}"
+        assert out.returncode == 0, (
+            f"checks --tests --lenient failed: stdout={out.stdout!r} stderr={out.stderr!r}"
+        )
         data = json.loads(out.stdout)
         stale_chk = next(
             (c for c in data.get("checks", []) if c.get("name") == "tests.results_stale"),

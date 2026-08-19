@@ -89,9 +89,9 @@ class TestHealthOnCrossRepoTemplate:
         rows = json.loads(result.stdout)
         ids = {row["id"] for row in rows}
         # Phase A composite root
-        assert (
-            "APP-p00001::LIB-p00001" in ids
-        ), f"Missing composite instance root in trace; saw: {sorted(ids)}"
+        assert "APP-p00001::LIB-p00001" in ids, (
+            f"Missing composite instance root in trace; saw: {sorted(ids)}"
+        )
         # Underlying template still observable
         assert "LIB-p00001" in ids
 
@@ -117,13 +117,13 @@ class TestMissingAssociateDiagnostic:
         combined = result.stdout + result.stderr
         # Diagnostic must surface the associate name and/or path so the user
         # can find the broken config entry.
-        assert (
-            "library" in combined.lower() or "nowhere" in combined.lower()
-        ), f"Expected diagnostic to mention the broken associate; got:\n{combined}"
+        assert "library" in combined.lower() or "nowhere" in combined.lower(), (
+            f"Expected diagnostic to mention the broken associate; got:\n{combined}"
+        )
         # The associate_paths check is what produces the failure.
-        assert (
-            "associate" in combined.lower()
-        ), f"Expected 'associate' in diagnostic; got:\n{combined}"
+        assert "associate" in combined.lower(), (
+            f"Expected 'associate' in diagnostic; got:\n{combined}"
+        )
 
 
 # ---------------------------------------------------------------------------

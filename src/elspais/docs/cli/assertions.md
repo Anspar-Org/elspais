@@ -53,12 +53,11 @@ In code comments (multiple comment styles supported: `#`, `//`, `--`, `<!-- -->`
 
 In tests (via function names or `Validates`/`Tests` comments):
 ```python
-def test_REQ_p00001_A_verify_auth():
-    ...
+def test_REQ_p00001_A_verify_auth(): ...
+
 
 # Validates: REQ-p00001-A
-def test_login():
-    ...
+def test_login(): ...
 ```
 
 ## Removed Assertions

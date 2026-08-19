@@ -96,8 +96,7 @@ By comment -- in test files, all three recognized keywords
 
 ```python
 # Verifies: REQ-d00001-A, REQ-d00001-B
-def test_full_auth_flow():
-    ...
+def test_full_auth_flow(): ...
 ```
 
 In code files, the keyword determines the edge kind:
@@ -171,8 +170,7 @@ Verifying tests target steps with `Verifies: JNY-.../step-N`:
 
 ```python
 # Verifies: JNY-OQ-Login-01/step-2
-def test_coordinator_can_submit_credentials():
-    ...
+def test_coordinator_can_submit_credentials(): ...
 ```
 
 ### FILE
@@ -283,12 +281,11 @@ def test_password_hashing():
 
 ```python
 # Verifies: JNY-OQ-Login-01
-def test_full_login_flow():
-    ...
+def test_full_login_flow(): ...
+
 
 # Verifies: JNY-OQ-Login-01/step-2
-def test_coordinator_submits_credentials():
-    ...
+def test_coordinator_submits_credentials(): ...
 ```
 
 Targeting a whole journey treats it as a single unit. Targeting a step

@@ -3,6 +3,7 @@
 
 Validates REQ-o00063: file mutation operations with undo support.
 """
+
 from __future__ import annotations
 
 from pathlib import Path

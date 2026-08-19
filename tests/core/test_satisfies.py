@@ -669,7 +669,7 @@ class TestSatisfiesFileNodeEdges:
         # FILE node should have DEFINES edge to clone root
         defines_targets = {e.target.id for e in file_node.iter_edges_by_kind(EdgeKind.DEFINES)}
         assert clone_root.id in defines_targets, (
-            f"FILE should have DEFINES edge to instance root; " f"got targets: {defines_targets}"
+            f"FILE should have DEFINES edge to instance root; got targets: {defines_targets}"
         )
 
     def test_REQ_d00128_J_defines_edge_from_file_to_instance_assertions(self):
@@ -758,8 +758,7 @@ class TestSatisfiesFileNodeEdges:
         for node in [clone_root, clone_a]:
             contains_edges = [e for e in node.iter_incoming_edges() if e.kind == EdgeKind.CONTAINS]
             assert len(contains_edges) == 0, (
-                f"INSTANCE node {node.id} should have no CONTAINS edges, "
-                f"got {len(contains_edges)}"
+                f"INSTANCE node {node.id} should have no CONTAINS edges, got {len(contains_edges)}"
             )
 
     def test_REQ_d00128_L_file_node_returns_none_for_instance(self):

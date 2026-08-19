@@ -87,9 +87,9 @@ def test_fix_rewrites_file_with_duplicate_refines(tmp_path):
     content = spec_file.read_text()
 
     refines_lines = [line for line in content.splitlines() if "**Refines**:" in line]
-    assert (
-        len(refines_lines) == 1
-    ), f"Expected exactly one **Refines**: line, got {len(refines_lines)}: {refines_lines}"
-    assert (
-        "REQ-p00002" in refines_lines[0]
-    ), f"Expected **Refines**: REQ-p00002 but got: {refines_lines[0]}"
+    assert len(refines_lines) == 1, (
+        f"Expected exactly one **Refines**: line, got {len(refines_lines)}: {refines_lines}"
+    )
+    assert "REQ-p00002" in refines_lines[0], (
+        f"Expected **Refines**: REQ-p00002 but got: {refines_lines[0]}"
+    )

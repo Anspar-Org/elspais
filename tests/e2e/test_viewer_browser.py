@@ -147,17 +147,17 @@ class TestViewerPageLoad:
         assert not js_errors, f"JS errors on page load: {js_errors}"
         title = page.title()
         body_text = page.text_content("body") or ""
-        assert (
-            "elspais" in title.lower() or len(body_text.strip()) > 0
-        ), "Page has no title or body content"
+        assert "elspais" in title.lower() or len(body_text.strip()) > 0, (
+            "Page has no title or body content"
+        )
 
     def test_REQ_d00010_A_page_has_content(self, page, viewer_url):
         page.goto(viewer_url, wait_until="networkidle")
 
         body_text = page.text_content("body") or ""
-        assert (
-            len(body_text.strip()) > 50
-        ), f"Page body has too little content ({len(body_text.strip())} chars)"
+        assert len(body_text.strip()) > 50, (
+            f"Page body has too little content ({len(body_text.strip())} chars)"
+        )
 
 
 class TestViewerAPI:
@@ -168,9 +168,9 @@ class TestViewerAPI:
         assert resp.ok, f"GET /api/status returned {resp.status}"
 
         data = resp.json()
-        assert (
-            "node_counts" in data
-        ), f"Expected 'node_counts' in status response, got keys: {list(data.keys())}"
+        assert "node_counts" in data, (
+            f"Expected 'node_counts' in status response, got keys: {list(data.keys())}"
+        )
 
     def test_REQ_d00010_A_api_search_returns_results(self, page, viewer_url):
         resp = page.request.get(f"{viewer_url}/api/search?q=REQ")
@@ -477,11 +477,11 @@ class TestJourneyVerdictBrowser:
         node_data = resp.json()
         props = node_data.get("properties", {})
         assert props.get("verdict") == "fail", (
-            f"Expected verdict='fail' in API, got {props.get('verdict')!r}. " f"Properties: {props}"
+            f"Expected verdict='fail' in API, got {props.get('verdict')!r}. Properties: {props}"
         )
-        assert "2" in props.get(
-            "failing_steps", []
-        ), f"Expected '2' in failing_steps, got {props.get('failing_steps')!r}"
+        assert "2" in props.get("failing_steps", []), (
+            f"Expected '2' in failing_steps, got {props.get('failing_steps')!r}"
+        )
 
         # Load the viewer page
         page_journey.goto(failing_journey_viewer_url, wait_until="networkidle")
@@ -497,15 +497,15 @@ class TestJourneyVerdictBrowser:
 
         # Assert UAT: FAIL badge text
         card_text = card_locator.inner_text()
-        assert (
-            "UAT: FAIL" in card_text
-        ), f"Expected 'UAT: FAIL' in journey card, got card text:\n{card_text!r}"
+        assert "UAT: FAIL" in card_text, (
+            f"Expected 'UAT: FAIL' in journey card, got card text:\n{card_text!r}"
+        )
 
         # Assert the failing step label is shown (bare step number, "Failing
         # steps: 2" — a substring check on "2" alone would be trivially true)
-        assert (
-            "Failing steps: 2" in card_text
-        ), f"Expected 'Failing steps: 2' in journey card, got card text:\n{card_text!r}"
+        assert "Failing steps: 2" in card_text, (
+            f"Expected 'Failing steps: 2' in journey card, got card text:\n{card_text!r}"
+        )
 
         # No JS errors during the interaction
         assert not js_errors, f"JS errors during journey card render: {js_errors}"
@@ -539,9 +539,9 @@ class TestJourneyVerdictBrowser:
         assert vlink["id"] == "JNY-OQ-Login-01"
         assert vlink["state"]["label"] == "fail", f"Expected fail state, got {vlink['state']!r}"
         assert vlink["state"]["color"] == "red", f"Expected red color, got {vlink['state']!r}"
-        assert (
-            "2/3 steps verified" in vlink["tooltip"]
-        ), f"Expected 2/3 fraction, got {vlink['tooltip']!r}"
+        assert "2/3 steps verified" in vlink["tooltip"], (
+            f"Expected 2/3 fraction, got {vlink['tooltip']!r}"
+        )
 
         page_journey.goto(failing_journey_viewer_url, wait_until="networkidle")
         page_journey.evaluate(f"() => window.openCard('{req_id}')")
@@ -561,18 +561,18 @@ class TestJourneyVerdictBrowser:
         # The state badge renders red ('fail') in the DOM, not merely present.
         badge = panel.locator(".incoming-state-badge")
         badge.wait_for(state="visible", timeout=10_000)
-        assert (
-            "fail" in badge.inner_text().lower()
-        ), f"Expected 'fail' badge text, got {badge.inner_text()!r}"
+        assert "fail" in badge.inner_text().lower(), (
+            f"Expected 'fail' badge text, got {badge.inner_text()!r}"
+        )
         badge_class = badge.get_attribute("class") or ""
         assert "val-red" in badge_class, f"Expected val-red on badge, got class={badge_class!r}"
 
         # The 2/3 step fraction is surfaced via the row's hover tooltip (title).
         row = panel.locator(".incoming-link-row", has_text="JNY-OQ-Login-01")
         row_title = row.get_attribute("title") or ""
-        assert (
-            "2/3 steps verified" in row_title
-        ), f"Expected 2/3 fraction in tooltip, got {row_title!r}"
+        assert "2/3 steps verified" in row_title, (
+            f"Expected 2/3 fraction in tooltip, got {row_title!r}"
+        )
 
         assert not js_errors, f"JS errors during incoming-links render: {js_errors}"
 
@@ -602,9 +602,9 @@ class TestJourneyVerdictBrowser:
         # "Steps (N)" section must exist as a DOM element (text-transform may
         # render it as "STEPS" in inner_text; use the class selector instead)
         steps_section = card_locator.locator(".journey-steps")
-        assert (
-            steps_section.count() == 1
-        ), "Expected exactly one .journey-steps section in the journey card"
+        assert steps_section.count() == 1, (
+            "Expected exactly one .journey-steps section in the journey card"
+        )
 
         # Three step rows must appear (one per numbered step in the fixture)
         all_step_rows = card_locator.locator(".journey-step-row").all()
@@ -621,21 +621,21 @@ class TestJourneyVerdictBrowser:
         step2_cls = row_status_class(all_step_rows[1])
         step3_cls = row_status_class(all_step_rows[2])
 
-        assert (
-            "validation-fail" in step2_cls
-        ), f"step-2 badge should be validation-fail, got {step2_cls!r}"
-        assert (
-            "validation-fail" not in step1_cls
-        ), f"step-1 badge should NOT be validation-fail, got {step1_cls!r}"
-        assert (
-            "validation-fail" not in step3_cls
-        ), f"step-3 badge should NOT be validation-fail, got {step3_cls!r}"
+        assert "validation-fail" in step2_cls, (
+            f"step-2 badge should be validation-fail, got {step2_cls!r}"
+        )
+        assert "validation-fail" not in step1_cls, (
+            f"step-1 badge should NOT be validation-fail, got {step1_cls!r}"
+        )
+        assert "validation-fail" not in step3_cls, (
+            f"step-3 badge should NOT be validation-fail, got {step3_cls!r}"
+        )
 
         # Each step must expose at least one verifying-test row
         all_test_rows = card_locator.locator(".journey-step-test-row").all()
-        assert (
-            len(all_test_rows) >= 3
-        ), f"Expected >= 3 verifying-test rows, got {len(all_test_rows)}"
+        assert len(all_test_rows) >= 3, (
+            f"Expected >= 3 verifying-test rows, got {len(all_test_rows)}"
+        )
 
         assert not js_errors, f"JS errors during step-status render: {js_errors}"
 
@@ -676,19 +676,19 @@ class TestJourneyVerdictBrowser:
         badge = first_row.locator(".journey-step-badge").first
         badge.click()
         panel.wait_for(state="visible", timeout=5_000)
-        assert (
-            "test_step1" in panel.inner_text()
-        ), f"Expected verifying test id in revealed panel, got: {panel.inner_text()!r}"
-        assert "active" in (
-            badge.get_attribute("class") or ""
-        ), "Badge should carry 'active' class while its panel is open"
+        assert "test_step1" in panel.inner_text(), (
+            f"Expected verifying test id in revealed panel, got: {panel.inner_text()!r}"
+        )
+        assert "active" in (badge.get_attribute("class") or ""), (
+            "Badge should carry 'active' class while its panel is open"
+        )
 
         # Click again — should hide the panel
         badge.click()
         panel.wait_for(state="hidden", timeout=5_000)
-        assert "active" not in (
-            badge.get_attribute("class") or ""
-        ), "Badge should lose 'active' class once its panel is closed"
+        assert "active" not in (badge.get_attribute("class") or ""), (
+            "Badge should lose 'active' class once its panel is closed"
+        )
 
         assert not js_errors, f"JS errors during step-badge toggle: {js_errors}"
 
@@ -745,16 +745,15 @@ class TestJourneyVerdictBrowser:
             f"{test_row.inner_html()!r}"
         )
         onclick = links.first.get_attribute("onclick") or ""
-        assert (
-            "showSource(" in onclick
-        ), f"Step-test link must call showSource, got onclick={onclick!r}"
+        assert "showSource(" in onclick, (
+            f"Step-test link must call showSource, got onclick={onclick!r}"
+        )
 
         # The display text must appear only once (no id + duplicate title spans).
         link_text = links.first.inner_text().strip()
         assert link_text, "link should have display text"
         assert test_row.inner_text().count(link_text) == 1, (
-            f"Display text {link_text!r} should not be duplicated in row: "
-            f"{test_row.inner_text()!r}"
+            f"Display text {link_text!r} should not be duplicated in row: {test_row.inner_text()!r}"
         )
 
         assert not js_errors, f"JS errors during step-test link render: {js_errors}"
@@ -912,11 +911,11 @@ class TestJunitStepBindingBrowser:
         for i in range(rows.count()):
             link = rows.nth(i).locator("a")
             assert link.count() == 1, (
-                f"Result row {i} should have exactly one link: " f"{rows.nth(i).inner_html()!r}"
+                f"Result row {i} should have exactly one link: {rows.nth(i).inner_html()!r}"
             )
             link_text = link.inner_text().strip()
             assert link_text.startswith("results.xml:"), (
-                f"Result row {i} link must be 'results.xml:<line>', got " f"{link_text!r}"
+                f"Result row {i} link must be 'results.xml:<line>', got {link_text!r}"
             )
 
         assert not js_errors, f"JS errors during step-results render: {js_errors}"
@@ -1132,28 +1131,28 @@ class TestBrowserOptimisticConcurrency:
             for i, e in enumerate(events)
             if e["method"] == "POST" and e["url"].endswith("/api/mutate/title")
         ]
-        assert (
-            len(mutate_posts) == 1
-        ), f"expected exactly ONE title POST (no blind retry), got: {mutate_posts}"
+        assert len(mutate_posts) == 1, (
+            f"expected exactly ONE title POST (no blind retry), got: {mutate_posts}"
+        )
         conflict_index, conflict_event = mutate_posts[0]
-        assert (
-            conflict_event["status"] == 409
-        ), f"stale edit must be rejected with HTTP 409, got {conflict_event}"
+        assert conflict_event["status"] == 409, (
+            f"stale edit must be rejected with HTTP 409, got {conflict_event}"
+        )
         rereads = [
             i
             for i, e in enumerate(events)
             if e["method"] == "GET" and f"/api/node/{req_id}" in e["url"]
         ]
         assert any(i > conflict_index for i in rereads), (
-            f"expected a re-read GET of /api/node/{req_id} AFTER the 409; " f"events: {events}"
+            f"expected a re-read GET of /api/node/{req_id} AFTER the 409; events: {events}"
         )
 
         # Server state: the behind-the-back write survived; the stale browser
         # edit never landed.
         final = page.request.get(f"{base}/api/node/{req_id}").json()
-        assert (
-            final.get("title") == "Agent Rewrote This"
-        ), f"server must keep the concurrent writer's state, got: {final.get('title')!r}"
+        assert final.get("title") == "Agent Rewrote This", (
+            f"server must keep the concurrent writer's state, got: {final.get('title')!r}"
+        )
 
         assert not js_errors, f"JS errors during conflict recovery: {js_errors}"
 
@@ -1349,13 +1348,13 @@ class TestBrowserPendingWorkIndicatorTruth:
 
         _refresh_dirty(page)
         state = _badge_state(page)
-        assert (
-            "hidden" in state["classes"]
-        ), f"server reported 0 pending: badge must be hidden, got classes {state['classes']}"
+        assert "hidden" in state["classes"], (
+            f"server reported 0 pending: badge must be hidden, got classes {state['classes']}"
+        )
         assert state["count"] == 0, f"editState.mutationCount must be 0, got {state['count']!r}"
-        assert (
-            state["count_type"] == "number"
-        ), f"a reported count is a number, got type {state['count_type']!r}"
+        assert state["count_type"] == "number", (
+            f"a reported count is a number, got type {state['count_type']!r}"
+        )
 
     @pytest.mark.browser
     @pytest.mark.e2e
@@ -1371,9 +1370,9 @@ class TestBrowserPendingWorkIndicatorTruth:
         pending = _create_pending_mutation(page, badge_viewer_url, "Badge Pending One")
         _refresh_dirty(page)
         reported = _badge_state(page)
-        assert reported["text"] == str(
-            pending
-        ), f"precondition: badge must show the server's count {pending}, got {reported['text']!r}"
+        assert reported["text"] == str(pending), (
+            f"precondition: badge must show the server's count {pending}, got {reported['text']!r}"
+        )
         assert "hidden" not in reported["classes"], reported["classes"]
 
         _go_unknown(page)
@@ -1397,9 +1396,9 @@ class TestBrowserPendingWorkIndicatorTruth:
             f"visible, got {state['classes']}"
         )
         assert state["title"], "unknown badge must carry an explanatory title attribute"
-        assert (
-            "unreachable" in state["title"].lower()
-        ), f"unknown badge title must name the unreachable server, got {state['title']!r}"
+        assert "unreachable" in state["title"].lower(), (
+            f"unknown badge title must name the unreachable server, got {state['title']!r}"
+        )
         assert state["count"] is None, (
             f"editState.mutationCount must be null (unknown), got "
             f"{state['count']!r} (type {state['count_type']!r})"
@@ -1426,9 +1425,9 @@ class TestBrowserPendingWorkIndicatorTruth:
 
         _go_unknown(page)
         after = _badge_state(page)["tip"]
-        assert (
-            after == before
-        ), f"a failed /api/dirty fetch must leave lastSeenTip untouched: {before!r} -> {after!r}"
+        assert after == before, (
+            f"a failed /api/dirty fetch must leave lastSeenTip untouched: {before!r} -> {after!r}"
+        )
 
         page.unroute("**/api/dirty")
 
@@ -1463,13 +1462,13 @@ class TestBrowserPendingWorkIndicatorTruth:
             f"after the server answers again the badge must show the reported "
             f"count {pending}, got {state['text']!r}"
         )
-        assert (
-            "unknown" not in state["classes"]
-        ), f"the unknown presentation must be replaced, got {state['classes']}"
+        assert "unknown" not in state["classes"], (
+            f"the unknown presentation must be replaced, got {state['classes']}"
+        )
         assert "hidden" not in state["classes"], state["classes"]
-        assert (
-            state["count"] == pending
-        ), f"editState.mutationCount must be the reported count {pending}, got {state['count']!r}"
+        assert state["count"] == pending, (
+            f"editState.mutationCount must be the reported count {pending}, got {state['count']!r}"
+        )
 
     @pytest.mark.browser
     @pytest.mark.e2e
@@ -1630,12 +1629,12 @@ class TestBrowserUnloadDecisionObservable:
             f"unloadWarningState() must report the full decision input; "
             f"missing keys {sorted(missing)} (got {sorted(state)})"
         )
-        assert isinstance(
-            state["willWarnOnClose"], bool
-        ), f"willWarnOnClose must be a boolean decision, got {state['willWarnOnClose']!r}"
-        assert isinstance(
-            state["countKnown"], bool
-        ), f"countKnown must be a boolean, got {state['countKnown']!r}"
+        assert isinstance(state["willWarnOnClose"], bool), (
+            f"willWarnOnClose must be a boolean decision, got {state['willWarnOnClose']!r}"
+        )
+        assert isinstance(state["countKnown"], bool), (
+            f"countKnown must be a boolean, got {state['countKnown']!r}"
+        )
 
     @pytest.mark.browser
     @pytest.mark.e2e
@@ -1659,15 +1658,15 @@ class TestBrowserUnloadDecisionObservable:
             f"the server reports {pending} pending: the reported decision must "
             f"be to warn, got {state!r}"
         )
-        assert (
-            state["pendingCount"] == pending
-        ), f"pendingCount must be the server's count {pending}, got {state['pendingCount']!r}"
-        assert (
-            state["countKnown"] is True
-        ), f"a server-reported count is known, got countKnown={state['countKnown']!r}"
-        assert (
-            state["countSource"] == "server"
-        ), f"the count came from the server, got countSource={state['countSource']!r}"
+        assert state["pendingCount"] == pending, (
+            f"pendingCount must be the server's count {pending}, got {state['pendingCount']!r}"
+        )
+        assert state["countKnown"] is True, (
+            f"a server-reported count is known, got countKnown={state['countKnown']!r}"
+        )
+        assert state["countSource"] == "server", (
+            f"the count came from the server, got countSource={state['countSource']!r}"
+        )
         assert state["countEstablishedAt"], (
             "the moment the count was established must be reported, got "
             f"{state['countEstablishedAt']!r}"
@@ -1706,14 +1705,14 @@ class TestBrowserUnloadDecisionObservable:
         state = _unload_state(page)
 
         assert state["willWarnOnClose"] is False, (
-            f"an unverifiable claim must not arm the warning; reported " f"decision was {state!r}"
+            f"an unverifiable claim must not arm the warning; reported decision was {state!r}"
         )
-        assert (
-            state["pendingCount"] is None
-        ), f"an unknown count must be reported as null, got {state['pendingCount']!r}"
-        assert (
-            state["countKnown"] is False
-        ), f"countKnown must be false while unreachable, got {state['countKnown']!r}"
+        assert state["pendingCount"] is None, (
+            f"an unknown count must be reported as null, got {state['pendingCount']!r}"
+        )
+        assert state["countKnown"] is False, (
+            f"countKnown must be false while unreachable, got {state['countKnown']!r}"
+        )
         assert state["countSource"] == "unreachable", (
             f"the state must name WHY the count is what it is, expected "
             f"'unreachable', got {state['countSource']!r}"
@@ -1756,7 +1755,7 @@ class TestBrowserUnloadDecisionObservable:
         assert reported_zero["countKnown"] is True, reported_zero
         assert reported_zero["countSource"] == "server", reported_zero
         assert reported_zero["willWarnOnClose"] is False, (
-            f"a server-reported zero must leave the warning disarmed, got " f"{reported_zero!r}"
+            f"a server-reported zero must leave the warning disarmed, got {reported_zero!r}"
         )
 
         # The server now goes away. Nothing pending was ever reported, so the
@@ -1809,9 +1808,9 @@ class TestBrowserUnloadDecisionObservable:
             f"the armed record must carry its own phrasing {_ARMED_PHRASE!r} "
             f"so it is distinguishable from the not-armed one: {reported!r}"
         )
-        assert not any(
-            "not warning" in m for m in reported
-        ), f"the armed record must not read as a not-warning decision: {reported!r}"
+        assert not any("not warning" in m for m in reported), (
+            f"the armed record must not read as a not-warning decision: {reported!r}"
+        )
 
     @pytest.mark.browser
     @pytest.mark.e2e
@@ -2246,7 +2245,7 @@ class TestBrowserDestructiveOperationsUnderUnknownCount:
         _wait_for_js(
             page,
             "() => document.getElementById('branch-modal-overlay') !== null",
-            "with the server reporting nothing pending the branch picker must " "open normally",
+            "with the server reporting nothing pending the branch picker must open normally",
         )
         assert not _dom_present(page, "#error-modal-overlay"), (
             f"a reported zero is a real answer and must not be refused; "
@@ -2291,9 +2290,9 @@ class TestBrowserDestructiveOperationsUnderUnknownCount:
             f"offers no action the operator can take; got dialogs {dialogs}"
         )
         text = _error_modal_text(page).lower()
-        assert (
-            "unknown" in text
-        ), f"the refusal must name the reason — the count is unknown; got {text!r}"
+        assert "unknown" in text, (
+            f"the refusal must name the reason — the count is unknown; got {text!r}"
+        )
 
         page.unroute("**/api/dirty")
 
@@ -2512,9 +2511,9 @@ class TestBrowserFileMutations:
         card.locator("a", has_text="prd-tables.md:").first.click()
         rename_btn = page.locator("#fv-rename")
         rename_btn.wait_for(state="visible", timeout=10_000)
-        assert (
-            page.locator("#fv-path").get_attribute("title") == old_path
-        ), "file viewer must be showing the file about to be renamed"
+        assert page.locator("#fv-path").get_attribute("title") == old_path, (
+            "file viewer must be showing the file about to be renamed"
+        )
 
         # The Rename control asks for the new path with prompt().
         page.on("dialog", lambda d: d.accept(new_path))
@@ -2526,7 +2525,7 @@ class TestBrowserFileMutations:
             f"{new_path} in /api/spec-files, got {after}"
         )
         assert old_path not in after, (
-            f"the old path must be gone after a rename, still listed in " f"{after}"
+            f"the old path must be gone after a rename, still listed in {after}"
         )
         assert after[new_path] == f"file:{_FILE_MUT_NAMESPACE}:{new_path}", (
             f"the renamed FILE id must carry the owning repository's "
@@ -2672,6 +2671,6 @@ class TestAssertionPillMeasures:
             assert "~" not in tip, f"pill title carries a caveat marker: {tip!r}"
         for label in labels:
             assert "~" not in label, f"pill label carries a caveat marker: {label!r}"
-        assert (
-            page.locator("#card-stack-body .dim-caveat").count() == 0
-        ), "a caveat element is still rendered in the card"
+        assert page.locator("#card-stack-body .dim-caveat").count() == 0, (
+            "a caveat element is still rendered in the card"
+        )

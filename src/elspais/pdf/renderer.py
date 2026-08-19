@@ -3,6 +3,7 @@
 
 Invokes pandoc as a subprocess to convert assembled Markdown to PDF.
 """
+
 from __future__ import annotations
 
 import os

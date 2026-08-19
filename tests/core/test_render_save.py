@@ -392,9 +392,9 @@ class TestParseDirtyFileDetection:
         result = render_save(graph, tmp_path)
 
         assert result["success"] is True
-        assert (
-            result["saved_count"] >= 1
-        ), "Expected file to be saved because its requirement child has parse_dirty=True"
+        assert result["saved_count"] >= 1, (
+            "Expected file to be saved because its requirement child has parse_dirty=True"
+        )
 
     # Verifies: REQ-d00132-A
     def test_no_parse_dirty_no_save_without_mutations(self, tmp_path: Path):
@@ -420,6 +420,6 @@ class TestPersistenceDeleted:
         persistence_path = (
             Path(__file__).parent.parent.parent / "src" / "elspais" / "server" / "persistence.py"
         )
-        assert (
-            not persistence_path.exists()
-        ), f"persistence.py should be deleted (replaced by render-based save): {persistence_path}"
+        assert not persistence_path.exists(), (
+            f"persistence.py should be deleted (replaced by render-based save): {persistence_path}"
+        )

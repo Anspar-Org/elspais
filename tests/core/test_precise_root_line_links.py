@@ -13,6 +13,7 @@ This test file exercises the two-attempt resolver in ``build()``:
      ``(root_file or source_file, root_line)`` — widget-test recovery.
   3. If still no match, fall back to every TEST in ``source_file``.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -244,9 +245,9 @@ def test_root_resolved_match_scope_is_test(graph_root_resolves_a):
     """Root-line-resolved result carries match_scope='test'."""
     r = graph_root_resolves_a.find_by_id("r_root_a")
     assert r is not None
-    assert (
-        r.get_field("match_scope") == "test"
-    ), f"expected match_scope='test', got {r.get_field('match_scope')!r}"
+    assert r.get_field("match_scope") == "test", (
+        f"expected match_scope='test', got {r.get_field('match_scope')!r}"
+    )
 
 
 def test_root_resolved_edge_kind_is_yields(graph_root_resolves_a):
@@ -270,12 +271,12 @@ def test_primary_line_wins_when_it_matches(graph_primary_wins):
     a_results = {c.id for c in test_a.iter_children() if c.kind == NodeKind.RESULT}
     b_results = {c.id for c in test_b.iter_children() if c.kind == NodeKind.RESULT}
 
-    assert (
-        "r_primary" in a_results
-    ), f"r_primary (line=TEST_A_LINE) should link to test_a; got a={a_results} b={b_results}"
-    assert (
-        "r_primary" not in b_results
-    ), "r_primary must NOT appear in test_b (root_line should be ignored when line matched)"
+    assert "r_primary" in a_results, (
+        f"r_primary (line=TEST_A_LINE) should link to test_a; got a={a_results} b={b_results}"
+    )
+    assert "r_primary" not in b_results, (
+        "r_primary must NOT appear in test_b (root_line should be ignored when line matched)"
+    )
 
 
 def test_primary_scope_is_test_when_direct_match(graph_primary_wins):
@@ -296,9 +297,9 @@ def test_both_miss_falls_back_to_all_tests(graph_both_miss):
     assert len(tests) == 2
     for test_node in tests:
         result_ids = {c.id for c in test_node.iter_children() if c.kind == NodeKind.RESULT}
-        assert (
-            "r_both_miss" in result_ids
-        ), f"r_both_miss should be in {test_node.id} children (fallback); got {result_ids}"
+        assert "r_both_miss" in result_ids, (
+            f"r_both_miss should be in {test_node.id} children (fallback); got {result_ids}"
+        )
 
 
 def test_both_miss_scope_is_file(graph_both_miss):
@@ -319,9 +320,9 @@ def test_root_no_file_uses_source_file(graph_root_no_file):
     test_a = tests[0]
 
     a_results = {c.id for c in test_a.iter_children() if c.kind == NodeKind.RESULT}
-    assert (
-        "r_root_no_file" in a_results
-    ), f"r_root_no_file (root_file=None) should link test_a via source_file; got {a_results}"
+    assert "r_root_no_file" in a_results, (
+        f"r_root_no_file (root_file=None) should link test_a via source_file; got {a_results}"
+    )
 
 
 def test_root_no_file_scope_is_test(graph_root_no_file):

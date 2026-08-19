@@ -11,6 +11,7 @@ The test uses a 2-test Dart file where each test() is preceded by a distinct
 // Verifies: comment.  Before the fix both TEST nodes have parse_line on the
 comment line; after the fix they land on the test() call line.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -135,12 +136,12 @@ def test_dart_test_node_parse_line_equals_test_call_line(dart_graph):
     tests = sorted(dart_graph.iter_by_kind(NodeKind.TEST), key=lambda n: n.get_field("parse_line"))
     assert len(tests) == 2, f"need 2 TEST nodes to check parse_lines, got {len(tests)}"
 
-    assert (
-        tests[0].get_field("parse_line") == TEST_A_LINE
-    ), f"Test A: expected parse_line={TEST_A_LINE}, got {tests[0].get_field('parse_line')}"
-    assert (
-        tests[1].get_field("parse_line") == TEST_B_LINE
-    ), f"Test B: expected parse_line={TEST_B_LINE}, got {tests[1].get_field('parse_line')}"
+    assert tests[0].get_field("parse_line") == TEST_A_LINE, (
+        f"Test A: expected parse_line={TEST_A_LINE}, got {tests[0].get_field('parse_line')}"
+    )
+    assert tests[1].get_field("parse_line") == TEST_B_LINE, (
+        f"Test B: expected parse_line={TEST_B_LINE}, got {tests[1].get_field('parse_line')}"
+    )
 
 
 def test_dart_each_test_verifies_only_its_own_assertion(dart_graph):
@@ -163,12 +164,12 @@ def test_dart_each_test_verifies_only_its_own_assertion(dart_graph):
     a_targets = assertion_targets_for(test_a)
     b_targets = assertion_targets_for(test_b)
 
-    assert a_targets == [
-        "A"
-    ], f"Test A (parse_line={test_a.get_field('parse_line')}) should VERIFIES [A], got {a_targets}"
-    assert b_targets == [
-        "B"
-    ], f"Test B (parse_line={test_b.get_field('parse_line')}) should VERIFIES [B], got {b_targets}"
+    assert a_targets == ["A"], (
+        f"Test A (parse_line={test_a.get_field('parse_line')}) should VERIFIES [A], got {a_targets}"
+    )
+    assert b_targets == ["B"], (
+        f"Test B (parse_line={test_b.get_field('parse_line')}) should VERIFIES [B], got {b_targets}"
+    )
 
 
 # ---------------------------------------------------------------------------

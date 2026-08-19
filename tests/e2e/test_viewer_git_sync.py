@@ -95,9 +95,9 @@ class TestGitSyncWorkflowE2E:
         assert result.returncode == 0
         data = json.loads(result.stdout)
         modified_files = data.get("uncommitted", {}).get("modified", [])
-        assert any(
-            "prd.md" in f for f in modified_files
-        ), f"Expected prd.md in modified files, got: {modified_files}"
+        assert any("prd.md" in f for f in modified_files), (
+            f"Expected prd.md in modified files, got: {modified_files}"
+        )
 
     def test_REQ_p00004_D_changed_on_branch(self, tmp_path) -> None:
         """elspais changed works correctly on a feature branch."""

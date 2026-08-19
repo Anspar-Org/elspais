@@ -203,11 +203,11 @@ class TestOptionSurface:
             f"{class_name} must offer --treat-active (widening selector); fields were "
             f"{sorted(fields)}"
         )
-        assert (
-            "only_status" not in fields
-        ), f"{class_name} must not offer --only-status; fields were {sorted(fields)}"
+        assert "only_status" not in fields, (
+            f"{class_name} must not offer --only-status; fields were {sorted(fields)}"
+        )
         assert "status" not in fields, (
-            f"{class_name} must not offer the ambiguous --status; fields were " f"{sorted(fields)}"
+            f"{class_name} must not offer the ambiguous --status; fields were {sorted(fields)}"
         )
 
     def test_errors_exposes_no_status_option(self):
@@ -218,16 +218,16 @@ class TestOptionSurface:
 
         fields = {f.name for f in dataclasses.fields(ErrorsArgs)}
 
-        assert (
-            "status" not in fields
-        ), f"ErrorsArgs must not offer --status; fields were {sorted(fields)}"
+        assert "status" not in fields, (
+            f"ErrorsArgs must not offer --status; fields were {sorted(fields)}"
+        )
         assert "treat_active" not in fields, (
             "ErrorsArgs must NOT offer --treat-active: errors reports every status, "
             f"so there is nothing to promote; fields were {sorted(fields)}"
         )
-        assert (
-            "only_status" not in fields
-        ), f"ErrorsArgs must not offer --only-status; fields were {sorted(fields)}"
+        assert "only_status" not in fields, (
+            f"ErrorsArgs must not offer --only-status; fields were {sorted(fields)}"
+        )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -250,7 +250,7 @@ class TestErrorsCoversEveryStatus:
         result = compute_errors(graph, config, {})
 
         assert _error_req_ids(result) == sorted([ACTIVE_ID, DRAFT_ID, DEPRECATED_ID]), (
-            "compute_errors must exclude nothing; got " f"{_error_req_ids(result)}"
+            f"compute_errors must exclude nothing; got {_error_req_ids(result)}"
         )
 
 

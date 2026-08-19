@@ -9,6 +9,7 @@ Encapsulates the daemon-vs-local decision tree:
 
 Both daemon and local paths return the same dict shape.
 """
+
 from __future__ import annotations
 
 from collections.abc import Callable

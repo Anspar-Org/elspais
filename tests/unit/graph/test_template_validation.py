@@ -73,7 +73,7 @@ class TestSatisfiesAgainstUnmarkedRaises:
         ]
         assert brs, "expected a satisfies broken-ref"
         assert "not marked **Template**" in brs[0].diagnostic, (
-            f"diagnostic should mention the missing Template marker, got: " f"{brs[0].diagnostic!r}"
+            f"diagnostic should mention the missing Template marker, got: {brs[0].diagnostic!r}"
         )
 
     def test_unmarked_target_does_not_clone_instance(self) -> None:
@@ -219,12 +219,12 @@ class TestRefinesInstanceRaises:
         ]
         assert brs, "expected a refines broken-ref against the instance"
         diag = brs[0].diagnostic
-        assert (
-            "Refining instance content is not supported" in diag
-        ), f"diagnostic should explain the rule, got: {diag!r}"
+        assert "Refining instance content is not supported" in diag, (
+            f"diagnostic should explain the rule, got: {diag!r}"
+        )
         # Diagnostic should point users at the recommended pattern.
         assert "Satisfies:" in diag and "Refines:" in diag, (
-            f"diagnostic should sketch the satisfier+refines-concrete pattern, " f"got: {diag!r}"
+            f"diagnostic should sketch the satisfier+refines-concrete pattern, got: {diag!r}"
         )
 
 
@@ -254,9 +254,9 @@ class TestTemplateWithBehaviouralMetadataRaises:
 
         brs = [br for br in graph.broken_references() if br.source_id == "REQ-p00001"]
         assert brs, "expected at least one broken-ref on REQ-p00001"
-        assert any(
-            "Templates are pure specs" in br.diagnostic for br in brs
-        ), f"diagnostics: {[br.diagnostic for br in brs]!r}"
+        assert any("Templates are pure specs" in br.diagnostic for br in brs), (
+            f"diagnostics: {[br.diagnostic for br in brs]!r}"
+        )
 
     def test_template_with_refines_metadata_errors(self) -> None:
         """A template with Refines: metadata produces a rule-7 broken-ref."""
@@ -276,9 +276,9 @@ class TestTemplateWithBehaviouralMetadataRaises:
 
         brs = [br for br in graph.broken_references() if br.source_id == "REQ-p00001"]
         assert brs, "expected at least one broken-ref on REQ-p00001"
-        assert any(
-            "Templates are pure specs" in br.diagnostic for br in brs
-        ), f"diagnostics: {[br.diagnostic for br in brs]!r}"
+        assert any("Templates are pure specs" in br.diagnostic for br in brs), (
+            f"diagnostics: {[br.diagnostic for br in brs]!r}"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -360,8 +360,7 @@ class TestTemplateInboundRefinesRaises:
             f"template target, got {rule8_brs!r}"
         )
         assert "Satisfies:" in rule8_brs[0].diagnostic, (
-            f"rule-8 diagnostic should name the Satisfies: remedy, "
-            f"got: {rule8_brs[0].diagnostic!r}"
+            f"rule-8 diagnostic should name the Satisfies: remedy, got: {rule8_brs[0].diagnostic!r}"
         )
 
         # Rule 7: the refining template declared behavioural metadata
@@ -372,9 +371,9 @@ class TestTemplateInboundRefinesRaises:
             if br.source_id == "REQ-p00002" and br.edge_kind == "refines"
         ]
         assert rule7_brs, "expected a rule-7 refines broken-ref on the refining template"
-        assert any(
-            "Templates are pure specs" in br.diagnostic for br in rule7_brs
-        ), f"rule-7 diagnostics: {[br.diagnostic for br in rule7_brs]!r}"
+        assert any("Templates are pure specs" in br.diagnostic for br in rule7_brs), (
+            f"rule-7 diagnostics: {[br.diagnostic for br in rule7_brs]!r}"
+        )
 
         # And no INSTANCE subtree should appear since both templates are
         # invalid-target-perspectives; no Satisfies declaration here either.
@@ -418,9 +417,9 @@ class TestChainedInstantiationRaises:
             if br.source_id == "REQ-p00003" and br.edge_kind == "satisfies"
         ]
         assert brs, "expected a satisfies broken-ref for chained instantiation"
-        assert any(
-            "Chained instantiation" in br.diagnostic for br in brs
-        ), f"diagnostics: {[br.diagnostic for br in brs]!r}"
+        assert any("Chained instantiation" in br.diagnostic for br in brs), (
+            f"diagnostics: {[br.diagnostic for br in brs]!r}"
+        )
 
         # And the chained instance must NOT have been cloned a second time.
         # No node with the doubly-composite ID should exist.
@@ -528,9 +527,9 @@ class TestImplementsInstanceIsError:
         ]
         assert brs, "expected a rule-5 broken-ref for implements -> instance"
         diag = brs[0].diagnostic
-        assert (
-            "Instance assertions have no canonical on-disk identifier" in diag
-        ), f"diagnostic should explain the rule, got: {diag!r}"
+        assert "Instance assertions have no canonical on-disk identifier" in diag, (
+            f"diagnostic should explain the rule, got: {diag!r}"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -570,9 +569,9 @@ class TestVerifiesInstanceIsError:
         ]
         assert brs, "expected a rule-6 broken-ref for verifies -> instance"
         diag = brs[0].diagnostic
-        assert (
-            "Instance assertions have no canonical on-disk identifier" in diag
-        ), f"diagnostic should explain the rule, got: {diag!r}"
+        assert "Instance assertions have no canonical on-disk identifier" in diag, (
+            f"diagnostic should explain the rule, got: {diag!r}"
+        )
 
 
 # ---------------------------------------------------------------------------

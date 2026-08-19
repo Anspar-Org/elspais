@@ -139,9 +139,9 @@ class TestHeaderRecognisedUnderRepositoryGrammar:
             f"reads it must be the one that configuration produces. Graph "
             f"holds: {sorted(n.id for n in graph.iter_by_kind(NodeKind.REQUIREMENT))}"
         )
-        assert (
-            node.kind == NodeKind.REQUIREMENT
-        ), f"{req_id!r} is in the graph as {node.kind}, not a REQUIREMENT"
+        assert node.kind == NodeKind.REQUIREMENT, (
+            f"{req_id!r} is in the graph as {node.kind}, not a REQUIREMENT"
+        )
 
     # Verifies: REQ-d00251-L
     @pytest.mark.parametrize("namespace,style,sep,req_id", _GRAMMARS)

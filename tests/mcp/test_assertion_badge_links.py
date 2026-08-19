@@ -1,6 +1,7 @@
 # tests/mcp/test_assertion_badge_links.py
 # Verifies: REQ-d00064
 """Tests for assertion badge link filtering (IMP vs REF separation)."""
+
 from unittest.mock import MagicMock
 
 from elspais.graph.GraphNode import GraphNode, NodeKind

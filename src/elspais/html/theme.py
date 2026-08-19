@@ -4,6 +4,7 @@
 Reads theme.toml (colors, symbols, CSS classes) and help.toml (labels, descriptions)
 and exposes a LegendCatalog that generates CSS custom properties and legend content.
 """
+
 from __future__ import annotations
 
 import functools

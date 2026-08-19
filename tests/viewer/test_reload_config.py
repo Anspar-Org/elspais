@@ -228,9 +228,9 @@ class TestReloadAbsorbsChangeDetectionState:
             "the freshness check after a completed reload reported the change "
             "the reload already absorbed, and rebuilt a second time"
         )
-        assert (
-            state.build_time == build_time_after_reload
-        ), "build_time moved after the reload with nothing changed on disk"
+        assert state.build_time == build_time_after_reload, (
+            "build_time moved after the reload with nothing changed on disk"
+        )
 
     def test_REQ_p00004_O_reload_syncs_daemon_config_hash(self, tmp_path):
         """A reload that re-read an edited config must leave daemon.json's
@@ -263,9 +263,9 @@ class TestReloadAbsorbsChangeDetectionState:
         time.sleep(0.05)
         config_path.write_text(_REAL_CONFIG.replace('name = "test"', 'name = "renamed-on-disk"'))
         stale_hash = json.loads(daemon_json.read_text())["config_hash"]
-        assert stale_hash != compute_config_hash(
-            config_path
-        ), "fixture must present a genuinely stale recorded config hash"
+        assert stale_hash != compute_config_hash(config_path), (
+            "fixture must present a genuinely stale recorded config hash"
+        )
 
         state._last_stale_check = time.time()  # keep the middleware out of it
         resp = client.post("/api/reload", json={"if_tip_mutation_id": ""})
@@ -302,9 +302,9 @@ class TestRevertRereadsConfig:
         assert resp.status_code == 200, resp.json()
         assert resp.json()["success"] is True
 
-        assert (
-            state.config["project"]["name"] == "renamed-on-disk"
-        ), "revert rebuilt from the held config instead of re-reading disk"
+        assert state.config["project"]["name"] == "renamed-on-disk", (
+            "revert rebuilt from the held config instead of re-reading disk"
+        )
 
     def test_REQ_p00004_J_revert_builds_from_the_on_disk_config(self, tmp_path):
         """The graph the revert installs is built from the on-disk config,

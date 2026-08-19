@@ -220,9 +220,9 @@ class TestMarkdownRenderer:
         p2_idx = next(i for i, line in enumerate(lines) if "Paragraph two" in line)
         # There should be at least one empty line between the two paragraphs
         between = lines[p1_idx + 1 : p2_idx]
-        assert any(
-            line.strip() == "" for line in between
-        ), f"Expected blank line between paragraphs at lines {p1_idx} and {p2_idx}"
+        assert any(line.strip() == "" for line in between), (
+            f"Expected blank line between paragraphs at lines {p1_idx} and {p2_idx}"
+        )
 
 
 class TestCLIIntegration:

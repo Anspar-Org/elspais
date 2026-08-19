@@ -1,6 +1,7 @@
 # Implements: REQ-p00006-B
 # Implements: REQ-d00010-A
 """Starlette UI route handlers — template rendering and helpers."""
+
 from __future__ import annotations
 
 from pathlib import Path

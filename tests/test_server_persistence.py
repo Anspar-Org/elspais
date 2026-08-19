@@ -672,9 +672,9 @@ class TestAssertionTargetPersistence:
                 for meta_line in lines[i + 1 : i + 5]:
                     if "**Implements**:" in meta_line:
                         count = meta_line.count("REQ-p00001")
-                        assert (
-                            count == 1
-                        ), f"Expected REQ-p00001 exactly once but found {count} in: {meta_line}"
+                        assert count == 1, (
+                            f"Expected REQ-p00001 exactly once but found {count} in: {meta_line}"
+                        )
                         found = True
                         break
                 break

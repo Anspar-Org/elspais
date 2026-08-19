@@ -8,8 +8,7 @@ Add a comment above or inside any function that implements a requirement:
 
 ```python
 # Implements: REQ-d00001-A
-def hash_password(plain: str) -> str:
-    ...
+def hash_password(plain: str) -> str: ...
 ```
 
 ```javascript
@@ -86,8 +85,7 @@ Test class methods work the same way:
 class TestPasswordHashing:
     """Validates REQ-d00001-A: password hashing"""
 
-    def test_REQ_d00001_A_uses_bcrypt(self):
-        ...
+    def test_REQ_d00001_A_uses_bcrypt(self): ...
 ```
 
 ## Test Linking -- Comments
@@ -98,14 +96,12 @@ is `Verifies:`:
 
 ```python
 # Verifies: REQ-d00001-A
-def test_password_hashing():
-    ...
+def test_password_hashing(): ...
 ```
 
 ```python
 # Verifies: REQ-d00001-A, REQ-d00001-B
-def test_full_auth_flow():
-    ...
+def test_full_auth_flow(): ...
 ```
 
 The colon is optional for all keywords.
@@ -126,11 +122,11 @@ A comment placed before any function definition applies to the entire file:
 # Tests: REQ-d00001
 # All tests in this file validate password security
 
-def test_bcrypt_cost():
-    ...
 
-def test_no_plaintext_storage():
-    ...
+def test_bcrypt_cost(): ...
+
+
+def test_no_plaintext_storage(): ...
 ```
 
 Both tests inherit the file-level `REQ-d00001` link.
@@ -160,8 +156,7 @@ When a test validates a requirement that is implemented by code with an `Impleme
 ```python
 # src/auth.py
 # Implements: REQ-d00001-A
-def hash_password(plain: str) -> str:
-    ...
+def hash_password(plain: str) -> str: ...
 ```
 
 ```python

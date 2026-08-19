@@ -128,9 +128,9 @@ class TestWorkspaceInfoFederation:
         )
 
         # The response must include a 'federation' section
-        assert (
-            "federation" in result
-        ), "Workspace info must include a 'federation' section when graph has multiple repos"
+        assert "federation" in result, (
+            "Workspace info must include a 'federation' section when graph has multiple repos"
+        )
         federation = result["federation"]
 
         # Must list repos with name, path, status fields

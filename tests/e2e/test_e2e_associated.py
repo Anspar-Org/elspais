@@ -495,7 +495,7 @@ class TestFileContentCrossRepo:
 
         # With node_id: same content, resolved explicitly via repo_root_for.
         ok_req = urllib.request.Request(
-            f"http://127.0.0.1:{port}/api/file-content" f"?path=spec/prd-assoc.md&node_id=XX-p00099"
+            f"http://127.0.0.1:{port}/api/file-content?path=spec/prd-assoc.md&node_id=XX-p00099"
         )
         resp = urllib.request.urlopen(ok_req, timeout=5)
         assert resp.status == 200
@@ -707,7 +707,7 @@ class TestFederationWriteScope:
         assert result.returncode == 0, f"fix failed: {result.stderr}\n{result.stdout}"
 
         assert _git_porcelain(assoc_root) != "", (
-            "associate file with stale hash was NOT rewritten despite " "write_associates=true"
+            "associate file with stale hash was NOT rewritten despite write_associates=true"
         )
         # The corrupt hash was canonicalized away.
         assoc_text = (assoc_root / "spec" / "prd-assoc.md").read_text()
@@ -753,9 +753,7 @@ class TestFederationWriteScope:
         # Term defined via markdown definition-list syntax (blank line before
         # and after); a separate prose file so the scan records it as a
         # core-namespace definition.
-        glossary = (
-            "# Glossary\n\n" f"{self.TERM}\n" ": A periodic liveness signal emitted by a node.\n"
-        )
+        glossary = f"# Glossary\n\n{self.TERM}\n: A periodic liveness signal emitted by a node.\n"
         build_project(
             core_root,
             core_cfg,
@@ -805,9 +803,9 @@ class TestFederationWriteScope:
             f"associate namespace block **{self.CAL_NS}:** leaked into primary "
             "term-index with index_associates=false"
         )
-        assert (
-            self.CAL_TERM_REQ not in text
-        ), f"associate node {self.CAL_TERM_REQ} leaked into primary term-index"
+        assert self.CAL_TERM_REQ not in text, (
+            f"associate node {self.CAL_TERM_REQ} leaked into primary term-index"
+        )
         # The core's own reference to the term is still indexed.
         assert f"**{self.CORE_NS}:**" in text, "core namespace block missing"
 
@@ -829,9 +827,9 @@ class TestFederationWriteScope:
             f"associate namespace block **{self.CAL_NS}:** absent from primary "
             "term-index despite index_associates=true"
         )
-        assert (
-            self.CAL_TERM_REQ in text
-        ), f"associate node {self.CAL_TERM_REQ} absent despite index_associates=true"
+        assert self.CAL_TERM_REQ in text, (
+            f"associate node {self.CAL_TERM_REQ} absent despite index_associates=true"
+        )
 
 
 class TestFederationMCPGuard:
@@ -932,9 +930,9 @@ class TestFederationMCPGuard:
             stop_mcp(server)
 
         assert isinstance(resp, dict), f"unexpected MCP response: {resp!r}"
-        assert (
-            resp.get("success") is True
-        ), f"expected success with write_associates=true, got {resp!r}"
+        assert resp.get("success") is True, (
+            f"expected success with write_associates=true, got {resp!r}"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -1202,7 +1200,7 @@ class TestPdfMediaFidelity:
         assert out.exists(), "PDF file was not created"
 
         assert "nope.webp" in result.stderr, (
-            f"the resource pandoc could not fetch was not named on stderr: " f"{result.stderr}"
+            f"the resource pandoc could not fetch was not named on stderr: {result.stderr}"
         )
         assert "PDF written to" in result.stdout, f"no completion line: {result.stdout}"
         assert "INCOMPLETE" in result.stdout, (
@@ -1287,9 +1285,9 @@ class TestPdfMediaFidelity:
         complete, _complete_out = federated_pdf
         assert complete.returncode == 0, f"pdf failed: {complete.stderr}"
         assert "PDF written to" in complete.stdout, f"no completion line: {complete.stdout}"
-        assert (
-            "INCOMPLETE" not in complete.stdout
-        ), f"a document missing nothing was reported as degraded: {complete.stdout}"
+        assert "INCOMPLETE" not in complete.stdout, (
+            f"a document missing nothing was reported as degraded: {complete.stdout}"
+        )
 
     # Verifies: REQ-p00080-H
     @requires_pandoc
@@ -1310,19 +1308,19 @@ class TestPdfMediaFidelity:
         text = _pdf_text(out)
         print(f"\npdftotext {out} (normalised):\n{text}")
 
-        assert (
-            "The associate SHALL render its own imagery." in text
-        ), "associate requirement's assertion text missing from the compiled PDF"
-        assert (
-            "rationale marker delta zulu seven" in text
-        ), "associate requirement's rationale missing from the compiled PDF"
+        assert "The associate SHALL render its own imagery." in text, (
+            "associate requirement's assertion text missing from the compiled PDF"
+        )
+        assert "rationale marker delta zulu seven" in text, (
+            "associate requirement's rationale missing from the compiled PDF"
+        )
         # The root repo's own content is still there — federation adds, not replaces.
-        assert (
-            "The system SHALL render core imagery." in text
-        ), "root repo's assertion text missing from the compiled PDF"
-        assert (
-            "rationale marker alpha kilo nine" in text
-        ), "root repo's rationale missing from the compiled PDF"
+        assert "The system SHALL render core imagery." in text, (
+            "root repo's assertion text missing from the compiled PDF"
+        )
+        assert "rationale marker alpha kilo nine" in text, (
+            "root repo's rationale missing from the compiled PDF"
+        )
 
     # Verifies: REQ-p00080-D
     @requires_pandoc
@@ -1350,12 +1348,12 @@ class TestPdfMediaFidelity:
             f"associate entry not annotated with its repo name in the compiled "
             f"Topic Index: {index_text}"
         )
-        assert (
-            "REQ-p00001" in index_text
-        ), f"root repo entry missing from the compiled Topic Index: {index_text}"
-        assert (
-            "[pdf-core] REQ-p00001" not in index_text
-        ), f"host repo entry must render bare, not annotated: {index_text}"
+        assert "REQ-p00001" in index_text, (
+            f"root repo entry missing from the compiled Topic Index: {index_text}"
+        )
+        assert "[pdf-core] REQ-p00001" not in index_text, (
+            f"host repo entry must render bare, not annotated: {index_text}"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -1621,9 +1619,9 @@ class TestFederationContributionInvariance:
 
         members = sorted(nested)
         expected_members = ["a", "b", "c", "d"]
-        assert (
-            members == expected_members
-        ), f"a -> b -> c -> d did not federate every member transitively: {members}"
+        assert members == expected_members, (
+            f"a -> b -> c -> d did not federate every member transitively: {members}"
+        )
         assert nested["d"]["coverage"]["DDD-d00003"] == (2, 1.0, 1.0)
         assert nested == flat, (
             f"a member reached down a chain contributes differently from the "

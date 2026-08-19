@@ -4,6 +4,7 @@
 Validates REQ-p00005-E: clear config errors for invalid associate paths.
 Validates REQ-p00001-A: CLI validation of requirement documents.
 """
+
 from __future__ import annotations
 
 import argparse

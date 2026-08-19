@@ -371,7 +371,7 @@ class TestUndoTo:
         entries = []
         for i in range(3):
             old_title = node.get_label()
-            new_title = f"Title{i+2}"
+            new_title = f"Title{i + 2}"
             entry = MutationEntry(
                 operation="update_title",
                 target_id="REQ-p00001",

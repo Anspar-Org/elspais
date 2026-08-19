@@ -875,8 +875,7 @@ class TestAutoRefreshDoesNotDiscardPendingMutations:
         app_state.ensure_fresh()
 
         assert app_state.graph is graph_before, (
-            "ensure_fresh() rebuilt over a non-empty mutation log, "
-            "silently discarding pending work"
+            "ensure_fresh() rebuilt over a non-empty mutation log, silently discarding pending work"
         )
         assert len(app_state.graph.mutation_log) == 1
         assert app_state.graph.find_by_id(REQ).get_label() == PENDING_TITLE
@@ -977,9 +976,9 @@ class TestNotEveryRefusedSaveIsAConflict:
         assert payload["success"] is False
         assert payload["code"] == "save_failed"
         assert _spec_snapshot(viewer_project) == before
-        assert (
-            len(app_state.graph.mutation_log) == 1
-        ), "a save that could not write also destroyed the work it was holding"
+        assert len(app_state.graph.mutation_log) == 1, (
+            "a save that could not write also destroyed the work it was holding"
+        )
 
     def test_REQ_o00062_O_the_save_that_answered_the_rule_succeeds(
         self, client, app_state, viewer_project, version_of
