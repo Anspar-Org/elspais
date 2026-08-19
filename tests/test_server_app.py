@@ -493,8 +493,8 @@ class TestGetTestCoverage:
         resp = coverage_client.get("/api/test-coverage/REQ-p00001")
         data = resp.json()
         assert data["total_assertions"] == 2
-        assert data["covered_count"] == 1
-        assert data["referenced_pct"] == 50.0
+        assert data["total_covered"] == 1.0
+        assert data["total_pct"] == 50.0
 
     def test_REQ_d00010_A_test_coverage_not_found(self, coverage_client):
         """GET /api/test-coverage returns 404 for unknown ID."""

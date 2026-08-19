@@ -4179,6 +4179,17 @@ def _get_test_coverage(graph: FederatedGraph, req_id: str) -> dict[str, Any]:
         )
 
     total = len(assertion_ids)
+    # name: covered_count / referenced_pct
+    # use:  a work list -- which assertions still want a test naming them.
+    #       Read by an agent deciding what to write next, never as a progress
+    #       figure.
+    # def:  assertions covered on the IMMEDIATE DIRECT measure
+    #       (``WORK_LIST_MEASURE``, REQ-d00258-M): a citation named the
+    #       *Assertion* and the evidence is attached to it.
+    #       "referenced" is accurate HERE and only here -- the figure is
+    #       exactly the claim that a citation referenced these assertions.
+    #       A per-*Assertion* TOTAL must never be published under this name;
+    #       see ``_dimension_figures``.
     covered_count = len(covered_assertions)
     referenced_pct = (covered_count / total * 100) if total > 0 else 0.0
 
@@ -4285,15 +4296,25 @@ def _dimension_figures(node: Any, dimension: str) -> dict[str, Any]:
     if dim is None:
         return {
             "total_assertions": total,
-            "covered_count": 0.0,
-            "referenced_pct": 0.0,
+            "total_covered": 0.0,
+            "total_pct": 0.0,
             "measures": dict.fromkeys(MEASURES, 0.0),
         }
     covered = float(measure_total(dim, HEADLINE_MEASURE))
+    # name: total_covered / total_pct
+    # use:  a reader asking how far along this dimension is at this
+    #       requirement; the panel headline beside the per-assertion listing.
+    # def:  the per-*Assertion* total (REQ-d00069-N) -- each *Assertion*
+    #       counted once at the greatest of its four measures -- summed, and
+    #       that sum over the requirement's assertion count.
+    #       NOT named "referenced": that word claimed a citation had named the
+    #       assertions, which the total does not say. It was retired from
+    #       ``get_requirement`` for exactly that reason, and the same figure
+    #       must not carry it back here under a different roof.
     return {
         "total_assertions": total,
-        "covered_count": round(covered, 2),
-        "referenced_pct": round((covered / total * 100) if total > 0 else 0.0, 1),
+        "total_covered": round(covered, 2),
+        "total_pct": round((covered / total * 100) if total > 0 else 0.0, 1),
         "measures": {m: round(v, 2) for m, v in dimension_measures(dim).items()},
     }
 

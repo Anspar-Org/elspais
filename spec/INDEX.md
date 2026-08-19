@@ -75,7 +75,7 @@
 | REQ-d00051 | Graph Aggregate Functions                                     | dev-graph-core.md       | ca876d95 |
 | REQ-d00052 | Output Generators Consume Graph Directly                      | dev-graph-core.md       | abb3f6b8 |
 | REQ-d00054 | Annotation Pipeline Pattern                                   | dev-graph-core.md       | 374f7365 |
-| REQ-d00055 | Node Metrics as Extension Point                               | dev-graph-core.md       | 1c90d8fa |
+| REQ-d00055 | Node Metrics as Extension Point                               | dev-graph-core.md       | 83148e40 |
 | REQ-d00060 | Graph Status Tool Implementation                              | dev-mcp-tools.md        | 8c173481 |
 | REQ-d00061 | Requirement Search Tool Implementation                        | dev-mcp-tools.md        | 51c28611 |
 | REQ-d00062 | Requirement Detail Tool Implementation                        | dev-mcp-tools.md        | 1e2097db |

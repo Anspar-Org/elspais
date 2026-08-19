@@ -54,10 +54,21 @@ TIER_TO_BUCKET: dict[str, str] = {
 # UAT-Passed over UAT-COVERED labels. ``implemented`` and ``uat_coverage`` are
 # ABSOLUTE (measured over all assertions) and deliberately absent from this map.
 # Implements: REQ-d00277
-# The coverage dimensions, in the order a reader meets them: each answers a
-# different question, conferred by a different relationship. Named once so a
-# surface reporting "every dimension" cannot report a different set from the
-# one the requirement defines.
+# name: COVERAGE_DIMENSIONS
+# use:  a surface reporting "every dimension" iterates this, so it cannot
+#       report a different set from the one REQ-d00277 defines.
+# def:  the five coverage dimensions, in the order a reader meets them. Each
+#       answers a DIFFERENT question, conferred by a different relationship,
+#       and none substitutes for another:
+#         implemented   -- was anything built?            (`Implements:`)
+#         tested        -- is what was built exercised?   (`Verifies:`)
+#         verified      -- did the exercise succeed?      (a test's result)
+#         uat_coverage  -- does a journey visit it?       (`Validates:`)
+#         uat_verified  -- did that journey pass?         (a journey's result)
+#       The attribute name is what the code reads; the WORD each is reported
+#       under is configurable (REQ-d00258-K) and is not the definition. Note
+#       `verified` is displayed "Passing" and `uat_coverage` "UAT Covered" --
+#       attribute and display term deliberately differ.
 COVERAGE_DIMENSIONS: tuple[str, ...] = (
     "implemented",
     "tested",
@@ -86,6 +97,12 @@ _MEASURE_ATTRS: dict[str, str] = {
     "rolled_indirect": "rolled_indirect_by_label",
 }
 
+# name: MEASURES
+# use:  the set a surface iterates when publishing "the measures behind" a
+#       figure (REQ-d00258-A). Iterate this, never a hand-written list, or a
+#       surface publishes a different set from the one the estate defines.
+# def:  the four measures of REQ-d00069-L -- the two axes crossed. Each is
+#       measured from the evidence itself; none is derived from another.
 MEASURES: tuple[str, ...] = (
     "immediate_direct",
     "immediate_indirect",
@@ -98,6 +115,13 @@ MEASURES: tuple[str, ...] = (
 # the same four names on the CLI and in the viewer and never has to work out
 # whether two surfaces are talking about the same thing. Published beside a
 # figure rather than compressed into a caveat marker (REQ-d00258-J).
+# name: MEASURE_WORDS
+# use:  the ONE vocabulary every surface renders a measure under, so a reader
+#       meets the same four names on the CLI and in the viewer and never has
+#       to work out whether two surfaces mean the same thing (REQ-d00258-C).
+# def:  measure name -> the words it is published as. Published BESIDE a
+#       figure, never compressed into a caveat marker standing in for a
+#       measure that was not shown (REQ-d00258-J).
 MEASURE_WORDS: dict[str, str] = {
     "immediate_direct": "cited by name here",
     "immediate_indirect": "whole-requirement",
@@ -111,10 +135,29 @@ MEASURE_WORDS: dict[str, str] = {
 # named the *Assertion* and the evidence is attached to it. Named once so
 # ``gaps``, the health coverage checks, and anything else answering "what is
 # left to do" cannot drift apart about what counts as done.
+# name: WORK_LIST_MEASURE
+# use:  every surface answering "what is left to do" -- ``gaps``, the health
+#       coverage checks, the MCP uncovered-*Assertion* and test-coverage
+#       tools. Named once so they cannot drift apart about what counts as
+#       done (REQ-d00258-M).
+# def:  the immediate direct measure: a citation named the *Assertion* AND
+#       the evidence is attached to it. Deliberately blind to
+#       whole-requirement evidence and to coverage conducted up a `Refines:`
+#       chain, because an *Assertion* nobody wrote evidence for is exactly
+#       what a work list exists to surface.
 WORK_LIST_MEASURE = "immediate_direct"
 
 # The measure a surface reporting how far along the estate is headlines
 # (REQ-d00258-A): each *Assertion* counted once, at the greatest of its four.
+# name: HEADLINE_MEASURE
+# use:  every surface reporting how far along something is -- summary, trace,
+#       the MCP project summary and subtree, the viewer (REQ-d00258-A).
+# def:  the per-*Assertion* total of REQ-d00069-N: each *Assertion* counted
+#       once at the GREATEST of its four measures, so one covered three ways
+#       is one covered *Assertion* and a requirement's total can never exceed
+#       its assertion count. A derived VIEW over the measures, not a fifth
+#       measure. Never publish it under a name claiming a citation named the
+#       assertions -- it makes no such claim.
 HEADLINE_MEASURE = "total"
 
 
@@ -128,6 +171,13 @@ def measure_by_label(dim: CoverageDimension, measure: str) -> dict[str, float]:
     if measure == "total":
         return dim.total_by_label
     if measure == "immediate":
+        # name: the "immediate" derived view
+        # use:  a whole-requirement gate -- "is there ANY evidence for this
+        #       dimension attached at this requirement", asked before listing
+        #       which assertions still want some. Read through
+        #       ``work_verdict``; it is NOT in ``MEASURES`` and must not be
+        #       published as one.
+        # def:  the greater of the two immediate measures per *Assertion*.
         # The stronger of the two immediate measures per *Assertion*: evidence
         # attached HERE, whether its citation named the *Assertion* or only the
         # requirement. Conducted value is deliberately absent -- this answers

@@ -137,7 +137,7 @@ B. Annotators SHALL NOT modify node.children, node.parents, or other structural 
 
 C. Metrics keys SHALL use consistent naming (snake_case, descriptive names).
 
-D. Standard metrics keys SHALL include: is_uncommitted, is_moved, is_new, is_roadmap, display_filename, repo_prefix, implementation_files, referenced_pct.
+D. Standard metrics keys SHALL include: is_uncommitted, is_moved, is_new, is_roadmap, display_filename, repo_prefix, implementation_files.
 
 E. Custom metrics MAY be added by specific annotators without modifying TraceNode class.
 
@@ -147,11 +147,12 @@ Using metrics dict as the extension point enables adding new annotations without
 
 ### Changelog
 
+- 2026-08-19 | 83148e40 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | 1c90d8fa | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 0073a9c3 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 0073a9c3 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Node Metrics as Extension Point* | **Hash**: 1c90d8fa
+*End* *Node Metrics as Extension Point* | **Hash**: 83148e40
 ---
 
 ## REQ-d00069: Indirect Coverage Source

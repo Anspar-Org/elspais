@@ -464,7 +464,6 @@ def count_by_repo(
     repo_counts: dict[str, dict[str, int]] = {}
 
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
-
         prefix = node.get_metric("repo_prefix", "CORE")
         status = node.get_field("status", "Active")
 
@@ -658,7 +657,6 @@ def count_by_git_status(graph: FederatedGraph) -> dict[str, int]:
     }
 
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
-
         if node.get_metric("is_uncommitted", False):
             counts["uncommitted"] += 1
         if node.get_metric("is_branch_changed", False):
@@ -1323,7 +1321,10 @@ def annotate_coverage(
     This function traverses the graph once to compute RollupMetrics for
     each REQUIREMENT node. Metrics are stored in node._metrics as:
     - "rollup_metrics": The full RollupMetrics object
-    - "referenced_pct": Coverage percentage (for convenience)
+    Note there is no "referenced_pct" metric. It was the strict footing --
+    assertions a citation named -- and was retired with the strict/generous
+    pair; the measure it stood for is now ``immediate_direct``, read through
+    ``WORK_LIST_MEASURE``.
 
     Coverage is determined by outgoing edges from REQUIREMENT nodes:
     - The builder links TEST/CODE/REQ as children of the parent REQ
@@ -1366,7 +1367,6 @@ def annotate_coverage(
     region_cache: dict = {}
 
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
-
         metrics = RollupMetrics()
 
         # Collect assertion children

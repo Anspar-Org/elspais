@@ -228,8 +228,8 @@ class TestGetAssertionTestMap:
         assert result["success"] is True
         assert result["assertion_tests"] == {}
         assert result["total_assertions"] == 0
-        assert result["covered_count"] == 0
-        assert result["referenced_pct"] == 0.0
+        assert result["total_covered"] == 0.0
+        assert result["total_pct"] == 0.0
 
     def test_REQ_d00066_C_assertions_with_no_tests(self, assertion_map_graph):
         """REQ-d00066-C: SHALL return empty test lists for assertions with no coverage."""
@@ -242,8 +242,8 @@ class TestGetAssertionTestMap:
         assert "A" in result["assertion_tests"]
         assert result["assertion_tests"]["A"]["assertion_id"] == "REQ-p00002-A"
         assert result["assertion_tests"]["A"]["tests"] == []
-        assert result["covered_count"] == 0
-        assert result["referenced_pct"] == 0.0
+        assert result["total_covered"] == 0.0
+        assert result["total_pct"] == 0.0
 
     def test_REQ_d00066_D_pattern1_targeted_assertion_coverage(self, assertion_map_graph):
         """REQ-d00066-D: Pattern 1 - REQ->TEST with assertion_targets."""
@@ -311,8 +311,8 @@ class TestGetAssertionTestMap:
 
         # All 3 assertions (A, B, C) have at least one test via indirect coverage
         assert result["total_assertions"] == 3
-        assert result["covered_count"] == 3
-        assert result["referenced_pct"] == 100.0
+        assert result["total_covered"] == 3.0
+        assert result["total_pct"] == 100.0
 
     def test_REQ_d00066_B_coverage_stats_partial(self, assertion_map_graph):
         """REQ-d00066-B: SHALL compute correct partial coverage when some assertions lack tests."""
@@ -321,8 +321,8 @@ class TestGetAssertionTestMap:
         result = _get_assertion_test_map(assertion_map_graph, "REQ-p00002")
 
         assert result["total_assertions"] == 1
-        assert result["covered_count"] == 0
-        assert result["referenced_pct"] == 0.0
+        assert result["total_covered"] == 0.0
+        assert result["total_pct"] == 0.0
 
     def test_REQ_d00066_C_deduplication_same_test_via_both_patterns(self, assertion_map_graph):
         """REQ-d00066-C: SHALL deduplicate when same test reached via multiple patterns."""
@@ -373,8 +373,8 @@ class TestGetAssertionTestMap:
         # Coverage is fractional: a journey verified in part credits in
         # proportion (REQ-d00069-M), so a covered count is a real number and
         # pinning it to int would pin the opposite of what the measures say.
-        assert isinstance(result["covered_count"], float)
-        assert isinstance(result["referenced_pct"], float)
+        assert isinstance(result["total_covered"], float)
+        assert isinstance(result["total_pct"], float)
         # The measures behind the figure travel with it (REQ-d00258-A).
         assert set(result["measures"]) == {
             "immediate_direct",

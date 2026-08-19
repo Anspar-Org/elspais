@@ -341,7 +341,9 @@ def analyze_foundations(
     Assertions are included in computation (for uncovered_dependents counting)
     but filtered from ranked output -- only REQUIREMENT nodes appear in results.
     Descendant counts are computed internally alongside the other metrics.
-    Coverage is read via node.get_metric("referenced_pct", 0).
+    Coverage is read on the immediate direct measure (``WORK_LIST_MEASURE``),
+    because what makes a requirement foundational is dependents nobody has
+    written evidence for.
     """
     from elspais.config.status_roles import StatusRolesConfig
 

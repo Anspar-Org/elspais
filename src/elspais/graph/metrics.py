@@ -153,12 +153,43 @@ class CoverageDimension:
     carried: bool = False
 
     # Implements: REQ-d00069-L
-    # The four measures. Two axes: what a citation named (direct/indirect),
-    # and whether the evidence is attached here or conducted from a refining
-    # requirement (immediate/rolled). None is defined in terms of another.
+    # The four measures, on two independent axes: what a citation NAMED
+    # (direct = this *Assertion*, indirect = the requirement as a whole) x
+    # WHERE the evidence sits (immediate = attached here, rolled = conducted
+    # up a `Refines:` chain). Each is measured from the evidence itself; none
+    # is derived from a sibling. Values are per-*Assertion* fractions in
+    # [0.0, 1.0], so a measure's sum may be non-integer (REQ-d00069-M).
+
+    # name: immediate_direct_by_label
+    # use:  every work list -- "which assertions has nobody written evidence
+    #       for" (``WORK_LIST_MEASURE``, REQ-d00258-M). The strictest measure,
+    #       and the one a gap surface answers on.
+    # def:  a citation named THIS *Assertion*, and the evidence is attached to
+    #       this requirement.
     immediate_direct_by_label: dict[str, float] = field(default_factory=dict)
+
+    # name: immediate_indirect_by_label
+    # use:  showing how much green rests on whole-requirement citation --
+    #       published beside the total so a reader can see it, never used to
+    #       decide a work list.
+    # def:  a citation named only the REQUIREMENT, so it is attributed equally
+    #       to every *Assertion* of it; evidence attached to this requirement.
     immediate_indirect_by_label: dict[str, float] = field(default_factory=dict)
+
+    # name: rolled_direct_by_label
+    # use:  answering "is the detail below this finished" without claiming
+    #       anyone wrote evidence here.
+    # def:  conducted up a `Refines:` chain from a refining requirement's own
+    #       DIRECT coverage -- the mean, in that measure, of the contributing
+    #       requirements' coverage (REQ-d00069-J).
     rolled_direct_by_label: dict[str, float] = field(default_factory=dict)
+
+    # name: rolled_indirect_by_label
+    # use:  as rolled_direct, for refining requirements whose own evidence was
+    #       itself whole-requirement.
+    # def:  conducted the same way, from a refining requirement's INDIRECT
+    #       coverage. Direct conducts into direct and indirect into indirect,
+    #       so no measure is ever composed of another.
     rolled_indirect_by_label: dict[str, float] = field(default_factory=dict)
 
     @property
@@ -199,6 +230,13 @@ class CoverageDimension:
         return out
 
     # Implements: REQ-d00069-N
+    # name: covered
+    # use:  the headline figure of every REPORTING surface (REQ-d00258-A) --
+    #       "how far along is this". Never a work list: it credits evidence no
+    #       citation attached to the *Assertion*.
+    # def:  the per-*Assertion* total summed. A derived VIEW over the four
+    #       measures, not a fifth measure. Real-valued, and it can never
+    #       exceed ``total``.
     @property
     def covered(self) -> float:
         return sum(self.total_by_label.values())
