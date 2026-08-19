@@ -169,6 +169,7 @@ def _respell(segment: str, separator: str) -> str:
     return "".join(separator if c in "-_" else c for c in segment)
 
 
+# Implements: REQ-d00251-B
 def component_regex(component: ComponentFormat, internal_separator: str | None = None) -> str:
     """Resolve a ComponentFormat to its regex string.
 
@@ -442,6 +443,7 @@ class IdResolver:
 
         return re.compile(pattern)
 
+    # Implements: REQ-d00082-E
     def _build_assertion_suffix(self, separator: str | None = None) -> str:
         """Build optional assertion suffix regex.
 
@@ -653,7 +655,7 @@ class IdResolver:
         labels = re.split(re.escape(af.separator), m.group(2))
         return f"{m.group(1)}{af.separator}{af.multi_separator.join(labels)}"
 
-    # Implements: REQ-d00272-D, REQ-d00272-L
+    # Implements: REQ-d00272-D, REQ-d00272-E, REQ-d00272-L
     def diagnose_item(self, item: str) -> tuple[str, ...]:
         """The smallest set of relaxations that makes *item* acceptable.
 
@@ -896,6 +898,7 @@ class IdResolver:
 
         return result
 
+    # Implements: REQ-d00082-G
     def to_canonical(self, raw_id: str) -> str | None:
         """Parse then render as canonical. Returns None if no form matches."""
         parsed = self.parse(raw_id)
@@ -1323,6 +1326,7 @@ class FederatedIdReader:
             )
         return self._ref_regex
 
+    # Implements: REQ-d00082-E
     def _classify(self, raw_ref: str) -> tuple[str, bool]:
         """Normalize *raw_ref* under the grammar of the member that claims it,
         and say whether some member actually confirmed it as its own.

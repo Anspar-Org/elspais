@@ -201,6 +201,7 @@ Run `elspais checks` to check format compliance.
 """
 
 
+# Implements: REQ-d00259-A
 def run(args: argparse.Namespace) -> int:
     """
     Run the example command.
@@ -232,6 +233,7 @@ def run(args: argparse.Namespace) -> int:
         return 0
 
 
+# Implements: REQ-d00259-B
 def show_requirement_template(args: argparse.Namespace) -> int:
     """Show requirement template."""
     print("# Requirement Templates\n")
@@ -244,18 +246,21 @@ def show_requirement_template(args: argparse.Namespace) -> int:
     return 0
 
 
+# Implements: REQ-d00259-C
 def show_journey_template(args: argparse.Namespace) -> int:
     """Show user journey template."""
     print(JOURNEY_TEMPLATE)
     return 0
 
 
+# Implements: REQ-d00259-D
 def show_assertion_rules(args: argparse.Namespace) -> int:
     """Show assertion format rules."""
     print(ASSERTION_RULES)
     return 0
 
 
+# Implements: REQ-d00259-E
 def show_id_patterns(args: argparse.Namespace) -> int:
     """Show ID patterns from current configuration."""
     from elspais.config import config_defaults, load_config
@@ -287,6 +292,7 @@ def show_id_patterns(args: argparse.Namespace) -> int:
     return 0
 
 
+# Implements: REQ-d00259-F
 def show_full_spec(args: argparse.Namespace) -> int:
     """Display the full requirements-spec.md if it exists."""
     from elspais.config import load_config

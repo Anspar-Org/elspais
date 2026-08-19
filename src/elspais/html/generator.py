@@ -103,8 +103,9 @@ class ViewStats:
 SEVERITY_PRIORITY: dict[str, int] = {"error": 0, "warning": 1, "info": 2, "neutral": 2, "ok": 3}
 
 
+# Implements: REQ-d00258-D
 def _severity_color(severity: str) -> str:
-    """Resolve a severity name to its theme-catalog color_key (REQ-d00258-D)."""
+    """Resolve a severity name to its theme-catalog color_key."""
     from elspais.html.theme import get_catalog
 
     try:
@@ -114,7 +115,7 @@ def _severity_color(severity: str) -> str:
 
 
 # Dimension labels (the "Implemented/Tested/Passing/UAT Covered/UAT Passed"
-# vocabulary, REQ-d00258-B) now live in a single per-relationship source:
+# vocabulary, REQ-d00258-K) now live in a single per-relationship source:
 # elspais.config.status_words.get_status_words(config).
 
 # Tooltip definitions for card-view badges
@@ -406,6 +407,7 @@ def compute_coverage_tiers(node: GraphNode, config: dict[str, Any] | None = None
 COVERAGE_STANDINGS = ("full", "partial", "failing", "missing")
 
 
+# Implements: REQ-d00258-D
 def _standing_color(standing: str) -> str:
     """Resolve a coverage standing to its theme-catalog color_key (REQ-d00258-G).
 

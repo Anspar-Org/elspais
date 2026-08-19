@@ -1,4 +1,5 @@
 # Implements: REQ-p00004-A
+# Implements: REQ-d00248-A
 """
 elspais.commands.fix_cmd - Auto-fix spec file issues.
 
@@ -154,6 +155,7 @@ def _is_associate_owned(graph, node) -> bool:  # noqa: ANN001
     return is_associate_owned(graph, node.file_node() or node)
 
 
+# Implements: REQ-d00250-E
 def _scan_and_report_unfixable(graph) -> int:  # noqa: ANN001
     """Walk `parse_unfixable_reasons` across requirements; print to stderr.
 
@@ -364,6 +366,7 @@ def _add_drift_changelog_entries(
     return added
 
 
+# Implements: REQ-d00250-E
 def _fix_parse_dirty(args: argparse.Namespace, dry_run: bool) -> int:
     """Single-pass fix: build graph, detect all fixable issues, render to disk.
 

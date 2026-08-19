@@ -200,7 +200,7 @@ def _render_text(data: dict) -> str:
         lines.append(f"  ({', '.join(parts)} not included in coverage)")
 
     # REQ-d00252-F: External integrations grouped by owning associate.
-    # "Passing" (REQ-d00258-B vocabulary, REQ-d00258-N):
+    # "Passing" (REQ-d00258-K vocabulary, REQ-d00277-C):
     # integrates_by_associate() folds the library node's
     # tested_and_passing() Passing dimension into these figures, so the
     # label matches the other coverage columns. `!` marks a row whose library
@@ -303,7 +303,7 @@ def _render_markdown(data: dict) -> str:
         lines.append(f"*{', '.join(parts)} not included in coverage.*")
 
     # REQ-d00252-F: External integrations grouped by owning associate.
-    # "Passing" (REQ-d00258-B vocabulary, REQ-d00258-N):
+    # "Passing" (REQ-d00258-K vocabulary, REQ-d00277-C):
     # integrates_by_associate() folds the library node's tested_and_passing()
     # Passing dimension into these figures, so the label matches the other
     # coverage columns. `!` marks a row whose library suite has failing

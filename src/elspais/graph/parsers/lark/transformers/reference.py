@@ -577,6 +577,7 @@ class ReferenceTransformer:
             )
 
         items = read_reference_list(self.reader, text)
+        # Implements: REQ-d00272-H
         if not items:
             self.faults.append(
                 (

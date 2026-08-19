@@ -72,6 +72,7 @@ _LEGACY_STYLE_MIGRATION = {
 }
 
 
+# Implements: REQ-d00251-D
 def _legacy_style_message(legacy: str) -> str:
     """Build the migration error message for the deprecated style names.
 

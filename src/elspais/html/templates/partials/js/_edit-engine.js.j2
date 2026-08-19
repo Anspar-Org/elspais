@@ -712,7 +712,8 @@ function showBranchPickerModal(targetRepo) {
     // restrictive here -- the opposite of the navigation warning, which is
     // permissive because closing a tab destroys nothing. Refusing rather
     // than prompting: saving needs the same server whose silence caused the
-    // uncertainty. Implements: REQ-d00267-E
+    // uncertainty.
+    // Implements: REQ-d00267-E
     if (editState.mutationCount === null) {
         showErrorModal('Unsaved changes unknown',
             'The number of unsaved changes is unknown - the server could not ' +
@@ -1847,7 +1848,8 @@ function showCheckpointModal() {
     // An unknown count is not a zero: checkpointing under one commits around
     // changes that may be pending, producing a commit that silently omits
     // them. Refuse rather than prompt -- the prompt's only remedy is a save,
-    // which needs the server that just went quiet. Implements: REQ-d00267-E
+    // which needs the server that just went quiet.
+    // Implements: REQ-d00267-E
     if (editState.mutationCount === null) {
         showErrorModal('Unsaved changes unknown',
             'The number of unsaved changes is unknown - the server could not ' +

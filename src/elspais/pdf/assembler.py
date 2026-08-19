@@ -627,6 +627,7 @@ class MarkdownAssembler:
     # Mermaid diagram resolution
     # ------------------------------------------------------------------
 
+    # Implements: REQ-p00080-G
     def _resolve_mermaid_images(
         self,
         line: str,
@@ -705,7 +706,7 @@ class MarkdownAssembler:
     # Raster/vector image resolution
     # ------------------------------------------------------------------
 
-    # Implements: REQ-p00080-H
+    # Implements: REQ-p00080-G, REQ-p00080-H
     def _resolve_image_paths(
         self,
         line: str,

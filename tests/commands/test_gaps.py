@@ -134,7 +134,7 @@ class TestCollectGaps:
         assert "REQ-p00001" in ids
         assert "REQ-p00002" in ids
 
-    # Verifies: REQ-d00258, REQ-d00069-J
+    # Verifies: REQ-d00258-M, REQ-d00069-J
     def test_unimplemented_reqs_not_untested_but_uncovered(self, gap_graph: FederatedGraph) -> None:
         """A REQ with no implementation is NOT a testing gap (nothing built to
         test yet) -- but it stays visible as an implementation gap in

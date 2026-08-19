@@ -458,7 +458,7 @@ _COVERAGE_COLUMNS = [
 ]
 
 # Implements: REQ-d00069-L, REQ-d00258-A
-# The four measures behind each of the 5 REQ-d00258-B dimensions, published
+# The four measures behind each of the 5 REQ-d00277 dimensions, published
 # as their own CSV columns beside the dimension's total so a reader can see
 # what evidence produced it without a caveat marker (REQ-d00258-J). The
 # ``data`` key suffix (``_get_node_data``) and the display-header suffix,
@@ -470,7 +470,7 @@ _MEASURE_COLUMNS: list[tuple[str, str]] = [
     ("_rolled_indirect", "Rolled Indirect"),
 ]
 
-# The 5 REQ-d00258-B display dimensions -- code_tested/lcov_tested are
+# The 5 REQ-d00277 display dimensions -- code_tested/lcov_tested are
 # diagnostic columns outside that vocabulary and carry no total/measure
 # split of their own.
 _COVERAGE_COLUMNS_WITH_MEASURES = [

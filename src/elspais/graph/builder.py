@@ -1867,6 +1867,7 @@ class TraceGraph:
         self._mutation_log.append(entry)
         return entry
 
+    # Implements: REQ-o00062-S
     def _next_assertion_label(self, parent: GraphNode) -> str:
         """The label following ``parent``'s last assertion in its series.
 
@@ -1935,6 +1936,7 @@ class TraceGraph:
             return last_assertion + 1.0
         return (last_assertion + following) / 2.0
 
+    # Implements: REQ-o00062-R
     def add_assertion(self, req_id: str, text: str) -> MutationEntry:
         """Add an assertion to a requirement, after its existing assertions.
 
@@ -4017,6 +4019,7 @@ class GraphBuilder:
             self._pending_terms.append((def_id, defn))
 
         # Add children in document order (sorted by line number)
+        # Implements: REQ-d00128-F
         children_with_lines.sort(key=lambda x: x[0])
         for line_num, child_node in children_with_lines:
             edge = node.link(child_node, EdgeKind.STRUCTURES)
@@ -4046,7 +4049,8 @@ class GraphBuilder:
             if computed and stored_hash != computed:
                 parse_dirty_reasons.append("stale_hash")
 
-        # Section header depth validation (REQ-d00250-B, REQ-d00250-C)
+        # Section header depth validation
+        # Implements: REQ-d00250-B, REQ-d00250-C
         req_depth = data.get("heading_level", 2)
         min_child_depth = req_depth + 1
         has_section_block = False
@@ -4521,7 +4525,7 @@ class GraphBuilder:
         }
         self._nodes[remainder_id] = node
 
-    # Implements: REQ-d00128-D
+    # Implements: REQ-d00128-D, REQ-d00128-E
     def _wire_contains_edge(
         self, file_node: GraphNode, content_node: GraphNode, content: ParsedContent
     ) -> None:
@@ -4854,6 +4858,7 @@ class GraphBuilder:
                 # INSTANCE edge from clone to original
                 clone.link(orig, EdgeKind.INSTANCE)
 
+            # Implements: REQ-d00128-K
             # Recreate internal edges in cloned subtree
             for orig in template_nodes:
                 clone = clone_map.get(orig.id)
@@ -5285,6 +5290,7 @@ class GraphBuilder:
         # Roots: parentless REQUIREMENTs (always), or other parentless nodes
         #        with at least one meaningful (non-satellite) child.
         # Orphans: parentless non-REQUIREMENT nodes without meaningful children.
+        # Implements: REQ-d00128-I
         _non_candidate_kinds = {NodeKind.FILE, NodeKind.REMAINDER, NodeKind.ASSERTION}
         _content_edge_kinds = {
             EdgeKind.IMPLEMENTS,

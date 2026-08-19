@@ -3520,6 +3520,7 @@ def _mutate_rename_assertion(graph: FederatedGraph, old_id: str, new_label: str)
 # ─────────────────────────────────────────────────────────────────────────────
 
 
+# Implements: REQ-o00062-H
 def _mutate_update_remainder(
     graph: FederatedGraph, node_id: str, text: str | None = None, heading: str | None = None
 ) -> dict[str, Any]:

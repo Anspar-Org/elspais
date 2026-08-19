@@ -75,6 +75,7 @@ def parse_end_marker(line: str) -> EndMarker | None:
     return EndMarker(title=m.group("title"), hash_value=m.group("hash"))
 
 
+# Implements: REQ-d00131-K
 def format_changelog_entry(entry: dict[str, str]) -> str:
     """Format a changelog entry dict into its markdown line.
 
@@ -90,6 +91,7 @@ def format_changelog_entry(entry: dict[str, str]) -> str:
     )
 
 
+# Implements: REQ-d00250-D
 def _effective_depth(stored: int | None, min_depth: int) -> int:
     """Effective rendered depth: stored, clamped to [min_depth, 6].
 

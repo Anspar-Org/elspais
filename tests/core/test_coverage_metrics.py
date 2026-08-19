@@ -399,7 +399,7 @@ class TestImplementedExcludesTestVerifies:
     Implemented = CODE evidence only (Implements refs, conducted, or inherited)
     per REQ-d00084-D. A `Verifies:` reference is TEST evidence: it populates the
     `tested` dimension, never `implemented`. This keeps the Implemented-vs-Tested
-    distinction that REQ-d00258-B rests on. (Regression: test Verifies used to
+    distinction that REQ-d00258-K rests on. (Regression: test Verifies used to
     leak into implemented via CoverageSource.DIRECT.)
     """
 

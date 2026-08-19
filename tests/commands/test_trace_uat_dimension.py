@@ -251,7 +251,7 @@ class TestUATColumns:
                 assert col not in row, f"Code column '{col}' should be excluded; row: {row}"
 
     def test_markdown_header_has_uat_coverage(self, mixed_graph, uat_preset):
-        """Markdown UAT header must include 'UAT Covered' column (REQ-d00258-B)."""
+        """Markdown UAT header must include 'UAT Covered' column (REQ-d00258-K)."""
         from elspais.commands.trace import format_markdown
 
         lines = list(format_markdown(mixed_graph, uat_preset))

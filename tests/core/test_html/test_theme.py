@@ -165,7 +165,7 @@ class TestComputeValidationColorCatalog:
         expected_entry = catalog.by_key("coverage_standing.failing")
 
         # A/B both implemented and tested; the Passing dim FAILS on A (within the
-        # tested denominator) -> relative 'failing' tier -> red (REQ-d00258-B).
+        # tested denominator) -> relative 'failing' tier -> red (REQ-d00258-D).
         rollup = RollupMetrics(
             total_assertions=2,
             implemented=CoverageDimension(

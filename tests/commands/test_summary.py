@@ -709,11 +709,11 @@ class TestSummaryIntegrations:
         # must count toward with_code_refs (implemented requirements).
         assert dev_levels[0]["with_code_refs"] >= 1
 
-    # Verifies: REQ-d00252-F, REQ-d00258-B
-    def test_REQ_d00258_B_integrations_header_is_passing(self, tmp_path):
+    # Verifies: REQ-d00252-F, REQ-d00258-K
+    def test_REQ_d00258_K_integrations_header_is_passing(self, tmp_path):
         """The External integrations column header reads 'Passing', not the
         old 'verified (no lcov)' -- the figures come from tested_and_passing()
-        and the permitted display terms (REQ-d00258-B) name that dimension
+        and the permitted display terms (REQ-d00258-K) name that dimension
         'Passing', so the vocabulary matches the rest of the report."""
         fed = _federate_integrates(tmp_path)
         data = collect_coverage(fed, config=None)
@@ -1189,12 +1189,12 @@ class TestSummaryCarriedFootnote:
 
 
 # ===========================================================================
-# Verifies: REQ-d00258-A, REQ-d00258-B, REQ-d00258-C
+# Verifies: REQ-d00258-A, REQ-d00258-K, REQ-d00258-C
 # ===========================================================================
 
 
 class TestSummaryFooting:
-    """Verifies REQ-d00258-A/B/C: shared aggregation, the per-*Assertion*
+    """Verifies REQ-d00258-A/K/C: shared aggregation, the per-*Assertion*
     total as headline, and the Implemented/Tested/Passing vocabulary (no
     "Validated")."""
 
@@ -1334,7 +1334,7 @@ class TestTestedBreakdown:
 
         tested_line = next(ln for ln in output.splitlines() if "Tested:" in ln)
         assert "[1 passed, 1 failed, 1 awaiting a result]" in tested_line
-        # REQ-d00258-B: no new coverage display term appears alongside it.
+        # REQ-d00258-K: no new coverage display term appears alongside it.
         assert "Awaiting:" not in output
         assert "Failed:" not in output
 

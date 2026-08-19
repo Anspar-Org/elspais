@@ -184,6 +184,7 @@ class RequirementTransformer:
     # Requirement transformation
     # ------------------------------------------------------------------
 
+    # Implements: REQ-d00250-A
     def _transform_requirement(self, node: Tree) -> ParsedContent:
         """Transform a requirement tree node into ParsedContent."""
         header_token = node.children[0]  # REQ_HEADER

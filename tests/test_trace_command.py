@@ -86,7 +86,7 @@ class TestTraceCommand:
         ):
             assert f"tested{suffix}" in item
             assert f"implemented{suffix}" in item
-        # code_tested/lcov_tested are outside the REQ-d00258-B vocabulary
+        # code_tested/lcov_tested are outside the REQ-d00258-K vocabulary
         # and carry no measure split.
         assert "code_tested_immediate_direct" not in item
 
@@ -497,7 +497,7 @@ def _verified_cell(markdown_text, req_id):
     """Return the stripped 'Passing' column cell for the row containing req_id.
 
     The column is still keyed "verified" in the data dict, but its display
-    header is "Passing" (REQ-d00258-B).
+    header is "Passing" (REQ-d00258-K).
     """
     lines = markdown_text.splitlines()
     header_line = next((line for line in lines if line.startswith("| ID")), None)
@@ -1046,7 +1046,7 @@ def marker_carried_project(tmp_path):
 
 
 class TestTraceFooting:
-    """Verifies REQ-d00258-A, REQ-d00258-B, REQ-d00258-E, REQ-d00258-J:
+    """Verifies REQ-d00258-A, REQ-d00258-K, REQ-d00258-E, REQ-d00258-J:
     dimensions headline the per-*Assertion* TOTAL (REQ-d00069-N) with the
     four measures behind it published as their own columns rather than a
     caveat marker, the reporting vocabulary reads Passing/UAT Covered/UAT
@@ -1076,7 +1076,7 @@ class TestTraceFooting:
         indirect_str = fmt_assertion_count(dim.covered)
         assert data["verified_immediate_indirect"].startswith(f"{indirect_str}/")
 
-    # Verifies: REQ-d00258-B
+    # Verifies: REQ-d00258-K
     def test_headers_use_passing_vocabulary(self):
         from elspais.commands.trace import _column_headers
 

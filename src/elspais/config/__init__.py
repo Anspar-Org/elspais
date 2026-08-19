@@ -115,6 +115,7 @@ def status_expects_implementation(config: dict[str, Any], status: str | None) ->
 CURRENT_CONFIG_VERSION = 4
 
 
+# Implements: REQ-d00212-N
 def _migrate_v3_to_v4(config: dict) -> dict:
     """Move flat terms severity fields into nested [terms.severity].
 

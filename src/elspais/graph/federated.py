@@ -372,6 +372,7 @@ class FederatedGraph:
     # Comment Routing (Implements: REQ-d00230-B)
     # ─────────────────────────────────────────────────────────────────────────
 
+    # Implements: REQ-d00230-B
     def iter_comments(self, anchor: str) -> Iterator[CommentThread]:
         """Yield comment threads for an anchor, routed to owning repo."""
         from elspais.graph.comment_store import parse_anchor
@@ -2168,6 +2169,7 @@ class FederatedGraph:
         self._ownership = self._build_ownership(list(self._repos.values()))
 
     @staticmethod
+    # Implements: REQ-d00202-H
     def _build_ownership(repos: list[RepoEntry]) -> dict[str, str]:
         """Map every node id to the repository holding it.
 

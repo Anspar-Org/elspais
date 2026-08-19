@@ -1530,7 +1530,7 @@ def _downgrade_retired_findings(
 # =============================================================================
 
 
-# Implements: REQ-d00223-A
+# Implements: REQ-d00223-A, REQ-d00223-D
 def check_term_duplicates(
     duplicates: list[tuple],
     severity: str = "error",
@@ -1578,7 +1578,7 @@ def check_term_duplicates(
     )
 
 
-# Implements: REQ-d00223-B
+# Implements: REQ-d00223-B, REQ-d00223-D
 def check_undefined_terms(
     undefined: list[dict],
     severity: str = "warning",
@@ -1622,7 +1622,7 @@ def check_undefined_terms(
     )
 
 
-# Implements: REQ-d00223-C
+# Implements: REQ-d00223-C, REQ-d00223-D
 def check_unmarked_usage(
     unmarked: list[dict],
     severity: str = "warning",
@@ -2786,7 +2786,7 @@ def check_whole_req_only_coverage(graph, config=None) -> HealthCheck:
 
 
 # The display word for each end of a chain, so a finding reads in the
-# vocabulary REQ-d00258-B permits, for every surface, rather than in dimension
+# vocabulary REQ-d00258-K permits, for every surface, rather than in dimension
 # field names.
 _DIMENSION_WORD: dict[str, str] = {
     "implemented": "Implemented",

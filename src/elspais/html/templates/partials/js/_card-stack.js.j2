@@ -2354,6 +2354,7 @@ function toggleTermRefs(cardId) {
     saveState();
 }
 
+// Implements: REQ-d00244-C
 function buildTermCardHtml(cardId, data, collapsed) {
     var collapsedClass = collapsed ? ' collapsed' : '';
     var focusedClass = editState.openCardOrder[0] === cardId ? ' focused' : '';
