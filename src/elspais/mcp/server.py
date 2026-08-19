@@ -6289,7 +6289,7 @@ def create_server(
         Use when: you have search results and want to eliminate redundant parent
         requirements already covered by their children in the list.
         """
-        # REQ-d00077-F: Parse edge_kinds string to EdgeKind set
+        # Implements: REQ-d00077-F
         parsed_kinds: set[EdgeKind] = set()
         for kind_str in edge_kinds.split(","):
             kind_str = kind_str.strip().lower()
@@ -6318,6 +6318,7 @@ def create_server(
         Prefer discover_requirements() when you want only the most-specific
         (leaf-level) matches with ancestors pruned out.
         """
+        # Implements: REQ-d00078-F
         return _scoped_search(
             _state["graph"], query, scope_id, direction, field, regex, include_assertions, limit
         )
@@ -6340,7 +6341,7 @@ def create_server(
         searches descendants of scope_id, then prunes ancestor matches that are
         superseded by more-specific descendants.
         """
-        # REQ-d00079-D: Parse edge_kinds and delegate
+        # Implements: REQ-d00079-D
         parsed_kinds: set[EdgeKind] = set()
         for kind_str in edge_kinds.split(","):
             kind_str = kind_str.strip().lower()

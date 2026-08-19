@@ -1,8 +1,6 @@
 """
 elspais.commands.summary - Coverage summary report section.
 
-# Implements: REQ-d00086-A+B+C+D
-
 Produces a coverage summary showing Implemented/Tested/Passing status
 aggregated by level (PRD, OPS, DEV), plus an External integrations table when
 `Integrates:` references are present. UAT Covered/UAT Passed are not among
@@ -27,7 +25,7 @@ from elspais.graph.aggregation import collect_coverage
 from elspais.graph.metrics import fmt_assertion_count
 
 
-# Implements: REQ-d00085-A
+# Implements: REQ-d00085-A, REQ-d00086-A+B+C+D
 def render_section(
     graph: FederatedGraph,
     args: argparse.Namespace,
