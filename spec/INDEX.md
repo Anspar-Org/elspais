@@ -192,7 +192,7 @@
 | REQ-d00275 | Whose Configuration Governs a Federated Answer                | dev-graph-federation.md | 9ab2ef7c |
 | REQ-d00276 | Tests Outside the Requirement Estate                          | dev-graph-core.md       | 922d1382 |
 | REQ-d00277 | Coverage Dimensions                                           | dev-graph-core.md       | b097dcd7 |
-| REQ-d00278 | Report Scope Selection Vocabulary                             | dev-cli.md              | 0368ac23 |
+| REQ-d00278 | Report Scope Selection Vocabulary                             | dev-cli.md              | ef2221cc |
 | REQ-d00279 | One Authority for Report Scope Membership                     | dev-cli.md              | f103db89 |
 | REQ-d00280 | Named Report Scopes                                           | dev-cli.md              | 26e2811c |
 
