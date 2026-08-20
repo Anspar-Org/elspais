@@ -10,6 +10,7 @@ traceability graph from parsed content.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterator
 from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
@@ -74,6 +75,67 @@ def _canonicalize_list_spacing(text: str) -> str:
 # Default satellite kinds: children of these types don't count as "meaningful"
 # for determining root vs orphan status. Configurable via [graph].satellite_kinds.
 _DEFAULT_SATELLITE_KINDS = frozenset({NodeKind.ASSERTION, NodeKind.RESULT})
+
+
+# Implements: REQ-o00062-U
+def _refuse_render_hostile(text: str, field: str, *, headings: bool = True) -> None:
+    """Refuse content whose rendered lines the parser reads as structure.
+
+    A stored line the grammar reads as an End marker (or, inside an
+    assertion block, a section header) changes what the surrounding
+    requirement IS on the next parse, so it cannot be content.
+    """
+    from elspais.graph.render import parse_end_marker
+
+    for line in text.splitlines():
+        stripped = line.strip()
+        if parse_end_marker(stripped) is not None:
+            raise ValueError(f"{field} must not contain an End-marker line: {stripped!r}")
+        if headings and re.match(r"#{1,6}\s", stripped):
+            raise ValueError(f"{field} must not contain a heading line: {stripped!r}")
+
+
+# Implements: REQ-o00062-U
+def _refuse_title_hostile(title: str) -> None:
+    """Refuse a title the render round-trip cannot carry.
+
+    The End marker spells the title between ``*`` markers, so a ``*`` inside
+    one ends the title early and the stored hash is lost on reparse; a
+    newline truncates the header line to its first line.
+    """
+    if "*" in title:
+        raise ValueError(f"Title must not contain '*': {title!r}")
+    if "\n" in title or "\r" in title:
+        raise ValueError("Title must not contain a line break")
+
+
+# Implements: REQ-o00062-U
+# The two heading words the requirement grammar claims for itself, in the
+# tolerance it reads them with (optional emphasis wrap, optional trailing
+# punctuation). A section stored under either is not a section on reparse.
+_RESERVED_SECTION_HEADINGS = re.compile(
+    r"^(?:\*\*|\*|_)?(assertions|changelog)(?:\*\*|\*|_)?[:.]?$", re.IGNORECASE
+)
+
+
+def _refuse_heading_hostile(heading: str) -> None:
+    if "\n" in heading or "\r" in heading:
+        raise ValueError("Section heading must not contain a line break")
+    if _RESERVED_SECTION_HEADINGS.match(heading.strip()):
+        raise ValueError(
+            f"Section heading {heading!r} is reserved: the parser reads it as "
+            "the requirement's own Assertions/Changelog block"
+        )
+
+
+# Implements: REQ-o00062-V
+# The edge kinds that ARE a node's placement rather than its traceability.
+# Severing or rewriting one detaches content from the structure that renders
+# it; the mutations that change placement (move, delete of the content) are
+# the doors for that.
+_PLACEMENT_EDGE_KINDS = frozenset(
+    {EdgeKind.CONTAINS, EdgeKind.STRUCTURES, EdgeKind.INSTANCE, EdgeKind.DEFINES}
+)
 
 
 @dataclass
@@ -1338,7 +1400,8 @@ class TraceGraph:
 
         Args:
             node_id: The node ID to update.
-            new_title: The new title.
+            new_title: The new title. Refused when the render round-trip
+                cannot carry it (REQ-o00062-U).
 
         Returns:
             MutationEntry recording the operation.
@@ -1346,6 +1409,7 @@ class TraceGraph:
         Raises:
             KeyError: If node_id is not found.
         """
+        _refuse_title_hostile(new_title)
         if node_id not in self._index:
             raise KeyError(f"Node '{node_id}' not found")
 
@@ -1538,6 +1602,7 @@ class TraceGraph:
         """
         from elspais.utilities.hasher import calculate_hash
 
+        _refuse_title_hostile(title)
         if req_id in self._index:
             raise ValueError(f"Node '{req_id}' already exists")
         if parent_id and parent_id not in self._index:
@@ -1615,6 +1680,9 @@ class TraceGraph:
             raise KeyError(f"Node '{node_id}' not found")
 
         node = self._index[node_id]
+        # Implements: REQ-o00062-V
+        if node.kind != NodeKind.REQUIREMENT:
+            raise ValueError(f"Node '{node_id}' is not a requirement")
         was_root = node in self._roots
 
         # Record state before deletion. The FILE node's id is recorded
@@ -1828,6 +1896,7 @@ class TraceGraph:
             KeyError: If assertion_id is not found.
             ValueError: If the node is not an assertion.
         """
+        _refuse_render_hostile(new_text, "Assertion text")
         if assertion_id not in self._index:
             raise KeyError(f"Assertion '{assertion_id}' not found")
 
@@ -1958,6 +2027,7 @@ class TraceGraph:
             ValueError: If req_id is not a requirement, or the label series
                 is exhausted (REQ-o00062-S).
         """
+        _refuse_render_hostile(text, "Assertion text")
         if req_id not in self._index:
             raise KeyError(f"Requirement '{req_id}' not found")
 
@@ -2275,6 +2345,14 @@ class TraceGraph:
         if edge_to_update is None:
             raise ValueError(f"No edge exists from '{target_id}' to '{source_id}'")
 
+        # Implements: REQ-o00062-V
+        if edge_to_update.kind in _PLACEMENT_EDGE_KINDS or new_kind in _PLACEMENT_EDGE_KINDS:
+            raise ValueError(
+                "Edge kind changes are for traceability edges: a "
+                f"{edge_to_update.kind.value} -> {new_kind.value} rewrite would "
+                "detach content from the structure that renders it"
+            )
+
         old_kind = edge_to_update.kind
 
         entry = MutationEntry(
@@ -2407,6 +2485,13 @@ class TraceGraph:
         if edge_to_delete is None:
             raise ValueError(f"No edge exists from '{target_id}' to '{source_id}'")
 
+        # Implements: REQ-o00062-V
+        if edge_to_delete.kind in _PLACEMENT_EDGE_KINDS:
+            raise ValueError(
+                f"Cannot delete a {edge_to_delete.kind.value} edge: it places "
+                "content in its structure. Move or delete the content instead."
+            )
+
         entry = MutationEntry(
             operation="delete_edge",
             target_id=source_id,
@@ -2466,6 +2551,13 @@ class TraceGraph:
         """
         if node_id not in self._index:
             raise KeyError(f"Node '{node_id}' not found")
+        # Implements: REQ-o00062-V
+        _moved = self._index[node_id]
+        if _moved.kind not in (NodeKind.REQUIREMENT, NodeKind.USER_JOURNEY):
+            raise ValueError(
+                f"Cannot move a {_moved.kind.value} node between files: only "
+                "requirements and journeys are file-level content"
+            )
         if target_file_id not in self._index:
             raise KeyError(f"Target file '{target_file_id}' not found")
 
@@ -3085,6 +3177,10 @@ class TraceGraph:
             KeyError: If node_id not found.
             ValueError: If not a REMAINDER or is a definition_block.
         """
+        if heading is not None:
+            _refuse_heading_hostile(heading)
+        if text is not None:
+            _refuse_render_hostile(text, "Section text", headings=False)
         if node_id not in self._index:
             raise KeyError(f"Node '{node_id}' not found")
 
@@ -3153,6 +3249,8 @@ class TraceGraph:
             KeyError: If req_id not found.
             ValueError: If req_id is not a requirement.
         """
+        _refuse_heading_hostile(heading)
+        _refuse_render_hostile(text, "Section text", headings=False)
         if req_id not in self._index:
             raise KeyError(f"Requirement '{req_id}' not found")
 
@@ -3314,6 +3412,16 @@ class TraceGraph:
             ValueError: If journey_id already exists.
             KeyError: If file_id is not found.
         """
+        # Implements: REQ-o00062-U
+        # The journey header line is grammar: an id outside its shape makes
+        # the whole block loose text on the next parse.
+        from elspais.graph.parsers.patterns import JNY_ID_PATTERN
+
+        if not JNY_ID_PATTERN.match(journey_id):
+            raise ValueError(
+                f"Invalid journey id {journey_id!r}: expected JNY-<descriptor>-<number>"
+            )
+        _refuse_title_hostile(title)
         if journey_id in self._index:
             raise ValueError(f"Node '{journey_id}' already exists")
         if file_id not in self._index:

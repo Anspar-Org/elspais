@@ -511,7 +511,7 @@ class TestUndoRestoresRenderedText:
         before_text = render.render_file(spec_file, resolver=grammar_for("REQ"))
         before_version = node_version(spec_file)
 
-        private_graph.delete_edge(source_id="REQ-d00001", target_id=SPEC_FILE)
+        private_graph.move_node_to_file("REQ-d00001", make_file_id(NAMESPACE, "spec/prd-core.md"))
         private_graph.undo_last()
 
         restored = private_graph.find_by_id(SPEC_FILE)

@@ -627,6 +627,18 @@ class FederatedGraph:
         return self._repos[repo_name].repo_root
 
     # Implements: REQ-d00200-G
+    @property
+    def root_config(self) -> dict[str, Any] | None:
+        """The invoking repository's config -- the grammar of new content.
+
+        A node being created has no owner yet; it is added to the root repo,
+        so the root repo's configuration is what validates its identifier.
+
+        # Strategy: special
+        """
+        entry = self._repos.get(self._root_repo)
+        return entry.config if entry else None
+
     def config_for(self, node_id: str) -> dict[str, Any] | None:
         """Return the config dict for the repo owning node_id.
 

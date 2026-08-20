@@ -277,6 +277,24 @@ class TestMutateChangeStatus:
         assert "mutation" in result
         assert result["mutation"]["operation"] == "change_status"
 
+    # Verifies: REQ-o00062-U
+    # The single-word positive control is test_delegates_to_graph_change_status
+    # above ("Deprecated" succeeds).
+    @pytest.mark.parametrize("bad_status", ["In Progress", "Done!"])
+    def test_refuses_multi_word_status(self, mutation_graph, bad_status):
+        """A status the parser cannot read back as one word is refused before
+        delegation, naming the violated constraint."""
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _mutate_change_status
+
+        result = _mutate_change_status(mutation_graph, "REQ-p00001", bad_status)
+
+        assert result["success"] is False
+        assert "single word" in result["error"]
+        assert bad_status in result["error"]
+        node = mutation_graph.find_by_id("REQ-p00001")
+        assert node.status == "Active"
+
 
 class TestMutateAddRequirement:
     """Tests for mutate_add_requirement() tool."""
@@ -317,6 +335,101 @@ class TestMutateAddRequirement:
 
         assert "mutation" in result
         assert result["mutation"]["operation"] == "add_requirement"
+
+    # Verifies: REQ-d00205-C
+    def test_id_grammar_cannot_read_is_refused(self, mutation_graph):
+        """An id the root repo's grammar cannot read is refused, not stored."""
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _mutate_add_requirement
+
+        result = _mutate_add_requirement(
+            _federate(mutation_graph),
+            req_id="BANANA-42",
+            title="Unreadable Id",
+            level="dev",
+        )
+
+        assert result["success"] is False
+        assert "Invalid requirement id" in result["error"]
+        # Nothing was added under the refused spelling.
+        assert mutation_graph.find_by_id("BANANA-42") is None
+
+    # Verifies: REQ-d00205-C
+    def test_variant_id_spelling_stored_canonically_with_disclosure(self, mutation_graph):
+        """A variant spelling the grammar admits is stored canonically.
+
+        Matching admits case and padding variation, rendering emits the one
+        canonical spelling, and the rewrite is disclosed in the message.
+        """
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _mutate_add_requirement
+
+        result = _mutate_add_requirement(
+            _federate(mutation_graph),
+            req_id="req-P00077",
+            title="Variant Spelling",
+            level="prd",
+        )
+
+        assert result["success"] is True
+        assert mutation_graph.find_by_id("REQ-p00077") is not None
+        # The given spelling must not survive alongside the canonical one.
+        assert mutation_graph.find_by_id("req-P00077") is None
+        assert "(normalized: req-P00077 -> REQ-p00077)" in result["message"]
+
+    # Verifies: REQ-o00062-U
+    def test_refuses_multi_word_status(self, mutation_graph):
+        """A status the parser cannot read back as one word is refused, and
+        nothing is stored."""
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _mutate_add_requirement
+
+        result = _mutate_add_requirement(
+            mutation_graph,
+            req_id="REQ-d00043",
+            title="Bad Status",
+            level="DEV",
+            status="In Progress",
+        )
+
+        assert result["success"] is False
+        assert "single word" in result["error"]
+        assert mutation_graph.find_by_id("REQ-d00043") is None
+
+    # Verifies: REQ-o00062-U
+    def test_undeclared_level_is_refused_naming_declared_levels(self, mutation_graph):
+        """A level the project does not declare is refused, naming the levels."""
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _mutate_add_requirement
+
+        result = _mutate_add_requirement(
+            _federate(mutation_graph),
+            req_id="REQ-d00042",
+            title="Bad Level",
+            level="BANANA",
+        )
+
+        assert result["success"] is False
+        assert "Unknown level" in result["error"]
+        for declared in ("dev", "ops", "prd"):
+            assert declared in result["error"]
+        assert mutation_graph.find_by_id("REQ-d00042") is None
+
+    # Verifies: REQ-o00062-U
+    def test_level_membership_is_case_insensitive(self, mutation_graph):
+        """A display-case level is accepted against lowercase-keyed levels."""
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _mutate_add_requirement
+
+        result = _mutate_add_requirement(
+            _federate(mutation_graph),
+            req_id="REQ-d00043",
+            title="Display Case Level",
+            level="DEV",
+        )
+
+        assert result["success"] is True
+        assert mutation_graph.find_by_id("REQ-d00043") is not None
 
 
 class TestMutateDeleteRequirement:
@@ -1266,6 +1379,61 @@ class TestMutateRenameFile:
 
         assert result["success"] is False
         assert "error" in result
+
+    # Verifies: REQ-o00062-M
+    @pytest.mark.parametrize(
+        "bad_path",
+        [
+            "../escape.md",
+            "/etc/evil.md",
+            # validate_new_spec_path sees this as under spec/ and matching
+            # *.md, so the '..'-segment guard is the ONLY defense here.
+            "spec/../../evil.md",
+        ],
+    )
+    def test_traversal_or_absolute_path_refused(self, file_graph, bad_path):
+        """A path with '..' segments or an absolute path is refused."""
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _mutate_rename_file
+
+        result = _mutate_rename_file(file_graph, file_id("spec/main.md"), bad_path)
+
+        assert result["success"] is False
+        assert "must not contain '..' or be absolute" in result["error"]
+        # The file was not renamed.
+        assert file_graph.find_by_id(file_id("spec/main.md")) is not None
+
+    # Verifies: REQ-o00062-M
+    def test_path_outside_spec_tree_refused(self, file_graph):
+        """A destination outside the configured spec directories is refused."""
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _mutate_rename_file
+
+        result = _mutate_rename_file(
+            _federate(file_graph), file_id("spec/main.md"), "src/notaspec.md"
+        )
+
+        assert result["success"] is False
+        assert "not under any configured spec directory" in result["error"]
+        assert file_graph.find_by_id(file_id("spec/main.md")) is not None
+
+    # Verifies: REQ-o00062-M
+    def test_legitimate_rename_passes_spec_path_validation(self, file_graph):
+        """A rename inside the configured spec tree passes the path guard.
+
+        The bare-graph success test above never reaches
+        validate_new_spec_path (no config); this one does, so it fails if
+        the guard starts over-refusing legitimate destinations.
+        """
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _mutate_rename_file
+
+        result = _mutate_rename_file(
+            _federate(file_graph), file_id("spec/main.md"), "spec/renamed.md"
+        )
+
+        assert result["success"] is True
+        assert file_graph.find_by_id(file_id("spec/renamed.md")) is not None
 
 
 # ─────────────────────────────────────────────────────────────────────────────

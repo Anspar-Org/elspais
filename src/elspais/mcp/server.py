@@ -3227,6 +3227,17 @@ def _mutate_change_status(graph: FederatedGraph, node_id: str, new_status: str) 
     REQ-o00062-E: Returns MutationEntry for audit.
     """
     try:
+        # Implements: REQ-o00062-U
+        # The status field's grammar carries one word: a value the parser
+        # cannot read back renders a file that fails to build at all.
+        if not re.fullmatch(r"\w+", new_status):
+            return {
+                "success": False,
+                "error": (
+                    f"Invalid status {new_status!r}: a status is a single word "
+                    "(letters, digits, underscore)"
+                ),
+            }
         entry = graph.change_status(node_id, new_status)
         return {
             "success": True,
@@ -3296,6 +3307,41 @@ def _mutate_add_requirement(
     REQ-o00062-E: Returns MutationEntry for audit.
     """
     try:
+        note = ""
+        # Implements: REQ-o00062-U
+        # A new requirement is added to the root repo, so the root repo's
+        # grammar is what its identifier must satisfy (REQ-d00205-C); the
+        # status and level fields carry one grammar word each, and a level
+        # the project does not declare belongs to no hierarchy.
+        config = getattr(graph, "root_config", None)
+        if config:
+            resolver = build_resolver(config)
+            canonical = resolver.to_canonical(resolver.normalize_ref(req_id))
+            if canonical is None:
+                return {
+                    "success": False,
+                    "error": (
+                        f"Invalid requirement id {req_id!r}: does not match "
+                        "this repository's identifier grammar"
+                    ),
+                }
+            if canonical != req_id:
+                note = _normalization_note([req_id], [canonical])
+                req_id = canonical
+            levels = config.get("levels") or {}
+            if levels and level.casefold() not in {k.casefold() for k in levels}:
+                return {
+                    "success": False,
+                    "error": (f"Unknown level {level!r}: this project declares {sorted(levels)}"),
+                }
+        if not re.fullmatch(r"\w+", status):
+            return {
+                "success": False,
+                "error": (
+                    f"Invalid status {status!r}: a status is a single word "
+                    "(letters, digits, underscore)"
+                ),
+            }
         # Convert edge_kind string to EdgeKind enum if provided
         edge_kind_enum = None
         if edge_kind:
@@ -3312,7 +3358,7 @@ def _mutate_add_requirement(
         return {
             "success": True,
             "mutation": _serialize_mutation_entry(entry),
-            "message": f"Added requirement {req_id}",
+            "message": f"Added requirement {req_id}{note}",
         }
     except (ValueError, KeyError) as e:
         return {"success": False, "error": str(e)}
@@ -3863,6 +3909,26 @@ def _mutate_rename_file(
     REQ-d00065-D: Only parameter validation and delegation.
     """
     try:
+        # Implements: REQ-o00062-M
+        # Same path rules as mutate_move_node_to_file: the rename writes to
+        # disk at save, so the destination must stay inside the repository
+        # and inside the configured spec tree.
+        from elspais.utilities.spec_paths import validate_new_spec_path
+
+        if ".." in new_relative_path.split("/") or new_relative_path.startswith("/"):
+            return {
+                "success": False,
+                "error": "Invalid path: must not contain '..' or be absolute",
+            }
+        config = _config_for_node(graph, file_id)
+        if config:
+            path_error = validate_new_spec_path(new_relative_path, config)
+            if path_error:
+                return {"success": False, "error": path_error}
+        if repo_root is not None:
+            target = (repo_root / new_relative_path).resolve()
+            if not target.is_relative_to(repo_root.resolve()):
+                return {"success": False, "error": "Path escapes repository root"}
         entry = graph.rename_file(file_id, new_relative_path, repo_root)
         new_id = entry.after_state.get("id", "")
         return {

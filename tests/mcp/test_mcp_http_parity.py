@@ -104,7 +104,7 @@ PARITY_TOOL_CALLS = [
     (
         "mutate_add_journey",
         JOURNEY_FILE,
-        {"journey_id": "JNY-900", "title": "Leaked Journey", "file_id": JOURNEY_FILE},
+        {"journey_id": "JNY-leaked-900", "title": "Leaked Journey", "file_id": JOURNEY_FILE},
     ),
     (
         "mutate_delete_journey",
@@ -428,8 +428,8 @@ class TestAddJourneyGuardsItsParentFile:
     journeys to one file therefore cannot both write blind.
     """
 
-    NEW_ID = "JNY-901"
-    SECOND_ID = "JNY-902"
+    NEW_ID = "JNY-reset-901"
+    SECOND_ID = "JNY-reset-902"
 
     def test_REQ_o00062_I_file_version_admits_the_first_journey(self, mutable_graph, tools):
         """REQ-o00062-I: The parent FILE's version is the accepted token."""

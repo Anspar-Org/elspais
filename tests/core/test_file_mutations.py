@@ -134,6 +134,21 @@ class TestMoveNodeToFile:
         with pytest.raises(ValueError):
             graph.move_node_to_file("REQ-p00001", "REQ-p00001")
 
+    # Verifies: REQ-o00062-V
+    def test_move_refuses_non_file_level_content(self):
+        """An ASSERTION is rendered by its requirement, not placed in a file;
+        moving one between files would detach it from that structure."""
+        graph = build_two_file_graph()
+        entry = graph.add_assertion("REQ-p00001", "SHALL hold")
+        assertion_id = entry.target_id
+
+        with pytest.raises(ValueError, match="Cannot move a assertion node"):
+            graph.move_node_to_file(assertion_id, make_file_id(NAMESPACE, "spec/other.md"))
+
+        # Still structured under its requirement, not the target file
+        parent = graph.find_by_id("REQ-p00001")
+        assert parent.has_child(graph.find_by_id(assertion_id))
+
     # Verifies: REQ-o00063-A
     def test_move_orphan_raises(self):
         """ValueError if node has no current FILE parent."""

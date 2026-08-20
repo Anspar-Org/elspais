@@ -241,6 +241,42 @@ class TestUpdateAssertion:
         with pytest.raises(ValueError, match="not an assertion"):
             graph.update_assertion("REQ-p00001", "New text")
 
+    # Verifies: REQ-o00062-U
+    def test_update_refuses_end_marker_line(self):
+        """Text carrying an End-marker line would end the requirement early on
+        reparse, so it is refused rather than stored."""
+        graph = build_graph_with_assertions()
+        original = graph.find_by_id("REQ-p00001-A").get_label()
+
+        with pytest.raises(ValueError, match="End-marker"):
+            graph.update_assertion(
+                "REQ-p00001-A", "SHALL do things\n*End* *Requirement with Assertions*"
+            )
+
+        assert graph.find_by_id("REQ-p00001-A").get_label() == original
+        assert len(graph.mutation_log) == 0
+
+    # Verifies: REQ-o00062-U
+    def test_update_refuses_heading_line(self):
+        """Text carrying a heading line reads back as a section header."""
+        graph = build_graph_with_assertions()
+
+        with pytest.raises(ValueError, match="heading"):
+            graph.update_assertion("REQ-p00001-A", "SHALL do things\n## Assertions")
+
+        assert len(graph.mutation_log) == 0
+
+    # Verifies: REQ-o00062-U
+    def test_update_accepts_benign_multiline_text(self):
+        """Ordinary continuation lines are content, not structure."""
+        graph = build_graph_with_assertions()
+
+        text = "SHALL do things\nacross several lines,\nnone of them structural."
+        entry = graph.update_assertion("REQ-p00001-A", text)
+
+        assert entry.operation == "update_assertion"
+        assert graph.find_by_id("REQ-p00001-A").get_label() == text
+
     # Verifies: REQ-o00062-E
     def test_update_changes_hash(self):
         """Updating assertion text changes parent hash."""
@@ -339,6 +375,28 @@ class TestAddAssertion:
             graph.add_assertion("REQ-p00001-A", "Text")
 
     # Verifies: REQ-o00062-S
+    # Verifies: REQ-o00062-U
+    def test_add_refuses_end_marker_line(self):
+        """New assertion text carrying an End-marker line is refused."""
+        graph = build_graph_with_assertions()
+
+        with pytest.raises(ValueError, match="End-marker"):
+            graph.add_assertion("REQ-p00001", "*End* *Anything*")
+
+        assert graph.find_by_id("REQ-p00001-D") is None
+        assert len(graph.mutation_log) == 0
+
+    # Verifies: REQ-o00062-U
+    def test_add_refuses_heading_line(self):
+        """New assertion text carrying a heading line is refused."""
+        graph = build_graph_with_assertions()
+
+        with pytest.raises(ValueError, match="heading"):
+            graph.add_assertion("REQ-p00001", "SHALL work\n### Rationale")
+
+        assert graph.find_by_id("REQ-p00001-D") is None
+        assert len(graph.mutation_log) == 0
+
     def test_REQ_o00062_S_exhausted_series_refuses_the_add(self):
         """REQ-o00062-S: a requirement filled to the end of its label series
         refuses the next add and creates no out-of-series label."""

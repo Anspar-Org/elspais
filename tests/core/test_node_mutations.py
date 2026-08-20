@@ -336,6 +336,29 @@ class TestUpdateTitle:
         graph.undo_last()
         assert graph.find_by_id("REQ-p00001").get_label() == original
 
+    # Verifies: REQ-o00062-U
+    def test_update_title_refuses_asterisk(self):
+        """A '*' in the title corrupts the End marker on reparse, so it is refused."""
+        graph = build_simple_graph()
+        original = graph.find_by_id("REQ-p00001").get_label()
+
+        with pytest.raises(ValueError, match="must not contain '\\*'"):
+            graph.update_title("REQ-p00001", "Broken *emphasis* title")
+
+        assert graph.find_by_id("REQ-p00001").get_label() == original
+        assert len(graph.mutation_log) == 0
+
+    # Verifies: REQ-o00062-U
+    @pytest.mark.parametrize("hostile", ["Two\nlines", "Carriage\rreturn"])
+    def test_update_title_refuses_line_break(self, hostile):
+        """A line break truncates the header line, so it is refused."""
+        graph = build_simple_graph()
+
+        with pytest.raises(ValueError, match="line break"):
+            graph.update_title("REQ-p00001", hostile)
+
+        assert len(graph.mutation_log) == 0
+
 
 class TestChangeStatus:
     """Tests for TraceGraph.change_status()."""
@@ -528,6 +551,21 @@ class TestAddRequirement:
         assert graph.root_count() == original_root_count + 1
         assert graph.has_root("REQ-p00099")
 
+    # Verifies: REQ-o00062-U
+    def test_add_requirement_refuses_hostile_title(self):
+        """A title the render round-trip cannot carry never enters the graph."""
+        graph = build_simple_graph()
+
+        with pytest.raises(ValueError, match="must not contain '\\*'"):
+            graph.add_requirement(
+                req_id="REQ-p00099",
+                title="A *starred* title",
+                level="PRD",
+            )
+
+        assert graph.find_by_id("REQ-p00099") is None
+        assert len(graph.mutation_log) == 0
+
 
 class TestDeleteRequirement:
     """Tests for TraceGraph.delete_requirement()."""
@@ -549,6 +587,18 @@ class TestDeleteRequirement:
 
         with pytest.raises(KeyError, match="not found"):
             graph.delete_requirement("REQ-nonexistent")
+
+    # Verifies: REQ-o00062-V
+    def test_delete_requirement_refuses_non_requirement(self):
+        """Deleting an ASSERTION through the requirement door would detach it
+        from the requirement that renders it; assertion deletion is the door."""
+        graph = build_graph_with_assertions()
+
+        with pytest.raises(ValueError, match="is not a requirement"):
+            graph.delete_requirement("REQ-p00001-A")
+
+        assert graph.find_by_id("REQ-p00001-A") is not None
+        assert len(graph.mutation_log) == 0
 
     # Verifies: REQ-o00062-A
     def test_delete_requirement_preserves_in_deleted_nodes(self):

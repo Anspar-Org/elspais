@@ -116,6 +116,10 @@ S. When a requirement's label series has no label left to assign, adding an *Ass
 
 T. A caller SHALL be able to add, retitle and remove the section markers that group a requirement's assertions, leaving the assertions themselves and their labels untouched.
 
+U. A mutation SHALL refuse input that would render into a form the parser reads back as a different structure, or fails to read at all, reporting the violated constraint rather than storing the value.
+
+V. A mutation SHALL refuse an operation that would detach content from the structure that renders it — the edges binding content to its file or a requirement's assertions to the requirement — where changing that structure is another mutation's purpose.
+
 ### Rationale
 
 In-memory mutations enable AI agents to draft requirement changes that can be reviewed before persisting. The undo system provides safety for exploratory editing.
@@ -128,6 +132,7 @@ A single daemon serves multiple concurrent writers — MCP agents and the viewer
 
 ### Changelog
 
+- 2026-08-19 | 31e8183f | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-10 | f11c79aa | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-10 | 0dfcea34 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-02 | e4b381e0 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -139,7 +144,7 @@ A single daemon serves multiple concurrent writers — MCP agents and the viewer
 - 2026-05-11 | ef63f424 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | ef63f424 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *MCP Graph Mutation Tools* | **Hash**: f11c79aa
+*End* *MCP Graph Mutation Tools* | **Hash**: 31e8183f
 ---
 
 ## REQ-o00063: MCP File Mutation Tools

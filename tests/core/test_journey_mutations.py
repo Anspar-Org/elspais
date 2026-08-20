@@ -169,6 +169,35 @@ class TestAddDeleteJourney:
                 "JNY-NEW-01", "New", make_file_id(CANONICAL_NAMESPACE, "nonexistent.md")
             )
 
+    # Verifies: REQ-o00062-U
+    @pytest.mark.parametrize("bad_id", ["JNY-SIGNUP", "REQ-p00001", "JNY-SIGN UP-01"])
+    def test_add_journey_refuses_malformed_id(self, bad_id):
+        """The journey header line is grammar: an id outside JNY-<descriptor>-<number>
+        makes the whole block loose text on the next parse."""
+        graph = build_journey_graph()
+
+        with pytest.raises(ValueError, match="Invalid journey id"):
+            graph.add_journey(
+                bad_id, "Title", make_file_id(CANONICAL_NAMESPACE, "spec/journeys.md")
+            )
+
+        assert len(graph.mutation_log) == 0
+
+    # Verifies: REQ-o00062-U
+    def test_add_journey_refuses_hostile_title(self):
+        """A title the render round-trip cannot carry is refused."""
+        graph = build_journey_graph()
+
+        with pytest.raises(ValueError, match="must not contain '\\*'"):
+            graph.add_journey(
+                "JNY-SIGNUP-01",
+                "Signup *fast*",
+                make_file_id(CANONICAL_NAMESPACE, "spec/journeys.md"),
+            )
+
+        assert graph.find_by_id("JNY-SIGNUP-01") is None
+        assert len(graph.mutation_log) == 0
+
     def test_delete_journey(self):
         graph = build_journey_graph()
         entry = graph.delete_journey("JNY-LOGIN-01")
