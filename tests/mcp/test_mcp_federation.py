@@ -233,33 +233,80 @@ class TestRefreshGraphSyncsConfig:
 class TestNodeSpecificConfig:
     """Validates REQ-d00205-C: Node-specific ops use per-repo config."""
 
+    # Verifies: REQ-d00205-C
     def test_REQ_d00205_C_normalize_targets_uses_graph_config(self):
-        """_normalize_assertion_targets uses the target node's repo config.
+        """_mutate_add_edge normalizes targets under the OWNING repo's config.
 
-        Validates REQ-d00205-C: When normalizing assertion targets for
-        an edge mutation, the config should come from graph.config_for(node_id)
-        rather than a global _state['config'].
+        Validates REQ-d00205-C: no config is passed to _mutate_add_edge --
+        production must resolve graph.config_for(target_id) itself. The
+        target lives in an ASSOCIATE repo whose namespace (ASSOC) the root
+        config (ROOT) cannot parse, so a regression to the global/root
+        config leaves the raw full assertion id on the edge and the test
+        fails.
         """
         pytest.importorskip("mcp")
-        from elspais.mcp.server import _normalize_assertion_targets
+        from elspais.mcp.server import _mutate_add_edge
+        from elspais.utilities.patterns import build_resolver
 
-        # Build a federation where root and associate have different configs
-        # but matching namespace (REQ) so IdResolver can parse IDs
-        root_cfg = _make_config(**{"project.name": "Root", "project.namespace": "REQ"})
-        assoc_cfg = _make_config(**{"project.name": "Assoc", "project.namespace": "REQ"})
-        fed = _make_two_repo_federation(root_config=root_cfg, assoc_config=assoc_cfg)
+        root_cfg = _make_config(**{"project.name": "Root", "project.namespace": "ROOT"})
+        assoc_cfg = _make_config(**{"project.name": "Assoc", "project.namespace": "ASSOC"})
 
-        # Get per-repo config via graph.config_for() — the correct pattern
-        # Note: use REQ-p00001 (root node, type 'p') since 'a' isn't a valid type letter
-        root_config_dict = fed.config_for("REQ-p00001")
-        assert root_config_dict is not None
-        result = _normalize_assertion_targets(
-            targets=["REQ-p00001-A"],
-            target_id="REQ-p00001",
-            config=root_config_dict,
+        # This is what makes the test discriminating: the root grammar
+        # cannot read the associate's assertion id at all, so only the
+        # associate's own config can produce the bare label.
+        assert build_resolver(root_cfg).parse("ASSOC-o00001-A") is None
+        assert build_resolver(assoc_cfg).parse("ASSOC-o00001-A") is not None
+
+        root_graph = _make_simple_graph(
+            "ROOT-p00001", "Root Requirement", "PRD", Path("/repo/root")
         )
-        # Should normalize "REQ-p00001-A" to just "A"
-        assert "A" in result
+        assoc_graph = _make_simple_graph(
+            "ASSOC-o00001", "Associate Target", "OPS", Path("/repo/associate")
+        )
+        # A second associate-owned node to be the edge source. Indexed
+        # BEFORE the FederatedGraph is built -- ownership is snapshotted
+        # at construction.
+        source = GraphNode(id="ASSOC-d00001", kind=NodeKind.REQUIREMENT, label="Associate Source")
+        source._content = {"level": "DEV", "status": "Active", "hash": "ccdd3344"}
+        assoc_graph._index["ASSOC-d00001"] = source
+
+        fed = FederatedGraph(
+            [
+                RepoEntry(
+                    name="root",
+                    graph=root_graph,
+                    config=root_cfg,
+                    repo_root=Path("/repo/root"),
+                ),
+                RepoEntry(
+                    name="associate",
+                    graph=assoc_graph,
+                    config=assoc_cfg,
+                    repo_root=Path("/repo/associate"),
+                    git_origin="https://github.com/org/associate.git",
+                ),
+            ],
+            root_repo="root",
+        )
+
+        result = _mutate_add_edge(
+            fed,
+            source_id="ASSOC-d00001",
+            target_id="ASSOC-o00001",
+            edge_kind="IMPLEMENTS",
+            assertion_targets=["ASSOC-o00001-A"],
+        )
+
+        assert result["success"] is True
+        target = fed.find_by_id("ASSOC-o00001")
+        edges = [
+            e
+            for e in target.iter_outgoing_edges()
+            if e.kind == EdgeKind.IMPLEMENTS and e.target.id == "ASSOC-d00001"
+        ]
+        assert len(edges) == 1
+        # Normalized to the bare label under the ASSOCIATE's grammar.
+        assert edges[0].assertion_targets == ["A"]
 
 
 # ─────────────────────────────────────────────────────────────────────────────

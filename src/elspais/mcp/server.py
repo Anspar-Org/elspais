@@ -101,7 +101,7 @@ from elspais.mcp.shared_state import (
     rebuild_shared_graph,
     report_shutdown_outcome,
 )
-from elspais.utilities.patterns import build_resolver
+from elspais.utilities.patterns import FederatedIdReader, build_resolver
 
 
 # Known schema fields (by alias and Python name) for filtering non-schema keys
@@ -3181,11 +3181,23 @@ def _mutate_rename_node(graph: FederatedGraph, old_id: str, new_id: str) -> dict
     REQ-o00062-E: Returns MutationEntry for audit.
     """
     try:
+        note = ""
+        # Implements: REQ-d00205-C
+        # A new identifier the owning repo's grammar parses is stored in its
+        # canonical spelling; one it does not parse (a journey id, or a shape
+        # the grammar has no opinion on) is stored as given.
+        config = _config_for_node(graph, old_id)
+        if config:
+            resolver = build_resolver(config)
+            canonical = resolver.to_canonical(resolver.normalize_ref(new_id))
+            if canonical and canonical != new_id:
+                note = _normalization_note([new_id], [canonical])
+                new_id = canonical
         entry = graph.rename_node(old_id, new_id)
         return {
             "success": True,
             "mutation": _serialize_mutation_entry(entry),
-            "message": f"Renamed {old_id} to {new_id}",
+            "message": f"Renamed {old_id} to {new_id}{note}",
         }
     except (ValueError, KeyError) as e:
         return {"success": False, "error": str(e)}
@@ -3505,11 +3517,24 @@ def _mutate_rename_assertion(graph: FederatedGraph, old_id: str, new_label: str)
     REQ-o00062-E: Returns MutationEntry for audit.
     """
     try:
+        note = ""
+        # Implements: REQ-d00205-C
+        # The label is stored bare and rendered verbatim, so a full assertion
+        # id or an admitted case variant is normalized to the canonical bare
+        # label of the owning repo's series before it is stored.
+        config = _config_for_node(graph, old_id)
+        if config:
+            split = build_resolver(config).split_assertion_ref(old_id)
+            if split:
+                candidate = _normalize_assertion_targets([new_label], split[0], config)[0]
+                if candidate != new_label:
+                    note = _normalization_note([new_label], [candidate])
+                    new_label = candidate
         entry = graph.rename_assertion(old_id, new_label)
         return {
             "success": True,
             "mutation": _serialize_mutation_entry(entry),
-            "message": f"Renamed assertion {old_id} to new label {new_label}",
+            "message": f"Renamed assertion {old_id} to new label {new_label}{note}",
         }
     except (ValueError, KeyError) as e:
         return {"success": False, "error": str(e)}
@@ -3569,6 +3594,34 @@ def _mutate_delete_remainder(graph: FederatedGraph, node_id: str) -> dict[str, A
 # ─────────────────────────────────────────────────────────────────────────────
 
 
+def _config_for_node(graph: Any, node_id: str) -> dict[str, Any] | None:
+    """The config of the repo owning node_id, or None where none is derivable.
+
+    # Implements: REQ-d00205-C
+    A graph without per-repo configs (a bare TraceGraph in tests) offers no
+    grammar to normalize under, and a node no repo owns has none either; the
+    caller then stores the input as given rather than guessing a grammar.
+    """
+    config_for = getattr(graph, "config_for", None)
+    if config_for is None:
+        return None
+    try:
+        return config_for(node_id)
+    except KeyError:
+        return None
+
+
+def _normalization_note(before: list[str], after: list[str]) -> str:
+    """A message suffix disclosing what normalization changed, or ''.
+
+    The stored form is system-composed, not the caller's prose, so when it
+    differs from what the caller wrote the mutation result says so.
+    """
+    if before == after:
+        return ""
+    return f" (normalized: {', '.join(before)} -> {', '.join(after)})"
+
+
 def _normalize_assertion_targets(
     targets: list[str], target_id: str, config: dict[str, Any]
 ) -> list[str]:
@@ -3581,11 +3634,24 @@ def _normalize_assertion_targets(
     resolver = build_resolver(config)
     normalized: list[str] = []
     for at in targets:
-        parsed = resolver.parse(at)
+        # A full assertion id of the target, in any admitted spelling
+        # (case, padding, notation) -- normalize_ref makes reading tolerant,
+        # to_canonical re-renders the one canonical form.
+        parsed = resolver.parse(resolver.normalize_ref(at))
         if parsed and parsed.assertions and parsed.fqn == target_id:
             normalized.extend(parsed.assertions)
-        else:
-            normalized.append(at)
+            continue
+        # A bare label: canonicalize its case under the target's series by
+        # composing the full id and reading it back through the same grammar.
+        composed = resolver.to_canonical(
+            resolver.normalize_ref(resolver.make_assertion_id(target_id, at))
+        )
+        if composed:
+            reparsed = resolver.parse(composed)
+            if reparsed and reparsed.assertions and reparsed.fqn == target_id:
+                normalized.extend(reparsed.assertions)
+                continue
+        normalized.append(at)
     return normalized
 
 
@@ -3595,7 +3661,6 @@ def _mutate_add_edge(
     target_id: str,
     edge_kind: str,
     assertion_targets: list[str] | None = None,
-    config: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Add an edge between nodes.
 
@@ -3603,8 +3668,18 @@ def _mutate_add_edge(
     REQ-o00062-E: Returns MutationEntry for audit.
     """
     try:
-        if assertion_targets and config:
-            assertion_targets = _normalize_assertion_targets(assertion_targets, target_id, config)
+        note = ""
+        if assertion_targets:
+            # Implements: REQ-d00205-C
+            # The targets are labels of the TARGET requirement, so the grammar
+            # that reads them is the one of the repo owning that requirement.
+            config = _config_for_node(graph, target_id)
+            if config:
+                given = list(assertion_targets)
+                assertion_targets = _normalize_assertion_targets(
+                    assertion_targets, target_id, config
+                )
+                note = _normalization_note(given, assertion_targets)
         edge_kind_enum = EdgeKind[edge_kind.upper()]
         entry = graph.add_edge(
             source_id=source_id,
@@ -3615,7 +3690,7 @@ def _mutate_add_edge(
         return {
             "success": True,
             "mutation": _serialize_mutation_entry(entry),
-            "message": f"Added edge {source_id} --[{edge_kind}]--> {target_id}",
+            "message": f"Added edge {source_id} --[{edge_kind}]--> {target_id}{note}",
         }
     except (ValueError, KeyError) as e:
         return {"success": False, "error": str(e)}
@@ -3657,12 +3732,25 @@ def _mutate_change_edge_targets(
     REQ-o00062-E: Returns MutationEntry for audit.
     """
     try:
+        note = ""
+        if assertion_targets:
+            # Implements: REQ-d00205-C
+            # Same normalization as _mutate_add_edge: the labels belong to the
+            # TARGET requirement, and render spells the stored label verbatim,
+            # so an unnormalized full ID would reach the file corrupted.
+            config = _config_for_node(graph, target_id)
+            if config:
+                given = list(assertion_targets)
+                assertion_targets = _normalize_assertion_targets(
+                    assertion_targets, target_id, config
+                )
+                note = _normalization_note(given, assertion_targets)
         entry = graph.change_edge_targets(source_id, target_id, assertion_targets)
         if assertion_targets:
             targets_display = ", ".join(assertion_targets)
         else:
             targets_display = "(whole requirement)"
-        msg = f"Changed targets on {source_id} -> {target_id}: {targets_display}"
+        msg = f"Changed targets on {source_id} -> {target_id}: {targets_display}{note}"
         return {
             "success": True,
             "mutation": _serialize_mutation_entry(entry),
@@ -3712,11 +3800,31 @@ def _mutate_fix_broken_reference(
     REQ-o00062-E: Returns MutationEntry for audit.
     """
     try:
+        note = ""
+        # Implements: REQ-d00205-C
+        # The new target is system-composed content: it is stored and later
+        # rendered verbatim, so it is normalized under the grammar of the
+        # member that claims it -- which cannot be found by ownership lookup,
+        # since a variant spelling owns no index entry. FederatedIdReader is
+        # the one authority for reading an identifier across members; a
+        # reference no member claims stays as given, so the reference remains
+        # broken and is reported, not silently respelled.
+        resolvers = [
+            build_resolver(entry.config)
+            for entry in getattr(graph, "iter_repos", lambda: [])()
+            if getattr(entry, "config", None)
+        ]
+        if resolvers:
+            reader = FederatedIdReader(resolvers[0], resolvers[1:])
+            canonical = reader.normalize(new_target_id)
+            if canonical != new_target_id:
+                note = _normalization_note([new_target_id], [canonical])
+                new_target_id = canonical
         entry = graph.fix_broken_reference(source_id, old_target_id, new_target_id)
         return {
             "success": True,
             "mutation": _serialize_mutation_entry(entry),
-            "message": f"Fixed reference {source_id}: {old_target_id} -> {new_target_id}",
+            "message": f"Fixed reference {source_id}: {old_target_id} -> {new_target_id}{note}",
         }
     except (ValueError, KeyError) as e:
         return {"success": False, "error": str(e)}
@@ -7071,7 +7179,6 @@ def create_server(
                 target_id,
                 edge_kind,
                 assertion_targets,
-                config=_state.get("config"),
             ),
             source,
         )

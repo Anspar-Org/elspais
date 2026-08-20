@@ -287,6 +287,7 @@ def relative_tier(
     return "missing", False
 
 
+# Implements: REQ-d00051-E
 def absolute_tier(dim: CoverageDimension, *, measure: str) -> str:
     """Tier of a dimension in ``measure``, measured over ALL its assertions.
 

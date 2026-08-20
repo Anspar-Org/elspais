@@ -683,7 +683,13 @@ class TestNoAssertions:
 
     # Verifies: REQ-d00051-E
     def test_requirement_with_no_assertions(self):
-        """Requirements with no assertions have zero metrics."""
+        """Requirements with no assertions have zero metrics.
+
+        The base case of per-requirement coverage status from node.metrics:
+        the counts start from zero, so a requirement contributing no
+        assertions reads as zero covered of zero, not as an error or a
+        missing metric.
+        """
         graph = build_graph(
             make_requirement(
                 "REQ-100",

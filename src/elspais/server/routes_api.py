@@ -1732,7 +1732,6 @@ async def api_mutate_edge(request: Request) -> JSONResponse:
             target_id,
             edge_kind,
             assertion_targets,
-            config=state.config,
         )
     elif action == "change_kind":
         new_kind = data.get("new_kind", "")
