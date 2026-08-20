@@ -45,6 +45,9 @@ class FakeGraph:
     def repo_for(self, fid):
         raise KeyError(fid)
 
+    def repo_for_node(self, node):
+        raise KeyError(node.id)
+
 
 class _Repo:
     """Minimal repo-like object returned by graph.repo_for().
@@ -83,6 +86,11 @@ class FakeGraphWithOwnership(FakeGraph):
         name = self._ownership[fid]
         return _Repo(name, self._REPO_ROOTS[name])
 
+    def repo_for_node(self, node) -> _Repo:
+        # The real graph settles this by node identity; these fixtures hold
+        # one node per id, so resolving through the id agrees with it.
+        return self.repo_for(node.id)
+
 
 @pytest.mark.parametrize(
     "write_associates, expect_associate_written",
@@ -100,9 +108,7 @@ def test_render_save_associate_file_filter(monkeypatch, write_associates, expect
     associate = FakeFileNode("file:spec/b.md", "spec/b.md", "lib")
     nodes = {n.id: n for n in (primary, associate)}
 
-    monkeypatch.setattr(
-        render, "_find_dirty_files", lambda g, resolver=None: {"file:spec/a.md", "file:spec/b.md"}
-    )
+    monkeypatch.setattr(render, "_find_dirty_files", lambda g, resolver=None: [primary, associate])
     monkeypatch.setattr(render, "_wire_new_requirements_to_files", lambda g: None)
     monkeypatch.setattr(render, "render_file", lambda node, resolver=None: "body\n")
     monkeypatch.setattr(
@@ -154,9 +160,7 @@ def test_render_save_ownership_map_path(monkeypatch, write_associates, expect_as
         "file:lib/b.md": "lib",
     }
 
-    monkeypatch.setattr(
-        render, "_find_dirty_files", lambda g, resolver=None: {"file:spec/a.md", "file:lib/b.md"}
-    )
+    monkeypatch.setattr(render, "_find_dirty_files", lambda g, resolver=None: [primary, associate])
     monkeypatch.setattr(render, "_wire_new_requirements_to_files", lambda g: None)
     monkeypatch.setattr(render, "render_file", lambda node, resolver=None: "body\n")
     monkeypatch.setattr(
@@ -174,6 +178,85 @@ def test_render_save_ownership_map_path(monkeypatch, write_associates, expect_as
     if expect_associate_written:
         assert any("b.md" in w for w in written), "associate file should be written when enabled"
     else:
-        assert not any(
-            "b.md" in w for w in written
-        ), "associate must be skipped (ownership-map path)"
+        assert not any("b.md" in w for w in written), (
+            "associate must be skipped (ownership-map path)"
+        )
+
+
+class TestRenderSaveRealFederationSamePath:
+    """Validates REQ-d00253-B: the write gate answers for the repo actually edited.
+
+    Both members of this federation hold `spec/reqs.md`, so the ownership map
+    keyed by structural id resolves both to a single member.  Only resolution
+    by node identity routes the associate's edit to the associate's file and
+    leaves the primary's same-named file alone.
+    """
+
+    @staticmethod
+    def _federation(tmp_path):
+        """Build a real primary + associate federation sharing `spec/reqs.md`."""
+        from elspais.config import load_config
+        from elspais.graph.factory import build_graph
+        from tests.federation_repos import make_repo, namespace_for
+
+        associate = make_repo(tmp_path, "lib")
+        primary = make_repo(tmp_path, "core", associates={"lib": str(associate)})
+
+        config_path = primary / ".elspais.toml"
+        graph = build_graph(
+            config=load_config(config_path),
+            config_path=config_path,
+            repo_root=primary,
+            scan_code=False,
+            scan_tests=False,
+        )
+        associate_req = f"{namespace_for('lib')}-d00001"
+        assert graph.find_by_id(associate_req) is not None, "associate requirement must load"
+        return graph, primary, associate, associate_req
+
+    # Verifies: REQ-d00253-B
+    def test_d00253_B_associate_edit_lands_in_associate_repo(self, tmp_path):
+        from elspais.graph.render import render_save
+
+        graph, primary, associate, associate_req = self._federation(tmp_path)
+        primary_spec = primary / "spec" / "reqs.md"
+        associate_spec = associate / "spec" / "reqs.md"
+        primary_before = primary_spec.read_bytes()
+
+        new_title = "Retitled in the associate"
+        graph.update_title(associate_req, new_title)
+
+        result = render_save(graph, repo_root=primary, write_associates=True)
+
+        assert result["success"] is True, result["errors"]
+        # 1. The associate's own file carries the edit.
+        assert new_title in associate_spec.read_text(encoding="utf-8"), (
+            "the associate's file must receive the edit made to its requirement; "
+            f"files_modified={result['files_modified']}"
+        )
+        # 2. The primary's same-path file must not have been rewritten.
+        assert primary_spec.read_bytes() == primary_before, (
+            "the primary repo's same-named file must be untouched by an associate-owned edit"
+        )
+
+    # Verifies: REQ-d00253-B
+    def test_d00253_B_associate_edit_refused_by_default(self, tmp_path):
+        from elspais.graph.render import render_save
+
+        graph, primary, associate, associate_req = self._federation(tmp_path)
+        primary_spec = primary / "spec" / "reqs.md"
+        associate_spec = associate / "spec" / "reqs.md"
+        primary_before = primary_spec.read_bytes()
+        associate_before = associate_spec.read_bytes()
+
+        graph.update_title(associate_req, "Retitled without permission")
+
+        # 3. Default write_associates=False refuses the write entirely.
+        render_save(graph, repo_root=primary)
+
+        assert associate_spec.read_bytes() == associate_before, (
+            "an associate-owned edit must not be written with write_associates=False"
+        )
+        assert primary_spec.read_bytes() == primary_before, (
+            "refusing the associate write must not divert it into the primary repo"
+        )

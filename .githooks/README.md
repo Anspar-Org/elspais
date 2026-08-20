@@ -39,7 +39,7 @@ be decided from the tree alone happens here, once per commit.
 | --- | --- | --- |
 | Branch protection | Blocks commits to main/master | - |
 | Unstaged changes | Refuses a partial commit of `src/` or `tests/` | - |
-| Python quality | `ruff check` and `black --check` on `src/ tests/` | `ruff`, `black` |
+| Python quality | `ruff check` and `ruff format --check` on `src/ tests/` | `ruff` |
 | Markdown linting | markdownlint on changed `.md` files | `markdownlint` |
 | Index regeneration | `elspais fix`, staging what it regenerates | `elspais` |
 | Unit tests | `pytest` with coverage, cached by tree hash | `pytest` |
@@ -80,7 +80,7 @@ Install these tools for full hook functionality:
 
 ```bash
 # Python tools (via pip)
-pip install ruff black pytest
+pip install ruff pytest
 
 # Markdown linting (via npm)
 npm install -g markdownlint-cli

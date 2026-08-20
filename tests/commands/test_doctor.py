@@ -4,6 +4,7 @@
 Validates REQ-p00005-E: clear config errors for invalid associate paths.
 Validates REQ-p00001-A: CLI validation of requirement documents.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -111,7 +112,7 @@ class TestDoctorAssociateChecks:
         assoc_dir = tmp_path / "callisto"
         assoc_dir.mkdir()
         (assoc_dir / ".elspais.toml").write_text(
-            'version = 3\n[project]\nname = "callisto"\nnamespace = "REQ"\n'
+            'version = 3\n[project]\nname = "callisto"\nnamespace = "CAL"\n'
         )
         config = {"associates": {"callisto": {"path": str(assoc_dir), "namespace": "CAL"}}}
         result = check_associate_paths(config, None)

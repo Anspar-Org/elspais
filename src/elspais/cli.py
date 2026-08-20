@@ -6,6 +6,7 @@ elspais.cli - Command-line interface.
 Main entry point for the elspais CLI tool.
 Uses Tyro for declarative CLI generation from dataclass definitions.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -73,6 +74,7 @@ from elspais.commands.args import (
     LinkArgs,
     LinkSuggestArgs,
     McpArgs,
+    McpEnvArgs,
     McpInstallArgs,
     McpServeArgs,
     McpUninstallArgs,
@@ -196,6 +198,7 @@ def _to_namespace(global_args: GlobalArgs) -> argparse.Namespace:
             McpServeArgs: "serve",
             McpInstallArgs: "install",
             McpUninstallArgs: "uninstall",
+            McpEnvArgs: "env",
         }
         ns.mcp_action = _MCP_MAP.get(type(cmd.action), None)
         if hasattr(cmd.action, "__dataclass_fields__"):
@@ -543,9 +546,13 @@ def version_command(args: argparse.Namespace) -> int:
 
 def mcp_command(args: argparse.Namespace) -> int:
     """Handle MCP server commands."""
+    if args.mcp_action == "env":
+        from elspais.commands.daemon_cmd import run_env
+
+        return run_env(args)
     if args.mcp_action == "install":
         desktop = getattr(args, "desktop", False)
-        rc = _mcp_install(global_scope=args.global_scope)
+        rc = _mcp_install(global_scope=args.global_scope, transport=args.transport)
         if desktop:
             rc_desktop = _mcp_install_desktop()
             if rc == 0:
@@ -596,6 +603,15 @@ def mcp_command(args: argparse.Namespace) -> int:
         return 1
 
 
+#: What an http registration names when the address cannot be written
+#: down. Deliberately carries no default: an unset variable is reported
+#: by the client as a missing variable, which names the cause -- the
+#: shell never ran `eval "$(elspais mcp env)"`. A default address would
+#: instead fail as a refused connection, naming a symptom and sending
+#: the reader to look at the daemon.
+_ADDRESS_VARIABLE = "${ELSPAIS_MCP_URL}"
+
+
 def _claude_env() -> dict[str, str]:
     """Return env dict with Claude nesting guards removed.
 
@@ -611,8 +627,68 @@ def _claude_env() -> dict[str, str]:
     return env
 
 
-def _mcp_install(global_scope: bool = False) -> int:
-    """Register elspais MCP server with Claude Code."""
+# Implements: REQ-o00076-K
+def _http_registration_url(global_scope: bool) -> str:
+    """The address to register, literal where one registration means one tree.
+
+    A registration scoped to a single project names one working tree, and
+    that tree's address is settled and survives the process serving it
+    (REQ-o00076-K), so it can be written down. Nothing then has to be
+    arranged before the client is launched.
+
+    A registration shared by every project cannot be written down, because
+    the address it needs differs by which tree the client was started in.
+    There the variable is the answer, and the shell supplies it.
+
+    Reserving the address does not start anything. Registering a client
+    says where a tree will be served, not that it is being served now,
+    and an install that spawned a daemon as a side effect would start one
+    on a machine that was only being set up.
+
+    Falls back to the variable when no address can be settled, which
+    happens when there is no working tree to settle one for. A literal
+    that was wrong would be worse than a variable that has to be set.
+    """
+    if global_scope:
+        return _ADDRESS_VARIABLE
+
+    from elspais.config import find_git_root
+
+    repo_root = find_git_root()
+    if repo_root is None:
+        return _ADDRESS_VARIABLE
+
+    from elspais.mcp.daemon import free_port, reserve_port, reserved_port
+
+    port = reserved_port(repo_root)
+    if port is None:
+        # First registration for this tree: settle an address now so the
+        # client can be told one, and let the daemon bind it when it
+        # eventually starts.
+        port = free_port()
+        reserve_port(repo_root, port)
+    return f"http://127.0.0.1:{port}/mcp"
+
+
+# Implements: REQ-o00076-K
+def _mcp_install(global_scope: bool = False, transport: str = "http") -> int:
+    """Register elspais MCP server with Claude Code.
+
+    Over http a project-scoped registration names this working tree's
+    address outright, so nothing has to be arranged before the client is
+    launched. A ``--global`` registration cannot: the address it needs
+    differs by which tree the client was started in, so it names a
+    variable and the shell supplies it with
+    ``eval "$(elspais mcp env)"``.
+
+    http is the better connection and is the default. The client then
+    shares one graph with the CLI and the viewer, and a daemon that is
+    replaced is reconnected to rather than lost -- a stdio server is a
+    process the client owns, which nothing restarts once it exits.
+
+    Running this again replaces whatever is registered, which is what
+    changing transport requires.
+    """
     import shutil
     import subprocess
 
@@ -630,12 +706,56 @@ def _mcp_install(global_scope: bool = False) -> int:
         print("Error: 'elspais' not found on PATH.", file=sys.stderr)
         return 1
 
-    cmd = [claude, "mcp", "add", "elspais", "--transport", "stdio"]
+    cmd = [claude, "mcp", "add", "elspais", "--transport", transport]
     if global_scope:
         cmd.extend(["--scope", "user"])
-    cmd.extend(["--", "elspais", "mcp", "serve"])
+    if transport == "http":
+        cmd.append(_http_registration_url(global_scope))
+    else:
+        cmd.extend(["--", "elspais", "mcp", "serve"])
 
+    scope = "user" if global_scope else "local"
     result = subprocess.run(cmd, capture_output=True, text=True, env=_claude_env())
+
+    # Installing is how a registration is changed -- switching transport
+    # is the ordinary reason to run this twice -- and the client refuses
+    # to add a name it already holds. Replace it rather than report a
+    # conflict the caller would resolve by hand with the very command
+    # this one wraps.
+    #
+    # The existing registration is removed only after the client has said
+    # the name is taken, never speculatively, so a run that fails for any
+    # other reason leaves what was there in place.
+    if result.returncode != 0 and "already exists" in result.stderr.lower():
+        removal = subprocess.run(
+            [claude, "mcp", "remove", "elspais", "-s", scope],
+            capture_output=True,
+            text=True,
+            env=_claude_env(),
+        )
+        if removal.returncode != 0:
+            print(f"Error: {result.stderr.strip()}", file=sys.stderr)
+            print(
+                f"The existing registration could not be removed either: {removal.stderr.strip()}",
+                file=sys.stderr,
+            )
+            return 1
+        result = subprocess.run(cmd, capture_output=True, text=True, env=_claude_env())
+        if result.returncode != 0:
+            # The previous registration is gone and the new one did not
+            # land, which leaves nothing registered. Say so plainly:
+            # a caller who reads "failed" and assumes the old one
+            # survived will not think to re-register.
+            print(f"Error: {result.stderr.strip()}", file=sys.stderr)
+            print(
+                "The previous elspais registration was removed to make way for "
+                "this one, so nothing is registered now. Re-run this command "
+                "once the error above is resolved.",
+                file=sys.stderr,
+            )
+            return 1
+        print("Replaced the existing elspais MCP registration.")
+
     if result.returncode != 0:
         print(f"Error: {result.stderr.strip()}", file=sys.stderr)
         return 1

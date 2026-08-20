@@ -93,9 +93,6 @@ directories = ["spec"]
 enabled = true
 directories = ["tests"]
 file_patterns = ["test_*.py"]
-
-[references]
-enabled = true
 """
         )
 
@@ -134,9 +131,9 @@ enabled = true
         assert "*" in grouped, f"Expected '*' key in grouped refs, got: {grouped}"
         # The whole-req test should be under "*"
         star_ids = grouped["*"]
-        assert any(
-            "test_whole_req" in tid for tid in star_ids
-        ), f"Expected test_whole_req under '*', got: {star_ids}"
+        assert any("test_whole_req" in tid for tid in star_ids), (
+            f"Expected test_whole_req under '*', got: {star_ids}"
+        )
 
     def test_assertion_targeted_tests_under_label_keys(self, project_dir: Path):
         """Assertion-targeted tests appear under their label keys."""
@@ -155,12 +152,12 @@ enabled = true
         a_ids = grouped["A"]
         c_ids = grouped["C"]
         # test_multi_target should be in both
-        assert any(
-            "test_multi_target" in tid for tid in a_ids
-        ), f"Expected test_multi_target under 'A', got: {a_ids}"
-        assert any(
-            "test_multi_target" in tid for tid in c_ids
-        ), f"Expected test_multi_target under 'C', got: {c_ids}"
+        assert any("test_multi_target" in tid for tid in a_ids), (
+            f"Expected test_multi_target under 'A', got: {a_ids}"
+        )
+        assert any("test_multi_target" in tid for tid in c_ids), (
+            f"Expected test_multi_target under 'C', got: {c_ids}"
+        )
 
     def test_flat_test_refs_still_populated(self, project_dir: Path):
         """The flat test_refs list is still populated with all test IDs."""
@@ -205,9 +202,6 @@ directories = ["spec"]
 
 [scanning.test]
 enabled = false
-
-[references]
-enabled = true
 """
         )
 
@@ -319,9 +313,6 @@ directories = ["spec"]
 enabled = true
 directories = ["tests"]
 file_patterns = ["test_*.py"]
-
-[references]
-enabled = true
 """
         )
 
@@ -456,9 +447,6 @@ directories = ["spec"]
 enabled = true
 directories = ["tests"]
 file_patterns = ["test_*.py"]
-
-[references]
-enabled = true
 """
         )
 
@@ -504,9 +492,9 @@ enabled = true
         assert len(code_contents) > 0, "No <code> tags found in output"
         # At least one code tag should contain a known test file/function ref
         all_code_text = " ".join(code_contents)
-        assert (
-            "test_input_validation" in all_code_text or "test_output" in all_code_text
-        ), f"Expected known test ref IDs in <code> tags, got: {code_contents}"
+        assert "test_input_validation" in all_code_text or "test_output" in all_code_text, (
+            f"Expected known test ref IDs in <code> tags, got: {code_contents}"
+        )
 
 
 class TestJsonGroupedRefs:
@@ -578,9 +566,6 @@ directories = ["spec"]
 enabled = true
 directories = ["tests"]
 file_patterns = ["test_*.py"]
-
-[references]
-enabled = true
 """
         )
 
@@ -713,9 +698,6 @@ directories = ["spec"]
 enabled = true
 directories = ["tests"]
 file_patterns = ["test_*.py"]
-
-[references]
-enabled = true
 """
         )
 
@@ -788,9 +770,9 @@ enabled = true
         """Kind column NOT added when test refs not included."""
         lines = self._build_and_format_csv(project_dir, include_test_refs=False)
         header = lines[0]
-        assert not header.startswith(
-            "Kind,"
-        ), f"Header should not start with 'Kind,' when test refs disabled, got: {header}"
+        assert not header.startswith("Kind,"), (
+            f"Header should not start with 'Kind,' when test refs disabled, got: {header}"
+        )
         for line in lines[1:]:
             assert not line.startswith("REQ,"), f"No REQ kind expected without test refs: {line}"
             assert not line.startswith("TEST,"), f"No TEST kind expected without test refs: {line}"

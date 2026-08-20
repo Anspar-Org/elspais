@@ -12,12 +12,44 @@ Ported from core/patterns.py.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
-from typing import Any
+from collections.abc import Sequence
+from dataclasses import dataclass, field, replace
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from elspais.graph.reference_faults import FaultClass, FaultCode, RefItem
+
+# --- Errors ---
+
+
+class GrammarUnavailable(RuntimeError):
+    """A caller must spell an identifier but holds no repository grammar.
+
+    Deliberately not a ``ValueError``: the render layer catches that to mean
+    "this node is not independently renderable", and a missing grammar
+    swallowed by that catch would degrade output rather than stop it.
+    """
+
 
 # --- Constants ---
 
 INSTANCE_SEPARATOR = "::"
+
+# The character between two references of one list. One spelling, shared by
+# every surface that reads a list of references, so a *Requirement*'s
+# metadata line and a code annotation admit exactly the same target.
+REF_LIST_SEPARATOR = ","
+
+# Implements: REQ-p00014-S, REQ-d00272-M
+# The characters no identifier configuration may produce. `:` separates the
+# parts of a node identifier, so configuration validation refuses any pattern
+# element able to put one into an identifier -- which makes an item carrying
+# one an item that was never written as an identifier, exactly as a space is.
+# One definition: the schema's refusal and the reader's classification are two
+# consequences of the same reservation, and a character reserved in one and
+# not the other would leave an item both impossible to configure and reported
+# as a name from a repository nobody configured.
+RESERVED_IDENTIFIER_CHARACTERS = (":",)
 
 # --- Shared regex patterns ---
 
@@ -81,27 +113,93 @@ class AssertionFormat:
     separator: str = "-"
 
 
-# Implements: REQ-d00251-G
-def component_regex(component: ComponentFormat) -> str:
+# Implements: REQ-d00251-L
+def _schema_default_canonical() -> str:
+    """The canonical identifier template a configuration defaults to."""
+    from elspais.config.schema import IdPatternsConfig
+
+    return IdPatternsConfig.model_fields["canonical"].default
+
+
+def _schema_default_assertion(field_name: str) -> Any:
+    """A default the assertion grammar takes when a raw dict omits the field.
+
+    Read off the schema rather than spelled again here. The schema is where
+    a configuration acquires its defaults, and a second copy of one is a
+    second grammar the moment the two disagree.
+    """
+    from elspais.config.schema import AssertionConfig
+
+    return AssertionConfig.model_fields[field_name].default
+
+
+@dataclass(frozen=True)
+class IdGrammar:
+    """The regex fragments of one repository's identifier grammar.
+
+    Uncompiled and unanchored, so a consumer can embed a fragment in a
+    larger grammar without reconstructing it. Produced only by
+    ``IdResolver.grammar()``.
+    """
+
+    namespace: str
+    namespace_separator: str
+    level: str
+    component: str
+    identifier: str
+    assertion_label: str
+    assertion_label_exact: str
+    assertion_separator: str
+    multi_separator: str
+
+
+# Each case-style's own internal punctuation. A notation that cannot spell it
+# substitutes its own character for it, so it is a parameter rather than a
+# literal inside the pattern.
+STYLE_INTERNAL_SEPARATOR = {"snake_case": "_", "kebab-case": "-"}
+
+
+def _respell(segment: str, separator: str) -> str:
+    """Rewrite a template's literal punctuation into *separator*'s notation.
+
+    One rule, used wherever a notation is rendered: a notation spends its one
+    character on every boundary the template spells with ``-`` or ``_``, and
+    leaves everything else alone.
+    """
+    return "".join(separator if c in "-_" else c for c in segment)
+
+
+# Implements: REQ-d00251-B
+def component_regex(component: ComponentFormat, internal_separator: str | None = None) -> str:
     """Resolve a ComponentFormat to its regex string.
 
-    Sole authority for the style → regex mapping. Both ``IdResolver`` and
-    the lark grammar pattern builder call this — no other code path may
+    Sole authority for the style → regex mapping. No other code path may
     contain a component-style dispatch.
+
+    Args:
+        internal_separator: Spell a case-style's internal punctuation with
+            this character instead of its own. A Python test name can write
+            ``data-export`` only as ``data_export``, and a pattern still
+            demanding the hyphen would match nothing.
     """
     style = component.style
     if style == "numeric":
+        # Implements: REQ-d00212-R, REQ-d00212-T
+        # The configured digit count bounds the component's VALUE, not the
+        # characters written: leading zeros carry no value, so they are
+        # consumed separately and only the significant digits are counted.
+        # `\d{1,N}` alone caps characters, which makes how many zeros an
+        # author typed decide whether an identifier resolves.
         if component.digits > 0:
-            return rf"\d{{1,{component.digits}}}"
+            return rf"0*\d{{1,{component.digits}}}"
         return r"\d+"
     if style == "camelCase":
         return r"[a-z][a-zA-Z0-9]+"
     if style == "PascalCase":
         return r"[A-Z][a-zA-Z0-9]+"
-    if style == "snake_case":
-        return r"[a-z][a-z0-9]*(?:_[a-z0-9]+)*"
-    if style == "kebab-case":
-        return r"[a-z][a-z0-9]*(?:-[a-z0-9]+)*"
+    if style in ("snake_case", "kebab-case"):
+        sep = re.escape(internal_separator or STYLE_INTERNAL_SEPARATOR[style])
+        return rf"[a-z][a-z0-9]*(?:{sep}[a-z0-9]+)*"
     if style == "regex":
         return component.pattern or r"[A-Za-z][A-Za-z0-9]+"
     # Defensive: schema validation already rejects unknown values, but
@@ -136,20 +234,25 @@ class IdPatternConfig:
         namespace = project.get("namespace", "REQ")
 
         patterns = data.get("id-patterns", {})
-        canonical = patterns.get("canonical", "{namespace}-{type}{component}")
+        # The schema's default, not a second copy of it. This one had drifted
+        # to a token the schema stopped using, so a caller reaching here
+        # without a canonical template got a different grammar than any
+        # configuration file produces.
+        canonical = patterns.get("canonical") or _schema_default_canonical()
         aliases = dict(patterns.get("aliases", {}))
 
-        # Parse types from v2 id-patterns.types OR v3 top-level levels
-        raw_types = patterns.get("types", {})
-        if not raw_types:
-            # v3: read from top-level [levels] section
-            raw_levels = data.get("levels", {})
-            for code, ldef in raw_levels.items():
-                if isinstance(ldef, dict):
-                    raw_types[code] = {
-                        "level": ldef.get("rank", 1),
-                        "aliases": {"letter": ldef.get("letter", code[0])},
-                    }
+        # Levels are declared in the top-level [levels] section. An
+        # `id-patterns.types` table is not part of the configuration the
+        # schema admits, so reading one here would build a grammar from a
+        # shape no config file can hold -- and would go on answering for
+        # callers that hand-build one instead of loading a config.
+        raw_types: dict[str, Any] = {}
+        for code, ldef in data.get("levels", {}).items():
+            if isinstance(ldef, dict):
+                raw_types[code] = {
+                    "level": ldef.get("rank", 1),
+                    "aliases": {"letter": ldef.get("letter", code[0])},
+                }
         types: dict[str, TypeDef] = {}
         for code, tdef in raw_types.items():
             if isinstance(tdef, dict):
@@ -172,11 +275,13 @@ class IdPatternConfig:
         # Parse assertion format
         raw_assert = patterns.get("assertions", {})
         assertions = AssertionFormat(
-            label_style=raw_assert.get("label_style", "uppercase"),
-            max_count=raw_assert.get("max_count", 26),
-            zero_pad=raw_assert.get("zero_pad", False),
-            separator=raw_assert.get("separator", "-"),
-            multi_separator=raw_assert.get("multi_separator", "+"),
+            label_style=raw_assert.get("label_style", _schema_default_assertion("label_style")),
+            max_count=raw_assert.get("max_count", _schema_default_assertion("max_count")),
+            zero_pad=raw_assert.get("zero_pad", _schema_default_assertion("zero_pad")),
+            separator=raw_assert.get("separator", _schema_default_assertion("separator")),
+            multi_separator=raw_assert.get(
+                "multi_separator", _schema_default_assertion("multi_separator")
+            ),
         )
 
         # Parse output forms
@@ -225,6 +330,10 @@ class IdResolver:
                     self._reverse_aliases[alias_name] = {}
                 self._reverse_aliases[alias_name][alias_value] = type_code
 
+        self._ci_forms: list[tuple[str, re.Pattern, str | None]] | None = None
+        # The same forms rendered in an alternate notation, keyed by the
+        # notation's character. Compiled on first use.
+        self._notation_forms_cache: dict[str, list[tuple[str, re.Pattern, str | None]]] = {}
         # Compile all forms: list of (form_name, compiled_regex, type_alias_name_or_None)
         # type_alias_name is the TypeDef alias name used in the template (e.g., "letter")
         self._forms: list[tuple[str, re.Pattern, str | None]] = []
@@ -273,9 +382,34 @@ class IdResolver:
         m = re.search(r"\{(?:type|level)\.(\w+)\}", template)
         return m.group(1) if m else None
 
-    def _compile_regex(self, template: str) -> re.Pattern:
-        """Compile a template string into a regex for parsing."""
+    def _compile_regex(
+        self,
+        template: str,
+        separator: str | None = None,
+        *,
+        unbounded_component: bool = False,
+    ) -> re.Pattern:
+        """Compile a template string into a regex for parsing.
+
+        Args:
+            separator: Compile the template in an alternate notation, where
+                every boundary -- the template's own literals, the component's
+                internal punctuation and the *Assertion* separator -- is
+                spelled with this character. A Python test name can spell them
+                only as ``_``; that is one grammar in two notations, so the
+                notation is a parameter here rather than a second derivation.
+            unbounded_component: Drop the configured bound on a numeric
+                component's value. Never used to admit a reference -- only to
+                tell an item whose number is too large from one that is
+                misspelled, so the report names the defect the input has
+                (REQ-d00212-T).
+        """
         pattern = template
+        if separator is not None:
+            parts = re.split(r"(\{[^}]+\})", template)
+            pattern = "".join(
+                part if part.startswith("{") else _respell(part, separator) for part in parts
+            )
 
         # {namespace} -> literal match
         pattern = pattern.replace(
@@ -297,20 +431,29 @@ class IdResolver:
                 pattern = pattern.replace(match.group(0), f"(?P<type>{val_alt})")
 
         # {component} -> resolved via the single style→regex helper
-        comp_pattern = component_regex(self.config.component)
+        component = self.config.component
+        if unbounded_component and component.style == "numeric" and component.digits > 0:
+            component = replace(component, digits=0)
+        comp_pattern = component_regex(component, internal_separator=separator)
         pattern = pattern.replace("{component}", f"(?P<component>{comp_pattern})")
 
         # Assertion suffix (optional)
-        assertion_suffix = self._build_assertion_suffix()
+        assertion_suffix = self._build_assertion_suffix(separator)
         pattern = f"^{pattern}{assertion_suffix}$"
 
         return re.compile(pattern)
 
-    def _build_assertion_suffix(self) -> str:
-        """Build optional assertion suffix regex."""
+    # Implements: REQ-d00082-E
+    def _build_assertion_suffix(self, separator: str | None = None) -> str:
+        """Build optional assertion suffix regex.
+
+        The multi-*Assertion* separator is not a boundary the notation has to
+        respell -- it is not punctuation an identifier can be embedded behind
+        -- so it stays as configured, matching ``grammar()``.
+        """
         af = self.config.assertions
         label_pat = self._assertion_label_regex_str()
-        sep = re.escape(af.separator)
+        sep = re.escape(separator if separator is not None else af.separator)
         multi = re.escape(af.multi_separator)
         return rf"(?:{sep}(?P<assertions>{label_pat}(?:{multi}{label_pat})*))?"
 
@@ -338,6 +481,279 @@ class IdResolver:
             return r"[0-9]{2}" if af.zero_pad else r"[1-9][0-9]?"
         return r"[A-Z]"
 
+    # Implements: REQ-d00251-L
+    def grammar(self, separator: str | None = None) -> IdGrammar:
+        """The regex fragments of this repository's identifier grammar.
+
+        Every consumer that has to recognise, parse or expand an identifier
+        takes its patterns from here, so a repository's configuration is
+        interpreted once and the surfaces cannot drift apart.  The fragments
+        are uncompiled and unanchored so a caller can embed them in a larger
+        grammar; the compiled, anchored form is ``canonical_regex``.
+
+        Args:
+            separator: Render the same grammar with this character wherever
+                the identifier's own punctuation appears.  Test function
+                names spell ``REQ-d00001-A`` as ``REQ_d00001_A``; that is one
+                grammar in two notations, not two grammars, so the notation
+                is a parameter here rather than a second derivation
+                elsewhere.
+        """
+        cfg = self.config
+        namespace = re.escape(cfg.namespace)
+
+        alias_values = self.all_type_alias_values()
+        level = "|".join(re.escape(v) for v in alias_values) if alias_values else "[a-z]"
+
+        component = component_regex(cfg.component, internal_separator=separator)
+        if cfg.component.style in ("camelCase", "PascalCase", "snake_case", "kebab-case"):
+            # A case-style says case is what distinguishes a component from
+            # anything else, so the fragment stays case-sensitive even when a
+            # consumer embeds it in a case-insensitive pattern. Without this a
+            # kebab component swallows the uppercase assertion label that
+            # follows it, and `REQ-p-widget-A+C` loses its second label.
+            component = f"(?-i:{component})"
+
+        placeholders = {
+            "{namespace}": namespace,
+            "{component}": component,
+            "{level}": f"(?:{level})",
+        }
+        type_codes = list(cfg.types.keys())
+        if type_codes:
+            placeholders["{type}"] = "(?:" + "|".join(re.escape(t) for t in type_codes) + ")"
+        for match in re.finditer(r"\{(?:type|level)\.(\w+)\}", cfg.canonical_template):
+            alias_vals = self._reverse_aliases.get(match.group(1), {})
+            if alias_vals:
+                placeholders[match.group(0)] = (
+                    "(?:" + "|".join(re.escape(v) for v in alias_vals) + ")"
+                )
+
+        def _literal(segment: str) -> str:
+            if separator is None:
+                return re.escape(segment)
+            return re.escape(_respell(segment, separator))
+
+        parts = re.split(r"(\{[^}]+\})", cfg.canonical_template)
+        identifier = "".join(placeholders[p] if p in placeholders else _literal(p) for p in parts)
+
+        # The literal character the canonical template places right after
+        # {namespace} -- the boundary declares_namespace() tests against,
+        # taken from the same template the identifier fragment above is
+        # built from rather than assumed to be "-".
+        namespace_separator = ""
+        for i, part in enumerate(parts):
+            if part == "{namespace}" and i + 1 < len(parts):
+                following = (
+                    _respell(parts[i + 1], separator) if separator is not None else parts[i + 1]
+                )
+                if following:
+                    namespace_separator = following[0]
+                break
+
+        assertion_separator = re.escape(
+            separator if separator is not None else cfg.assertions.separator
+        )
+
+        assertion_label = self._assertion_label_regex_str()
+        # The same alphabet, written so that it cannot match another case
+        # inside a case-insensitive consumer. A label alphabet that names a
+        # case has one to preserve; a digit alphabet does not.
+        assertion_label_exact = (
+            f"(?-i:{assertion_label})"
+            if cfg.assertions.label_style in ("uppercase", "alphanumeric")
+            else assertion_label
+        )
+
+        return IdGrammar(
+            namespace=namespace,
+            namespace_separator=namespace_separator,
+            level=level,
+            component=component,
+            identifier=identifier,
+            assertion_label=assertion_label,
+            assertion_label_exact=assertion_label_exact,
+            assertion_separator=assertion_separator,
+            multi_separator=re.escape(cfg.assertions.multi_separator),
+        )
+
+    # Implements: REQ-d00272-C
+    def declares_namespace(self, item: str) -> bool:
+        """Whether *item* opens with this repository's namespace.
+
+        The boundary between the namespace and what follows comes from the
+        grammar rather than from an assumed ``-``: a repository configured
+        with another separator would otherwise have every one of its
+        identifiers attributed elsewhere.
+        """
+        grammar = self.grammar()
+        pattern = re.compile(
+            rf"(?:{grammar.namespace})(?:{re.escape(grammar.namespace_separator)}|$)"
+        )
+        return bool(pattern.match(item))
+
+    # Implements: REQ-d00081-D
+    def multi_assertion_reference_regex(self) -> re.Pattern[str]:
+        """Compile the pattern matching an identifier with its assertion suffix.
+
+        Matches ``REQ-d00001`` and ``REQ-d00001-A+B`` alike, so a reference
+        naming several *Assertion* labels is captured whole rather than
+        truncated at the first label.
+        """
+        g = self.grammar()
+        label = g.assertion_label
+        suffix = rf"(?:{g.assertion_separator}{label}(?:{g.multi_separator}{label})*)?"
+        return re.compile(f"{g.identifier}{suffix}", re.IGNORECASE)
+
+    # Implements: REQ-d00272-D
+    def _canonical_assertion_sep(self, item: str) -> str:
+        """Rewrite *item* as though its assertion separator were spelled
+        with this repository's multi-*Assertion* separator by mistake.
+
+        Only the boundary between the identifier and the first label is
+        touched -- an author who reaches for the wrong character reaches for
+        it once, at the one boundary that looks like a separator to type,
+        and every label after it is still joined by whatever character the
+        author used there. Returns *item* unchanged where the wrong-spelling
+        shape does not match, so a caller testing the result against the
+        strict grammar sees no false success.
+        """
+        g = self.grammar()
+        label = g.assertion_label
+        wrong = re.compile(
+            rf"^({g.identifier}){g.multi_separator}({label}(?:{g.multi_separator}{label})*)$",
+            re.IGNORECASE,
+        )
+        m = wrong.fullmatch(item)
+        if not m:
+            return item
+        return f"{m.group(1)}{self.config.assertions.separator}{m.group(2)}"
+
+    # Implements: REQ-d00272-D
+    def _canonical_multi_sep(self, item: str) -> str:
+        """Rewrite *item* as though its labels were joined with this
+        repository's assertion separator by mistake, in place of the
+        multi-*Assertion* separator.
+
+        Requires at least two labels: with only one, nothing distinguishes
+        "wrong multi-separator" from a correctly-formed single-label
+        reference, so there is nothing here for this relaxation to name.
+        Returns *item* unchanged where the wrong-spelling shape does not
+        match.
+        """
+        g = self.grammar()
+        label = g.assertion_label
+        wrong = re.compile(
+            rf"^({g.identifier}){g.assertion_separator}"
+            rf"({label}(?:{g.assertion_separator}{label})+)$",
+            re.IGNORECASE,
+        )
+        m = wrong.fullmatch(item)
+        if not m:
+            return item
+        af = self.config.assertions
+        labels = re.split(re.escape(af.separator), m.group(2))
+        return f"{m.group(1)}{af.separator}{af.multi_separator.join(labels)}"
+
+    # Implements: REQ-d00272-D, REQ-d00272-E, REQ-d00272-L
+    def diagnose_item(self, item: str) -> tuple[str, ...]:
+        """The smallest set of relaxations that makes *item* acceptable.
+
+        Minimality is what bounds the diagnosis: a larger set that also
+        succeeds contains a relaxation the input never asked for, and naming
+        it describes a defect the author does not have.  Where two disjoint
+        sets of equal size each succeed, the input admits two accounts and
+        neither is issued (REQ-d00271-D): the item carries the generic code
+        alone, which is already the report that nothing more specific is
+        known (REQ-d00271-C).
+
+        A relaxation never produces a reference.  It says what is wrong and
+        stops (REQ-d00269-J).
+        """
+        import itertools
+
+        from elspais.graph.reference_faults import FaultCode
+
+        relaxations = {
+            FaultCode.WRONG_ASSERTION_SEPARATOR: self._canonical_assertion_sep,
+            FaultCode.WRONG_MULTI_SEPARATOR: self._canonical_multi_sep,
+        }
+        # The matcher already ignores case and numeric padding, so an item
+        # differing only in those resolved and never reached this function.
+        exact = self.multi_assertion_reference_regex()
+
+        # An item that already fullmatches has nothing for a relaxation to
+        # explain -- each relaxation is a no-op on a string its own "wrong"
+        # shape does not match, and a no-op applied to an already-acceptable
+        # item would otherwise register as a trivially succeeding combo at
+        # every size, naming a defect an item that is not malformed at all
+        # does not have.
+        if exact.fullmatch(item):
+            return ()
+
+        for size in range(1, len(relaxations) + 1):
+            succeeding = []
+            for combo in itertools.combinations(relaxations, size):
+                candidate = item
+                for code in combo:
+                    candidate = relaxations[code](candidate)
+                if exact.fullmatch(candidate):
+                    succeeding.append(frozenset(combo))
+            if len(succeeding) == 1:
+                return tuple(sorted(succeeding[0]))
+            if len(succeeding) > 1:
+                return ()
+
+        prefix = exact.match(item)
+        if prefix and prefix.end() < len(item):
+            return (FaultCode.IDENTIFIER_WITH_TRAILING_TEXT,)
+        return ()
+
+    # Implements: REQ-d00212-T
+    def component_out_of_range(self, item: str) -> bool:
+        """Whether *item* is this repository's identifier but for a numeric
+        component whose value the configuration cannot admit.
+
+        A padding defect and an out-of-range value are different defects with
+        different remedies: one is answered by rewriting the same number,
+        the other by no spelling at all.  Telling them apart needs the value,
+        so the item is re-read with the bound lifted and the number compared
+        against what the configuration admits -- never to resolve it, only to
+        say which defect it has.
+        """
+        component = self.config.component
+        if component.style != "numeric" or component.digits <= 0:
+            return False
+        relaxed = self._compile_regex(self.config.canonical_template, unbounded_component=True)
+        match = re.compile(relaxed.pattern, re.IGNORECASE).fullmatch(item)
+        if match is None:
+            return False
+        value = match.groupdict().get("component")
+        if not value or not value.isdigit():
+            return False
+        return int(value) >= 10**component.digits
+
+    # Implements: REQ-d00272-D
+    def label_position_defect(self, item: str) -> bool:
+        """Whether *item* opens with a bare identifier immediately followed
+        by this repository's own assertion separator.
+
+        ``diagnose_item`` reports unaccounted trailing content generically
+        (``IDENTIFIER_WITH_TRAILING_TEXT``); this narrows that to the one
+        case worth naming more specifically -- the separator the author used
+        is already correct, so what follows it occupies label position, and
+        a defect there is about the label rather than about content the
+        reference never reaches. A label outside the configured series is
+        decided by the series itself, not by re-reading, so it is not one of
+        ``diagnose_item``'s relaxations.
+        """
+        exact = self.multi_assertion_reference_regex()
+        prefix = exact.match(item)
+        if not prefix:
+            return False
+        trailing = item[prefix.end() :]
+        return trailing.startswith(self.config.assertions.separator)
+
     def parse(self, raw_id: str) -> ParsedId | None:
         """Try all compiled forms. Returns ParsedId with canonical type_code.
 
@@ -354,6 +770,37 @@ class IdResolver:
                 return self._match_to_parsed_id(m, alias_used)
         return None
 
+    def _notation_forms(self, separator: str) -> list[tuple[str, re.Pattern, str | None]]:
+        """This repository's forms, compiled in *separator*'s notation."""
+        forms = self._notation_forms_cache.get(separator)
+        if forms is None:
+            templates = [("canonical", self.config.canonical_template)]
+            templates.extend(self.config.aliases.items())
+            forms = [
+                (
+                    name,
+                    self._compile_regex(template, separator),
+                    self._extract_type_alias_name(template),
+                )
+                for name, template in templates
+            ]
+            self._notation_forms_cache[separator] = forms
+        return forms
+
+    def _parse_notation(self, raw_id: str, separator: str) -> ParsedId | None:
+        """``parse`` for an identifier spelled in *separator*'s notation.
+
+        The parts come back in the configured spelling, so the result renders
+        canonically without any further rewriting.
+        """
+        if "::" in raw_id:
+            return None
+        for _form_name, regex, alias_used in self._notation_forms(separator):
+            m = regex.match(raw_id)
+            if m:
+                return self._match_to_parsed_id(m, alias_used, separator=separator)
+        return None
+
     def is_local_id(self, raw_id: str) -> bool:
         """Return True if raw_id matches this repo's ID pattern.
 
@@ -363,8 +810,16 @@ class IdResolver:
         """
         return self.parse(raw_id) is not None
 
-    def _match_to_parsed_id(self, m: re.Match, alias_used: str | None) -> ParsedId:
-        """Convert regex match to ParsedId."""
+    def _match_to_parsed_id(
+        self, m: re.Match, alias_used: str | None, separator: str | None = None
+    ) -> ParsedId:
+        """Convert regex match to ParsedId.
+
+        Args:
+            separator: The notation the match was read in. A case-style
+                component's own punctuation was spelled with it, so it is
+                spelled back before anything is rendered from the component.
+        """
         groups = m.groupdict()
         namespace = groups.get("namespace", self.config.namespace)
         raw_type = groups.get("type", "")
@@ -376,14 +831,36 @@ class IdResolver:
         else:
             type_code = raw_type
 
-        # If type is empty (JIRA-style with no {type} in template), use first type
+        # The type group is absent exactly when the matched form's template
+        # names no type token. Where the CANONICAL template is also typeless,
+        # the substituted type is never rendered back out -- it exists only
+        # to satisfy the membership check below -- and every shipped and
+        # fixture configuration of that shape declares exactly one level, so
+        # "the first declared" is "the only one".
+        #
+        # Nothing enforces that condition. Beside a TYPED canonical, or with
+        # more than one level declared, this invents a level, and which one
+        # depends on the order the levels appear in the TOML rather than on
+        # anything about the identifier. `type_code` also reaches next-ID
+        # allocation, which a wrong level mis-scopes.
         if not type_code and self.config.types:
             type_code = next(iter(self.config.types))
 
         # Normalize component (zero-pad if needed)
         comp = self.config.component
-        if comp.style == "numeric" and comp.digits > 0 and comp.leading_zeros:
-            component = component.zfill(comp.digits)
+        internal = STYLE_INTERNAL_SEPARATOR.get(comp.style)
+        if separator is not None and internal is not None and component:
+            component = component.replace(separator, internal)
+        # Implements: REQ-d00212-R
+        # A numeric component's identity is its value, so the canonical form
+        # is that value written to the configured width -- reached by
+        # discarding the zeros the author wrote and re-padding, not by
+        # padding what was written. `zfill` alone leaves an over-padded
+        # component longer than the configuration names, and the identifier
+        # renders in a form that configuration does not.
+        if comp.style == "numeric" and comp.digits > 0:
+            value = component.lstrip("0") or "0"
+            component = value.zfill(comp.digits) if comp.leading_zeros else value
 
         # Parse assertions
         assertions_str = groups.get("assertions", "")
@@ -421,6 +898,7 @@ class IdResolver:
 
         return result
 
+    # Implements: REQ-d00082-G
     def to_canonical(self, raw_id: str) -> str | None:
         """Parse then render as canonical. Returns None if no form matches."""
         parsed = self.parse(raw_id)
@@ -546,61 +1024,6 @@ class IdResolver:
         """Compiled regex for the canonical form (anchored with ^...$)."""
         return self._forms[0][1]
 
-    def search_regex(self) -> re.Pattern:
-        """Unanchored regex for finding canonical IDs within longer text.
-
-        Replaces literal hyphens with ``[-_]`` so the pattern matches IDs
-        written with either hyphen or underscore separators (e.g. both
-        ``REQ-p00001`` and ``REQ_p00001``).  A negative lookahead after
-        optional assertion labels prevents a trailing lowercase letter
-        from being captured as an assertion (e.g. the ``l`` in
-        ``REQ_p00001_login``).
-
-        Treats both literal ``-`` and escaped ``\\-`` outside character
-        classes as separators (the assertion suffix uses ``re.escape`` on
-        the configured separator, which yields ``\\-`` for the default).
-        """
-        pat = self._forms[0][1].pattern
-        # Strip ^ and $ anchors
-        if pat.startswith("^"):
-            pat = pat[1:]
-        if pat.endswith("$"):
-            pat = pat[:-1]
-        # Replace literal/escaped hyphens with [-_] to match both separators.
-        # The canonical regex uses literal '-' between groups (namespace-type,
-        # id-assertion).  Inside the assertion suffix, the separator is
-        # `re.escape`d, producing `\-`.  We replace both forms, but NOT
-        # hyphens inside character classes (e.g. [A-Z]).
-        out: list[str] = []
-        in_class = False
-        i = 0
-        while i < len(pat):
-            ch = pat[i]
-            if ch == "\\" and i + 1 < len(pat):
-                # Escaped hyphen outside a class behaves like a literal `-`
-                # in the source ID — substitute the same way.
-                if pat[i + 1] == "-" and not in_class:
-                    out.append("[-_]")
-                    i += 2
-                    continue
-                out.append(pat[i : i + 2])
-                i += 2
-                continue
-            if ch == "[":
-                in_class = True
-            elif ch == "]":
-                in_class = False
-            if ch == "-" and not in_class:
-                out.append("[-_]")
-            else:
-                out.append(ch)
-            i += 1
-        pat = "".join(out)
-        # Append negative lookahead to prevent lowercase letters immediately
-        # following the match from being captured as assertion labels.
-        pat += r"(?![a-z])"
-        return re.compile(pat)
-
     def all_type_codes(self) -> list[str]:
         """All canonical type codes."""
         return list(self.config.types.keys())
@@ -617,9 +1040,7 @@ class IdResolver:
         parsed = self.parse(raw_id)
         if parsed is None or not parsed.assertions:
             return None
-        af = self.config.assertions
-        sep = af.multi_separator if af.multi_separator else "+"
-        return (parsed.fqn, sep.join(parsed.assertions))
+        return (parsed.fqn, self.config.assertions.multi_separator.join(parsed.assertions))
 
     def make_assertion_id(self, req_id: str, label: str) -> str:
         """Compose an assertion node ID from a requirement ID and label.
@@ -655,19 +1076,152 @@ class IdResolver:
                 values.add(code)
         return sorted(values)
 
+    def _case_insensitive_forms(self) -> list[tuple[str, re.Pattern, str | None]]:
+        """The compiled forms again, ignoring case. Built once, on demand."""
+        if self._ci_forms is None:
+            self._ci_forms = [
+                (name, re.compile(regex.pattern, regex.flags | re.IGNORECASE), alias)
+                for name, regex, alias in self._forms
+            ]
+        return self._ci_forms
+
+    # Implements: REQ-d00212-R, REQ-d00212-S
+    def _canonicalize_case(self, cleaned: str) -> str | None:
+        """Rewrite a reference's level code and *Assertion* labels to canonical case.
+
+        Case does not decide whether an identifier resolves (REQ-d00212-R):
+        two case-spellings of a level code or label name the same identifier,
+        and the configuration guard (REQ-d00212-G) keeps that reading safe by
+        refusing a configuration that would let two case-spellings collide.
+        Rendering stays canonical regardless of the case an author wrote, so
+        this is what makes reading tolerant without making writing ambiguous.
+
+        The component is deliberately not touched (REQ-d00212-S): under a
+        case-style its case is its identity, so a mis-cased component is a
+        different component, not the same one spelled differently, and it
+        stays unresolved -- case tolerance reaches no further than case.
+        """
+        for _form_name, regex, alias_used in self._case_insensitive_forms():
+            m = regex.match(cleaned)
+            if not m:
+                continue
+            groups = m.groupdict()
+
+            component = groups.get("component", "")
+            if component and not re.fullmatch(component_regex(self.config.component), component):
+                return None
+
+            raw_type = groups.get("type", "")
+            type_code = raw_type
+            if alias_used and alias_used in self._reverse_aliases:
+                by_lower = {k.lower(): v for k, v in self._reverse_aliases[alias_used].items()}
+                type_code = by_lower.get(raw_type.lower(), raw_type)
+            # Same substitution, same unenforced condition, as the plain
+            # parse above: absent only for a typeless template, harmless
+            # only while such a configuration declares one level.
+            if not type_code and self.config.types:
+                type_code = next(iter(self.config.types))
+            if type_code not in self.config.types:
+                return None
+
+            af = self.config.assertions
+            labels = [
+                label.upper() if af.label_style in ("uppercase", "alphanumeric") else label
+                for label in (groups.get("assertions") or "").split(af.multi_separator)
+                if label
+            ]
+            return self.render_canonical(
+                ParsedId(
+                    namespace=self.config.namespace,
+                    type_code=type_code,
+                    component=component,
+                    assertions=labels,
+                    fqn="",
+                )
+            )
+        return None
+
+    def _fold_notation(self, raw_ref: str) -> str:
+        """Rewrite an alternate notation onto the configured punctuation.
+
+        A reference embedded in a Python identifier can spell every boundary
+        only as ``_``. Folding restores the configured characters, each where
+        it belongs: the template's own literals between the parts, the
+        component's own punctuation inside it, and the *Assertion* separator
+        where a label follows. Which underscore is which cannot be read off
+        the string, so the notation is parsed by the same grammar rendered in
+        it rather than guessed at by substitution -- a component style whose
+        punctuation is already ``_`` would otherwise leave every boundary
+        unfolded and the reference unclaimable.
+        """
+        if "_" not in raw_ref:
+            return raw_ref
+        sep = self.config.assertions.separator
+        multi = self.config.assertions.multi_separator
+
+        parsed = self._parse_notation(raw_ref, "_")
+        if parsed is not None:
+            return self.render_canonical(parsed)
+
+        # Otherwise some suffix of the parts are labels. The notation spends
+        # its one punctuation character on every boundary, so the split has to
+        # be found rather than read: take the longest head that parses as a
+        # requirement, and the rest are labels joined by the multi-separator.
+        notation_parts = raw_ref.split("_")
+        for cut in range(len(notation_parts) - 1, 0, -1):
+            head = "_".join(notation_parts[:cut])
+            labels = notation_parts[cut:]
+            parsed_head = self._parse_notation(head, "_")
+            if parsed_head is None or parsed_head.assertions:
+                # A head that already carries labels is not the boundary --
+                # it would leave the remaining labels stranded behind the
+                # wrong separator.
+                continue
+            if all(self.is_valid_assertion_label(label) for label in labels):
+                return self.render_canonical(parsed_head) + sep + multi.join(labels)
+
+        # Nothing parses in either notation. Respell what punctuation can be
+        # placed without a parse, so a reference whose case is what stops it
+        # parsing still reaches case canonicalization downstream.
+        internal = STYLE_INTERNAL_SEPARATOR.get(self.config.component.style, "-")
+        all_internal = raw_ref.replace("_", internal)
+        if self.parse(all_internal) is not None:
+            # Every underscore was the component's own punctuation.
+            return all_internal
+
+        # The same split search over the respelled string, for a component
+        # style that spells its own punctuation outside what the notation
+        # rendering can express.
+        parts = raw_ref.split("_")
+        for cut in range(len(parts) - 1, 0, -1):
+            head = internal.join(parts[:cut])
+            labels = parts[cut:]
+            parsed_head = self.parse(head)
+            if parsed_head is None or parsed_head.assertions:
+                # A head that already carries labels is not the boundary --
+                # it would leave the remaining labels stranded behind the
+                # wrong separator.
+                continue
+            if all(self.is_valid_assertion_label(label) for label in labels):
+                return head + sep + multi.join(labels)
+        return all_internal
+
     def normalize_ref(self, raw_ref: str) -> str:
         """Normalize a raw reference string to canonical form.
 
-        Handles underscore-to-dash conversion and prefix case normalization.
-        Returns the cleaned (dash-normalized, case-fixed) form even if
-        it doesn't match any known canonical pattern.
+        Handles underscore-to-dash conversion and case normalization of every
+        part whose case the grammar does not treat as significant. Returns the
+        cleaned form even if it doesn't match any known canonical pattern, so
+        an unresolvable reference stays visible rather than disappearing.
         """
-        cleaned = raw_ref.replace("_", "-")
+        cleaned = self._fold_notation(raw_ref)
         # Fix namespace case before parsing (parse() is case-sensitive)
         prefix = self.config.namespace
         if cleaned.lower().startswith(prefix.lower() + "-"):
             cleaned = prefix + cleaned[len(prefix) :]
         result = self.to_canonical(cleaned)
+        if result is None:
+            result = self._canonicalize_case(cleaned)
         return result if result is not None else cleaned
 
     def build_instance_id(self, prefix: str, template_id: str) -> str:
@@ -701,6 +1255,289 @@ class IdResolver:
         if INSTANCE_SEPARATOR not in instance_id:
             return None
         return instance_id.split(INSTANCE_SEPARATOR, 1)[0]
+
+
+# Implements: REQ-d00269-C, REQ-d00251-L, REQ-d00275-B
+class FederatedIdReader:
+    """Reads the identifiers of every repository in one federation.
+
+    A repository's code and tests routinely name a requirement another
+    member of the same federation owns.  Recognising such a reference needs
+    every member's grammar; normalizing it needs the grammar of the member
+    that *claims* it, because the scanning repository's own resolver would
+    rewrite a foreign identifier under rules that do not govern it.
+
+    Each fragment still comes from one member's own ``IdResolver.grammar()``.
+    This type alternates those fragments and probes the members in order; it
+    never merges configurations, and it derives nothing itself.
+
+    A reader over a single repository produces exactly that repository's own
+    fragments, so a repository built alone is grammatically unchanged.
+    """
+
+    def __init__(self, own: IdResolver, others: Sequence[IdResolver] = ()) -> None:
+        resolvers = [own]
+        seen = {own.config.namespace}
+        for other in others:
+            namespace = other.config.namespace
+            if namespace not in seen:
+                seen.add(namespace)
+                resolvers.append(other)
+        self._resolvers: tuple[IdResolver, ...] = tuple(resolvers)
+        self._ref_regex: re.Pattern[str] | None = None
+        self._extra_item_regexes: dict[tuple[str, ...], tuple[re.Pattern[str], ...]] = {}
+
+    @property
+    def own(self) -> IdResolver:
+        """The resolver of the repository being scanned."""
+        return self._resolvers[0]
+
+    @property
+    def resolvers(self) -> tuple[IdResolver, ...]:
+        """Every member's resolver, the scanned repository's first."""
+        return self._resolvers
+
+    @staticmethod
+    def _alternate(fragments: Sequence[str]) -> str:
+        """Join member fragments into one alternation.
+
+        A lone member yields its fragment verbatim, so a repository outside
+        any federation embeds the same pattern text it always did.
+        """
+        if len(fragments) == 1:
+            return fragments[0]
+        return "(?:" + "|".join(fragments) + ")"
+
+    def namespace_pattern(self) -> str:
+        """A pattern matching any member's namespace."""
+        return self._alternate([r.grammar().namespace for r in self._resolvers])
+
+    def identifier_pattern(self) -> str:
+        """A pattern matching any member's canonical identifier."""
+        return self._alternate([r.grammar().identifier for r in self._resolvers])
+
+    def _reference_regex(self) -> re.Pattern[str]:
+        if self._ref_regex is None:
+            self._ref_regex = re.compile(
+                self._alternate(
+                    [r.multi_assertion_reference_regex().pattern for r in self._resolvers]
+                ),
+                re.IGNORECASE,
+            )
+        return self._ref_regex
+
+    # Implements: REQ-d00082-E
+    def _classify(self, raw_ref: str) -> tuple[str, bool]:
+        """Normalize *raw_ref* under the grammar of the member that claims it,
+        and say whether some member actually confirmed it as its own.
+
+        A member's grammar is more than its canonical spelling -- an alias
+        reads whole too, and a mis-cased label is still recognised (case is
+        repaired for a label, never for a component, since a component's
+        case is its identity). ``normalize_ref`` already applies both; this
+        additionally reports whether the result was a member's own
+        identifier rather than merely handed back cleaned up and unclaimed.
+        """
+        for resolver in self._resolvers:
+            candidate = resolver.normalize_ref(raw_ref)
+            if resolver.is_local_id(candidate):
+                return candidate, True
+        return self.own.normalize_ref(raw_ref), False
+
+    def normalize(self, raw_ref: str) -> str:
+        """Normalize *raw_ref* under the grammar of the member that claims it.
+
+        Falls back to the scanned repository's own resolver when no member
+        claims the reference, which keeps an unresolvable reference visible
+        rather than discarding it.
+        """
+        return self._classify(raw_ref)[0]
+
+    def extract_refs(self, text: str) -> list[str]:
+        """Every member's identifiers named in *text*, in the order written."""
+        refs: list[str] = []
+        for match in self._reference_regex().finditer(text):
+            ref = self.normalize(match.group(0))
+            if ref not in refs:
+                refs.append(ref)
+        return refs
+
+    def _extra_patterns(self, extra_items: Sequence[str]) -> tuple[re.Pattern[str], ...]:
+        key = tuple(extra_items)
+        compiled = self._extra_item_regexes.get(key)
+        if compiled is None:
+            compiled = tuple(re.compile(p, re.IGNORECASE) for p in key)
+            self._extra_item_regexes[key] = compiled
+        return compiled
+
+    # Implements: REQ-d00272-B, REQ-d00272-C, REQ-d00272-M
+    def classify_unmatched(self, candidate: str) -> tuple[FaultClass, tuple[FaultCode, ...]]:
+        """How far reading *candidate* got, for an item no grammar accepted.
+
+        Two tests, in order, and neither is a judgement about what an
+        identifier looks like.  A character no configuration can put in an
+        identifier is what no identifier contains, so an item holding one was
+        not written as an identifier and must not be described as naming a
+        repository -- a space is such a character whichever one it is, and so
+        is a character reserved out of every identifier pattern
+        (REQ-d00272-M).  Past that, whether some member *declares* the
+        namespace the item opens with is a fact the federation holds, and it
+        separates an identifier of this estate spelled wrongly from a name
+        belonging outside it.
+        """
+        from elspais.graph.reference_faults import FaultClass, FaultCode
+
+        if any(ch.isspace() or ch in RESERVED_IDENTIFIER_CHARACTERS for ch in candidate):
+            return FaultClass.MALFORMED, (FaultCode.NOT_AN_IDENTIFIER,)
+        declaring = [r for r in self._resolvers if r.declares_namespace(candidate)]
+        if declaring:
+            # Longest matching namespace, not first: `self._resolvers` is
+            # own-repo-first, so a first-match pick would attribute
+            # `REQ-ALP-p00001` to a member declaring plain `REQ` whenever
+            # that member is scanned, reintroducing the misattribution this
+            # function exists to prevent (REQ-d00272-C).
+            owner = max(declaring, key=lambda r: len(r.config.namespace))
+            # Implements: REQ-d00212-T
+            # An out-of-range value is read as an identifier with trailing
+            # digits by the bounded grammar, which names a defect the author
+            # does not have: no repadding makes the number fit, so the value
+            # is what is wrong and the value is what is reported.
+            if owner.component_out_of_range(candidate):
+                return FaultClass.MALFORMED, (FaultCode.COMPONENT_OUT_OF_RANGE,)
+            codes = owner.diagnose_item(candidate)
+            if codes == (FaultCode.IDENTIFIER_WITH_TRAILING_TEXT,) and owner.label_position_defect(
+                candidate
+            ):
+                codes = (FaultCode.LABEL_OUT_OF_SERIES,)
+            return FaultClass.MALFORMED, codes
+        return FaultClass.UNKNOWN_NAMESPACE, ()
+
+    # Implements: REQ-d00269-G, REQ-p00014-T
+    def parse_ref_list(
+        self,
+        text: str,
+        *,
+        extra_items: Sequence[str] = (),
+    ) -> list[RefItem]:
+        """The items *text* spells as a separated list, each with its verdict.
+
+        The one place a list of references is divided into its items.  A
+        *Traceability* keyword introduces a list and nothing else, so each
+        item is matched whole against a member's grammar rather than searched
+        for inside the item.  Searching would read ``XREQ-d00001`` as
+        ``REQ-d00001`` -- an edge to a requirement the author never named, and
+        one nothing reports, since a reference that resolved is a reference
+        that looked fine.
+
+        Each item is judged on its own.  An item the grammar accounts for
+        produces its reference; one it does not is returned carrying the class
+        it reached, so the caller reports it rather than losing it.  A defect
+        in one item is evidence about that item and not about the list
+        (REQ-d00269-G).
+
+        Args:
+            text: The content a keyword introduced, with the keyword and its
+                colon already removed.
+            extra_items: Patterns for items belonging to a grammar this
+                reader does not own -- a journey step, say -- which are
+                accepted verbatim rather than normalized.
+
+        Returns:
+            A ``RefItem`` per item, never ``None``.  An empty list means the
+            content was empty.
+        """
+        from elspais.graph.reference_faults import FaultClass, FaultCode, RefItem
+
+        stripped = text.strip()
+        if not stripped:
+            return []
+        extras = self._extra_patterns(extra_items)
+        parts = stripped.split(REF_LIST_SEPARATOR)
+        last_index = len(parts) - 1
+        results: list[RefItem] = []
+        for index, part in enumerate(parts):
+            candidate = part.strip()
+            if not candidate:
+                # Implements: REQ-d00269-H
+                # An empty final item means the separator that introduced it
+                # had nothing to introduce -- a dangling separator, not a
+                # gap between two named items -- so it is reported as one
+                # and the other, never both, by its position in the list.
+                code = FaultCode.TRAILING_SEPARATOR if index == last_index else FaultCode.EMPTY_ITEM
+                results.append(
+                    RefItem(
+                        raw="",
+                        index=index,
+                        fault_class=FaultClass.MALFORMED,
+                        codes=(code,),
+                    )
+                )
+                continue
+            # Whole-item membership, not a merged regex: a member's grammar
+            # is more than its canonical form (an alias reads whole too, and
+            # a mis-cased label is still recognised), and ``_classify`` is
+            # anchored both ends throughout, so this is exactly the match a
+            # single identifier gets, never a search inside a larger string.
+            ref, matched = self._classify(candidate)
+            if not matched and any(extra.fullmatch(candidate) for extra in extras):
+                ref = candidate
+                matched = True
+            if matched:
+                results.append(RefItem(raw=candidate, index=index, resolved=ref))
+            else:
+                fault_class, codes = self.classify_unmatched(candidate)
+                results.append(
+                    RefItem(raw=candidate, index=index, fault_class=fault_class, codes=codes)
+                )
+
+        # Implements: REQ-d00272-K
+        # A repeated target is a list its author has lost track of. Every
+        # instance is reported and none resolves -- keeping the first would
+        # hide the very thing worth reporting. Detection is on the resolved
+        # (normalized) target, so two spellings of one identifier count as a
+        # repeat; an item that never resolved names no target and so cannot
+        # collide with anything.
+        target_counts: dict[str, int] = {}
+        for item in results:
+            if item.resolved is not None:
+                target_counts[item.resolved] = target_counts.get(item.resolved, 0) + 1
+        for i, item in enumerate(results):
+            if item.resolved is not None and target_counts[item.resolved] > 1:
+                results[i] = RefItem(
+                    raw=item.raw,
+                    index=item.index,
+                    fault_class=FaultClass.FORBIDDEN,
+                    codes=(FaultCode.DUPLICATE_ITEM,),
+                )
+        return results
+
+    def extract_underscored_ref(self, text: str) -> str | None:
+        """The first identifier *text* spells in underscore notation, or None.
+
+        A Python test function name can spell every boundary only as ``_``,
+        so each member's grammar is re-rendered in that notation rather than
+        composed a second time.  A trailing lowercase run continues the
+        function name rather than labelling an *Assertion*, so
+        ``test_REQ_p00001_validates`` must not read its ``_v`` as a label.
+
+        Only the first label is read tolerantly of case.  Past it the
+        notation has spent its distinguishing punctuation -- the separator
+        between the component and the labels and the separator between two
+        labels are both ``_`` -- so case is all that is left to tell a second
+        label from the next word of the name, and
+        ``test_REQ_p00001_A_and_so_on`` names one label rather than two.
+        """
+        best: tuple[int, str] | None = None
+        for resolver in self._resolvers:
+            g = resolver.grammar(separator="_")
+            head = rf"(?:{g.assertion_separator}{g.assertion_label}(?![a-z]))"
+            tail = rf"(?:{g.assertion_separator}{g.assertion_label_exact}(?![a-z]))*"
+            suffix = head + tail
+            pattern = re.compile(rf"(?P<ref>{g.identifier}(?:{suffix})?)", re.IGNORECASE)
+            match = pattern.search(text)
+            if match and (best is None or match.start() < best[0]):
+                best = (match.start(), resolver.normalize_ref(match.group("ref")))
+        return best[1] if best else None
 
 
 def build_resolver(config: dict[str, Any]) -> IdResolver:

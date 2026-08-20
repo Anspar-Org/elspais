@@ -1,25 +1,22 @@
 """Parser for `flutter test --machine` newline-delimited JSON events.
 
-Builds RESULT records carrying the REAL test-file path (from ``suite.path``)
-and per-test identity (name, line) — unlike tojunit's lossy classname.
+Builds RESULT records carrying the test file's real path (from ``suite.path``)
+and each test's identity within it (name, line).
 
 Record shape mirrors sibling parsers (junit_xml, pytest_json):
-``{"id", "name", "classname", "status", "duration", "message", "verifies",
+``{"id", "name", "classname", "status", "duration", "message",
 "source_path", "line", "root_path", "root_line", "test_id"}``.
 
-``line`` is the line number from the machine event's ``test.line`` field.
-For plain ``test()`` calls this is the user call site.  For
-``testWidgets(...)`` calls the framework reports a wrapper line instead
-(e.g. inside ``package:flutter_test/src/widget_tester.dart``), which will
-*not* match the TEST node built from the source file.  In that case the
-real call site lives in ``test.root_line`` / ``test.root_url``.
+``line`` is the machine event's ``test.line``, counted from one, as the tool
+counts source lines. For a plain ``test()`` call it is the user's call site.
+For ``testWidgets(...)`` the framework reports a wrapper line instead (inside
+``package:flutter_test/src/widget_tester.dart``), which names no line of the
+user's file; the call site is then in ``test.root_line`` / ``test.root_url``.
+Both are carried so the builder can try ``(source_path, line)`` and fall back
+to ``(root_path, root_line)``.
 
-Both fields are carried through so the graph builder can try the primary
-``(source_path, line)`` match first and fall back to
-``(root_path, root_line)`` before giving up and doing a file-granular link.
-
-``test_id`` is always ``None``.  Per-test correlation is resolved at
-graph-build time by ``(source_path, line)`` — no pre-baked id is used.
+``test_id`` is always ``None``: which test a result belongs to is answered at
+graph-build time from the file and line, so nothing needs to be pre-baked.
 
 Suite-loader pseudo-tests (``hidden: true`` in ``testDone``) are skipped.
 """
@@ -87,7 +84,6 @@ class FlutterMachineParser:
                         "status": status,
                         "duration": 0.0,
                         "message": None,
-                        "verifies": [],
                         "source_path": path,
                         "line": meta["line"],
                         "root_line": meta["root_line"],

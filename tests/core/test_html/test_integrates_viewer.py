@@ -179,9 +179,9 @@ class TestIntegratesRollupSerialized:
         cid = "APP-p00001"
         assert cid in nodes, f"expected consumer {cid} in node-index; got {sorted(nodes)[:10]}"
         props = nodes[cid].get("properties") or {}
-        assert (
-            "integrates_rollup" in props
-        ), f"expected integrates_rollup on consumer {cid}; properties keys: {sorted(props)}"
+        assert "integrates_rollup" in props, (
+            f"expected integrates_rollup on consumer {cid}; properties keys: {sorted(props)}"
+        )
         assert props["integrates_rollup"] == {
             "implemented_covered": 1,
             "implemented_total": 1,
@@ -193,28 +193,27 @@ class TestIntegratesRollupSerialized:
             f"implemented by code, not verified); got {props['integrates_rollup']!r}"
         )
 
-    # Verifies: REQ-d00252-D, REQ-d00258-B
-    def test_REQ_d00258_B_library_failure_flag_serialized(self, federation):
-        """A failing library Verifies-result with full lcov credit reads as
-        covered in the passing union, but the serialized rollup must carry
-        has_failures=True so the viewer can flag the red library suite."""
+    # Verifies: REQ-d00252-D, REQ-d00258-N
+    def test_REQ_d00258_N_library_failure_flag_serialized(self, federation):
+        """A library with one passing and one failing declared test reads as
+        covered on the count alone, so the serialized rollup must carry
+        has_failures=True for the viewer to flag the partly-red suite."""
         from elspais.graph.metrics import CoverageDimension, RollupMetrics
 
         lib_req = federation._repos["library"].graph._index["LIB-p00001"]
         lib_req.set_metric(
             "rollup_metrics",
             RollupMetrics(
-                total_assertions=1,
-                implemented=CoverageDimension(total=1, direct=1.0, indirect=1.0),
-                verified=CoverageDimension(total=1, has_failures=True),
-                lcov_tested=CoverageDimension(
-                    total=1,
-                    direct=1.0,
-                    indirect=1.0,
-                    direct_labels={"A"},
-                    indirect_labels={"A"},
-                    direct_pct_by_label={"A": 1.0},
-                    indirect_pct_by_label={"A": 1.0},
+                total_assertions=2,
+                implemented=CoverageDimension(
+                    total=2, immediate_direct_by_label={"A": 1.0, "B": 1.0}
+                ),
+                # B's declared test passed; A's failed.
+                verified=CoverageDimension(
+                    total=2,
+                    has_failures=True,
+                    failing_labels={"A"},
+                    immediate_direct_by_label={"B": 1.0},
                 ),
             ),
         )
@@ -222,7 +221,7 @@ class TestIntegratesRollupSerialized:
         html = HTMLGenerator(federation).generate(embed_content=True)
         nodes = _extract_node_index(html)
         rollup = (nodes["APP-p00001"].get("properties") or {})["integrates_rollup"]
-        assert rollup["verified_covered"] == 1  # union covered despite the failure
+        assert rollup["verified_covered"] == 1  # B's pass reads covered
         assert rollup["has_failures"] is True
 
     def test_REQ_d00252_D_non_integrating_req_has_no_integrates_rollup(self, federation):
@@ -249,9 +248,9 @@ class TestIntegratesRollupRendered:
             "expected 'Integrated coverage:' label in rendered HTML "
             "(integrates rollup card row not wired in)"
         )
-        assert (
-            "integrates-rollup" in html
-        ), "expected 'integrates-rollup' CSS class in rendered HTML"
+        assert "integrates-rollup" in html, (
+            "expected 'integrates-rollup' CSS class in rendered HTML"
+        )
 
 
 class TestIntegratesRelationshipRendered:
@@ -317,7 +316,7 @@ class TestIntegratesEdgeBadge:
         entry = integrates[0]
         assert entry.label == "Integrates", f"expected label 'Integrates', got {entry.label!r}"
         assert entry.description, "expected non-empty description on integrates edge badge"
-        assert (
-            entry.long_description
-        ), "expected non-empty long_description on integrates edge badge"
+        assert entry.long_description, (
+            "expected non-empty long_description on integrates edge badge"
+        )
         assert entry.css_class, "expected non-empty css_class on integrates edge badge"

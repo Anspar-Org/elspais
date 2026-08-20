@@ -10,28 +10,45 @@ from __future__ import annotations
 
 import pytest
 
-from elspais.graph.parsers.lark import GrammarFactory
+from elspais.config.schema import ElspaisConfig
+from elspais.graph.parsers.lark import FileDispatcher, GrammarFactory
 from elspais.graph.parsers.lark.transformers.reference import ReferenceTransformer
+from elspais.graph.reference_faults import FaultCode
 from elspais.utilities.patterns import IdPatternConfig, IdResolver
+
+
+def _validated(config: dict) -> dict:
+    """Return ``config`` after checking a configuration file could hold it.
+
+    ``IdPatternConfig.from_dict`` takes a raw dictionary and never consults the
+    config schema, so a fixture built here could describe a repository no
+    ``.elspais.toml`` can produce -- and pin grammar behaviour no user can
+    reach. Every fixture is therefore validated the way a file on disk is,
+    before any resolver is built from it.
+    """
+    ElspaisConfig.model_validate(config)
+    return config
 
 
 @pytest.fixture
 def resolver():
     config = IdPatternConfig.from_dict(
-        {
-            "project": {"namespace": "REQ"},
-            "id-patterns": {
-                "canonical": "{namespace}-{type.letter}{component}",
-                "aliases": {"short": "{type.letter}{component}"},
-                "types": {
-                    "prd": {"level": 1, "aliases": {"letter": "p"}},
-                    "ops": {"level": 2, "aliases": {"letter": "o"}},
-                    "dev": {"level": 3, "aliases": {"letter": "d"}},
+        _validated(
+            {
+                "project": {"namespace": "REQ"},
+                "levels": {
+                    "prd": {"rank": 1, "letter": "p", "implements": ["prd"]},
+                    "ops": {"rank": 2, "letter": "o", "implements": ["ops", "prd"]},
+                    "dev": {"rank": 3, "letter": "d", "implements": ["dev", "ops", "prd"]},
                 },
-                "component": {"style": "numeric", "digits": 5, "leading_zeros": True},
-                "assertions": {"label_style": "uppercase", "max_count": 26},
-            },
-        }
+                "id-patterns": {
+                    "canonical": "{namespace}-{level.letter}{component}",
+                    "aliases": {"short": "{level.letter}{component}"},
+                    "component": {"style": "numeric", "digits": 5, "leading_zeros": True},
+                    "assertions": {"label_style": "uppercase", "max_count": 26},
+                },
+            }
+        )
     )
     return IdResolver(config)
 
@@ -49,6 +66,53 @@ def _parse_code(content, resolver, code_parser):
     tree = code_parser.parse(content)
     tx = ReferenceTransformer(resolver, "code_ref")
     return tx.transform(tree)
+
+
+@pytest.fixture
+def parse_code(resolver, code_parser):
+    """Parse *content* as a code file, returning ``(results, transformer)``.
+
+    The transformer is returned alongside the ``ParsedContent`` list so a
+    test can inspect ``transformer.style_findings`` -- a fact about the
+    file that never travels on the results themselves.
+    """
+
+    def _parse(content):
+        text = content if content.endswith("\n") else content + "\n"
+        tree = code_parser.parse(text)
+        tx = ReferenceTransformer(resolver, "code_ref")
+        return tx.transform(tree), tx
+
+    return _parse
+
+
+def _all_refs(result) -> set[str]:
+    """Every reference-shaped string surfacing anywhere in a parse result.
+
+    ``result`` is the ``(results, transformer)`` pair ``parse_code``
+    returns.  Implements/verifies/forbidden all count -- a test asking "is
+    this identifier bound anywhere" should not have to know which keyword
+    was used or whether the keyword was refused for this file's kind.
+    """
+    results, _tx = result
+    found: set[str] = set()
+    for r in results:
+        found.update(r.parsed_data.get("implements", []) or [])
+        found.update(r.parsed_data.get("verifies", []) or [])
+        found.update(r.parsed_data.get("forbidden", []) or [])
+    return found
+
+
+def _diagnostics(result):
+    """The transformer's reported faults for a parse result.
+
+    ``result`` is the ``(results, transformer)`` pair ``parse_code``
+    returns -- a diagnostic is a fact about the file, not about any single
+    ``ParsedContent``, so it lives on the transformer rather than on a
+    result entry.
+    """
+    _results, tx = result
+    return [*tx.faults, *tx.undeclared]
 
 
 def _parse_test(content, resolver, code_parser, **kwargs):
@@ -113,6 +177,29 @@ def foo(): pass
         refs = [r for r in results if r.content_type == "code_ref"]
         assert len(refs) == 0
 
+    # Verifies: REQ-d00269-G
+    def test_a_partly_unmatched_scanned_line_binds_the_good_item(self, resolver, code_parser):
+        """A defect in one item is evidence about that item, not the list:
+        the item the grammar cannot account for is reported (carried
+        through in ``implements`` and named in ``reference_verdicts``)
+        while the item that did resolve still binds -- salvage, not
+        all-or-nothing rejection."""
+        content = "# Implements: REQ-p00001, GARBAGE-999\ndef foo(): pass\n"
+        results = _parse_code(content, resolver, code_parser)
+        refs = [r for r in results if r.content_type == "code_ref"]
+        assert len(refs) == 1
+        assert "REQ-p00001" in refs[0].parsed_data["implements"], (
+            f"the item that resolved must still bind; got {refs[0].parsed_data['implements']}"
+        )
+        assert "GARBAGE-999" in refs[0].parsed_data["implements"], (
+            "the faulted item stays in the list so the builder can report "
+            f"it as a broken reference; got {refs[0].parsed_data['implements']}"
+        )
+        assert ("implements", "GARBAGE-999") in refs[0].parsed_data["reference_verdicts"], (
+            "the faulted item's verdict must reach the builder; got "
+            f"{refs[0].parsed_data['reference_verdicts']}"
+        )
+
 
 class TestTestRefParsing:
     """Test test reference parsing via Lark grammar."""
@@ -147,13 +234,6 @@ class TestTestRefParsing:
         # Unlinked test function should inherit file defaults
         assert refs[0].parsed_data["file_default_verifies"] == ["REQ-p00001"]
 
-    def test_control_marker_recognized(self, resolver, code_parser):
-        content = "# elspais: expected-broken-links 3\ndef test_foo(): pass\n"
-        tree = code_parser.parse(content + "\n")
-        # Verify the control marker is in the tree
-        markers = [c for c in tree.children if hasattr(c, "data") and c.data == "control_marker"]
-        assert len(markers) == 1
-
     def test_block_verifies(self, resolver, code_parser):
         content = """\
 -- VERIFIES REQUIREMENTS:
@@ -165,3 +245,310 @@ class TestTestRefParsing:
         assert len(refs) == 1
         assert "REQ-p00001" in refs[0].parsed_data["verifies"]
         assert "REQ-p00002" in refs[0].parsed_data["verifies"]
+
+    # Verifies: REQ-d00269-G
+    def test_a_partly_unmatched_file_default_binds_the_good_item(self, resolver):
+        """A second salvage site, distinct from ``_handle_unresolved_ref``:
+        ``FileDispatcher.dispatch_test`` reads a file-level ``Verifies:``
+        comment into ``file_default_verifies`` through its own loop. One
+        unmatched item in that list must not cost the item that did
+        resolve -- every unlinked test function still inherits the good
+        reference as its default.
+
+        Driven through the real ``FileDispatcher.dispatch_test`` pipeline
+        (prescan, tree parse, the file-level extraction loop, then the
+        transformer's third pass for unlinked test functions) rather than a
+        reimplementation of the loop, so this fails if the loop's salvage
+        behaviour is ever weakened back to all-or-nothing.
+
+        The file-level comment sits far enough above ``test_something`` that
+        the AST pre-scan's forward-looking comment/function binding does not
+        attach it as the function's own annotation -- keeping this test on
+        the file-default path (the third pass) rather than the
+        already-covered per-function path in ``_handle_unresolved_ref``.
+
+        Salvage is only honest because the item that did *not* resolve is
+        still reported somewhere: the same line also goes through the
+        transformer's ordinary ``single_ref`` handling (``_handle_unresolved_ref``),
+        which produces its own ``test_ref`` entry (unattached to any
+        function) carrying ``GARBAGE-999`` in both ``verifies`` and
+        ``reference_verdicts`` -- that is this test's other half.
+        """
+        content = (
+            "# Verifies: REQ-p00001, GARBAGE-999\n"
+            "import time\n\n\n\n\n\n\n"
+            "def test_something():\n"
+            "    assert True\n"
+        )
+        dispatcher = FileDispatcher(resolver)
+        items = dispatcher.dispatch_test(content, file_path="tests/test_demo.py")
+
+        unlinked = [
+            r
+            for r in items
+            if r.content_type == "test_ref"
+            and r.parsed_data.get("function_name") == "test_something"
+        ]
+        assert len(unlinked) == 1, f"expected one entry for test_something; got {items}"
+        assert unlinked[0].parsed_data["file_default_verifies"] == ["REQ-p00001"], (
+            "the item that resolved must still populate the file-level "
+            f"default; got {unlinked[0].parsed_data}"
+        )
+        assert unlinked[0].parsed_data["verifies"] == ["REQ-p00001"]
+
+        # The faulted sibling is not simply dropped: the file-level line's
+        # own single_ref entry (function_name is None -- it belongs to no
+        # function) carries it forward for reporting.
+        file_level = [
+            r
+            for r in items
+            if r.content_type == "test_ref" and r.parsed_data.get("function_name") is None
+        ]
+        assert len(file_level) == 1, f"expected one file-level entry; got {items}"
+        assert "GARBAGE-999" in file_level[0].parsed_data["verifies"], (
+            "the faulted item must still reach a reportable entry, not "
+            f"vanish once salvaged from the default; got {file_level[0].parsed_data}"
+        )
+        assert ("verifies", "GARBAGE-999") in file_level[0].parsed_data["reference_verdicts"], (
+            "its verdict must ride alongside so the builder can report it "
+            f"as a broken reference; got {file_level[0].parsed_data}"
+        )
+
+
+# Verifies: REQ-d00269-E
+@pytest.mark.parametrize("spelling", ["Implements", "IMPLEMENTS", "implements", "ImPlEmEnTs"])
+def test_a_keyword_is_recognised_in_any_case(parse_code, spelling):
+    result = parse_code(f"# {spelling}: REQ-d00001\ndef f():\n    return 1\n")
+    assert "REQ-d00001" in _all_refs(result)
+
+
+# Verifies: REQ-d00272-G
+def test_a_non_canonical_keyword_still_binds(parse_code):
+    result = parse_code("# implements: REQ-d00001\ndef f():\n    return 1\n")
+    assert "REQ-d00001" in _all_refs(result)
+    _results, tx = result
+    assert (1, FaultCode.KEYWORD_WRONG_CASE) in tx.style_findings
+
+
+# Verifies: REQ-d00269-E
+def test_a_space_before_the_colon_is_not_a_keyword(parse_code):
+    result = parse_code("# Implements : REQ-d00001\ndef f():\n    return 1\n")
+    assert "REQ-d00001" not in _all_refs(result)
+
+
+# Verifies: REQ-d00269-E
+@pytest.mark.parametrize(
+    "header,opens",
+    [
+        ("# IMPLEMENTS REQUIREMENTS:", True),
+        ("# Implements Requirements:", True),
+        ("# IMPLEMENTS REQUIREMENTS", False),
+        ("# IMPLEMENTS REQUIREMENT:", False),
+    ],
+)
+def test_the_legacy_block_header_is_strict_about_everything_but_case(parse_code, header, opens):
+    result = parse_code(f"{header}\n#   REQ-d00001\ndef f():\n    return 1\n")
+    assert ("REQ-d00001" in _all_refs(result)) is opens
+
+
+# Verifies: REQ-d00272-G
+def test_no_space_after_the_comment_marker_still_binds(parse_code):
+    result = parse_code("#Implements: REQ-d00001\ndef f():\n    return 1\n")
+    assert "REQ-d00001" in _all_refs(result)
+    _results, tx = result
+    assert (1, FaultCode.KEYWORD_NO_MARKER_SPACE) in tx.style_findings
+
+
+# Verifies: REQ-d00272-G
+def test_markdown_emphasis_in_a_code_comment_still_binds(parse_code):
+    result = parse_code("# **Implements**: REQ-d00001\ndef f():\n    return 1\n")
+    assert "REQ-d00001" in _all_refs(result)
+    _results, tx = result
+    assert (1, FaultCode.KEYWORD_MARKDOWN_EMPHASIS_OFF_MARKDOWN) in tx.style_findings
+
+
+# Verifies: REQ-d00272-B
+def test_a_stray_leading_asterisk_on_the_target_does_not_bind(parse_code):
+    """A malformed target must stay malformed, not be laundered by the
+    emphasis-stripping fix.
+
+    The fix for markdown-emphasis-wrapped keywords must strip only the
+    keyword's own closing "**", never any leading "*" that is part of what
+    the author actually wrote as the target -- otherwise an ordinary typo
+    silently becomes a clean edge, which is the exact defect this work
+    exists to remove.
+    """
+    results, tx = parse_code("# Implements: *REQ-d00001\ndef f():\n    return 1\n")
+    assert "REQ-d00001" not in _all_refs((results, tx))
+    refs = [r for r in results if r.content_type == "code_ref"]
+    assert len(refs) == 1
+    verdicts = refs[0].parsed_data.get("reference_verdicts", {})
+    assert (
+        "implements",
+        "*REQ-d00001",
+    ) in verdicts, (
+        f"the stray asterisk must survive verbatim in the reported target; got {verdicts}"
+    )
+
+
+# Verifies: REQ-d00272-G
+def test_the_canonical_form_records_no_style_finding(parse_code):
+    result = parse_code("# Implements: REQ-d00001\ndef f():\n    return 1\n")
+    _results, tx = result
+    assert tx.style_findings == []
+
+
+# Verifies: REQ-d00272-H
+def test_a_keyword_introducing_nothing_is_admitted_and_reported(parse_code):
+    """An empty declaration is recognised, not silently folded into remainder."""
+    results, tx = parse_code("# Implements:\ndef f():\n    return 1\n")
+    assert not _all_refs((results, tx))
+    assert len(tx.faults) == 1
+    ref_item, line_num, keyword = tx.faults[0]
+    assert line_num == 1
+    assert keyword == "implements"
+    assert FaultCode.EMPTY_REFERENCE_LIST in ref_item.codes
+
+
+# Verifies: REQ-d00269-H
+def test_a_trailing_separator_continues_onto_the_next_comment_line(parse_code):
+    result = parse_code(
+        "# Implements: REQ-d00001,\n#             REQ-d00002\ndef f():\n    return 1\n"
+    )
+    refs = _all_refs(result)
+    assert "REQ-d00001" in refs
+    assert "REQ-d00002" in refs
+
+
+# Verifies: REQ-d00269-H
+def test_a_separator_with_nothing_to_continue_onto_binds_what_precedes_it(parse_code):
+    result = parse_code("# Implements: REQ-d00001,\ndef f():\n    return 1\n")
+    assert "REQ-d00001" in _all_refs(result)
+
+
+# Verifies: REQ-d00269-H
+def test_a_continuation_without_a_separator_is_an_orphan(parse_code):
+    """No separator means line 1 is a complete list and line 2 stands alone
+    -- and is reported as an orphan, not merely absent from the refs.
+    """
+    result = parse_code(
+        "# Implements: REQ-d00001\n#             REQ-d00002\ndef f():\n    return 1\n"
+    )
+    refs = _all_refs(result)
+    assert "REQ-d00001" in refs
+    assert "REQ-d00002" not in refs
+    assert _diagnostics(result), "line 2 must be reported, not merely dropped"
+
+
+# Verifies: REQ-d00272-O, REQ-p00019-A
+def test_a_bare_identifier_comment_is_never_silent(parse_code):
+    """The standing defect: this produced no node, no remainder, no diagnostic.
+
+    ``REQ-d00272-H`` is a keyword introducing no content -- a different
+    defect from this one, which is a bare identifier line with no keyword
+    above it at all.  Nothing about this line is malformed, so it is
+    reported as a relationship its author appears to intend and has not
+    declared (REQ-d00272-O), never as a reference fault.
+    """
+    results, tx = parse_code("def f():\n    #   REQ-d00001\n    return 1\n")
+    assert tx.undeclared, "a bare identifier comment must be reported"
+    assert not tx.faults, "it is not a reference fault -- nothing about it is malformed"
+    # Round-trip fidelity is absolute: the line is reported AND still
+    # renders back verbatim through the remainder gatherer, never dropped.
+    remainder = [r for r in results if r.content_type == "remainder"]
+    assert any("#   REQ-d00001" in r.raw_text for r in remainder), (
+        f"the line must survive verbatim in a remainder; got {remainder}"
+    )
+
+
+# Verifies: REQ-d00272-O
+def test_an_informal_citation_produces_no_relationship(parse_code):
+    """Prose citing a requirement is evidence of intent, and inferring an
+    edge from intent is the failure this vocabulary exists to prevent."""
+    results, tx = parse_code(
+        "# REQ-d00001: the code below answers to this, informally.\ndef f():\n    return 1\n"
+    )
+    assert not _all_refs((results, tx)), "an informal citation must bind nothing"
+    assert len(tx.undeclared) == 1
+    line_num, text = tx.undeclared[0]
+    assert line_num == 1
+    assert "REQ-d00001" in text
+
+
+# Verifies: REQ-d00272-O
+def test_a_comment_a_keyword_introduces_is_not_an_informal_citation(parse_code):
+    """A keyword makes the comment a declaration, not a citation."""
+    results, tx = parse_code("# Implements: REQ-d00001\ndef f():\n    return 1\n")
+    assert "REQ-d00001" in _all_refs((results, tx))
+    assert not tx.undeclared
+
+
+# Verifies: REQ-d00272-O
+def test_a_comment_continuing_a_list_is_not_an_informal_citation(parse_code):
+    """A continuation line is an item of its list, not a citation of its own."""
+    results, tx = parse_code(
+        "# Implements: REQ-d00001,\n#             REQ-d00002\ndef f():\n    return 1\n"
+    )
+    refs = _all_refs((results, tx))
+    assert "REQ-d00001" in refs and "REQ-d00002" in refs
+    assert not tx.undeclared
+
+
+# Verifies: REQ-d00269-H
+def test_a_folded_continuation_preserves_the_original_lines_for_rendering(parse_code):
+    """The fold's extraction text (used to read the list) and its raw_text
+    (used to render the file back) are different strings on purpose: the
+    whole round-trip claim rests on raw_text staying the two original
+    physical lines, newline-joined, rather than the flattened single-line
+    form used only to parse the keyword's target.
+    """
+    results, _tx = parse_code(
+        "# Implements: REQ-d00001,\n#             REQ-d00002\ndef f():\n    return 1\n"
+    )
+    refs = [r for r in results if r.content_type == "code_ref"]
+    assert len(refs) == 1
+    assert refs[0].raw_text == "# Implements: REQ-d00001,\n#             REQ-d00002"
+    assert refs[0].start_line == 1
+    assert refs[0].end_line == 2
+
+
+# Verifies: REQ-d00269-H
+def test_a_continuation_candidate_need_not_be_identifier_shaped(parse_code):
+    """REQ-d00269-H continues onto "the next line of the same comment
+    block" -- any comment line, not only one already shaped like an
+    identifier.  Narrowing the fold to identifier-shaped lines would leave
+    ``XREQ-d00002`` (no configured namespace opens with ``X``) as silent
+    prose instead of a reported, unbound item -- the anti-silence failure
+    this requirement exists to remove.  The space test (REQ-d00272-B) still
+    refuses to guess: the item is read and reported, never bound.
+    """
+    results, tx = parse_code(
+        "# Implements: REQ-d00001,\n#             XREQ-d00002\ndef f():\n    return 1\n"
+    )
+    refs = _all_refs((results, tx))
+    assert "REQ-d00001" in refs
+    # The faulted item stays in the list (raw, unresolved) so the builder can
+    # report it as a broken reference -- REQ-d00269-G -- but nothing coerces
+    # it into REQ-d00002: no edge exists that its author did not spell.
+    assert "REQ-d00002" not in refs
+    verdicted = [
+        r
+        for r in results
+        if r.content_type == "code_ref"
+        and ("implements", "XREQ-d00002") in r.parsed_data.get("reference_verdicts", {})
+    ]
+    assert verdicted, f"XREQ-d00002 must be reported as a faulted item; got {results}"
+
+
+# Verifies: REQ-d00269-H
+def test_a_continuation_chain_of_three_lines_binds_every_reference(parse_code):
+    result = parse_code(
+        "# Implements: REQ-d00001,\n"
+        "#             REQ-d00002,\n"
+        "#             REQ-d00003\n"
+        "def f():\n    return 1\n"
+    )
+    refs = _all_refs(result)
+    assert "REQ-d00001" in refs
+    assert "REQ-d00002" in refs
+    assert "REQ-d00003" in refs

@@ -21,10 +21,6 @@ name = "elspais"
 [id-patterns]
 # ID template; vars: {namespace}, {level.letter}, {component}
 canonical = "{namespace}-{level.letter}{component}"
-# Characters treated as equivalent separators when matching IDs
-separators = ["-", "_"]
-# If true, namespace prefix is optional when matching IDs
-prefix_optional = false
 
 # Named shorthand patterns for ID matching
 [id-patterns.aliases]
@@ -40,8 +36,6 @@ digits = 5
 leading_zeros = true
 # Regex pattern (empty = not applicable for numeric style)
 pattern = ""
-# Max length (0 = unlimited; named style only)
-max_length = 0
 
 # Assertion label format
 [id-patterns.assertions]
@@ -223,6 +217,8 @@ aspirational = ["Roadmap", "Future"]
 # Concluded -- excluded from everything, hidden by default
 retired = ["Deprecated", "Superseded"]
 
+[rules.coverage]
+
 # Coverage severity tiers per dimension (ok | info | warning | error)
 # Code implements assertions
 [rules.coverage.implemented]
@@ -271,6 +267,10 @@ retired = "warning"
 provisional = "info"
 # "ok" | "info" | "warning" | "error" -- refs to Roadmap/Future/Idea
 aspirational = "info"
+# "ok" | "info" | "warning" | "error" -- a comment citing a requirement in
+# prose without a keyword. This estate writes those deliberately, so the
+# findings are listed without failing the run.
+undeclared = "info"
 
 # Changelog enforcement for requirement changes
 [changelog]
@@ -307,8 +307,6 @@ min_length = 3
 [validation]
 # "normalized-text" -- how requirement content is hashed
 hash_mode = "normalized-text"
-# Suppress errors for unresolved cross-repo refs
-allow_unresolved_cross_repo = false
 # Hash algorithm
 hash_algorithm = "sha256"
 # Hash truncation length in chars

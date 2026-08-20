@@ -27,28 +27,32 @@ from elspais.config.schema import ElspaisConfig
 from elspais.graph.builder import GraphBuilder
 from elspais.graph.deserializer import DomainFile
 from elspais.graph.federated import FederatedGraph
+from elspais.graph.federation_plan import (
+    PlannedRepo,
+    declared_associates,
+    plan_federation,
+)
 from elspais.graph.GraphNode import FileType, GraphNode, NodeKind, make_file_id
 from elspais.graph.parsers import ParserRegistry
 from elspais.graph.parsers.journey import JourneyParser
 from elspais.graph.parsers.lark import FileDispatcher
 from elspais.graph.parsers.remainder import RemainderParser
-from elspais.utilities.patterns import build_resolver
+from elspais.utilities.patterns import FederatedIdReader, IdResolver, build_resolver
 
 _log = logging.getLogger(__name__)
 
+
 # Known schema fields (by alias and Python name) for filtering non-schema keys
-_SCHEMA_FIELDS = {f.alias or name for name, f in ElspaisConfig.model_fields.items()} | set(
-    ElspaisConfig.model_fields.keys()
-)
-
-
 def _resolve_coverage_file_node(graph, source_file, lcov_path, repo_root):
     """Resolve an lcov SF path to a repo-relative FILE node.
 
     Tries the SF verbatim, then resolves it relative to the package root
     (the directory containing the lcov file, minus a trailing 'coverage').
     """
-    node = graph.find_by_id(make_file_id(source_file))
+    # Coverage is ingested into the repository whose graph this is, so the
+    # id is written in that repository's namespace.
+    namespace = graph.namespace
+    node = graph.find_by_id(make_file_id(namespace, source_file))
     if node is not None:
         return node
     pkg_root = lcov_path.parent
@@ -58,7 +62,7 @@ def _resolve_coverage_file_node(graph, source_file, lcov_path, repo_root):
         rel = (pkg_root / source_file).resolve().relative_to(Path(repo_root).resolve())
     except ValueError:
         return None
-    return graph.find_by_id(make_file_id(str(rel)))
+    return graph.find_by_id(make_file_id(namespace, str(rel)))
 
 
 # Implements: REQ-d00254-F, REQ-d00254-I
@@ -98,6 +102,19 @@ def _ingest_target_results(
 
     parser = spec.parser_factory()
     records = parser.parse(results_text, source_path)
+
+    # Implements: REQ-d00254-O
+    # Normalise the producer's line origin to the tool's own numbering, once,
+    # here. Everything downstream -- binding a result to the test at a line,
+    # and pointing a reader at that line -- can then treat a line as a line.
+    # `result_line` is this module's own count of lines in the results
+    # artifact and is already 1-based, so it is left alone.
+    line_shift = 1 - (target.line_base if target.line_base is not None else spec.line_base)
+    if line_shift:
+        for rec in records:
+            for key in ("line", "root_line"):
+                if isinstance(rec.get(key), int):
+                    rec[key] = rec[key] + line_shift
     repo_root_resolved = Path(repo_root).resolve()
     count = 0
     for rec in records:
@@ -148,7 +165,6 @@ def _ingest_target_results(
             "classname": rec.get("classname", ""),
             "duration": rec.get("duration", 0.0),
             "message": rec.get("message"),
-            "verifies": rec.get("verifies", []),
             "test_id": rec.get("test_id"),
             "source_path": raw_src,
             "source_file": source_file,
@@ -174,23 +190,10 @@ def _ingest_target_results(
 
 
 def _validate_config(config: dict[str, Any]) -> ElspaisConfig:
-    """Validate a config dict into ElspaisConfig, stripping non-schema keys.
+    """Validate a config dict into ElspaisConfig (see config.validate_config)."""
+    from elspais.config import validate_config
 
-    The config dict from get_config() may contain legacy keys (e.g. 'patterns')
-    that were consumed by migration but not removed. We filter those out before
-    validation since ElspaisConfig uses extra='forbid'.
-
-    The 'associates' key may use legacy format (``{paths: [...]}`` instead of
-    ``{name: {path: ...}}``), which is incompatible with the schema. We strip
-    it when it has the legacy shape since factory.py accesses associates via
-    ``get_associates_config(config)`` on the raw dict.
-    """
-    filtered = {k: v for k, v in config.items() if k in _SCHEMA_FIELDS}
-    # Strip legacy-format associates (contains 'paths' list instead of named entries)
-    assoc = filtered.get("associates")
-    if isinstance(assoc, dict) and "paths" in assoc:
-        filtered.pop("associates", None)
-    return ElspaisConfig.model_validate(filtered)
+    return validate_config(config)
 
 
 # Implements: REQ-d00128-C
@@ -216,6 +219,7 @@ def create_file_node(
     file_path: Path,
     repo_root: Path,
     file_type: FileType,
+    namespace: str,
     repo: str | None = None,
     git_branch: str | None = None,
     git_commit: str | None = None,
@@ -226,19 +230,31 @@ def create_file_node(
         file_path: Absolute path to the file.
         repo_root: Repository root for computing relative path.
         file_type: The FileType classification.
+        namespace: The namespace this repository declares. Positional and
+            required: a FILE id names the repository holding the file, and
+            a caller that cannot say which repository that is cannot make
+            the id.
         repo: Repository identifier (None for main project).
         git_branch: Current git branch (captured once per repo).
         git_commit: Current git commit (captured once per repo).
 
     Returns:
         A GraphNode with kind == NodeKind.FILE.
+
+    Raises:
+        ValueError: The namespace is empty.
     """
+    if not namespace:
+        raise ValueError(
+            f"Cannot make a FILE id for {file_path} without a namespace: the id "
+            f"names the repository holding the file."
+        )
     try:
         rel_path = str(file_path.resolve().relative_to(repo_root.resolve()))
     except ValueError:
         rel_path = str(file_path)
 
-    file_id = make_file_id(rel_path)
+    file_id = make_file_id(namespace, rel_path)
     node = GraphNode(
         id=file_id,
         kind=NodeKind.FILE,
@@ -353,6 +369,15 @@ def _run_prescan_command(
 
 # Default file patterns for [directories].code scanning.
 # Covers all languages listed in the multi-language comment support table.
+#
+# Jinja templates are included because a template is where a viewer's
+# JavaScript is written -- the code is real, the annotations in it are real,
+# and leaving the extension out meant every one of them was invisible while
+# the requirements they implement read as unimplemented. What a `.j2` file
+# holds is decided by the comment markers found in it, exactly as for any
+# other extension: a `//` line in a `.js.j2` reads, and a `/* */` block in a
+# `.css.j2` does not, which is the block-comment gap and not specific to
+# templates.
 DEFAULT_CODE_PATTERNS = [
     "*.py",
     "*.js",
@@ -381,6 +406,7 @@ DEFAULT_CODE_PATTERNS = [
     "*.tf",
     "*.tfvars",
     "*.hcl",
+    "*.j2",
 ]
 
 
@@ -402,7 +428,11 @@ class SpecDirConfig:
 
 # Implements: REQ-d00254-A+B+F
 def _derive_credit_config(targets):
-    """Collapse per-target credit settings into the annotator's global CoverageCreditConfig.
+    """Collapse one repository's per-target credit settings into a CoverageCreditConfig.
+
+    The result governs that repository's evidence only; a federation derives
+    one per member and credits each member's evidence under its own
+    (REQ-d00261-E).
 
     Phase 1: homogeneous targets. assertion_credit = strongest credit_coverage;
     unmatched_credit = "verified" iff any aggregate target; dirs = target cwds;
@@ -492,7 +522,7 @@ def _resolve_spec_dir_config(
     # Legacy registry kept for backwards compatibility during transition
     registry = ParserRegistry()
     # RequirementParser removed — Lark dispatcher handles spec files
-    registry.register(JourneyParser())
+    registry.register(JourneyParser(FederatedIdReader(resolver)))
     # Implements: REQ-d00128-G
     registry.register(RemainderParser())
 
@@ -522,6 +552,7 @@ def build_graph(
     _build_associates: bool = True,
     captured_results: dict[str, str] | None = None,
     fresh_targets: set[str] | None = None,
+    federation_resolvers: list[IdResolver] | None = None,
 ) -> FederatedGraph:
     """Build a FederatedGraph from spec directories.
 
@@ -550,6 +581,12 @@ def build_graph(
             ingested for a target NOT in this set is tagged ``carried=True``.
             When None (the default), no target is considered carried. Stashed
             on the returned FederatedGraph as ``render_fresh_targets``.
+        federation_resolvers: Every federation member's ``IdResolver``,
+            supplied when this build is one member of a federation already
+            planned by its host. Each member's own grammar still comes from
+            its own configuration; sharing the set is what lets a member's
+            code and tests name the identifiers its siblings own. Resolved
+            here from the declarations when not supplied.
 
     Returns:
         FederatedGraph wrapping one or more TraceGraph instances.
@@ -578,16 +615,30 @@ def build_graph(
     # 3. Create default resolver
     default_resolver = build_resolver(config)
 
+    # Implements: REQ-d00269-C
+    # Membership is settled before any file is scanned: an identifier owned
+    # by any member has to be recognised in this repository's code and test
+    # annotations, and a scanner cannot recognise a grammar it has not been
+    # given.  The plan is resolved from configuration alone and reused for
+    # the associate builds below rather than walked a second time.
+    plan: list[PlannedRepo] | None = None
+    if federation_resolvers is None:
+        federation_resolvers = [default_resolver]
+        if _build_associates and declared_associates(config, repo_root):
+            plan = plan_federation(config, repo_root, strict=strict)
+            federation_resolvers.extend(
+                build_resolver(member.config) for member in plan[1:] if member.config is not None
+            )
+    own_namespace = default_resolver.config.namespace
+    member_resolvers = [r for r in federation_resolvers if r.config.namespace != own_namespace]
+
     # Implements: REQ-d00128-G
     # Lark FileDispatcher for code and test files
-    default_dispatcher = FileDispatcher(default_resolver)
+    default_dispatcher = FileDispatcher(default_resolver, member_resolvers)
 
     # 4. Build graph from all spec directories
     hash_mode = typed_config.validation.hash_mode
     satellite_kinds = ["assertion", "result"]
-    mas = default_resolver.config.assertions.multi_separator
-    if mas is False or mas is None:
-        mas = ""
     # YIELDS (RESULT->TEST) links are always enabled: flutter-machine emits
     # test_id=None (never queues YIELDS), while junit/pytest emit real test_ids
     # (YIELDS desired).  So the per-test link is unconditionally safe.
@@ -595,7 +646,6 @@ def build_graph(
         repo_root=repo_root,
         hash_mode=hash_mode,
         satellite_kinds=satellite_kinds,
-        multi_assertion_separator=str(mas),
         resolver=default_resolver,
         namespace=typed_config.project.namespace,
         project_name=typed_config.project.name,
@@ -621,7 +671,13 @@ def build_graph(
         resolved = str(source_path.resolve())
         if resolved not in file_nodes:
             fn = create_file_node(
-                source_path, repo_root, file_type, file_repo, git_branch, git_commit
+                source_path,
+                repo_root,
+                file_type,
+                typed_config.project.namespace,
+                repo=file_repo,
+                git_branch=git_branch,
+                git_commit=git_commit,
             )
             file_nodes[resolved] = fn
             builder.register_file_node(fn)
@@ -905,95 +961,120 @@ def build_graph(
     # Annotate keywords on all nodes so keyword search tools work
     # Annotate coverage metrics so all consumers (MCP, HTML, Flask) get coverage data
     from elspais.graph.annotators import (
+        DEFAULT_STOPWORDS,
+        KeywordsConfig,
         annotate_coverage,
         annotate_journey_verification,
         annotate_keywords,
     )
 
-    annotate_keywords(graph)
-    # Derive the global coverage-credit config from [[scanning.test.targets]].
-    # Per-target settings are collapsed into one global config (acceptable for
-    # Phase 1 homogeneous targets). Logic lives in _derive_credit_config (pure,
-    # unit-tested independently).
+    # The shortest word worth indexing is the project's to set. The
+    # extractor has always honoured it; nothing had ever passed it in.
+    annotate_keywords(
+        graph,
+        KeywordsConfig(
+            stopwords=DEFAULT_STOPWORDS,
+            min_length=typed_config.keywords.min_length,
+        ),
+    )
+    # Derive this repository's coverage-credit config from
+    # [[scanning.test.targets]]. Per-target settings are collapsed into one
+    # config for the repository (acceptable for Phase 1 homogeneous targets).
+    # Logic lives in _derive_credit_config (pure, unit-tested independently).
     credit = _derive_credit_config(typed_config.scanning.test.targets)
-    # Roll each journey's verifying tests into a journey_verification metric
-    # BEFORE coverage, so the per-REQ UAT consumer can read each validating
-    # journey's verdict when populating the uat_verified dimension.
-    annotate_journey_verification(graph)
-    annotate_coverage(graph, credit)
+
+    def _annotate_coverage_here() -> None:
+        # Roll each journey's verifying tests into a journey_verification
+        # metric BEFORE coverage, so the per-REQ UAT consumer can read each
+        # validating journey's verdict when populating the uat_verified
+        # dimension.
+        annotate_journey_verification(graph)
+        annotate_coverage(graph, credit)
+
+    # A federation recomputes coverage over every member at once, after the
+    # cross-repository edges exist -- those edges are evidence, so numbers
+    # computed before them are provisional and are thrown away. Computing
+    # them here as well is work whose every result is overwritten, and it is
+    # the dominant cost of a build.
+    #
+    # A member build is always part of such a federation: it happens only
+    # because a host is assembling one, and the host's graph is live beside
+    # it, so the recompute is certain to run and this pass would be
+    # discarded. A host build cannot know yet -- its members are built
+    # below, and any of them may fail to load -- so it annotates once that
+    # is settled, and only where the recompute will not happen.
 
     # Implements: REQ-d00203-A+B+C+D+E
-    # Build associate repos if [associates] config is present
+    # Build every repository the declarations reach, not only those the
+    # root names directly (REQ-d00202-D).
     if _build_associates:
-        from elspais.config import get_associates_config, validate_no_transitive_associates
-        from elspais.graph.federated import FederationError, RepoEntry
+        from elspais.graph.federated import RepoEntry
 
-        associates_config = get_associates_config(config, repo_root=repo_root)
-        if associates_config:
-            entries: list[RepoEntry] = []
-            host_name = config["project"]["name"]
-            # Root repo entry
-            entries.append(
+        if plan is not None:
+            host_name = plan[0].name
+            entries: list[RepoEntry] = [
                 RepoEntry(
                     name=host_name,
                     graph=graph,
                     config=config,
                     repo_root=repo_root,
+                    # The plan detected this repository's origin along with
+                    # every other member's. Leaving it off here made the
+                    # repository being worked in the one member that never
+                    # reported an origin, and so the one that never received
+                    # branch or divergence staleness.
+                    git_origin=plan[0].git_origin,
                 )
-            )
-            for assoc_name, assoc_info in associates_config.items():
-                assoc_path = (repo_root / assoc_info["path"]).resolve()
-                git_origin = assoc_info.get("git")
-
-                if not assoc_path.exists():
-                    # Implements: REQ-d00203-C, REQ-d00203-D
-                    if strict:
-                        raise FederationError(
-                            f"Associate '{assoc_name}' path does not exist: {assoc_path}"
-                        )
+            ]
+            for member in plan[1:]:
+                if member.config is None:
+                    # Implements: REQ-d00202-I, REQ-d00203-C, REQ-d00203-D
                     entries.append(
                         RepoEntry(
-                            name=assoc_name,
+                            name=member.name,
                             graph=None,
                             config=None,
-                            repo_root=assoc_path,
-                            git_origin=git_origin,
-                            error=f"Path does not exist: {assoc_path}",
+                            repo_root=member.repo_root,
+                            git_origin=member.git_origin,
+                            error=member.error,
                         )
                     )
                     continue
 
-                # Load associate's config
-                assoc_config = get_config(None, assoc_path)
-
-                # Implements: REQ-d00203-B
-                validate_no_transitive_associates(assoc_name, assoc_config)
-
-                # Build associate's graph (no recursive associate building)
-                assoc_fg = build_graph(
-                    config=assoc_config,
-                    repo_root=assoc_path,
+                # The plan already resolved this member's own declarations,
+                # so each graph is built for itself alone.
+                member_fg = build_graph(
+                    config=member.config,
+                    repo_root=member.repo_root,
                     scan_code=scan_code,
                     scan_tests=scan_tests,
                     _build_associates=False,
+                    federation_resolvers=federation_resolvers,
                 )
-                # Extract the TraceGraph from the federation-of-one
-                assoc_graph = list(assoc_fg.iter_repos())[0].graph
                 entries.append(
                     RepoEntry(
-                        name=assoc_name,
-                        graph=assoc_graph,
-                        config=assoc_config,
-                        repo_root=assoc_path,
-                        git_origin=git_origin,
+                        name=member.name,
+                        graph=list(member_fg.iter_repos())[0].graph,
+                        config=member.config,
+                        repo_root=member.repo_root,
+                        git_origin=member.git_origin,
                     )
                 )
 
+            if len([e for e in entries if e.graph is not None]) < 2:
+                # Every member failed to load, so no recompute will run and
+                # this graph is the only one there is.
+                _annotate_coverage_here()
             federated = FederatedGraph(entries, root_repo=host_name)
             # Implements: REQ-d00254-I
             federated.render_fresh_targets = fresh_targets
             return federated
 
+    # Reached by a host with no associates to federate -- nothing will
+    # recompute, so this is the only pass -- and by a member build, whose
+    # host is about to recompute over it.
+    if _build_associates:
+        _annotate_coverage_here()
     federated = FederatedGraph.from_single(graph, config, repo_root)
     # Implements: REQ-d00254-I
     federated.render_fresh_targets = fresh_targets

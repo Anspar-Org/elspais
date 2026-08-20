@@ -1,0 +1,112 @@
+#!/bin/bash
+# =====================================================
+# e2e-verdict: the one authority for the cached e2e verdict
+# =====================================================
+#
+# Runs the e2e tier and records the verdict in .results/.test-cache-e2e,
+# keyed on the committed tree (git write-tree) and the source directory the
+# on-PATH elspais resolves to. The pre-push hook honors a verdict this
+# script recorded, so running it before `git push` moves the several-minute
+# e2e stage out of the push, where a long run otherwise overruns the
+# remote's idle timeout.
+#
+# A verdict already recorded for the same tree and environment is honored
+# without re-running: exit 0 on PASS, exit 1 on FAIL. Re-run a recorded
+# verdict with ELSPAIS_E2E_FORCE=1. The verdict is written only by a real
+# run -- never pre-write PASS.
+
+set -e
+set -o pipefail
+
+RED='\033[0;31m'
+YELLOW='\033[1;33m'
+GREEN='\033[0;32m'
+NC='\033[0m'
+
+REPO_ROOT=$(git rev-parse --show-toplevel)
+cd "$REPO_ROOT"
+CACHE_DIR="$REPO_ROOT/.results"
+E2E_CACHE="$CACHE_DIR/.test-cache-e2e"
+CONTENT_HASH=$(git write-tree | head -c 40)
+mkdir -p "$CACHE_DIR"
+
+# The e2e tier spawns `elspais` as a subprocess from PATH, so its verdict
+# describes whichever binary that resolved to -- not necessarily this tree.
+# Identify the environment by where the on-PATH CLI's code actually lives,
+# and make that part of the cache key. A verdict earned elsewhere is a miss,
+# not a failure -- it has nothing to say about this tree, so we re-run.
+e2e_cli_src() {
+    _bin=$(command -v elspais 2>/dev/null) || return 1
+    _py=$(head -1 "$_bin" 2>/dev/null | sed 's|^#!||')
+    [ -x "$_py" ] || return 1
+    "$_py" -c 'import elspais,os;print(os.path.realpath(os.path.dirname(elspais.__file__)))' 2>/dev/null
+}
+E2E_REPO_SRC=$(python3 -c 'import os,sys;print(os.path.realpath(sys.argv[1]))' "src/elspais") \
+    || E2E_REPO_SRC="$REPO_ROOT/src/elspais"
+E2E_ENV_SRC=$(e2e_cli_src) || E2E_ENV_SRC=""
+
+# The venv in the worktree is the binary this tree's e2e tests mean. Prefer
+# it automatically rather than making every developer remember the PATH dance.
+if [ "$E2E_ENV_SRC" != "$E2E_REPO_SRC" ] && [ -x "$REPO_ROOT/.venv/bin/elspais" ]; then
+    _saved_path="$PATH"
+    PATH="$REPO_ROOT/.venv/bin:$PATH"
+    export PATH
+    if [ "$(e2e_cli_src)" = "$E2E_REPO_SRC" ]; then
+        E2E_ENV_SRC="$E2E_REPO_SRC"
+        echo -e "${YELLOW}E2E: using $REPO_ROOT/.venv/bin for elspais (PATH resolved elsewhere)${NC}"
+    else
+        PATH="$_saved_path"
+        export PATH
+    fi
+fi
+
+if [ "$E2E_ENV_SRC" != "$E2E_REPO_SRC" ]; then
+    echo -e "${YELLOW}E2E: on-PATH elspais is ${E2E_ENV_SRC:-<not found>},${NC}"
+    echo -e "${YELLOW}     not this tree ($E2E_REPO_SRC). Results describe that${NC}"
+    echo -e "${YELLOW}     install, not this branch. Fix with:${NC}"
+    echo -e "${YELLOW}       export PATH=\"$REPO_ROOT/.venv/bin:\$PATH\"${NC}"
+fi
+
+# Honor a verdict already recorded for this tree in this environment. The
+# cache records the verdict for a tree, not just its successes: caching only
+# passes meant any failing run guaranteed every subsequent push re-ran the
+# whole suite and died the same way.
+if [ -z "$ELSPAIS_E2E_FORCE" ] && [ -f "$E2E_CACHE" ]; then
+    CACHED_HASH=$(cut -d' ' -f1 < "$E2E_CACHE")
+    CACHED_VERDICT=$(cut -d' ' -f2 < "$E2E_CACHE")
+    CACHED_ENV=$(cut -d' ' -f3 < "$E2E_CACHE")
+    if [ "$CACHED_HASH" = "$CONTENT_HASH" ] && [ -n "$CACHED_ENV" ] \
+       && [ "$CACHED_ENV" = "$E2E_ENV_SRC" ]; then
+        if [ "$CACHED_VERDICT" = "PASS" ]; then
+            echo -e "${GREEN}E2E tests cached — passed since last change${NC}"
+            exit 0
+        fi
+        echo -e "${RED}E2E tests failed (cached verdict for an unchanged tree)${NC}"
+        echo "Re-run them with: ELSPAIS_E2E_FORCE=1 .githooks/e2e-verdict"
+        echo "Cache: $E2E_CACHE"
+        exit 1
+    fi
+fi
+
+E2E_RC=0
+pytest tests/ -m "e2e" --tb=short -q \
+    --junitxml="$CACHE_DIR/test-results-e2e.xml" 2>&1 || E2E_RC=$?
+
+# Pretty-print JUnit XML for elspais line-level linking. The XML is an
+# artifact and never gates the verdict.
+if ! python3 -c "
+import xml.etree.ElementTree as ET
+tree = ET.parse('$CACHE_DIR/test-results-e2e.xml')
+ET.indent(tree, space='  ')
+tree.write('$CACHE_DIR/test-results-e2e.xml', encoding='unicode', xml_declaration=True)
+" 2>/dev/null; then
+    echo "::warning::junit pretty-print failed (tolerated: artifact formatting only)"
+fi
+
+if [ "$E2E_RC" -ne 0 ]; then
+    echo "$CONTENT_HASH FAIL $E2E_ENV_SRC" > "$E2E_CACHE"
+    echo -e "${RED}E2E tests failed!${NC}"
+    exit 1
+fi
+echo "$CONTENT_HASH PASS $E2E_ENV_SRC" > "$E2E_CACHE"
+echo -e "${GREEN}E2E tests passed!${NC}"

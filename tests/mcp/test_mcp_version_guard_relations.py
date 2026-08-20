@@ -40,9 +40,21 @@ from pathlib import Path
 import pytest
 
 from elspais.graph import render
+from elspais.graph.GraphNode import make_file_id
+from tests.core.graph_test_helpers import grammar_for
 
 FIXTURES_DIR = Path(__file__).parent.parent / "fixtures"
 HHT_LIKE = FIXTURES_DIR / "hht-like"
+
+# The namespace the hht-like fixture declares -- structural ids carry the
+# namespace of the repository holding the node.
+NAMESPACE = "REQ"
+
+
+def file_id(relative_path: str) -> str:
+    """FILE node id for a path in the fixture repository."""
+    return make_file_id(NAMESPACE, relative_path)
+
 
 BOGUS_VERSION = "0" * 16
 
@@ -340,7 +352,9 @@ class TestEdgeChainThreadsTheSourcesVersion:
         )
 
         assert result["success"] is True, result.get("error")
-        assert "REQ-p00001-A" in render.render_node(chain.find_by_id(self.SOURCE))
+        assert "REQ-p00001-A" in render.render_node(
+            chain.find_by_id(self.SOURCE), resolver=grammar_for(NAMESPACE)
+        )
         TestEdgeChainThreadsTheSourcesVersion.threaded = result["version"]
 
     def test_REQ_o00062_K_threaded_token_admits_the_delete(self, chain, tools):
@@ -661,7 +675,7 @@ class TestAddRequirementIntoChosenFileParity:
     under the same guard.
     """
 
-    FILE = "file:spec/dev-impl.md"
+    FILE = file_id("spec/dev-impl.md")
 
     def test_REQ_o00062_O_add_requirement_places_into_the_named_file(self, rollback, tools):
         """REQ-o00062-O: ``file_id`` plus the FILE's live token lands the
@@ -681,7 +695,9 @@ class TestAddRequirementIntoChosenFileParity:
         assert created is not None
         assert created.file_node() is not None
         assert created.file_node().id == self.FILE
-        assert "REQ-d00910" in render.render_file(rollback.find_by_id(self.FILE))
+        assert "REQ-d00910" in render.render_file(
+            rollback.find_by_id(self.FILE), resolver=grammar_for(NAMESPACE)
+        )
 
     def test_REQ_o00062_M_stale_file_token_rejects_the_placement(self, rollback, tools):
         """REQ-o00062-M: File placement is guarded on the destination FILE --
@@ -713,8 +729,8 @@ class TestRenameFileGuardsTheFile:
     so the FILE is the single guarded node.
     """
 
-    FILE = "file:spec/glossary.md"
-    RENAMED = "file:spec/glossary-renamed.md"
+    FILE = file_id("spec/glossary.md")
+    RENAMED = file_id("spec/glossary-renamed.md")
 
     def test_REQ_o00062_M_if_version_is_a_required_parameter(self, tools):
         """REQ-o00062-M: if_version has no default -- callers cannot omit it."""
@@ -733,12 +749,14 @@ class TestRenameFileGuardsTheFile:
         assert result["code"] == "version_conflict"
         assert result["node_id"] == self.FILE
         assert chain.find_by_id(self.FILE) is not None
-        assert chain.find_by_id("file:spec/never-lands.md") is None
+        assert chain.find_by_id(file_id("spec/never-lands.md")) is None
 
     def test_REQ_o00062_L_missing_file_reports_node_not_found(self, tools):
         """REQ-o00062-L: An absent FILE id is not a version conflict."""
         result = tools["mutate_rename_file"](
-            file_id="file:spec/absent.md", new_relative_path="spec/x.md", if_version=BOGUS_VERSION
+            file_id=file_id("spec/absent.md"),
+            new_relative_path="spec/x.md",
+            if_version=BOGUS_VERSION,
         )
 
         assert result["success"] is False
@@ -765,8 +783,8 @@ class TestRenameFileGuardsTheFile:
 # (which token is stale, the node id the conflict must name)
 MOVE_TOKENS = [
     ("if_version", "REQ-d00003"),
-    ("if_source_file_version", "file:spec/dev-impl.md"),
-    ("if_target_version", "file:spec/ops-deploy.md"),
+    ("if_source_file_version", file_id("spec/dev-impl.md")),
+    ("if_target_version", file_id("spec/ops-deploy.md")),
 ]
 
 
@@ -787,15 +805,15 @@ class TestMoveNodeToFileGuardsAllThreeAffectedNodes:
     """
 
     NODE = "REQ-d00003"
-    ORIGIN = "file:spec/dev-impl.md"
-    DESTINATION = "file:spec/ops-deploy.md"
+    ORIGIN = file_id("spec/dev-impl.md")
+    DESTINATION = file_id("spec/ops-deploy.md")
 
     @staticmethod
     def _live_tokens(graph):
         return {
             "if_version": node_version(graph.find_by_id("REQ-d00003")),
-            "if_source_file_version": node_version(graph.find_by_id("file:spec/dev-impl.md")),
-            "if_target_version": node_version(graph.find_by_id("file:spec/ops-deploy.md")),
+            "if_source_file_version": node_version(graph.find_by_id(file_id("spec/dev-impl.md"))),
+            "if_target_version": node_version(graph.find_by_id(file_id("spec/ops-deploy.md"))),
         }
 
     def test_REQ_o00062_M_all_three_tokens_are_required_parameters(self, tools):
@@ -839,7 +857,7 @@ class TestMoveNodeToFileGuardsAllThreeAffectedNodes:
         tokens["if_target_version"] = ""
 
         result = tools["mutate_move_node_to_file"](
-            node_id=self.NODE, target_file_id="file:notaspecdir/x.md", **tokens
+            node_id=self.NODE, target_file_id=file_id("notaspecdir/x.md"), **tokens
         )
 
         assert result["success"] is False
@@ -847,7 +865,7 @@ class TestMoveNodeToFileGuardsAllThreeAffectedNodes:
         assert "not under any configured spec directory" in result["error"]
         assert not (HHT_LIKE / "notaspecdir" / "x.md").exists()
         assert not (HHT_LIKE / "notaspecdir").exists()
-        assert canonical_graph.find_by_id("file:notaspecdir/x.md") is None
+        assert canonical_graph.find_by_id(file_id("notaspecdir/x.md")) is None
         assert canonical_graph.find_by_id(self.NODE).file_node().id == self.ORIGIN
 
     def test_REQ_o00062_O_path_traversal_destination_is_rejected_and_nothing_created(
@@ -860,7 +878,7 @@ class TestMoveNodeToFileGuardsAllThreeAffectedNodes:
         tokens["if_target_version"] = ""
 
         result = tools["mutate_move_node_to_file"](
-            node_id=self.NODE, target_file_id="file:../escape.md", **tokens
+            node_id=self.NODE, target_file_id=file_id("../escape.md"), **tokens
         )
 
         assert result["success"] is False
@@ -910,8 +928,8 @@ class TestMoveNodeCreatesMissingDestinationParity:
     """
 
     NODE = "REQ-d00003"
-    ORIGIN = "file:spec/dev-impl.md"
-    NEW_DESTINATION = "file:spec/relocated.md"
+    ORIGIN = file_id("spec/dev-impl.md")
+    NEW_DESTINATION = file_id("spec/relocated.md")
     NEW_PATH = "spec/relocated.md"
 
     def test_REQ_o00062_O_move_to_missing_destination_creates_and_wires_the_file(
@@ -980,7 +998,7 @@ class TestMoveNodeCreatesMissingDestinationParity:
 DISK_TOOL_CALLS = [
     (
         "apply_link",
-        "file:tests/test_auth.py",
+        file_id("tests/test_auth.py"),
         {"file_path": "tests/test_auth.py", "line": 5, "requirement_id": "REQ-d00001"},
         "tests/test_auth.py",
         True,

@@ -23,7 +23,12 @@ This document intentionally avoids workflow, tooling, or process guidance. Those
 
 ### Requirement IDs
 
-Each requirement is uniquely identified by an ID of the form:
+Each requirement is uniquely identified. What an identifier looks like is
+each repository's own to configure: the namespace it opens with, the levels it
+declares and their letters, whether its component is a number or a name in one
+of the case conventions, which character marks off an assertion label, and
+what a label may be. This repository configures the form below, and every
+example in this document is written in it.
 
 ```text
 REQ-{prefix}{number}[-{assertion}]
@@ -44,12 +49,18 @@ Examples:
 - `REQ-d00123-G`
 - `REQ-o00007`
 
+A repository configuring otherwise reads its own identifiers by its own
+grammar and nothing here changes for it, except that its identifiers are
+spelled differently. `REQ-d00251` states what may be configured.
+
 ### Sponsor-Scoped Requirements
 
-Sponsor-specific requirements MAY include a sponsor prefix in the numeric
-portion of the ID, as defined by repository conventions.
+A repository may scope requirements to a sponsor by declaring a namespace of
+its own, which its identifiers then carry. No two repositories in one
+federation may declare the same namespace, which is what lets a reference
+crossing between them say whose requirement it means.
 
-Example:
+Example, in a repository declaring the namespace `TTN-REQ`:
 
 - `TTN-REQ-p00001-F`.
 
@@ -354,7 +365,7 @@ Field guidance:
 - **Validates**: Optional; lists REQ IDs or assertion references this journey validates (e.g., `Validates: REQ-p00001-A, REQ-p00002-A+B`). Multi-assertion syntax is supported. Contributes to UAT coverage metrics.
 - **Steps**: Numbered sequence of user actions and system responses
 - **Expected Outcome**: Brief statement of success from the user's perspective
-- **End marker**: Required for parsing; uses format `*End* *{Title}*` (no hash since JNYs are non-normative)
+- **End marker**: Required for parsing; uses format `*End* *{Title}*` (no hash since JNYs are non-normative). The identifier form `*End* *{ID}*` is also read, so a journey written that way still parses, but the title form is what the tool writes
 
 ### Referencing User Journeys in Requirements
 
@@ -393,7 +404,7 @@ Validates: REQ-p00001-A, REQ-p00002-A+B
 ## Steps
 ...
 
-*End* *JNY-Admin-Portal-01*
+*End* *Manage Admin Users*
 ```
 
 The `Validates:` line:

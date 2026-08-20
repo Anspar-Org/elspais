@@ -30,8 +30,14 @@ from collections.abc import Callable
 from typing import Any
 
 
+# Implements: REQ-o00076-A
 class SharedServerState(dict):
     """Dict-shaped holder for graph/config plus the write lock.
+
+    Holding one graph behind one lock is what lets a process serve
+    several clients at the same time rather than one after another: two
+    writers act on the same graph, and neither acts on one the other
+    cannot see.
 
     There is exactly one of these per server process; MCP tool closures
     and AppState both hold a reference to the same instance, so a swap
@@ -77,7 +83,7 @@ class SharedServerState(dict):
         # statement that was otherwise missing (REQ-p00083-B).
         self._discard_requested = False
 
-    # Implements: REQ-o00075-B, REQ-o00075-E
+    # Implements: REQ-o00075-B, REQ-o00076-E
     def begin_shutdown(self) -> None:
         """Mark this process as shutting down. Irreversible by design.
 

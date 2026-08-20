@@ -5,6 +5,7 @@ from elspais.graph.builder import GraphBuilder
 from elspais.graph.relations import Edge, EdgeKind
 from tests.core.graph_test_helpers import (
     children_string,
+    grammar_for,
     incoming_edges_string,
     make_requirement,
     outgoing_edges_string,
@@ -159,7 +160,7 @@ class TestNodeEdgeIntegration:
     # Verifies: REQ-d00127-A
     def test_implements_relationship(self):
         """Child implementing parent creates correct edges and relationships."""
-        builder = GraphBuilder()
+        builder = GraphBuilder(namespace="REQ", resolver=grammar_for("REQ"))
         builder.add_parsed_content(make_requirement("REQ-p00001"))
         builder.add_parsed_content(make_requirement("REQ-o00001", implements=["REQ-p00001"]))
         graph = builder.build()
@@ -177,7 +178,7 @@ class TestNodeEdgeIntegration:
     # Verifies: REQ-d00127-A
     def test_refines_relationship(self):
         """Child refining parent creates refines edge."""
-        builder = GraphBuilder()
+        builder = GraphBuilder(namespace="REQ", resolver=grammar_for("REQ"))
         builder.add_parsed_content(make_requirement("REQ-p00001"))
         builder.add_parsed_content(make_requirement("REQ-p00002", refines=["REQ-p00001"]))
         graph = builder.build()
@@ -191,7 +192,7 @@ class TestNodeEdgeIntegration:
     # Verifies: REQ-d00127-A
     def test_multiple_edge_kinds(self):
         """Graph can have both implements and refines edges from same parent."""
-        builder = GraphBuilder()
+        builder = GraphBuilder(namespace="REQ", resolver=grammar_for("REQ"))
         builder.add_parsed_content(make_requirement("REQ-p00001"))
         builder.add_parsed_content(make_requirement("REQ-o00001", implements=["REQ-p00001"]))
         builder.add_parsed_content(make_requirement("REQ-p00002", refines=["REQ-p00001"]))
@@ -211,7 +212,7 @@ class TestNodeEdgeIntegration:
     # Verifies: REQ-d00127-C
     def test_iter_edges_by_kind(self):
         """iter_edges_by_kind filters correctly."""
-        builder = GraphBuilder()
+        builder = GraphBuilder(namespace="REQ", resolver=grammar_for("REQ"))
         builder.add_parsed_content(make_requirement("REQ-p00001"))
         builder.add_parsed_content(make_requirement("REQ-o00001", implements=["REQ-p00001"]))
         builder.add_parsed_content(make_requirement("REQ-p00002", refines=["REQ-p00001"]))

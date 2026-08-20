@@ -377,3 +377,53 @@ class TestChangelogConfigV3:
         # Defaults preserved for unset fields
         assert cc.require.author_name is True
         assert cc.require.author_id is True
+
+
+# ---------------------------------------------------------------------------
+# REQ-d00269-F: ValidationConfig / ReferenceSeverityConfig -- retired keys
+# ---------------------------------------------------------------------------
+
+
+ReferenceSeverityConfig = _schema.ReferenceSeverityConfig
+ValidationConfig = _schema.ValidationConfig
+
+
+class TestReferenceSeverityConfigRetiredKeys:
+    """Two checks split every fault on whether some configured repository
+    claimed the string; five classes replace them, each with its own
+    severity key. The old ``unclaimed`` key is retired -- pre-beta, no
+    back-compat shim -- and a config still naming it must be REJECTED by
+    the strict schema, not silently ignored."""
+
+    def test_REQ_d00269_F_five_class_keys_accepted(self):
+        """Each of the five fault-class severities, plus keyword_form, is a
+        real field with its documented default."""
+        rsc = ReferenceSeverityConfig()
+        assert rsc.malformed == "warning"
+        assert rsc.unknown_namespace == "info"
+        assert rsc.unknown_requirement == "error"
+        assert rsc.unknown_assertion == "error"
+        assert rsc.forbidden == "error"
+        assert rsc.keyword_form == "warning"
+
+    def test_REQ_d00269_F_unclaimed_key_rejected(self):
+        """The retired ``unclaimed`` key is an extra field under strict mode,
+        not a silently-ignored alias for ``unknown_namespace``."""
+        with pytest.raises(ValidationError, match="extra"):
+            ReferenceSeverityConfig(unclaimed="info")
+
+
+class TestValidationConfigRetiredKeys:
+    """``allow_unresolved_cross_repo`` is retired: silencing expected
+    cross-repository references is now ``unknown_namespace = "ok"`` on
+    ``[rules.references]``, which answers per fault class rather than
+    taking every reference into an unconfigured repository down with it."""
+
+    def test_REQ_d00269_F_allow_unresolved_cross_repo_rejected(self):
+        with pytest.raises(ValidationError, match="extra"):
+            ValidationConfig(allow_unresolved_cross_repo=False)
+
+    def test_REQ_d00269_F_validation_config_still_accepts_its_real_fields(self):
+        vc = ValidationConfig(hash_mode="full-text", strict_hierarchy=True)
+        assert vc.hash_mode == "full-text"
+        assert vc.strict_hierarchy is True

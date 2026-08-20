@@ -2,17 +2,21 @@
 """Tests for traceability-focused health checks.
 
 Tests check_structural_orphans(), check_unlinked_tests(), check_unlinked_code(),
-check_broken_references(), config backward compatibility for allow_orphans, and
+check_reference_class(), config backward compatibility for allow_orphans, and
 the code.no_traceability wiring in run_code_checks() (REQ-d00241).
 """
+
 from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from elspais.commands.health import (
     HealthFinding,
-    check_broken_references,
+    HealthReport,
     check_no_cycles,
+    check_reference_class,
     check_structural_orphans,
     check_unlinked_code,
     check_unlinked_tests,
@@ -22,10 +26,13 @@ from elspais.commands.health import (
 from elspais.config import _merge_configs, config_defaults, get_config
 from elspais.graph.builder import TraceGraph
 from elspais.graph.federated import FederatedGraph, RepoEntry
-from elspais.graph.GraphNode import FileType, GraphNode, NodeKind
+from elspais.graph.GraphNode import FileType, GraphNode, NodeKind, make_file_id
+from elspais.graph.reference_faults import FaultClass
 from elspais.graph.relations import EdgeKind
+from tests.federation_repos import make_repo
 
 from ..core.graph_test_helpers import (
+    HELPER_NAMESPACE,
     build_graph,
     make_code_ref,
     make_requirement,
@@ -198,7 +205,7 @@ class TestCheckUnlinkedTests:
             ),
         )
         # Sanity: the file really has a TEST child (not the empty-file case).
-        file_node = graph._index["file:tests/test_unmarked.py"]
+        file_node = graph._index[make_file_id(HELPER_NAMESPACE, "tests/test_unmarked.py")]
         assert any(
             c.kind == NodeKind.TEST for c in file_node.iter_children(edge_kinds={EdgeKind.CONTAINS})
         )
@@ -328,25 +335,36 @@ class TestRunCodeChecksNoTraceabilityWiring:
     exclusively the responsibility of ``tests.unlinked``.
     """
 
-    # Verifies: REQ-d00241-B
-    def test_REQ_d00241_B_unlinked_code_node_still_appears(self) -> None:
-        """An unlinked CODE node is still reported by code.no_traceability.
+    # Verifies: REQ-d00241-B, REQ-d00241-E
+    def test_REQ_d00241_E_dangling_implements_excluded_owned_by_reference_check(self) -> None:
+        """A CODE node unlinked because its ``Implements:`` target failed to
+        resolve carries a marker -- it just failed. ``code.no_traceability``
+        would call that file unmarked, sending its author to add a marker
+        that is already there; the file is excluded here and belongs to
+        ``references.unknown_requirement`` instead (REQ-d00241-E).
 
         Uses a dangling ``implements`` target (rather than an empty list)
         because ``GraphBuilder._add_code_ref`` only creates a CODE node
         per referenced id -- unlike TEST, there's no unconditional
         per-function pass, so a target that fails to resolve is what
-        makes the node exist-but-unreachable.
+        makes the node exist-but-unreachable. Under REQ-d00241-E every path
+        that leaves a CODE node exist-but-unreachable also records the
+        fault that explains why, so this is also the only way to build one.
         """
         graph = build_graph(
             make_code_ref(
                 implements=["REQ-p09999"], source_path="src/orphan.py", start_line=1, end_line=5
             ),
         )
-        checks = run_code_checks(_wrap(graph))
+        fed = _wrap(graph)
+        checks = run_code_checks(fed)
         check = next(c for c in checks if c.name == "code.no_traceability")
-        assert not check.passed
-        assert any("orphan.py" in f.message for f in check.findings)
+        assert check.passed
+        assert not any("orphan.py" in f.message for f in check.findings)
+
+        broken = check_broken_references(fed)
+        assert not broken.passed
+        assert any("orphan.py" in (f.file_path or "") for f in broken.findings)
 
     # Verifies: REQ-d00241-A, REQ-d00241-B, REQ-d00241-D
     def test_REQ_d00241_A_marker_less_test_function_excluded(self) -> None:
@@ -383,10 +401,14 @@ class TestRunCodeChecksNoTraceabilityWiring:
         assert not tests_check.passed
         assert any(f.file_path == "tests/test_unmarked.py" for f in tests_check.findings)
 
-    # Verifies: REQ-d00241-A
-    def test_REQ_d00241_A_mixed_code_and_test_only_code_reported(self) -> None:
-        """With both an unlinked CODE node and a marker-less TEST node,
-        only the CODE file is reported by code.no_traceability.
+    # Verifies: REQ-d00241-A, REQ-d00241-E
+    def test_REQ_d00241_A_mixed_code_and_test_neither_appears_in_no_traceability(self) -> None:
+        """With both a dangling-``Implements:`` CODE node and a marker-less
+        TEST node, ``code.no_traceability`` reports neither -- the CODE
+        file is excluded because its marker failed rather than being
+        absent (REQ-d00241-E, owned by ``references.unknown_requirement``);
+        the TEST file was never code.no_traceability's to report
+        (REQ-d00241-A, owned by ``tests.unlinked``).
         """
         graph = build_graph(
             make_code_ref(
@@ -402,9 +424,9 @@ class TestRunCodeChecksNoTraceabilityWiring:
         )
         checks = run_code_checks(_wrap(graph))
         check = next(c for c in checks if c.name == "code.no_traceability")
-        assert not check.passed
+        assert check.passed
         messages = [f.message for f in check.findings]
-        assert any("orphan.py" in m for m in messages)
+        assert not any("orphan.py" in m for m in messages)
         assert not any("test_unmarked.py" in m for m in messages)
 
 
@@ -413,8 +435,30 @@ class TestRunCodeChecksNoTraceabilityWiring:
 # =============================================================================
 
 
+def check_broken_references(graph: FederatedGraph, config: dict | None = None):
+    """A claimed reference naming a requirement that does not exist."""
+    return check_reference_class(
+        graph,
+        config,
+        FaultClass.UNKNOWN_REQUIREMENT,
+        "references.unknown_requirement",
+        "claimed, but no such requirement exists",
+    )
+
+
+def check_unclaimed_references(graph: FederatedGraph, config: dict | None = None):
+    """A reference naming a target no configured repository claims."""
+    return check_reference_class(
+        graph,
+        config,
+        FaultClass.UNKNOWN_NAMESPACE,
+        "references.unknown_namespace",
+        "no configured repository claims this identifier",
+    )
+
+
 class TestCheckBrokenReferences:
-    """Tests for check_broken_references()."""
+    """Tests for check_reference_class(..., FaultClass.UNKNOWN_REQUIREMENT, ...)."""
 
     def test_REQ_d00085_no_broken_refs_passes(self) -> None:
         """A graph with all references resolved passes."""
@@ -424,100 +468,314 @@ class TestCheckBrokenReferences:
         )
         check = check_broken_references(_wrap(graph))
         assert check.passed
-        assert check.name == "spec.broken_references"
+        assert check.name == "references.unknown_requirement"
 
     def test_REQ_d00085_broken_refs_warning_severity(self) -> None:
-        """Broken references produce a warning-severity failure."""
-        from elspais.graph.mutations import BrokenReference
+        """Broken references produce an error-severity failure by default."""
+        from elspais.graph.reference_faults import ReferenceFault
 
         graph = build_graph(
             make_requirement("REQ-p00001", title="Parent", level="PRD"),
         )
-        # Manually inject broken references
+        # Manually inject broken references (fault_class defaults to
+        # UNKNOWN_REQUIREMENT, matching the class this check reports).
         graph._broken_references = [
-            BrokenReference(
+            ReferenceFault(
                 source_id="REQ-d00001",
                 target_id="REQ-p99999",
                 edge_kind="implements",
             ),
-            BrokenReference(
+            ReferenceFault(
                 source_id="REQ-d00002",
                 target_id="REQ-p88888",
                 edge_kind="refines",
             ),
         ]
 
-        check = check_broken_references(_wrap(graph))
+        # A claimed target -- a misspelling of an identifier this repository's
+        # grammar describes -- is this check's population; the full default
+        # config is what makes ``REQ-`` identifiers claimed.
+        config = _claimed_config()
+        check = check_broken_references(_wrap(graph, config), config)
         assert not check.passed
-        assert check.severity == "error"  # REQ-d00204-E: within-repo broken refs are errors
-        assert check.name == "spec.broken_references"
+        assert check.severity == "error"  # REQ-d00204-E: unknown_requirement is an error
+        assert check.name == "references.unknown_requirement"
         assert len(check.findings) == 2
         assert check.details.get("count") == 2
 
     def test_REQ_d00085_broken_ref_findings_have_source_id(self) -> None:
         """Each broken reference finding includes the source node_id."""
-        from elspais.graph.mutations import BrokenReference
+        from elspais.graph.reference_faults import ReferenceFault
 
         graph = TraceGraph()
         graph._broken_references = [
-            BrokenReference(
+            ReferenceFault(
                 source_id="REQ-d00001",
                 target_id="REQ-p99999",
                 edge_kind="verifies",
             ),
         ]
 
-        check = check_broken_references(_wrap(graph))
+        config = _claimed_config()
+        check = check_broken_references(_wrap(graph, config), config)
         assert not check.passed
         finding = check.findings[0]
         assert isinstance(finding, HealthFinding)
         assert finding.node_id == "REQ-d00001"
         assert "REQ-p99999" in finding.message
 
-    # Verifies: REQ-d00252-G
-    def test_REQ_d00085_no_associates_never_suppresses_foreign_looking_ref(self) -> None:
-        """Guard 1 (REQ-d00252-G): a federation-of-one has no configured
-        associates, so a foreign-*looking* (unparseable) broken ref can
-        never be presumed foreign, even with
-        allow_unresolved_cross_repo=True -- there is no other repo it
-        could belong to. This reproduces the field bug where an empty
-        ``[associates]`` table combined with a mis-styled reference
-        suffix caused genuinely-local broken references to be silently
-        suppressed as "cross-repo".
-        """
-        from elspais.graph.mutations import BrokenReference
+    def test_REQ_d00269_F_unclaimed_target_reported_separately(self) -> None:
+        """A target no configured repository claims is
+        ``references.unknown_namespace``, not ``references.unknown_requirement``
+        -- each check reports exactly the class its name promises."""
+        from elspais.graph.reference_faults import FaultClass as FC
+        from elspais.graph.reference_faults import ReferenceFault
 
         graph = TraceGraph()
         graph._broken_references = [
-            BrokenReference(source_id="REQ-d00001", target_id="HHT-p00001", edge_kind="implements"),
+            ReferenceFault(
+                source_id="REQ-d00001",
+                target_id="HHT-p00001",
+                edge_kind="implements",
+                fault_class=FC.UNKNOWN_NAMESPACE,
+            ),
         ]
-        override = {"validation": {"allow_unresolved_cross_repo": True}}
-        config = _merge_configs(config_defaults(), override)
-
-        # Pass config to _wrap so FederatedGraph annotates presumed_foreign during init
+        config = config_defaults()
         fed = _wrap(graph, config)
-        check = check_broken_references(fed, config)
-        assert not check.passed
-        assert "suppressed" not in check.message
 
-    # Verifies: REQ-d00252-G
-    def test_REQ_d00085_allow_unresolved_cross_repo_suppresses_with_real_associate(
-        self,
-    ) -> None:
-        """Regression: suppression still applies to a genuinely foreign
-        reference once a real associate of a different namespace is
-        configured -- only the associate-less blanket case (guard 1) is
-        gated.
+        unclaimed = check_unclaimed_references(fed, config)
+        assert not unclaimed.passed
+        assert any("HHT-p00001" in f.message for f in unclaimed.findings)
+
+        broken = check_broken_references(fed, config)
+        assert broken.passed
+        assert not any("HHT-p00001" in f.message for f in broken.findings)
+
+
+# =============================================================================
+# Unclaimed References
+# =============================================================================
+
+
+def _claimed_config(**overrides: object) -> dict:
+    """A full default config naming this repo, so ``REQ-`` ids are claimed."""
+    config = _merge_configs(config_defaults(), dict(overrides))
+    config["project"] = {"name": "test", "namespace": "REQ"}
+    return config
+
+
+# Verifies: REQ-d00269-F
+class TestCheckUnclaimedReferences:
+    """Tests for check_unclaimed_references() — the dedicated check.
+
+    Validates REQ-d00269-F: a reference recognised by position may name
+    anything at all, so a
+    target no configured repository claims is reported separately from a
+    misspelling of an identifier the federation understands, at a
+    severity the project chooses.
+    """
+
+    def test_REQ_d00269_F_unclaimed_target_in_code_is_reported_once(self, tmp_path) -> None:
+        """A real on-disk scan: one finding, naming the unreadable target.
+
+        The reference sits in canonical position, so position recognises
+        it; its lowercase namespace is claimed by no configured grammar,
+        so only this check may speak for it.
         """
-        from elspais.graph.mutations import BrokenReference
+        from elspais.graph.factory import build_graph
+
+        repo = make_repo(tmp_path, "solo", namespace="REQ", req_id="REQ-d00001")
+        (repo / "src").mkdir()
+        (repo / "src" / "impl.py").write_text(
+            "# Implements: widget-42\ndef impl():\n    pass\n", encoding="utf-8"
+        )
+
+        federated = build_graph(repo_root=repo)
+        unclaimed = check_unclaimed_references(federated)
+
+        assert not unclaimed.passed
+        assert unclaimed.name == "references.unknown_namespace"
+        assert unclaimed.category == "references"
+        assert len(unclaimed.findings) == 1
+        assert "widget-42" in unclaimed.findings[0].message
+
+        # The two checks partition the population: neither double-reports.
+        broken = check_broken_references(federated)
+        assert not any("widget-42" in f.message for f in broken.findings)
+        assert broken.passed
+
+    def test_REQ_d00269_F_claimed_target_stays_with_broken_references(self) -> None:
+        """A misspelt local identifier is a broken reference, not an unclaimed one."""
+        from elspais.graph.reference_faults import ReferenceFault
+
+        graph = TraceGraph()
+        graph._broken_references = [
+            ReferenceFault(source_id="REQ-d00001", target_id="REQ-p99999", edge_kind="implements"),
+        ]
+        config = _claimed_config()
+        fed = _wrap(graph, config)
+
+        broken = check_broken_references(fed, config)
+        unclaimed = check_unclaimed_references(fed, config)
+
+        assert not broken.passed
+        assert any("REQ-p99999" in f.message for f in broken.findings)
+        assert unclaimed.passed
+        assert unclaimed.findings == []
+
+    @pytest.mark.parametrize("configured", ["info", "warning", "error"])
+    def test_REQ_d00269_F_severity_follows_configuration(self, configured: str) -> None:
+        """Noticing is not the project's decision; how loudly is."""
+        from elspais.graph.reference_faults import ReferenceFault
+
+        graph = TraceGraph()
+        graph._broken_references = [
+            ReferenceFault(
+                source_id="REQ-d00001",
+                target_id="widget-42",
+                edge_kind="implements",
+                fault_class=FaultClass.UNKNOWN_NAMESPACE,
+            ),
+        ]
+        config = _claimed_config(rules={"references": {"unknown_namespace": configured}})
+
+        check = check_unclaimed_references(_wrap(graph, config), config)
+
+        assert not check.passed
+        assert check.severity == configured
+
+    # Verifies: REQ-d00269-F
+    @pytest.mark.parametrize("configured", ["info", "warning", "error"])
+    @pytest.mark.parametrize("has_finding", [True, False])
+    def test_REQ_d00269_F_severity_is_the_configured_one_in_both_states(
+        self, configured: str, has_finding: bool
+    ) -> None:
+        """The severity a check reports is the project's setting, not a
+        property of what the check happened to find.
+
+        A check that reports the configured severity only when it has
+        findings answers a different question on a clean estate — and a
+        report reader cannot tell the difference between "this project
+        treats unclaimed references as errors" and "this check forgot".
+        """
+        from elspais.graph.reference_faults import ReferenceFault
+
+        graph = TraceGraph()
+        if has_finding:
+            graph._broken_references = [
+                ReferenceFault(
+                    source_id="REQ-d00001",
+                    target_id="widget-42",
+                    edge_kind="implements",
+                    fault_class=FaultClass.UNKNOWN_NAMESPACE,
+                ),
+            ]
+        config = _claimed_config(rules={"references": {"unknown_namespace": configured}})
+
+        check = check_unclaimed_references(_wrap(graph, config), config)
+
+        report = HealthReport()
+        report.add(check)
+
+        assert bool(check.findings) is has_finding
+        assert check.severity == configured
+        # The serialized report is what every downstream consumer reads.
+        assert report.to_dict()["checks"][0]["severity"] == configured
+
+    # Verifies: REQ-d00269-F
+    @pytest.mark.parametrize("has_finding", [True, False])
+    def test_REQ_d00269_F_info_severity_never_lands_in_passed(self, has_finding: bool) -> None:
+        """The bucket the check is counted under follows its configured
+        severity, so it does not migrate between report headings.
+
+        ``HealthReport`` counts every ``info`` check as *skipped* and
+        excludes it from *passed*. A check configured informational that
+        reported ``error`` when it found nothing was counted as passed on
+        a clean run and skipped on a dirty one — the same check under two
+        headings from one run to the next.
+        """
+        from elspais.graph.reference_faults import ReferenceFault
+
+        graph = TraceGraph()
+        if has_finding:
+            graph._broken_references = [
+                ReferenceFault(
+                    source_id="REQ-d00001",
+                    target_id="widget-42",
+                    edge_kind="implements",
+                    fault_class=FaultClass.UNKNOWN_NAMESPACE,
+                ),
+            ]
+        config = _claimed_config(rules={"references": {"unknown_namespace": "info"}})
+
+        report = HealthReport()
+        report.add(check_unclaimed_references(_wrap(graph, config), config))
+
+        assert report.skipped == 1
+        assert report.passed == 0
+        assert report.to_dict()["checks"][0]["severity"] == "info"
+
+    # Verifies: REQ-d00269-F
+    @pytest.mark.parametrize(
+        "configured,has_finding,bucket",
+        [
+            ("warning", False, "passed"),
+            ("warning", True, "warnings"),
+            ("error", False, "passed"),
+            ("error", True, "failed"),
+        ],
+    )
+    def test_REQ_d00269_F_failing_severities_bucket_by_findings(
+        self, configured: str, has_finding: bool, bucket: str
+    ) -> None:
+        """A check the project asked to hear about loudly is counted as
+        passed when clean and against its own severity when not — and is
+        never counted as skipped, which is reserved for informational."""
+        from elspais.graph.reference_faults import ReferenceFault
+
+        graph = TraceGraph()
+        if has_finding:
+            graph._broken_references = [
+                ReferenceFault(
+                    source_id="REQ-d00001",
+                    target_id="widget-42",
+                    edge_kind="implements",
+                    fault_class=FaultClass.UNKNOWN_NAMESPACE,
+                ),
+            ]
+        config = _claimed_config(rules={"references": {"unknown_namespace": configured}})
+
+        report = HealthReport()
+        report.add(check_unclaimed_references(_wrap(graph, config), config))
+
+        counts = {"passed": report.passed, "warnings": report.warnings, "failed": report.failed}
+        assert counts[bucket] == 1
+        assert sum(counts.values()) == 1
+        assert report.skipped == 0
+
+    @pytest.mark.parametrize("severity", ["ok", "error"])
+    def test_REQ_d00269_F_unknown_namespace_ok_silences_the_finding(self, severity: str) -> None:
+        """A project that does not want to hear about references into
+        unconfigured repositories sets ``unknown_namespace = "ok"`` --
+        the successor to ``allow_unresolved_cross_repo``, which named a
+        boolean flag rather than the severity the project actually wanted.
+        Any other value keeps reporting it.
+        """
+        from elspais.graph.reference_faults import ReferenceFault
 
         host_graph = TraceGraph()
         host_graph._broken_references = [
-            BrokenReference(source_id="REQ-d00001", target_id="HHT-p00001", edge_kind="implements"),
+            ReferenceFault(
+                source_id="REQ-d00001",
+                target_id="widget-42",
+                edge_kind="implements",
+                fault_class=FaultClass.UNKNOWN_NAMESPACE,
+            ),
         ]
-        lib_graph = TraceGraph()
-        override = {"validation": {"allow_unresolved_cross_repo": True}}
-        host_config = _merge_configs(config_defaults(), override)
+        host_config = _merge_configs(
+            config_defaults(),
+            {"rules": {"references": {"unknown_namespace": severity}}},
+        )
         host_config["project"] = {"name": "host", "namespace": "REQ"}
         lib_config = config_defaults()
         lib_config["project"] = {"name": "lib", "namespace": "HHT"}
@@ -525,44 +783,27 @@ class TestCheckBrokenReferences:
         fed = FederatedGraph(
             [
                 RepoEntry(
-                    name="host", graph=host_graph, config=host_config, repo_root=Path("/repo/host")
+                    name="host",
+                    graph=host_graph,
+                    config=host_config,
+                    repo_root=Path("/repo/host"),
                 ),
                 RepoEntry(
-                    name="lib", graph=lib_graph, config=lib_config, repo_root=Path("/repo/lib")
+                    name="lib",
+                    graph=TraceGraph(),
+                    config=lib_config,
+                    repo_root=Path("/repo/lib"),
                 ),
             ],
             root_repo="host",
         )
-        check = check_broken_references(fed, host_config)
-        assert check.passed
-        assert "suppressed" in check.message
 
-    def test_REQ_d00085_allow_unresolved_cross_repo_keeps_local_refs(self) -> None:
-        """Same-namespace broken refs are still flagged with allow_unresolved_cross_repo=True."""
-        from elspais.graph.mutations import BrokenReference
+        check = check_unclaimed_references(fed, host_config)
 
-        graph = TraceGraph()
-        graph._broken_references = [
-            BrokenReference(source_id="REQ-d00001", target_id="REQ-p99999", edge_kind="implements"),
-        ]
-        override = {"validation": {"allow_unresolved_cross_repo": True}}
-        config = _merge_configs(config_defaults(), override)
-
-        check = check_broken_references(_wrap(graph, config), config)
-        assert not check.passed
-
-    def test_REQ_d00085_allow_unresolved_cross_repo_default_false(self) -> None:
-        """Without the config flag, foreign-namespace broken refs are still reported."""
-        from elspais.graph.mutations import BrokenReference
-
-        graph = TraceGraph()
-        graph._broken_references = [
-            BrokenReference(source_id="REQ-d00001", target_id="HHT-p00001", edge_kind="implements"),
-        ]
-        config = config_defaults()
-
-        check = check_broken_references(_wrap(graph, config))
-        assert not check.passed
+        # Silenced ("ok") still passes and still names the finding -- "ok"
+        # is a severity that reports without failing the run, not a filter.
+        assert check.passed is (severity == "ok")
+        assert any("widget-42" in f.message for f in check.findings)
 
 
 # =============================================================================
@@ -645,9 +886,9 @@ allow_structural_orphans = true
 
         checks = run_spec_checks(_wrap(graph, config), config)
         structural_check = next(c for c in checks if c.name == "spec.structural_orphans")
-        assert (
-            structural_check.passed
-        ), "allow_structural_orphans=true should skip structural orphan check"
+        assert structural_check.passed, (
+            "allow_structural_orphans=true should skip structural orphan check"
+        )
 
     def test_REQ_d00085_allow_structural_orphans_false_runs_check(self, tmp_path: Path) -> None:
         """allow_structural_orphans=false runs the check regardless of allow_orphans."""
@@ -678,6 +919,6 @@ allow_structural_orphans = false
 
         checks = run_spec_checks(_wrap(graph, config), config)
         structural_check = next(c for c in checks if c.name == "spec.structural_orphans")
-        assert (
-            not structural_check.passed
-        ), "allow_structural_orphans=false should run structural orphan check"
+        assert not structural_check.passed, (
+            "allow_structural_orphans=false should run structural orphan check"
+        )

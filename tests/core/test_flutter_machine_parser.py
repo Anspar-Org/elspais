@@ -5,6 +5,7 @@ Covers line-precise record emission: each parsed result must carry the
 ``test()`` call-site line number so graph-build can correlate by
 ``(source_path, line)`` rather than a pre-baked id.
 """
+
 from __future__ import annotations
 
 import json

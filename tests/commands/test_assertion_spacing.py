@@ -122,6 +122,6 @@ class TestREQ_d00131_B_assertion_spacing_canonicalization:
             idx = assertion_indices[i]
             next_idx = assertion_indices[i + 1]
             has_blank = any(lines[j].strip() == "" for j in range(idx + 1, next_idx))
-            assert (
-                has_blank
-            ), f"No blank line between assertions at lines {idx + 1} and {next_idx + 1}"
+            assert has_blank, (
+                f"No blank line between assertions at lines {idx + 1} and {next_idx + 1}"
+            )

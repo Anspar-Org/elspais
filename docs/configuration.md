@@ -13,8 +13,8 @@ elspais looks for configuration in this order:
 
 For **git worktrees**, elspais detects the canonical (main) repository
 root and uses it when resolving relative associate paths. This means
-paths like `"../sibling-repo"` in `[associates].paths` resolve from the
-main repo, not the worktree location.
+paths like `"../sibling-repo"` in an `[associates.<name>]` declaration
+resolve from the main repo, not the worktree location.
 
 ## Complete Configuration Reference
 
@@ -132,12 +132,6 @@ implements = ["dev", "ops", "prd"]  # DEV can implement DEV, OPS, or PRD
 #   "{level.letter}-{component}"             -> p-00001
 canonical = "{namespace}-{level.letter}{component}"
 
-# Separator characters accepted between ID components (e.g., REQ-p00001 or REQ_p00001)
-separators = ["-", "_"]
-
-# Whether the namespace prefix (e.g., "REQ") is required for matching
-prefix_optional = false
-
 # Named alias patterns for short-form parsing
 [id-patterns.aliases]
 short = "{level.letter}{component}"
@@ -153,19 +147,29 @@ digits = 5
 # For numeric: pad with leading zeros
 leading_zeros = true
 
-# For alphanumeric: regex pattern
+# For style = "regex": the pattern is required
 # pattern = "[A-Z]{2}[0-9]{3}"
-
-# For named: allowed characters and max length
-# max_length = 32
 
 # Assertion label configuration
 [id-patterns.assertions]
 label_style = "uppercase"  # "uppercase" [A-Z], "numeric" [00-99], "alphanumeric" [0-Z], "numeric_1based" [1-99]
 max_count = 26             # Maximum assertions per requirement
 # zero_pad = false         # Pad numeric labels with zeros
-# separator = "-"          # Character between requirement ID and first label (REQ-p00001-A)
-# multi_separator = "+"    # Separator for multi-assertion syntax (A+B+C)
+# separator = "-"          # Single character between component and label
+# multi_separator = "+"    # Single character joining multi-assertion syntax (A+B+C)
+
+# Both separators are validated when the config loads. Each must be exactly
+# one character. `separator` must be a character that can appear in neither a
+# component nor an assertion label, and `multi_separator` must be a character
+# that cannot appear in a label. A kebab-case component therefore rules out
+# separator = "-", and numeric labels rule out a digit as multi_separator.
+# Neither may be "," — that character already divides one reference from the
+# next in a list, and a list is split before its items are read, so a comma
+# inside an identifier never survives to reach the identifier reader.
+# Use "/" where the default collides. ":" is refused outright, in every
+# setting an identifier could carry one through: it separates the parts of a
+# node identifier and "::" joins a declaring requirement to a template's, so
+# an identifier able to contain one is ambiguous with the graph's own syntax.
 ```
 
 These two characters are the only accepted way to cite an assertion, and they
@@ -329,9 +333,18 @@ dir = ""
 # during federation. See `elspais docs graph-model`.
 #──────────────────────────────────────────────────────────────────────────────
 
+# A declaration states the path and the namespace it expects to find
+# there; both are required. The namespace must match the one the
+# repository at that path declares for itself, and no two repositories in
+# one federation may declare the same namespace — a namespace is what
+# says whose identifiers these are.
+
 [associates.callisto]
 path = "../callisto"
 namespace = "CAL"
+# git = "git@github.com:acme/callisto.git"   # Optional: where to obtain the
+                                    #   repository when it is not on this
+                                    #   machine; never how it is located
 # color = "#7c3aed"                  # Optional: badge color for this namespace
 
 [associates.phoenix]
@@ -395,9 +408,6 @@ color = "#6c757d"
 # Hash mode for change detection: "full-text" | "normalized-text"
 hash_mode = "normalized-text"
 
-# Allow unresolved cross-repo references
-allow_unresolved_cross_repo = false
-
 # hash_algorithm = "sha256"         # Hash algorithm
 # hash_length = 8                   # Hash truncation length (characters)
 # strict_hierarchy = false          # Strict hierarchy validation
@@ -458,6 +468,49 @@ provisional = ["Draft", "Proposed"]
 aspirational = ["Roadmap", "Future", "Idea"]
 retired = ["Deprecated", "Superseded", "Rejected"]
 
+# Severity of the reference checks. Each value is "ok", "info", "warning"
+# or "error"; "ok" reports the finding without failing the run. Each class
+# is how far reading a reference got before it failed -- never a later
+# class than the one it reached.
+#   retired/provisional/aspirational -- a reference resolves, but to a
+#     requirement whose status makes the link stale or premature.
+#   malformed -- the text never read as a reference at all.
+#   unknown_namespace -- a reference resolves to nothing and names an
+#     identifier no configured repository claims. A sibling repository
+#     that has not yet authored the requirement is advisory to one project
+#     and a build failure to another, so the level is yours to pick; set
+#     it to "ok" to silence expected cross-repository references entirely.
+#   unknown_requirement -- a configured repository's grammar claims the
+#     identifier, but it names no requirement that repository holds.
+#   unknown_assertion -- the requirement exists, but not that label.
+#   forbidden -- the reference reads and resolves, but the relationship it
+#     declares is refused: the keyword is not valid for the file kind it
+#     was written in (e.g. `Refines:` in a code file), or the list names
+#     the same target more than once.
+#   keyword_form -- a keyword written in a non-canonical case, spacing, or
+#     markdown-emphasis form. Never costs the edge its keyword introduces;
+#     a style finding, not a broken reference.
+#   identifier_form -- a reference spelled in a form the configuration
+#     admits that is not the canonical one (case, padding, an alias).
+#     Never costs the relationship it names; a style finding, like
+#     keyword_form, but about the referent rather than the keyword.
+#   undeclared -- a comment opening with an identifier that no keyword
+#     introduces: a relationship its author appears to intend and has not
+#     spelled. Nothing about it is malformed and it produces no
+#     relationship; set it to "ok" where prose citations are house style.
+[rules.references]
+retired = "warning"
+provisional = "info"
+aspirational = "info"
+malformed = "warning"
+unknown_namespace = "info"
+unknown_requirement = "error"
+unknown_assertion = "error"
+forbidden = "error"
+keyword_form = "warning"
+identifier_form = "warning"
+undeclared = "warning"
+
 #──────────────────────────────────────────────────────────────────────────────
 # CHANGELOG
 #──────────────────────────────────────────────────────────────────────────────
@@ -497,38 +550,29 @@ change_order = false
 min_length = 3
 ```
 
-## Environment Variable Overrides
+## Tool Environment Variables
 
-Configuration values can be overridden with environment variables:
+The environment does not supply configuration. Every setting comes from
+`.elspais.toml`, with `.elspais.local.toml` merged over it for values that
+differ per machine (associate paths, most often) — and `elspais associate`
+registers those without editing either file by hand.
 
-```bash
-# Pattern: ELSPAIS_<SECTION>_<KEY>
-# Single underscore (_) separates sections: SECTION_KEY -> section.key
-# Double underscore (__) is a literal underscore: KEY__NAME -> key_name
-ELSPAIS_PROJECT_NAMESPACE=PRD
-ELSPAIS_PROJECT_NAME=my-project
+Two variables the tool reads directly, neither of which is a setting:
 
-# Booleans are parsed automatically
-ELSPAIS_VALIDATION_ALLOW__UNRESOLVED__CROSS__REPO=false
+`ELSPAIS_VERSION` pins the minimum CLI version.
 
-# JSON list values
-ELSPAIS_SCANNING_SKIP='["node_modules", ".git"]'
-```
-
-Reserved (never treated as config overrides): `ELSPAIS_VERSION`
-(min-CLI-version pin) and `ELSPAIS_CLIENT_PID` (a session/IDE declares
-itself the client of implicitly auto-started daemons, tying the daemon's
-lifetime to that process — see the `cli_ttl` comment above). The value
-must be a process id, not a label or name: the client-liveness rule needs
-a handle whose disappearance it can observe without the client's
-cooperation, and a process id can be tested by signalling it while an
-arbitrary string cannot — a label never disappears, so it could never end
-the daemon's watch on that client. A set `ELSPAIS_CLIENT_PID` is decisive:
-a value that is not a usable PID (not an integer, or a PID that is
-already dead) means "no session identity", not "fall back to the other
-checks" — and the daemon reports that once on stderr rather than silently
-falling through. The former name, `ELSPAIS_SPAWNER_PID`, is still honoured
-for callers that set it.
+`ELSPAIS_CLIENT_PID` lets a session or IDE declare itself the client of an
+implicitly auto-started daemon, tying the daemon's lifetime to that process —
+see the `cli_ttl` comment above. The value must be a process id, not a label
+or name: the client-liveness rule needs a handle whose disappearance it can
+observe without the client's cooperation, and a process id can be tested by
+signalling it while an arbitrary string cannot — a label never disappears, so
+it could never end the daemon's watch on that client. A set
+`ELSPAIS_CLIENT_PID` is decisive: a value that is not a usable PID (not an
+integer, or a PID that is already dead) means "no session identity", not "fall
+back to the other checks" — and the daemon reports that once on stderr rather
+than silently falling through. The former name, `ELSPAIS_SPAWNER_PID`, is
+still honoured for callers that set it.
 
 ## Minimal Configuration Examples
 
@@ -568,6 +612,12 @@ implements = ["task", "story", "epic"]
 
 ### With Associates (Federation)
 
+Each associate's own `[associates]` declarations are read as well, depth-first,
+so the federation is every repository reachable from this one rather than only
+the ones named here. Members are identified by git origin, so two chains
+reaching one repository converge on a single member; a repository reached
+through itself is an error naming the declaration chain.
+
 ```toml
 [project]
 name = "core-platform"
@@ -581,6 +631,17 @@ namespace = "CAL"
 path = "../phoenix"
 namespace = "PHX"
 ```
+
+**Whose configuration decides what.** In a federation the repository you invoke
+from governs how findings are judged, scored and reported — reference
+severities, the coverage rules, and how a status is read. Two things stay with
+the member: an identifier is always read under the grammar of the repository
+that owns it, and a setting that states a fact about a repository rather than a
+rule for judging one — where its spec directories are, its namespace, where its
+test results are written — is read from that repository's own config. Where a
+member configures a governed setting differently from you, the
+`config.governed_rules` check discloses it: the setting, both values, and the
+member. It is informational and never fails a run.
 
 ### Type-Prefix Style Requirements
 
@@ -686,7 +747,7 @@ See `elspais docs test-targets` for all `[[scanning.test.targets]]` fields.
 
 elspais's own suite (this repo's `.elspais.toml`) demonstrates a
 coverage-only target that still gets per-test line attribution
-(`code_tested.direct`) without a machine-readable results file, by pointing
+(`code_tested.attributed_lines`) without a machine-readable results file, by pointing
 `coverage` directly at coverage.py's native `.coverage` SQLite data file:
 
 ```toml
@@ -700,7 +761,7 @@ coverage = ".coverage"
 
 Reading contexts from `.coverage` requires the `coverage` package (the
 `elspais[coverage]` extra) to be importable in elspais's own interpreter --
-if it isn't, ingestion degrades gracefully: `code_tested.direct` stays `0`
+if it isn't, ingestion degrades gracefully: no line is attributed to a test
 and `Code Tested` renders the honest `n/a`, with a single warning naming the
 extra to install. No other config is required; format detection sniffs the
 SQLite file header, so no `reporter` field is needed for this target. A
@@ -725,8 +786,8 @@ alternative for suites too small to worry about the JSON-report size cost.
 health-check exit behavior and the viewer's badge/legend colors. Tiers use
 the unified state vocabulary -- `full` / `partial` / `failing` / `missing`
 (the legacy `full_direct` / `full_indirect` / `none` keys are retired;
-`missing` replaces `none`, and the direct-vs-indirect quality is now a caveat,
-not a tier):
+`missing` replaces `none`, and the direct-vs-indirect quality is reported as
+its own measure rather than as a tier):
 
 ```toml
 [rules.coverage.implemented]
@@ -770,22 +831,57 @@ Passing) renders `missing` at neutral severity (grey), never a red gap -- you
 cannot test what is not built. A **failing** in-denominator label renders
 `failing` (red) regardless of the fraction.
 
-#### `allow_indirect` (direct vs indirect credit)
+#### The four measures and the total
+
+Coverage is measured four ways, on two independent axes: what a citation named
+(**direct**, this assertion by name, versus **indirect**, the requirement as a
+whole) and where the evidence sits (**immediate**, attached to this
+requirement, versus **rolled**, conducted up a `Refines:` chain from a refining
+requirement).
+
+| Measure | Reported as |
+|---------|-------------|
+| immediate direct | cited by name here |
+| immediate indirect | whole-requirement |
+| rolled direct | conducted direct |
+| rolled indirect | conducted indirect |
+
+The **total** is taken per assertion as the greatest of its four measures, so
+an assertion covered three ways is still one covered assertion and the total
+can never exceed the assertion count.
+
+Reporting surfaces (`summary`, `trace`, the MCP project summary, the viewer)
+headline the total and publish the four measures beside it, so a figure is
+never shown without the evidence that produced it. Work-list surfaces (`gaps`,
+`untested`, `unvalidated`, the MCP uncovered-assertion and test-coverage tools)
+read the immediate direct measure alone, so an assertion nobody cited by name
+is reported however much whole-requirement evidence its requirement carries.
+
+There is no setting that selects between them, and no caveat marker: where the
+difference between measures matters, the measures themselves are reported.
+
+#### `uncredited_evidence` (evidence that reaches no figure)
 
 ```toml
 [rules.coverage]
-allow_indirect = true   # default
+uncredited_evidence = "error"   # default
 ```
 
-Indirect coverage is evidence that named the whole requirement rather than the
-specific assertion (`Implements: REQ-xxx`), or that reached an assertion via
-`Refines:` conduction. When `allow_indirect = true` (default), indirect
-evidence credits a dimension's headline state, and a trailing `~` marker flags
-any state whose evidence is not fully direct (`indirect > direct`); hover text
-always states the direct/indirect split. When `false`, only **direct**
-assertion-level evidence lifts the state -- a requirement covered only
-indirectly reads `missing`/`partial`, and the indirect evidence is shown in
-hover as "not credited" so the fallback stays visible.
+Because the chain measures each dimension over the prior link, evidence can name
+an assertion its dimension does not count -- a test on an assertion nothing
+implements. The figures are computed without it, so it credits nothing. The
+`tests.uncredited_evidence` check reports each such piece of evidence with the
+assertion it names, the dimension it fails to reach, and the file and line it was
+written on. A verdict the evidence carries is part of that report: a test that
+only names the assertion, one that passed against it, and one that failed against
+it read as three different findings. It defaults to `error` because the condition has only two
+explanations and both are defects: the implementation exists and its
+`Implements:` reference was never written, or the test is aimed at an assertion
+it does not exercise. Only assertion-targeted evidence names an assertion; a
+whole-requirement `Verifies: REQ-xxx` names the requirement, and is reported
+against the requirement -- once, not once per assertion -- and only where the
+dimension counts no assertion of it at all. Set `"warning"` or `"ok"` to lower
+it.
 
 #### `status_words` (per-relationship dimension labels)
 

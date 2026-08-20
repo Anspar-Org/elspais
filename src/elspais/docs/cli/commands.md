@@ -459,7 +459,9 @@ Link suggestion tools for connecting tests to requirements.
 
 MCP (Model Context Protocol) server commands.
 
-  $ elspais mcp install --global --desktop   # One-time setup
+  $ elspais mcp install                      # This project; nothing else to do
+  $ elspais mcp install --global --desktop   # Every project; needs the eval below
+  $ eval "$(elspais mcp env)"                # Only for a --global registration
   $ elspais mcp serve                        # Start MCP server
 
 **Note:** Requires `elspais[mcp]` extra.

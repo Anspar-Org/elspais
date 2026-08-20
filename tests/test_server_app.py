@@ -18,12 +18,24 @@ import pytest
 from starlette.testclient import TestClient
 
 from elspais.graph import GraphNode, NodeKind
+from elspais.graph.annotators import annotate_coverage
 from elspais.graph.builder import TraceGraph
-from elspais.graph.federated import FederatedGraph
-from elspais.graph.GraphNode import FileType
+from elspais.graph.federated import FederatedGraph, RepoEntry
+from elspais.graph.GraphNode import FileType, make_file_id
 from elspais.graph.relations import EdgeKind
 from elspais.server.app import create_app
 from elspais.server.state import AppState
+from tests.core.graph_test_helpers import grammar_for
+
+# The namespace these tests build their graphs with -- a structural id carries
+# the namespace of the repository holding the node.
+NAMESPACE = "REQ"
+
+
+def file_id(relative_path: str) -> str:
+    """FILE node id for a path in the test repository."""
+    return make_file_id(NAMESPACE, relative_path)
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Fixtures
@@ -98,7 +110,7 @@ def _save(client: TestClient) -> dict:
 @pytest.fixture
 def sample_graph():
     """Create a sample single-repo FederatedGraph for testing."""
-    graph = TraceGraph(repo_root=Path("/test/repo"))
+    graph = TraceGraph(repo_root=Path("/test/repo"), _resolver=grammar_for("REQ"))
 
     # Create PRD requirement with assertions
     prd_node = GraphNode(
@@ -177,7 +189,7 @@ def client(app):
 @pytest.fixture
 def coverage_graph():
     """Create a graph with test coverage for API testing."""
-    graph = TraceGraph(repo_root=Path("/test/repo"))
+    graph = TraceGraph(repo_root=Path("/test/repo"), _resolver=grammar_for("REQ"))
 
     req_node = GraphNode(id="REQ-p00001", kind=NodeKind.REQUIREMENT, label="Platform Security")
     req_node._content = {"level": "PRD", "status": "Active", "hash": "abc12345"}
@@ -195,7 +207,12 @@ def coverage_graph():
         id="test:test_encrypt.py::test_encrypt", kind=NodeKind.TEST, label="test_encrypt"
     )
     test_node._content = {"file": "test_encrypt.py", "name": "test_encrypt"}
-    assertion_a.link(test_node, EdgeKind.VERIFIES)
+    # The builder hangs a citation on the OWNING REQUIREMENT carrying the
+    # assertion labels it named, not on the assertion node -- that is the
+    # shape the coverage computation reads (REQ-d00269-B). Wiring it to the
+    # assertion instead produces a graph whose listing and whose figures
+    # disagree, which no build can produce.
+    req_node.link(test_node, EdgeKind.VERIFIES, ["A"])
 
     # Test result
     result_node = GraphNode(id="result:test_encrypt", kind=NodeKind.RESULT, label="passed")
@@ -210,7 +227,14 @@ def coverage_graph():
         "test:test_encrypt.py::test_encrypt": test_node,
         "result:test_encrypt": result_node,
     }
-    return _wrap(graph, Path("/test/repo"))
+    # The coverage endpoints report their figures from ``rollup_metrics``
+    # (REQ-d00258-C), which a served graph always carries because building one
+    # annotates it. Annotating here keeps the fixture a graph the viewer could
+    # actually be handed, rather than one whose figures are absent for a
+    # reason no real caller reproduces.
+    wrapped = _wrap(graph, Path("/test/repo"))
+    annotate_coverage(wrapped)
+    return wrapped
 
 
 @pytest.fixture
@@ -386,7 +410,7 @@ class TestGetSearch:
     def test_REQ_d00061_E_search_default_limit(self):
         """Default limit is 50 when not specified — truncates beyond 50."""
         # Build a graph with 60 matching nodes to verify the limit
-        big_graph = TraceGraph(repo_root=Path("/test/repo"))
+        big_graph = TraceGraph(repo_root=Path("/test/repo"), _resolver=grammar_for("REQ"))
         for i in range(60):
             node = GraphNode(
                 id=f"REQ-d{i:05d}",
@@ -469,8 +493,8 @@ class TestGetTestCoverage:
         resp = coverage_client.get("/api/test-coverage/REQ-p00001")
         data = resp.json()
         assert data["total_assertions"] == 2
-        assert data["covered_count"] == 1
-        assert data["referenced_pct"] == 50.0
+        assert data["total_covered"] == 1.0
+        assert data["total_pct"] == 50.0
 
     def test_REQ_d00010_A_test_coverage_not_found(self, coverage_client):
         """GET /api/test-coverage returns 404 for unknown ID."""
@@ -1035,7 +1059,7 @@ class TestGetFileContent:
 
     def test_REQ_p00006_A_file_content_returns_highlighted_lines(self, tmp_path):
         """API returns highlighted_lines and language for a Python file."""
-        graph = TraceGraph(repo_root=tmp_path)
+        graph = TraceGraph(repo_root=tmp_path, _resolver=grammar_for("REQ"))
         state = AppState(
             graph=_wrap(graph, tmp_path),
             repo_root=tmp_path,
@@ -1061,7 +1085,7 @@ class TestGetFileContent:
 
     def test_REQ_p00006_A_file_content_mutation_tracking(self, tmp_path):
         """API still returns mutation tracking alongside highlighting."""
-        graph = TraceGraph(repo_root=tmp_path)
+        graph = TraceGraph(repo_root=tmp_path, _resolver=grammar_for("REQ"))
         state = AppState(
             graph=_wrap(graph, tmp_path),
             repo_root=tmp_path,
@@ -1120,7 +1144,7 @@ class TestGetFileContent:
 
         # Build graph with a node whose source path is the absolute path
         # (this is what happens when associated repos are outside the main repo)
-        graph = TraceGraph(repo_root=main_repo)
+        graph = TraceGraph(repo_root=main_repo, _resolver=grammar_for("REQ"))
         node = GraphNode(
             id="REQ-A-p00001",
             kind=NodeKind.REQUIREMENT,
@@ -1130,8 +1154,24 @@ class TestGetFileContent:
         graph._index[node.id] = node
         graph._roots.append(node)
 
+        # The federation itself is the authority on which roots may be served,
+        # so the associate is a member of it. A member whose graph could not be
+        # built still owns the directory its files live in.
+        federated = FederatedGraph(
+            [
+                RepoEntry(name="test", graph=graph, config=config, repo_root=main_repo),
+                RepoEntry(
+                    name="assoc",
+                    graph=None,
+                    config=None,
+                    repo_root=assoc_repo,
+                    error="graph not built in this fixture",
+                ),
+            ],
+            root_repo="test",
+        )
         state = AppState(
-            graph=FederatedGraph.from_single(graph, config, main_repo),
+            graph=federated,
             repo_root=main_repo,
             config=config,
         )
@@ -1157,7 +1197,7 @@ class TestGetFileContent:
             outside_path = f.name
 
         try:
-            graph = TraceGraph(repo_root=main_repo)
+            graph = TraceGraph(repo_root=main_repo, _resolver=grammar_for("REQ"))
             state = AppState(
                 graph=_wrap(graph, main_repo),
                 repo_root=main_repo,
@@ -1277,7 +1317,7 @@ def incoming_graph():
     with NO incoming traceability edges."""
     from elspais.graph.annotators import JourneyVerification
 
-    graph = TraceGraph(repo_root=Path("/test/repo"))
+    graph = TraceGraph(repo_root=Path("/test/repo"), _resolver=grammar_for("REQ"))
 
     req = GraphNode(id="REQ-p00006", kind=NodeKind.REQUIREMENT, label="Traceability Viewer")
     req._content = {"level": "PRD", "status": "Active", "hash": "aaa11111"}
@@ -1907,11 +1947,11 @@ def _make_disk_app(tmp_path, spec_content=DISK_SPEC, two_reqs=False):
 
     from elspais.graph.GraphNode import FileType
 
-    graph = TraceGraph(repo_root=tmp_path)
+    graph = TraceGraph(repo_root=tmp_path, _resolver=grammar_for("REQ"))
     rel_path = str(spec_file.relative_to(tmp_path))
 
     # Create FILE node
-    file_node = GraphNode(id=f"file:{rel_path}", kind=NodeKind.FILE, label="test_spec.md")
+    file_node = GraphNode(id=file_id(rel_path), kind=NodeKind.FILE, label="test_spec.md")
     file_node.set_field("file_type", FileType.SPEC)
     file_node.set_field("relative_path", rel_path)
     file_node.set_field("absolute_path", str(spec_file))
@@ -1957,7 +1997,7 @@ def _make_disk_app(tmp_path, spec_content=DISK_SPEC, two_reqs=False):
     prd.link(req, EdgeKind.IMPLEMENTS)
 
     index = {
-        f"file:{rel_path}": file_node,
+        file_id(rel_path): file_node,
         "REQ-p00001": prd,
         "REQ-t00001": req,
         "REQ-t00001-A": a1,
@@ -2726,11 +2766,11 @@ def _make_freshness_app(tmp_path, spec_subdir="spec"):
         encoding="utf-8",
     )
 
-    graph = TraceGraph(repo_root=tmp_path)
+    graph = TraceGraph(repo_root=tmp_path, _resolver=grammar_for("REQ"))
     rel_path = str(spec_file.relative_to(tmp_path))
 
     # Create FILE node
-    file_node = GraphNode(id=f"file:{rel_path}", kind=NodeKind.FILE, label="requirements.md")
+    file_node = GraphNode(id=file_id(rel_path), kind=NodeKind.FILE, label="requirements.md")
     file_node.set_field("file_type", FileType.SPEC)
     file_node.set_field("relative_path", rel_path)
     file_node.set_field("absolute_path", str(spec_file))
@@ -2752,7 +2792,7 @@ def _make_freshness_app(tmp_path, spec_subdir="spec"):
 
     graph._roots = [file_node, prd]
     graph._index = {
-        f"file:{rel_path}": file_node,
+        file_id(rel_path): file_node,
         "REQ-p00001": prd,
         "REQ-p00001-A": a1,
     }
@@ -3142,10 +3182,10 @@ class TestSpecFiles:
     @pytest.fixture
     def spec_files_graph(self):
         """Graph with FILE nodes of various types."""
-        graph = TraceGraph(repo_root=Path("/test/repo"))
+        graph = TraceGraph(repo_root=Path("/test/repo"), _resolver=grammar_for("REQ"))
 
         spec_file1 = GraphNode(
-            id="file:spec/requirements.md",
+            id=file_id("spec/requirements.md"),
             kind=NodeKind.FILE,
             label="spec/requirements.md",
         )
@@ -3157,7 +3197,7 @@ class TestSpecFiles:
         }
 
         spec_file2 = GraphNode(
-            id="file:spec/ops/ops-reqs.md",
+            id=file_id("spec/ops/ops-reqs.md"),
             kind=NodeKind.FILE,
             label="spec/ops/ops-reqs.md",
         )
@@ -3169,7 +3209,7 @@ class TestSpecFiles:
         }
 
         code_file = GraphNode(
-            id="file:src/main.py",
+            id=file_id("src/main.py"),
             kind=NodeKind.FILE,
             label="src/main.py",
         )
@@ -3181,7 +3221,7 @@ class TestSpecFiles:
         }
 
         test_file = GraphNode(
-            id="file:tests/test_main.py",
+            id=file_id("tests/test_main.py"),
             kind=NodeKind.FILE,
             label="tests/test_main.py",
         )
@@ -3194,10 +3234,10 @@ class TestSpecFiles:
 
         graph._roots = []
         graph._index = {
-            "file:spec/requirements.md": spec_file1,
-            "file:spec/ops/ops-reqs.md": spec_file2,
-            "file:src/main.py": code_file,
-            "file:tests/test_main.py": test_file,
+            file_id("spec/requirements.md"): spec_file1,
+            file_id("spec/ops/ops-reqs.md"): spec_file2,
+            file_id("src/main.py"): code_file,
+            file_id("tests/test_main.py"): test_file,
         }
         # Register FILE nodes in the kind index
         graph._kind_index = {
@@ -3230,11 +3270,11 @@ class TestSpecFiles:
             assert f["file_type"] == "SPEC"
         # Check IDs
         ids = {f["id"] for f in files}
-        assert "file:spec/requirements.md" in ids
-        assert "file:spec/ops/ops-reqs.md" in ids
+        assert file_id("spec/requirements.md") in ids
+        assert file_id("spec/ops/ops-reqs.md") in ids
         # CODE/TEST should not appear
-        assert "file:src/main.py" not in ids
-        assert "file:tests/test_main.py" not in ids
+        assert file_id("src/main.py") not in ids
+        assert file_id("tests/test_main.py") not in ids
 
     def test_spec_files_sorted_by_path(self, spec_files_client):
         # Verifies: REQ-d00010
@@ -3251,9 +3291,9 @@ class TestSpecFiles:
     def test_spec_files_empty_when_no_spec_files(self):
         # Verifies: REQ-d00010
         """Returns empty list when no SPEC files exist."""
-        graph = TraceGraph(repo_root=Path("/test/repo"))
+        graph = TraceGraph(repo_root=Path("/test/repo"), _resolver=grammar_for("REQ"))
         code_file = GraphNode(
-            id="file:src/main.py",
+            id=file_id("src/main.py"),
             kind=NodeKind.FILE,
             label="src/main.py",
         )
@@ -3264,7 +3304,7 @@ class TestSpecFiles:
             "repo": "",
         }
         graph._roots = []
-        graph._index = {"file:src/main.py": code_file}
+        graph._index = {file_id("src/main.py"): code_file}
         graph._kind_index = {NodeKind.FILE: [code_file]}
 
         state = AppState(
@@ -3357,7 +3397,7 @@ class TestMoveToNewFile:
 
         body = {
             "node_id": "REQ-t00001",
-            "target_file_id": "file:spec/new-reqs.md",
+            "target_file_id": file_id("spec/new-reqs.md"),
             "if_version": _version(client, "REQ-t00001"),
             "if_source_file_version": _file_version(client, "REQ-t00001"),
             # The destination does not exist yet, so the caller has no token
@@ -3377,7 +3417,7 @@ class TestMoveToNewFile:
         assert new_file.exists()
 
         # The graph should have a FILE node for the new file
-        new_file_node = state.graph.find_by_id("file:spec/new-reqs.md")
+        new_file_node = state.graph.find_by_id(file_id("spec/new-reqs.md"))
         assert new_file_node is not None
 
     # Verifies: REQ-d00010
@@ -3390,7 +3430,7 @@ class TestMoveToNewFile:
             "/api/mutate/move-to-file",
             json={
                 "node_id": "REQ-t00001",
-                "target_file_id": "file:random/not-a-spec.md",
+                "target_file_id": file_id("random/not-a-spec.md"),
                 # Valid tokens, so the path rejection is what gets asserted
                 # rather than a version conflict masking it.
                 "if_version": _version(client, "REQ-t00001"),
@@ -3416,7 +3456,7 @@ class TestMoveToNewFile:
             "/api/mutate/move-to-file",
             json={
                 "node_id": "REQ-t00001",
-                "target_file_id": "file:spec/../../etc/passwd.md",
+                "target_file_id": file_id("spec/../../etc/passwd.md"),
             },
         )
         assert resp.status_code == 400
@@ -3447,19 +3487,19 @@ class TestMoveToNewFile:
         state._rebuild()
 
         # The target file already exists in the graph
-        target_node = state.graph.find_by_id("file:spec/other.md")
+        target_node = state.graph.find_by_id(file_id("spec/other.md"))
         assert target_node is not None
 
         resp = client.post(
             "/api/mutate/move-to-file",
             json={
                 "node_id": "REQ-t00001",
-                "target_file_id": "file:spec/other.md",
+                "target_file_id": file_id("spec/other.md"),
                 # A move changes the node, the file it leaves and the file it
                 # joins, so all three tokens are required.
                 "if_version": _version(client, "REQ-t00001"),
                 "if_source_file_version": _file_version(client, "REQ-t00001"),
-                "if_target_version": _version(client, "file:spec/other.md"),
+                "if_target_version": _version(client, file_id("spec/other.md")),
             },
         )
         assert resp.status_code == 200, resp.json()

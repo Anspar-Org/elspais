@@ -141,9 +141,9 @@ class TestCollectErrors:
 
         data = collect_errors(graph, config, exclude_status=set())
 
-        assert (
-            len(data.format_errors) >= 1
-        ), f"Expected at least 1 format error, got {len(data.format_errors)}"
+        assert len(data.format_errors) >= 1, (
+            f"Expected at least 1 format error, got {len(data.format_errors)}"
+        )
 
         ids = [e.req_id for e in data.format_errors]
         assert "REQ-d00001" in ids, f"REQ-d00001 should have a format error, got {ids}"
@@ -162,9 +162,9 @@ class TestCollectErrors:
 
         data = collect_errors(graph, config, exclude_status=set())
 
-        assert (
-            len(data.no_assertions) >= 1
-        ), f"Expected at least 1 no-assertions entry, got {len(data.no_assertions)}"
+        assert len(data.no_assertions) >= 1, (
+            f"Expected at least 1 no-assertions entry, got {len(data.no_assertions)}"
+        )
 
         ids = [e.req_id for e in data.no_assertions]
         assert "REQ-d00002" in ids, f"REQ-d00002 should be flagged, got {ids}"

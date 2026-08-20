@@ -109,25 +109,28 @@ C. The drift check SHALL pass when all schema sections are documented and no sta
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-p00002
 
-The viewer UI SHALL derive dropdown values and filter labels from `ElspaisConfig` rather than hardcoding them. The Flask template context SHALL include config-derived requirement types, allowed statuses, and user-selectable relationship kinds.
+The values the viewer offers a reader — the levels it groups by, the statuses it filters on, the relationships a reader may create — SHALL come from the project's configuration rather than from the viewer, so that a project sees its own vocabulary and not this one's.
 
 ### Assertions
 
-A. The Flask template context SHALL include a `config_types` variable containing requirement type definitions derived from `ElspaisConfig.id_patterns.types`.
+A. The viewer SHALL offer the requirement levels the project declares, each with the letter and rank that project gives it.
 
-B. The Flask template context SHALL include a `config_relationship_kinds` variable listing user-selectable relationship kinds (implements, refines, satisfies).
+B. The viewer SHALL offer only those relationships a reader may author. The graph holds kinds the tool derives rather than accepts, and offering one would invite a reader to declare something the tool will overwrite.
 
-C. The Flask template context SHALL include a `config_statuses` variable containing allowed statuses from `ElspaisConfig.rules.format.allowed_statuses` when configured.
+C. The viewer SHALL offer the statuses the project declares, which are the statuses its requirements may carry.
 
-D. `StatusRolesConfig` SHALL provide a `sort_by_role()` method that orders a list of status strings by role priority (active first, then provisional, aspirational, and retired last), preserving original order within each role group; unknown statuses SHALL be treated as active.
+D. Statuses presented in order SHALL run active first, then provisional, then aspirational, then retired, keeping the order they were given in within each of those groups. A status belonging to no declared role SHALL be ordered as an active one.
 
 ### Changelog
 
+- 2026-08-14 | 254fcba9 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-14 | 3feb798c | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-14 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: state what the viewer offers a reader rather than which variables carry it; two assertions named configuration fields that do not exist
 - 2026-07-31 | 58192a4f | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | a9cc41d2 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | a9cc41d2 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Config-Driven Viewer UI Values* | **Hash**: 58192a4f
+*End* *Config-Driven Viewer UI Values* | **Hash**: 254fcba9
 ---
 
 ## REQ-d00212: Config Schema v3 Models
@@ -150,15 +153,15 @@ E. A `ChangelogRequireConfig` sub-model SHALL group changelog requirement boolea
 
 F. `ElspaisConfig` SHALL have `levels` (dict[str, LevelConfig]), `scanning` (ScanningConfig), and `output` (OutputConfig) fields. The `directories`, `spec`, `testing`, `ignore`, `graph`, `traceability`, `core`, and `associated` fields SHALL be removed. Version SHALL default to 3.
 
-G. `IdPatternsConfig` SHALL have `separators` and `prefix_optional` fields (moved from `references.defaults`). The `types` and `associated` fields SHALL be removed. The canonical pattern SHALL use `{level.letter}` instead of `{type.letter}`.
+G. A repository's identifier configuration SHALL admit exactly one spelling of any given identifier, up to case. Two elements of an identifier configuration that differ only in case SHALL be rejected at configuration-validation time, naming both and the element they collide in.
 
 H. `HierarchyConfig` SHALL contain only boolean flags (`allow_circular`, `allow_structural_orphans`, `allow_orphans`, `cross_repo_implements`). Per-level implement rules SHALL be defined in `LevelConfig.implements` instead. The model SHALL be strict (`extra="forbid"`).
 
-I. `ReferencesConfig` SHALL contain only `enabled` (bool) and `case_sensitive` (bool). The `defaults` sub-model and `overrides` list SHALL be removed.
+I. [Removed - named a references section of the configuration that does not exist. Identifier grammar is configured under identifier patterns, and an identifier is admitted in one spelling only, per REQ-d00212-G.]
 
 J. `ProjectConfig` SHALL contain only `namespace` and `name`. The `version` and `type` fields SHALL be removed.
 
-K. `AssociateEntryConfig` SHALL contain `path` (str) and `namespace` (str). The `git` and `spec` fields SHALL be removed.
+K. `AssociateEntryConfig` SHALL define the fields an associate declaration is written in: `path` (str) and `namespace` (str), both required, together with the optional `git` remote and `color`. A declaration SHALL be admitted only where every field it carries is one this model defines.
 
 L. A `TermsConfig` model SHALL define defined-terms configuration: `output_dir` (str, default "spec/_generated"), `markup_styles` (list[str], default ["*", "**"]), `exclude_files` (list[str], default []), and a nested `severity` field of type `TermsSeverityConfig`. `TermsSeverityConfig` SHALL define 6 severity fields: `duplicate` (default "error"), `undefined` (default "warning"), `unmarked` (default "warning"), `unused` (default "warning"), `bad_definition` (default "error"), `collection_empty` (default "warning"). `ElspaisConfig` SHALL include a `terms` field of type `TermsConfig` with factory default.
 
@@ -172,12 +175,51 @@ P. The configuration schema SHALL make the severity of every health check config
 
 Q. The configuration schema SHALL express file selection for scanning through a single mechanism, such that exactly one configuration surface determines whether any given file is scanned.
 
+R. An identifier SHALL resolve to a requirement only where it is spelled as the configuration of the repository owning that requirement admits. Neither case nor, for a numeric component, the number of leading zeros SHALL decide whether it resolves, except where a component's configured style makes its case part of the pattern it must match. An identifier SHALL be rendered in the one form that configuration names, on every surface.
+
+S. Reading an identifier without regard to case and padding SHALL NOT extend to any other difference. A spelling that differs from what the configuration admits in anything else SHALL resolve to nothing, and SHALL NOT be repaired into one that resolves.
+
+T. Where a component is configured as numeric, its value SHALL be its identity, and the configured digit count SHALL bound that value rather than the number of characters written. A component whose value exceeds what the configuration admits SHALL resolve to nothing.
+
 ### Rationale
 
-A–N inventory the v3/v4 model shapes; O–Q state the organising invariants those shapes must converge on. Rule settings have drifted into a layout where a setting's location no longer predicts what it governs, some check severities are configurable while others are hardcoded with no stated principle distinguishing them, and "why was this file (not) scanned" can have more than one configuration answer (per-kind skip lists alongside a global skip list, plus pattern lists). O–Q close those gaps as invariants only: candidate mechanisms discussed during design — splitting rules into concern sections such as `[rules.changelog]` and `[rules.status]`, or collapsing file selection into a unified `patterns` list — are proposals, not obligations, and deliberately absent from the assertions. Which existing semantics survive, and how existing configs migrate, is decided at implementation. Current schema shapes that contradict O–Q (including the dual file-selection surfaces described alongside B and C) are conformance-defect territory for later implementation tickets.
+Most lettered entries inventory the v3/v4 model shapes; G and O–R state the organising invariants those shapes must converge on.
+
+K carries the remote because a federation member is a git repository, and a member declared but absent from this machine is an ordinary situation rather than an error to be merely reported: the declaration is the one place that knows where the repository can be obtained. The remote never identifies a member — the path and the namespace do that, which is why it stays optional and why a declaration without one is complete. What a declaration may contain and what it must contain are one question, so the field list and the strictness that enforces it belong together rather than in separate assertions that could drift.
+
+G, R and S hold within a single repository, not only where several meet. G fixes what the configuration admits; R fixes what an inadmissible spelling may do; S bounds how far R's tolerance reaches. The failure R forbids is not silence but a wrong answer: a spelling nobody wrote being repaired into one that resolves, so a reference lands on a requirement its author did not name. That is invisible in every report, because the reference looks satisfied.
+
+Case is exempt from that, and the exemption is safe for a reason that has to be built rather than assumed. Reading without regard to case can only mislead where two admissible spellings differ in case alone — and G now forbids a configuration from holding such a pair at all, so the ambiguity has no way to arise. What remains is one identifier reachable by more than one casing, and a single casing in which it is written back. An author who types a label in the wrong case is naming a requirement that exists, unambiguously, and refusing them costs an edge to buy nothing; an author who mistypes a digit is naming a requirement that may not exist at all, which is why S keeps every other difference resolving to nothing.
+
+The exception R carries is not a softening of it but the same reasoning applied once more. Where a component's style spells its own shape — PascalCase, camelCase, snake_case, kebab-case — the case is not how the identifier is presented, it is what the pattern admits, and a component in the wrong case does not differ from a valid one by case: it fails to be one. Treating it as a case variant would mean reading a string the configuration never admitted, which is the repair S forbids. A project that wants case to carry no meaning in its components has a way to say so, by choosing a style that does not spell one.
+
+Padding is exempt on stronger grounds still, and T says why: a numeric component is a number. Leading zeros do not make a different number, so a configuration that treated them as identifying would not be describing numbers at all — it would be describing characters that happen to be digits, which is a different component style and is configured as one. The same safety argument applies without needing a guard: a repository has one padding configuration, so two admissible spellings can never differ in padding alone. What the digit count bounds is therefore the value, not the spelling — a component may be written with any number of leading zeros and remain the same component, while one carrying more significant digits than the configuration admits is outside the space entirely and no amount of re-padding brings it back.
+
+The two obligations are therefore a pair rather than a compromise: matching relaxes exactly as far as the configuration guard makes safe, and no further. Rendering is what keeps the estate uniform regardless — an identifier read in any casing is stored and re-emitted in the one the configuration names, so a file rewritten by the tool converges on that casing rather than preserving whatever was typed.
+
+Reporting is deliberately absent from R. Once an inadmissible spelling resolves to nothing, it is an unresolved reference like any other, and the existing obligations to record it and to report it at a project-chosen severity carry it the rest of the way. Stating the reporting again here would duplicate them and invite the two statements to drift apart.
+
+R is a condition on resolving, never on writing, which is what keeps a reference authored ahead of its target legitimate. A requirement may be named before the repository owning it is declared, or before that requirement exists; the reference simply finds nothing yet, and how loudly that is reported is the project's decision. R also judges a spelling against the configuration of the repository owning the named requirement, not the one doing the writing — otherwise no reference could ever cross a repository boundary, since a neighbour's identifiers are foreign to the local grammar by construction. Rule settings have drifted into a layout where a setting's location no longer predicts what it governs, some check severities are configurable while others are hardcoded with no stated principle distinguishing them, and "why was this file (not) scanned" can have more than one configuration answer (per-kind skip lists alongside a global skip list, plus pattern lists). O–Q close those gaps as invariants only: candidate mechanisms discussed during design — splitting rules into concern sections such as `[rules.changelog]` and `[rules.status]`, or collapsing file selection into a unified `patterns` list — are proposals, not obligations, and deliberately absent from the assertions. Which existing semantics survive, and how existing configs migrate, is decided at implementation. Current schema shapes that contradict O–Q (including the dual file-selection surfaces described alongside B and C) are conformance-defect territory for later implementation tickets.
 
 ### Changelog
 
+- 2026-08-16 | 468cf0e9 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-16 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: case decides resolution where a component's style makes case part of the pattern it must match (R)
+- 2026-08-15 | a2917c2b | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-15 | a11d15f9 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-15 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: numeric padding is presentation and the digit count bounds the value rather than the spelling (R, T)
+- 2026-08-15 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: case no longer decides whether an identifier resolves (R), a configuration holding two elements differing only in case is rejected (G), and S bounds the tolerance to case alone
+- 2026-08-12 | da474c2a | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: sync changelog hash
+- 2026-08-12 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: amend K to state the fields an associate declaration is written in, including the optional git remote, reconciling it with REQ-d00202-A/B
+- 2026-08-12 | da474c2a | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-10 | 52cce4c8 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-10 | d2250c7d | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-10 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: retire I, which named a references section that does not exist
+- 2026-08-10 | 3b50127c | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-10 | 92f8213c | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-10 | 9b2c6bea | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-10 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: G states one admitted spelling; R states reporting a malformed one
+- 2026-08-10 | f2697393 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | 40849780 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-26: organising invariants for rule-setting location (O), severity configurability (P), and single file-selection mechanism (Q)
 - 2026-07-31 | a0ea657d | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -186,14 +228,14 @@ A–N inventory the v3/v4 model shapes; O–Q state the organising invariants th
 - 2026-03-30 | db4ad28c | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 - 2026-03-29 | c75b87f8 | - | Michael Lewis (<michael@anspar.org>) | Add assertion N for config migration v3 to v4
 
-*End* *Config Schema v3 Models* | **Hash**: 40849780
+*End* *Config Schema v3 Models* | **Hash**: 468cf0e9
 ---
 
-## REQ-d00251: Component Style Vocabulary and Assertion Separator
+## REQ-d00251: A Repository's Identifier Grammar
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-p00002
 
-The `[id-patterns.component].style` configuration SHALL use an explicit case-convention vocabulary rather than a small set of "custom pattern with hidden default" modes. The `[id-patterns.assertions]` section SHALL gain a configurable separator that decouples the component-to-*Assertion* boundary from any character used inside component names, enabling kebab-case and snake_case component styles to work cleanly with numeric *Assertion* labels.
+The `[id-patterns.component].style` configuration SHALL use an explicit case-convention vocabulary rather than a small set of "custom pattern with hidden default" modes. The `[id-patterns.assertions]` section SHALL gain a configurable separator that decouples the component-to-*Assertion* boundary from any character used inside component names, enabling kebab-case and snake_case component styles to work cleanly with numeric *Assertion* labels. The grammar these settings describe is one repository's own, and applies to that repository's identifiers alone.
 
 ### Assertions
 
@@ -207,21 +249,89 @@ D. Rejection of the legacy values `named` and `alphanumeric` SHALL produce a fix
 
 E. `AssertionConfig` SHALL include a `separator` field (str, default `"-"`) used (with `re.escape`) as the boundary between the component and the optional *Assertion* suffix in the canonical regex.
 
-F. Ambiguous combinations SHALL be rejected at config validation time: `style = "snake_case"` with `separator = "_"` plus a non-uppercase `label_style`; `style = "kebab-case"` with `separator = "-"` plus a non-uppercase `label_style`. The error message SHALL suggest changing `separator` to a non-overlapping character.
+F. The *Assertion* separator SHALL NOT be a character that can legally appear in a component or in an *Assertion* label. A configuration that violates this SHALL be rejected at validation time, naming the offending character, the style that makes it legal, and a non-overlapping character to use instead.
 
-G. A single helper in `utilities/patterns.py` SHALL resolve a `ComponentFormat` to its regex string. The helper SHALL be the sole authority used by both the `IdResolver` regex compiler (`utilities/patterns.py`) and the lark grammar pattern builder (`graph/parsers/lark/__init__.py`); no other component-style dispatch SHALL exist in the codebase.
+G. [Removed - stated where the component sub-pattern is derived rather than an obligation the tool meets. What a configuration admits is REQ-d00212-G; that one repository's grammar governs only its own identifiers is L below.]
 
-H. An *Assertion* label series SHALL be one of two ordered alphabets: `uppercase`, running A to Z; and `numeric`, running 0 upward. Each SHALL have a first label, a successor for every label but its last, and a last label beyond which the series does not extend.
+H. An *Assertion* label series SHALL be one of the alphabets a repository may configure, each having a first label, a successor for every label but its last, and a last label beyond which the series does not extend.
 
-I. An *Assertion* label series configured as `alphanumeric` SHALL run 0 to 9 and then A to Z, giving thirty-six labels in that order.
+I. [Removed - enumerated one alphabet's order here. Which alphabets a repository may configure is a matter for the configuration surface; what any of them must be is H, and a series ends at its alphabet's last label rather than at a separately configured count.]
+
+J. The multi-*Assertion* separator SHALL NOT be a character that can legally appear in an *Assertion* label.
+
+K. The *Assertion* separator and the multi-*Assertion* separator SHALL each be exactly one character. A configuration declaring either as empty, or as longer than one character, SHALL be rejected at validation time.
+
+L. A repository's identifier grammar SHALL be derived from that repository's own identifier configuration, so that a process holding several repositories at once applies each repository's grammar only to that repository.
+
+M. Neither the *Assertion* separator nor the multi-*Assertion* separator SHALL be the character that divides one reference from the next within a list of references. A configuration that declares either as that character SHALL be rejected at validation time, naming the character, the role it already holds, and a character available instead.
+
+### Rationale
+
+An identifier is read left to right, so every boundary inside it has to be findable without knowing what follows. A separator drawn from the characters a component may itself contain destroys that boundary: the component absorbs the separator and the label after it, and the reference resolves to a different requirement rather than failing. The result is a wrong answer, not an error, which is why this is rejected at validation time rather than warned about later.
+
+Restricting the rule to the punctuation a style happens to use internally would leave the same trap open elsewhere — a digit separator under a numeric component, a letter separator under a camelCase one. F and J are therefore stated over the whole legal character set of the part each separator bounds, which is derivable from the style and needs no enumeration here.
+
+Uppercase *Assertion* labels do make a lowercase component mechanically unambiguous, and that exception was previously how an overlapping separator was tolerated. It is a subtlety every reader has to re-derive, and it silently changes which requirement a mis-cased reference names, so the tolerance is not worth its cost.
+
+K is what makes F and J decidable. Both are stated over *a character*, which leaves a separator of some other length outside the rule rather than inside it: an empty separator marks no boundary at all, and a longer one is absorbed character by character exactly as a single legal character would be, so asking whether the whole string is legal answers a different question than the one F and J pose. Fixing the length at one keeps every boundary a single findable character and leaves F and J to say which character it may be.
+
+The alphabets themselves are configuration rather than obligation: which ones a repository may choose belongs to the configuration surface, while H fixes what any of them must be — ordered, with a definite beginning and end, so that a label can be placed in it and the label after it named. That is what lets a label missing from the middle of a series be evidence of loss rather than of removal, and it is what ends a series without a separate count: a requirement runs out of labels when its alphabet does.
+
+M extends F and J outward. Those two protect a boundary inside one reference; M protects the boundary between two of them. A list is divided before its items are read, so a separator that also divides references is spent on the outer boundary first: what reaches the identifier reader is a fragment ending where the list was cut, and a bare label with no requirement in front of it. Both halves fail quietly — the fragment resolves to the requirement it names without the labels the author attached, and the orphaned label resolves to nothing and is carried as an unresolved reference. As with F, the outcome is a wrong answer rather than an error, so the configuration is refused rather than tolerated. Stating the rule over the dividing character rather than over a particular punctuation mark keeps it true of whatever character holds that role.
 
 ### Changelog
 
+- 2026-08-14 | 09f5a257 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-14 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: an assertion separator may not also be the character dividing two references (M)
+- 2026-08-13 | d83f4fd6 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-13 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: repoint G's placeholder, which named a requirement that has since been retired itself
+- 2026-08-12 | d6d44bc9 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-12 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: H states what any label alphabet must be, not which ones exist; retire I
+- 2026-08-12 | c7541313 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-10 | e4e4a5fc | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-12 | 0ba5e8b6 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-10 | 534a01d7 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-10 | 3632edb9 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-10 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: separators are exactly one character (K)
+- 2026-08-08 | 7a2823ed | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-08 | 427d0f5f | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | 7857498c | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | e04a4e37 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-05-11 | e04a4e37 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize term forms, update hash
 - 2026-05-11 | - | - | Developer (<dev@example.com>) | Initial authoring: introduce explicit case-style vocabulary and configurable assertion separator.
 
-*End* *Component Style Vocabulary and Assertion Separator* | **Hash**: e4e4a5fc
+*End* *A Repository's Identifier Grammar* | **Hash**: 09f5a257
+---
+
+## REQ-d00270: Single-Authority Identifier Grammar Derivation
+
+**Level**: dev | **Status**: Superseded | **Implements**: REQ-p00002
+
+This requirement stated an implementation structure rather than a property of the tool. Deriving the identifier grammar in one place is an engineering rule, and it lives with the other such rules rather than as an obligation the tool can be measured against. The one property it carried that is observable — that each repository's grammar applies only to that repository's identifiers — is REQ-d00251-L. Which strings a configuration admits, and what becomes of a string spelled any other way, are REQ-d00212-G and REQ-d00212-R.
+
+### Assertions
+
+A. [Removed - stated where a derivation lives rather than an obligation the tool meets. Single-authority derivation is an engineering rule and is recorded with the others; what a configuration admits is REQ-d00212-G.]
+
+B. [Removed - an interface rule about the implementation, measurable only by reading it. The observable consequence is REQ-d00212-G.]
+
+C. [Removed - prescribed how a surface obtains its patterns. What it must then answer is REQ-d00212-G, and what an inadmissible spelling may do is REQ-d00212-R.]
+
+D. [Removed - one configuration admitting one spelling is REQ-d00212-G, which every deciding surface answers under alike.]
+
+E. [Removed - carried by REQ-d00251-L.]
+
+F. [Removed - a rule about an optimisation, not about an answer. A string an admitting configuration spells is resolvable under REQ-d00212-G however a surface narrows candidates first.]
+
+G. [Removed - carried by REQ-d00212-R, which admits one spelling and lets any other resolve to nothing.]
+
+### Changelog
+
+- 2026-08-13 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: reduce the retired assertions to placeholders naming what carries each obligation now, and delete a Rationale arguing in the present tense for assertions that no longer oblige anything
+- 2026-08-10 | d3233556 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-10 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: D scoped to deciding surfaces; add F (pre-filter contract) and G (component case is spelling)
+- 2026-08-08 | 2e02bcf7 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: sync changelog hash
+- 2026-08-09 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: single-authority derivation for the whole identifier grammar
+
+*End* *Single-Authority Identifier Grammar Derivation* | **Hash**: c8cb35b9
 ---

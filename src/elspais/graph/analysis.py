@@ -19,18 +19,12 @@ from typing import TYPE_CHECKING, Any
 from elspais.config.schema import ElspaisConfig
 from elspais.graph.GraphNode import GraphNode, NodeKind
 
-_SCHEMA_FIELDS = {f.alias or name for name, f in ElspaisConfig.model_fields.items()} | set(
-    ElspaisConfig.model_fields.keys()
-)
-
 
 def _validate_config(config: dict[str, Any]) -> ElspaisConfig:
-    """Validate a config dict into ElspaisConfig, stripping non-schema keys."""
-    filtered = {k: v for k, v in config.items() if k in _SCHEMA_FIELDS}
-    assoc = filtered.get("associates")
-    if isinstance(assoc, dict) and "paths" in assoc:
-        filtered.pop("associates", None)
-    return ElspaisConfig.model_validate(filtered)
+    """Validate a config dict into ElspaisConfig (see config.validate_config)."""
+    from elspais.config import validate_config
+
+    return validate_config(config)
 
 
 if TYPE_CHECKING:
@@ -249,6 +243,8 @@ def _count_uncovered_descendants(
     included_set: set[str],
 ) -> int:
     """Count leaf descendants (in included_set) with zero coverage."""
+    from elspais.graph.aggregation import WORK_LIST_MEASURE, measure_total
+
     count = 0
     visited: set[str] = set()
     queue: deque[str] = deque([node_id])
@@ -266,10 +262,16 @@ def _count_uncovered_descendants(
         included_children = [c for c in node.iter_children() if c.id in included_set]
 
         if not included_children and nid != node_id:
-            # Leaf node — check coverage
+            # Leaf node — check coverage.
+            # Implements: REQ-d00258-M
+            # "Uncovered" is asked on the immediate direct measure: this count
+            # ranks requirements by how much UNDONE work depends on them, and
+            # a leaf whose only credit is whole-requirement evidence or the
+            # coverage of something refining it has had nothing written
+            # against it by name.
             rollup = node.get_metric("rollup_metrics")
-            coverage = rollup.implemented.indirect_pct if rollup else 0
-            if coverage == 0:
+            covered = measure_total(rollup.implemented, WORK_LIST_MEASURE) if rollup else 0.0
+            if covered <= 0:
                 count += 1
         else:
             for child in included_children:
@@ -339,7 +341,9 @@ def analyze_foundations(
     Assertions are included in computation (for uncovered_dependents counting)
     but filtered from ranked output -- only REQUIREMENT nodes appear in results.
     Descendant counts are computed internally alongside the other metrics.
-    Coverage is read via node.get_metric("referenced_pct", 0).
+    Coverage is read on the immediate direct measure (``WORK_LIST_MEASURE``),
+    because what makes a requirement foundational is dependents nobody has
+    written evidence for.
     """
     from elspais.config.status_roles import StatusRolesConfig
 

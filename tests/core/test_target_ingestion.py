@@ -3,6 +3,7 @@
 
 Tests for target-driven result ingestion via the reporter registry.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -14,7 +15,7 @@ from elspais.config.schema import (
     TestTargetConfig,
 )
 from elspais.graph.GraphNode import NodeKind
-from tests.core.graph_test_helpers import build_graph, make_test_result
+from tests.core.graph_test_helpers import build_graph, grammar_for, make_test_result
 
 # ---------------------------------------------------------------------------
 # (a) make_test_result / _add_test_result -- source_file + match on RESULT node
@@ -69,7 +70,7 @@ def test_ingest_target_results_flutter_machine(tmp_path: Path):
     from elspais.graph.builder import GraphBuilder
     from elspais.graph.factory import _ingest_target_results
 
-    builder = GraphBuilder(repo_root=tmp_path)
+    builder = GraphBuilder(repo_root=tmp_path, namespace="REQ", resolver=grammar_for("REQ"))
     target = TestTargetConfig(name="flutter", reporter="flutter-machine", match="source")
     count = _ingest_target_results(builder, target, _FLUTTER_MACHINE_SAMPLE, tmp_path)
     assert count == 1
@@ -89,7 +90,7 @@ def test_ingest_target_results_returns_zero_for_coverage_reporter(tmp_path: Path
     from elspais.graph.builder import GraphBuilder
     from elspais.graph.factory import _ingest_target_results
 
-    builder = GraphBuilder(repo_root=tmp_path)
+    builder = GraphBuilder(repo_root=tmp_path, namespace="REQ", resolver=grammar_for("REQ"))
     target = TestTargetConfig(name="cov", reporter="lcov", match="aggregate")
     count = _ingest_target_results(builder, target, "SF:src/foo.dart\nend_of_record\n", tmp_path)
     assert count == 0
@@ -109,7 +110,7 @@ def test_ingest_target_results_source_file_repo_relative(tmp_path: Path):
         '{"type":"testStart","test":{"id":1,"name":"passes","suiteID":0,"line":1,"column":1,"metadata":{}}}\n'
         '{"type":"testDone","testID":1,"result":"success","hidden":false,"time":10}\n'
     )
-    builder = GraphBuilder(repo_root=tmp_path)
+    builder = GraphBuilder(repo_root=tmp_path, namespace="REQ", resolver=grammar_for("REQ"))
     target = TestTargetConfig(name="flutter", reporter="flutter-machine", match="source")
     _ingest_target_results(builder, target, sample, tmp_path)
     graph = builder.build()

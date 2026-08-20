@@ -285,7 +285,7 @@ class TestProjectNameBoundary:
     def test_load_config_rejects_missing_project_name(self, tmp_path):
         """A config file missing [project].name is rejected at load_config()."""
         cfg_path = tmp_path / ".elspais.toml"
-        cfg_path.write_text("version = 4\n" "[project]\n" 'namespace = "REQ"\n')
+        cfg_path.write_text('version = 4\n[project]\nnamespace = "REQ"\n')
         with pytest.raises(ValueError) as ei:
             load_config(cfg_path)
         msg = str(ei.value).lower()
@@ -294,7 +294,7 @@ class TestProjectNameBoundary:
     def test_load_config_rejects_empty_project_name(self, tmp_path):
         """A config file with empty [project].name is rejected at load_config()."""
         cfg_path = tmp_path / ".elspais.toml"
-        cfg_path.write_text("version = 4\n" "[project]\n" 'name = ""\n' 'namespace = "REQ"\n')
+        cfg_path.write_text('version = 4\n[project]\nname = ""\nnamespace = "REQ"\n')
         with pytest.raises(ValueError) as ei:
             load_config(cfg_path)
         msg = str(ei.value).lower()
@@ -303,7 +303,7 @@ class TestProjectNameBoundary:
     def test_load_config_accepts_real_project_name(self, tmp_path):
         """A config file with a real [project].name loads cleanly."""
         cfg_path = tmp_path / ".elspais.toml"
-        cfg_path.write_text("version = 4\n" "[project]\n" 'name = "demo"\n' 'namespace = "REQ"\n')
+        cfg_path.write_text('version = 4\n[project]\nname = "demo"\nnamespace = "REQ"\n')
         cfg = load_config(cfg_path)
         assert cfg["project"]["name"] == "demo"
 
@@ -334,7 +334,7 @@ class TestProjectNameBoundary:
         would be useless for the project name.
         """
         cfg_path = tmp_path / ".elspais.toml"
-        cfg_path.write_text("version = 4\n" "[project]\n" 'namespace = "REQ"\n')
+        cfg_path.write_text('version = 4\n[project]\nnamespace = "REQ"\n')
         local_path = tmp_path / ".elspais.local.toml"
         local_path.write_text('[project]\nname = "from-local"\n')
         cfg = load_config(cfg_path)
@@ -352,7 +352,7 @@ class TestProjectNamespaceBoundary:
     def test_load_config_rejects_missing_project_namespace(self, tmp_path):
         """A config file missing [project].namespace is rejected at load_config()."""
         cfg_path = tmp_path / ".elspais.toml"
-        cfg_path.write_text("version = 4\n" "[project]\n" 'name = "demo"\n')
+        cfg_path.write_text('version = 4\n[project]\nname = "demo"\n')
         with pytest.raises(ValueError) as ei:
             load_config(cfg_path)
         msg = str(ei.value).lower()
@@ -361,7 +361,7 @@ class TestProjectNamespaceBoundary:
     def test_load_config_rejects_empty_project_namespace(self, tmp_path):
         """A config file with empty [project].namespace is rejected at load_config()."""
         cfg_path = tmp_path / ".elspais.toml"
-        cfg_path.write_text("version = 4\n" "[project]\n" 'name = "demo"\n' 'namespace = ""\n')
+        cfg_path.write_text('version = 4\n[project]\nname = "demo"\nnamespace = ""\n')
         with pytest.raises(ValueError) as ei:
             load_config(cfg_path)
         msg = str(ei.value).lower()
@@ -370,14 +370,14 @@ class TestProjectNamespaceBoundary:
     def test_load_config_accepts_real_project_namespace(self, tmp_path):
         """A config file with a real [project].namespace loads cleanly."""
         cfg_path = tmp_path / ".elspais.toml"
-        cfg_path.write_text("version = 4\n" "[project]\n" 'name = "demo"\n' 'namespace = "DEMO"\n')
+        cfg_path.write_text('version = 4\n[project]\nname = "demo"\nnamespace = "DEMO"\n')
         cfg = load_config(cfg_path)
         assert cfg["project"]["namespace"] == "DEMO"
 
     def test_load_config_accepts_namespace_via_local_override(self, tmp_path):
         """Local override supplying namespace rescues a main TOML without it."""
         cfg_path = tmp_path / ".elspais.toml"
-        cfg_path.write_text("version = 4\n" "[project]\n" 'name = "demo"\n')
+        cfg_path.write_text('version = 4\n[project]\nname = "demo"\n')
         local_path = tmp_path / ".elspais.local.toml"
         local_path.write_text('[project]\nnamespace = "LOCAL"\n')
         cfg = load_config(cfg_path)

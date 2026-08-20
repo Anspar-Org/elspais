@@ -122,9 +122,9 @@ class TestCollectSourceFilesLanguageDetection:
 
         for path, data in md_files.items():
             # Pygments uses "markdown" for .md files
-            assert (
-                data["language"] == "markdown"
-            ), f"Expected 'markdown' language for {path}, got '{data['language']}'"
+            assert data["language"] == "markdown", (
+                f"Expected 'markdown' language for {path}, got '{data['language']}'"
+            )
 
     def test_REQ_p00006_C_collect_source_files_detects_python(self):
         """Python files are detected as python language."""

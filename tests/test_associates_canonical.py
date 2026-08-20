@@ -20,14 +20,19 @@ class TestGetAssociateSpecDirectoriesCanonicalRoot:
     """
 
     @staticmethod
-    def _create_associate_repo(repo_dir: Path) -> None:
-        """Create a minimal associate repo with .elspais.toml and spec/."""
+    def _create_associate_repo(repo_dir: Path, namespace: str = "TST") -> None:
+        """Create a minimal associate repo with .elspais.toml and spec/.
+
+        The repo declares the namespace its declaration names: a declaration
+        naming a namespace the repository does not declare is a federation
+        error, and these tests are about path resolution, not that error.
+        """
         repo_dir.mkdir(parents=True, exist_ok=True)
         toml_content = (
             "version = 3\n"
             "[project]\n"
             'name = "test-associate"\n'
-            'namespace = "REQ"\n'
+            f'namespace = "{namespace}"\n'
             "\n"
             "[scanning.spec]\n"
             'directories = ["spec"]\n'
@@ -67,7 +72,7 @@ class TestGetAssociateSpecDirectoriesCanonicalRoot:
 
         # Create associate repo at an absolute location
         associate_repo = tmp_path / "absolute" / "associate"
-        self._create_associate_repo(associate_repo)
+        self._create_associate_repo(associate_repo, namespace="ABS")
 
         worktree = tmp_path / "worktrees" / "feature-x"
         worktree.mkdir(parents=True)

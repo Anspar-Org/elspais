@@ -8,6 +8,7 @@ for unmatched per-test IDs that were never intended to match scanner TEST nodes.
 The RESULT node is still created and iterable (feeds the green/red aggregate
 signal); only the YIELDS link is suppressed.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -16,6 +17,7 @@ from elspais.graph.builder import GraphBuilder, TraceGraph
 from elspais.graph.GraphNode import FileType, GraphNode, NodeKind
 from elspais.graph.relations import EdgeKind
 from tests.core.graph_test_helpers import (
+    grammar_for,
     make_test_result,
 )
 
@@ -33,6 +35,8 @@ def _build_with_flag(link_results: bool) -> TraceGraph:
     builder = GraphBuilder(
         repo_root=Path("."),
         link_results_to_tests=link_results,
+        namespace="REQ",
+        resolver=grammar_for("REQ"),
     )
 
     result_content = make_test_result(
@@ -81,16 +85,16 @@ class TestAggregateMode:
         graph = _build_with_flag(link_results=False)
         result_nodes = list(graph.iter_by_kind(NodeKind.RESULT))
         result_ids = {n.id for n in result_nodes}
-        assert (
-            "result-dart-1" in result_ids
-        ), "RESULT node must be iterable by kind so _compute_app_status can find it"
+        assert "result-dart-1" in result_ids, (
+            "RESULT node must be iterable by kind so _compute_app_status can find it"
+        )
 
     def test_no_broken_reference_in_aggregate_mode(self):
         """Aggregate mode must NOT produce a broken reference for unmatched test_id."""
         graph = _build_with_flag(link_results=False)
-        assert (
-            not graph.has_broken_references()
-        ), "Aggregate mode: unmatched RESULT should never create a broken reference"
+        assert not graph.has_broken_references(), (
+            "Aggregate mode: unmatched RESULT should never create a broken reference"
+        )
 
     def test_result_has_no_yields_edge_in_aggregate_mode(self):
         """RESULT node must have no outgoing YIELDS edge in aggregate mode."""
@@ -119,6 +123,8 @@ class TestDefaultMode:
         builder = GraphBuilder(
             repo_root=Path("."),
             link_results_to_tests=True,
+            namespace="REQ",
+            resolver=grammar_for("REQ"),
         )
         result_content = make_test_result(
             "result-precise-1",
@@ -141,13 +147,13 @@ class TestDefaultMode:
 
         result = graph.find_by_id("result-precise-1")
         assert result is not None, "RESULT node must exist in default mode too"
-        assert (
-            graph.has_broken_references()
-        ), "Default mode + source: unmatched test_id must still produce a broken reference"
+        assert graph.has_broken_references(), (
+            "Default mode + source: unmatched test_id must still produce a broken reference"
+        )
         broken_targets = {br.target_id for br in graph.broken_references()}
-        assert (
-            "test:does/not/exist.py::x" in broken_targets
-        ), "Broken reference must target the unmatched test_id"
+        assert "test:does/not/exist.py::x" in broken_targets, (
+            "Broken reference must target the unmatched test_id"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -165,7 +171,12 @@ class TestMatchBasedSuppression:
 
     def test_aggregate_match_suppresses_yields_even_with_link_flag(self):
         """match='aggregate' + link_results_to_tests=True: YIELDS must NOT be created."""
-        builder = GraphBuilder(repo_root=Path("."), link_results_to_tests=True)
+        builder = GraphBuilder(
+            repo_root=Path("."),
+            link_results_to_tests=True,
+            namespace="REQ",
+            resolver=grammar_for("REQ"),
+        )
         result_content = make_test_result(
             "result-agg-link",
             status="passed",
@@ -188,9 +199,9 @@ class TestMatchBasedSuppression:
         result = graph.find_by_id("result-agg-link")
         assert result is not None
         yields_edges = [e for e in result.iter_outgoing_edges() if e.kind == EdgeKind.YIELDS]
-        assert (
-            len(yields_edges) == 0
-        ), "match='aggregate' must suppress YIELDS even when link_results_to_tests=True"
+        assert len(yields_edges) == 0, (
+            "match='aggregate' must suppress YIELDS even when link_results_to_tests=True"
+        )
         assert not graph.has_broken_references(), (
             "match='aggregate' must not produce a broken reference"
             " even with link_results_to_tests=True"
@@ -206,7 +217,12 @@ class TestMatchBasedSuppression:
         exist the pending link resolves to a broken reference -- the key
         invariant is that a broken reference IS produced (not silently dropped).
         """
-        builder = GraphBuilder(repo_root=Path("."), link_results_to_tests=True)
+        builder = GraphBuilder(
+            repo_root=Path("."),
+            link_results_to_tests=True,
+            namespace="REQ",
+            resolver=grammar_for("REQ"),
+        )
         result_content = make_test_result(
             "result-prec-link",
             status="passed",
@@ -231,10 +247,10 @@ class TestMatchBasedSuppression:
         # The TEST node does not exist, so the YIELDS becomes a broken reference
         # (not a live edge). Verify the broken reference IS present -- precise
         # mode does NOT suppress the attempt the way aggregate does.
-        assert (
-            graph.has_broken_references()
-        ), "match='source' must produce a broken reference when TEST node is absent"
+        assert graph.has_broken_references(), (
+            "match='source' must produce a broken reference when TEST node is absent"
+        )
         broken_targets = {br.target_id for br in graph.broken_references()}
-        assert (
-            "test:does/not/exist.py::x" in broken_targets
-        ), "match='source' broken reference must target the unmatched test_id"
+        assert "test:does/not/exist.py::x" in broken_targets, (
+            "match='source' broken reference must target the unmatched test_id"
+        )

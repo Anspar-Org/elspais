@@ -10,6 +10,7 @@ Validates REQ-d00212-K: associate entries use named [associates.<name>] format.
 Validates REQ-d00212-F: config consumers use v3 scanning paths.
 Validates REQ-d00207-C: typed config internally via ElspaisConfig.
 """
+
 from __future__ import annotations
 
 
@@ -30,6 +31,11 @@ class TestCheckAssociatePathsV3:
 
         assoc_dir = tmp_path / "myrepo"
         assoc_dir.mkdir()
+        # The declaration below names namespace MYR; a repository declaring
+        # anything else there is a federation error, not a resolution one.
+        (assoc_dir / ".elspais.toml").write_text(
+            'version = 3\n[project]\nname = "myrepo"\nnamespace = "MYR"\n'
+        )
 
         # v3 config: named associate entries (not paths array)
         config = {
@@ -63,30 +69,23 @@ class TestCheckAssociatePathsV3:
         assert "not found" in result.message.lower()
 
     def test_REQ_d00202_A_does_not_use_paths_array(self):
-        """Should NOT look for config['associates']['paths'] (v2 format)."""
+        """A bare paths array is not a declaration and is reported as such."""
         from elspais.commands.doctor import check_associate_paths
 
-        # This is the v2 format; check_associate_paths should NOT find associates
-        # from this structure if it properly uses get_associates_config()
+        # The pre-v3 spelling. It names no namespace for anything it lists,
+        # so it cannot say which repository it means -- and the check has to
+        # survive the configuration it exists to describe rather than raise.
         config = {
             "associates": {
                 "paths": ["/some/path"],
             },
         }
-        # If the function uses get_associates_config(), the "paths" key is a
-        # legacy fallback that requires discover_associate_from_path.
-        # If it uses the old v2 code path (config.get("associates",{}).get("paths",[])),
-        # it would try to iterate over ["/some/path"].
-        # The v3 function should use get_associates_config() which handles this
-        # differently from raw dict access.
+
         result = check_associate_paths(config, None)
-        # With v3 code using get_associates_config(), this should either:
-        # - Return passed=True (no valid named associates found), OR
-        # - Process via legacy fallback in get_associates_config()
-        # With v2 code doing config.get("associates",{}).get("paths",[]),
-        # it would try to iterate and find missing paths.
-        # We assert the v3 behavior: it should NOT blindly iterate paths array
+
         assert result.name == "associate.paths_resolvable"
+        assert result.passed is False
+        assert "paths" in result.message
 
 
 class TestCheckAssociateConfigsV3:
@@ -133,7 +132,7 @@ class TestCrossRepoInCommittedConfigV3:
 
         config_path = tmp_path / ".elspais.toml"
         config_path.write_text(
-            "version = 3\n" "[scanning.spec]\n" 'directories = ["spec", "../other-repo/spec"]\n'
+            'version = 3\n[scanning.spec]\ndirectories = ["spec", "../other-repo/spec"]\n'
         )
         result = check_cross_repo_in_committed_config(config_path)
         assert result.passed is False
@@ -145,7 +144,7 @@ class TestCrossRepoInCommittedConfigV3:
 
         config_path = tmp_path / ".elspais.toml"
         config_path.write_text(
-            "version = 3\n" "[associates.other]\n" 'path = "../other-repo"\n' 'namespace = "OTH"\n'
+            'version = 3\n[associates.other]\npath = "../other-repo"\nnamespace = "OTH"\n'
         )
         result = check_cross_repo_in_committed_config(config_path)
         assert result.passed is False
@@ -156,7 +155,7 @@ class TestCrossRepoInCommittedConfigV3:
         from elspais.commands.doctor import check_cross_repo_in_committed_config
 
         config_path = tmp_path / ".elspais.toml"
-        config_path.write_text("version = 3\n" "[scanning.spec]\n" 'directories = ["spec"]\n')
+        config_path.write_text('version = 3\n[scanning.spec]\ndirectories = ["spec"]\n')
         result = check_cross_repo_in_committed_config(config_path)
         assert result.passed is True
 
@@ -170,7 +169,7 @@ class TestCrossRepoInCommittedConfigV3:
         # If a config has ONLY the v2 path with cross-repo, and the function
         # checks v3 paths, it should NOT detect it (pass).
         config_path.write_text(
-            "version = 3\n" "[spec]\n" 'directories = ["spec", "../other-repo/spec"]\n'
+            'version = 3\n[spec]\ndirectories = ["spec", "../other-repo/spec"]\n'
         )
         result = check_cross_repo_in_committed_config(config_path)
         # v3 code should NOT look at [spec].directories — that's v2

@@ -218,7 +218,7 @@ match    = "aggregate"
 
 If your suite produces no machine-readable results file (no `--json-report` /
 `--junit-xml` step) but you already run under `pytest-cov`, you can still get
-`code_tested.direct` (per-test line attribution, see `elspais docs checks`).
+`code_tested.attributed_lines` (per-test line attribution, see `elspais docs checks`).
 `Verifies:` wiring still comes from `# Verifies:` comments scanned in your
 test files -- independent of this target.
 
@@ -248,7 +248,7 @@ Reading `.coverage` requires the `coverage` package to be importable in
 elspais's own interpreter -- install it with `pip install elspais[coverage]`
 (or ensure `coverage`/`pytest-cov` are already present, e.g. as a dev
 dependency). If it isn't importable, ingestion degrades gracefully:
-`code_tested.direct` stays `0` and `Code Tested` renders `n/a`, with a single
+no line is attributed and `Code Tested` renders `n/a`, with a single
 warning naming the extra to install -- it does not fail the build.
 
 A stale `.coverage` file misattributes contexts: line numbers were recorded
@@ -260,7 +260,7 @@ files the per-test attribution points at the old line numbers. Regenerate
 That is coverage.py's own context-switching (keyed by dotted test qualname,
 no file path, no `|run` suffix) and it silently wins over pytest-cov's
 `--cov-context=test` when both are active, replacing the nodeid-shaped
-contexts elspais expects with an incompatible format -- `code_tested.direct`
+contexts elspais expects with an incompatible format -- attribution
 then stays `0` everywhere even though contexts are present.
 
 **Alternative: portable but large -- coverage.json with `show_contexts`.**

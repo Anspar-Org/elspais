@@ -5,6 +5,7 @@ elspais.commands.install_cmd - Manage elspais installation (local dev / PyPI).
 Provides install/uninstall of local editable development versions,
 replacing the current global pipx/uv installation.
 """
+
 from __future__ import annotations
 
 import argparse

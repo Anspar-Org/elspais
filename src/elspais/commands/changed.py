@@ -7,10 +7,12 @@ Detects changes to requirement files using git:
 - Changes vs main/master branch
 - Moved requirements (comparing current location to committed state)
 """
+
 from __future__ import annotations
 
 import argparse
 import json
+from typing import Any
 
 from elspais.config.schema import ElspaisConfig
 from elspais.utilities.git import (
@@ -21,19 +23,12 @@ from elspais.utilities.git import (
     get_req_locations_from_graph,
 )
 
-_SCHEMA_FIELDS = {f.alias or name for name, f in ElspaisConfig.model_fields.items()} | set(
-    ElspaisConfig.model_fields.keys()
-)
 
+def _validate_config(config: dict[str, Any]) -> ElspaisConfig:
+    """Validate a config dict into ElspaisConfig (see config.validate_config)."""
+    from elspais.config import validate_config
 
-def _validate_config(config: dict) -> ElspaisConfig:
-    """Validate a config dict into ElspaisConfig, stripping non-schema keys."""
-
-    filtered = {k: v for k, v in config.items() if k in _SCHEMA_FIELDS}
-    assoc = filtered.get("associates")
-    if isinstance(assoc, dict) and "paths" in assoc:
-        filtered.pop("associates", None)
-    return ElspaisConfig.model_validate(filtered)
+    return validate_config(config)
 
 
 def load_configuration(args: argparse.Namespace) -> dict | None:

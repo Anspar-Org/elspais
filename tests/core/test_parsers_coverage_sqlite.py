@@ -28,7 +28,7 @@ _SQLITE_MAGIC = b"SQLite format 3\x00"
 def _write_module(mod_path: Path) -> None:
     mod_path.parent.mkdir(parents=True, exist_ok=True)
     mod_path.write_text(
-        "def add(a, b):\n" "    return a + b\n" "\n" "\n" "def sub(a, b):\n" "    return a - b\n",
+        "def add(a, b):\n    return a + b\n\n\ndef sub(a, b):\n    return a - b\n",
         encoding="utf-8",
     )
 
@@ -131,7 +131,7 @@ class TestParse:
         """A statement never executed under any context is recorded as 0."""
         mod_path = tmp_path / "partial.py"
         mod_path.write_text(
-            "def covered():\n" "    return 1\n" "\n" "\n" "def uncovered():\n" "    return 2\n",
+            "def covered():\n    return 1\n\n\ndef uncovered():\n    return 2\n",
             encoding="utf-8",
         )
         cov_path = tmp_path / ".coverage"
@@ -207,7 +207,7 @@ class TestParse:
         self, cov_fixture: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """When `coverage` is not importable, parse() returns {} rather
-        than raising -- code_tested.direct stays 0, no crash (CUR-1568)."""
+        than raising -- code_tested.immediate_direct stays 0, no crash (CUR-1568)."""
         import builtins
 
         _, cov_path = cov_fixture

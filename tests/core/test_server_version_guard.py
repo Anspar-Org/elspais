@@ -30,6 +30,7 @@ from starlette.testclient import TestClient
 
 import elspais
 from elspais.graph import render
+from elspais.graph.GraphNode import FILE_ID_PREFIX, make_file_id
 
 FIXTURES_DIR = Path(__file__).parent.parent / "fixtures"
 HHT_LIKE = FIXTURES_DIR / "hht-like"
@@ -59,14 +60,17 @@ CONFLICT_KEYS = {
 # The exact keys ``_guard_mutation_tip`` puts on a rejection.
 TIP_CONFLICT_KEYS = {"success", "code", "provided_tip", "current_tip", "unseen", "hint"}
 
+# The namespace the hht-like fixture declares; structural node ids carry it.
+NAMESPACE = "REQ"
+
 REQ = "REQ-d00003"
 ASSERTION = "REQ-d00003-A"
 SECTION = "REQ-d00003:section:1"
-REQ_FILE = "file:spec/dev-impl.md"
-OTHER_FILE = "file:spec/ops-deploy.md"
-GLOSSARY_FILE = "file:spec/glossary.md"
+REQ_FILE = make_file_id(NAMESPACE, "spec/dev-impl.md")
+OTHER_FILE = make_file_id(NAMESPACE, "spec/ops-deploy.md")
+GLOSSARY_FILE = make_file_id(NAMESPACE, "spec/glossary.md")
 JOURNEY = "JNY-001"
-JOURNEY_FILE = "file:spec/journeys.md"
+JOURNEY_FILE = make_file_id(NAMESPACE, "spec/journeys.md")
 
 UNDO_ROUTE = "/api/mutate/undo"
 
@@ -392,7 +396,9 @@ class TestHttpMutationRoutesRequireAVersion:
         """REQ-o00062-L: Naming a node that does not exist is not a version
         conflict -- retrying with a fresh token cannot fix it."""
         absent = (
-            "file:spec/does-not-exist.md" if case.guarded_id.startswith("file:") else "REQ-d99999"
+            make_file_id(NAMESPACE, "spec/does-not-exist.md")
+            if case.guarded_id.startswith(FILE_ID_PREFIX)
+            else "REQ-d99999"
         )
         body = case.with_tokens(lambda _node_id: BOGUS_VERSION)
         # Point the *guarded* field at a node that is not there. Substituting
@@ -869,8 +875,7 @@ class TestAutoRefreshDoesNotDiscardPendingMutations:
         app_state.ensure_fresh()
 
         assert app_state.graph is graph_before, (
-            "ensure_fresh() rebuilt over a non-empty mutation log, "
-            "silently discarding pending work"
+            "ensure_fresh() rebuilt over a non-empty mutation log, silently discarding pending work"
         )
         assert len(app_state.graph.mutation_log) == 1
         assert app_state.graph.find_by_id(REQ).get_label() == PENDING_TITLE
@@ -971,9 +976,9 @@ class TestNotEveryRefusedSaveIsAConflict:
         assert payload["success"] is False
         assert payload["code"] == "save_failed"
         assert _spec_snapshot(viewer_project) == before
-        assert (
-            len(app_state.graph.mutation_log) == 1
-        ), "a save that could not write also destroyed the work it was holding"
+        assert len(app_state.graph.mutation_log) == 1, (
+            "a save that could not write also destroyed the work it was holding"
+        )
 
     def test_REQ_o00062_O_the_save_that_answered_the_rule_succeeds(
         self, client, app_state, viewer_project, version_of

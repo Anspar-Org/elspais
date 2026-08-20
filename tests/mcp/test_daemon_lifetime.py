@@ -1,4 +1,4 @@
-# Verifies: REQ-o00074-A+B+C+D+E+G+H+I+J+K+M+O, REQ-o00075-B+E, REQ-p00083-A+C+D+H
+# Verifies: REQ-o00074-A+B+C+D+E+G+H+I+J+K+M+O, REQ-o00075-B, REQ-o00076-E, REQ-p00083-A+C+D+H
 """Daemon lifetime tests, verifying REQ-o00074 (Background Daemon Lifetime).
 
 A daemon started on behalf of a client is bound to that client at the
@@ -308,9 +308,9 @@ class TestAdoptingClientsJoinTheRecordedSet:
         # Well past every grace deadline, the daemon keeps serving.
         for offset in (0, 500, 1000, 2000, 5000):
             clock.now = 1000.0 + offset
-            assert (
-                wd.check_once() is Decision.KEEP
-            ), f"daemon stopped underneath a live client at t+{offset}"
+            assert wd.check_once() is Decision.KEEP, (
+                f"daemon stopped underneath a live client at t+{offset}"
+            )
         assert exits == []
         assert wd.clients() == [999], "dead client was not pruned from the client set"
 
@@ -339,9 +339,9 @@ class TestAdoptingClientsJoinTheRecordedSet:
         # Now the adopter goes too. Nobody is left using the daemon.
         alive[999] = False
         clock.now += 100
-        assert (
-            wd.check_once() is Decision.EXIT_CLEAN
-        ), "daemon kept serving with every recorded client gone"
+        assert wd.check_once() is Decision.EXIT_CLEAN, (
+            "daemon kept serving with every recorded client gone"
+        )
         assert exits == ["exit"]
         assert "shutting down" in capsys.readouterr().err
 
@@ -790,9 +790,9 @@ class TestUndoneWorkStillCountsAsActivity:
 
         count_after, token_after = pending_snapshot(fg)
         assert count_after == count_before, "apply+undo did not restore the pending count"
-        assert (
-            fg.mutation_log.tail(0)[-1].id == tip_before
-        ), "apply+undo did not restore the log tip -- the test no longer poses the problem"
+        assert fg.mutation_log.tail(0)[-1].id == tip_before, (
+            "apply+undo did not restore the log tip -- the test no longer poses the problem"
+        )
         assert token_after != token_before, (
             "activity token did not move across an apply+undo pair: a writer working "
             "in that pattern reads as idle"
@@ -829,9 +829,9 @@ class TestUndoneWorkStillCountsAsActivity:
             fg.update_title("REQ-p00002", f"Data Privacy (draft {offset})")
             fg.undo_last()
             clock.now = 1000.0 + offset
-            assert (
-                wd.check_once() is Decision.KEEP
-            ), "a writer applying and undoing between checks was judged idle"
+            assert wd.check_once() is Decision.KEEP, (
+                "a writer applying and undoing between checks was judged idle"
+            )
         assert exits == []
 
         fg.undo_last()  # leave the log as the fixture handed it over
@@ -1066,9 +1066,9 @@ class TestPersistPendingRecordsAndRetires:
         assert record["saved_by"] == "daemon"
         assert record["mutation_count"] == 1
         assert record["trigger"] == "no recorded client was running"
-        assert (
-            "daemon-saved" in (project / "spec" / "prd-core.md").read_text()
-        ), "the daemon's save did not reach disk"
+        assert "daemon-saved" in (project / "spec" / "prd-core.md").read_text(), (
+            "the daemon's save did not reach disk"
+        )
 
     def test_REQ_o00074_J_client_requested_save_retires_the_record(self, project):
         from elspais.mcp.daemon import read_automatic_save
@@ -1085,9 +1085,9 @@ class TestPersistPendingRecordsAndRetires:
         # changelog reason; only the daemon's own save writes one for itself.
         assert persist_pending(state.shared, message="client asked for this").get("success")
 
-        assert (
-            read_automatic_save(project) is None
-        ), "a client-requested save left the daemon's record standing"
+        assert read_automatic_save(project) is None, (
+            "a client-requested save left the daemon's record standing"
+        )
 
 
 class TestViewerSaveRetiresTheRecord:
@@ -1124,9 +1124,9 @@ class TestViewerSaveRetiresTheRecord:
         )
         record_path = project / ".elspais" / "automatic-save.json"
         assert record_path.is_file()
-        assert (
-            client.get("/api/dirty").json().get("automatic_save") is not None
-        ), "the record was not being disclosed, so its retirement proves nothing"
+        assert client.get("/api/dirty").json().get("automatic_save") is not None, (
+            "the record was not being disclosed, so its retirement proves nothing"
+        )
 
         # This client applies its own change and asks for it to be persisted.
         node = state.graph.find_by_id("REQ-p00001")
@@ -1148,20 +1148,20 @@ class TestViewerSaveRetiresTheRecord:
         )
         assert resp.status_code == 200, resp.text
         assert resp.json()["success"] is True
-        assert (
-            "viewer-saved" in (project / "spec" / "prd-core.md").read_text()
-        ), "the save did not reach disk, so there was nothing to retire the record for"
+        assert "viewer-saved" in (project / "spec" / "prd-core.md").read_text(), (
+            "the save did not reach disk, so there was nothing to retire the record for"
+        )
 
         # The record now describes a state that no longer stands.
-        assert (
-            not record_path.exists()
-        ), "a client-requested save over HTTP left the daemon's record standing on disk"
-        assert (
-            "automatic_save" not in client.get("/api/dirty").json()
-        ), "/api/dirty still discloses a retired record"
-        assert (
-            client.get("/api/check-freshness").json().get("automatic_save") is None
-        ), "/api/check-freshness still discloses a retired record"
+        assert not record_path.exists(), (
+            "a client-requested save over HTTP left the daemon's record standing on disk"
+        )
+        assert "automatic_save" not in client.get("/api/dirty").json(), (
+            "/api/dirty still discloses a retired record"
+        )
+        assert client.get("/api/check-freshness").json().get("automatic_save") is None, (
+            "/api/check-freshness still discloses a retired record"
+        )
 
     def test_REQ_o00074_J_refused_viewer_save_retires_nothing(self, client_and_project):
         """The retirement follows a save that happened. A rejected one leaves
@@ -1342,9 +1342,9 @@ class TestUnusableClientIdentityIsRefused:
     def test_REQ_o00074_D_unusable_client_pid_starts_no_watchdog(
         self, monkeypatch, tmp_path, value
     ):
-        assert (
-            self._client_pids_watched(monkeypatch, tmp_path, value) == []
-        ), f"daemon watched a pid it cannot learn anything from: {value!r}"
+        assert self._client_pids_watched(monkeypatch, tmp_path, value) == [], (
+            f"daemon watched a pid it cannot learn anything from: {value!r}"
+        )
 
     def test_REQ_o00074_D_real_client_pid_is_watched(self, monkeypatch, tmp_path):
         """The control: a usable identity does produce a watch on that pid."""
@@ -1497,9 +1497,9 @@ class TestClientSetIsObservable:
         )
         info = json.loads(path.read_text())
         assert info["client_pid"] == 333
-        assert info["clients"] == [
-            {"kind": "pid", "id": 333}
-        ], "the initial client set is not published, or not by kind of handle"
+        assert info["clients"] == [{"kind": "pid", "id": 333}], (
+            "the initial client set is not published, or not by kind of handle"
+        )
 
     def test_REQ_o00074_B_record_daemon_clients_republishes_the_whole_set(self, tmp_path):
         from elspais.mcp.daemon import record_daemon_clients, write_daemon_json
@@ -1700,7 +1700,7 @@ class TestRestartSaysWhatBecomesOfTheWork:
             patch("elspais.mcp.daemon.get_daemon_mutation_count", return_value=2),
             patch(
                 "elspais.mcp.daemon.save_daemon_mutations",
-                side_effect=lambda info, message=None: (seen.append(message) or {"success": True}),
+                side_effect=lambda info, message=None: seen.append(message) or {"success": True},
             ),
             patch("elspais.mcp.daemon.stop_daemon"),
             patch("elspais.mcp.daemon.get_cli_ttl", return_value=30),
@@ -1713,7 +1713,7 @@ class TestRestartSaysWhatBecomesOfTheWork:
 
 
 class TestStoppingDaemonIsReplacedNotReused:
-    """Verifies REQ-o00075-B and REQ-o00075-E: what a client locates describes
+    """Verifies REQ-o00075-B and REQ-o00076-E: what a client locates describes
     the process it would reach, and one working tree is served by one process.
 
     A daemon that has committed to stopping still answers, so a liveness
@@ -1725,7 +1725,7 @@ class TestStoppingDaemonIsReplacedNotReused:
     its replacement. It never starts one alongside.
     """
 
-    def test_REQ_o00075_E_committed_stop_is_recorded_in_the_state_record(self, tmp_path):
+    def test_REQ_o00076_E_committed_stop_is_recorded_in_the_state_record(self, tmp_path):
         from elspais.mcp.daemon import daemon_is_stopping, get_daemon_info, write_daemon_json
         from elspais.mcp.shared_state import SharedServerState
 
@@ -1824,9 +1824,9 @@ class TestStoppingDaemonIsReplacedNotReused:
         ):
             assert dm.replace_stopping_daemon(tmp_path, {"pid": 999, "port": 4321}) is True
 
-        assert (
-            tmp_path / ".elspais" / "daemon.json"
-        ).exists(), "the successor's record was removed"
+        assert (tmp_path / ".elspais" / "daemon.json").exists(), (
+            "the successor's record was removed"
+        )
 
     def test_REQ_o00075_B_command_does_not_reach_a_stopping_daemon(self, tmp_path):
         from elspais.commands import _engine
@@ -1842,7 +1842,7 @@ class TestStoppingDaemonIsReplacedNotReused:
             patch("elspais.mcp.daemon.ensure_daemon", return_value=7777),
             patch(
                 "elspais.commands._daemon_client._try_port",
-                side_effect=lambda port, *a, **k: (reached.append(port) or {"ok": True}),
+                side_effect=lambda port, *a, **k: reached.append(port) or {"ok": True},
             ),
         ):
             result = _engine._try_daemon("/api/run/checks", {})

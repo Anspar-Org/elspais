@@ -34,19 +34,21 @@ def _make_graph(
 def _make_federated_multi() -> FederatedGraph:
     """Create a multi-repo FederatedGraph with root + associate."""
     root_graph = _make_graph(Path("/test/root"), "REQ-p00001", "Root Req")
-    assoc_graph = _make_graph(Path("/test/associate"), "REQ-a00001", "Assoc Req")
+    # Written in the associate's own namespace: a member declares its
+    # namespace and its identifiers are spelled in it.
+    assoc_graph = _make_graph(Path("/test/associate"), "ASSOC-a00001", "Assoc Req")
 
     root_entry = RepoEntry(
         name="root",
         graph=root_graph,
-        config=None,
+        config={"project": {"name": "root", "namespace": "REQ"}},
         repo_root=Path("/test/root"),
         git_origin="https://github.com/org/root.git",
     )
     assoc_entry = RepoEntry(
         name="associate",
         graph=assoc_graph,
-        config=None,
+        config={"project": {"name": "associate", "namespace": "ASSOC"}},
         repo_root=Path("/test/associate"),
         git_origin="https://github.com/org/associate.git",
     )
@@ -103,7 +105,7 @@ class TestApiRepos:
         root_entry = RepoEntry(
             name="root",
             graph=root_graph,
-            config=None,
+            config={"project": {"name": "root", "namespace": "REQ"}},
             repo_root=Path("/test/root"),
         )
         error_entry = RepoEntry(
@@ -164,7 +166,7 @@ class TestApiReposStaleness:
         entry = RepoEntry(
             name="root",
             graph=root_graph,
-            config=None,
+            config={"project": {"name": "root", "namespace": "REQ"}},
             repo_root=Path("/test/root"),
             git_origin=None,  # No origin
         )
@@ -175,6 +177,49 @@ class TestApiReposStaleness:
         data = response.json()
         repo = data["repos"][0]
         assert "staleness" not in repo
+
+    # Verifies: REQ-d00206-B
+    def test_REQ_d00206_B_api_repos_staleness_for_the_repo_being_worked_in(
+        self, tmp_path: Path
+    ) -> None:
+        """The repository the server was started in receives staleness too.
+
+        The route attaches staleness only where an origin is present, so a
+        repository whose entry carried none was silently exempt from it.
+        The federation here is built by `build_graph` over a real git-backed
+        repository rather than from a hand-written `RepoEntry`, which is the
+        only way the host's own entry is put under test.
+        """
+        from elspais.graph.factory import build_graph
+        from tests.federation_repos import make_repo
+
+        repo = make_repo(tmp_path, "host", origin="https://example.com/host.git")
+        fed = build_graph(repo_root=repo, scan_code=False, scan_tests=False)
+
+        state = AppState(graph=fed, repo_root=repo, config={})
+        client = TestClient(create_app(state=state, mount_mcp=False))
+
+        mock_summary = {
+            "branch": "main",
+            "remote_diverged": True,
+            "fast_forward_possible": False,
+        }
+        # Patched so no network fetch is attempted against the fake origin;
+        # what is under test is whether the route reaches this call at all
+        # for the host repository.
+        with patch("elspais.utilities.git.git_status_summary", return_value=mock_summary):
+            response = client.get("/api/repos")
+
+        repo_info = response.json()["repos"][0]
+        assert repo_info["name"] == "host"
+        assert "git_origin" in repo_info, (
+            "the host repository reported no origin, so it is exempt from staleness"
+        )
+        assert repo_info["staleness"] == {
+            "branch": "main",
+            "remote_diverged": True,
+            "fast_forward_possible": False,
+        }
 
 
 class TestApiStatusRepos:

@@ -1,5 +1,6 @@
 # Verifies: REQ-d00010-A, REQ-p00015-E
 """Tests for Starlette server routes using TestClient."""
+
 from __future__ import annotations
 
 import time
@@ -690,7 +691,7 @@ class TestFileContent:
     )
 
     _ASSOC_SPEC = (
-        "# REQ-p00099: Associate Requirement\n"
+        "# ASSOC-p00099: Associate Requirement\n"
         "\n"
         "**Level**: PRD | **Status**: Active\n"
         "\n"
@@ -698,7 +699,7 @@ class TestFileContent:
         "\n"
         "A. Assoc assertion\n"
         "\n"
-        "*End* *REQ-p00099*\n"
+        "*End* *ASSOC-p00099*\n"
     )
 
     _CORE_CONFIG_WITH_ASSOC = """\
@@ -725,7 +726,7 @@ implements = ["dev", "ops", "prd"]
 
 [associates.assoc]
 path = "../assoc"
-namespace = "REQ"
+namespace = "ASSOC"
 """
 
     _ASSOC_CONFIG = """\
@@ -733,7 +734,7 @@ version = 3
 
 [project]
 name = "assoc"
-namespace = "REQ"
+namespace = "ASSOC"
 
 [levels.prd]
 rank = 1
@@ -848,9 +849,9 @@ implements = ["dev", "ops", "prd"]
         ``repo_root_for(node_id)`` redirects resolution to the associate.
         """
         client, state, _core_root, assoc_root = federated_client
-        node = state.graph.find_by_id("REQ-p00099")
-        assert node is not None, "federated fixture must produce REQ-p00099"
-        assert state.graph.repo_root_for("REQ-p00099") == assoc_root.resolve()
+        node = state.graph.find_by_id("ASSOC-p00099")
+        assert node is not None, "federated fixture must produce ASSOC-p00099"
+        assert state.graph.repo_root_for("ASSOC-p00099") == assoc_root.resolve()
 
         # Without node_id: server tries the core root first (file does not
         # exist there) and then falls back through state.allowed_roots,
@@ -862,10 +863,10 @@ implements = ["dev", "ops", "prd"]
         assert any("distinguishable from root" in line for line in fallback_data["lines"])
 
         # With node_id: server reads assoc/spec/assoc.md and returns its content.
-        resp = client.get("/api/file-content?path=spec/assoc.md&node_id=REQ-p00099")
+        resp = client.get("/api/file-content?path=spec/assoc.md&node_id=ASSOC-p00099")
         assert resp.status_code == 200, resp.text
         data = resp.json()
-        assert data["lines"][0].startswith("# REQ-p00099")
+        assert data["lines"][0].startswith("# ASSOC-p00099")
         # Content distinguishable from the root repo's file.
         assert any("distinguishable from root" in line for line in data["lines"])
 
@@ -884,7 +885,7 @@ implements = ["dev", "ops", "prd"]
         assert resp.status_code == 200, resp.text
         data = resp.json()
         # Body distinguishable from the core repo's spec/test.md.
-        assert data["lines"][0].startswith("# REQ-p00099")
+        assert data["lines"][0].startswith("# ASSOC-p00099")
         assert any("distinguishable from root" in line for line in data["lines"])
         # `abs_path` resolves to the associate's on-disk file so the
         # file-viewer's `vscode://` link targets the right location.
@@ -908,7 +909,7 @@ implements = ["dev", "ops", "prd"]
         assert resp.status_code == 200, resp.text
         data = resp.json()
         # We got the associate's file, not anything from the core repo.
-        assert data["lines"][0].startswith("# REQ-p00099")
+        assert data["lines"][0].startswith("# ASSOC-p00099")
         assert any("distinguishable from root" in line for line in data["lines"])
 
     # Verifies: REQ-d00200-G

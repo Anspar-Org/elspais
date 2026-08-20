@@ -14,6 +14,7 @@ building a static HTML document. A fresh interpreter is required because other
 tests in this process legitimately import starlette (the server suite), which
 would pollute ``sys.modules``.
 """
+
 from __future__ import annotations
 
 import subprocess

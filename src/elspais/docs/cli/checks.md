@@ -29,8 +29,9 @@ Configuration checks always run as part of traceability verification. For focuse
 | `config.pattern_tokens` | Validates pattern template tokens |
 | `config.hierarchy_rules` | Checks hierarchy rules consistency |
 | `config.paths_exist` | Verifies spec directories exist |
-| `config.associate_paths` | Validates that configured `[associates]` paths exist and contain spec files; severity: error |
+| `config.associate_paths` | Validates that every federated repository — those declared here and those reached through an associate's own `[associates]` declarations — loads and contains spec files, reporting each failure with its path and reason; severity: error |
 | `config.no_requirements` | Flags when no requirements are found (likely config issue); severity: warning |
+| `config.governed_rules` | Discloses each governed setting (coverage rules, reference severities, status roles) a federated member would judge by differently from the repository the run was invoked from — whether the member declared it or kept a default the invoking project overrode — naming the setting, both values and the member; never fails a run; severity: info |
 | `docs.config_drift` | Compares config schema sections against `docs/configuration.md`; reports undocumented and stale sections (runs in `elspais doctor`) |
 
 ### Spec File Checks (`--spec`)
@@ -43,7 +44,14 @@ Configuration checks always run as part of traceability verification. For focuse
 | `spec.refines_resolve` | All Refines: references resolve |
 | `spec.hierarchy_levels` | Requirements follow hierarchy rules |
 | `spec.structural_orphans` | No nodes without a FILE ancestor (build bugs) |
-| `spec.broken_references` | No edges targeting non-existent nodes |
+| `references.malformed` | No reference fails to read as a reference at all; default severity: warning |
+| `references.unknown_namespace` | No reference names a target no configured repository claims; default severity: info |
+| `references.unknown_requirement` | No claimed reference names a requirement that repository does not hold; default severity: error |
+| `references.unknown_assertion` | No claimed reference names an assertion label its requirement lacks; default severity: error |
+| `references.forbidden` | No reference that reads and resolves has its relationship refused — a keyword the file kind may not use, or a target the list names twice; default severity: error |
+| `references.keyword_form` | No keyword is written in a non-canonical case, spacing, or markdown-emphasis form; default severity: warning (never costs the edge its keyword introduces) |
+| `references.identifier_form` | No reference is spelled in a non-canonical form the configuration admits; default severity: warning (never costs the relationship it names) |
+| `references.undeclared` | No comment opens with an identifier that no keyword introduces; default severity: warning (produces no relationship) |
 | `spec.needs_rewrite` | Flags requirements that will be rewritten on next save (duplicate refs, stale hash); severity: warning |
 | `spec.hash_integrity` | Flags Satisfies-linked requirements for review when their template hash is stale; severity: warning |
 | `spec.changelog_present` | Active requirements must have at least one changelog entry (when `changelog.present = true`); severity: warning |
@@ -149,6 +157,7 @@ that changes to cross-cutting requirements are propagated to their consumers.
 |-------|-------------|
 | `tests.coverage` | Test coverage statistics with rollup (informational) |
 | `tests.unlinked` | Test files with no traceability markers -- either no test functions found, or no test in the file links to any requirement (a file with at least one linked test is not flagged); severity: info |
+| `tests.uncredited_evidence` | Evidence naming an assertion its dimension does not count -- a test on an assertion nothing implements -- so it reaches no coverage figure; configured by `[rules.coverage] uncredited_evidence`, default severity: error |
 | `tests.results` | Test pass/fail status from JUnit XML or pytest JSON results |
 | `tests.retired_references` | Tests referencing requirements with retired status (Deprecated, Superseded, Rejected); default severity: warning |
 | `tests.provisional_references` | Tests referencing requirements with provisional status (Draft, Proposed); default severity: info |
@@ -179,10 +188,82 @@ active-like status, so `code.provisional_references` and
 
 ```toml
 [rules.references]
-retired = "warning"       # info | warning | error
-provisional = "info"      # info | warning | error
-aspirational = "info"     # info | warning | error
+retired = "warning"            # info | warning | error
+provisional = "info"           # info | warning | error
+aspirational = "info"          # info | warning | error
+malformed = "warning"          # ok | info | warning | error
+unknown_namespace = "info"     # ok | info | warning | error
+unknown_requirement = "error"  # ok | info | warning | error
+unknown_assertion = "error"    # ok | info | warning | error
+forbidden = "error"            # ok | info | warning | error
+keyword_form = "warning"       # ok | info | warning | error
+identifier_form = "warning"    # ok | info | warning | error
+undeclared = "warning"         # ok | info | warning | error
 ```
+
+#### The Five Reference Checks — How Far Reading Got
+
+A reference is recognised by *where* it is written, not by what it names: a
+*Traceability* keyword opening a comment, or opening a metadata line in a
+spec file, introduces a reference, and everything after the colon is its
+target. Reading that target proceeds through stages, and a fault is
+reported under exactly one check — the furthest stage reading it reached,
+never a later one:
+
+| Check | What reading found |
+|---|---|
+| `references.malformed` | The text never read as a reference at all (bad syntax, wrong separator, an empty item). |
+| `references.unknown_namespace` | The text reads, but no configured repository's identifier grammar claims it. |
+| `references.unknown_requirement` | A repository claims the identifier format, but holds no such requirement. |
+| `references.unknown_assertion` | The requirement exists, but not that assertion label. |
+| `references.forbidden` | The reference reads and resolves, but the relationship it declares is refused — its keyword is not valid for this file kind (e.g. `Refines:` in a code file), or the list names the same target more than once. |
+
+A target no repository claims is by definition outside every configured ID
+pattern, so its shape says nothing about whether the author meant a
+reference — only its position can, which is why documentation may show a
+keyword inside backticks or a fenced block without invoking one.
+
+Two consequences worth knowing. A section banner such as
+`# Verifies: how the parser handles blank lines` is a reference to a target
+named "how the parser handles blank lines" — reword it or move the keyword
+off the front of the comment. And a reference whose target lives in a repo
+you have not configured is reported under `references.unknown_namespace`
+rather than discarded, so a federation assembled from a partial checkout
+still tells you what it could not read. Set `unknown_namespace = "ok"` to
+silence expected cross-repository references entirely.
+
+A keyword written in a non-canonical case, spacing, or markdown-emphasis
+form is reported separately, under `references.keyword_form` — a style
+finding never costs the edge its keyword introduces, so it does not join a
+check that counts references that failed to bind. `references.identifier_form`
+says the same thing about the referent: a reference spelled in a form the
+configuration admits but that is not the canonical one — different case,
+different padding, an alias — produces the relationship it names, and its
+spelling is reported rather than charged to it. The report names the file and
+the line so the spelling can be brought into line by hand; nothing rewrites a
+code or test annotation for you.
+
+#### `references.undeclared` — A Relationship Meant, Not Declared
+
+Opening a comment with an identifier and then explaining, in prose, why the
+code below answers to it — `# REQ-d00252-F: covered through the associate,
+so not a gap` — is a natural way to write, and an author doing it means the
+relationship. Nothing about the line is malformed, so reporting it as a
+malformed reference would name a defect the author does not have. It is
+reported under `references.undeclared` instead, with the message that
+saying it with a keyword would make it count.
+
+It produces no relationship. An informal citation is evidence of intent,
+and inferring an edge from intent would credit a requirement nobody
+declared. Two comments are excluded, because neither is a citation: one a
+*Traceability* keyword introduces is already a declaration, and one
+continuing a reference list is an item of that list.
+
+Where prose citations are house style, set `undeclared = "ok"` — the
+findings still appear, and the run does not fail on them.
+
+**Follow-up:** Run `elspais broken` to list every unresolved reference,
+across every class.
 
 ### UAT Checks
 
@@ -241,11 +322,23 @@ results_file = "uat-results.csv"   # default
 ## Coverage Dimensions
 
 Coverage checks report six **dimensions**, each tracking how thoroughly
-requirements are implemented, tested, and validated. Every dimension has
-two tiers of confidence:
+requirements are implemented, tested, and validated. The five *Assertion*
+dimensions are each read on four independent **measures**, crossing what a
+citation named with where the evidence sits:
 
-- **direct** — the link names specific assertions (high confidence)
-- **indirect** — the link targets the whole requirement, implying all assertions (lower confidence)
+- **cited by name here** (immediate direct) — a citation on this requirement named the assertion
+- **whole-requirement** (immediate indirect) — a citation on this requirement named the requirement, implying every assertion
+- **conducted direct** (rolled direct) — a refining requirement's assertion-naming evidence, carried up a `Refines:` chain
+- **conducted indirect** (rolled indirect) — a refining requirement's whole-requirement evidence, carried up the same chain
+
+None is derived from another, and they overlap: an assertion can be covered on
+several at once. Beside them sits the **total** — each assertion counted once,
+at the greatest of its four measures — which is what a reporting surface
+headlines. Because the measures overlap, they do not sum to the total.
+
+The sixth dimension, `code_tested`, is measured in LINES rather than
+assertions and carries none of the four measures. It is reported in its own
+right and never folded into the *Assertion* dimensions (REQ-d00254-B).
 
 ### The six dimensions
 
@@ -262,17 +355,18 @@ two tiers of confidence:
 
 The system classifies *how specifically* coverage was claimed:
 
-| Source | When | Dimension effect |
-|--------|------|-----------------|
-| `DIRECT` | TEST or CODE names specific assertions (`REQ-xxx-A`) | `implemented.direct`, `tested.direct` |
-| `EXPLICIT` | Child REQ names specific assertions (`Implements: REQ-xxx-A+B`) | `implemented.direct` |
-| `INFERRED` | Child REQ targets whole parent (`Implements: REQ-xxx`) | `implemented.indirect` only |
-| `INDIRECT` | TEST targets whole REQ (no assertion labels) | `tested.indirect` only |
-| `UAT_EXPLICIT` | JNY names specific assertions (`Validates: REQ-xxx-A`) | `uat_coverage.direct` |
-| `UAT_INFERRED` | JNY targets whole REQ (`Validates: REQ-xxx`) | `uat_coverage.indirect` only |
+| Source | When | Measure credited |
+|--------|------|------------------|
+| `DIRECT` | TEST or CODE names specific assertions (`REQ-xxx-A`) | `implemented` / `tested` immediate direct |
+| `EXPLICIT` | Child REQ names specific assertions (`Implements: REQ-xxx-A+B`) | `implemented` immediate direct |
+| `INFERRED` | Child REQ targets whole parent (`Implements: REQ-xxx`) | `implemented` immediate indirect |
+| `INDIRECT` | TEST targets whole REQ (no assertion labels) | `tested` immediate indirect |
+| `UAT_EXPLICIT` | JNY names specific assertions (`Validates: REQ-xxx-A`) | `uat_coverage` immediate direct |
+| `UAT_INFERRED` | JNY targets whole REQ (`Validates: REQ-xxx`) | `uat_coverage` immediate indirect |
 
-After collection, `implemented.direct = DIRECT | EXPLICIT` and
-`implemented.indirect = DIRECT | EXPLICIT | INFERRED`.
+Every source above is *immediate*: the evidence is attached to the requirement
+that carries the assertion. The two *rolled* measures hold value conducted up a
+`Refines:` chain from a refining requirement, and nothing else.
 
 ### Roll-up: how RESULT nodes contribute
 
@@ -289,8 +383,8 @@ REQ (assertion "A")
 
 What gets credited:
 
-- `tested.direct` += "A" — from the VERIFIES edge (assertion-targeted)
-- `verified.direct` += "A" — from the RESULT with `status=passed`
+- `tested` immediate direct += "A" — from the VERIFIES edge (assertion-targeted)
+- `verified` immediate direct += "A" — from the RESULT with `status=passed`
 
 If the RESULT is absent or failing, `tested` still gets credit but `verified`
 does not. The same pattern applies to UAT: a journey RESULT populates
@@ -304,7 +398,7 @@ Each dimension resolves to a **tier** that drives severity and UI color:
 |------|---------|
 | `missing` | No coverage at all (grey/neutral when the denominator is empty; a red gap only when in-scope) |
 | `partial` | Some assertions covered, not all |
-| `full` | All assertions covered (the direct/indirect distinction is shown as a `~` marker, not a separate tier) |
+| `full` | All assertions covered |
 | `failing` | Coverage exists but results are failing |
 
 Tier, per-assertion standing, and bucket share this one vocabulary
@@ -318,22 +412,47 @@ neutral severity (grey) rather than a red gap -- you cannot test what is not
 built. A failing in-denominator label is always `failing` (red), regardless of
 the fraction.
 
-**Direct vs indirect credit.** By default (`[rules.coverage] allow_indirect =
-true`) indirect evidence (a whole-requirement link, or `Refines:` conduction)
-credits the tier, and a trailing `~` flags any tier whose evidence is not fully
-direct. Set `allow_indirect = false` to require direct assertion-level evidence;
-indirect-only coverage then reads `missing`/`partial` and is shown as
-"not credited" in the viewer hover.
+**Which evidence credits a tier.** A tier is scored on the total measure: each
+assertion counted once, at the greatest of its four measures -- what a citation
+named here, what whole-requirement evidence reached, and what `Refines:`
+conduction carried up in each of those two shapes. Work-list surfaces (`gaps`,
+`untested`, `unvalidated`) answer a different question and so read a different
+measure: they count only "cited by name here" -- evidence that named the
+assertion, attached to it -- so they can report work a tier calls done.
+
+**Evidence outside the denominator.** Measuring over the prior link means
+evidence can name an assertion the dimension does not count -- a test on an
+assertion nothing implements. It credits nothing, and `tests.uncredited_evidence`
+reports it rather than letting it vanish into a denominator it was never in:
+the assertion named, the dimension not reached, and the file and line the
+evidence was written on. Where the evidence carries a verdict of its own the
+finding says so -- "A test names", "A passing test names" and "A failing test
+names" are three different reports, and a test that failed against an assertion
+nothing implements is the sharpest form of the defect. It is an `error` by default (`[rules.coverage]
+uncredited_evidence`) because the condition has only two explanations and both
+are defects -- a missing `Implements:` reference, or a test aimed at an
+assertion it does not exercise. Only assertion-targeted evidence names an
+assertion: a whole-requirement `Verifies: REQ-xxx` names the requirement, so it
+is never reported against an individual assertion — it is reported against the
+requirement, and only where the dimension counts no assertion of it at all,
+which is one finding rather than one per assertion. What the dimension counts
+is read from the same definition the coverage tier uses, so a finding and the
+figure beside it cannot disagree.
 
 ### `code_tested` — line coverage
 
-Unlike the other five dimensions, `code_tested` counts **source lines** rather
-than assertions. It cross-references implementation line ranges (from
-`Implements:` edges to CODE nodes) against file-level line-coverage data
-(LCOV or coverage.json). `code_tested.indirect` counts any covered
-implementation line, regardless of which test covered it.
+`code_tested` is not a coverage dimension at all: it counts **source lines**
+rather than assertions, and carries its own three figures rather than the four
+measures. It cross-references implementation line ranges (from `Implements:`
+edges to CODE nodes) against file-level line-coverage data (LCOV or
+coverage.json).
 
-`code_tested.direct` additionally counts implementation lines whose recorded
+- `total_lines` -- implementation lines attributed to the requirement.
+- `covered_lines` -- lines any coverage run executed, whichever test did it.
+- `attributed_lines` -- lines a run executed *and* whose recorded context
+  names a test that verifies the requirement.
+
+`attributed_lines` counts implementation lines whose recorded
 test **context** names a test that `Verifies:` the requirement (Python only,
 via coverage.py's per-test dynamic contexts). A `coverage.json` produced with
 pytest-cov's `--cov-context=test` *and* `show_contexts = true` under
@@ -342,8 +461,8 @@ pytest-cov's `--cov-context=test` *and* `show_contexts = true` under
 with no class). Only the `|run` phase credits direct attribution --
 `|setup`/`|teardown` fixture-phase execution is not evidence the test itself
 exercised the line. Coverage formats without a `contexts` map (LCOV, or
-coverage.json exported without `show_contexts`) always report
-`code_tested.direct == 0`.
+coverage.json exported without `show_contexts`) record no attribution at all,
+and every surface renders `n/a` rather than a misleading `0`.
 
 Do not set `[tool.coverage.run] dynamic_context = "test_function"` alongside
 `--cov-context=test`: that is coverage.py's own (incompatible) context
@@ -596,13 +715,14 @@ elspais checks untested           # Checklist + untested gaps
 
 Gap commands support `--format text` (default), `--format markdown`, and `--format json`.
 
-An assertion listed in a gap can carry a `— N% via refines-conduction`
-annotation (text/markdown) or a `fraction` field (json): a whole-requirement
-(blanket) `Refines:` conducts only a fraction of its refiner's own coverage
-up to the targeted parent assertion (REQ-d00069-J -- see `elspais docs
-graph-model` for the conduction model). A fraction of `0` (no annotation) is
-uncovered outright; `0 < fraction < 1` is partially conducted and still a
-gap, but distinguishable from zero coverage.
+An assertion listed in a gap can carry a `— N% direct` annotation
+(text/markdown) or a `fraction` field (json). A gap is decided on one measure:
+a citation named the assertion and the evidence is attached to it. A fraction
+of `0` (no annotation) means nothing names it at all; `0 < fraction < 1` means
+the evidence naming it is itself partial, still a gap but distinguishable from
+zero. Whole-requirement evidence and coverage conducted up a `Refines:` chain
+are counted by the summary and viewer figures but never close a gap here (see
+`elspais docs graph-model` for the conduction model).
 
 ## Prospective Reports (What-If Analysis)
 

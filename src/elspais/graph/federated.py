@@ -15,12 +15,19 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from elspais.graph.GraphNode import (
-    STRUCTURAL_ID_PREFIXES,
     FileType,
     GraphNode,
     NodeKind,
 )
-from elspais.graph.mutations import BrokenReference, MutationEntry
+from elspais.graph.mutations import MutationEntry
+from elspais.graph.reference_faults import (
+    FaultClass,
+    IdentifierFormFinding,
+    ReferenceFault,
+    StyleFinding,
+    UndeclaredRelationship,
+    reader_refused,
+)
 from elspais.graph.relations import EdgeKind
 
 if TYPE_CHECKING:
@@ -182,7 +189,12 @@ class RepoEntry:
         graph: The repo's TraceGraph, or None if repo unavailable.
         config: The repo's config dict, or None if repo unavailable.
         repo_root: Expected local filesystem path.
-        git_origin: Remote URL for clone assistance.
+        git_origin: The repository's origin, reduced to a comparable
+            identity -- scheme, credentials and a trailing ".git" removed,
+            so the same repository addressed two ways compares equal. It is
+            what says two members are one repository, and what the surfaces
+            report; it is not a URL to clone from, and the remote a
+            declaration may carry is a separate thing.
         error: Human-readable error message if repo is in error state.
     """
 
@@ -215,12 +227,11 @@ class FederatedGraph:
         # ``namespace`` — the three identifiers (host-side handle,
         # display name, REQ-id prefix) are distinct and downstream
         # consumers (term cards, file routing, viewer namespace labels,
-        # render save) assume all three are present. The ``[project]``
-        # presence check is permissive on empty ``config={}`` so isolated
-        # unit tests that wire a TraceGraph straight into a RepoEntry
-        # don't need to fabricate a full config dict; production callers
-        # always go through ``load_config()`` which produces a populated
-        # ``[project]`` block.
+        # render save) assume all three are present. A repo that carries a
+        # graph must declare both: its nodes name their repository in their
+        # ids, and there is no namespace-less repository for them to name.
+        # A repo that failed to load carries no graph and no config, and is
+        # exempt because it contributes no nodes.
         for r in repos:
             if not r.name or not str(r.name).strip():
                 raise FederationError(
@@ -230,8 +241,8 @@ class FederatedGraph:
                 )
             if r.repo_root is None or str(r.repo_root) == "":
                 raise FederationError(f"RepoEntry({r.name!r}).repo_root must be set")
-            if r.config and "project" in r.config:
-                project = r.config["project"] or {}
+            if r.graph is not None:
+                project = (r.config or {}).get("project") or {}
                 if not project.get("name") or not str(project["name"]).strip():
                     raise FederationError(
                         f"RepoEntry({r.name!r}).config is missing non-empty "
@@ -248,22 +259,7 @@ class FederatedGraph:
         self._repos: dict[str, RepoEntry] = {r.name: r for r in repos}
         self._root_repo = root_repo or (repos[0].name if repos else "")
         # Build ownership map: node_id -> repo name
-        # Detect ID conflicts across repos (skip FILE/REMAINDER nodes which
-        # naturally have same relative paths across repos)
-        self._ownership: dict[str, str] = {}
-        for entry in repos:
-            if entry.graph is not None:
-                for node_id in entry.graph._index:
-                    if node_id in self._ownership:
-                        # FILE and REMAINDER nodes may share relative paths
-                        if node_id.startswith(STRUCTURAL_ID_PREFIXES):
-                            continue
-                        existing_repo = self._ownership[node_id]
-                        raise FederationError(
-                            f"ID conflict: '{node_id}' exists in both "
-                            f"'{existing_repo}' and '{entry.name}'"
-                        )
-                    self._ownership[node_id] = entry.name
+        self._ownership = self._build_ownership(repos)
         # Cache of per-repo IdResolvers, populated on first access by
         # ``_resolver_for``.  Cross-repo ownership / canonicalisation
         # probes hit this cache instead of rebuilding the resolver on
@@ -284,7 +280,8 @@ class FederatedGraph:
         #   - _detect_satisfies_cycles also runs unconditionally; cycles can
         #     in principle exist inside a single repo via in-repo Satisfies
         #     chains, though Phase-2 validation usually prevents that.
-        if len([e for e in repos if e.graph is not None]) > 1:
+        multi_repo = len([e for e in repos if e.graph is not None]) > 1
+        if multi_repo:
             self._wire_cross_graph_edges()
         # Implements: REQ-p00014-H
         self._instantiate_cross_repo_satisfies()
@@ -292,7 +289,9 @@ class FederatedGraph:
         self._wire_integrates_edges()
         # Implements: REQ-p00014-J
         self._detect_satisfies_cycles()
-        self._annotate_presumed_foreign_refs()
+        # Implements: REQ-d00269-A
+        if multi_repo:
+            self._recompute_coverage()
         # Implements: REQ-d00201-B
         self._federated_log = FederatedMutationLog()
         self._federated_log._bind_repos(self._repos)
@@ -355,7 +354,9 @@ class FederatedGraph:
                 continue
             config = entry.config or {}
             terms_cfg = config.get("terms", {})
-            req_namespace = config.get("project", {}).get("namespace", "") or entry.name
+            # A repo with a graph has a config, and a config that loaded has a
+            # namespace -- load_config refuses one without. No substitute needed.
+            req_namespace = config["project"]["namespace"]
             unmatched = scan_graph(
                 self._terms,
                 entry.graph,
@@ -371,6 +372,7 @@ class FederatedGraph:
     # Comment Routing (Implements: REQ-d00230-B)
     # ─────────────────────────────────────────────────────────────────────────
 
+    # Implements: REQ-d00230-B
     def iter_comments(self, anchor: str) -> Iterator[CommentThread]:
         """Yield comment threads for an anchor, routed to owning repo."""
         from elspais.graph.comment_store import parse_anchor
@@ -523,14 +525,18 @@ class FederatedGraph:
         must pass an explicit ``name`` sentinel (e.g. ``"<unconfigured>"``)
         so the degraded state is visible at the call site rather than hidden
         behind a default.
-        """
-        from elspais.graph.builder import TraceGraph
 
+        The entry carries no graph, which is the same shape a repository
+        that failed to load takes. A graph would have to say which
+        repository it holds, and this stands for a repository that could
+        not be read at all.
+        """
         entry = RepoEntry(
             name=name,
-            graph=TraceGraph(),
+            graph=None,
             config=None,
             repo_root=Path("."),
+            error="Configuration could not be read",
         )
         return cls([entry], root_repo=name)
 
@@ -555,12 +561,19 @@ class FederatedGraph:
         Returns:
             A FederatedGraph wrapping a single repo.
         """
+        from elspais.graph.federation_plan import repository_origin
+
         host_name = config["project"]["name"]
         entry = RepoEntry(
             name=host_name,
             graph=graph,
             config=config,
             repo_root=repo_root,
+            # Detected the same way a federated member's is. Without it a
+            # project with no associates would be the one kind of project
+            # whose own repository never reports an origin, and so never
+            # receives the staleness reporting that depends on having one.
+            git_origin=repository_origin(repo_root),
         )
         return cls([entry], root_repo=host_name)
 
@@ -574,12 +587,32 @@ class FederatedGraph:
 
         # Strategy: by_id
 
+        A structural id (FILE, REMAINDER, definition) is keyed by source
+        location, which repeats across repositories, so this answers for
+        only one of the members holding it. A caller with the node itself
+        MUST use ``repo_for_node`` instead: writing to the repository this
+        answers with would write to a repository the caller never named.
+
         Raises:
             KeyError: If node_id is not found in any repo.
         """
         repo_name = self._ownership.get(node_id)
         if repo_name is None:
             raise KeyError(f"Node '{node_id}' not found in any repo")
+        return self._repos[repo_name]
+
+    def repo_for_node(self, node) -> RepoEntry:
+        """Return the RepoEntry holding this node OBJECT.
+
+        Unambiguous where ``repo_for`` is not: identity settles which
+        member holds a node whose id repeats across them.
+
+        Raises:
+            KeyError: If no repo holds the node.
+        """
+        repo_name = self._owner_of_node(node)
+        if repo_name is None or repo_name not in self._repos:
+            raise KeyError(f"Node '{node.id}' not found in any repo")
         return self._repos[repo_name]
 
     # Implements: REQ-d00230-D
@@ -594,6 +627,18 @@ class FederatedGraph:
         return self._repos[repo_name].repo_root
 
     # Implements: REQ-d00200-G
+    @property
+    def root_config(self) -> dict[str, Any] | None:
+        """The invoking repository's config -- the grammar of new content.
+
+        A node being created has no owner yet; it is added to the root repo,
+        so the root repo's configuration is what validates its identifier.
+
+        # Strategy: special
+        """
+        entry = self._repos.get(self._root_repo)
+        return entry.config if entry else None
+
     def config_for(self, node_id: str) -> dict[str, Any] | None:
         """Return the config dict for the repo owning node_id.
 
@@ -734,12 +779,12 @@ class FederatedGraph:
         return sum(graph.orphan_count() for _name, graph in self._live_graphs())
 
     # Implements: REQ-d00200-E
-    def broken_references(self) -> list[BrokenReference]:
+    def broken_references(self) -> list[ReferenceFault]:
         """Get all broken references across all repos.
 
         # Strategy: aggregate
         """
-        result: list[BrokenReference] = []
+        result: list[ReferenceFault] = []
         for _name, graph in self._live_graphs():
             result.extend(graph.broken_references())
         return result
@@ -751,6 +796,39 @@ class FederatedGraph:
         # Strategy: aggregate
         """
         return any(graph.has_broken_references() for _name, graph in self._live_graphs())
+
+    # Implements: REQ-d00272-G
+    def style_findings(self) -> list[StyleFinding]:
+        """Get all keyword-form style findings across all repos.
+
+        # Strategy: aggregate
+        """
+        result: list[StyleFinding] = []
+        for _name, graph in self._live_graphs():
+            result.extend(graph.style_findings())
+        return result
+
+    # Implements: REQ-d00272-N
+    def identifier_form_findings(self) -> list[IdentifierFormFinding]:
+        """Get every non-canonical reference spelling across all repos.
+
+        # Strategy: aggregate
+        """
+        result: list[IdentifierFormFinding] = []
+        for _name, graph in self._live_graphs():
+            result.extend(graph.identifier_form_findings())
+        return result
+
+    # Implements: REQ-d00272-O
+    def undeclared_relationships(self) -> list[UndeclaredRelationship]:
+        """Get every undeclared relationship across all repos.
+
+        # Strategy: aggregate
+        """
+        result: list[UndeclaredRelationship] = []
+        for _name, graph in self._live_graphs():
+            result.extend(graph.undeclared_relationships())
+        return result
 
     def duplicate_req_ids(self) -> dict[str, list[str]]:
         """Aggregate cross-file duplicate REQ IDs across all repos.
@@ -1349,6 +1427,77 @@ class FederatedGraph:
         }
     )
 
+    # Implements: REQ-d00269-A
+    def _recompute_coverage(self) -> None:
+        """Recompute coverage over the wired federation.
+
+        Each member repository is annotated as it is built, before any
+        cross-repository edge exists. Those edges are evidence like any
+        other, so the numbers are recomputed here -- once, over every
+        member at once -- after the wiring passes have run. One
+        computation spanning the whole federation is what lets a
+        reference conduct coverage between two repositories the same way
+        it does within one.
+
+        Coverage annotation rebuilds each requirement's metrics from the
+        graph rather than accumulating into what is already there, so
+        recomputing does not double-count.
+
+        Crediting settings stay with the repository that declares them:
+        each member's own test targets are collapsed by the same rule that
+        collapses several targets within one repository, and its evidence
+        is credited under that result alone. A member declaring none is
+        credited exactly as it is when built by itself, so joining a
+        federation moves no coverage number by membership (REQ-d00261-E).
+        """
+        from elspais.graph.annotators import (
+            CreditPolicy,
+            annotate_coverage,
+            annotate_journey_verification,
+        )
+        from elspais.graph.factory import _derive_credit_config, _validate_config
+
+        by_repo = {}
+        for entry in self._repos.values():
+            if entry.graph is None or entry.config is None:
+                continue
+            targets = _validate_config(entry.config).scanning.test.targets
+            by_repo[entry.name] = _derive_credit_config(targets)
+        policy = CreditPolicy(by_repo=by_repo, owner=self._owner_of_node)
+        annotate_journey_verification(self)
+        annotate_coverage(self, policy)
+
+    # Implements: REQ-d00261-E
+    def _owner_of_node(self, node) -> str | None:
+        """Return the name of the repository holding ``node``.
+
+        Every id names its repository, structural ids included, so the
+        ownership map answers for the node in hand rather than for some
+        other member that happens to hold the same path.
+        """
+        return self._ownership.get(node.id)
+
+    @staticmethod
+    def _edge_anchor(target_graph: TraceGraph, target_id: str) -> tuple[str, list[str] | None]:
+        """Resolve the node a traceability edge attaches to, plus its labels.
+
+        A reference naming an *Assertion* attaches to the *Requirement* that
+        owns it and carries the assertion label, which is the shape the
+        same-repository builder produces and the shape the coverage
+        computation reads. Any other target attaches directly.
+
+        An assertion with no owning requirement (a shape the builder also
+        tolerates) anchors on itself.
+        """
+        target = target_graph._index.get(target_id)
+        if target is None or target.kind != NodeKind.ASSERTION:
+            return target_id, None
+        parent_reqs = [p for p in target.iter_parents() if p.kind == NodeKind.REQUIREMENT]
+        if not parent_reqs:
+            return target_id, None
+        label = target.get_field("label", "")
+        return parent_reqs[0].id, [label] if label else None
+
     def _wire_cross_graph_edges(self) -> None:
         """Wire cross-graph edges by resolving broken references across repos.
 
@@ -1356,6 +1505,14 @@ class FederatedGraph:
         in another sub-graph. If found, create the edge using target_graph
         parameter and remove the broken reference. After wiring, demote any
         source nodes from _roots that now have content-level parent edges.
+
+        A reference naming several *Assertion* labels of a foreign
+        requirement never appears in the ownership index, because that index
+        holds node ids and no node is named ``REQ-x-A+B``. The per-repo
+        builder expands such a reference under its own grammar, which does
+        not claim a foreign identifier, so the reference arrives here whole.
+        It is expanded under the grammar of the repository that owns it and
+        wired one edge per label (REQ-d00269-B).
         """
         # Track source node IDs that got wired via content edges, keyed by repo
         wired_sources: dict[str, set[str]] = {}
@@ -1364,6 +1521,9 @@ class FederatedGraph:
             if source_entry.graph is None:
                 continue
             resolved: list[int] = []  # indices to remove
+            # Broken references that survive wiring in a different shape than
+            # they were written: index -> the references that replace it.
+            replacements: dict[int, list[ReferenceFault]] = {}
             for i, br in enumerate(source_entry.graph._broken_references):
                 # SATISFIES is handled by _instantiate_cross_repo_satisfies,
                 # which clones the template subtree instead of wiring a
@@ -1382,22 +1542,64 @@ class FederatedGraph:
                 if br.edge_kind == EdgeKind.INTEGRATES.value:
                     continue
                 target_repo_name = self._ownership.get(br.target_id)
+                if target_repo_name is None:
+                    expansion = self._expand_foreign_multi_reference(br.target_id)
+                    if expansion is not None and expansion[0] != source_entry.name:
+                        owner, present, missing = expansion
+                        wired = self._wire_expanded_labels(source_entry, br, owner, present)
+                        if wired and EdgeKind(br.edge_kind) in self._CONTENT_EDGE_KINDS:
+                            wired_sources.setdefault(source_entry.name, set()).add(br.source_id)
+                        replacements[i] = [
+                            ReferenceFault(
+                                source_id=br.source_id,
+                                target_id=missing_id,
+                                edge_kind=br.edge_kind,
+                                # At least one label of this same multi-
+                                # assertion item resolved in `owner` (else
+                                # `present` would be empty and this branch
+                                # never reached), so the requirement itself
+                                # is confirmed to exist there -- what is
+                                # missing is only this label.
+                                fault_class=FaultClass.UNKNOWN_ASSERTION,
+                                diagnostic=(
+                                    f"repository '{owner}' owns {missing_id} in the identifier "
+                                    f"grammar it declares, but has no such node; check the "
+                                    f"labels named in {br.target_id}."
+                                ),
+                            )
+                            for missing_id in missing
+                        ]
+                        continue
                 if target_repo_name and target_repo_name != source_entry.name:
                     target_entry = self._repos[target_repo_name]
                     if target_entry.graph is not None:
-                        # Wire the cross-graph edge
+                        # Wire the cross-graph edge in the same shape the
+                        # same-repository builder produces (REQ-d00269-B):
+                        # an assertion-targeted reference hangs off the
+                        # owning REQUIREMENT and names the assertion in
+                        # ``assertion_targets``.
+                        anchor_id, targets = self._edge_anchor(target_entry.graph, br.target_id)
                         source_entry.graph.add_edge(
                             br.source_id,
-                            br.target_id,
+                            anchor_id,
                             EdgeKind(br.edge_kind),
+                            assertion_targets=targets,
                             target_graph=target_entry.graph,
                         )
                         resolved.append(i)
                         if EdgeKind(br.edge_kind) in self._CONTENT_EDGE_KINDS:
                             wired_sources.setdefault(source_entry.name, set()).add(br.source_id)
-            # Remove resolved broken references (reverse to preserve indices)
-            for idx in reversed(resolved):
-                source_entry.graph._broken_references.pop(idx)
+            # Drop the resolved broken references and swap in the
+            # replacements, in one rebuild so no index shifts underfoot.
+            if resolved or replacements:
+                dropped = set(resolved)
+                rebuilt: list[ReferenceFault] = []
+                for idx, ref in enumerate(source_entry.graph._broken_references):
+                    if idx in replacements:
+                        rebuilt.extend(replacements[idx])
+                    elif idx not in dropped:
+                        rebuilt.append(ref)
+                source_entry.graph._broken_references[:] = rebuilt
 
         # Demote wired source nodes from _roots — they now have parent edges
         for repo_name, source_ids in wired_sources.items():
@@ -1405,14 +1607,72 @@ class FederatedGraph:
             if graph is not None:
                 graph._roots = [r for r in graph._roots if r.id not in source_ids]
 
+    # Implements: REQ-d00269-B
+    def _expand_foreign_multi_reference(
+        self, target_id: str
+    ) -> tuple[str, list[str], list[str]] | None:
+        """Expand a multi-*Assertion* reference under its owner's grammar.
+
+        Returns ``(repo_name, present_ids, missing_ids)`` for the first
+        repository that claims ``target_id`` and holds at least one of the
+        nodes it expands to. Returns ``None`` when the reference names at
+        most one label (the single-target case the ownership index already
+        answers) and when no repository holds any of the expansion -- a
+        reference nothing in the federation can resolve keeps whatever
+        classification it already carries, exactly as a single-target one
+        does.
+
+        Expansion is delegated to that repository's ``IdResolver`` — the one
+        authority for the identifier grammar — never to a separator split
+        here.
+        """
+        for entry in self._repos.values():
+            if entry.graph is None:
+                continue
+            resolver = self._resolver_for(entry)
+            if resolver is None:
+                continue
+            parsed = resolver.parse(target_id)
+            if parsed is None or len(parsed.assertions) <= 1:
+                continue
+            canonical = [resolver.render_canonical(p) for p in resolver.expand(parsed)]
+            present = [c for c in canonical if c in entry.graph._index]
+            if not present:
+                continue
+            missing = [c for c in canonical if c not in entry.graph._index]
+            return entry.name, present, missing
+        return None
+
+    # Implements: REQ-d00269-B
+    def _wire_expanded_labels(
+        self,
+        source_entry: RepoEntry,
+        br: ReferenceFault,
+        owner: str,
+        target_ids: list[str],
+    ) -> bool:
+        """Wire one cross-graph edge per expanded target. Returns True if any."""
+        target_entry = self._repos[owner]
+        if target_entry.graph is None or not target_ids:
+            return False
+        for target_id in target_ids:
+            anchor_id, targets = self._edge_anchor(target_entry.graph, target_id)
+            source_entry.graph.add_edge(
+                br.source_id,
+                anchor_id,
+                EdgeKind(br.edge_kind),
+                assertion_targets=targets,
+                target_graph=target_entry.graph,
+            )
+        return True
+
     def _resolver_for(self, entry: RepoEntry) -> IdResolver | None:
         """Return the cached ``IdResolver`` for ``entry``'s repo.
 
         Builds and memoises the resolver on first access. Returns
         ``None`` when the repo has no config (error-state repos can't
         be probed). Used by every federation pass that needs ID-format
-        tolerance: ``_claim_for``, ``_instantiate_cross_repo_satisfies``,
-        and ``_annotate_presumed_foreign_refs``.
+        tolerance: ``_claim_for`` and ``_instantiate_cross_repo_satisfies``.
         """
         if entry.config is None:
             return None
@@ -1490,6 +1750,15 @@ class FederatedGraph:
                     if claim is not None:
                         target_repo_name, target_id_canonical = claim
                 if target_repo_name is None:
+                    # Implements: REQ-d00272-A, REQ-d00272-B
+                    # An item the reader itself refused keeps the class it
+                    # reached. Reading is staged, and this rewrite speaks for
+                    # a later stage than an unread item got to: text that is
+                    # not an identifier cannot name a repository, declared or
+                    # otherwise, so describing it as one names a cause the
+                    # input does not determine.
+                    if reader_refused((br.fault_class, br.codes)):
+                        continue
                     # Missing-associate: no associated repo claims this
                     # target ID. Emit a typed diagnostic naming the
                     # currently-available associates so the author knows
@@ -1503,10 +1772,11 @@ class FederatedGraph:
                         if available
                         else "No associates declared. "
                     )
-                    new_br = BrokenReference(
+                    new_br = ReferenceFault(
                         source_id=br.source_id,
                         target_id=br.target_id,
                         edge_kind=br.edge_kind,
+                        fault_class=FaultClass.UNKNOWN_NAMESPACE,
                         presumed_foreign=True,
                         diagnostic=(
                             f"{br.source_id} satisfies {br.target_id}; "
@@ -1647,7 +1917,15 @@ class FederatedGraph:
             if source_entry.graph is None:
                 continue
             for req in list(source_entry.graph.iter_by_kind(NodeKind.REQUIREMENT)):
+                # Implements: REQ-d00272-K
+                # An item the reader refused binds nothing. The builder has
+                # already reported it under the class the reader reached;
+                # resolving it here would return the relationship the verdict
+                # withheld, and report it a second time as unresolved.
+                refused = set(req.get_field("integrates_refused") or [])
                 for raw in req.get_field("integrates_refs") or []:
+                    if raw in refused:
+                        continue
                     self._wire_one_integrates(source_entry, req.id, raw)
 
     # Implements: REQ-d00252
@@ -1739,10 +2017,11 @@ class FederatedGraph:
         # Same-repo target: external-only violation (REQ-d00252-C).
         if owner == source_entry.name:
             source_entry.graph._broken_references.append(
-                BrokenReference(
+                ReferenceFault(
                     source_id=source_id,
                     target_id=target_id,
                     edge_kind=EdgeKind.INTEGRATES.value,
+                    fault_class=FaultClass.FORBIDDEN,
                     diagnostic=(
                         f"{source_id} integrates {target_id}, but {target_id} is in the "
                         f"same repository; Integrates must target an external associate."
@@ -1762,10 +2041,13 @@ class FederatedGraph:
                 claimed = True
                 break
         source_entry.graph._broken_references.append(
-            BrokenReference(
+            ReferenceFault(
                 source_id=source_id,
                 target_id=target_id,
                 edge_kind=EdgeKind.INTEGRATES.value,
+                fault_class=(
+                    FaultClass.UNKNOWN_REQUIREMENT if claimed else FaultClass.UNKNOWN_NAMESPACE
+                ),
                 presumed_foreign=not claimed,
                 diagnostic=(
                     f"{source_id} integrates {target_id}: a configured associate "
@@ -1785,7 +2067,7 @@ class FederatedGraph:
         INSTANCE (clone -> template) then any outbound SATISFIES from
         that template eventually returns to a node already on the path.
 
-        Emits one typed ``BrokenReference`` per build (with ``cycle`` in
+        Emits one typed ``ReferenceFault`` per build (with ``cycle`` in
         its diagnostic) on the owning repo of the first node in the
         detected cycle, then returns. Reporting one cycle per build keeps
         the output legible; once the author breaks the first cycle,
@@ -1842,134 +2124,15 @@ class FederatedGraph:
                 if cycle:
                     # Emit a typed broken-ref on the originating repo.
                     entry.graph._broken_references.append(
-                        BrokenReference(
+                        ReferenceFault(
                             source_id=cycle[0],
                             target_id=cycle[-1],
                             edge_kind=EdgeKind.SATISFIES.value,
+                            fault_class=FaultClass.FORBIDDEN,
                             diagnostic=(f"Satisfies cycle detected: {' -> '.join(cycle)}"),
                         )
                     )
                     return  # one cycle per build to keep output sane
-
-    def _namespace_claimed_by_other_repo(self, source_entry: RepoEntry, namespace: str) -> bool:
-        """Return True if some other *live* repo's own namespace equals ``namespace``.
-
-        Associate namespaces are validated for shape (see ``validate_namespace``)
-        but NOT for uniqueness against each other or the primary repo's
-        namespace (``config/schema.py`` has no cross-repo check) -- two repos
-        MAY legitimately share a namespace. When they do, we can't
-        conclusively say a same-namespace-looking broken ref is a malformed
-        LOCAL reference rather than one intended for that other repo, so the
-        namespace-collision guard in ``_annotate_presumed_foreign_refs`` must
-        stand down and fall back to the prior blanket determination.
-        """
-        for entry in self._repos.values():
-            if entry is source_entry or entry.graph is None:
-                continue
-            resolver = self._resolver_for(entry)
-            if resolver is not None and resolver.config.namespace == namespace:
-                return True
-        return False
-
-    # Implements: REQ-d00252-G
-    def _annotate_presumed_foreign_refs(self) -> None:
-        """Mark remaining broken references whose target doesn't match the source repo's ID pattern.
-
-        Called after _wire_cross_graph_edges(). Any broken ref whose target_id
-        cannot be parsed by the source repo's IdResolver is presumed to belong
-        to a foreign repo (different namespace/format) and is replaced with a
-        BrokenReference with presumed_foreign=True.
-
-        Skipped for repos with no config (annotation requires pattern knowledge).
-
-        Refs that already carry a ``diagnostic`` are left untouched: an earlier
-        federation pass (e.g. cross-repo Satisfies, or Integrates resolution in
-        ``_wire_integrates_edges``) made a deliberate hard/soft determination
-        that this generic pattern check must not silently override.
-
-        Two guards prevent over-eager "presumed foreign" classification,
-        which otherwise causes genuinely-local broken references to be
-        silently suppressed by ``validation.allow_unresolved_cross_repo``:
-
-        1. No configured associates at all (``self._repos`` holds only the
-           primary repo, whether live or error-state entries) means there is
-           no foreign repository any reference could belong to -- nothing is
-           ever marked foreign, though a target matching the repo's own
-           namespace still gets the diagnostic from guard 2 below. This is
-           the common case a bare ``[associates]`` table (empty or absent)
-           produces, since ``build_graph()`` takes the
-           ``FederatedGraph.from_single()`` path whenever
-           ``get_associates_config()`` returns nothing.
-        2. Even with associates configured, a target whose leading token
-           matches the *source* repo's own namespace is a malformed LOCAL
-           reference (e.g. a mis-styled assertion suffix), not a cross-repo
-           one -- unless another configured repo shares that same namespace
-           (see ``_namespace_claimed_by_other_repo``), in which case we can't
-           rule out the other repo and fall back to the prior behavior. The
-           malformed-local case is left a hard broken reference with a
-           diagnostic pointing at the likely cause.
-        """
-        # Deliberate: count ALL RepoEntry objects, including error-state
-        # associates (graph=None, e.g. a configured path that doesn't exist
-        # on this machine). A configured-but-unreachable associate is a real
-        # signal that a foreign repository exists which could own the ref --
-        # the soft presumed-foreign classification is exactly for that
-        # "associate not present here" situation. Precedent: REQ-d00200-A/H
-        # -- error-state repos remain represented in the federation
-        # (iter_repos() yields them) even though aggregation skips them.
-        has_associates = len(self._repos) > 1
-
-        for source_entry in self._repos.values():
-            if source_entry.graph is None:
-                continue
-            resolver = self._resolver_for(source_entry)
-            if resolver is None:
-                continue
-            own_namespace = resolver.config.namespace
-            refs = source_entry.graph._broken_references
-            for i, br in enumerate(refs):
-                if br.diagnostic:
-                    continue
-                if br.presumed_foreign or resolver.is_local_id(br.target_id):
-                    continue
-                target_id = br.target_id
-                # Prefix match here vs. exact equality in
-                # _namespace_claimed_by_other_repo: this asymmetry means a
-                # nested-namespace pair (host "REQ" vs associate "REQ-EXTRA")
-                # would prefix-match the host and not be exact-claimed by the
-                # associate, mis-classifying a malformed "REQ-EXTRA-..." ref
-                # as local-to-host. Accepted as out of scope: namespaces are
-                # shape-validated identifiers (validate_namespace) and the
-                # `elspais associate` workflow makes one namespace being a
-                # dash-prefix of another improbable in practice.
-                matches_own_namespace = target_id == own_namespace or target_id.startswith(
-                    f"{own_namespace}-"
-                )
-                if matches_own_namespace and not self._namespace_claimed_by_other_repo(
-                    source_entry, own_namespace
-                ):
-                    refs[i] = BrokenReference(
-                        source_id=br.source_id,
-                        target_id=br.target_id,
-                        edge_kind=br.edge_kind,
-                        diagnostic=(
-                            f"{target_id} matches this repo's namespace ({own_namespace}) but "
-                            "does not parse under the configured ID pattern (check "
-                            "[id-patterns.assertions] separator/multi_separator)."
-                        ),
-                    )
-                    continue
-                if not has_associates:
-                    # Guard 1: no foreign repo exists to presume the ref
-                    # belongs to. Leave it a plain (non-diagnostic,
-                    # non-foreign) hard broken reference.
-                    continue
-                refs[i] = BrokenReference(
-                    source_id=br.source_id,
-                    target_id=br.target_id,
-                    edge_kind=br.edge_kind,
-                    presumed_foreign=True,
-                )
 
     # ─────────────────────────────────────────────────────────────────────────
     # Undo Operations
@@ -2010,34 +2173,65 @@ class FederatedGraph:
         return undone
 
     def _rebuild_ownership(self) -> None:
-        """Rebuild the ownership map from all sub-graph indexes."""
-        self._ownership.clear()
-        for entry in self._repos.values():
-            if entry.graph is not None:
-                for node_id in entry.graph._index:
-                    self._ownership[node_id] = entry.name
+        """Rebuild the ownership map from all sub-graph indexes.
+
+        Built exactly as ``__init__`` builds it, so an undo cannot leave
+        ownership answering differently from how it answered before.
+        """
+        self._ownership = self._build_ownership(list(self._repos.values()))
+
+    @staticmethod
+    # Implements: REQ-d00202-H
+    def _build_ownership(repos: list[RepoEntry]) -> dict[str, str]:
+        """Map every node id to the repository holding it.
+
+        Every id is unique across a federation: a semantic id carries its
+        repository's namespace, and so does a structural id, which is what
+        lets two repositories hold a file at the same repo-relative path
+        without their nodes colliding. So a repeated id is a genuine
+        conflict rather than a path two members happen to share, and it is
+        reported instead of silently resolving to one of them.
+        """
+        ownership: dict[str, str] = {}
+        for entry in repos:
+            if entry.graph is None:
+                continue
+            for node_id in entry.graph._index:
+                existing_repo = ownership.get(node_id)
+                if existing_repo is not None:
+                    raise FederationError(
+                        f"ID conflict: '{node_id}' exists in both "
+                        f"'{existing_repo}' and '{entry.name}'"
+                    )
+                ownership[node_id] = entry.name
+        return ownership
 
 
-def is_associate_owned(graph: Any, node_id: str) -> bool:
-    """Whether *node_id* is owned by an associate repo rather than the primary.
+def is_associate_owned(graph: Any, node: Any) -> bool:
+    """Whether *node* is owned by an associate repo rather than the primary.
 
     Single home for the write-scope ownership resolution used by
     ``render_save`` and ``elspais fix`` reporting (REQ-d00253-B, REQ-d00253-F).
-    The federation ownership map is authoritative: anything ``repo_for``
-    attributes to a non-root repo is associate-owned. Nodes not registered in
-    the map (or plain TraceGraphs with no federation API) fall back to the
-    node's ``repo`` field — build-time associate FILE nodes are created by a
-    recursive build where the associate is its own root, so their ``repo``
-    field is None and only the ownership map can classify them; the field is
-    a fallback, not the authority.
+
+    Takes the node OBJECT, never its id. A structural id repeats across
+    repositories, so asking by id can answer with a member that merely
+    holds the same path — and answering "primary" for an associate's file
+    is what lets a write past this guard. Identity cannot be mistaken.
+
+    Nodes no repository claims (or plain TraceGraphs with no federation
+    API) fall back to the node's ``repo`` field — build-time associate FILE
+    nodes are created by a recursive build where the associate is its own
+    root, so their ``repo`` field is None and only ownership can classify
+    them; the field is a fallback, not the authority.
 
     The MCP write guard (``_guard_associate_write``) intentionally does NOT
     share this fallback: there an unknown/new node must stay writable.
     """
+    if node is None:
+        return False
     root_repo = getattr(graph, "root_repo_name", None)
     try:
-        owner = graph.repo_for(node_id).name
+        owner = graph.repo_for_node(node).name
         return root_repo is not None and owner != root_repo
     except (KeyError, AttributeError):
-        node = graph.find_by_id(node_id)
-        return node is not None and node.get_field("repo") is not None
+        return node.get_field("repo") is not None

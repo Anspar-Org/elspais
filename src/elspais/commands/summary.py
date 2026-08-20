@@ -1,8 +1,6 @@
 """
 elspais.commands.summary - Coverage summary report section.
 
-# Implements: REQ-d00086-A+B+C+D
-
 Produces a coverage summary showing Implemented/Tested/Passing status
 aggregated by level (PRD, OPS, DEV), plus an External integrations table when
 `Integrates:` references are present. UAT Covered/UAT Passed are not among
@@ -27,7 +25,7 @@ from elspais.graph.aggregation import collect_coverage
 from elspais.graph.metrics import fmt_assertion_count
 
 
-# Implements: REQ-d00085-A
+# Implements: REQ-d00085-A, REQ-d00086-A+B+C+D
 def render_section(
     graph: FederatedGraph,
     args: argparse.Namespace,
@@ -109,9 +107,41 @@ def _render(data: dict, fmt: str) -> str:
         return _render_text(data)
 
 
-def _marker(covered: float, direct: float) -> str:
-    """REQ-d00258-A: `~` flags a count whose evidence is not fully direct."""
-    return " ~" if covered > direct + 1e-9 else ""
+# Implements: REQ-d00069-L, REQ-d00258-A, REQ-d00258-J
+# The four measures behind a dimension's headline total, in health.py's
+# vocabulary (check_dimension_coverage): "cited by name here" for what a
+# citation named and attached directly, "whole-requirement" for a citation
+# that named only the requirement, and "conducted" for what a `Refines:`
+# chain carries up from a refining requirement's own evidence. Published
+# beside the total rather than behind a caveat marker (REQ-d00258-J).
+def _measures_line(lv: dict, prefix: str) -> str:
+    from elspais.graph.aggregation import MEASURE_WORDS, MEASURES
+
+    return ", ".join(
+        f"{MEASURE_WORDS[m]}: {fmt_assertion_count(lv[f'{prefix}_{m}'])}" for m in MEASURES
+    )
+
+
+# Implements: REQ-d00258-O
+def _tested_breakdown(lv: dict) -> str:
+    """The tested assertions of one level, by what came back.
+
+    Silent when nothing is tested: there is no breakdown of an empty set, and
+    "(0 passed, 0 failed, 0 awaiting a result)" reads as a finding where there
+    is only an absence.
+    """
+    passed = lv.get("tested_passed", 0)
+    failed = lv.get("tested_failed", 0)
+    awaiting = lv.get("tested_awaiting", 0)
+    if passed + failed + awaiting == 0:
+        return ""
+    # Rendered through the shared assertion-count formatter: the breakdown is
+    # in the same fractional units as the Tested figure it qualifies
+    # (REQ-d00258-O), and a whole number still reads whole.
+    return (
+        f"  [{fmt_assertion_count(passed)} passed, {fmt_assertion_count(failed)} failed, "
+        f"{fmt_assertion_count(awaiting)} awaiting a result]"
+    )
 
 
 def _render_text(data: dict) -> str:
@@ -128,26 +158,41 @@ def _render_text(data: dict) -> str:
     lines.append("")
     lines.append("Summary by Level")
     lines.append("-" * 60)
+    # Implements: REQ-d00258-A
+    # Without this the natural read of a headline above four measures is that
+    # the measures sum to it. They do not: they are four readings of the same
+    # assertions, and the headline takes the greatest of them per *Assertion*.
+    # Said once here rather than per level, so it is a caption and not noise.
+    lines.append("  (each headline counts an assertion once, at the greatest of")
+    lines.append("   its four measures; the measures overlap and do not sum)")
     for lv in data["levels"]:
         if lv["total"] == 0:
             continue
         ta = lv["total_assertions"]
         lines.append(f"  {lv['level']}: {lv['total']} requirements, {ta} assertions")
+        # Implements: REQ-d00069-N, REQ-d00258-A, REQ-d00258-J
+        # The headline is the per-*Assertion* TOTAL (the greatest of the
+        # four measures); the measures line beneath it is what a reader
+        # checks instead of a caveat marker (REQ-d00258-J).
         lines.append(
-            f"    Implemented: {fmt_assertion_count(lv['implemented_assertions'])}/{ta}"
-            f" ({_pct(lv['implemented_assertions'], ta):.1f}%)"
-            f"{_marker(lv['implemented_assertions'], lv['implemented_direct'])}"
+            f"    Implemented: {fmt_assertion_count(lv['implemented_total_covered'])}/{ta}"
+            f" ({_pct(lv['implemented_total_covered'], ta):.1f}%)"
         )
+        lines.append(f"      ({_measures_line(lv, 'implemented')})")
+        # Implements: REQ-d00258-O
+        # The breakdown qualifies Tested rather than standing beside it, so it
+        # rides on the Tested line and adds no coverage term of its own.
         lines.append(
-            f"    Tested:      {fmt_assertion_count(lv['tested_assertions'])}/{ta}"
-            f" ({_pct(lv['tested_assertions'], ta):.1f}%)"
-            f"{_marker(lv['tested_assertions'], lv['tested_direct'])}"
+            f"    Tested:      {fmt_assertion_count(lv['tested_total_covered'])}/{ta}"
+            f" ({_pct(lv['tested_total_covered'], ta):.1f}%)"
+            f"{_tested_breakdown(lv)}"
         )
+        lines.append(f"      ({_measures_line(lv, 'tested')})")
         lines.append(
-            f"    Passing:     {fmt_assertion_count(lv['passing_assertions'])}/{ta}"
-            f" ({_pct(lv['passing_assertions'], ta):.1f}%){carry_marker}"
-            f"{_marker(lv['passing_assertions'], lv['passing_direct'])}"
+            f"    Passing:     {fmt_assertion_count(lv['passing_total_covered'])}/{ta}"
+            f" ({_pct(lv['passing_total_covered'], ta):.1f}%){carry_marker}"
         )
+        lines.append(f"      ({_measures_line(lv, 'passing')})")
 
     excluded = data.get("excluded", {})
     if excluded:
@@ -155,12 +200,13 @@ def _render_text(data: dict) -> str:
         lines.append(f"  ({', '.join(parts)} not included in coverage)")
 
     # REQ-d00252-F: External integrations grouped by owning associate.
-    # "Passing" (REQ-d00258-B vocabulary): integrates_by_associate() now folds
-    # the library node's tested_and_passing() union (result-verified OR
-    # line-coverage-credited) into these figures, so the label matches the
-    # other coverage columns. `!` marks a row whose library suite has failing
-    # results -- the union's covered count can still read full in that case,
-    # so the marker (footnoted below, like `~`/`*`) is the only red signal.
+    # "Passing" (REQ-d00258-K vocabulary, REQ-d00277-C):
+    # integrates_by_associate() folds the library node's
+    # tested_and_passing() Passing dimension into these figures, so the
+    # label matches the other coverage columns. `!` marks a row whose library
+    # suite has failing results -- the covered figure alone cannot say whether
+    # an uncounted assertion failed or was never tested, so the marker
+    # (footnoted below, like `*`) is the only red signal.
     integrations = data.get("integrations") or []
     if integrations:
         any_failing = any(row.get("has_failures") for row in integrations)
@@ -216,24 +262,37 @@ def _render_markdown(data: dict) -> str:
     # Level summary
     lines.append("## Summary by Level")
     lines.append("")
+    # Implements: REQ-d00258-A
+    # See the text renderer: the measures beneath each headline are four
+    # readings of the same assertions, not parts of it.
+    lines.append(
+        "*Each headline counts an assertion once, at the greatest of its four"
+        " measures; the measures overlap and do not sum.*"
+    )
+    lines.append("")
     lines.append("| Level | Requirements | Assertions | Implemented | Tested | Passing |")
     lines.append("|-------|-------------|------------|-------------|--------|---------|")
     for lv in data["levels"]:
         ta = lv["total_assertions"]
-        ia = lv["implemented_assertions"]
-        ta_tested = lv["tested_assertions"]
-        pa = lv["passing_assertions"]
+        # Implements: REQ-d00069-N, REQ-d00258-A, REQ-d00258-J
+        # The headline is the per-*Assertion* TOTAL; the measures line
+        # beneath it (in the same cell) is what a reader checks instead of
+        # a caveat marker (REQ-d00258-J).
+        ia = lv["implemented_total_covered"]
+        ta_tested = lv["tested_total_covered"]
+        pa = lv["passing_total_covered"]
         impl = (
             f"{fmt_assertion_count(ia)}/{ta} ({_pct(ia, ta):.0f}%)"
-            f"{_marker(ia, lv['implemented_direct'])}"
+            f"<br>({_measures_line(lv, 'implemented')})"
         )
         tested = (
             f"{fmt_assertion_count(ta_tested)}/{ta} ({_pct(ta_tested, ta):.0f}%)"
-            f"{_marker(ta_tested, lv['tested_direct'])}"
+            f"{_tested_breakdown(lv)}"
+            f"<br>({_measures_line(lv, 'tested')})"
         )
         pas = (
             f"{fmt_assertion_count(pa)}/{ta} ({_pct(pa, ta):.0f}%){carry_marker}"
-            f"{_marker(pa, lv['passing_direct'])}"
+            f"<br>({_measures_line(lv, 'passing')})"
         )
         lines.append(f"| {lv['level']} | {lv['total']} | {ta} | {impl} | {tested} | {pas} |")
 
@@ -244,12 +303,13 @@ def _render_markdown(data: dict) -> str:
         lines.append(f"*{', '.join(parts)} not included in coverage.*")
 
     # REQ-d00252-F: External integrations grouped by owning associate.
-    # "Passing" (REQ-d00258-B vocabulary): integrates_by_associate() now folds
-    # the library node's tested_and_passing() union (result-verified OR
-    # line-coverage-credited) into these figures, so the label matches the
-    # other coverage columns. `!` marks a row whose library suite has failing
-    # results -- the union's covered count can still read full in that case,
-    # so the marker (footnoted below, like `*`) is the only red signal.
+    # "Passing" (REQ-d00258-K vocabulary, REQ-d00277-C):
+    # integrates_by_associate() folds the library node's tested_and_passing()
+    # Passing dimension into these figures, so the label matches the other
+    # coverage columns. `!` marks a row whose library suite has failing
+    # results -- the covered figure alone cannot say whether an uncounted
+    # assertion failed or was never tested, so the marker (footnoted below,
+    # like `*`) is the only red signal.
     integrations = data.get("integrations") or []
     if integrations:
         any_failing = any(row.get("has_failures") for row in integrations)
@@ -297,40 +357,57 @@ def _render_json(data: dict) -> str:
     return json.dumps(data, indent=2) + "\n"
 
 
+# Implements: REQ-d00069-L, REQ-d00258-A
+# The four measure-column suffixes and their headers, shared by every
+# dimension's CSV columns -- one place naming them so the header row and the
+# data row cannot drift apart.
+_CSV_MEASURE_COLUMNS: list[tuple[str, str]] = [
+    ("_immediate_direct", "Immediate Direct"),
+    ("_immediate_indirect", "Immediate Indirect"),
+    ("_rolled_direct", "Rolled Direct"),
+    ("_rolled_indirect", "Rolled Indirect"),
+]
+
+
 def _render_csv(data: dict) -> str:
     buf = io.StringIO()
     writer = csv.writer(buf)
-    writer.writerow(
-        [
-            "Level",
-            "Requirements",
-            "Assertions",
-            "Implemented",
-            "Implemented %",
-            "Tested",
-            "Tested %",
-            "Passing",
-            "Passing %",
-        ]
-    )
+    header = ["Level", "Requirements", "Assertions"]
+    for prefix, label in (("implemented", "Implemented"), ("tested", "Tested")):
+        header.extend([label, f"{label} %"])
+        if prefix == "tested":
+            # Implements: REQ-d00258-O
+            header.extend(["Tested Passed", "Tested Failed", "Tested Awaiting"])
+        header.extend(f"{label} {m_label}" for _suffix, m_label in _CSV_MEASURE_COLUMNS)
+    header.extend(["Passing", "Passing %"])
+    header.extend(f"Passing {m_label}" for _suffix, m_label in _CSV_MEASURE_COLUMNS)
+    writer.writerow(header)
+
     for lv in data["levels"]:
         ta = lv["total_assertions"]
-        ia = lv["implemented_assertions"]
-        te = lv["tested_assertions"]
-        pa = lv["passing_assertions"]
-        writer.writerow(
+        # Implements: REQ-d00069-N, REQ-d00258-A, REQ-d00258-J
+        # The headline is the per-*Assertion* TOTAL; the measure columns
+        # are what a reader reads instead of a caveat marker (REQ-d00258-J).
+        ia = lv["implemented_total_covered"]
+        te = lv["tested_total_covered"]
+        pa = lv["passing_total_covered"]
+        row = [lv["level"], lv["total"], ta]
+        row.extend([ia, _pct(ia, ta)])
+        row.extend(lv[f"implemented{suffix}"] for suffix, _label in _CSV_MEASURE_COLUMNS)
+        row.extend([te, _pct(te, ta)])
+        row.extend(
             [
-                lv["level"],
-                lv["total"],
-                ta,
-                ia,
-                _pct(ia, ta),
-                te,
-                _pct(te, ta),
-                pa,
-                _pct(pa, ta),
+                # Same units and same formatting as every other assertion
+                # count: fractional where the credit is, whole where it is.
+                fmt_assertion_count(lv.get("tested_passed", 0)),
+                fmt_assertion_count(lv.get("tested_failed", 0)),
+                fmt_assertion_count(lv.get("tested_awaiting", 0)),
             ]
         )
+        row.extend(lv[f"tested{suffix}"] for suffix, _label in _CSV_MEASURE_COLUMNS)
+        row.extend([pa, _pct(pa, ta)])
+        row.extend(lv[f"passing{suffix}"] for suffix, _label in _CSV_MEASURE_COLUMNS)
+        writer.writerow(row)
 
     # Implements: REQ-d00254-I
     # Structured carried-results counts (no asterisk -- machine format).

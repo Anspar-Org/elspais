@@ -19,10 +19,23 @@ from pathlib import Path
 
 import pytest
 
+from elspais.config.schema import ElspaisConfig
 from elspais.graph import GraphNode, NodeKind
 from elspais.graph.builder import TraceGraph
-from elspais.graph.mutations import BrokenReference
+from elspais.graph.GraphNode import make_file_id
+from elspais.graph.reference_faults import ReferenceFault
 from elspais.graph.relations import EdgeKind
+from tests.core.graph_test_helpers import grammar_for
+
+# The namespace these hand-built graphs use -- a structural id carries the
+# namespace of the repository holding the node.
+NAMESPACE = "REQ"
+
+
+def file_id(relative_path: str) -> str:
+    """FILE node id for a path in the test repository."""
+    return make_file_id(NAMESPACE, relative_path)
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Fixtures
@@ -32,7 +45,7 @@ from elspais.graph.relations import EdgeKind
 @pytest.fixture
 def mutation_graph():
     """Create a TraceGraph with mutation support for testing."""
-    graph = TraceGraph(repo_root=Path("/test/repo"))
+    graph = TraceGraph(repo_root=Path("/test/repo"), _resolver=grammar_for(NAMESPACE))
 
     # Create PRD requirement with assertions
     prd_node = GraphNode(
@@ -92,6 +105,26 @@ def mutation_graph():
     return graph
 
 
+def _federate(graph):
+    """Wrap a hand-built TraceGraph as a default-config federation-of-one.
+
+    The mutation helpers are annotated FederatedGraph and resolve per-node
+    config through graph.config_for(). A live-graph RepoEntry must carry a
+    config naming the project, so the wrapper holds the defaults under the
+    fixture's namespace; target normalization is a no-op for the bare
+    assertion labels these tests pass, so the wrapped graph behaves exactly
+    as the bare TraceGraph did.
+    """
+    from elspais.config import config_defaults
+    from elspais.graph.federated import FederatedGraph, RepoEntry
+
+    config = config_defaults()
+    config["project"]["name"] = "test"
+    config["project"]["namespace"] = NAMESPACE
+    entry = RepoEntry(name="test", graph=graph, config=config, repo_root=Path("/test/repo"))
+    return FederatedGraph([entry], root_repo="test")
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Test: Node Mutations - REQ-o00062-A
 # ─────────────────────────────────────────────────────────────────────────────
@@ -136,6 +169,58 @@ class TestMutateRenameNode:
 
         assert result["success"] is False
         assert "error" in result
+
+    # Verifies: REQ-d00205-C
+    @pytest.mark.parametrize(
+        ("new_id", "stored_id", "note"),
+        [
+            # A padding variant the owning repo's grammar parses is stored
+            # in its canonical spelling, and the rewrite is disclosed.
+            ("REQ-o99", "REQ-o00099", "(normalized: REQ-o99 -> REQ-o00099)"),
+            # Case and padding variation together: matching admits both in
+            # any part of an identifier, and rendering emits the one
+            # canonical spelling.
+            ("req-P99", "REQ-p00099", "(normalized: req-P99 -> REQ-p00099)"),
+            # An id the grammar has no opinion on (a journey id) is stored
+            # exactly as given, with nothing to disclose.
+            ("JNY-legacy-name", "JNY-legacy-name", None),
+        ],
+    )
+    def test_new_id_canonicalized_under_owning_grammar(
+        self, mutation_graph, new_id, stored_id, note
+    ):
+        """New ids the grammar parses store canonically; others store as given."""
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _mutate_rename_node
+
+        result = _mutate_rename_node(_federate(mutation_graph), "REQ-o00001", new_id)
+
+        assert result["success"] is True
+        assert mutation_graph.find_by_id(stored_id) is not None
+        if stored_id != new_id:
+            # The given spelling must not survive alongside the canonical one.
+            assert mutation_graph.find_by_id(new_id) is None
+        if note:
+            assert note in result["message"]
+        else:
+            assert "(normalized:" not in result["message"]
+
+    # Verifies: REQ-d00205-C
+    def test_bare_graph_rename_attempts_no_normalization(self, mutation_graph):
+        """A graph without per-repo configs offers no grammar to normalize under.
+
+        The bare TraceGraph has no config_for, so a padding variant is
+        stored exactly as given rather than under a guessed grammar.
+        """
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _mutate_rename_node
+
+        result = _mutate_rename_node(mutation_graph, "REQ-o00001", "REQ-o99")
+
+        assert result["success"] is True
+        assert mutation_graph.find_by_id("REQ-o99") is not None
+        assert mutation_graph.find_by_id("REQ-o00099") is None
+        assert "(normalized:" not in result["message"]
 
 
 class TestMutateUpdateTitle:
@@ -192,6 +277,24 @@ class TestMutateChangeStatus:
         assert "mutation" in result
         assert result["mutation"]["operation"] == "change_status"
 
+    # Verifies: REQ-o00062-U
+    # The single-word positive control is test_delegates_to_graph_change_status
+    # above ("Deprecated" succeeds).
+    @pytest.mark.parametrize("bad_status", ["In Progress", "Done!"])
+    def test_refuses_multi_word_status(self, mutation_graph, bad_status):
+        """A status the parser cannot read back as one word is refused before
+        delegation, naming the violated constraint."""
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _mutate_change_status
+
+        result = _mutate_change_status(mutation_graph, "REQ-p00001", bad_status)
+
+        assert result["success"] is False
+        assert "single word" in result["error"]
+        assert bad_status in result["error"]
+        node = mutation_graph.find_by_id("REQ-p00001")
+        assert node.status == "Active"
+
 
 class TestMutateAddRequirement:
     """Tests for mutate_add_requirement() tool."""
@@ -232,6 +335,101 @@ class TestMutateAddRequirement:
 
         assert "mutation" in result
         assert result["mutation"]["operation"] == "add_requirement"
+
+    # Verifies: REQ-d00205-C
+    def test_id_grammar_cannot_read_is_refused(self, mutation_graph):
+        """An id the root repo's grammar cannot read is refused, not stored."""
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _mutate_add_requirement
+
+        result = _mutate_add_requirement(
+            _federate(mutation_graph),
+            req_id="BANANA-42",
+            title="Unreadable Id",
+            level="dev",
+        )
+
+        assert result["success"] is False
+        assert "Invalid requirement id" in result["error"]
+        # Nothing was added under the refused spelling.
+        assert mutation_graph.find_by_id("BANANA-42") is None
+
+    # Verifies: REQ-d00205-C
+    def test_variant_id_spelling_stored_canonically_with_disclosure(self, mutation_graph):
+        """A variant spelling the grammar admits is stored canonically.
+
+        Matching admits case and padding variation, rendering emits the one
+        canonical spelling, and the rewrite is disclosed in the message.
+        """
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _mutate_add_requirement
+
+        result = _mutate_add_requirement(
+            _federate(mutation_graph),
+            req_id="req-P00077",
+            title="Variant Spelling",
+            level="prd",
+        )
+
+        assert result["success"] is True
+        assert mutation_graph.find_by_id("REQ-p00077") is not None
+        # The given spelling must not survive alongside the canonical one.
+        assert mutation_graph.find_by_id("req-P00077") is None
+        assert "(normalized: req-P00077 -> REQ-p00077)" in result["message"]
+
+    # Verifies: REQ-o00062-U
+    def test_refuses_multi_word_status(self, mutation_graph):
+        """A status the parser cannot read back as one word is refused, and
+        nothing is stored."""
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _mutate_add_requirement
+
+        result = _mutate_add_requirement(
+            mutation_graph,
+            req_id="REQ-d00043",
+            title="Bad Status",
+            level="DEV",
+            status="In Progress",
+        )
+
+        assert result["success"] is False
+        assert "single word" in result["error"]
+        assert mutation_graph.find_by_id("REQ-d00043") is None
+
+    # Verifies: REQ-o00062-U
+    def test_undeclared_level_is_refused_naming_declared_levels(self, mutation_graph):
+        """A level the project does not declare is refused, naming the levels."""
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _mutate_add_requirement
+
+        result = _mutate_add_requirement(
+            _federate(mutation_graph),
+            req_id="REQ-d00042",
+            title="Bad Level",
+            level="BANANA",
+        )
+
+        assert result["success"] is False
+        assert "Unknown level" in result["error"]
+        for declared in ("dev", "ops", "prd"):
+            assert declared in result["error"]
+        assert mutation_graph.find_by_id("REQ-d00042") is None
+
+    # Verifies: REQ-o00062-U
+    def test_level_membership_is_case_insensitive(self, mutation_graph):
+        """A display-case level is accepted against lowercase-keyed levels."""
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _mutate_add_requirement
+
+        result = _mutate_add_requirement(
+            _federate(mutation_graph),
+            req_id="REQ-d00043",
+            title="Display Case Level",
+            level="DEV",
+        )
+
+        assert result["success"] is True
+        assert mutation_graph.find_by_id("REQ-d00043") is not None
 
 
 class TestMutateDeleteRequirement:
@@ -410,6 +608,54 @@ class TestMutateRenameAssertion:
         assert "mutation" in result
         assert result["mutation"]["operation"] == "rename_assertion"
 
+    # Verifies: REQ-d00205-C
+    def test_full_assertion_id_normalized_to_bare_label(self, mutation_graph):
+        """A new_label given as the parent's full assertion id stores bare.
+
+        The label is stored bare and rendered verbatim, so "REQ-p00001-D"
+        must land as label "D" -- and the rewrite must be disclosed.
+        """
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _mutate_rename_assertion
+
+        result = _mutate_rename_assertion(_federate(mutation_graph), "REQ-p00001-A", "REQ-p00001-D")
+
+        assert result["success"] is True
+        assert mutation_graph.find_by_id("REQ-p00001-D") is not None
+        assert mutation_graph.find_by_id("REQ-p00001-A") is None
+        assert mutation_graph.find_by_id("REQ-p00001-D").get_field("label") == "D"
+        assert "(normalized: REQ-p00001-D -> D)" in result["message"]
+
+    # Verifies: REQ-d00205-C
+    def test_lowercase_label_variant_normalized_to_canonical_case(self, mutation_graph):
+        """An admitted case variant of a label stores the canonical spelling.
+
+        Under the uppercase label style, "d" names the same label as "D";
+        the stored label is the canonical one and the rewrite is disclosed.
+        """
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _mutate_rename_assertion
+
+        result = _mutate_rename_assertion(_federate(mutation_graph), "REQ-p00001-A", "d")
+
+        assert result["success"] is True
+        renamed = mutation_graph.find_by_id("REQ-p00001-D")
+        assert renamed is not None
+        assert renamed.get_field("label") == "D"
+        assert "(normalized: d -> D)" in result["message"]
+
+    # Verifies: REQ-d00205-C
+    def test_bare_canonical_label_produces_no_normalization_note(self, mutation_graph):
+        """A label already bare and canonical is stored silently."""
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _mutate_rename_assertion
+
+        result = _mutate_rename_assertion(_federate(mutation_graph), "REQ-p00001-A", "D")
+
+        assert result["success"] is True
+        assert mutation_graph.find_by_id("REQ-p00001-D") is not None
+        assert "(normalized:" not in result["message"]
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Test: Remainder (Section) Mutations - REQ-o00062-H
@@ -426,7 +672,7 @@ def _build_remainder_graph() -> TraceGraph:
     from elspais.graph.builder import GraphBuilder
     from elspais.graph.parsers import ParsedContent
 
-    builder = GraphBuilder()
+    builder = GraphBuilder(namespace="REQ", resolver=grammar_for("REQ"))
     builder.add_parsed_content(
         ParsedContent(
             content_type="requirement",
@@ -642,10 +888,16 @@ class TestMutateAddEdge:
         assert "mutation" in result
         assert result["mutation"]["operation"] == "add_edge"
 
-    # Verifies: REQ-o00062-C
+    # Verifies: REQ-o00062-C, REQ-d00205-C
     def test_normalizes_full_assertion_ids_to_bare_labels(self, mutation_graph):
-        """Full assertion IDs like REQ-o00001-A are normalized to bare labels."""
+        """Full assertion IDs like REQ-o00001-A are normalized to bare labels.
+
+        No config is handed to _mutate_add_edge: production must resolve it
+        from the graph itself (graph.config_for(target_id), REQ-d00205-C),
+        so the graph's RepoEntry is what carries the config here.
+        """
         pytest.importorskip("mcp")
+        from elspais.graph.federated import FederatedGraph
         from elspais.mcp.server import _mutate_add_edge
 
         # Setup: add assertion to target so the ID is valid
@@ -660,28 +912,34 @@ class TestMutateAddEdge:
         dev_node._content = {"level": "DEV", "status": "Draft"}
         mutation_graph._index["REQ-d00003"] = dev_node
 
-        # Config matching the default REQ-{type}{component} pattern
+        # Config matching the default REQ-{type}{component} pattern. Validated
+        # the way a file on disk is, so this fixture cannot describe a
+        # repository the tool would refuse to load.
         config = {
-            "project": {"namespace": "REQ"},
+            "project": {"name": "TestProject", "namespace": "REQ"},
+            "levels": {
+                "p": {"rank": 1, "letter": "p", "implements": ["p"]},
+                "o": {"rank": 2, "letter": "o", "implements": ["o", "p"]},
+                "d": {"rank": 3, "letter": "d", "implements": ["d", "o", "p"]},
+            },
             "id-patterns": {
                 "canonical": "{namespace}-{type}{component}",
-                "types": {
-                    "p": {"level": 1},
-                    "o": {"level": 2},
-                    "d": {"level": 3},
-                },
                 "component": {"style": "numeric", "digits": 5, "leading_zeros": True},
                 "assertions": {"label_style": "uppercase"},
             },
         }
+        ElspaisConfig.model_validate(config)
+
+        # Wrap AFTER all nodes are indexed -- federation ownership is
+        # snapshotted at construction, and config_for(target_id) reads it.
+        fed = FederatedGraph.from_single(mutation_graph, config, Path("/test/repo"))
 
         result = _mutate_add_edge(
-            mutation_graph,
+            fed,
             source_id="REQ-d00003",
             target_id="REQ-o00001",
             edge_kind="IMPLEMENTS",
             assertion_targets=["REQ-o00001-A"],
-            config=config,
         )
 
         assert result["success"] is True
@@ -693,6 +951,38 @@ class TestMutateAddEdge:
         ]
         assert len(edges) == 1
         assert edges[0].assertion_targets == ["A"]
+        # The stored form differs from what the caller wrote, so the
+        # mutation result must disclose the rewrite naming both spellings.
+        assert "(normalized: REQ-o00001-A -> A)" in result["message"]
+
+    # Verifies: REQ-d00205-C
+    def test_already_bare_label_produces_no_normalization_note(self, mutation_graph):
+        """A target already in canonical form is stored unchanged, silently.
+
+        The disclosure suffix exists to flag a rewrite; emitting it when
+        nothing changed would train callers to ignore it.
+        """
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _mutate_add_edge
+
+        dev_node = GraphNode(
+            id="REQ-d00004",
+            kind=NodeKind.REQUIREMENT,
+            label="DEV with bare label ref",
+        )
+        dev_node._content = {"level": "DEV", "status": "Draft"}
+        mutation_graph._index["REQ-d00004"] = dev_node
+
+        result = _mutate_add_edge(
+            _federate(mutation_graph),
+            source_id="REQ-d00004",
+            target_id="REQ-p00001",
+            edge_kind="IMPLEMENTS",
+            assertion_targets=["A"],
+        )
+
+        assert result["success"] is True
+        assert "(normalized:" not in result["message"]
 
 
 class TestMutateChangeEdgeKind:
@@ -734,7 +1024,9 @@ class TestMutateChangeEdgeTargets:
 
         # REQ-o00001 implements REQ-p00001 (edge exists from fixture)
         # Change assertion targets to just ["A"]
-        result = _mutate_change_edge_targets(mutation_graph, "REQ-o00001", "REQ-p00001", ["A"])
+        result = _mutate_change_edge_targets(
+            _federate(mutation_graph), "REQ-o00001", "REQ-p00001", ["A"]
+        )
 
         assert result["success"] is True
         # Verify the edge's assertion_targets is ["A"]
@@ -752,11 +1044,81 @@ class TestMutateChangeEdgeTargets:
         pytest.importorskip("mcp")
         from elspais.mcp.server import _mutate_change_edge_targets
 
-        result = _mutate_change_edge_targets(mutation_graph, "REQ-o00001", "REQ-p00001", ["B"])
+        result = _mutate_change_edge_targets(
+            _federate(mutation_graph), "REQ-o00001", "REQ-p00001", ["B"]
+        )
 
         assert "mutation" in result
         mutation = result["mutation"]
         assert mutation["operation"] == "change_edge_targets"
+
+    # Verifies: REQ-d00205-C
+    def test_normalizes_full_assertion_ids_to_bare_labels(self, mutation_graph):
+        """Full assertion IDs are normalized to bare labels at mutation time.
+
+        render_save spells the stored label verbatim into the Implements:
+        line, so an unnormalized full ID would reach the spec file corrupted.
+        """
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _mutate_change_edge_targets
+
+        # REQ-o00001 implements REQ-p00001 (edge exists from fixture)
+        result = _mutate_change_edge_targets(
+            _federate(mutation_graph), "REQ-o00001", "REQ-p00001", ["REQ-p00001-A"]
+        )
+
+        assert result["success"] is True
+        # Verify the edge stores the bare label "A", not the full ID
+        parent = mutation_graph.find_by_id("REQ-p00001")
+        edges = [
+            e
+            for e in parent.iter_outgoing_edges()
+            if e.kind == EdgeKind.IMPLEMENTS and e.target.id == "REQ-o00001"
+        ]
+        assert len(edges) == 1
+        assert edges[0].assertion_targets == ["A"]
+        # Verifies: REQ-d00205-C -- the rewrite is disclosed in the result.
+        assert "(normalized: REQ-p00001-A -> A)" in result["message"]
+
+    # Verifies: REQ-d00205-C
+    @pytest.mark.parametrize("spelling", ["REQ-p00001-a", "req-P00001-A"])
+    def test_case_variant_spellings_normalize_to_bare_label(self, mutation_graph, spelling):
+        """Case variants of the full assertion id normalize to the bare label.
+
+        Matching admits case variation in any part of an identifier --
+        label and namespace/type alike -- so both spellings store the one
+        canonical label, and each rewrite is disclosed.
+        """
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _mutate_change_edge_targets
+
+        result = _mutate_change_edge_targets(
+            _federate(mutation_graph), "REQ-o00001", "REQ-p00001", [spelling]
+        )
+
+        assert result["success"] is True
+        parent = mutation_graph.find_by_id("REQ-p00001")
+        edges = [
+            e
+            for e in parent.iter_outgoing_edges()
+            if e.kind == EdgeKind.IMPLEMENTS and e.target.id == "REQ-o00001"
+        ]
+        assert len(edges) == 1
+        assert edges[0].assertion_targets == ["A"]
+        assert f"(normalized: {spelling} -> A)" in result["message"]
+
+    # Verifies: REQ-d00205-C
+    def test_bare_label_produces_no_normalization_note(self, mutation_graph):
+        """A bare canonical label passes through with no disclosure suffix."""
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _mutate_change_edge_targets
+
+        result = _mutate_change_edge_targets(
+            _federate(mutation_graph), "REQ-o00001", "REQ-p00001", ["A"]
+        )
+
+        assert result["success"] is True
+        assert "(normalized:" not in result["message"]
 
     # Verifies: REQ-o00062-C
     def test_change_edge_targets_error_no_edge(self, mutation_graph):
@@ -765,7 +1127,9 @@ class TestMutateChangeEdgeTargets:
         from elspais.mcp.server import _mutate_change_edge_targets
 
         # REQ-p00001-A is an assertion, no edge from it to REQ-o00001
-        result = _mutate_change_edge_targets(mutation_graph, "REQ-p00001-A", "REQ-o00001", ["A"])
+        result = _mutate_change_edge_targets(
+            _federate(mutation_graph), "REQ-p00001-A", "REQ-o00001", ["A"]
+        )
 
         assert result["success"] is False
         assert "error" in result
@@ -817,7 +1181,7 @@ class TestMutateFixBrokenReference:
 
         # Create a broken reference scenario first
         mutation_graph._broken_references.append(
-            BrokenReference(
+            ReferenceFault(
                 source_id="REQ-o00001",
                 target_id="REQ-MISSING",
                 edge_kind=EdgeKind.IMPLEMENTS,
@@ -837,7 +1201,7 @@ class TestMutateFixBrokenReference:
         from elspais.mcp.server import _mutate_fix_broken_reference
 
         mutation_graph._broken_references.append(
-            BrokenReference(
+            ReferenceFault(
                 source_id="REQ-o00001",
                 target_id="REQ-BAD",
                 edge_kind=EdgeKind.IMPLEMENTS,
@@ -848,6 +1212,65 @@ class TestMutateFixBrokenReference:
 
         assert "mutation" in result
         assert result["mutation"]["operation"] == "fix_broken_reference"
+
+    # Verifies: REQ-d00205-C
+    def test_claimed_variant_target_normalized_with_disclosure(self, mutation_graph):
+        """A variant spelling a member's grammar claims stores canonically.
+
+        "req-P00001" is claimed by the REQ member's grammar, so the new
+        target is stored and reported as "REQ-p00001" -- and because that
+        node exists, the reference actually resolves rather than staying
+        broken under the variant spelling. The rewrite is disclosed.
+        """
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _mutate_fix_broken_reference
+
+        mutation_graph._broken_references.append(
+            ReferenceFault(
+                source_id="REQ-o00001",
+                target_id="REQ-MISSING",
+                edge_kind=EdgeKind.IMPLEMENTS,
+            )
+        )
+
+        result = _mutate_fix_broken_reference(
+            _federate(mutation_graph), "REQ-o00001", "REQ-MISSING", "req-P00001"
+        )
+
+        assert result["success"] is True
+        assert result["mutation"]["after_state"]["new_target_id"] == "REQ-p00001"
+        assert result["mutation"]["after_state"]["fixed"] is True
+        assert "(normalized: req-P00001 -> REQ-p00001)" in result["message"]
+
+    # Verifies: REQ-d00205-C
+    def test_target_no_member_claims_stays_as_given(self, mutation_graph):
+        """A new target no member's grammar claims is stored as given.
+
+        No grammar claims "OTHER-x00001", so there is nothing to normalize
+        under: the spelling the caller wrote is what is stored, the
+        reference stays broken and is reported, and no normalization is
+        disclosed -- guessing a grammar would silently respell the
+        reference.
+        """
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _mutate_fix_broken_reference
+
+        mutation_graph._broken_references.append(
+            ReferenceFault(
+                source_id="REQ-o00001",
+                target_id="REQ-MISSING",
+                edge_kind=EdgeKind.IMPLEMENTS,
+            )
+        )
+
+        result = _mutate_fix_broken_reference(
+            _federate(mutation_graph), "REQ-o00001", "REQ-MISSING", "OTHER-x00001"
+        )
+
+        assert result["success"] is True
+        assert result["mutation"]["after_state"]["new_target_id"] == "OTHER-x00001"
+        assert result["mutation"]["after_state"]["still_broken"] is True
+        assert "(normalized:" not in result["message"]
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -866,18 +1289,18 @@ class TestMutateMoveNodeToFile:
         """Extend mutation_graph with FILE nodes and CONTAINS wiring."""
         graph = mutation_graph
 
-        file1 = GraphNode("file:spec/main.md", NodeKind.FILE, label="main.md")
+        file1 = GraphNode(file_id("spec/main.md"), NodeKind.FILE, label="main.md")
         file1.set_field("relative_path", "spec/main.md")
-        graph._index["file:spec/main.md"] = file1
+        graph._index[file_id("spec/main.md")] = file1
         graph._roots.append(file1)
 
         req = graph.find_by_id("REQ-p00001")
         edge = file1.link(req, EdgeKind.CONTAINS)
         edge.metadata["render_order"] = 0.0
 
-        file2 = GraphNode("file:spec/other.md", NodeKind.FILE, label="other.md")
+        file2 = GraphNode(file_id("spec/other.md"), NodeKind.FILE, label="other.md")
         file2.set_field("relative_path", "spec/other.md")
-        graph._index["file:spec/other.md"] = file2
+        graph._index[file_id("spec/other.md")] = file2
         graph._roots.append(file2)
 
         return graph
@@ -887,13 +1310,13 @@ class TestMutateMoveNodeToFile:
         pytest.importorskip("mcp")
         from elspais.mcp.server import _mutate_move_node_to_file
 
-        result = _mutate_move_node_to_file(file_graph, "REQ-p00001", "file:spec/other.md")
+        result = _mutate_move_node_to_file(file_graph, "REQ-p00001", file_id("spec/other.md"))
 
         assert result["success"] is True
         assert "mutation" in result
         # Verify req is now under the target file
         req = file_graph.find_by_id("REQ-p00001")
-        assert req.file_node().id == "file:spec/other.md"
+        assert req.file_node().id == file_id("spec/other.md")
 
     def test_REQ_o00063_A_move_error_no_file_parent(self, file_graph):
         """REQ-o00063-A: Moving a node without a FILE parent returns error."""
@@ -905,7 +1328,7 @@ class TestMutateMoveNodeToFile:
         orphan._content = {"level": "DEV", "status": "Draft"}
         file_graph._index["REQ-d00099"] = orphan
 
-        result = _mutate_move_node_to_file(file_graph, "REQ-d00099", "file:spec/other.md")
+        result = _mutate_move_node_to_file(file_graph, "REQ-d00099", file_id("spec/other.md"))
 
         assert result["success"] is False
         assert "error" in result
@@ -922,9 +1345,9 @@ class TestMutateRenameFile:
         """Extend mutation_graph with a FILE node."""
         graph = mutation_graph
 
-        file1 = GraphNode("file:spec/main.md", NodeKind.FILE, label="main.md")
+        file1 = GraphNode(file_id("spec/main.md"), NodeKind.FILE, label="main.md")
         file1.set_field("relative_path", "spec/main.md")
-        graph._index["file:spec/main.md"] = file1
+        graph._index[file_id("spec/main.md")] = file1
         graph._roots.append(file1)
 
         req = graph.find_by_id("REQ-p00001")
@@ -938,24 +1361,79 @@ class TestMutateRenameFile:
         pytest.importorskip("mcp")
         from elspais.mcp.server import _mutate_rename_file
 
-        result = _mutate_rename_file(file_graph, "file:spec/main.md", "spec/renamed.md")
+        result = _mutate_rename_file(file_graph, file_id("spec/main.md"), "spec/renamed.md")
 
         assert result["success"] is True
         assert "mutation" in result
         # Verify the new ID is findable
-        assert file_graph.find_by_id("file:spec/renamed.md") is not None
+        assert file_graph.find_by_id(file_id("spec/renamed.md")) is not None
         # Old ID should be gone
-        assert file_graph.find_by_id("file:spec/main.md") is None
+        assert file_graph.find_by_id(file_id("spec/main.md")) is None
 
     def test_REQ_o00063_A_rename_error_not_found(self, file_graph):
         """REQ-o00063-A: Renaming a nonexistent file returns error."""
         pytest.importorskip("mcp")
         from elspais.mcp.server import _mutate_rename_file
 
-        result = _mutate_rename_file(file_graph, "file:spec/nonexistent.md", "spec/new.md")
+        result = _mutate_rename_file(file_graph, file_id("spec/nonexistent.md"), "spec/new.md")
 
         assert result["success"] is False
         assert "error" in result
+
+    # Verifies: REQ-o00062-M
+    @pytest.mark.parametrize(
+        "bad_path",
+        [
+            "../escape.md",
+            "/etc/evil.md",
+            # validate_new_spec_path sees this as under spec/ and matching
+            # *.md, so the '..'-segment guard is the ONLY defense here.
+            "spec/../../evil.md",
+        ],
+    )
+    def test_traversal_or_absolute_path_refused(self, file_graph, bad_path):
+        """A path with '..' segments or an absolute path is refused."""
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _mutate_rename_file
+
+        result = _mutate_rename_file(file_graph, file_id("spec/main.md"), bad_path)
+
+        assert result["success"] is False
+        assert "must not contain '..' or be absolute" in result["error"]
+        # The file was not renamed.
+        assert file_graph.find_by_id(file_id("spec/main.md")) is not None
+
+    # Verifies: REQ-o00062-M
+    def test_path_outside_spec_tree_refused(self, file_graph):
+        """A destination outside the configured spec directories is refused."""
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _mutate_rename_file
+
+        result = _mutate_rename_file(
+            _federate(file_graph), file_id("spec/main.md"), "src/notaspec.md"
+        )
+
+        assert result["success"] is False
+        assert "not under any configured spec directory" in result["error"]
+        assert file_graph.find_by_id(file_id("spec/main.md")) is not None
+
+    # Verifies: REQ-o00062-M
+    def test_legitimate_rename_passes_spec_path_validation(self, file_graph):
+        """A rename inside the configured spec tree passes the path guard.
+
+        The bare-graph success test above never reaches
+        validate_new_spec_path (no config); this one does, so it fails if
+        the guard starts over-refusing legitimate destinations.
+        """
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _mutate_rename_file
+
+        result = _mutate_rename_file(
+            _federate(file_graph), file_id("spec/main.md"), "spec/renamed.md"
+        )
+
+        assert result["success"] is True
+        assert file_graph.find_by_id(file_id("spec/renamed.md")) is not None
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1159,7 +1637,7 @@ class TestGetBrokenReferences:
         from elspais.mcp.server import _get_broken_references
 
         mutation_graph._broken_references.append(
-            BrokenReference(
+            ReferenceFault(
                 source_id="REQ-o00001",
                 target_id="REQ-MISSING",
                 edge_kind=EdgeKind.IMPLEMENTS,

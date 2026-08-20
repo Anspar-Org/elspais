@@ -1,4 +1,3 @@
-# elspais: expected-broken-links 2
 """
 Tests for the example command.
 """
@@ -278,9 +277,32 @@ class TestExampleTemplateContent:
         """Test that assertion rules shows configuration."""
         from elspais.commands.example_cmd import ASSERTION_RULES
 
-        assert "[patterns.assertions]" in ASSERTION_RULES
+        assert "[id-patterns.assertions]" in ASSERTION_RULES
         assert "[rules.format]" in ASSERTION_RULES
         assert "label_style" in ASSERTION_RULES
+
+    def test_assertion_rules_configuration_actually_loads(self, tmp_path):
+        """The sample a reader copies must be a configuration the tool reads.
+
+        It showed a pre-v2 section and three rule fields the schema did not
+        have, so following it produced a project that would not load at all.
+        """
+        import re
+
+        from elspais.commands.example_cmd import ASSERTION_RULES
+        from elspais.config import load_config
+
+        blocks = re.findall(r"```toml\n(.*?)```", ASSERTION_RULES, re.S)
+        assert blocks, "the assertion rules should show a configuration sample"
+
+        for block in blocks:
+            config = tmp_path / ".elspais.toml"
+            config.write_text(
+                'version = 4\n[project]\nname = "x"\nnamespace = "REQ"\n'
+                '[levels.prd]\nrank = 1\nletter = "p"\nimplements = ["prd"]\n' + block,
+                encoding="utf-8",
+            )
+            load_config(config)
 
 
 class TestCLIIntegration:

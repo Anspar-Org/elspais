@@ -1,12 +1,15 @@
 # Validates REQ-o00062-C, REQ-o00062-D, REQ-o00062-E, REQ-o00062-F, REQ-o00062-G
 """Tests for edge mutation operations (add, change_kind, delete, fix_broken)."""
+
 from __future__ import annotations
 
 import pytest
 
 from elspais.graph.builder import GraphBuilder, TraceGraph
+from elspais.graph.GraphNode import GraphNode, NodeKind, make_file_id
 from elspais.graph.parsers import ParsedContent
 from elspais.graph.relations import EdgeKind
+from tests.core.graph_test_helpers import grammar_for
 
 
 def make_req(
@@ -37,7 +40,7 @@ def make_req(
 
 def build_disconnected_graph() -> TraceGraph:
     """Build a graph with two unconnected requirements."""
-    builder = GraphBuilder()
+    builder = GraphBuilder(namespace="REQ", resolver=grammar_for("REQ"))
     builder.add_parsed_content(make_req("REQ-p00001", "Parent"))
     builder.add_parsed_content(make_req("REQ-p00002", "Child"))
     return builder.build()
@@ -45,7 +48,7 @@ def build_disconnected_graph() -> TraceGraph:
 
 def build_hierarchy_graph() -> TraceGraph:
     """Build a graph with parent-child hierarchy."""
-    builder = GraphBuilder()
+    builder = GraphBuilder(namespace="REQ", resolver=grammar_for("REQ"))
     builder.add_parsed_content(make_req("REQ-p00001", "Parent"))
     builder.add_parsed_content(make_req("REQ-p00002", "Child", implements=["REQ-p00001"]))
     return builder.build()
@@ -53,7 +56,7 @@ def build_hierarchy_graph() -> TraceGraph:
 
 def build_graph_with_assertions() -> TraceGraph:
     """Build a graph with assertions on the parent."""
-    builder = GraphBuilder()
+    builder = GraphBuilder(namespace="REQ", resolver=grammar_for("REQ"))
     builder.add_parsed_content(
         make_req(
             "REQ-p00001",
@@ -68,9 +71,22 @@ def build_graph_with_assertions() -> TraceGraph:
     return builder.build()
 
 
+def build_graph_with_contained_requirement() -> TraceGraph:
+    """Build a graph whose requirement sits in a FILE node via CONTAINS."""
+    graph = build_disconnected_graph()
+    file_id = make_file_id("REQ", "spec/main.md")
+    file_node = GraphNode(file_id, NodeKind.FILE, label=file_id)
+    file_node.set_field("file_type", "SPEC")
+    file_node.set_field("relative_path", "spec/main.md")
+    graph._index[file_id] = file_node
+    graph._roots.append(file_node)
+    file_node.link(graph.find_by_id("REQ-p00001"), EdgeKind.CONTAINS)
+    return graph
+
+
 def build_graph_with_broken_reference() -> TraceGraph:
     """Build a graph with a broken reference."""
-    builder = GraphBuilder()
+    builder = GraphBuilder(namespace="REQ", resolver=grammar_for("REQ"))
     builder.add_parsed_content(make_req("REQ-p00001", "Parent"))
     # Child implements non-existent requirement
     builder.add_parsed_content(make_req("REQ-p00002", "Child", implements=["REQ-nonexistent"]))
@@ -318,6 +334,31 @@ class TestChangeEdgeKind:
         with pytest.raises(ValueError, match="No edge exists"):
             graph.change_edge_kind("REQ-p00002", "REQ-p00001", EdgeKind.REFINES)
 
+    # Verifies: REQ-o00062-V
+    def test_change_edge_kind_refuses_placement_current_kind(self):
+        """A STRUCTURES edge cannot be rewritten into a traceability kind --
+        that would detach the assertion from the requirement that renders it."""
+        graph = build_graph_with_assertions()
+
+        with pytest.raises(ValueError, match="traceability edges"):
+            graph.change_edge_kind("REQ-p00001-A", "REQ-p00001", EdgeKind.IMPLEMENTS)
+
+        edges = list(graph.find_by_id("REQ-p00001-A").iter_incoming_edges())
+        assert edges[0].kind == EdgeKind.STRUCTURES
+        assert len(graph.mutation_log) == 0
+
+    # Verifies: REQ-o00062-V
+    def test_change_edge_kind_refuses_placement_new_kind(self):
+        """A traceability edge cannot be rewritten into a placement kind."""
+        graph = build_hierarchy_graph()
+
+        with pytest.raises(ValueError, match="traceability edges"):
+            graph.change_edge_kind("REQ-p00002", "REQ-p00001", EdgeKind.CONTAINS)
+
+        edges = list(graph.find_by_id("REQ-p00002").iter_incoming_edges())
+        assert edges[0].kind == EdgeKind.IMPLEMENTS
+        assert len(graph.mutation_log) == 0
+
     # Verifies: REQ-o00062-C
     def test_change_edge_kind_preserves_assertion_targets(self):
         """Changing edge kind preserves assertion targets."""
@@ -530,6 +571,32 @@ class TestDeleteEdge:
         with pytest.raises(ValueError, match="No edge exists"):
             graph.delete_edge("REQ-p00002", "REQ-p00001")
 
+    # Verifies: REQ-o00062-V
+    def test_delete_edge_refuses_structures_edge(self):
+        """Severing STRUCTURES detaches an assertion from the requirement that
+        renders it; assertion deletion is the mutation for that."""
+        graph = build_graph_with_assertions()
+
+        with pytest.raises(ValueError, match="Cannot delete a structures edge"):
+            graph.delete_edge("REQ-p00001-A", "REQ-p00001")
+
+        parent = graph.find_by_id("REQ-p00001")
+        assert parent.has_child(graph.find_by_id("REQ-p00001-A"))
+        assert len(graph.mutation_log) == 0
+
+    # Verifies: REQ-o00062-V
+    def test_delete_edge_refuses_contains_edge(self):
+        """Severing CONTAINS detaches content from its file; move_node_to_file
+        and content deletion are the mutations for that."""
+        graph = build_graph_with_contained_requirement()
+
+        with pytest.raises(ValueError, match="Cannot delete a contains edge"):
+            graph.delete_edge("REQ-p00001", make_file_id("REQ", "spec/main.md"))
+
+        req = graph.find_by_id("REQ-p00001")
+        assert req.file_node() is graph.find_by_id(make_file_id("REQ", "spec/main.md"))
+        assert len(graph.mutation_log) == 0
+
     # Verifies: REQ-o00062-C
     def test_delete_edge_source_becomes_orphan(self):
         """Deleting last parent edge makes source orphan."""
@@ -549,7 +616,7 @@ class TestDeleteEdge:
     def test_delete_edge_root_not_orphaned(self):
         """Deleting edge from root node doesn't mark as orphan."""
         # Create a graph where a root has an edge to another root
-        builder = GraphBuilder()
+        builder = GraphBuilder(namespace="REQ", resolver=grammar_for("REQ"))
         builder.add_parsed_content(make_req("REQ-p00001", "Parent"))
         builder.add_parsed_content(make_req("REQ-p00002", "Child", implements=["REQ-p00001"]))
         graph = builder.build()

@@ -1,5 +1,6 @@
 # Implements: REQ-d00235-B
 """Comment management CLI commands."""
+
 from __future__ import annotations
 
 import argparse

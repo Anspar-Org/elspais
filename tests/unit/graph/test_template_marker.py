@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import pytest
 
+from elspais.config.schema import ElspaisConfig
 from elspais.graph.GraphNode import NodeKind
 from elspais.graph.parsers.lark import GrammarFactory
 from elspais.graph.parsers.lark.transformers.requirement import RequirementTransformer
@@ -22,22 +23,37 @@ from elspais.utilities.patterns import IdPatternConfig, IdResolver
 from tests.core.graph_test_helpers import build_graph, make_requirement
 
 
+def _validated(config: dict) -> dict:
+    """Return ``config`` after checking a configuration file could hold it.
+
+    ``IdPatternConfig.from_dict`` takes a raw dictionary and never consults the
+    config schema, so a fixture built here could describe a repository no
+    ``.elspais.toml`` can produce -- and pin grammar behaviour no user can
+    reach. Every fixture is therefore validated the way a file on disk is,
+    before any resolver is built from it.
+    """
+    ElspaisConfig.model_validate(config)
+    return config
+
+
 def _make_lark_pipeline():
     """Create Lark parser + transformer with standard HHT-like pattern."""
     config = IdPatternConfig.from_dict(
-        {
-            "project": {"namespace": "REQ"},
-            "id-patterns": {
-                "canonical": "{namespace}-{type.letter}{component}",
-                "aliases": {"short": "{type.letter}{component}"},
-                "types": {
-                    "prd": {"level": 1, "aliases": {"letter": "p"}},
-                    "ops": {"level": 2, "aliases": {"letter": "o"}},
-                    "dev": {"level": 3, "aliases": {"letter": "d"}},
+        _validated(
+            {
+                "project": {"namespace": "REQ"},
+                "levels": {
+                    "prd": {"rank": 1, "letter": "p", "implements": ["prd"]},
+                    "ops": {"rank": 2, "letter": "o", "implements": ["ops", "prd"]},
+                    "dev": {"rank": 3, "letter": "d", "implements": ["dev", "ops", "prd"]},
                 },
-                "component": {"style": "numeric", "digits": 5, "leading_zeros": True},
-            },
-        }
+                "id-patterns": {
+                    "canonical": "{namespace}-{level.letter}{component}",
+                    "aliases": {"short": "{level.letter}{component}"},
+                    "component": {"style": "numeric", "digits": 5, "leading_zeros": True},
+                },
+            }
+        )
     )
     resolver = IdResolver(config)
     factory = GrammarFactory(resolver)
@@ -184,9 +200,9 @@ class TestTemplateStereotypeSeat:
         assertion_nodes = [c for c in root.iter_children() if c.kind == NodeKind.ASSERTION]
         assert len(assertion_nodes) == 2
         for a in assertion_nodes:
-            assert (
-                a.get_field("stereotype") == Stereotype.TEMPLATE
-            ), f"Assertion {a.id} should inherit TEMPLATE stereotype"
+            assert a.get_field("stereotype") == Stereotype.TEMPLATE, (
+                f"Assertion {a.id} should inherit TEMPLATE stereotype"
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -218,9 +234,9 @@ class TestTemplateRoundTripRender:
         rendered = render_node(node)
         # The metadata line is the third line (header, blank, metadata).
         meta_line = next(line for line in rendered.split("\n") if line.startswith("**Level**:"))
-        assert (
-            "**Template**" in meta_line
-        ), f"Expected '**Template**' on metadata line, got: {meta_line!r}"
+        assert "**Template**" in meta_line, (
+            f"Expected '**Template**' on metadata line, got: {meta_line!r}"
+        )
 
     # Verifies: REQ-p00014-E
     def test_render_omits_template_marker_for_concrete(self) -> None:
@@ -241,9 +257,9 @@ class TestTemplateRoundTripRender:
         assert node.get_field("stereotype") == Stereotype.CONCRETE
 
         rendered = render_node(node)
-        assert (
-            "**Template**" not in rendered
-        ), f"CONCRETE REQ rendering should not include **Template**: {rendered!r}"
+        assert "**Template**" not in rendered, (
+            f"CONCRETE REQ rendering should not include **Template**: {rendered!r}"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -305,9 +321,9 @@ class TestSatisfiesAcceptedInBothForms:
 
         rendered = render_node(node)
         # Canonical output uses bold form.
-        assert (
-            "**Satisfies**: REQ-p80001" in rendered
-        ), f"Expected canonical '**Satisfies**: ...' in output, got: {rendered!r}"
+        assert "**Satisfies**: REQ-p80001" in rendered, (
+            f"Expected canonical '**Satisfies**: ...' in output, got: {rendered!r}"
+        )
         # And the bare form should NOT appear (would mean we double-rendered or
         # left the legacy line).
         for line in rendered.split("\n"):

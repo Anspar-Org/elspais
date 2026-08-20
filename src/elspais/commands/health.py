@@ -23,24 +23,20 @@ from typing import TYPE_CHECKING, Any
 
 from elspais.config.schema import ElspaisConfig
 from elspais.config.status_roles import StatusRole
+from elspais.graph.aggregation import EvidenceResult
+from elspais.graph.reference_faults import FaultClass, FaultCode
 
 if TYPE_CHECKING:
     from elspais.graph.federated import FederatedGraph
     from elspais.graph.GraphNode import GraphNode
     from elspais.utilities.patterns import IdResolver
 
-_SCHEMA_FIELDS = {f.alias or name for name, f in ElspaisConfig.model_fields.items()} | set(
-    ElspaisConfig.model_fields.keys()
-)
-
 
 def _validate_config(config: dict[str, Any]) -> ElspaisConfig:
-    """Validate a config dict into ElspaisConfig, stripping non-schema keys."""
-    filtered = {k: v for k, v in config.items() if k in _SCHEMA_FIELDS}
-    assoc = filtered.get("associates")
-    if isinstance(assoc, dict) and "paths" in assoc:
-        filtered.pop("associates", None)
-    return ElspaisConfig.model_validate(filtered)
+    """Validate a config dict into ElspaisConfig (see config.validate_config)."""
+    from elspais.config import validate_config
+
+    return validate_config(config)
 
 
 # Implements: REQ-d00085-I, REQ-d00204-D
@@ -254,11 +250,10 @@ def check_spec_implements_resolve(
             target = graph.find_by_id(ref)
             if target is None:
                 # Check if it's an assertion reference (e.g., REQ-xxx-A)
+                # Splitting a reference needs the grammar that admits it;
+                # guessing the boundary character finds whichever one the
+                # component itself contains and names a different parent.
                 split = resolver.split_assertion_ref(ref) if resolver else None
-                if split is None and "-" in ref:
-                    parts = ref.rsplit("-", 1)
-                    if len(parts) == 2:
-                        split = (parts[0], parts[1])
                 if split is not None:
                     parent = graph.find_by_id(split[0])
                     if parent is not None:
@@ -306,11 +301,10 @@ def check_spec_refines_resolve(
             target = graph.find_by_id(ref)
             if target is None:
                 # Check assertion reference
+                # Splitting a reference needs the grammar that admits it;
+                # guessing the boundary character finds whichever one the
+                # component itself contains and names a different parent.
                 split = resolver.split_assertion_ref(ref) if resolver else None
-                if split is None and "-" in ref:
-                    parts = ref.rsplit("-", 1)
-                    if len(parts) == 2:
-                        split = (parts[0], parts[1])
                 if split is not None:
                     parent = graph.find_by_id(split[0])
                     if parent is not None:
@@ -359,11 +353,10 @@ def check_spec_satisfies_resolve(
             target = graph.find_by_id(ref)
             if target is None:
                 # Check assertion reference
+                # Splitting a reference needs the grammar that admits it;
+                # guessing the boundary character finds whichever one the
+                # component itself contains and names a different parent.
                 split = resolver.split_assertion_ref(ref) if resolver else None
-                if split is None and "-" in ref:
-                    parts = ref.rsplit("-", 1)
-                    if len(parts) == 2:
-                        split = (parts[0], parts[1])
                 if split is not None:
                     parent = graph.find_by_id(split[0])
                     if parent is not None:
@@ -660,118 +653,339 @@ def check_structural_orphans(
     )
 
 
-# Implements: REQ-d00204-E
-def check_broken_references(graph: FederatedGraph, config=None) -> HealthCheck:
-    """Check for edges targeting non-existent nodes.
+def _fault_location(
+    graph: FederatedGraph, source_id: str, line: int | None
+) -> tuple[str | None, int | None]:
+    """The file path and line a fault's ``source_id`` names.
 
-    Distinguishes within-repo broken references (error severity) from
-    cross-repo references where the target repo is in error state
-    (warning severity with clone assistance info).
-
-    When validation.allow_unresolved_cross_repo is True, broken references
-    whose target ID uses a different namespace prefix than the current repo
-    are silently suppressed.
+    A fault anchored to a CODE/TEST node reads its file through
+    ``file_node()`` and its line through ``parse_line``. A fault anchored
+    directly to a FILE node (an empty reference list, a trailing separator,
+    a comment citing a requirement without declaring one -- no CODE/TEST
+    node exists for those lines) reads its own
+    ``relative_path``, and its line has nowhere to live but the fault
+    itself, so *line* (threaded from ``ReferenceFault.line``) wins whenever
+    it is set (REQ-d00252-K).
     """
-    broken = graph.broken_references()
+    from elspais.graph import NodeKind
 
-    suppressed_count = 0
-    if config is not None:
-        _tc = _validate_config(config)
-        _allow_unresolved = _tc.validation.allow_unresolved_cross_repo if _tc else False
-    else:
-        _allow_unresolved = False
-    if _allow_unresolved:
-        local_broken = [br for br in broken if not br.presumed_foreign]
-        suppressed_count = len(broken) - len(local_broken)
-        broken = local_broken
+    node = graph.find_by_id(source_id)
+    if node is None:
+        return None, line
+    file_n = node if node.kind == NodeKind.FILE else node.file_node()
+    file_path = file_n.get_field("relative_path") if file_n else None
+    resolved_line = line if line is not None else node.get_field("parse_line")
+    return file_path, resolved_line
 
-    if broken:
-        # Identify error-state repos and collect all known node IDs
-        error_repos = {entry.name for entry in graph.iter_repos() if entry.graph is None}
-        # All node IDs owned by live repos — if a target isn't here and
-        # error-state repos exist, it might belong to a missing repo
-        owned_ids = set(graph._ownership.keys()) if hasattr(graph, "_ownership") else set()
 
-        within_repo_findings = []
-        cross_repo_findings = []
+# Implements: REQ-d00269-F, REQ-p00019-J, REQ-p00019-K
+_REFERENCE_CHECKS: tuple[tuple[FaultClass, str, str], ...] = (
+    (FaultClass.MALFORMED, "references.malformed", "does not read as a reference"),
+    (
+        FaultClass.UNKNOWN_NAMESPACE,
+        "references.unknown_namespace",
+        "no configured repository claims this identifier",
+    ),
+    (
+        FaultClass.UNKNOWN_REQUIREMENT,
+        "references.unknown_requirement",
+        "claimed, but no such requirement exists",
+    ),
+    (
+        FaultClass.UNKNOWN_ASSERTION,
+        "references.unknown_assertion",
+        "the requirement exists, but not that label",
+    ),
+    # The class covers every reference that read and resolved and whose
+    # relationship is nonetheless refused -- a keyword the file kind may not
+    # use, and a target the list names more than once.  The description says
+    # only what is true of both; which one it was is the finding's code
+    # (REQ-p00019-J, REQ-d00252-K).
+    (
+        FaultClass.FORBIDDEN,
+        "references.forbidden",
+        "resolve, but the relationship they declare is refused",
+    ),
+)
 
-        for br in broken:
-            try:
-                source_entry = graph.repo_for(br.source_id)
-                repo_name = source_entry.name
-            except KeyError:
-                repo_name = None
 
-            # Implements: REQ-p00014-F
-            # Surface the optional diagnostic verbatim so authors see the
-            # specific guidance attached by the validation matrix.
-            base_msg = f"Broken reference: {br.source_id} -> {br.target_id} ({br.edge_kind})"
-            if br.diagnostic:
-                msg = f"{base_msg}: {br.diagnostic}"
-            else:
-                msg = base_msg
-            finding = HealthFinding(
-                message=msg,
-                node_id=br.source_id,
-                repo=repo_name,
-            )
+# Implements: REQ-d00204-E
+# The two classes an unreadable repository can actually account for. A
+# reference REACHES one of these by failing to find its target, which a
+# missing repository explains. The other three refute the explanation on
+# their own terms: MALFORMED identified no target at all, and FORBIDDEN and
+# UNKNOWN_ASSERTION both resolved theirs -- so the repository owning it
+# demonstrably loaded. Naming a missing repository beside any of those would
+# be prose naming a cause the finding does not have, which is the defect the
+# whole classification exists to remove (REQ-p00019-J, REQ-d00252-K).
+_CLASSES_A_MISSING_REPO_EXPLAINS = frozenset(
+    {FaultClass.UNKNOWN_NAMESPACE, FaultClass.UNKNOWN_REQUIREMENT}
+)
 
-            # Only classify as cross-repo if the target is genuinely
-            # unresolvable AND error-state repos exist that might contain it.
-            # A target that isn't in any live repo's ownership map could
-            # plausibly belong to a missing repo.
-            target_in_live_repo = br.target_id in owned_ids
-            if error_repos and not target_in_live_repo:
-                cross_repo_findings.append(finding)
-            else:
-                within_repo_findings.append(finding)
 
-        all_findings = within_repo_findings + cross_repo_findings
+def _unavailable_repos(graph: FederatedGraph) -> list[dict[str, str]]:
+    """The configured repositories that could not be loaded, with where each
+    one lives and why it failed.
 
-        # Severity: error if any within-repo broken refs, warning if only cross-repo
-        if within_repo_findings:
-            severity = "error"
-            msg_parts = [f"{len(within_repo_findings)} broken reference(s)"]
-            if cross_repo_findings:
-                msg_parts.append(
-                    f"{len(cross_repo_findings)} possibly due to missing repo(s): "
-                    + ", ".join(sorted(error_repos))
-                )
-            message = "; ".join(msg_parts)
-        else:
-            severity = "warning"
-            message = (
-                f"{len(cross_repo_findings)} broken reference(s), "
-                f"possibly due to missing repo(s): {', '.join(sorted(error_repos))}"
-            )
+    A reader who cannot resolve a reference because a repository is missing
+    needs to know how to obtain it, and that belongs in the report whatever
+    severity the project has chosen for the class -- severity follows the
+    class a reference reached, this follows from the federation's state.
 
-        return HealthCheck(
-            name="spec.broken_references",
-            passed=False,
-            message=message,
-            category="spec",
-            severity=severity,
-            details={
-                "count": len(broken),
-                "within_repo": len(within_repo_findings),
-                "cross_repo": len(cross_repo_findings),
-                "error_repos": sorted(error_repos),
-                "references": [
-                    {"source": br.source_id, "target": br.target_id, "kind": br.edge_kind}
-                    for br in broken[:20]
-                ],
-            },
-            findings=all_findings,
+    Which reports it belongs on is decided by the caller, and REQ-d00204-E
+    scopes it: the obligation attaches to a reference that fails *because*
+    the repository owning its target is in an error state.
+    """
+    out: list[dict[str, str]] = []
+    for entry in graph.iter_repos():
+        if entry.graph is not None:
+            continue
+        out.append(
+            {
+                "name": entry.name,
+                "path": str(entry.repo_root) if entry.repo_root else "",
+                "error": entry.error or "",
+            }
         )
+    return sorted(out, key=lambda r: r["name"])
 
-    message = "No broken references"
-    if suppressed_count:
-        message += f" ({suppressed_count} cross-repo suppressed)"
+
+# Implements: REQ-d00275-A
+def check_reference_class(
+    graph: FederatedGraph,
+    config: dict[str, Any] | None,
+    fault_class: FaultClass,
+    name: str,
+    description: str,
+) -> HealthCheck:
+    """Report the faults of one class, under a description true of each.
+
+    A fault belongs to exactly one class -- the furthest stage reading it
+    reached -- so a finding appears under one check and a count of findings
+    is a count of distinct facts (REQ-p00019-K).
+    """
+    typed = _validate_config(config or {})
+    severity = getattr(typed.rules.references, fault_class.label)
+    faults = [f for f in graph.broken_references() if f.fault_class is fault_class]
+    unavailable = (
+        _unavailable_repos(graph) if fault_class in _CLASSES_A_MISSING_REPO_EXPLAINS else []
+    )
+    if not faults:
+        return HealthCheck(
+            name=name,
+            passed=True,
+            message=f"No references that {description}",
+            category="references",
+            severity=severity,
+        )
+    findings = []
+    for f in faults:
+        codes = " ".join(c for c in f.codes if c != FaultCode.SYNTAX_ERROR)
+        detail = f" [{codes}]" if codes else ""
+        try:
+            repo_name = graph.repo_for(f.source_id).name
+        except KeyError:
+            repo_name = None
+        file_path, line = _fault_location(graph, f.source_id, f.line)
+        findings.append(
+            HealthFinding(
+                message=(
+                    f"{f.source_id} -> {f.target_id} ({f.edge_kind}) "
+                    f"-- {f.diagnostic or description}{detail}"
+                ),
+                node_id=f.source_id,
+                repo=repo_name,
+                file_path=file_path,
+                line=line,
+            )
+        )
+    # Implements: REQ-d00204-E
+    message = f"{len(faults)} reference(s): {description}"
+    if unavailable:
+        obtain = "; ".join(
+            f"{r['name']} at {r['path']}" + (f" ({r['error']})" if r["error"] else "")
+            for r in unavailable
+        )
+        message += f" -- a target may belong to a repository that could not be read: {obtain}"
     return HealthCheck(
-        name="spec.broken_references",
-        passed=True,
+        name=name,
+        passed=severity == "ok",
         message=message,
-        category="spec",
+        category="references",
+        severity=severity,
+        details={
+            "count": len(faults),
+            "unavailable_repos": unavailable,
+            "references": [
+                {
+                    "source": f.source_id,
+                    "target": f.target_id,
+                    "kind": f.edge_kind,
+                    "codes": list(f.codes),
+                }
+                for f in faults[:20]
+            ],
+        },
+        findings=findings,
+    )
+
+
+# Implements: REQ-d00272-G
+def check_reference_keyword_form(
+    graph: FederatedGraph, config: dict[str, Any] | None
+) -> HealthCheck:
+    """Report a keyword written in a non-canonical form.
+
+    A style finding never costs the edge its keyword introduces -- it is
+    reported under its own rule, at its own severity, so it can never join a
+    bucket that counts references that failed to bind.
+    """
+    typed = _validate_config(config or {})
+    severity = typed.rules.references.keyword_form
+    findings_raw = graph.style_findings()
+    if not findings_raw:
+        return HealthCheck(
+            name="references.keyword_form",
+            passed=True,
+            message="No keywords written in a non-canonical form",
+            category="references",
+            severity=severity,
+        )
+    findings = []
+    for sf in findings_raw:
+        try:
+            repo_name = graph.repo_for(sf.source_id).name
+        except KeyError:
+            repo_name = None
+        file_path, line = _fault_location(graph, sf.source_id, sf.line)
+        findings.append(
+            HealthFinding(
+                message=f"{sf.source_id}: {sf.code} -- keyword written in a non-canonical form",
+                node_id=sf.source_id,
+                repo=repo_name,
+                file_path=file_path,
+                line=line,
+            )
+        )
+    return HealthCheck(
+        name="references.keyword_form",
+        passed=severity == "ok",
+        message=f"{len(findings_raw)} keyword(s) written in a non-canonical form",
+        category="references",
+        severity=severity,
+        details={"count": len(findings_raw)},
+        findings=findings,
+    )
+
+
+# Implements: REQ-d00272-N
+def check_reference_identifier_form(
+    graph: FederatedGraph, config: dict[str, Any] | None
+) -> HealthCheck:
+    """Report a reference spelled in a form other than the canonical one.
+
+    The referent counterpart of ``references.keyword_form``, and it withholds
+    just as little: a spelling the configuration admits produces the
+    relationship it names, and that it is not the canonical spelling is a
+    fact about the file rather than a reason to refuse an edge.  So it is
+    reported under its own rule and can never join a check that counts
+    references that failed to bind.
+    """
+    typed = _validate_config(config or {})
+    severity = typed.rules.references.identifier_form
+    findings_raw = graph.identifier_form_findings()
+    if not findings_raw:
+        return HealthCheck(
+            name="references.identifier_form",
+            passed=True,
+            message="No references spelled in a non-canonical form",
+            category="references",
+            severity=severity,
+        )
+    findings = []
+    for f in findings_raw:
+        try:
+            repo_name = graph.repo_for(f.source_id).name
+        except KeyError:
+            repo_name = None
+        file_path, line = _fault_location(graph, f.source_id, f.line)
+        codes = " ".join(c for c in f.codes if c != FaultCode.NON_CANONICAL_SPELLING)
+        detail = f" [{codes}]" if codes else ""
+        findings.append(
+            HealthFinding(
+                message=(
+                    f"{f.text} -- spelled in a form the configuration admits but "
+                    f"is not the canonical one; the relationship it names still "
+                    f"holds{detail}"
+                ),
+                node_id=f.source_id,
+                repo=repo_name,
+                file_path=file_path,
+                line=line,
+            )
+        )
+    return HealthCheck(
+        name="references.identifier_form",
+        passed=severity == "ok",
+        message=f"{len(findings_raw)} reference(s) spelled in a non-canonical form",
+        category="references",
+        severity=severity,
+        details={"count": len(findings_raw)},
+        findings=findings,
+    )
+
+
+# Implements: REQ-d00272-O
+def check_reference_undeclared(graph: FederatedGraph, config: dict[str, Any] | None) -> HealthCheck:
+    """Report a comment that cites an identifier without declaring anything.
+
+    Nothing about such a comment is malformed, so reporting it as a
+    malformed reference would be wrong twice: it would name a defect its
+    author does not have, and the useful message is not that something is
+    broken but that saying it with a keyword would make it count.  No
+    relationship is produced from it -- an informal citation is evidence of
+    intent, and inferring an edge from intent is the failure the whole
+    vocabulary exists to prevent.
+    """
+    typed = _validate_config(config or {})
+    severity = typed.rules.references.undeclared
+    cites = graph.undeclared_relationships()
+    if not cites:
+        return HealthCheck(
+            name="references.undeclared",
+            passed=True,
+            message="No comments cite a requirement without declaring a relationship",
+            category="references",
+            severity=severity,
+        )
+    findings = []
+    for c in cites:
+        try:
+            repo_name = graph.repo_for(c.source_id).name
+        except KeyError:
+            repo_name = None
+        file_path, line = _fault_location(graph, c.source_id, c.line)
+        findings.append(
+            HealthFinding(
+                message=(
+                    f"{c.text} -- a relationship appears to be intended and is not "
+                    "declared; introduce the identifier with a Traceability keyword "
+                    "(e.g. `Implements:` or `Verifies:`) for it to count"
+                ),
+                node_id=c.source_id,
+                repo=repo_name,
+                file_path=file_path,
+                line=line,
+            )
+        )
+    return HealthCheck(
+        name="references.undeclared",
+        passed=severity == "ok",
+        message=(f"{len(cites)} comment(s) cite a requirement without declaring a relationship"),
+        category="references",
+        severity=severity,
+        details={"count": len(cites)},
+        findings=findings,
     )
 
 
@@ -922,6 +1136,7 @@ def check_spec_no_assertions(graph: FederatedGraph, config: dict[str, Any]) -> H
         passed=True,
         message="All requirements have at least one assertion",
         category="spec",
+        severity=severity,
     )
 
 
@@ -1221,8 +1436,21 @@ def check_spec_index_current(
     # Byte-level mismatch — still provide the legacy ID-diff breakdown for context.
     import re
 
-    index_req_ids = set(re.findall(r"REQ-[a-z0-9-]+", actual, re.IGNORECASE))
-    index_jny_ids = set(re.findall(r"JNY-[A-Za-z0-9-]+", actual))
+    # Both grammars come from where they are defined: the repository's own
+    # configuration for requirement identifiers, the canonical pattern for
+    # journeys. Spelled here, this breakdown would recognise a different set
+    # of identifiers than the index it is comparing against was generated
+    # from, and would report every requirement missing under any namespace
+    # other than the one written into the pattern.
+    from elspais.config import config_defaults
+    from elspais.graph.parsers.patterns import JOURNEY_REF_PATTERN
+    from elspais.utilities.patterns import build_resolver
+
+    # An empty config is not the default configuration -- it has no levels,
+    # so its grammar matches no identifier at all.
+    _identifier = build_resolver(config or config_defaults()).grammar().identifier
+    index_req_ids = set(re.findall(_identifier, actual))
+    index_jny_ids = set(JOURNEY_REF_PATTERN.findall(actual))
     graph_req_ids = _indexed_node_ids(graph, NodeKind.REQUIREMENT, include_assoc)
     graph_jny_ids = _indexed_node_ids(graph, NodeKind.USER_JOURNEY, include_assoc)
 
@@ -1302,7 +1530,7 @@ def _downgrade_retired_findings(
 # =============================================================================
 
 
-# Implements: REQ-d00223-A
+# Implements: REQ-d00223-A, REQ-d00223-D
 def check_term_duplicates(
     duplicates: list[tuple],
     severity: str = "error",
@@ -1350,7 +1578,7 @@ def check_term_duplicates(
     )
 
 
-# Implements: REQ-d00223-B
+# Implements: REQ-d00223-B, REQ-d00223-D
 def check_undefined_terms(
     undefined: list[dict],
     severity: str = "warning",
@@ -1394,7 +1622,7 @@ def check_undefined_terms(
     )
 
 
-# Implements: REQ-d00223-C
+# Implements: REQ-d00223-C, REQ-d00223-D
 def check_unmarked_usage(
     unmarked: list[dict],
     severity: str = "warning",
@@ -1618,7 +1846,8 @@ def check_term_canonical_form(
                 continue
             if ref.is_canonical(canonical):
                 continue
-            # Implements: REQ-d00237-F — embedded-in-identifier occurrences are
+            # Implements: REQ-d00237-F
+            # Embedded-in-identifier occurrences are
             # references, not non-canonical prose; leave them untouched.
             if ref.embedded:
                 continue
@@ -1679,7 +1908,8 @@ def run_term_checks(
     unmarked: list[dict] = []
     for entry in entries:
         for ref in entry.references:
-            # Implements: REQ-d00237-F — occurrences embedded in a compound
+            # Implements: REQ-d00237-F
+            # Occurrences embedded in a compound
             # identifier (e.g. a REQ-ID) are references, not unmarked-emphasis
             # violations.
             if ref.embedded:
@@ -1704,16 +1934,33 @@ def run_term_checks(
     ]
 
 
-# Implements: REQ-d00202-A
+# Implements: REQ-d00202-A+D+I, REQ-d00203-C
 def check_associate_paths(
     config: dict[str, Any],
     repo_root: Path,
 ) -> HealthCheck:
-    """Validate that configured associate paths exist and contain spec files."""
-    from elspais.config import get_associates_config
+    """Validate that every federated repository loads and contains spec files.
 
-    associates = get_associates_config(config)
-    if not associates:
+    The subject is the whole federation, not only the repositories this
+    one names: a repository reached through an associate's own
+    declarations contributes to the same graph, so its problems are this
+    project's problems and have to be visible from here.
+    """
+    from elspais.associates import discover_associate_from_path
+    from elspais.graph.federation_plan import plan_federation_or_error
+
+    plan, plan_error = plan_federation_or_error(config, repo_root)
+    if plan_error is not None:
+        return HealthCheck(
+            name="config.associate_paths",
+            passed=False,
+            message="Federation membership could not be resolved",
+            category="spec",
+            findings=[HealthFinding(message=plan_error)],
+        )
+
+    members = plan[1:]
+    if not members:
         return HealthCheck(
             name="config.associate_paths",
             passed=True,
@@ -1723,41 +1970,44 @@ def check_associate_paths(
         )
 
     findings: list[HealthFinding] = []
-    for assoc_name, assoc_info in associates.items():
-        path_str = assoc_info["path"]
-        p = Path(path_str)
-        if not p.is_absolute():
-            p = repo_root / p
-        if not p.exists():
+    for member in members:
+        via = " -> ".join(member.declaration_path)
+        if member.error is not None:
             findings.append(
                 HealthFinding(
-                    message=f"Associate '{assoc_name}' path does not exist: {path_str}",
-                    node_id=assoc_name,
+                    message=f"Associate '{member.name}' (declared via {via}): {member.error}",
+                    node_id=member.name,
                 )
             )
-        else:
-            from elspais.associates import discover_associate_from_path
+            continue
 
-            disc_result = discover_associate_from_path(p)
-            if isinstance(disc_result, str):
-                findings.append(
-                    HealthFinding(
-                        message=f"Associate '{assoc_name}' is misconfigured: {disc_result}",
-                        node_id=assoc_name,
-                    )
+        # The planner answers whether a configuration could be loaded for
+        # this directory; it does not answer whether the directory is
+        # itself an elspais repository, which is what discovery decides.
+        disc_result = discover_associate_from_path(member.repo_root)
+        if isinstance(disc_result, str):
+            findings.append(
+                HealthFinding(
+                    message=(
+                        f"Associate '{member.name}' (declared via {via}) "
+                        f"is misconfigured: {disc_result}"
+                    ),
+                    node_id=member.name,
                 )
-            else:
-                assoc_spec_dir = p / disc_result.spec_path
-                if not assoc_spec_dir.exists() or not any(assoc_spec_dir.glob("*.md")):
-                    findings.append(
-                        HealthFinding(
-                            message=(
-                                f"Associate '{assoc_name}' has no spec files"
-                                f" in {disc_result.spec_path}"
-                            ),
-                            node_id=assoc_name,
-                        )
-                    )
+            )
+            continue
+
+        assoc_spec_dir = member.repo_root / disc_result.spec_path
+        if not assoc_spec_dir.exists() or not any(assoc_spec_dir.glob("*.md")):
+            findings.append(
+                HealthFinding(
+                    message=(
+                        f"Associate '{member.name}' (declared via {via}) has no spec files"
+                        f" in {disc_result.spec_path}"
+                    ),
+                    node_id=member.name,
+                )
+            )
 
     if findings:
         return HealthCheck(
@@ -1770,7 +2020,7 @@ def check_associate_paths(
     return HealthCheck(
         name="config.associate_paths",
         passed=True,
-        message=f"All {len(associates)} associate path(s) valid",
+        message=f"All {len(members)} federated repository path(s) valid",
         category="spec",
     )
 
@@ -1878,6 +2128,128 @@ def check_no_requirements(graph: FederatedGraph) -> HealthCheck:
     )
 
 
+# The settings the invoking repository governs for the whole federation
+# (REQ-d00275-A): how a finding is judged, scored and reported. Deliberately
+# not every setting under [rules] -- hierarchy and format state the rules a
+# repository's own content is authored by, and those stay with that repository
+# (REQ-d00204-A). Status roles sit under [rules.format] but decide how a
+# requirement's status is read when reporting, so they are governed.
+_GOVERNED_SETTING_ROOTS: tuple[str, ...] = (
+    "rules.coverage",
+    "rules.references",
+    "rules.format.status_roles",
+)
+
+
+def _flatten_settings(value: Any, prefix: str) -> dict[str, Any]:
+    """Dotted-key view of a config subtree, for comparing two of them.
+
+    An empty table is a leaf, not an absence. A setting whose value is a table
+    of entries is answered by "no entries" as surely as by any other value, and
+    dropping it would let one side of a comparison read as unset when it is in
+    fact what the run judges by.
+    """
+    if not isinstance(value, dict) or not value:
+        return {prefix: value}
+    flat: dict[str, Any] = {}
+    for key, sub in value.items():
+        flat.update(_flatten_settings(sub, f"{prefix}.{key}" if prefix else str(key)))
+    return flat
+
+
+def _governed_settings(config: dict[str, Any] | None) -> dict[str, Any]:
+    """The governed settings a config holds, as dotted keys.
+
+    Filters whatever mapping it is given; it does not fill anything in. A
+    config loaded from disk arrives with the schema defaults already merged,
+    so a member that declared no governed setting still carries the values it
+    would have judged by, which is what the disclosure is about -- a member
+    silently relying on a default the invoking project overrode would have
+    reported differently on its own, and that is worth being told.
+    """
+    if not config:
+        return {}
+    flat = _flatten_settings(config, "")
+    return {
+        key: val
+        for key, val in flat.items()
+        if any(key == root or key.startswith(f"{root}.") for root in _GOVERNED_SETTING_ROOTS)
+    }
+
+
+# Implements: REQ-d00275-D
+def check_governed_rule_divergence(
+    graph: FederatedGraph, config: dict[str, Any] | None = None
+) -> HealthCheck:
+    """Disclose where a member configured a governed setting differently.
+
+    The invoking repository's configuration governs how findings are judged
+    and reported across the federation, which means a member is being measured
+    by rules its maintainer did not choose. Where the two differ, that member's
+    own repository would have reported something else, and a finding silenced
+    by the invoking configuration is otherwise indistinguishable from a finding
+    that was never there.
+
+    A member reaches a differing value two ways -- by declaring it, or by
+    never declaring it and keeping a default the invoking project overrode.
+    Both are disclosed, because both mean the member's own run would report
+    something else, which is the thing worth knowing. Neither is reported as a
+    choice the member's maintainer made.
+
+    Never a failure: differing configurations are what federated repositories
+    legitimately do, so this reports and does not judge (REQ-d00275-D).
+    """
+    invoking = _governed_settings(config)
+    findings: list[HealthFinding] = []
+    for entry in graph.iter_repos():
+        if entry.config is None or entry.config == config:
+            continue
+        member = _governed_settings(entry.config)
+        for key in sorted(set(invoking) | set(member)):
+            if key not in member:
+                continue
+            theirs = member[key]
+            if key not in invoking:
+                mine = "no value"
+            else:
+                mine = repr(invoking[key])
+                if invoking[key] == theirs:
+                    continue
+            # "would judge by", not "sets": a config arrives with defaults
+            # merged, so a member reaching this value by never declaring it is
+            # indistinguishable here from one that wrote it down. What is true
+            # of both is the value the member would have judged by.
+            findings.append(
+                HealthFinding(
+                    message=(
+                        f"{entry.name} would judge {key} by {theirs!r}; this run judges "
+                        f"by {mine}, configured here"
+                    ),
+                    repo=entry.name,
+                )
+            )
+    if not findings:
+        return HealthCheck(
+            name="config.governed_rules",
+            passed=True,
+            message="No federated member configures a governed rule differently",
+            category="spec",
+            severity="info",
+        )
+    repos = sorted({f.repo for f in findings if f.repo})
+    return HealthCheck(
+        name="config.governed_rules",
+        passed=True,
+        message=(
+            f"{len(findings)} governed setting(s) across {len(repos)} member(s) differ "
+            "from the configuration this run judges by"
+        ),
+        category="spec",
+        severity="info",
+        findings=findings,
+    )
+
+
 # Implements: REQ-d00204-A, REQ-d00204-B, REQ-d00204-F
 def run_spec_checks(
     graph: FederatedGraph,
@@ -1915,10 +2287,17 @@ def run_spec_checks(
 
     checks: list[HealthCheck] = [
         check_no_requirements(graph),
+        check_governed_rule_divergence(graph, config),
         check_associate_paths(config, _repo_root),
         check_spec_files_parseable(graph),
         check_spec_no_duplicates(graph),
-        check_broken_references(graph, config),
+        *[
+            check_reference_class(graph, config, fault_class, name, description)
+            for fault_class, name, description in _REFERENCE_CHECKS
+        ],
+        check_reference_keyword_form(graph, config),
+        check_reference_identifier_form(graph, config),
+        check_reference_undeclared(graph, config),
         check_spec_hash_integrity(graph),
         check_no_cycles(graph),
     ]
@@ -2125,8 +2504,20 @@ def check_dimension_coverage(
 ) -> HealthCheck:
     """Check coverage for one of the 5 CoverageDimension dimensions.
 
-    Reports both requirement-level (any coverage) and assertion-level
-    (direct/indirect percentages) metrics.
+    Reports the requirement-level count and the assertion-level figures, each
+    naming the measure it is on (REQ-d00258-A). The headline is the
+    per-*Assertion* total (REQ-d00069-N) -- each *Assertion* counted once at
+    the greatest of its four measures -- and the four measures behind it are
+    listed under the ONE shared vocabulary (``MEASURE_WORDS``), the same words
+    `summary`, `trace` and the viewer render. The immediate direct measure
+    ("cited by name here") is named first because it is what the gap surfaces
+    answer on (REQ-d00258-M), so a reader can see why this check reports
+    coverage while `gaps` still lists work.
+
+    The measures are NOT nested and are not described as though they were: an
+    *Assertion* can carry credit on several of them, which is why the total is
+    a per-*Assertion* maximum rather than their sum. Each label therefore says
+    what its own figure counts and claims no ordering against its neighbours.
 
     Args:
         graph: The graph to check.
@@ -2141,7 +2532,11 @@ def check_dimension_coverage(
             requirement levels are counted (see ``aggregate_dimension``).
         message_suffix: Optional clarifying text appended to the message.
     """
-    from elspais.graph.aggregation import aggregate_dimension
+    from elspais.graph.aggregation import (
+        MEASURE_WORDS,
+        WORK_LIST_MEASURE,
+        aggregate_dimension,
+    )
     from elspais.graph.metrics import fmt_assertion_count
 
     dim_labels = {
@@ -2150,7 +2545,6 @@ def check_dimension_coverage(
         "verified": ("Passing", "tests"),
         "uat_coverage": ("UAT Covered", "uat"),
         "uat_verified": ("UAT Passed", "uat"),
-        "code_tested": ("Code Tested (line coverage)", "code"),
         "lcov_tested": ("Coverage-Verified (lcov)", "tests"),
     }
     label, category = dim_labels.get(dimension, (dimension, "code"))
@@ -2160,29 +2554,72 @@ def check_dimension_coverage(
     # aggregation module -- not a second re-implementation of the walk here.
     agg = aggregate_dimension(graph, dimension, config=config, level_filter=level_filter)
     req_count = agg.req_count
-    req_with_any = agg.req_with_any  # REQs where dim.indirect > 0
-    req_with_direct = agg.req_with_direct  # REQs where dim.direct > 0
+    req_with_any = agg.req_with_any  # REQs covered on the per-Assertion total
+    req_with_direct = agg.req_with_direct  # REQs with immediate-direct coverage
     total_assertions = agg.total
-    direct_assertions = agg.direct
-    indirect_assertions = agg.covered
     has_any_failures = agg.has_failures
 
+    # Implements: REQ-d00258-A, REQ-d00069-L, REQ-d00069-N
+    # The headline is the per-*Assertion* total -- the greatest of the four
+    # measures per *Assertion*, so each *Assertion* is counted once however
+    # many ways it is covered -- and the four measures behind it are reported
+    # with it, so a reader is never shown a figure without the evidence that
+    # produced it. Every figure is read from the shared aggregation rather
+    # than recomputed here.
+    total_covered = agg.total_covered
+    measures = {
+        "immediate_direct": agg.immediate_direct,
+        "immediate_indirect": agg.immediate_indirect,
+        "rolled_direct": agg.rolled_direct,
+        "rolled_indirect": agg.rolled_indirect,
+    }
+    # The immediate direct measure is also the one the work-listing surfaces
+    # answer on (REQ-d00258-M), so it is named first below.
+    cited_assertions = measures[WORK_LIST_MEASURE]
+
+    def _pct(value: float) -> float:
+        return (value / total_assertions * 100) if total_assertions > 0 else 0.0
+
     req_pct = (req_with_any / req_count * 100) if req_count > 0 else 0
-    direct_pct = (direct_assertions / total_assertions * 100) if total_assertions > 0 else 0
-    indirect_pct = (indirect_assertions / total_assertions * 100) if total_assertions > 0 else 0
+    cited_pct = _pct(cited_assertions)
+    total_pct = _pct(total_covered)
     # REQ-d00258-C: note and counts read the SAME config (the --treat-active overlay),
     # so a promoted status is counted AND absent from the excluded-note.
     note = _excluded_note(graph, config=config)
 
-    # Build message showing both levels
+    # Implements: REQ-d00258-A
+    # Every figure says which evidence it counts, in the ONE shared vocabulary
+    # (MEASURE_WORDS) the CLI summary and the viewer render, so a reader who
+    # meets two surfaces meets the same words for the same quantities. The
+    # requirement count is on the same total reading as the headline -- a
+    # requirement is counted once any of its measures is above zero.
     msg_parts = [
-        f"{label}: {req_with_any}/{req_count} REQs ({req_pct:.0f}%)",
-        f"{fmt_assertion_count(direct_assertions)}/{total_assertions} assertions"
-        f" direct ({direct_pct:.0f}%)",
+        f"{label}: {req_with_any}/{req_count} REQs covered on any measure ({req_pct:.0f}%)",
+        f"{fmt_assertion_count(total_covered)}/{total_assertions} assertions"
+        f" covered in total ({total_pct:.0f}%)",
     ]
-    if abs(indirect_assertions - direct_assertions) > 1e-9:
+    # The immediate direct measure is ALWAYS shown, zero included: it is what
+    # the gap surfaces answer on (REQ-d00258-M), so a zero here is exactly the
+    # fact that explains why `gaps` lists work this check counts as covered.
+    # The other three are shown only when they carry something.
+    measure_parts = [
+        f"{fmt_assertion_count(value)}/{total_assertions} {MEASURE_WORDS[name]}"
+        f" ({_pct(value):.0f}%)"
+        for name, value in measures.items()
+        if name == WORK_LIST_MEASURE or value > 1e-9
+    ]
+    # The measures are independent readings of the same assertions, not parts
+    # of the total: each is counted over ALL assertions, they overlap freely,
+    # and they neither sum nor nest inside the total (which takes the greatest
+    # per *Assertion*). "of which" claimed a partition none of that supports,
+    # so the figures are introduced as the separate readings they are.
+    msg_parts.append("by measure: " + ", ".join(measure_parts))
+    # Implements: REQ-d00258-O
+    if dimension == "tested" and (agg.tested_passed + agg.tested_failed + agg.tested_awaiting):
         msg_parts.append(
-            f"{fmt_assertion_count(indirect_assertions)} indirect ({indirect_pct:.0f}%)"
+            f"{fmt_assertion_count(agg.tested_passed)} passed / "
+            f"{fmt_assertion_count(agg.tested_failed)} failed / "
+            f"{fmt_assertion_count(agg.tested_awaiting)} awaiting a result"
         )
     if has_any_failures:
         msg_parts.append("FAILURES DETECTED")
@@ -2201,12 +2638,96 @@ def check_dimension_coverage(
             "total_requirements": req_count,
             "req_coverage_percent": round(req_pct, 1),
             "total_assertions": total_assertions,
-            "direct_assertions": round(direct_assertions, 3),
-            "indirect_assertions": round(indirect_assertions, 3),
-            "direct_pct": round(direct_pct, 1),
-            "indirect_pct": round(indirect_pct, 1),
+            # Implements: REQ-d00258-A
+            "cited_assertions": round(cited_assertions, 3),
+            "cited_pct": round(cited_pct, 1),
+            "total_covered": round(total_covered, 3),
+            "total_pct": round(total_pct, 1),
+            **{name: round(value, 3) for name, value in measures.items()},
+            "tested_passed": agg.tested_passed,
+            "tested_failed": agg.tested_failed,
+            "tested_awaiting": agg.tested_awaiting,
             "has_failures": has_any_failures,
         },
+    )
+
+
+# Implements: REQ-d00254-B, REQ-d00258-E
+def check_line_coverage(graph, config=None, level_filter=None) -> HealthCheck:
+    """INFO: how much of the attributed implementation a test run executed.
+
+    Reported in LINES, and deliberately not through the assertion-coverage
+    check: line coverage measures the code, assertion coverage measures the
+    *Traceability*, and putting them through one function would invite the two
+    counts to be read as the same kind of number (REQ-d00254-B).
+
+    Nothing is reported that the ingested data cannot answer. Where no coverage
+    run was ingested at all there is no covered figure to give, and "0/N lines
+    covered" would read as "the tests reached none of this". Where coverage
+    arrives aggregate-only there is no context to attribute a line to a test,
+    and a zero would read as "no test exercises this" rather than "the question
+    was not asked" (REQ-d00258-E).
+    """
+    from elspais.graph.aggregation import aggregate_line_coverage
+
+    agg = aggregate_line_coverage(graph, config=config, level_filter=level_filter)
+    covered_pct = (agg.covered_lines / agg.total_lines * 100) if agg.total_lines else 0.0
+
+    details: dict[str, object] = {
+        "dimension": "code_tested",
+        "total_lines": agg.total_lines,
+        "has_measurement": agg.has_measurement,
+        "has_contexts": agg.has_contexts,
+        "total_requirements": agg.req_count,
+    }
+    # Implements: REQ-d00258-E
+    # An unmeasured estate and a measured-but-unexecuted one are opposite
+    # facts, so they are reported in different words rather than through the
+    # same zero.
+    if not agg.has_measurement:
+        return HealthCheck(
+            name="code.code_tested",
+            passed=True,
+            message=(
+                f"Code Tested (line coverage): no line-coverage data ingested for"
+                f" {agg.total_lines} attributed implementation lines"
+                f" across {agg.req_count} REQs" + _excluded_note(graph, config=config)
+            ),
+            category="code",
+            severity="info",
+            details=details,
+        )
+
+    msg_parts = [
+        f"Code Tested (line coverage): {agg.req_with_covered}/{agg.req_count}"
+        f" REQs with covered implementation lines",
+        f"{agg.covered_lines:.0f}/{agg.total_lines} lines covered ({covered_pct:.0f}%)",
+    ]
+    details.update(
+        {
+            "covered_lines": round(agg.covered_lines, 3),
+            "covered_pct": round(covered_pct, 1),
+            "reqs_with_covered_lines": agg.req_with_covered,
+        }
+    )
+    if agg.has_attribution:
+        attributed_pct = (agg.attributed_lines / agg.total_lines * 100) if agg.total_lines else 0.0
+        msg_parts.append(
+            f"{agg.attributed_lines:.0f}/{agg.total_lines} attributed to a"
+            f" verifying test ({attributed_pct:.0f}%)"
+        )
+        details["attributed_lines"] = round(agg.attributed_lines, 3)
+        details["attributed_pct"] = round(attributed_pct, 1)
+    else:
+        msg_parts.append("per-test attribution not available from this coverage data")
+
+    return HealthCheck(
+        name="code.code_tested",
+        passed=True,
+        message=", ".join(msg_parts) + _excluded_note(graph, config=config),
+        category="code",
+        severity="info",
+        details=details,
     )
 
 
@@ -2214,12 +2735,13 @@ def check_whole_req_only_coverage(graph, config=None) -> HealthCheck:
     """INFO: assertions whose IMPLEMENTED coverage is whole-requirement-only.
 
     Under REQ-d00069-B/J a blanket `Implements:`/`Refines:` fully credits every
-    assertion on the generous footing. That is intended, but it must be VISIBLE:
+    assertion on the indirect measures. That is intended, but it must be VISIBLE:
     this reports how load-bearing the blanket references are so a team can see
     how much green rests on whole-requirement evidence. INFO severity -- never
     fails the build. (REQ-d00258.)
     """
     from elspais.graph import NodeKind
+    from elspais.graph.aggregation import WORK_LIST_MEASURE, measure_by_label
 
     findings: list[HealthFinding] = []
     total = 0
@@ -2228,10 +2750,16 @@ def check_whole_req_only_coverage(graph, config=None) -> HealthCheck:
         if rollup is None:
             continue
         dim = rollup.implemented
+        # Evidence ATTACHED to this requirement, on both immediate measures
+        # (REQ-d00069-L): an *Assertion* relies on whole-requirement evidence
+        # when the blanket citation reaches further than any citation naming
+        # it. Conducted coverage is a different fact and is not counted here --
+        # the message says "whole-requirement evidence", and it must be true.
+        immediate_direct = measure_by_label(dim, WORK_LIST_MEASURE)
         n = sum(
             1
-            for lbl, ind in dim.indirect_pct_by_label.items()
-            if ind > dim.direct_pct_by_label.get(lbl, 0.0) + 1e-9
+            for lbl, ind in measure_by_label(dim, "immediate_indirect").items()
+            if ind > immediate_direct.get(lbl, 0.0) + 1e-9
         )
         if n:
             total += n
@@ -2253,6 +2781,204 @@ def check_whole_req_only_coverage(graph, config=None) -> HealthCheck:
         ),
         category="code",
         severity="info",
+        findings=findings,
+    )
+
+
+# The display word for each end of a chain, so a finding reads in the
+# vocabulary REQ-d00258-K permits, for every surface, rather than in dimension
+# field names.
+_DIMENSION_WORD: dict[str, str] = {
+    "implemented": "Implemented",
+    "tested": "Tested",
+    "verified": "Passing",
+    "uat_coverage": "UAT Covered",
+    "uat_verified": "UAT Passed",
+}
+
+# Implements: REQ-d00274-D
+# Evidence that only names an *Assertion*, against evidence that also carries a
+# verdict for it. A test aimed where nothing is implemented, one that passed
+# there, and one that failed there are three different things, and an author
+# reading the report should not have to work out which one they have.
+#
+# The 'verified' row reads the same in all three states: its evidence is
+# credited from a declaration rather than from a result node of its own, so no
+# verdict is ever attached to the finding.
+_UNCREDITED_EVIDENCE_WORD: dict[str, dict[EvidenceResult, str]] = {
+    "tested": {
+        EvidenceResult.NONE: "A test names",
+        EvidenceResult.PASSED: "A passing test names",
+        EvidenceResult.FAILED: "A failing test names",
+    },
+    "verified": {
+        EvidenceResult.NONE: "Passing evidence names",
+        EvidenceResult.PASSED: "Passing evidence names",
+        EvidenceResult.FAILED: "Passing evidence names",
+    },
+    "uat_verified": {
+        EvidenceResult.NONE: "A journey result names",
+        EvidenceResult.PASSED: "A passing journey names",
+        EvidenceResult.FAILED: "A failing journey names",
+    },
+}
+
+# What the denominator leaving something out means, in the reader's terms: for
+# one *Assertion*, and for a requirement none of whose assertions it counts.
+_UNCREDITED_DENOMINATOR_WORD: dict[str, tuple[str, str]] = {
+    "implemented": ("nothing implements", "nothing implements any of its assertions"),
+    "tested": ("no test covers", "no test covers any of its assertions"),
+    "uat_coverage": ("no journey validates", "no journey validates any of its assertions"),
+}
+
+
+# Implements: REQ-d00274-A, REQ-d00274-C, REQ-d00274-D, REQ-d00274-F
+def check_uncredited_evidence(
+    graph: FederatedGraph, config: dict[str, Any] | None = None
+) -> HealthCheck:
+    """Report evidence that names an *Assertion* its dimension does not count.
+
+    Coverage dimensions are chained, so a test naming an *Assertion* nothing
+    implements contributes to no answer the tool gives: the figures are
+    computed without it and, until this check, nothing said it was there.
+    An error by default, because the condition has only two explanations and
+    both are defects -- a missing ``Implements:`` reference, or a test aimed at
+    an *Assertion* it does not exercise.
+    """
+    from elspais.graph.aggregation import iter_uncredited_evidence
+
+    typed = _validate_config(config or {})
+    severity = typed.rules.coverage.uncredited_evidence
+    items = iter_uncredited_evidence(graph, config)
+    if not items:
+        return HealthCheck(
+            name="tests.uncredited_evidence",
+            passed=True,
+            message="No coverage evidence that credits nothing",
+            category="tests",
+            severity=severity,
+        )
+
+    findings = []
+    for item in items:
+        word = _DIMENSION_WORD.get(item.dimension, item.dimension)
+        # A source is the annotation the author wrote. Line-coverage credit is
+        # written nowhere, so the finding carries no location rather than the
+        # requirement's own file, which is not where the evidence lives.
+        # Where a verdict is what the finding reports, it is reported at the
+        # test that returned it: the wording and the location must name the
+        # same test, or a reader is sent to a passing test to be shown a
+        # failure (REQ-p00019-J).
+        located_at = item.result_source_id or (item.source_ids[0] if item.source_ids else None)
+        if located_at:
+            file_path, line = _fault_location(graph, located_at, None)
+        else:
+            file_path, line = None, None
+        evidence = _UNCREDITED_EVIDENCE_WORD[item.dimension][item.result]
+        one, none_of = _UNCREDITED_DENOMINATOR_WORD[item.denominator]
+        if item.assertion_label is None:
+            clause = (
+                f"{item.requirement_id} ({len(item.labels)} assertion(s): "
+                f"{', '.join(item.labels)}), and {none_of}"
+            )
+        else:
+            clause = f"{item.requirement_id}-{item.assertion_label}, which {one}"
+        findings.append(
+            HealthFinding(
+                message=(f"{evidence} {clause}, so it credits no {word} figure"),
+                node_id=item.requirement_id,
+                file_path=file_path,
+                line=line,
+            )
+        )
+    return HealthCheck(
+        name="tests.uncredited_evidence",
+        passed=severity == "ok",
+        message=(f"{len(items)} piece(s) of coverage evidence reach no coverage figure"),
+        category="tests",
+        severity=severity,
+        details={"count": len(items)},
+        findings=findings,
+    )
+
+
+# Implements: REQ-d00276-A, REQ-d00276-B, REQ-d00276-C, REQ-d00276-D
+def check_external_tests(
+    graph: FederatedGraph, config: dict[str, Any] | None = None
+) -> HealthCheck:
+    """Report the tests that reach no requirement, by what they returned.
+
+    Coverage answers for requirements, so a test belonging to none is absent
+    from every figure -- it runs, it passes or fails, and nothing says so. The
+    two states are different problems: a failing test outside the estate is
+    usually a defect in the test, and cannot be found through any requirement
+    because it hangs off none; a passing one is work the estate cannot see.
+
+    Read-only with respect to coverage: this reports a population the figures
+    are not measuring, and does not move them (REQ-d00276-A).
+    """
+    from elspais.graph import NodeKind as NK
+    from elspais.graph.aggregation import EvidenceResult, _evidence_result
+
+    typed = _validate_config(config or {})
+    severity = typed.rules.coverage.external_test_failure
+
+    passed: list[GraphNode] = []
+    failed: list[GraphNode] = []
+    awaiting: list[GraphNode] = []
+    for test in graph.iter_unlinked(NK.TEST):
+        verdict, _ = _evidence_result(graph, (test.id,))
+        if verdict is EvidenceResult.FAILED:
+            failed.append(test)
+        elif verdict is EvidenceResult.PASSED:
+            passed.append(test)
+        else:
+            awaiting.append(test)
+
+    total = len(passed) + len(failed) + len(awaiting)
+    if total == 0:
+        return HealthCheck(
+            name="tests.external",
+            passed=True,
+            message="Every test reaches a requirement",
+            category="tests",
+            severity="info",
+        )
+
+    # A failing test is what the configured severity is about; a passing or
+    # unrun one outside the estate is disclosed, never failed on (REQ-d00276-C).
+    findings = []
+    for verdict_word, nodes in (
+        ("failed", failed),
+        ("passed", passed),
+        ("awaiting a result", awaiting),
+    ):
+        for test in nodes:
+            file_path, line = _fault_location(graph, test.id, None)
+            findings.append(
+                HealthFinding(
+                    message=(
+                        f"{test.get_label() or test.id} ({verdict_word}) reaches no requirement"
+                    ),
+                    node_id=test.id,
+                    file_path=file_path,
+                    line=line,
+                )
+            )
+    return HealthCheck(
+        name="tests.external",
+        passed=not failed or severity == "ok",
+        message=(
+            f"{total} test(s) reach no requirement: "
+            f"{len(passed)} passed, {len(failed)} failed, {len(awaiting)} awaiting a result"
+        ),
+        category="tests",
+        severity=severity if failed else "info",
+        details={
+            "passed": len(passed),
+            "failed": len(failed),
+            "awaiting_result": len(awaiting),
+        },
         findings=findings,
     )
 
@@ -2396,17 +3122,26 @@ def _check_status_references(
     )
 
 
-# Implements: REQ-d00241-A
+# Implements: REQ-d00241-A, REQ-d00241-E
 def check_no_traceability(
     unlinked_files: list[str],
     severity: str = "warning",
+    faulted_files: frozenset[str] | set[str] = frozenset(),
 ) -> HealthCheck:
     """Check for code files with no traceability markers.
 
     Test files are deliberately excluded -- ``tests.unlinked``
     (``check_unlinked_tests``) already reports marker-less test files;
     including them here too would double-report the same file.
+
+    A file whose markers produced no relationship carries markers, and
+    saying it carries none sends its author to add what is already there.
+    Those files are reported by the reference checks, which name what is
+    actually wrong with them, and are excluded here (*faulted_files*: the
+    set of file paths appearing as the ``source_id`` of any
+    ``ReferenceFault``).
     """
+    unlinked_files = [f for f in unlinked_files if f not in faulted_files]
     if severity == "off":
         return HealthCheck(
             name="code.no_traceability",
@@ -2476,17 +3211,13 @@ def run_code_checks(
         check_whole_req_only_coverage(graph, config),
     ]
 
-    # Add code_tested dimension only when line coverage data is present
+    # Add line coverage only when line coverage data is present
     has_coverage = any(
-        (m := node.get_metric("rollup_metrics")) is not None and m.code_tested.total > 0
+        (m := node.get_metric("rollup_metrics")) is not None and m.code_tested.total_lines > 0
         for node in graph.nodes_by_kind(NodeKind.REQUIREMENT)
     )
     if has_coverage:
-        checks.append(
-            check_dimension_coverage(
-                graph, "code_tested", exclude_status=exclude_status, config=config
-            )
-        )
+        checks.append(check_line_coverage(graph, config=config))
 
     # Implements: REQ-d00241-B, REQ-d00241-C
     no_trace_sev = typed_config.rules.format.no_traceability_severity
@@ -2497,8 +3228,28 @@ def run_code_checks(
             rel = file_n.get_field("relative_path")
             if rel:
                 unlinked_files.append(rel)
-    checks.append(check_no_traceability(unlinked_files, severity=no_trace_sev))
+    # Implements: REQ-d00241-E
+    faulted_files = {
+        path
+        for f in graph.broken_references()
+        if (path := _fault_location(graph, f.source_id, f.line)[0]) is not None
+    }
+    checks.append(
+        check_no_traceability(unlinked_files, severity=no_trace_sev, faulted_files=faulted_files)
+    )
 
+    return checks
+
+
+def run_checks(graph: FederatedGraph, config: dict[str, Any] | None = None) -> list[HealthCheck]:
+    """Run the spec and code health checks together, as a flat list.
+
+    A thin combiner over ``run_spec_checks``/``run_code_checks`` for callers
+    that want both families from one call without resolving spec
+    directories themselves.
+    """
+    checks = list(run_spec_checks(graph, config or {}))
+    checks.extend(run_code_checks(graph, config=config))
     return checks
 
 
@@ -2541,6 +3292,34 @@ def _collect_file_mtimes(
     return mtimes
 
 
+# Implements: REQ-d00275-C
+def _configured_test_targets(graph: FederatedGraph, config: dict | None) -> list[tuple[str, Any]]:
+    """``(repo name, target)`` for every federation member configuring one.
+
+    Where its test results live is a fact about a repository, not a rule the
+    invoking project gets to answer on its behalf: reading only the invoking
+    config describes a federation whose associate configures targets as having
+    none, and sends the reader looking for a missing configuration instead of
+    missing results. Over a lone repository this reads that repository's own
+    config, so the answer is unchanged.
+
+    The invoking config is one of those members and is counted once, through
+    whichever it is. It is read separately only when the federation does not
+    hold it -- no member declares it, or no member carries a config at all.
+    """
+    targets: list[tuple[str, Any]] = []
+    held = False
+    for entry in graph.iter_repos():
+        if entry.config is None:
+            continue
+        held = held or entry.config == config
+        member = _validate_config(entry.config)
+        targets.extend((entry.name, t) for t in member.scanning.test.targets)
+    if config and not held:
+        targets.extend(("", t) for t in _validate_config(config).scanning.test.targets)
+    return targets
+
+
 def check_test_results(graph: FederatedGraph, config: dict | None = None) -> HealthCheck:
     """Check test result status from JUnit/pytest output.
 
@@ -2561,11 +3340,7 @@ def check_test_results(graph: FederatedGraph, config: dict | None = None) -> Hea
     deselected = run_meta["deselected_count"]
 
     if not result_nodes:
-        if config:
-            _tc = _validate_config(config)
-            targets = _tc.scanning.test.targets
-        else:
-            targets = []
+        targets = _configured_test_targets(graph, config)
         if not targets:
             return HealthCheck(
                 name="tests.results",
@@ -2574,11 +3349,13 @@ def check_test_results(graph: FederatedGraph, config: dict | None = None) -> Hea
                 category="tests",
                 severity="info",
             )
+        repos = sorted({name for name, _ in targets if name})
+        where = f" across {len(repos)} repositories" if len(repos) > 1 else ""
         return HealthCheck(
             name="tests.results",
             passed=False,
             message=(
-                f"Test targets configured ({len(targets)}) but no results ingested. "
+                f"Test targets configured ({len(targets)}){where} but no results ingested. "
                 "Run `elspais checks --run-tests` or refresh manually."
             ),
             category="tests",
@@ -2757,6 +3534,8 @@ def check_uat_coverage(
     # WHICH reqs are uncovered (no re-implementation of the sum walk).
     from elspais.config import status_expects_implementation
     from elspais.graph import NodeKind
+    from elspais.graph.aggregation import work_verdict
+    from elspais.graph.relations import EdgeKind
 
     # REQ-d00258-C: the uncovered-findings walk gates on the SAME coverage
     # inclusion resolver as ``aggregate_dimension`` above, so the sums and the
@@ -2767,10 +3546,37 @@ def check_uat_coverage(
         if not status_expects_implementation(cfg, node.status) or not level_filter(node.level):
             continue
         rollup = node.get_metric("rollup_metrics")
-        if rollup is None or rollup.uat_coverage.indirect <= 0:
+        # Implements: REQ-d00258-C, REQ-d00258-M
+        # The verdict is ``work_verdict``, the same one ``gaps unvalidated``
+        # reaches, so the two cannot disagree about a requirement: a blanket
+        # journey used to satisfy this check while gaps listed the assertions
+        # it named none of.
+        labels = [
+            child.get_field("label", "")
+            for child in node.iter_children(edge_kinds={EdgeKind.STRUCTURES})
+            if child.kind == NodeKind.ASSERTION
+        ]
+        verdict = work_verdict(rollup, "uat_coverage", labels)
+        if not verdict.attached:
             uncovered.append(
                 HealthFinding(
-                    message=f"{node.id}: no UAT validation (level expects_validation)",
+                    message=(
+                        f"{node.id}: no journey names this requirement or any of "
+                        f"its assertions -- UAT coverage conducted from a refining "
+                        f"requirement is not validation of this one "
+                        f"(level expects_validation)"
+                    ),
+                    node_id=node.id,
+                )
+            )
+        elif verdict.needs_work:
+            named = ", ".join(sorted(verdict.uncovered))
+            uncovered.append(
+                HealthFinding(
+                    message=(
+                        f"{node.id}: a journey names this requirement but not "
+                        f"assertion(s) {named} (level expects_validation)"
+                    ),
                     node_id=node.id,
                 )
             )
@@ -2850,11 +3656,15 @@ def check_uat_results(graph: FederatedGraph, config: dict[str, Any] | None = Non
 
     results_path = Path(results_file)
     if not results_path.is_absolute():
-        git_root = cfg.get("_git_root")
-        if git_root:
-            results_path = Path(git_root) / results_path
+        # Relative to the repository being checked, which the graph knows.
+        # This used to read a `_git_root` key out of the configuration --
+        # a key no configuration file can carry and only a test ever wrote,
+        # so in use the branch never ran and the path resolved against the
+        # working directory instead of the repository.
+        repo_root = getattr(graph, "repo_root", None)
+        if repo_root:
+            results_path = Path(repo_root) / results_path
         elif not results_path.exists():
-            # Try cwd
             results_path = Path.cwd() / results_file
 
     if not results_path.exists():
@@ -2955,7 +3765,9 @@ def run_test_checks(
     return [
         check_test_coverage(graph, exclude_status=exclude_status, config=config),
         check_dimension_coverage(graph, "verified", exclude_status=exclude_status, config=config),
+        check_uncredited_evidence(graph, config),
         check_unlinked_tests(graph),
+        check_external_tests(graph, config),
         check_test_results(graph, config=config),
         check_test_results_stale(graph),
         _check_status_references(
@@ -3421,7 +4233,14 @@ _FOLLOWUP_COMMANDS: dict[str, str] = {
     "spec.implements_resolve": "elspais broken",
     "spec.refines_resolve": "elspais broken",
     "spec.satisfies_resolve": "elspais broken",
-    "spec.broken_references": "elspais broken",
+    "references.malformed": "elspais broken",
+    "references.unknown_namespace": "elspais broken",
+    "references.unknown_requirement": "elspais broken",
+    "references.unknown_assertion": "elspais broken",
+    "references.forbidden": "elspais broken",
+    "references.keyword_form": "elspais checks --spec --format json",
+    "references.identifier_form": "elspais checks --spec --format json",
+    "references.undeclared": "elspais checks --spec --format json",
     "spec.structural_orphans": "elspais checks --spec --format json",
     "spec.hierarchy_levels": "elspais checks --spec --format json",
     "spec.changelog_present": "elspais fix",
@@ -3429,6 +4248,7 @@ _FOLLOWUP_COMMANDS: dict[str, str] = {
     "spec.changelog_format": "elspais checks --spec --format json",
     "code.unlinked": "elspais unlinked",
     "tests.unlinked": "elspais unlinked",
+    "tests.uncredited_evidence": "elspais checks --tests --format json",
     "tests.results": "elspais failing",
     "uat.results": "elspais failing",
     "terms.duplicates": "elspais checks --terms --format json",
@@ -3490,6 +4310,7 @@ def _build_hint(report: HealthReport, already_verbose: bool) -> str | None:
 
     category_flags = {
         "spec": "--spec",
+        "references": "--spec",
         "code": "--code",
         "tests": "--tests",
         "config": "",
@@ -3538,7 +4359,7 @@ def _build_report_data(report: HealthReport, verbose: bool = False) -> _ReportDa
     counting (excluding info-severity from pass/total), check icon selection,
     summary line, and hint string.
     """
-    categories = ["config", "spec", "code", "tests", "uat", "terms"]
+    categories = ["config", "spec", "references", "code", "tests", "uat", "terms"]
     sections: list[_SectionData] = []
 
     for category in categories:
@@ -3698,7 +4519,7 @@ def _render_junit(
     import xml.etree.ElementTree as ET
 
     testsuites = ET.Element("testsuites")
-    categories = ["config", "spec", "code", "tests", "uat", "terms"]
+    categories = ["config", "spec", "references", "code", "tests", "uat", "terms"]
 
     for category in categories:
         checks = list(report.iter_by_category(category))

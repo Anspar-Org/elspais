@@ -10,6 +10,7 @@ traceability graph from parsed content.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterator
 from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
@@ -30,13 +31,22 @@ from elspais.graph.GraphNode import (
     make_remainder_id,
     make_step_id,
     make_test_id,
+    parse_structural_id,
 )
-from elspais.graph.mutations import BrokenReference, MutationEntry, MutationLog
+from elspais.graph.mutations import MutationEntry, MutationLog
 from elspais.graph.parsers import ParsedContent
+from elspais.graph.reference_faults import (
+    FaultClass,
+    IdentifierFormFinding,
+    ReferenceFault,
+    StyleFinding,
+    UndeclaredRelationship,
+    reader_refused,
+)
 from elspais.graph.relations import EdgeKind, Stereotype
 from elspais.graph.render import format_definition_block, render_end_marker
 from elspais.graph.terms import TermDictionary, TermEntry, compute_definition_hash
-from elspais.utilities.patterns import INSTANCE_SEPARATOR
+from elspais.utilities.patterns import INSTANCE_SEPARATOR, GrammarUnavailable
 from elspais.utilities.test_identity import build_test_id
 
 
@@ -67,6 +77,67 @@ def _canonicalize_list_spacing(text: str) -> str:
 _DEFAULT_SATELLITE_KINDS = frozenset({NodeKind.ASSERTION, NodeKind.RESULT})
 
 
+# Implements: REQ-o00062-U
+def _refuse_render_hostile(text: str, field: str, *, headings: bool = True) -> None:
+    """Refuse content whose rendered lines the parser reads as structure.
+
+    A stored line the grammar reads as an End marker (or, inside an
+    assertion block, a section header) changes what the surrounding
+    requirement IS on the next parse, so it cannot be content.
+    """
+    from elspais.graph.render import parse_end_marker
+
+    for line in text.splitlines():
+        stripped = line.strip()
+        if parse_end_marker(stripped) is not None:
+            raise ValueError(f"{field} must not contain an End-marker line: {stripped!r}")
+        if headings and re.match(r"#{1,6}\s", stripped):
+            raise ValueError(f"{field} must not contain a heading line: {stripped!r}")
+
+
+# Implements: REQ-o00062-U
+def _refuse_title_hostile(title: str) -> None:
+    """Refuse a title the render round-trip cannot carry.
+
+    The End marker spells the title between ``*`` markers, so a ``*`` inside
+    one ends the title early and the stored hash is lost on reparse; a
+    newline truncates the header line to its first line.
+    """
+    if "*" in title:
+        raise ValueError(f"Title must not contain '*': {title!r}")
+    if "\n" in title or "\r" in title:
+        raise ValueError("Title must not contain a line break")
+
+
+# Implements: REQ-o00062-U
+# The two heading words the requirement grammar claims for itself, in the
+# tolerance it reads them with (optional emphasis wrap, optional trailing
+# punctuation). A section stored under either is not a section on reparse.
+_RESERVED_SECTION_HEADINGS = re.compile(
+    r"^(?:\*\*|\*|_)?(assertions|changelog)(?:\*\*|\*|_)?[:.]?$", re.IGNORECASE
+)
+
+
+def _refuse_heading_hostile(heading: str) -> None:
+    if "\n" in heading or "\r" in heading:
+        raise ValueError("Section heading must not contain a line break")
+    if _RESERVED_SECTION_HEADINGS.match(heading.strip()):
+        raise ValueError(
+            f"Section heading {heading!r} is reserved: the parser reads it as "
+            "the requirement's own Assertions/Changelog block"
+        )
+
+
+# Implements: REQ-o00062-V
+# The edge kinds that ARE a node's placement rather than its traceability.
+# Severing or rewriting one detaches content from the structure that renders
+# it; the mutations that change placement (move, delete of the content) are
+# the doors for that.
+_PLACEMENT_EDGE_KINDS = frozenset(
+    {EdgeKind.CONTAINS, EdgeKind.STRUCTURES, EdgeKind.INSTANCE, EdgeKind.DEFINES}
+)
+
+
 @dataclass
 class TraceGraph:
     """Container for the complete traceability graph.
@@ -82,10 +153,61 @@ class TraceGraph:
     hash_mode: str = field(default="normalized-text")
     satellite_kinds: frozenset = field(default_factory=lambda: _DEFAULT_SATELLITE_KINDS)
 
-    # IdResolver for assertion-ID construction (configured separator).
-    # When None, falls back to the default "-" separator for tests/legacy
-    # code paths that don't have a resolver wired up.
+    # The identifier grammar of the repository this graph holds, carried
+    # down from the builder that produced it. Read through the ``resolver``
+    # property, never directly: spelling an identifier without it means
+    # spelling it under some other repository's grammar.
     _resolver: Any | None = field(default=None, repr=False)
+
+    # The namespace of the repository this graph holds, carried down from
+    # the builder that produced it. Read through the ``namespace``
+    # property, never directly: a graph assembled by hand has neither this
+    # nor a resolver, and must refuse rather than answer emptily.
+    _namespace: str = field(default="", repr=False)
+
+    @property
+    def namespace(self) -> str:
+        """The namespace this repository's identifiers are written in.
+
+        Preferred from the configured resolver, which is the one authority
+        for the identifier grammar, and otherwise the namespace the builder
+        was given — a builder cannot be constructed without one, so a graph
+        it produced can always answer.
+
+        Raises:
+            ValueError: The graph was assembled without either, and so
+                cannot say which repository it holds. There is no empty
+                answer: a caller asking this is about to identify a node,
+                and an id naming no repository resolves against nothing.
+        """
+        namespace = (
+            getattr(getattr(self._resolver, "config", None), "namespace", "") or self._namespace
+        )
+        if not namespace:
+            raise ValueError(
+                "This graph names no namespace and cannot say which repository "
+                "it holds; a node identified by source location needs one."
+            )
+        return namespace
+
+    @property
+    def resolver(self) -> Any:
+        """The identifier grammar this repository's identifiers are written in.
+
+        Raises:
+            GrammarUnavailable: The graph was assembled without one. A caller
+                asking for it is about to spell an identifier, and there is no
+                neutral spelling: the boundary characters are configuration,
+                so guessing them writes a reference that reads back as a
+                different requirement, or as none.
+        """
+        if self._resolver is None:
+            raise GrammarUnavailable(
+                "This graph carries no identifier grammar, so it cannot spell "
+                "an identifier: the characters bounding a component from its "
+                "assertion labels are configuration, not constants."
+            )
+        return self._resolver
 
     # Internal storage (prefixed) - excluded from constructor
     _roots: list[GraphNode] = field(default_factory=list, init=False)
@@ -93,7 +215,25 @@ class TraceGraph:
 
     # Detection: orphans and broken references (populated at build time)
     _orphaned_ids: set[str] = field(default_factory=set, init=False)
-    _broken_references: list[BrokenReference] = field(default_factory=list, init=False)
+    _broken_references: list[ReferenceFault] = field(default_factory=list, init=False)
+    # Implements: REQ-d00272-G
+    # Keyword-form findings (non-canonical case/spacing/emphasis) -- never
+    # cost the edge their keyword introduces, so kept apart from
+    # _broken_references rather than joining a bucket that counts
+    # references that failed to bind.
+    _style_findings: list[StyleFinding] = field(default_factory=list, init=False, repr=False)
+    # Implements: REQ-d00272-O
+    # Identifiers opening a comment no keyword introduces -- an intended
+    # relationship that was never declared, and so not a failed reference.
+    _undeclared_relationships: list[UndeclaredRelationship] = field(
+        default_factory=list, init=False, repr=False
+    )
+    # Implements: REQ-d00272-N
+    # References the configuration admits but did not spell canonically --
+    # each produced its relationship, so kept apart from _broken_references.
+    _identifier_form_findings: list[IdentifierFormFinding] = field(
+        default_factory=list, init=False, repr=False
+    )
     # Detection: duplicate REQ IDs across files (populated at build time).
     # Maps canonical REQ ID -> ordered list of source paths defining it.
     _duplicate_req_ids: dict[str, list[str]] = field(default_factory=dict, init=False, repr=False)
@@ -151,16 +291,30 @@ class TraceGraph:
         """
         return self._index.get(node_id)
 
+    # Implements: REQ-p00014-R
+    def _resolution_class(self, target_id: str) -> FaultClass:
+        """Which class an item that read but did not resolve reached.
+
+        A label that names no assertion of a requirement that exists is a
+        different finding from a requirement nothing holds: the first is
+        always the author's, the second may be a sibling that has not
+        authored it yet.  Reporting the later class than the reference
+        reached would describe a defect the author does not have.
+        """
+        if self._resolver is not None:
+            split = self._resolver.split_assertion_ref(target_id)
+            if split is not None and self.find_by_id(split[0]) is not None:
+                return FaultClass.UNKNOWN_ASSERTION
+        return FaultClass.UNKNOWN_REQUIREMENT
+
     def make_assertion_id(self, req_id: str, label: str) -> str:
         """Compose an assertion node ID using the configured separator.
 
-        Falls back to the default ``-`` separator when no resolver is wired.
-        Centralizes the convention so internal IDs match user-facing
-        canonical form (e.g. ``EVS-PRD-foo/A`` when ``separator="/"``).
+        Internal IDs are spelled in the same canonical form a reader would
+        write (e.g. ``EVS-PRD-foo/A`` when ``separator="/"``), so a node's
+        id and a citation of it are the same string.
         """
-        if self._resolver is not None:
-            return self._resolver.make_assertion_id(req_id, label)
-        return f"{req_id}-{label}"
+        return self.resolver.make_assertion_id(req_id, label)
 
     def all_nodes(self) -> Iterator[GraphNode]:
         """Iterate ALL nodes in graph, including orphans.
@@ -256,20 +410,35 @@ class TraceGraph:
         """Return the number of orphaned nodes."""
         return len(self._orphaned_ids)
 
-    def broken_references(self) -> list[BrokenReference]:
+    def broken_references(self) -> list[ReferenceFault]:
         """Get all broken references detected during build.
 
         Broken references occur when a node references a target ID
         that doesn't exist in the graph.
 
         Returns:
-            List of BrokenReference instances.
+            List of ReferenceFault instances.
         """
         return list(self._broken_references)
 
     def has_broken_references(self) -> bool:
         """Check if the graph has broken references."""
         return len(self._broken_references) > 0
+
+    # Implements: REQ-d00272-G
+    def style_findings(self) -> list[StyleFinding]:
+        """Get all keyword-form style findings detected during build."""
+        return list(self._style_findings)
+
+    # Implements: REQ-d00272-O
+    def undeclared_relationships(self) -> list[UndeclaredRelationship]:
+        """Get every comment that cites an identifier without declaring one."""
+        return list(self._undeclared_relationships)
+
+    # Implements: REQ-d00272-N
+    def identifier_form_findings(self) -> list[IdentifierFormFinding]:
+        """Get every reference spelled in a non-canonical admitted form."""
+        return list(self._identifier_form_findings)
 
     def duplicate_req_ids(self) -> dict[str, list[str]]:
         """Return cross-file duplicate REQ IDs detected at build time.
@@ -483,7 +652,7 @@ class TraceGraph:
 
         Handles the renamed node as broken-ref source, as exact target, and
         as the base of assertion-suffixed targets (``old_id-<label>``, the
-        form partial multi-assertion leftovers take). All BrokenReference
+        form partial multi-assertion leftovers take). All ReferenceFault
         fields (diagnostic, presumed_foreign) are preserved. When a target
         changes, the source node's stored leftover field is kept in sync so
         the render agrees with the broken-reference report (REQ-d00132-G).
@@ -626,7 +795,7 @@ class TraceGraph:
 
         # Restore broken references retired with the node (REQ-d00132-G)
         for br_dict in entry.before_state.get("purged_broken_refs", []):
-            self._broken_references.append(BrokenReference(**br_dict))
+            self._broken_references.append(ReferenceFault(**br_dict))
 
     # Stored ref fields hold UNRESOLVED leftovers only (REQ-d00132-F/G):
     # build() strips refs that became edges, and the mutation paths below
@@ -829,10 +998,11 @@ class TraceGraph:
 
             # Restore the original broken reference and its leftover (REQ-d00132-G)
             self._broken_references.append(
-                BrokenReference(
+                ReferenceFault(
                     source_id=source_id,
                     target_id=old_target_id,
                     edge_kind=edge_kind_str,
+                    fault_class=self._resolution_class(old_target_id),
                 )
             )
             self._add_leftover_ref(source, EdgeKind(edge_kind_str), old_target_id)
@@ -1151,8 +1321,12 @@ class TraceGraph:
                 if child.kind == NodeKind.ASSERTION:
                     assertion_label = child.get_field("label", "")
                     if assertion_label:
-                        old_assertion_id = f"{old_id}-{assertion_label}"
-                        new_assertion_id = f"{new_id}-{assertion_label}"
+                        # The old id is the child's own, not a recomposition of
+                        # it: composing under the wrong separator would miss the
+                        # index entry and leave the assertion named for the
+                        # requirement's former id.
+                        old_assertion_id = child.id
+                        new_assertion_id = self.make_assertion_id(new_id, assertion_label)
                         if old_assertion_id in self._index:
                             self._index.pop(old_assertion_id)
                             child.set_id(new_assertion_id)
@@ -1183,18 +1357,51 @@ class TraceGraph:
         # Implements: REQ-d00230-C
         update_anchors_on_rename(self._comment_index, old_id, new_id, self.repo_root)
 
-        # A journey's cached body embeds its ID in the header line
-        self._reconcile_journey_bodies(node)
+        # Implements: REQ-p00017-B
+        # A journey's cached body embeds its own ID in the header line, and
+        # the identifiers it validates in its metadata. Both are references
+        # held in the graph to the former identifier, and a journey renders
+        # from that cache -- so reconciling only the renamed node would leave
+        # every journey citing it naming a requirement that no longer exists.
+        cited_by = self._journeys_validating(node)
+        self._reconcile_journey_bodies(node, *cited_by)
+        # The reconciled journeys are named on the entry because the save
+        # path derives which files to rewrite from the mutation log. A
+        # journey corrected only in memory is a journey whose file still
+        # holds the old identifier, which is the state B forbids.
+        if cited_by:
+            entry.after_state["journeys_reconciled"] = [j.id for j in cited_by]
 
         self._mutation_log.append(entry)
         return entry
+
+    @staticmethod
+    def _journeys_validating(node: GraphNode) -> list[GraphNode]:
+        """The journeys whose metadata cites *node* or one of its assertions.
+
+        A VALIDATES edge runs from the requirement to the journey, so the
+        journeys are reached by walking out of the cited node -- and out of
+        its assertions too, since a journey may name an assertion rather
+        than the whole requirement.
+        """
+        cited: list[GraphNode] = []
+        seen: set[int] = set()
+        sources = [node, *node.iter_children(edge_kinds={EdgeKind.STRUCTURES})]
+        for source in sources:
+            for edge in source.iter_edges_by_kind(EdgeKind.VALIDATES):
+                journey = edge.target
+                if journey.kind == NodeKind.USER_JOURNEY and id(journey) not in seen:
+                    seen.add(id(journey))
+                    cited.append(journey)
+        return cited
 
     def update_title(self, node_id: str, new_title: str) -> MutationEntry:
         """Update requirement title. Does not affect hash.
 
         Args:
             node_id: The node ID to update.
-            new_title: The new title.
+            new_title: The new title. Refused when the render round-trip
+                cannot carry it (REQ-o00062-U).
 
         Returns:
             MutationEntry recording the operation.
@@ -1202,6 +1409,7 @@ class TraceGraph:
         Raises:
             KeyError: If node_id is not found.
         """
+        _refuse_title_hostile(new_title)
         if node_id not in self._index:
             raise KeyError(f"Node '{node_id}' not found")
 
@@ -1394,6 +1602,7 @@ class TraceGraph:
         """
         from elspais.utilities.hasher import calculate_hash
 
+        _refuse_title_hostile(title)
         if req_id in self._index:
             raise ValueError(f"Node '{req_id}' already exists")
         if parent_id and parent_id not in self._index:
@@ -1471,11 +1680,18 @@ class TraceGraph:
             raise KeyError(f"Node '{node_id}' not found")
 
         node = self._index[node_id]
+        # Implements: REQ-o00062-V
+        if node.kind != NodeKind.REQUIREMENT:
+            raise ValueError(f"Node '{node_id}' is not a requirement")
         was_root = node in self._roots
 
-        # Record state before deletion
+        # Record state before deletion. The FILE node's id is recorded
+        # alongside its path: a path alone does not say which repository
+        # holds the file, so a replay that rebuilt the id from the path
+        # could name a different repository's file of the same name.
         _fn = node.file_node()
         source_path = _fn.get_field("relative_path") if _fn else None
+        source_file_id = _fn.id if _fn else None
         entry = MutationEntry(
             operation="delete_requirement",
             target_id=node_id,
@@ -1489,6 +1705,7 @@ class TraceGraph:
                 "parent_ids": [p.id for p in node.iter_parents()],
                 "child_ids": [c.id for c in node.iter_children()],
                 "source_path": source_path,
+                "source_file_id": source_file_id,
                 # Implements: REQ-o00062-P
                 # Full edge capture so undo reattaches the requirement rather
                 # than restoring an orphan that renders into no file.
@@ -1650,6 +1867,16 @@ class TraceGraph:
         new_anchor = f"{parent.id}#{new_label}"
         update_anchors_on_rename(self._comment_index, old_anchor, new_anchor, self.repo_root)
 
+        # Implements: REQ-p00017-B
+        # A journey naming this assertion holds the old label in its cached
+        # body, which is what it renders from. B covers an *Assertion*'s
+        # identifier as squarely as a requirement's, so the citing journeys
+        # are reconciled and named on the entry for the save path to find.
+        cited_by = self._journeys_validating(parent)
+        if cited_by:
+            self._reconcile_journey_bodies(*cited_by)
+            entry.after_state["journeys_reconciled"] = [j.id for j in cited_by]
+
         self._mutation_log.append(entry)
         return entry
 
@@ -1669,6 +1896,7 @@ class TraceGraph:
             KeyError: If assertion_id is not found.
             ValueError: If the node is not an assertion.
         """
+        _refuse_render_hostile(new_text, "Assertion text")
         if assertion_id not in self._index:
             raise KeyError(f"Assertion '{assertion_id}' not found")
 
@@ -1708,6 +1936,7 @@ class TraceGraph:
         self._mutation_log.append(entry)
         return entry
 
+    # Implements: REQ-o00062-S
     def _next_assertion_label(self, parent: GraphNode) -> str:
         """The label following ``parent``'s last assertion in its series.
 
@@ -1716,21 +1945,7 @@ class TraceGraph:
         a requirement that has run out of labels is one to split, not one
         to label outside its own alphabet (REQ-o00062-S).
         """
-        resolver = self._resolver
-        if resolver is None:
-            # Without a configured series the default A-Z applies.
-            highest = -1
-            for child in parent.iter_children(edge_kinds={EdgeKind.STRUCTURES}):
-                if child.kind == NodeKind.ASSERTION:
-                    label = child.get_field("label", "")
-                    if len(label) == 1 and label.isupper():
-                        highest = max(highest, ord(label) - ord("A"))
-            if highest + 1 > 25:
-                raise ValueError(
-                    f"Requirement '{parent.id}' has no assertion label left "
-                    "(A-Z exhausted); split the requirement"
-                )
-            return chr(ord("A") + highest + 1)
+        resolver = self.resolver
 
         highest = -1
         for child in parent.iter_children(edge_kinds={EdgeKind.STRUCTURES}):
@@ -1790,6 +2005,7 @@ class TraceGraph:
             return last_assertion + 1.0
         return (last_assertion + following) / 2.0
 
+    # Implements: REQ-o00062-R
     def add_assertion(self, req_id: str, text: str) -> MutationEntry:
         """Add an assertion to a requirement, after its existing assertions.
 
@@ -1811,6 +2027,7 @@ class TraceGraph:
             ValueError: If req_id is not a requirement, or the label series
                 is exhausted (REQ-o00062-S).
         """
+        _refuse_render_hostile(text, "Assertion text")
         if req_id not in self._index:
             raise KeyError(f"Requirement '{req_id}' not found")
 
@@ -2076,10 +2293,11 @@ class TraceGraph:
         else:
             # Target doesn't exist - record as broken reference
             self._broken_references.append(
-                BrokenReference(
+                ReferenceFault(
                     source_id=source_id,
                     target_id=target_id,
                     edge_kind=edge_kind.value,
+                    fault_class=self._resolution_class(target_id),
                 )
             )
             entry.after_state["broken"] = True
@@ -2126,6 +2344,14 @@ class TraceGraph:
 
         if edge_to_update is None:
             raise ValueError(f"No edge exists from '{target_id}' to '{source_id}'")
+
+        # Implements: REQ-o00062-V
+        if edge_to_update.kind in _PLACEMENT_EDGE_KINDS or new_kind in _PLACEMENT_EDGE_KINDS:
+            raise ValueError(
+                "Edge kind changes are for traceability edges: a "
+                f"{edge_to_update.kind.value} -> {new_kind.value} rewrite would "
+                "detach content from the structure that renders it"
+            )
 
         old_kind = edge_to_update.kind
 
@@ -2259,6 +2485,13 @@ class TraceGraph:
         if edge_to_delete is None:
             raise ValueError(f"No edge exists from '{target_id}' to '{source_id}'")
 
+        # Implements: REQ-o00062-V
+        if edge_to_delete.kind in _PLACEMENT_EDGE_KINDS:
+            raise ValueError(
+                f"Cannot delete a {edge_to_delete.kind.value} edge: it places "
+                "content in its structure. Move or delete the content instead."
+            )
+
         entry = MutationEntry(
             operation="delete_edge",
             target_id=source_id,
@@ -2318,6 +2551,13 @@ class TraceGraph:
         """
         if node_id not in self._index:
             raise KeyError(f"Node '{node_id}' not found")
+        # Implements: REQ-o00062-V
+        _moved = self._index[node_id]
+        if _moved.kind not in (NodeKind.REQUIREMENT, NodeKind.USER_JOURNEY):
+            raise ValueError(
+                f"Cannot move a {_moved.kind.value} node between files: only "
+                "requirements and journeys are file-level content"
+            )
         if target_file_id not in self._index:
             raise KeyError(f"Target file '{target_file_id}' not found")
 
@@ -2409,13 +2649,17 @@ class TraceGraph:
         # Import here to avoid a circular import between builder and factory.
         from elspais.graph.factory import create_file_node
 
+        # Named rather than positional: the namespace sits between the file
+        # type and the repo, and a positional call that predates it lands
+        # every later argument one slot early without changing arity.
         node = create_file_node(
             absolute_path,
             repo_root,
             file_type,
-            repo,
-            git_branch,
-            git_commit,
+            self.namespace,
+            repo=repo,
+            git_branch=git_branch,
+            git_commit=git_commit,
         )
         if node.id in self._index:
             raise ValueError(f"FILE node '{node.id}' already exists")
@@ -2481,7 +2725,10 @@ class TraceGraph:
         if node.kind != NodeKind.FILE:
             raise ValueError(f"Node '{file_id}' is not a FILE node")
 
-        new_id = make_file_id(new_relative_path)
+        # A rename moves a file within its repository, never between
+        # repositories, so the new id is written in the same namespace the
+        # old one names.
+        new_id = make_file_id(parse_structural_id(file_id)[1], new_relative_path)
         old_relative_path = node.get_field("relative_path")
         old_absolute_path = node.get_field("absolute_path")
 
@@ -2590,10 +2837,11 @@ class TraceGraph:
         else:
             # New target also doesn't exist - remains broken
             self._broken_references.append(
-                BrokenReference(
+                ReferenceFault(
                     source_id=source_id,
                     target_id=new_target_id,
                     edge_kind=broken_ref.edge_kind,
+                    fault_class=self._resolution_class(new_target_id),
                 )
             )
             self._add_leftover_ref(source, edge_kind, new_target_id)
@@ -2609,7 +2857,11 @@ class TraceGraph:
     def _reconstruct_journey_body(self, node: GraphNode) -> str:
         """Rebuild body text from structured fields + live graph edges."""
         lines: list[str] = []
-        lines.append(f"## {node.id}: {node.get_label()}")
+        # The depth the author wrote, not a fixed one: a journey carries its
+        # heading level like a requirement does, and re-rendering it at some
+        # other depth alters a file in a way nothing asked for.
+        depth = "#" * (node.get_field("heading_level") or 2)
+        lines.append(f"{depth} {node.id}: {node.get_label()}")
         actor = node.get_field("actor")
         if actor:
             lines.append(f"**Actor**: {actor}")
@@ -2639,7 +2891,11 @@ class TraceGraph:
             if whole or not labels:
                 validates_refs.append(src)
             if labels:
-                validates_refs.append(f"{src}-{'+'.join(sorted(labels))}")
+                # Implements: REQ-p00014-U
+                # The separators are the owning repository's, not constants:
+                # a journey citing an assertion writes the same boundary
+                # characters a spec file's metadata line writes.
+                validates_refs.append(self.resolver.make_assertion_ref(src, sorted(labels)))
         if validates_refs:
             lines.append(f"Validates: {', '.join(validates_refs)}")
         preamble = node.get_field("body_lines", [])
@@ -2648,10 +2904,15 @@ class TraceGraph:
             lines.extend(preamble)
         for section in node.get_field("sections", []):
             lines.append("")
-            lines.append(f"## {section['name']}")
+            section_depth = "#" * (section.get("heading_level") or 2)
+            lines.append(f"{section_depth} {section['name']}")
             lines.extend(section["content"].splitlines())
         lines.append("")
-        lines.append(render_end_marker(node.id, None))
+        # A journey closes on its title, as a requirement does. The
+        # identifier form is still read -- it is what the tool used to emit,
+        # so it is in files already -- but one form is written, or a file
+        # saved twice would alternate between them.
+        lines.append(render_end_marker(node.get_label(), None))
         return "\n".join(lines)
 
     def _journey_bodies_snapshot(self, *nodes: GraphNode | None) -> dict[str, str]:
@@ -2916,6 +3177,10 @@ class TraceGraph:
             KeyError: If node_id not found.
             ValueError: If not a REMAINDER or is a definition_block.
         """
+        if heading is not None:
+            _refuse_heading_hostile(heading)
+        if text is not None:
+            _refuse_render_hostile(text, "Section text", headings=False)
         if node_id not in self._index:
             raise KeyError(f"Node '{node_id}' not found")
 
@@ -2984,6 +3249,8 @@ class TraceGraph:
             KeyError: If req_id not found.
             ValueError: If req_id is not a requirement.
         """
+        _refuse_heading_hostile(heading)
+        _refuse_render_hostile(text, "Section text", headings=False)
         if req_id not in self._index:
             raise KeyError(f"Requirement '{req_id}' not found")
 
@@ -3145,6 +3412,16 @@ class TraceGraph:
             ValueError: If journey_id already exists.
             KeyError: If file_id is not found.
         """
+        # Implements: REQ-o00062-U
+        # The journey header line is grammar: an id outside its shape makes
+        # the whole block loose text on the next parse.
+        from elspais.graph.parsers.patterns import JNY_ID_PATTERN
+
+        if not JNY_ID_PATTERN.match(journey_id):
+            raise ValueError(
+                f"Invalid journey id {journey_id!r}: expected JNY-<descriptor>-<number>"
+            )
+        _refuse_title_hostile(title)
         if journey_id in self._index:
             raise ValueError(f"Node '{journey_id}' already exists")
         if file_id not in self._index:
@@ -3368,7 +3645,7 @@ class GraphBuilder:
     """Builder for constructing TraceGraph from parsed content.
 
     Usage:
-        builder = GraphBuilder()
+        builder = GraphBuilder(namespace="REQ")
         for content in parsed_contents:
             builder.add_parsed_content(content)
         graph = builder.build()
@@ -3386,12 +3663,12 @@ class GraphBuilder:
     # Implements: REQ-d00222-D
     def __init__(
         self,
+        *,
+        namespace: str,
         repo_root: Path | None = None,
         hash_mode: str = "normalized-text",
         satellite_kinds: list[str] | None = None,
-        multi_assertion_separator: str = "+",
-        resolver: Any | None = None,
-        namespace: str = "",
+        resolver: Any,
         project_name: str = "",
         link_results_to_tests: bool = True,
     ) -> None:
@@ -3403,13 +3680,17 @@ class GraphBuilder:
             satellite_kinds: NodeKind values (e.g. ["assertion", "result"])
                 that don't count as meaningful children for root/orphan
                 classification. Defaults to ASSERTION and RESULT.
-            multi_assertion_separator: Character joining multiple assertion
-                labels in compact references (e.g. "+" for REQ-x-A+B+C).
-                Empty string disables expansion.
-            resolver: IdResolver instance for multi-assertion expansion.
-                When provided, uses resolver.parse()/expand()/render_canonical()
-                instead of string splitting.
-            namespace: Repository namespace for TermEntry attribution.
+            resolver: The identifier grammar of the repository being built.
+                Required: every identifier this builder composes — assertion
+                ids, expanded multi-assertion references — is spelled with
+                the boundary characters this grammar declares, and there is
+                no neutral spelling to fall back on. Its namespace must be
+                the one passed here; the two describe the same repository.
+            namespace: The namespace of the repository whose content this
+                graph holds. Required and non-empty: nodes identified by
+                source location name their repository, so a graph that
+                cannot say which repository it is holding cannot identify
+                what is in it. Also attributes ``TermEntry.namespace``.
             project_name: Human-readable repo/project name (from
                 ``[project].name`` in config). Used to tag in-repo
                 INSTANCE clones with ``template_repo`` so the viewer's
@@ -3426,17 +3707,40 @@ class GraphBuilder:
         """
         self.repo_root = repo_root or Path.cwd()
         self.hash_mode = hash_mode
+        if not namespace:
+            raise ValueError(
+                "GraphBuilder requires the namespace of the repository whose "
+                "content it holds: its nodes name that repository in their ids."
+            )
         self._namespace = namespace
+        if resolver is None:
+            raise GrammarUnavailable(
+                "GraphBuilder requires the identifier grammar of the repository "
+                "whose content it holds: it composes identifiers, and the "
+                "characters that bound their parts are configuration."
+            )
+        resolver_namespace = getattr(getattr(resolver, "config", None), "namespace", "")
+        if resolver_namespace != namespace:
+            raise ValueError(
+                f"GraphBuilder was given the grammar of {resolver_namespace!r} to "
+                f"build {namespace!r}. A grammar governs its own repository's "
+                f"identifiers alone, so the two name one repository or neither."
+            )
         self._project_name = project_name
         self._link_results_to_tests = link_results_to_tests
-        self._multi_assertion_separator = multi_assertion_separator
         self._resolver = resolver
         if satellite_kinds is not None:
             self.satellite_kinds = frozenset(NodeKind(s) for s in satellite_kinds)
         else:
             self.satellite_kinds = _DEFAULT_SATELLITE_KINDS
         self._nodes: dict[str, GraphNode] = {}
-        self._pending_links: list[tuple[str, str, EdgeKind]] = []
+        # The fourth element is the verdict dict Task 3's reader attached to
+        # the raw item that named this target (empty when the surface that
+        # queued the link carries none), consulted only if the target turns
+        # out missing when links are resolved.
+        self._pending_links: list[
+            tuple[str, str, EdgeKind, dict[tuple[str, str], tuple[FaultClass, tuple[str, ...]]]]
+        ] = []
         # Implements: REQ-d00254-G
         # Source RESULT->TEST links for test_id-less reporters (e.g. flutter-
         # machine), matched by real source-file path + test() source line rather
@@ -3451,9 +3755,18 @@ class GraphBuilder:
         # Implements: REQ-d00222-A
         self._pending_terms: list[tuple[str, dict]] = []  # (node_id, parsed_data)
         # Implements: REQ-p00014-B
-        self._satisfies_links: list[tuple[str, str]] = []  # (declaring_id, template_id)
+        # (declaring_id, template_id, the verdict dict its reference list carried)
+        self._satisfies_links: list[
+            tuple[str, str, dict[tuple[str, str], tuple[FaultClass, tuple[str, ...]]]]
+        ] = []
         # Detection: broken references
-        self._broken_references: list[BrokenReference] = []
+        self._broken_references: list[ReferenceFault] = []
+        # Implements: REQ-d00272-G
+        self._style_findings: list[StyleFinding] = []
+        # Implements: REQ-d00272-O
+        self._undeclared_relationships: list[UndeclaredRelationship] = []
+        # Implements: REQ-d00272-N
+        self._identifier_form_findings: list[IdentifierFormFinding] = []
         # Detection: duplicate REQ IDs across files. Maps the canonical (real)
         # requirement ID -> ordered list of source paths that defined it. First
         # occurrence keeps the real ID; subsequent occurrences get a synthetic
@@ -3555,7 +3868,9 @@ class GraphBuilder:
                 source_ctx = getattr(content, "source_context", None)
                 source_path = source_ctx.source_id if source_ctx else ""
                 rel_source = self._to_relative_path(source_path) if source_path else source_path
-                remainder_id = data.get("id") or make_definition_id(rel_source, content.start_line)
+                remainder_id = data.get("id") or make_definition_id(
+                    self._namespace, rel_source, content.start_line
+                )
                 node = self._nodes.get(remainder_id)
                 if node:
                     self._wire_contains_edge(file_node, node, content)
@@ -3567,10 +3882,64 @@ class GraphBuilder:
                 source_ctx = getattr(content, "source_context", None)
                 source_path = source_ctx.source_id if source_ctx else ""
                 rel_source = self._to_relative_path(source_path) if source_path else source_path
-                remainder_id = data.get("id") or make_remainder_id(rel_source, content.start_line)
+                remainder_id = data.get("id") or make_remainder_id(
+                    self._namespace, rel_source, content.start_line
+                )
                 node = self._nodes.get(remainder_id)
                 if node:
                     self._wire_contains_edge(file_node, node, content)
+        elif content.content_type == "reference_fault":
+            # Implements: REQ-d00269-H, REQ-p00019-A
+            # No node is created and no CONTAINS edge wired -- the physical
+            # line already round-trips via the remainder gatherer. The FILE
+            # node is the only anchor available for a fault with no CODE/TEST
+            # node of its own (an empty reference list, a trailing separator).
+            data = content.parsed_data
+            source_id = file_node.id if file_node is not None else data.get("source_id", "")
+            self._broken_references.append(
+                ReferenceFault(
+                    source_id=source_id,
+                    target_id=data["raw"],
+                    edge_kind=data.get("edge_kind") or "",
+                    fault_class=data["fault_class"],
+                    codes=data["codes"],
+                    line=content.start_line,
+                )
+            )
+        elif content.content_type == "style_finding":
+            # Implements: REQ-d00272-G
+            data = content.parsed_data
+            source_id = file_node.id if file_node is not None else data.get("source_id", "")
+            self._style_findings.append(
+                StyleFinding(source_id=source_id, code=data["code"], line=content.start_line)
+            )
+        elif content.content_type == "identifier_form_finding":
+            # Implements: REQ-d00272-N
+            # The relationship was produced; only its spelling is reported,
+            # so this joins no bucket that counts references that failed.
+            data = content.parsed_data
+            source_id = file_node.id if file_node is not None else data.get("source_id", "")
+            self._identifier_form_findings.append(
+                IdentifierFormFinding(
+                    source_id=source_id,
+                    text=data["text"],
+                    codes=tuple(data["codes"]),
+                    line=content.start_line,
+                )
+            )
+        elif content.content_type == "undeclared_relationship":
+            # Implements: REQ-d00272-O
+            # No node, no edge: reading an informal citation as a
+            # declaration is exactly the inference this vocabulary exists
+            # to refuse.  The FILE node anchors it, since the line
+            # declared nothing that could carry it.
+            data = content.parsed_data
+            source_id = file_node.id if file_node is not None else data.get("source_id", "")
+            self._undeclared_relationships.append(
+                UndeclaredRelationship(
+                    source_id=source_id, text=data["text"], line=content.start_line
+                )
+            )
 
     def _add_requirement(self, content: ParsedContent) -> None:
         """Add a requirement node and its assertions."""
@@ -3603,7 +3972,7 @@ class GraphBuilder:
             # later human-authored ID could collide with the synthetic and
             # disguise itself as a duplicate. Refuse to build with a clear
             # message rather than silently producing wrong duplicate reports.
-            if self._resolver is not None and self._resolver.is_valid(synthetic_id):
+            if self._resolver.is_valid(synthetic_id):
                 raise ValueError(
                     f"Cannot disambiguate duplicate REQ ID {canonical_id!r}: "
                     f"the configured ID resolver accepts the synthetic form "
@@ -3648,6 +4017,18 @@ class GraphBuilder:
             "satisfies_refs": data.get("satisfies", []),
             # Implements: REQ-d00252
             "integrates_refs": data.get("integrates", []),
+            # Implements: REQ-d00272-K
+            # The raw items the reader refused. They stay in
+            # ``integrates_refs`` so rendering returns the author's own text
+            # unchanged, and are named here so the federation pass wires no
+            # relationship for an item whose verdict already withheld one.
+            "integrates_refused": sorted(
+                {
+                    raw
+                    for (kw, raw), verdict in (data.get("reference_verdicts") or {}).items()
+                    if kw == EdgeKind.INTEGRATES.value and reader_refused(verdict)
+                }
+            ),
             "heading_level": data.get("heading_level", 2),
             "assertions_heading_level": data.get("assertions_heading_level"),
             "changelog_heading_level": data.get("changelog_heading_level"),
@@ -3672,10 +4053,7 @@ class GraphBuilder:
 
         # Create assertion nodes
         for assertion in data.get("assertions", []):
-            if self._resolver is not None:
-                assertion_id = self._resolver.make_assertion_id(req_id, assertion["label"])
-            else:
-                assertion_id = f"{req_id}-{assertion['label']}"
+            assertion_id = self._resolver.make_assertion_id(req_id, assertion["label"])
             assertion_line = assertion.get("line", content.start_line)
             assertion_node = GraphNode(
                 id=assertion_id,
@@ -3749,6 +4127,7 @@ class GraphBuilder:
             self._pending_terms.append((def_id, defn))
 
         # Add children in document order (sorted by line number)
+        # Implements: REQ-d00128-F
         children_with_lines.sort(key=lambda x: x[0])
         for line_num, child_node in children_with_lines:
             edge = node.link(child_node, EdgeKind.STRUCTURES)
@@ -3778,7 +4157,8 @@ class GraphBuilder:
             if computed and stored_hash != computed:
                 parse_dirty_reasons.append("stale_hash")
 
-        # Section header depth validation (REQ-d00250-B, REQ-d00250-C)
+        # Section header depth validation
+        # Implements: REQ-d00250-B, REQ-d00250-C
         req_depth = data.get("heading_level", 2)
         min_child_depth = req_depth + 1
         has_section_block = False
@@ -3840,16 +4220,43 @@ class GraphBuilder:
             existing = node._content.get("parse_unfixable_reasons", [])
             node._content["parse_unfixable_reasons"] = existing + ["section_header_depth_unfixable"]
 
-        # Queue implements/refines links for later resolution
+        # Queue implements/refines links for later resolution. The verdict
+        # dict Task 3's reader carried for this requirement's reference
+        # lists rides along, so a malformed or duplicated item is classified
+        # the same way here as in a code or test annotation (REQ-d00272-K).
+        req_verdicts = data.get("reference_verdicts") or {}
         for impl_ref in data.get("implements", []):
-            self._pending_links.append((req_id, impl_ref, EdgeKind.IMPLEMENTS))
+            self._pending_links.append((req_id, impl_ref, EdgeKind.IMPLEMENTS, req_verdicts))
 
         for refine_ref in data.get("refines", []):
-            self._pending_links.append((req_id, refine_ref, EdgeKind.REFINES))
+            self._pending_links.append((req_id, refine_ref, EdgeKind.REFINES, req_verdicts))
 
-        # Implements: REQ-p00014-B
+        # Implements: REQ-p00014-B, REQ-d00272-K
+        # The verdict its item carried rides along exactly as it does for
+        # Implements and Refines: a Satisfies target reads through the one
+        # reader, so a malformed or repeated item is classified the same way
+        # here as under any other keyword.
         for sat_ref in data.get("satisfies", []):
-            self._satisfies_links.append((req_id, sat_ref))
+            self._satisfies_links.append((req_id, sat_ref, req_verdicts))
+
+        # Implements: REQ-d00252, REQ-d00272-K
+        # An Integrates item the reader refused is reported here, under the
+        # class the reader reached. Its target is resolved by the federation
+        # pass rather than by pending-link resolution, so without this the
+        # refusal reaches no surface at all.
+        for (kw, raw), verdict in req_verdicts.items():
+            if kw != EdgeKind.INTEGRATES.value or not reader_refused(verdict):
+                continue
+            fault_class, codes = verdict
+            self._broken_references.append(
+                ReferenceFault(
+                    source_id=req_id,
+                    target_id=raw,
+                    edge_kind=EdgeKind.INTEGRATES.value,
+                    fault_class=fault_class,
+                    codes=codes,
+                )
+            )
 
         # Implements: REQ-p00014-E
         # Author-declared TEMPLATE marker: stamp the REQ and its assertions
@@ -3877,6 +4284,10 @@ class GraphBuilder:
             "body": content.raw_text,
             "body_lines": data.get("body_lines", []),
             "sections": data.get("sections", []),
+            # The depth the journey was authored at. The parser reads it; a
+            # node that did not carry it is re-rendered at a fixed depth, so
+            # saving a journey moved its heading.
+            "heading_level": data.get("heading_level"),
             "parse_line": content.start_line,
             "parse_end_line": content.end_line,
         }
@@ -3907,9 +4318,34 @@ class GraphBuilder:
             edge = node.link(step_node, EdgeKind.STRUCTURES)
             edge.metadata = {"render_order": float(line_num)}
 
-        # Queue validates links for later resolution
+        # Queue validates links for later resolution. Same verdict-threading
+        # as a requirement's Implements/Refines (REQ-d00272-K): a journey's
+        # Validates: is read through the same reader, so it is classified
+        # the same way.
+        jny_verdicts = data.get("reference_verdicts") or {}
         for addr_ref in data.get("validates", []):
-            self._pending_links.append((journey_id, addr_ref, EdgeKind.VALIDATES))
+            self._pending_links.append((journey_id, addr_ref, EdgeKind.VALIDATES, jny_verdicts))
+
+        # Implements: REQ-p00014-V, REQ-p00014-R
+        # A declaration outside the metadata produced no relationship. Saying
+        # so is the whole point of refusing to read it: a journey that
+        # validates less than its author wrote must not look like a journey
+        # that validated everything.
+        for section_name, declared in data.get("misplaced_validates", []):
+            where = f'section "{section_name}"' if section_name else "a section"
+            self._broken_references.append(
+                ReferenceFault(
+                    source_id=journey_id,
+                    target_id=declared,
+                    edge_kind="validates",
+                    fault_class=FaultClass.FORBIDDEN,
+                    diagnostic=(
+                        f"declared in {where} rather than in the journey's "
+                        f"metadata, so it validates nothing. Move the "
+                        f"declaration up to the metadata, beside Actor and Goal."
+                    ),
+                )
+            )
 
     def _add_code_ref(self, content: ParsedContent) -> None:
         """Add code reference nodes.
@@ -3937,7 +4373,10 @@ class GraphBuilder:
         all_refs = [(ref, EdgeKind.IMPLEMENTS) for ref in data.get("implements", [])] + [
             (ref, EdgeKind.VERIFIES) for ref in data.get("verifies", [])
         ]
-        for ref, edge_kind in all_refs:
+        forbidden = data.get("forbidden") or []
+        verdicts = data.get("reference_verdicts") or {}
+
+        def _ensure_code_node() -> str:
             code_id = make_code_id(source_id, content.start_line)
             if code_id not in self._nodes:
                 node = GraphNode(
@@ -3962,8 +4401,27 @@ class GraphBuilder:
                 if func_end_line:
                     node.set_field("function_end_line", func_end_line)
                 self._nodes[code_id] = node
+            return code_id
 
-            self._pending_links.append((code_id, ref, edge_kind))
+        for ref, edge_kind in all_refs:
+            code_id = _ensure_code_node()
+            self._pending_links.append((code_id, ref, edge_kind, verdicts))
+
+        # Implements: REQ-d00272-J
+        # A keyword a code file may not use is read, not passed over: the
+        # relationship it would have declared is refused and reported,
+        # anchored to the same CODE node an admitted keyword would use.
+        if forbidden:
+            code_id = _ensure_code_node()
+            self._broken_references.extend(
+                self._forbidden_keyword_faults(
+                    code_id,
+                    data.get("forbidden_keyword", ""),
+                    forbidden,
+                    verdicts,
+                    "code",
+                )
+            )
 
     def _add_test_ref(self, content: ParsedContent) -> None:
         """Add test reference nodes.
@@ -4010,13 +4468,30 @@ class GraphBuilder:
             # Implements: REQ-d00131-G
             # Store raw comment text for render protocol
             node.set_field("raw_text", content.raw_text)
-            expected_broken = data.get("expected_broken_count", 0)
-            if expected_broken > 0:
-                node.set_metric("_expected_broken_count", expected_broken)
             self._nodes[test_id] = node
 
+        verdicts = data.get("reference_verdicts") or {}
         for val_ref in data.get("verifies", []):
-            self._pending_links.append((test_id, val_ref, EdgeKind.VERIFIES))
+            self._pending_links.append((test_id, val_ref, EdgeKind.VERIFIES, verdicts))
+
+        # Implements: REQ-d00272-J
+        # A keyword a test file may not use (anything but Verifies) is read,
+        # not passed over: the relationship it would have declared is
+        # refused and reported.  No function context is attached here even
+        # when one is available -- doing so would mark the function's line
+        # "emitted" and suppress the third-pass unlinked-test fallback that
+        # gives the actual test function its file-default Verifies.
+        forbidden = data.get("forbidden") or []
+        if forbidden:
+            self._broken_references.extend(
+                self._forbidden_keyword_faults(
+                    test_id,
+                    data.get("forbidden_keyword", ""),
+                    forbidden,
+                    verdicts,
+                    "test",
+                )
+            )
 
     def _add_test_result(self, content: ParsedContent) -> None:
         """Add a test result node.
@@ -4081,7 +4556,7 @@ class GraphBuilder:
         # enabled).
         if test_id and self._link_results_to_tests and data.get("match") != "aggregate":
             # Implements: REQ-d00127-E
-            self._pending_links.append((result_id, test_id, EdgeKind.YIELDS))
+            self._pending_links.append((result_id, test_id, EdgeKind.YIELDS, {}))
         elif data.get("match") == "source" and self._link_results_to_tests:
             # Implements: REQ-d00254-G
             # Source-matching reporters (e.g. flutter-machine) emit no test_id;
@@ -4109,7 +4584,9 @@ class GraphBuilder:
         source_path = source_ctx.source_id if source_ctx else ""
 
         rel_source = self._to_relative_path(source_path) if source_path else source_path
-        remainder_id = data.get("id") or make_definition_id(rel_source, content.start_line)
+        remainder_id = data.get("id") or make_definition_id(
+            self._namespace, rel_source, content.start_line
+        )
         text = content.raw_text or ""
 
         node = GraphNode(
@@ -4139,7 +4616,9 @@ class GraphBuilder:
         # Use provided ID or generate from source location (repo-relative to
         # keep generated artifacts stable across worktrees).
         rel_source = self._to_relative_path(source_path) if source_path else source_path
-        remainder_id = data.get("id") or make_remainder_id(rel_source, content.start_line)
+        remainder_id = data.get("id") or make_remainder_id(
+            self._namespace, rel_source, content.start_line
+        )
         text = data.get("text", content.raw_text or "")
 
         node = GraphNode(
@@ -4154,7 +4633,7 @@ class GraphBuilder:
         }
         self._nodes[remainder_id] = node
 
-    # Implements: REQ-d00128-D
+    # Implements: REQ-d00128-D, REQ-d00128-E
     def _wire_contains_edge(
         self, file_node: GraphNode, content_node: GraphNode, content: ParsedContent
     ) -> None:
@@ -4178,47 +4657,115 @@ class GraphBuilder:
 
     # Implements: REQ-d00081-D+E+G
     def _expand_multi_assertion(self, target_id: str) -> list[str]:
-        """Expand multi-assertion reference using IdResolver or configured separator.
+        """Expand a multi-assertion reference into its individual references.
 
         REQ-p00001-A+B+C -> [REQ-p00001-A, REQ-p00001-B, REQ-p00001-C]
 
-        When a resolver is available, delegates to resolver.parse()/expand()/
-        render_canonical(). Falls back to string splitting when no resolver
-        is set.
+        Which characters divide a component from its first label, and one
+        label from the next, is the repository's grammar to say — reading
+        them off the string instead would find whichever of them the
+        component happens to contain.
         """
-        # Use IdResolver when available
-        if self._resolver is not None:
-            parsed = self._resolver.parse(target_id)
-            if parsed is None or len(parsed.assertions) <= 1:
-                return [target_id]
-            expanded = self._resolver.expand(parsed)
-            return [self._resolver.render_canonical(e) for e in expanded]
-
-        # Fallback: string-based splitting
-        sep = self._multi_assertion_separator
-        if not sep or sep not in target_id:
+        parsed = self._resolver.parse(target_id)
+        if parsed is None or len(parsed.assertions) <= 1:
             return [target_id]
+        return [self._resolver.render_canonical(e) for e in self._resolver.expand(parsed)]
 
-        parts = target_id.split(sep)
-        base = parts[0]
-        if not parts[1:]:
-            return [target_id]
+    # Implements: REQ-p00014-R
+    def _resolution_class(self, target_id: str) -> FaultClass:
+        """Which class an item that read but did not resolve reached.
 
-        # Find the last ID separator (- or _) to split off the first label
-        last_sep_idx = max(base.rfind("-"), base.rfind("_"))
-        if last_sep_idx < 0:
-            return [target_id]
+        A label that names no assertion of a requirement that exists is a
+        different finding from a requirement nothing holds: the first is
+        always the author's, the second may be a sibling that has not
+        authored it yet.  Reporting the later class than the reference
+        reached would describe a defect the author does not have.
+        """
+        split = self._resolver.split_assertion_ref(target_id)
+        if split is not None and split[0] in self._nodes:
+            return FaultClass.UNKNOWN_ASSERTION
+        return FaultClass.UNKNOWN_REQUIREMENT
 
-        base_req = base[:last_sep_idx]
-        id_sep = base[last_sep_idx]
-        first_label = base[last_sep_idx + 1 :]
+    # Implements: REQ-d00252-K
+    def _fault_verdict(
+        self,
+        target_id: str,
+        keyword: str,
+        verdicts: dict[tuple[str, str], tuple[FaultClass, tuple[str, ...]]],
+    ) -> tuple[FaultClass, tuple[str, ...]]:
+        """The class and codes for *target_id*, from its parsed verdict or
+        resolution.
 
-        result = [f"{base_req}{id_sep}{first_label}"]
-        for label in parts[1:]:
-            if label:
-                result.append(f"{base_req}{id_sep}{label}")
+        A verdict Task 3's reader carried (grammar-level: the item never
+        matched any member's identifier) always wins when present; an item
+        that matched but names a node this graph does not hold falls back to
+        ``_resolution_class``, since no grammar-level verdict exists for it
+        (REQ-d00269-G reads a multi-assertion item's expanded labels
+        individually, and only the whole item's raw text is ever a verdict
+        key).
 
-        return result
+        No prose accompanies either answer. A cause is named by the code, the
+        file and the line the reference was written on, and that code's
+        documented meaning (REQ-d00252-K); all three reach every surface, so
+        a sentence guessing at a separator mismatch would only add a fourth
+        naming that the input does not determine -- and, on the fallback
+        path, would name a defect an item that parsed perfectly and is simply
+        absent does not have.
+        """
+        if (keyword, target_id) in verdicts:
+            return verdicts[(keyword, target_id)]
+        return self._resolution_class(target_id), ()
+
+    # Implements: REQ-d00272-A, REQ-d00272-J
+    def _forbidden_keyword_faults(
+        self,
+        source_id: str,
+        keyword: str,
+        targets: list[str],
+        verdicts: dict[tuple[str, str], tuple[FaultClass, tuple[str, ...]]],
+        file_kind: str,
+    ) -> list[ReferenceFault]:
+        """The faults a keyword *file_kind* may not use produces for *targets*.
+
+        ``FORBIDDEN`` is the last stage of reading, and an item only arrives
+        there by having read: the keyword refuses a relationship the item
+        successfully named.  An item that never read stopped earlier and
+        carries its own verdict, which is reported instead -- stamping the
+        refusal on it would report a later stage than reading reached
+        (REQ-d00272-A) and describe it as resolving, which it did not.
+
+        The verdict is looked up against the item as written, before any
+        multi-*Assertion* expansion: the reader keys a verdict by the whole
+        item's raw text, and an expanded label is not that key.
+        """
+        faults: list[ReferenceFault] = []
+        for raw_target in targets:
+            if (keyword, raw_target) in verdicts:
+                fault_class, codes = verdicts[(keyword, raw_target)]
+                faults.append(
+                    ReferenceFault(
+                        source_id=source_id,
+                        target_id=raw_target,
+                        edge_kind=keyword,
+                        fault_class=fault_class,
+                        codes=codes,
+                    )
+                )
+                continue
+            for expanded in self._expand_multi_assertion(raw_target):
+                faults.append(
+                    ReferenceFault(
+                        source_id=source_id,
+                        target_id=expanded,
+                        edge_kind=keyword,
+                        fault_class=FaultClass.FORBIDDEN,
+                        diagnostic=(
+                            f"'{keyword.capitalize()}:' is not a valid keyword in "
+                            f"a {file_kind} file; the declaration is refused."
+                        ),
+                    )
+                )
+        return faults
 
     # Implements: REQ-p00014-B, REQ-p00014-C, REQ-d00069-H
     def _instantiate_satisfies_templates(self) -> None:
@@ -4233,10 +4780,39 @@ class GraphBuilder:
         # Collect all template roots first (a template may be referenced
         # by multiple declaring reqs)
         template_roots: dict[str, list[str]] = {}  # template_id -> [declaring_ids]
-        for declaring_id, template_id in self._satisfies_links:
+        # Implements: REQ-d00272-K
+        # An item its reader already refused never reaches template lookup:
+        # its verdict decided it binds nothing, and finding the node anyway
+        # would return the relationship the verdict withheld. It is reported
+        # under the class the reader reached, not the resolution-stage one.
+        #
+        # One entry per refused ITEM, not per (declaring, target) pair: the
+        # commonest reason an item is refused is that it repeats a sibling,
+        # and every instance of a repeat is reported. Keyed by the pair, the
+        # instances would collapse into the one report that keeping the first
+        # instance already produces -- the silence this assertion exists to
+        # remove.
+        refused_items: list[tuple[str, str, FaultClass, tuple[str, ...]]] = []
+        for declaring_id, template_id, verdicts in self._satisfies_links:
+            refused = verdicts.get((EdgeKind.SATISFIES.value, template_id))
+            if reader_refused(refused):
+                assert refused is not None
+                refused_items.append((declaring_id, template_id, refused[0], refused[1]))
+                continue
             # Handle assertion-level satisfies: strip assertion suffix to find root
             # but keep the full ref for later use
             template_roots.setdefault(template_id, []).append(declaring_id)
+
+        for declaring_id, template_id, fault_class, codes in refused_items:
+            self._broken_references.append(
+                ReferenceFault(
+                    source_id=declaring_id,
+                    target_id=template_id,
+                    edge_kind=EdgeKind.SATISFIES.value,
+                    fault_class=fault_class,
+                    codes=codes,
+                )
+            )
 
         # CUR-1353 Phase 2 (single-REQ scope): a template is one REQ root plus
         # its directly-attached assertions. We do NOT pre-resolve REFINES into
@@ -4257,10 +4833,11 @@ class GraphBuilder:
                 # Genuinely missing — record a plain broken-ref and skip clone.
                 for declaring_id in template_roots[template_id]:
                     self._broken_references.append(
-                        BrokenReference(
+                        ReferenceFault(
                             source_id=declaring_id,
                             target_id=template_id,
                             edge_kind=EdgeKind.SATISFIES.value,
+                            fault_class=self._resolution_class(template_id),
                         )
                     )
                 template_roots[template_id] = []
@@ -4273,10 +4850,11 @@ class GraphBuilder:
                 # node.
                 for declaring_id in template_roots[template_id]:
                     self._broken_references.append(
-                        BrokenReference(
+                        ReferenceFault(
                             source_id=declaring_id,
                             target_id=template_id,
                             edge_kind=EdgeKind.SATISFIES.value,
+                            fault_class=FaultClass.FORBIDDEN,
                             diagnostic=(
                                 f"{template_id} is not marked **Template**; "
                                 f"mark {template_id} with **Template** if it's "
@@ -4288,7 +4866,7 @@ class GraphBuilder:
 
         # Sub-pass 2: Clone & link. Skip any satisfies-link whose template was
         # rejected in sub-pass 1 (template_roots[t] emptied).
-        cloneable_links = [(d, t) for d, t in self._satisfies_links if template_roots.get(t)]
+        cloneable_links = [(d, t) for d, t, _v in self._satisfies_links if template_roots.get(t)]
         for declaring_id, template_id in cloneable_links:
             template_node = self._nodes.get(template_id)
             declaring_node = self._nodes.get(declaring_id)
@@ -4297,10 +4875,11 @@ class GraphBuilder:
                 # genuinely broken.
                 if not template_node and INSTANCE_SEPARATOR in template_id:
                     self._broken_references.append(
-                        BrokenReference(
+                        ReferenceFault(
                             source_id=declaring_id,
                             target_id=template_id,
                             edge_kind=EdgeKind.SATISFIES.value,
+                            fault_class=self._resolution_class(template_id),
                         )
                     )
                 continue
@@ -4309,10 +4888,11 @@ class GraphBuilder:
             # very loop by a sibling satisfier). Refuse to clone again.
             if template_node.get_field("stereotype") == Stereotype.INSTANCE:
                 self._broken_references.append(
-                    BrokenReference(
+                    ReferenceFault(
                         source_id=declaring_id,
                         target_id=template_id,
                         edge_kind=EdgeKind.SATISFIES.value,
+                        fault_class=FaultClass.FORBIDDEN,
                         diagnostic=(
                             "Chained instantiation is not supported. "
                             "Satisfy the original template directly."
@@ -4326,10 +4906,11 @@ class GraphBuilder:
             # emit rule-1 diagnostic.
             if template_node.get_field("stereotype") != Stereotype.TEMPLATE:
                 self._broken_references.append(
-                    BrokenReference(
+                    ReferenceFault(
                         source_id=declaring_id,
                         target_id=template_id,
                         edge_kind=EdgeKind.SATISFIES.value,
+                        fault_class=FaultClass.FORBIDDEN,
                         diagnostic=(
                             f"{template_id} is not marked **Template**; "
                             f"mark {template_id} with **Template** if it's "
@@ -4352,11 +4933,7 @@ class GraphBuilder:
             clone_map: dict[str, GraphNode] = {}
 
             for orig in template_nodes:
-                clone_id = (
-                    self._resolver.build_instance_id(declaring_id, orig.id)
-                    if self._resolver
-                    else f"{declaring_id}{INSTANCE_SEPARATOR}{orig.id}"
-                )
+                clone_id = self._resolver.build_instance_id(declaring_id, orig.id)
                 clone = GraphNode(
                     id=clone_id,
                     kind=orig.kind,
@@ -4376,7 +4953,8 @@ class GraphBuilder:
                 # in-repo Satisfies clones.
                 if self._project_name:
                     clone.set_field("template_repo", self._project_name)
-                # Implements: REQ-d00129-C -- copy parse_line fields from original
+                # Implements: REQ-d00129-C
+                # Copy parse_line fields from the original.
                 if orig.get_field("parse_line") is not None:
                     clone.set_field("parse_line", orig.get_field("parse_line"))
                 if orig.get_field("parse_end_line") is not None:
@@ -4388,6 +4966,7 @@ class GraphBuilder:
                 # INSTANCE edge from clone to original
                 clone.link(orig, EdgeKind.INSTANCE)
 
+            # Implements: REQ-d00128-K
             # Recreate internal edges in cloned subtree
             for orig in template_nodes:
                 clone = clone_map.get(orig.id)
@@ -4412,7 +4991,8 @@ class GraphBuilder:
             if cloned_root:
                 declaring_node.link(cloned_root, EdgeKind.SATISFIES)
 
-            # Implements: REQ-d00128-J -- DEFINES edges from declaring FILE to INSTANCE nodes
+            # Implements: REQ-d00128-J
+            # DEFINES edges run from the declaring FILE to the INSTANCE nodes.
             declaring_file = declaring_node.file_node()
             if declaring_file:
                 for clone in clone_map.values():
@@ -4423,7 +5003,7 @@ class GraphBuilder:
         """Validate template-marker rules that need full graph context.
 
         Phase 2 of CUR-1353: walk the graph after link resolution and emit
-        typed ``BrokenReference`` diagnostics for templates that violate
+        typed ``ReferenceFault`` diagnostics for templates that violate
         the static validation matrix.
 
         Rule 7: A REQ marked ``**Template**`` may not declare behavioural
@@ -4461,10 +5041,11 @@ class GraphBuilder:
         # Expand multi-assertion refs (e.g. REQ-X-A+B+C) to base targets.
         for expanded in self._expand_multi_assertion(ref_id):
             self._broken_references.append(
-                BrokenReference(
+                ReferenceFault(
                     source_id=template_id,
                     target_id=expanded,
                     edge_kind=edge_kind.value,
+                    fault_class=FaultClass.FORBIDDEN,
                     diagnostic=(
                         f"Templates are pure specs; remove "
                         f"behavioural-claim metadata or remove the "
@@ -4517,19 +5098,48 @@ class GraphBuilder:
         # Phase 2: Instantiate templates before resolving links
         self._instantiate_satisfies_templates()
 
-        # Expand multi-assertion references before resolving
-        expanded_links: list[tuple[str, str, EdgeKind]] = []
-        for source_id, target_id, edge_kind in self._pending_links:
+        # Expand multi-assertion references before resolving. Salvage
+        # reaches inside a multi-assertion item the same as anywhere else
+        # (REQ-d00269-G): each label is resolved on its own, so A+Z binds A
+        # and reports only Z. But a verdict keyed on the item's whole raw
+        # text (REQ-d00269-G: only the raw item is ever a verdict key) is
+        # not only present when nothing about it matched at all --
+        # DUPLICATE_ITEM is a verdict on an item that matched perfectly
+        # (REQ-d00272-K), and ``_resolver.parse()`` succeeds on it, same as
+        # any other duplicate. Expanding a verdicted item would scatter that
+        # verdict across labels the reader never computed one for and lose
+        # it entirely -- the expanded labels don't match the raw-text
+        # verdict key, so they would fall through to ordinary node lookup
+        # and bind. A verdicted item is therefore kept whole, unexpanded, so
+        # its one verdict resolves to one link that reports (or refuses to
+        # bind) the item exactly as the reader classified it.
+        expanded_links: list[
+            tuple[str, str, EdgeKind, dict[tuple[str, str], tuple[FaultClass, tuple[str, ...]]]]
+        ] = []
+        for source_id, target_id, edge_kind, verdicts in self._pending_links:
+            if (edge_kind.value, target_id) in verdicts:
+                expanded_links.append((source_id, target_id, edge_kind, verdicts))
+                continue
             for resolved_target in self._expand_multi_assertion(target_id):
-                expanded_links.append((source_id, resolved_target, edge_kind))
+                expanded_links.append((source_id, resolved_target, edge_kind, verdicts))
 
         # Resolve pending links. Track which (source, target, kind) refs
         # actually became edges so the stored ref fields can be re-scoped to
         # unresolved leftovers afterwards (REQ-d00132-F, REQ-d00132-G).
         resolved_refs: set[tuple[str, str, str]] = set()
-        for source_id, target_id, edge_kind in expanded_links:
+        for source_id, target_id, edge_kind, verdicts in expanded_links:
             source = self._nodes.get(source_id)
-            target = self._nodes.get(target_id)
+            # A verdict Task 3's reader carried for this raw item (an
+            # unmatched item's grammar-level class, or a repeated target's
+            # DUPLICATE_ITEM) already answers whether it may bind -- and the
+            # answer is always no. Node lookup must not override that: a
+            # duplicate's raw text is a real reference's own spelling (that
+            # is what makes it a duplicate rather than a typo), so
+            # ``self._nodes.get(target_id)`` finds the real node and would
+            # bind it were this check skipped (REQ-d00272-K).
+            target = (
+                None if (edge_kind.value, target_id) in verdicts else self._nodes.get(target_id)
+            )
 
             if source and target:
                 # Implements: REQ-p00014-G
@@ -4545,10 +5155,11 @@ class GraphBuilder:
                     # (Satisfies:) plainly, since the bare "(refines)" line plus a
                     # passing refines_resolve check is what misleads authors.
                     self._broken_references.append(
-                        BrokenReference(
+                        ReferenceFault(
                             source_id=source_id,
                             target_id=target_id,
                             edge_kind=edge_kind.value,
+                            fault_class=FaultClass.FORBIDDEN,
                             diagnostic=(
                                 f"{target_id} is a Template: target it with "
                                 f"Satisfies:, not Refines:. To add detail, "
@@ -4561,10 +5172,11 @@ class GraphBuilder:
                 if edge_kind == EdgeKind.REFINES and target_stereotype == Stereotype.INSTANCE:
                     # Rule 4: refining instance content is not supported.
                     self._broken_references.append(
-                        BrokenReference(
+                        ReferenceFault(
                             source_id=source_id,
                             target_id=target_id,
                             edge_kind=edge_kind.value,
+                            fault_class=FaultClass.FORBIDDEN,
                             diagnostic=(
                                 "Refining instance content is not supported. "
                                 "Instance subtrees are read-only synthetic "
@@ -4578,10 +5190,11 @@ class GraphBuilder:
                 if edge_kind == EdgeKind.IMPLEMENTS and target_stereotype == Stereotype.INSTANCE:
                     # Rule 5: composite IDs are not authoring syntax.
                     self._broken_references.append(
-                        BrokenReference(
+                        ReferenceFault(
                             source_id=source_id,
                             target_id=target_id,
                             edge_kind=edge_kind.value,
+                            fault_class=FaultClass.FORBIDDEN,
                             diagnostic=(
                                 "Instance assertions have no canonical "
                                 "on-disk identifier; target the template "
@@ -4594,10 +5207,11 @@ class GraphBuilder:
                 if edge_kind == EdgeKind.VERIFIES and target_stereotype == Stereotype.INSTANCE:
                     # Rule 6: same reasoning as rule 5, TEST source.
                     self._broken_references.append(
-                        BrokenReference(
+                        ReferenceFault(
                             source_id=source_id,
                             target_id=target_id,
                             edge_kind=edge_kind.value,
+                            fault_class=FaultClass.FORBIDDEN,
                             diagnostic=(
                                 "Instance assertions have no canonical "
                                 "on-disk identifier; target the template "
@@ -4614,10 +5228,11 @@ class GraphBuilder:
                     # Journeys and steps are verification targets only; rejecting
                     # Implements/Refines here prevents invalid traceability edges.
                     self._broken_references.append(
-                        BrokenReference(
+                        ReferenceFault(
                             source_id=source_id,
                             target_id=target_id,
                             edge_kind=edge_kind.value,
+                            fault_class=FaultClass.FORBIDDEN,
                             diagnostic=(
                                 "Journeys and steps are only valid as "
                                 "`Verifies:` targets, not Implements/Refines."
@@ -4664,12 +5279,19 @@ class GraphBuilder:
                     if impl_end:
                         edge.metadata["impl_end_line"] = impl_end
             elif source and not target:
-                # Broken reference: target doesn't exist
+                # Broken reference: target doesn't exist. Consult the
+                # verdict Task 3's reader carried for this item first; only
+                # an item no grammar accounted for has one, so a target that
+                # matched but names no node here falls back to the
+                # resolution-stage decision (REQ-p00014-R).
+                fault_class, codes = self._fault_verdict(target_id, edge_kind.value, verdicts)
                 self._broken_references.append(
-                    BrokenReference(
+                    ReferenceFault(
                         source_id=source_id,
                         target_id=target_id,
                         edge_kind=edge_kind.value,
+                        fault_class=fault_class,
+                        codes=codes,
                     )
                 )
 
@@ -4767,16 +5389,6 @@ class GraphBuilder:
                 ]
                 node.set_field(field_name, leftovers)
 
-        # Populate _expected_broken_targets from nodes with the marker
-        for br in self._broken_references:
-            source = self._nodes.get(br.source_id)
-            if source and source.get_metric("_expected_broken_count"):
-                remaining = source.get_metric("_expected_broken_count")
-                targets = source.get_metric("_expected_broken_targets") or []
-                if len(targets) < remaining:
-                    targets.append(br.target_id)
-                    source.set_metric("_expected_broken_targets", targets)
-
         # Implements: REQ-d00071-A, REQ-d00071-B
         # Compute orphan candidates from graph structure instead of tracking
         # incrementally. A content node (not FILE, REMAINDER, ASSERTION) is an
@@ -4786,6 +5398,7 @@ class GraphBuilder:
         # Roots: parentless REQUIREMENTs (always), or other parentless nodes
         #        with at least one meaningful (non-satellite) child.
         # Orphans: parentless non-REQUIREMENT nodes without meaningful children.
+        # Implements: REQ-d00128-I
         _non_candidate_kinds = {NodeKind.FILE, NodeKind.REMAINDER, NodeKind.ASSERTION}
         _content_edge_kinds = {
             EdgeKind.IMPLEMENTS,
@@ -4820,11 +5433,15 @@ class GraphBuilder:
             hash_mode=self.hash_mode,
             satellite_kinds=self.satellite_kinds,
             _resolver=self._resolver,
+            _namespace=self._namespace,
         )
         graph._roots = roots
         graph._index = dict(self._nodes)
         graph._orphaned_ids = orphaned_ids
         graph._broken_references = list(self._broken_references)
+        graph._style_findings = list(self._style_findings)
+        graph._undeclared_relationships = list(self._undeclared_relationships)
+        graph._identifier_form_findings = list(self._identifier_form_findings)
         graph._duplicate_req_ids = {k: list(v) for k, v in self._duplicate_req_ids.items()}
 
         # Implements: REQ-d00222-A, REQ-d00222-B

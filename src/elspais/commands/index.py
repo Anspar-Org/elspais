@@ -44,8 +44,18 @@ def _validate_index(
 
     # Parse IDs from INDEX.md
     content = index_path.read_text()
-    index_req_ids = set(re.findall(r"REQ-[a-z0-9-]+", content, re.IGNORECASE))
-    index_jny_ids = set(re.findall(r"JNY-[A-Za-z0-9-]+", content))
+    # As in the health check that does this comparison: the requirement
+    # grammar is the repository's, the journey pattern is the canonical one.
+    from elspais.config import config_defaults
+    from elspais.graph.parsers.patterns import JOURNEY_REF_PATTERN
+    from elspais.utilities.patterns import build_resolver
+
+    # An empty config is not the default configuration -- it has no levels,
+    # so its grammar matches no identifier at all.
+    _config = getattr(args, "config_dict", None) or config_defaults()
+    _identifier = build_resolver(_config).grammar().identifier
+    index_req_ids = set(re.findall(_identifier, content))
+    index_jny_ids = set(JOURNEY_REF_PATTERN.findall(content))
 
     # Get IDs from graph (filtered to same set as INDEX.md generation)
     graph_req_ids = _indexed_node_ids(graph, NodeKind.REQUIREMENT, include_associates)
@@ -145,10 +155,6 @@ def _resolve_spec_dir_info(spec_dir: Path) -> _SpecDirInfo:
                 f.alias or name for name, f in ElspaisConfig.model_fields.items()
             } | set(ElspaisConfig.model_fields.keys())
             filtered = {k: v for k, v in cfg.items() if k in schema_fields}
-            # Strip legacy associates.paths list (v3 expects named entries)
-            assoc = filtered.get("associates")
-            if isinstance(assoc, dict) and "paths" in assoc:
-                filtered.pop("associates", None)
             typed_config = ElspaisConfig.model_validate(filtered)
             project_name = typed_config.project.name or current.name
             try:

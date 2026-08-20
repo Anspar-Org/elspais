@@ -17,6 +17,7 @@ from elspais.graph import GraphNode, NodeKind
 from elspais.graph.builder import TraceGraph
 from elspais.graph.federated import FederatedGraph, RepoEntry
 from elspais.graph.relations import EdgeKind
+from tests.federation_repos import make_repo
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Helpers
@@ -99,7 +100,8 @@ def _make_two_repo_federation(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Verifies: REQ-d00205-A — workspace info includes federation details
+# Verifies: REQ-d00205-A
+# Workspace info includes federation details.
 # ─────────────────────────────────────────────────────────────────────────────
 
 
@@ -126,9 +128,9 @@ class TestWorkspaceInfoFederation:
         )
 
         # The response must include a 'federation' section
-        assert (
-            "federation" in result
-        ), "Workspace info must include a 'federation' section when graph has multiple repos"
+        assert "federation" in result, (
+            "Workspace info must include a 'federation' section when graph has multiple repos"
+        )
         federation = result["federation"]
 
         # Must list repos with name, path, status fields
@@ -178,7 +180,8 @@ class TestWorkspaceInfoFederation:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Verifies: REQ-d00205-B — refresh_graph syncs config
+# Verifies: REQ-d00205-B
+# refresh_graph syncs config.
 # ─────────────────────────────────────────────────────────────────────────────
 
 
@@ -222,44 +225,93 @@ class TestRefreshGraphSyncsConfig:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Verifies: REQ-d00205-C — node-specific config
+# Verifies: REQ-d00205-C
+# Node-specific config.
 # ─────────────────────────────────────────────────────────────────────────────
 
 
 class TestNodeSpecificConfig:
     """Validates REQ-d00205-C: Node-specific ops use per-repo config."""
 
+    # Verifies: REQ-d00205-C
     def test_REQ_d00205_C_normalize_targets_uses_graph_config(self):
-        """_normalize_assertion_targets uses the target node's repo config.
+        """_mutate_add_edge normalizes targets under the OWNING repo's config.
 
-        Validates REQ-d00205-C: When normalizing assertion targets for
-        an edge mutation, the config should come from graph.config_for(node_id)
-        rather than a global _state['config'].
+        Validates REQ-d00205-C: no config is passed to _mutate_add_edge --
+        production must resolve graph.config_for(target_id) itself. The
+        target lives in an ASSOCIATE repo whose namespace (ASSOC) the root
+        config (ROOT) cannot parse, so a regression to the global/root
+        config leaves the raw full assertion id on the edge and the test
+        fails.
         """
         pytest.importorskip("mcp")
-        from elspais.mcp.server import _normalize_assertion_targets
+        from elspais.mcp.server import _mutate_add_edge
+        from elspais.utilities.patterns import build_resolver
 
-        # Build a federation where root and associate have different configs
-        # but matching namespace (REQ) so IdResolver can parse IDs
-        root_cfg = _make_config(**{"project.name": "Root", "project.namespace": "REQ"})
-        assoc_cfg = _make_config(**{"project.name": "Assoc", "project.namespace": "REQ"})
-        fed = _make_two_repo_federation(root_config=root_cfg, assoc_config=assoc_cfg)
+        root_cfg = _make_config(**{"project.name": "Root", "project.namespace": "ROOT"})
+        assoc_cfg = _make_config(**{"project.name": "Assoc", "project.namespace": "ASSOC"})
 
-        # Get per-repo config via graph.config_for() — the correct pattern
-        # Note: use REQ-p00001 (root node, type 'p') since 'a' isn't a valid type letter
-        root_config_dict = fed.config_for("REQ-p00001")
-        assert root_config_dict is not None
-        result = _normalize_assertion_targets(
-            targets=["REQ-p00001-A"],
-            target_id="REQ-p00001",
-            config=root_config_dict,
+        # This is what makes the test discriminating: the root grammar
+        # cannot read the associate's assertion id at all, so only the
+        # associate's own config can produce the bare label.
+        assert build_resolver(root_cfg).parse("ASSOC-o00001-A") is None
+        assert build_resolver(assoc_cfg).parse("ASSOC-o00001-A") is not None
+
+        root_graph = _make_simple_graph(
+            "ROOT-p00001", "Root Requirement", "PRD", Path("/repo/root")
         )
-        # Should normalize "REQ-p00001-A" to just "A"
-        assert "A" in result
+        assoc_graph = _make_simple_graph(
+            "ASSOC-o00001", "Associate Target", "OPS", Path("/repo/associate")
+        )
+        # A second associate-owned node to be the edge source. Indexed
+        # BEFORE the FederatedGraph is built -- ownership is snapshotted
+        # at construction.
+        source = GraphNode(id="ASSOC-d00001", kind=NodeKind.REQUIREMENT, label="Associate Source")
+        source._content = {"level": "DEV", "status": "Active", "hash": "ccdd3344"}
+        assoc_graph._index["ASSOC-d00001"] = source
+
+        fed = FederatedGraph(
+            [
+                RepoEntry(
+                    name="root",
+                    graph=root_graph,
+                    config=root_cfg,
+                    repo_root=Path("/repo/root"),
+                ),
+                RepoEntry(
+                    name="associate",
+                    graph=assoc_graph,
+                    config=assoc_cfg,
+                    repo_root=Path("/repo/associate"),
+                    git_origin="https://github.com/org/associate.git",
+                ),
+            ],
+            root_repo="root",
+        )
+
+        result = _mutate_add_edge(
+            fed,
+            source_id="ASSOC-d00001",
+            target_id="ASSOC-o00001",
+            edge_kind="IMPLEMENTS",
+            assertion_targets=["ASSOC-o00001-A"],
+        )
+
+        assert result["success"] is True
+        target = fed.find_by_id("ASSOC-o00001")
+        edges = [
+            e
+            for e in target.iter_outgoing_edges()
+            if e.kind == EdgeKind.IMPLEMENTS and e.target.id == "ASSOC-d00001"
+        ]
+        assert len(edges) == 1
+        # Normalized to the bare label under the ASSOCIATE's grammar.
+        assert edges[0].assertion_targets == ["A"]
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Verifies: REQ-d00205-D — global ops use root config
+# Verifies: REQ-d00205-D
+# Global ops use root config.
 # ─────────────────────────────────────────────────────────────────────────────
 
 
@@ -295,3 +347,83 @@ class TestGlobalOpsUseRootConfig:
         # Project name and prefix must come from root config, not associate
         assert result["project_name"] == "MainProject"
         assert result["config_summary"]["prefix"] == "MAIN"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Verifies: REQ-d00202-D, REQ-d00203-B
+# One federation, one member list.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestWorkspaceInfoAssociatesAgreeWithFederation:
+    """One tool, one membership answer, whether or not a graph is in hand."""
+
+    def test_associates_and_federation_repos_agree(self):
+        """The associates block is the federation's repos less the root.
+
+        Verifies: REQ-d00202-D
+        """
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _get_workspace_info
+
+        root_graph = _make_simple_graph("REQ-p00001", "Root", "PRD", Path("/repo/root"))
+        entries = [
+            RepoEntry(name="root", graph=root_graph, config=_make_config(), repo_root=Path("/r")),
+            RepoEntry(
+                name="direct",
+                graph=_make_simple_graph("REQ-a00001", "Direct", "OPS", Path("/repo/direct")),
+                config=_make_config(),
+                repo_root=Path("/repo/direct"),
+            ),
+            RepoEntry(
+                name="transitive",
+                graph=_make_simple_graph("REQ-b00001", "Transitive", "OPS", Path("/repo/deep")),
+                config=_make_config(),
+                repo_root=Path("/repo/deep"),
+            ),
+        ]
+        fed = FederatedGraph(entries, root_repo="root")
+
+        result = _get_workspace_info(
+            Path("/r"), config=_make_config(), graph=fed, detail="worktree"
+        )
+
+        associates = result["associates"]
+        names = {a["name"] for a in associates["associates"]}
+        assert names == {"direct", "transitive"}
+        assert associates["count"] == len(result["federation"]["repos"]) - 1
+        assert {a["path"] for a in associates["associates"]} == {"/repo/direct", "/repo/deep"}
+
+    def test_associates_without_graph_include_transitive_members(self, tmp_path: Path):
+        """Without a graph, membership still comes from the whole federation.
+
+        Verifies: REQ-d00203-B
+        """
+        pytest.importorskip("mcp")
+        from elspais.config import get_config
+        from elspais.mcp.server import _get_workspace_info
+
+        make_repo(tmp_path, "leaf", namespace="LEAF", req_id="LEAF-d00001")
+        make_repo(
+            tmp_path,
+            "mid",
+            namespace="MID",
+            associates={"leaf": "../leaf"},
+            associate_namespaces={"leaf": "LEAF"},
+            req_id="MID-d00001",
+        )
+        root = make_repo(
+            tmp_path,
+            "root",
+            namespace="ROOT",
+            associates={"mid": "../mid"},
+            associate_namespaces={"mid": "MID"},
+            req_id="ROOT-d00001",
+        )
+
+        config = get_config(config_path=root / ".elspais.toml", quiet=True)
+        result = _get_workspace_info(root, config=config, graph=None, detail="worktree")
+
+        associates = result["associates"]
+        assert {a["name"] for a in associates["associates"]} == {"mid", "leaf"}
+        assert associates["count"] == 2

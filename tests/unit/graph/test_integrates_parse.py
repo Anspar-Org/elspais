@@ -1,5 +1,6 @@
 # Verifies: REQ-d00252
 """Validates REQ-d00252-A: Integrates: is parsed and stored as integrates_refs."""
+
 import textwrap
 from pathlib import Path
 

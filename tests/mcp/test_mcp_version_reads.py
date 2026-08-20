@@ -24,15 +24,20 @@ from pathlib import Path
 import pytest
 
 from elspais.graph import render
+from elspais.graph.GraphNode import make_file_id
 
 FIXTURES_DIR = Path(__file__).parent.parent / "fixtures"
 HHT_LIKE = FIXTURES_DIR / "hht-like"
 
+# The namespace the hht-like fixture declares -- structural ids carry the
+# namespace of the repository holding the node.
+NAMESPACE = "REQ"
+
 # A requirement, one of its assertions, and the file that contains them.
 REQ = "REQ-d00003"
 ASSERTION = "REQ-d00003-A"
-SOURCE_FILE = "file:spec/dev-impl.md"
-TARGET_FILE = "file:spec/ops-deploy.md"
+SOURCE_FILE = make_file_id(NAMESPACE, "spec/dev-impl.md")
+TARGET_FILE = make_file_id(NAMESPACE, "spec/ops-deploy.md")
 
 UNKNOWN_ID = "REQ-z99999"
 
@@ -334,7 +339,8 @@ class TestGetVersionsTool:
 
     def test_REQ_o00060_G_get_versions_of_only_unknown_ids_is_empty(self, tools):
         """All-unknown is an empty mapping, still not an error."""
-        assert tools["get_versions"](node_ids=[UNKNOWN_ID, "file:spec/nope.md"]) == {}
+        _unknown_file = make_file_id(NAMESPACE, "spec/nope.md")
+        assert tools["get_versions"](node_ids=[UNKNOWN_ID, _unknown_file]) == {}
 
 
 # ─────────────────────────────────────────────────────────────────────────────

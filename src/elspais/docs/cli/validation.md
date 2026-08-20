@@ -92,14 +92,70 @@ See `elspais docs config` for the full `[federation]` reference.
   **Hierarchy violation** (PRD implements DEV)
     Fix: Reverse the relationship or change levels
 
-## Suppressing Warnings
+  **Unclaimed target** (reference names an identifier no repository claims)
+    Fix: Correct the ID, configure the associate that owns it, or move the
+    keyword off the front of the comment if no reference was meant
 
-For expected issues, add inline suppression:
+## Where a Reference Is Recognised
 
-```markdown
-# elspais: expected-broken-links 2
-**Implements**: REQ-future-001, REQ-future-002
+Position decides, not the shape of the target. A *Traceability* keyword
+introduces a reference only where it is the first content of:
+
+  **a comment**        `# Verifies: REQ-p00001`
+  **a metadata line**  `**Implements**: REQ-p00001` (spec files only)
+
+The same keyword anywhere else is ordinary text. None of these introduce a
+reference:
+
+```text
+value = 1  # what Implements: means here          (not first in the comment)
+# The Implements: keyword links code to a REQ     (not first in the comment)
+# `Implements: REQ-p00001`                        (inline-quoted)
 ```
+
+A keyword inside a fenced block is likewise displayed rather than invoked,
+so documentation can show reference syntax without minting references.
+
+Metadata lines are a spec-file form. In a code or test file only comment
+position counts, so an embedded fixture string containing
+`**Implements**: REQ-p00001` stays a string.
+
+Because recognition does not inspect the target, everything after the colon
+is the target whatever it looks like -- including an identifier from a
+repository this project has not configured, whose namespace need not
+resemble your own. Such a reference is reported by
+`references.unknown_namespace` at a severity you choose (see
+`elspais docs checks`) rather than discarded.
+
+## What a Reference May Introduce
+
+A recognised line still has to say something the tool can read. What a
+keyword introduces is a list of references separated by commas, and
+nothing else. Each item may name an assertion, and may name several at
+once:
+
+```text
+# Implements: REQ-p00001
+# Implements: REQ-p00001-A
+# Implements: REQ-p00001-A+B
+# Implements: REQ-p00001, REQ-p00002-A
+**Implements**: REQ-p00001-A+B, REQ-p00002
+```
+
+A target holding anything else -- a note after the reference, prose around
+it, an identifier from another estate that merely contains one of yours --
+resolves to nothing and is reported as an unresolved reference carrying the
+line as written. No identifier is picked out of it: an edge to a
+requirement you never named would be evidence filed against the wrong
+requirement, and nothing would report it.
+
+```text
+# Implements: REQ-p00001 -- the flag path        (a note is not a reference)
+# Verifies: exit code is worst-of-all (REQ-p00001-C)   (prose is not a list)
+# Implements: XREQ-d00001                        (not your REQ-d00001)
+```
+
+Put the note on the line below, and the line above stays a reference.
 
 ## JSON Output
 

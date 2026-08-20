@@ -4,14 +4,18 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from elspais.commands.health import (
     _config_with_status_overlay,
     _excluded_note,
     check_code_coverage,
     check_dimension_coverage,
+    check_external_tests,
     check_test_coverage,
     check_uat_coverage,
     check_uat_results,
+    check_uncredited_evidence,
     run_code_checks,
     run_uat_checks,
 )
@@ -33,15 +37,21 @@ def _make_req(req_id: str, level: str = "dev", status: str = "Active") -> GraphN
     return node
 
 
-def _make_graph(*nodes: GraphNode) -> FederatedGraph:
-    """Wrap requirement nodes in a FederatedGraph for testing."""
+def _make_graph(*nodes: GraphNode, repo_root: Path | None = None) -> FederatedGraph:
+    """Wrap requirement nodes in a FederatedGraph for testing.
+
+    `repo_root` is the directory a relative configured path resolves against;
+    checks read it from the graph they are given.
+    """
     tg = TraceGraph()
     for node in nodes:
         tg._index[node.id] = node
         if node.kind == NodeKind.REQUIREMENT:
             tg._roots.append(node)
     return FederatedGraph.from_single(
-        tg, config={"project": {"name": "test", "namespace": "REQ"}}, repo_root=Path(".")
+        tg,
+        config={"project": {"name": "test", "namespace": "REQ"}},
+        repo_root=repo_root or Path("."),
     )
 
 
@@ -82,7 +92,7 @@ class TestCheckTestCoverage:
         req = _make_req("REQ-d00001")
         metrics = RollupMetrics(
             total_assertions=2,
-            tested=CoverageDimension(total=2, direct=1, indirect=1),
+            tested=CoverageDimension(total=2, immediate_direct_by_label={"A": 1.0}),
         )
         req.set_metric("rollup_metrics", metrics)
 
@@ -95,11 +105,11 @@ class TestCheckTestCoverage:
 
     # Verifies: REQ-d00218-A
     def test_req_without_direct_tested_not_counted(self):
-        """Requirement with tested.direct == 0 is not test-covered."""
+        """Requirement with tested.immediate_direct == 0 is not test-covered."""
         req = _make_req("REQ-d00001")
         metrics = RollupMetrics(
             total_assertions=2,
-            tested=CoverageDimension(total=2, direct=0, indirect=0),
+            tested=CoverageDimension(total=2),
         )
         req.set_metric("rollup_metrics", metrics)
 
@@ -110,20 +120,21 @@ class TestCheckTestCoverage:
 
     # Verifies: REQ-d00218-B
     def test_test_coverage_separate_from_code_coverage(self):
-        """Test coverage uses tested.direct, not implemented.direct (which includes CODE)."""
+        """Test coverage reads tested's immediate direct measure, not
+        implemented's (which includes CODE)."""
         req = _make_req("REQ-d00001")
-        # implemented.direct includes CODE refs; tested.direct is TEST-only
+        # implemented.immediate_direct includes CODE refs; tested.immediate_direct is TEST-only
         metrics = RollupMetrics(
             total_assertions=3,
-            implemented=CoverageDimension(total=3, direct=2, indirect=2),
-            tested=CoverageDimension(total=3, direct=0, indirect=0),
+            implemented=CoverageDimension(total=3, immediate_direct_by_label={"A": 1.0, "B": 1.0}),
+            tested=CoverageDimension(total=3),
         )
         req.set_metric("rollup_metrics", metrics)
 
         graph = _make_graph(req)
         result = check_test_coverage(graph, exclude_status=set())
 
-        # Test coverage should be 0 even though implemented.direct is 2
+        # Test coverage should be 0 even though implemented.immediate_direct is 2
         assert result.details["reqs_with_any_coverage"] == 0
 
     # Verifies: REQ-d00218-C
@@ -132,14 +143,14 @@ class TestCheckTestCoverage:
         active_req = _make_req("REQ-d00001", status="Active")
         active_metrics = RollupMetrics(
             total_assertions=1,
-            tested=CoverageDimension(total=1, direct=1, indirect=1),
+            tested=CoverageDimension(total=1, immediate_direct_by_label={"A": 1.0}),
         )
         active_req.set_metric("rollup_metrics", active_metrics)
 
         deprecated_req = _make_req("REQ-d00002", status="Deprecated")
         dep_metrics = RollupMetrics(
             total_assertions=1,
-            tested=CoverageDimension(total=1, direct=0, indirect=0),
+            tested=CoverageDimension(total=1),
         )
         deprecated_req.set_metric("rollup_metrics", dep_metrics)
 
@@ -161,14 +172,14 @@ class TestCheckTestCoverage:
         # Simulate rollup: parent gets credit from child's test coverage
         parent_metrics = RollupMetrics(
             total_assertions=1,
-            tested=CoverageDimension(total=1, direct=1, indirect=1),
+            tested=CoverageDimension(total=1, immediate_direct_by_label={"A": 1.0}),
         )
         parent.set_metric("rollup_metrics", parent_metrics)
 
         child = _make_req("REQ-d00001", level="dev")
         child_metrics = RollupMetrics(
             total_assertions=1,
-            tested=CoverageDimension(total=1, direct=1, indirect=1),
+            tested=CoverageDimension(total=1, immediate_direct_by_label={"A": 1.0}),
         )
         child.set_metric("rollup_metrics", child_metrics)
 
@@ -198,7 +209,7 @@ class TestCheckTestCoverage:
             "rollup_metrics",
             RollupMetrics(
                 total_assertions=2,
-                tested=CoverageDimension(total=2, direct=2, indirect=2),
+                tested=CoverageDimension(total=2, immediate_direct_by_label={"A": 1.0, "B": 1.0}),
             ),
         )
 
@@ -207,7 +218,7 @@ class TestCheckTestCoverage:
             "rollup_metrics",
             RollupMetrics(
                 total_assertions=1,
-                tested=CoverageDimension(total=1, direct=0, indirect=0),
+                tested=CoverageDimension(total=1),
             ),
         )
 
@@ -216,7 +227,7 @@ class TestCheckTestCoverage:
             "rollup_metrics",
             RollupMetrics(
                 total_assertions=3,
-                tested=CoverageDimension(total=3, direct=1, indirect=1),
+                tested=CoverageDimension(total=3, immediate_direct_by_label={"A": 1.0}),
             ),
         )
 
@@ -238,7 +249,7 @@ class TestCheckTestCoverage:
             "rollup_metrics",
             RollupMetrics(
                 total_assertions=1,
-                tested=CoverageDimension(total=1, direct=1, indirect=1),
+                tested=CoverageDimension(total=1, immediate_direct_by_label={"A": 1.0}),
             ),
         )
         other = _make_req("REQ-d00002", status="Wibble")
@@ -246,7 +257,7 @@ class TestCheckTestCoverage:
             "rollup_metrics",
             RollupMetrics(
                 total_assertions=1,
-                tested=CoverageDimension(total=1, direct=0, indirect=0),
+                tested=CoverageDimension(total=1),
             ),
         )
         graph = _make_graph(covered, other)
@@ -265,6 +276,67 @@ class TestCheckTestCoverage:
 # =============================================================================
 # REQ-d00219: check_uat_coverage
 # =============================================================================
+
+
+# Verifies: REQ-d00258-A
+class TestCoverageCheckShowsTheMeasuresBehindItsFigures:
+    """A coverage check reports figures on more than one measure, and says
+    which measure each is on.
+
+    A requirement whose UAT coverage is entirely conducted from a refinement
+    is genuinely covered on the conducted figure AND genuinely holds an
+    *Assertion* no journey names, which is work (REQ-d00258-M). Reported as
+    two bare numbers that is a reader's contradiction; reported as two named
+    measures it is the model. REQ-d00258-A is what requires the naming: a
+    reader is never shown a figure without being able to see what evidence
+    produced it.
+    """
+
+    @staticmethod
+    def _conducted_only_uat_check():
+        from elspais.commands.health import check_uat_coverage
+        from elspais.graph.annotators import annotate_coverage
+        from tests.core.graph_test_helpers import build_graph, make_journey, make_requirement
+
+        graph = build_graph(
+            make_requirement(
+                "REQ-900", level="PRD", assertions=[{"label": "A", "text": "Assertion A"}]
+            ),
+            make_requirement(
+                "REQ-901",
+                level="DEV",
+                refines=["REQ-900-A"],
+                assertions=[{"label": "A", "text": "Refining assertion"}],
+            ),
+            make_journey("JNY-001", validates=["REQ-901-A"]),
+        )
+        annotate_coverage(graph)
+        config = {"levels": {"prd": {"rank": 1, "expects_validation": True}, "dev": {"rank": 3}}}
+        return check_uat_coverage(graph, exclude_status=set(), config=config)
+
+    def test_message_carries_the_total_and_the_measures_behind_it(self):
+        """Nothing cites REQ-900-A, and conduction covers it. Both numbers are
+        shown, each naming the measure it is on, in the ONE shared vocabulary
+        (REQ-d00258-A). The zero on the measure the gap surfaces answer on
+        (REQ-d00258-M) is shown even though it is zero -- it is the fact that
+        explains why `gaps` lists work this check counts as covered."""
+        check = self._conducted_only_uat_check()
+        assert "1/1 REQs covered on any measure" in check.message
+        assert "1/1 assertions covered in total" in check.message
+        assert "0/1 cited by name here" in check.message
+        assert "1/1 conducted direct" in check.message
+        assert check.details["cited_assertions"] == 0.0
+        assert check.details["total_covered"] == 1.0
+        assert check.details["rolled_direct"] == 1.0
+
+    def test_finding_says_why_the_requirement_is_listed(self):
+        """The finding explains itself against the figure above it, rather
+        than reading as its contradiction."""
+        check = self._conducted_only_uat_check()
+        assert check.passed is False
+        (finding,) = check.findings
+        assert "no journey names this requirement" in finding.message
+        assert "conducted from a refining requirement is not validation" in finding.message
 
 
 class TestCheckUatCoverage:
@@ -294,7 +366,13 @@ class TestCheckUatCoverage:
         req = _make_req("REQ-d00001")
         metrics = RollupMetrics(
             total_assertions=2,
-            uat_coverage=CoverageDimension(total=2, direct=1, indirect=1),
+            uat_coverage=CoverageDimension(
+                total=2,
+                # A journey names A: evidence attached to this requirement, so
+                # it is recorded in the immediate direct measure (REQ-d00069-L)
+                # -- which is what the gap walk reads (REQ-d00258-M).
+                immediate_direct_by_label={"A": 1.0},
+            ),
         )
         req.set_metric("rollup_metrics", metrics)
 
@@ -312,7 +390,7 @@ class TestCheckUatCoverage:
         req = _make_req("REQ-d00001")
         metrics = RollupMetrics(
             total_assertions=2,
-            uat_coverage=CoverageDimension(total=2, direct=0, indirect=0),
+            uat_coverage=CoverageDimension(total=2),
         )
         req.set_metric("rollup_metrics", metrics)
 
@@ -339,7 +417,7 @@ class TestCheckUatCoverage:
             "rollup_metrics",
             RollupMetrics(
                 total_assertions=2,
-                uat_coverage=CoverageDimension(total=2, direct=0, indirect=0),
+                uat_coverage=CoverageDimension(total=2),
             ),
         )
         graph = _make_graph(req)
@@ -357,7 +435,7 @@ class TestCheckUatCoverage:
             "rollup_metrics",
             RollupMetrics(
                 total_assertions=2,
-                uat_coverage=CoverageDimension(total=2, direct=0, indirect=0),
+                uat_coverage=CoverageDimension(total=2),
             ),
         )
         graph = _make_graph(req)
@@ -374,7 +452,7 @@ class TestCheckUatCoverage:
         active.set_metric(
             "rollup_metrics",
             RollupMetrics(
-                uat_coverage=CoverageDimension(total=1, direct=1, indirect=1),
+                uat_coverage=CoverageDimension(total=1, immediate_direct_by_label={"A": 1.0}),
             ),
         )
 
@@ -382,7 +460,7 @@ class TestCheckUatCoverage:
         rejected.set_metric(
             "rollup_metrics",
             RollupMetrics(
-                uat_coverage=CoverageDimension(total=1, direct=1, indirect=1),
+                uat_coverage=CoverageDimension(total=1, immediate_direct_by_label={"A": 1.0}),
             ),
         )
 
@@ -417,9 +495,8 @@ class TestCheckUatResults:
         """Missing CSV file produces info-severity passed check."""
         config = {
             "scanning": {"journey": {"results_file": "nonexistent.csv"}},
-            "_git_root": str(tmp_path),
         }
-        graph = _make_graph()
+        graph = _make_graph(repo_root=tmp_path)
         result = check_uat_results(graph, config=config)
 
         assert result.passed is True
@@ -449,9 +526,7 @@ class TestCheckUatResults:
     def test_failures_flagged(self, tmp_path):
         """CSV with failures produces failing check with findings."""
         csv_file = tmp_path / "uat-results.csv"
-        csv_file.write_text(
-            "journey_id,status\n" "JNY-001,pass\n" "JNY-002,fail\n" "JNY-003,failed\n"
-        )
+        csv_file.write_text("journey_id,status\nJNY-001,pass\nJNY-002,fail\nJNY-003,failed\n")
 
         config = {
             "scanning": {"journey": {"results_file": str(csv_file)}},
@@ -537,11 +612,7 @@ class TestCheckUatResults:
         """Pass rate is correctly calculated."""
         csv_file = tmp_path / "uat-results.csv"
         csv_file.write_text(
-            "journey_id,status\n"
-            "JNY-001,pass\n"
-            "JNY-002,pass\n"
-            "JNY-003,fail\n"
-            "JNY-004,pass\n"
+            "journey_id,status\nJNY-001,pass\nJNY-002,pass\nJNY-003,fail\nJNY-004,pass\n"
         )
 
         config = {
@@ -554,7 +625,7 @@ class TestCheckUatResults:
 
     # Verifies: REQ-d00219-B
     def test_git_root_path_resolution(self, tmp_path):
-        """Relative results_file path resolves via _git_root config."""
+        """Relative results_file path resolves against the graph's repo root."""
         subdir = tmp_path / "subdir"
         subdir.mkdir()
         csv_file = tmp_path / "my-results.csv"
@@ -562,9 +633,8 @@ class TestCheckUatResults:
 
         config = {
             "scanning": {"journey": {"results_file": "my-results.csv"}},
-            "_git_root": str(tmp_path),
         }
-        graph = _make_graph()
+        graph = _make_graph(repo_root=tmp_path)
         result = check_uat_results(graph, config=config)
 
         assert result.passed is True
@@ -598,7 +668,7 @@ class TestRunUatChecks:
         req_active.set_metric(
             "rollup_metrics",
             RollupMetrics(
-                uat_coverage=CoverageDimension(total=1, direct=1, indirect=1),
+                uat_coverage=CoverageDimension(total=1, immediate_direct_by_label={"A": 1.0}),
             ),
         )
 
@@ -606,7 +676,7 @@ class TestRunUatChecks:
         req_deprecated.set_metric(
             "rollup_metrics",
             RollupMetrics(
-                uat_coverage=CoverageDimension(total=1, direct=1, indirect=1),
+                uat_coverage=CoverageDimension(total=1, immediate_direct_by_label={"A": 1.0}),
             ),
         )
 
@@ -660,7 +730,7 @@ class TestStatusOverlayCoverageConsistency:
             "rollup_metrics",
             RollupMetrics(
                 total_assertions=1,
-                implemented=CoverageDimension(total=1, direct=1, indirect=1),
+                implemented=CoverageDimension(total=1, immediate_direct_by_label={"A": 1.0}),
             ),
         )
         draft = _make_req("REQ-d00002", status="Draft")
@@ -668,7 +738,7 @@ class TestStatusOverlayCoverageConsistency:
             "rollup_metrics",
             RollupMetrics(
                 total_assertions=1,
-                implemented=CoverageDimension(total=1, direct=0, indirect=0),
+                implemented=CoverageDimension(total=1),
             ),
         )
         return _make_graph(active, draft)
@@ -817,3 +887,501 @@ class TestWholeReqOnlyCoverageCheck:
         annotate_coverage(graph)
         check = check_whole_req_only_coverage(graph)
         assert check.findings == []
+
+
+class TestCheckUncreditedEvidence:
+    """REQ-d00274: evidence naming an assertion its chained dimension does not
+    count is a health finding, error by default, naming the file and line the
+    evidence was written on and distinguishing a passing test from a bare
+    reference."""
+
+    @staticmethod
+    def _built_graph(*, with_result: bool = False, result_status: str = "passed"):
+        from tests.core.graph_test_helpers import (
+            build_graph,
+            make_code_ref,
+            make_requirement,
+            make_test_ref,
+        )
+
+        contents = [
+            make_requirement(
+                "REQ-100",
+                level="PRD",
+                assertions=[{"label": "A", "text": "a"}, {"label": "B", "text": "b"}],
+            ),
+            make_code_ref(implements=["REQ-100-A"], source_path="src/impl.py"),
+            make_test_ref(
+                verifies=["REQ-100-B"],
+                source_path="tests/test_b.py",
+                start_line=5,
+                end_line=6,
+            ),
+        ]
+        if with_result:
+            from tests.core.graph_test_helpers import make_test_result
+
+            contents.append(
+                make_test_result(
+                    "result-b",
+                    status=result_status,
+                    test_id="test:tests/test_b.py:5",
+                    match="source",
+                )
+            )
+        return build_graph(*contents)
+
+    # Verifies: REQ-d00274-A, REQ-d00274-C
+    def test_error_by_default(self):
+        """A/C: unimplemented-but-tested B is reported, error severity when
+        the project configures nothing."""
+        from elspais.graph.annotators import annotate_coverage
+
+        graph = self._built_graph()
+        annotate_coverage(graph)
+        check = check_uncredited_evidence(graph)
+
+        assert check.name == "tests.uncredited_evidence"
+        assert check.category == "tests"
+        assert check.severity == "error"
+        assert check.passed is False
+        assert len(check.findings) == 1
+        finding = check.findings[0]
+        assert finding.node_id == "REQ-100"
+        assert "REQ-100-B" in finding.message
+
+    # Verifies: REQ-d00274-D
+    def test_finding_names_file_and_line_of_the_evidence(self):
+        """D: the finding resolves to the TEST node's own file and line, not
+        the requirement's spec location."""
+        from elspais.graph.annotators import annotate_coverage
+
+        graph = self._built_graph()
+        annotate_coverage(graph)
+        check = check_uncredited_evidence(graph)
+
+        finding = check.findings[0]
+        assert finding.file_path == "tests/test_b.py"
+        assert finding.line == 5
+
+    # Verifies: REQ-d00274-D
+    def test_bare_reference_vs_passing_test_are_distinguished(self):
+        """D: a test that only names the assertion reads differently from one
+        that also carries a passing result."""
+        from elspais.graph.annotators import annotate_coverage
+
+        bare_graph = self._built_graph(with_result=False)
+        annotate_coverage(bare_graph)
+        bare_message = check_uncredited_evidence(bare_graph).findings[0].message
+        assert "A test names" in bare_message
+        assert "A passing test names" not in bare_message
+
+        passing_graph = self._built_graph(with_result=True)
+        annotate_coverage(passing_graph)
+        passing_message = check_uncredited_evidence(passing_graph).findings[0].message
+        assert "A passing test names" in passing_message
+
+    # Verifies: REQ-d00274-D
+    def test_failing_test_is_worded_as_failing(self):
+        """D: a test that RAN and failed against an assertion nothing
+        implements is the sharpest form of the defect, and must not read like
+        a test that merely named it or one that passed."""
+        from elspais.graph.annotators import annotate_coverage
+
+        graph = self._built_graph(with_result=True, result_status="failed")
+        annotate_coverage(graph)
+        message = check_uncredited_evidence(graph).findings[0].message
+
+        assert message.startswith("A failing test names")
+        assert "REQ-100-B" in message
+
+    # Verifies: REQ-d00274-D
+    @pytest.mark.parametrize("status", ["skipped", ""])
+    def test_test_without_a_verdict_is_not_worded_as_failing(self, status):
+        """D: a status carrying neither verdict is reported as a bare
+        reference. A skipped test did not fail, and the wording must not say
+        it did."""
+        from elspais.graph.annotators import annotate_coverage
+
+        graph = self._built_graph(with_result=True, result_status=status)
+        annotate_coverage(graph)
+        message = check_uncredited_evidence(graph).findings[0].message
+
+        assert message.startswith("A test names")
+        assert "failing" not in message
+
+    @staticmethod
+    def _mixed_result_graph(first_status: str | None, second_status: str | None):
+        """Two tests naming the same uncredited assertion B, with differing
+        results: ``tests/test_b.py:5`` (resolved first) and
+        ``tests/test_c.py:9``.
+
+        A status of None means that test produced no RESULT node at all.
+        """
+        from tests.core.graph_test_helpers import (
+            build_graph,
+            make_code_ref,
+            make_requirement,
+            make_test_ref,
+            make_test_result,
+        )
+
+        contents = [
+            make_requirement(
+                "REQ-100",
+                level="PRD",
+                assertions=[{"label": "A", "text": "a"}, {"label": "B", "text": "b"}],
+            ),
+            make_code_ref(implements=["REQ-100-A"], source_path="src/impl.py"),
+        ]
+        for index, (path, line, status) in enumerate(
+            [("tests/test_b.py", 5, first_status), ("tests/test_c.py", 9, second_status)]
+        ):
+            contents.append(
+                make_test_ref(
+                    verifies=["REQ-100-B"], source_path=path, start_line=line, end_line=line + 1
+                )
+            )
+            if status is not None:
+                contents.append(
+                    make_test_result(
+                        f"result-{index}",
+                        status=status,
+                        test_id=f"test:{path}:{line}",
+                        match="source",
+                    )
+                )
+        return build_graph(*contents)
+
+    # Verifies: REQ-d00274-D, REQ-p00019-J
+    @pytest.mark.parametrize(
+        "first_status,second_status,expected_file,expected_line",
+        [
+            ("passed", "failed", "tests/test_c.py", 9),
+            ("failed", "passed", "tests/test_b.py", 5),
+        ],
+        ids=["passing-first", "failing-first"],
+    )
+    def test_failing_finding_locates_at_the_failing_test(
+        self, first_status, second_status, expected_file, expected_line
+    ):
+        """J: the test the wording describes and the test the reader is sent
+        to are the same one. Two tests name B, one passing and one failing;
+        the message says "A failing test", so the location must be the FAILING
+        test whichever of the two the sources happened to list first.
+
+        Regression guard: reporting at the first source instead makes the
+        passing-first case point at ``tests/test_b.py:5`` -- a true sentence
+        over a false location.
+        """
+        from elspais.graph.annotators import annotate_coverage
+
+        graph = self._mixed_result_graph(first_status, second_status)
+        annotate_coverage(graph)
+        finding = check_uncredited_evidence(graph).findings[0]
+
+        assert finding.message.startswith("A failing test names")
+        assert (finding.file_path, finding.line) == (expected_file, expected_line)
+
+    # Verifies: REQ-d00274-D, REQ-p00019-J
+    def test_passing_finding_locates_at_the_passing_test(self):
+        """J, the other verdict: the first test names B and returned no result
+        at all while the second passed. The message says "A passing test", so
+        the reader is sent to the test that passed -- not to the resultless
+        one that merely happens to be listed first."""
+        from elspais.graph.annotators import annotate_coverage
+
+        graph = self._mixed_result_graph(None, "passed")
+        annotate_coverage(graph)
+        finding = check_uncredited_evidence(graph).findings[0]
+
+        assert finding.message.startswith("A passing test names")
+        assert (finding.file_path, finding.line) == ("tests/test_c.py", 9)
+
+    # Verifies: REQ-p00019-J
+    def test_verdictless_finding_still_locates_at_its_evidence(self):
+        """Two tests name B and neither returned a verdict, so no source can be
+        pointed at as the one that did. The finding still names evidence it is
+        about rather than losing its location -- the wording claims nothing
+        about which of the two, so either is honest and the first stands."""
+        from elspais.graph.annotators import annotate_coverage
+
+        graph = self._mixed_result_graph(None, "skipped")
+        annotate_coverage(graph)
+        finding = check_uncredited_evidence(graph).findings[0]
+
+        assert finding.message.startswith("A test names")
+        assert (finding.file_path, finding.line) == ("tests/test_b.py", 5)
+
+    # Verifies: REQ-d00274-C
+    def test_configured_severity_is_honored(self):
+        from elspais.graph.annotators import annotate_coverage
+
+        graph = self._built_graph()
+        annotate_coverage(graph)
+        cfg = {"rules": {"coverage": {"uncredited_evidence": "warning"}}}
+        check = check_uncredited_evidence(graph, config=cfg)
+
+        assert check.severity == "warning"
+        # "warning" still leaves the finding unresolved -- only "ok" passes.
+        assert check.passed is False
+
+    # Verifies: REQ-d00274-C
+    def test_ok_severity_passes_the_check(self):
+        from elspais.graph.annotators import annotate_coverage
+
+        graph = self._built_graph()
+        annotate_coverage(graph)
+        cfg = {"rules": {"coverage": {"uncredited_evidence": "ok"}}}
+        check = check_uncredited_evidence(graph, config=cfg)
+
+        assert check.severity == "ok"
+        assert check.passed is True
+
+    # Verifies: REQ-d00274
+    def test_healthy_shape_produces_no_finding(self):
+        """No evidence outside a chained dimension's denominator -> check
+        passes with no findings."""
+        from elspais.graph.annotators import annotate_coverage
+        from tests.core.graph_test_helpers import (
+            build_graph,
+            make_code_ref,
+            make_requirement,
+            make_test_ref,
+        )
+
+        graph = build_graph(
+            make_requirement(
+                "REQ-200",
+                level="PRD",
+                assertions=[{"label": "A", "text": "a"}],
+            ),
+            make_code_ref(implements=["REQ-200-A"], source_path="src/impl.py"),
+            make_test_ref(verifies=["REQ-200-A"], source_path="tests/test_a.py"),
+        )
+        annotate_coverage(graph)
+        check = check_uncredited_evidence(graph)
+
+        assert check.passed is True
+        assert check.findings == []
+
+
+class TestTestedBreakdownInHealth:
+    """REQ-d00258-O: the tests.tested finding reports what came back."""
+
+    def _graph(self) -> FederatedGraph:
+        """One requirement: A passed, B failed, C awaiting a result."""
+
+        def dim(fractions, **kwargs):
+            return CoverageDimension(
+                total=3,
+                immediate_direct_by_label=dict(fractions),
+                **kwargs,
+            )
+
+        req = _make_req("REQ-d00001")
+        req.set_metric(
+            "rollup_metrics",
+            RollupMetrics(
+                total_assertions=3,
+                implemented=dim({"A": 1.0, "B": 1.0, "C": 1.0}),
+                tested=dim({"A": 1.0, "B": 1.0, "C": 1.0}),
+                verified=dim(
+                    {"A": 1.0, "B": 0.0, "C": 0.0},
+                    has_failures=True,
+                    failing_labels={"B"},
+                ),
+            ),
+        )
+        return _make_graph(req)
+
+    # Verifies: REQ-d00258-O
+    def test_message_breaks_the_tested_figure_down(self):
+        check = check_dimension_coverage(self._graph(), "tested", config={})
+
+        assert "1 passed / 1 failed / 1 awaiting a result" in check.message
+        assert check.details["tested_passed"] == 1
+        assert check.details["tested_failed"] == 1
+        assert check.details["tested_awaiting"] == 1
+
+    # Verifies: REQ-d00258-O
+    def test_breakdown_belongs_to_tested_alone(self):
+        """It breaks Tested down, so it means nothing beside another dimension
+        and must not appear in one."""
+        check = check_dimension_coverage(self._graph(), "implemented", config={})
+
+        assert "awaiting a result" not in check.message
+        assert check.details["tested_passed"] == 0
+        assert check.details["tested_failed"] == 0
+        assert check.details["tested_awaiting"] == 0
+
+
+class TestCheckExternalTests:
+    """REQ-d00276: tests reaching no requirement are reported as their own
+    set, split by what each returned, located at file and line, and failing
+    the check only where one of them failed."""
+
+    @staticmethod
+    def _graph(*outside: tuple[str, int, str | None]):
+        """A requirement with one test of its own, plus the given outsiders.
+
+        Each outsider is ``(path, line, status)``; a status of None means that
+        test produced no RESULT node at all. ``tests/test_in.py`` always names
+        the requirement, so the estate is never empty and an outsider is
+        reported for reaching no requirement rather than for being the only
+        test there is.
+        """
+        from tests.core.graph_test_helpers import (
+            build_graph,
+            make_requirement,
+            make_test_ref,
+            make_test_result,
+        )
+
+        contents = [
+            make_requirement(
+                "REQ-100",
+                level="PRD",
+                assertions=[{"label": "A", "text": "a"}],
+            ),
+            make_test_ref(
+                verifies=["REQ-100-A"],
+                source_path="tests/test_in.py",
+                start_line=3,
+                end_line=4,
+            ),
+        ]
+        for index, (path, line, status) in enumerate(outside):
+            contents.append(
+                make_test_ref(verifies=[], source_path=path, start_line=line, end_line=line + 1)
+            )
+            if status is not None:
+                contents.append(
+                    make_test_result(
+                        f"result-{index}",
+                        status=status,
+                        test_id=f"test:{path}:{line}",
+                        match="source",
+                    )
+                )
+        return build_graph(*contents)
+
+    # Verifies: REQ-d00276-A, REQ-d00276-C
+    def test_failing_outsider_fails_the_check_at_the_configured_severity(self):
+        """C: a failing test outside the estate is reported at the severity
+        the project sets for it."""
+        check = check_external_tests(
+            self._graph(("tests/test_out.py", 9, "failed")),
+            {"rules": {"coverage": {"external_test_failure": "error"}}},
+        )
+
+        assert check.name == "tests.external"
+        assert check.category == "tests"
+        assert check.severity == "error"
+        assert check.passed is False
+
+    # Verifies: REQ-d00276-C
+    def test_warning_is_the_severity_when_nothing_is_configured(self):
+        """C: the project configuring nothing gets a warning, not silence and
+        not an error."""
+        check = check_external_tests(self._graph(("tests/test_out.py", 9, "failed")), {})
+
+        assert check.severity == "warning"
+        assert check.passed is False
+
+    # Verifies: REQ-d00276-A, REQ-d00276-C
+    @pytest.mark.parametrize("status", ["passed", None], ids=["passed", "awaiting"])
+    def test_outsider_that_did_not_fail_is_reported_without_failing(self, status):
+        """A/C: a passing test outside the estate, and one still awaiting a
+        result, are both disclosed -- neither is a defect to fail on."""
+        check = check_external_tests(self._graph(("tests/test_out.py", 9, status)), {})
+
+        assert check.passed is True
+        assert check.severity == "info"
+        assert len(check.findings) == 1
+        assert "tests/test_out.py" in check.findings[0].file_path
+
+    # Verifies: REQ-d00276-B
+    def test_counts_split_by_what_each_test_returned(self):
+        """B: passed, failed and awaiting are three states, counted apart."""
+        check = check_external_tests(
+            self._graph(
+                ("tests/test_p.py", 3, "passed"),
+                ("tests/test_f.py", 5, "failed"),
+                ("tests/test_n.py", 7, None),
+                ("tests/test_p2.py", 11, "passed"),
+            ),
+            {},
+        )
+
+        assert check.details == {"passed": 2, "failed": 1, "awaiting_result": 1}
+        assert "2 passed, 1 failed, 1 awaiting a result" in check.message
+        assert len(check.findings) == 4
+
+    # Verifies: REQ-d00276-B, REQ-d00276-D
+    def test_each_finding_names_its_file_line_and_verdict(self):
+        """B/D: a reader is sent to the test the wording describes."""
+        check = check_external_tests(
+            self._graph(
+                ("tests/test_p.py", 3, "passed"),
+                ("tests/test_f.py", 5, "failed"),
+                ("tests/test_n.py", 7, None),
+            ),
+            {},
+        )
+
+        located = {(f.file_path, f.line): f.message for f in check.findings}
+        assert "(passed)" in located[("tests/test_p.py", 3)]
+        assert "(failed)" in located[("tests/test_f.py", 5)]
+        assert "(awaiting a result)" in located[("tests/test_n.py", 7)]
+
+    # Verifies: REQ-d00276-C
+    def test_configuring_ok_suppresses_the_failure_but_not_the_report(self):
+        """C: a project may decide a failing outsider is not its problem; the
+        set is still reported."""
+        check = check_external_tests(
+            self._graph(("tests/test_out.py", 9, "failed")),
+            {"rules": {"coverage": {"external_test_failure": "ok"}}},
+        )
+
+        assert check.passed is True
+        assert check.details["failed"] == 1
+        assert len(check.findings) == 1
+
+    # Verifies: REQ-d00276-A
+    def test_every_test_reaching_a_requirement_passes_and_says_so(self):
+        """A: with no such set to report, the check says the estate covers
+        every test rather than reporting an empty one."""
+        check = check_external_tests(self._graph(), {})
+
+        assert check.passed is True
+        assert check.severity == "info"
+        assert check.message == "Every test reaches a requirement"
+        assert check.findings == []
+
+    # Verifies: REQ-d00276-A
+    def test_reporting_moves_no_coverage_figure(self):
+        """A: the check is read-only with respect to coverage -- an outsider
+        neither credits nor discredits the requirement it does not name."""
+        from elspais.graph.annotators import annotate_coverage
+
+        graph = self._graph(("tests/test_out.py", 9, "failed"))
+        annotate_coverage(graph)
+        before = graph.find_by_id("REQ-100").get_metric("rollup_metrics")
+        snapshot = (
+            before.tested.immediate_direct,
+            before.verified.immediate_direct,
+            before.verified.has_failures,
+        )
+
+        check_external_tests(graph, {})
+
+        after = graph.find_by_id("REQ-100").get_metric("rollup_metrics")
+        assert (
+            after.tested.immediate_direct,
+            after.verified.immediate_direct,
+            after.verified.has_failures,
+        ) == snapshot
+        # The outsider's failure is genuinely outside the figure it left alone.
+        assert after.verified.has_failures is False
+        assert after.tested.immediate_direct == 1.0

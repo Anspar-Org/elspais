@@ -655,9 +655,9 @@ A. The system SHALL do something.
 
         # Check hash matches v1
         content = spec_file.read_text()
-        assert (
-            f"**Hash**: {hash_v1}" in content
-        ), f"After update, hash should be {hash_v1} (computed from v1 body)"
+        assert f"**Hash**: {hash_v1}" in content, (
+            f"After update, hash should be {hash_v1} (computed from v1 body)"
+        )
 
         # Now change to v2 (same assertions, different intro)
         spec_file.write_text(

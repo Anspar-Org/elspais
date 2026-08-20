@@ -556,7 +556,10 @@ function buildAssertionHtml(nodeId, a, data) {
     // as the requirement header badges (REQ-d00258-G). Color is applied on render
     // (no lazy prefetch): state -> the val-* class the requirement badge uses.
     var aStates = data.assertion_coverage_states ? data.assertion_coverage_states[label] : null;
-    var aCaveats = data.assertion_coverage_caveats ? data.assertion_coverage_caveats[label] : null;
+    // The four measures behind each standing, phrased server-side under the one
+    // shared vocabulary (REQ-d00258-G/J) — shown on hover instead of a caveat
+    // marker standing in for a measure the pill does not show.
+    var aMeasures = data.assertion_coverage_measures ? data.assertion_coverage_measures[label] : null;
     var dimDefs = [
         {cls: 'assertion-implemented-btn', full: 'Implemented', abbr: 'IMP', dot: 'I', toggle: 'toggleAssertionCode', tip: 'Code implementation', linkKey: 'implemented', stateKey: 'implemented', edgeKind: 'implements'},
         {cls: 'assertion-refined-btn', full: 'Refined', abbr: 'REF', dot: 'R', toggle: 'toggleAssertionRefines', tip: 'Refines references', linkKey: 'refined'},
@@ -576,21 +579,20 @@ function buildAssertionHtml(nodeId, a, data) {
         if (aLinks && !aLinks[dim.linkKey] && !(dim.stateKey && hasState)) return;
         anyBadge = true;
         var btnLabel = badgeMode === 'full' ? dim.full : (badgeMode === 'dots' ? dim.dot : dim.abbr);
-        // Non-transitive ~ caveat: whole-requirement evidence involved.
-        if (dim.stateKey && aCaveats && aCaveats[dim.stateKey] && hasState) {
-            btnLabel += ' ~';
-        }
         var btnStyle = badgeMode === 'dots' ? ' style="min-width:0;padding:2px 4px;font-size:0.55rem;"' : '';
         var extraArg = dim.edgeKind ? ", '" + dim.edgeKind + "'" : '';
         var stateCls = '';
         if (dim.stateKey && aStates && aStates[dim.stateKey]) {
             stateCls = assertionStateColorClass(aStates[dim.stateKey]);
         }
-        // Data-driven tooltip: coverage standing + direct-link count, with
-        // the "~" legend only when the caveat marker is actually shown.
+        // Data-driven tooltip: the coverage standing, the four measures behind
+        // it (REQ-d00258-G), then the direct-link count.
         var tipParts = [dim.tip];
         if (dim.stateKey && aStates && aStates[dim.stateKey]) {
             tipParts.push('standing: ' + aStates[dim.stateKey]);
+        }
+        if (dim.stateKey && aMeasures && aMeasures[dim.stateKey]) {
+            tipParts.push(aMeasures[dim.stateKey]);
         }
         var dimLinks = aLinks ? aLinks[dim.linkKey] : null;
         if (dimLinks && dimLinks.length) {
@@ -599,9 +601,6 @@ function buildAssertionHtml(nodeId, a, data) {
             tipParts.push('click to view');
         }
         var pillTip = tipParts.join(' — ');
-        if (dim.stateKey && aCaveats && aCaveats[dim.stateKey] && hasState) {
-            pillTip += ' (~ = some coverage comes from whole-requirement references)';
-        }
         h += '<button class="' + dim.cls + (stateCls ? ' ' + stateCls : '') + '" ' +
             'data-req-id="' + nodeId + '" data-label="' + escapeAttr(label) + '" ' +
             'title="' + escapeAttr(pillTip) + '" ' +
@@ -625,7 +624,7 @@ function buildAssertionHtml(nodeId, a, data) {
                 'style="font-size:0.6rem;color:var(--secondary-text);font-style:italic;">' +
                 escapeHtml(inheritedText) + '</span>';
         } else {
-            h += '<span class="assertion-no-coverage" title="No coverage on either footing" style="font-size:0.6rem;color:var(--secondary-text);opacity:0.5;">no coverage</span>';
+            h += '<span class="assertion-no-coverage" title="No coverage on any measure" style="font-size:0.6rem;color:var(--secondary-text);opacity:0.5;">no coverage</span>';
         }
     }
     h += '</span>'; // close .assertion-badges-area
@@ -760,18 +759,13 @@ function buildCardHtml(nodeId, data, collapsed) {
             if (hasReqLinks) tipParts.push(rLinks[d.linkKey].length + ' REQ-level link(s)');
             if (hasAssertionLinks) tipParts.push('Click to highlight assertions');
             var tip = tipParts.length > 0 ? tipParts.join(' \u2014 ') : d.label;
-            // Per-dimension provenance caveat (REQ-d00069-L): a "~" beside the
-            // badge glyph flags coverage whose evidence is not fully direct
-            // (indirect > direct). The enriched status_tip (above) already spells
-            // out the "Nn% direct, Mm% indirect" provenance on hover.
-            var marker = dim && dim.marker ? dim.marker : '';
-            var markerGlyph = marker
-                ? '<sup class="dim-caveat" style="font-weight:700;opacity:0.85;">' + escapeHtml(marker) + '</sup>'
-                : '';
+            // No caveat marker beside the glyph (REQ-d00258-J): the status_tip
+            // above names the four measures behind the standing, so nothing
+            // stands in for a measure the badge does not show.
             html += '<span class="status-badge' + colorClass + ' card-dim-badge" ' +
                 'title="' + escapeHtml(tip) + '" style="font-size:0.6rem;padding:1px 5px;" ' +
                 'onclick="event.stopPropagation(); toggleReqLevelLinks(this, \'' + nodeId + '\', \'' + d.linkKey + '\', \'' + d.assertLinkKey + '\')">' +
-                d.label + markerGlyph + '</span>';
+                d.label + '</span>';
         });
         html += '</div>';
         // Expandable link panels (one per header dimension, hidden by default)
@@ -855,9 +849,9 @@ function buildCardHtml(nodeId, data, collapsed) {
     // Surfaced by _serialize_node_generic when the REQ has integrations.
     // See CUR-1419 / REQ-d00252-D. Fields differ from satisfier_rollup:
     // implemented_covered/total + verified_covered/total (no covered_fraction).
-    // NOTE (REQ-d00258-B): despite the `verified_*` field names (kept for
-    // wire compatibility), the value is the tested_and_passing() union
-    // (result-verified OR line-coverage-credited), so it is labeled
+    // NOTE (REQ-d00258-N): despite the `verified_*` field names (kept for
+    // wire compatibility), the value is the tested_and_passing() Passing
+    // dimension (what the declared tests returned), so it is labeled
     // "passing" here rather than "verified". `has_failures` flags a red
     // library suite whose covered count can still read full via the union's
     // per-assertion max() -- render a FAILING badge (same validation-fail
@@ -1531,8 +1525,9 @@ function _buildTermsRegex() {
     editState.termsRegex = new RegExp('\\b(' + escaped.join('|') + ')\\b', 'gi');
 }
 
-// Implements: REQ-d00245-B — delegated click handler for .defined-term spans.
-// Scoped to document.body so clicks land for terms surfaced anywhere —
+// Implements: REQ-d00245-B
+// Delegated click handler for .defined-term spans, scoped to document.body
+// so clicks land for terms surfaced anywhere —
 // card stack, file-viewer Rendered pane, etc.
 document.addEventListener('DOMContentLoaded', function() {
     document.body.addEventListener('click', function(e) {
@@ -1887,14 +1882,14 @@ function renderAssertionCode(panel, reqId, label, data) {
     }
 
     if (wholeReqRefs.length > 0) {
-        html += '<div class="assertion-test-subheader">Whole-requirement references (~)</div>';
+        html += '<div class="assertion-test-subheader">Whole-requirement references</div>';
         for (var j = 0; j < wholeReqRefs.length; j++) {
             html += renderCodeRefItem(wholeReqRefs[j]);
         }
     }
 
     if (refinesRefs.length > 0) {
-        html += '<div class="assertion-test-subheader">Implemented via refinement (~)</div>';
+        html += '<div class="assertion-test-subheader">Implemented via refinement</div>';
         for (var k = 0; k < refinesRefs.length; k++) {
             var r = refinesRefs[k];
             html += '<div class="assertion-test-item">';
@@ -2232,7 +2227,7 @@ function toggleReqLevelLinks(badge, reqId, dimKey, assertLinkKey) {
     var html = _renderReqLinkItems(links);
     if (refinedLinks.length > 0) {
         html += '<div style="font-style:italic;color:var(--secondary-text);font-size:0.72rem;margin-top:' +
-            (links.length ? '6px' : '0') + ';">Implemented via refinement (~)</div>';
+            (links.length ? '6px' : '0') + ';">Implemented via refinement</div>';
         html += _renderReqLinkItems(refinedLinks);
     }
     panel.innerHTML = html;
@@ -2359,6 +2354,7 @@ function toggleTermRefs(cardId) {
     saveState();
 }
 
+// Implements: REQ-d00244-C
 function buildTermCardHtml(cardId, data, collapsed) {
     var collapsedClass = collapsed ? ' collapsed' : '';
     var focusedClass = editState.openCardOrder[0] === cardId ? ' focused' : '';

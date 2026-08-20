@@ -1,5 +1,6 @@
 # Verifies: REQ-d00252
 """Validates REQ-d00252-B: Integrates: in non-spec files creates no edge."""
+
 import subprocess
 import textwrap
 from pathlib import Path
@@ -7,6 +8,7 @@ from pathlib import Path
 from lark import Tree
 from lark.lexer import Token
 
+from elspais.config.schema import ElspaisConfig
 from elspais.graph.factory import build_graph
 from elspais.graph.GraphNode import NodeKind
 from elspais.graph.parsers.lark.transformers.reference import ReferenceTransformer
@@ -14,21 +16,36 @@ from elspais.graph.relations import EdgeKind
 from elspais.utilities.patterns import IdPatternConfig, IdResolver
 
 
+def _validated(config: dict) -> dict:
+    """Return ``config`` after checking a configuration file could hold it.
+
+    ``IdPatternConfig.from_dict`` takes a raw dictionary and never consults the
+    config schema, so a fixture built here could describe a repository no
+    ``.elspais.toml`` can produce -- and pin grammar behaviour no user can
+    reach. Every fixture is therefore validated the way a file on disk is,
+    before any resolver is built from it.
+    """
+    ElspaisConfig.model_validate(config)
+    return config
+
+
 def _resolver() -> IdResolver:
     config = IdPatternConfig.from_dict(
-        {
-            "project": {"namespace": "REQ"},
-            "id-patterns": {
-                "canonical": "{namespace}-{type.letter}{component}",
-                "aliases": {"short": "{type.letter}{component}"},
-                "types": {
-                    "prd": {"level": 1, "aliases": {"letter": "p"}},
-                    "dev": {"level": 3, "aliases": {"letter": "d"}},
+        _validated(
+            {
+                "project": {"namespace": "REQ"},
+                "levels": {
+                    "prd": {"rank": 1, "letter": "p", "implements": ["prd"]},
+                    "dev": {"rank": 3, "letter": "d", "implements": ["dev", "prd"]},
                 },
-                "component": {"style": "numeric", "digits": 5, "leading_zeros": True},
-                "assertions": {"label_style": "uppercase", "max_count": 26},
-            },
-        }
+                "id-patterns": {
+                    "canonical": "{namespace}-{level.letter}{component}",
+                    "aliases": {"short": "{level.letter}{component}"},
+                    "component": {"style": "numeric", "digits": 5, "leading_zeros": True},
+                    "assertions": {"label_style": "uppercase", "max_count": 26},
+                },
+            }
+        )
     )
     return IdResolver(config)
 
@@ -183,23 +200,37 @@ def test_REQ_d00252_B_integrates_in_test_file_creates_no_edge(tmp_path):
     ), "Integrates: in a test file must not create an inbound traceability edge"
 
 
+# Verifies: REQ-d00272-J
 def test_REQ_d00252_B_integrates_ref_skipped_in_code_transformer():
     """An Integrates: comment must not be reclassified as an IMPLEMENTS ref.
 
     Drives the transformer directly because the reference grammar does not
-    list ``Integrates`` as a keyword today; this guard ensures that if such
-    a ref ever reaches the transformer it is dropped rather than falling
-    back to ``implements``.
+    list ``Integrates`` as a keyword today. Integrates is spec-file only, so
+    a code file's comment is read and refused rather than reclassified: no
+    IMPLEMENTS ref, but a forbidden target the builder stamps FORBIDDEN
+    (REQ-d00272-J), not silently dropped as though it were prose.
     """
     tx = ReferenceTransformer(_resolver(), "code_ref")
-    assert tx._handle_single_ref(_single_ref("# Integrates: REQ-d00001")) is None
+    pc = tx._handle_single_ref(_single_ref("# Integrates: REQ-d00001"))
+    assert pc is not None
+    assert pc.parsed_data["implements"] == []
+    assert pc.parsed_data["verifies"] == []
+    assert pc.parsed_data["forbidden_keyword"] == "integrates"
+    assert pc.parsed_data["forbidden"] == ["REQ-d00001"]
     # A genuine Implements ref must still be honored (no over-skipping).
     pc = tx._handle_single_ref(_single_ref("# Implements: REQ-d00001"))
     assert pc is not None
     assert pc.parsed_data["implements"] == ["REQ-d00001"]
 
 
+# Verifies: REQ-d00272-J
 def test_REQ_d00252_B_integrates_ref_skipped_in_test_transformer():
-    """An Integrates: comment in a test file yields no parsed ref."""
+    """An Integrates: comment in a test file is read and refused, not passed
+    over: no VERIFIES ref, but a forbidden target the builder stamps
+    FORBIDDEN (REQ-d00272-J)."""
     tx = ReferenceTransformer(_resolver(), "test_ref")
-    assert tx._handle_single_ref(_single_ref("# Integrates: REQ-d00001")) is None
+    pc = tx._handle_single_ref(_single_ref("# Integrates: REQ-d00001"))
+    assert pc is not None
+    assert pc.parsed_data["verifies"] == []
+    assert pc.parsed_data["forbidden_keyword"] == "integrates"
+    assert pc.parsed_data["forbidden"] == ["REQ-d00001"]

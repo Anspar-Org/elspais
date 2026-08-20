@@ -32,10 +32,16 @@ def hierarchy_graph():
 
 @pytest.fixture
 def builder():
-    """Fresh GraphBuilder instance."""
+    """Fresh GraphBuilder instance, standing in one repository.
+
+    A builder names the repository whose content it holds; there is no
+    namespace-less graph to hand out here.
+    """
     from elspais.graph.builder import GraphBuilder
 
-    return GraphBuilder()
+    from .graph_test_helpers import HELPER_NAMESPACE, grammar_for
+
+    return GraphBuilder(namespace=HELPER_NAMESPACE, resolver=grammar_for(HELPER_NAMESPACE))
 
 
 @pytest.fixture

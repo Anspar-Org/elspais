@@ -7,6 +7,7 @@ import pytest
 from elspais.graph import MutationEntry, MutationLog
 from elspais.graph.builder import GraphBuilder
 from elspais.graph.parsers import ParsedContent
+from tests.core.graph_test_helpers import grammar_for
 
 
 def make_req(
@@ -272,7 +273,7 @@ class TestTraceGraphMutationInfrastructure:
     # Verifies: REQ-o00062-G
     def test_undo_last_empty(self):
         """undo_last on empty log returns None."""
-        builder = GraphBuilder()
+        builder = GraphBuilder(namespace="REQ", resolver=grammar_for("REQ"))
         builder.add_parsed_content(make_req("REQ-p00001"))
         graph = builder.build()
 
@@ -286,7 +287,7 @@ class TestUndoRenameNode:
     # Verifies: REQ-o00062-G
     def test_undo_rename_restores_id(self):
         """Undoing rename restores original node ID."""
-        builder = GraphBuilder()
+        builder = GraphBuilder(namespace="REQ", resolver=grammar_for("REQ"))
         builder.add_parsed_content(make_req("REQ-p00001", "Test Req"))
         graph = builder.build()
 
@@ -330,7 +331,7 @@ class TestUndoUpdateTitle:
     # Verifies: REQ-o00062-G
     def test_undo_title_restores_original(self):
         """Undoing title update restores original title."""
-        builder = GraphBuilder()
+        builder = GraphBuilder(namespace="REQ", resolver=grammar_for("REQ"))
         builder.add_parsed_content(make_req("REQ-p00001", "Original Title"))
         graph = builder.build()
 
@@ -360,7 +361,7 @@ class TestUndoTo:
     # Verifies: REQ-o00062-G
     def test_undo_to_multiple(self):
         """undo_to undoes multiple mutations in reverse order."""
-        builder = GraphBuilder()
+        builder = GraphBuilder(namespace="REQ", resolver=grammar_for("REQ"))
         builder.add_parsed_content(make_req("REQ-p00001", "Title1"))
         graph = builder.build()
 
@@ -370,7 +371,7 @@ class TestUndoTo:
         entries = []
         for i in range(3):
             old_title = node.get_label()
-            new_title = f"Title{i+2}"
+            new_title = f"Title{i + 2}"
             entry = MutationEntry(
                 operation="update_title",
                 target_id="REQ-p00001",

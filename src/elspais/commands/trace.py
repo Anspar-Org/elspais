@@ -210,6 +210,7 @@ def _get_node_data(node, graph: FederatedGraph, *, assertion_labels: bool = Fals
     """
     from elspais.graph.metrics import (
         CoverageDimension,
+        LineCoverage,
         RollupMetrics,
         fmt_assertion_count,
     )
@@ -262,27 +263,31 @@ def _get_node_data(node, graph: FederatedGraph, *, assertion_labels: bool = Fals
         pct = round(num / total * 100)
         return f"{fmt_assertion_count(num)}/{total} ({pct}%)"
 
-    def _fmt_code_tested(dim: CoverageDimension) -> str:
-        if dim.total == 0 or (dim.direct == 0 and dim.indirect > 0):
+    def _fmt_code_tested(lines: LineCoverage) -> str:
+        if lines.total_lines == 0 or not lines.has_attribution:
             # Aggregate-only tooling (e.g. lcov/coverage.json without per-test
-            # attribution) can't prove a *direct* count -- rendering "0/N (0%)"
-            # would misrepresent real (aggregate) coverage as no coverage at
-            # all (REQ-d00258-E).
+            # attribution), and an estate with no coverage ingested at all,
+            # record no context naming a test, so neither can produce an
+            # attribution count -- rendering "0/N (0%)" would say no test
+            # exercises this code when nothing was ever asked (REQ-d00258-E).
+            # Where contexts ARE present the cell reads "0/N": that is a real
+            # answer, and suppressing it would hide unattributed code.
             return "n/a"
-        pct = round(dim.direct / dim.total * 100)
-        return f"{fmt_assertion_count(dim.direct)}/{dim.total} ({pct}%)"
+        pct = round(lines.attributed_lines / lines.total_lines * 100)
+        return f"{fmt_assertion_count(lines.attributed_lines)}/{lines.total_lines} ({pct}%)"
 
-    # Implements: REQ-d00258-A
-    # (column_key, rollup_attr, use_indirect_for_count, use_indirect_for_labels)
-    # All five dimensions headline on the generous (indirect) footing per
-    # REQ-d00069-L; the `~` marker (appended below) signals when the count
-    # isn't fully direct rather than rendering a second strict count.
+    # Implements: REQ-d00258-A, REQ-d00258-J
+    # (column_key, rollup_attr). All five dimensions headline on the
+    # per-*Assertion* TOTAL (REQ-d00069-N, the greatest of an *Assertion*'s
+    # four measures), and no marker stands in for a measure the surface does
+    # not show -- the four measures behind the total are published as their
+    # own columns instead (below).
     _DIMS = [
-        ("implemented", "implemented", True, True),
-        ("tested", "tested", True, True),
-        ("verified", "verified", True, True),
-        ("uat_coverage", "uat_coverage", True, True),
-        ("uat_verified", "uat_verified", True, True),
+        ("implemented", "implemented"),
+        ("tested", "tested"),
+        ("verified", "verified"),
+        ("uat_coverage", "uat_coverage"),
+        ("uat_verified", "uat_verified"),
     ]
 
     from elspais.graph.serialize import serialize_requirement_summary
@@ -302,42 +307,67 @@ def _get_node_data(node, graph: FederatedGraph, *, assertion_labels: bool = Fals
     )
 
     if rollup:
-        from elspais.graph.metrics import tested_and_passing
+        from elspais.graph.aggregation import (
+            HEADLINE_MEASURE,
+            covered_labels,
+            measure_total,
+        )
+        from elspais.graph.metrics import tested_and_passing, tested_partition
 
-        for key, attr, use_ind_count, use_ind_labels in _DIMS:
-            # Implements: REQ-d00258-A, REQ-d00258-B
-            # "Passing" (the verified column) is the union of result-verified
-            # and line-coverage-credited evidence.
+        for key, attr in _DIMS:
+            # Implements: REQ-d00258-A, REQ-d00258-N
+            # "Passing" (the verified column) counts what the declared tests
+            # returned, excluding an assertion its own tests failed.
             dim: CoverageDimension = (
                 tested_and_passing(rollup) if key == "verified" else getattr(rollup, attr)
             )
-            marker = " ~" if dim.indirect > dim.direct + 1e-9 else ""
+            # Implements: REQ-d00069-N, REQ-d00258-A, REQ-d00258-J
+            # The headline is the per-*Assertion* TOTAL -- the greatest of
+            # the four measures, taken once per *Assertion* -- with no
+            # marker standing in for a measure the cell does not show; the
+            # four measures are published as their own columns below.
             if assertion_labels:
-                labels = dim.indirect_labels if use_ind_labels else dim.direct_labels
+                labels = covered_labels(dim, HEADLINE_MEASURE)
                 label_str = _compact_labels(labels) if labels else f"0/{dim.total}"
-                # Percentage reflects true fractional coverage (sum of per-assertion
-                # fractions), not just how many assertions have *any* coverage.
-                covered = dim.indirect if use_ind_labels else dim.direct
-                pct = round(covered / dim.total * 100) if dim.total else 0
-                data[key] = f"{label_str} ({pct}%){marker}" if dim.total else "n/a"
+                pct = round(dim.covered / dim.total * 100) if dim.total else 0
+                data[key] = f"{label_str} ({pct}%)" if dim.total else "n/a"
                 data[key + "_labels"] = label_str if dim.total else "n/a"
                 data[key + "_pct"] = f"{pct}%" if dim.total else "n/a"
             else:
-                num = dim.indirect if use_ind_count else dim.direct
-                formatted = _fmt_count(num, total_a)
-                data[key] = formatted if formatted == "n/a" else f"{formatted}{marker}"
+                data[key] = _fmt_count(dim.covered, total_a)
+            for suffix, _header in _MEASURE_COLUMNS:
+                measure = suffix.lstrip("_")
+                data[key + suffix] = _fmt_count(measure_total(dim, measure), total_a)
+        # Implements: REQ-d00258-O
+        # Carried beside the Tested cell rather than inside it, so each format
+        # places it: the table appends it, CSV gives it columns of its own.
+        # Empty when nothing is tested -- there is no breakdown of an empty set.
+        part = tested_partition(rollup)
+        # Formatted here rather than left raw: these reach CSV columns of
+        # their own, and an assertion count reads the same way on every
+        # surface -- fractional where the credit is, whole where it is.
+        data["tested_passed"] = fmt_assertion_count(part.passed)
+        data["tested_failed"] = fmt_assertion_count(part.failed)
+        data["tested_awaiting"] = fmt_assertion_count(part.awaiting)
+        data["tested_breakdown"] = (
+            f"[{fmt_assertion_count(part.passed)}P {fmt_assertion_count(part.failed)}F "
+            f"{fmt_assertion_count(part.awaiting)}A]"
+            if part.tested
+            else ""
+        )
+
         ct = rollup.code_tested
         data["code_tested"] = _fmt_code_tested(ct)
         if assertion_labels:
             # Same guard as _fmt_code_tested (REQ-d00258-E): aggregate-only
-            # coverage (direct==0 while indirect>0) has no per-test attribution
-            # to report, so the label/pct cells must not claim "0/N"/"0%".
-            if ct.total == 0 or (ct.direct == 0 and ct.indirect > 0):
+            # coverage has no per-test attribution to report, so the cells
+            # must not claim "0/N"/"0%".
+            if ct.total_lines == 0 or not ct.has_attribution:
                 data["code_tested_labels"] = "n/a"
                 data["code_tested_pct"] = "n/a"
             else:
-                data["code_tested_labels"] = f"{ct.direct}/{ct.total}"
-                data["code_tested_pct"] = f"{round(ct.direct / ct.total * 100)}%"
+                data["code_tested_labels"] = f"{ct.attributed_lines:.0f}/{ct.total_lines}"
+                data["code_tested_pct"] = f"{round(ct.attributed_lines / ct.total_lines * 100)}%"
         # Implements: REQ-d00254-I+J
         # Special-case the "verified" cell: distinguish "not run, no baseline"
         # from a carried (baseline) verdict, ahead of the "n/a"/count rendering
@@ -360,10 +390,13 @@ def _get_node_data(node, graph: FederatedGraph, *, assertion_labels: bool = Fals
 
         lt = rollup.lcov_tested
         if lt.total > 0:
-            lt_pct = round(lt.indirect / lt.total * 100)
+            # Implements: REQ-d00069-N, REQ-d00258-A
+            # The per-*Assertion* total, like every other dimension headline.
+            lt_by_label = lt.total_by_label
+            lt_pct = round(lt.covered / lt.total * 100)
             data["lcov_tested"] = f"lcov {lt_pct}%"
             if assertion_labels:
-                labels = lt.indirect_labels if lt.indirect_labels else lt.direct_labels
+                labels = {lbl for lbl, frac in lt_by_label.items() if frac > 0}
                 label_str = _compact_labels(labels) if labels else f"0/{lt.total}"
                 data["lcov_tested_labels"] = label_str
                 data["lcov_tested_pct"] = f"{lt_pct}%"
@@ -373,11 +406,13 @@ def _get_node_data(node, graph: FederatedGraph, *, assertion_labels: bool = Fals
                 data["lcov_tested_labels"] = "n/a"
                 data["lcov_tested_pct"] = "n/a"
     else:
-        for key, _, _, _ in _DIMS:
+        for key, _ in _DIMS:
             data[key] = "n/a"
             if assertion_labels:
                 data[key + "_labels"] = "n/a"
                 data[key + "_pct"] = "n/a"
+            for suffix, _header in _MEASURE_COLUMNS:
+                data[key + suffix] = "n/a"
         data["code_tested"] = "n/a"
         if assertion_labels:
             data["code_tested_labels"] = "n/a"
@@ -422,6 +457,46 @@ _COVERAGE_COLUMNS = [
     "lcov_tested",
 ]
 
+# Implements: REQ-d00069-L, REQ-d00258-A
+# The four measures behind each of the 5 REQ-d00277 dimensions, published
+# as their own CSV columns beside the dimension's total so a reader can see
+# what evidence produced it without a caveat marker (REQ-d00258-J). The
+# ``data`` key suffix (``_get_node_data``) and the display-header suffix,
+# named once so the CSV writer and the data builder cannot drift apart.
+_MEASURE_COLUMNS: list[tuple[str, str]] = [
+    ("_immediate_direct", "Immediate Direct"),
+    ("_immediate_indirect", "Immediate Indirect"),
+    ("_rolled_direct", "Rolled Direct"),
+    ("_rolled_indirect", "Rolled Indirect"),
+]
+
+# The 5 REQ-d00277 display dimensions -- code_tested/lcov_tested are
+# diagnostic columns outside that vocabulary and carry no total/measure
+# split of their own.
+_COVERAGE_COLUMNS_WITH_MEASURES = [
+    "implemented",
+    "tested",
+    "verified",
+    "uat_coverage",
+    "uat_verified",
+]
+
+
+def _add_measure_fields(node_dict: dict, data: dict, columns: list[str]) -> None:
+    """Add the four REQ-d00069-L measure fields for each rendered dimension.
+
+    JSON's per-requirement object is where REQ-d00258-A's "available" is
+    cheapest to satisfy without widening the text/markdown/html table: a
+    field costs nothing to a reader who is not looking at it. Only for
+    dimensions actually present in ``columns`` (the UAT preset excludes the
+    code dimensions; the minimal preset excludes coverage entirely).
+    """
+    for col in columns:
+        if col not in _COVERAGE_COLUMNS_WITH_MEASURES:
+            continue
+        for suffix, _header in _MEASURE_COLUMNS:
+            node_dict[col + suffix] = data.get(col + suffix)
+
 
 def _format_row(data: dict, columns: list[str]) -> list[str]:
     """Format a single row from node data according to columns."""
@@ -457,6 +532,8 @@ def format_markdown(graph: FederatedGraph, preset: ReportPreset | None = None) -
     # marker in its verified cell, so the legend is only emitted when it's
     # relevant (and full-run output stays byte-identical to before).
     has_carry_marker = False
+    # Implements: REQ-d00258-O
+    has_tested_breakdown = False
 
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
         if preset.dimension == "uat":
@@ -472,6 +549,13 @@ def format_markdown(graph: FederatedGraph, preset: ReportPreset | None = None) -
             verified_cell = data.get("verified", "")
             if "(baseline)" in verified_cell or "—" in verified_cell:
                 has_carry_marker = True
+        # Implements: REQ-d00258-O
+        # Only where the Tested column is rendered: a breakdown of a figure
+        # this preset does not show explains nothing, and its legend would
+        # point at a column that is not there.
+        if "tested" in columns and data.get("tested_breakdown"):
+            data["tested"] = f"{data['tested']} {data['tested_breakdown']}"
+            has_tested_breakdown = True
 
         row_values = _format_row(data, columns)
         yield "| " + " | ".join(row_values) + " |"
@@ -515,6 +599,17 @@ def format_markdown(graph: FederatedGraph, preset: ReportPreset | None = None) -
             "> Legend: `(baseline)` = carried from a prior run (not re-run this PR, "
             "verdict still honored); `—` = target not run and no baseline "
             "(skipped, not a regression)."
+        )
+
+    # Implements: REQ-d00258-O
+    # The breakdown is unreadable without its key, so the key appears whenever
+    # a row carried one.
+    if has_tested_breakdown:
+        yield ""
+        yield (
+            "> Tested breakdown: `P` passed, `F` failed, `A` awaiting a result "
+            "(declared, and no verdict came back). The three account for every "
+            "tested assertion."
         )
 
 
@@ -565,6 +660,20 @@ def format_csv(graph: FederatedGraph, preset: ReportPreset | None = None) -> Ite
         else:
             header_names.append(col_headers.get(c, c.title()))
             csv_columns.append(c)
+        # Implements: REQ-d00258-O
+        # Columns rather than a bracket inside the Tested cell: a machine
+        # format should not need to parse a figure out of prose.
+        if c == "tested":
+            header_names.extend(["Tested Passed", "Tested Failed", "Tested Awaiting"])
+            csv_columns.extend(["tested_passed", "tested_failed", "tested_awaiting"])
+        # Implements: REQ-d00069-L, REQ-d00258-A, REQ-d00258-J
+        # The four measures behind this dimension's total, as columns of
+        # their own -- what REQ-d00258-A requires a reader be able to see,
+        # published rather than summarized by a caveat marker (REQ-d00258-J).
+        if c in _COVERAGE_COLUMNS_WITH_MEASURES:
+            display = col_headers.get(c, c.title())
+            header_names.extend(f"{display} {label}" for _suffix, label in _MEASURE_COLUMNS)
+            csv_columns.extend(c + suffix for suffix, _label in _MEASURE_COLUMNS)
 
     extra_prefix = []
     extra_suffix = []
@@ -692,6 +801,7 @@ def format_json(graph: FederatedGraph, preset: ReportPreset | None = None) -> It
         if preset.dimension == "uat":
             # UAT view: only uat_coverage, uat_verified, and journeys; no code columns
             node_dict: dict = {col: data.get(col) for col in _UAT_COLUMNS}
+            _add_measure_fields(node_dict, data, _UAT_COLUMNS)
             node_dict["journeys"] = uat_jnys
             yield json.dumps(node_dict, indent=2)
             continue
@@ -708,6 +818,12 @@ def format_json(graph: FederatedGraph, preset: ReportPreset | None = None) -> It
                 }
             else:
                 node_dict[col] = data.get(col)
+        # Implements: REQ-d00069-L, REQ-d00258-A
+        # JSON carries the four measures behind each dimension's total as
+        # fields of their own -- the brief requires it, and unlike the
+        # text/markdown/html table (already 11 columns wide) a JSON object
+        # has no readability cost to adding four fields per dimension.
+        _add_measure_fields(node_dict, data, preset.columns)
 
         # Add detail fields (controlled by flags)
         if preset.include_body:
@@ -800,6 +916,8 @@ def _render_json_from_data(data: dict, preset: ReportPreset) -> None:
                 }
             else:
                 node_dict[col] = node_data.get(col)
+        # Implements: REQ-d00069-L, REQ-d00258-A
+        _add_measure_fields(node_dict, node_data, preset.columns)
         if preset.include_body:
             node_dict["body"] = node_data.get("body", "")
         if preset.include_assertions:

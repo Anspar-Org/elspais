@@ -13,7 +13,7 @@ from elspais.graph.serialize import (
     to_csv,
     to_markdown,
 )
-from tests.core.graph_test_helpers import make_requirement
+from tests.core.graph_test_helpers import grammar_for, make_requirement
 
 
 @pytest.fixture
@@ -21,7 +21,11 @@ def sample_graph():
     """Create a sample graph for testing."""
     from elspais.graph.GraphNode import FileType
 
-    builder = GraphBuilder(repo_root=Path("/test/repo"))
+    builder = GraphBuilder(
+        repo_root=Path("/test/repo"),
+        namespace="REQ",
+        resolver=grammar_for("REQ"),
+    )
 
     # Create FILE nodes
     file_nodes = {}
@@ -238,7 +242,7 @@ class TestToCsv:
     # Verifies: REQ-d00052-C
     def test_csv_handles_commas(self):
         """Escapes commas in values."""
-        builder = GraphBuilder()
+        builder = GraphBuilder(namespace="REQ", resolver=grammar_for("REQ"))
         builder.add_parsed_content(
             make_requirement(
                 "REQ-test",
@@ -257,7 +261,7 @@ class TestToCsv:
     # Verifies: REQ-d00052-C
     def test_csv_handles_quotes(self):
         """Escapes quotes in values."""
-        builder = GraphBuilder()
+        builder = GraphBuilder(namespace="REQ", resolver=grammar_for("REQ"))
         builder.add_parsed_content(
             make_requirement(
                 "REQ-test",
@@ -303,7 +307,7 @@ class TestSerializeAdditionalCoverage:
     # Verifies: REQ-d00064-D
     def test_serialize_empty_graph(self):
         """Serializes empty graph correctly."""
-        builder = GraphBuilder()
+        builder = GraphBuilder(namespace="REQ", resolver=grammar_for("REQ"))
         graph = builder.build()
 
         result = serialize_graph(graph)
@@ -340,9 +344,9 @@ class TestSerializeMetricsFiltering:
         result = serialize_node(node)
 
         assert "metrics" in result
-        assert (
-            "rollup_metrics" not in result["metrics"]
-        ), "RollupMetrics object should be filtered out of serialized metrics"
+        assert "rollup_metrics" not in result["metrics"], (
+            "RollupMetrics object should be filtered out of serialized metrics"
+        )
 
     def test_REQ_d00055_D_referenced_pct_included_in_serialization(self):
         """referenced_pct (float scalar) SHOULD appear in serialized output."""
@@ -363,15 +367,15 @@ class TestSerializeMetricsFiltering:
         result = serialize_node(node)
 
         assert "metrics" in result
-        assert (
-            result["metrics"]["referenced_pct"] == 75.0
-        ), "referenced_pct should be preserved in serialized output"
-        assert (
-            result["metrics"]["is_uncommitted"] is True
-        ), "Boolean metrics should be preserved in serialized output"
-        assert (
-            result["metrics"]["total_tests"] == 3
-        ), "Integer metrics should be preserved in serialized output"
+        assert result["metrics"]["referenced_pct"] == 75.0, (
+            "referenced_pct should be preserved in serialized output"
+        )
+        assert result["metrics"]["is_uncommitted"] is True, (
+            "Boolean metrics should be preserved in serialized output"
+        )
+        assert result["metrics"]["total_tests"] == 3, (
+            "Integer metrics should be preserved in serialized output"
+        )
 
     def test_REQ_d00055_D_serialized_metrics_are_json_safe(self):
         """All metrics in serialized output must be JSON-serializable scalar types."""

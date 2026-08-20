@@ -1,6 +1,7 @@
 # Implements: REQ-p00006-B
 # Implements: REQ-d00010-A
 """Starlette UI route handlers — template rendering and helpers."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -16,7 +17,7 @@ from elspais.view_model import build_levels, build_namespaces, build_statuses
 _USER_RELATIONSHIP_KINDS = ["implements", "refines", "satisfies"]
 
 
-def _extract_viewer_config(config: dict[str, Any]) -> dict[str, Any]:
+def _extract_viewer_config(config: dict[str, Any], federation: Any = None) -> dict[str, Any]:
     """Extract viewer-relevant values from the config dict.
 
     Returns a dict with keys suitable for unpacking into the Jinja2
@@ -24,6 +25,9 @@ def _extract_viewer_config(config: dict[str, Any]) -> dict[str, Any]:
     backward compatibility, plus the dynamic `levels` / `namespaces` /
     `statuses` lists (each item carrying resolved bg/text colors) that the
     templates and API responses consume.
+
+    ``federation`` is the FederatedGraph being viewed; it supplies the full
+    set of repositories for the namespace catalog.
     """
     from elspais.config.schema import ElspaisConfig
 
@@ -53,7 +57,7 @@ def _extract_viewer_config(config: dict[str, Any]) -> dict[str, Any]:
         "config_relationship_kinds": list(_USER_RELATIONSHIP_KINDS),
         "config_statuses": config_statuses,
         "levels": build_levels(typed),
-        "namespaces": build_namespaces(typed),
+        "namespaces": build_namespaces(typed, federation),
     }
 
 
@@ -82,7 +86,7 @@ async def index(request: Request):
         topics = sorted(gen._collect_unique_values("topic"))
         default_hidden = roles.default_hidden_statuses()
 
-        viewer_cfg = _extract_viewer_config(state.config)
+        viewer_cfg = _extract_viewer_config(state.config, state.graph)
         # Build status entries with resolved colors, preserving role-sorted order.
         from elspais.config.schema import ElspaisConfig
 

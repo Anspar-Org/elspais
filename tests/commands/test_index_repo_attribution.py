@@ -31,6 +31,11 @@ from elspais.graph.terms import TermDictionary, TermEntry, TermRef
 # ─────────────────────────────────────────────────────────────────────────────
 
 
+def _project_config(name: str, namespace: str) -> dict:
+    """The [project] block every graph-bearing RepoEntry must declare."""
+    return {"project": {"name": name, "namespace": namespace}}
+
+
 def _make_file_node(repo_root: Path, relative_path: str) -> GraphNode:
     """Create a FILE node with absolute_path/relative_path populated."""
     file_id = f"file:{relative_path}"
@@ -106,13 +111,13 @@ def _build_two_repo_federation(
     root_entry = RepoEntry(
         name="root",
         graph=root_graph,
-        config=None,
+        config=_project_config("root", "REQ"),
         repo_root=root_repo,
     )
     cal_entry = RepoEntry(
         name="callisto",
         graph=cal_graph,
-        config=None,
+        config=_project_config("callisto", "REQ-CAL"),
         repo_root=callisto_repo,
     )
     fed = FederatedGraph([root_entry, cal_entry], root_repo="root")
@@ -152,8 +157,7 @@ class TestSingleRepoBucketsByName:
             "for foreign or unmatched files. After fix, it must never appear."
         )
         assert "Unattributed" not in content, (
-            "Single-repo with all nodes owned by 'root' must NOT produce an "
-            "'Unattributed' bucket."
+            "Single-repo with all nodes owned by 'root' must NOT produce an 'Unattributed' bucket."
         )
         # Single-repo INDEX.md historically renders without a per-repo
         # subsection (subsections only appear when multiple repos contribute).
@@ -195,9 +199,9 @@ class TestFederatedMultiRepoBuckets:
             "Foreign-repo REQ must NOT bucket as 'Unknown Source'. "
             "It belongs under its owning repo's name ('callisto')."
         )
-        assert (
-            "callisto" in content
-        ), "REQ-CAL-p00001 must surface under a 'callisto' section label."
+        assert "callisto" in content, (
+            "REQ-CAL-p00001 must surface under a 'callisto' section label."
+        )
         # The labels 'root' and 'callisto' should appear distinctly — the
         # foreign REQ should not be lumped with the primary's section.
         assert "root" in content
@@ -253,7 +257,7 @@ class TestUnattributedBucket:
         entry = RepoEntry(
             name="root",
             graph=graph,
-            config=None,
+            config=_project_config("root", "REQ"),
             repo_root=tmp_path,
         )
         fed = _OrphanIDFederation([entry], root_repo="root")
@@ -281,7 +285,7 @@ class TestUnattributedBucket:
         root_before_orphan = content.rfind("root", 0, orphan_idx)
         assert unatt_before_orphan != -1, "Expected 'Unattributed' label to precede REQ-p00002."
         assert unatt_before_orphan > root_before_orphan, (
-            "REQ-p00002 must be rendered under the 'Unattributed' bucket, " "not under 'root'."
+            "REQ-p00002 must be rendered under the 'Unattributed' bucket, not under 'root'."
         )
 
 

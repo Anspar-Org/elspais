@@ -119,9 +119,9 @@ class TestZeroPaddedNumericAssertions:
     def test_zero_padded_labels_health_passes(self, project):
         # PROJ-3 has 3 assertions labeled 00, 01, 02
         result = run_elspais("checks", "--lenient", cwd=project)
-        assert (
-            result.returncode == 0
-        ), f"health failed with zero-padded assertions: {result.stderr}\n{result.stdout}"
+        assert result.returncode == 0, (
+            f"health failed with zero-padded assertions: {result.stderr}\n{result.stdout}"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -159,7 +159,7 @@ class TestIgnorePatterns:
 
 @pytest.mark.e2e
 class TestReferencesOverrides:
-    """Config: comment_styles=['#', '//'] — JS // Implements comments work."""
+    """JS `//` Implements comments are read as references."""
 
     def test_js_comment_style(self, project):
         # src/feature.js contains "// Implements: PROJ-3" — should parse without error
@@ -236,24 +236,6 @@ class TestComplexDirectoryStructure:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.e2e
-class TestEnvVarOverrides:
-    """Configuration can be overridden via ELSPAIS_* env vars."""
-
-    def test_env_override_project_name(self, project):
-        result = run_elspais(
-            "config",
-            "show",
-            "--format",
-            "json",
-            cwd=project,
-            env={"ELSPAIS_PROJECT_NAME": "env-overridden"},
-        )
-        assert result.returncode == 0, f"config show failed: {result.stderr}"
-        data = json.loads(result.stdout)
-        assert "project" in data
-
-
 # ---------------------------------------------------------------------------
 # TestAllowStructuralOrphansConfig (from test_e2e_config_variations.py)
 # ---------------------------------------------------------------------------
@@ -272,9 +254,9 @@ class TestAllowStructuralOrphansConfig:
             (c for c in data["checks"] if c["name"] == "spec.structural_orphans"), None
         )
         if orphan_check:
-            assert orphan_check[
-                "passed"
-            ], f"Orphan check should pass with allow_structural_orphans=True: {orphan_check}"
+            assert orphan_check["passed"], (
+                f"Orphan check should pass with allow_structural_orphans=True: {orphan_check}"
+            )
 
     def test_orphan_check_runs_when_disallowed(self, tmp_path):
         """When allow_structural_orphans=False, orphan check should run (not be skipped)."""

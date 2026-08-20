@@ -80,15 +80,12 @@ A. The system SHALL write audit entries.
 
 **Actor**: End User
 **Goal**: Authenticate
+Validates: REQ-d00001-A
 
 ## Steps
 
 1. User opens login page
 2. User enters credentials
-
-## Validates
-
-Validates: REQ-d00001-A
 
 *End* *JNY-OQ-01*
 ---
@@ -254,7 +251,7 @@ class TestUATColumns:
                 assert col not in row, f"Code column '{col}' should be excluded; row: {row}"
 
     def test_markdown_header_has_uat_coverage(self, mixed_graph, uat_preset):
-        """Markdown UAT header must include 'UAT Covered' column (REQ-d00258-B)."""
+        """Markdown UAT header must include 'UAT Covered' column (REQ-d00258-K)."""
         from elspais.commands.trace import format_markdown
 
         lines = list(format_markdown(mixed_graph, uat_preset))
@@ -292,9 +289,9 @@ class TestUATColumns:
 
         output = "\n".join(format_html(mixed_graph, uat_preset))
         # Check that the <th> for Implemented is absent
-        assert (
-            "<th>Implemented</th>" not in output
-        ), "Code column '<th>Implemented</th>' should be absent from UAT HTML"
+        assert "<th>Implemented</th>" not in output, (
+            "Code column '<th>Implemented</th>' should be absent from UAT HTML"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -355,9 +352,9 @@ class TestUATJourneyVerdicts:
         assert rows, "Expected at least one UAT row in steps-all-pass graph"
         for row in rows:
             for j in row["journeys"]:
-                assert (
-                    j["verdict"] == "pass"
-                ), f"Expected 'pass' verdict for {j['id']} in steps-all-pass; got '{j['verdict']}'"
+                assert j["verdict"] == "pass", (
+                    f"Expected 'pass' verdict for {j['id']} in steps-all-pass; got '{j['verdict']}'"
+                )
 
     def test_markdown_journey_data_in_rows(self, steps_all_pass_graph, uat_preset):
         """Markdown UAT rows contain journey IDs in the Journeys cell."""
@@ -368,9 +365,9 @@ class TestUATJourneyVerdicts:
         data_lines = [ln for ln in lines if "|" in ln and "----" not in ln and "Journeys" not in ln]
         assert data_lines, "Expected at least one data row in UAT markdown"
         # At least one row should mention JNY
-        assert any(
-            "JNY" in line for line in data_lines
-        ), "Expected journey ID in at least one markdown data row"
+        assert any("JNY" in line for line in data_lines), (
+            "Expected journey ID in at least one markdown data row"
+        )
 
     def test_one_step_fails_verdict_is_fail(self, tmp_path):
         """In the one-step-fails fixture, failing journey has verdict 'fail'."""
@@ -383,8 +380,7 @@ class TestUATJourneyVerdicts:
         for row in rows:
             for j in row["journeys"]:
                 assert j["verdict"] == "fail", (
-                    f"Expected 'fail' verdict for {j['id']} in one-step-fails; "
-                    f"got '{j['verdict']}'"
+                    f"Expected 'fail' verdict for {j['id']} in one-step-fails; got '{j['verdict']}'"
                 )
 
 
@@ -416,9 +412,9 @@ class TestJourneyNodeSerialization:
         jny = graph.find_by_id("JNY-OQ-Login-01")
         assert jny is not None, "JNY-OQ-Login-01 not found in one-step-fails fixture"
         payload = _build_journey_card_data(jny)
-        assert (
-            payload["verdict"] == "fail"
-        ), f"Expected verdict='fail' for failing journey; got '{payload['verdict']}'"
+        assert payload["verdict"] == "fail", (
+            f"Expected verdict='fail' for failing journey; got '{payload['verdict']}'"
+        )
 
     # Verifies: REQ-d00256
     def test_journey_api_exposes_failing_steps(self, tmp_path):
@@ -427,9 +423,9 @@ class TestJourneyNodeSerialization:
         jny = graph.find_by_id("JNY-OQ-Login-01")
         assert jny is not None, "JNY-OQ-Login-01 not found in one-step-fails fixture"
         payload = _build_journey_card_data(jny)
-        assert (
-            "2" in payload["failing_steps"]
-        ), f"Expected '2' in failing_steps; got {payload['failing_steps']}"
+        assert "2" in payload["failing_steps"], (
+            f"Expected '2' in failing_steps; got {payload['failing_steps']}"
+        )
 
     # Verifies: REQ-d00255
     def test_journey_api_verdict_pass_for_all_pass(self, steps_all_pass_graph):
@@ -437,9 +433,9 @@ class TestJourneyNodeSerialization:
         jny = steps_all_pass_graph.find_by_id("JNY-OQ-Login-01")
         assert jny is not None, "JNY-OQ-Login-01 not found in steps-all-pass fixture"
         payload = _build_journey_card_data(jny)
-        assert (
-            payload["verdict"] == "pass"
-        ), f"Expected verdict='pass' for all-pass journey; got '{payload['verdict']}'"
+        assert payload["verdict"] == "pass", (
+            f"Expected verdict='pass' for all-pass journey; got '{payload['verdict']}'"
+        )
 
     # Verifies: REQ-d00255
     def test_journey_api_failing_steps_empty_for_all_pass(self, steps_all_pass_graph):
@@ -447,9 +443,9 @@ class TestJourneyNodeSerialization:
         jny = steps_all_pass_graph.find_by_id("JNY-OQ-Login-01")
         assert jny is not None, "JNY-OQ-Login-01 not found in steps-all-pass fixture"
         payload = _build_journey_card_data(jny)
-        assert (
-            payload["failing_steps"] == []
-        ), f"Expected empty failing_steps for passing journey; got {payload['failing_steps']}"
+        assert payload["failing_steps"] == [], (
+            f"Expected empty failing_steps for passing journey; got {payload['failing_steps']}"
+        )
 
     def test_journey_api_verdict_unverified_for_no_metric(self, mixed_graph):
         """Journey with no journey_verification metric must expose verdict='unverified'."""
@@ -462,13 +458,13 @@ class TestJourneyNodeSerialization:
                     jny = edge.target
                     payload = _build_journey_card_data(jny)
                     got = payload["verdict"]
-                    assert (
-                        got == "unverified"
-                    ), f"Expected verdict='unverified' for journey with no metric; got '{got}'"
+                    assert got == "unverified", (
+                        f"Expected verdict='unverified' for journey with no metric; got '{got}'"
+                    )
                     steps = payload["failing_steps"]
-                    assert (
-                        steps == []
-                    ), f"Expected empty failing_steps for unverified journey; got {steps}"
+                    assert steps == [], (
+                        f"Expected empty failing_steps for unverified journey; got {steps}"
+                    )
                     return
         pytest.skip("mixed_graph has no VALIDATES edges")
 
@@ -513,9 +509,9 @@ class TestJourneyStepSerialization:
         """step-2 must have status='fail' in the one-step-fails fixture."""
         steps = self._get_step_children(tmp_path)
         by_label = {c["label"]: c for c in steps}
-        assert (
-            by_label["2"]["status"] == "fail"
-        ), f"Expected step-2 status='fail'; got '{by_label['step-2']['status']}'"
+        assert by_label["2"]["status"] == "fail", (
+            f"Expected step-2 status='fail'; got '{by_label['step-2']['status']}'"
+        )
 
     # Verifies: REQ-d00256
     def test_step1_and_step3_have_pass_status(self, tmp_path):
@@ -523,9 +519,9 @@ class TestJourneyStepSerialization:
         steps = self._get_step_children(tmp_path)
         by_label = {c["label"]: c for c in steps}
         for label in ("1", "3"):
-            assert (
-                by_label[label]["status"] == "pass"
-            ), f"Expected {label} status='pass'; got '{by_label[label]['status']}'"
+            assert by_label[label]["status"] == "pass", (
+                f"Expected {label} status='pass'; got '{by_label[label]['status']}'"
+            )
 
     # Verifies: REQ-d00256
     def test_step2_verifying_tests_contains_failing_test(self, tmp_path):
@@ -535,6 +531,6 @@ class TestJourneyStepSerialization:
         vt = by_label["2"]["verifying_tests"]
         assert vt, "Expected non-empty verifying_tests for step-2"
         statuses = [t["status"] for t in vt]
-        assert (
-            "fail" in statuses
-        ), f"Expected a failing test in step-2's verifying_tests; got statuses={statuses}"
+        assert "fail" in statuses, (
+            f"Expected a failing test in step-2's verifying_tests; got statuses={statuses}"
+        )

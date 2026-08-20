@@ -1,5 +1,6 @@
 # Verifies: REQ-d00085
 """Tests for bitfield exit code composition."""
+
 from elspais.commands.report import EXIT_BIT
 
 

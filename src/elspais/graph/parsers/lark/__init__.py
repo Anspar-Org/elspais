@@ -24,9 +24,9 @@ from typing import TYPE_CHECKING
 
 from lark import Lark
 
-from elspais.utilities.patterns import component_regex
-
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from elspais.utilities.patterns import IdResolver
 
 # Directory containing .lark grammar files
@@ -45,81 +45,66 @@ class GrammarFactory:
     # Class-level cache: grammar_hash -> compiled Lark instance
     _cache: dict[str, Lark] = {}
 
-    def __init__(self, resolver: IdResolver) -> None:
+    def __init__(
+        self,
+        resolver: IdResolver,
+        member_resolvers: Sequence[IdResolver] = (),
+    ) -> None:
+        from elspais.utilities.patterns import FederatedIdReader
+
         self._resolver = resolver
+        self._reader = FederatedIdReader(resolver, member_resolvers)
 
     # ------------------------------------------------------------------
     # Token builders (derive regex fragments from IdResolver / config)
     # ------------------------------------------------------------------
 
-    def _build_tokens(self) -> dict[str, str]:
-        """Build substitution tokens from the resolver."""
-        r = self._resolver
-        cfg = r.config
+    def _build_tokens(self, federated: bool = False) -> dict[str, str]:
+        """Build substitution tokens from the resolver's identifier grammar.
 
-        # Namespace: literal string, e.g. "REQ"
-        namespace = re.escape(cfg.namespace)
-
-        # Type pattern: alternation of alias values (e.g. "p|o|d")
-        type_values = r.all_type_alias_values()
-        if type_values:
-            type_pattern = "|".join(re.escape(v) for v in type_values)
-        else:
-            type_pattern = "[a-z]"
-
-        # Component/digits pattern — single authority (REQ-d00251-G)
-        digits_pattern = component_regex(cfg.component)
-
-        # Assertion label
-        assertion_label = r._assertion_label_regex_str()
-
-        # Assertion separator (between component and label) and multi-assertion separator
-        assertion_sep = re.escape(cfg.assertions.separator)
-        multi_sep = re.escape(cfg.assertions.multi_separator)
-
-        # Build __ID_PATTERN__ from canonical template.
-        # Strategy: split canonical into literal segments and placeholders,
-        # escape the literals, then join with regex fragments.
-        canonical = cfg.canonical_template
-        placeholders = {
-            "{namespace}": namespace,
-            "{component}": digits_pattern,
-            "{level}": f"(?:{type_pattern})",
-        }
-        # {type} -> alternation of canonical type codes
-        all_type_codes = list(r.config.types.keys())
-        if all_type_codes:
-            placeholders["{type}"] = "(?:" + "|".join(re.escape(t) for t in all_type_codes) + ")"
-        # {level.X} or {type.X} -> alternation of alias values
-        for m in re.finditer(r"\{(?:type|level)\.(\w+)\}", canonical):
-            alias_name = m.group(1)
-            alias_vals = r._reverse_aliases.get(alias_name, {})
-            if alias_vals:
-                val_alt = "|".join(re.escape(v) for v in alias_vals)
-                placeholders[m.group(0)] = f"(?:{val_alt})"
-
-        # Split on placeholders, escape literal parts, reassemble
-        parts = re.split(r"(\{[^}]+\})", canonical)
-        id_pattern = "".join(placeholders[p] if p in placeholders else re.escape(p) for p in parts)
+        Args:
+            federated: Widen the identifier and namespace fragments to every
+                federation member's grammar.  Code and test annotations may
+                name an identifier any member owns (REQ-d00269-C); a spec
+                file declares only identifiers its own repository owns, so
+                its grammar stays narrow.
+        """
+        # Every fragment comes from the one derivation authority,
+        # so the grammar this parser recognises and the identifiers the resolver
+        # accepts cannot drift apart.  A federated fragment alternates each
+        # member's own derivation rather than merging configurations
+        # (REQ-d00251-L).
+        g = self._resolver.grammar()
 
         tokens: dict[str, str] = {
-            "__NAMESPACE__": namespace,
-            "__TYPE_PATTERN__": type_pattern,
-            "__DIGITS_PATTERN__": digits_pattern,
-            "__ID_PATTERN__": id_pattern,
-            "__ASSERTION_LABEL__": assertion_label,
-            "__ASSERTION_SEP__": assertion_sep,
-            "__MULTI_SEP__": multi_sep,
+            "__NAMESPACE__": self._reader.namespace_pattern() if federated else g.namespace,
+            "__TYPE_PATTERN__": g.level,
+            "__DIGITS_PATTERN__": g.component,
+            "__ID_PATTERN__": self._reader.identifier_pattern() if federated else g.identifier,
+            "__ASSERTION_LABEL__": g.assertion_label,
+            "__ASSERTION_SEP__": g.assertion_separator,
+            "__MULTI_SEP__": g.multi_separator,
         }
 
         # Reference grammar tokens (comment styles + keywords)
         tokens["__COMMENT_STYLES__"] = r"\#|\/\/|\-\-"
-        impl_kw = ["Implements", "IMPLEMENTS"]
-        ver_kw = ["Verifies", "VERIFIES"]
-        ref_kw = ["Refines", "REFINES"]
-        tokens["__KEYWORDS__"] = "|".join(re.escape(k) for k in impl_kw + ver_kw + ref_kw)
-        tokens["__IMPL_KEYWORDS__"] = "|".join(re.escape(k) for k in impl_kw)
-        tokens["__VER_KEYWORDS__"] = "|".join(re.escape(k) for k in ver_kw)
+
+        # Implements: REQ-d00269-E
+        # What a keyword is does not depend on its case, nor on whether it is
+        # wrapped in markdown emphasis; that its form is non-canonical is
+        # reported instead (REQ-d00272-G).
+        def _any_case(word: str) -> str:
+            letters = "".join(
+                f"[{c.upper()}{c.lower()}]" if c.isalpha() else re.escape(c) for c in word
+            )
+            return rf"(?:\*\*)?{letters}(?:\*\*)?"
+
+        impl_kw = ["Implements"]
+        ver_kw = ["Verifies"]
+        ref_kw = ["Refines"]
+        tokens["__KEYWORDS__"] = "|".join(_any_case(k) for k in impl_kw + ver_kw + ref_kw)
+        tokens["__IMPL_KEYWORDS__"] = "|".join(_any_case(k) for k in impl_kw)
+        tokens["__VER_KEYWORDS__"] = "|".join(_any_case(k) for k in ver_kw)
 
         return tokens
 
@@ -166,7 +151,7 @@ class GrammarFactory:
 
     def get_reference_parser(self) -> Lark:
         """Compile (or retrieve cached) reference grammar parser."""
-        tokens = self._build_tokens()
+        tokens = self._build_tokens(federated=True)
         full_grammar = self._substitute(self._read_grammar("reference.lark"), tokens)
 
         key = self._grammar_hash(full_grammar)
@@ -195,14 +180,22 @@ class FileDispatcher:
 
     Args:
         resolver: IdResolver for ID parsing and normalization.
+        member_resolvers: The resolvers of the other repositories in this
+            federation.  Code and test annotations may name an identifier
+            any member owns, and each such reference is normalized by the
+            member that claims it (REQ-d00269-C).
     """
 
     def __init__(
         self,
         resolver: IdResolver,
+        member_resolvers: Sequence[IdResolver] = (),
     ) -> None:
+        from elspais.utilities.patterns import FederatedIdReader
+
         self._resolver = resolver
-        self._factory = GrammarFactory(resolver)
+        self._reader = FederatedIdReader(resolver, member_resolvers)
+        self._factory = GrammarFactory(resolver, member_resolvers)
         self._req_parser: Lark | None = None
         self._ref_parser: Lark | None = None
 
@@ -225,23 +218,50 @@ class FileDispatcher:
         replaces each line inside a fence with a neutral comment that the
         grammar will match as TEXT/remainder, preserving line count.
         """
-        lines = content.split("\n")
+        fenced = FileDispatcher._fenced_line_numbers(content)
         result: list[str] = []
-        in_fence = False
-        for line in lines:
-            stripped = line.strip()
-            if stripped.startswith("```") and not in_fence:
-                in_fence = True
-                result.append(line)  # keep the opening fence marker as-is
-            elif stripped.startswith("```") and in_fence:
-                in_fence = False
-                result.append(line)  # keep the closing fence marker as-is
-            elif in_fence:
+        for number, line in enumerate(content.split("\n"), start=1):
+            if number in fenced:
                 # Replace with a neutral line that won't match any grammar rule
                 result.append("<!-- fenced -->" if line.strip() else "")
             else:
                 result.append(line)
         return "\n".join(result)
+
+    @staticmethod
+    def _fenced_line_numbers(content: str) -> set[int]:
+        """The 1-based line numbers that sit inside a fenced code block.
+
+        The fence markers themselves are excluded -- they delimit the quoted
+        region rather than belonging to it. Text inside the region is a
+        display of syntax, not an instance of it, so a *Traceability* keyword
+        written there names a keyword instead of invoking one.
+        """
+        fenced: set[int] = set()
+        in_fence = False
+        for number, line in enumerate(content.split("\n"), start=1):
+            if line.strip().startswith("```"):
+                in_fence = not in_fence
+            elif in_fence:
+                fenced.add(number)
+        return fenced
+
+    @staticmethod
+    def _quoted_line_numbers(content: str, file_path: str) -> set[int]:
+        """Line numbers a *Traceability* keyword must not bind on (REQ-d00269-E).
+
+        Markdown fences are recognised in every source; a Python string
+        literal is recognised only for ``.py`` files, because only Python
+        has a parser here to ask. Other languages keep fence-only
+        behaviour -- guessing at string literals with a regex would be
+        exactly the shape-based reasoning this design refuses elsewhere.
+        """
+        quoted = FileDispatcher._fenced_line_numbers(content)
+        if file_path.endswith(".py"):
+            from elspais.graph.parsers.prescan import ast_string_literal_lines
+
+            quoted |= ast_string_literal_lines(content)
+        return quoted
 
     def dispatch_spec(
         self,
@@ -261,7 +281,7 @@ class FileDispatcher:
         neutralized = self._neutralize_fenced_blocks(content)
         parser = self._get_req_parser()
         tree = parser.parse(neutralized)
-        transformer = RequirementTransformer(self._resolver)
+        transformer = RequirementTransformer(self._resolver, self._reader)
         return transformer.transform(tree, source=original_content)
 
     def dispatch_code(
@@ -291,8 +311,12 @@ class FileDispatcher:
             "code_ref",
             line_context,
             source_id=file_path,
+            reader=self._reader,
+            quoted_lines=self._quoted_line_numbers(content, file_path),
         )
-        return transformer.transform(tree)
+        results = transformer.transform(tree)
+        results.extend(_fault_and_style_content(transformer))
+        return results
 
     def dispatch_test(
         self,
@@ -301,7 +325,10 @@ class FileDispatcher:
         prescan_data: dict[str, list[dict]] | None = None,
     ) -> list:
         """Parse a test file and return ParsedContent list."""
-        from elspais.graph.parsers.lark.transformers.reference import ReferenceTransformer
+        from elspais.graph.parsers.lark.transformers.reference import (
+            ReferenceTransformer,
+            read_reference_list,
+        )
         from elspais.graph.parsers.prescan import (
             ast_prescan,
             dart_prescan,
@@ -335,43 +362,51 @@ class FileDispatcher:
         else:
             line_context, all_test_funcs, first_def_line = text_prescan(lines)
 
-        # Extract file-level default verifies and expected-broken-links
-        # from control markers in the parse tree
+        # Extract file-level default verifies from the parse tree
         parser = self._get_ref_parser()
         tree = parser.parse(content)
 
-        from elspais.graph.parsers.patterns import (
-            KEYWORD_PATTERN,
-            build_multi_assertion_pattern,
+        from elspais.graph.parsers.patterns import KEYWORD_PATTERN
+
+        # Implements: REQ-d00269-E
+        # A file-level default is read from the same lines the transformer
+        # will later exclude -- a keyword written inside a quoted/fenced
+        # region must not become a default verifies any more than it may
+        # bind directly, or the exclusion below would be undone by this
+        # earlier pass reading the same line first.
+        quoted_lines = self._quoted_line_numbers(content, file_path)
+
+        # A file-level default list is read like any other reference list,
+        # continuation included (REQ-d00269-H): a bare instance built only
+        # to fold the tree once, before the real transformer -- which needs
+        # file_default_verifies to construct -- exists.
+        _fold_tx = ReferenceTransformer(
+            self._resolver, "test_ref", reader=self._reader, quoted_lines=quoted_lines
         )
+        _fold_tx._fold_continuations(tree.children)
 
         file_default_verifies: list[str] = []
-        expected_broken_count = 0
-        import re as _re
 
-        prefix = self._resolver.config.namespace
-        multi_sep = self._resolver.config.assertions.multi_separator
-        assertion_sep = self._resolver.config.assertions.separator
-        multi_assertion_pattern = build_multi_assertion_pattern(
-            prefix,
-            multi_sep,
-            assertion_sep,
-            label_pattern=self._resolver.assertion_label_pattern,
-        )
         for child in tree.children:
             if not hasattr(child, "data"):
                 continue
-            if child.data == "control_marker":
-                text = str(child.children[0])
-                m = _re.search(r"expected-broken-links\s+(\d+)", text, _re.IGNORECASE)
-                if m:
-                    expected_broken_count = int(m.group(1))
-            elif child.data == "single_ref":
+            if child.data == "single_ref":
+                # A single_ref is always an opener, never a continuation
+                # candidate (only block_ref/other_line can be folded), so
+                # this line is read for its own sake -- possibly extended
+                # by a joined continuation below it.  This loop only ever
+                # branches on "single_ref", so a node _fold_tx consumed
+                # (always block_ref/other_line) is never separately visited
+                # here and needs no explicit skip -- unlike the real
+                # transformer's dispatch loop, which walks every node kind
+                # and does check `_consumed`.
                 token = child.children[0]
                 ln = token.line  # type: ignore[attr-defined]
                 if first_def_line and ln >= first_def_line:
                     continue
-                text = str(token)
+                if ln in quoted_lines:
+                    continue
+                text = _fold_tx._joined_text.get(id(child), str(token))
                 # File-level reference comments become default verifies for
                 # all test functions in the file.  Only 'Verifies' is valid
                 # in test files; 'Implements'/'Refines' are skipped.
@@ -379,11 +414,18 @@ class FileDispatcher:
                 if kw_match:
                     kw = kw_match.group(0).lower()
                     if kw != "verifies":
-                        # Silently skip — test fixtures contain cross-type
-                        # keywords in string literals
+                        # Only Verifies is a valid file-level default; a
+                        # genuine cross-type keyword above the first def
+                        # (Implements/Refines, not valid in a test file) is
+                        # silently skipped rather than reported here -- the
+                        # grammar-level FORBIDDEN check owns that finding.
                         continue
-                    for ref_match in multi_assertion_pattern.finditer(text):
-                        ref = self._resolver.normalize_ref(ref_match.group(0))
+                    # A file-level default is an annotation like any other:
+                    # each item is judged on its own, so one item the
+                    # grammar cannot account for does not cost the items
+                    # that did resolve (REQ-d00269-G).
+                    items = read_reference_list(self._reader, text)
+                    for ref in (i.resolved for i in items if i.resolved):
                         if ref not in file_default_verifies:
                             file_default_verifies.append(ref)
 
@@ -392,11 +434,83 @@ class FileDispatcher:
             "test_ref",
             line_context=line_context,
             file_default_verifies=file_default_verifies,
-            expected_broken_count=expected_broken_count,
             all_test_funcs=all_test_funcs,
             source_id=file_path,
+            reader=self._reader,
+            quoted_lines=quoted_lines,
         )
-        return transformer.transform(tree)
+        results = transformer.transform(tree)
+        results.extend(_fault_and_style_content(transformer))
+        return results
+
+
+# Implements: REQ-d00269-H, REQ-d00272-G, REQ-d00272-N, REQ-d00272-O
+def _fault_and_style_content(transformer) -> list:
+    """Turn a transformer's faults, style findings and undeclared
+    relationships into synthetic ``ParsedContent`` entries.
+
+    A ``reference_fault``/``style_finding``/``undeclared_relationship``
+    entry creates no node and wires no edge -- the physical lines already
+    round-trip via the remainder gatherer -- it exists only to carry the
+    finding through the same ``add_parsed_content`` dispatch every other
+    piece of content travels, since nothing else read
+    ``ReferenceTransformer.faults``/``style_findings``/``undeclared``
+    before this (Task 9).
+    """
+    from elspais.graph.parsers import ParsedContent
+
+    entries: list[ParsedContent] = []
+    for item, line_num, edge_kind in transformer.faults:
+        entries.append(
+            ParsedContent(
+                content_type="reference_fault",
+                start_line=line_num,
+                end_line=line_num,
+                raw_text=item.raw,
+                parsed_data={
+                    "raw": item.raw,
+                    "edge_kind": edge_kind,
+                    "fault_class": item.fault_class,
+                    "codes": item.codes,
+                    "source_id": transformer.source_id,
+                },
+            )
+        )
+    for line_num, code in transformer.style_findings:
+        entries.append(
+            ParsedContent(
+                content_type="style_finding",
+                start_line=line_num,
+                end_line=line_num,
+                raw_text="",
+                parsed_data={"code": code, "source_id": transformer.source_id},
+            )
+        )
+    for line_num, text, codes in getattr(transformer, "identifier_form", ()):
+        entries.append(
+            ParsedContent(
+                content_type="identifier_form_finding",
+                start_line=line_num,
+                end_line=line_num,
+                raw_text=text,
+                parsed_data={
+                    "text": text,
+                    "codes": codes,
+                    "source_id": transformer.source_id,
+                },
+            )
+        )
+    for line_num, text in getattr(transformer, "undeclared", ()):
+        entries.append(
+            ParsedContent(
+                content_type="undeclared_relationship",
+                start_line=line_num,
+                end_line=line_num,
+                raw_text=text,
+                parsed_data={"text": text, "source_id": transformer.source_id},
+            )
+        )
+    return entries
 
 
 __all__ = ["GrammarFactory", "FileDispatcher"]

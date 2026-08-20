@@ -6,12 +6,12 @@ from elspais.graph.parsers.results.junit_xml import JUnitXMLParser
 class TestJUnitXMLParserBasic:
     """Basic tests for JUnitXMLParser."""
 
-    # Verifies: REQ-d00082-K
+    # Verifies: REQ-d00254-F
     def test_parse_passing_test(self):
         """Parses a passing test case."""
         xml = """<?xml version="1.0" encoding="UTF-8"?>
 <testsuite name="TestAuth" tests="1">
-  <testcase classname="tests.test_auth" name="test_login_REQ_p00001" time="0.123"/>
+  <testcase classname="tests.test_auth" name="test_login" time="0.123"/>
 </testsuite>"""
         parser = JUnitXMLParser()
 
@@ -19,10 +19,10 @@ class TestJUnitXMLParserBasic:
 
         assert len(results) == 1
         assert results[0]["status"] == "passed"
-        assert results[0]["name"] == "test_login_REQ_p00001"
-        assert "REQ-p00001" in results[0]["verifies"]
+        assert results[0]["name"] == "test_login"
+        assert results[0]["duration"] == 0.123
 
-    # Verifies: REQ-d00082-K
+    # Verifies: REQ-d00254-F
     def test_parse_failing_test(self):
         """Parses a failing test case."""
         xml = """<?xml version="1.0" encoding="UTF-8"?>
@@ -39,7 +39,7 @@ class TestJUnitXMLParserBasic:
         assert results[0]["status"] == "failed"
         assert "AssertionError" in results[0]["message"]
 
-    # Verifies: REQ-d00082-K
+    # Verifies: REQ-d00254-F
     def test_parse_skipped_test(self):
         """Parses a skipped test case."""
         xml = """<?xml version="1.0" encoding="UTF-8"?>
@@ -55,7 +55,7 @@ class TestJUnitXMLParserBasic:
         assert len(results) == 1
         assert results[0]["status"] == "skipped"
 
-    # Verifies: REQ-d00082-K
+    # Verifies: REQ-d00254-F
     def test_parse_error_test(self):
         """Parses a test with error."""
         xml = """<?xml version="1.0" encoding="UTF-8"?>
@@ -71,7 +71,7 @@ class TestJUnitXMLParserBasic:
         assert len(results) == 1
         assert results[0]["status"] == "error"
 
-    # Verifies: REQ-d00082-K
+    # Verifies: REQ-d00254-F
     def test_parse_multiple_tests(self):
         """Parses multiple test cases."""
         xml = """<?xml version="1.0" encoding="UTF-8"?>
@@ -87,50 +87,10 @@ class TestJUnitXMLParserBasic:
         assert len(results) == 3
 
 
-class TestJUnitXMLParserReqExtraction:
-    """Tests for requirement ID extraction."""
+class TestJUnitXMLParserTestIdentity:
+    """Tests for the recorded test identity carried by each result record."""
 
-    # Verifies: REQ-d00082-G
-    def test_extracts_req_from_name(self):
-        """Extracts REQ ID from test name."""
-        xml = """<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="Test" tests="1">
-  <testcase classname="test" name="test_REQ_p00001_login" time="0.1"/>
-</testsuite>"""
-        parser = JUnitXMLParser()
-
-        results = parser.parse(xml, "results.xml")
-
-        assert "REQ-p00001" in results[0]["verifies"]
-
-    # Verifies: REQ-d00082-G
-    def test_extracts_multiple_reqs(self):
-        """Extracts multiple REQ IDs from test name."""
-        xml = """<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="Test" tests="1">
-  <testcase classname="test" name="test_REQ_p00001_and_REQ_o00002" time="0.1"/>
-</testsuite>"""
-        parser = JUnitXMLParser()
-
-        results = parser.parse(xml, "results.xml")
-
-        assert "REQ-p00001" in results[0]["verifies"]
-        assert "REQ-o00002" in results[0]["verifies"]
-
-    # Verifies: REQ-d00082-G
-    def test_extracts_assertion_refs(self):
-        """Extracts assertion references like REQ-p00001-A."""
-        xml = """<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="Test" tests="1">
-  <testcase classname="test" name="test_REQ_p00001_A" time="0.1"/>
-</testsuite>"""
-        parser = JUnitXMLParser()
-
-        results = parser.parse(xml, "results.xml")
-
-        assert "REQ-p00001-A" in results[0]["verifies"]
-
-    # Verifies: REQ-d00082-K
+    # Verifies: REQ-d00254-G
     def test_generates_test_id(self):
         """Generates stable test_id from classname and name."""
         xml = """<?xml version="1.0" encoding="UTF-8"?>
@@ -143,7 +103,7 @@ class TestJUnitXMLParserReqExtraction:
 
         assert results[0]["test_id"] == "test:tests/test_auth.py::TestLogin::test_user_can_login"
 
-    # Verifies: REQ-d00082-K
+    # Verifies: REQ-d00254-G
     def test_generates_test_id_without_classname(self):
         """Generates test_id even without classname."""
         xml = """<?xml version="1.0" encoding="UTF-8"?>
@@ -161,7 +121,7 @@ class TestJUnitXMLParserReqExtraction:
 class TestJUnitXMLParserEdgeCases:
     """Edge case tests for JUnitXMLParser."""
 
-    # Verifies: REQ-d00082-K
+    # Verifies: REQ-d00254-F
     def test_invalid_xml_returns_empty(self):
         """Returns empty list for invalid XML."""
         parser = JUnitXMLParser()
@@ -170,7 +130,7 @@ class TestJUnitXMLParserEdgeCases:
 
         assert results == []
 
-    # Verifies: REQ-d00082-K
+    # Verifies: REQ-d00254-F
     def test_empty_testsuite(self):
         """Handles empty testsuite."""
         xml = """<?xml version="1.0" encoding="UTF-8"?>
@@ -182,7 +142,7 @@ class TestJUnitXMLParserEdgeCases:
 
         assert results == []
 
-    # Verifies: REQ-d00082-K
+    # Verifies: REQ-d00254-F
     def test_testsuites_wrapper(self):
         """Handles testsuites wrapper element."""
         xml = """<?xml version="1.0" encoding="UTF-8"?>
@@ -204,7 +164,7 @@ class TestJUnitXMLParserEdgeCases:
 class TestJUnitXMLParserCanParse:
     """Tests for can_parse method."""
 
-    # Verifies: REQ-d00082-K
+    # Verifies: REQ-d00254-F
     def test_can_parse_junit_xml(self):
         """Returns True for JUnit XML files."""
         from pathlib import Path
@@ -215,7 +175,7 @@ class TestJUnitXMLParserCanParse:
         assert parser.can_parse(Path("test-results.xml")) is True
         assert parser.can_parse(Path("results.xml")) is True
 
-    # Verifies: REQ-d00082-K
+    # Verifies: REQ-d00254-F
     def test_cannot_parse_non_xml(self):
         """Returns False for non-XML files."""
         from pathlib import Path
@@ -224,116 +184,6 @@ class TestJUnitXMLParserCanParse:
 
         assert parser.can_parse(Path("results.json")) is False
         assert parser.can_parse(Path("test.py")) is False
-
-
-class TestJUnitXMLParserCustomConfig:
-    """Tests for JUnitXMLParser with custom configuration.
-
-    REQ-d00082-K: Parser accepts custom PatternConfig for non-standard prefixes.
-    REQ-d00082-K: Parser instantiation with PatternConfig and ReferenceResolver.
-    REQ-d00082-K: Parser extracts custom prefix IDs from test names.
-    """
-
-    def test_REQ_d00082_K_custom_prefix_spec(self):
-        """REQ-d00082-K: Parser with custom prefix 'SPEC' extracts correct IDs."""
-        from elspais.utilities.patterns import IdPatternConfig, IdResolver
-
-        resolver = IdResolver(
-            IdPatternConfig.from_dict(
-                {
-                    "project": {"namespace": "SPEC"},
-                    "id-patterns": {
-                        "canonical": "{namespace}-{type.letter}{component}",
-                        "aliases": {"short": "{type.letter}{component}"},
-                        "types": {
-                            "prd": {"level": 1, "aliases": {"letter": "p"}},
-                            "ops": {"level": 2, "aliases": {"letter": "o"}},
-                            "dev": {"level": 3, "aliases": {"letter": "d"}},
-                        },
-                        "component": {"style": "numeric", "digits": 5, "leading_zeros": True},
-                    },
-                }
-            )
-        )
-        parser = JUnitXMLParser(resolver=resolver)
-
-        xml = """<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="TestCustom" tests="1">
-  <testcase classname="tests.test_custom" name="test_spec_SPEC_p00102" time="0.1"/>
-</testsuite>"""
-
-        results = parser.parse(xml, "results.xml")
-
-        assert len(results) == 1
-        assert "SPEC-p00102" in results[0]["verifies"]
-
-    def test_REQ_d00082_K_instantiation_with_pattern_config(self):
-        """REQ-d00082-K: Parser instantiation with IdResolver."""
-        from pathlib import Path
-
-        from elspais.utilities.patterns import IdPatternConfig, IdResolver
-
-        id_resolver = IdResolver(
-            IdPatternConfig.from_dict(
-                {
-                    "project": {"namespace": "REQ"},
-                    "id-patterns": {
-                        "canonical": "{namespace}-{type.letter}{component}",
-                        "aliases": {"short": "{type.letter}{component}"},
-                        "types": {
-                            "prd": {"level": 1, "aliases": {"letter": "p"}},
-                            "ops": {"level": 2, "aliases": {"letter": "o"}},
-                            "dev": {"level": 3, "aliases": {"letter": "d"}},
-                        },
-                        "component": {"style": "numeric", "digits": 5, "leading_zeros": True},
-                    },
-                }
-            )
-        )
-
-        base_path = Path(".")
-
-        # Verify instantiation succeeds with all parameters
-        parser = JUnitXMLParser(
-            resolver=id_resolver,
-            base_path=base_path,
-        )
-
-        assert parser._resolver == id_resolver
-        assert parser._base_path == base_path
-
-    def test_REQ_d00082_K_extracts_custom_prefix_ids(self):
-        """REQ-d00082-K: Parser extracts custom prefix IDs from test names."""
-        from elspais.utilities.patterns import IdPatternConfig, IdResolver
-
-        resolver = IdResolver(
-            IdPatternConfig.from_dict(
-                {
-                    "project": {"namespace": "TASK"},
-                    "id-patterns": {
-                        "canonical": "{namespace}-{type.letter}{component}",
-                        "aliases": {"short": "{type.letter}{component}"},
-                        "types": {
-                            "prd": {"level": 1, "aliases": {"letter": "p"}},
-                            "ops": {"level": 2, "aliases": {"letter": "o"}},
-                            "dev": {"level": 3, "aliases": {"letter": "d"}},
-                        },
-                        "component": {"style": "numeric", "digits": 5, "leading_zeros": True},
-                    },
-                }
-            )
-        )
-        parser = JUnitXMLParser(resolver=resolver)
-
-        xml = """<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="TestTask" tests="1">
-  <testcase classname="tests.test_task" name="test_TASK_d00102_implementation" time="0.2"/>
-</testsuite>"""
-
-        results = parser.parse(xml, "results.xml")
-
-        assert len(results) == 1
-        assert "TASK-d00102" in results[0]["verifies"]
 
 
 class TestJUnitXMLParserSourceBinding:

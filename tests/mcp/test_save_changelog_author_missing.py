@@ -82,20 +82,20 @@ class TestSaveMutationsFailsWhenAuthorMissing:
 
         # _add_changelog_for_active_mutations must now return a dict that
         # the save_mutations caller can propagate as success=False.
-        assert isinstance(
-            result, dict
-        ), f"Expected dict result on author failure, got: {type(result).__name__}"
-        assert (
-            result.get("success") is False
-        ), f"Expected success=False on author resolution failure. Got: {result!r}"
+        assert isinstance(result, dict), (
+            f"Expected dict result on author failure, got: {type(result).__name__}"
+        )
+        assert result.get("success") is False, (
+            f"Expected success=False on author resolution failure. Got: {result!r}"
+        )
         error_msg = result.get("error", "") or ""
-        assert (
-            "author_name" in error_msg
-        ), f"Error message should name the missing field. Got: {error_msg!r}"
+        assert "author_name" in error_msg, (
+            f"Error message should name the missing field. Got: {error_msg!r}"
+        )
 
         # No changelog section should have been added on disk.
         after = spec_file.read_text()
         assert "## Changelog" not in after, (
-            "Spec file should not have gained a Changelog section when the " "author lookup failed."
+            "Spec file should not have gained a Changelog section when the author lookup failed."
         )
         assert after == before, "Spec file content should be unchanged on failure"

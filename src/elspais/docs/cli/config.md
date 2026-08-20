@@ -108,8 +108,6 @@ Controls requirement ID format and parsing.
 ```toml
 [id-patterns]
 canonical = "{namespace}-{level.letter}{component}"  # ID template
-separators = ["-", "_"]    # Accepted separator characters
-prefix_optional = false    # Whether namespace prefix is required
 
 [id-patterns.aliases]
 short = "{level.letter}{component}"   # Named alias patterns
@@ -119,14 +117,13 @@ style = "numeric"          # numeric | camelCase | PascalCase | snake_case | keb
 digits = 5                 # Number of digits (0 = variable length, numeric style only)
 leading_zeros = true       # Pad with zeros (00001 vs 1, numeric style only)
 # pattern = "[A-Z]{2}[0-9]{3}"   # Required when style = "regex"; ignored otherwise
-# max_length = 0                 # Reserved (not currently enforced)
 
 [id-patterns.assertions]
 label_style = "uppercase"  # "uppercase" | "numeric" | "alphanumeric" | "numeric_1based"
 max_count = 26             # Maximum assertions per requirement
 # zero_pad = false         # Pad numeric labels with zeros
-# separator = "-"          # Character between component and label (use ":" for snake/kebab + numeric labels)
-# multi_separator = "+"    # Separator for multi-assertion syntax (A+B+C)
+# separator = "-"          # Single character between component and label (use "/" for snake/kebab components)
+# multi_separator = "+"    # Single character joining multi-assertion syntax (A+B+C)
 ```
 
 **Component style examples** (with the canonical
@@ -139,10 +136,35 @@ directly after the level letter with no extra separator):
   `kebab-case`   `REQ-puser-auth`       (`[a-z][a-z0-9]*(?:-[a-z0-9]+)*`)
   `regex`        custom — set `pattern`
 
-Some `style` + `label_style` combinations are ambiguous and rejected at config
-load time: `snake_case` + `separator = "_"` with non-uppercase labels, and
-`kebab-case` + `separator = "-"` with non-uppercase labels. The fix is a
-different `assertions.separator` (commonly `":"`).
+Both separators are validated at config load time, and a violation is an error
+rather than a warning — an absorbed boundary makes a reference resolve to the
+wrong requirement instead of failing.
+
+- Each separator must be **exactly one character**. Empty and multi-character
+  values are rejected.
+- `assertions.separator` must be a character that can appear in neither a
+  component nor an *Assertion* label. So `snake_case` + `separator = "_"` and
+  `kebab-case` + `separator = "-"` are rejected, whatever the label style —
+  the component absorbs the separator and the label after it.
+- `assertions.multi_separator` must be a character that cannot appear in a
+  label. So `numeric` labels rule out digits, and `numeric_1based` rules out
+  `"0"` as well, since `10` is a legal label.
+- Neither separator may be `","`, which already divides one reference from
+  the next in a list. A list is split before its items are read, so that
+  character never reaches the identifier reader as part of an identifier:
+  `Implements: REQ-p00001,A,B` would be read as three references, one of
+  them a bare label naming no requirement.
+
+The fix is a different `assertions.separator` — commonly `"/"`.
+
+`:` is refused everywhere an identifier could carry one: the separators, the
+canonical template, an alias template, a level's letter, and a component
+pattern that merely *admits* a colon. It separates the parts of a node
+identifier — `file:<namespace>:<path>` — and `::` joins a declaring
+requirement to a template's, so an identifier able to contain one would be
+ambiguous with the graph's own syntax. The refusal happens when the
+configuration loads, and the constraint is exported in the JSON schema, so an
+editor rejects it before the tool is run.
 
 **Template Tokens:**
   `{namespace}`      ID prefix (e.g., "REQ")
@@ -236,7 +258,6 @@ retired = ["Deprecated", "Superseded"]  # Excluded from everything
 ```toml
 [validation]
 hash_mode = "normalized-text"       # "full-text" | "normalized-text"
-allow_unresolved_cross_repo = false # Allow unresolved cross-repo refs
 # hash_algorithm = "sha256"         # Hash algorithm
 # hash_length = 8                   # Hash truncation length
 # strict_hierarchy = false          # Strict hierarchy validation
@@ -285,7 +306,10 @@ Each entry has a name, path, and namespace.
 ```toml
 [associates.callisto]
 path = "../callisto"     # Relative to canonical repo root
-namespace = "CAL"        # Namespace prefix for this repo
+namespace = "CAL"        # Namespace this repo declares for itself
+# git = "git@github.com:acme/callisto.git"
+                         # Optional: where to obtain the repo when it is
+                         #   absent from this machine
 # color = "#7c3aed"      # Optional badge color (hex "#RRGGBB"); omit for
                           #   a deterministic hash-derived color.
 
@@ -297,6 +321,14 @@ namespace = "PHX"
 Relative paths resolve from the **canonical** repository root,
 so they work correctly from git worktrees. Each path must contain
 a `.elspais.toml` with its own configuration.
+
+Both keys are required, and the namespace must be the one the repository
+at that path declares for itself — a declaration naming a different one
+points somewhere its author did not intend, and the build says so. No two
+repositories in a federation may declare the same namespace, including
+repositories reached through an associate's own declarations rather than
+named here: a namespace answers whose identifiers these are, so two
+claimants leave it unanswerable and the build fails naming both.
 
 The viewer renders one toggle per namespace (local repo first, then each
 associate in declared order). Namespace badge colors are taken from
@@ -368,16 +400,11 @@ The schema is derived from the Pydantic `ElspaisConfig` model and includes
 a `$schema` self-reference for IDE autocompletion. A committed copy lives at
 `src/elspais/config/elspais-schema.json` and is kept in sync via CI.
 
-## Environment Variable Overrides
+## Where Configuration Comes From
 
-Any config key can be overridden via environment variables:
+Every setting comes from `.elspais.toml`, with `.elspais.local.toml` merged
+over it for values that differ per machine. The environment supplies no
+configuration: `ELSPAIS_VERSION` and `ELSPAIS_CLIENT_PID` are read directly
+by the code that wants them and are not settings.
 
-  ELSPAIS_PROJECT_NAMESPACE=MYREQ elspais checks
-  ELSPAIS_SCANNING_TEST_ENABLED=true elspais checks
-
-**Conversion:**
-  `ELSPAIS_PROJECT_NAMESPACE` -> `project.namespace`
-  `ELSPAIS_SCANNING_TEST_ENABLED` -> `scanning.test.enabled`
-
-Rule: Remove `ELSPAIS_`, lowercase, single underscores become dots.
-Use double underscore (`__`) for a literal underscore in key names.
+To register an associate without editing either file, use `elspais associate`.

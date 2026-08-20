@@ -132,22 +132,32 @@ def coverage_graph():
     # testing gaps at all (an unimplemented assertion has nothing to test yet).
     from elspais.graph.metrics import CoverageDimension, RollupMetrics
 
+    # The fractions model assertion-targeted (named) evidence attached to this
+    # requirement, so they land in the IMMEDIATE DIRECT measure a work-list
+    # surface reads (REQ-d00258-M) as well as in the legacy footings.
+    # Whole-requirement-only and conducted evidence are exercised separately
+    # (TestStrictFootingMcpGaps, TestUncoveredMeasureDetail).
+    def _dim(total: int, fractions: dict[str, float]) -> CoverageDimension:
+        return CoverageDimension(
+            total=total,
+            immediate_direct_by_label=dict(fractions),
+            immediate_indirect_by_label=dict(fractions),
+        )
+
     req_node.set_metric(
         "rollup_metrics",
         RollupMetrics(
             total_assertions=3,
-            implemented=CoverageDimension(
-                total=3, indirect_pct_by_label={"A": 1.0, "B": 1.0, "C": 1.0}
-            ),
-            tested=CoverageDimension(total=3, indirect_pct_by_label={"A": 1.0}),
+            implemented=_dim(3, {"A": 1.0, "B": 1.0, "C": 1.0}),
+            tested=_dim(3, {"A": 1.0}),
         ),
     )
     req_node2.set_metric(
         "rollup_metrics",
         RollupMetrics(
             total_assertions=1,
-            implemented=CoverageDimension(total=1, indirect_pct_by_label={"A": 1.0}),
-            tested=CoverageDimension(total=1, indirect_pct_by_label={}),
+            implemented=_dim(1, {"A": 1.0}),
+            tested=_dim(1, {}),
         ),
     )
 
@@ -218,6 +228,30 @@ class TestGetTestCoverage:
         assert result["referenced_pct"] == 0
         assert result["uncovered_assertions"] == ["REQ-p00002-A"]
 
+    # Verifies: REQ-d00258-O
+    def test_REQ_d00258_O_reports_the_tested_breakdown(self, coverage_graph):
+        """The tool reports what came back from the tests it counts: A is
+        tested and its result passed, B fails, and C is tested with no verdict
+        -- so the three account for the whole tested set."""
+        from elspais.graph.metrics import CoverageDimension
+        from elspais.mcp.server import _get_test_coverage
+
+        rollup = coverage_graph.find_by_id("REQ-p00001").get_metric("rollup_metrics")
+        rollup.tested = CoverageDimension(
+            total=3,
+            immediate_direct_by_label={"A": 1.0, "B": 1.0, "C": 1.0},
+        )
+        rollup.verified = CoverageDimension(
+            total=3,
+            has_failures=True,
+            failing_labels={"B"},
+            immediate_direct_by_label={"A": 1.0},
+        )
+
+        result = _get_test_coverage(coverage_graph, "REQ-p00001")
+
+        assert result["tested_breakdown"] == {"passed": 1, "failed": 1, "awaiting_result": 1}
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Tests for get_uncovered_assertions() - REQ-d00067
@@ -276,23 +310,24 @@ class TestGetUncoveredAssertions:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# REQ-d00069-J: uncovered entries gain fraction/via detail for assertions
-# partially covered via REFINES conduction. Additive alongside the existing
-# flat ``uncovered_assertions`` / ``uncovered_labels`` fields (MCP consumers
-# rely on those staying plain lists of strings).
+# REQ-d00258-J/M: an uncovered entry carries the work-list fraction its verdict
+# was taken on, plus the four measures of REQ-d00069-L behind it, so evidence
+# the gap does not count (whole-requirement, conducted up a `Refines:` chain)
+# stays visible without deciding the verdict. Additive alongside the flat
+# ``uncovered_assertions`` / ``uncovered_labels`` lists.
 # ─────────────────────────────────────────────────────────────────────────────
 
 
 @pytest.fixture
 def refines_conduction_graph():
-    """Graph with an assertion (REQ-200-X) only partially covered via
-    REFINES conduction, and no direct test/journey reference of its own.
+    """Graph with an assertion (REQ-200-X) covered only by REFINES conduction,
+    and with no test reference of its own.
 
     REQ-200 has a single assertion X. REQ-030 refines REQ-200-X and has two
     assertions of its own (P, Q); only P is directly tested, so REQ-030's
     own "tested" coverage is 0.5. Under equal-weight conduction
-    (REQ-d00069-J), X inherits that 0.5 fraction -- partially covered, but
-    not enough to be folded into "covered" (which requires ~1.0).
+    (REQ-d00069-J), X carries 0.5 of ROLLED DIRECT coverage and nothing at all
+    on the immediate direct measure -- no citation names X.
     """
     from elspais.graph.annotators import annotate_coverage
     from tests.core.graph_test_helpers import (
@@ -317,9 +352,9 @@ def refines_conduction_graph():
                 {"label": "Q", "text": "Assertion Q"},
             ],
         ),
-        # REQ-200-X is IMPLEMENTED (so it stays a *testing* gap under the
-        # implemented-scoped MCP surface, REQ-d00258) but only ~50% tested via
-        # REFINES conduction from REQ-030-P -- a partially-conducted testing gap.
+        # REQ-200-X is IMPLEMENTED by a citation naming it (so it stays a
+        # *testing* gap under the implemented-scoped MCP surface), and reaches
+        # 0.5 of conducted test coverage from REQ-030-P.
         make_code_ref(implements=["REQ-200-X"], source_path="src/x.py"),
         make_test_ref(verifies=["REQ-030-P"], source_path="tests/test_p.py"),
     )
@@ -327,60 +362,79 @@ def refines_conduction_graph():
     return graph
 
 
-# Verifies: REQ-d00069-J, REQ-d00258-A
-class TestUncoveredFractionDetail:
-    """Uncovered entries carry per-assertion fraction/via detail (REQ-d00069-J)."""
+# Verifies: REQ-d00258-J, REQ-d00258-M, REQ-d00069-L
+class TestUncoveredMeasureDetail:
+    """A gap's detail reports the work-list measure and publishes the four."""
 
-    def test_get_test_coverage_uncovered_detail_has_partial_fraction(
-        self, refines_conduction_graph
-    ):
+    def test_get_test_coverage_conducted_assertion_is_a_gap_at_zero(self, refines_conduction_graph):
+        """REQ-d00258-M: conduction from a refining requirement is not a
+        citation naming X, so X is work and its work-list fraction is 0."""
         from elspais.mcp.server import _get_test_coverage
 
         result = _get_test_coverage(refines_conduction_graph, "REQ-200")
 
-        # Existing flat field is untouched (backward compatible).
         assert result["uncovered_assertions"] == ["REQ-200-X"]
-
         detail_by_id = {d["id"]: d for d in result["uncovered_detail"]}
-        assert detail_by_id["REQ-200-X"]["fraction"] == 0.5
-        assert detail_by_id["REQ-200-X"]["via"] == "refines-conduction"
+        assert detail_by_id["REQ-200-X"]["fraction"] == 0.0
 
-    def test_get_test_coverage_zero_fraction_has_null_via(self, coverage_graph):
+    def test_get_test_coverage_detail_publishes_the_conducted_measure(
+        self, refines_conduction_graph
+    ):
+        """REQ-d00258-J: the conducted evidence the verdict does not count is
+        published beside it rather than dropped."""
+        from elspais.mcp.server import _get_test_coverage
+
+        result = _get_test_coverage(refines_conduction_graph, "REQ-200")
+
+        measures = {d["id"]: d for d in result["uncovered_detail"]}["REQ-200-X"]["measures"]
+        assert measures["tested"]["rolled_direct"] == 0.5
+        assert measures["tested"]["immediate_direct"] == 0.0
+
+    def test_get_test_coverage_unevidenced_assertion_reads_zero_everywhere(self, coverage_graph):
+        """An *Assertion* nothing tests reads 0 on every measure, so a caller
+        can tell it apart from one carrying evidence the verdict discounts."""
         from elspais.mcp.server import _get_test_coverage
 
         result = _get_test_coverage(coverage_graph, "REQ-p00001")
 
-        detail_by_id = {d["id"]: d for d in result["uncovered_detail"]}
-        # REQ-p00001-B/C have no coverage at all: fraction 0.0, via None.
-        assert detail_by_id["REQ-p00001-B"]["fraction"] == 0.0
-        assert detail_by_id["REQ-p00001-B"]["via"] is None
+        detail = {d["id"]: d for d in result["uncovered_detail"]}["REQ-p00001-B"]
+        assert detail["fraction"] == 0.0
+        assert set(detail["measures"]["tested"].values()) == {0.0}
 
-    def test_get_uncovered_assertions_req_id_detail_has_partial_fraction(
-        self, refines_conduction_graph
-    ):
+    def test_get_uncovered_assertions_req_id_reports_the_measures(self, refines_conduction_graph):
         from elspais.mcp.server import _get_uncovered_assertions
 
         result = _get_uncovered_assertions(refines_conduction_graph, req_id="REQ-200")
 
-        # Existing flat field is untouched (backward compatible).
         assert result["uncovered_labels"] == ["X"]
+        detail = {d["label"]: d for d in result["uncovered_detail"]}["X"]
+        assert detail["id"] == "REQ-200-X"
+        assert detail["fraction"] == 0.0
+        assert detail["measures"]["tested"]["rolled_direct"] == 0.5
 
-        detail_by_label = {d["label"]: d for d in result["uncovered_detail"]}
-        assert detail_by_label["X"]["fraction"] == 0.5
-        assert detail_by_label["X"]["via"] == "refines-conduction"
-        assert detail_by_label["X"]["id"] == "REQ-200-X"
-
-    def test_get_uncovered_assertions_scan_all_detail_has_partial_fraction(
-        self, refines_conduction_graph
-    ):
+    def test_get_uncovered_assertions_scan_all_reports_the_measures(self, refines_conduction_graph):
         from elspais.mcp.server import _get_uncovered_assertions
 
         result = _get_uncovered_assertions(refines_conduction_graph, req_id=None)
 
         reqs = {r["req_id"]: r for r in result["requirements"]}
-        detail_by_label = {d["label"]: d for d in reqs["REQ-200"]["uncovered_detail"]}
-        assert detail_by_label["X"]["fraction"] == 0.5
-        assert detail_by_label["X"]["via"] == "refines-conduction"
+        detail = {d["label"]: d for d in reqs["REQ-200"]["uncovered_detail"]}["X"]
+        assert detail["fraction"] == 0.0
+        assert detail["measures"]["tested"]["rolled_direct"] == 0.5
+
+    def test_uncovered_assertions_measures_cover_each_axis_asked_about(
+        self, refines_conduction_graph
+    ):
+        """The measures are reported per dimension the ``source`` asked about,
+        so a caller can see which axis the evidence belongs to."""
+        from elspais.mcp.server import _get_uncovered_assertions
+
+        result = _get_uncovered_assertions(
+            refines_conduction_graph, req_id="REQ-200", source="both"
+        )
+
+        detail = {d["label"]: d for d in result["uncovered_detail"]}["X"]
+        assert set(detail["measures"]) == {"tested", "uat_coverage"}
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -489,8 +543,8 @@ class TestUncoveredTestingGapDenominator:
         for entry in data.untested:
             if entry.req_id != "REQ-500":
                 continue
-            for aid, _frac in entry.assertions:
-                cli_labels.add(aid.rsplit("-", 1)[-1])
+            for _aid, label, _frac in entry.assertions:
+                cli_labels.add(label)
 
         assert mcp_labels == cli_labels == {"A"}
 
@@ -564,3 +618,248 @@ class TestFindAssertionsByKeywords:
 
         result = _find_assertions_by_keywords(coverage_graph, keywords=["Tls"])
         assert len(result["assertions"]) == 1
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# REQ-d00258-M: the MCP uncovered-assertion and test-coverage tools determine
+# gaps on the STRICT footing -- an assertion with no evidence naming it is
+# reported however much whole-requirement evidence its requirement carries.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@pytest.fixture
+def blanket_evidence_graph():
+    """REQ-700 with A covered ONLY by whole-requirement evidence.
+
+    ``Implements: REQ-700`` (blanket) + ``Implements: REQ-700-B`` (named) +
+    ``Verifies: REQ-700`` (blanket). Strict footing: implemented = {B},
+    tested = {}. Generous footing: everything covered.
+    """
+    from elspais.graph.annotators import annotate_coverage
+    from tests.core.graph_test_helpers import (
+        build_graph,
+        make_code_ref,
+        make_requirement,
+        make_test_ref,
+    )
+
+    graph = build_graph(
+        make_requirement(
+            "REQ-700",
+            level="PRD",
+            assertions=[
+                {"label": "A", "text": "Assertion A"},
+                {"label": "B", "text": "Assertion B"},
+            ],
+        ),
+        make_code_ref(implements=["REQ-700"], source_path="src/whole.py"),
+        make_code_ref(implements=["REQ-700-B"], source_path="src/b.py"),
+        make_test_ref(verifies=["REQ-700"], source_path="tests/test_whole.py"),
+    )
+    annotate_coverage(graph)
+    return graph
+
+
+class TestStrictFootingMcpGaps:
+    """Validates REQ-d00258-M: MCP gap tools answer on the strict footing."""
+
+    # Verifies: REQ-d00258-M
+    def test_REQ_d00258_M_test_coverage_reports_blanket_only_assertion_uncovered(
+        self, blanket_evidence_graph
+    ) -> None:
+        """(a) B is tested only by a whole-requirement `Verifies:`, so
+        get_test_coverage reports it as uncovered, not covered."""
+        from elspais.mcp.server import _get_test_coverage
+
+        result = _get_test_coverage(blanket_evidence_graph, "REQ-700")
+        assert "REQ-700-B" in result["uncovered_assertions"]
+        assert "REQ-700-B" not in result["covered_assertions"]
+
+    # Verifies: REQ-d00258-M
+    def test_REQ_d00258_M_test_coverage_still_lists_the_whole_req_test(
+        self, blanket_evidence_graph
+    ) -> None:
+        """The whole-requirement test is real evidence and stays in the tool's
+        test listing -- only the covered/uncovered verdict goes strict."""
+        from elspais.mcp.server import _get_test_coverage
+
+        result = _get_test_coverage(blanket_evidence_graph, "REQ-700")
+        assert result["test_nodes"], "whole-requirement test must still be listed"
+
+    # Verifies: REQ-d00258-M
+    def test_REQ_d00258_M_uncovered_detail_fraction_matches_strict_verdict(
+        self, blanket_evidence_graph
+    ) -> None:
+        """An assertion reported as a gap must not be annotated with a
+        generous-footing fraction of 1.0."""
+        from elspais.mcp.server import _get_test_coverage
+
+        result = _get_test_coverage(blanket_evidence_graph, "REQ-700")
+        detail = {d["id"]: d for d in result["uncovered_detail"]}
+        assert detail["REQ-700-B"]["fraction"] == 0.0
+
+    # Verifies: REQ-d00258-M
+    def test_REQ_d00258_M_uncovered_assertions_uses_strict_numerator(
+        self, blanket_evidence_graph
+    ) -> None:
+        """(a) B is implemented by name but tested only by a whole-requirement
+        test, so it IS a testing gap."""
+        from elspais.mcp.server import _get_uncovered_assertions
+
+        result = _get_uncovered_assertions(blanket_evidence_graph, req_id="REQ-700", source="test")
+        assert "B" in result["uncovered_labels"]
+
+    # Verifies: REQ-d00258-M
+    def test_REQ_d00258_M_uncovered_assertions_denominator_is_also_strict(
+        self, blanket_evidence_graph
+    ) -> None:
+        """(d) A is implemented only by whole-requirement evidence, so it is
+        not in the strict implemented denominator and is not a testing gap."""
+        from elspais.mcp.server import _get_uncovered_assertions
+
+        result = _get_uncovered_assertions(blanket_evidence_graph, req_id="REQ-700", source="test")
+        assert result["uncovered_labels"] == ["B"]
+
+    # Verifies: REQ-d00258-M
+    def test_REQ_d00258_M_mcp_agrees_with_cli_gaps_on_strict_footing(
+        self, blanket_evidence_graph
+    ) -> None:
+        """(b/c) The MCP test axis and the CLI `gaps untested` surface report
+        the same strict-footing gap set."""
+        from elspais.commands.gaps import collect_gaps
+        from elspais.mcp.server import _get_uncovered_assertions
+
+        mcp = _get_uncovered_assertions(blanket_evidence_graph, req_id="REQ-700", source="test")
+        data = collect_gaps(blanket_evidence_graph, exclude_status=set(), config={})
+        cli = {
+            label
+            for entry in data.untested
+            if entry.req_id == "REQ-700"
+            for _aid, label, _frac in entry.assertions
+        }
+        assert set(mcp["uncovered_labels"]) == cli == {"B"}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# REQ-d00258-A/C: get_project_summary publishes the headline measure and the
+# four measures behind it, and reports the same figures the CLI summary does.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+# Verifies: REQ-d00258-A, REQ-d00258-C, REQ-d00069-L, REQ-d00069-N
+class TestProjectSummaryPublishesTheMeasures:
+    """The MCP project summary answers the coverage question the CLI answers."""
+
+    _DIMENSIONS = ("implemented", "tested", "passing", "uat_covered", "uat_passed")
+
+    def _levels(self, graph, config, tmp_path):
+        from elspais.mcp.server import _get_project_summary
+
+        return _get_project_summary(graph, tmp_path, config)["coverage_by_level"]
+
+    @pytest.mark.parametrize("dimension", _DIMENSIONS)
+    def test_every_dimension_carries_its_headline_and_its_four_measures(
+        self, canonical_graph, canonical_config, tmp_path, dimension
+    ):
+        """REQ-d00258-A: the headline figure is published together with the
+        evidence that produced it, for every dimension the payload reports."""
+        pytest.importorskip("mcp")
+        level = self._levels(canonical_graph, canonical_config, tmp_path)[0]
+
+        assert f"{dimension}_total_covered" in level
+        for measure in (
+            "immediate_direct",
+            "immediate_indirect",
+            "rolled_direct",
+            "rolled_indirect",
+        ):
+            assert f"{dimension}_{measure}" in level
+
+    @pytest.mark.parametrize("dimension", _DIMENSIONS)
+    def test_the_headline_never_exceeds_the_assertion_count(
+        self, canonical_graph, canonical_config, tmp_path, dimension
+    ):
+        """REQ-d00069-N: the total is taken per *Assertion* as the greatest of
+        the four, so an *Assertion* covered several ways is counted once and
+        the headline can never exceed the assertions there are to cover."""
+        pytest.importorskip("mcp")
+        for level in self._levels(canonical_graph, canonical_config, tmp_path):
+            assert level[f"{dimension}_total_covered"] <= level["total_assertions"]
+
+    @pytest.mark.parametrize("dimension", _DIMENSIONS)
+    def test_the_headline_is_at_least_each_measure_behind_it(
+        self, canonical_graph, canonical_config, tmp_path, dimension
+    ):
+        """REQ-d00069-N: no single measure can report more coverage than the
+        total that takes the greatest of all four."""
+        pytest.importorskip("mcp")
+        for level in self._levels(canonical_graph, canonical_config, tmp_path):
+            headline = level[f"{dimension}_total_covered"]
+            for measure in (
+                "immediate_direct",
+                "immediate_indirect",
+                "rolled_direct",
+                "rolled_indirect",
+            ):
+                assert level[f"{dimension}_{measure}"] <= headline + 1e-9
+
+    def test_mcp_reports_the_figures_the_cli_summary_reports(
+        self, canonical_graph, canonical_config, tmp_path
+    ):
+        """REQ-d00258-C: identical questions receive identical answers, so the
+        per-level rows come from the one shared collector rather than a second
+        derivation of the same numbers."""
+        pytest.importorskip("mcp")
+        from elspais.graph.aggregation import collect_coverage
+
+        assert (
+            self._levels(canonical_graph, canonical_config, tmp_path)
+            == collect_coverage(canonical_graph, canonical_config)["levels"]
+        )
+
+
+# Verifies: REQ-d00258-M, REQ-d00069-L
+class TestUatValidatedPctMeasure:
+    """``get_test_coverage``'s UAT figures answer on one measure.
+
+    The tool reports which assertions still need work (REQ-d00258-M), so every
+    figure in it -- ``uat.covered_count``/``referenced_pct`` and
+    ``uat.validated_pct`` alike -- counts evidence that named the *Assertion*.
+    A blanket journey must not lift one of them while leaving the other at
+    zero.
+    """
+
+    def _with_uat_verified(self, graph, immediate_direct):
+        from elspais.graph.metrics import CoverageDimension
+
+        rollup = graph.find_by_id("REQ-p00001").get_metric("rollup_metrics")
+        rollup.uat_verified = CoverageDimension(
+            total=3,
+            # A journey naming the requirement reaches every assertion on the
+            # legacy blended footing...
+            immediate_indirect_by_label={"A": 1.0, "B": 1.0, "C": 1.0},
+            # ...but named only these by name.
+            immediate_direct_by_label=dict.fromkeys(immediate_direct, 1.0),
+        )
+        return graph
+
+    def test_validated_pct_counts_only_assertions_a_journey_named(self, coverage_graph):
+        """Two of three assertions are reached only by whole-requirement
+        validation. They are not validated work; the figure says so."""
+        from elspais.mcp.server import _get_test_coverage
+
+        graph = self._with_uat_verified(coverage_graph, ["A"])
+        result = _get_test_coverage(graph, "REQ-p00001")
+
+        # 1 of 3 named -> 33.3, NOT the 100.0 the blended footing reports.
+        assert result["uat"]["validated_pct"] == 33.3
+
+    def test_validated_pct_reaches_full_when_every_assertion_is_named(self, coverage_graph):
+        """The figure is not merely deflated -- naming every assertion still
+        reaches 100."""
+        from elspais.mcp.server import _get_test_coverage
+
+        graph = self._with_uat_verified(coverage_graph, ["A", "B", "C"])
+        result = _get_test_coverage(graph, "REQ-p00001")
+
+        assert result["uat"]["validated_pct"] == 100.0

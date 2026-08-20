@@ -20,11 +20,17 @@
         },
         "separator": {
           "default": "-",
+          "maxLength": 1,
+          "minLength": 1,
+          "pattern": "^[^:]*$",
           "title": "Separator",
           "type": "string"
         },
         "multi_separator": {
           "default": "+",
+          "maxLength": 1,
+          "minLength": 1,
+          "pattern": "^[^:]*$",
           "title": "Multi Separator",
           "type": "string"
         }
@@ -42,6 +48,18 @@
         "namespace": {
           "title": "Namespace",
           "type": "string"
+        },
+        "git": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Git"
         },
         "color": {
           "anyOf": [
@@ -244,11 +262,6 @@
           "default": "",
           "title": "Pattern",
           "type": "string"
-        },
-        "max_length": {
-          "default": 0,
-          "title": "Max Length",
-          "type": "integer"
         }
       },
       "title": "ComponentConfig",
@@ -273,10 +286,15 @@
         "uat_verified": {
           "$ref": "#/$defs/CoverageSeverityConfig"
         },
-        "allow_indirect": {
-          "default": true,
-          "title": "Allow Indirect",
-          "type": "boolean"
+        "uncredited_evidence": {
+          "default": "error",
+          "title": "Uncredited Evidence",
+          "type": "string"
+        },
+        "external_test_failure": {
+          "default": "warning",
+          "title": "External Test Failure",
+          "type": "string"
         },
         "status_words": {
           "additionalProperties": {
@@ -393,19 +411,27 @@
           "title": "Require Rationale",
           "type": "boolean"
         },
+        "require_shall": {
+          "default": false,
+          "title": "Require Shall",
+          "type": "boolean"
+        },
+        "labels_sequential": {
+          "default": false,
+          "title": "Labels Sequential",
+          "type": "boolean"
+        },
+        "labels_unique": {
+          "default": true,
+          "title": "Labels Unique",
+          "type": "boolean"
+        },
         "status_roles": {
           "additionalProperties": {
-            "anyOf": [
-              {
-                "items": {
-                  "type": "string"
-                },
-                "type": "array"
-              },
-              {
-                "type": "string"
-              }
-            ]
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
           },
           "title": "Status Roles",
           "type": "object"
@@ -456,6 +482,7 @@
       "properties": {
         "canonical": {
           "default": "{namespace}-{level.letter}{component}",
+          "pattern": "^[^:]*$",
           "title": "Canonical",
           "type": "string"
         },
@@ -474,18 +501,6 @@
         },
         "associated": {
           "$ref": "#/$defs/AssociatedPatternConfig"
-        },
-        "separators": {
-          "items": {
-            "type": "string"
-          },
-          "title": "Separators",
-          "type": "array"
-        },
-        "prefix_optional": {
-          "default": false,
-          "title": "Prefix Optional",
-          "type": "boolean"
         }
       },
       "title": "IdPatternsConfig",
@@ -521,6 +536,11 @@
           },
           "title": "Skip Dirs",
           "type": "array"
+        },
+        "results_file": {
+          "default": "uat-results.csv",
+          "title": "Results File",
+          "type": "string"
         }
       },
       "title": "JourneyScanningConfig",
@@ -546,6 +566,7 @@
           "type": "integer"
         },
         "letter": {
+          "pattern": "^[^:]*$",
           "title": "Letter",
           "type": "string"
         },
@@ -637,7 +658,7 @@
     },
     "ReferenceSeverityConfig": {
       "additionalProperties": false,
-      "description": "Severity levels for status-based reference checks.",
+      "description": "Severity for each class of reference fault, and for reference status.\n\nSeverity is chosen per class because the classes differ in what would\nresolve them: configuring a missing repository answers one and answers\nnothing about a line that never read as an identifier (REQ-d00269-F).",
       "properties": {
         "retired": {
           "default": "warning",
@@ -652,6 +673,46 @@
         "aspirational": {
           "default": "info",
           "title": "Aspirational",
+          "type": "string"
+        },
+        "malformed": {
+          "default": "warning",
+          "title": "Malformed",
+          "type": "string"
+        },
+        "unknown_namespace": {
+          "default": "info",
+          "title": "Unknown Namespace",
+          "type": "string"
+        },
+        "unknown_requirement": {
+          "default": "error",
+          "title": "Unknown Requirement",
+          "type": "string"
+        },
+        "unknown_assertion": {
+          "default": "error",
+          "title": "Unknown Assertion",
+          "type": "string"
+        },
+        "forbidden": {
+          "default": "error",
+          "title": "Forbidden",
+          "type": "string"
+        },
+        "keyword_form": {
+          "default": "warning",
+          "title": "Keyword Form",
+          "type": "string"
+        },
+        "identifier_form": {
+          "default": "warning",
+          "title": "Identifier Form",
+          "type": "string"
+        },
+        "undeclared": {
+          "default": "warning",
+          "title": "Undeclared",
           "type": "string"
         }
       },
@@ -985,6 +1046,18 @@
           "default": 0.0,
           "title": "Min Coverage Fraction",
           "type": "number"
+        },
+        "line_base": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Line Base"
         }
       },
       "required": [
@@ -1010,11 +1083,6 @@
           "default": 8,
           "title": "Hash Length",
           "type": "integer"
-        },
-        "allow_unresolved_cross_repo": {
-          "default": false,
-          "title": "Allow Unresolved Cross Repo",
-          "type": "boolean"
         },
         "strict_hierarchy": {
           "default": false,

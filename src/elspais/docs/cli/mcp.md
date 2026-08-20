@@ -20,6 +20,51 @@ manual CLI usage.
 
   $ elspais mcp serve
 
+## Two Ways To Connect, and Which To Prefer
+
+`elspais mcp install` registers an **http** connection by default. Prefer
+it. Over http the client talks to the same daemon the CLI and the viewer
+use, so all three see one graph -- a change made through MCP is visible
+to `elspais` commands immediately, and vice versa. It also survives the
+daemon being replaced: an http client reconnects to the same address,
+where a stdio server is a process the client owns and nothing restarts
+once it exits.
+
+Installed for one project (the default), the registration names this
+working tree's address outright and there is nothing to arrange -- just
+launch the client. Each working tree keeps its own address, so parallel
+sessions in different worktrees do not collide, and the address is held
+for that tree even while nothing is serving it: restart the daemon, or
+stop and start it, and the same address answers.
+
+Installed with `--global`, one registration serves every project, so it
+cannot name any single tree's address. It names a variable instead, and
+the shell that launches the client supplies it:
+
+  $ eval "$(elspais mcp env)"
+  $ claude
+
+`elspais mcp env` starts the daemon for the working tree you are in if
+none is running, then prints `export ELSPAIS_MCP_URL=...` for the shell
+to apply. (It prints rather than exports because no process can set a
+variable in the shell that started it.)
+
+If a tree's reserved address is ever taken by something else, the daemon
+says so and serves elsewhere; re-running `elspais mcp install` records
+the new address.
+
+Running `elspais mcp install` again replaces whatever is registered, so
+switching between the two is one command either way.
+
+Use **stdio** (`elspais mcp install --transport stdio`) for a client that
+cannot speak http. A stdio server holds its own private graph: mutations
+made through it are not visible to the CLI or the viewer until they are
+saved to disk, and it goes on answering from the elspais it loaded at
+startup for as long as the session lasts. If elspais is reinstalled
+beneath it -- which, in a tree elspais is installed from, is what editing
+a file amounts to -- it says so and asks to be reconnected. See
+`docs("concurrency")` for what it reports and why.
+
 ## Available Tools
 
 ### Graph Status & Control
@@ -112,6 +157,18 @@ Get full details for a single requirement.
     assertions      List of assertion objects {id, label, text}
     children        Child requirements (summaries)
     parents         Parent requirements (summaries)
+    coverage        Coverage figures, when the requirement carries a rollup
+                    (null otherwise):
+                    `total_assertions`, plus `implemented_total_covered` and
+                    `implemented_total_pct` — both the per-*Assertion* total
+                    of REQ-d00069-N, each assertion counted once at the
+                    greatest of its four measures. These two keys replaced
+                    `covered_assertions` and `referenced_pct`, which were
+                    named for a claim the total does not make (that a
+                    citation had named the assertions). To read what a
+                    citation named, ask `get_test_coverage` or
+                    `get_uncovered_assertions`, which answer on the
+                    immediate-direct measure.
 
   Example:
     get_requirement("REQ-p00001")
@@ -184,15 +241,49 @@ Get summary statistics for the project.
                              shape to the `elspais summary` CLI's `levels`
                              list (level, total, with_code_refs,
                              with_test_refs, with_passing, total_assertions,
-                             implemented_assertions, implemented_direct,
-                             tested_assertions, tested_direct,
-                             passing_assertions, passing_direct)
+                             tested_passed, tested_failed, tested_awaiting).
+                             The three tested_* counts are the Tested
+                             breakdown and account for every tested
+                             assertion. Per dimension (implemented, tested,
+                             passing, uat_covered, uat_passed) the payload
+                             carries `<dim>_total_covered` -- the
+                             REQ-d00069-N per-*Assertion* total the CLI now
+                             headlines -- plus the four REQ-d00069-L measures
+                             behind it: `<dim>_immediate_direct`,
+                             `<dim>_immediate_indirect`, `<dim>_rolled_direct`,
+                             `<dim>_rolled_indirect`.
     changes                 Git change metrics:
       - uncommitted       Modified spec files
       - branch_changed    Changed vs main branch
     total_nodes            Total nodes in graph
     orphan_count           Requirements without parents
     broken_reference_count References to non-existent requirements
+
+**get_test_coverage(req_id)** / **get_uncovered_assertions(req_id?, source?)**
+
+These two answer "what is left to do", so they read one measure: a citation
+NAMED the assertion and the evidence is attached to it (REQ-d00258-M). Neither
+whole-requirement evidence (a blanket `Verifies:`, which names no assertion)
+nor coverage conducted up a `Refines:` chain (written against the refining
+requirement) closes a gap, however much of either the requirement carries.
+This is deliberately stricter than the figures `get_project_summary` and the
+viewer headline, which count each assertion at the greatest of the four
+measures.
+
+  Each entry of `uncovered_detail` carries:
+    id           Assertion node ID
+    label        Assertion label (get_uncovered_assertions only)
+    fraction     Its coverage on the measure the verdict was taken on;
+                  0 means nothing names it, 0 < f < 1 means partial
+                  evidence, and a listed gap can never read 1
+    measures     Keyed by dimension -- always just `tested` from
+                  get_test_coverage, and one entry per axis `source` asked
+                  about (`tested`, `uat_coverage`) from
+                  get_uncovered_assertions. Each holds the four measures of
+                  REQ-d00069-L behind the verdict:
+                  immediate_direct, immediate_indirect, rolled_direct,
+                  rolled_indirect. This is where whole-requirement and
+                  conducted evidence stays visible.
 
 ## Concurrency Control
 

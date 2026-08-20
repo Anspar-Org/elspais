@@ -9,6 +9,7 @@ use Annotated[Union[...], tyro.conf.subcommand(...)] patterns.
 Phase 3 of CONFIG-SCHEMA: these dataclasses will replace argparse
 in cli.py via tyro.cli(GlobalArgs).
 """
+
 from __future__ import annotations
 
 import dataclasses
@@ -821,6 +822,11 @@ class McpInstallArgs:
     desktop: bool = False
     """Also install into Claude Desktop."""
 
+    transport: Literal["http", "stdio"] = "http"
+    """How the client reaches elspais. http shares one graph with the CLI and the
+    viewer and survives the daemon restarting; stdio holds a private graph and is
+    for clients that cannot speak http."""
+
 
 @dataclasses.dataclass
 class McpUninstallArgs:
@@ -833,10 +839,25 @@ class McpUninstallArgs:
     """Also remove from Claude Desktop."""
 
 
+@dataclasses.dataclass
+class McpEnvArgs:
+    """Print shell assignments naming where this working tree is served.
+
+    Meant to be evaluated by the shell that will launch the client:
+    ``eval "$(elspais mcp env)"``. A process cannot set a variable in the
+    shell that started it, so the assignments are printed for the shell
+    to apply -- the same arrangement ssh-agent and direnv use.
+    """
+
+    no_start: bool = False
+    """Report only an already-running daemon rather than starting one."""
+
+
 McpAction = (
     Annotated[McpServeArgs, tyro.conf.subcommand("serve")]
     | Annotated[McpInstallArgs, tyro.conf.subcommand("install")]
     | Annotated[McpUninstallArgs, tyro.conf.subcommand("uninstall")]
+    | Annotated[McpEnvArgs, tyro.conf.subcommand("env")]
 )
 
 
@@ -1127,8 +1148,7 @@ def generate_help(version: str) -> str:
                     doc += f" ({', '.join(sub_names)})"
 
         assert name in COMMAND_GROUPS, (
-            f"Subcommand {name!r} missing from COMMAND_GROUPS — "
-            f"add it to elspais/commands/args.py"
+            f"Subcommand {name!r} missing from COMMAND_GROUPS — add it to elspais/commands/args.py"
         )
         commands.append((name, doc))
 

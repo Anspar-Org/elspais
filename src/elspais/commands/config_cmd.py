@@ -243,7 +243,7 @@ def cmd_remove(args: argparse.Namespace) -> int:
     return 0
 
 
-# Implements: REQ-d00208-A
+# Implements: REQ-d00208-A, REQ-d00208-B
 def cmd_schema(args: argparse.Namespace) -> int:
     """Output JSON Schema for .elspais.toml configuration.
 

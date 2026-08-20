@@ -116,6 +116,35 @@ def ensure_fixture_daemon(root: Path) -> None:
         pass
 
 
+@pytest.fixture(autouse=True, scope="session")
+def _cleanup_session_daemons(tmp_path_factory):
+    """Stop every daemon the run started under pytest's temp root.
+
+    ``_cleanup_daemon`` below is function-scoped and sweeps only that test's
+    own ``tmp_path``, so a daemon started by a MODULE-scoped project fixture
+    -- a sibling directory under the same basetemp -- is invisible to it.
+    Those daemons are bound to this process by ``ELSPAIS_CLIENT_PID`` and do
+    reap themselves once it exits, but one holding unsaved work waits out its
+    grace period first, which looks exactly like a leak for half an hour.
+    Sweeping the basetemp ends them deterministically instead.
+
+    Deliberately scoped to the temp root: a daemon serving the developer's own
+    checkout is not this run's to stop.
+    """
+    yield
+    try:
+        from elspais.mcp.daemon import stop_daemon
+
+        basetemp = tmp_path_factory.getbasetemp()
+        for daemon_json in basetemp.rglob(".elspais/daemon.json"):
+            try:
+                stop_daemon(daemon_json.parent.parent)
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+
 @pytest.fixture(autouse=True)
 def _cleanup_daemon(tmp_path):
     """Stop any daemon started during the test.

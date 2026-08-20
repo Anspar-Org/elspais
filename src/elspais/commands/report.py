@@ -1,4 +1,4 @@
-# Implements: REQ-d00085-A+B+C+D+E+F+G
+# Implements: REQ-d00085-A+B+C+D+E+F+G+K+L
 """
 elspais.commands.report - Composable multi-section report system.
 
@@ -6,6 +6,7 @@ Accepts multiple section names (health, summary, trace, changed) and renders
 them in order, concatenating output. Shared flags apply globally. Exit code
 is worst-of-all-sections.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -99,8 +100,7 @@ def run(
         if fmt not in supported:
             supported_str = ", ".join(sorted(supported))
             print(
-                f"Error: Format '{fmt}' not supported for '{section}'."
-                f" Supported: {supported_str}",
+                f"Error: Format '{fmt}' not supported for '{section}'. Supported: {supported_str}",
                 file=sys.stderr,
             )
             return 1

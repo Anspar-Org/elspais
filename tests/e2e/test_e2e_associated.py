@@ -8,9 +8,9 @@ Consolidated from:
     TestMCPAssociatedSubtree
 
 On-disk fixture layout (tests/fixtures/e2e-associated/):
-  - core:  standard IDs (REQ-p/o/d), uppercase assertions, associates=[alpha,beta]
-  - alpha: standard IDs, prefix ALP, uppercase assertions
-  - beta:  standard IDs, prefix BET, numeric assertions
+  - core:  namespace REQ, uppercase assertions, associates=[alpha,beta]
+  - alpha: namespace REQ-ALP, uppercase assertions
+  - beta:  namespace REQ-BET, numeric assertions
 """
 
 from __future__ import annotations
@@ -20,6 +20,8 @@ import shutil
 import subprocess
 
 import pytest
+
+from tests.federation_repos import make_repo
 
 from .conftest import (
     ensure_fixture_daemon,
@@ -291,7 +293,9 @@ class TestAssociateFDAStyle:
             name="core-std",
             associated_enabled=True,
         )
-        core_cfg["associates"] = {"paths": ["../fda-assoc"]}
+        core_cfg["associates"] = {
+            "fda-assoc": {"path": "../fda-assoc", "namespace": "FDA"},
+        }
         core_prd = Requirement(
             "REQ-p00001",
             "Core Standard",
@@ -304,9 +308,9 @@ class TestAssociateFDAStyle:
             spec_files={"spec/prd.md": [core_prd]},
         )
 
-        # FDA-style associate with namespaced prefix
+        # FDA-style associate under its own namespace
         assoc_prd = Requirement(
-            "REQ-FDA-p00001",
+            "FDA-p00001",
             "FDA Compliance",
             "PRD",
             assertions=[("A", "The system SHALL comply with FDA regulations.")],
@@ -423,7 +427,7 @@ class TestFileContentCrossRepo:
         # the associate root, so /api/file-content's security guard allows
         # reading from it.
         core_cfg["associates"] = {
-            "assoc": {"path": "../assoc", "namespace": "REQ"},
+            "assoc": {"path": "../assoc", "namespace": "XX"},
         }
         core_prd = Requirement(
             "REQ-p00001",
@@ -437,11 +441,12 @@ class TestFileContentCrossRepo:
             spec_files={"spec/prd-core.md": [core_prd]},
         )
 
-        # Associate uses the same namespace but a distinct numeric ID so
-        # the parser accepts it under the canonical {namespace}-{level}{n}
-        # pattern. The file content is distinguishable from the root.
+        # The associate owns its own namespace -- no two repositories in a
+        # federation may declare one namespace -- so its identifiers are
+        # distinct from the core's by construction. The file content is
+        # distinguishable from the root.
         assoc_prd = Requirement(
-            "REQ-p00099",
+            "XX-p00099",
             "Associate PRD",
             "PRD",
             assertions=[("A", "Cross-repo file content SHALL resolve.")],
@@ -457,7 +462,7 @@ class TestFileContentCrossRepo:
         return core_root, assoc_root
 
     def test_file_content_resolves_associate_repo(self, tmp_path):
-        """GET /api/file-content?path=spec/prd-assoc.md&node_id=REQ-p00099
+        """GET /api/file-content?path=spec/prd-assoc.md&node_id=XX-p00099
         returns the on-disk content of the associate's source file."""
         import json
         import urllib.request
@@ -490,15 +495,14 @@ class TestFileContentCrossRepo:
 
         # With node_id: same content, resolved explicitly via repo_root_for.
         ok_req = urllib.request.Request(
-            f"http://127.0.0.1:{port}/api/file-content"
-            f"?path=spec/prd-assoc.md&node_id=REQ-p00099"
+            f"http://127.0.0.1:{port}/api/file-content?path=spec/prd-assoc.md&node_id=XX-p00099"
         )
         resp = urllib.request.urlopen(ok_req, timeout=5)
         assert resp.status == 200
         data = json.loads(resp.read().decode("utf-8"))
         assert data["lines"] == on_disk
         # Content is distinguishable from the root repo's file.
-        assert any("REQ-p00099" in line for line in data["lines"])
+        assert any("XX-p00099" in line for line in data["lines"])
 
 
 # ---------------------------------------------------------------------------
@@ -517,9 +521,9 @@ class TestAssociatedMutations:
 
 # ---------------------------------------------------------------------------
 # Test: Federation write/index scope (CUR-1419 / REQ-d00253)
-# Verifies: REQ-d00253-B (fix writes primary-only)
-# Verifies: REQ-d00253-C (INDEX/term-index primary-only)
-# Verifies: REQ-d00253-D (MCP rejects associate mutations)
+# Verifies: REQ-d00253-B, REQ-d00253-C, REQ-d00253-D
+# B: fix writes primary-only.  C: INDEX/term-index primary-only.
+# D: MCP rejects associate mutations.
 #
 # These tests RUN `elspais fix` (which writes disk) and toggle config flags,
 # so each builds its OWN isolated core+associate project in tmp_path. The
@@ -546,13 +550,13 @@ class TestFederationWriteScope:
     """REQ-d00253-B/C: `elspais fix` writes and indexes the primary repo only,
     unless the corresponding federation opt-in flag is set."""
 
-    # Both repos use the default canonical pattern ({namespace}-{level}{n}).
-    # The associate's requirement is a DISTINCT numeric ID (REQ-p00099) so the
-    # core's parser accepts it and the federated graph indexes it as an
-    # associate-owned node (repo_for(...) -> "assoc"). This is the same
-    # construction TestFileContentCrossRepo uses for a real federation.
+    # Both repos use the default canonical pattern ({namespace}-{level}{n}),
+    # each under its own namespace -- one namespace names one repository in a
+    # federation. The federated graph therefore indexes the associate's
+    # requirement as an associate-owned node (repo_for(...) -> "assoc"). This
+    # is the same construction TestFileContentCrossRepo uses.
     CORE_REQ = "REQ-p00001"
-    ASSOC_REQ = "REQ-p00099"
+    ASSOC_REQ = "XX-p00099"
     ASSOC_NAME = "assoc"
 
     def _build(
@@ -569,7 +573,7 @@ class TestFederationWriteScope:
         # cli_ttl=0 disables the daemon so toggled config is always honoured.
         core_cfg["cli_ttl"] = 0
         # Named associate link so federation kicks in during fix.
-        core_cfg["associates"] = {self.ASSOC_NAME: {"path": "../assoc", "namespace": "REQ"}}
+        core_cfg["associates"] = {self.ASSOC_NAME: {"path": "../assoc", "namespace": "XX"}}
         fed = {}
         if write_associates:
             fed["write_associates"] = True
@@ -703,7 +707,7 @@ class TestFederationWriteScope:
         assert result.returncode == 0, f"fix failed: {result.stderr}\n{result.stdout}"
 
         assert _git_porcelain(assoc_root) != "", (
-            "associate file with stale hash was NOT rewritten despite " "write_associates=true"
+            "associate file with stale hash was NOT rewritten despite write_associates=true"
         )
         # The corrupt hash was canonicalized away.
         assoc_text = (assoc_root / "spec" / "prd-assoc.md").read_text()
@@ -749,9 +753,7 @@ class TestFederationWriteScope:
         # Term defined via markdown definition-list syntax (blank line before
         # and after); a separate prose file so the scan records it as a
         # core-namespace definition.
-        glossary = (
-            "# Glossary\n\n" f"{self.TERM}\n" ": A periodic liveness signal emitted by a node.\n"
-        )
+        glossary = f"# Glossary\n\n{self.TERM}\n: A periodic liveness signal emitted by a node.\n"
         build_project(
             core_root,
             core_cfg,
@@ -801,9 +803,9 @@ class TestFederationWriteScope:
             f"associate namespace block **{self.CAL_NS}:** leaked into primary "
             "term-index with index_associates=false"
         )
-        assert (
-            self.CAL_TERM_REQ not in text
-        ), f"associate node {self.CAL_TERM_REQ} leaked into primary term-index"
+        assert self.CAL_TERM_REQ not in text, (
+            f"associate node {self.CAL_TERM_REQ} leaked into primary term-index"
+        )
         # The core's own reference to the term is still indexed.
         assert f"**{self.CORE_NS}:**" in text, "core namespace block missing"
 
@@ -825,9 +827,9 @@ class TestFederationWriteScope:
             f"associate namespace block **{self.CAL_NS}:** absent from primary "
             "term-index despite index_associates=true"
         )
-        assert (
-            self.CAL_TERM_REQ in text
-        ), f"associate node {self.CAL_TERM_REQ} absent despite index_associates=true"
+        assert self.CAL_TERM_REQ in text, (
+            f"associate node {self.CAL_TERM_REQ} absent despite index_associates=true"
+        )
 
 
 class TestFederationMCPGuard:
@@ -835,7 +837,7 @@ class TestFederationMCPGuard:
     federation.write_associates is set. Isolated core+associate per project."""
 
     CORE_REQ = "REQ-p00001"
-    ASSOC_REQ = "REQ-p00099"
+    ASSOC_REQ = "XX-p00099"
     ASSOC_NAME = "assoc"
 
     def _build(self, tmp_path, *, write_associates=False):
@@ -844,7 +846,7 @@ class TestFederationMCPGuard:
 
         core_cfg = base_config(name="fed-mcp-core")
         core_cfg["cli_ttl"] = 0
-        core_cfg["associates"] = {self.ASSOC_NAME: {"path": "../assoc", "namespace": "REQ"}}
+        core_cfg["associates"] = {self.ASSOC_NAME: {"path": "../assoc", "namespace": "XX"}}
         if write_associates:
             core_cfg["federation"] = {"write_associates": True}
 
@@ -928,9 +930,9 @@ class TestFederationMCPGuard:
             stop_mcp(server)
 
         assert isinstance(resp, dict), f"unexpected MCP response: {resp!r}"
-        assert (
-            resp.get("success") is True
-        ), f"expected success with write_associates=true, got {resp!r}"
+        assert resp.get("success") is True, (
+            f"expected success with write_associates=true, got {resp!r}"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -1055,7 +1057,7 @@ class TestPdfMediaFidelity:
         assoc_root = base / "assoc"
 
         core_cfg = base_config(name="pdf-core", associated_enabled=True)
-        core_cfg["associates"] = {"paths": ["../assoc"]}
+        core_cfg["associates"] = {"assoc": {"path": "../assoc", "namespace": "ASC"}}
         build_project(
             core_root,
             core_cfg,
@@ -1198,7 +1200,7 @@ class TestPdfMediaFidelity:
         assert out.exists(), "PDF file was not created"
 
         assert "nope.webp" in result.stderr, (
-            f"the resource pandoc could not fetch was not named on stderr: " f"{result.stderr}"
+            f"the resource pandoc could not fetch was not named on stderr: {result.stderr}"
         )
         assert "PDF written to" in result.stdout, f"no completion line: {result.stdout}"
         assert "INCOMPLETE" in result.stdout, (
@@ -1283,9 +1285,9 @@ class TestPdfMediaFidelity:
         complete, _complete_out = federated_pdf
         assert complete.returncode == 0, f"pdf failed: {complete.stderr}"
         assert "PDF written to" in complete.stdout, f"no completion line: {complete.stdout}"
-        assert (
-            "INCOMPLETE" not in complete.stdout
-        ), f"a document missing nothing was reported as degraded: {complete.stdout}"
+        assert "INCOMPLETE" not in complete.stdout, (
+            f"a document missing nothing was reported as degraded: {complete.stdout}"
+        )
 
     # Verifies: REQ-p00080-H
     @requires_pandoc
@@ -1306,19 +1308,19 @@ class TestPdfMediaFidelity:
         text = _pdf_text(out)
         print(f"\npdftotext {out} (normalised):\n{text}")
 
-        assert (
-            "The associate SHALL render its own imagery." in text
-        ), "associate requirement's assertion text missing from the compiled PDF"
-        assert (
-            "rationale marker delta zulu seven" in text
-        ), "associate requirement's rationale missing from the compiled PDF"
+        assert "The associate SHALL render its own imagery." in text, (
+            "associate requirement's assertion text missing from the compiled PDF"
+        )
+        assert "rationale marker delta zulu seven" in text, (
+            "associate requirement's rationale missing from the compiled PDF"
+        )
         # The root repo's own content is still there — federation adds, not replaces.
-        assert (
-            "The system SHALL render core imagery." in text
-        ), "root repo's assertion text missing from the compiled PDF"
-        assert (
-            "rationale marker alpha kilo nine" in text
-        ), "root repo's rationale missing from the compiled PDF"
+        assert "The system SHALL render core imagery." in text, (
+            "root repo's assertion text missing from the compiled PDF"
+        )
+        assert "rationale marker alpha kilo nine" in text, (
+            "root repo's rationale missing from the compiled PDF"
+        )
 
     # Verifies: REQ-p00080-D
     @requires_pandoc
@@ -1346,9 +1348,337 @@ class TestPdfMediaFidelity:
             f"associate entry not annotated with its repo name in the compiled "
             f"Topic Index: {index_text}"
         )
-        assert (
-            "REQ-p00001" in index_text
-        ), f"root repo entry missing from the compiled Topic Index: {index_text}"
-        assert (
-            "[pdf-core] REQ-p00001" not in index_text
-        ), f"host repo entry must render bare, not annotated: {index_text}"
+        assert "REQ-p00001" in index_text, (
+            f"root repo entry missing from the compiled Topic Index: {index_text}"
+        )
+        assert "[pdf-core] REQ-p00001" not in index_text, (
+            f"host repo entry must render bare, not annotated: {index_text}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Test: what a federation member contributes does not depend on how it was
+#       reached — and what it does depend on (the member set)
+# ---------------------------------------------------------------------------
+
+
+def _req_block(req_id, title, *, implements=None, assertions=()):
+    """Render one requirement block for a fixture spec file."""
+    head = f"## {req_id}: {title}\n\n**Status**: active"
+    if implements:
+        head += f"\n\n**Implements**: {implements}"
+    if assertions:
+        body = "\n\n## Assertions\n\n" + "".join(
+            f"{label}. The system SHALL {text}.\n\n" for label, text in assertions
+        )
+    else:
+        body = "\n\nThe system shall do a thing.\n\n"
+    return head + body + "*End*\n"
+
+
+def _add_spec(repo, text):
+    """Add a committed spec file to a repo built by `make_repo`."""
+    (repo / "spec" / "extra.md").write_text(text, encoding="utf-8")
+    subprocess.run(["git", "add", "-A"], cwd=repo, check=True, capture_output=True)
+    subprocess.run(
+        ["git", "-c", "user.email=t@t", "-c", "user.name=T", "commit", "-m", "extra"],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+    )
+
+
+# `d` carries every observable at once: intra-repo coverage (d00002 covers one
+# of d00003's two assertions), a cross-repo reference that resolves (d00004 ->
+# BBB-d00001), a dangling reference in its own namespace (hard), and a
+# reference into a namespace no federation member claims (presumed foreign).
+_D_SPEC = (
+    _req_block("DDD-d00003", "Target", assertions=[("A", "be covered"), ("B", "be uncovered")])
+    + _req_block("DDD-d00002", "Coverer", implements="DDD-d00003-A", assertions=[("A", "cover")])
+    + _req_block("DDD-d00004", "Cross repo", implements="BBB-d00001")
+    + _req_block("DDD-d00005", "Dangling local", implements="DDD-d99999")
+    + _req_block("DDD-d00006", "Dangling foreign", implements="ZZZ-d00001")
+)
+
+
+def _observe(entry_root):
+    """Build a federation from `entry_root` and reduce it to per-member observables.
+
+    Keyed by the member's directory name rather than its federation name:
+    the name a converged repo is filed under is the declaration key of
+    whichever chain reached it first, so keying by name would compare
+    federations by an attribute that is itself path-dependent.
+    """
+    from pathlib import Path
+
+    from elspais.config import get_config
+    from elspais.graph.factory import build_graph
+    from elspais.graph.GraphNode import NodeKind
+
+    fed = build_graph(config=get_config(None, entry_root, quiet=True), repo_root=entry_root)
+    observed = {}
+    for entry in fed.iter_repos():
+        graph = entry.graph
+        assert graph is not None, f"{entry.name} failed to build: {entry.error}"
+        coverage = {}
+        for node in graph.iter_by_kind(NodeKind.REQUIREMENT):
+            rollup = node.get_metric("rollup_metrics")
+            coverage[node.id] = (
+                rollup.total_assertions,
+                rollup.implemented.immediate_direct,
+                rollup.implemented.covered,
+            )
+        observed[Path(entry.repo_root).resolve().name] = {
+            "reqs": sorted(node.id for node in graph.iter_by_kind(NodeKind.REQUIREMENT)),
+            "broken": sorted(
+                (br.source_id, br.target_id, str(br.edge_kind), bool(br.presumed_foreign))
+                for br in graph.broken_references()
+            ),
+            "coverage": coverage,
+        }
+    return observed
+
+
+def _make_diamond(base, *, both_branches, swapped):
+    """A declares b and c; b declares d; c declares d only when `both_branches`."""
+    base.mkdir(parents=True)
+    d = make_repo(base, "d", namespace="DDD", req_id="DDD-d00001")
+    _add_spec(d, _D_SPEC)
+    make_repo(
+        base,
+        "b",
+        namespace="BBB",
+        req_id="BBB-d00001",
+        associates={"d": "../d"},
+        associate_namespaces={"d": "DDD"},
+    )
+    make_repo(
+        base,
+        "c",
+        namespace="CCC",
+        req_id="CCC-d00001",
+        associates=({"d": "../d"} if both_branches else None),
+        associate_namespaces={"d": "DDD"},
+    )
+    declarations = {"c": "../c", "b": "../b"} if swapped else {"b": "../b", "c": "../c"}
+    return make_repo(
+        base,
+        "a",
+        namespace="AAA",
+        req_id="AAA-d00001",
+        associates=declarations,
+        associate_namespaces={"b": "BBB", "c": "CCC"},
+    )
+
+
+def _make_chain(base):
+    """a -> b -> c, with b referencing up into a and c referencing up into b."""
+    base.mkdir(parents=True)
+    c = make_repo(base, "c", namespace="CCC", req_id="CCC-d00001")
+    _add_spec(
+        c,
+        _req_block("CCC-d00003", "Target", assertions=[("A", "be covered"), ("B", "be uncovered")])
+        + _req_block("CCC-d00004", "Coverer", implements="CCC-d00003-A")
+        + _req_block("CCC-d00002", "Up one", implements="BBB-d00001")
+        + _req_block("CCC-d00005", "Absent from a present member", implements="BBB-d99999"),
+    )
+    b = make_repo(
+        base,
+        "b",
+        namespace="BBB",
+        req_id="BBB-d00001",
+        associates={"c": "../c"},
+        associate_namespaces={"c": "CCC"},
+    )
+    _add_spec(
+        b,
+        _req_block("BBB-d00003", "Target", assertions=[("A", "be covered"), ("B", "be uncovered")])
+        + _req_block("BBB-d00004", "Coverer", implements="BBB-d00003-A")
+        + _req_block("BBB-d00002", "Up chain", implements="AAA-d00001"),
+    )
+    a = make_repo(
+        base,
+        "a",
+        namespace="AAA",
+        req_id="AAA-d00001",
+        associates={"b": "../b"},
+        associate_namespaces={"b": "BBB"},
+    )
+    return a, b
+
+
+class TestFederationContributionInvariance:
+    """A member's contribution against declaration topology and entry point.
+
+    Every fixture here is a throwaway federation in `tmp_path`; none of
+    them touch the module's shared `project` fixture.
+    """
+
+    # Verifies: REQ-d00202-F
+    def test_diamond_member_contributes_identically_through_either_branch(self, tmp_path):
+        """`d` contributes the same thing reached through one branch or two.
+
+        The diamond is the case where convergence could plausibly change
+        what a member contributes: `d` is declared twice, and the walk is
+        depth-first, so which branch reaches it first is decided by the
+        declaration order in `a`'s config.
+        """
+        through_both = _observe(_make_diamond(tmp_path / "both", both_branches=True, swapped=False))
+        swapped = _observe(_make_diamond(tmp_path / "swapped", both_branches=True, swapped=True))
+        one_branch = _observe(_make_diamond(tmp_path / "one", both_branches=False, swapped=False))
+
+        assert sorted(through_both) == ["a", "b", "c", "d"]
+        assert sorted(swapped) == ["a", "b", "c", "d"]
+        assert sorted(one_branch) == ["a", "b", "c", "d"]
+
+        # Non-vacuity: `d`'s observables carry a resolved cross-repo
+        # reference, both broken-reference classifications, and partial
+        # coverage — so an equality below is comparing something.
+        d_both = through_both["d"]
+        assert d_both["reqs"] == [
+            "DDD-d00001",
+            "DDD-d00002",
+            "DDD-d00003",
+            "DDD-d00004",
+            "DDD-d00005",
+            "DDD-d00006",
+        ]
+        # presumed_foreign is False for both (TOOL-58): see the c_broken
+        # note in test_entry_point_changes_the_member_set_not_a_member_
+        # contribution above.
+        assert d_both["broken"] == [
+            ("DDD-d00005", "DDD-d99999", "implements", False),
+            ("DDD-d00006", "ZZZ-d00001", "implements", False),
+        ], f"unexpected broken references for d: {d_both['broken']}"
+        assert d_both["coverage"]["DDD-d00003"] == (2, 1.0, 1.0)
+
+        assert swapped["d"] == d_both, (
+            f"reversing the declaration order in a's config changed d's "
+            f"contribution: {swapped['d']} vs {d_both}"
+        )
+        assert one_branch["d"] == d_both, (
+            f"reaching d through one branch instead of two changed its "
+            f"contribution: {one_branch['d']} vs {d_both}"
+        )
+
+    # Verifies: REQ-d00202-D, REQ-d00203-B
+    def test_same_member_set_reached_flat_or_transitively_is_one_federation(self, tmp_path):
+        """{a,b,c,d} declared flat by `a` equals the same set reached down a chain.
+
+        Two entry points cannot have equal reachable sets — each would have
+        to reach the other, which is a declaration cycle — so this is the
+        realizable form of "same members, different declaration paths":
+        one entry point, the members reached directly or transitively.
+        """
+        nested_base = tmp_path / "nested"
+        nested_base.mkdir()
+        d = make_repo(nested_base, "d", namespace="DDD", req_id="DDD-d00001")
+        _add_spec(d, _D_SPEC)
+        make_repo(
+            nested_base,
+            "c",
+            namespace="CCC",
+            req_id="CCC-d00001",
+            associates={"d": "../d"},
+            associate_namespaces={"d": "DDD"},
+        )
+        make_repo(
+            nested_base,
+            "b",
+            namespace="BBB",
+            req_id="BBB-d00001",
+            associates={"c": "../c"},
+            associate_namespaces={"c": "CCC"},
+        )
+        nested_entry = make_repo(
+            nested_base,
+            "a",
+            namespace="AAA",
+            req_id="AAA-d00001",
+            associates={"b": "../b"},
+            associate_namespaces={"b": "BBB"},
+        )
+
+        flat_base = tmp_path / "flat"
+        flat_base.mkdir()
+        flat_d = make_repo(flat_base, "d", namespace="DDD", req_id="DDD-d00001")
+        _add_spec(flat_d, _D_SPEC)
+        make_repo(flat_base, "c", namespace="CCC", req_id="CCC-d00001")
+        make_repo(flat_base, "b", namespace="BBB", req_id="BBB-d00001")
+        flat_entry = make_repo(
+            flat_base,
+            "a",
+            namespace="AAA",
+            req_id="AAA-d00001",
+            associates={"b": "../b", "c": "../c", "d": "../d"},
+            associate_namespaces={"b": "BBB", "c": "CCC", "d": "DDD"},
+        )
+
+        nested = _observe(nested_entry)
+        flat = _observe(flat_entry)
+
+        members = sorted(nested)
+        expected_members = ["a", "b", "c", "d"]
+        assert members == expected_members, (
+            f"a -> b -> c -> d did not federate every member transitively: {members}"
+        )
+        assert nested["d"]["coverage"]["DDD-d00003"] == (2, 1.0, 1.0)
+        assert nested == flat, (
+            f"a member reached down a chain contributes differently from the "
+            f"same member declared directly: {nested} vs {flat}"
+        )
+
+    # Verifies: REQ-d00202-D, REQ-d00203-B
+    def test_entry_point_changes_the_member_set_not_a_member_contribution(self, tmp_path):
+        """In a -> b -> c, entering at `a` or at `b` is compared on {b, c}.
+
+        The entry point decides which repositories are members, and that
+        is the one thing a member's contribution does depend on: `b`'s
+        reference up into `a` resolves when `a` is a member and is a
+        broken reference when it is not.  Everything else about `b` and
+        `c` — their requirement IDs and their coverage rollups — is the
+        same from either entry point.
+        """
+        entry_a, entry_b = _make_chain(tmp_path / "chain")
+
+        from_a = _observe(entry_a)
+        from_b = _observe(entry_b)
+
+        assert sorted(from_a) == ["a", "b", "c"]
+        assert sorted(from_b) == ["b", "c"], (
+            f"entering at b must reach b and c only — declarations are "
+            f"directed, so a is not reachable from b: {sorted(from_b)}"
+        )
+
+        for member in ("b", "c"):
+            assert from_a[member]["reqs"] == from_b[member]["reqs"], (
+                f"{member} contributed different requirement IDs from the two "
+                f"entry points: {from_a[member]['reqs']} vs {from_b[member]['reqs']}"
+            )
+            assert from_a[member]["coverage"] == from_b[member]["coverage"], (
+                f"{member}'s coverage rollups differ between entry points: "
+                f"{from_a[member]['coverage']} vs {from_b[member]['coverage']}"
+            )
+
+        # c's references only ever point at members present under both
+        # entry points, so its broken-reference set does not move.
+        # presumed_foreign is False here (TOOL-58): a post-hoc federation
+        # pass no longer stamps it onto an ordinary unresolved reference,
+        # pending Task 9's per-class severity replacement.
+        c_broken = [("CCC-d00005", "BBB-d99999", "implements", False)]
+        assert from_a["c"]["broken"] == c_broken, f"{from_a['c']['broken']}"
+        assert from_b["c"]["broken"] == c_broken, f"{from_b['c']['broken']}"
+
+        # b's does: BBB-d00002 -> AAA-d00001 resolves against a member
+        # under one entry point and stays broken under the other.
+        # presumed_foreign is False (TOOL-58): see the c_broken note above.
+        assert from_a["b"]["broken"] == [], (
+            f"b's reference into a should resolve when a is a federation "
+            f"member: {from_a['b']['broken']}"
+        )
+        assert from_b["b"]["broken"] == [
+            ("BBB-d00002", "AAA-d00001", "implements", False),
+        ], (
+            f"b's reference into a should be a broken reference when a is "
+            f"outside the federation: {from_b['b']['broken']}"
+        )

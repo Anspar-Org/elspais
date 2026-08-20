@@ -4,6 +4,7 @@
 Provides a consistent metadata dict (version, date, source identity)
 that any report renderer can include in its output.
 """
+
 from __future__ import annotations
 
 import socket

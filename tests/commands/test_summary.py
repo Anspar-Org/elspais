@@ -86,6 +86,27 @@ def _add_requirement(
     return node
 
 
+def _synthetic_immediate_direct(total: int, covered: float) -> dict[str, float]:
+    """Synthetic per-label immediate-direct credit summing to ``covered``.
+
+    ``_set_rollup`` only knows an assertion COUNT, not real per-assertion
+    labels, so this fabricates labels A, B, C... and credits the first
+    ``covered`` of them at full value (REQ-d00069-M) -- enough for
+    ``CoverageDimension.covered`` (the REQ-d00069-N total the CLI now
+    headlines) to equal the legacy ``direct``/``indirect`` figure these
+    fixtures set, since none of them model conducted or blanket evidence.
+    """
+    labels = [chr(65 + i) for i in range(total)]
+    out: dict[str, float] = {}
+    whole = int(covered)
+    for lbl in labels[:whole]:
+        out[lbl] = 1.0
+    frac = covered - whole
+    if frac > 1e-9 and whole < len(labels):
+        out[labels[whole]] = frac
+    return out
+
+
 def _set_rollup(
     node: GraphNode,
     total: int = 0,
@@ -99,10 +120,18 @@ def _set_rollup(
 
     rm = RollupMetrics(
         total_assertions=total,
-        implemented=CoverageDimension(total=total, direct=covered, indirect=covered),
-        tested=CoverageDimension(total=total, direct=tested, indirect=tested),
+        implemented=CoverageDimension(
+            total=total,
+            immediate_direct_by_label=_synthetic_immediate_direct(total, covered),
+        ),
+        tested=CoverageDimension(
+            total=total,
+            immediate_direct_by_label=_synthetic_immediate_direct(total, tested),
+        ),
         verified=CoverageDimension(
-            total=total, direct=validated, indirect=validated, has_failures=has_failures
+            total=total,
+            has_failures=has_failures,
+            immediate_direct_by_label=_synthetic_immediate_direct(total, validated),
         ),
     )
     node.set_metric("rollup_metrics", rm)
@@ -146,7 +175,7 @@ def _build_mixed_graph() -> TraceGraph:
 
 
 # ===========================================================================
-# Verifies: collect_coverage data structure
+# Section: collect_coverage data structure
 # ===========================================================================
 
 
@@ -185,7 +214,7 @@ class TestCollectCoverage:
 
 
 # ===========================================================================
-# Verifies: Level grouping
+# Section: Level grouping
 # ===========================================================================
 
 
@@ -218,21 +247,21 @@ class TestLevelGrouping:
 
         # PRD: p00001(3) + p00002(2) = 5 total assertions
         assert prd["total_assertions"] == 5
-        assert prd["implemented_assertions"] == 4  # 2 + 2
-        assert prd["tested_assertions"] == 3  # 1 + 2
-        assert prd["passing_assertions"] == 1  # 1 + 0
+        assert prd["implemented_total_covered"] == 4  # 2 + 2
+        assert prd["tested_total_covered"] == 3  # 1 + 2
+        assert prd["passing_total_covered"] == 1  # 1 + 0
 
         # OPS: o00001 only
         assert ops["total_assertions"] == 4
-        assert ops["implemented_assertions"] == 3
-        assert ops["tested_assertions"] == 2
-        assert ops["passing_assertions"] == 2
+        assert ops["implemented_total_covered"] == 3
+        assert ops["tested_total_covered"] == 2
+        assert ops["passing_total_covered"] == 2
 
         # DEV: d00001 only (d00002 Draft excluded, d00003 Deprecated excluded)
         assert dev["total_assertions"] == 1
-        assert dev["implemented_assertions"] == 1
-        assert dev["tested_assertions"] == 1
-        assert dev["passing_assertions"] == 1
+        assert dev["implemented_total_covered"] == 1
+        assert dev["tested_total_covered"] == 1
+        assert dev["passing_total_covered"] == 1
 
     def test_REQ_d00086_A_with_code_refs_count(self):
         """with_code_refs counts reqs that have at least one implemented assertion."""
@@ -282,7 +311,7 @@ class TestLevelGrouping:
 
 
 # ===========================================================================
-# Verifies: Draft/Deprecated exclusion
+# Section: Draft/Deprecated exclusion
 # ===========================================================================
 
 
@@ -317,7 +346,7 @@ class TestStatusExclusion:
 
 
 # ===========================================================================
-# Verifies: Output format - Text
+# Section: Output format - Text
 # ===========================================================================
 
 
@@ -372,7 +401,7 @@ class TestTextFormat:
 
 
 # ===========================================================================
-# Verifies: Output format - Markdown
+# Section: Output format - Markdown
 # ===========================================================================
 
 
@@ -428,7 +457,7 @@ class TestMarkdownFormat:
 
 
 # ===========================================================================
-# Verifies: Output format - JSON
+# Section: Output format - JSON
 # ===========================================================================
 
 
@@ -459,9 +488,9 @@ class TestJsonFormat:
         assert prd["level"] == "PRD"
         assert prd["total"] == 1
         assert prd["total_assertions"] == 3
-        assert prd["implemented_assertions"] == 2
-        assert prd["tested_assertions"] == 1
-        assert prd["passing_assertions"] == 1
+        assert prd["implemented_total_covered"] == 2
+        assert prd["tested_total_covered"] == 1
+        assert prd["passing_total_covered"] == 1
 
     def test_REQ_d00086_C_json_excluded_counts(self):
         """JSON output includes excluded status counts."""
@@ -475,13 +504,14 @@ class TestJsonFormat:
 
 
 # ===========================================================================
-# Verifies: Output format - CSV
+# Section: Output format - CSV
 # ===========================================================================
 
 
 class TestCsvFormat:
     """Validates REQ-d00086-C: CSV format output."""
 
+    # Verifies: REQ-d00258-O, REQ-d00069-L, REQ-d00258-A
     def test_REQ_d00086_C_csv_has_correct_headers(self):
         """CSV output has the expected column headers."""
         graph = _make_graph()
@@ -491,16 +521,30 @@ class TestCsvFormat:
         reader = csv.reader(io.StringIO(output))
         headers = next(reader)
 
+        measure_headers = [
+            "Immediate Direct",
+            "Immediate Indirect",
+            "Rolled Direct",
+            "Rolled Indirect",
+        ]
         expected_headers = [
             "Level",
             "Requirements",
             "Assertions",
             "Implemented",
             "Implemented %",
+            *[f"Implemented {m}" for m in measure_headers],
             "Tested",
             "Tested %",
+            # The Tested breakdown (REQ-d00258-O) rides on Tested, so its three
+            # columns sit with it rather than beside the other dimensions.
+            "Tested Passed",
+            "Tested Failed",
+            "Tested Awaiting",
+            *[f"Tested {m}" for m in measure_headers],
             "Passing",
             "Passing %",
+            *[f"Passing {m}" for m in measure_headers],
         ]
         assert headers == expected_headers
 
@@ -516,8 +560,14 @@ class TestCsvFormat:
         # 1 header + 3 levels (PRD, OPS, DEV)
         assert len(rows) == 4
 
+    # Verifies: REQ-d00258-O, REQ-d00069-N, REQ-d00258-A
     def test_REQ_d00086_C_csv_row_values(self):
-        """CSV data rows contain correct level summary values."""
+        """CSV data rows contain correct level summary values.
+
+        Looked up by header name rather than position: REQ-d00069-L added
+        measure columns between the dimension totals, so a positional index
+        would silently start reading the wrong cell.
+        """
         graph = _make_graph()
         node = _add_requirement(graph, "REQ-p00001", "CSV Req", level="prd")
         _set_rollup(node, total=4, covered=3, tested=2, validated=1)
@@ -525,24 +575,34 @@ class TestCsvFormat:
         data = collect_coverage(graph)
         output = _render(data, "csv")
 
-        reader = csv.reader(io.StringIO(output))
-        _header = next(reader)
+        reader = csv.DictReader(io.StringIO(output))
         row = next(reader)  # PRD row
 
         # Coverage counts are sums of per-assertion fractions (REQ-d00069-J)
         # sourced from DimensionSums (a float accumulator), so whole-number
         # counts render with a trailing ".0" in the raw machine formats
         # (CSV/JSON); only the text renderer uses fmt_assertion_count() to
-        # strip it for human display.
-        assert row[0] == "PRD"  # Level
-        assert row[1] == "1"  # Requirements
-        assert row[2] == "4"  # Assertions
-        assert row[3] == "3.0"  # Implemented
-        assert row[4] == "75.0"  # Implemented %
-        assert row[5] == "2.0"  # Tested
-        assert row[6] == "50.0"  # Tested %
-        assert row[7] == "1.0"  # Passing
-        assert row[8] == "25.0"  # Passing %
+        # strip it for human display. The headline is now the per-*Assertion*
+        # TOTAL (REQ-d00069-N); this fixture credits everything as immediate
+        # direct evidence, so it equals the legacy figure (REQ-d00258-A).
+        assert row["Level"] == "PRD"
+        assert row["Requirements"] == "1"
+        assert row["Assertions"] == "4"
+        assert row["Implemented"] == "3.0"
+        assert row["Implemented %"] == "75.0"
+        assert row["Implemented Immediate Direct"] == "3.0"
+        assert row["Tested"] == "2.0"
+        assert row["Tested %"] == "50.0"
+        # The breakdown counts assertions, not fractional credit, so it is
+        # rendered as plain ints. Two assertions are tested; one of them also
+        # has a passing result, the other is still awaiting one.
+        assert row["Tested Passed"] == "1"
+        assert row["Tested Failed"] == "0"
+        assert row["Tested Awaiting"] == "1"
+        assert row["Tested Immediate Direct"] == "2.0"
+        assert row["Passing"] == "1.0"
+        assert row["Passing %"] == "25.0"
+        assert row["Passing Immediate Direct"] == "1.0"
 
     def test_REQ_d00086_C_csv_parseable(self):
         """CSV output is parseable by Python csv module without errors."""
@@ -568,7 +628,7 @@ class TestCsvFormat:
 
 
 # ===========================================================================
-# Verifies: _render format dispatch
+# Section: _render format dispatch
 # ===========================================================================
 
 
@@ -586,7 +646,7 @@ class TestRenderDispatch:
 
 
 # ===========================================================================
-# Verifies: _pct helper
+# Section: _pct helper
 # ===========================================================================
 
 
@@ -649,11 +709,12 @@ class TestSummaryIntegrations:
         # must count toward with_code_refs (implemented requirements).
         assert dev_levels[0]["with_code_refs"] >= 1
 
-    # Verifies: REQ-d00252-F, REQ-d00258-B
-    def test_REQ_d00258_B_integrations_header_is_passing(self, tmp_path):
+    # Verifies: REQ-d00252-F, REQ-d00258-K
+    def test_REQ_d00258_K_integrations_header_is_passing(self, tmp_path):
         """The External integrations column header reads 'Passing', not the
-        old 'verified (no lcov)' -- the figures are now the tested_and_passing()
-        union (REQ-d00258-B), so the vocabulary matches the rest of the report."""
+        old 'verified (no lcov)' -- the figures come from tested_and_passing()
+        and the permitted display terms (REQ-d00258-K) name that dimension
+        'Passing', so the vocabulary matches the rest of the report."""
         fed = _federate_integrates(tmp_path)
         data = collect_coverage(fed, config=None)
         text = _render(data, "text")
@@ -664,12 +725,13 @@ class TestSummaryIntegrations:
         assert "passing" in text.lower()
         assert "Passing" in md
 
-    # Verifies: REQ-d00252-D, REQ-d00252-F, REQ-d00258-B
-    def test_REQ_d00252_F_lcov_only_library_propagates_in_summary(self, tmp_path):
+    # Verifies: REQ-d00252-D, REQ-d00252-F, REQ-d00258-N
+    def test_REQ_d00252_F_lcov_only_library_is_not_passing_in_summary(self, tmp_path):
         """A library requirement whose only evidence is lcov_tested credit (no
-        Verifies:-based result) still shows up as passing in the summary's
-        per-associate integrations table -- the union propagates through
-        federation, not just the raw verified dimension."""
+        Verifies:-based result) contributes nothing to the passing column of
+        the summary's per-associate integrations table. What propagates
+        through federation is what the library's declared tests returned, and
+        no test returned anything here -- so the row reads 0 of 1."""
         from elspais.graph.metrics import CoverageDimension
 
         dest = tmp_path / "proj"
@@ -688,31 +750,27 @@ class TestSummaryIntegrations:
             "rollup_metrics",
             RollupMetrics(
                 total_assertions=1,
+                verified=CoverageDimension(total=1),
                 lcov_tested=CoverageDimension(
                     total=1,
-                    direct=1.0,
-                    indirect=1.0,
-                    direct_labels={"A"},
-                    indirect_labels={"A"},
-                    direct_pct_by_label={"A": 1.0},
-                    indirect_pct_by_label={"A": 1.0},
+                    immediate_direct_by_label={"A": 1.0},
                 ),
             ),
         )
 
         data = collect_coverage(fed, config=None)
         by_name = {row["associate"]: row for row in data["integrations"]}
-        assert by_name["library"]["verified_covered"] >= 1
-        assert by_name["library"]["verified_total"] >= 1
+        assert by_name["library"]["verified_covered"] == 0
+        assert by_name["library"]["verified_total"] == 1
         assert by_name["library"]["has_failures"] is False
 
-    # Verifies: REQ-d00252-F, REQ-d00258-B
-    def test_REQ_d00258_B_library_failures_flagged_in_summary(self, tmp_path):
-        """A library assertion with a FAILING Verifies-result but full lcov
-        credit reads as covered in the union, so the covered/total figures
-        alone would show 100% passing. The summary must carry has_failures
-        through to the integrations row/total and mark the rendered table so
-        a red library suite is never displayed as clean."""
+    # Verifies: REQ-d00252-F, REQ-d00258-N
+    def test_REQ_d00258_N_library_failures_flagged_in_summary(self, tmp_path):
+        """A library with one passing and one failing declared test reads as
+        covered on the covered/total figures alone. The summary must carry
+        has_failures through to the integrations row/total and mark the
+        rendered table so a partly-red library suite is never displayed as
+        clean."""
         from elspais.graph.metrics import CoverageDimension
 
         dest = tmp_path / "proj"
@@ -730,23 +788,19 @@ class TestSummaryIntegrations:
         lib_req.set_metric(
             "rollup_metrics",
             RollupMetrics(
-                total_assertions=1,
-                verified=CoverageDimension(total=1, has_failures=True),
-                lcov_tested=CoverageDimension(
-                    total=1,
-                    direct=1.0,
-                    indirect=1.0,
-                    direct_labels={"A"},
-                    indirect_labels={"A"},
-                    direct_pct_by_label={"A": 1.0},
-                    indirect_pct_by_label={"A": 1.0},
+                total_assertions=2,
+                verified=CoverageDimension(
+                    total=2,
+                    has_failures=True,
+                    failing_labels={"A"},
+                    immediate_direct_by_label={"B": 1.0},
                 ),
             ),
         )
 
         data = collect_coverage(fed, config=None)
         by_name = {row["associate"]: row for row in data["integrations"]}
-        assert by_name["library"]["verified_covered"] >= 1  # union covered
+        assert by_name["library"]["verified_covered"] >= 1  # B's pass reads covered
         assert by_name["library"]["has_failures"] is True
         assert data["integration_total"]["has_failures"] is True
 
@@ -760,12 +814,15 @@ class TestSummaryIntegrations:
         assert "failing test result" in md
 
 
-class TestTestedAndPassingUnion:
-    """Validates REQ-d00215-B: lcov_tested credit counts toward headline passing score."""
+# Verifies: REQ-d00258-N
+class TestLineCoverageDoesNotCreditPassing:
+    """The headline passing score counts what the declared tests returned;
+    line-coverage credit reaches it from nowhere (REQ-d00254-B)."""
 
-    def test_lcov_only_req_contributes_to_passing(self):
-        """A requirement with only lcov_tested credit (no verified) contributes
-        to passing_assertions."""
+    def test_lcov_only_req_does_not_contribute_to_passing(self):
+        """A requirement with only lcov_tested credit (no verified) adds
+        nothing to passing_assertions and is not counted among the
+        requirements with passing coverage."""
         from elspais.graph.metrics import CoverageDimension
 
         graph = _make_graph()
@@ -773,25 +830,25 @@ class TestTestedAndPassingUnion:
         # Set rollup with lcov_tested but NO verified credit
         rm = RollupMetrics(
             total_assertions=1,
-            verified=CoverageDimension(total=1, direct=0.0, indirect=0.0),
+            verified=CoverageDimension(total=1),
             lcov_tested=CoverageDimension(
                 total=1,
-                direct=1.0,
-                indirect=1.0,
-                direct_labels={"A"},
-                indirect_labels={"A"},
-                direct_pct_by_label={"A": 1.0},
-                indirect_pct_by_label={"A": 1.0},
+                immediate_direct_by_label={"A": 1.0},
             ),
         )
         req.set_metric("rollup_metrics", rm)
+        # The guard only guards if the lcov credit is REAL: an empty
+        # lcov_tested would pass whether or not the code folded line coverage
+        # into Passing.
+        assert rm.lcov_tested.covered == 1.0
+        assert rm.verified.covered == 0.0
 
         data = collect_coverage(graph)
         dev = next(lv for lv in data["levels"] if lv["level"] == "DEV")
-        assert (
-            dev["passing_assertions"] > 0
-        ), "lcov_tested credit must count toward headline passing"
-        assert dev["with_passing"] == 1
+        assert dev["passing_total_covered"] == 0, (
+            "lcov_tested credit must not count toward headline passing"
+        )
+        assert dev["with_passing"] == 0
 
 
 class TestFreshTargetsWiring:
@@ -1132,15 +1189,16 @@ class TestSummaryCarriedFootnote:
 
 
 # ===========================================================================
-# Verifies: REQ-d00258-A, REQ-d00258-B, REQ-d00258-C
+# Verifies: REQ-d00258-A, REQ-d00258-K, REQ-d00258-C
 # ===========================================================================
 
 
 class TestSummaryFooting:
-    """Verifies REQ-d00258-A/B/C: shared aggregation, generous footing, and
-    the Implemented/Tested/Passing vocabulary (no "Validated")."""
+    """Verifies REQ-d00258-A/K/C: shared aggregation, the per-*Assertion*
+    total as headline, and the Implemented/Tested/Passing vocabulary (no
+    "Validated")."""
 
-    def test_tested_and_passing_use_generous_footing(self, canonical_graph, canonical_config):
+    def test_tested_and_passing_headline_the_total(self, canonical_graph, canonical_config):
         from elspais.graph.aggregation import collect_coverage
 
         data = collect_coverage(canonical_graph, canonical_config)
@@ -1148,18 +1206,166 @@ class TestSummaryFooting:
 
         agg = {lv.level: lv for lv in aggregate_by_level(canonical_graph, canonical_config)}
         for lv in data["levels"]:
-            assert lv["tested_assertions"] == pytest.approx(
-                round(agg[lv["level"]].tested.covered, 3)
+            assert lv["tested_total_covered"] == pytest.approx(
+                round(agg[lv["level"]].tested.total_covered, 3)
             )
-            assert lv["passing_assertions"] == pytest.approx(
-                round(agg[lv["level"]].passing.covered, 3)
+            assert lv["passing_total_covered"] == pytest.approx(
+                round(agg[lv["level"]].passing.total_covered, 3)
             )
             assert "validated_assertions" not in lv
 
-    def test_text_render_uses_tested_label_and_marker(self, canonical_graph, canonical_config):
+    def test_text_render_uses_tested_label(self, canonical_graph, canonical_config):
         from elspais.commands.summary import _render_text
         from elspais.graph.aggregation import collect_coverage
 
         text = _render_text(collect_coverage(canonical_graph, canonical_config))
         assert "Validated" not in text
         assert "Tested:" in text
+
+
+# Verifies: REQ-d00258-A, REQ-d00258-J
+class TestMeasuresArePublished:
+    """REQ-d00258-J retires the `~` caveat marker: a surface names the
+    measures behind its headline instead of flagging that one is partly
+    another."""
+
+    def test_no_caveat_marker_anywhere_in_the_output(self, canonical_graph, canonical_config):
+        out = _render(collect_coverage(canonical_graph, canonical_config), "text")
+        assert "~" not in out
+
+    def test_each_dimension_shows_the_measures_behind_its_total(
+        self, canonical_graph, canonical_config
+    ):
+        out = _render(collect_coverage(canonical_graph, canonical_config), "text")
+        # One line per dimension carries the total, then the four measures.
+        assert "Implemented:" in out
+        for word in ("direct", "indirect", "conducted"):
+            assert word in out
+
+    # Verifies: REQ-d00069-N, REQ-d00258-A, REQ-d00258-J
+    def test_headline_reads_the_total_not_the_legacy_blended_footing(self):
+        """A discriminating fixture where the legacy blended footings and the
+        REQ-d00069-N total genuinely disagree: *Assertion* A carries partial
+        LOCAL evidence (0.6, e.g. a partially-verified journey attached here)
+        AND a fully-finished conducted refinement (1.0). The legacy footings
+        AVERAGE the two into 0.8 (`direct_pct_by_label`/`indirect_pct_by_label`,
+        as the real annotator's per-assertion mean would); the total takes
+        the GREATEST of the four measures (1.0) -- a finished refinement is
+        not capped by averaging it against a weaker local citation.
+        `_set_rollup`-based fixtures elsewhere in this file cannot produce
+        this shape: they are direct-only, so total trivially equals the
+        legacy figure and a reverted headline would pass unnoticed."""
+        from elspais.graph.metrics import CoverageDimension
+
+        graph = _make_graph()
+        node = _add_requirement(graph, "REQ-p00001", "Partial+Refined", level="prd")
+        node.set_metric(
+            "rollup_metrics",
+            RollupMetrics(
+                total_assertions=1,
+                implemented=CoverageDimension(
+                    total=1,
+                    immediate_direct_by_label={"A": 0.6},
+                    rolled_direct_by_label={"A": 1.0},
+                ),
+            ),
+        )
+
+        dim = node.get_metric("rollup_metrics").implemented
+        # Confirm the fixture actually produces the discriminating shape
+        # before trusting an assertion built on it.
+        assert dim.immediate_direct == pytest.approx(0.6)
+        assert dim.rolled_direct == pytest.approx(1.0)
+        assert dim.covered == pytest.approx(1.0)  # REQ-d00069-N total
+
+        data = collect_coverage(graph)
+        lv = next(lv for lv in data["levels"] if lv["level"] == "PRD")
+        assert lv["implemented_total_covered"] == pytest.approx(1.0)
+
+        out = _render(data, "text")
+        implemented_line = next(ln for ln in out.splitlines() if "Implemented:" in ln)
+        assert "1/1 (100" in implemented_line
+        assert "0.8/1" not in implemented_line
+        assert "80.0%" not in implemented_line
+
+
+class TestTestedBreakdown:
+    """REQ-d00258-O: the summary reports Tested with its three-way breakdown."""
+
+    def _graph_with_breakdown(self) -> TraceGraph:
+        """One PRD requirement: A passed, B failed, C awaiting a result."""
+        from elspais.graph.metrics import CoverageDimension
+
+        graph = _make_graph()
+        node = _add_requirement(graph, "REQ-p00001", "Breakdown Req", level="prd")
+
+        def dim(fractions, **kwargs):
+            return CoverageDimension(
+                total=3,
+                # REQ-d00069-M: this fixture models only direct, immediate
+                # evidence (a citation named the *Assertion* directly), so the
+                # REQ-d00069-N total (what the CLI now headlines) equals the
+                # legacy direct/indirect figures set above.
+                immediate_direct_by_label=dict(fractions),
+                **kwargs,
+            )
+
+        node.set_metric(
+            "rollup_metrics",
+            RollupMetrics(
+                total_assertions=3,
+                implemented=dim({"A": 1.0, "B": 1.0, "C": 1.0}),
+                tested=dim({"A": 1.0, "B": 1.0, "C": 1.0}),
+                verified=dim(
+                    {"A": 1.0, "B": 0.0, "C": 0.0},
+                    has_failures=True,
+                    failing_labels={"B"},
+                ),
+            ),
+        )
+        return graph
+
+    # Verifies: REQ-d00258-O
+    def test_text_tested_line_carries_the_breakdown(self):
+        """The breakdown qualifies Tested, so it rides on the Tested line and
+        introduces no coverage term of its own."""
+        data = collect_coverage(self._graph_with_breakdown())
+        output = _render(data, "text")
+
+        tested_line = next(ln for ln in output.splitlines() if "Tested:" in ln)
+        assert "[1 passed, 1 failed, 1 awaiting a result]" in tested_line
+        # REQ-d00258-K: no new coverage display term appears alongside it.
+        assert "Awaiting:" not in output
+        assert "Failed:" not in output
+
+    # Verifies: REQ-d00258-O
+    def test_text_breakdown_silent_when_nothing_is_tested(self):
+        """There is no breakdown of an empty set: a level with no tested
+        assertion says nothing rather than reporting three zeros."""
+        graph = _make_graph()
+        node = _add_requirement(graph, "REQ-p00001", "Untested", level="prd")
+        _set_rollup(node, total=2, covered=2, tested=0, validated=0)
+
+        output = _render(collect_coverage(graph), "text")
+
+        tested_line = next(ln for ln in output.splitlines() if "Tested:" in ln)
+        assert "awaiting" not in tested_line
+
+    # Verifies: REQ-d00258-O
+    def test_markdown_tested_cell_carries_the_breakdown(self):
+        data = collect_coverage(self._graph_with_breakdown())
+        output = _render(data, "markdown")
+
+        assert "[1 passed, 1 failed, 1 awaiting a result]" in output
+
+    # Verifies: REQ-d00258-O
+    def test_csv_columns_carry_the_breakdown(self):
+        data = collect_coverage(self._graph_with_breakdown())
+        output = _render(data, "csv")
+
+        row = next(csv.DictReader(io.StringIO(output)))
+        assert row["Tested Passed"] == "1"
+        assert row["Tested Failed"] == "1"
+        assert row["Tested Awaiting"] == "1"
+        # The three account for every tested assertion the Tested column counts.
+        assert float(row["Tested"]) == 3.0

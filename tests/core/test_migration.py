@@ -1,69 +1,43 @@
 """Tests for version-gated config migration."""
 
-import copy
-
-
-# Verifies: REQ-d00212-A
-def test_v1_patterns_migrated_to_v2():
-    """Legacy [patterns] config should be migrated to [id-patterns]."""
-    from elspais.config import _migrate_legacy_patterns
-
-    v1_config = {
-        "patterns": {
-            "prefix": "PROJ",
-            "types": {
-                "prd": {"level": 1, "id": "p"},
-                "ops": {"level": 2, "id": "o"},
-            },
-            "id_template": "{prefix}-{type}{id}",
-            "id_format": {"style": "numeric", "digits": 5, "leading_zeros": True},
-        },
-    }
-
-    result = _migrate_legacy_patterns(v1_config)
-    assert "id-patterns" in result
-    assert "levels" in result
-    assert result["levels"]["prd"]["rank"] == 1
+import pytest
 
 
 # Verifies: REQ-d00207-B
-def test_v2_config_skips_migration():
-    """v2+ configs should not be migrated."""
-    from elspais.config import _migrate_legacy_patterns
+def test_pre_v2_patterns_section_is_refused(tmp_path):
+    """A `[patterns]` section is reported, not quietly ignored.
 
-    v2_config = {"version": 2, "id-patterns": {"canonical": "custom"}}
-    result = _migrate_legacy_patterns(v2_config)
-    assert result["id-patterns"]["canonical"] == "custom"
+    It was how identifiers were declared before v2. Nothing reads it now,
+    so accepting one would load a configuration whose identifier settings
+    silently do not happen -- the reader would get the defaults, and the
+    spelling the author configured would simply not occur.
+    """
+    from elspais.config import load_config
+
+    config = tmp_path / ".elspais.toml"
+    config.write_text(
+        'version = 3\n[project]\nname = "p"\nnamespace = "REQ"\n\n'
+        '[patterns]\nprefix = "PROJ"\n[patterns.types]\nprd = { level = 1, id = "p" }\n',
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match=r"\[patterns\]"):
+        load_config(config)
 
 
-# Verifies: REQ-d00212-F
-def test_migration_produces_valid_schema():
-    """Migrated config must pass Pydantic validation."""
-    from elspais.config import _merge_configs, _migrate_legacy_patterns, config_defaults
-    from elspais.config.schema import ElspaisConfig
+# Verifies: REQ-d00212-N
+def test_v3_terms_severity_is_migrated(tmp_path):
+    """The one live migration still fires: flat terms severity nests itself."""
+    from elspais.config import load_config
 
-    v1_config = {
-        "patterns": {
-            "prefix": "TEST",
-            "types": {
-                "prd": {"level": 1, "id": "p"},
-                "ops": {"level": 2, "id": "o"},
-                "dev": {"level": 3, "id": "d"},
-            },
-            "id_template": "{prefix}-{type}{id}",
-            "id_format": {"style": "numeric", "digits": 5, "leading_zeros": True},
-        },
-    }
+    config = tmp_path / ".elspais.toml"
+    config.write_text(
+        'version = 3\n[project]\nname = "p"\nnamespace = "REQ"\n\n'
+        '[terms]\nduplicate_severity = "warning"\n',
+        encoding="utf-8",
+    )
 
-    defaults = copy.deepcopy(config_defaults())
-    # Remove version so migration treats this as a v1 config
-    defaults.pop("version", None)
-    merged = _merge_configs(defaults, v1_config)
-    migrated = _migrate_legacy_patterns(merged)
+    loaded = load_config(config)
 
-    # Remove 'patterns' key (legacy, not in schema)
-    migrated.pop("patterns", None)
-
-    # Should validate cleanly
-    config = ElspaisConfig.model_validate(migrated, by_alias=True)
-    assert config.project.namespace == "TEST"
+    assert loaded["terms"]["severity"]["duplicate"] == "warning"
+    assert "duplicate_severity" not in loaded["terms"]

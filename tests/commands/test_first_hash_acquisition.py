@@ -237,9 +237,9 @@ class TestFirstHashAcquisition:
         finally:
             os.chdir(old_cwd)
 
-        assert (
-            "hash_mismatch" in reasons
-        ), f"An absent stored hash must register as fixable; got reasons={reasons}"
+        assert "hash_mismatch" in reasons, (
+            f"An absent stored hash must register as fixable; got reasons={reasons}"
+        )
 
     def test_bulk_fix_dry_run_reports_requirement_with_no_stored_hash(self, tmp_path, capsys):
         """Bulk fix --dry-run must name a hashless requirement in its
@@ -256,9 +256,9 @@ class TestFirstHashAcquisition:
         after = spec_file.read_bytes()
 
         assert after == before, "Dry run must not modify the spec file"
-        assert (
-            "REQ-d00001" in out
-        ), f"Bulk dry-run must report the hashless requirement; output was:\n{out}"
+        assert "REQ-d00001" in out, (
+            f"Bulk dry-run must report the hashless requirement; output was:\n{out}"
+        )
 
     def test_bulk_fix_dry_run_shows_hash_value_that_will_be_written(self, tmp_path, capsys):
         """Bulk fix --dry-run must show the hash value it is about to
@@ -366,9 +366,9 @@ class TestFirstHashAcquisition:
         content = spec_file.read_text()
         end_line = _end_line(content)
         end_match = HASH_RE.search(end_line)
-        assert (
-            end_match is not None
-        ), f"End marker must carry a computed hash after fix; got {end_line!r}"
+        assert end_match is not None, (
+            f"End marker must carry a computed hash after fix; got {end_line!r}"
+        )
         stamped = end_match.group(1)
 
         changelog_hashes = [
@@ -378,9 +378,9 @@ class TestFirstHashAcquisition:
             for m in [re.search(r"\|\s*([0-9a-fA-F]{8}|N/A)\s*\|", line)]
             if m
         ]
-        assert (
-            changelog_hashes
-        ), f"Expected a Changelog entry after first hash acquisition; content:\n{content}"
+        assert changelog_hashes, (
+            f"Expected a Changelog entry after first hash acquisition; content:\n{content}"
+        )
         assert stamped in changelog_hashes, (
             "Changelog entry must be anchored to the newly acquired hash "
             f"{stamped!r}; changelog carried {changelog_hashes!r}"

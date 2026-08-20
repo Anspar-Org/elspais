@@ -3,6 +3,7 @@
 
 Validates REQ-o00063: file mutation operations with undo support.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -10,16 +11,21 @@ from pathlib import Path
 import pytest
 
 from elspais.graph.builder import GraphBuilder, TraceGraph
-from elspais.graph.GraphNode import GraphNode, NodeKind
+from elspais.graph.GraphNode import GraphNode, NodeKind, make_file_id
 from elspais.graph.parsers import ParsedContent
 from elspais.graph.relations import EdgeKind
+from tests.core.graph_test_helpers import grammar_for
+
+# The namespace these graphs are built with; structural node ids carry it.
+NAMESPACE = "REQ"
 
 
-def make_file_node(file_id: str) -> GraphNode:
-    """Create a FILE node."""
+def make_file_node(relative_path: str) -> GraphNode:
+    """Create a FILE node for a repo-relative path."""
+    file_id = make_file_id(NAMESPACE, relative_path)
     node = GraphNode(file_id, NodeKind.FILE, label=file_id)
     node.set_field("file_type", "SPEC")
-    node.set_field("relative_path", file_id.replace("file:", ""))
+    node.set_field("relative_path", relative_path)
     return node
 
 
@@ -53,20 +59,20 @@ def build_two_file_graph() -> TraceGraph:
     """Build graph with two FILE nodes, REQ in first.
 
     Structure:
-        FILE: file:spec/main.md
+        FILE: file:REQ:spec/main.md
           +-- CONTAINS --> REQ-p00001 "Test Req"
-        FILE: file:spec/other.md
+        FILE: file:REQ:spec/other.md
           (empty)
     """
-    builder = GraphBuilder()
+    builder = GraphBuilder(namespace=NAMESPACE, resolver=grammar_for(NAMESPACE))
     builder.add_parsed_content(make_req("REQ-p00001", "Test Req"))
     graph = builder.build()
 
     # Create FILE nodes and wire CONTAINS
-    file1 = make_file_node("file:spec/main.md")
-    file2 = make_file_node("file:spec/other.md")
-    graph._index["file:spec/main.md"] = file1
-    graph._index["file:spec/other.md"] = file2
+    file1 = make_file_node("spec/main.md")
+    file2 = make_file_node("spec/other.md")
+    graph._index[make_file_id(NAMESPACE, "spec/main.md")] = file1
+    graph._index[make_file_id(NAMESPACE, "spec/other.md")] = file2
     graph._roots.append(file1)
     graph._roots.append(file2)
 
@@ -90,27 +96,27 @@ class TestMoveNodeToFile:
         graph = build_two_file_graph()
 
         req = graph._index["REQ-p00001"]
-        assert req.file_node().id == "file:spec/main.md"
+        assert req.file_node().id == make_file_id(NAMESPACE, "spec/main.md")
 
-        graph.move_node_to_file("REQ-p00001", "file:spec/other.md")
+        graph.move_node_to_file("REQ-p00001", make_file_id(NAMESPACE, "spec/other.md"))
 
-        assert req.file_node().id == "file:spec/other.md"
+        assert req.file_node().id == make_file_id(NAMESPACE, "spec/other.md")
 
     def test_REQ_o00063_A_move_requirement_undo(self):
         """REQ-o00063-A: Undo restores requirement to original file with render_order."""
         graph = build_two_file_graph()
 
         req = graph._index["REQ-p00001"]
-        assert req.file_node().id == "file:spec/main.md"
+        assert req.file_node().id == make_file_id(NAMESPACE, "spec/main.md")
 
-        graph.move_node_to_file("REQ-p00001", "file:spec/other.md")
-        assert req.file_node().id == "file:spec/other.md"
+        graph.move_node_to_file("REQ-p00001", make_file_id(NAMESPACE, "spec/other.md"))
+        assert req.file_node().id == make_file_id(NAMESPACE, "spec/other.md")
 
         graph.undo_last()
 
-        assert req.file_node().id == "file:spec/main.md"
+        assert req.file_node().id == make_file_id(NAMESPACE, "spec/main.md")
         # Verify render_order is restored on the CONTAINS edge
-        file1 = graph._index["file:spec/main.md"]
+        file1 = graph._index[make_file_id(NAMESPACE, "spec/main.md")]
         contains_edges = [
             e
             for e in file1.iter_outgoing_edges()
@@ -128,20 +134,35 @@ class TestMoveNodeToFile:
         with pytest.raises(ValueError):
             graph.move_node_to_file("REQ-p00001", "REQ-p00001")
 
+    # Verifies: REQ-o00062-V
+    def test_move_refuses_non_file_level_content(self):
+        """An ASSERTION is rendered by its requirement, not placed in a file;
+        moving one between files would detach it from that structure."""
+        graph = build_two_file_graph()
+        entry = graph.add_assertion("REQ-p00001", "SHALL hold")
+        assertion_id = entry.target_id
+
+        with pytest.raises(ValueError, match="Cannot move a assertion node"):
+            graph.move_node_to_file(assertion_id, make_file_id(NAMESPACE, "spec/other.md"))
+
+        # Still structured under its requirement, not the target file
+        parent = graph.find_by_id("REQ-p00001")
+        assert parent.has_child(graph.find_by_id(assertion_id))
+
     # Verifies: REQ-o00063-A
     def test_move_orphan_raises(self):
         """ValueError if node has no current FILE parent."""
-        builder = GraphBuilder()
+        builder = GraphBuilder(namespace=NAMESPACE, resolver=grammar_for(NAMESPACE))
         builder.add_parsed_content(make_req("REQ-p00001", "Orphan Req"))
         graph = builder.build()
 
         # Add a target FILE node but don't wire the req to any file
-        file2 = make_file_node("file:spec/other.md")
-        graph._index["file:spec/other.md"] = file2
+        file2 = make_file_node("spec/other.md")
+        graph._index[make_file_id(NAMESPACE, "spec/other.md")] = file2
         graph._roots.append(file2)
 
         with pytest.raises(ValueError):
-            graph.move_node_to_file("REQ-p00001", "file:spec/other.md")
+            graph.move_node_to_file("REQ-p00001", make_file_id(NAMESPACE, "spec/other.md"))
 
     # Verifies: REQ-o00062-E
     def test_move_logs_mutation(self):
@@ -149,13 +170,13 @@ class TestMoveNodeToFile:
         graph = build_two_file_graph()
         initial_count = len(graph.mutation_log)
 
-        entry = graph.move_node_to_file("REQ-p00001", "file:spec/other.md")
+        entry = graph.move_node_to_file("REQ-p00001", make_file_id(NAMESPACE, "spec/other.md"))
 
         assert len(graph.mutation_log) == initial_count + 1
         assert entry.operation == "move_node_to_file"
         assert entry.target_id == "REQ-p00001"
-        assert entry.before_state["file_id"] == "file:spec/main.md"
-        assert entry.after_state["file_id"] == "file:spec/other.md"
+        assert entry.before_state["file_id"] == make_file_id(NAMESPACE, "spec/main.md")
+        assert entry.after_state["file_id"] == make_file_id(NAMESPACE, "spec/other.md")
 
     # Verifies: REQ-d00128-E
     def test_move_assigns_render_order_at_end(self):
@@ -163,18 +184,18 @@ class TestMoveNodeToFile:
         graph = build_two_file_graph()
 
         # Add a second requirement to the target file
-        builder2 = GraphBuilder()
+        builder2 = GraphBuilder(namespace=NAMESPACE, resolver=grammar_for(NAMESPACE))
         builder2.add_parsed_content(make_req("REQ-p00002", "Existing Req"))
         graph2 = builder2.build()
         req2 = graph2.find_by_id("REQ-p00002")
         graph._index["REQ-p00002"] = req2
 
-        file2 = graph._index["file:spec/other.md"]
+        file2 = graph._index[make_file_id(NAMESPACE, "spec/other.md")]
         edge2 = file2.link(req2, EdgeKind.CONTAINS)
         edge2.metadata["render_order"] = 0.0
 
         # Move REQ-p00001 to the target file
-        graph.move_node_to_file("REQ-p00001", "file:spec/other.md")
+        graph.move_node_to_file("REQ-p00001", make_file_id(NAMESPACE, "spec/other.md"))
 
         # Find the CONTAINS edge for the moved requirement
         moved_edges = [
@@ -197,13 +218,13 @@ class TestRenameFile:
         """REQ-o00063-A: Rename updates FILE node ID, index, and path fields."""
         graph = build_two_file_graph()
 
-        graph.rename_file("file:spec/main.md", "spec/renamed.md")
+        graph.rename_file(make_file_id(NAMESPACE, "spec/main.md"), "spec/renamed.md")
 
         # New ID is findable
-        node = graph.find_by_id("file:spec/renamed.md")
+        node = graph.find_by_id(make_file_id(NAMESPACE, "spec/renamed.md"))
         assert node is not None
         # Old ID is gone
-        assert graph.find_by_id("file:spec/main.md") is None
+        assert graph.find_by_id(make_file_id(NAMESPACE, "spec/main.md")) is None
         # Path field updated
         assert node.get_field("relative_path") == "spec/renamed.md"
 
@@ -211,16 +232,16 @@ class TestRenameFile:
         """REQ-o00063-A: Undo restores original file ID and paths."""
         graph = build_two_file_graph()
 
-        graph.rename_file("file:spec/main.md", "spec/renamed.md")
-        assert graph.find_by_id("file:spec/renamed.md") is not None
+        graph.rename_file(make_file_id(NAMESPACE, "spec/main.md"), "spec/renamed.md")
+        assert graph.find_by_id(make_file_id(NAMESPACE, "spec/renamed.md")) is not None
 
         graph.undo_last()
 
         # Original ID is back
-        node = graph.find_by_id("file:spec/main.md")
+        node = graph.find_by_id(make_file_id(NAMESPACE, "spec/main.md"))
         assert node is not None
         # Renamed ID is gone
-        assert graph.find_by_id("file:spec/renamed.md") is None
+        assert graph.find_by_id(make_file_id(NAMESPACE, "spec/renamed.md")) is None
         # Path field restored
         assert node.get_field("relative_path") == "spec/main.md"
 
@@ -238,14 +259,14 @@ class TestRenameFile:
         graph = build_two_file_graph()
         initial_count = len(graph.mutation_log)
 
-        entry = graph.rename_file("file:spec/main.md", "spec/renamed.md")
+        entry = graph.rename_file(make_file_id(NAMESPACE, "spec/main.md"), "spec/renamed.md")
 
         assert len(graph.mutation_log) == initial_count + 1
         assert entry.operation == "rename_file"
-        assert entry.target_id == "file:spec/main.md"
-        assert entry.before_state["id"] == "file:spec/main.md"
+        assert entry.target_id == make_file_id(NAMESPACE, "spec/main.md")
+        assert entry.before_state["id"] == make_file_id(NAMESPACE, "spec/main.md")
         assert entry.before_state["relative_path"] == "spec/main.md"
-        assert entry.after_state["id"] == "file:spec/renamed.md"
+        assert entry.after_state["id"] == make_file_id(NAMESPACE, "spec/renamed.md")
         assert entry.after_state["relative_path"] == "spec/renamed.md"
 
     # Verifies: REQ-o00063-A
@@ -254,12 +275,12 @@ class TestRenameFile:
         graph = build_two_file_graph()
 
         graph.rename_file(
-            "file:spec/main.md",
+            make_file_id(NAMESPACE, "spec/main.md"),
             "spec/renamed.md",
             repo_root=Path("/repo"),
         )
 
-        node = graph.find_by_id("file:spec/renamed.md")
+        node = graph.find_by_id(make_file_id(NAMESPACE, "spec/renamed.md"))
         assert node is not None
         assert node.get_field("absolute_path") == str(Path("/repo") / "spec/renamed.md")
 
@@ -269,4 +290,4 @@ class TestRenameFile:
         graph = build_two_file_graph()
 
         with pytest.raises(KeyError):
-            graph.rename_file("file:spec/nonexistent.md", "spec/renamed.md")
+            graph.rename_file(make_file_id(NAMESPACE, "spec/nonexistent.md"), "spec/renamed.md")

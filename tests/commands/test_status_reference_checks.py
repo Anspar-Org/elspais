@@ -5,6 +5,7 @@ Validates REQ-p00002-A: status-based reference checking detects CODE or TEST
 nodes that reference requirements with retired, provisional, or aspirational
 status roles, with configurable severity and exclude_status support.
 """
+
 from __future__ import annotations
 
 from pathlib import Path

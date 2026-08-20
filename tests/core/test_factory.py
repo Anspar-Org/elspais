@@ -14,6 +14,7 @@ import pytest
 
 from elspais.graph import NodeKind
 from elspais.graph.factory import build_graph
+from elspais.graph.GraphNode import make_file_id
 from elspais.graph.relations import EdgeKind
 
 
@@ -78,9 +79,9 @@ directories = ["src"]
         )
 
         code_nodes = list(graph.nodes_by_kind(NodeKind.CODE))
-        assert (
-            len(code_nodes) > 0
-        ), "[directories].code should produce CODE nodes even without scan_patterns"
+        assert len(code_nodes) > 0, (
+            "[directories].code should produce CODE nodes even without scan_patterns"
+        )
         # Verify the code node references our requirement
         code_ids = [n.id for n in code_nodes]
         has_ref = any("main.py" in cid for cid in code_ids)
@@ -204,12 +205,11 @@ skip_dirs = ["vendor"]
         app_nodes = [cid for cid in code_ids if "app.py" in cid]
 
         assert len(vendor_nodes) == 0, (
-            f"Files in ignored 'vendor' dir should NOT produce CODE nodes, "
-            f"but got: {vendor_nodes}"
+            f"Files in ignored 'vendor' dir should NOT produce CODE nodes, but got: {vendor_nodes}"
         )
-        assert (
-            len(app_nodes) > 0
-        ), f"Non-ignored src/app.py should produce CODE node, got: {code_ids}"
+        assert len(app_nodes) > 0, (
+            f"Non-ignored src/app.py should produce CODE node, got: {code_ids}"
+        )
 
     def test_REQ_d00054_A_code_directories_explicit_src_scanned(self, tmp_path: Path) -> None:
         """When scanning.code.directories is explicitly set to ["src"],
@@ -327,7 +327,7 @@ class TestDefaultCodePatternFileTypes:
         graph = _build_graph_for_annotated_file(tmp_path, f"infra.{ext}")
 
         # REQ-d00128-A: FILE node with file:<repo-relative-path> ID
-        file_node = graph.find_by_id(f"file:src/infra.{ext}")
+        file_node = graph.find_by_id(make_file_id("REQ", f"src/infra.{ext}"))
         assert file_node is not None, f".{ext} file should produce a FILE node"
         assert file_node.get_field("relative_path") == f"src/infra.{ext}"
 
@@ -350,9 +350,9 @@ class TestDefaultCodePatternFileTypes:
         implements_edges = [
             e for e in code_node.iter_incoming_edges() if e.kind == EdgeKind.IMPLEMENTS
         ]
-        assert (
-            len(implements_edges) == 1
-        ), f".{ext} annotation should produce one IMPLEMENTS edge, got {len(implements_edges)}"
+        assert len(implements_edges) == 1, (
+            f".{ext} annotation should produce one IMPLEMENTS edge, got {len(implements_edges)}"
+        )
         implementing_parents = {
             p.id for p in code_node.iter_parents(edge_kinds={EdgeKind.IMPLEMENTS})
         }
@@ -444,10 +444,10 @@ A. The system SHALL perform action X.
 
         rollup = req_node.get_metric("rollup_metrics")
         assert rollup is not None, "rollup_metrics should be set after build_graph()"
-        referenced_pct = rollup.implemented.indirect_pct
-        assert (
-            referenced_pct == 100.0
-        ), f"Expected 100% coverage (1/1 assertion covered), got {referenced_pct}"
+        referenced_pct = rollup.implemented.covered_pct
+        assert referenced_pct == 100.0, (
+            f"Expected 100% coverage (1/1 assertion covered), got {referenced_pct}"
+        )
 
     def test_REQ_d00055_D_build_graph_sets_rollup_metrics(self, tmp_path: Path) -> None:
         """After build_graph(), requirement nodes have rollup_metrics metric set.
@@ -518,8 +518,8 @@ B. The system SHALL do B.
         assert rollup is not None, "rollup_metrics should be set after build_graph()"
         assert isinstance(rollup, RollupMetrics), f"Expected RollupMetrics, got {type(rollup)}"
         assert rollup.total_assertions == 2
-        assert rollup.implemented.indirect == 1
-        assert rollup.implemented.indirect_pct == 50.0
+        assert rollup.implemented.covered == 1
+        assert rollup.implemented.covered_pct == 50.0
 
     def test_REQ_o00061_B_project_summary_nonzero_coverage_after_build_graph(
         self, tmp_path: Path
@@ -594,9 +594,9 @@ A. The system SHALL do A.
             "After build_graph() with annotate_coverage(), the requirement with "
             "100% coverage should appear in full_coverage count"
         )
-        assert (
-            coverage_stats["no_coverage"] == 0
-        ), "The requirement should NOT be in no_coverage since it has code implementing it"
+        assert coverage_stats["no_coverage"] == 0, (
+            "The requirement should NOT be in no_coverage since it has code implementing it"
+        )
 
 
 class TestMultiRoleFileScanning:
@@ -635,7 +635,7 @@ file_patterns = ["test_*.py"]
         test_file = tmp_path / "tests" / "test_dual.py"
         test_file.parent.mkdir(parents=True, exist_ok=True)
         test_file.write_text(
-            "# Implements: REQ-p00001\n" "def test_REQ_p00001_something():\n" "    assert True\n",
+            "# Implements: REQ-p00001\ndef test_REQ_p00001_something():\n    assert True\n",
             encoding="utf-8",
         )
 
@@ -647,9 +647,9 @@ file_patterns = ["test_*.py"]
 
         # Find the FILE node for test_dual.py
         file_nodes = [n for n in graph.iter_roots(NodeKind.FILE) if "test_dual.py" in n.id]
-        assert (
-            len(file_nodes) == 1
-        ), f"Expected exactly 1 FILE node for test_dual.py, got {len(file_nodes)}"
+        assert len(file_nodes) == 1, (
+            f"Expected exactly 1 FILE node for test_dual.py, got {len(file_nodes)}"
+        )
         file_node = file_nodes[0]
 
         # Check file_types list includes both CODE and TEST (stored as string values)
@@ -660,9 +660,9 @@ file_patterns = ["test_*.py"]
 
         # Check both CODE and TEST content children exist
         child_kinds = {child.kind for child in file_node.iter_children()}
-        assert (
-            NodeKind.CODE in child_kinds
-        ), f"Expected CODE child from # Implements:, got kinds: {child_kinds}"
-        assert (
-            NodeKind.TEST in child_kinds
-        ), f"Expected TEST child from test function, got kinds: {child_kinds}"
+        assert NodeKind.CODE in child_kinds, (
+            f"Expected CODE child from # Implements:, got kinds: {child_kinds}"
+        )
+        assert NodeKind.TEST in child_kinds, (
+            f"Expected TEST child from test function, got kinds: {child_kinds}"
+        )

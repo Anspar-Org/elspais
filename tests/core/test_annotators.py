@@ -3,7 +3,6 @@
 # Validates REQ-o00051-E, REQ-o00051-F
 # Validates REQ-d00050-A, REQ-d00050-B, REQ-d00050-C, REQ-d00050-D, REQ-d00050-E
 # Validates REQ-d00051-A, REQ-d00051-B, REQ-d00051-C, REQ-d00051-D
-# Validates REQ-d00051-E, REQ-d00051-F
 # Validates REQ-d00055-A, REQ-d00055-B, REQ-d00055-C, REQ-d00055-D, REQ-d00055-E
 """Tests for Graph Annotators."""
 
@@ -17,7 +16,6 @@ from elspais.graph.annotators import (
     count_by_level,
     count_by_repo,
     count_implementation_files,
-    get_implementation_status,
 )
 from elspais.graph.GraphNode import GraphNode
 from elspais.utilities.git import GitChangeInfo
@@ -393,103 +391,6 @@ class TestCollectTopics:
 
         assert "authentication" in topics
         assert "billing" in topics
-
-
-class TestGetImplementationStatus:
-    """Tests for get_implementation_status function."""
-
-    # Verifies: REQ-d00051-E
-    def test_full_coverage(self):
-        """Returns Full when coverage is 100%."""
-        from elspais.graph.metrics import CoverageDimension, RollupMetrics
-
-        node = GraphNode(id="REQ-p00001", kind=NodeKind.REQUIREMENT)
-        node.set_metric(
-            "rollup_metrics",
-            RollupMetrics(
-                total_assertions=2,
-                implemented=CoverageDimension(total=2, direct=2, indirect=2),
-            ),
-        )
-
-        status = get_implementation_status(node)
-
-        assert status == "Full"
-
-    # Verifies: REQ-d00051-E
-    def test_partial_coverage(self):
-        """Returns Partial when coverage is between 0 and 100."""
-        from elspais.graph.metrics import CoverageDimension, RollupMetrics
-
-        node = GraphNode(id="REQ-p00001", kind=NodeKind.REQUIREMENT)
-        node.set_metric(
-            "rollup_metrics",
-            RollupMetrics(
-                total_assertions=2,
-                implemented=CoverageDimension(total=2, direct=1, indirect=1),
-            ),
-        )
-
-        status = get_implementation_status(node)
-
-        assert status == "Partial"
-
-    # Verifies: REQ-d00051-E
-    def test_unimplemented(self):
-        """Returns Unimplemented when coverage is 0."""
-        node = GraphNode(id="REQ-p00001", kind=NodeKind.REQUIREMENT)
-
-        status = get_implementation_status(node)
-
-        assert status == "Unimplemented"
-
-    # Verifies: REQ-d00051-E
-    def test_defaults_to_unimplemented(self):
-        """Defaults to Unimplemented when no coverage metric."""
-        node = GraphNode(
-            id="REQ-p00001",
-            kind=NodeKind.REQUIREMENT,
-        )
-
-        status = get_implementation_status(node)
-
-        assert status == "Unimplemented"
-
-    # Verifies: REQ-d00051-E
-    def test_boundary_99_is_partial(self):
-        """Coverage of 99% is still Partial, not Full."""
-        from elspais.graph.metrics import CoverageDimension, RollupMetrics
-
-        node = GraphNode(id="REQ-p00001", kind=NodeKind.REQUIREMENT)
-        node.set_metric(
-            "rollup_metrics",
-            RollupMetrics(
-                total_assertions=100,
-                implemented=CoverageDimension(total=100, direct=99, indirect=99),
-            ),
-        )
-
-        status = get_implementation_status(node)
-
-        assert status == "Partial"
-
-    # Verifies: REQ-d00051-E
-    def test_boundary_1_is_partial(self):
-        """Coverage of 1% is Partial, not Unimplemented."""
-        from elspais.graph.metrics import CoverageDimension, RollupMetrics
-
-        node = GraphNode(id="REQ-p00001", kind=NodeKind.REQUIREMENT)
-        node.set_metric(
-            "rollup_metrics",
-            RollupMetrics(
-                total_assertions=100,
-                implemented=CoverageDimension(total=100, direct=1, indirect=1),
-            ),
-        )
-
-        status = get_implementation_status(node)
-
-        assert status == "Partial"
 
 
 class TestAggregateIterationBehavior:

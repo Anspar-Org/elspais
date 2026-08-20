@@ -71,14 +71,7 @@ def test_REQ_d00236_B_python_docstring_not_extracted():
     texts = [t for t, _ in result]
     assert not any("Module-level docstring" in t for t in texts)
 
-    source = (
-        "def bar():\n"
-        '    """First line.\n'
-        "\n"
-        "    Second paragraph.\n"
-        '    """\n'
-        "    pass\n"
-    )
+    source = 'def bar():\n    """First line.\n\n    Second paragraph.\n    """\n    pass\n'
     result = extract_comments(source, ".py")
     texts = [t for t, _ in result]
     assert not any("First line" in t for t in texts)
@@ -113,9 +106,7 @@ def test_REQ_d00236_C_js_block_comment():
 
 
 def test_REQ_d00236_C_js_multiline_block_comment():
-    source = (
-        "const x = 1;\n" "/* first line\n" "   second line\n" "   third line */\n" "const y = 2;\n"
-    )
+    source = "const x = 1;\n/* first line\n   second line\n   third line */\nconst y = 2;\n"
     result = extract_comments(source, ".js")
     texts = [t for t, _ in result]
     assert any("first line" in t and "third line" in t for t in texts)
@@ -202,7 +193,7 @@ def test_REQ_d00236_F_html_comment():
 
 
 def test_REQ_d00236_F_html_multiline_comment():
-    source = "<div>\n" "<!-- first line\n" "     second line -->\n" "</div>\n"
+    source = "<div>\n<!-- first line\n     second line -->\n</div>\n"
     result = extract_comments(source, ".html")
     texts = [t for t, _ in result]
     assert any("first line" in t and "second line" in t for t in texts)
@@ -756,9 +747,9 @@ def test_REQ_d00239_A_scan_terms_method_exists_and_calls_scan_graph():
     from elspais.graph.terms import TermDictionary
 
     # _scan_terms must exist on FederatedGraph
-    assert hasattr(
-        FederatedGraph, "_scan_terms"
-    ), "FederatedGraph._scan_terms() method does not exist yet"
+    assert hasattr(FederatedGraph, "_scan_terms"), (
+        "FederatedGraph._scan_terms() method does not exist yet"
+    )
 
     # Build minimal RepoEntry mocks
     graph_a = _mock_graph({})
@@ -768,16 +759,25 @@ def test_REQ_d00239_A_scan_terms_method_exists_and_calls_scan_graph():
     graph_a._index = {}
     graph_b._index = {}
 
+    # A repository's declared name and its namespace are different
+    # identifiers, and a term's attribution follows the namespace: the
+    # fixture keeps them distinct so a scan reading the wrong one shows.
     entry_a = RepoEntry(
         name="repo-a",
         graph=graph_a,
-        config={"terms": {"markup_styles": ["*"]}},
+        config={
+            "project": {"name": "repo-a", "namespace": "REPOA"},
+            "terms": {"markup_styles": ["*"]},
+        },
         repo_root=Path("/tmp/repo-a"),
     )
     entry_b = RepoEntry(
         name="repo-b",
         graph=graph_b,
-        config={"terms": {"markup_styles": ["**"]}},
+        config={
+            "project": {"name": "repo-b", "namespace": "REPOB"},
+            "terms": {"markup_styles": ["**"]},
+        },
         repo_root=Path("/tmp/repo-b"),
     )
 
@@ -790,8 +790,8 @@ def test_REQ_d00239_A_scan_terms_method_exists_and_calls_scan_graph():
         call_namespaces = {
             call.kwargs.get("namespace") or call.args[2] for call in mock_scan.call_args_list
         }
-        assert "repo-a" in call_namespaces
-        assert "repo-b" in call_namespaces
+        assert "REPOA" in call_namespaces
+        assert "REPOB" in call_namespaces
 
 
 # -- REQ-d00239-B: Per-repo config for markup_styles and exclude_files --------
@@ -871,9 +871,9 @@ def test_REQ_d00239_B_scan_terms_passes_per_repo_config():
     from elspais.graph.terms import TermDictionary
 
     # _scan_terms must exist on FederatedGraph
-    assert hasattr(
-        FederatedGraph, "_scan_terms"
-    ), "FederatedGraph._scan_terms() method does not exist yet"
+    assert hasattr(FederatedGraph, "_scan_terms"), (
+        "FederatedGraph._scan_terms() method does not exist yet"
+    )
 
     graph_a = _mock_graph({})
     graph_a._terms = TermDictionary()
@@ -886,13 +886,19 @@ def test_REQ_d00239_B_scan_terms_passes_per_repo_config():
     entry_a = RepoEntry(
         name="repo-a",
         graph=graph_a,
-        config={"terms": {"markup_styles": ["*"], "exclude_files": ["docs/*"]}},
+        config={
+            "project": {"name": "repo-a", "namespace": "REPOA"},
+            "terms": {"markup_styles": ["*"], "exclude_files": ["docs/*"]},
+        },
         repo_root=Path("/tmp/repo-a"),
     )
     entry_b = RepoEntry(
         name="repo-b",
         graph=graph_b,
-        config={"terms": {"markup_styles": ["**"], "exclude_files": []}},
+        config={
+            "project": {"name": "repo-b", "namespace": "REPOB"},
+            "terms": {"markup_styles": ["**"], "exclude_files": []},
+        },
         repo_root=Path("/tmp/repo-b"),
     )
 
@@ -906,16 +912,18 @@ def test_REQ_d00239_B_scan_terms_passes_per_repo_config():
             ns = call.kwargs.get("namespace") or call.args[2]
             calls_by_ns[ns] = call
 
-        assert "repo-a" in calls_by_ns
-        assert "repo-b" in calls_by_ns
+        # Keyed by NAMESPACE, which is what a term reference is attributed
+        # to -- deliberately different here from each repo's declared name.
+        assert "REPOA" in calls_by_ns
+        assert "REPOB" in calls_by_ns
 
         # Repo A should get markup_styles=["*"] and exclude_files=["docs/*"]
-        call_a = calls_by_ns["repo-a"]
+        call_a = calls_by_ns["REPOA"]
         assert call_a.kwargs.get("markup_styles") == ["*"]
         assert call_a.kwargs.get("exclude_files") == ["docs/*"]
 
         # Repo B should get markup_styles=["**"] and exclude_files=[]
-        call_b = calls_by_ns["repo-b"]
+        call_b = calls_by_ns["REPOB"]
         assert call_b.kwargs.get("markup_styles") == ["**"]
         assert call_b.kwargs.get("exclude_files") == []
 
@@ -1004,9 +1012,9 @@ def test_REQ_d00237_F_embedded_predicate_true_for_compound_ids():
         "path/Session/config",
     ):
         start, end = _offsets(compound, "Session")
-        assert (
-            _is_embedded_in_compound(compound, start, end) is True
-        ), f"{compound!r} should be embedded"
+        assert _is_embedded_in_compound(compound, start, end) is True, (
+            f"{compound!r} should be embedded"
+        )
 
 
 def test_REQ_d00237_F_embedded_predicate_false_for_free_standing_prose():
@@ -1019,9 +1027,9 @@ def test_REQ_d00237_F_embedded_predicate_false_for_free_standing_prose():
         "Start Session here",
     ):
         start, end = _offsets(text, "Session")
-        assert (
-            _is_embedded_in_compound(text, start, end) is False
-        ), f"{text!r} should NOT be embedded"
+        assert _is_embedded_in_compound(text, start, end) is False, (
+            f"{text!r} should NOT be embedded"
+        )
 
 
 # -- REQ-d00237-F: scan_text_for_terms flags embedded refs but keeps them -----

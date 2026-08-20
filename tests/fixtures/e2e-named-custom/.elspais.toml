@@ -35,7 +35,7 @@ style = "PascalCase"
 [id-patterns.assertions]
 label_style = "numeric"
 max_count = 99
-multi_separator = ","
+multi_separator = "&"
 
 [rules.hierarchy]
 allow_structural_orphans = true
@@ -44,7 +44,6 @@ allow_structural_orphans = true
 require_hash = true
 require_assertions = true
 require_status = true
-allowed_statuses = ["Active", "Draft", "Deprecated", "Superseded"]
 
 [changelog]
 hash_current = false

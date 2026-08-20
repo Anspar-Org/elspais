@@ -8,8 +8,7 @@ Add a comment above or inside any function that implements a requirement:
 
 ```python
 # Implements: REQ-d00001-A
-def hash_password(plain: str) -> str:
-    ...
+def hash_password(plain: str) -> str: ...
 ```
 
 ```javascript
@@ -42,24 +41,32 @@ Multiple requirements on one line:
 relationship (see `elspais docs graph-model`). Use `Verifies:` in code files
 that produce pass/fail result output (e.g., benchmarks writing JUnit XML).
 
-## Code Linking -- Multiline Blocks
+## Code Linking -- Multiline Lists
 
-When a file implements many requirements, use block syntax:
+When a file implements many requirements, end the line with the list
+separator and continue on the next comment line:
+
+```python
+# Implements: REQ-d00001-A,
+#             REQ-d00002-B,
+#             REQ-d00003
+```
+
+The separator is what says the list has not ended. Without it, the first line
+is a complete list and anything below it is a citation with no keyword of its
+own -- reported as an undeclared relationship (`references.undeclared`),
+never as part of the list above it and never as a broken reference.
+
+### Legacy: block header
 
 ```python
 # IMPLEMENTS REQUIREMENTS:
 #   REQ-d00001-A
 #   REQ-d00002-B
-#   REQ-d00003
 ```
 
-```javascript
-// VERIFIES REQUIREMENTS:
-//   REQ-d00010
-//   REQ-d00011
-```
-
-The block ends at the first line that is not an indented comment with a requirement ID.
+This form still parses. The colon is required and the word is plural. Nothing
+emits it; prefer the continuation form above.
 
 ## Test Linking -- Function Names
 
@@ -78,8 +85,7 @@ Test class methods work the same way:
 class TestPasswordHashing:
     """Validates REQ-d00001-A: password hashing"""
 
-    def test_REQ_d00001_A_uses_bcrypt(self):
-        ...
+    def test_REQ_d00001_A_uses_bcrypt(self): ...
 ```
 
 ## Test Linking -- Comments
@@ -90,14 +96,12 @@ is `Verifies:`:
 
 ```python
 # Verifies: REQ-d00001-A
-def test_password_hashing():
-    ...
+def test_password_hashing(): ...
 ```
 
 ```python
 # Verifies: REQ-d00001-A, REQ-d00001-B
-def test_full_auth_flow():
-    ...
+def test_full_auth_flow(): ...
 ```
 
 The colon is optional for all keywords.
@@ -118,11 +122,11 @@ A comment placed before any function definition applies to the entire file:
 # Tests: REQ-d00001
 # All tests in this file validate password security
 
-def test_bcrypt_cost():
-    ...
 
-def test_no_plaintext_storage():
-    ...
+def test_bcrypt_cost(): ...
+
+
+def test_no_plaintext_storage(): ...
 ```
 
 Both tests inherit the file-level `REQ-d00001` link.
@@ -152,8 +156,7 @@ When a test validates a requirement that is implemented by code with an `Impleme
 ```python
 # src/auth.py
 # Implements: REQ-d00001-A
-def hash_password(plain: str) -> str:
-    ...
+def hash_password(plain: str) -> str: ...
 ```
 
 ```python
@@ -210,27 +213,89 @@ Use multi-assertion syntax for compact references:
 
 ## Configuration
 
-Reference parsing is configurable via `.elspais.toml`:
+What a reference may look like comes from the identifier configuration, in
+`[id-patterns]`. A repository declares its own canonical template, component
+style, and the single character separating a requirement from an *Assertion*
+label; references are read and written in exactly that form. In a federation
+each repository keeps its own, and a reference is understood under the grammar
+of whichever repository owns the identifier it names.
 
 ```toml
-[references.defaults]
-separators = ["-", "_"]
-case_sensitive = false
-comment_styles = ["#", "//", "--"]
+[id-patterns]
+canonical = "{namespace}-{level.letter}{component}"
 
-[references.defaults.keywords]
-implements = ["Implements", "IMPLEMENTS"]
-verifies = ["Verifies", "VERIFIES"]
-refines = ["Refines", "REFINES"]
+[id-patterns.assertions]
+separator = "-"          # between component and label
+multi_separator = "+"    # between labels, as in A+B+C
 ```
 
-Override settings for specific files or directories:
+There is no list of alternative separators. One spelling is accepted, the one
+configured, so a reference written some other way is reported rather than
+quietly resolved.
 
-```toml
-[[references.overrides]]
-match = "*.java"
-comment_styles = ["//"]
-keywords = { implements = ["@Implements"], verifies = ["@Tests"] }
-```
+The keyword that introduces a reference in a test file is
+`scanning.test.reference_keyword` (default `Verifies`). Comment styles are not
+configurable: `#`, `//` and `--` introduce a reference, and a keyword inside a
+block comment is not read.
 
 See `elspais docs config` for the full configuration reference.
+
+## What a reference report says
+
+Every reported reference carries a **class** — how far reading it got — and one
+or more **codes** naming what is wrong with it. The classes are fixed, because
+a project configures a severity per class. The codes are open: a diagnosis
+becomes more specific over releases without anything having to be
+reconfigured.
+
+Each row below is an input and what the tool reports for it. The identifier
+configuration is the default one shown above (`REQ-`, five numeric digits, `-`
+before an *Assertion* label, `+` between labels), and the repository holds
+`REQ-d00001` with assertions A and B.
+
+| Input | Class | Codes |
+|---|---|---|
+| `# Implements: REQ-d00001` | — | binds |
+| `# Implements: not a reference` | malformed | `E_NOT_AN_IDENTIFIER` |
+| `# Implements: REQ-d00001+A` | malformed | `E_WRONG_ASSERTION_SEPARATOR` |
+| `# Implements: REQ-d00001-A-B` | malformed | `E_WRONG_MULTI_SEPARATOR` |
+| `# Implements: REQ-d00001-1` | malformed | `E_LABEL_OUT_OF_SERIES` |
+| `# Implements: REQ-d00001-AB` | malformed | `E_IDENTIFIER_WITH_TRAILING_TEXT` |
+| `# Implements: REQ-d00001 (A, C)` | malformed | `E_NOT_AN_IDENTIFIER` on the first item; the second reads as a name no repository claims |
+| `# Implements: REQ-d00001,,REQ-d00002` | malformed | `E_EMPTY_ITEM` |
+| `# Implements: REQ-d00001,` (nothing follows) | malformed | `E_TRAILING_SEPARATOR` |
+| `# Implements:` | malformed | `E_EMPTY_REFERENCE_LIST` |
+| `# Implements: WIDGET-42` | unknown_namespace | — |
+| `# Implements: REQ-d00099` | unknown_requirement | — |
+| `# Implements: REQ-d00001-Z` | unknown_assertion | — |
+| `# Implements: REQ-d00001, REQ-d00001` | forbidden | `E_DUPLICATE_ITEM` (both instances) |
+| `# Refines: REQ-d00001` (in a code file) | forbidden | — |
+| `# Implements: req-d00001` | — | binds; `E_NON_CANONICAL_SPELLING` `E_WRONG_CASE` |
+| `# Implements: REQ-d1` | — | binds; `E_NON_CANONICAL_SPELLING` `E_WRONG_PADDING` |
+| `#Implements: REQ-d00001` | — | binds; `E_KEYWORD_NO_MARKER_SPACE` |
+| `# implements: REQ-d00001` | — | binds; `E_KEYWORD_WRONG_CASE` |
+| `# **Implements**: REQ-d00001` (off markdown) | — | binds; `E_KEYWORD_MARKDOWN_EMPHASIS_OFF_MARKDOWN` |
+| `#   REQ-d00001` (no keyword above) | — | reported as an undeclared relationship |
+
+The `forbidden` class covers every reference that reads and resolves and whose
+relationship is refused anyway. Its description says only what is true of all
+of them; which refusal it was is the finding's code.
+
+`E_SYNTAX_ERROR` accompanies every reported fault. Carried *alone* it is the
+report that nothing more specific is known — the tool declining to guess, not
+the absence of a diagnosis. That is also what an item admitting two accounts of
+equal extent carries: a code is issued only where the input determines the
+defect it names, so where two accounts each explain the item, neither is
+issued and the generic code stands alone.
+
+The last six rows are not reference faults, and none of them costs a
+relationship. A reference spelled in a form the configuration admits that is
+not the canonical one — different case, different padding, an alias — binds
+exactly as the canonical spelling would and is reported under
+`references.identifier_form`, carrying `E_NON_CANONICAL_SPELLING` plus
+whichever of case and padding the two spellings determine. The finding names
+the file and the line; nothing rewrites the annotation for you. A keyword written in a non-canonical form is the same fact about
+the keyword rather than the referent, reported under
+`references.keyword_form`. And a comment opening with an identifier that no
+keyword introduces is a relationship its author appears to intend and has not
+spelled; it is reported under `references.undeclared` and produces nothing.

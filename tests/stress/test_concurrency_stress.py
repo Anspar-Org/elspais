@@ -362,9 +362,9 @@ class TestStormAndPersistence:
             text=True,
             timeout=120,
         )
-        assert (
-            chk.returncode == 0
-        ), f"post-storm saved state fails checks:\n{chk.stdout[-1500:]}\n{chk.stderr[-500:]}"
+        assert chk.returncode == 0, (
+            f"post-storm saved state fails checks:\n{chk.stdout[-1500:]}\n{chk.stderr[-500:]}"
+        )
 
         # Both surfaces agree on the committed state afterwards (REQ-o00062-Q).
         for node_id, title in finals.items():

@@ -58,6 +58,18 @@ except ImportError:
 from elspais.config import find_config_file, get_config
 from elspais.config.schema import ElspaisConfig
 from elspais.graph import NodeKind
+from elspais.graph.aggregation import (
+    COVERAGE_DIMENSIONS,
+    HEADLINE_MEASURE,
+    MEASURES,
+    WORK_LIST_MEASURE,
+    assertion_measures,
+    covered_labels,
+    dimension_measures,
+    is_covered,
+    measure_by_label,
+    measure_total,
+)
 from elspais.graph.annotators import (
     annotate_graph_git_state,
     count_by_coverage,
@@ -68,7 +80,7 @@ from elspais.graph.annotators import (
 )
 from elspais.graph.factory import build_graph
 from elspais.graph.federated import FederatedGraph
-from elspais.graph.GraphNode import GraphNode, make_file_id
+from elspais.graph.GraphNode import GraphNode
 from elspais.graph.mutations import MutationEntry
 from elspais.graph.parsers.patterns import JNY_ID_PATTERN
 from elspais.graph.relations import EdgeKind
@@ -89,22 +101,15 @@ from elspais.mcp.shared_state import (
     rebuild_shared_graph,
     report_shutdown_outcome,
 )
-from elspais.utilities.patterns import build_resolver
+from elspais.utilities.patterns import FederatedIdReader, build_resolver
+
 
 # Known schema fields (by alias and Python name) for filtering non-schema keys
-_SCHEMA_FIELDS = {f.alias or name for name, f in ElspaisConfig.model_fields.items()} | set(
-    ElspaisConfig.model_fields.keys()
-)
-
-
 def _validate_config(config: dict[str, Any]) -> ElspaisConfig:
-    """Validate a config dict into ElspaisConfig, stripping non-schema keys."""
-    filtered = {k: v for k, v in config.items() if k in _SCHEMA_FIELDS}
-    # Strip legacy-format associates (contains 'paths' list instead of named entries)
-    assoc = filtered.get("associates")
-    if isinstance(assoc, dict) and "paths" in assoc:
-        filtered.pop("associates", None)
-    return ElspaisConfig.model_validate(filtered)
+    """Validate a config dict into ElspaisConfig (see config.validate_config)."""
+    from elspais.config import validate_config
+
+    return validate_config(config)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -486,7 +491,8 @@ def _serialize_node_generic(node: Any, graph: FederatedGraph | None = None) -> d
     keywords = node.get_field("keywords", []) or []
 
     # ── Kind-specific properties ──
-    # Implements: REQ-p00014-K (cross-repo template provenance affordance)
+    # Implements: REQ-p00014-K
+    # The cross-repository template provenance affordance.
     properties: dict[str, Any] = {}
     if kind == NodeKind.REQUIREMENT:
         from elspais.graph.relations import Stereotype
@@ -530,14 +536,14 @@ def _serialize_node_generic(node: Any, graph: FederatedGraph | None = None) -> d
                     "covered_fraction": rollup.covered_fraction,
                 }
         # CUR-1419: consumer REQs declaring `Integrates:` inherit the
-        # library node's implemented/passing coverage (result-verified or
-        # line-coverage-credited union, REQ-d00258-B) across INTEGRATES
+        # library node's implemented/passing coverage (REQ-d00258-N: what the
+        # library's declared tests returned) across INTEGRATES
         # edges. Surface the live overlay so viewers can show inherited
         # status. Skip when there are no integrations to avoid noise.
         # `verified_*` key names are the wire contract (semantics: the
-        # passing union); `has_failures` flags a red library suite whose
-        # covered count can still read full via the union's per-assertion
-        # max().
+        # Passing dimension); `has_failures` flags a red library suite, which
+        # the covered figure alone cannot distinguish from one whose
+        # assertions were never tested.
         from elspais.graph.metrics import integrates_rollup
 
         irollup = integrates_rollup(node)
@@ -687,7 +693,7 @@ def _serialize_mutation_entry(entry: MutationEntry) -> dict[str, Any]:
 
 
 def _serialize_broken_reference(ref: Any) -> dict[str, Any]:
-    """Serialize a BrokenReference to dict format."""
+    """Serialize a ReferenceFault to dict format."""
     return {
         "source_id": ref.source_id,
         "target_id": ref.target_id,
@@ -841,6 +847,10 @@ def _get_graph_status(
     record = _automatic_save_record(working_dir)
     if record is not None:
         status["automatic_save"] = record
+    # Implements: REQ-o00077-A
+    difference = _executable_difference()
+    if difference is not None:
+        status["executable_difference"] = difference
     notice = _lost_changes_notice(working_dir)
     if notice is not None:
         status["lost_changes"] = notice
@@ -1617,10 +1627,23 @@ def _get_requirement(graph: FederatedGraph, req_id: str) -> dict[str, Any]:
     metrics_data = None
     metrics = node.get_metric("rollup_metrics")
     if metrics is not None:
+        # Implements: REQ-d00258-A, REQ-d00069-N
+        # A requirement-detail payload is a REPORT, not a work list, so both
+        # figures are the per-*Assertion* total -- the greatest of an
+        # *Assertion*'s four measures, counting each *Assertion* once however
+        # many ways it is covered. They are named for the measure they carry:
+        # "referenced" claimed a citation had named the assertions, which the
+        # total does not say. Both keys move together, because two figures
+        # reported on different measures inside one payload is exactly the
+        # disagreement REQ-d00258-C exists to prevent.
+        implemented = metrics.implemented
+        covered = implemented.covered
         metrics_data = {
-            "referenced_pct": metrics.implemented.indirect_pct,
+            "implemented_total_pct": (
+                (covered / implemented.total * 100) if implemented.total else 0.0
+            ),
             "total_assertions": metrics.total_assertions,
-            "covered_assertions": metrics.implemented.indirect,
+            "implemented_total_covered": covered,
         }
 
     # Source location
@@ -1758,6 +1781,10 @@ def _build_base_workspace_info(working_dir: Path, config: dict[str, Any]) -> dic
     record = _automatic_save_record(working_dir)
     if record is not None:
         info["automatic_save"] = record
+    # Implements: REQ-o00077-A
+    difference = _executable_difference()
+    if difference is not None:
+        info["executable_difference"] = difference
     # Implements: REQ-p00083-F
     notice = _lost_changes_notice(working_dir)
     if notice is not None:
@@ -1766,6 +1793,19 @@ def _build_base_workspace_info(working_dir: Path, config: dict[str, Any]) -> dic
 
 
 # Implements: REQ-p00083-C
+# Implements: REQ-o00077-A
+def _executable_difference() -> dict[str, str] | None:
+    """What this process runs versus what is installed, for status surfaces.
+
+    Reported to every client that asks how things stand, not only to one
+    being refused: a client reading answers from a superseded program
+    has no other way to learn that is what it is reading.
+    """
+    from elspais.mcp import executable
+
+    return executable.difference()
+
+
 def _automatic_save_record(working_dir: Path | str | None) -> dict[str, Any] | None:
     """The outstanding record of a save the daemon performed, if any.
 
@@ -1852,8 +1892,8 @@ def _build_assertion_format(config: dict[str, Any]) -> dict[str, Any]:
     # "-A" in a repo configured for "/A" writes references this repo does not
     # accept, and an off-separator reference is a broken reference, not an
     # alternate spelling.
-    sep = assertions.separator or "-"
-    ma_sep = assertions.multi_separator or "+"
+    sep = assertions.separator
+    ma_sep = assertions.multi_separator
     example_req = f"{namespace}-{first_type_letter}{example_num}"
 
     return {
@@ -1903,25 +1943,49 @@ def _build_coverage_stats(graph: FederatedGraph | None, config: dict[str, Any]) 
 
 
 def _build_associates_info(
-    config: dict[str, Any], working_dir: Path, include_paths: bool = False
+    config: dict[str, Any],
+    working_dir: Path,
+    include_paths: bool = False,
+    graph: FederatedGraph | None = None,
 ) -> dict[str, Any]:
-    """Build associates info from [associates] TOML config."""
-    try:
-        from elspais.config import get_associates_config
+    """Build associates info: every federation member except the root.
 
-        assoc_map = get_associates_config(config)
+    Membership comes from the built graph when there is one and from
+    ``plan_federation()`` otherwise, so this answer and the
+    ``federation.repos`` block of the same tool describe one federation:
+    a repository reached through an associate's own declarations is
+    listed here too, and the count is the repo count less the root.
+    """
+    members: list[tuple[str, Path, str | None]] = []
+    try:
+        if graph is not None:
+            root_name = graph.root_repo_name
+            members = [
+                (entry.name, entry.repo_root, entry.error)
+                for entry in graph.iter_repos()
+                if entry.name != root_name
+            ]
+        else:
+            from elspais.graph.federation_plan import plan_federation
+
+            members = [
+                (planned.name, planned.repo_root, planned.error)
+                for planned in plan_federation(config, working_dir)[1:]
+            ]
     except Exception:
         return {"count": 0, "associates": [], "config_file": None}
 
     result = []
-    for name, entry in assoc_map.items():
+    for name, repo_root, error in members:
         info: dict[str, Any] = {
             "name": name,
             "code": name,
             "enabled": True,
         }
+        if error:
+            info["error"] = error
         if include_paths:
-            info["path"] = entry.get("path", "")
+            info["path"] = str(repo_root)
             info["local_path"] = None
             info["spec_path"] = "spec"
         result.append(info)
@@ -1982,7 +2046,6 @@ def _workspace_profile_code_refs(
     result["id_patterns"] = _build_id_patterns(config)
     result["code_references"] = {
         "code_directories": list(typed_config.scanning.code.directories),
-        "separators": typed_config.id_patterns.separators,
         "case_sensitive": False,
     }
     result["assertion_format"] = _build_assertion_format(config)
@@ -2001,7 +2064,9 @@ def _workspace_profile_coverage(
     result["detail"] = "coverage"
 
     result["coverage_stats"] = _build_coverage_stats(graph, config)
-    result["associates"] = _build_associates_info(config, working_dir, include_paths=False)
+    result["associates"] = _build_associates_info(
+        config, working_dir, include_paths=False, graph=graph
+    )
 
     return result
 
@@ -2023,7 +2088,6 @@ def _workspace_profile_retrofit(
 
     result["code_references"] = {
         "code_directories": list(typed_config.scanning.code.directories),
-        "separators": typed_config.id_patterns.separators,
         "case_sensitive": False,
     }
 
@@ -2034,7 +2098,9 @@ def _workspace_profile_retrofit(
         "result_files": [t.results for t in typed_config.scanning.test.targets if t.results],
     }
 
-    result["associates"] = _build_associates_info(config, working_dir, include_paths=False)
+    result["associates"] = _build_associates_info(
+        config, working_dir, include_paths=False, graph=graph
+    )
 
     return result
 
@@ -2074,7 +2140,9 @@ def _workspace_profile_worktree(
     result["id_patterns"] = _build_id_patterns(config)
     result["hierarchy_rules"] = _build_hierarchy_rules(config)
     typed_config = _validate_config(config) if isinstance(config, dict) else config
-    result["associates"] = _build_associates_info(config, working_dir, include_paths=True)
+    result["associates"] = _build_associates_info(
+        config, working_dir, include_paths=True, graph=graph
+    )
     result["config_summary"]["spec_directories"] = typed_config.scanning.spec.directories
 
     return result
@@ -2099,7 +2167,6 @@ def _workspace_profile_all(
     # Code references
     result["code_references"] = {
         "code_directories": list(typed_config.scanning.code.directories),
-        "separators": typed_config.id_patterns.separators,
         "case_sensitive": False,
     }
 
@@ -2122,7 +2189,9 @@ def _workspace_profile_all(
     result["change_metrics"] = _build_change_metrics(graph)
 
     # Associates with full paths
-    result["associates"] = _build_associates_info(config, working_dir, include_paths=True)
+    result["associates"] = _build_associates_info(
+        config, working_dir, include_paths=True, graph=graph
+    )
 
     return result
 
@@ -2344,6 +2413,13 @@ _CONCURRENCY_PROTOCOL = (
     "   restore_from_safety_branch(..., if_tip_mutation_id) require the\n"
     '   mutation-log tip (current_tip from get_mutation_log(); "" = nothing\n'
     "   pending). On mutation_log_conflict, review 'unseen' before retrying.\n"
+    "5. On executable_changed: elspais was reinstalled since this server\n"
+    "   started, so it is answering from the older program, and this one\n"
+    "   cannot renew itself without ending your session with it. Nothing\n"
+    "   was applied. Reconnect this server (/mcp in Claude Code) to pick\n"
+    "   up the current program; retrying without reconnecting returns the\n"
+    "   same rejection. A daemon reached over http never returns this — it\n"
+    "   renews itself and you reconnect to the same address.\n"
     "\n"
     'Full protocol: docs("concurrency"); quick answers: faq("concurrency").'
 )
@@ -2445,13 +2521,18 @@ _FAQ_ENTRIES: list[dict[str, str]] = [
     },
     {
         "topic": "coverage",
-        "question": "What is the difference between direct and indirect coverage?",
+        "question": "What do the four coverage measures mean?",
         "answer": (
-            "Direct coverage: a test explicitly references a requirement via comment\n"
-            "or function name.\n"
-            "Indirect coverage: a test covers code that implements a requirement,\n"
-            "creating an inferred coverage chain (test -> code -> requirement).\n"
-            "Both contribute to the coverage percentage."
+            "Two axes. What a citation NAMED: direct (it named the assertion) vs\n"
+            "indirect (it named only the requirement). Where the evidence SITS:\n"
+            "immediate (attached to this requirement) vs rolled (conducted up a\n"
+            "`Refines:` chain from a refining requirement).\n"
+            "That gives immediate_direct, immediate_indirect, rolled_direct and\n"
+            "rolled_indirect. Reporting surfaces headline the TOTAL: per assertion,\n"
+            "the greatest of the four, so an assertion covered several ways counts\n"
+            "once. Work lists (get_uncovered_assertions, get_test_coverage, gaps)\n"
+            "read immediate_direct only -- an assertion nobody has written evidence\n"
+            "for is still work."
         ),
     },
     {
@@ -2495,6 +2576,23 @@ _FAQ_ENTRIES: list[dict[str, str]] = [
             "restore_from_safety_branch(branch, if_tip_mutation_id=<tip>) rolls\n"
             "files back to a safety branch (it discards pending work, so it\n"
             'takes the tip too). See docs("concurrency") for why these take it.'
+        ),
+    },
+    {
+        "topic": "concurrency",
+        "question": "Why is everything returning executable_changed?",
+        "answer": (
+            "elspais was reinstalled since this server started, so it is still\n"
+            "answering from the program it loaded. That happens routinely when\n"
+            "the tree you are editing is elspais's own source. Nothing you sent\n"
+            "was applied. A daemon renews itself when this happens — it writes\n"
+            "whatever it holds, restarts from the current program and serves at\n"
+            "the same address — so you will not see this from one. A stdio MCP\n"
+            "server cannot renew itself, because exiting would take its tools\n"
+            "out of your session and nothing would restart it, so it refuses and\n"
+            "asks to be reconnected (/mcp in Claude Code). This is unrelated to\n"
+            "your spec files going stale, which is reported separately as\n"
+            "executable_difference and answered by rebuilding."
         ),
     },
     {
@@ -2854,6 +2952,132 @@ def _guard_shutdown(state: Any) -> dict[str, Any] | None:
     }
 
 
+# Implements: REQ-o00077-A, REQ-o00077-F
+def _guard_executable_drift(state: Any, tool_name: str) -> dict[str, Any] | None:
+    """Refuse a call this process cannot renew itself out of.
+
+    Third member of the guard family, and the one whose condition is
+    about this process rather than about the graph. It fires only where
+    REQ-o00077-D cannot be met: the program beneath this process has been
+    superseded, and renewing it would end the session of the client
+    asking, because that client reaches this process over a connection it
+    owns rather than by an address it can dial again.
+
+    A process that CAN renew itself never reaches a refusal here,
+    whatever it is holding. Held changes are carried across a renewal
+    rather than standing in the way of one, so they are not this guard's
+    business and are not counted here.
+
+    The refusal is also the disclosure REQ-o00077-A asks for, delivered
+    to the client that would otherwise have acted on the answer, and it
+    names what renews the process because a client holding a working
+    connection can act on an instruction.
+    """
+    from elspais.mcp import executable
+
+    if executable.watcher().settled_difference is None:
+        return None
+    if state is not None and state.get("renewable_unasked"):
+        # REQ-o00077-D's case: this process renews itself, so the client
+        # never learns there was anything to refuse.
+        return None
+    return {
+        "success": False,
+        "code": "executable_changed",
+        "error": (
+            "elspais has been reinstalled since this server started. Answers "
+            "from here would come from the program as it was, so they are "
+            "refused. This server cannot renew itself without ending your "
+            "session with it."
+        ),
+        "hint": (
+            "Nothing was changed. Reconnect this MCP server (in Claude Code, "
+            "/mcp) to pick up the current program."
+        ),
+    }
+
+
+# Implements: REQ-o00077-D
+def renew_for_installed_program(
+    shared: Any,
+    graph_fn: Callable[[], Any],
+    exec_fn: Callable[[], None] | None = None,
+) -> str:
+    """Serve this tree from the program now installed, carrying held work.
+
+    Renews rather than stops. A process that merely stopped would answer
+    the half of REQ-o00077-D about no longer serving from a superseded
+    program while failing the half about the tree going on being served,
+    and a client that reaches this process by address rather than by
+    launching it would simply lose the tool.
+
+    Changes held here exist nowhere else, so they are written before the
+    process is replaced. Writing them is enough to preserve them; the
+    record of what was done goes with the process that did it, so they
+    can no longer be undone, which is the same thing that happens
+    whenever a process stops for any other reason. The unasked write
+    leaves the record that exists for exactly that purpose.
+
+    Replacing the process image keeps its identity -- same pid, so the
+    state record still describes it, and the reserved address is bound
+    again by the same act. In-flight requests are lost, which over a
+    transport where each request stands alone reaches the client as a
+    failure it retries rather than as an answer that never comes.
+
+    Returns what it decided: ``"unknown"``, ``"save_failed"`` or
+    ``"renewing"``. Never returns after a real replacement.
+    """
+    with shared.write_lock:
+        try:
+            pending = len(graph_fn().mutation_log.tail(0))
+        except Exception:  # noqa: BLE001
+            # Renewing on a count that could not be taken risks replacing
+            # a process holding the only copy of somebody's work before
+            # it has been written. Stay as we are.
+            return "unknown"
+        if pending:
+            outcome = persist_pending(
+                shared,
+                automatic=True,
+                trigger="the installed program changed and this server is renewing itself",
+            )
+            if not outcome.get("success"):
+                import sys as _sys_warn
+
+                # Keep what could not be written and go on serving.
+                # Replacing the process now would take the work with it.
+                print(
+                    f"warning: elspais was reinstalled, but the {pending} unsaved "
+                    f"change(s) held here could not be written "
+                    f"({outcome.get('error')}). This server is NOT renewing itself, "
+                    f"so it goes on answering from the program it started with. "
+                    f"Save through it and restart it once the error above is fixed.",
+                    file=_sys_warn.stderr,
+                    flush=True,
+                )
+                return "save_failed"
+        (exec_fn or _replace_process_image)()
+    return "renewing"
+
+
+# Implements: REQ-o00077-D
+def _replace_process_image() -> None:
+    """Run this process again, from the program now installed.
+
+    ``-m elspais`` rather than the argv this process was launched with,
+    because a console script and a module invocation reach here alike and
+    only the module form is certain to exist. The environment carries
+    over untouched, so the successor keeps the same state record and the
+    same client binding.
+    """
+    import os as _os
+    import sys as _sys
+
+    _sys.stderr.write("elspais was reinstalled; renewing this server from it.\n")
+    _sys.stderr.flush()
+    _os.execv(_sys.executable, [_sys.executable, "-m", "elspais", *_sys.argv[1:]])
+
+
 # Implements: REQ-o00062-K
 def _owning_container(graph: Any, node_id: str) -> Any | None:
     """Resolve the surviving parent whose version a sub-node deletion reports.
@@ -2957,11 +3181,23 @@ def _mutate_rename_node(graph: FederatedGraph, old_id: str, new_id: str) -> dict
     REQ-o00062-E: Returns MutationEntry for audit.
     """
     try:
+        note = ""
+        # Implements: REQ-d00205-C
+        # A new identifier the owning repo's grammar parses is stored in its
+        # canonical spelling; one it does not parse (a journey id, or a shape
+        # the grammar has no opinion on) is stored as given.
+        config = _config_for_node(graph, old_id)
+        if config:
+            resolver = build_resolver(config)
+            canonical = resolver.to_canonical(resolver.normalize_ref(new_id))
+            if canonical and canonical != new_id:
+                note = _normalization_note([new_id], [canonical])
+                new_id = canonical
         entry = graph.rename_node(old_id, new_id)
         return {
             "success": True,
             "mutation": _serialize_mutation_entry(entry),
-            "message": f"Renamed {old_id} to {new_id}",
+            "message": f"Renamed {old_id} to {new_id}{note}",
         }
     except (ValueError, KeyError) as e:
         return {"success": False, "error": str(e)}
@@ -2991,6 +3227,17 @@ def _mutate_change_status(graph: FederatedGraph, node_id: str, new_status: str) 
     REQ-o00062-E: Returns MutationEntry for audit.
     """
     try:
+        # Implements: REQ-o00062-U
+        # The status field's grammar carries one word: a value the parser
+        # cannot read back renders a file that fails to build at all.
+        if not re.fullmatch(r"\w+", new_status):
+            return {
+                "success": False,
+                "error": (
+                    f"Invalid status {new_status!r}: a status is a single word "
+                    "(letters, digits, underscore)"
+                ),
+            }
         entry = graph.change_status(node_id, new_status)
         return {
             "success": True,
@@ -3060,6 +3307,41 @@ def _mutate_add_requirement(
     REQ-o00062-E: Returns MutationEntry for audit.
     """
     try:
+        note = ""
+        # Implements: REQ-o00062-U
+        # A new requirement is added to the root repo, so the root repo's
+        # grammar is what its identifier must satisfy (REQ-d00205-C); the
+        # status and level fields carry one grammar word each, and a level
+        # the project does not declare belongs to no hierarchy.
+        config = getattr(graph, "root_config", None)
+        if config:
+            resolver = build_resolver(config)
+            canonical = resolver.to_canonical(resolver.normalize_ref(req_id))
+            if canonical is None:
+                return {
+                    "success": False,
+                    "error": (
+                        f"Invalid requirement id {req_id!r}: does not match "
+                        "this repository's identifier grammar"
+                    ),
+                }
+            if canonical != req_id:
+                note = _normalization_note([req_id], [canonical])
+                req_id = canonical
+            levels = config.get("levels") or {}
+            if levels and level.casefold() not in {k.casefold() for k in levels}:
+                return {
+                    "success": False,
+                    "error": (f"Unknown level {level!r}: this project declares {sorted(levels)}"),
+                }
+        if not re.fullmatch(r"\w+", status):
+            return {
+                "success": False,
+                "error": (
+                    f"Invalid status {status!r}: a status is a single word "
+                    "(letters, digits, underscore)"
+                ),
+            }
         # Convert edge_kind string to EdgeKind enum if provided
         edge_kind_enum = None
         if edge_kind:
@@ -3076,7 +3358,7 @@ def _mutate_add_requirement(
         return {
             "success": True,
             "mutation": _serialize_mutation_entry(entry),
-            "message": f"Added requirement {req_id}",
+            "message": f"Added requirement {req_id}{note}",
         }
     except (ValueError, KeyError) as e:
         return {"success": False, "error": str(e)}
@@ -3281,11 +3563,24 @@ def _mutate_rename_assertion(graph: FederatedGraph, old_id: str, new_label: str)
     REQ-o00062-E: Returns MutationEntry for audit.
     """
     try:
+        note = ""
+        # Implements: REQ-d00205-C
+        # The label is stored bare and rendered verbatim, so a full assertion
+        # id or an admitted case variant is normalized to the canonical bare
+        # label of the owning repo's series before it is stored.
+        config = _config_for_node(graph, old_id)
+        if config:
+            split = build_resolver(config).split_assertion_ref(old_id)
+            if split:
+                candidate = _normalize_assertion_targets([new_label], split[0], config)[0]
+                if candidate != new_label:
+                    note = _normalization_note([new_label], [candidate])
+                    new_label = candidate
         entry = graph.rename_assertion(old_id, new_label)
         return {
             "success": True,
             "mutation": _serialize_mutation_entry(entry),
-            "message": f"Renamed assertion {old_id} to new label {new_label}",
+            "message": f"Renamed assertion {old_id} to new label {new_label}{note}",
         }
     except (ValueError, KeyError) as e:
         return {"success": False, "error": str(e)}
@@ -3296,6 +3591,7 @@ def _mutate_rename_assertion(graph: FederatedGraph, old_id: str, new_label: str)
 # ─────────────────────────────────────────────────────────────────────────────
 
 
+# Implements: REQ-o00062-H
 def _mutate_update_remainder(
     graph: FederatedGraph, node_id: str, text: str | None = None, heading: str | None = None
 ) -> dict[str, Any]:
@@ -3344,6 +3640,34 @@ def _mutate_delete_remainder(graph: FederatedGraph, node_id: str) -> dict[str, A
 # ─────────────────────────────────────────────────────────────────────────────
 
 
+def _config_for_node(graph: Any, node_id: str) -> dict[str, Any] | None:
+    """The config of the repo owning node_id, or None where none is derivable.
+
+    # Implements: REQ-d00205-C
+    A graph without per-repo configs (a bare TraceGraph in tests) offers no
+    grammar to normalize under, and a node no repo owns has none either; the
+    caller then stores the input as given rather than guessing a grammar.
+    """
+    config_for = getattr(graph, "config_for", None)
+    if config_for is None:
+        return None
+    try:
+        return config_for(node_id)
+    except KeyError:
+        return None
+
+
+def _normalization_note(before: list[str], after: list[str]) -> str:
+    """A message suffix disclosing what normalization changed, or ''.
+
+    The stored form is system-composed, not the caller's prose, so when it
+    differs from what the caller wrote the mutation result says so.
+    """
+    if before == after:
+        return ""
+    return f" (normalized: {', '.join(before)} -> {', '.join(after)})"
+
+
 def _normalize_assertion_targets(
     targets: list[str], target_id: str, config: dict[str, Any]
 ) -> list[str]:
@@ -3356,11 +3680,24 @@ def _normalize_assertion_targets(
     resolver = build_resolver(config)
     normalized: list[str] = []
     for at in targets:
-        parsed = resolver.parse(at)
+        # A full assertion id of the target, in any admitted spelling
+        # (case, padding, notation) -- normalize_ref makes reading tolerant,
+        # to_canonical re-renders the one canonical form.
+        parsed = resolver.parse(resolver.normalize_ref(at))
         if parsed and parsed.assertions and parsed.fqn == target_id:
             normalized.extend(parsed.assertions)
-        else:
-            normalized.append(at)
+            continue
+        # A bare label: canonicalize its case under the target's series by
+        # composing the full id and reading it back through the same grammar.
+        composed = resolver.to_canonical(
+            resolver.normalize_ref(resolver.make_assertion_id(target_id, at))
+        )
+        if composed:
+            reparsed = resolver.parse(composed)
+            if reparsed and reparsed.assertions and reparsed.fqn == target_id:
+                normalized.extend(reparsed.assertions)
+                continue
+        normalized.append(at)
     return normalized
 
 
@@ -3370,7 +3707,6 @@ def _mutate_add_edge(
     target_id: str,
     edge_kind: str,
     assertion_targets: list[str] | None = None,
-    config: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Add an edge between nodes.
 
@@ -3378,8 +3714,18 @@ def _mutate_add_edge(
     REQ-o00062-E: Returns MutationEntry for audit.
     """
     try:
-        if assertion_targets and config:
-            assertion_targets = _normalize_assertion_targets(assertion_targets, target_id, config)
+        note = ""
+        if assertion_targets:
+            # Implements: REQ-d00205-C
+            # The targets are labels of the TARGET requirement, so the grammar
+            # that reads them is the one of the repo owning that requirement.
+            config = _config_for_node(graph, target_id)
+            if config:
+                given = list(assertion_targets)
+                assertion_targets = _normalize_assertion_targets(
+                    assertion_targets, target_id, config
+                )
+                note = _normalization_note(given, assertion_targets)
         edge_kind_enum = EdgeKind[edge_kind.upper()]
         entry = graph.add_edge(
             source_id=source_id,
@@ -3390,7 +3736,7 @@ def _mutate_add_edge(
         return {
             "success": True,
             "mutation": _serialize_mutation_entry(entry),
-            "message": f"Added edge {source_id} --[{edge_kind}]--> {target_id}",
+            "message": f"Added edge {source_id} --[{edge_kind}]--> {target_id}{note}",
         }
     except (ValueError, KeyError) as e:
         return {"success": False, "error": str(e)}
@@ -3432,12 +3778,25 @@ def _mutate_change_edge_targets(
     REQ-o00062-E: Returns MutationEntry for audit.
     """
     try:
+        note = ""
+        if assertion_targets:
+            # Implements: REQ-d00205-C
+            # Same normalization as _mutate_add_edge: the labels belong to the
+            # TARGET requirement, and render spells the stored label verbatim,
+            # so an unnormalized full ID would reach the file corrupted.
+            config = _config_for_node(graph, target_id)
+            if config:
+                given = list(assertion_targets)
+                assertion_targets = _normalize_assertion_targets(
+                    assertion_targets, target_id, config
+                )
+                note = _normalization_note(given, assertion_targets)
         entry = graph.change_edge_targets(source_id, target_id, assertion_targets)
         if assertion_targets:
             targets_display = ", ".join(assertion_targets)
         else:
             targets_display = "(whole requirement)"
-        msg = f"Changed targets on {source_id} -> {target_id}: {targets_display}"
+        msg = f"Changed targets on {source_id} -> {target_id}: {targets_display}{note}"
         return {
             "success": True,
             "mutation": _serialize_mutation_entry(entry),
@@ -3487,11 +3846,31 @@ def _mutate_fix_broken_reference(
     REQ-o00062-E: Returns MutationEntry for audit.
     """
     try:
+        note = ""
+        # Implements: REQ-d00205-C
+        # The new target is system-composed content: it is stored and later
+        # rendered verbatim, so it is normalized under the grammar of the
+        # member that claims it -- which cannot be found by ownership lookup,
+        # since a variant spelling owns no index entry. FederatedIdReader is
+        # the one authority for reading an identifier across members; a
+        # reference no member claims stays as given, so the reference remains
+        # broken and is reported, not silently respelled.
+        resolvers = [
+            build_resolver(entry.config)
+            for entry in getattr(graph, "iter_repos", lambda: [])()
+            if getattr(entry, "config", None)
+        ]
+        if resolvers:
+            reader = FederatedIdReader(resolvers[0], resolvers[1:])
+            canonical = reader.normalize(new_target_id)
+            if canonical != new_target_id:
+                note = _normalization_note([new_target_id], [canonical])
+                new_target_id = canonical
         entry = graph.fix_broken_reference(source_id, old_target_id, new_target_id)
         return {
             "success": True,
             "mutation": _serialize_mutation_entry(entry),
-            "message": f"Fixed reference {source_id}: {old_target_id} -> {new_target_id}",
+            "message": f"Fixed reference {source_id}: {old_target_id} -> {new_target_id}{note}",
         }
     except (ValueError, KeyError) as e:
         return {"success": False, "error": str(e)}
@@ -3530,6 +3909,26 @@ def _mutate_rename_file(
     REQ-d00065-D: Only parameter validation and delegation.
     """
     try:
+        # Implements: REQ-o00062-M
+        # Same path rules as mutate_move_node_to_file: the rename writes to
+        # disk at save, so the destination must stay inside the repository
+        # and inside the configured spec tree.
+        from elspais.utilities.spec_paths import validate_new_spec_path
+
+        if ".." in new_relative_path.split("/") or new_relative_path.startswith("/"):
+            return {
+                "success": False,
+                "error": "Invalid path: must not contain '..' or be absolute",
+            }
+        config = _config_for_node(graph, file_id)
+        if config:
+            path_error = validate_new_spec_path(new_relative_path, config)
+            if path_error:
+                return {"success": False, "error": path_error}
+        if repo_root is not None:
+            target = (repo_root / new_relative_path).resolve()
+            if not target.is_relative_to(repo_root.resolve()):
+                return {"success": False, "error": "Path escapes repository root"}
         entry = graph.rename_file(file_id, new_relative_path, repo_root)
         new_id = entry.after_state.get("id", "")
         return {
@@ -3830,16 +4229,23 @@ def _query_nodes(
 
 
 # Implements: REQ-d00069-J
-def _via_provenance(fraction: float) -> str | None:
-    """Provenance tag for an uncovered assertion's coverage fraction.
+# Implements: REQ-d00258-M, REQ-d00069-L
+def _gap_measures(rollup: Any, dimension: str, label: str) -> dict[str, float]:
+    """The four measures of one *Assertion*, for a gap the work list reports.
 
-    Returns ``"refines-conduction"`` when the fraction is partial
-    (0 < fraction < ~1.0, i.e. coverage conducted up a REFINES edge from a
-    not-fully-covered refiner), else ``None`` (no coverage at all, or ~fully
-    covered). Shared by every uncovered-detail assembly so the wording and
-    the covered threshold (1.0 - 1e-9) cannot drift between surfaces.
+    A gap is decided on the immediate direct measure (REQ-d00258-M), which
+    says nothing about whole-requirement evidence the requirement carries or
+    about coverage conducted up a `Refines:` chain. Publishing the four
+    measures beside the gap (REQ-d00258-J) keeps that evidence visible to the
+    caller without letting it decide the verdict, under the SAME vocabulary
+    the CLI and the viewer name them by (REQ-d00258-C).
     """
-    return "refines-conduction" if 0 < fraction < 1.0 - 1e-9 else None
+    dim = getattr(rollup, dimension, None) if rollup is not None else None
+    if dim is None:
+        from elspais.graph.aggregation import MEASURES
+
+        return dict.fromkeys(MEASURES, 0.0)
+    return {m: round(v, 4) for m, v in assertion_measures(dim, label).items()}
 
 
 def _get_test_coverage(graph: FederatedGraph, req_id: str) -> dict[str, Any]:
@@ -3878,19 +4284,22 @@ def _get_test_coverage(graph: FederatedGraph, req_id: str) -> dict[str, Any]:
     label_to_id = {label: aid for aid, label in assertions}
     rollup = node.get_metric("rollup_metrics")
 
-    def _fold_conducted(target_ids: set[str], dimension: str) -> None:
-        # REQ-d00069-J: an assertion covered only through a refining requirement
-        # has no direct incoming edge but does carry conducted coverage in its
-        # rollup dimension. Fold those in so it is not reported as a gap -- but
-        # only when conduction makes it ~fully covered. A partially covered
-        # assertion (0 < fraction < 1) remains a gap.
+    def _fold_immediate_direct(target_ids: set[str], dimension: str) -> None:
+        # Implements: REQ-d00258-M
+        # A citation that named the *Assertion*, with its evidence attached
+        # here, is what covers it. Coverage conducted up a `Refines:` chain was
+        # written against the refining requirement and whole-requirement
+        # evidence named no *Assertion* at all -- neither answers "has anybody
+        # written evidence for this *Assertion*", which is the question this
+        # work list exists to ask. An *Assertion* counts only at ~its whole
+        # value; a partially covered one is still work.
         if rollup is None:
             return
         dim = getattr(rollup, dimension, None)
         if dim is None:
             return
-        for label, frac in dim.indirect_pct_by_label.items():
-            if frac >= 1.0 - 1e-9:
+        for label, frac in measure_by_label(dim, WORK_LIST_MEASURE).items():
+            if is_covered(frac):
                 aid = label_to_id.get(label)
                 if aid is not None:
                     target_ids.add(aid)
@@ -3900,37 +4309,62 @@ def _get_test_coverage(graph: FederatedGraph, req_id: str) -> dict[str, Any]:
     test_nodes: list[dict[str, Any]] = []
     covered_assertion_ids: set[str] = set()
 
-    for test_node, labels in _iter_assertion_coverage(node, NodeKind.TEST):
-        # Track covered assertions
-        for label in labels:
-            if label in label_to_id:
-                covered_assertion_ids.add(label_to_id[label])
-
+    # Two passes over the same coverage iterator, because the listing and the
+    # verdict answer different questions (REQ-d00258-M). The listing includes a
+    # whole-requirement test -- it is real evidence and the caller should see
+    # it. The covered/uncovered verdict is strict: a blanket `Verifies:` names
+    # no assertion, so it covers none of them.
+    for test_node, _labels in _iter_assertion_coverage(node, NodeKind.TEST):
         if test_node.id in seen_test_ids:
             continue
         seen_test_ids.add(test_node.id)
 
         test_nodes.append(_serialize_test_info(test_node, graph))
 
-    _fold_conducted(covered_assertion_ids, "tested")
+    for _test_node, labels in _iter_assertion_coverage(node, NodeKind.TEST, direct_only=True):
+        for label in labels:
+            if label in label_to_id:
+                covered_assertion_ids.add(label_to_id[label])
+
+    _fold_immediate_direct(covered_assertion_ids, "tested")
     covered_assertions = sorted(covered_assertion_ids)
     uncovered_assertions = sorted(set(assertion_ids) - covered_assertion_ids)
 
-    # REQ-d00069-J: annotate each uncovered assertion with its conducted
-    # fraction so a partially-conducted assertion (0 < fraction < 1) is
-    # distinguishable from one with no coverage at all (fraction 0.0). This
-    # is additive alongside ``uncovered_assertions`` -- that field keeps its
-    # existing flat id-list shape for backward compatibility.
+    # Annotate each uncovered assertion with the measure the verdict was taken
+    # on, so a partially-covered assertion (0 < fraction < 1) is
+    # distinguishable from one with no evidence naming it at all (0.0), and
+    # with the four measures behind it (REQ-d00258-J) so whole-requirement and
+    # conducted evidence stays visible without deciding the verdict. Read on
+    # the SAME measure as the verdict (REQ-d00258-M): an assertion listed as a
+    # gap can never read 100% covered.
     id_to_label = dict(assertions)
-    tested_fractions = rollup.tested.indirect_pct_by_label if rollup is not None else {}
+    tested_fractions = (
+        measure_by_label(rollup.tested, WORK_LIST_MEASURE) if rollup is not None else {}
+    )
     uncovered_detail = []
     for aid in uncovered_assertions:
-        frac = tested_fractions.get(id_to_label.get(aid, ""), 0.0)
+        label = id_to_label.get(aid, "")
+        frac = tested_fractions.get(label, 0.0)
         uncovered_detail.append(
-            {"id": aid, "fraction": round(frac, 4), "via": _via_provenance(frac)}
+            {
+                "id": aid,
+                "fraction": round(frac, 4),
+                "measures": {"tested": _gap_measures(rollup, "tested", label)},
+            }
         )
 
     total = len(assertion_ids)
+    # name: covered_count / referenced_pct
+    # use:  a work list -- which assertions still want a test naming them.
+    #       Read by an agent deciding what to write next, never as a progress
+    #       figure.
+    # def:  assertions covered on the IMMEDIATE DIRECT measure
+    #       (``WORK_LIST_MEASURE``, REQ-d00258-M): a citation named the
+    #       *Assertion* and the evidence is attached to it.
+    #       "referenced" is accurate HERE and only here -- the figure is
+    #       exactly the claim that a citation referenced these assertions.
+    #       A per-*Assertion* TOTAL must never be published under this name;
+    #       see ``_dimension_figures``.
     covered_count = len(covered_assertions)
     referenced_pct = (covered_count / total * 100) if total > 0 else 0.0
 
@@ -3958,12 +4392,37 @@ def _get_test_coverage(graph: FederatedGraph, req_id: str) -> dict[str, Any]:
             }
         )
 
-    _fold_conducted(covered_uat_assertion_ids, "uat_coverage")
+    _fold_immediate_direct(covered_uat_assertion_ids, "uat_coverage")
     uat_covered_count = len(covered_uat_assertion_ids)
     uat_referenced_pct = (uat_covered_count / total * 100) if total > 0 else 0.0
 
-    # Read uat_validated_pct from rollup_metrics if available
-    uat_validated_pct = rollup.uat_verified.indirect_pct if rollup is not None else 0.0
+    # Implements: REQ-d00258-M
+    # Read on the work-list measure, like every other figure this tool
+    # publishes. This is not a reporting surface headlining how far along the
+    # estate is (REQ-d00258-A) -- it is the tool REQ-d00258-M names, and its
+    # neighbouring `uat.covered_count`/`referenced_pct` already answer on that
+    # measure. A blanket journey lifting `validated_pct` to 100 beside a
+    # `referenced_pct` of 0 would have the same dict answer one question two
+    # ways.
+    uat_validated_pct = 0.0
+    if rollup is not None:
+        uat_verified = rollup.uat_verified
+        if uat_verified.total > 0:
+            uat_validated_pct = (
+                measure_total(uat_verified, WORK_LIST_MEASURE) / uat_verified.total * 100
+            )
+
+    # Implements: REQ-d00258-O
+    tested_breakdown: dict[str, int] | None = None
+    if rollup is not None:
+        from elspais.graph.metrics import tested_partition
+
+        part = tested_partition(rollup)
+        tested_breakdown = {
+            "passed": part.passed,
+            "failed": part.failed,
+            "awaiting_result": part.awaiting,
+        }
 
     return {
         "success": True,
@@ -3975,6 +4434,10 @@ def _get_test_coverage(graph: FederatedGraph, req_id: str) -> dict[str, Any]:
         "total_assertions": total,
         "covered_count": covered_count,
         "referenced_pct": round(referenced_pct, 1),
+        # Implements: REQ-d00258-O
+        # What came back from the tests this requirement has: a breakdown of
+        # its tested assertions, not a further coverage dimension.
+        "tested_breakdown": tested_breakdown,
         "uat": {
             "jny_nodes": jny_nodes,
             "covered_assertions": sorted(covered_uat_assertion_ids),
@@ -3982,6 +4445,52 @@ def _get_test_coverage(graph: FederatedGraph, req_id: str) -> dict[str, Any]:
             "referenced_pct": round(uat_referenced_pct, 1),
             "validated_pct": round(uat_validated_pct, 1),
         },
+    }
+
+
+# Implements: REQ-d00258-A, REQ-d00258-C
+def _dimension_figures(node: Any, dimension: str) -> dict[str, Any]:
+    """The coverage figures for one dimension of one requirement.
+
+    Read from ``rollup_metrics`` through the one shared aggregation, so a
+    figure this surface reports is the figure every other surface reports
+    (REQ-d00258-C). Counting the assertions that happen to have an edge
+    listed beside them answers a different question -- whether anything cites
+    them -- and gives a different number: it cannot see coverage conducted up
+    a `Refines:` chain, cannot see that a citation named the requirement
+    rather than the *Assertion*, and counts a partly covered *Assertion*
+    whole.
+
+    The headline is the per-*Assertion* total and the four measures are
+    published beside it, so a reader can see what evidence produced it
+    (REQ-d00258-A) rather than being handed one number to trust.
+    """
+    total = sum(1 for child in node.iter_children() if child.kind == NodeKind.ASSERTION)
+    rollup = node.get_metric("rollup_metrics")
+    dim = getattr(rollup, dimension, None) if rollup is not None else None
+    if dim is None:
+        return {
+            "total_assertions": total,
+            "total_covered": 0.0,
+            "total_pct": 0.0,
+            "measures": dict.fromkeys(MEASURES, 0.0),
+        }
+    covered = float(measure_total(dim, HEADLINE_MEASURE))
+    # name: total_covered / total_pct
+    # use:  a reader asking how far along this dimension is at this
+    #       requirement; the panel headline beside the per-assertion listing.
+    # def:  the per-*Assertion* total (REQ-d00069-N) -- each *Assertion*
+    #       counted once at the greatest of its four measures -- summed, and
+    #       that sum over the requirement's assertion count.
+    #       NOT named "referenced": that word claimed a citation had named the
+    #       assertions, which the total does not say. It was retired from
+    #       ``get_requirement`` for exactly that reason, and the same figure
+    #       must not carry it back here under a different roof.
+    return {
+        "total_assertions": total,
+        "total_covered": round(covered, 2),
+        "total_pct": round((covered / total * 100) if total > 0 else 0.0, 1),
+        "measures": {m: round(v, 2) for m, v in dimension_measures(dim).items()},
     }
 
 
@@ -4031,17 +4540,11 @@ def _get_assertion_test_map(graph: FederatedGraph, req_id: str) -> dict[str, Any
             seen_per_assertion[label].add(test_node.id)
             assertion_tests[label]["tests"].append(info)
 
-    total = len(assertions)
-    covered_count = sum(1 for label in assertion_tests if assertion_tests[label]["tests"])
-    referenced_pct = (covered_count / total * 100) if total > 0 else 0.0
-
     return {
         "success": True,
         "req_id": req_id,
         "assertion_tests": assertion_tests,
-        "total_assertions": total,
-        "covered_count": covered_count,
-        "referenced_pct": round(referenced_pct, 1),
+        **_dimension_figures(node, "tested"),
     }
 
 
@@ -4092,17 +4595,11 @@ def _get_assertion_uat_map(graph: FederatedGraph, req_id: str) -> dict[str, Any]
             seen_per_assertion[label].add(jny_node.id)
             assertion_journeys[label]["journeys"].append(info)
 
-    total = len(assertions)
-    covered_count = sum(1 for label in assertion_journeys if assertion_journeys[label]["journeys"])
-    referenced_pct = (covered_count / total * 100) if total > 0 else 0.0
-
     return {
         "success": True,
         "req_id": req_id,
         "assertion_journeys": assertion_journeys,
-        "total_assertions": total,
-        "covered_count": covered_count,
-        "referenced_pct": round(referenced_pct, 1),
+        **_dimension_figures(node, "uat_coverage"),
     }
 
 
@@ -4171,8 +4668,9 @@ def _get_assertion_code_map(
     # IMP drill-down provenance for INDIRECT coverage (REQ-d00064, REQ-d00069-L):
     # when the IMP badge is lit via whole-requirement evidence, the direct
     # code_refs above are empty. Surface the blanket Implements: CODE refs and
-    # the conducting Refines: requirements so the panel explains the `~` instead
-    # of reading "No references". Additive — code_refs / stats are unchanged.
+    # the conducting Refines: requirements so the panel names the
+    # whole-requirement and conducted evidence instead of reading
+    # "No references". Additive — code_refs / stats are unchanged.
     if edge_kind == "implements":
         all_labels = [label for _, label in assertions]
         wq_seen: dict[str, set[str]] = {label: set() for _, label in assertions}
@@ -4207,17 +4705,11 @@ def _get_assertion_code_map(
                     rf_seen[label].add(tgt.id)
                     assertion_code[label]["refines_refs"].append(dict(rinfo))
 
-    total = len(assertions)
-    covered_count = sum(1 for label in assertion_code if assertion_code[label]["code_refs"])
-    referenced_pct = (covered_count / total * 100) if total > 0 else 0.0
-
     return {
         "success": True,
         "req_id": req_id,
         "assertion_code": assertion_code,
-        "total_assertions": total,
-        "covered_count": covered_count,
-        "referenced_pct": round(referenced_pct, 1),
+        **_dimension_figures(node, "implemented"),
     }
 
 
@@ -4304,7 +4796,7 @@ def _get_uncovered_assertions(
     REQ-d00069-A: SHALL accept source parameter ('test', 'uat', 'both') to filter coverage source.
 
     Uses ``_iter_assertion_coverage`` to build the covered-labels set,
-    which correctly handles indirect coverage (tests with no
+    which correctly handles whole-requirement evidence (tests with no
     ``assertion_targets`` covering ALL assertions).
 
     Args:
@@ -4318,34 +4810,41 @@ def _get_uncovered_assertions(
     """
 
     def _axis_covered_labels(req_node: Any, kind: NodeKind, dimension: str) -> set[str]:
-        """Return labels ~fully covered on one axis (direct edges + conduction).
+        """Return labels ~fully covered on one axis, on the work-list measure.
 
-        Includes coverage conducted upward across REFINES edges (REQ-d00069-J):
-        an assertion covered only through a refining requirement has no direct
-        incoming edge, and is counted here only when conduction makes it
-        ~fully covered (rollup fraction ~1.0). A partial fraction (0 < f < 1)
-        stays a gap.
+        Implements: REQ-d00258-M. An *Assertion* is done when a citation named
+        it and the evidence is attached to it. A whole-requirement reference
+        named no *Assertion*, and coverage conducted up a `Refines:` chain was
+        written against the refining requirement -- an *Assertion* nobody has
+        written evidence for is still work, however finished the requirements
+        refining it are. Counted only at ~its whole value; a partially covered
+        one stays a gap.
         """
         covered: set[str] = set()
-        for _node, labels in _iter_assertion_coverage(req_node, kind):
+        for _node, labels in _iter_assertion_coverage(req_node, kind, direct_only=True):
             covered.update(labels)
         rollup = req_node.get_metric("rollup_metrics")
         if rollup is not None:
             dim = getattr(rollup, dimension, None)
             if dim is not None:
                 covered.update(
-                    lbl for lbl, frac in dim.indirect_pct_by_label.items() if frac >= 1.0 - 1e-9
+                    lbl
+                    for lbl, frac in measure_by_label(dim, WORK_LIST_MEASURE).items()
+                    if is_covered(frac)
                 )
         return covered
 
     def _implemented_labels(req_node: Any) -> set[str]:
-        """Return labels with any implementation evidence (fraction > 0).
+        """Return labels with any implementation evidence naming them.
 
         Reads the existing ``implemented`` projection -- no re-derivation. The
-        RELATIVE denominator (REQ-d00258): a *testing* gap is scoped to
+        RELATIVE denominator (REQ-d00258-I): a *testing* gap is scoped to
         assertions that are IMPLEMENTED, mirroring gaps.py's
         ``restrict_to_dimension="implemented"``. An unimplemented assertion has
         nothing built to test yet and is therefore not a testing gap.
+
+        Read on the SAME measure as the numerator (REQ-d00258-I/M), so the
+        figure and its denominator are made of the same kind of evidence.
         """
         rollup = req_node.get_metric("rollup_metrics")
         if rollup is None:
@@ -4353,7 +4852,7 @@ def _get_uncovered_assertions(
         dim = getattr(rollup, "implemented", None)
         if dim is None:
             return set()
-        return {lbl for lbl, frac in dim.indirect_pct_by_label.items() if frac > 0}
+        return covered_labels(dim, WORK_LIST_MEASURE)
 
     def _uncovered_labels_for_req(req_node: Any, all_labels: list[str]) -> set[str]:
         """Union of per-axis gaps for the requested ``source`` (REQ-d00258).
@@ -4376,34 +4875,47 @@ def _get_uncovered_assertions(
             uncovered.update(lbl for lbl in all_labels if lbl not in uat_covered)
         return uncovered
 
+    def _axis_dimensions() -> tuple[str, ...]:
+        """The dimensions this call's ``source`` is asking about."""
+        dims: list[str] = []
+        if source in ("test", "both"):
+            dims.append("tested")
+        if source in ("uat", "both"):
+            dims.append("uat_coverage")
+        return tuple(dims)
+
     def _fraction_for_label(req_node: Any, label: str) -> float:
-        # REQ-d00069-J: the strongest conducted fraction across the dimensions
-        # this call considers (per ``source``), for annotating an uncovered
-        # label with its "how close to covered" progress.
+        # The strongest work-list fraction across the dimensions this call
+        # considers, for annotating a gap with how far along it is. Read on the
+        # SAME measure as the verdict (REQ-d00258-M) so a reported gap can
+        # never be annotated as fully covered.
         rollup = req_node.get_metric("rollup_metrics")
         if rollup is None:
             return 0.0
         fractions = []
-        if source in ("test", "both"):
-            dim = getattr(rollup, "tested", None)
+        for dimension in _axis_dimensions():
+            dim = getattr(rollup, dimension, None)
             if dim is not None:
-                fractions.append(dim.indirect_pct_by_label.get(label, 0.0))
-        if source in ("uat", "both"):
-            dim = getattr(rollup, "uat_coverage", None)
-            if dim is not None:
-                fractions.append(dim.indirect_pct_by_label.get(label, 0.0))
+                fractions.append(measure_by_label(dim, WORK_LIST_MEASURE).get(label, 0.0))
         return max(fractions) if fractions else 0.0
 
     def _uncovered_detail(req_node: Any, labels: list[str], id_by_label: dict[str, str]) -> list:
+        rollup = req_node.get_metric("rollup_metrics")
         detail = []
         for label in labels:
             frac = _fraction_for_label(req_node, label)
+            # The four measures behind the verdict, per dimension this call
+            # asked about (REQ-d00258-J): the whole-requirement and conducted
+            # evidence a gap does not count stays visible to the caller.
             detail.append(
                 {
                     "id": id_by_label.get(label),
                     "label": label,
                     "fraction": round(frac, 4),
-                    "via": _via_provenance(frac),
+                    "measures": {
+                        dimension: _gap_measures(rollup, dimension, label)
+                        for dimension in _axis_dimensions()
+                    },
                 }
             )
         return detail
@@ -4785,33 +5297,43 @@ _SUBTREE_EDGE_DEFAULTS: dict[NodeKind, set[EdgeKind]] = {
 }
 
 
+# Implements: REQ-d00258-A, REQ-d00258-C, REQ-d00277
 def _compute_coverage_summary(req_node: Any) -> dict[str, Any]:
-    """Lightweight coverage summary reusing _iter_assertion_coverage().
+    """Coverage for one requirement, every dimension, from the one shared
+    aggregation.
 
-    REQ-d00075-B: Returns {total, covered, pct}.
+    This used to count the assertions reached by any TEST or CODE edge and
+    call the result "covered". That merged Implemented and Tested under one
+    word -- two dimensions answering different questions (REQ-d00277) -- and
+    read none of the four measures, so it saw neither coverage conducted up a
+    `Refines:` chain nor whether a citation named the *Assertion* or only its
+    requirement, and counted a partly covered *Assertion* whole. The figure
+    it produced was not comparable with any other surface's.
+
+    Each dimension is reported in its own right, headlined on the
+    per-*Assertion* total with its four measures beside it (REQ-d00258-A).
     """
-    # Count total assertions
-    total = 0
-    for child in req_node.iter_children():
-        if child.kind == NodeKind.ASSERTION:
-            total += 1
+    total = sum(1 for child in req_node.iter_children() if child.kind == NodeKind.ASSERTION)
+    rollup = req_node.get_metric("rollup_metrics")
 
-    if total == 0:
-        return {"total": 0, "covered": 0, "pct": 0.0}
+    dimensions: dict[str, Any] = {}
+    for name in COVERAGE_DIMENSIONS:
+        dim = getattr(rollup, name, None) if rollup is not None else None
+        if dim is None:
+            dimensions[name] = {
+                "covered": 0.0,
+                "pct": 0.0,
+                "measures": dict.fromkeys(MEASURES, 0.0),
+            }
+            continue
+        covered = float(measure_total(dim, HEADLINE_MEASURE))
+        dimensions[name] = {
+            "covered": round(covered, 2),
+            "pct": round((covered / total * 100) if total > 0 else 0.0, 1),
+            "measures": {m: round(v, 2) for m, v in dimension_measures(dim).items()},
+        }
 
-    # Collect covered assertion labels from both TEST and CODE edges
-    covered_labels: set[str] = set()
-    for _node, labels in _iter_assertion_coverage(req_node, NodeKind.TEST):
-        covered_labels.update(labels)
-    for _node, labels in _iter_assertion_coverage(req_node, NodeKind.CODE):
-        covered_labels.update(labels)
-
-    covered = len(covered_labels)
-    return {
-        "total": total,
-        "covered": covered,
-        "pct": round(covered / total * 100, 1) if total > 0 else 0.0,
-    }
+    return {"total_assertions": total, "dimensions": dimensions}
 
 
 def _collect_subtree(
@@ -4895,9 +5417,25 @@ def _subtree_to_markdown(
             level_str = node.get_field("level", "")
             status = node.get_field("status", "")
             title = node.get_label()
-            # Coverage summary (REQ-o00067-F)
+            # Coverage summary (REQ-o00067-F). Each dimension is NAMED rather
+            # than merged under a bare "covered": that word used to stand for
+            # a union of Implemented and Tested, which answer different
+            # questions (REQ-d00277), so a requirement nothing implements read
+            # the same as one nothing tests. The three *Traceability*
+            # dimensions are shown here; the structured formats carry every
+            # dimension and the measures behind each (REQ-d00258-A).
             cov = _compute_coverage_summary(node)
-            cov_str = f" [{cov['covered']}/{cov['total']} covered, {cov['pct']}%]"
+            total_a = cov["total_assertions"]
+            cov_str = " [{}]".format(
+                ", ".join(
+                    f"{word} {cov['dimensions'][dim]['covered']}/{total_a}"
+                    for dim, word in (
+                        ("implemented", "Implemented"),
+                        ("tested", "Tested"),
+                        ("verified", "Passing"),
+                    )
+                )
+            )
             lines.append(
                 f"{indent}{'#' * min(depth_level + 1, 6)} {node.id}: {title} "
                 f"({level_str}, {status}){cov_str}"
@@ -5758,8 +6296,23 @@ def create_server(
             print(f"CONFIG ERROR: {e}", file=sys.stderr)
             graph = FederatedGraph.empty(name="<unconfigured>")
 
+    # Implements: REQ-o00077-A, REQ-o00077-B, REQ-o00077-C
+    # Every tool call reaches the transport through ``call_tool``, so the
+    # rule lands there rather than on each tool: a per-tool opt-in is one
+    # a later tool forgets, and REQ-o00077-C is stated over all of them at
+    # once. Subclassed rather than patched onto the instance because
+    # ``_setup_handlers`` binds this method during construction, and a
+    # replacement installed afterwards is never the one the transport
+    # holds.
+    class _ExecutableGuardedMCP(FastMCP):
+        async def call_tool(self, name: str, arguments: dict[str, Any]) -> Any:
+            blocked = _guard_executable_drift(_state, name)
+            if blocked is not None:
+                return blocked
+            return await super().call_tool(name, arguments)
+
     # Create server with instructions for AI agents (REQ-d00065)
-    mcp = FastMCP("elspais", instructions=MCP_SERVER_INSTRUCTIONS)
+    mcp = _ExecutableGuardedMCP("elspais", instructions=MCP_SERVER_INSTRUCTIONS)
 
     # Store graph in closure for tools. _state is the process-wide shared
     # holder when one is passed (unified daemon): every ``_state["graph"]``
@@ -5911,7 +6464,7 @@ def create_server(
         Use when: you have search results and want to eliminate redundant parent
         requirements already covered by their children in the list.
         """
-        # REQ-d00077-F: Parse edge_kinds string to EdgeKind set
+        # Implements: REQ-d00077-F
         parsed_kinds: set[EdgeKind] = set()
         for kind_str in edge_kinds.split(","):
             kind_str = kind_str.strip().lower()
@@ -5940,6 +6493,7 @@ def create_server(
         Prefer discover_requirements() when you want only the most-specific
         (leaf-level) matches with ancestors pruned out.
         """
+        # Implements: REQ-d00078-F
         return _scoped_search(
             _state["graph"], query, scope_id, direction, field, regex, include_assertions, limit
         )
@@ -5962,7 +6516,7 @@ def create_server(
         searches descendants of scope_id, then prunes ancestor matches that are
         superseded by more-specific descendants.
         """
-        # REQ-d00079-D: Parse edge_kinds and delegate
+        # Implements: REQ-d00079-D
         parsed_kinds: set[EdgeKind] = set()
         for kind_str in edge_kinds.split(","):
             kind_str = kind_str.strip().lower()
@@ -6264,7 +6818,8 @@ def create_server(
         if guard:
             return guard
         parent = None
-        # Implements: REQ-o00062-M — placement changes the destination file's
+        # Implements: REQ-o00062-M
+        # Placement changes the destination file's
         # composition, so the FILE token is the one that must be current.
         guarded_id = file_id or parent_id
         if guarded_id:
@@ -6690,7 +7245,6 @@ def create_server(
                 target_id,
                 edge_kind,
                 assertion_targets,
-                config=_state.get("config"),
             ),
             source,
         )
@@ -6819,7 +7373,11 @@ def create_server(
                 the move itself creates has no prior version; pass "".
         """
         from elspais.graph import FILE_ID_PREFIX
-        from elspais.utilities.spec_paths import validate_new_spec_path
+        from elspais.graph.GraphNode import parse_structural_id
+        from elspais.utilities.spec_paths import (
+            file_id_for_reference,
+            validate_new_spec_path,
+        )
 
         guard = _guard_associate_write(_state["graph"], _state["config"], node_id, target_file_id)
         if guard:
@@ -6837,10 +7395,16 @@ def create_server(
         # (REQ-o00062-M/O): path validated against scanning config, every
         # guard runs BEFORE the file is created, and the brand-new file has
         # no version to require.
+        # The path comes out of the id through the one helper that knows
+        # where a structural id's colons fall -- it is written to disk below.
         if target_file_id.startswith(FILE_ID_PREFIX):
-            relative_path = target_file_id[len(FILE_ID_PREFIX) :]
+            try:
+                relative_path = parse_structural_id(target_file_id)[2]
+            except ValueError as exc:
+                return {"success": False, "error": str(exc)}
         else:
             relative_path = target_file_id
+            target_file_id = file_id_for_reference(target_file_id, _state["config"])
         if ".." in relative_path.split("/") or relative_path.startswith("/"):
             return {
                 "success": False,
@@ -7021,6 +7585,13 @@ def create_server(
 
         Use when: checking if a requirement has adequate test coverage, or finding
         which specific assertions still need tests written.
+
+        An assertion counts as covered when a citation NAMED it and the test
+        evidence is attached to it. A whole-requirement `Verifies:` is listed
+        under test_nodes but covers no assertion, and coverage conducted up a
+        `Refines:` chain was written against the refining requirement -- both
+        are published per assertion under uncovered_detail[].measures so you
+        can see them, neither closes the gap.
         """
         return _get_test_coverage(_state["graph"], req_id)
 
@@ -7032,6 +7603,13 @@ def create_server(
         """Find assertions that have no tests validating them.
 
         Use when: identifying test gaps — assertions that need tests written.
+
+        An assertion is a gap unless a citation named it and the evidence is
+        attached to it: whole-requirement evidence and coverage conducted up a
+        `Refines:` chain do not close it, and are published per assertion under
+        uncovered_detail[].measures instead. The test axis is scoped to
+        assertions that are implemented (nothing built yet is not a testing
+        gap); the UAT axis is unscoped.
 
         Args:
             req_id: Optional requirement ID to check. When None, scans ALL requirements.
@@ -7225,7 +7803,12 @@ def create_server(
                 read. The requirement is not guarded — its rendered form does
                 not change. Required.
         """
-        file_id = make_file_id(file_path)
+        # This tool writes relative to the primary repository's root, so the
+        # file it names is the primary's and its id is read in the primary's
+        # namespace. A caller cannot name another member's file here.
+        from elspais.utilities.spec_paths import file_id_for_reference
+
+        file_id = file_id_for_reference(file_path, _state["config"])
         conflict = _guard_version(_state["graph"], file_id, if_version)
         if conflict:
             return conflict
@@ -7260,6 +7843,13 @@ def create_server(
             include_kinds: Comma-separated NodeKind values to include.
                 Empty string uses conservative defaults per root kind.
             format: 'markdown', 'flat', or 'nested'.
+
+        Coverage: each requirement entry carries `total_assertions` and a
+        `dimensions` map with one entry per coverage dimension (REQ-d00277),
+        each headlining the per-*Assertion* total with the four measures
+        beside it (REQ-d00258-A). Counts are real numbers, since a journey
+        verified in part credits in proportion. There is no single "covered"
+        figure: Implemented and Tested answer different questions.
         """
         return _get_subtree(
             _state["graph"],
@@ -7430,6 +8020,14 @@ def run_server(
         # of a dead process and clear it, reporting a loss that never
         # happened and erasing the record of one that might. The HTTP
         # servers are one per repo and can own it unambiguously.
+        # Implements: REQ-o00077-A
+        # A stdio server is the longest-lived reader of a superseded
+        # program there is: it is spawned once when its client's session
+        # begins and is never acquired again, so an acquisition-time
+        # check never judges it a second time however long it runs.
+        from elspais.mcp.executable import watcher as _executable_watcher
+
+        _executable_watcher().start()
         try:
             mcp.run(transport="stdio")
         finally:
@@ -7475,12 +8073,39 @@ def run_server(
                 clients_alive=_clients_alive,
             )
 
-        # Resolve ephemeral port if port=0
-        if port == 0:
+        def _free_port() -> int:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                 s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
                 s.bind(("127.0.0.1", 0))
-                port = s.getsockname()[1]
+                return int(s.getsockname()[1])
+
+        # Resolve ephemeral port if port=0
+        if port == 0:
+            port = _free_port()
+        else:
+            # Implements: REQ-o00076-K, REQ-o00075-G
+            # A requested address that something else holds is not a
+            # reason to refuse to serve: the tool must work whether or
+            # not this process can be reached where a client expected.
+            # Serving somewhere else and saying so leaves the CLI and the
+            # viewer unaffected -- they read the record -- and tells a
+            # client that resolved the old address why it will not answer.
+            try:
+                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+                    probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                    probe.bind(("127.0.0.1", port))
+            except OSError:
+                import sys as _sys
+
+                taken, port = port, _free_port()
+                print(
+                    f"warning: port {taken} is reserved for this working tree but is "
+                    f"in use, so this daemon is serving on {port} instead. Commands "
+                    f"and the viewer are unaffected. A client configured for "
+                    f"{taken} will not reach it until that port is free and the "
+                    f"daemon is restarted.",
+                    file=_sys.stderr,
+                )
 
         # Client liveness: set for implicitly spawned daemons only (env
         # written by daemon.start_daemon). Explicit starts (manual serve,
@@ -7508,6 +8133,28 @@ def run_server(
                 server_type="daemon",
                 client_pid=client_pid,
             )
+
+        # Implements: REQ-o00077-A, REQ-o00077-D
+        # Watched for every daemon, not only one with a recorded client:
+        # the program moving beneath a process has nothing to do with who
+        # asked for that process. Watched only where it can move at all,
+        # so an installation fixed until it is replaced pays nothing.
+        #
+        # A client reaches this process by an address it can dial again,
+        # so replacing the process costs it nothing it cannot recover.
+        # That is what earns the silent renewal here, and REQ-o00077-F's
+        # refusal on a transport where it is not true.
+        from elspais.mcp.executable import installation_can_change
+        from elspais.mcp.executable import watcher as _executable_watcher
+
+        state.shared["renewable_unasked"] = True
+
+        def _renew_on_settled_change(_installed: str) -> None:
+            renew_for_installed_program(state.shared, lambda: state.graph)
+
+        if installation_can_change():
+            _executable_watcher().on_settled = _renew_on_settled_change
+            _executable_watcher().start()
 
         if client_pid is not None:
             from elspais.server.client_watch import (

@@ -1,5 +1,14 @@
-# Verifies: REQ-d00254-G
-"""Precise file-granular matching credits verified by real test-file path."""
+# Verifies: REQ-d00254-A, REQ-d00254-G
+"""A source result that names no test credits nothing and flags nothing.
+
+``match = "source"`` binds a result at the most precise scope available. The
+results below carry no line, so they resolve to the file and no further --
+they name every test written in it and therefore none of them. A result that
+binds at neither step nor test scope contributes no verdict, and the assertion
+its file's test declares stays awaiting one.
+"""
+
+import pytest
 
 from elspais.graph.annotators import CoverageCreditConfig, annotate_coverage
 from tests.core.graph_test_helpers import (
@@ -21,26 +30,17 @@ def _g(result_status):
     return build_graph(req, test, res)
 
 
-def test_precise_credits_verified_on_pass():
-    g = _g("passed")
+@pytest.mark.parametrize("result_status", ["passed", "failed", "skipped"])
+def test_file_scope_result_grants_no_verdict(result_status):
+    """Pass, fail and skip alike: the result reached the file, not the test."""
+    g = _g(result_status)
     annotate_coverage(g, CoverageCreditConfig())
+
+    # The result did arrive and did bind -- at file scope, which is the point.
+    assert g.find_by_id("r1").get_field("match_scope") == "file"
     m = g.find_by_id("REQ-p00001").get_metric("rollup_metrics")
-    assert m.verified.direct_pct_by_label.get("A") == 1.0
+    # The `Verifies:` linkage is live, so the assertion IS tested...
+    assert m.tested.total_by_label.get("A") == 1.0
+    # ...and awaiting a result: neither credited nor blamed.
+    assert m.verified.total_by_label.get("A", 0.0) == 0.0
     assert m.verified.has_failures is False
-
-
-def test_precise_flags_on_fail():
-    g = _g("failed")
-    annotate_coverage(g, CoverageCreditConfig())
-    m = g.find_by_id("REQ-p00001").get_metric("rollup_metrics")
-    assert m.verified.has_failures is True
-    assert m.verified.direct_pct_by_label.get("A", 0.0) == 0.0
-
-
-def test_precise_skipped_only_grants_no_credit():
-    """Skipped tests must NOT grant verified credit (regression guard)."""
-    g = _g("skipped")
-    annotate_coverage(g, CoverageCreditConfig())
-    m = g.find_by_id("REQ-p00001").get_metric("rollup_metrics")
-    assert m.verified.has_failures is False
-    assert m.verified.direct_pct_by_label.get("A", 0.0) == 0.0

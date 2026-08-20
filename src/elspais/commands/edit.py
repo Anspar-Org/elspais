@@ -10,6 +10,7 @@ Provides functionality to modify requirements in-place:
 
 File I/O is delegated to ``utilities.spec_writer``.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -48,20 +49,31 @@ def run(args: argparse.Namespace) -> int:
 
     validate_refs = getattr(args, "validate_refs", False)
 
+    # This repository's own grammar decides which headers are identifiers.
+    # Reading them under any other configuration's grammar would validate
+    # references against a set that is not this repository's.
+    from elspais.utilities.patterns import build_resolver
+
+    resolver = build_resolver(config)
+
     # Handle batch mode
     if hasattr(args, "from_json") and args.from_json:
-        return run_batch_edit(args.from_json, base_spec_dir, dry_run, validate_refs)
+        return run_batch_edit(args.from_json, base_spec_dir, dry_run, validate_refs, resolver)
 
     # Handle single edit mode
     if hasattr(args, "req_id") and args.req_id:
-        return run_single_edit(args, base_spec_dir, dry_run, validate_refs)
+        return run_single_edit(args, base_spec_dir, dry_run, validate_refs, resolver)
 
     print("Error: Must specify REQ_ID or --from-json", file=sys.stderr)
     return 1
 
 
 def run_batch_edit(
-    json_source: str, spec_dir: Path, dry_run: bool, validate_refs: bool = False
+    json_source: str,
+    spec_dir: Path,
+    dry_run: bool,
+    validate_refs: bool = False,
+    resolver: Any | None = None,
 ) -> int:
     """Run batch edit from JSON file or stdin."""
     # Load JSON
@@ -78,7 +90,9 @@ def run_batch_edit(
         print("Error: JSON must be a list of changes", file=sys.stderr)
         return 1
 
-    results = batch_edit(spec_dir, changes, dry_run=dry_run, validate_refs=validate_refs)
+    results = batch_edit(
+        spec_dir, changes, dry_run=dry_run, validate_refs=validate_refs, resolver=resolver
+    )
 
     # Report results
     success_count = sum(1 for r in results if r.get("success"))
@@ -100,7 +114,11 @@ def run_batch_edit(
 
 
 def run_single_edit(
-    args: argparse.Namespace, spec_dir: Path, dry_run: bool, validate_refs: bool = False
+    args: argparse.Namespace,
+    spec_dir: Path,
+    dry_run: bool,
+    validate_refs: bool = False,
+    resolver: Any | None = None,
 ) -> int:
     """Run single requirement edit."""
     req_id = args.req_id
@@ -117,17 +135,19 @@ def run_single_edit(
     # Collect valid refs if validation is enabled
     valid_refs: set | None = None
     if validate_refs:
-        valid_refs = collect_all_req_ids(spec_dir)
+        valid_refs = collect_all_req_ids(spec_dir, resolver)
 
     # Apply implements change
     if hasattr(args, "implements") and args.implements is not None:
         impl_list = [i.strip() for i in args.implements.split(",")]
 
-        # Validate references if enabled
-        if validate_refs and valid_refs:
+        # Validate references if enabled. An empty set is not "nothing to
+        # check": it means no identifier in the spec directory resolved, so
+        # every reference is unknown.
+        if validate_refs and valid_refs is not None:
             invalid_refs = []
             for ref in impl_list:
-                if ref not in valid_refs and f"REQ-{ref}" not in valid_refs:
+                if ref not in valid_refs:
                     invalid_refs.append(ref)
             if invalid_refs:
                 print(
@@ -238,30 +258,49 @@ def find_requirement_in_files(
     return None
 
 
-def collect_all_req_ids(spec_dir: Path) -> set:
+def collect_all_req_ids(spec_dir: Path, resolver: Any | None = None) -> set:
     """
     Collect all requirement IDs from spec directory.
 
     Args:
         spec_dir: Directory to scan
+        resolver: The repository's ``IdResolver``. Its grammar decides which
+            headers are identifiers and what each one's short form is —
+            hand-writing either here would recognise a different set of
+            identifiers than the rest of the tool does, and this set is what
+            ``--validate-refs`` checks against. Defaults to the shipped
+            configuration's grammar for callers holding no config.
 
     Returns:
-        Set of requirement IDs found (short form, e.g., "p00001")
+        Set of requirement IDs found, in every form the repository's
+        configuration admits (canonical, plus any configured alias such as
+        the short form).
     """
     import re
 
-    req_ids = set()
-    pattern = re.compile(r"^#+\s*(REQ-[A-Za-z0-9-]+):", re.MULTILINE)
+    if resolver is None:
+        from elspais.config import config_defaults
+        from elspais.utilities.patterns import build_resolver
+
+        resolver = build_resolver(config_defaults())
+
+    req_ids: set[str] = set()
+    pattern = re.compile(rf"^#+\s*({resolver.grammar().identifier}):", re.MULTILINE)
 
     for md_file in spec_dir.rglob("*.md"):
         content = md_file.read_text()
         for match in pattern.finditer(content):
             full_id = match.group(1)
-            # Extract short form (e.g., "p00001" from "REQ-p00001")
-            if full_id.startswith("REQ-"):
-                short_id = full_id[4:]  # Remove "REQ-" prefix
-                req_ids.add(short_id)
-            req_ids.add(full_id)  # Also add full form
+            req_ids.add(full_id)
+            parsed = resolver.parse(full_id)
+            if parsed is not None:
+                # Every spelling the configuration admits for this
+                # identifier, so a reference written in any of them
+                # validates. Which spellings those are is the
+                # configuration's business, not this command's -- the
+                # shipped default carries a short form, others may not.
+                for form in ("canonical", *resolver.config.aliases):
+                    req_ids.add(resolver.render(parsed, form))
 
     return req_ids
 
@@ -271,6 +310,7 @@ def batch_edit(
     changes: list[dict[str, Any]],
     dry_run: bool = False,
     validate_refs: bool = False,
+    resolver: Any | None = None,
 ) -> list[dict[str, Any]]:
     """
     Apply batch edits from a list of change specifications.
@@ -283,6 +323,7 @@ def batch_edit(
                  - move_to: str (relative path)
         dry_run: If True, don't actually modify files
         validate_refs: If True, validate that implements references exist
+        resolver: The repository's ``IdResolver``; see ``collect_all_req_ids``.
 
     Returns:
         List of result dicts
@@ -292,7 +333,7 @@ def batch_edit(
     # Collect all req IDs if validation is enabled
     valid_refs: set | None = None
     if validate_refs:
-        valid_refs = collect_all_req_ids(spec_dir)
+        valid_refs = collect_all_req_ids(spec_dir, resolver)
 
     for change in changes:
         req_id = change.get("req_id")
@@ -316,11 +357,16 @@ def batch_edit(
         result: dict[str, Any] = {"req_id": req_id, "success": True}
 
         # Validate implements references if enabled
-        if validate_refs and valid_refs and "implements" in change:
+        # `valid_refs` empty is not "nothing to check" -- it means no
+        # identifier in the spec directory resolved, and every reference is
+        # therefore unknown. Reading it as falsy is how --validate-refs came
+        # to report success by doing nothing.
+        if validate_refs and valid_refs is not None and "implements" in change:
             invalid_refs = []
             for ref in change["implements"]:
-                # Check both short and full forms
-                if ref not in valid_refs and f"REQ-{ref}" not in valid_refs:
+                # Every admitted spelling is already in the set, so one
+                # membership test answers for all of them.
+                if ref not in valid_refs:
                     invalid_refs.append(ref)
             if invalid_refs:
                 result = {

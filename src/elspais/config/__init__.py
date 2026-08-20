@@ -9,7 +9,6 @@ Exports:
 from __future__ import annotations
 
 import fnmatch
-import os
 import re
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -113,105 +112,6 @@ def status_expects_implementation(config: dict[str, Any], status: str | None) ->
     return get_status_roles(config or {}).role_of(status) == StatusRole.ACTIVE
 
 
-def _migrate_legacy_patterns(config: dict[str, Any]) -> dict[str, Any]:
-    """Migrate legacy [patterns] config to [id-patterns] + [levels] format.
-
-    Configs without an explicit ``version`` field (pre-v2) may define ID
-    patterns in the old ``[patterns]`` section.  This function synthesizes
-    the equivalent ``[id-patterns]`` and ``[levels]`` so that ``IdResolver``
-    works correctly.
-
-    Once all repos have migrated to v3 format, this migration path can be
-    removed.
-    """
-    # v2+ configs must use [id-patterns] directly — skip migration
-    config_version = config.get("version")
-    if config_version is not None and isinstance(config_version, int) and config_version >= 2:
-        return config
-
-    patterns = config.get("patterns", {})
-    if not patterns or not patterns.get("types"):
-        return config
-
-    # Only migrate if [id-patterns] is still at defaults (user didn't define it)
-    id_patterns = config.get("id-patterns", {})
-    canonical = id_patterns.get("canonical")
-    default_canonical = config_defaults()["id-patterns"]["canonical"]
-    if canonical is not None and canonical != default_canonical:
-        return config  # user has explicit [id-patterns], don't override
-
-    # Build level definitions from old types: old types.*.id -> levels.*.letter
-    old_types = patterns.get("types", {})
-    new_levels: dict[str, Any] = {}
-    for code, tdef in old_types.items():
-        if isinstance(tdef, dict):
-            new_levels[code] = {
-                "rank": tdef.get("level", 1),
-                "letter": tdef.get("id", code[0]),
-                "implements": [code],  # self-reference as minimal default
-            }
-
-    # Build component format from old id_format
-    old_id_format = patterns.get("id_format", {})
-    new_component = {
-        "style": old_id_format.get("style", "numeric"),
-        "digits": old_id_format.get("digits", 5),
-        "leading_zeros": old_id_format.get("leading_zeros", True),
-    }
-    if old_id_format.get("pattern"):
-        new_component["pattern"] = old_id_format["pattern"]
-
-    # Build canonical template by translating tokens
-    old_template = patterns.get("id_template", "{prefix}-{type}{id}")
-    canonical = old_template
-    canonical = canonical.replace("{prefix}", "{namespace}")
-    canonical = canonical.replace("{id}", "{component}")
-    canonical = canonical.replace("{type}", "{level.letter}")
-
-    # Handle {associated} token: replace with literal prefix if configured
-    associated_config = patterns.get("associated", {})
-    if associated_config.get("enabled") and "{associated}" in canonical:
-        assoc_prefix = config.get("associated", {}).get("prefix", "")
-        sep = associated_config.get("separator", "-")
-        if assoc_prefix:
-            canonical = canonical.replace("{associated}", f"{assoc_prefix}{sep}")
-        else:
-            # Associated enabled but no prefix — drop the token
-            canonical = canonical.replace("{associated}", "")
-    else:
-        canonical = canonical.replace("{associated}", "")
-
-    # Build assertions config
-    old_assertions = patterns.get("assertions", {})
-    new_assertions: dict[str, Any] = {}
-    if old_assertions:
-        new_assertions["label_style"] = old_assertions.get("label_style", "uppercase")
-        new_assertions["max_count"] = old_assertions.get("max_count", 26)
-        if "zero_pad" in old_assertions:
-            new_assertions["zero_pad"] = old_assertions["zero_pad"]
-        if "multi_separator" in old_assertions:
-            new_assertions["multi_separator"] = old_assertions["multi_separator"]
-
-    # Also set namespace from patterns.prefix if not already in [project]
-    namespace = patterns.get("prefix", "REQ")
-    if config.get("project", {}).get("namespace") == config_defaults()["project"]["namespace"]:
-        config.setdefault("project", {})["namespace"] = namespace
-
-    # Write synthesized [id-patterns]
-    config["id-patterns"] = {
-        "canonical": canonical,
-        "aliases": {"short": canonical.split("-", 1)[1] if "-" in canonical else canonical},
-        "component": new_component,
-        "assertions": new_assertions or id_patterns.get("assertions", {}),
-    }
-
-    # Write synthesized [levels]
-    if new_levels:
-        config["levels"] = new_levels
-
-    return config
-
-
 CURRENT_CONFIG_VERSION = 4
 
 
@@ -249,7 +149,6 @@ def _migrate_v3_to_v4(config: dict) -> dict:
 
 
 MIGRATIONS: dict[int, Callable[[dict], dict]] = {
-    1: _migrate_legacy_patterns,  # [patterns] -> [id-patterns]
     3: _migrate_v3_to_v4,  # flat terms severity -> nested [terms.severity]
 }
 
@@ -304,31 +203,35 @@ def load_config(config_path: Path) -> dict[str, Any]:
         merged = _merge_configs(merged, local_config)
         _override_levels(merged, local_config)
 
-    merged = _apply_env_overrides(merged)
-
     # Version-gated sequential migration
     version = int(merged.get("version", 1))
     for v in range(version, CURRENT_CONFIG_VERSION):
         if v in MIGRATIONS:
             merged = MIGRATIONS[v](merged)
 
-    # Strip legacy/unknown keys before Pydantic validation, but keep them
-    # for backward-compatible config.get() access afterwards.
-    _LEGACY_TOP_LEVEL_KEYS = {"patterns", "requirements", "paths", "references"}
-    stripped: dict[str, Any] = {}
-    for key in _LEGACY_TOP_LEVEL_KEYS:
-        if key in merged:
-            stripped[key] = merged.pop(key)
+    # A pre-v2 configuration declared its identifiers in a `[patterns]`
+    # section. Nothing reads that section now, so accepting one would mean
+    # loading a configuration whose identifier settings are silently
+    # ignored -- the reader would get whatever the defaults are, and the
+    # spelling they configured would simply not happen.
+    if "patterns" in merged:
+        raise ValueError(
+            f"{config_path}: [patterns] is the pre-v2 way of declaring identifiers "
+            f"and is no longer read. Declare levels in [levels] and the identifier "
+            f"form in [id-patterns]; see `elspais docs config`."
+        )
 
-    # Strip legacy associates.paths list before validation (v3 expects named entries)
-    assoc = merged.get("associates")
-    if isinstance(assoc, dict) and "paths" in assoc:
-        stripped["associates"] = merged.pop("associates")
-
-    # Strip removed field: allowed_statuses (now derived from status_roles)
+    # The set of statuses a requirement may declare is the union of the
+    # lists in [rules.format.status_roles], so naming it again here could
+    # only agree or disagree with them. It was dropped silently, which left
+    # a project believing it had said something.
     fmt = merged.get("rules", {}).get("format", {})
     if "allowed_statuses" in fmt:
-        fmt.pop("allowed_statuses")
+        raise ValueError(
+            f"{config_path}: rules.format.allowed_statuses is no longer read. The "
+            f"statuses a requirement may declare are the ones named in "
+            f"[rules.format.status_roles], which also says what each one means."
+        )
 
     # Validate via Pydantic schema
     from elspais.config.schema import ElspaisConfig
@@ -354,10 +257,6 @@ def load_config(config_path: Path) -> dict[str, Any]:
 
     # Produce hyphenated dict for backward-compatible access
     result = validated.model_dump(by_alias=True)
-
-    # Restore stripped legacy keys so existing config access still works
-    for key, value in stripped.items():
-        result[key] = value
 
     return result
 
@@ -508,82 +407,6 @@ def _merge_configs(base: dict[str, Any], override: dict[str, Any]) -> dict[str, 
     return result
 
 
-def _try_parse_env_value(value: str) -> Any:
-    """Parse an environment variable value with type inference.
-
-    Attempts to interpret the string as a richer Python type:
-    - JSON arrays/objects (starts with ``[`` or ``{``)
-    - Booleans (``true``/``false``, case-insensitive)
-    - Falls back to plain string
-
-    Args:
-        value: Raw environment variable string.
-
-    Returns:
-        Parsed Python value (list, dict, bool, or str).
-    """
-    import json
-
-    # JSON array or object
-    if value.startswith("[") or value.startswith("{"):
-        try:
-            return json.loads(value)
-        except json.JSONDecodeError:
-            return value
-
-    # Boolean
-    if value.lower() == "true":
-        return True
-    if value.lower() == "false":
-        return False
-
-    # Numeric (int or float)
-    numeric = _try_parse_numeric(value)
-    if numeric is not None:
-        return numeric
-
-    return value
-
-
-# Env vars reserved by the tool itself — must NOT be treated as config overrides.
-# ELSPAIS_VERSION is the min-CLI-version pin consumed by utilities/version_check.py;
-# it would otherwise collide with the config's top-level `version` (schema format int).
-# ELSPAIS_CLIENT_PID (and its former name ELSPAIS_SPAWNER_PID, still
-# honoured) is the client-identity declaration consumed by mcp/daemon.py
-# (resolve_client_pid); there is no `client` config section.
-_RESERVED_ENV_VARS = frozenset({"ELSPAIS_VERSION", "ELSPAIS_CLIENT_PID", "ELSPAIS_SPAWNER_PID"})
-
-
-def _apply_env_overrides(config: dict[str, Any]) -> dict[str, Any]:
-    """Apply environment variable overrides.
-
-    Looks for ELSPAIS_* environment variables.  Values are parsed via
-    ``_try_parse_env_value`` so that JSON lists, booleans, and plain
-    strings are all handled correctly.
-
-    Tool-reserved vars in ``_RESERVED_ENV_VARS`` are skipped.
-
-    Args:
-        config: Configuration dictionary.
-
-    Returns:
-        Configuration with environment overrides applied.
-    """
-    # Example: ELSPAIS_PATTERNS_PREFIX=MYREQ
-    # Example: ELSPAIS_ASSOCIATES_PATHS='["/path/to/repo"]'
-    for key, value in os.environ.items():
-        if key.startswith("ELSPAIS_") and key not in _RESERVED_ENV_VARS:
-            # Convert ELSPAIS_PATTERNS_PREFIX to patterns.prefix
-            # Single _ = section separator, __ = literal underscore in key
-            # e.g., ELSPAIS_VALIDATION_STRICT__HIERARCHY -> validation.strict_hierarchy
-            config_key = (
-                key[8:].lower().replace("__", "\x00").replace("_", ".").replace("\x00", "_")
-            )
-            _set_nested(config, config_key, _try_parse_env_value(value))
-
-    return config
-
-
 def _set_nested(data: dict[str, Any], key: str, value: Any) -> None:
     """Set a value at a nested key path."""
     parts = key.split(".")
@@ -688,9 +511,16 @@ def get_config(
             # A config file that exists but can't be parsed is always an error.
             # Silently falling back to defaults would hide the problem and cause
             # hard-to-diagnose issues (e.g. skip_dirs not working).
+            # The advice names the file, not a cause: a config file is
+            # refused for a malformed line, for a setting that no longer
+            # exists, and for a value the schema will not admit, and telling
+            # a reader to look for a syntax error sends them hunting for
+            # something that is usually not there. The exception above says
+            # which setting and why.
             raise ValueError(
-                f"Failed to parse config file {resolved_path}: {e}\n"
-                "Fix the syntax error in your .elspais.toml file."
+                f"Failed to read config file {resolved_path}: {e}\n"
+                f"Correct the reported setting in {resolved_path.name}, or see "
+                f"`elspais docs config` for what it accepts."
             ) from e
     else:
         # Return defaults (no config file found)
@@ -992,6 +822,7 @@ __all__ = [
     "load_config",
     "find_config_file",
     "find_git_root",
+    "validate_config",
     "get_config",
     "get_spec_directories",
     "get_code_directories",
@@ -1004,89 +835,76 @@ __all__ = [
     "_try_parse_numeric",
     "_try_parse_env_value",
     "get_associates_config",
-    "validate_no_transitive_associates",
 ]
 
 
 # Implements: REQ-d00202-A+B+C
+def validate_config(config: dict[str, Any]) -> Any:
+    """Validate a configuration dictionary into the typed schema.
+
+    The one place a loaded configuration is turned into `ElspaisConfig`.
+    Eleven copies of this existed, each filtering the dictionary to the
+    schema's own field names first, because `load_config` used to hand back
+    keys it had itself withheld from validation. It no longer does, so the
+    filter is gone with them: a key the schema does not know is a key the
+    configuration should not have carried, and it is reported here rather
+    than dropped by every consumer separately.
+    """
+    from elspais.config.schema import ElspaisConfig
+
+    return ElspaisConfig.model_validate(config)
+
+
 def get_associates_config(
     config: dict[str, Any],
     repo_root: Path | None = None,
 ) -> dict[str, dict]:
     """Read [associates] sections from config.
 
-    Supports both the new named format ([associates.<name>]) and the legacy
-    paths array format ([associates] paths = ["../repo"]).
-
-    Each associate entry has:
+    Each associate is declared as ``[associates.<name>]`` and states:
     - path (str, required): relative path to the associate repo
-    - namespace (str, required): namespace prefix for the associate
+    - namespace (str, required): the namespace expected at that path
+    - git (str, optional): remote URL, for clone assistance only
 
     Args:
         config: The project configuration dictionary.
-        repo_root: Repository root for resolving relative legacy paths.
+        repo_root: Unused; retained so callers may pass the repository
+            root without knowing whether resolution needs it.
 
     Returns:
         Dict mapping associate name to {"path": str, "namespace": str}.
         Empty dict if no [associates] section exists.
+
+    Raises:
+        ValueError: A declaration omits its path or its namespace. Both
+            are how a declaration says which repository it means, so a
+            declaration missing either names nothing in particular.
     """
     associates = config.get("associates", {})
     if not associates:
         return {}
     result: dict[str, dict] = {}
     for name, entry in associates.items():
-        if isinstance(entry, dict):
-            result[name] = {
-                "path": entry["path"],
-                "namespace": entry.get("namespace", ""),
-            }
-
-    # Support legacy [associates] paths = ["../repo"] format
-    if not result:
-        paths = associates.get("paths", [])
-        if isinstance(paths, list) and paths:
-            from elspais.associates import discover_associate_from_path
-
-            for path_str in paths:
-                repo_path = Path(path_str)
-                if not repo_path.is_absolute() and repo_root:
-                    repo_path = repo_root / repo_path
-                assoc = discover_associate_from_path(repo_path)
-                if not isinstance(assoc, str):
-                    result[assoc.name] = {
-                        "path": path_str,
-                        "git": None,
-                    }
+        if not isinstance(entry, dict):
+            raise ValueError(
+                f"Associate '{name}' is not a declaration table. Declare it as "
+                f"[associates.{name}] with a path and a namespace."
+            )
+        if not entry.get("path"):
+            raise ValueError(f"Associate '{name}' declares no path.")
+        if not entry.get("namespace"):
+            raise ValueError(
+                f"Associate '{name}' declares no namespace. A declaration names "
+                f"the namespace it expects to find at that path, which is what "
+                f"identifies the repository it means."
+            )
+        result[name] = {
+            "path": entry["path"],
+            "namespace": entry["namespace"],
+            "git": entry.get("git"),
+        }
 
     return result
-
-
-# Implements: REQ-d00202-D
-def validate_no_transitive_associates(
-    associate_name: str, associate_config: dict[str, Any]
-) -> None:
-    """Check that an associate does not declare its own associates.
-
-    Only the root repo may declare [associates]. If an associate's config
-    contains an [associates] section, raise FederationError.
-
-    Args:
-        associate_name: Name of the associate being validated.
-        associate_config: The associate's loaded config dict.
-
-    Raises:
-        FederationError: If the associate declares its own associates.
-    """
-    from elspais.graph.federated import FederationError
-
-    # Use get_associates_config to check for NEW-format [associates.<name>] entries
-    # (not the legacy associates.paths list from the old sponsor system)
-    new_format_associates = get_associates_config(associate_config)
-    if new_format_associates:
-        raise FederationError(
-            f"Associate '{associate_name}' declares its own associates "
-            f"-- only the root repo may declare associates."
-        )
 
 
 def get_status_roles(config: dict[str, Any]):

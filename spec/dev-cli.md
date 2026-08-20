@@ -41,17 +41,17 @@ Multi-*Assertion* references allow compact notation for referencing multiple ass
 
 ### Assertions
 
-A. The `multi_assertion_separator` key SHALL be available in `[references.defaults]` configuration.
+A. The character joining *Assertion* labels within one reference SHALL be configurable per repository.
 
-B. The default value of `multi_assertion_separator` SHALL be `"+"`.
+B. The multi-*Assertion* separator SHALL default to `+`.
 
-C. Config validation SHALL reject configurations where the multi-*Assertion* separator character appears in the `separators` list.
+C. [Removed - named a list of accepted alternate separators that no longer exists. The multi-*Assertion* separator is constrained against the characters an *Assertion* label can contain, per REQ-d00251-J.]
 
-D. Expansion SHALL occur in the graph builder's link resolution, applying uniformly to all parser types (requirement, code, test, result).
+D. A multi-*Assertion* reference SHALL expand to the same set of individual references wherever it is written.
 
-E. The expansion pattern SHALL derive from the configured *Assertion* label pattern and multi-*Assertion* separator.
+E. [Removed - restated the derivation of a pattern rather than an obligation the tool must meet. What a multi-*Assertion* reference expands to is D; which strings the grammar admits is REQ-d00212-G.]
 
-F. When `multi_assertion_separator` is empty or `false`, expansion SHALL be disabled.
+F. [Removed - an empty separator is not a configurable state. A separator is exactly one character, per REQ-d00251-K, so there is no value of it that disables expansion.]
 
 G. A reference containing no multi-*Assertion* separator character SHALL pass through unchanged.
 
@@ -61,11 +61,17 @@ The previous implementation hardcoded expansion in RequirementParser only, using
 
 ### Changelog
 
+- 2026-08-12 | b1812806 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-10 | c40a462e | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-10 | 67ee3df9 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-10 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: A and B name the configured separator, D states expansion uniformity; retire E (superseded) and F (empty is not a state)
+- 2026-08-10 | e001c08a | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-10 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: retire C, which named a list of accepted alternate separators that no longer exists
 - 2026-07-31 | 25c43ce2 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 313fe52b | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | 313fe52b | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *Multi-Assertion Reference Expansion* | **Hash**: 25c43ce2
+*End* *Multi-Assertion Reference Expansion* | **Hash**: b1812806
 ---
 
 ## REQ-d00082: Unified Reference Configuration
@@ -76,23 +82,23 @@ The system SHALL provide a unified, configurable reference pattern system used b
 
 ### Assertions
 
-D. The reference configuration SHALL support case-sensitive and case-insensitive ID matching.
+D. [Removed - named a configurable case-matching mode that does not exist. An identifier is admitted in one spelling only, per REQ-d00212-G, so there is no case-matching mode to configure.]
 
-E. The reference configuration SHALL support configurable ID separators including underscore and hyphen.
+E. Locating a reference in a source file SHALL use the separator the repository owning the referenced identifier configures, so that a reference is recognised in exactly the form that repository writes and in no other.
 
-F. The reference configuration SHALL support file-type specific overrides via glob patterns (e.g., `*.py`, `tests/legacy/**`).
+F. [Removed - named per-file reference overrides that do not exist. One set of acceptance rules applies in every context that accepts a reference, per REQ-p00014-T.]
 
-G. The reference configuration SHALL extract ID components (prefix, type, number) from matched references.
+G. Reading a reference SHALL yield the parts its grammar defines, so that a consumer works from the identifier's structure rather than from the matched text.
 
-H. The reference configuration SHALL support configurable comment styles (e.g., `#`, `//`, `--`) for code reference detection.
+H. [Removed - named a reference-configuration artifact that does not exist. The limitation it described is real: a *Traceability* keyword inside a block comment is never read, so a block-comment-only language has no reference form.]
 
-I. CodeParser SHALL accept PatternConfig and ReferenceResolver for configurable reference matching in source files.
+I. [Removed - named classes that do not exist; source-file reference matching derives from the identifier grammar authority.]
 
-J. TestParser SHALL accept PatternConfig and ReferenceResolver for configurable reference matching in test files.
+J. [Removed - named classes that do not exist; test-file reference matching derives from the identifier grammar authority.]
 
-K. JUnitXMLParser SHALL accept PatternConfig and ReferenceResolver for configurable reference matching in JUnit XML reports.
+K. [Removed - a result record is matched to its test by recorded identity, not by reading requirement references out of a reported test name.]
 
-L. PytestJSONParser SHALL accept PatternConfig and ReferenceResolver for configurable reference matching in pytest JSON reports.
+L. [Removed - a result record is matched to its test by recorded identity, not by reading requirement references out of a reported test name.]
 
 ### Rationale
 
@@ -100,11 +106,17 @@ Different projects use different ID conventions, comment styles, and directory s
 
 ### Changelog
 
+- 2026-08-10 | f0808bb9 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-10 | 268cdb9f | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-10 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: retire D and F, which named configuration that does not exist; G states the parts a read reference yields
+- 2026-08-10 | 6289e433 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-10 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: E names the configured separator rather than a list of accepted alternates
+- 2026-08-10 | 109921be | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | 00cd96fc | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 89956cd7 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 89956cd7 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Unified Reference Configuration* | **Hash**: 00cd96fc
+*End* *Unified Reference Configuration* | **Hash**: f0808bb9
 ---
 
 ## REQ-d00084: Trace Command
@@ -121,7 +133,7 @@ B. The command SHALL support column presets (`--preset minimal|standard|full`) c
 
 C. The command SHALL support independent detail flags (`--body`, `--assertions`, `--tests`) that control whether expanded rows appear beneath each requirement, orthogonal to column presets.
 
-D. The standard and full presets SHALL include per-requirement coverage columns Implemented (assertions with code evidence: Implements references, conducted, or inherited via INSTANCE/INTEGRATES), Tested (assertions with test references), and Passing (tested assertions whose evidence passes, including line-coverage credit), each displayed as N/M (%) on the generous footing with the indirect-evidence marker per REQ-d00258-A.
+D. The standard and full presets SHALL include per-requirement coverage columns for Implemented, Tested and Passing as REQ-d00277 defines them, each displayed as N/M (%) on the total coverage of REQ-d00069-N, with the measures behind it available per REQ-d00258-A and no caveat marker standing in for one not shown.
 
 ### Rationale
 
@@ -129,13 +141,16 @@ A JSON graph output mode enables programmatic consumption of the full *Traceabil
 
 ### Changelog
 
+- 2026-08-19 | 67887c51 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-18 | 3a6da144 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-17 | 66981b81 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | 1bd6bca1 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-02 | 64954432 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-02 | f4e1d611 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | f8f0e0f2 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | f8f0e0f2 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *Trace Command* | **Hash**: 1bd6bca1
+*End* *Trace Command* | **Hash**: 67887c51
 ---
 
 ## REQ-d00085: Unified Report Composition
@@ -156,9 +171,9 @@ D. When a single section is specified, it SHALL behave identically to a standalo
 
 E. The `--format` flag SHALL support `text`, `markdown`, `json`, and `csv` output modes. Not all formats are valid for all sections; invalid combinations SHALL produce a clear error.
 
-F. The `-q`/`--quiet` flag SHALL suppress all output except a single summary line per section. The `-v`/`--verbose` flag SHALL expand all available detail.
+F. The `-q`/`--quiet` flag SHALL suppress all output except a single summary line per section.
 
-G. The `--lenient` flag SHALL allow warnings to pass without affecting the exit code. Without `--lenient`, any warning-level finding SHALL cause a non-zero exit code.
+G. The `--lenient` flag SHALL allow warnings to pass without affecting the exit code.
 
 H. The `--format junit` option SHALL render health checks as JUnit XML, mapping categories to `<testsuite>` elements, checks to `<testcase>` elements, failures to `<failure>` elements, warnings to `<system-err>`, and info to `<system-out>`.
 
@@ -166,17 +181,66 @@ I. Each `HealthCheck` SHALL carry a `findings` list of `HealthFinding` dataclass
 
 J. The `--format sarif` option SHALL render health findings as SARIF v2.1.0 JSON, with one `reportingDescriptor` per unique check name, one `result` per `HealthFinding` with physical locations, passing checks omitted, and coverage stats in `run.properties`.
 
+K. The `-v`/`--verbose` flag SHALL expand all available detail.
+
+L. Without `--lenient`, any warning-level finding SHALL cause a non-zero exit code.
+
+M. Detail for a passing check SHALL be suppressed by default and included on request.
+
+N. A format that always carries complete findings, or that omits passing checks entirely, SHALL render identically whether or not passing-check detail is requested.
+
 ### Rationale
 
 Report-producing commands (`health`, `trace`, `coverage`, `changed`) currently exist as independent subcommands with inconsistent format support. Composing a combined report (e.g. health + coverage for a CI PR comment) requires multiple invocations and manual concatenation. A composable system builds the graph once, renders each section, and produces unified output. The `--lenient` flag provides an escape hatch for workflows that want to observe warnings without gating on them.
 
+Quietness and verbosity are separate obligations (F, K), as are leniency and the default it departs from (G, L). Each pair was carried under one label until evidence for one half was found standing in for both: coverage is reported per assertion, so a label holding two obligations cannot distinguish an implementation from half of one.
+
+A failing check's findings are what the reader came for; a passing check's are noise until asked for, which is why M suppresses them by default and makes the request explicit rather than the reverse. The request is about passing checks only and is orthogonal to overall verbosity — a format carries a passing check's detail because it was asked for, not because the report as a whole is verbose. N is separate from M because a format can be wrong about invariance while the request itself works: complete findings and omitted passing checks are properties of those formats, not outcomes of the request.
+
 ### Changelog
 
+- 2026-08-11 | 587285b0 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-11 | 650b3641 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-11 | 0d1e518a | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: specify passing-check detail (M) and its format invariance (N)
+- 2026-08-11 | 0d1e518a | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: split the verbose half of F into K and the without-lenient half of G into L
 - 2026-07-31 | 0d1e518a | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 82d76f1a | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 82d76f1a | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Unified Report Composition* | **Hash**: 0d1e518a
+*End* *Unified Report Composition* | **Hash**: 587285b0
+---
+
+## REQ-d00271: Diagnostic Code Vocabulary
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00015
+
+A report groups findings so they can be counted and a severity chosen for them, and names each finding's defect so it can be acted on. Those are separate vocabularies with separate obligations: the first is closed so a project can configure against it, the second is open so a diagnosis can become more specific without anything having to be reconfigured.
+
+### Assertions
+
+A. Every finding SHALL carry a code naming its defect, and the codes SHALL be documented with an example of input that produces each.
+
+B. A finding MAY carry more than one code, so that a defect determined in several independent respects is reported in all of them rather than in whichever was tested first.
+
+C. There SHALL be a code meaning that the defect could not be determined beyond the category, and a finding whose defect is undetermined SHALL carry it. A finding carrying only that code is the report that nothing more specific is known, and SHALL NOT be read as the absence of a diagnosis.
+
+D. A code SHALL be issued only where the input determines the defect it names. Where the input admits two accounts of equal extent, neither SHALL be issued.
+
+E. Introducing a code SHALL NOT change which category a finding falls in, the severity configured for that category, or the meaning of a code already in use.
+
+### Rationale
+
+The two vocabularies fail in opposite directions, which is why they are separated. A category that grows breaks configuration that referred to the old set and reopens a decision the project already made. A diagnosis that cannot grow leaves the tool unable to say more than it once could, so every improvement in what it can determine has to be paid for in churn somewhere. Fixing the categories and leaving the codes open lets diagnosis improve indefinitely at no cost to the project's settings.
+
+D is what keeps B from becoming guesswork. Reporting several respects in which an input is defective is a statement of fact only where each respect is determined by the input; where two accounts explain it equally, naming either asserts something the input does not support, and an author acting on the wrong one is worse off than an author told only the category. C is what makes that refusal reportable rather than silent: without a code for "no further account", declining to guess is indistinguishable from not having looked.
+
+### Changelog
+
+- 2026-08-16 | 6f4019d1 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: sync changelog hash
+- 2026-08-16 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: Active — every reported fault carries codes, the codes are documented with a producing input in `elspais docs linking`, and two codes no input could produce are retired from the vocabulary
+- 2026-08-15 | - | - | Michael Lewis (<michael@anspar.org>) | Initial authoring: closed categories over open codes, multiple codes per finding, a generic code, and issuance only where determined
+
+*End* *Diagnostic Code Vocabulary* | **Hash**: 6f4019d1
 ---
 
 ## REQ-d00086: Coverage Report Section
@@ -189,7 +253,7 @@ The `coverage` section SHALL produce a coverage report showing implemented, test
 
 A. The report SHALL group requirements by level (PRD, OPS, DEV) and show counts and percentages of requirements with code references, test references, and passing tests.
 
-B. The report SHALL compute per-requirement *Assertion* coverage: Implemented (assertions with code evidence: Implements references, conducted, or inherited via INSTANCE/INTEGRATES), Tested (assertions with test references), and Passing (tested assertions whose evidence passes, including line-coverage credit), each on the generous footing with the indirect-evidence marker per REQ-d00258-A.
+B. The report SHALL compute per-requirement *Assertion* coverage for Implemented, Tested and Passing as REQ-d00277 defines them, each on the total coverage of REQ-d00069-N, with the measures behind it available per REQ-d00258-A and no caveat marker standing in for one not shown.
 
 C. The report SHALL support `text`, `markdown`, `json`, and `csv` output formats.
 
@@ -201,12 +265,15 @@ Coverage data is already computed during graph construction but is only surfaced
 
 ### Changelog
 
+- 2026-08-19 | 4559fce7 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-18 | 0cca2a88 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-17 | 185b2d34 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | a12d2826 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-02 | a17871db | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 2fd4ab13 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | 2fd4ab13 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *Coverage Report Section* | **Hash**: a12d2826
+*End* *Coverage Report Section* | **Hash**: 4559fce7
 ---
 
 ## REQ-d00073: Link Suggestion CLI Command
@@ -495,4 +562,4 @@ H. The tool SHALL report style findings through the standard checks reporting su
 
 Agent-generated code routinely cannot reliably be constrained to generate assertions according to a set of rules, so we must rely on checks instead. Not all checks can be automated, but those that can, are.
 
-*End* *Mechanical Requirement Style Checks* | **Hash**: 084c17a0
+*End* *Mechanical Style Checks* | **Hash**: 084c17a0

@@ -141,6 +141,67 @@ class TestIntegratesUnresolved:
         assert matches[0].presumed_foreign is False
 
 
+class TestIntegratesRefusedByReader:
+    """An ``Integrates:`` target its reader refused wires nothing and is
+    reported under the class the reader reached -- while a target that read
+    cleanly and is merely foreign keeps wiring, since foreign is what an
+    ``Integrates:`` target is for."""
+
+    def _retarget(self, tmp_path, target: str):
+        app_root = _copy_full(tmp_path)
+        spec = app_root / "spec" / "dev-app.md"
+        spec.write_text(
+            spec.read_text().replace("**Integrates**: LIB-d00007", f"**Integrates**: {target}")
+        )
+        return app_root
+
+    # Verifies: REQ-d00272-A, REQ-d00272-B
+    def test_a_malformed_integrates_target_is_reported_as_malformed(self, tmp_path):
+        """An item holding a space was never written as an identifier, so it
+        must not be reported as naming a repository -- configured or not."""
+        from elspais.graph.reference_faults import FaultClass, FaultCode
+
+        app_root = self._retarget(tmp_path, "not a reference")
+        fed = _federate(app_root)
+        brs = fed._repos["app"].graph._broken_references
+        matches = [b for b in brs if b.target_id == "not a reference"]
+        assert len(matches) == 1, f"the refused item must be reported once; got {brs}"
+        assert matches[0].fault_class is FaultClass.MALFORMED
+        assert FaultCode.NOT_AN_IDENTIFIER in matches[0].codes
+        assert matches[0].presumed_foreign is False, (
+            "an item that never read as an identifier names no foreign repository"
+        )
+
+    # Verifies: REQ-d00252-A
+    def test_a_malformed_integrates_target_wires_nothing_and_renders_verbatim(self, tmp_path):
+        app_root = self._retarget(tmp_path, "not a reference")
+        fed = _federate(app_root)
+        app_req = fed._repos["app"].graph._index["APP-d00001"]
+        assert _outgoing_integrates(app_req) == []
+        assert "not a reference" in render_node(app_req), (
+            "the author's own text is stored and rendered back unchanged, "
+            "whatever verdict it carried"
+        )
+
+    # Verifies: REQ-d00252-D
+    def test_a_target_the_reader_merely_could_not_claim_still_wires(self, tmp_path):
+        """The app's own grammar does not claim the ``LIB`` namespace, so the
+        reader's verdict on an ordinary library target is
+        ``UNKNOWN_NAMESPACE``. That is the EXPECTED state of an
+        ``Integrates:`` target -- the federation, not the reader, decides who
+        owns it -- so treating it as a refusal would silently unwire every
+        working integration."""
+        app_root = _copy_full(tmp_path)
+        fed = _federate(app_root)
+        app_req = fed._repos["app"].graph._index["APP-d00001"]
+        assert app_req.get_field("integrates_refused") in (
+            None,
+            [],
+        ), f"a foreign target is not a refused one; got {app_req.get_field('integrates_refused')}"
+        edges = _outgoing_integrates(app_req)
+        assert [e.target.id for e in edges] == ["LIB-d00007"]
+
+
 class TestIntegratesSameRepo:
     """Validates REQ-d00252-C: a same-repo target is an external-only violation."""
 
@@ -235,7 +296,7 @@ class TestIntegratesHierarchyLevels:
             v for v in violations if v["child"] == "LIB-p00001" and v["parent"] == "APP-d00001"
         ]
         assert offending == [], (
-            "INTEGRATES edge wrongly flagged as a hierarchy-level deviation: " f"{offending}"
+            f"INTEGRATES edge wrongly flagged as a hierarchy-level deviation: {offending}"
         )
         assert violations == []
         assert res.message == "All requirements follow hierarchy rules"
@@ -373,6 +434,130 @@ class TestIntegratesHierarchyLevels:
         offending = [
             v for v in violations if v["child"] == "REPO-p00001" and v["parent"] == "REPO-d00001"
         ]
-        assert (
-            len(offending) == 1
-        ), f"genuine same-repo level violation not detected; violations={violations}"
+        assert len(offending) == 1, (
+            f"genuine same-repo level violation not detected; violations={violations}"
+        )
+
+
+# A levels block for the multi-assertion federation below, which needs code
+# scanning switched on (``_LEVELS_TOML`` deliberately disables it).
+_CODE_LEVELS_TOML = """\
+[levels.prd]
+rank = 1
+letter = "p"
+implements = ["prd"]
+[levels.dev]
+rank = 3
+letter = "d"
+implements = ["dev", "prd"]
+[scanning.spec]
+directories = ["spec"]
+[scanning.code]
+directories = ["src"]
+[scanning.test]
+enabled = false
+directories = []
+"""
+
+
+class TestMultiAssertionCrossRepoReference:
+    """A reference naming several *Assertion* labels of a foreign requirement.
+
+    The invoking repository's own resolver does not claim the associate's
+    grammar, so the multi-assertion reference reaches federation unexpanded.
+    It must still wire one edge per named label, in the same shape a
+    same-repository reference produces (REQ-d00269-B), and any label the
+    owning repository does not have must be reported as a hard broken
+    reference rather than presumed foreign (REQ-d00269-D/F).
+    """
+
+    def _build(self, tmp_path: Path, spec_target: str, code_target: str | None = None):
+        library = tmp_path / "library"
+        app = tmp_path / "app"
+        levels = _CODE_LEVELS_TOML if code_target else _LEVELS_TOML
+
+        _write(
+            library / ".elspais.toml",
+            'version = 3\n[project]\nname = "library"\nnamespace = "LIB"\n' + levels,
+        )
+        _write(
+            library / "spec" / "prd.md",
+            "# LIB-p00001: Event Log\n\n"
+            "**Level**: prd | **Status**: Active | **Implements**: -\n\n"
+            "### Assertions\n\n"
+            "A. SHALL append.\n\n"
+            "B. SHALL flush.\n\n"
+            "*End* *Event Log*\n",
+        )
+
+        _write(
+            app / ".elspais.toml",
+            'version = 3\n[project]\nname = "app"\nnamespace = "APP"\n'
+            + levels
+            + '[associates.library]\npath = "../library"\nnamespace = "LIB"\n',
+        )
+        _write(
+            app / "spec" / "dev.md",
+            "# APP-d00001: Consumer log\n\n"
+            f"**Level**: dev | **Status**: Active | **Implements**: {spec_target}\n\n"
+            "A. SHALL use the library log.\n\n"
+            "*End* *Consumer log*\n",
+        )
+        if code_target:
+            _write(
+                app / "src" / "mod.py",
+                f'"""App code."""\n\n\n# Implements: {code_target}\ndef use_log():\n    return 1\n',
+            )
+
+        return build_graph(
+            config=get_config(None, app),
+            repo_root=app,
+            scan_code=bool(code_target),
+            scan_tests=False,
+        )
+
+    def _shapes(self, node):
+        return {
+            (e.kind, tuple(e.assertion_targets or ()), e.target.id)
+            for e in node.iter_outgoing_edges()
+            if e.kind == EdgeKind.IMPLEMENTS
+        }
+
+    # Verifies: REQ-d00269-B
+    def test_multi_assertion_spec_reference_wires_one_edge_per_label(self, tmp_path):
+        """``Implements: LIB-p00001-A+B`` wires an edge for A and one for B,
+        each hanging off the owning requirement and naming its label."""
+        fed = self._build(tmp_path, "LIB-p00001-A+B")
+        lib_req = fed._repos["library"].graph._index["LIB-p00001"]
+        shapes = self._shapes(lib_req)
+        assert (EdgeKind.IMPLEMENTS, ("A",), "APP-d00001") in shapes
+        assert (EdgeKind.IMPLEMENTS, ("B",), "APP-d00001") in shapes
+        assert fed._repos["app"].graph._broken_references == []
+
+    # Verifies: REQ-d00269-C
+    def test_multi_assertion_code_annotation_wires_one_edge_per_label(self, tmp_path):
+        """The same reference written in a code annotation credits both
+        labels of the foreign requirement."""
+        fed = self._build(tmp_path, "-", code_target="LIB-p00001-A+B")
+        lib_req = fed._repos["library"].graph._index["LIB-p00001"]
+        labels = {
+            tuple(e.assertion_targets or ())
+            for e in lib_req.iter_outgoing_edges()
+            if e.kind == EdgeKind.IMPLEMENTS and e.target.kind.name == "CODE"
+        }
+        assert labels == {("A",), ("B",)}
+        assert fed._repos["app"].graph._broken_references == []
+
+    # Verifies: REQ-d00269-D, REQ-d00269-F
+    def test_label_the_owner_lacks_is_a_hard_broken_reference(self, tmp_path):
+        """``LIB-p00001-A+C`` wires A and reports C: the associate claims the
+        identifier's format but has no assertion C, so the leftover is a hard
+        broken reference with a diagnostic, not a presumed-foreign one."""
+        fed = self._build(tmp_path, "LIB-p00001-A+C")
+        lib_req = fed._repos["library"].graph._index["LIB-p00001"]
+        assert (EdgeKind.IMPLEMENTS, ("A",), "APP-d00001") in self._shapes(lib_req)
+
+        brs = fed._repos["app"].graph._broken_references
+        assert [b.target_id for b in brs] == ["LIB-p00001-C"]
+        assert brs[0].presumed_foreign is False
+        assert brs[0].diagnostic

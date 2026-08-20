@@ -30,6 +30,7 @@ import pytest
 
 import elspais
 from elspais.graph import render
+from elspais.graph.GraphNode import make_file_id
 
 FIXTURES_DIR = Path(__file__).parent.parent / "fixtures"
 HHT_LIKE = FIXTURES_DIR / "hht-like"
@@ -38,8 +39,12 @@ APP_SOURCE = Path(elspais.__file__).parent / "server" / "app.py"
 
 BOGUS_VERSION = "0" * 16
 
+# The namespace the hht-like fixture declares -- structural ids carry the
+# namespace of the repository holding the node.
+NAMESPACE = "REQ"
+
 JOURNEY = "JNY-001"
-JOURNEY_FILE = "file:spec/journeys.md"
+JOURNEY_FILE = make_file_id(NAMESPACE, "spec/journeys.md")
 
 CONFLICT_KEYS = {
     "success",
@@ -99,7 +104,7 @@ PARITY_TOOL_CALLS = [
     (
         "mutate_add_journey",
         JOURNEY_FILE,
-        {"journey_id": "JNY-900", "title": "Leaked Journey", "file_id": JOURNEY_FILE},
+        {"journey_id": "JNY-leaked-900", "title": "Leaked Journey", "file_id": JOURNEY_FILE},
     ),
     (
         "mutate_delete_journey",
@@ -233,7 +238,7 @@ class TestHttpMutationsAreReachableOverMcp:
         }
 
         assert not missing, (
-            "HTTP mutations unreachable over MCP (route -> missing tool): " f"{missing}"
+            f"HTTP mutations unreachable over MCP (route -> missing tool): {missing}"
         )
 
     def test_REQ_o00062_O_mcp_may_exceed_http(self, tools):
@@ -423,8 +428,8 @@ class TestAddJourneyGuardsItsParentFile:
     journeys to one file therefore cannot both write blind.
     """
 
-    NEW_ID = "JNY-901"
-    SECOND_ID = "JNY-902"
+    NEW_ID = "JNY-reset-901"
+    SECOND_ID = "JNY-reset-902"
 
     def test_REQ_o00062_I_file_version_admits_the_first_journey(self, mutable_graph, tools):
         """REQ-o00062-I: The parent FILE's version is the accepted token."""

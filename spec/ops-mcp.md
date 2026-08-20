@@ -116,6 +116,10 @@ S. When a requirement's label series has no label left to assign, adding an *Ass
 
 T. A caller SHALL be able to add, retitle and remove the section markers that group a requirement's assertions, leaving the assertions themselves and their labels untouched.
 
+U. A mutation SHALL refuse input that would render into a form the parser reads back as a different structure, or fails to read at all, reporting the violated constraint rather than storing the value.
+
+V. A mutation SHALL refuse an operation that would detach content from the structure that renders it — the edges binding content to its file or a requirement's assertions to the requirement — where changing that structure is another mutation's purpose.
+
 ### Rationale
 
 In-memory mutations enable AI agents to draft requirement changes that can be reviewed before persisting. The undo system provides safety for exploratory editing.
@@ -128,6 +132,7 @@ A single daemon serves multiple concurrent writers — MCP agents and the viewer
 
 ### Changelog
 
+- 2026-08-19 | 31e8183f | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-10 | f11c79aa | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-10 | 0dfcea34 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-02 | e4b381e0 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -139,7 +144,7 @@ A single daemon serves multiple concurrent writers — MCP agents and the viewer
 - 2026-05-11 | ef63f424 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | ef63f424 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *MCP Graph Mutation Tools* | **Hash**: f11c79aa
+*End* *MCP Graph Mutation Tools* | **Hash**: 31e8183f
 ---
 
 ## REQ-o00063: MCP File Mutation Tools
@@ -528,15 +533,15 @@ The tool SHALL be able to serve a working tree's graph from a process shared by 
 
 A. The tool SHALL be able to serve a working tree's graph from a process that outlives the individual commands and sessions that use it.
 
-B. Such a process SHALL be scoped to one working tree: at most one SHALL serve a given working tree at a time, so that every writer in that tree acts on one graph and no writer acts on a graph another writer cannot see.
+B. At most one such process SHALL serve a given working tree at a time.
 
 C. Separate working trees SHALL be served independently, each by its own process holding its own graph, whether or not they belong to the same repository.
 
-D. Such a process SHALL serve several clients at once, and a client SHALL be able to begin using a process that another client started.
+D. [Removed - stated two obligations in one assertion. Serving several clients at once is REQ-o00076-A; a client joining a process another started is REQ-o00076-B.]
 
-E. A client SHALL be able to locate the process serving the working tree it is operating in, without prior arrangement; a process SHALL be discoverable for as long as it is serving, and what a client locates SHALL describe the process it would reach.
+E. [Removed - stated three obligations in one assertion. Locating without prior arrangement is REQ-o00076-C; remaining locatable while serving is REQ-o00076-D; the record describing the process a client would reach is REQ-o00076-E.]
 
-F. Such a process SHALL be startable either implicitly, on behalf of a client that needs it, or explicitly by an operator, and which of the two brought it into existence SHALL remain determinable for as long as it runs.
+F. [Removed - stated three obligations in one assertion. Starting on behalf of a client is REQ-o00076-F; starting at an operator's request is REQ-o00076-G; the origin remaining determinable is REQ-o00076-H.]
 
 G. Every operation the tool offers SHALL remain available when no such process is running or its use is declined.
 
@@ -544,17 +549,133 @@ G. Every operation the tool offers SHALL remain available when no such process i
 
 Rebuilding the graph once per command is the cost this process exists to amortise, and holding one graph is also what makes guarding concurrent writers meaningful at all — those guards are REQ-o00062's subject and are not restated here.
 
-The unit of exclusivity is the working tree, not the repository. A worktree holds its own branch and its own unpersisted work, so two trees are two graphs: a shared process would answer one tree's questions from another tree's files, and would hold one tree's uncommitted work under the other's identity. Assertion C states that isolation affirmatively rather than by silence, because it is the property a future shared-baseline optimisation must be reconciled against — sharing derived read-only state across trees is compatible with C, sharing the mutable graph is not. The redundant-parse cost of one process per tree is accepted where the federation rules record it, and is not re-argued here.
+The unit of exclusivity is the working tree, not the repository. A worktree holds its own branch and its own unpersisted work, so two trees are two graphs: a shared process would answer one tree's questions from another tree's files, and would hold one tree's uncommitted work under the other's identity. Exclusivity is what makes a writer's view trustworthy: every writer in a tree acts on one graph, and none acts on a graph another writer cannot see. Assertion C states that isolation affirmatively rather than by silence, because it is the property a future shared-baseline optimisation must be reconciled against — sharing derived read-only state across trees is compatible with C, sharing the mutable graph is not. The redundant-parse cost of one process per tree is accepted where the federation rules record it, and is not re-argued here.
 
 Assertion G keeps the process an accelerator rather than a dependency: a tool whose correctness requires a background process fails whenever that process cannot start, and every path served by the daemon has a path that does not need it.
 
-Assertion F fixes only that the origin stays determinable. The consequence — that the two origins carry different lifetimes — is REQ-o00074's subject.
+How a client reaches such a process, and what it may rely on when it does, is REQ-o00076's subject rather than this one's. That includes the two ways a process comes into existence: this requirement fixes that a process exists and is exclusive, not who asked for it.
 
 REQ-p00005-F obliges associate paths to resolve from the canonical, non-worktree repository root so cross-repository paths stay valid when working from a worktree. That governs where a path points, not what a process serves. The two roots answer different questions, and keying a serving process on the canonical root would collapse the isolation assertion C requires.
 
 ### Changelog
 
+- 2026-08-18 | b44d9887 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: sync changelog hash
+- 2026-08-18 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: move reaching the serving process out to REQ-o00076 and state exclusivity on its own
+- 2026-08-18 | b44d9887 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-18 | 9f242aa5 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-08 | 1fd622fe | - | Michael Lewis (<michael@anspar.org>) | TOOL-12: introduce the shared per-working-tree graph daemon
 - 2026-08-08 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-12: introduce the shared per-working-tree graph daemon
 
-*End* *Shared Graph Daemon* | **Hash**: 1fd622fe
+*End* *Shared Graph Daemon* | **Hash**: b44d9887
+
+## REQ-o00076: Reaching the Serving Process
+
+**Level**: ops | **Status**: Active | **Implements**: REQ-o00075
+
+The tool SHALL make the process serving a working tree reachable by the clients working in that tree, on terms those clients can rely on.
+
+### Assertions
+
+A. Such a process SHALL serve several clients at the same time.
+
+B. A client SHALL be able to begin using such a process that another client started.
+
+C. A client SHALL be able to locate the process serving the working tree it is operating in, without prior arrangement.
+
+D. Such a process SHALL remain locatable for as long as it is serving.
+
+E. What a client locates SHALL describe the process that client would reach.
+
+F. Such a process SHALL be startable on behalf of a client that needs one.
+
+G. Such a process SHALL be startable at an operator's request.
+
+H. Whether a process was started on behalf of a client or at an operator's request SHALL remain determinable for as long as it runs.
+
+I. When a client requires the process serving its working tree, that process SHALL serve from the same program code and configuration the client itself would use.
+
+J. If the process serving a working tree cannot be made to serve from the same program code and configuration as the client requiring it, then the tool SHALL disclose that difference to that client.
+
+K. When the process serving a working tree is replaced, a client SHALL reach the replacement at the address it reached the previous process at.
+
+### Rationale
+
+A client and the process serving it meet at one point — the client asks which process serves its working tree, and acts on the answer. Everything here is a property of that meeting: that it can happen at all, that the answer is true, and that what answers is what the client would have run. That a process exists and that exactly one of them serves a tree is REQ-o00075's subject and is not restated.
+
+Assertion E carries most of the weight. A record that names a process is read as a promise about the process it names, so one that goes on naming a process which has committed to stopping sends clients to a server that answers and refuses everything. The remedy is not to remove the record — a record removed while its process still serves is what lets a second process boot alongside it — but to keep it describing what the client would actually meet.
+
+A process that outlives the commands that use it outlives the code that started it. A working tree whose contents are the tool's own source is the ordinary case for its developers, not an exotic one, and REQ-o00075-B forbids standing a second process beside a stale one, so a client cannot route around what it is handed. Program code and configuration are named together in assertion I because they are one failure: an answer computed from inputs the client is not running. Splitting them invites a remedy for one that leaves the other.
+
+Assertion J is a disclosure rather than a refusal because declining the process is itself always available. Answering from the client's own code — REQ-o00075-G is what guarantees it — and wherever it is available it satisfies assertion I outright rather than reporting a breach of it. What makes a difference worth accepting instead is the one case where declining costs more than it saves: a process holding changes that exist nowhere else. Answering from the client's own code would then answer from a graph those changes are missing from. Code that differs can be replaced afterwards; work that was never written cannot be recovered, so the process holding the work answers and the client is told whose code answered it. A client told that can decide what it is worth.
+
+Assertion I governs what a client is handed when it acquires the process, not what happens afterwards: a client holding an open session while the code beneath it changes goes on being answered by the code its session began on, and each fresh acquisition is judged again. How a client establishes the difference — a recorded version, a digest of the installed files — is a realization choice this requirement does not fix.
+
+Assertions F and G separate the two ways a process comes into existence because they carry different consequences downstream, and H makes the difference answerable rather than inferred. What those consequences are — chiefly that the two origins carry different lifetimes — is REQ-o00074's subject.
+
+Assertion K is what lets a client outlive the process it is talking to. Assertions C and E have a client ask which process serves its tree and act on the answer, which is enough for a client that can ask again; not every client can. One that resolves the address once — when it is configured, or when its session begins — and then holds it for hours has no way to learn that the answer has changed, and reaches for whatever it was told the first time. An address that moved leaves such a client unable to reach a process that is running and willing to serve it.
+
+K is therefore what decides which side of REQ-o00077-D a client falls on. A process reachable at an address that survives its replacement can be replaced without ending that client's session, which is what D asks; a process whose address goes with it cannot, and its clients are owed REQ-o00077-F's refusal instead. Making an address survive is thus not a convenience — it is what buys a whole class of client the silent renewal D describes.
+
+An address that survives replacement must also survive there being nothing to replace. The record naming the process currently serving a tree is removed when none is, which is what E requires of it; the address a tree is reached at is a different fact with a different lifetime, and holding the two separately is what lets a tree be reached in the same place after serving has stopped and begun again.
+
+### Changelog
+
+- 2026-08-18 | 32c4639b | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-18 | cd6333aa | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: sync changelog hash
+- 2026-08-18 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: state each obligation a client relies on when it reaches the serving process as its own assertion
+- 2026-08-18 | cd6333aa | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-18 | d2a0addf | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash, add missing changelog section
+
+*End* *Reaching the Serving Process* | **Hash**: 32c4639b
+
+## REQ-o00077: Serving From the Installed Program
+
+**Level**: ops | **Status**: Active | **Implements**: REQ-o00075
+
+Where the tool is installed such that its program can change while a process is running, the tool SHALL keep what a serving process answers from in step with the program now installed, for as long as it serves.
+
+### Assertions
+
+A. While a serving process answers from a program that differs from the one the tool is now installed from, the tool SHALL disclose that difference to the clients it is serving.
+
+B. [Removed - protected the request to persist from assertion C, which is itself removed. A process that carries held changes across a renewal never traps them, so there is nothing left to protect.]
+
+C. [Removed - treated held changes as a reason to stop answering. They are a reason to take care over a renewal, not to refuse one, and D now says so.]
+
+D. When the program such a process is running is superseded, its working tree SHALL go on being served, from the program now installed, without a client having to ask and without discarding changes the process holds that exist nowhere else.
+
+E. A run of changes to that program arriving together SHALL cause at most one response.
+
+F. Where D cannot be met without ending the session of a client the process is serving, it SHALL decline the other requests it would otherwise answer, and SHALL name the action that renews it.
+
+### Rationale
+
+A process that outlives the commands using it goes on answering from the program it loaded when it started, and no process can re-read its own program. This requirement is what that process owes the clients it is already serving once the tool has been installed afresh beneath it.
+
+Two different things go stale in a process that serves a working tree, and they are not one condition. The content the tool traces — the specifications, code and tests the tree holds — changes constantly, and a serving process answers that by rebuilding its graph from what the tree now holds. The program the tool itself runs is not traced but installed, and no rebuild reaches it. So the two never share a remedy: a graph that has fallen behind its files is rebuilt and never renews the process, and a superseded program is renewed and is not a rebuild. Merging them would let one report a difference it cannot repair, or suppress a remedy that was owed.
+
+This requirement therefore binds only where the installed program can move beneath a running process at all. An installation whose files are fixed until it is replaced wholesale cannot go stale this way, and a process running from one is asked for nothing here. The case that remains is an installation that resolves to a working tree, where editing a source file installs a new program by the same act -- which is the ordinary way the tool's own developers work, and the only way this arises.
+
+REQ-o00076-I governs what a client is handed when it acquires a process, and is judged at that moment; this one governs the process a client is already holding. Code and configuration are named together there, and separating them here is what the difference between them demands: a configuration that has moved is answered by rebuilding from the configuration on disk, and a program that has moved cannot be answered that way at all. The case this exists for is a working tree whose contents are the tool's own source and which the tool is installed from, where the ordinary act of editing the tree reinstalls the program beneath every process serving it. The client most exposed is the one least able to notice — a session that acquired a process once and goes on using it for hours without ever acquiring again, and for which an acquisition-time rule never fires.
+
+Assertion D renews rather than stops, and that distinction is the whole of it. A process that stopped would satisfy the half of the sentence about no longer answering from a superseded program while failing the half about the tree going on being served, and a client that cannot start one for itself -- which is any client that reaches a process by address rather than by launching it -- would simply lose the tool.
+
+Changes the process holds are carried across rather than treated as a reason to refuse. They exist nowhere else, so they must not be discarded; but writing them is enough to preserve them, and a renewal that writes first loses nothing that matters. What it does lose is the ability to undo them, since the record of what was done goes with the process that did it. That is accepted: the changes themselves survive on disk, which is what the work was for, and this is already what happens whenever a process stops for any other reason. The unasked write is disclosed by the record that already exists for exactly that purpose.
+
+D acts without being asked because the client that most needs it is the one that will never ask. Whether the tree comes to be served by a replacement process or by the same one renewed is not fixed here; what matters is that a client which had a working process still has one.
+
+Assertion F is for the processes where that cannot be arranged. Where a client reaches a process over a connection that client owns rather than by an address it can dial again, renewing the process ends the connection, and a connection that ends takes the tool away until the client re-establishes it -- which costs more than the difference D exists to remove. Naming the action that renews it is the whole of F's value: a client left holding a working connection and an instruction can act on it, where one whose connection vanished mid-task can only discover that it has.
+
+Assertion E exists because a change is rarely one file. An editor writing out a directory, a branch being switched, a build emitting sources — each is one act that arrives as many separate events, and answering each in turn would disturb a serving process repeatedly while the program beneath it was still moving. Counting responses rather than events is what makes D safe to perform unasked, and it bounds the disturbance by the change rather than by the file count.
+
+### Changelog
+
+- 2026-08-18 | 2dfa09e9 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-18 | b6acd5d0 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-18 | 8ef6d965 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-18 | eaea87c6 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-18 | 0588f7bb | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-18 | bfd8a2aa | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-18 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: state what a serving process owes its clients when its program code changes beneath it
+
+*End* *Serving From the Installed Program* | **Hash**: 2dfa09e9

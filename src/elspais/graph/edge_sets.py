@@ -4,6 +4,7 @@
 Single source of truth for grouped EdgeKind frozensets. Do NOT redefine
 these inline elsewhere -- import from here.
 """
+
 from __future__ import annotations
 
 from elspais.graph.relations import EdgeKind

@@ -8,9 +8,12 @@ between them owns the executable lines that follow, up to the next block
 or EOF.
 """
 
+from elspais.graph.aggregation import covered_labels
 from elspais.graph.annotators import CoverageCreditConfig, annotate_coverage
+from elspais.graph.GraphNode import make_file_id
 from elspais.graph.metrics import RollupMetrics
 from tests.core.graph_test_helpers import (
+    HELPER_NAMESPACE,
     build_graph,
     make_code_ref,
     make_requirement,
@@ -60,7 +63,7 @@ class TestSingleBlockOwnsWholeFile:
         g = build_graph(req, code)
 
         # Add line_coverage: lines 5-20, half covered
-        fn = g.find_by_id("file:lib/src/foo.dart")
+        fn = g.find_by_id(make_file_id(HELPER_NAMESPACE, "lib/src/foo.dart"))
         assert fn is not None
         lc = {ln: (1 if ln % 2 == 0 else 0) for ln in range(5, 21)}
         fn.set_field("line_coverage", lc)
@@ -69,13 +72,13 @@ class TestSingleBlockOwnsWholeFile:
 
         rollup: RollupMetrics = g.find_by_id("REQ-p00001").get_metric("rollup_metrics")
         assert rollup is not None
-        assert (
-            "A" in rollup.lcov_tested.indirect_labels
-        ), "Assertion A should be credited via block-scoped attribution"
-        assert rollup.lcov_tested.indirect > 0, "indirect coverage should be > 0"
+        assert "A" in covered_labels(rollup.lcov_tested, "total"), (
+            "Assertion A should be credited via block-scoped attribution"
+        )
+        assert rollup.lcov_tested.covered > 0, "indirect coverage should be > 0"
 
     def test_single_block_code_tested_indirect(self):
-        """code_tested.indirect should count covered lines in the block region."""
+        """code_tested.covered should count covered lines in the block region."""
         req = make_requirement(
             "REQ-p00001",
             assertions=[{"label": "A", "text": "SHALL A"}],
@@ -87,7 +90,7 @@ class TestSingleBlockOwnsWholeFile:
         )
         g = build_graph(req, code)
 
-        fn = g.find_by_id("file:lib/src/bar.dart")
+        fn = g.find_by_id(make_file_id(HELPER_NAMESPACE, "lib/src/bar.dart"))
         # Lines 10-15: only 10,12,14 covered
         lc = {10: 1, 11: 0, 12: 1, 13: 0, 14: 1, 15: 0}
         fn.set_field("line_coverage", lc)
@@ -96,7 +99,7 @@ class TestSingleBlockOwnsWholeFile:
 
         rollup: RollupMetrics = g.find_by_id("REQ-p00001").get_metric("rollup_metrics")
         assert rollup is not None
-        assert rollup.code_tested.indirect > 0, "code_tested.indirect should be > 0"
+        assert rollup.code_tested.covered_lines > 0, "covered_lines should be > 0"
 
 
 # ---------------------------------------------------------------------------
@@ -128,7 +131,7 @@ class TestTwoBlocksPartitionFile:
         )
         g = build_graph(req, code_a, code_b)
 
-        fn = g.find_by_id("file:lib/src/split.dart")
+        fn = g.find_by_id(make_file_id(HELPER_NAMESPACE, "lib/src/split.dart"))
         # Lines 3-5 owned by block1, lines 9-12 owned by block2
         # Line 5 is strictly between markers 1 and 8 -> causes split
         lc = {3: 1, 4: 1, 5: 1, 9: 1, 10: 1, 11: 0, 12: 0}
@@ -138,8 +141,8 @@ class TestTwoBlocksPartitionFile:
 
         rollup: RollupMetrics = g.find_by_id("REQ-p00001").get_metric("rollup_metrics")
         assert rollup is not None
-        assert "A" in rollup.lcov_tested.indirect_labels, "A should be credited"
-        assert "B" in rollup.lcov_tested.indirect_labels, "B should be credited"
+        assert "A" in covered_labels(rollup.lcov_tested, "total"), "A should be credited"
+        assert "B" in covered_labels(rollup.lcov_tested, "total"), "B should be credited"
 
 
 # ---------------------------------------------------------------------------
@@ -171,7 +174,7 @@ class TestBoundaryDetection:
         )
         g = build_graph(req, code_a, code_b)
 
-        fn = g.find_by_id("file:lib/src/adjacent.dart")
+        fn = g.find_by_id(make_file_id(HELPER_NAMESPACE, "lib/src/adjacent.dart"))
         # Lines 5-8 are after both markers -> both A and B should own them
         lc = {5: 1, 6: 1, 7: 1, 8: 0}
         fn.set_field("line_coverage", lc)
@@ -180,8 +183,12 @@ class TestBoundaryDetection:
 
         rollup: RollupMetrics = g.find_by_id("REQ-p00001").get_metric("rollup_metrics")
         assert rollup is not None
-        assert "A" in rollup.lcov_tested.indirect_labels, "A in same block should be credited"
-        assert "B" in rollup.lcov_tested.indirect_labels, "B in same block should be credited"
+        assert "A" in covered_labels(rollup.lcov_tested, "total"), (
+            "A in same block should be credited"
+        )
+        assert "B" in covered_labels(rollup.lcov_tested, "total"), (
+            "B in same block should be credited"
+        )
 
     def test_executable_line_strictly_between_splits_blocks(self):
         """An executable line strictly between markers causes a block split."""
@@ -204,7 +211,7 @@ class TestBoundaryDetection:
         )
         g = build_graph(req, code_a, code_b)
 
-        fn = g.find_by_id("file:lib/src/split2.dart")
+        fn = g.find_by_id(make_file_id(HELPER_NAMESPACE, "lib/src/split2.dart"))
         # Line 5 between markers -> split -> block1=[1], block2=[10]
         # Block1 owns: lines > 1 and < 10 -> line 5
         # Block2 owns: lines > 10 -> line 20
@@ -215,8 +222,8 @@ class TestBoundaryDetection:
 
         rollup: RollupMetrics = g.find_by_id("REQ-p00001").get_metric("rollup_metrics")
         assert rollup is not None
-        assert "A" in rollup.lcov_tested.indirect_labels, "A owns line 5"
-        assert "B" in rollup.lcov_tested.indirect_labels, "B owns line 20"
+        assert "A" in covered_labels(rollup.lcov_tested, "total"), "A owns line 5"
+        assert "B" in covered_labels(rollup.lcov_tested, "total"), "B owns line 20"
 
 
 # ---------------------------------------------------------------------------
@@ -242,7 +249,7 @@ class TestFunctionRangeWins:
         )
         g = build_graph(req, code)
 
-        fn = g.find_by_id("file:lib/src/python_style.py")
+        fn = g.find_by_id(make_file_id(HELPER_NAMESPACE, "lib/src/python_style.py"))
         lc = dict.fromkeys(range(10, 21), 1)
         fn.set_field("line_coverage", lc)
 
@@ -250,10 +257,10 @@ class TestFunctionRangeWins:
 
         rollup: RollupMetrics = g.find_by_id("REQ-p00001").get_metric("rollup_metrics")
         assert rollup is not None
-        assert (
-            "A" in rollup.lcov_tested.indirect_labels
-        ), "Range-based attribution should still work for multi-line refs"
-        assert rollup.lcov_tested.indirect > 0
+        assert "A" in covered_labels(rollup.lcov_tested, "total"), (
+            "Range-based attribution should still work for multi-line refs"
+        )
+        assert rollup.lcov_tested.covered > 0
 
 
 # ---------------------------------------------------------------------------
@@ -282,9 +289,11 @@ class TestNoCoverageData:
 
         rollup: RollupMetrics = g.find_by_id("REQ-p00001").get_metric("rollup_metrics")
         assert rollup is not None
-        assert rollup.lcov_tested.indirect_labels == set(), "No line_coverage means no credit"
-        assert rollup.lcov_tested.indirect == 0.0
-        assert rollup.code_tested.indirect == 0
+        assert covered_labels(rollup.lcov_tested, "total") == set(), (
+            "No line_coverage means no credit"
+        )
+        assert rollup.lcov_tested.covered == 0.0
+        assert rollup.code_tested.covered_lines == 0
 
 
 # ---------------------------------------------------------------------------
@@ -326,7 +335,7 @@ class TestMultiLineRefIgnoredInBlockMarkers:
         )
         g = build_graph(req, code_single, code_multi)
 
-        fn = g.find_by_id("file:lib/src/mixed.dart")
+        fn = g.find_by_id(make_file_id(HELPER_NAMESPACE, "lib/src/mixed.dart"))
         assert fn is not None
         # Executable lines span past line 30 -- if multi-line ref were a marker,
         # block region for line 1 would stop at line 9.

@@ -6,6 +6,7 @@ in declaration order via ``subprocess.run(command, shell=True)``. stdout/stderr
 pass-through vs. capture depends on the reporter channel; this module
 captures timing, exit codes, and stdout for stdout-channel reporters.
 """
+
 from __future__ import annotations
 
 import subprocess

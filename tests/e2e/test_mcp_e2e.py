@@ -293,6 +293,5 @@ class TestMCPMutationRoundtrip:
         # 4. Verify the title reverted
         after_undo = _call_tool(mcp, "get_requirement", {"req_id": "REQ-p00001"}, msg_id=6)
         assert after_undo.get("title") == original_title, (
-            f"Title did not revert: expected {original_title!r}, "
-            f"got {after_undo.get('title')!r}"
+            f"Title did not revert: expected {original_title!r}, got {after_undo.get('title')!r}"
         )

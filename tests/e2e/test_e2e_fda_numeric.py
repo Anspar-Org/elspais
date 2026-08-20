@@ -2,7 +2,7 @@
 """FDA-style IDs + numeric assertions e2e tests — on-disk fixture with daemon acceleration.
 
 Tests FDA-style ID patterns (PRD-00001, OPS-00001, DEV-00001), numeric-0
-assertion labels, custom allowed_statuses, require_rationale, and the fix
+assertion labels, custom status roles, require_rationale, and the fix
 command against an FDA-style project.
 
 Groups:
@@ -103,7 +103,7 @@ class TestNumericAssertionLabels:
 
 @pytest.mark.e2e
 class TestCustomStatuses:
-    """Config: allowed_statuses includes Review and Archived — ported from source."""
+    """Config: status_roles names Review provisional and Archived retired."""
 
     def test_health_passes_with_custom_statuses(self, project):
         # PRD-00002 is Review, DEV-00001 is Archived — both should be valid
@@ -227,9 +227,9 @@ class TestMCPFDAStyle:
             assert "ancestors" in result
             ancestor_ids = [a.get("id", "") for a in result["ancestors"]]
             # DEV-00001 -> OPS-00001 -> PRD-00001
-            assert (
-                "PRD-00001" in ancestor_ids or "OPS-00001" in ancestor_ids
-            ), f"Expected PRD-00001 or OPS-00001 in ancestors, got: {ancestor_ids}"
+            assert "PRD-00001" in ancestor_ids or "OPS-00001" in ancestor_ids, (
+                f"Expected PRD-00001 or OPS-00001 in ancestors, got: {ancestor_ids}"
+            )
         finally:
             stop_mcp(proc)
 

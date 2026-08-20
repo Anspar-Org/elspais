@@ -5,6 +5,7 @@ elspais.commands.associate_cmd - Manage associate repository links.
 Provides subcommands to link, unlink, list, and auto-discover
 associate repositories.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -187,7 +188,13 @@ def cmd_list(args: argparse.Namespace) -> int:
         quiet=True,
     )
 
-    associates = get_associates_config(config)
+    try:
+        associates = get_associates_config(config)
+    except ValueError as exc:
+        # A listing surface has to survive the declarations it exists to
+        # list, and say which one it could not read.
+        print(f"Cannot list associates: {exc}")
+        return 1
 
     if not associates:
         print("No associates linked.")

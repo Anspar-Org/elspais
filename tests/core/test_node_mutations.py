@@ -1,11 +1,14 @@
 # Validates REQ-o00062-A, REQ-o00062-D, REQ-o00062-E, REQ-o00062-F
 """Tests for node mutation operations (rename, update_title, change_status, add, delete)."""
+
 from __future__ import annotations
 
 import pytest
 
 from elspais.graph.builder import GraphBuilder, TraceGraph
+from elspais.graph.GraphNode import NodeKind
 from elspais.graph.parsers import ParsedContent
+from tests.core.graph_test_helpers import grammar_for
 
 
 def make_req(
@@ -36,7 +39,7 @@ def make_req(
 
 def build_simple_graph() -> TraceGraph:
     """Build a simple graph with one root requirement and a child."""
-    builder = GraphBuilder()
+    builder = GraphBuilder(namespace="REQ", resolver=grammar_for("REQ"))
     builder.add_parsed_content(make_req("REQ-p00001", "Test Requirement"))
     builder.add_parsed_content(make_req("REQ-o00001", "Child Req", implements=["REQ-p00001"]))
     return builder.build()
@@ -44,15 +47,33 @@ def build_simple_graph() -> TraceGraph:
 
 def build_hierarchy_graph() -> TraceGraph:
     """Build a graph with parent-child hierarchy."""
-    builder = GraphBuilder()
+    builder = GraphBuilder(namespace="REQ", resolver=grammar_for("REQ"))
     builder.add_parsed_content(make_req("REQ-p00001", "Parent"))
     builder.add_parsed_content(make_req("REQ-p00002", "Child", implements=["REQ-p00001"]))
     return builder.build()
 
 
-def build_graph_with_assertions() -> TraceGraph:
+def slash_grammar():
+    """An identifier grammar separating a label from its requirement with "/".
+
+    A repository chooses that boundary character; "-" is only the shipped
+    default. Composing an assertion id needs whichever one this repository
+    declares.
+    """
+    from elspais.config import config_defaults
+    from elspais.utilities.patterns import build_resolver
+
+    config = config_defaults()
+    config["project"] = {**config.get("project", {}), "namespace": "REQ"}
+    id_patterns = {**config.get("id-patterns", {})}
+    id_patterns["assertions"] = {**id_patterns.get("assertions", {}), "separator": "/"}
+    config["id-patterns"] = id_patterns
+    return build_resolver(config)
+
+
+def build_graph_with_assertions(resolver=None) -> TraceGraph:
     """Build a graph with a requirement that has assertions."""
-    builder = GraphBuilder()
+    builder = GraphBuilder(namespace="REQ", resolver=resolver or grammar_for("REQ"))
     builder.add_parsed_content(
         make_req(
             "REQ-p00001",
@@ -119,6 +140,44 @@ class TestRenameNode:
         # New assertion IDs exist
         assert graph.find_by_id("REQ-p00099-A") is not None
         assert graph.find_by_id("REQ-p00099-B") is not None
+
+    # Verifies: REQ-o00062-A, REQ-p00014-U
+    def test_rename_updates_assertions_under_a_custom_separator(self):
+        """The renamed assertions are spelled with the repository's own
+        assertion separator.
+
+        The separator between a requirement and its assertion label is
+        configuration, so a rename that composes the old assertion id with a
+        "-" of its own looks up an id this repository never issued, finds
+        nothing, and leaves every assertion named for the requirement's
+        former id.
+        """
+        graph = build_graph_with_assertions(resolver=slash_grammar())
+
+        assert graph.find_by_id("REQ-p00001/A") is not None
+        assert graph.find_by_id("REQ-p00001/B") is not None
+
+        graph.rename_node("REQ-p00001", "REQ-p00042")
+
+        assert graph.find_by_id("REQ-p00042/A") is not None, (
+            "The rename must cascade to the assertions under the configured "
+            "separator; they are still named for the requirement's old id."
+        )
+        assert graph.find_by_id("REQ-p00042/B") is not None
+        assert graph.find_by_id("REQ-p00001/A") is None
+        assert graph.find_by_id("REQ-p00001/B") is None
+        # No assertion is spelled under a separator this repository does not
+        # configure, whichever id it is attached to.
+        assert graph.find_by_id("REQ-p00042-A") is None
+        assert graph.find_by_id("REQ-p00001-A") is None
+
+        renamed = graph.find_by_id("REQ-p00042")
+        assert sorted(
+            child.id for child in renamed.iter_children() if child.kind is NodeKind.ASSERTION
+        ) == [
+            "REQ-p00042/A",
+            "REQ-p00042/B",
+        ]
 
     # Verifies: REQ-o00062-A
     def test_rename_preserves_title(self):
@@ -276,6 +335,29 @@ class TestUpdateTitle:
 
         graph.undo_last()
         assert graph.find_by_id("REQ-p00001").get_label() == original
+
+    # Verifies: REQ-o00062-U
+    def test_update_title_refuses_asterisk(self):
+        """A '*' in the title corrupts the End marker on reparse, so it is refused."""
+        graph = build_simple_graph()
+        original = graph.find_by_id("REQ-p00001").get_label()
+
+        with pytest.raises(ValueError, match="must not contain '\\*'"):
+            graph.update_title("REQ-p00001", "Broken *emphasis* title")
+
+        assert graph.find_by_id("REQ-p00001").get_label() == original
+        assert len(graph.mutation_log) == 0
+
+    # Verifies: REQ-o00062-U
+    @pytest.mark.parametrize("hostile", ["Two\nlines", "Carriage\rreturn"])
+    def test_update_title_refuses_line_break(self, hostile):
+        """A line break truncates the header line, so it is refused."""
+        graph = build_simple_graph()
+
+        with pytest.raises(ValueError, match="line break"):
+            graph.update_title("REQ-p00001", hostile)
+
+        assert len(graph.mutation_log) == 0
 
 
 class TestChangeStatus:
@@ -469,6 +551,21 @@ class TestAddRequirement:
         assert graph.root_count() == original_root_count + 1
         assert graph.has_root("REQ-p00099")
 
+    # Verifies: REQ-o00062-U
+    def test_add_requirement_refuses_hostile_title(self):
+        """A title the render round-trip cannot carry never enters the graph."""
+        graph = build_simple_graph()
+
+        with pytest.raises(ValueError, match="must not contain '\\*'"):
+            graph.add_requirement(
+                req_id="REQ-p00099",
+                title="A *starred* title",
+                level="PRD",
+            )
+
+        assert graph.find_by_id("REQ-p00099") is None
+        assert len(graph.mutation_log) == 0
+
 
 class TestDeleteRequirement:
     """Tests for TraceGraph.delete_requirement()."""
@@ -490,6 +587,18 @@ class TestDeleteRequirement:
 
         with pytest.raises(KeyError, match="not found"):
             graph.delete_requirement("REQ-nonexistent")
+
+    # Verifies: REQ-o00062-V
+    def test_delete_requirement_refuses_non_requirement(self):
+        """Deleting an ASSERTION through the requirement door would detach it
+        from the requirement that renders it; assertion deletion is the door."""
+        graph = build_graph_with_assertions()
+
+        with pytest.raises(ValueError, match="is not a requirement"):
+            graph.delete_requirement("REQ-p00001-A")
+
+        assert graph.find_by_id("REQ-p00001-A") is not None
+        assert len(graph.mutation_log) == 0
 
     # Verifies: REQ-o00062-A
     def test_delete_requirement_preserves_in_deleted_nodes(self):

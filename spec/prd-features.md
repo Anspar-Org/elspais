@@ -180,9 +180,11 @@ Cross-cutting concerns — regulatory compliance frameworks, security policies, 
 
 A template is a *subtree*, not a single REQ: template-marked REQs refine other template-marked REQs to decompose one cross-cutting obligation into levels of detail (a policy root refined by its specific provisions). `Satisfies:` may target any member of a template subtree — the clone is the subtree rooted at the target, so declaring against an interior member is simply a narrower declaration. An earlier revision restricted templates to single-REQ scope (root plus directly-attached assertions, inbound `Refines:` prohibited); that made real policy hierarchies unrepresentable and is retired. The validation matrix's complements are deliberate permissions: template-to-template `Refines:` is the subtree-forming edge, and `Implements:` from CODE / `Verifies:` from TEST against template targets is the cross-cutting evidence path — assertion D produces the direct edge, assertion P makes that evidence count on every instance. Instances need no special analysis: evidence recorded against a template *Assertion* counts on each of its instances (assertion P), and from there every surface treats instances as ordinary directly-declared nodes (assertion K) — the standard rollup aggregates a cloned subtree like any other. The INSTANCE edge is the wiring by which implementations realize assertion P; whether that is computed as query-time inheritance or by materializing evidence edges onto clones is an implementation choice the spec does not fix. Which members of a subtree apply to a given repository is that repository's authoring decision, expressed by what it targets — the granularity question is no different from deciding what belongs in one REQ.
 
-Two conformance details keep the model usable with named ID schemes. Named-component styles (kebab-case, snake_case) put the assertion-separator character inside requirement names, so a string like `HHT-OPS-production-readiness-A` is lexically ambiguous between a longer requirement name and an assertion-targeted reference; the configuration guard that rejects overlapping separator/label styles (REQ-d00251-F) makes the split well-defined, and assertion Q obliges every accepting field — the metadata line included — to apply the same split, so a reference never resolves differently in a `Satisfies:`/`Refines:` header than the identical string would in a code marker. And because template targets are where authors first collide with the validation matrix, assertion R separates the two ways a reference can fail — the ID resolves to nothing, or it resolves to a node the matrix forbids — so a diagnostic never sends an author hunting a "missing" requirement that in fact exists, or relaxing a rule when the real problem is a typo.
+Two conformance details keep the model usable with named ID schemes. Named-component styles (kebab-case, snake_case) put the assertion-separator character inside requirement names, so a string like `HHT-OPS-production-readiness-A` is lexically ambiguous between a longer requirement name and an assertion-targeted reference; the configuration guard that rejects overlapping separator/label styles (REQ-d00251-F) makes the split well-defined, and assertion Q obliges every accepting field — the metadata line included — to apply the same split, so a reference never resolves differently in a `Satisfies:`/`Refines:` header than the identical string would in a code marker. And because template targets are where authors first collide with the validation matrix, assertion R separates the ways a reference can fail by how far it got, so a diagnostic never sends an author hunting a "missing" requirement that in fact exists, relaxing a rule when the real problem is a typo, or configuring an absent repository when the text was never an identifier. Naming a class further along than the reference reached is the same error in each case: it describes a defect the author does not have.
 
 Three uniformity guarantees complete the reference contract. Reserving `:` out of every configurable pattern element (assertion S) leaves `::` unambiguous as the composite instance-ID joiner in any federation of valid configurations. Assertions T and U extend Q from parsing to the full round trip: one set of acceptance rules and one rendered form per entity — determined by the owning repository — in every file type, so a repository configured with separator `/` cites `REQ-p00001/F` everywhere, never `-F` on one surface and `/F` on another. Journey and journey-step references ride the same contract, steps standing in for *Assertions* (REQ-p00002-G).
+
+Assertion V fixes where a journey may make that declaration, for the same reason U fixes how it is spelled. A journey that could declare its targets in either its metadata or a section has two states to reconcile whenever either changes, and reconciling them is not merely redundant work: the declaration is regenerated from the graph on save, so a journey holding a second copy is rewritten with both, one current and one as originally typed, naming different requirements after any rename. One place removes the second state rather than keeping it consistent. Metadata is that place because the declaration is about the journey as a whole, which is also the only granularity the tool computes UAT coverage at. Scoping a declaration more narrowly — some steps validating one *Assertion* while others validate another — is a coherent refinement and is deliberately absent: nothing computes step-scoped UAT credit, so admitting the syntax would accept a distinction the tool then discards. Until that refinement is built, a declaration outside the metadata is reported rather than read, because a journey silently validating less than its author wrote is the failure this requirement exists to prevent.
 
 ### Assertions
 
@@ -196,13 +198,13 @@ D. CODE that declares `Implements: <template-assertion>` and TEST that declares 
 
 E. Authors SHALL mark a requirement as a template by adding the no-value `**Template**` flag (markdown decoration optional) anywhere on the pipe-separated metadata line. The parser SHALL set `Stereotype.TEMPLATE` on the resulting REQ and on each of its *Assertions*. The render protocol SHALL emit the flag verbatim on the metadata line for any node with `Stereotype.TEMPLATE`.
 
-F. `BrokenReference` SHALL carry an optional `diagnostic` field that explains why a reference is invalid. The `elspais checks` command SHALL surface the diagnostic verbatim in its health-finding message so authors get actionable guidance (e.g. *"REQ-A is not marked **Template**; mark REQ-A with **Template** if it's intended to be satisfiable."*).
+F. `ReferenceFault` SHALL carry an optional `diagnostic` field that explains why a reference is invalid. The `elspais checks` command SHALL surface the diagnostic verbatim in its health-finding message so authors get actionable guidance (e.g. *"REQ-A is not marked **Template**; mark REQ-A with **Template** if it's intended to be satisfiable."*).
 
-G. The graph builder SHALL enforce a static validation matrix at build time, raising typed `BrokenReference` diagnostics for each invalid combination: `Satisfies:` against a target that exists but is not marked `**Template**`; `Satisfies:` against an `INSTANCE` target (chained instantiation); `Refines:` against a `TEMPLATE` target from a REQ not itself marked `**Template**` (a template's refiners must themselves be templates); `Refines:` against an `INSTANCE` target (refining instance content); `Implements:` from CODE against an `INSTANCE` target; `Verifies:` from TEST against an `INSTANCE` target; a REQ marked `**Template**` that declares `Implements:`/`Refines:` metadata targeting nodes outside its template subtree.
+G. The graph builder SHALL enforce a static validation matrix at build time, raising typed `ReferenceFault` diagnostics for each invalid combination: `Satisfies:` against a target that exists but is not marked `**Template**`; `Satisfies:` against an `INSTANCE` target (chained instantiation); `Refines:` against a `TEMPLATE` target from a REQ not itself marked `**Template**` (a template's refiners must themselves be templates); `Refines:` against an `INSTANCE` target (refining instance content); `Implements:` from CODE against an `INSTANCE` target; `Verifies:` from TEST against an `INSTANCE` target; a REQ marked `**Template**` that declares `Implements:`/`Refines:` metadata targeting nodes outside its template subtree.
 
 H. When a requirement declares `Satisfies:` against a template owned by an associated repository, the federated graph builder SHALL clone the template subtree (the target REQ, its directly-attached *Assertions*, and descendant template REQs with theirs) into the declaring repo's index with composite IDs of the form `declaring_id::original_id`, wiring intra-graph `SATISFIES`, `STRUCTURES`, `REFINES`, and `DEFINES` edges and a cross-graph `INSTANCE` edge from each clone to its template original.
 
-J. When a cross-repository `Satisfies:` target is not claimed by any associated repository, the federated graph builder SHALL emit a typed `BrokenReference` whose diagnostic names the target ID, lists the currently-declared associates (or states that none are declared), and points authors at the `[associates.<name>]` block in `.elspais.toml`. When transitively walking `SATISFIES` and `INSTANCE` edges produces a cycle, the federated graph builder SHALL emit a typed `BrokenReference` whose diagnostic contains the word `cycle` and the cycle path; reporting one cycle per build is sufficient.
+J. When a cross-repository `Satisfies:` target is not claimed by any associated repository, the federated graph builder SHALL emit a typed `ReferenceFault` whose diagnostic names the target ID, lists the currently-declared associates (or states that none are declared), and points authors at the `[associates.<name>]` block in `.elspais.toml`. When transitively walking `SATISFIES` and `INSTANCE` edges produces a cycle, the federated graph builder SHALL emit a typed `ReferenceFault` whose diagnostic contains the word `cycle` and the cycle path; reporting one cycle per build is sufficient.
 
 K. Coverage computation, rollup, and reporting SHALL treat an instance node exactly as a directly declared node of the same kind.
 
@@ -218,7 +220,7 @@ P. Evidence declared against a template *Assertion* SHALL count as evidence on e
 
 Q. The system SHALL parse each requirement or *Assertion* reference according to the ID-pattern rules of the repository that owns the referenced identifier.
 
-R. When a declared reference fails to produce a valid relationship, the resulting diagnostic SHALL state which failure class occurred: resolution failure (the referenced ID matches no requirement or *Assertion*) or rule violation (the target exists but the relationship is forbidden by the validation matrix).
+R. When a declared reference fails to produce a valid relationship, the resulting diagnostic SHALL state which failure class occurred. The classes are distinguished by how far the reference got before it failed: it did not read as a reference at all; it read as one whose identifier no repository of the federation claims; it named a requirement no repository holds; it named a requirement that exists but an *Assertion* of it that does not; or it named an existing target the validation matrix forbids for that keyword. A diagnostic SHALL NOT report a class further along than the one the reference reached.
 
 S. The system SHALL reject at configuration-validation time an identifier-pattern configuration able to produce an identifier or reference containing the character `:`.
 
@@ -226,9 +228,17 @@ T. The system SHALL apply the owning repository's reference-acceptance rules ide
 
 U. When the system renders a reference to a requirement, *Assertion*, journey, or journey step on any surface, it SHALL emit the form determined by the owning repository's canonical ID pattern.
 
+V. A user journey SHALL declare what it validates in one place: its metadata, where the declaration applies to the journey as a whole. A validation declaration appearing anywhere else within a journey SHALL produce no validation relationship, and SHALL be reported under R as a declared reference that produced none.
+
 ### Changelog
 
+- 2026-08-16 | ca4892c1 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-16 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: name the type a reference fault is reported as, `ReferenceFault` (F, G, J)
+- 2026-08-15 | 1bae4f82 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-14 | 11ee2801 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-14 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: a journey declares what it validates in one place, its metadata (V)
 - 2026-08-02 | ee2b9541 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-15 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: R distinguishes failure classes by how far the reference got, and forbids naming a class further along than it reached
 - 2026-08-01 | 50f072e0 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | 064c817a | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-02 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-47: reserve `:` out of configurable pattern elements so `::` is unambiguously the composite joiner (S); uniform reference acceptance across file types (T); canonical rendered form per owning repo (U)
@@ -250,7 +260,7 @@ U. When the system renders a reference to a requirement, *Assertion*, journey, o
 - 2026-05-04 | bae1b85d | - | Developer (<dev@example.com>) | Auto-fix: canonicalize term forms, update hash
 - 2026-03-30 | 9115ce0d | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *Satisfies Relationship* | **Hash**: ee2b9541
+*End* *Satisfies Relationship* | **Hash**: ca4892c1
 ---
 
 ## REQ-p00016: NOT APPLICABLE Status
@@ -288,6 +298,8 @@ C. The system SHALL NOT create parallel data structures that duplicate informati
 
 D. The system SHALL NOT have multiple code paths that independently compute hierarchy, coverage, or relationships.
 
+E. A node's identifier SHALL denote exactly one node.
+
 ### Rationale
 
 Multiple data structures lead to synchronization bugs, duplicated logic, and maintenance burden. A single graph provides:
@@ -297,13 +309,17 @@ Multiple data structures lead to synchronization bugs, duplicated logic, and mai
 - Centralized metrics computation
 - Easier testing and debugging
 
+An identifier that denotes two nodes makes the graph two sources of truth wearing one name, which is the synchronization failure A exists to prevent rather than a separate concern. A lookup has to be able to answer, and a caller that writes based on that answer has to be writing to the thing it asked for.
+
 ### Changelog
 
+- 2026-08-10 | 3a0fb899 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-10 | 46ac5f6a | - | Michael Lewis (<michael@anspar.org>) | Oblige an identifier to denote one node
 - 2026-07-31 | 46ac5f6a | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 4a1e5d0b | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 4a1e5d0b | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Unified Graph Architecture* | **Hash**: 46ac5f6a
+*End* *Unified Graph Architecture* | **Hash**: 3a0fb899
 ---
 
 ## REQ-p00060: MCP Server for AI-Driven Requirements Management

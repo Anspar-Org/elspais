@@ -178,9 +178,9 @@ class TestTheLogAnnouncesOnlyTheTransitions:
         driver.remove_all()
         driver.remove_one()
 
-        assert (
-            observer.calls == []
-        ), f"an empty log announced a crossing it never made: {observer.calls}"
+        assert observer.calls == [], (
+            f"an empty log announced a crossing it never made: {observer.calls}"
+        )
 
 
 class TestTheSentinelTracksWhatTheServerHolds:
@@ -232,9 +232,9 @@ class TestTheSentinelTracksWhatTheServerHolds:
 
         assert persist_pending(state.shared, message="the client asked for this").get("success")
 
-        assert not _sentinel(
-            project
-        ).exists(), "the work is on disk and the record still says it is held only in memory"
+        assert not _sentinel(project).exists(), (
+            "the work is on disk and the record still says it is held only in memory"
+        )
 
     def test_REQ_o00074_L_undoing_back_to_nothing_takes_the_record_away(self, state, project):
         state.graph.update_title(REQ, "User Authentication (held in memory)")
@@ -243,9 +243,9 @@ class TestTheSentinelTracksWhatTheServerHolds:
         state.graph.undo_last()
 
         assert len(state.graph.mutation_log) == 0
-        assert not _sentinel(
-            project
-        ).exists(), "nothing is held any more and the record still says something is"
+        assert not _sentinel(project).exists(), (
+            "nothing is held any more and the record still says something is"
+        )
 
     def test_REQ_o00074_L_reverting_takes_the_record_away_and_keeps_watching(self, project):
         """A revert does not empty the log, it replaces the graph. The record
@@ -283,9 +283,9 @@ class TestTheSentinelTracksWhatTheServerHolds:
         assert client.post("/api/revert", json={"if_tip_mutation_id": tip}).status_code == 200
         assert len(state.graph.mutation_log) == 0
 
-        assert not _sentinel(
-            project
-        ).exists(), "nothing is held any more and the record still says something is"
+        assert not _sentinel(project).exists(), (
+            "nothing is held any more and the record still says something is"
+        )
 
         _mutate("User Authentication (held after the revert)")
 
@@ -308,9 +308,9 @@ class TestTheSentinelTracksWhatTheServerHolds:
 
         assert outcome["discarded"] is True, outcome
         assert not _sentinel(project).exists()
-        assert not _finding(
-            project
-        ).exists(), "a discard the operator asked for was reported as work lost"
+        assert not _finding(project).exists(), (
+            "a discard the operator asked for was reported as work lost"
+        )
 
 
 class TestASentinelLeftBehindBecomesAFindingAboutItsWriter:

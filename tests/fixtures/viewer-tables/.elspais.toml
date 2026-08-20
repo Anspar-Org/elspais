@@ -30,4 +30,3 @@ allow_structural_orphans = true
 require_hash = false
 require_assertions = false
 require_status = true
-allowed_statuses = ["Active", "Draft", "Deprecated", "Superseded"]

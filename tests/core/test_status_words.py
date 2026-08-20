@@ -17,7 +17,7 @@ from elspais.config.status_words import (
 
 
 class TestDefaultStatusWords:
-    """REQ-d00258-B display vocabulary with no config override."""
+    """REQ-d00258-K display vocabulary with no config override."""
 
     @pytest.mark.parametrize(
         ("dim_key", "expected"),
@@ -92,7 +92,7 @@ class TestStatusWordsReachRenderedTip:
 
     Proves ``compute_coverage_tiers`` reads its dimension label from
     ``get_status_words(config)`` -- a config override changes the rendered tip
-    text, and a default config still yields the REQ-d00258-B word.
+    text, and a default config still yields the REQ-d00258-K word.
     """
 
     def _req(self):

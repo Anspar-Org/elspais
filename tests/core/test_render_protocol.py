@@ -1,5 +1,4 @@
 # Verifies: REQ-d00131
-# elspais: expected-broken-links 1
 """Tests for the render protocol (Task 1 of FILENODE3).
 
 Validates REQ-d00131-A: Each NodeKind has a render() function dispatched by kind
@@ -659,14 +658,11 @@ class TestRenderRoundTrip:
             # Allow canonical metadata capitalization (prd vs PRD)
             if orig.startswith("**Level**") or orig.startswith("**Status**"):
                 continue
-            assert orig == rend, (
-                f"Line {i} differs:\n" f"  original: {orig!r}\n" f"  rendered: {rend!r}"
-            )
+            assert orig == rend, f"Line {i} differs:\n  original: {orig!r}\n  rendered: {rend!r}"
 
         # Line count should match (within 1 for trailing newline)
         assert abs(len(original_lines) - len(rendered_lines)) <= 1, (
-            f"Line count mismatch: original={len(original_lines)}, "
-            f"rendered={len(rendered_lines)}"
+            f"Line count mismatch: original={len(original_lines)}, rendered={len(rendered_lines)}"
         )
 
     # Verifies: REQ-d00131-I
@@ -726,12 +722,12 @@ class TestRenderRoundTrip:
         rendered = render_file(file_node)
 
         # The sub-headings must appear in their original format
-        assert (
-            "*Core Functionality*" in rendered
-        ), f"Italic sub-heading not preserved.\nRendered:\n{rendered}"
-        assert (
-            "**Data Management**" in rendered
-        ), f"Bold sub-heading not preserved.\nRendered:\n{rendered}"
+        assert "*Core Functionality*" in rendered, (
+            f"Italic sub-heading not preserved.\nRendered:\n{rendered}"
+        )
+        assert "**Data Management**" in rendered, (
+            f"Bold sub-heading not preserved.\nRendered:\n{rendered}"
+        )
         # Must NOT appear as ## headings
         assert "## Core Functionality" not in rendered
         assert "## Data Management" not in rendered
@@ -798,8 +794,7 @@ class TestRenderRoundTrip:
         )
         # Lowercase form should NOT appear in the rendered output.
         assert "## assertions" not in rendered, (
-            f"Source lowercase '## assertions' must be canonicalized away.\n"
-            f"Rendered:\n{rendered}"
+            f"Source lowercase '## assertions' must be canonicalized away.\nRendered:\n{rendered}"
         )
         # And the assertions themselves must round-trip.
         assert "A. SHALL do X." in rendered
@@ -869,16 +864,16 @@ class TestRenderRoundTrip:
         rendered = render_file(file_node)
 
         # ### Group A and ### Group B are now named sections (not assertion sub-headings)
-        assert (
-            "### Group A" in rendered
-        ), f"### Group A named section not preserved.\nRendered:\n{rendered}"
-        assert (
-            "### Group B" in rendered
-        ), f"### Group B named section not preserved.\nRendered:\n{rendered}"
+        assert "### Group A" in rendered, (
+            f"### Group A named section not preserved.\nRendered:\n{rendered}"
+        )
+        assert "### Group B" in rendered, (
+            f"### Group B named section not preserved.\nRendered:\n{rendered}"
+        )
 
         # ## Assertions is absent (assertion_block was empty — no assertions captured)
         assert "## Assertions" not in rendered, (
-            f"## Assertions should be absent (empty assertion block); " f"found in:\n{rendered}"
+            f"## Assertions should be absent (empty assertion block); found in:\n{rendered}"
         )
 
         # Ordering: ### Group A < A. ... < ### Group B < C. ...
@@ -899,7 +894,7 @@ class TestRenderRoundTrip:
         # *End* must appear exactly once -- no synthetic duplicate
         end_count = rendered.count("*End*")
         assert end_count == 1, (
-            f"Expected exactly one *End* marker, found {end_count}.\n" f"Rendered:\n{rendered}"
+            f"Expected exactly one *End* marker, found {end_count}.\nRendered:\n{rendered}"
         )
 
     # Verifies: REQ-d00131-I
@@ -969,14 +964,14 @@ class TestRenderRoundTrip:
         )
 
         # ## Assertions is absent (empty assertion block)
-        assert (
-            "## Assertions" not in rendered
-        ), f"## Assertions should be absent; found in:\n{rendered}"
+        assert "## Assertions" not in rendered, (
+            f"## Assertions should be absent; found in:\n{rendered}"
+        )
 
         # Single *End* marker
         end_count = rendered.count("*End*")
         assert end_count == 1, (
-            f"Expected exactly one *End* marker, found {end_count}.\n" f"Rendered:\n{rendered}"
+            f"Expected exactly one *End* marker, found {end_count}.\nRendered:\n{rendered}"
         )
 
 

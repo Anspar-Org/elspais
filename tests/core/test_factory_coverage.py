@@ -15,6 +15,7 @@ import pytest
 
 from elspais.graph import NodeKind
 from elspais.graph.factory import build_graph
+from elspais.graph.GraphNode import make_file_id
 
 
 def _write_spec(spec_dir: Path, req_id: str = "REQ-p00001", title: str = "Test Req") -> None:
@@ -98,7 +99,7 @@ coverage = "coverage/lcov.info"
         # Find the FILE node for src/main.py
         file_node = None
         for node in graph.iter_by_kind(NodeKind.FILE):
-            if node.id == "file:src/main.py":
+            if node.id == make_file_id("REQ", "src/main.py"):
                 file_node = node
                 break
 
@@ -140,7 +141,7 @@ directories = ["src"]
         # FILE node should exist but without coverage fields
         file_node = None
         for node in graph.iter_by_kind(NodeKind.FILE):
-            if node.id == "file:src/main.py":
+            if node.id == make_file_id("REQ", "src/main.py"):
                 file_node = node
                 break
 
@@ -183,7 +184,7 @@ coverage = "lcov.info"
         # FILE node for src/main.py should NOT have coverage fields
         file_node = None
         for node in graph.iter_by_kind(NodeKind.FILE):
-            if node.id == "file:src/main.py":
+            if node.id == make_file_id("REQ", "src/main.py"):
                 file_node = node
                 break
 
@@ -239,7 +240,7 @@ coverage = "coverage.json"
 
         file_node = None
         for node in graph.iter_by_kind(NodeKind.FILE):
-            if node.id == "file:src/main.py":
+            if node.id == make_file_id("REQ", "src/main.py"):
                 file_node = node
                 break
 
@@ -304,7 +305,7 @@ coverage = "coverage.json"
 
         file_node = None
         for node in graph.iter_by_kind(NodeKind.FILE):
-            if node.id == "file:src/main.py":
+            if node.id == make_file_id("REQ", "src/main.py"):
                 file_node = node
                 break
 
@@ -362,7 +363,7 @@ coverage = "coverage.json"
 
         file_node = None
         for node in graph.iter_by_kind(NodeKind.FILE):
-            if node.id == "file:src/main.py":
+            if node.id == make_file_id("REQ", "src/main.py"):
                 file_node = node
                 break
 
@@ -424,7 +425,7 @@ coverage = ".coverage"
 
         file_node = None
         for node in graph.iter_by_kind(NodeKind.FILE):
-            if node.id == "file:src/main.py":
+            if node.id == make_file_id("REQ", "src/main.py"):
                 file_node = node
                 break
 
@@ -435,9 +436,9 @@ coverage = ".coverage"
 
         line_contexts = file_node.get_field("line_contexts")
         assert line_contexts is not None
-        assert any(
-            "test_work" in c for c in line_contexts.get(2, [])
-        ), f"expected test_work context on line 2, got {line_contexts}"
+        assert any("test_work" in c for c in line_contexts.get(2, [])), (
+            f"expected test_work context on line 2, got {line_contexts}"
+        )
 
     # Verifies: REQ-d00254-G, REQ-d00258-E
     def test_coverage_sqlite_unresolvable_file_contexts_not_materialized(
@@ -510,11 +511,11 @@ coverage = ".coverage"
         )
 
         assert str(code_path) in queried, "resolvable file's contexts should be read"
-        assert (
-            str(outside_path) not in queried
-        ), "unresolvable measured file's contexts must never be materialized"
+        assert str(outside_path) not in queried, (
+            "unresolvable measured file's contexts must never be materialized"
+        )
 
         # And the resolvable file's annotation still works end-to-end.
-        file_node = graph.find_by_id("file:src/main.py")
+        file_node = graph.find_by_id(make_file_id("REQ", "src/main.py"))
         assert file_node is not None
         assert file_node.get_field("line_contexts") is not None

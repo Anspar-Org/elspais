@@ -50,24 +50,24 @@ class FileType(Enum):
     RESULT = "result"
 
 
-# Structural node-id prefixes. FILE and REMAINDER node IDs are keyed by
-# relative file path (not by semantic identity), so the same id can
-# legitimately appear in multiple repos during federation. Consumers that
-# construct or recognize these ids MUST use these constants / helpers
-# rather than inline string literals — past drift between construction
-# (``rem:``) and recognition (``remainder:``) caused federated ID-conflict
-# false positives.
+# Structural node-id prefixes. FILE and REMAINDER node ids are keyed by
+# source location rather than by semantic identity, so they name their
+# repository's namespace to stay distinct from another repository's node
+# at the same repo-relative path. Consumers that construct or recognize
+# these ids MUST use these constants and helpers rather than inline string
+# literals — past drift between construction (``rem:``) and recognition
+# (``remainder:``) caused federated ID-conflict false positives.
 FILE_ID_PREFIX = "file:"
 REMAINDER_ID_PREFIX = "rem:"
 DEFINITION_ID_PREFIX = "def:"
 CODE_ID_PREFIX = "code:"
 TEST_ID_PREFIX = "test:"
 
-# Structural prefixes are those whose IDs are keyed by repo-relative source
-# location (path and/or line), not by semantic identity. Two repos can
-# legitimately produce the same such id. DEFINITION nodes are REMAINDER
-# nodes with a separate prefix for definition blocks — same collision
-# semantics as rem:, so they belong here.
+# Structural prefixes are those whose ids are keyed by repo-relative source
+# location (path and/or line), not by semantic identity, and which
+# therefore carry a namespace. DEFINITION nodes are REMAINDER nodes with a
+# separate prefix for definition blocks — same id shape as rem:, so they
+# belong here.
 STRUCTURAL_ID_PREFIXES: tuple[str, ...] = (
     FILE_ID_PREFIX,
     REMAINDER_ID_PREFIX,
@@ -75,19 +75,76 @@ STRUCTURAL_ID_PREFIXES: tuple[str, ...] = (
 )
 
 
-def make_file_id(relative_path: str) -> str:
-    """Canonical FILE node id for a repo-relative path."""
-    return f"{FILE_ID_PREFIX}{relative_path}"
+def _require_namespace(namespace: str, relative_path: str) -> str:
+    """Reject an id that would name no repository.
+
+    A structural id says which repository holds the source location it
+    names. Built without one it still looks like an id, resolves against
+    nothing, and is only noticed once some other repository's node is
+    read in its place -- so it is refused where it is made.
+    """
+    if not namespace:
+        raise ValueError(
+            f"Cannot make a structural id for '{relative_path}' without a "
+            f"namespace: the id names the repository holding the file."
+        )
+    return namespace
 
 
-def make_remainder_id(relative_path: str, start_line: int) -> str:
+def make_file_id(namespace: str, relative_path: str) -> str:
+    """Canonical FILE node id for a repo-relative path in a namespace."""
+    _require_namespace(namespace, relative_path)
+    return f"{FILE_ID_PREFIX}{namespace}:{relative_path}"
+
+
+def make_remainder_id(namespace: str, relative_path: str, start_line: int) -> str:
     """Canonical REMAINDER node id for a repo-relative path + line."""
-    return f"{REMAINDER_ID_PREFIX}{relative_path}:{start_line}"
+    _require_namespace(namespace, relative_path)
+    return f"{REMAINDER_ID_PREFIX}{namespace}:{relative_path}:{start_line}"
 
 
-def make_definition_id(relative_path: str, start_line: int) -> str:
+def make_definition_id(namespace: str, relative_path: str, start_line: int) -> str:
     """Canonical id for a REMAINDER node created from a definition block."""
-    return f"{DEFINITION_ID_PREFIX}{relative_path}:{start_line}"
+    _require_namespace(namespace, relative_path)
+    return f"{DEFINITION_ID_PREFIX}{namespace}:{relative_path}:{start_line}"
+
+
+def parse_structural_id(node_id: str) -> tuple[str, str, str, int | None]:
+    """Split a structural id into prefix, namespace, path and line.
+
+    The one place a structural id is taken apart, so no caller has to
+    know where its colons fall. A namespace cannot contain a colon
+    (``validate_namespace``), so the first colon ends the prefix and the
+    second ends the namespace; for a line-anchored id the LAST colon
+    begins the line, which leaves a path containing colons intact.
+
+    Returns:
+        ``(prefix, namespace, relative_path, start_line)`` with
+        ``start_line`` None for a FILE id.
+
+    Raises:
+        ValueError: The id is not a structural id, or is malformed.
+    """
+    for prefix in STRUCTURAL_ID_PREFIXES:
+        if not node_id.startswith(prefix):
+            continue
+        rest = node_id[len(prefix) :]
+        namespace, sep, remainder = rest.partition(":")
+        if not sep or not namespace or not remainder:
+            raise ValueError(
+                f"Structural id '{node_id}' names no namespace. Ids are written "
+                f"'{prefix}<namespace>:<repo-relative-path>'."
+            )
+        if prefix == FILE_ID_PREFIX:
+            return prefix, namespace, remainder, None
+        path, sep, line = remainder.rpartition(":")
+        if not sep or not path or not line.isdigit():
+            raise ValueError(
+                f"Structural id '{node_id}' names no line. Ids are written "
+                f"'{prefix}<namespace>:<repo-relative-path>:<line>'."
+            )
+        return prefix, namespace, path, int(line)
+    raise ValueError(f"'{node_id}' is not a structural id")
 
 
 def make_code_id(source_id: str, start_line: int) -> str:

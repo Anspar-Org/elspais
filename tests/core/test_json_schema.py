@@ -85,15 +85,15 @@ class TestJsonSchemaExport:
             "File contains 'Schema written' — cmd_schema is independently writing to the file "
             "in addition to the generic stdout redirect in cli.py"
         )
-        assert (
-            "Generated:" not in content
-        ), "File contains 'Generated:' — the CLI notice leaked into the output file"
+        assert "Generated:" not in content, (
+            "File contains 'Generated:' — the CLI notice leaked into the output file"
+        )
 
         # File must be pure valid JSON equal to the model schema
         schema = json.loads(content)  # raises JSONDecodeError if corrupt
-        assert (
-            schema == ElspaisConfig.model_json_schema()
-        ), "Schema written via --output does not match ElspaisConfig.model_json_schema()"
+        assert schema == ElspaisConfig.model_json_schema(), (
+            "Schema written via --output does not match ElspaisConfig.model_json_schema()"
+        )
 
 
 class TestCommittedSchemaFile:

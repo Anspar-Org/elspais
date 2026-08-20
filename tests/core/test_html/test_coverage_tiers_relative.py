@@ -31,14 +31,10 @@ def _dim(labels=(), *, total=5, failing=()):
     labels = set(labels)
     return CoverageDimension(
         total=total,
-        direct=len(labels),
-        indirect=len(labels),
         has_failures=bool(failing),
         failing_labels=set(failing),
-        direct_labels=set(labels),
-        indirect_labels=set(labels),
-        direct_pct_by_label=dict.fromkeys(labels, 1.0),
-        indirect_pct_by_label=dict.fromkeys(labels, 1.0),
+        immediate_direct_by_label=dict.fromkeys(labels, 1.0),
+        immediate_indirect_by_label=dict.fromkeys(labels, 1.0),
     )
 
 
@@ -64,7 +60,7 @@ def _node(rollup, *, status="Active", level="PRD"):
 # ── Scenario A: DIARY-GUI — 0 implemented, empty relative denominators ──
 
 
-def test_REQ_d00258_B_empty_denominator_tested_is_neutral_not_yellow():
+def test_REQ_d00258_I_empty_denominator_tested_is_neutral_not_yellow():
     """0 implemented -> Tested denom empty -> N/A -> neutral grey, NOT yellow/red."""
     node = _node(_rollup(implemented=(), tested=(), passing=()))
     result = compute_coverage_tiers(node)
@@ -87,7 +83,7 @@ def test_REQ_d00258_B_empty_denominator_tested_is_neutral_not_yellow():
     assert result["verified_color"] == _severity_color("neutral")
 
 
-def test_REQ_d00258_B_empty_denominator_does_not_drag_bucket_below_implemented():
+def test_REQ_d00258_I_empty_denominator_does_not_drag_bucket_below_implemented():
     """The neutral N/A Tested/Passing dims must not worsen combined_bucket."""
     node = _node(_rollup(implemented=(), tested=(), passing=()))
     result = compute_coverage_tiers(node)
@@ -99,7 +95,7 @@ def test_REQ_d00258_B_empty_denominator_does_not_drag_bucket_below_implemented()
 # ── Scenario B: 1-of-5 implemented, that one tested & passing ──
 
 
-def test_REQ_d00258_B_relative_full_when_the_one_implemented_is_covered():
+def test_REQ_d00258_I_relative_full_when_the_one_implemented_is_covered():
     """1/5 implemented -> impl partial (yellow); Tested/Passing full over that 1."""
     node = _node(_rollup(implemented={"A"}, tested={"A"}, passing={"A"}))
     result = compute_coverage_tiers(node)
@@ -117,7 +113,7 @@ def test_REQ_d00258_B_relative_full_when_the_one_implemented_is_covered():
     assert result["verified_color"] == _standing_color("full")
 
 
-def test_REQ_d00258_B_green_relatives_do_not_drag_bucket_up_or_down():
+def test_REQ_d00258_I_green_relatives_do_not_drag_bucket_up_or_down():
     """combined_bucket = worst APPLICABLE (Implemented partial), not the greens."""
     node = _node(_rollup(implemented={"A"}, tested={"A"}, passing={"A"}))
     result = compute_coverage_tiers(node)
@@ -129,7 +125,7 @@ def test_REQ_d00258_B_green_relatives_do_not_drag_bucket_up_or_down():
 # ── Scenario C: some implemented, none tested — a REAL relative gap ──
 
 
-def test_REQ_d00258_B_nonempty_denominator_uncovered_is_real_gap():
+def test_REQ_d00258_I_nonempty_denominator_uncovered_is_real_gap():
     """Implemented labels exist but none tested -> Tested missing, is_na FALSE.
 
     A non-empty denominator with zero coverage is a genuine gap and must use
@@ -146,7 +142,7 @@ def test_REQ_d00258_B_nonempty_denominator_uncovered_is_real_gap():
     assert result["combined_bucket"] == "missing"
 
 
-def test_REQ_d00258_B_partial_relative_when_some_denom_covered():
+def test_REQ_d00258_I_partial_relative_when_some_denom_covered():
     """2 implemented, 1 tested -> Tested partial (relative), yellow."""
     node = _node(_rollup(implemented={"A", "B"}, tested={"A"}, passing={"A"}))
     result = compute_coverage_tiers(node)
@@ -171,14 +167,10 @@ def _dim_with_zeros(covered=(), zeros=(), *, total=5, failing=()):
     pct = {**dict.fromkeys(covered, 1.0), **dict.fromkeys(zeros, 0.0)}
     return CoverageDimension(
         total=total,
-        direct=len(covered),
-        indirect=len(covered),
         has_failures=bool(failing),
         failing_labels=set(failing),
-        direct_labels=set(covered),
-        indirect_labels=set(covered),
-        direct_pct_by_label=dict(pct),
-        indirect_pct_by_label=dict(pct),
+        immediate_direct_by_label=dict(pct),
+        immediate_indirect_by_label=dict(pct),
     )
 
 

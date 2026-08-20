@@ -25,6 +25,13 @@ class ReporterSpec:
     channel: str  # "stdout" | "file"
     kind: str  # "results" | "coverage"
     parser_factory: Callable[[], Any]
+    # Implements: REQ-d00254-O
+    # The origin this format's line numbers count from. Declared here, where
+    # the format is known, rather than left to each project to discover: the
+    # `line` attribute pytest writes into JUnit XML counts from zero, while
+    # the tool numbers source lines from one. A target may override it for a
+    # producer that departs from its format's convention.
+    line_base: int = 1
 
 
 REPORTER_REGISTRY: dict[str, ReporterSpec] = {}
@@ -44,7 +51,7 @@ def _register_builtins() -> None:
     from elspais.graph.parsers.results.flutter_machine import FlutterMachineParser
 
     register_reporter(ReporterSpec("flutter-machine", "stdout", "results", FlutterMachineParser))
-    register_reporter(ReporterSpec("junit", "file", "results", JUnitXMLParser))
+    register_reporter(ReporterSpec("junit", "file", "results", JUnitXMLParser, line_base=0))
     register_reporter(ReporterSpec("pytest-json", "file", "results", PytestJSONParser))
     register_reporter(ReporterSpec("lcov", "file", "coverage", LcovParser))
     register_reporter(ReporterSpec("coverage-json", "file", "coverage", CoverageJsonParser))

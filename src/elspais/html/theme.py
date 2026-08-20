@@ -4,6 +4,7 @@
 Reads theme.toml (colors, symbols, CSS classes) and help.toml (labels, descriptions)
 and exposes a LegendCatalog that generates CSS custom properties and legend content.
 """
+
 from __future__ import annotations
 
 import functools
@@ -47,7 +48,6 @@ _CATEGORY_LABELS: dict[str, str] = {
     "buttons.validation": "Result Status",
     "severity": "Coverage Severity",
     "coverage_standing": "Assertion Coverage Standing",
-    "coverage_caveat": "Coverage Caveats",
 }
 
 

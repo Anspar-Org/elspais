@@ -6,7 +6,7 @@
 # Validates code quality before commits:
 #   - Branch protection (blocks commits to main/master)
 #   - Unstaged src/tests changes (prevents partial commits)
-#   - Python code quality (ruff + black)
+#   - Python code quality (ruff: lint + format)
 #   - Markdown linting (markdownlint)
 #   - elspais fix (regenerate INDEX.md, KNOWN_ISSUES.md)
 #   - Unit/integration tests with coverage (last — most expensive)
@@ -138,7 +138,7 @@ if [ -n "$UNSTAGED_SRC_TESTS" ]; then
 fi
 
 # =====================================================
-# 3. Python Code Quality (ruff + black, whole tree)
+# 3. Python Code Quality (ruff lint + format, whole tree)
 # =====================================================
 # Checks ALL of src/ and tests/, not only the files staged in this commit.
 # Change-scoped checks let drift accumulate invisibly (e.g. via --no-verify
@@ -164,30 +164,29 @@ else
     echo -e "${YELLOW}  WARNING: ruff not installed - skipping${NC}"
 fi
 
-# Run black if available
-if command -v black &> /dev/null; then
-    echo "  Running black check on src/ tests/..."
-    if ! black --check --quiet src/ tests/ 2>&1; then
+# Run the formatter. ruff is both the linter above and the formatter here;
+# there is no second formatter to disagree with it.
+if command -v ruff &> /dev/null; then
+    echo "  Running ruff format check on src/ tests/..."
+    if ! ruff format --check --quiet src/ tests/ 2>&1; then
         # Auto-fix is offered only for files staged in this commit
         if [ -n "$STAGED_PYTHON_FILES" ]; then
             echo -e "${YELLOW}  Files need formatting. Applying fixes to staged files...${NC}"
-            echo "$STAGED_PYTHON_FILES" | xargs black
+            echo "$STAGED_PYTHON_FILES" | xargs ruff format
             echo "$STAGED_PYTHON_FILES" | xargs git add
             echo -e "${GREEN}  Formatted files have been re-staged${NC}"
         fi
         # Anything still unformatted is drift outside this commit — fail loudly
-        if ! black --check src/ tests/ 2>&1; then
+        if ! ruff format --check src/ tests/ 2>&1; then
             PYTHON_FAILED=true
-            echo -e "${RED}  black check failed on files outside this commit${NC}"
-            echo "  Run 'black src/ tests/' and commit the result."
+            echo -e "${RED}  ruff format check failed on files outside this commit${NC}"
+            echo "  Run 'ruff format src/ tests/' and commit the result."
         else
-            echo -e "${GREEN}  black check passed after formatting staged files${NC}"
+            echo -e "${GREEN}  ruff format check passed after formatting staged files${NC}"
         fi
     else
-        echo -e "${GREEN}  black check passed${NC}"
+        echo -e "${GREEN}  ruff format check passed${NC}"
     fi
-else
-    echo -e "${YELLOW}  WARNING: black not installed - skipping${NC}"
 fi
 
 if [ "$PYTHON_FAILED" = true ]; then

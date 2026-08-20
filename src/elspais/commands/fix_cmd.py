@@ -1,4 +1,5 @@
 # Implements: REQ-p00004-A
+# Implements: REQ-d00248-A
 """
 elspais.commands.fix_cmd - Auto-fix spec file issues.
 
@@ -16,18 +17,12 @@ from typing import Any
 
 from elspais.config.schema import ElspaisConfig
 
-_SCHEMA_FIELDS = {f.alias or name for name, f in ElspaisConfig.model_fields.items()} | set(
-    ElspaisConfig.model_fields.keys()
-)
-
 
 def _validate_config(config: dict[str, Any]) -> ElspaisConfig:
-    """Validate a config dict into ElspaisConfig, stripping non-schema keys."""
-    filtered = {k: v for k, v in config.items() if k in _SCHEMA_FIELDS}
-    assoc = filtered.get("associates")
-    if isinstance(assoc, dict) and "paths" in assoc:
-        filtered.pop("associates", None)
-    return ElspaisConfig.model_validate(filtered)
+    """Validate a config dict into ElspaisConfig (see config.validate_config)."""
+    from elspais.config import validate_config
+
+    return validate_config(config)
 
 
 def _abort_if_duplicates(graph) -> int:  # noqa: ANN001
@@ -157,10 +152,10 @@ def _is_associate_owned(graph, node) -> bool:  # noqa: ANN001
     """
     from elspais.graph.federated import is_associate_owned
 
-    fnode = node.file_node()
-    return is_associate_owned(graph, fnode.id if fnode is not None else node.id)
+    return is_associate_owned(graph, node.file_node() or node)
 
 
+# Implements: REQ-d00250-E
 def _scan_and_report_unfixable(graph) -> int:  # noqa: ANN001
     """Walk `parse_unfixable_reasons` across requirements; print to stderr.
 
@@ -371,6 +366,7 @@ def _add_drift_changelog_entries(
     return added
 
 
+# Implements: REQ-d00250-E
 def _fix_parse_dirty(args: argparse.Namespace, dry_run: bool) -> int:
     """Single-pass fix: build graph, detect all fixable issues, render to disk.
 
@@ -817,6 +813,35 @@ def _select_terms_dictionary(graph, include_associates: bool):
     return getattr(graph, "terms", None)
 
 
+def _foreign_namespaces(graph) -> set[str]:
+    """Return the REQ-id namespaces of every federation member but the root.
+
+    Federation membership is transitive, so the repositories whose term
+    references must be dropped from a primary-only artifact are not the
+    ones the root's ``[associates]`` table names -- they are every member
+    the built graph carries. Each namespace is derived exactly as the
+    federated term scan derives ``TermRef.namespace`` (the repo's own
+    ``[project].namespace``, falling back to its federation name), so the
+    values compare equal to what the references carry.
+
+    A namespace equal to the root's own is never foreign: two repos may
+    legitimately share one, and the root's references belong in its own
+    index. Implements: REQ-d00253-C
+    """
+    if not hasattr(graph, "iter_repos"):
+        return set()
+    root_name = getattr(graph, "root_repo_name", None)
+    root_ns = ""
+    namespaces: set[str] = set()
+    for entry in graph.iter_repos():
+        namespace = (entry.config or {}).get("project", {}).get("namespace", "") or entry.name
+        if entry.name == root_name:
+            root_ns = namespace
+        else:
+            namespaces.add(namespace)
+    return {ns for ns in namespaces if ns and ns != root_ns}
+
+
 # Implements: REQ-d00225-B
 def _fix_terms(args: argparse.Namespace, dry_run: bool) -> None:
     """Generate glossary and term index if terms are defined."""
@@ -859,11 +884,7 @@ def _fix_terms(args: argparse.Namespace, dry_run: bool) -> None:
     # manifests don't surface associate-namespace sections. Implements: REQ-d00253-C
     ref_filter = None
     if not include_assoc:
-        assoc_ns = {
-            a.get("namespace")
-            for a in config.get("associates", {}).values()
-            if isinstance(a, dict) and a.get("namespace")
-        }
+        assoc_ns = _foreign_namespaces(graph)
         if assoc_ns:
 
             def ref_filter(ref, _assoc_ns=assoc_ns):

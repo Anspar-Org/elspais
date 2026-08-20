@@ -9,63 +9,66 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from elspais.graph.federated import FederatedGraph
-    from elspais.graph.mutations import BrokenReference
+    from elspais.graph.reference_faults import ReferenceFault
 
 
 def collect_broken(
     graph: FederatedGraph,
     config: dict[str, Any] | None,
-) -> list[BrokenReference]:
-    """Collect broken references, respecting allow_unresolved_cross_repo."""
-    from elspais.config.schema import ElspaisConfig
+) -> list[ReferenceFault]:
+    """Collect every unresolved reference the graph recorded.
 
-    broken = graph.broken_references()
-
-    allow_unresolved = False
-    if config is not None:
-        _SCHEMA_FIELDS = {f.alias or name for name, f in ElspaisConfig.model_fields.items()} | set(
-            ElspaisConfig.model_fields.keys()
-        )
-        filtered = {k: v for k, v in config.items() if k in _SCHEMA_FIELDS}
-        assoc = filtered.get("associates")
-        if isinstance(assoc, dict) and "paths" in assoc:
-            filtered.pop("associates", None)
-        try:
-            tc = ElspaisConfig.model_validate(filtered)
-            allow_unresolved = tc.validation.allow_unresolved_cross_repo
-        except Exception:
-            pass
-
-    if allow_unresolved:
-        broken = [br for br in broken if not br.presumed_foreign]
-
-    return broken
+    Silencing by class now happens at review time, through
+    ``[rules.references]`` severity (``unknown_namespace = "ok"`` for
+    expected cross-repository references) -- this listing always shows the
+    whole population regardless of *config*, so a project's severity
+    choices never hide something from it.
+    """
+    return list(graph.broken_references())
 
 
 # =============================================================================
 # Rendering
 # =============================================================================
 
-_LABEL = "BROKEN REFERENCES"
+# This command lists every reference that resolves to nothing. The five
+# reference checks (`references.malformed`, `references.unknown_namespace`,
+# `references.unknown_requirement`, `references.unknown_assertion`,
+# `references.forbidden`) partition the same set by fault class, so the
+# listing uses the union's name and leaves "broken" to mean what a check
+# means by it.
+_LABEL = "UNRESOLVED REFERENCES"
 
 
-def render_broken_text(refs: list[BrokenReference]) -> str:
+def _is_foreign(br: ReferenceFault) -> bool:
+    """A target no configured repository claims -- the display flag.
+
+    Derived from *fault_class* rather than read off ``presumed_foreign``:
+    the field is retained for the clone-assistance path, but what earns the
+    "[foreign]" tag here is the class a fault actually reached.
+    """
+    from elspais.graph.reference_faults import FaultClass
+
+    return br.fault_class is FaultClass.UNKNOWN_NAMESPACE
+
+
+def render_broken_text(refs: list[ReferenceFault]) -> str:
     """Render broken references as plain text."""
     if not refs:
         return f"\n{_LABEL}: none"
     lines = [f"\n{_LABEL} ({len(refs)}):"]
     for br in sorted(refs, key=lambda r: (r.source_id, r.target_id)):
-        foreign = " [foreign]" if br.presumed_foreign else ""
+        foreign = " [foreign]" if _is_foreign(br) else ""
         lines.append(f"  {br.source_id:20s} -> {br.target_id:20s} ({br.edge_kind}){foreign}")
         if br.diagnostic:
             lines.append(f"      {br.diagnostic}")
     return "\n".join(lines)
 
 
-def render_broken_markdown(refs: list[BrokenReference]) -> str:
+def render_broken_markdown(refs: list[ReferenceFault]) -> str:
     """Render broken references as markdown."""
     if not refs:
-        return f"## {_LABEL}\n\nNo broken references found."
+        return f"## {_LABEL}\n\nNo unresolved references found."
     lines = [
         f"## {_LABEL} ({len(refs)})",
         "",
@@ -73,7 +76,7 @@ def render_broken_markdown(refs: list[BrokenReference]) -> str:
         "|--------|--------|------|------------|",
     ]
     for br in sorted(refs, key=lambda r: (r.source_id, r.target_id)):
-        foreign = " [foreign]" if br.presumed_foreign else ""
+        foreign = " [foreign]" if _is_foreign(br) else ""
         lines.append(
             f"| {br.source_id} | {br.target_id} | {br.edge_kind}{foreign} | {br.diagnostic} |"
         )
@@ -105,7 +108,7 @@ def render_section(
                 "source": br.source_id,
                 "target": br.target_id,
                 "kind": br.edge_kind,
-                "foreign": br.presumed_foreign,
+                "foreign": _is_foreign(br),
                 "diagnostic": br.diagnostic,
             }
             for br in sorted(refs, key=lambda r: (r.source_id, r.target_id))
@@ -140,7 +143,7 @@ def compute_broken(
             "source": br.source_id,
             "target": br.target_id,
             "kind": br.edge_kind,
-            "foreign": br.presumed_foreign,
+            "foreign": _is_foreign(br),
             "diagnostic": br.diagnostic,
         }
         for br in sorted(refs, key=lambda r: (r.source_id, r.target_id))
@@ -216,7 +219,7 @@ def _render_broken_data_text(refs: list[dict[str, Any]]) -> str:
 def _render_broken_data_markdown(refs: list[dict[str, Any]]) -> str:
     """Render broken references from dict data as markdown."""
     if not refs:
-        return f"## {_LABEL}\n\nNo broken references found."
+        return f"## {_LABEL}\n\nNo unresolved references found."
     lines = [
         f"## {_LABEL} ({len(refs)})",
         "",

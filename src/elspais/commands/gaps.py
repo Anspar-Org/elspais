@@ -12,6 +12,13 @@ if TYPE_CHECKING:
     from elspais.graph.federated import FederatedGraph
 
 from elspais.graph import NodeKind
+from elspais.graph.aggregation import (
+    WORK_LIST_MEASURE,
+    WorkVerdict,
+    measure_total,
+    work_verdict,
+)
+from elspais.graph.metrics import tested_and_passing
 from elspais.graph.relations import EdgeKind
 
 
@@ -19,15 +26,22 @@ from elspais.graph.relations import EdgeKind
 class GapEntry:
     """A single gap: a REQ with optionally listed uncovered assertions.
 
-    ``assertions`` holds ``(assertion_id, fraction)`` pairs, where ``fraction``
-    is the assertion's conducted coverage fraction in ``[0.0, 1.0)`` (REQ-d00069-J).
-    A fraction of ``0.0`` means no coverage at all; ``0 < fraction < 1`` means
-    the assertion is partially covered via REFINES conduction.
+    ``assertions`` holds ``(assertion_id, label, fraction)`` triples. The label
+    is carried rather than re-derived from the id: recovering it would mean
+    splitting the id on a boundary character only the owning repository's
+    grammar knows. ``fraction`` is the assertion's immediate direct coverage
+    fraction in ``[0.0, 1.0)`` (REQ-d00258-M, REQ-d00069-M). A fraction of
+    ``0.0`` means no evidence is attached here at all; ``0 < fraction < 1``
+    means evidence attached directly to this *Assertion* is itself partial
+    (e.g. a journey verified in part, REQ-d00255-C) -- coverage conducted up a
+    `Refines:` chain plays no part in this fraction, since a gap list answers
+    what still needs citing here, not what a refinement has done elsewhere.
     """
 
     req_id: str
     title: str
-    assertions: list[tuple[str, float]] = field(default_factory=list)  # empty = whole REQ uncovered
+    # empty = whole REQ uncovered
+    assertions: list[tuple[str, str, float]] = field(default_factory=list)
 
 
 @dataclass
@@ -130,6 +144,7 @@ def collect_gaps(
             for child in node.iter_children(edge_kinds={EdgeKind.STRUCTURES})
             if child.kind == NodeKind.ASSERTION
         ]
+        labels = [a.get_field("label", "") for a in assertion_nodes]
 
         # REQ-d00252-F: a requirement that delegates implementation to a library
         # via INTEGRATES is covered through that associate -- it must NOT be
@@ -141,31 +156,36 @@ def collect_gaps(
         # Uncovered: no code references
         elif req_id not in code_covered:
             data.uncovered.append(GapEntry(req_id, title))
-        elif metrics is not None and metrics.implemented.indirect < metrics.implemented.total:
-            # Partially covered: find which assertions lack coverage
-            uncov = _uncovered_assertions(metrics, assertion_nodes, "implemented")
+        elif metrics is not None:
+            # Measured on the immediate direct measure (REQ-d00258-M): find
+            # which assertions no citation names. A requirement fully covered
+            # only by whole-requirement evidence, or only by finished
+            # refinements below it, still has assertions nobody has written
+            # evidence for, and this is the surface that exists to list them.
+            uncov = _uncovered_assertions(
+                work_verdict(metrics, "implemented", labels), assertion_nodes
+            )
             if uncov:
                 data.uncovered.append(GapEntry(req_id, title, uncov))
 
         # Testing gap (untested): an assertion is a testing gap iff it is
         # IMPLEMENTED but not tested to ~100% (relative denominator,
-        # REQ-d00258, REQ-d00069-J). A wholly-UNIMPLEMENTED assertion is NOT a
+        # REQ-d00258, REQ-d00069-J), both read on the immediate direct
+        # measure (REQ-d00258-M). A wholly-UNIMPLEMENTED assertion is NOT a
         # testing gap -- there is nothing built to test yet. Such a REQ still
         # surfaces as an implementation gap in the ``uncovered`` section above,
         # so narrowing here never silently drops an unbuilt requirement.
-        if metrics is not None and metrics.implemented.indirect > 0:
-            uncov = _uncovered_assertions(
-                metrics, assertion_nodes, "tested", restrict_to_dimension="implemented"
-            )
+        if metrics is not None and measure_total(metrics.implemented, WORK_LIST_MEASURE) > 0:
+            tested = work_verdict(metrics, "tested", labels, restrict_to_dimension="implemented")
+            uncov = _uncovered_assertions(tested, assertion_nodes)
             if uncov:
-                # Whole-REQ formatting (empty assertion list = "all") only when
-                # the REQ has NO test coverage at all AND every assertion is
-                # implemented, so "all" is accurate. When any test coverage
-                # exists (partial conduction, 0 < fraction < 1) or an
-                # unimplemented sibling is present, list the specific
-                # implemented-untested assertions so per-assertion fractions
-                # survive (REQ-d00069-J) and no unimplemented sibling is implied.
-                whole_req = metrics.tested.indirect <= 0 and len(uncov) == len(assertion_nodes)
+                # Whole-REQ formatting (empty assertion list = "all") only
+                # when NO test evidence is attached to the requirement at all
+                # AND every assertion is implemented, so "all" is accurate.
+                # When some assertions are tested, or an unimplemented sibling
+                # is present, list the specific implemented-untested assertions
+                # so no untouched sibling is implied to be a testing gap.
+                whole_req = not tested.attached and len(uncov) == len(assertion_nodes)
                 if whole_req:
                     data.untested.append(GapEntry(req_id, title))
                 else:
@@ -173,12 +193,19 @@ def collect_gaps(
 
         # Unvalidated: no UAT coverage. Only levels that expect_validation can
         # be "unvalidated" -- an internal level that never gets a journey is not
-        # a gap (REQ-d00258-F).
+        # a gap (REQ-d00258-F). The whole-requirement verdict reads the
+        # IMMEDIATE measures: a journey validating the requirement is evidence
+        # attached here, whether or not it named an *Assertion*, while coverage
+        # conducted from a refining requirement is not and must not rescue an
+        # unvalidated requirement. The per-assertion listing reads the immediate
+        # DIRECT measure (REQ-d00258-M) -- an assertion no journey names is a
+        # gap even under a blanket journey.
         if level_expects_validation(cfg, node.level):
-            if metrics is None or metrics.uat_coverage.indirect <= 0:
+            verdict = work_verdict(metrics, "uat_coverage", labels)
+            if not verdict.attached:
                 data.unvalidated.append(GapEntry(req_id, title))
-            elif metrics.uat_coverage.indirect < metrics.uat_coverage.total:
-                uncov = _uncovered_assertions(metrics, assertion_nodes, "uat_coverage")
+            elif verdict.needs_work:
+                uncov = _uncovered_assertions(verdict, assertion_nodes)
                 if uncov:
                     data.unvalidated.append(GapEntry(req_id, title, uncov))
 
@@ -186,9 +213,10 @@ def collect_gaps(
         if not assertion_nodes:
             data.no_assertions.append(GapEntry(req_id, title))
 
-        # Failing: test or UAT failures
+        # Failing: test or UAT failures. Read through the Passing dimension,
+        # so a failure line coverage carries is seen too (REQ-d00258-N).
         if metrics is not None:
-            if metrics.verified.has_failures:
+            if tested_and_passing(metrics).has_failures:
                 data.failing.append((req_id, title, "test"))
             if metrics.uat_verified.has_failures:
                 data.failing.append((req_id, title, "uat"))
@@ -197,48 +225,25 @@ def collect_gaps(
 
 
 def _uncovered_assertions(
-    metrics: Any,
+    verdict: WorkVerdict,
     assertion_nodes: list[Any],
-    dimension: str,
-    restrict_to_dimension: str | None = None,
-) -> list[tuple[str, float]]:
-    """Return (id, fraction) pairs for assertions not ~fully covered for a dimension.
+) -> list[tuple[str, str, float]]:
+    """The ``(id, label, fraction)`` triples a gap entry renders.
 
-    Reads the dimension's per-assertion fraction map so that coverage conducted
-    upward across REFINES edges (REQ-d00069-J) is honored. The fraction map is
-    keyed by assertion *label* (e.g. ``A``), so each node is looked up by its
-    label while the returned pairs report assertion *IDs* (e.g. ``REQ-100-A``),
-    which is what gap entries and their renderers expect. An assertion counts as
-    covered only when its fraction reaches ~1.0; a partially covered assertion
-    (0 < fraction < 1, e.g. a parent assertion refined by a not-fully-covered
-    child) is still reported as a gap, with its fraction carried along so
-    renderers can distinguish "no coverage at all" (0.0) from "partially
-    conducted" (0 < fraction < 1).
+    The verdict already decided WHICH assertions are uncovered and what
+    fraction each reached (``work_verdict``, REQ-d00258-C). All this adds is
+    the assertion *ID* beside the label, which the fraction map is not keyed
+    by and which gap entries report; deciding coverage a second time here is
+    what let this surface and the health checks drift apart.
 
-    ``restrict_to_dimension`` implements the RELATIVE denominator (REQ-d00258):
-    when given, the candidate set is intersected with assertions that HAVE
-    coverage in that dimension (fraction > 0). A *testing* gap passes
-    ``restrict_to_dimension="implemented"`` so an unimplemented assertion --
-    which has nothing built to test yet -- is not reported as a testing gap.
+    Order follows the requirement's own assertions rather than the map, so a
+    gap list reads in the order the requirement declares.
     """
-    dim = getattr(metrics, dimension, None)
-    fractions = dim.indirect_pct_by_label if dim is not None else {}
-
-    restrict_labels: set[str] | None = None
-    if restrict_to_dimension is not None:
-        rdim = getattr(metrics, restrict_to_dimension, None)
-        rfractions = rdim.indirect_pct_by_label if rdim is not None else {}
-        restrict_labels = {lbl for lbl, frac in rfractions.items() if frac > 0}
-
-    covered = 1.0 - 1e-9
-    result: list[tuple[str, float]] = []
-    for a in assertion_nodes:
-        label = a.get_field("label", "")
-        if restrict_labels is not None and label not in restrict_labels:
-            continue
-        frac = fractions.get(label, 0.0)
-        if frac < covered:
-            result.append((a.id, frac))
+    result: list[tuple[str, str, float]] = []
+    for node in assertion_nodes:
+        label = node.get_field("label", "")
+        if label in verdict.uncovered:
+            result.append((node.id, label, verdict.uncovered[label]))
     return result
 
 
@@ -268,15 +273,16 @@ def render_gap_text(gap_type: str, data: GapData) -> str:
     else:
         for entry in sorted(gaps, key=lambda e: e.req_id):
             if entry.assertions:
-                # Partial gap: show REQ with uncovered assertions. A partially
-                # conducted assertion (0 < fraction < 1, REQ-d00069-J) is
-                # annotated with its percentage so it reads differently from
-                # an assertion with no coverage at all (fraction 0.0).
+                # Partial gap: show REQ with uncovered assertions. An
+                # *Assertion* with partial evidence attached directly
+                # (0 < fraction < 1, REQ-d00069-M, e.g. a journey verified in
+                # part) is annotated with its percentage so it reads
+                # differently from an *Assertion* with no evidence here at
+                # all (fraction 0.0).
                 parts = []
-                for aid, frac in entry.assertions:
-                    label = aid.rsplit("-", 1)[-1] if "-" in aid else aid
+                for _aid, label, frac in entry.assertions:
                     if frac > 0:
-                        parts.append(f"{label} — {round(frac * 100)}% via refines-conduction")
+                        parts.append(f"{label} — {round(frac * 100)}% direct")
                     else:
                         parts.append(label)
                 labels = ", ".join(parts)
@@ -332,8 +338,8 @@ def render_gap_markdown(gap_type: str, data: GapData) -> str:
         for entry in sorted(gaps, key=lambda e: e.req_id):
             if entry.assertions:
                 parts = [
-                    f"{aid} ({round(frac * 100)}% via refines-conduction)" if frac > 0 else aid
-                    for aid, frac in entry.assertions
+                    f"{aid} ({round(frac * 100)}% direct)" if frac > 0 else aid
+                    for aid, _label, frac in entry.assertions
                 ]
                 assertions = ", ".join(parts)
             else:
@@ -419,14 +425,20 @@ def _gap_entry_to_list(entry: GapEntry) -> list:
     """Serialize GapEntry for JSON.
 
     Uncovered assertions are serialized as ``{"id": ..., "fraction": ...}``
-    dicts so a partially-conducted assertion (0 < fraction < 1, REQ-d00069-J)
-    is distinguishable from one with no coverage at all. ``fraction`` is
-    rounded to 4 places, matching the MCP surface (server.py), so the two
-    JSON surfaces agree on precision rather than one emitting raw floats.
+    dicts so an *Assertion* with partial direct evidence (0 < fraction < 1,
+    REQ-d00069-M) is distinguishable from one with no evidence attached here
+    at all. ``fraction`` is rounded to 4 places, matching the MCP surface
+    (server.py), so the two JSON surfaces agree on precision rather than one
+    emitting raw floats.
     """
     result: list = [entry.req_id, entry.title]
     if entry.assertions:
-        result.append([{"id": aid, "fraction": round(frac, 4)} for aid, frac in entry.assertions])
+        result.append(
+            [
+                {"id": aid, "label": label, "fraction": round(frac, 4)}
+                for aid, label, frac in entry.assertions
+            ]
+        )
     return result
 
 
@@ -436,7 +448,12 @@ def _gap_data_from_dict(data: dict[str, Any]) -> GapData:
     for gt in ("uncovered", "untested", "unvalidated", "no_assertions"):
         for item in data.get(gt, []):
             raw_assertions = item[2] if len(item) > 2 else []
-            assertions = [(a["id"], a.get("fraction", 0.0)) for a in raw_assertions]
+            # A payload that carries no label falls back to the full id
+            # rather than to an empty bracket: the id is longer than the
+            # label but it still says which assertion is uncovered.
+            assertions = [
+                (a["id"], a.get("label") or a["id"], a.get("fraction", 0.0)) for a in raw_assertions
+            ]
             getattr(gd, gt).append(GapEntry(item[0], item[1], assertions))
     for item in data.get("failing", []):
         gd.failing.append(tuple(item))  # type: ignore[arg-type]

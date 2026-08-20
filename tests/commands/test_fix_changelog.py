@@ -360,8 +360,7 @@ A. The system SHALL do X.
 
         content = (project / "spec" / "requirements.md").read_text()
         assert "## Changelog" in content, (
-            "Batch fix must write the missing Changelog section to disk; "
-            f"content was:\n{content}"
+            f"Batch fix must write the missing Changelog section to disk; content was:\n{content}"
         )
         assert correct_hash in content
 

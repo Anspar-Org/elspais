@@ -12,12 +12,14 @@ values from pre-classified tokens -- no regex re-scanning for structure.
 from __future__ import annotations
 
 import re
+from functools import cache
 from typing import TYPE_CHECKING, Any
 
 from lark import Token, Tree
 
 # Implements: REQ-d00246-B
 from elspais.graph.parsers import ParsedContent
+from elspais.graph.parsers.continuation import fold_continuation
 from elspais.graph.parsers.patterns import (
     ACTOR_PATTERN as _ACTOR_RE,
 )
@@ -30,6 +32,7 @@ from elspais.graph.parsers.patterns import (
 from elspais.graph.parsers.patterns import (
     VALIDATES_PATTERN as _VALIDATES_RE,
 )
+from elspais.graph.reference_faults import FaultClass, refs_and_verdicts
 from elspais.graph.render import parse_end_marker
 from elspais.utilities.markdown import strip_emphasis
 
@@ -37,10 +40,21 @@ if TYPE_CHECKING:
     from elspais.utilities.patterns import IdResolver
 
 
-# Header parsing
-_REQ_HEADER_RE = re.compile(
-    r"^(?P<hashes>#+)[ \t]*(?P<id>[A-Z]+-[A-Za-z0-9-]+):[ \t]*(?P<title>.+)$"
-)
+# Header parsing. The identifier fragment comes from the repository's own
+# grammar, which is also what the Lark terminal that produced this token was
+# built from -- a second, hand-written spelling here would decide which
+# headers survive whenever the two disagreed, and it would decide silently,
+# by turning the requirement into prose.
+#
+# Compiled once per resolver rather than per file: the pattern depends on
+# configuration, so it cannot be a module constant, and parsing re-enters
+# this for every spec file in the repository.
+@cache
+def _req_header_re(resolver: IdResolver) -> re.Pattern[str]:
+    identifier = resolver.grammar().identifier
+    return re.compile(rf"^(?P<hashes>#+)[ \t]*(?P<id>{identifier}):[ \t]*(?P<title>.+)$")
+
+
 # Metadata field value extraction
 _FIELD_VALUE_RE = re.compile(r"\*\*\w+\*\*:[ \t]*(.*)")
 
@@ -96,8 +110,17 @@ class RequirementTransformer:
     tokens.  Produces output identical to the old parser pipeline.
     """
 
-    def __init__(self, resolver: IdResolver) -> None:
+    def __init__(self, resolver: IdResolver, reader: Any = None) -> None:
         self.resolver = resolver
+        # The one authority for dividing a reference list into its items.
+        # A transformer given no federation still gets a reader: over a
+        # single repository it emits that repository's own fragments, so
+        # the reading is unchanged and there is still only one of it.
+        if reader is None:
+            from elspais.utilities.patterns import FederatedIdReader
+
+            reader = FederatedIdReader(resolver)
+        self.reader = reader
 
     def transform(self, tree: Tree, source: str = "") -> list[ParsedContent]:
         """Transform the full parse tree into a list of ParsedContent.
@@ -161,14 +184,19 @@ class RequirementTransformer:
     # Requirement transformation
     # ------------------------------------------------------------------
 
+    # Implements: REQ-d00250-A
     def _transform_requirement(self, node: Tree) -> ParsedContent:
         """Transform a requirement tree node into ParsedContent."""
         header_token = node.children[0]  # REQ_HEADER
         header_text = str(header_token)
         header_line = header_token.line  # type: ignore[attr-defined]
 
-        header_match = _REQ_HEADER_RE.match(header_text)
+        header_match = _req_header_re(self.resolver).match(header_text)
         if not header_match:
+            # Structurally unreachable: the terminal that produced this token
+            # is built from the same fragment this pattern is. Kept as a
+            # guard, which is all it now is -- it used to be the path by
+            # which a requirement left the graph without a word said.
             return self._make_remainder(header_line, header_line, header_text)
 
         req_id = header_match.group("id")
@@ -183,6 +211,15 @@ class RequirementTransformer:
         satisfies: list[str] = []
         # Implements: REQ-d00252
         integrates: list[str] = []
+        # Implements: REQ-d00272-K
+        # Keyed by the *Traceability* keyword the item was written under
+        # paired with its raw text, merged across every metadata line so the
+        # builder consults one dict whichever line an item came from. The
+        # keyword is part of the key because a verdict answers for the
+        # reference it was read from: a repeated target under ``Refines:``
+        # decides that item and says nothing about a clean ``Implements:``
+        # naming the same target.
+        reference_verdicts: dict[tuple[str, str], tuple[FaultClass, tuple[str, ...]]] = {}
         assertions: list[dict[str, Any]] = []
         sections: list[dict[str, Any]] = []
         changelog: list[dict[str, str]] = []
@@ -196,46 +233,58 @@ class RequirementTransformer:
         # Implements: REQ-p00014-E
         is_template = False
 
+        # Implements: REQ-d00269-H
+        meta_continuations, folded_lines = self._fold_metadata_continuations(node.children[1:])
+
         for child in node.children[1:]:
             if not isinstance(child, Tree):
                 continue
+            # A line folded into a reference list above it is that list's
+            # content, not preamble prose; emitting it twice would render it
+            # twice.
+            if id(child) in folded_lines:
+                continue
 
             if child.data == "metadata_line":
-                meta = self._extract_metadata(child)
+                meta = self._extract_metadata(child, meta_continuations)
                 if meta.get("level"):
                     resolved = self.resolver.resolve_level(meta["level"])
                     level = resolved if resolved is not None else meta["level"]
                 if meta.get("status"):
                     status = meta["status"]
                 if meta.get("implements"):
-                    old_len = len(implements)
-                    for ref in meta["implements"]:
-                        if ref not in implements:
-                            implements.append(ref)
-                    if len(implements) < old_len + len(meta["implements"]):
+                    if self._merge_ref_field(
+                        implements,
+                        reference_verdicts,
+                        meta["implements"],
+                        meta.get("implements_verdicts", {}),
+                    ):
                         has_redundant_refs = True
                 if meta.get("refines"):
-                    old_len = len(refines)
-                    for ref in meta["refines"]:
-                        if ref not in refines:
-                            refines.append(ref)
-                    if len(refines) < old_len + len(meta["refines"]):
+                    if self._merge_ref_field(
+                        refines,
+                        reference_verdicts,
+                        meta["refines"],
+                        meta.get("refines_verdicts", {}),
+                    ):
                         has_redundant_refs = True
                 # Implements: REQ-p00014-A
                 if meta.get("satisfies"):
-                    old_len = len(satisfies)
-                    for ref in meta["satisfies"]:
-                        if ref not in satisfies:
-                            satisfies.append(ref)
-                    if len(satisfies) < old_len + len(meta["satisfies"]):
+                    if self._merge_ref_field(
+                        satisfies,
+                        reference_verdicts,
+                        meta["satisfies"],
+                        meta.get("satisfies_verdicts", {}),
+                    ):
                         has_redundant_refs = True
                 # Implements: REQ-d00252
                 if meta.get("integrates"):
-                    old_len = len(integrates)
-                    for ref in meta["integrates"]:
-                        if ref not in integrates:
-                            integrates.append(ref)
-                    if len(integrates) < old_len + len(meta["integrates"]):
+                    if self._merge_ref_field(
+                        integrates,
+                        reference_verdicts,
+                        meta["integrates"],
+                        meta.get("integrates_verdicts", {}),
+                    ):
                         has_redundant_refs = True
                 # Implements: REQ-p00014-E
                 if meta.get("template"):
@@ -322,6 +371,8 @@ class RequirementTransformer:
             "heading_level": heading_level,
             "assertions_heading_level": assertions_depth,
             "changelog_heading_level": changelog_depth,
+            # Implements: REQ-d00272-K
+            "reference_verdicts": reference_verdicts,
         }
         if has_redundant_refs:
             parsed_data["has_redundant_refs"] = True
@@ -338,7 +389,9 @@ class RequirementTransformer:
     # Metadata extraction from pre-classified tokens
     # ------------------------------------------------------------------
 
-    def _extract_metadata(self, node: Tree) -> dict[str, Any]:
+    def _extract_metadata(
+        self, node: Tree, continuations: dict[int, str] | None = None
+    ) -> dict[str, Any]:
         """Extract metadata fields from a metadata_line tree node.
 
         Field terminals match flexible patterns with optional markdown
@@ -349,21 +402,33 @@ class RequirementTransformer:
         for child in node.children:
             if isinstance(child, Token):
                 text = str(child).strip()
-                val = self._extract_field_value(text)
+                # Implements: REQ-d00269-H
+                # A list continued onto the lines below reads as the joined
+                # text, so the reader divides one list rather than seeing a
+                # separator with nothing after it.
+                val = (continuations or {}).get(id(child)) or self._extract_field_value(text)
                 if child.type == "LEVEL_FIELD":
                     result["level"] = val
                 elif child.type == "STATUS_FIELD":
                     result["status"] = val
                 elif child.type == "IMPLEMENTS_FIELD":
-                    result["implements"] = self._parse_refs(val)
+                    result["implements"], result["implements_verdicts"] = self._parse_ref_list(
+                        val, "implements"
+                    )
                 elif child.type == "REFINES_FIELD":
-                    result["refines"] = self._parse_refs(val)
+                    result["refines"], result["refines_verdicts"] = self._parse_ref_list(
+                        val, "refines"
+                    )
                 # Implements: REQ-p00014-A
                 elif child.type == "SATISFIES_FIELD":
-                    result["satisfies"] = self._parse_refs(val)
+                    result["satisfies"], result["satisfies_verdicts"] = self._parse_ref_list(
+                        val, "satisfies"
+                    )
                 # Implements: REQ-d00252
                 elif child.type == "INTEGRATES_FIELD":
-                    result["integrates"] = self._parse_refs(val)
+                    result["integrates"], result["integrates_verdicts"] = self._parse_ref_list(
+                        val, "integrates"
+                    )
                 # Implements: REQ-p00014-E
                 elif child.type == "TEMPLATE_FIELD":
                     result["template"] = True
@@ -624,10 +689,14 @@ class RequirementTransformer:
         parsed_data: dict[str, Any] = {
             "id": journey_id,
             "title": title,
+            # The authored heading depth, carried like a requirement's, so a
+            # journey re-rendered after a mutation keeps the depth it had.
+            "heading_level": _count_hashes(header_text),
             "actor": None,
             "goal": None,
             "context": None,
             "validates": [],
+            "misplaced_validates": [],
             "body_lines": [],
             "sections": [],
         }
@@ -662,7 +731,10 @@ class RequirementTransformer:
                 token = child.children[0]
                 text = str(token)
                 val = re.sub(r"^[Vv]alidates[:=\s]\s*", "", text).strip()
-                parsed_data["validates"] = [ref.strip() for ref in val.split(",") if ref.strip()]
+                # Implements: REQ-d00272-K
+                parsed_data["validates"], parsed_data["reference_verdicts"] = self._parse_ref_list(
+                    val, "validates"
+                )
 
             elif child.data == "jny_body_line":
                 # Preamble body text (after metadata, before sections)
@@ -701,13 +773,19 @@ class RequirementTransformer:
             goal_match = _GOAL_RE.search(raw_text)
             if goal_match:
                 parsed_data["goal"] = goal_match.group("goal").strip()
-        if not parsed_data["validates"]:
-            validates_match = _VALIDATES_RE.search(raw_text)
-            if validates_match:
-                refs_str = validates_match.group("validates")
-                parsed_data["validates"] = [
-                    ref.strip() for ref in refs_str.split(",") if ref.strip()
-                ]
+        # Implements: REQ-p00014-V
+        # A journey declares what it validates in its metadata and nowhere
+        # else. A declaration inside a section is NOT read: reading it would
+        # give the journey two states to reconcile, and the saved journey is
+        # regenerated from the graph, so the second copy comes back naming
+        # whatever it named when it was typed. It is recorded instead, so a
+        # journey validating less than its author wrote says so.
+        for section in parsed_data["sections"]:
+            match = _VALIDATES_RE.search(section.get("content") or "")
+            if match:
+                parsed_data["misplaced_validates"].append(
+                    (section.get("name") or "", match.group("validates").strip())
+                )
 
         # Implements: REQ-d00256-A
         # Extract numbered steps from the ## Steps section into addressable entries.
@@ -937,21 +1015,68 @@ class RequirementTransformer:
     # Reference parsing
     # ------------------------------------------------------------------
 
-    def _parse_refs(self, refs_str: str) -> list[str]:
-        """Parse comma-separated reference list, normalizing to canonical form."""
+    def _parse_ref_list(
+        self, refs_str: str, keyword: str
+    ) -> tuple[list[str], dict[tuple[str, str], tuple[FaultClass, tuple[str, ...]]]]:
+        """The references a spec-file list names, each kept whether or not it
+        resolves, alongside the verdict for any item that did not read
+        cleanly.
+
+        Dividing the list is the reader's job and only the reader's; what a
+        spec file adds is that a reference it cannot account for is retained
+        rather than discarded, because a wrong reference has to survive being
+        read in order to be reported as a broken one. The verdict rides
+        alongside (REQ-d00272-K) exactly as it does for a code or test
+        annotation (``transformers/reference.py``), through the one shared
+        ``refs_and_verdicts`` conversion -- so the builder consults the same
+        shape regardless of which surface divided the list.
+        """
         if not refs_str:
-            return []
-        stripped = refs_str.strip()
-        if stripped in _NO_REF_VALUES:
-            return []
-        parts = [p.strip() for p in refs_str.split(",")]
-        result = []
-        for p in parts:
-            if not p or p in _NO_REF_VALUES:
-                continue
-            canonical = self.resolver.to_canonical(p)
-            result.append(canonical if canonical else p)
-        return result
+            return [], {}
+        if refs_str.strip() in _NO_REF_VALUES:
+            return [], {}
+        items = self.reader.parse_ref_list(refs_str)
+        refs, verdicts = refs_and_verdicts(items, keyword)
+        refs = [ref for ref in refs if ref not in _NO_REF_VALUES]
+        verdicts = {key: v for key, v in verdicts.items() if key[1] not in _NO_REF_VALUES}
+        return refs, verdicts
+
+    @staticmethod
+    def _merge_ref_field(
+        accumulator: list[str],
+        verdicts: dict[tuple[str, str], tuple[FaultClass, tuple[str, ...]]],
+        field_refs: list[str],
+        field_verdicts: dict[tuple[str, str], tuple[FaultClass, tuple[str, ...]]],
+    ) -> bool:
+        """Merge one metadata line's references into the requirement's
+        running list and verdict dict; returns whether a redundant repeat
+        was collapsed (``has_redundant_refs``, for the file-dirty marker).
+
+        An item that itself carries a verdict -- e.g. ``DUPLICATE_ITEM``,
+        which ``parse_ref_list`` detects among items of the SAME line -- is
+        kept at every position: that verdict already decided the item binds
+        nothing, and collapsing it here would silently return the very edge
+        REQ-d00272-K forbids. Every keyword is treated this way, because
+        every keyword's targets are now refused through the verdict its own
+        reading produced -- Implements and Refines at pending-link
+        resolution, Satisfies at template instantiation, Integrates at the
+        federation's wiring pass.
+
+        An item with no verdict that repeats a raw string already
+        accumulated from an EARLIER metadata line (the cross-line
+        ``**Refines**:`` typo `elspais fix` cleans up) is always collapsed
+        to one instance.
+        """
+        redundant = False
+        for ref in field_refs:
+            if any(key[1] == ref for key in field_verdicts):
+                accumulator.append(ref)
+            elif ref not in accumulator:
+                accumulator.append(ref)
+            else:
+                redundant = True
+        verdicts.update(field_verdicts)
+        return redundant
 
     # ------------------------------------------------------------------
     # Helpers
@@ -992,6 +1117,61 @@ class RequirementTransformer:
             if hasattr(token, "line") and token.line < first:  # type: ignore[attr-defined]
                 first = token.line  # type: ignore[attr-defined]
         return first if first < 999999999 else 0
+
+    _REF_FIELD_TYPES = (
+        "IMPLEMENTS_FIELD",
+        "REFINES_FIELD",
+        "SATISFIES_FIELD",
+        "INTEGRATES_FIELD",
+    )
+
+    # Implements: REQ-d00269-H
+    def _fold_metadata_continuations(self, children: list[Any]) -> tuple[dict[int, str], set[int]]:
+        """The text each metadata reference list gains from the lines below
+        it, and the ``body_line`` nodes that text was taken from.
+
+        Continuation itself is ``fold_continuation`` -- the one reading of
+        REQ-d00269-H, shared with comment blocks. What this adds is what a
+        metadata block's lines are: which field can continue, and how to read
+        a following line's content.
+
+        Only the LAST field of a metadata line can continue one. A field with
+        another after it on the line is closed by the field separator, so the
+        list's content ends there and no later line holds more of it; the
+        separator introduced nothing and is reported as such.
+        """
+        extra: dict[int, str] = {}
+        consumed: set[int] = set()
+
+        def _line_of(node: Tree) -> int:
+            return self._extract_text_from_body_line(node)[0]
+
+        def _content_of(node: Tree) -> str | None:
+            if not (isinstance(node, Tree) and node.data == "body_line"):
+                return None
+            return self._extract_text_from_body_line(node)[1]
+
+        for idx, child in enumerate(children):
+            if not (isinstance(child, Tree) and child.data == "metadata_line"):
+                continue
+            tokens = [c for c in child.children if isinstance(c, Token)]
+            if not tokens or tokens[-1].type not in self._REF_FIELD_TYPES:
+                continue
+            token = tokens[-1]
+            value = self._extract_field_value(str(token).strip())
+
+            joined, folded, _last = fold_continuation(
+                value,
+                self._last_line(child),
+                [c for c in children[idx + 1 :] if isinstance(c, Tree)],
+                line_of=_line_of,
+                content_of=_content_of,
+            )
+            if folded:
+                extra[id(token)] = joined
+                consumed.update(id(node) for node in folded)
+
+        return extra, consumed
 
     def _last_line(self, node: Tree) -> int:
         """Get the last line number from a tree node."""

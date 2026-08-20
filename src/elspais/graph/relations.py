@@ -63,7 +63,7 @@ class EdgeKind(Enum):
     # into the library file.
     INTEGRATES = "integrates"
 
-    # Implements: REQ-p00050-D
+    # Implements: REQ-p00050-D, REQ-d00126-D
     def contributes_to_coverage(self) -> bool:
         """Check if this edge type contributes to coverage rollup.
 

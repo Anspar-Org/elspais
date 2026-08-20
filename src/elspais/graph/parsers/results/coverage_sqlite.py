@@ -31,8 +31,8 @@ _SQLITE_MAGIC = b"SQLite format 3\x00"
 
 _INSTALL_HINT = (
     "coverage-sqlite: 'coverage' package not importable in this interpreter -- "
-    "per-test line attribution (code_tested.direct) will stay 0 and Code "
-    "Tested renders 'n/a'. Install with: pip install elspais[coverage]"
+    "per-test line attribution (code_tested.attributed_lines) will stay 0 and "
+    "Code Tested renders 'n/a'. Install with: pip install elspais[coverage]"
 )
 
 

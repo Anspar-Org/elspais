@@ -66,7 +66,7 @@ class TestFixFailsWhenAuthorMissing:
 
         captured = capsys.readouterr()
         assert "author_name" in captured.err, (
-            "stderr should name the missing field. " f"stderr was: {captured.err!r}"
+            f"stderr should name the missing field. stderr was: {captured.err!r}"
         )
 
     @patch(
@@ -137,7 +137,7 @@ class TestFixFailsWhenAuthorMissing:
             os.chdir(old_cwd)
 
         assert result == 0, (
-            "fix should succeed for Draft-only changes even if author lookup " "would fail"
+            "fix should succeed for Draft-only changes even if author lookup would fail"
         )
 
         content = spec_file.read_text()

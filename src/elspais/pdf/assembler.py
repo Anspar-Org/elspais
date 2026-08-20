@@ -5,6 +5,7 @@
 Uses the graph for file ordering metadata (level, depth), then reads the
 source spec files directly to preserve all content faithfully.
 """
+
 from __future__ import annotations
 
 import logging
@@ -170,7 +171,11 @@ class MarkdownAssembler:
         else:
             self._title = "Requirements Specification"
         if resolver is None:
-            resolver = build_resolver({})
+            # An empty dict is not the default configuration: it declares no
+            # levels, so the grammar it yields matches no identifier.
+            from elspais.config import config_defaults
+
+            resolver = build_resolver(config_defaults())
         self._resolver = resolver
         order, headings, prefix_re = _build_level_metadata(config)
         self._level_order = order
@@ -622,6 +627,7 @@ class MarkdownAssembler:
     # Mermaid diagram resolution
     # ------------------------------------------------------------------
 
+    # Implements: REQ-p00080-G
     def _resolve_mermaid_images(
         self,
         line: str,
@@ -700,7 +706,7 @@ class MarkdownAssembler:
     # Raster/vector image resolution
     # ------------------------------------------------------------------
 
-    # Implements: REQ-p00080-H
+    # Implements: REQ-p00080-G, REQ-p00080-H
     def _resolve_image_paths(
         self,
         line: str,
@@ -759,8 +765,7 @@ class MarkdownAssembler:
                             repo=self._repo_name_for_root(owning_repo_root),
                             searched=(str(target),),
                             cause=(
-                                "Absolute image path does not exist; no "
-                                "repository can supply it."
+                                "Absolute image path does not exist; no repository can supply it."
                             ),
                             remedy=(
                                 "Correct the path, or make the reference "

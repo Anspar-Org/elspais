@@ -10,7 +10,7 @@
 #   4. Secret detection (gitleaks)
 #   5. Documentation sync tests
 #
-# Pre-commit already handles: lint, black, markdown, unit tests,
+# Pre-commit already handles: lint, format, markdown, unit tests,
 # elspais fix, commit message format.
 #
 # PR-aware blocking:
@@ -152,22 +152,20 @@ REPO_ROOT=$(git rev-parse --show-toplevel)
 # 3. E2E Tests (cached)
 # =====================================================
 
-CACHE_DIR="$REPO_ROOT/.results"
-E2E_CACHE="$CACHE_DIR/.test-cache-e2e"
-CONTENT_HASH=$(git write-tree 2>/dev/null | head -c 40)
-
-mkdir -p "$CACHE_DIR"
-
-# git holds the connection to the remote open for the whole of this hook, and
-# the remote closes an idle connection well before a full e2e run finishes.
-# When that happens git reports "Connection to <host> closed by remote host"
-# and exits 141 -- a network-shaped error with nothing pointing back here. So
-# the two guards below exist to keep this stage from running when it cannot
-# tell us anything new, and the banner exists so the failure is diagnosable
-# when it does run long.
-
-# Guard 1: a push that changes only prose cannot change e2e behaviour. The
+# Guard: a push that changes only prose cannot change e2e behaviour. The
 # documentation-sync stage below still covers the documents themselves.
+# Relevance is a property of the push, so it stays here; the verdict itself
+# -- key derivation, cache, run, record -- lives in .githooks/e2e-verdict,
+# the one authority, shared with anyone who runs that script before pushing
+# so the several-minute e2e stage can happen outside the push.
+#
+# git holds the connection to the remote open for the whole of this hook,
+# and the remote closes an idle connection well before a full e2e run
+# finishes. When the run happens here and the push ends in "Connection ...
+# closed by remote host", that is this stage overrunning the remote's idle
+# timeout, not a network fault: the verdict is cached, so pushing again
+# completes quickly. Running .githooks/e2e-verdict before the push avoids
+# the long window entirely.
 E2E_RELEVANT=true
 E2E_MERGE_BASE=""
 if E2E_MERGE_BASE=$(git merge-base HEAD origin/main 2>/dev/null); then
@@ -177,123 +175,14 @@ if E2E_MERGE_BASE=$(git merge-base HEAD origin/main 2>/dev/null); then
     fi
 fi
 
-# Guard 2: the cache records the verdict for a tree, not just its successes.
-# Caching only passes meant any failing run -- including one caused by the
-# local environment rather than the code -- guaranteed that every subsequent
-# push re-ran the whole suite and died the same way.
-E2E_CACHED_HASH=""
-E2E_CACHED_VERDICT=""
-E2E_CACHED_ENV=""
-if [ -f "$E2E_CACHE" ]; then
-    E2E_CACHED_HASH=$(cut -d' ' -f1 < "$E2E_CACHE")
-    E2E_CACHED_VERDICT=$(cut -d' ' -f2 < "$E2E_CACHE")
-    E2E_CACHED_ENV=$(cut -d' ' -f3 < "$E2E_CACHE")
-fi
-
-# Guard 3: the e2e tier spawns `elspais` as a subprocess from PATH, so its
-# verdict describes whichever binary that resolved to -- not necessarily this
-# tree. A stale global install (pipx, ~/.local/bin) or another worktree's venv
-# produces failures that belong to the environment, and the tree hash cannot
-# tell the two runs apart: same code, same key, different software.
-#
-# So identify the environment by where the on-PATH CLI's code actually lives,
-# and make that part of the cache key. A verdict earned elsewhere is a miss,
-# not a failure -- it simply has nothing to say about this tree, so we re-run.
-# Recording it as a third field also retires every 2-field entry written
-# before this guard existed: they have no environment, so they never match.
-e2e_cli_src() {
-    _bin=$(command -v elspais 2>/dev/null) || return 1
-    _py=$(head -1 "$_bin" 2>/dev/null | sed 's|^#!||')
-    [ -x "$_py" ] || return 1
-    "$_py" -c 'import elspais,os;print(os.path.realpath(os.path.dirname(elspais.__file__)))' 2>/dev/null
-}
-# `set -e` is in force and `VAR=$(fn)` adopts the function's exit status, so an
-# unset fallback aborts the whole hook when `elspais` is not installed — before
-# the secret scan or the documentation check get to run. Not finding the CLI is
-# a fact this stage already knows how to report; it is not fatal.
-E2E_REPO_SRC=$(cd "$REPO_ROOT" && python3 -c 'import os,sys;print(os.path.realpath(sys.argv[1]))' "src/elspais") \
-    || E2E_REPO_SRC="$REPO_ROOT/src/elspais"
-E2E_ENV_SRC=$(e2e_cli_src) || E2E_ENV_SRC=""
-
-# The venv in the worktree is the binary this tree's e2e tests mean. Prefer it
-# automatically rather than making every developer remember the PATH dance.
-if [ "$E2E_ENV_SRC" != "$E2E_REPO_SRC" ] && [ -x "$REPO_ROOT/.venv/bin/elspais" ]; then
-    _saved_path="$PATH"
-    PATH="$REPO_ROOT/.venv/bin:$PATH"
-    export PATH
-    if [ "$(e2e_cli_src)" = "$E2E_REPO_SRC" ]; then
-        E2E_ENV_SRC="$E2E_REPO_SRC"
-        echo -e "${YELLOW}E2E: using $REPO_ROOT/.venv/bin for elspais (PATH resolved elsewhere)${NC}"
-    else
-        PATH="$_saved_path"
-        export PATH
-    fi
-fi
-
-if [ "$E2E_ENV_SRC" != "$E2E_REPO_SRC" ]; then
-    echo -e "${YELLOW}E2E: on-PATH elspais is ${E2E_ENV_SRC:-<not found>},${NC}"
-    echo -e "${YELLOW}     not this tree ($E2E_REPO_SRC). Results describe that${NC}"
-    echo -e "${YELLOW}     install, not this branch. Fix with:${NC}"
-    echo -e "${YELLOW}       export PATH=\"$REPO_ROOT/.venv/bin:\$PATH\"${NC}"
-fi
-
-if [ -n "$ELSPAIS_E2E_FORCE" ]; then
-    E2E_CACHED_HASH=""
-    E2E_CACHED_VERDICT=""
-    E2E_CACHED_ENV=""
-fi
-
-E2E_CACHE_USABLE=false
-if [ "$E2E_CACHED_HASH" = "$CONTENT_HASH" ] && [ -n "$E2E_CACHED_ENV" ] \
-   && [ "$E2E_CACHED_ENV" = "$E2E_ENV_SRC" ]; then
-    E2E_CACHE_USABLE=true
-fi
-
 if [ "$E2E_RELEVANT" = false ]; then
     echo -e "${GREEN}E2E tests skipped — this branch changes documentation only${NC}"
-elif [ "$E2E_CACHE_USABLE" = true ] && [ "$E2E_CACHED_VERDICT" = "PASS" ]; then
-    echo -e "${GREEN}E2E tests cached — passed since last change${NC}"
-elif [ "$E2E_CACHE_USABLE" = true ] && [ "$E2E_CACHED_VERDICT" = "FAIL" ]; then
-    VALIDATION_FAILED=true
-    echo -e "${RED}E2E tests failed (cached verdict for an unchanged tree)${NC}"
-    echo "Re-run them with: ELSPAIS_E2E_FORCE=1 git push"
-    echo "Cache: $E2E_CACHE"
 else
-    echo -e "${YELLOW}Running e2e tests. This stage takes several minutes, and git${NC}"
-    echo -e "${YELLOW}holds the connection to the remote open while it runs. If the${NC}"
-    echo -e "${YELLOW}push ends in \"Connection ... closed by remote host\", that is${NC}"
-    echo -e "${YELLOW}this stage overrunning the remote's idle timeout, not a network${NC}"
-    echo -e "${YELLOW}fault: the verdict is cached, so pushing again completes quickly.${NC}"
-    echo ""
-
-    E2E_RC=0
-    pytest tests/ -m "e2e" --tb=short -q \
-        --junitxml="$CACHE_DIR/test-results-e2e.xml" 2>&1 || E2E_RC=$?
-
-    if [ "$E2E_RC" -ne 0 ]; then
+    if ! "$REPO_ROOT/.githooks/e2e-verdict"; then
         VALIDATION_FAILED=true
-        echo "$CONTENT_HASH FAIL $E2E_ENV_SRC" > "$E2E_CACHE"
-        echo -e "${RED}E2E tests failed!${NC}"
-    else
-        echo "$CONTENT_HASH PASS $E2E_ENV_SRC" > "$E2E_CACHE"
-        echo -e "${GREEN}E2E tests passed!${NC}"
     fi
 fi
 echo ""
-
-# Pretty-print JUnit XML for elspais line-level linking
-for xml_file in "$CACHE_DIR"/test-results*.xml; do
-    [ -f "$xml_file" ] || continue
-    python3 -c "
-import xml.etree.ElementTree as ET, sys
-try:
-    tree = ET.parse('$xml_file')
-    ET.indent(tree, space='  ')
-    tree.write('$xml_file', encoding='unicode', xml_declaration=True)
-except Exception:
-    sys.exit(0)
-" 2>/dev/null || true
-done
 
 # =====================================================
 # 4. Secret Detection

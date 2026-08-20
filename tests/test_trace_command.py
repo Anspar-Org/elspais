@@ -64,6 +64,96 @@ class TestTraceCommand:
         assert isinstance(parsed, list)
         assert any(item["id"] == "REQ-p00001" for item in parsed)
 
+    # Verifies: REQ-d00069-L, REQ-d00258-A
+    def test_json_carries_the_four_measures_per_dimension(self, canonical_federated_graph, capsys):
+        """REQ-d00258-A: JSON is where the measures are cheap to make
+        available without widening the text/markdown/html table."""
+        data = compute_trace(canonical_federated_graph, {}, {})
+        preset = ReportPreset(
+            name="standard",
+            columns=list(REPORT_PRESETS["standard"].columns),
+        )
+        _render_json_from_data(data, preset)
+
+        content = capsys.readouterr().out
+        parsed = json.loads(content)
+        item = next(i for i in parsed if i["id"] == "REQ-p00001")
+        for suffix in (
+            "_immediate_direct",
+            "_immediate_indirect",
+            "_rolled_direct",
+            "_rolled_indirect",
+        ):
+            assert f"tested{suffix}" in item
+            assert f"implemented{suffix}" in item
+        # code_tested/lcov_tested are outside the REQ-d00258-K vocabulary
+        # and carry no measure split.
+        assert "code_tested_immediate_direct" not in item
+
+    # Verifies: REQ-d00069-L, REQ-d00258-A
+    def test_format_json_graph_path_carries_the_four_measures(
+        self, canonical_federated_graph, capsys
+    ):
+        """The live-graph JSON path (``format_json``) matches the
+        daemon-payload path (``_render_json_from_data``) above."""
+        from elspais.commands.trace import format_json
+
+        preset = ReportPreset(
+            name="standard",
+            columns=list(REPORT_PRESETS["standard"].columns),
+        )
+        out = "".join(format_json(canonical_federated_graph, preset))
+        parsed = json.loads(out)
+        item = next(i for i in parsed if i["id"] == "REQ-p00001")
+        assert "tested_rolled_direct" in item
+        assert "implemented_immediate_indirect" in item
+
+
+# Verifies: REQ-d00069-N, REQ-d00258-A, REQ-d00258-J
+class TestTraceHeadlineIsTheTotal:
+    """A discriminating fixture where the legacy blended footings and the
+    REQ-d00069-N total genuinely disagree, so a headline reverted to the
+    legacy footing (without reinstating the `~` marker) would be caught."""
+
+    def test_headline_reads_the_total_not_the_legacy_blended_footing(self):
+        """*Assertion* A carries partial LOCAL evidence (0.6) AND a fully
+        finished conducted refinement (1.0). The legacy footings average the
+        two into 0.8; the total takes the greatest of the four measures
+        (1.0)."""
+        from elspais.commands.trace import _get_node_data
+        from elspais.graph.builder import TraceGraph
+        from elspais.graph.GraphNode import GraphNode, NodeKind
+        from elspais.graph.metrics import CoverageDimension, RollupMetrics
+
+        node = GraphNode("REQ-p00001", NodeKind.REQUIREMENT, label="Partial+Refined")
+        node.set_field("level", "prd")
+        node.set_field("status", "Active")
+        node.set_metric(
+            "rollup_metrics",
+            RollupMetrics(
+                total_assertions=1,
+                implemented=CoverageDimension(
+                    total=1,
+                    immediate_direct_by_label={"A": 0.6},
+                    rolled_direct_by_label={"A": 1.0},
+                ),
+            ),
+        )
+        dim = node.get_metric("rollup_metrics").implemented
+        # The legacy blended footing averaged the citation with what the
+        # refinement conducted -- (0.6 + 1.0) / 2 == 0.8, LOWER than either.
+        # The total is a per-*Assertion* max instead, so a finished refinement
+        # cannot be pulled down by a partial citation beside it.
+        assert dim.immediate_direct == pytest.approx(0.6)
+        assert dim.rolled_direct == pytest.approx(1.0)
+        assert dim.covered == pytest.approx(1.0)
+
+        data = _get_node_data(node, TraceGraph())
+        assert data["implemented"] == "1/1 (100%)"
+        assert "0.8" not in data["implemented"]
+        assert data["implemented_immediate_direct"] == "0.6/1 (60%)"
+        assert data["implemented_rolled_direct"] == "1/1 (100%)"
+
 
 class TestTraceReportPresets:
     """Tests for --preset functionality."""
@@ -236,15 +326,15 @@ class TestLcovTestedTrace:
             rollup: RollupMetrics | None = node.get_metric("rollup_metrics")
             if rollup and rollup.lcov_tested.total > 0:
                 # Nodes with lcov data must render as "lcov NN%"
-                assert re.match(
-                    r"lcov \d+%$", data["lcov_tested"]
-                ), f"Unexpected lcov_tested format for {node.id}: {data['lcov_tested']!r}"
+                assert re.match(r"lcov \d+%$", data["lcov_tested"]), (
+                    f"Unexpected lcov_tested format for {node.id}: {data['lcov_tested']!r}"
+                )
                 has_lcov_node = True
             else:
                 # Nodes without lcov data must render as "n/a"
-                assert (
-                    data["lcov_tested"] == "n/a"
-                ), f"Expected 'n/a' for {node.id} but got: {data['lcov_tested']!r}"
+                assert data["lcov_tested"] == "n/a", (
+                    f"Expected 'n/a' for {node.id} but got: {data['lcov_tested']!r}"
+                )
 
         # At least one node must have lcov data in the canonical graph
         # (the canonical graph includes LCOV result fixtures)
@@ -269,12 +359,12 @@ class TestLcovTestedTrace:
         """lcov_tested column is present in the standard and full preset definitions."""
         from elspais.commands.trace import REPORT_PRESETS
 
-        assert (
-            "lcov_tested" in REPORT_PRESETS["standard"].columns
-        ), "lcov_tested must be in standard preset columns"
-        assert (
-            "lcov_tested" in REPORT_PRESETS["full"].columns
-        ), "lcov_tested must be in full preset columns"
+        assert "lcov_tested" in REPORT_PRESETS["standard"].columns, (
+            "lcov_tested must be in standard preset columns"
+        )
+        assert "lcov_tested" in REPORT_PRESETS["full"].columns, (
+            "lcov_tested must be in full preset columns"
+        )
 
 
 class TestTraceFreshTargets:
@@ -407,7 +497,7 @@ def _verified_cell(markdown_text, req_id):
     """Return the stripped 'Passing' column cell for the row containing req_id.
 
     The column is still keyed "verified" in the data dict, but its display
-    header is "Passing" (REQ-d00258-B).
+    header is "Passing" (REQ-d00258-K).
     """
     lines = markdown_text.splitlines()
     header_line = next((line for line in lines if line.startswith("| ID")), None)
@@ -755,9 +845,10 @@ def marker_verified_project(tmp_path):
     (whole-requirement) `# Verifies:` reference with a passing result.
 
     A blanket reference credits every assertion INDIRECTly but none
-    DIRECTly, so `tested_and_passing(rollup).indirect > .direct` -- the
-    trace 'verified' cell must show the generous (indirect) count with the
-    `~` marker appended (REQ-d00258-A).
+    DIRECTly, so `tested_and_passing(rollup).covered > .immediate_direct` -- the
+    trace 'verified' cell must headline the total (REQ-d00069-N), with the
+    immediate-direct and immediate-indirect measure columns showing which
+    measure carried the evidence rather than a `~` marker (REQ-d00258-J).
     """
     project = tmp_path / "project"
     (project / "spec").mkdir(parents=True)
@@ -844,8 +935,8 @@ A. The system SHALL do A.
 @pytest.fixture
 def code_tested_no_attribution_project(tmp_path):
     """On-disk project: REQ-d00001's implementation has aggregate (lcov)
-    line-coverage data but no per-test attribution -- `code_tested.direct`
-    stays 0 while `.indirect` is > 0 (per-test attribution is not derivable
+    line-coverage data but no per-test attribution -- `code_tested.immediate_direct`
+    stays 0 while `.covered` is > 0 (per-test attribution is not derivable
     from aggregate tooling). REQ-d00258-E: the trace 'code_tested' cell must
     render `n/a`, never a misleading `0/N (0%)`.
     """
@@ -869,13 +960,63 @@ def code_tested_no_attribution_project(tmp_path):
 
 
 @pytest.fixture
+def code_tested_context_carrying_project(tmp_path):
+    """On-disk project whose coverage DOES carry per-test contexts, but where
+    no context names a test verifying REQ-d00001.
+
+    The sibling of ``code_tested_no_attribution_project``: identical shape,
+    context-carrying tooling instead of aggregate-only. Under REQ-d00258-E the
+    suppression keys on what the tooling provided, so here the attribution
+    question WAS asked and its answer is zero -- the trace cell must render
+    ``0/N``, not ``n/a``.
+    """
+    project = tmp_path / "project"
+    (project / "spec").mkdir(parents=True)
+    (project / "spec" / "reqs.md").write_text(_CODE_TESTED_SPEC, encoding="utf-8")
+
+    (project / "src").mkdir(parents=True)
+    (project / "src" / "main.py").write_text(
+        "# Implements: REQ-d00001\nx = 1\ny = 2\nz = 3\n", encoding="utf-8"
+    )
+
+    (project / "coverage").mkdir(parents=True)
+    (project / "coverage" / "coverage.json").write_text(
+        json.dumps(
+            {
+                "files": {
+                    "src/main.py": {
+                        "executed_lines": [1, 2, 3, 4],
+                        "missing_lines": [],
+                        "summary": {"num_statements": 4, "covered_lines": 4},
+                        # Contexts recorded, but the test they name verifies
+                        # nothing in this project.
+                        "contexts": {
+                            "2": ["tests/test_unrelated.py::test_other|run"],
+                            "3": ["tests/test_unrelated.py::test_other|run"],
+                        },
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    (project / ".elspais.toml").write_text(
+        _CODE_TESTED_CONFIG.replace("coverage/lcov.info", "coverage/coverage.json"),
+        encoding="utf-8",
+    )
+    return project
+
+
+@pytest.fixture
 def marker_carried_project(tmp_path):
     """Two-target project where REQ-d00002 is verified only through a blanket
     (whole-requirement) `# Verifies: REQ-d00002` in target 'b'.
 
     Under a `--targets a` selective run, target 'b' is carried (baseline) AND
-    its verified evidence is indirect-only, so the trace verified cell must
-    compose both markers in order: `count (pct%) ~ (baseline)`.
+    its verified evidence is whole-requirement-only, so the trace verified
+    cell must compose the total with the baseline suffix: `count (pct%)
+    (baseline)` -- no `~` marker (REQ-d00258-J).
     """
     project = tmp_path / "project"
     (project / "spec").mkdir(parents=True)
@@ -886,7 +1027,7 @@ def marker_carried_project(tmp_path):
         "# Verifies: REQ-d00001-A\ndef test_a():\n    pass\n", encoding="utf-8"
     )
     # Blanket (whole-requirement) ref: credits REQ-d00002's assertions
-    # INDIRECTly only, so the `~` marker fires alongside `(baseline)`.
+    # INDIRECTly only, via the immediate-indirect measure.
     (project / "tests" / "test_b.py").write_text(
         "# Verifies: REQ-d00002\ndef test_b():\n    pass\n", encoding="utf-8"
     )
@@ -905,27 +1046,37 @@ def marker_carried_project(tmp_path):
 
 
 class TestTraceFooting:
-    """Verifies REQ-d00258-A, REQ-d00258-B, REQ-d00258-E: generous-footing
-    headline counts get a `~` marker when evidence isn't fully direct, the
-    reporting vocabulary reads Passing/UAT Covered/UAT Passed (no
-    "Validated"), and aggregate-only line coverage never renders a
-    misleading direct-attribution count."""
+    """Verifies REQ-d00258-A, REQ-d00258-K, REQ-d00258-E, REQ-d00258-J:
+    dimensions headline the per-*Assertion* TOTAL (REQ-d00069-N) with the
+    four measures behind it published as their own columns rather than a
+    caveat marker, the reporting vocabulary reads Passing/UAT Covered/UAT
+    Passed (no "Validated"), and aggregate-only line coverage never renders
+    a misleading direct-attribution count."""
 
-    # Verifies: REQ-d00258-A
-    def test_indirect_only_coverage_headlines_with_marker(self, marker_verified_project):
+    # Verifies: REQ-d00069-N, REQ-d00258-A, REQ-d00258-J
+    def test_whole_requirement_only_coverage_headlines_the_total(self, marker_verified_project):
+        """A blanket (whole-requirement) `Verifies:` credits only the
+        immediate-indirect measure; the headline is still the total (equal
+        to that measure here), and no `~` stands in for the fact that no
+        citation named the *Assertion* directly -- the immediate-direct and
+        immediate-indirect columns say that on their own."""
         from elspais.commands.trace import _get_node_data
         from elspais.graph.metrics import fmt_assertion_count, tested_and_passing
 
         graph = _build_project_graph(marker_verified_project, targets=None)
         node = graph.find_by_id("REQ-d00001")
         dim = tested_and_passing(node.get_metric("rollup_metrics"))
-        assert dim.indirect > dim.direct + 1e-9
+        assert dim.covered > dim.immediate_direct + 1e-9
 
         data = _get_node_data(node, graph)
-        assert data["verified"].rstrip().endswith("~")
-        assert data["verified"].startswith(f"{fmt_assertion_count(dim.indirect)}/{dim.total}")
+        assert "~" not in data["verified"]
+        pct = round(dim.covered / dim.total * 100)
+        assert data["verified"] == f"{fmt_assertion_count(dim.covered)}/{dim.total} ({pct}%)"
+        assert data["verified_immediate_direct"].startswith("0/")
+        indirect_str = fmt_assertion_count(dim.covered)
+        assert data["verified_immediate_indirect"].startswith(f"{indirect_str}/")
 
-    # Verifies: REQ-d00258-B
+    # Verifies: REQ-d00258-K
     def test_headers_use_passing_vocabulary(self):
         from elspais.commands.trace import _column_headers
 
@@ -942,8 +1093,8 @@ class TestTraceFooting:
         graph = _build_project_graph(code_tested_no_attribution_project, targets=None)
         node = graph.find_by_id("REQ-d00001")
         rollup = node.get_metric("rollup_metrics")
-        assert rollup.code_tested.direct == 0
-        assert rollup.code_tested.indirect > 0
+        assert rollup.code_tested.attributed_lines == 0
+        assert rollup.code_tested.covered_lines > 0
 
         data = _get_node_data(node, graph)
         assert not data["code_tested"].startswith("0/")
@@ -959,12 +1110,39 @@ class TestTraceFooting:
         graph = _build_project_graph(code_tested_no_attribution_project, targets=None)
         node = graph.find_by_id("REQ-d00001")
         rollup = node.get_metric("rollup_metrics")
-        assert rollup.code_tested.direct == 0
-        assert rollup.code_tested.indirect > 0
+        assert rollup.code_tested.attributed_lines == 0
+        assert rollup.code_tested.covered_lines > 0
 
         data = _get_node_data(node, graph, assertion_labels=True)
         assert data["code_tested_labels"] == "n/a"
         assert data["code_tested_pct"] == "n/a"
+
+    # Verifies: REQ-d00258-E
+    def test_code_tested_with_contexts_but_no_verifying_test_is_zero_of_n(
+        self, code_tested_context_carrying_project
+    ):
+        """Where the tooling DID record per-test contexts, a zero attribution
+        count is a real answer and must be rendered as `0/N`.
+
+        This is the other half of REQ-d00258-E: the suppression is about what
+        the tooling provides, not about how the count came out. Rendering
+        `n/a` here would hide implementation no verifying test reaches, which
+        is exactly the fact worth surfacing."""
+        from elspais.commands.trace import _get_node_data
+
+        graph = _build_project_graph(code_tested_context_carrying_project, targets=None)
+        node = graph.find_by_id("REQ-d00001")
+        rollup = node.get_metric("rollup_metrics")
+        assert rollup.code_tested.has_contexts is True
+        assert rollup.code_tested.attributed_lines == 0
+
+        data = _get_node_data(node, graph)
+        assert data["code_tested"].startswith("0/")
+        assert data["code_tested"] != "n/a"
+
+        labelled = _get_node_data(node, graph, assertion_labels=True)
+        assert labelled["code_tested_labels"].startswith("0/")
+        assert labelled["code_tested_pct"] == "0%"
 
     # Verifies: REQ-d00258-E
     def test_lcov_tested_labels_empty_set_renders_zero_of_total(
@@ -978,26 +1156,274 @@ class TestTraceFooting:
         graph = _build_project_graph(code_tested_no_attribution_project, targets=None)
         node = graph.find_by_id("REQ-d00001")
         rollup = node.get_metric("rollup_metrics")
-        # Simplified dimensions (e.g. scalar-only fixtures) may carry counts
-        # without per-label data; the renderer must not fall back to "-".
-        rollup.lcov_tested = CoverageDimension(total=2, indirect=1.0)
+        # A dimension with assertions but no credited label must render the
+        # honest "0/N" rather than falling back to "-".
+        rollup.lcov_tested = CoverageDimension(total=2)
 
         data = _get_node_data(node, graph, assertion_labels=True)
         assert data["lcov_tested_labels"] == "0/2"
         assert data["lcov_tested_labels"] != "-"
 
     # Verifies: REQ-d00258-A, REQ-d00254-I
-    def test_marker_composes_with_baseline_suffix(self, marker_carried_project):
-        """Indirect-only AND carried verified evidence must compose the exact
-        order `count (pct%) ~ (baseline)`."""
+    # Verifies: REQ-d00069-N, REQ-d00258-A, REQ-d00258-J, REQ-d00254-I
+    def test_baseline_suffix_composes_with_the_total_headline(self, marker_carried_project):
+        """Whole-requirement-only AND carried verified evidence must compose
+        the exact order `count (pct%) (baseline)` -- no `~` stands in for the
+        immediate-indirect-only evidence (REQ-d00258-J)."""
         from elspais.commands.trace import _get_node_data
 
         graph = _build_project_graph(marker_carried_project, targets=["a"])
         node = graph.find_by_id("REQ-d00002")
         rollup = node.get_metric("rollup_metrics")
         assert rollup.verified.carried
-        assert rollup.verified.direct == 0
-        assert rollup.verified.indirect > 0
+        assert rollup.verified.immediate_direct == 0
+        assert rollup.verified.covered > 0
 
         data = _get_node_data(node, graph)
-        assert data["verified"] == "1/1 (100%) ~ (baseline)"
+        assert data["verified"] == "1/1 (100%) (baseline)"
+
+
+_BREAKDOWN_CONFIG = """\
+version = 3
+
+[project]
+name = "tested-breakdown-trace"
+namespace = "REQ"
+
+[levels.dev]
+rank = 1
+letter = "d"
+implements = ["dev"]
+
+[id-patterns]
+canonical = "{namespace}-{level.letter}{component}"
+
+[id-patterns.component]
+style = "numeric"
+digits = 5
+leading_zeros = true
+
+[scanning.spec]
+directories = ["spec"]
+
+[scanning.test]
+enabled = true
+directories = ["tests"]
+file_patterns = ["test_*.py"]
+
+[[scanning.test.targets]]
+name = "a"
+reporter = "junit"
+results = "results/results.xml"
+match = "source"
+
+[rules.hierarchy]
+allow_circular = false
+allow_structural_orphans = true
+
+[rules.format]
+require_hash = false
+require_assertions = false
+require_status = false
+"""
+
+_BREAKDOWN_SPEC = """\
+# Requirements
+
+---
+
+### REQ-d00001: Req A
+
+The system SHALL do A, B and C.
+
+## Assertions
+
+A. The system SHALL do A.
+B. The system SHALL do B.
+C. The system SHALL do C.
+
+*End* *Req A*
+---
+"""
+
+_BREAKDOWN_JOURNEY = """\
+# User Journeys
+
+---
+
+### JNY-OQ-01: Flow
+
+**Actor**: End User
+**Goal**: Do the thing
+Validates: REQ-d00001-A
+
+## Steps
+
+1. The user does the thing
+
+*End* *JNY-OQ-01*
+---
+"""
+
+_BREAKDOWN_JUNIT = """\
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="suite" tests="2">
+  <testcase name="test_a" classname="tests.test_a" file="tests/test_a.py" line="1" time="0.01"/>
+  <testcase name="test_b" classname="tests.test_b" file="tests/test_b.py" line="1" time="0.01">
+    <failure message="boom">boom</failure>
+  </testcase>
+</testsuite>
+"""
+
+
+@pytest.fixture
+def tested_breakdown_project(tmp_path):
+    """On-disk project whose one requirement holds each tested state at once.
+
+    Assertion A is verified by a passing test, B by a failing one, and C by a
+    test whose result never arrived -- so the Tested breakdown reads 1P 1F 1A
+    (REQ-d00258-O). A journey validates A, so the requirement also has a row to
+    render under the UAT preset (which shows no Tested column).
+
+    Each `<testcase>` carries the line of its own `def` in the JUnit reporter's
+    own 0-based origin, so its result resolves to that one test. Without it the
+    results would bind at file scope, naming every test in the file and so none
+    of them, and all three assertions would read as awaiting a result
+    (REQ-d00254-A).
+    """
+    project = tmp_path / "project"
+    (project / "spec").mkdir(parents=True)
+    (project / "spec" / "reqs.md").write_text(_BREAKDOWN_SPEC, encoding="utf-8")
+    (project / "spec" / "journeys.md").write_text(_BREAKDOWN_JOURNEY, encoding="utf-8")
+
+    (project / "tests").mkdir(parents=True)
+    for label in ("a", "b", "c"):
+        (project / "tests" / f"test_{label}.py").write_text(
+            f"# Verifies: REQ-d00001-{label.upper()}\ndef test_{label}():\n    pass\n",
+            encoding="utf-8",
+        )
+
+    (project / "results").mkdir(parents=True)
+    (project / "results" / "results.xml").write_text(_BREAKDOWN_JUNIT, encoding="utf-8")
+
+    (project / ".elspais.toml").write_text(_BREAKDOWN_CONFIG, encoding="utf-8")
+    return project
+
+
+class TestTraceTestedBreakdown:
+    """REQ-d00258-O: the trace Tested cell carries the three-way breakdown."""
+
+    def _tested_cell(self, markdown_text, req_id):
+        lines = markdown_text.splitlines()
+        header_line = next(line for line in lines if line.startswith("| ID"))
+        headers = [h.strip() for h in header_line.strip("|").split("|")]
+        idx = headers.index("Tested")
+        row = next(line for line in lines if line.startswith("|") and req_id in line)
+        return [c.strip() for c in row.strip("|").split("|")][idx]
+
+    # Verifies: REQ-d00258-O
+    def test_tested_cell_carries_the_breakdown(self, tested_breakdown_project):
+        """The breakdown qualifies Tested, so it rides in the Tested cell and
+        adds no column of its own."""
+        from elspais.commands.trace import format_markdown
+
+        graph = _build_project_graph(tested_breakdown_project)
+        out = "\n".join(format_markdown(graph))
+
+        cell = self._tested_cell(out, "REQ-d00001")
+        assert cell == "3/3 (100%) [1P 1F 1A]"
+        header_line = next(line for line in out.splitlines() if line.startswith("| ID"))
+        assert "Awaiting" not in header_line
+
+    # Verifies: REQ-d00258-O
+    def test_legend_emitted_when_a_row_carried_a_breakdown(self, tested_breakdown_project):
+        """The compact form is unreadable without its key."""
+        from elspais.commands.trace import format_markdown
+
+        graph = _build_project_graph(tested_breakdown_project)
+        out = "\n".join(format_markdown(graph))
+
+        assert "> Tested breakdown:" in out
+
+    # Verifies: REQ-d00258-O
+    def test_legend_absent_when_nothing_is_tested(self, code_tested_no_attribution_project):
+        """No row carried a breakdown, so no key is offered: there is no
+        breakdown of an empty set."""
+        from elspais.commands.trace import format_markdown
+
+        graph = _build_project_graph(code_tested_no_attribution_project)
+        out = "\n".join(format_markdown(graph))
+
+        assert "> Tested breakdown:" not in out
+
+    # Verifies: REQ-d00258-O, REQ-d00257-C
+    @pytest.mark.parametrize("preset_name", ["uat", "minimal"])
+    def test_breakdown_absent_from_presets_without_a_tested_column(
+        self, tested_breakdown_project, preset_name
+    ):
+        """A breakdown of a figure the preset does not show explains nothing,
+        and its key would point at a column that is not there. The UAT report
+        excludes the test columns outright (REQ-d00257-C)."""
+        from elspais.commands.trace import (
+            _UAT_COLUMNS,
+            REPORT_PRESETS,
+            ReportPreset,
+            format_markdown,
+        )
+
+        if preset_name == "uat":
+            preset = ReportPreset(name="uat", columns=list(_UAT_COLUMNS), dimension="uat")
+        else:
+            preset = ReportPreset(
+                name=preset_name, columns=list(REPORT_PRESETS[preset_name].columns)
+            )
+
+        graph = _build_project_graph(tested_breakdown_project)
+        out = "\n".join(format_markdown(graph, preset=preset))
+
+        # The requirement IS rendered and IS carrying a breakdown -- the
+        # absence below is the gating, not an empty report.
+        assert "REQ-d00001" in out
+        header_line = next(line for line in out.splitlines() if line.startswith("| ID"))
+        assert "Tested" not in header_line
+        assert "> Tested breakdown:" not in out
+        assert "1P" not in out
+
+    # Verifies: REQ-d00258-O
+    def test_csv_gives_the_breakdown_columns_of_its_own(self, tested_breakdown_project):
+        """A machine format should not need to parse the figures out of a
+        bracket, so CSV carries them as three columns beside Tested and the
+        Tested cell stays a bare count."""
+        import csv as csv_module
+        import io as io_module
+
+        from elspais.commands.trace import format_csv
+
+        graph = _build_project_graph(tested_breakdown_project)
+        out = "\n".join(format_csv(graph))
+
+        reader = csv_module.reader(io_module.StringIO(out))
+        headers = next(reader)
+        tested_idx = headers.index("Tested")
+        assert headers[tested_idx + 1 : tested_idx + 4] == [
+            "Tested Passed",
+            "Tested Failed",
+            "Tested Awaiting",
+        ]
+
+        row = next(csv_module.reader(io_module.StringIO(out.splitlines()[1])))
+        assert row[tested_idx] == "3/3 (100%)"
+        assert row[tested_idx + 1 : tested_idx + 4] == ["1", "1", "1"]
+        assert "1P" not in out
+
+    # Verifies: REQ-d00069-L, REQ-d00258-A
+    def test_csv_carries_a_column_per_measure(self, tested_breakdown_project):
+        """REQ-d00258-A: a reader can see what evidence produced a total --
+        the four measures behind Tested are columns of their own."""
+        from elspais.commands.trace import format_csv
+
+        graph = _build_project_graph(tested_breakdown_project)
+        out = "\n".join(format_csv(graph))
+        header = out.splitlines()[0].split(",")
+        for col in ("Tested", "Tested Immediate Direct", "Tested Rolled Direct"):
+            assert col in header

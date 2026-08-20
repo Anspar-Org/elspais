@@ -149,6 +149,5 @@ def test_fix_skips_files_containing_unfixable_reqs(tmp_path):
 
     after = (project / "spec" / "f.md").read_text()
     assert after == original, (
-        "File containing an unfixable req must be left untouched even when "
-        "it has fixable siblings."
+        "File containing an unfixable req must be left untouched even when it has fixable siblings."
     )

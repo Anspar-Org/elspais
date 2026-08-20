@@ -1,6 +1,7 @@
 # Validates REQ-o00062-B, REQ-o00062-D, REQ-o00062-E, REQ-o00062-F
 # Verifies: REQ-o00062-R
 """Tests for assertion mutation operations (rename, update, add, delete)."""
+
 from __future__ import annotations
 
 import re
@@ -16,6 +17,7 @@ from elspais.graph.GraphNode import NodeKind
 from elspais.graph.parsers import ParsedContent
 from elspais.graph.render import render_save
 from elspais.utilities.patterns import build_resolver
+from tests.core.graph_test_helpers import grammar_for
 
 
 def make_req(
@@ -46,7 +48,7 @@ def make_req(
 
 def build_graph_with_assertions() -> TraceGraph:
     """Build a graph with a requirement that has assertions."""
-    builder = GraphBuilder()
+    builder = GraphBuilder(namespace="REQ", resolver=grammar_for("REQ"))
     builder.add_parsed_content(
         make_req(
             "REQ-p00001",
@@ -63,7 +65,7 @@ def build_graph_with_assertions() -> TraceGraph:
 
 def build_graph_with_child_implementing_assertion() -> TraceGraph:
     """Build a graph where a child implements specific assertions."""
-    builder = GraphBuilder()
+    builder = GraphBuilder(namespace="REQ", resolver=grammar_for("REQ"))
     builder.add_parsed_content(
         make_req(
             "REQ-p00001",
@@ -239,6 +241,42 @@ class TestUpdateAssertion:
         with pytest.raises(ValueError, match="not an assertion"):
             graph.update_assertion("REQ-p00001", "New text")
 
+    # Verifies: REQ-o00062-U
+    def test_update_refuses_end_marker_line(self):
+        """Text carrying an End-marker line would end the requirement early on
+        reparse, so it is refused rather than stored."""
+        graph = build_graph_with_assertions()
+        original = graph.find_by_id("REQ-p00001-A").get_label()
+
+        with pytest.raises(ValueError, match="End-marker"):
+            graph.update_assertion(
+                "REQ-p00001-A", "SHALL do things\n*End* *Requirement with Assertions*"
+            )
+
+        assert graph.find_by_id("REQ-p00001-A").get_label() == original
+        assert len(graph.mutation_log) == 0
+
+    # Verifies: REQ-o00062-U
+    def test_update_refuses_heading_line(self):
+        """Text carrying a heading line reads back as a section header."""
+        graph = build_graph_with_assertions()
+
+        with pytest.raises(ValueError, match="heading"):
+            graph.update_assertion("REQ-p00001-A", "SHALL do things\n## Assertions")
+
+        assert len(graph.mutation_log) == 0
+
+    # Verifies: REQ-o00062-U
+    def test_update_accepts_benign_multiline_text(self):
+        """Ordinary continuation lines are content, not structure."""
+        graph = build_graph_with_assertions()
+
+        text = "SHALL do things\nacross several lines,\nnone of them structural."
+        entry = graph.update_assertion("REQ-p00001-A", text)
+
+        assert entry.operation == "update_assertion"
+        assert graph.find_by_id("REQ-p00001-A").get_label() == text
+
     # Verifies: REQ-o00062-E
     def test_update_changes_hash(self):
         """Updating assertion text changes parent hash."""
@@ -337,10 +375,32 @@ class TestAddAssertion:
             graph.add_assertion("REQ-p00001-A", "Text")
 
     # Verifies: REQ-o00062-S
+    # Verifies: REQ-o00062-U
+    def test_add_refuses_end_marker_line(self):
+        """New assertion text carrying an End-marker line is refused."""
+        graph = build_graph_with_assertions()
+
+        with pytest.raises(ValueError, match="End-marker"):
+            graph.add_assertion("REQ-p00001", "*End* *Anything*")
+
+        assert graph.find_by_id("REQ-p00001-D") is None
+        assert len(graph.mutation_log) == 0
+
+    # Verifies: REQ-o00062-U
+    def test_add_refuses_heading_line(self):
+        """New assertion text carrying a heading line is refused."""
+        graph = build_graph_with_assertions()
+
+        with pytest.raises(ValueError, match="heading"):
+            graph.add_assertion("REQ-p00001", "SHALL work\n### Rationale")
+
+        assert graph.find_by_id("REQ-p00001-D") is None
+        assert len(graph.mutation_log) == 0
+
     def test_REQ_o00062_S_exhausted_series_refuses_the_add(self):
         """REQ-o00062-S: a requirement filled to the end of its label series
         refuses the next add and creates no out-of-series label."""
-        builder = GraphBuilder()
+        builder = GraphBuilder(namespace="REQ", resolver=grammar_for("REQ"))
         builder.add_parsed_content(
             make_req(
                 "REQ-p00001",
@@ -839,20 +899,20 @@ class TestAssertionPlacementInSeries:
         block = _requirement_block((repo_root / spec_file).read_text(), req_id)
 
         assertions_headings = list(re.finditer(r"^#+ Assertions\s*$", block, re.MULTILINE))
-        assert (
-            len(assertions_headings) == 1
-        ), "the requirement must render exactly one Assertions block"
-        assert block.index(new_text) > block.index(
-            last_existing_text
-        ), "the new assertion must render after the existing ones"
+        assert len(assertions_headings) == 1, (
+            "the requirement must render exactly one Assertions block"
+        )
+        assert block.index(new_text) > block.index(last_existing_text), (
+            "the new assertion must render after the existing ones"
+        )
         # The first heading after the Assertions block — the trailing section
         # the new assertion must not have jumped past.
         after_assertions = assertions_headings[0].end()
         trailing = re.search(r"^#+ (?!Assertions)\w+", block[after_assertions:], re.MULTILINE)
         assert trailing is not None, "fixture must have a trailing section after the assertions"
-        assert (
-            block.index(new_text) < after_assertions + trailing.start()
-        ), "the new assertion must render before the trailing section"
+        assert block.index(new_text) < after_assertions + trailing.start(), (
+            "the new assertion must render before the trailing section"
+        )
 
     @pytest.mark.parametrize("fixture,req_id,spec_file", _PLACEMENT_CASES)
     # Verifies: REQ-o00062-R
@@ -872,9 +932,9 @@ class TestAssertionPlacementInSeries:
         _, rebuilt = _root_graph(repo_root)
         after = _assertion_labels(rebuilt, req_id)
 
-        assert set(before) <= set(
-            after
-        ), f"assertions lost on re-parse: {sorted(set(before) - set(after))}"
+        assert set(before) <= set(after), (
+            f"assertions lost on re-parse: {sorted(set(before) - set(after))}"
+        )
         assert new_label in after
         assert after == before + [new_label], "rendered order must be label order for the whole run"
 
@@ -893,24 +953,24 @@ class TestAssertionPlacementInSeries:
 
         entry = graph.add_assertion(req_id, "The system SHALL archive backups offsite.")
 
-        assert (
-            entry.after_state["label"] == expected
-        ), "the mutation must report the label it assigned"
-        assert _assertion_labels(graph, req_id) == before + [
-            expected
-        ], "the assigned label must follow the existing series, leaving no gap"
+        assert entry.after_state["label"] == expected, (
+            "the mutation must report the label it assigned"
+        )
+        assert _assertion_labels(graph, req_id) == before + [expected], (
+            "the assigned label must follow the existing series, leaving no gap"
+        )
 
     # Verifies: REQ-o00062-R
     def test_REQ_o00062_R_first_assertion_takes_the_first_label(self):
         """REQ-o00062-R: a requirement with no assertions yet gets the first
         label in the series."""
-        builder = GraphBuilder()
+        builder = GraphBuilder(namespace="REQ", resolver=grammar_for("REQ"))
         builder.add_parsed_content(make_req("REQ-p00001", "No Assertions Yet", assertions=[]))
         graph = builder.build()
 
         entry = graph.add_assertion("REQ-p00001", "The system SHALL do the first thing.")
 
         assert entry.after_state["label"] == "A"
-        assert _assertion_labels(graph, "REQ-p00001") == [
-            "A"
-        ], "the first assertion must take the first label in the series"
+        assert _assertion_labels(graph, "REQ-p00001") == ["A"], (
+            "the first assertion must take the first label in the series"
+        )

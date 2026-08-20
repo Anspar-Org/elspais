@@ -1,12 +1,12 @@
-# Verifies: REQ-d00252, REQ-d00258-B
+# Verifies: REQ-d00252, REQ-d00258-N
 """Validates REQ-d00252-F.
 
 Coverage reports summarize integrated requirements grouped by the owning
 associate, with a federation total. This exercises the data helper
 ``integrates_by_associate`` (and the optional ``integrates_total`` aggregate).
-The inherited "verified" figures are the passing union (result-verified or
-line-coverage-credited, REQ-d00258-B `tested_and_passing()`), not raw
-`verified`.
+The inherited "verified" figures are the Passing dimension
+(REQ-d00258-N `tested_and_passing()`): what the library's declared tests
+returned, with a failing *Assertion* excluded from the figures.
 """
 
 import shutil
@@ -87,10 +87,12 @@ def test_REQ_d00252_F_total_aggregates(tmp_path):
     assert total.verified_covered >= 1
 
 
-def test_REQ_d00252_F_lcov_only_credit_counts_as_passing(tmp_path):
+# Verifies: REQ-d00258-N
+def test_REQ_d00252_F_lcov_only_credit_does_not_count_as_passing(tmp_path):
     """A library REQ with only lcov_tested (line-coverage) credit -- no
-    Verifies:-based result -- still counts toward the associate's passing
-    figure (REQ-d00258-B union), not just raw `verified`.
+    Verifies:-based result -- contributes nothing to the associate's passing
+    figure. Line coverage credits no *Traceability* dimension, so the row
+    reads 0 of 1 rather than borrowing a verdict no test returned.
     """
     fed = _federate(tmp_path)
     lib_req = fed._repos["library"].graph._index["LIB-d00007"]
@@ -98,14 +100,10 @@ def test_REQ_d00252_F_lcov_only_credit_counts_as_passing(tmp_path):
         "rollup_metrics",
         RollupMetrics(
             total_assertions=1,
+            verified=CoverageDimension(total=1),
             lcov_tested=CoverageDimension(
                 total=1,
-                direct=1.0,
-                indirect=1.0,
-                direct_labels={"A"},
-                indirect_labels={"A"},
-                direct_pct_by_label={"A": 1.0},
-                indirect_pct_by_label={"A": 1.0},
+                immediate_direct_by_label={"A": 1.0},
             ),
         ),
     )
@@ -113,32 +111,29 @@ def test_REQ_d00252_F_lcov_only_credit_counts_as_passing(tmp_path):
     rows = integrates_by_associate(fed)
     by_name = {r.associate: r for r in rows}
     lib = by_name["library"]
-    assert lib.verified_covered >= 1
-    assert lib.verified_total >= 1
+    assert lib.verified_covered == 0
+    assert lib.verified_total == 1
     assert lib.has_failures is False
 
 
+# Verifies: REQ-d00258-N
 def test_REQ_d00252_F_library_failures_flag_associate_row(tmp_path):
-    """A library assertion with a FAILING Verifies-result but full lcov credit
-    still counts as covered in the union, but the per-associate row (and the
-    federation total) must carry has_failures=True so a red library suite is
-    never reported as clean (REQ-d00258-B).
+    """A library with one passing and one failing declared test reads covered
+    on the count alone, so the per-associate row (and the federation total)
+    must carry has_failures=True or a partly-red library suite is reported as
+    clean.
     """
     fed = _federate(tmp_path)
     lib_req = fed._repos["library"].graph._index["LIB-d00007"]
     lib_req.set_metric(
         "rollup_metrics",
         RollupMetrics(
-            total_assertions=1,
-            verified=CoverageDimension(total=1, has_failures=True),
-            lcov_tested=CoverageDimension(
-                total=1,
-                direct=1.0,
-                indirect=1.0,
-                direct_labels={"A"},
-                indirect_labels={"A"},
-                direct_pct_by_label={"A": 1.0},
-                indirect_pct_by_label={"A": 1.0},
+            total_assertions=2,
+            verified=CoverageDimension(
+                total=2,
+                has_failures=True,
+                failing_labels={"A"},
+                immediate_direct_by_label={"B": 1.0},
             ),
         ),
     )
@@ -146,7 +141,7 @@ def test_REQ_d00252_F_library_failures_flag_associate_row(tmp_path):
     rows = integrates_by_associate(fed)
     by_name = {r.associate: r for r in rows}
     lib = by_name["library"]
-    assert lib.verified_covered >= 1  # union covered, yet...
+    assert lib.verified_covered >= 1  # B's pass reads covered, yet...
     assert lib.has_failures is True  # ...flagged failing
 
     total = integrates_total(rows)

@@ -1,9 +1,106 @@
-# elspais: expected-broken-links 3
 """
 Tests for the edit command.
 """
 
+import argparse
 from pathlib import Path
+
+# An identifier configuration whose namespace is not "REQ": FDA-style
+# `PRD-00001` / `DEV-00001` identifiers, as the e2e-fda-numeric fixture uses.
+_FDA_CONFIG = """
+version = 3
+
+[project]
+name = "fda-shaped"
+namespace = "REQ"
+
+[levels.PRD]
+rank = 1
+letter = "P"
+implements = ["PRD"]
+
+[levels.OPS]
+rank = 2
+letter = "O"
+implements = ["OPS", "PRD"]
+
+[levels.DEV]
+rank = 3
+letter = "D"
+implements = ["DEV", "OPS", "PRD"]
+
+[scanning.spec]
+directories = ["spec"]
+
+[id-patterns]
+canonical = "{type}-{component}"
+
+[id-patterns.component]
+style = "numeric"
+digits = 5
+leading_zeros = true
+
+[id-patterns.assertions]
+label_style = "numeric"
+"""
+
+
+def _fda_project(tmp_path: Path) -> tuple[Path, object]:
+    """Build a project whose identifiers are FDA-shaped, not `REQ-`-shaped.
+
+    Returns the spec directory and the resolver built from that project's
+    own configuration -- the pair the edit command works with after
+    ``run()`` has loaded the config.
+    """
+    from elspais.config import load_config
+    from elspais.utilities.patterns import build_resolver
+
+    config_path = tmp_path / ".elspais.toml"
+    config_path.write_text(_FDA_CONFIG)
+
+    spec_dir = tmp_path / "spec"
+    spec_dir.mkdir()
+
+    (spec_dir / "prd-core.md").write_text(
+        """
+# PRD-00001: Regulatory Compliance
+
+**Level**: PRD | **Status**: Active
+
+PRD body.
+
+*End* *Regulatory Compliance* | **Hash**: prd12345
+---
+"""
+    )
+
+    (spec_dir / "ops-compliance.md").write_text(
+        """
+# OPS-00001: Compliance Monitoring
+
+**Level**: OPS | **Status**: Active | **Implements**: PRD-00001
+
+OPS body.
+
+*End* *Compliance Monitoring* | **Hash**: ops12345
+---
+"""
+    )
+
+    (spec_dir / "dev-audit.md").write_text(
+        """
+# DEV-00001: Audit Logger
+
+**Level**: DEV | **Status**: Active | **Implements**: OPS-00001
+
+DEV body.
+
+*End* *Audit Logger* | **Hash**: dev12345
+---
+"""
+    )
+
+    return spec_dir, build_resolver(load_config(config_path))
 
 
 class TestModifyImplements:
@@ -691,3 +788,106 @@ Body text.
         assert results[0]["dry_run"] is True
         # File unchanged
         assert (spec_dir / "dev-core.md").read_text() == original
+
+
+class TestValidateRefsUnderForeignNamespace:
+    """Validates REQ-d00251-L: a repository's identifier grammar is derived
+    from that repository's own identifier configuration.
+
+    ``--validate-refs`` checks references against the identifiers it can
+    read out of the spec directory. Reading those headers under a grammar
+    other than the repository's own collects nothing under any namespace
+    but `REQ`, and a check with nothing to compare against is a check that
+    passes everything.
+
+    Validates REQ-p00015-B: a change the tool does not apply is reported
+    with its cause -- so a reference that resolves to nothing is refused
+    and named, never silently accepted.
+    """
+
+    # Verifies: REQ-d00251-L
+    def test_req_d00251_l_collect_ids_reads_configured_namespace(self, tmp_path: Path):
+        """The identifiers of an FDA-shaped repository are collected."""
+        from elspais.commands.edit import collect_all_req_ids
+
+        spec_dir, resolver = _fda_project(tmp_path)
+
+        found = collect_all_req_ids(spec_dir, resolver)
+
+        assert "PRD-00001" in found
+        assert "OPS-00001" in found
+        assert "DEV-00001" in found
+
+    # Verifies: REQ-d00251-L
+    def test_req_d00251_l_validate_refs_accepts_existing_reference(self, tmp_path: Path):
+        """A reference to an identifier that exists is accepted."""
+        from elspais.commands.edit import batch_edit
+
+        spec_dir, resolver = _fda_project(tmp_path)
+
+        results = batch_edit(
+            spec_dir,
+            [{"req_id": "DEV-00001", "implements": ["PRD-00001"]}],
+            validate_refs=True,
+            resolver=resolver,
+        )
+
+        assert results[0]["success"] is True
+        assert "**Implements**: PRD-00001" in (spec_dir / "dev-audit.md").read_text()
+
+    # Verifies: REQ-p00015-B
+    def test_req_p00015_b_validate_refs_rejects_unknown_reference(self, tmp_path: Path):
+        """A reference to an identifier that does not exist is rejected."""
+        from elspais.commands.edit import batch_edit
+
+        spec_dir, resolver = _fda_project(tmp_path)
+
+        results = batch_edit(
+            spec_dir,
+            [{"req_id": "DEV-00001", "implements": ["PRD-99999"]}],
+            validate_refs=True,
+            resolver=resolver,
+        )
+
+        assert results[0]["success"] is False
+        assert "PRD-99999" in results[0]["error"]
+        # The refused change did not reach disk.
+        assert "PRD-99999" not in (spec_dir / "dev-audit.md").read_text()
+
+    # Verifies: REQ-p00015-B
+    def test_req_p00015_b_no_identifiers_rejects_every_reference(self, tmp_path: Path):
+        """An empty identifier set means every reference is unknown.
+
+        The spec directory here holds no requirement the configuration
+        admits -- its one header is spelled outside the identifier grammar
+        -- so nothing is available to validate against. That is grounds to
+        refuse the reference, not grounds to wave it through.
+        """
+        from elspais.commands.edit import collect_all_req_ids, run_single_edit
+
+        _, resolver = _fda_project(tmp_path)
+
+        bare_dir = tmp_path / "bare"
+        bare_dir.mkdir()
+        (bare_dir / "notes.md").write_text(
+            """
+# XYZ-00001: Not An Admitted Identifier
+
+**Level**: DEV | **Status**: Active | **Implements**: -
+
+Body text.
+
+*End* *Not An Admitted Identifier* | **Hash**: test1234
+---
+"""
+        )
+
+        assert collect_all_req_ids(bare_dir, resolver) == set()
+
+        args = argparse.Namespace(req_id="XYZ-00001", implements="PRD-00001")
+        exit_code = run_single_edit(
+            args, bare_dir, dry_run=False, validate_refs=True, resolver=resolver
+        )
+
+        assert exit_code != 0
+        assert "**Implements**: PRD-00001" not in (bare_dir / "notes.md").read_text()

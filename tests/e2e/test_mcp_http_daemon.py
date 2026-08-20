@@ -338,9 +338,9 @@ def test_REQ_o00062_Q_two_http_sessions_conflict_detected(daemon):
                                 },
                             )
                         )
-                        assert (
-                            lost.get("code") == "version_conflict"
-                        ), f"stale second write not rejected as version_conflict: {lost}"
+                        assert lost.get("code") == "version_conflict", (
+                            f"stale second write not rejected as version_conflict: {lost}"
+                        )
                         assert lost.get("current_version") == won.get("version"), (
                             f"rejection must carry the first writer's resulting version "
                             f"{won.get('version')}: {lost}"
@@ -404,13 +404,13 @@ def test_REQ_o00062_Q_writes_after_a_save_survive_across_surfaces_to_disk(daemon
                 # tip; save with it. Earlier tests' pending mutations are in
                 # the same log, so the newest entry is the one just applied.
                 log = _tool_payload(await session.call_tool("get_mutation_log", {}))
-                assert (
-                    log["current_tip"] == mutated["mutation"]["id"]
-                ), f"current_tip is not the newest entry's id: {log}"
+                assert log["current_tip"] == mutated["mutation"]["id"], (
+                    f"current_tip is not the newest entry's id: {log}"
+                )
                 assert log["total"] >= 1
-                assert (
-                    log["mutations"][0]["id"] == log["current_tip"]
-                ), f"window is not newest-first: {log}"
+                assert log["mutations"][0]["id"] == log["current_tip"], (
+                    f"window is not newest-first: {log}"
+                )
                 saved = _tool_payload(
                     await session.call_tool(
                         "save_mutations",

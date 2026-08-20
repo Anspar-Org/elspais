@@ -25,29 +25,45 @@ from pathlib import Path
 
 import pytest
 
+from elspais.config.schema import ElspaisConfig
 from elspais.graph.parsers.lark import GrammarFactory
 from elspais.graph.parsers.lark.transformers.requirement import RequirementTransformer
 from elspais.utilities.patterns import IdPatternConfig, IdResolver
+
+
+def _validated(config: dict) -> dict:
+    """Return ``config`` after checking a configuration file could hold it.
+
+    ``IdPatternConfig.from_dict`` takes a raw dictionary and never consults the
+    config schema, so a fixture built here could describe a repository no
+    ``.elspais.toml`` can produce -- and pin grammar behaviour no user can
+    reach. Every fixture is therefore validated the way a file on disk is,
+    before any resolver is built from it.
+    """
+    ElspaisConfig.model_validate(config)
+    return config
 
 
 @pytest.fixture
 def resolver() -> IdResolver:
     """IdResolver for standard HHT-like pattern (matches test_definition_grammar)."""
     config = IdPatternConfig.from_dict(
-        {
-            "project": {"namespace": "REQ"},
-            "id-patterns": {
-                "canonical": "{namespace}-{type.letter}{component}",
-                "aliases": {"short": "{type.letter}{component}"},
-                "types": {
-                    "prd": {"level": 1, "aliases": {"letter": "p"}},
-                    "ops": {"level": 2, "aliases": {"letter": "o"}},
-                    "dev": {"level": 3, "aliases": {"letter": "d"}},
+        _validated(
+            {
+                "project": {"namespace": "REQ"},
+                "levels": {
+                    "prd": {"rank": 1, "letter": "p", "implements": ["prd"]},
+                    "ops": {"rank": 2, "letter": "o", "implements": ["ops", "prd"]},
+                    "dev": {"rank": 3, "letter": "d", "implements": ["dev", "ops", "prd"]},
                 },
-                "component": {"style": "numeric", "digits": 5, "leading_zeros": True},
-                "assertions": {"label_style": "uppercase", "max_count": 26},
-            },
-        }
+                "id-patterns": {
+                    "canonical": "{namespace}-{level.letter}{component}",
+                    "aliases": {"short": "{level.letter}{component}"},
+                    "component": {"style": "numeric", "digits": 5, "leading_zeros": True},
+                    "assertions": {"label_style": "uppercase", "max_count": 26},
+                },
+            }
+        )
     )
     return IdResolver(config)
 
@@ -189,15 +205,15 @@ class TestJourneyMetadataEmphasis:
 """
         results = _parse(content, resolver)
         jny = _first_journey(results)
-        assert (
-            jny.get("actor") == "Sarah (Site 101)"
-        ), f"actor wrapped in '**...**' must be unwrapped, got {jny.get('actor')!r}"
-        assert (
-            jny.get("goal") == "Submit a clean enrollment form"
-        ), f"goal wrapped in '**...**' must be unwrapped, got {jny.get('goal')!r}"
-        assert (
-            jny.get("context") == "Pre-screening visit"
-        ), f"context wrapped in '**...**' must be unwrapped, got {jny.get('context')!r}"
+        assert jny.get("actor") == "Sarah (Site 101)", (
+            f"actor wrapped in '**...**' must be unwrapped, got {jny.get('actor')!r}"
+        )
+        assert jny.get("goal") == "Submit a clean enrollment form", (
+            f"goal wrapped in '**...**' must be unwrapped, got {jny.get('goal')!r}"
+        )
+        assert jny.get("context") == "Pre-screening visit", (
+            f"context wrapped in '**...**' must be unwrapped, got {jny.get('context')!r}"
+        )
 
     # Verifies: REQ-d00246-B
     def test_REQ_d00246_B_journey_actor_plain_value_unchanged(self, resolver: IdResolver) -> None:
@@ -211,12 +227,12 @@ class TestJourneyMetadataEmphasis:
 """
         results = _parse(content, resolver)
         jny = _first_journey(results)
-        assert (
-            jny.get("actor") == "Plain Name"
-        ), f"Plain value must pass through unchanged, got {jny.get('actor')!r}"
-        assert (
-            jny.get("goal") == "A simple goal"
-        ), f"Plain goal must pass through unchanged, got {jny.get('goal')!r}"
+        assert jny.get("actor") == "Plain Name", (
+            f"Plain value must pass through unchanged, got {jny.get('actor')!r}"
+        )
+        assert jny.get("goal") == "A simple goal", (
+            f"Plain goal must pass through unchanged, got {jny.get('goal')!r}"
+        )
 
     # Verifies: REQ-d00246-B
     def test_REQ_d00246_B_journey_actor_underscore_wrapped(self, resolver: IdResolver) -> None:
@@ -230,9 +246,9 @@ Goal: Plain goal
 """
         results = _parse(content, resolver)
         jny = _first_journey(results)
-        assert (
-            jny.get("actor") == "Bold User"
-        ), f"Value wrapped in '__...__' must be unwrapped, got {jny.get('actor')!r}"
+        assert jny.get("actor") == "Bold User", (
+            f"Value wrapped in '__...__' must be unwrapped, got {jny.get('actor')!r}"
+        )
 
     # Verifies: REQ-d00246-B
     def test_REQ_d00246_B_journey_actor_unbalanced_value_intact(self, resolver: IdResolver) -> None:

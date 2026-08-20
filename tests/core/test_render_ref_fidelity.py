@@ -29,8 +29,10 @@ from pathlib import Path
 import pytest
 
 from elspais.graph.factory import build_graph
+from elspais.graph.GraphNode import make_file_id
 from elspais.graph.relations import EdgeKind
 from elspais.graph.render import node_version, render_file, render_node
+from tests.core.graph_test_helpers import grammar_for
 
 # One spec file covering every scenario. IDs use the default REQ-p/o
 # patterns; REQ-?77777 / REQ-?88888 style targets match the ID pattern but
@@ -311,22 +313,22 @@ class TestBrokenRefRenderPreservation:
         resolved ref (REQ-o00005/REQ-o00006). Both citations must survive a
         whole-file rewrite, so each broken ID must appear exactly twice.
         """
-        file_node = _node(fidelity_graph, "file:spec/reqs.md")
-        content = render_file(file_node)
+        file_node = _node(fidelity_graph, make_file_id("REQ", "spec/reqs.md"))
+        content = render_file(file_node, resolver=grammar_for("REQ"))
         assert content.count("REQ-p77777") == 2, (
-            "the mixed requirement's broken Implements entry was dropped " "from the file rewrite"
+            "the mixed requirement's broken Implements entry was dropped from the file rewrite"
         )
         assert content.count("REQ-o77777") == 2, (
-            "the mixed requirement's broken Refines entry was dropped " "from the file rewrite"
+            "the mixed requirement's broken Refines entry was dropped from the file rewrite"
         )
 
     def test_REQ_d00132_G_partial_multi_assertion_keeps_broken_expansion(self, fidelity_graph):
         """`Implements: REQ-p00001-A+Z` keeps derived A and broken Z."""
         child = _node(fidelity_graph, "REQ-o00007")
-        rendered = render_node(child)
+        rendered = render_node(child, resolver=grammar_for("REQ"))
         assert "REQ-p00001-A" in rendered
         assert "REQ-p00001-Z" in rendered, (
-            "the resolved A expansion evicted the broken Z expansion from " "the render"
+            "the resolved A expansion evicted the broken Z expansion from the render"
         )
 
 
@@ -347,7 +349,7 @@ class TestMutationBrokenRefLeftovers:
         rendered = render_node(child)
         assert "REQ-p77777" not in rendered, "the resolved leftover must stop rendering"
         assert rendered.count("REQ-p00001") == 1, (
-            "the fixed ref must render exactly once -- not duplicated by a " "stale leftover entry"
+            "the fixed ref must render exactly once -- not duplicated by a stale leftover entry"
         )
 
     def test_REQ_d00132_G_undo_fix_broken_reference_restores_broken_ref(self, fidelity_graph):
@@ -458,7 +460,7 @@ class TestRenameRetargetsBrokenLeftovers:
     """Validates REQ-d00132-G: renaming a broken-ref target retargets the
     RENDERED leftover, not just the broken-references report.
 
-    ``rename_node`` rewrites ``BrokenReference.target_id`` entries, but the
+    ``rename_node`` rewrites ``ReferenceFault.target_id`` entries, but the
     text that actually renders (and saves) comes from the source node's
     stored leftover field -- the two must move together or the report and
     the file disagree about which ID the author cites.
@@ -498,7 +500,7 @@ class TestRenameRetargetsBrokenLeftovers:
     ):
         """Renaming either endpoint must not strip the diagnostic.
 
-        The retargeting loop rebuilds BrokenReference from scratch; the
+        The retargeting loop rebuilds ReferenceFault from scratch; the
         template-rule diagnostic (and presumed_foreign) must survive.
         """
         diagnostic_before = _broken_refs_from(template_graph, "REQ-p00091")[0].diagnostic
@@ -509,7 +511,7 @@ class TestRenameRetargetsBrokenLeftovers:
         assert len(brs) == 1
         assert brs[0].target_id == expect_target
         assert brs[0].diagnostic == diagnostic_before, (
-            "rename_node rebuilt the BrokenReference without its diagnostic "
+            "rename_node rebuilt the ReferenceFault without its diagnostic "
             "-- the author's actionable guidance was silently dropped"
         )
 
@@ -603,9 +605,9 @@ class TestRenameRetargetsAssertionSuffixedBrokenRefs:
         """The rendered leftover expansion follows the parent rename too."""
         fidelity_graph.rename_node("REQ-p00001", "REQ-p00009")
 
-        rendered = render_node(_node(fidelity_graph, "REQ-o00007"))
+        rendered = render_node(_node(fidelity_graph, "REQ-o00007"), resolver=grammar_for("REQ"))
         assert "REQ-p00009-A" in rendered, "the edge-derived expansion must follow the rename"
-        assert (
-            "REQ-p00009-Z" in rendered
-        ), "the broken expansion's leftover still cites the old parent ID"
+        assert "REQ-p00009-Z" in rendered, (
+            "the broken expansion's leftover still cites the old parent ID"
+        )
         assert "REQ-p00001-Z" not in rendered

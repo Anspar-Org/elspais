@@ -6,8 +6,7 @@
 //   # IMPLEMENTS REQUIREMENTS:
 //   #   REQ-p00001: Description
 //
-// Also recognizes test name patterns (def test_foo_REQ_p00001)
-// and elspais control markers (# elspais: expected-broken-links 3).
+// Also recognizes test name patterns (def test_foo_REQ_p00001).
 //
 // Pre-scan (function/class context tracking) is handled in Python,
 // not in the grammar.
@@ -20,9 +19,9 @@
 //   __TYPE_PATTERN__    e.g. "p|o|d"
 //   __DIGITS_PATTERN__  e.g. "\\d{1,5}"
 //   __COMMENT_STYLES__  e.g. "\\#|//|\\-\\-"
-//   __IMPL_KEYWORDS__   e.g. "Implements|IMPLEMENTS"
-//   __VER_KEYWORDS__    e.g. "Verifies|VERIFIES"
-//   __KEYWORDS__        e.g. "Implements|IMPLEMENTS|Verifies|VERIFIES|..."
+//   __IMPL_KEYWORDS__   e.g. "[Ii][Mm][Pp]...", matching any case
+//   __VER_KEYWORDS__    e.g. "[Vv][Ee][Rr]...", matching any case
+//   __KEYWORDS__        every keyword, case-insensitive, alternated
 
 start: (_entry)*
 
@@ -35,7 +34,7 @@ _entry: ref_line _NL
          | block_header
          | block_ref
          | test_name_ref
-         | control_marker
+         | unresolved_ref
          | other_line
 
 // --- Single-line reference comment ---
@@ -58,10 +57,14 @@ block_ref.3: BLOCK_REF_LINE
 
 test_name_ref.3: TEST_NAME_LINE
 
-// --- elspais control marker ---
-// # elspais: expected-broken-links 3
+// --- Reference comment naming no configured identifier ---
+// # Implements: WIDGET-42
+//
+// A reference whose target no repository of the federation claims is a
+// fact about the estate its author needs to see, so the line is admitted
+// here and reported as a broken reference rather than read as prose.
 
-control_marker.3: CONTROL_MARKER_LINE
+unresolved_ref.2: UNRESOLVED_REF_LINE
 
 // --- Ordinary line (no reference) ---
 
@@ -75,10 +78,14 @@ other_line.1: TEXT
 // Matches lines starting with either the configured namespace (e.g. REQ-) or
 // the fixed JNY- prefix so that ``Verifies: JNY-OQ-Login-01/2`` is
 // recognized even when no REQ ID appears on the line.
-SINGLE_REF_LINE.5: /[ \t]*(?:__COMMENT_STYLES__)[ \t]*(?:__KEYWORDS__):?[ \t]+(?:__NAMESPACE__[-_]|JNY-)[^\n]+/
+SINGLE_REF_LINE.5: /[ \t]*(?:__COMMENT_STYLES__)[ \t]*(?:__KEYWORDS__):[ \t]+(?:__NAMESPACE__[-_]|JNY-)[^\n]+/
 
-// Block header: comment + keyword + REQUIREMENTS: (optional leading whitespace)
-BLOCK_HEADER_LINE.5: /[ \t]*(?:__COMMENT_STYLES__)[ \t]*(?:__KEYWORDS__)[ \t]+[Rr][Ee][Qq][Uu][Ii][Rr][Ee][Mm][Ee][Nn][Tt][Ss]?:?[ \t]*/
+// Block header: comment + keyword + REQUIREMENTS: (optional leading whitespace).
+// Case-lax like every other keyword form, but otherwise held to the same
+// strictness as the single-line forms: the plural is fixed and the colon
+// is required, so a header missing either reads as prose rather than as a
+// silently-accepted block opener.
+BLOCK_HEADER_LINE.5: /[ \t]*(?:__COMMENT_STYLES__)[ \t]*(?:__KEYWORDS__)[ \t]+[Rr][Ee][Qq][Uu][Ii][Rr][Ee][Mm][Ee][Nn][Tt][Ss]:[ \t]*/
 
 // Block reference line: comment + indented REQ-ID or JNY-ID
 BLOCK_REF_LINE.4: /[ \t]*(?:__COMMENT_STYLES__)[ \t]+(?:__NAMESPACE__[-_]|JNY-)[^\n]+/
@@ -86,8 +93,31 @@ BLOCK_REF_LINE.4: /[ \t]*(?:__COMMENT_STYLES__)[ \t]+(?:__NAMESPACE__[-_]|JNY-)[
 // Test function name containing REQ pattern
 TEST_NAME_LINE.4: /[ \t]*(?:async[ \t]+)?def[ \t]+test_\w*__NAMESPACE__[-_][^\n]+/
 
-// elspais control marker
-CONTROL_MARKER_LINE.4: /(?:__COMMENT_STYLES__|\/\*|<!--)[ \t]*[Ee][Ll][Ss][Pp][Aa][Ii][Ss]:[ \t]*[^\n]+/
+// Reference comment whose target names no configured identifier.  The colon
+// must abut the keyword, so "# IMPLEMENTS REQUIREMENTS:" still lexes as a
+// block header, and a full-length match here always loses to SINGLE_REF_LINE.
+//
+// What decides recognition is position, not the shape of the target.  A
+// target no repository claims is by definition outside every configured
+// grammar, so nothing about how it looks can say whether it was meant as a
+// reference; only where it was written can.  The keyword must therefore be
+// the first content of the comment -- a terminal spans a whole line, so a
+// keyword appearing anywhere else in the line is left ordinary text -- and
+// whatever follows the colon is the target, whatever it looks like.  That
+// admits a foreign identifier with a lowercase namespace, which a
+// shape-based rule cannot.
+//
+// Recognising a line is not resolving it.  What a target may *mean* is a
+// list of references and nothing else, and that is decided in the
+// transformer, over the target as a whole: a target this terminal admits
+// and that grammar cannot account for resolves to nothing and is reported
+// verbatim.
+//
+// Once a line is recognised, shape is what distinguishes the classes
+// within it: content after the colon is optional here, so a keyword
+// introducing nothing at all is admitted and reported rather than
+// vanishing as ordinary text (REQ-d00272-H).
+UNRESOLVED_REF_LINE.3: /[ \t]*(?:__COMMENT_STYLES__)[ \t]*(?:__KEYWORDS__):[ \t]*[^\n]*/
 
 // Generic text (lowest priority)
 TEXT.1: /[^\n]+/

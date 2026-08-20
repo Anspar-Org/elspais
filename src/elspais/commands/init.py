@@ -4,6 +4,7 @@ elspais.commands.init - Initialize configuration command.
 
 Creates .elspais.toml configuration file.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -153,7 +154,10 @@ _FIELD_COMMENTS: dict[str, str] = {
     "stats": "File path for MCP tool-usage statistics (optional)",
     # --- [project] ---
     "project": "Project identity",
-    "project.namespace": "Prefix for requirement IDs (e.g. REQ -> REQ-p00001)",
+    "project.namespace": (
+        "The namespace this repository's identifiers carry, and its alone: no two "
+        "repositories in one federation may declare the same one (e.g. REQ -> REQ-p00001)"
+    ),
     "project.name": "Project display name",
     "project.color": (
         'Optional badge color for this project\'s namespace (hex "#RRGGBB"); '
@@ -162,8 +166,6 @@ _FIELD_COMMENTS: dict[str, str] = {
     # --- [id-patterns] ---
     "id-patterns": "Requirement ID format and type definitions",
     "id-patterns.canonical": "ID template; vars: {namespace}, {level.letter}, {component}",
-    "id-patterns.separators": "Characters treated as equivalent separators when matching IDs",
-    "id-patterns.prefix_optional": "If true, namespace prefix is optional when matching IDs",
     "id-patterns.aliases": "Named shorthand patterns for ID matching",
     "id-patterns.component": "Component (numeric part) of the ID",
     "id-patterns.component.style": (
@@ -174,7 +176,6 @@ _FIELD_COMMENTS: dict[str, str] = {
     "id-patterns.component.pattern": (
         'Custom regex (required for `style = "regex"`; ignored otherwise)'
     ),
-    "id-patterns.component.max_length": "Max length (case-style components only)",
     "id-patterns.assertions": "Assertion label format",
     "id-patterns.assertions.label_style": (
         '"uppercase" (A,B,C) | "numeric" (0,1,2) | "numeric_1based" | "alphanumeric"'
@@ -182,11 +183,14 @@ _FIELD_COMMENTS: dict[str, str] = {
     "id-patterns.assertions.max_count": "Maximum number of assertions per requirement",
     "id-patterns.assertions.zero_pad": "Pad numeric assertion labels with leading zero",
     "id-patterns.assertions.separator": (
-        'Character between component and label, default "-". '
-        'Use ":" for snake/kebab + numeric labels.'
+        'Single character between component and label, default "-". '
+        'Must appear in neither a component nor a label; use "/" for snake/kebab. '
+        'Never "," -- that already divides one reference from the next.'
     ),
     "id-patterns.assertions.multi_separator": (
-        'Separator for multi-assertion refs (e.g. "+" -> A+B+C)'
+        'Single character joining multi-assertion refs (e.g. "+" -> A+B+C). '
+        'Must not be a character a label can contain, nor "," -- that '
+        "already divides one reference from the next."
     ),
     "id-patterns.associated": "Associated (cross-repo) prefix formatting",
     "id-patterns.associated.enabled": "Enable associated prefix in IDs",
@@ -201,7 +205,7 @@ _FIELD_COMMENTS: dict[str, str] = {
     "levels.*.display_name": "Human-readable name for reports",
     "levels.*.implements": "Which levels this level can implement (list of level names)",
     "levels.*.color": (
-        'Optional badge color (hex "#RRGGBB"); omit for a deterministic ' "hash-derived color"
+        'Optional badge color (hex "#RRGGBB"); omit for a deterministic hash-derived color'
     ),
     "levels.*.expects_validation": (
         "Set true for levels that should have a user-journey validating them; "
@@ -302,10 +306,10 @@ _FIELD_COMMENTS: dict[str, str] = {
     "rules.coverage.*.partial": "Some assertions covered, some not",
     "rules.coverage.*.failing": "Has coverage but test results show failures",
     "rules.coverage.*.missing": "No coverage at all",
-    "rules.coverage.allow_indirect": (
-        "true (default): indirect (REFINES-conducted/whole-req) evidence credits "
-        "a dimension's state; false: only direct assertion-level evidence credits "
-        "it (indirect shown as not-credited in hover)"
+    "rules.coverage.uncredited_evidence": (
+        'error (default): severity for the "tests.uncredited_evidence" check -- '
+        "evidence naming an assertion its dimension does not count (a test on an "
+        "assertion nothing implements), which reaches no coverage figure"
     ),
     "rules.coverage.status_words": (
         "Per-relationship coverage labels. Keys: implements|verifies|yields|"
@@ -317,13 +321,37 @@ _FIELD_COMMENTS: dict[str, str] = {
     "rules.coverage.status_words.yields": "Label for passing dimension",
     "rules.coverage.status_words.validates": "Label for UAT-covered dimension",
     "rules.coverage.status_words.validated": "Label for UAT-passed dimension",
-    "rules.references": "Severity for code/test references to non-active requirements",
+    "rules.references": "Severity for the reference checks",
     "rules.references.retired": ('"ok" | "info" | "warning" | "error" — refs to retired REQs'),
     "rules.references.provisional": (
         '"ok" | "info" | "warning" | "error" — refs to provisional REQs'
     ),
     "rules.references.aspirational": (
         '"ok" | "info" | "warning" | "error" — refs to aspirational REQs'
+    ),
+    "rules.references.malformed": (
+        '"ok" | "info" | "warning" | "error" — refs that do not read as a reference'
+    ),
+    "rules.references.unknown_namespace": (
+        '"ok" | "info" | "warning" | "error" — refs to targets no repo claims'
+    ),
+    "rules.references.unknown_requirement": (
+        '"ok" | "info" | "warning" | "error" — claimed refs to a requirement that does not exist'
+    ),
+    "rules.references.unknown_assertion": (
+        '"ok" | "info" | "warning" | "error" — refs naming a label the requirement lacks'
+    ),
+    "rules.references.forbidden": (
+        '"ok" | "info" | "warning" | "error" — refs using a keyword the file kind refuses'
+    ),
+    "rules.references.keyword_form": (
+        '"ok" | "info" | "warning" | "error" — a keyword written in a non-canonical form'
+    ),
+    "rules.references.identifier_form": (
+        '"ok" | "info" | "warning" | "error" — a reference spelled non-canonically'
+    ),
+    "rules.references.undeclared": (
+        '"ok" | "info" | "warning" | "error" — a comment citing a requirement without a keyword'
     ),
     # --- [changelog] ---
     "changelog": "Changelog enforcement for requirement changes",
@@ -346,7 +374,6 @@ _FIELD_COMMENTS: dict[str, str] = {
     "validation.hash_mode": '"normalized-text" — how requirement content is hashed',
     "validation.hash_algorithm": '"sha256" (default) — hash algorithm',
     "validation.hash_length": "Hash truncation length in chars (default: 8)",
-    "validation.allow_unresolved_cross_repo": "Suppress errors for unresolved cross-repo refs",
     "validation.strict_hierarchy": "Strict hierarchy validation mode",
     # --- [terms] ---
     "terms": "Defined terms: glossary, index, and health checks",
@@ -369,7 +396,13 @@ _FIELD_COMMENTS: dict[str, str] = {
     # --- [associates] ---
     "associates": "Associated repository definitions for cross-repo federation",
     "associates.*.path": "Path to the associated repository (absolute or relative to repo root)",
-    "associates.*.namespace": "Namespace prefix for the associated repo's requirements",
+    "associates.*.namespace": (
+        "Namespace the associated repo declares for itself; unique across the federation"
+    ),
+    "associates.*.git": (
+        "Optional remote where the associated repository can be obtained "
+        "when it is absent from this machine; never how it is located"
+    ),
     "associates.*.color": (
         'Optional badge color for this namespace (hex "#RRGGBB"); omit for a '
         "deterministic hash-derived color"
@@ -578,10 +611,10 @@ def _add_table(
                     sub.add(sk, inner)
                 else:
                     # A bare scalar sharing a table with sub-tables (e.g.
-                    # rules.coverage.allow_indirect alongside the per-dimension
-                    # tables) gets hoisted above them by tomlkit, orphaning a
-                    # standalone comment. Attach it inline so it stays with the
-                    # value.
+                    # rules.coverage.uncredited_evidence alongside the
+                    # per-dimension tables) gets hoisted above them by tomlkit,
+                    # orphaning a standalone comment. Attach it inline so it
+                    # stays with the value.
                     parent_has_tables = any(isinstance(x, dict) for x in v.values())
                     field_comment = _resolve_field_comment(sub_field_path)
                     if parent_has_tables and field_comment:

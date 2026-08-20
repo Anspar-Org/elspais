@@ -1,6 +1,7 @@
 # Implements: REQ-p00004-C, REQ-p00004-D, REQ-p00004-E, REQ-p00004-F
 # Implements: REQ-p00004-H, REQ-p00004-I
 """Starlette route handlers for /api/git/* endpoints."""
+
 from __future__ import annotations
 
 from pathlib import Path

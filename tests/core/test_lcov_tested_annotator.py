@@ -1,8 +1,20 @@
 # Verifies: REQ-d00254-B
-"""lcov_tested assertion-level crediting (CUR-1533)."""
+"""lcov_tested assertion-level crediting.
 
+The dimension measures which implementation lines a run executed. It is
+credited in its own right and never folded into a *Traceability* dimension,
+and it carries no verdict of its own: an application's red is one aggregate
+result, and blaming every line-credited assertion for it names assertions no
+failing test aimed at.
+"""
+
+import pytest
+
+from elspais.graph.aggregation import covered_labels
 from elspais.graph.annotators import CoverageCreditConfig, annotate_coverage
+from elspais.graph.GraphNode import make_file_id
 from tests.core.graph_test_helpers import (
+    HELPER_NAMESPACE,
     build_graph,
     make_code_ref,
     make_requirement,
@@ -26,7 +38,7 @@ def _build(*, covered, result_status="passed", credit_mode="verified", min_frac=
             )
         )
     g = build_graph(*contents)
-    fn = g.find_by_id("file:provenance/lib/foo.dart")
+    fn = g.find_by_id(make_file_id(HELPER_NAMESPACE, "provenance/lib/foo.dart"))
     # lines 10,11,12; `covered` selects which are hit
     fn.set_field("line_coverage", {ln: (1 if ln in covered else 0) for ln in (10, 11, 12)})
     credit = CoverageCreditConfig(
@@ -41,35 +53,38 @@ def _build(*, covered, result_status="passed", credit_mode="verified", min_frac=
 
 def test_lcov_tested_credited_any_execution_green():
     m = _build(covered={10})  # 1 of 3 lines
-    assert m.lcov_tested.direct_pct_by_label.get("A") == 1 / 3
-    assert "A" in m.lcov_tested.direct_labels
+    assert m.lcov_tested.total_by_label.get("A") == 1 / 3
+    assert "A" in covered_labels(m.lcov_tested, "immediate_direct")
     assert m.lcov_tested.has_failures is False
     # not folded into verified
-    assert m.verified.direct == 0.0
+    assert m.verified.immediate_direct == 0.0
 
 
-def test_lcov_tested_flagged_when_app_red():
-    m = _build(covered={10}, result_status="failed")
-    assert "A" in m.lcov_tested.direct_labels
-    assert m.lcov_tested.has_failures is True
+# Verifies: REQ-d00254-A, REQ-d00254-B
+@pytest.mark.parametrize("credit_mode", ["verified", "tested"])
+def test_lcov_tested_carries_no_verdict_when_app_red(credit_mode):
+    """A red application flags nothing here, whatever the credit mode.
+
+    The credit itself still lands -- the executed line is measured -- so the
+    absent failure flag is the annotator declining to attribute one aggregate
+    verdict to every assertion the lines happen to implement.
+    """
+    m = _build(covered={10}, result_status="failed", credit_mode=credit_mode)
+    assert "A" in covered_labels(m.lcov_tested, "immediate_direct")
+    assert m.lcov_tested.has_failures is False
+    assert m.lcov_tested.failing_labels == set()
 
 
 def test_lcov_tested_zero_coverage_not_credited():
     m = _build(covered=set())
-    assert m.lcov_tested.direct_labels == set()
-
-
-def test_lcov_tested_tested_mode_never_fails():
-    m = _build(covered={10}, result_status="failed", credit_mode="tested")
-    assert "A" in m.lcov_tested.direct_labels
-    assert m.lcov_tested.has_failures is False
+    assert covered_labels(m.lcov_tested, "immediate_direct") == set()
 
 
 def test_lcov_tested_threshold_blocks_partial():
     m = _build(covered={10}, min_frac=0.5)  # 1/3 < 0.5
-    assert m.lcov_tested.direct_labels == set()
+    assert covered_labels(m.lcov_tested, "immediate_direct") == set()
 
 
 def test_lcov_tested_off_by_default():
     m = _build(covered={10}, credit_mode="off")
-    assert m.lcov_tested.direct == 0.0
+    assert m.lcov_tested.immediate_direct == 0.0

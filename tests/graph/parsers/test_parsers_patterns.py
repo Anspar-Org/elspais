@@ -1,15 +1,17 @@
 # Verifies: REQ-d00250-A
 # Verifies: REQ-d00131-B
-"""Behavior tests for shared parser regex patterns.
+# Verifies: REQ-d00081-D
+"""Behavior tests for the shared parser regex patterns.
 
-Phase 2 of the DRY refactor consolidates the regex patterns that today are
-inlined across journey.py, the Lark transformers, hasher.py, and other
-modules into ``src/elspais/graph/parsers/patterns.py``. These tests pin
-down the externally observable behavior of those patterns so future edits
-cannot silently broaden, narrow, or break recognition.
+``src/elspais/graph/parsers/patterns.py`` holds the fixed patterns the
+parsers share -- journey identifiers, journey metadata lines, edge
+keywords, the changelog header. These tests pin the externally observable
+behavior of those patterns so an edit cannot silently broaden, narrow, or
+break recognition.
 
-The tests deliberately do not import from journey.py / reference.py /
-hasher.py -- they exercise only the public symbols of ``patterns.py``.
+Identifier recognition is not among them: an identifier's shape comes from
+the repository's own configuration, so it is derived by ``IdResolver``
+rather than fixed here, and the last section exercises that surface.
 """
 
 from __future__ import annotations
@@ -18,7 +20,9 @@ import re
 
 import pytest
 
+from elspais.config.schema import ElspaisConfig
 from elspais.graph.parsers import patterns
+from elspais.utilities.patterns import build_resolver
 
 # ---------------------------------------------------------------------------
 # JNY_ID_PATTERN -- anchored, captures <descriptor> and <number>.
@@ -251,73 +255,135 @@ def test_changelog_header_pattern_rejects_other_forms(line: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# build_multi_assertion_pattern(prefix, multi_sep)
+# IdResolver.multi_assertion_reference_regex() -- an identifier plus its
+# optional multi-assertion suffix, derived from the repository's identifier
+# configuration by the one grammar authority.
 # ---------------------------------------------------------------------------
 
 
+def _config(
+    *,
+    namespace: str = "REQ",
+    canonical: str = "{namespace}-{level.letter}{component}",
+    component: dict | None = None,
+    assertions: dict | None = None,
+) -> dict:
+    """A configuration dictionary the shipped schema accepts.
+
+    ``build_resolver`` takes a raw dictionary and never consults the config
+    schema, so a fixture built here could describe a repository no config
+    file can produce -- and pin behaviour no user can reach. Every fixture is
+    therefore validated the way ``load_config`` validates a file on disk,
+    before any resolver is built from it, so an unreachable one fails loudly
+    at construction instead of quietly pinning unreachable behaviour.
+    """
+    config = {
+        "project": {"namespace": namespace},
+        "levels": {
+            "prd": {"rank": 1, "letter": "p", "implements": ["prd"]},
+            "dev": {"rank": 2, "letter": "d", "implements": ["dev", "prd"]},
+        },
+        "id-patterns": {
+            "canonical": canonical,
+            "component": component or {"style": "numeric", "digits": 5},
+            "assertions": assertions or {},
+        },
+    }
+    ElspaisConfig.model_validate(config)
+    return config
+
+
+_FDA = _config(
+    namespace="PRD",
+    canonical="{namespace}-{component}",
+    component={"style": "numeric", "digits": 3, "leading_zeros": True},
+)
+
+
 @pytest.mark.parametrize(
-    "prefix, multi_sep, text, should_match",
+    "config, text, should_match",
     [
-        # ("REQ", "+") -- the default config
-        ("REQ", "+", "REQ-d00001-A", True),
-        ("REQ", "+", "REQ-d00001-A+B+C", True),
-        ("REQ", "+", "REQ-d00001-A+B+C+D+E", True),
-        ("REQ", "+", "PRD-001-A", False),  # wrong prefix
-        ("REQ", "+", "REQ-d00001-A,B", False),  # wrong separator
-        # ("PRD", "+") -- FDA-style prefix
-        ("PRD", "+", "PRD-001-A+B", True),
-        ("PRD", "+", "REQ-d00001-A+B", False),
-        # ("REQ", ",") -- alternate separator
-        ("REQ", ",", "REQ-d00001-A,B", True),
-        ("REQ", ",", "REQ-d00001-A+B", False),
+        # Default configuration: "REQ" namespace, "+" between labels.
+        (_config(), "REQ-d00001-A", True),
+        (_config(), "REQ-d00001-A+B+C", True),
+        (_config(), "REQ-d00001-A+B+C+D+E", True),
+        (_config(), "PRD-001-A", False),  # foreign namespace
+        (_config(), "REQ-d00001-A,B", False),  # wrong multi-separator
+        # FDA-style: a namespace-and-number identifier with no level letter.
+        (_FDA, "PRD-001-A+B", True),
+        (_FDA, "REQ-d00001-A+B", False),
+        # Alternate multi-separator.
+        (_config(assertions={"multi_separator": "&"}), "REQ-d00001-A&B", True),
+        (_config(assertions={"multi_separator": "&"}), "REQ-d00001-A+B", False),
     ],
 )
-def test_build_multi_assertion_pattern_matches_per_config(
-    prefix: str, multi_sep: str, text: str, should_match: bool
+def test_multi_assertion_regex_matches_per_config(
+    config: dict, text: str, should_match: bool
 ) -> None:
-    pattern = patterns.build_multi_assertion_pattern(prefix, multi_sep)
+    """The regex answers for exactly the identifiers the configuration describes."""
+    pattern = build_resolver(config).multi_assertion_reference_regex()
     match = pattern.search(text)
     if should_match:
-        assert match is not None, f"expected match for {text!r} with sep={multi_sep!r}"
-        # The full token should be captured (not just a prefix).
+        assert match is not None, f"expected match for {text!r}"
+        # The full token must be captured, not truncated at the first label.
         assert match.group(0) == text
     else:
-        # Either no match at all, or the match must NOT span the full text.
         assert match is None or match.group(0) != text
 
 
-def test_build_multi_assertion_pattern_treats_separator_as_literal() -> None:
-    """The separator must not be interpreted as a regex metacharacter."""
-    # "." would mean "any char" if not escaped -- here we want a literal dot.
-    pattern = patterns.build_multi_assertion_pattern("REQ", ".")
-    # Literal "." separator: REQ-x.A.B is a valid 3-assertion reference.
-    m = pattern.search("REQ-x.A.B")
+def test_multi_assertion_regex_treats_separator_as_literal() -> None:
+    """A separator that is a regex metacharacter matches only itself."""
+    # "." would mean "any char" if it reached the engine unescaped.
+    pattern = build_resolver(
+        _config(assertions={"multi_separator": "."})
+    ).multi_assertion_reference_regex()
+    m = pattern.search("REQ-d00001-A.B")
     assert m is not None
-    assert m.group(0) == "REQ-x.A.B"
-    # The "+" form should NOT match (separator is now ".", not "+").
-    m_plus = pattern.search("REQ-x+A.B")
-    # The "REQ-x" prefix may still match as a 0-assertion suffix, but the
-    # full "REQ-x+A.B" token must not.
-    assert m_plus is None or m_plus.group(0) != "REQ-x+A.B"
+    assert m.group(0) == "REQ-d00001-A.B"
+    # "+" is now an ordinary character with no role in the grammar.
+    m_plus = pattern.search("REQ-d00001+A.B")
+    assert m_plus is None or m_plus.group(0) != "REQ-d00001+A.B"
 
 
-def test_build_multi_assertion_pattern_is_case_insensitive() -> None:
-    """Multi-assertion matching must be case-insensitive (matches inline behavior)."""
-    pattern = patterns.build_multi_assertion_pattern("REQ", "+")
-    assert pattern.search("req-d00001-a+b") is not None
-    assert pattern.search("Req-D00001-A+B") is not None
+def test_multi_assertion_regex_is_case_insensitive_for_a_numeric_component() -> None:
+    """A reference written in the wrong case is still recognised as a reference.
 
-
-@pytest.mark.parametrize("empty_sep", [None, ""])
-def test_build_multi_assertion_pattern_defaults_empty_separator_to_plus(empty_sep) -> None:
-    """Callers shouldn't need ``... or '+'`` -- the builder defaults empty/None.
-
-    A misconfigured ``multi_separator`` (None or '') would otherwise crash
-    ``re.escape`` or produce an over-broad pattern. The canonical helper
-    is the place to enforce the default.
+    Recognition is deliberately tolerant so a mis-cased reference is caught
+    and normalised rather than read as prose. Nothing in a numeric-component
+    identifier carries meaning through its case, so every part of it is
+    case-insensitive.
     """
-    pattern = patterns.build_multi_assertion_pattern("REQ", empty_sep)
-    # Default-to-"+" behaviour: matches REQ-x-A+B as a 2-assertion ref.
-    m = pattern.search("REQ-d00001-A+B")
+    pattern = build_resolver(_config()).multi_assertion_reference_regex()
+    assert pattern.fullmatch("req-d00001-a+b") is not None
+    assert pattern.fullmatch("Req-D00001-A+B") is not None
+
+
+def test_multi_assertion_regex_keeps_a_case_style_component_case_sensitive() -> None:
+    """A case-style component's case is what identifies it, so it is honoured.
+
+    Recognition is otherwise deliberately case-tolerant, because the parts a
+    mis-cased reference gets wrong -- namespace, level code, assertion label
+    -- are ones normalization can settle. A ``kebab-case`` component is not
+    such a part: it is lowercase by definition, so its case is its identity
+    and no rewriting can recover the intended name. Were the component read
+    case-insensitively the matcher would recognise ``REQ-p-Widget`` as an
+    identifier of this repository, and a reference to a component that does
+    not exist would be reported as a local broken reference instead of being
+    left to the repository whose grammar actually claims it.
+    """
+    pattern = build_resolver(
+        _config(
+            canonical="{namespace}-{level.letter}-{component}",
+            component={"style": "kebab-case", "digits": 0, "leading_zeros": False},
+            # A kebab-case component absorbs "-", so the labels are marked
+            # out by a character the component cannot contain.
+            assertions={"separator": "/"},
+        )
+    ).multi_assertion_reference_regex()
+
+    m = pattern.search("REQ-p-widget/A+C")
     assert m is not None
-    assert m.group(0) == "REQ-d00001-A+B"
+    assert m.group(0) == "REQ-p-widget/A+C"
+    # An uppercase component is not a kebab-case component.
+    assert pattern.fullmatch("REQ-p-Widget") is None
+    assert pattern.fullmatch("REQ-p-Widget/A") is None

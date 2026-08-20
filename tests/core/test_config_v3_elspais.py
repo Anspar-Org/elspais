@@ -110,24 +110,21 @@ class TestElspaisConfigRestructuring:
 
 
 # ---------------------------------------------------------------------------
-# REQ-d00212-G: IdPatternsConfig changes
+# REQ-d00212-G: one admitted spelling per identifier
 # ---------------------------------------------------------------------------
 
 
 class TestIdPatternsConfigChanges:
-    """Validates REQ-d00212-G: IdPatternsConfig changes."""
+    """Validates REQ-d00212-G: no configuration surface offers a second spelling."""
 
-    def test_REQ_d00212_G_has_separators_field(self):
-        """IdPatternsConfig has a 'separators' field (list[str])."""
-        assert "separators" in IdPatternsConfig.model_fields
-        cfg = IdPatternsConfig()
-        assert cfg.separators == ["-", "_"]
+    def test_REQ_d00212_G_no_alternate_separator_fields(self):
+        """The accepted-alternates list and the optional-prefix switch are gone.
 
-    def test_REQ_d00212_G_has_prefix_optional_field(self):
-        """IdPatternsConfig has a 'prefix_optional' field (bool, default False)."""
-        assert "prefix_optional" in IdPatternsConfig.model_fields
-        cfg = IdPatternsConfig()
-        assert cfg.prefix_optional is False
+        Neither governed anything: one separator is accepted, the one each
+        repository configures for itself.
+        """
+        assert "separators" not in IdPatternsConfig.model_fields
+        assert "prefix_optional" not in IdPatternsConfig.model_fields
 
     def test_REQ_d00212_G_no_types_field(self):
         """IdPatternsConfig does NOT have a 'types' field."""
@@ -151,6 +148,35 @@ class TestIdPatternsConfigChanges:
         assert "short" in cfg.aliases
         assert "{level.letter}" in cfg.aliases["short"]
         assert "{type.letter}" not in cfg.aliases["short"]
+
+    def test_REQ_d00212_G_level_letters_colliding_only_by_case_rejected(self):
+        """A configuration naming two levels whose letter differs only in
+        case is refused: matching an identifier's level code is
+        case-insensitive (REQ-d00212-R), so such a pair would make that
+        tolerance ambiguous."""
+        with pytest.raises(ValidationError) as excinfo:
+            ElspaisConfig(
+                levels={
+                    "prd": LevelConfig(rank=1, letter="p", implements=["prd"]),
+                    "product": LevelConfig(rank=2, letter="P", implements=["prd"]),
+                }
+            )
+        message = str(excinfo.value)
+        assert "prd" in message
+        assert "product" in message
+
+    def test_REQ_d00212_G_level_letters_distinct_case_accepted(self):
+        """Two levels with genuinely distinct letters load without complaint,
+        including a level letter that happens to repeat across a rebuilt
+        config (not a collision -- the same spelling, not two of them)."""
+        cfg = ElspaisConfig(
+            levels={
+                "prd": LevelConfig(rank=1, letter="p", implements=["prd"]),
+                "ops": LevelConfig(rank=2, letter="o", implements=["prd", "ops"]),
+            }
+        )
+        assert cfg.levels["prd"].letter == "p"
+        assert cfg.levels["ops"].letter == "o"
 
 
 # ---------------------------------------------------------------------------
@@ -267,9 +293,14 @@ class TestAssociateEntryConfigSimplified:
         assert cfg.path == "/some/path"
         assert cfg.namespace == "NS"
 
-    def test_REQ_d00212_K_no_git_field(self):
-        """AssociateEntryConfig does NOT have a 'git' field."""
-        assert "git" not in AssociateEntryConfig.model_fields
+    def test_REQ_d00212_K_git_field_is_optional(self):
+        """AssociateEntryConfig carries an optional 'git' remote."""
+        assert "git" in AssociateEntryConfig.model_fields
+        # Optional: a declaration without a remote is complete, and the
+        # remote is never what identifies the repository.
+        assert AssociateEntryConfig(path="/some/path", namespace="NS").git is None
+        remote = "https://example.com/lib.git"
+        assert AssociateEntryConfig(path="/p", namespace="NS", git=remote).git == remote
 
     def test_REQ_d00212_K_no_spec_field(self):
         """AssociateEntryConfig does NOT have a 'spec' field."""

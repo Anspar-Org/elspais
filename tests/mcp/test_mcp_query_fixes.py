@@ -15,10 +15,24 @@ from typing import Any
 
 import pytest
 
+from elspais.config.schema import ElspaisConfig
 from elspais.graph import NodeKind
 from elspais.graph.builder import TraceGraph
 from elspais.graph.GraphNode import GraphNode
 from elspais.graph.relations import EdgeKind
+
+
+def _validated(config: dict) -> dict:
+    """Return ``config`` after checking a configuration file could hold it.
+
+    ``IdPatternConfig.from_dict`` takes a raw dictionary and never consults the
+    config schema, so a fixture built here could describe a repository no
+    ``.elspais.toml`` can produce -- and pin grammar behaviour no user can
+    reach. Every fixture is therefore validated the way a file on disk is,
+    before any resolver is built from it.
+    """
+    ElspaisConfig.model_validate(config)
+    return config
 
 
 def _wire_body(parent: GraphNode, body_text: str) -> None:
@@ -109,17 +123,19 @@ class TestLevelNormalization:
         from elspais.utilities.patterns import IdPatternConfig, IdResolver
 
         id_config = IdPatternConfig.from_dict(
-            {
-                "project": {"namespace": "REQ"},
-                "id-patterns": {
-                    "canonical": "{namespace}-{type.letter}{component}",
-                    "types": {
-                        "prd": {"level": 1, "aliases": {"letter": "p"}},
-                        "ops": {"level": 2, "aliases": {"letter": "o"}},
-                        "dev": {"level": 3, "aliases": {"letter": "d"}},
+            _validated(
+                {
+                    "project": {"namespace": "REQ"},
+                    "levels": {
+                        "prd": {"rank": 1, "letter": "p", "implements": ["prd"]},
+                        "ops": {"rank": 2, "letter": "o", "implements": ["ops", "prd"]},
+                        "dev": {"rank": 3, "letter": "d", "implements": ["dev", "ops", "prd"]},
                     },
-                },
-            }
+                    "id-patterns": {
+                        "canonical": "{namespace}-{level.letter}{component}",
+                    },
+                }
+            )
         )
         resolver = IdResolver(id_config)
         assert resolver.resolve_level("PRD") == "prd"
@@ -132,17 +148,19 @@ class TestLevelNormalization:
         from elspais.utilities.patterns import IdPatternConfig, IdResolver
 
         id_config = IdPatternConfig.from_dict(
-            {
-                "project": {"namespace": "REQ"},
-                "id-patterns": {
-                    "canonical": "{namespace}-{type.letter}{component}",
-                    "types": {
-                        "prd": {"level": 1, "aliases": {"letter": "p"}},
-                        "ops": {"level": 2, "aliases": {"letter": "o"}},
-                        "dev": {"level": 3, "aliases": {"letter": "d"}},
+            _validated(
+                {
+                    "project": {"namespace": "REQ"},
+                    "levels": {
+                        "prd": {"rank": 1, "letter": "p", "implements": ["prd"]},
+                        "ops": {"rank": 2, "letter": "o", "implements": ["ops", "prd"]},
+                        "dev": {"rank": 3, "letter": "d", "implements": ["dev", "ops", "prd"]},
                     },
-                },
-            }
+                    "id-patterns": {
+                        "canonical": "{namespace}-{level.letter}{component}",
+                    },
+                }
+            )
         )
         resolver = IdResolver(id_config)
         assert resolver.resolve_level("Dev") == "dev"
@@ -154,15 +172,17 @@ class TestLevelNormalization:
         from elspais.utilities.patterns import IdPatternConfig, IdResolver
 
         id_config = IdPatternConfig.from_dict(
-            {
-                "project": {"namespace": "REQ"},
-                "id-patterns": {
-                    "canonical": "{namespace}-{type.letter}{component}",
-                    "types": {
-                        "prd": {"level": 1, "aliases": {"letter": "p"}},
+            _validated(
+                {
+                    "project": {"namespace": "REQ"},
+                    "levels": {
+                        "prd": {"rank": 1, "letter": "p", "implements": ["prd"]},
                     },
-                },
-            }
+                    "id-patterns": {
+                        "canonical": "{namespace}-{level.letter}{component}",
+                    },
+                }
+            )
         )
         resolver = IdResolver(id_config)
         assert resolver.resolve_level("UNKNOWN") is None
@@ -176,18 +196,20 @@ class TestLevelNormalization:
         from elspais.utilities.patterns import IdPatternConfig, IdResolver
 
         id_config = IdPatternConfig.from_dict(
-            {
-                "project": {"namespace": "REQ"},
-                "id-patterns": {
-                    "canonical": "{namespace}-{type.letter}{component}",
-                    "types": {
-                        "prd": {"level": 1, "aliases": {"letter": "p"}},
-                        "ops": {"level": 2, "aliases": {"letter": "o"}},
-                        "dev": {"level": 3, "aliases": {"letter": "d"}},
+            _validated(
+                {
+                    "project": {"namespace": "REQ"},
+                    "levels": {
+                        "prd": {"rank": 1, "letter": "p", "implements": ["prd"]},
+                        "ops": {"rank": 2, "letter": "o", "implements": ["ops", "prd"]},
+                        "dev": {"rank": 3, "letter": "d", "implements": ["dev", "ops", "prd"]},
                     },
-                    "component": {"style": "numeric", "digits": 5, "leading_zeros": True},
-                },
-            }
+                    "id-patterns": {
+                        "canonical": "{namespace}-{level.letter}{component}",
+                        "component": {"style": "numeric", "digits": 5, "leading_zeros": True},
+                    },
+                }
+            )
         )
         resolver = IdResolver(id_config)
         factory = GrammarFactory(resolver)

@@ -137,7 +137,7 @@ B. Annotators SHALL NOT modify node.children, node.parents, or other structural 
 
 C. Metrics keys SHALL use consistent naming (snake_case, descriptive names).
 
-D. Standard metrics keys SHALL include: is_uncommitted, is_moved, is_new, is_roadmap, display_filename, repo_prefix, implementation_files, referenced_pct.
+D. Standard metrics keys SHALL include: is_uncommitted, is_moved, is_new, is_roadmap, display_filename, repo_prefix, implementation_files.
 
 E. Custom metrics MAY be added by specific annotators without modifying TraceNode class.
 
@@ -147,11 +147,12 @@ Using metrics dict as the extension point enables adding new annotations without
 
 ### Changelog
 
+- 2026-08-19 | 83148e40 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | 1c90d8fa | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 0073a9c3 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 0073a9c3 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Node Metrics as Extension Point* | **Hash**: 1c90d8fa
+*End* *Node Metrics as Extension Point* | **Hash**: 83148e40
 ---
 
 ## REQ-d00069: Indirect Coverage Source
@@ -164,7 +165,7 @@ The coverage annotation system SHALL support an INDIRECT coverage source for who
 
 A. `CoverageSource` enum SHALL include distinct test-evidence values -- `TEST_DIRECT` for an assertion-targeted `Verifies:` and `TEST_INDIRECT` for a whole-requirement `Verifies:` -- kept separate from implementation-evidence sources (`DIRECT`/`EXPLICIT`/`INFERRED`) so that a test that verifies an *Assertion* credits the Tested dimension only and never the Implemented dimension (REQ-d00084-D). (`INDIRECT` remains for the transitive CODE->TEST provenance path.)
 
-B. A whole-requirement (assertion-less) reference SHALL credit ALL of the target requirement's assertions at full value on the generous footing. This SHALL hold symmetrically for `Verifies:` (source `TEST_INDIRECT` -> Tested), `Implements:` on CODE (source `CODE_INDIRECT` -> Implemented), `Implements:`/`Refines:` from a child requirement (source `INFERRED` -> Implemented), and `Validates:` from a journey (source `UAT_INFERRED` -> UAT Covered). No whole-requirement reference SHALL credit the strict (direct) footing.
+B. A whole-requirement (assertion-less) reference SHALL credit every *Assertion* of the target requirement in its immediate indirect measure, at full value, and SHALL credit no immediate direct measure. This SHALL hold for `Verifies:` (Tested), `Implements:` on CODE (Implemented), `Implements:`/`Refines:` from a child requirement, and `Validates:` from a journey alike -- a reference that names no *Assertion* names them all equally, whatever keyword carried it. What such a reference conducts from a refining requirement is a separate question, answered by REQ-d00069-J.
 
 C. `RollupMetrics` SHALL track `validated_with_indirect` count for assertions validated when including INDIRECT sources.
 
@@ -180,18 +181,40 @@ H. When a requirement declares `Satisfies: X`, the graph builder SHALL clone the
 
 I. 100% coverage of a template instance SHALL be achieved when every leaf *Assertion* in the cloned template subtree (excluding N/A assertions) has at least one inbound coverage edge (`Implements:`, `Verifies:`, or `Validates:`) on its template original, consistent with the inherited-coverage rule (REQ-p00014-K).
 
-J. A `Refines:` relationship SHALL NOT contribute coverage by itself, but it SHALL conduct the refining requirement's own rolled-up coverage upward to the *Assertion* it targets. A requirement's coverage SHALL be the mean of its assertions' coverage (assertions are unweighted), computed independently per coverage dimension. Coverage SHALL be tracked on two footings (REQ-d00069-L). An *Assertion*'s **strict (direct)** coverage SHALL be the equal-weight mean of its assertion-specific contributions (local direct evidence at full value; each assertion-targeted refining requirement at its own rolled-up coverage), and SHALL be `0` when it has none; whole-requirement (blanket) credit SHALL NOT enter the strict footing. An *Assertion*'s **generous (indirect)** coverage SHALL be the maximum of (a) its strict coverage, (b) full value when the requirement has local whole-requirement evidence (a whole-requirement test/code/journey), and (c) the mean coverage of the requirement's whole-requirement (blanket) `Refines:` edges at FULL weight. The generous footing SHALL be monotone: adding assertion-specific evidence SHALL NOT lower it. The prior `1/N` blanket deflation is retired.
+J. A `Refines:` relationship SHALL NOT contribute coverage by itself; it SHALL conduct the coverage of the refining requirement to the assertions its own citation names -- the *Assertion* it names, or every *Assertion* of the requirement where it names only the requirement. Each measure SHALL conduct into the same measure, direct into direct and indirect into indirect, so that no measure is ever composed of another. The value conducted SHALL be the mean, in that measure, of the contributing requirements' own coverage, a requirement's coverage being the mean over its assertions, computed independently per dimension.
 
 K. The system SHALL report coverage gaps on template instance nodes through the standard coverage mechanisms. Instance nodes are normal graph nodes and participate in existing health checks.
 
-L. Coverage SHALL be tracked on two footings per dimension: strict (direct, assertion-targeted evidence only) and generous (indirect, additionally counting whole-requirement, inferred, conducted, and inherited evidence). Reporting surfaces SHALL headline the generous footing and SHALL express precision as a tier (full, partial, failing, missing), rendering a single unified indirect-evidence caveat (a `~` marker meaning "some coverage comes from whole-requirement references") rather than a second count. The caveat SHALL be derived from `indirect > direct` per dimension and per *Assertion*, and SHALL be applied consistently at BOTH the requirement badge and the per-*Assertion* level so the two never disagree.
+L. Coverage SHALL be measured on two independent axes per dimension. The first axis is what a citation named: *direct* where it named the *Assertion* it credits, *indirect* where it named only the requirement and is therefore attributed equally to every *Assertion* of it. The second axis is where the evidence sits: *immediate* where it is attached to what is being reported, and *rolled-up* where it is conducted from a refining requirement, in which case the first axis describes the refining requirement's own evidence. Each measure the axes yield SHALL be measured from the evidence itself and reported in its own right.
+
+M. An *Assertion*'s immediate coverage SHALL record the strength of the evidence attached to it. That strength SHALL be whole wherever the evidence is whole, a citation either naming the *Assertion* or not; it MAY be partial where the evidence itself is partial, as a journey verified in part credits in proportion to its verification (REQ-d00255-C). Rolled-up coverage MAY likewise be fractional, being the mean of the coverage of the requirements refining it, so that a partially finished refinement reads as partially done.
+
+N. Total coverage SHALL be reported as well, taken per *Assertion* as the greatest of that *Assertion*'s four measures, so that an *Assertion* covered more than one way is counted once and a requirement's total can never exceed its number of assertions.
 
 ### Rationale
+
+Two questions are asked of coverage and they are not the same question. "What still needs doing here" is answered by what a citation names and where it is attached: an *Assertion* nobody has cited is work, however finished the requirements refining it may be. "How much of this is real" is answered by conduction: a requirement high in the tree is rarely cited by code at all, and what makes it true is the state of everything beneath it. One number cannot answer both, and a number that tries answers neither -- averaging an *Assertion*'s own citation together with the progress of a refinement made the figure move when nothing about that *Assertion* had changed, and let an *Assertion* nobody had cited read as fully covered because something below it was finished.
+
+A measure conducts only into itself, because the two are not the same unit. Direct coverage counts assertions somebody wrote evidence against; indirect counts assertions reached by evidence written against their requirement. Adding one to the other, or letting a requirement covered only as a whole raise an *Assertion*'s direct figure one level up, would put a number under a description that is not true of it -- and would do so invisibly, since nothing downstream can tell which part of a summed figure came from where. What the refining citation names decides which assertions receive a conducted value; it does not decide which measure that value belongs to.
+
+Separating the axes is what makes each measure sayable in a sentence. Direct and indirect say what a citation named; immediate and rolled-up say whether the evidence is attached here or conducted from below. Each of the four is reported in its own right, so no measure is defined as another's remainder, and each can independently be complete: a requirement whose assertions are each cited AND which is also cited as a whole is fully covered twice over, which the old nested pair could not express.
+
+Total exists because a reader also wants one number, and taking it per *Assertion* as the greatest of that *Assertion*'s measures is what keeps it honest -- an *Assertion* covered three ways is still one covered *Assertion*, so a requirement's total can never exceed the number of assertions it has.
 
 Whole-requirement tests (e.g., `test_implements_req_d00087` with no *Assertion* suffix) currently contribute zero *Assertion* coverage. Adding INDIRECT as a separate source allows a "progress indicator" view alongside strict *Traceability*, following the same pattern as INFERRED coverage for requirement-to-requirement relationships.
 
 ### Changelog
 
+- 2026-08-19 | 665b798a | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-18 | a8b306bc | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: sync changelog hash
+- 2026-08-18 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: superseded — four published measures answer what the toggle asked; A was the only assertion ever built, and it fed a list nothing renders
+- 2026-08-18 | a8b306bc | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-18 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: scope the whole-requirement crediting rule to the immediate measures, leaving what it conducts to J (B)
+- 2026-08-18 | bbad16d5 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-18 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: immediate coverage records the strength of the evidence attached, whole where the evidence is whole and partial where the evidence is (M)
+- 2026-08-17 | 6de09e95 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-17 | 6ac9e8a6 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-17 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: measure coverage on two axes -- what a citation named, and whether the evidence is attached or conducted -- reporting each measure in its own right plus a per-assertion total (J, L, M, N)
 - 2026-07-31 | 8c02235b | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-07 | 2d89da53 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-03 | ddbc50c8 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -201,38 +224,40 @@ Whole-requirement tests (e.g., `test_implements_req_d00087` with no *Assertion* 
 - 2026-05-11 | e9b5c3f1 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | e9b5c3f1 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *Indirect Coverage Source* | **Hash**: 8c02235b
+*End* *Indirect Coverage Source* | **Hash**: 665b798a
 ---
 
 ## REQ-d00070: Indirect Coverage Toggle Display
 
-**Level**: dev | **Status**: Active | **Implements**: REQ-p00006
+**Level**: dev | **Status**: Superseded | **Implements**: REQ-p00006
 
-The interactive trace view SHALL provide a toggle to switch between strict and indirect coverage display modes.
+This requirement offered a reader a choice between two coverage views because only one could be shown at a time. Coverage is no longer measured as a pair of nested footings to choose between: it is four independent measures, each reported in its own right, with a total taken per *Assertion* (REQ-d00069-L, REQ-d00069-N). A surface now shows the total and makes the measures behind it available (REQ-d00258-A), so the question the toggle asked is answered without asking the reader to pick a mode first.
+
+The need its rationale named is met and not withdrawn: a strict *Traceability* view is the immediate direct measure, which is also what every work-listing surface answers on (REQ-d00258-M), and the progress-indicator view is the total.
 
 ### Assertions
 
-A. `TreeRow` SHALL include a `coverage_indirect` attribute computed from `indirect_referenced_pct` using the same thresholds as strict coverage (0=none, <100=partial, 100=full).
+A. [Removed - a per-row field derived from one of two nested footings. The measures a row reports are REQ-d00258-A, and what a work list answers on is REQ-d00258-M.]
 
-B. The template SHALL render a `data-coverage-indirect` attribute on each requirement row.
+B. [Removed - an attribute carrying the toggle's second mode. There is no second mode.]
 
-C. The template SHALL include a toggle control in the filter bar area to switch between strict and indirect coverage views.
+C. [Removed - the toggle itself. With every measure published there is nothing to switch between.]
 
-D. The default display SHALL show strict coverage (toggle OFF).
+D. [Removed - the toggle's default. There is no toggle.]
 
-E. The `has_failures` warning indicator SHALL display regardless of toggle state.
+E. [Removed - failures showing regardless of toggle state. That a failing *Assertion* reads failing whatever else credits it is REQ-d00258-G, which does not depend on a display mode.]
 
 ### Rationale
 
-Users need both a strict *Traceability* view (only *Assertion*-targeted tests count) and a progress indicator view (whole-requirement tests cover all assertions). A toggle lets users switch between modes without regenerating the trace.
+The toggle was the shape a two-footing model forced: with one number on screen and a second hidden behind it, a control had to exist to swap them, and a reader had to know which mode they were in before they could read a figure. Publishing the measures removes both the swap and the question.
 
-### Changelog
+Retiring this cost no working behaviour. A alone was built -- a `TreeRow.coverage_indirect` field feeding a list no template iterates -- while B, C and D were never implemented at all, so the view has never had the toggle this requirement described.
 
 - 2026-07-31 | a55fcb89 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 3e5b1766 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | 3e5b1766 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *Indirect Coverage Toggle Display* | **Hash**: a55fcb89
+*End* *Indirect Coverage Toggle Display* | **Hash**: 27a15cb2
 ---
 
 ## REQ-d00071: Unified Root vs Orphan Classification
@@ -412,17 +437,99 @@ A label is a permanent name: references point at it, coverage accrues to it, and
 
 *End* *Report Malformed Assertion Labels* | **Hash**: cb7e96dd
 
+## REQ-d00272: Reference Fault Classification
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00014-R
+**Satisfies**: REQ-p00019
+
+A reference that fails is described by how far reading it got, and the classes are only as useful as the rule that assigns them. This states that rule: what decides that an item was written as an identifier at all, which repository's grammar it should be read against, and how much of a defect may be named without guessing.
+
+### Assertions
+
+A. An item SHALL be assigned the class of the furthest stage of reading it completed, and no later stage SHALL be reported for it.
+
+B. An item containing a space SHALL NOT be read as an identifier. A report SHALL NOT describe such an item as naming a repository, an unconfigured repository included.
+
+C. An item no grammar of the federation accepts SHALL be attributed to a repository where the namespace it opens with is one that repository declares, and to no repository otherwise. What separates an identifier of this estate written wrongly from a name belonging outside it SHALL be that declaration, not the item's resemblance to any pattern.
+
+D. Where re-reading an item under relaxations of the grammar that accepts its namespace makes it acceptable, the report SHALL name the smallest set of relaxations that does so.
+
+E. An item that opens with an acceptable reference and continues into content no grammar accounts for SHALL be reported naming both the reference found and the content unaccounted for.
+
+F. Reading within an item SHALL inform what is reported about it and SHALL NOT contribute a relationship, so that no relationship exists that its author did not spell.
+
+G. A *Traceability* keyword SHALL have one canonical spelling. A keyword recognised in any other SHALL be reported at a severity the project configures, and SHALL produce the relationships it introduced regardless.
+
+H. A keyword introducing no content SHALL be reported as having introduced none.
+
+J. A *Traceability* keyword a file's kind does not admit SHALL be read, and the relationship it declares SHALL be refused as one the keyword may not take. It SHALL NOT be passed over as though it were prose.
+
+K. Where a reference list names the same target more than once, every instance SHALL be reported and none SHALL produce a relationship.
+
+L. Where an item both opens with an acceptable reference and can be read as differing from one by a relaxation, the relaxation SHALL be reported. Trailing content SHALL be reported only where no relaxation accounts for the item.
+
+M. An item holding any character no identifier configuration can admit SHALL be treated under B. A character the writing system counts as a space is such a character, whichever one it is, as is any character reserved out of every identifier pattern.
+
+N. An identifier SHALL have one canonical spelling. A reference written in another spelling the configuration admits SHALL be reported at a severity the project configures, and SHALL produce the relationship it names regardless.
+
+O. Where an identifier is the first content of a comment that no *Traceability* keyword introduces, and the comment does not continue a list, the tool SHALL report that a relationship appears to be intended and is not declared, at a severity the project configures. It SHALL produce no relationship.
+
+### Rationale
+
+B and C are the whole of the decidability claim, and they are stated as tests on the item rather than as descriptions of what an identifier looks like because a shape can always be argued with. A space is what no identifier of any configuration contains, and a declared namespace is a fact the federation holds rather than an inference about the text; between them they separate three populations that a project acts on differently — text that was never a reference, an estate identifier spelled wrongly, and a name belonging to a repository nobody configured. Collapsing any two of those sends an author to work that will not fix anything.
+
+D bounds diagnosis by minimality rather than by a list of defects worth naming. The smallest set is the one the input determines; a larger set that also succeeds contains a relaxation the input never asked for, and naming it describes a defect the author does not have.
+
+E and F are a pair, and F is what makes E safe. Looking inside an item is exactly the move that, allowed to produce a relationship, credits a requirement its author never named — and credits it silently, since a reference that resolved is a reference that looked fine. The distinction that keeps E is not how far the tool may look but what it may do with what it finds: describing costs nothing, because a description cannot be mistaken downstream for a declaration.
+
+G separates recognition from form. What a keyword is cannot depend on its case without making a report's absence depend on it too, so a differently-cased keyword is read; that its form is non-canonical is a fact about the file worth reporting, but withholding the relationships it introduced would punish the reference for the keyword's spelling.
+
+J settles what a keyword does where the file's kind does not admit it. Passing it over reads as prose a line that is unmistakably a declaration, and the author of an annotation that did nothing is never told why — the failure a journey's misplaced validation declaration is already reported to prevent. Reading it and refusing the relationship says both true things at once: this is a declaration, and it is not one this file may make.
+
+K makes a repeated target an error rather than a convenience. Silently keeping the first instance leaves the others producing neither a relationship nor a report, which is the silence this requirement exists to remove; and the silence is not even uniform, since two spellings of one identifier that differ in case are not recognised as repeats and so do report. Refusing all instances rather than keeping one is what makes the report actionable: a list that names a target twice is a list its author has lost track of, and resolving it for them would hide that.
+
+L ranks trailing content beneath every named relaxation. An item that opens with a valid reference can always be read as that reference plus whatever follows, so an unranked trailing-content reading accounts for every malformed item and would either win every time or tie every time — leaving the named relaxations unreachable and every diagnosis generic. Ranking it last makes it what it should be: the account that applies when nothing more specific does.
+
+M keeps the space test from turning on which space was typed, and generalises past spaces for the same reason. A character that reads as a space to an author but not to the test would take an item that is plainly not an identifier and report it as a name from a repository nobody configured — the precise misattribution B exists to prevent, reintroduced by an invisible character. The same holds for a character reserved out of every identifier pattern: no configuration can produce one, so an item carrying it was not written as an identifier, and saying so needs no judgement about what it resembles. Stating the test as a property of the character rather than listing the characters means a newly reserved one is covered when it is reserved rather than when someone remembers to add it here.
+
+O names a habit rather than a defect. Opening a comment with an identifier and then explaining, in prose, why the code below answers to it is a natural way to write, and an author doing it means the relationship — they have simply not spelled it in the form the tool reads. Reporting it as a malformed reference would be wrong twice: nothing about it is malformed, and the useful message is not that something is broken but that saying it with a keyword would make it count.
+
+What makes the report safe is that it produces nothing. An informal citation is evidence of intent, not a declaration, and inferring a relationship from intent is the failure every other assertion here exists to prevent — an edge nobody wrote, indistinguishable downstream from one they did. So the tool says what it sees and leaves the declaring to the author.
+
+The exclusions are what keep it from firing on text that means something else. A comment a keyword introduces is already a declaration and is judged as one. A comment continuing a list is part of that list, and its identifier is an item rather than a citation. Everything else that opens a comment with an identifier is an author pointing at a requirement without linking to it, which is worth one line of report and no more.
+
+N pairs with G, one for the referent and one for the keyword. Both say the same thing: a spelling the configuration admits produces its relationship, and that it is not the canonical spelling is a fact about the file worth reporting rather than a reason to withhold an edge. Which spellings a configuration admits is settled elsewhere; what N adds is that admitting more than one form does not mean writing more than one.
+
+This requirement declares `Satisfies:` against the REQ-p00019 anti-pattern template and concretizes its classes for reference reading. Misattribution and double-counting are the classes this subsystem exists to answer, and assertions A, B and C pin them: one class per item and never a later one, no describing an item holding a space as though it named a repository, and attribution decided by what a repository declares rather than by what the text resembles. Silent omission and unreported non-performance are pinned by the obligation to report every recognised reference that produces no relationship (REQ-d00269-F, REQ-d00269-G), and phantom success by the rule that reading within an item informs a report and never contributes an edge (assertion F, REQ-d00269-J). Undisclosed substitution is pinned twice over: a list of which some items bound and others did not is a partial result, disclosed by reporting each item that failed, and a defect the tool could not determine is carried as the generic code rather than passed off as no defect at all (REQ-d00271-C).
+
+The template's remaining classes bind to this subsystem through the instance without a tool-specific strengthening. That a failure report names the operation, the cause, and a remedy or the absence of one is one of them, and it does not compete with the rule that a code names a defect rather than a repair: the code says what is wrong, the report may also say what would answer it, and the two are different layers of the same finding.
+
+One class has no purchase here and is left visibly uncovered rather than answered. A classification is computed from file content at every build and no verdict is cached, so this subsystem serves no value that can diverge from the sources it came from. Divergence between a served answer and changed sources is real elsewhere in the tool and is covered where it lives (REQ-p00015-E, REQ-p00015-G).
+
+### Changelog
+
+- 2026-08-16 | d01290ac | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-16 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: an identifier opening a comment with no keyword is reported as an undeclared relationship and produces none (O)
+- 2026-08-16 | fadb924e | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: sync changelog hash
+- 2026-08-16 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: Active — the five classes now reach `elspais checks` as `references.*`, each with its own severity, and G/N's keyword/identifier-form reporting is `references.keyword_form`
+- 2026-08-15 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: generalise the space test to any character no configuration can admit (M); one canonical spelling per identifier, reported not withheld (N)
+- 2026-08-15 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: a keyword its file may not use is read and refused rather than passed over (J); every instance of a repeated target is reported and none resolves (K); trailing content ranks beneath every named relaxation (L); any space character reaches the space test (M)
+- 2026-08-15 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: record how each REQ-p00019 class is answered for this subsystem — concretized, bound through the instance, or left visibly uncovered with its reason
+- 2026-08-15 | - | - | Michael Lewis (<michael@anspar.org>) | Initial authoring: the rule assigning reference failure classes — the space and namespace tests, minimal relaxation, and reading within an item without binding from it
+
+*End* *Reference Fault Classification* | **Hash**: d01290ac
+
 ## REQ-d00254: Test Evidence: Attribution, Ingestion, and Coverage Crediting
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-o00051
 
-Test verification evidence SHALL be attributed per test as it is scanned, ingested from configured test targets, and credited through two complementary paths: aggregate app-green status for unmatched test-file edges, and line-coverage fraction for implementation-code edges; both are tracked as separate dimensions distinct from direct `Verifies:` evidence.
+Test verification evidence SHALL be attributed per test as it is scanned and ingested from configured test targets. Line coverage of implementation code is measured alongside it as its own dimension, answering a different question from *Traceability* and never standing in for it.
 
 ### Assertions
 
-A. When a test-file edge has no matching result record, the annotator SHALL consult the per-app green/red signal derived from result nodes whose source path falls within the same app directory. A green app SHALL credit the assertion as verified; a red app SHALL flag the requirement as having failures.
+A. Where no result record binds to a test, that test SHALL contribute no verdict, and the assertions it declares SHALL be reported as awaiting a result. No verdict SHALL be inferred for a test from the results of other tests -- neither from the file it is written in nor from the application it belongs to.
 
-B. The annotator SHALL compute a separate `lcov_tested` dimension by measuring the fraction of implementation lines (from `Implements:` edges) covered by execution data. When the fraction meets or exceeds the configured minimum, the relevant assertions SHALL be credited in `lcov_tested`, which feeds into the `tested_and_passing` union score alongside `verified`.
+B. The annotator SHALL compute a separate `lcov_tested` dimension by measuring the fraction of implementation lines (from `Implements:` edges) covered by execution data. When the fraction meets or exceeds the configured minimum, the relevant assertions SHALL be credited in `lcov_tested`. That dimension SHALL be reported in its own right and SHALL NOT credit any *Traceability* coverage dimension.
 
 C. The configuration surface SHALL express test result and coverage ingestion via `[[scanning.test.targets]]` entries, each declaring how a target's results and coverage are produced (`command`) and ingested (`reporter`, `results`, `coverage`, `match`, `credit_coverage`, `min_coverage_fraction`). User documentation SHALL include a `test-targets` topic describing the target model, the available reporters, and a worked Flutter recipe.
 
@@ -432,7 +539,7 @@ E. A reporter registry SHALL map each `reporter` format name to a parser and an 
 
 F. For each configured target, the system SHALL obtain the reporter's output (captured from the command's stdout for stdout-channel reporters, or read from the `results` glob for file-channel reporters), build RESULT nodes carrying the real test-file path (`source_file`, repo-relative) and the target's `match` mode, and ingest the target's `coverage` file. Coverage crediting SHALL be derived from the targets' `credit_coverage`/`min_coverage_fraction`. File-channel results SHALL additionally record where each result was recorded — the results artifact's repo-relative path and, when derivable from the artifact (e.g. one JUnit `<testcase>` per line), the per-result line — as provenance distinct from the test's source path, and result links in reporting surfaces SHALL point at that artifact location.
 
-G. Each target SHALL select its result-to-test matching via `match`: `source` SHALL bind each result at the most precise scope available — first step scope, when the result's recorded test name embeds exactly one journey-step reference (in the configured reference form) that resolves to a step whose verifying test(s) live in the result's source file; then test scope, resolving the result's real source-file path and `test()` source line to the specific test node at that `(path, line)`; and only then file granularity (all passing credits the file's `Verifies:` assertions; any failure flags them). Step- and test-scoped results SHALL credit per test, never via the file-level all-pass/any-fail rule. `aggregate` SHALL use the per-app green/red engine.
+G. Each target SHALL select its result-to-test matching via `match`: `source` SHALL bind each result at the most precise scope available — first step scope, when the result's recorded test name embeds exactly one journey-step reference (in the configured reference form) that resolves to a step whose verifying test(s) live in the result's source file; then test scope, resolving the result's real source-file path and `test()` source line to the specific test node at that `(path, line)`. A result that binds at neither scope SHALL credit nothing. `aggregate` SHALL derive the per-app green/red signal, which informs the line-coverage dimension only.
 
 H. `elspais checks --run-tests` SHALL accept a `--targets` selector naming a subset of `[[scanning.test.targets]]` to execute; an unknown target name SHALL be an error, and an absent selector SHALL execute all targets. The same `--targets` flag on `summary`/`trace` SHALL mark provenance without executing anything.
 
@@ -448,7 +555,13 @@ M. The system SHALL exchange prescan data with a configured external test-presca
 
 N. Where an external test-prescan command returns attribution records for a scanned test file, the system SHALL bind that file's tests from those records in preference to the system's built-in attribution.
 
+O. A line number a reporter records SHALL be read in the origin that reporter counts from. That origin SHALL be declared with the reporter and SHALL be overridable per target, and a recorded line SHALL be normalised to the numbering the tool uses for source lines before it is matched against a test or shown to a reader.
+
 ### Rationale
+
+A line number means nothing without its origin, and producers disagree: the `line` attribute pytest writes into JUnit XML counts from zero, while the tool numbers source lines from one. Read as though they agreed, every such result missed the test it named by exactly one line and bound at file granularity instead -- which the file-granular inference then papered over, so the disagreement never surfaced as an error. Declaring the origin with the reporter puts the knowledge where the format is known rather than in each project's config, and the per-target override is for a producer that departs from its format's convention. Normalising once, at ingestion, is what keeps the rest of the system able to treat a line as a line -- to match on it, and to point a reader at it.
+
+A test that returned no result is awaiting one, and nothing else is known about it. The inference this replaces -- reading a verdict for one test off the results of its neighbours, in the same file or the same application -- was built to work around test files that supposedly could not carry their own `Verifies:` annotation. They can, in every language the tool reads tests in, so the workaround bought nothing and cost the distinction: a deselected tier, an unbuilt target and a crashed runner all left their assertions reported as passing on the strength of tests that say nothing about them. Its failing half was worse, blaming an *Assertion* for a sibling test's failure, which REQ-d00258-G forbids one level down. Aggregate results still say something real about an application, and that is where they are read: the line-coverage dimension, which measures the code rather than the *Traceability*.
 
 K states the outcome the scanning side owes the crediting side: without per-test identity and extent, the line-level dimensions computed here have nothing to intersect implementation ranges against, and a framework's tests can only ever be credited at file granularity. The obligation is deliberately language-neutral — it fixes what attribution must yield, not whether a given language earns built-in support or is served through an external command.
 
@@ -460,6 +573,11 @@ N resolves per file, not per configuration, because both routes are routinely li
 
 ### Changelog
 
+- 2026-08-17 | b7f71d81 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-17 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: a reporter's line numbers are read in the origin it counts from, declared with the reporter and normalised at ingestion (O)
+- 2026-08-17 | 11ca8985 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms, update hash
+- 2026-08-17 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: a test with no result of its own contributes no verdict; no verdict is inferred from other tests in the file or the application (A, G)
+- 2026-08-17 | 87077749 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms, update hash
 - 2026-08-03 | 22faeb40 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-02 | cbd59482 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | ea4e01b1 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -473,7 +591,7 @@ N resolves per file, not per configuration, because both routes are routinely li
 - 2026-06-20 | 98120740 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-06-20 | 00000000 | - | Michael Lewis (<michael@anspar.org>) | CUR-1533: initial
 
-*End* *Test Evidence: Attribution, Ingestion, and Coverage Crediting* | **Hash**: 22faeb40
+*End* *Test Evidence: Attribution, Ingestion, and Coverage Crediting* | **Hash**: b7f71d81
 
 ---
 
@@ -539,11 +657,11 @@ Reporting surfaces (trace, summary, MCP project summary, HTML viewer) SHALL pres
 
 ### Assertions
 
-A. All reporting surfaces (trace, summary, MCP project summary, HTML viewer) SHALL headline coverage counts on the generous footing per REQ-d00069-L, and text surfaces SHALL append a `~` marker, per coverage dimension, to any count whose evidence is not fully direct.
+A. A surface reporting a coverage figure SHALL headline total coverage (REQ-d00069-N) and SHALL make the measures behind it available, so that a reader is never shown a figure without being able to see what evidence produced it.
 
-B. Reporting surfaces SHALL use exactly five coverage display terms: Implemented, Tested, Passing, UAT Covered, UAT Passed. The term "Validated" SHALL NOT denote test coverage. Passing SHALL be the union of result-verified and line-coverage-credited evidence.
+B. [Removed - a fixed set of display words, which REQ-d00258-K had already made configurable per project. Each dimension is now stated on its own in REQ-d00277, so one can be added, redefined or withdrawn without rewriting a list.]
 
-C. The CLI summary, the MCP project summary, and the viewer SHALL derive their coverage statistics from a single shared aggregation so identical questions receive identical answers.
+C. A surface reporting a coverage figure or reaching a coverage verdict SHALL derive it from the one shared aggregation, so that two surfaces asked the same question give the same answer.
 
 D. Viewer coverage badge colors SHALL resolve from the coverage standing through the theme catalog by standing name — the same resolution for requirement dimension badges and per-*Assertion* badges — so a given standing is one color on every surface (full green, partial yellow, failing red), never through hard-coded color values and never recolored by the dimension's configured severity. A missing standing SHALL render red only when it is a required gap (its resolved severity is error) and grey otherwise. Severity SHALL govern combined-bucket dragging and the checks gate, not the badge color for the full, partial, and failing standings. The coverage standings SHALL appear in the viewer Legend.
 
@@ -551,20 +669,52 @@ E. Viewer coverage filters SHALL bucket requirements by tier semantics using the
 
 F. A per-level `expects_validation` flag (default false) SHALL declare that requirements at that level are expected to have UAT validation (a USER_JOURNEY that `Validates:` them). When a level expects validation, a requirement of that level with no UAT coverage SHALL be a reported gap: flagged by the health `uat.coverage` check and listed under `gaps unvalidated`, and its viewer UAT badge SHALL render at error severity (red). When a level does not expect validation (the default), absent UAT SHALL be neither flagged by health, listed as a gap, nor badged in the viewer, and SHALL NOT drag the requirement's combined coverage bucket. The `uat.coverage` check SHALL count only requirements at expects_validation levels; when no level expects validation it SHALL pass trivially. All surfaces SHALL resolve this flag through a single shared helper rather than reading the level config independently.
 
-G. The viewer SHALL assign each *Assertion* a semantic coverage *standing* (full, partial, failing, or missing) per coverage dimension, projected from the requirement's rollup metrics, so that if every *Assertion* is full on a dimension the requirement badge for that dimension reads full, and if any *Assertion* is failing the requirement dimension reports a failure. An *Assertion*'s standing SHALL read failing only when that *Assertion* itself has a failing result or verification for the dimension, not because a sibling *Assertion* covered by a different, non-failing test or journey failed; a failing test or journey attributes the failure to exactly the assertions it covers (its named targets, or every assertion when it covers the whole requirement). The standing SHALL be computed server-side and applied on initial render, without depending on a lazy client prefetch. Standing colors SHALL be resolved through the theme catalog by standing name (never hard-coded in the badge logic), the same decoupling severity colors use per D, so the standing-to-color association is configurable, and the standings SHALL appear in the viewer Legend. Per-*Assertion* pills SHALL honor `allow_indirect` when computing standing and SHALL render the unified `~` caveat (REQ-d00069-L) when applicable, though the direct-versus-indirect distinction SHALL NOT introduce a separate *Assertion* badge tier color.
+G. The viewer SHALL assign each *Assertion* a semantic coverage *standing* (full, partial, failing, or missing) per coverage dimension, projected from the requirement's rollup metrics, so that if every *Assertion* is full on a dimension the requirement badge for that dimension reads full, and if any *Assertion* is failing the requirement dimension reports a failure. An *Assertion*'s standing SHALL read failing only when that *Assertion* itself has a failing result or verification for the dimension, not because a sibling *Assertion* covered by a different, non-failing test or journey failed; a failing test or journey attributes the failure to exactly the assertions it covers (its named targets, or every assertion when it covers the whole requirement). The standing SHALL be computed server-side and applied on initial render, without depending on a lazy client prefetch. Standing colors SHALL be resolved through the theme catalog by standing name (never hard-coded in the badge logic), the same decoupling severity colors use per D, so the standing-to-color association is configurable, and the standings SHALL appear in the viewer Legend. A per-*Assertion* pill SHALL make the measures behind its standing available to a reader, and SHALL NOT carry a caveat standing in for a measure it does not show (REQ-d00258-J). The distinction between the measures SHALL NOT introduce a separate *Assertion* badge tier color.
 
 H. The requirement-level coverage tier, the per-*Assertion* coverage standing, and the viewer filter bucket SHALL be drawn from one shared set of coverage state names — full, partial, failing, and missing — so that a given coverage condition maps to the same state word on every surface. The prior split of the full state into separate direct and indirect states SHALL NOT reappear as distinct tier states.
 
-I. Tested SHALL be measured as the coverage of the implemented assertions, Passing as the coverage of the tested assertions, and UAT Passed as the coverage of the UAT-covered assertions. A chained dimension whose relative denominator is empty SHALL read missing at neutral severity — neither a reported gap nor error-colored — and SHALL NOT drag the requirement's combined coverage bucket. A failing result on any assertion within a dimension's denominator SHALL render that dimension failing regardless of the covered fraction.
+I. A chained dimension (REQ-d00277) SHALL be measured within one measure, so that a figure and its denominator are made of the same kind of evidence. A chained dimension whose denominator is empty SHALL read missing at neutral severity -- neither a reported gap nor error-colored -- and SHALL NOT drag the requirement's combined coverage bucket. A failing result on any assertion within a dimension's denominator SHALL render that dimension failing regardless of the covered fraction.
 
-J. The distinction between direct and indirect coverage (for example, coverage conducted through a refinement relationship) SHALL be surfaced as a caveat — a `~` marker accompanied by hover provenance — rather than as a distinct tier color. A configurable `allow_indirect` setting (default enabled) SHALL govern whether indirect coverage credits a dimension's state: when disabled, only direct coverage credits the state and indirect coverage SHALL be reported as present but not credited.
+J. A surface SHALL NOT annotate a coverage figure with a caveat standing in for a measure it did not show. Where the difference between measures matters, the measures themselves SHALL be reported (REQ-d00069-L).
 
 K. The coverage dimension labels SHALL be derived from a single configurable mapping from each coverage-conferring relationship to its display word, and every surface SHALL render dimension labels through that one mapping.
 
 L. A per-status `expects_implementation` flag SHALL declare whether a requirement in that status is expected to have implementation; its default SHALL be derived from the status's role, so that active-role statuses expect implementation and others do not. When a status does not expect implementation, absent implementation SHALL be neither flagged as a gap, nor error-colored, nor counted against aggregate implemented coverage. All surfaces SHALL resolve this flag through a single shared helper, and it SHALL supersede the coverage-exclusion role when determining coverage inclusion.
 
+M. A surface reporting which assertions need work SHALL read the immediate direct measure, so that an *Assertion* no citation names is reported however much whole-requirement evidence its requirement carries and however finished the requirements refining it are.
+
+N. [Removed - moved to REQ-d00277-C, where every coverage dimension is defined. Two authorities for what Passing counts is the duplication that split exists to remove.]
+
+O. Tested SHALL be reported with a breakdown of the assertions it counts into those that passed, those that failed, and those awaiting a result, and the three counts SHALL together account for every tested *Assertion*. The breakdown qualifies the Tested figure and SHALL NOT introduce a coverage dimension of its own.
+
+### Rationale
+
+The measures answer different questions, so the surfaces divide along the same line: what still needs doing is read from the immediate direct measure, because an *Assertion* no citation names is work whatever is happening below it, while a summary headlines total, because a reader asking how far along something is wants one number that counts each *Assertion* once.
+
+A caveat marker was how a single figure used to admit it was standing in for two. With the measures published there is nothing for it to admit, and a marker that means "this number is partly something else" is worse than the something else being shown.
+
+N draws the line between measuring a requirement's tests and measuring its code. A test that names an *Assertion* and passes is the only thing that says that *Assertion* passes; that a line of implementing code ran during some test run says the code was reached, which is a different fact about a different subject. Crediting the second as the first was a workaround for an inability that does not exist: a test can carry its `Verifies:` in every language the tool reads tests in, so an *Assertion* reported as passing without one is reporting an annotation nobody wrote. It also broke the chain -- Passing could credit an *Assertion* Tested did not, leaving the two figures incomparable and the excess unexplainable to a reader.
+
+Line coverage is kept and reported in its own right, because how much of the implementation a run exercised is worth knowing. It answers about lines, not about assertions, and REQ-d00254-B keeps it there: a dimension beside the *Traceability* ones, never folded into them. Correlating executable lines with the assertions they implement is a coherent thing to want, and would remain a separate dimension if it were ever built.
+
+O says a tested *Assertion* is always in exactly one of three states, and that a reader is told all three. Passing alone leaves the remainder ambiguous: an *Assertion* absent from it either failed or never returned a verdict, and those call for opposite actions -- one is a defect to fix, the other a run to complete or ingest. An estate can be entirely green on Passing while most of its tests never ran, and until the three are counted together nothing says so. They break Tested down rather than standing beside it, because each one is a tested *Assertion* seen from closer up, not a further dimension of coverage.
+
+A reports how the estate is doing and M reports what is left to do; the two questions want different measures. Crediting whole-requirement evidence to every *Assertion* is defensible when summarising, because the evidence plausibly reaches them and the indirect measures are published beside the total, so a reader can see how much of it there is. It is not defensible when listing work, because an *Assertion* nobody has written evidence for is precisely what the list exists to surface — and on a measure that credits whole-requirement evidence it is the one thing the list can never show.
+
 ### Changelog
 
+- 2026-08-19 | 879012b7 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-18 | e6e17ee9 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-18 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: a per-assertion pill shows the measures behind its standing rather than a caveat standing in for one (G)
+- 2026-08-17 | cc6480b3 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-17 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: headline total and publish the measures behind it (A); read work-lists from immediate direct evidence (M); retire the caveat marker that stood in for an unshown measure (J); chain each dimension within one measure (I)
+- 2026-08-17 | c0428191 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms, update hash
+- 2026-08-17 | 0f7c5cf2 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-17 | 2371dd44 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-11 | e0925092 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-17 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: state the display terms as the permitted set rather than a count (B); give Passing its own assertion, requiring one kind of evidence to indicate passing and neither to indicate failing (N); partition Tested into passed, failed and awaiting a result as a breakdown of it (O)
+- 2026-08-17 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: Passing counts only a declared test's own passing result; line coverage credits no traceability dimension (N)
+- 2026-08-11 | 5270fa45 | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: gap surfaces answer on the strict footing (M)
 - 2026-07-31 | 5270fa45 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-07 | 90053f29 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-07 | 4767b41c | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -575,4 +725,107 @@ L. A per-status `expects_implementation` flag SHALL declare whether a requiremen
 - 2026-07-03 | c843c727 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-02 | be97c170 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: add missing changelog section
 
-*End* *Reporting Surface Consistency* | **Hash**: 5270fa45
+*End* *Reporting Surface Consistency* | **Hash**: 879012b7
+
+---
+
+## REQ-d00274: Uncredited Coverage Evidence
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00015
+
+Coverage dimensions are chained: one dimension counts only the assertions another dimension already covers. Evidence can therefore name an *Assertion* its dimension does not count, and so contribute to no answer the tool gives. This requirement obliges the tool to say that the evidence exists and reaches nothing, rather than let it disappear into a denominator it was never in.
+
+### Assertions
+
+A. Where evidence for a coverage dimension names an *Assertion* that the dimension does not count, the tool SHALL report the evidence, the *Assertion* it names, and the dimension the evidence does not reach.
+
+B. Whether a dimension counts an *Assertion* SHALL be decided by the same rule that produces that dimension's figures under the project's own configuration, so that what is reported as uncredited is exactly what the project's coverage answers leave out.
+
+C. The severity of the report SHALL be what the project configures for it, and SHALL be an error where the project configures nothing.
+
+D. The report SHALL name the file and the line the evidence was written on, and SHALL distinguish evidence that only names the *Assertion* from evidence that also carries a result.
+
+E. Reporting SHALL NOT alter what the evidence credits: the *Assertion* SHALL remain uncounted by that dimension, and the reported evidence SHALL NOT enter any coverage figure on any measure.
+
+F. Where a dimension counts no *Assertion* of a requirement at all, the tool SHALL report that once for the requirement rather than once for each *Assertion* the evidence names.
+
+### Rationale
+
+An error default is the honest reading of what the condition means. A test that names an *Assertion* nothing implements is one of two defects: the implementation exists and its `Implements:` reference was never written, or the test is aimed at an *Assertion* it does not exercise. Neither is a matter of style, and both cost the estate the same thing — a requirement that reads as untested when it is tested, or as tested when it is not. A warning would leave the author to decide which of those two they are looking at without telling them there is a decision to make.
+
+B ties the report to the project's own arithmetic rather than to a measure named once here, because the two must not be able to drift apart: a finding that an *Assertion* went uncounted is only true if that same *Assertion* is uncounted in the figures the project reads. Satisfying B is therefore a matter of reading one definition rather than restating it — a second statement of what a dimension counts is a second thing to keep in step, and the report would eventually contradict the numbers beside it. A dimension counting whole-requirement evidence is the ordinary case: an *Assertion* credited only that way is inside the dimension and a test naming it credits normally, so an estate that annotates implementation per requirement and tests per *Assertion* is not reported wholesale for a pattern the tool encourages elsewhere.
+
+A and B divide the question between them. B settles what the dimension counts, which is the figures' business; A settles what the evidence names, which is not a matter of measure at all. Whole-requirement evidence names the requirement, and crediting it to every *Assertion* is the indirect measures' doing rather than the author's, so an *Assertion* reached only that way was named by nobody and cannot be reported as though evidence were aimed at it. F is where such evidence is answered, against the requirement it did name.
+
+This is not the question REQ-d00258-M answers. That assertion governs surfaces listing what remains to be done, which read the immediate direct measure so an *Assertion* with no evidence naming it cannot hide behind its requirement's. Here the *Assertion* is not missing evidence; it has evidence that credits nothing.
+
+### Changelog
+
+- 2026-08-18 | 2f1e6599 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-17 | b7624174 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: add missing changelog section
+
+*End* *Uncredited Coverage Evidence* | **Hash**: 2f1e6599
+
+## REQ-d00276: Tests Outside the Requirement Estate
+
+**Level**: dev | **Status**: Draft | **Implements**: REQ-p00015
+
+A test that no requirement claims still runs, and still passes or fails. Nothing about it reaches a coverage figure, because coverage answers for requirements and this test belongs to none. This requirement obliges the tool to report those tests as a set of their own, so that work happening outside the estate reads as work rather than as silence.
+
+### Assertions
+
+A. Tests that reach no requirement SHALL be reported together as their own set, and reporting them SHALL NOT credit or discredit any coverage figure.
+
+B. The report SHALL say what each such test returned, distinguishing one that passed, one that failed, and one awaiting a result.
+
+C. A failing test that reaches no requirement SHALL be reported at the severity the project configures for it, and SHALL be a warning where the project configures nothing.
+
+D. The report SHALL name the file and the line each reported test was written at.
+
+### Rationale
+
+The two states this set holds are different problems wearing one shape. A test that fails and belongs to nothing is most often a defect in the test itself -- aimed at something that no longer exists, or never named what it was for -- and it cannot be found through any requirement, because it hangs off none. A test that passes and belongs to nothing is work the estate cannot see: either its `Verifies:` was never written, or it exercises something no requirement claims, and which of those it is only the author can say.
+
+Neither belongs in a coverage figure, and putting them there is what the figures exist to avoid: a set of tests that reaches no requirement is exactly the population coverage is not measuring. Reporting them separately is the only way both facts stay true at once -- the figures stay about requirements, and the tests stop being invisible.
+
+C defaults to warning rather than error because the condition is not always a defect. A repository legitimately carries tests for things it has not written requirements for. What is not legitimate is not knowing.
+
+*End* *Tests Outside the Requirement Estate* | **Hash**: 922d1382
+
+---
+
+## REQ-d00277: Coverage Dimensions
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-d00069
+
+Each coverage dimension answers a different question about a requirement, conferred by a different relationship and read for a different purpose. They are stated one at a time so that one can be added, redefined or withdrawn without disturbing the others.
+
+### Assertions
+
+A. Implemented SHALL count an *Assertion* credited by an `Implements:` citation, by coverage conducted to it, or inherited through an INSTANCE or INTEGRATES relationship, measured over every *Assertion* of the requirement.
+
+B. Tested SHALL count an *Assertion* credited by a `Verifies:` citation, measured over the assertions Implemented counts.
+
+C. Passing SHALL count only an *Assertion* where a test declared against that *Assertion* returned a passing result and no such test returned a failure, measured over the assertions Tested counts.
+
+D. UAT Covered SHALL count an *Assertion* a journey `Validates:`, measured over every *Assertion* of the requirement.
+
+E. UAT Passed SHALL count an *Assertion* whose validating journey returned a passing result, measured over the assertions UAT Covered counts.
+
+### Rationale
+
+A dimension is a question, not a label. Implemented asks whether anything was built; Tested whether what was built is exercised; Passing whether the exercise succeeded. UAT Covered and UAT Passed ask that same pair of a user journey. A reader choosing between them is choosing which question to ask, so each is stated on its own and none is defined as a variation of another.
+
+The denominator is part of the definition. Tested measured over every *Assertion* would report an estate as untested when it is merely unbuilt, and those two call for different work.
+
+A single failure is decisive for the *Assertion* it lands on: C requires that no declared test returned a failure, because a passing sibling test does not retract a failure a test reported. How a failure reaches the requirement as a whole is a reporting rule, not a definition, and stays with the surfaces (REQ-d00258-I).
+
+The magnitude a dimension credits is governed by REQ-d00069-M, so a journey verified in part credits in proportion without any dimension restating the rule.
+
+The word each dimension is reported under is configurable (REQ-d00258-K); the names used here are the defaults, not the definitions.
+
+### Changelog
+
+- 2026-08-19 | b097dcd7 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash, add missing changelog section
+
+*End* *Coverage Dimensions* | **Hash**: b097dcd7

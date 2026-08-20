@@ -6,11 +6,34 @@ Single home for the "may a mutation create a spec file at this path" check,
 shared by the viewer HTTP route and the MCP move tool so both surfaces accept
 and reject identically (REQ-o00062-O).
 """
+
 from __future__ import annotations
 
 import fnmatch
 from pathlib import PurePosixPath
 from typing import Any
+
+
+def file_id_for_reference(reference: str, config: dict[str, Any]) -> str:
+    """Resolve a caller-supplied file reference to a FILE node id.
+
+    A mutation surface accepts either a FILE node id, which already names
+    the repository holding the file, or a bare repo-relative path, which
+    does not. A path can only mean the repository the surface is serving
+    -- its writes go under that repository's root -- so it is read in that
+    repository's namespace. Shared by the viewer routes and the MCP tools
+    so a path means the same thing on both.
+    """
+    from elspais.graph.GraphNode import FILE_ID_PREFIX, make_file_id
+
+    if reference.startswith(FILE_ID_PREFIX):
+        return reference
+    namespace = (config or {}).get("project", {}).get("namespace", "") or ""
+    if not namespace:
+        raise ValueError(
+            f"Cannot resolve '{reference}' to a file: this project declares no namespace."
+        )
+    return make_file_id(namespace, reference)
 
 
 def validate_new_spec_path(relative_path: str, config: dict[str, Any]) -> str | None:

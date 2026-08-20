@@ -380,6 +380,7 @@ def update_anchors_on_rename(
     return promote_events
 
 
+# Implements: REQ-d00235-A
 def compact_file(path: Path) -> int:
     """Rewrite a JSONL comment file, stripping resolved threads and collapsing promote chains.
 

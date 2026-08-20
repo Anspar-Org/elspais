@@ -132,9 +132,9 @@ class TestFormatTable:
         result = _format_table(headers, rows)
 
         expected = [
-            "| ID         | Title                        " "| File           | Hash     |",
-            "| ---------- | ---------------------------- " "| -------------- | -------- |",
-            "| REQ-p00001 | Requirements Management Tool " "| prd-elspais.md | bf63eda5 |",
+            "| ID         | Title                        | File           | Hash     |",
+            "| ---------- | ---------------------------- | -------------- | -------- |",
+            "| REQ-p00001 | Requirements Management Tool | prd-elspais.md | bf63eda5 |",
         ]
         assert result == expected
 

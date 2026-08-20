@@ -11,7 +11,7 @@ from pathlib import Path
 
 from elspais.commands.health import (
     HealthFinding,
-    check_broken_references,
+    check_reference_class,
     check_spec_format_rules,
     check_spec_hierarchy_levels,
     check_spec_implements_resolve,
@@ -276,8 +276,16 @@ def orphan_func():
 """
         )
 
+        from elspais.graph.reference_faults import FaultClass
+
         graph = _build(tmp_path, config_path, scan_code=True)
-        check = check_broken_references(graph)
+        check = check_reference_class(
+            graph,
+            None,
+            FaultClass.UNKNOWN_REQUIREMENT,
+            "references.unknown_requirement",
+            "claimed, but no such requirement exists",
+        )
 
         assert not check.passed, "Expected check to fail with broken references"
         assert len(check.findings) > 0, "Expected findings for broken references"

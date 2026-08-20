@@ -41,17 +41,17 @@ class TestFixtureHealthE2E:
         )
 
         data = json.loads(result.stdout)
-        assert (
-            data["summary"]["failed"] == 0
-        ), f"Fixture {fixture_dir.name} has {data['summary']['failed']} error(s)"
+        assert data["summary"]["failed"] == 0, (
+            f"Fixture {fixture_dir.name} has {data['summary']['failed']} error(s)"
+        )
 
     def test_REQ_p00002_health_text_output(self, fixture_dir) -> None:
         """elspais health produces readable text output."""
         result = run_elspais("checks", "--lenient", cwd=fixture_dir)
 
-        assert (
-            result.returncode == 0
-        ), f"elspais health failed on {fixture_dir.name}:\n{result.stderr}"
+        assert result.returncode == 0, (
+            f"elspais health failed on {fixture_dir.name}:\n{result.stderr}"
+        )
         # Text output should contain section headers
         assert "SPEC" in result.stdout or "spec" in result.stdout.lower()
 
@@ -62,14 +62,16 @@ class TestFixtureHealthE2E:
         assert result.returncode == 0
         data = json.loads(result.stdout)
         categories = {c["category"] for c in data["checks"]}
-        # --spec should only produce spec-category checks
-        assert categories <= {"spec"}, f"Expected only spec checks, got: {categories}"
+        # --spec should only produce spec-category checks -- "references" is
+        # part of that family (run_spec_checks emits both), not a code/tests
+        # category leaking in.
+        assert categories <= {"spec", "references"}, f"Expected only spec checks, got: {categories}"
 
     def test_REQ_p00002_health_formats(self, fixture_dir) -> None:
         """elspais health supports multiple output formats without crashing."""
         for fmt in ("text", "json", "markdown", "junit", "sarif"):
             result = run_elspais("checks", "--format", fmt, "--lenient", cwd=fixture_dir)
-            assert (
-                result.returncode == 0
-            ), f"Format {fmt} failed on {fixture_dir.name}:\n{result.stderr}"
+            assert result.returncode == 0, (
+                f"Format {fmt} failed on {fixture_dir.name}:\n{result.stderr}"
+            )
             assert len(result.stdout) > 0, f"Format {fmt} produced empty output"

@@ -3,7 +3,7 @@
 
 Validates REQ-d00211-A: config_types from id_patterns.types
 Validates REQ-d00211-B: config_relationship_kinds
-Validates REQ-d00211-C: config_statuses from allowed_statuses
+Validates REQ-d00211-C: config_statuses from the declared status roles
 Validates REQ-d00211-D: statuses in template context sorted by role order
 """
 
@@ -121,7 +121,7 @@ class TestExtractViewerConfigRelationshipKinds:
 
 
 class TestExtractViewerConfigStatuses:
-    """Validates REQ-d00211-C: config_statuses from allowed_statuses."""
+    """Validates REQ-d00211-C: config_statuses from the declared status roles."""
 
     def test_REQ_d00211_C_empty_config_returns_default_statuses(self):
         """Empty config should return sensible default statuses."""
@@ -134,7 +134,7 @@ class TestExtractViewerConfigStatuses:
         assert len(statuses) >= 0
 
     def test_REQ_d00211_C_custom_statuses(self, custom_statuses_config):
-        """Custom allowed_statuses from config are returned."""
+        """The statuses a project declares in its roles are returned."""
         from elspais.server.app import _extract_viewer_config
 
         result = _extract_viewer_config(custom_statuses_config)

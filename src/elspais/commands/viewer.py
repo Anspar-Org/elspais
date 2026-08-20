@@ -6,6 +6,7 @@ Starts a Flask-based server for browsing and editing the traceability graph.
 Extracted from trace.py to separate the interactive viewer from static report
 generation.
 """
+
 from __future__ import annotations
 
 import argparse

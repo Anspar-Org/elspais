@@ -25,11 +25,15 @@ from pathlib import Path
 import pytest
 
 from elspais.graph.factory import build_graph as build_repo_graph
+from elspais.graph.GraphNode import make_file_id
 from elspais.graph.render import render_file
+from tests.core.graph_test_helpers import grammar_for
 
 TARGET_ID = "REQ-d00001"
 ASSERTION_LABELS = ("A", "B", "C", "D")
 FIXTURES_DIR = Path(__file__).parent.parent / "fixtures"
+# The namespace the hht-like fixture declares; structural node ids carry it.
+NAMESPACE = "REQ"
 
 
 @pytest.fixture
@@ -83,7 +87,7 @@ class TestUndoDeleteRequirementRestoresAttachment:
         root_count = graph.root_count()
         # Guard: the fixture requirement must actually be attached, otherwise
         # the round trip below would compare orphan to orphan.
-        assert before["file_id"] == "file:spec/dev-impl.md"
+        assert before["file_id"] == make_file_id(NAMESPACE, "spec/dev-impl.md")
         assert before["incoming"] and before["outgoing"]
 
         graph.delete_requirement(TARGET_ID)
@@ -113,9 +117,9 @@ class TestUndoDeleteRequirementRestoresAttachment:
 
         graph.undo_last()
         for label in ASSERTION_LABELS:
-            assert (
-                graph.find_by_id(f"{TARGET_ID}-{label}") is not None
-            ), f"{TARGET_ID}-{label} not restored by undo"
+            assert graph.find_by_id(f"{TARGET_ID}-{label}") is not None, (
+                f"{TARGET_ID}-{label} not restored by undo"
+            )
 
     def test_REQ_o00062_P_undo_restores_requirement_to_rendered_file(
         self, requirement_graph_from_disk
@@ -126,13 +130,16 @@ class TestUndoDeleteRequirementRestoresAttachment:
         graph = requirement_graph_from_disk
         node = graph.find_by_id(TARGET_ID)
         file_node = node.file_node()
-        before_text = render_file(file_node)
+        before_text = render_file(file_node, resolver=grammar_for("REQ"))
         assert f"{TARGET_ID}: Authentication Module" in before_text
 
         graph.delete_requirement(TARGET_ID)
-        assert f"{TARGET_ID}: Authentication Module" not in render_file(file_node)
+        assert f"{TARGET_ID}: Authentication Module" not in render_file(
+            file_node,
+            resolver=grammar_for("REQ"),
+        )
 
         graph.undo_last()
-        after_text = render_file(file_node)
+        after_text = render_file(file_node, resolver=grammar_for("REQ"))
         assert f"{TARGET_ID}: Authentication Module" in after_text
         assert after_text == before_text

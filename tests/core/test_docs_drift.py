@@ -5,6 +5,7 @@ Validates REQ-d00210-A: doctor includes docs.config_drift health check
 Validates REQ-d00210-B: reports undocumented and stale sections
 Validates REQ-d00210-C: passes when all documented, fails otherwise
 """
+
 from __future__ import annotations
 
 from pathlib import Path

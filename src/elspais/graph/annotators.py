@@ -3,7 +3,7 @@
 # Implements: REQ-o00051-E, REQ-o00051-F
 # Implements: REQ-d00050-A, REQ-d00050-B, REQ-d00050-C, REQ-d00050-D, REQ-d00050-E
 # Implements: REQ-d00051-A, REQ-d00051-B, REQ-d00051-C, REQ-d00051-D
-# Implements: REQ-d00051-E, REQ-d00051-F
+# Implements: REQ-d00051-F
 # Implements: REQ-d00055-A, REQ-d00055-B, REQ-d00055-C, REQ-d00055-D, REQ-d00055-E
 # Implements: REQ-d00069-A, REQ-d00069-B, REQ-d00069-D
 # Implements: REQ-d00215-A+B+C+D+E
@@ -25,7 +25,7 @@ Usage:
 from __future__ import annotations
 
 import functools
-import re
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -33,25 +33,12 @@ from typing import TYPE_CHECKING, Any
 from elspais.config.schema import ElspaisConfig
 from elspais.utilities.test_identity import build_test_id_from_nodeid
 
-_SCHEMA_FIELDS = {f.alias or name for name, f in ElspaisConfig.model_fields.items()} | set(
-    ElspaisConfig.model_fields.keys()
-)
-
 
 def _validate_config(config: dict[str, Any]) -> ElspaisConfig:
-    """Validate a config dict into ElspaisConfig, stripping non-schema keys."""
-    filtered = {k: v for k, v in config.items() if k in _SCHEMA_FIELDS}
-    assoc = filtered.get("associates")
-    if isinstance(assoc, dict) and "paths" in assoc:
-        filtered.pop("associates", None)
-    return ElspaisConfig.model_validate(filtered)
+    """Validate a config dict into ElspaisConfig (see config.validate_config)."""
+    from elspais.config import validate_config
 
-
-# Implements: REQ-p00016
-_NA_PATTERN = re.compile(
-    r"([\w-]+-[A-Z0-9]+)\s+SHALL\s+be\s+NOT\s+APPLICABLE",
-    re.IGNORECASE,
-)
+    return validate_config(config)
 
 
 # Implements: REQ-d00254-A+B+F
@@ -64,6 +51,50 @@ class CoverageCreditConfig:
     coverage_dirs: tuple[str, ...] = ()
     assertion_credit: str = "off"  # "off" | "tested" | "verified"
     min_coverage_fraction: float = 0.0
+
+
+# Implements: REQ-d00261-E
+@dataclass(frozen=True)
+class CreditPolicy:
+    """Which crediting settings apply to which evidence.
+
+    Crediting settings are declared by a repository, in paths relative to
+    that repository's root, so they mean nothing outside it. A federation
+    annotates several repositories in one pass; each piece of evidence is
+    credited under the settings of the repository that holds it, and a
+    repository that declares none is credited exactly as it is when built
+    alone (REQ-d00261-E).
+
+    ``owner`` answers which repository a node belongs to; over a single
+    repository it is absent and every node takes ``default``.
+    """
+
+    default: CoverageCreditConfig = field(default_factory=CoverageCreditConfig)
+    by_repo: Mapping[str, CoverageCreditConfig] = field(default_factory=dict)
+    owner: Callable[[Any], str | None] | None = None
+
+    def owner_of(self, node) -> str | None:
+        """Return the name of the repository owning ``node``, if known."""
+        if self.owner is None or node is None:
+            return None
+        return self.owner(node)
+
+    def for_owner(self, repo: str | None) -> CoverageCreditConfig:
+        """Return the crediting settings a named repository declares."""
+        if repo is None:
+            return self.default
+        return self.by_repo.get(repo, self.default)
+
+    def for_node(self, node) -> CoverageCreditConfig:
+        """Return the crediting settings governing evidence held by ``node``."""
+        return self.for_owner(self.owner_of(node))
+
+
+def _as_policy(credit: CoverageCreditConfig | CreditPolicy | None) -> CreditPolicy:
+    """Accept either a single config (one repository) or a per-repo policy."""
+    if isinstance(credit, CreditPolicy):
+        return credit
+    return CreditPolicy(default=credit or CoverageCreditConfig())
 
 
 # Implements: REQ-d00254-A
@@ -95,18 +126,42 @@ def _match_app_dir(path: str | None, app_dirs: tuple[str, ...]) -> str | None:
 
 # Implements: REQ-d00254-A
 def _compute_app_status(graph, app_dirs: tuple[str, ...]) -> dict[str, str]:
-    """Map app dir -> 'green'|'red' from RESULT node statuses (CUR-1533)."""
+    """Map app dir -> 'green'|'red' from RESULT node statuses (CUR-1533).
+
+    The one-repository case of ``_compute_app_status_by_owner``: every
+    result answers to the same declared app dirs.
+    """
+    policy = CreditPolicy(default=CoverageCreditConfig(app_dirs=app_dirs))
+    return _compute_app_status_by_owner(graph, policy).get(None, {})
+
+
+# Implements: REQ-d00261-E
+def _compute_app_status_by_owner(graph, policy: CreditPolicy) -> dict[str | None, dict[str, str]]:
+    """Map repository -> its own app-dir statuses.
+
+    A result belongs to the repository that recorded it, and the app dirs it
+    can match are the ones that repository declares. Two repositories that
+    both call their test directory ``tests`` therefore keep separate
+    verdicts instead of one deciding the other's.
+    """
     from elspais.graph import NodeKind
 
-    failed_by_app: dict[str, bool] = {}
+    failed: dict[tuple[str | None, str], bool] = {}
     for r in graph.nodes_by_kind(NodeKind.RESULT):
+        owner = policy.owner_of(r)
+        app_dirs = policy.for_owner(owner).app_dirs
+        if not app_dirs:
+            continue
         app = _match_app_dir(r.get_field("source_path"), app_dirs)
         if app is None:
             continue
         status = (r.get_field("status") or "").lower()
         is_fail = status in ("failed", "fail", "failure", "error")
-        failed_by_app[app] = failed_by_app.get(app, False) or is_fail
-    return {app: ("red" if failed else "green") for app, failed in failed_by_app.items()}
+        failed[(owner, app)] = failed.get((owner, app), False) or is_fail
+    result: dict[str | None, dict[str, str]] = {}
+    for (owner, app), is_fail in failed.items():
+        result.setdefault(owner, {})[app] = "red" if is_fail else "green"
+    return result
 
 
 if TYPE_CHECKING:
@@ -409,7 +464,6 @@ def count_by_repo(
     repo_counts: dict[str, dict[str, int]] = {}
 
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
-
         prefix = node.get_metric("repo_prefix", "CORE")
         status = node.get_field("status", "Active")
 
@@ -462,27 +516,6 @@ def collect_topics(graph: FederatedGraph) -> list[str]:
             topic = stem.split("-", 1)[1] if "-" in stem else stem
             all_topics.add(topic)
     return sorted(all_topics)
-
-
-def get_implementation_status(node: GraphNode) -> str:
-    """Get implementation status for a requirement node.
-
-    Args:
-        node: The GraphNode to check.
-
-    Returns:
-        'Full': referenced_pct >= 100
-        'Partial': referenced_pct > 0
-        'Unimplemented': referenced_pct == 0
-    """
-    rollup = node.get_metric("rollup_metrics")
-    pct = rollup.implemented.indirect_pct if rollup else 0
-    if pct >= 100:
-        return "Full"
-    elif pct > 0:
-        return "Partial"
-    else:
-        return "Unimplemented"
 
 
 def count_by_coverage(
@@ -578,7 +611,7 @@ def count_code_coverage(graph: FederatedGraph) -> dict[str, int]:
     Returns dict with:
     - total_executable_lines: sum of executable_lines across FILE nodes
     - total_covered_lines: sum of lines where hit_count > 0 across FILE nodes
-    - total_attributed_lines: sum of code_tested.total across all REQUIREMENT nodes
+    - total_attributed_lines: sum of code_tested.total_lines across all REQUIREMENT nodes
       (lines shared across REQs may be counted multiple times)
     """
     from elspais.graph import NodeKind
@@ -598,7 +631,7 @@ def count_code_coverage(graph: FederatedGraph) -> dict[str, int]:
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
         rollup = node.get_metric("rollup_metrics")
         if rollup is not None:
-            total_attributed += rollup.code_tested.total
+            total_attributed += rollup.code_tested.total_lines
 
     return {
         "total_executable_lines": total_executable,
@@ -624,7 +657,6 @@ def count_by_git_status(graph: FederatedGraph) -> dict[str, int]:
     }
 
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
-
         if node.get_metric("is_uncommitted", False):
             counts["uncommitted"] += 1
         if node.get_metric("is_branch_changed", False):
@@ -712,7 +744,7 @@ def _compute_code_tested(
         metrics: The RollupMetrics to update (modifies code_tested in place).
     """
     from elspais.graph import NodeKind
-    from elspais.graph.metrics import CoverageDimension
+    from elspais.graph.metrics import LineCoverage
     from elspais.graph.relations import EdgeKind
 
     # Collect implementation lines: set of (relative_path, line_number)
@@ -786,6 +818,30 @@ def _compute_code_tested(
         has_any_coverage = True
         break  # Just checking existence
 
+    # Implements: REQ-d00258-E
+    # Whether the ingested coverage carried per-test contexts is a fact about
+    # the TOOLING, established at ingestion: the factory sets `line_contexts`
+    # only when the parser returned a non-empty contexts map, and aggregate-only
+    # formats return none. Read here so a surface can tell "the question was
+    # never asked" from "the answer is zero" instead of inferring it from a
+    # count that means both.
+    has_any_contexts = False
+    for edge in node.iter_outgoing_edges():
+        if edge.kind != EdgeKind.IMPLEMENTS:
+            continue
+        target = edge.target
+        if target.kind != NodeKind.CODE:
+            continue
+        fn = target.file_node()
+        if fn is None:
+            continue
+        rel_path = fn.get_field("relative_path")
+        if not rel_path or rel_path not in lines_by_file:
+            continue
+        if fn.get_field("line_contexts"):
+            has_any_contexts = True
+            break
+
     if has_any_coverage:
         # Build file_node cache for coverage lookup
         file_coverage: dict[str, dict[int, int]] = {}
@@ -824,11 +880,12 @@ def _compute_code_tested(
     # are deliberately excluded rather than treated as equivalent to "|run".
     direct_count = _direct_context_count(node, lines_by_file)
 
-    metrics.code_tested = CoverageDimension(
-        total=len(impl_lines),
-        direct=direct_count,
-        indirect=indirect_count,
-        has_failures=False,
+    metrics.code_tested = LineCoverage(
+        total_lines=len(impl_lines),
+        attributed_lines=direct_count,
+        covered_lines=indirect_count,
+        has_measurement=has_any_coverage,
+        has_contexts=has_any_contexts,
     )
 
 
@@ -968,15 +1025,17 @@ def _block_region_lines(file_node, cache: dict) -> dict:
 
 # Implements: REQ-d00254-B
 def _compute_lcov_tested(
-    node, metrics, credit, app_status, region_cache: dict | None = None
+    node, metrics, policy: CreditPolicy, app_status_by_owner, region_cache: dict | None = None
 ) -> None:
-    """Credit the lcov_tested dimension from covered // Implements: lines (CUR-1533)."""
+    """Credit the lcov_tested dimension from covered // Implements: lines (CUR-1533).
+
+    Line-coverage credit is decided per implementing file, under the settings
+    of the repository that holds it: its coverage directories, its minimum
+    fraction and its app status (REQ-d00261-E).
+    """
     from elspais.graph import NodeKind
     from elspais.graph.metrics import CoverageDimension
     from elspais.graph.relations import EdgeKind
-
-    if credit.assertion_credit == "off":
-        return
 
     labels = [
         c.get_field("label", "")
@@ -990,6 +1049,8 @@ def _compute_lcov_tested(
     blanket_lines: set[tuple[str, int]] = set()
     file_cov: dict[str, dict[int, int]] = {}
     file_app: dict[str, str | None] = {}
+    file_credit: dict[str, CoverageCreditConfig] = {}
+    file_owner: dict[str, str | None] = {}
 
     for edge in node.iter_outgoing_edges():
         if edge.kind != EdgeKind.IMPLEMENTS:
@@ -1008,6 +1069,10 @@ def _compute_lcov_tested(
         fn = target.file_node()
         if fn is None:
             continue
+        owner = policy.owner_of(fn)
+        credit = policy.for_owner(owner)
+        if credit.assertion_credit == "off":
+            continue
         rel = fn.get_field("relative_path")
         if not rel or not _under_dirs(rel, credit.coverage_dirs):
             continue
@@ -1016,6 +1081,8 @@ def _compute_lcov_tested(
             continue
         file_cov.setdefault(rel, lc)
         file_app.setdefault(rel, _match_app_dir(rel, credit.app_dirs))
+        file_credit.setdefault(rel, credit)
+        file_owner.setdefault(rel, owner)
         if end == start:
             owned = _block_region_lines(fn, region_cache if region_cache is not None else {}).get(
                 start, set()
@@ -1039,42 +1106,54 @@ def _compute_lcov_tested(
         covered = sum(1 for (rel, ln) in lines if file_cov.get(rel, {}).get(ln, 0) > 0)
         return covered / len(lines)
 
+    def threshold(lines: set[tuple[str, int]]) -> float:
+        """The strictest minimum any contributing file's repository sets."""
+        return max(
+            (file_credit[rel].min_coverage_fraction for rel, _ in lines if rel in file_credit),
+            default=0.0,
+        )
+
     direct_pct: dict[str, float] = {}
     for lbl, lines in direct_lines.items():
         f = frac(lines)
-        if f > 0 and f >= credit.min_coverage_fraction:
+        if f > 0 and f >= threshold(lines):
             direct_pct[lbl] = f
 
-    indirect_pct: dict[str, float] = dict(direct_pct)
+    # Implements: REQ-d00069-L, REQ-d00069-M
+    # The measures partition by WHAT THE CITATION NAMED: an assertion-targeted
+    # `Implements:` credits the assertion it names (direct), a blanket one
+    # credits every assertion of the requirement (indirect). The two maps are
+    # DISJOINT -- an assertion cited by name is not also whole-requirement
+    # evidence -- and both are immediate, because line-coverage credit is
+    # attached to the requirement whose code was executed and is never
+    # conducted up a `Refines:` chain (``lcov_tested`` is absent from
+    # ``_PROPAGATING_DIMENSIONS``).
+    blanket_pct: dict[str, float] = {}
     if blanket_lines:
         bf = frac(blanket_lines)
-        if bf > 0 and bf >= credit.min_coverage_fraction:
+        if bf > 0 and bf >= threshold(blanket_lines):
             for lbl in labels:
-                indirect_pct.setdefault(lbl, bf)
+                if lbl not in direct_pct:
+                    blanket_pct[lbl] = bf
 
-    if not indirect_pct:
+    if not direct_pct and not blanket_pct:
         return
 
+    # Implements: REQ-d00254-A, REQ-d00254-B
+    # No failure flag. A red application is one aggregate verdict, and
+    # attributing it to every lcov-credited *Assertion* blames assertions no
+    # failing test named -- the inference this dimension is no longer allowed
+    # to make. Line coverage measures which lines a run executed; whether that
+    # run's tests passed is the results' business, reported there.
     has_failures = False
-    if credit.assertion_credit == "verified":
-        apps = {file_app.get(rel) for rel in file_cov}
-        has_failures = any(app_status.get(a) == "red" for a in apps if a)
-
-    # A red app is a whole-application failure signal, so it attributes to every
-    # lcov-credited assertion (there is no per-assertion granularity in app
-    # status); an assertion with no lcov credit stays unblamed (REQ-d00258-G).
-    failing_labels = set(indirect_pct) if has_failures else set()
+    failing_labels: set[str] = set()
 
     metrics.lcov_tested = CoverageDimension(
         total=len(labels),
-        direct=sum(direct_pct.values()),
-        indirect=sum(indirect_pct.values()),
         has_failures=has_failures,
         failing_labels=failing_labels,
-        direct_labels=set(direct_pct),
-        indirect_labels=set(indirect_pct),
-        direct_pct_by_label=dict(direct_pct),
-        indirect_pct_by_label=dict(indirect_pct),
+        immediate_direct_by_label=dict(direct_pct),
+        immediate_indirect_by_label=dict(blanket_pct),
     )
 
 
@@ -1234,13 +1313,18 @@ def annotate_journey_verification(graph: FederatedGraph) -> None:
 
 
 # Implements: REQ-p00061-A
-def annotate_coverage(graph: FederatedGraph, credit: CoverageCreditConfig | None = None) -> None:
+def annotate_coverage(
+    graph: FederatedGraph, credit: CoverageCreditConfig | CreditPolicy | None = None
+) -> None:
     """Compute and store coverage metrics for all requirement nodes.
 
     This function traverses the graph once to compute RollupMetrics for
     each REQUIREMENT node. Metrics are stored in node._metrics as:
     - "rollup_metrics": The full RollupMetrics object
-    - "referenced_pct": Coverage percentage (for convenience)
+    Note there is no "referenced_pct" metric. It was the strict footing --
+    assertions a citation named -- and was retired with the strict/generous
+    pair; the measure it stood for is now ``immediate_direct``, read through
+    ``WORK_LIST_MEASURE``.
 
     Coverage is determined by outgoing edges from REQUIREMENT nodes:
     - The builder links TEST/CODE/REQ as children of the parent REQ
@@ -1265,6 +1349,10 @@ def annotate_coverage(graph: FederatedGraph, credit: CoverageCreditConfig | None
 
     Args:
         graph: The TraceGraph to annotate.
+        credit: The crediting settings to apply -- one ``CoverageCreditConfig``
+            when every node answers to the same repository, or a
+            ``CreditPolicy`` when the graph spans several and each repository's
+            evidence must be credited under its own settings (REQ-d00261-E).
     """
     from elspais.graph import NodeKind
     from elspais.graph.metrics import (
@@ -1274,40 +1362,11 @@ def annotate_coverage(graph: FederatedGraph, credit: CoverageCreditConfig | None
     )
     from elspais.graph.relations import EdgeKind
 
-    if credit is None:
-        credit = CoverageCreditConfig()
-    app_status = _compute_app_status(graph, credit.app_dirs) if credit.app_dirs else {}
+    policy = _as_policy(credit)
+    app_status_by_owner = _compute_app_status_by_owner(graph, policy)
     region_cache: dict = {}
 
-    # Build a per-file index of RESULT nodes with match=="source" (Task 5).
-    # Maps repo-relative source_file -> list of status strings (lowercased).
-    # Exclude precisely-resolved results (match_scope "test" or "step"):
-    # those credit inline (below) rather than via file-level all-pass/any-fail
-    # semantics.
-    #
-    # source_file_carried (CUR-1557) is a parallel map recording whether
-    # EVERY contributing RESULT for that source file was carried (baseline).
-    # It's file-granular (not per-status) since source_file_index itself only
-    # retains status strings, not node identity; a file with a mix of
-    # carried/fresh results is treated as NOT fully carried (safe default:
-    # under-claim "carried" rather than mislabel fresh coverage as baseline).
-    source_file_index: dict[str, list[str]] = {}
-    _source_file_carried_flags: dict[str, list[bool]] = {}
-    for r in graph.nodes_by_kind(NodeKind.RESULT):
-        if (r.get_field("match") or "") == "source" and r.get_field("match_scope") not in (
-            "test",
-            "step",
-        ):
-            sf = r.get_field("source_file")
-            if sf:
-                source_file_index.setdefault(sf, []).append((r.get_field("status") or "").lower())
-                _source_file_carried_flags.setdefault(sf, []).append(bool(r.get_field("carried")))
-    source_file_carried: dict[str, bool] = {
-        sf: all(flags) for sf, flags in _source_file_carried_flags.items()
-    }
-
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
-
         metrics = RollupMetrics()
 
         # Collect assertion children
@@ -1372,6 +1431,13 @@ def annotate_coverage(graph: FederatedGraph, credit: CoverageCreditConfig | None
                 # which conducts the refining requirement's coverage upward.
                 continue
 
+            if edge.kind == EdgeKind.INTEGRATES:
+                # An INTEGRATES edge credits the consumer through the live
+                # `integrates_rollup()` overlay, which reads the library
+                # requirement's own finalized metrics. Folding it in here too
+                # would count the same library evidence twice.
+                continue
+
             target_node = edge.target
             target_kind = target_node.kind
 
@@ -1395,7 +1461,7 @@ def annotate_coverage(graph: FederatedGraph, credit: CoverageCreditConfig | None
                 else:
                     # Blanket `Implements: REQ` (no assertion suffix) on CODE:
                     # a whole-requirement implementation reference credits ALL
-                    # assertions at full value into the INDIRECT footing, mirroring
+                    # assertions at full value into the INDIRECT measures, mirroring
                     # TEST_INDIRECT (whole-req Verifies) and INFERRED (child REQ).
                     # REQ-d00069-B closes the prior asymmetry (this had no else).
                     for label in assertion_labels:
@@ -1438,8 +1504,16 @@ def annotate_coverage(graph: FederatedGraph, credit: CoverageCreditConfig | None
                                     )
                                 )
 
-                        # Track for RESULT lookup (use CODE's assertion_targets)
-                        test_nodes_for_result_lookup.append((transitive_test, None))
+                        # Implements: REQ-d00258-N
+                        # Deliberately NOT registered for result lookup. This
+                        # test names the CODE, not the *Assertion*: its verdict
+                        # says the implementing code was exercised, which is
+                        # not the same claim as the *Assertion* having been
+                        # checked. Registering it credited Passing for every
+                        # assertion of the requirement -- so Passing could
+                        # exceed Tested, on evidence no author aimed anywhere.
+                        # The INDIRECT contributions above remain, as
+                        # provenance (REQ-d00069-A).
 
             elif target_kind == NodeKind.REQUIREMENT:
                 # Child REQ implements this REQ
@@ -1500,14 +1574,13 @@ def annotate_coverage(graph: FederatedGraph, credit: CoverageCreditConfig | None
         verified_saw_signal = False
         verified_all_carried = True
         for test_node, assertion_targets in test_nodes_for_result_lookup:
-            saw_result = False
             for result in test_node.iter_children():
                 if result.kind != NodeKind.RESULT:
                     continue
                 # Implements: REQ-d00254-G
-                # Skip inline only for FILE-scope source-match results (credited
-                # via source_file_index below: all-pass credits / any-fail flags
-                # the whole file). Precisely-resolved source results
+                # A source-match result that resolved to neither a step nor a
+                # test bound at file granularity only, so it names no test and
+                # credits nothing. Precisely-resolved source results
                 # (match_scope "test" or "step") credit inline like test_id
                 # results: their pass credits their assertions; their fail
                 # flags only their own test.
@@ -1517,7 +1590,6 @@ def annotate_coverage(graph: FederatedGraph, credit: CoverageCreditConfig | None
                     and result.get_field("match_scope") not in ("test", "step")
                 ):
                     continue
-                saw_result = True
                 status = (result.get_field("status", "") or "").lower()
                 if status in ("passed", "pass", "success"):
                     if assertion_targets:
@@ -1536,59 +1608,17 @@ def annotate_coverage(graph: FederatedGraph, credit: CoverageCreditConfig | None
                     verified_saw_signal = True
                     if not (result.get_field("carried") or False):
                         verified_all_carried = False
-            if not saw_result:
-                fn = test_node.file_node()
-                rel = fn.get_field("relative_path") if fn else None
-                # Implements: REQ-d00254-G
-                # Source-match file-granular path: match RESULT nodes by source_file.
-                if rel and rel in source_file_index:
-                    statuses = source_file_index[rel]
-                    if any(s in ("failed", "fail", "failure", "error") for s in statuses):
-                        has_failures = True
-                        verified_failing_labels |= _failing_targets(
-                            assertion_targets, assertion_labels
-                        )
-                        verified_saw_signal = True
-                        if not source_file_carried.get(rel, False):
-                            verified_all_carried = False
-                    elif any(
-                        s in ("passed", "pass", "success") for s in statuses
-                    ):  # >=1 passed, none failed
-                        if assertion_targets:
-                            for label in assertion_targets:
-                                if label in assertion_labels:
-                                    validated_labels.add(label)
-                        else:
-                            for label in assertion_labels:
-                                validated_indirect_labels.add(label)
-                        verified_saw_signal = True
-                        if not source_file_carried.get(rel, False):
-                            verified_all_carried = False
-                elif credit.unmatched_credit == "verified":
-                    # Aggregate app-green path: derived from per-app green/red
-                    # status, not a specific RESULT node, so carried-ness can't
-                    # be recovered precisely here. Per the safe-ambiguity rule
-                    # (CUR-1557), default this signal to fresh rather than risk
-                    # mislabeling fresh coverage as "(baseline)".
-                    app = _match_app_dir(rel, credit.app_dirs)
-                    st = app_status.get(app) if app else None
-                    if st == "green":
-                        if assertion_targets:
-                            for label in assertion_targets:
-                                if label in assertion_labels:
-                                    validated_labels.add(label)
-                        else:
-                            for label in assertion_labels:
-                                validated_indirect_labels.add(label)
-                        verified_saw_signal = True
-                        verified_all_carried = False
-                    elif st == "red":
-                        has_failures = True
-                        verified_failing_labels |= _failing_targets(
-                            assertion_targets, assertion_labels
-                        )
-                        verified_saw_signal = True
-                        verified_all_carried = False
+            # Implements: REQ-d00254-A
+            # A test with no result of its own contributes no verdict, and its
+            # assertions are awaiting one. No verdict is inferred from the
+            # results of OTHER tests -- not from the file this test is written
+            # in, and not from the application it belongs to. That inference
+            # existed for test files that supposedly could not carry their own
+            # `Verifies:`; they can, so it bought nothing and cost the
+            # distinction REQ-d00258-O reports: a deselected tier, an unbuilt
+            # target and a crashed runner all read as passing. Its failing half
+            # blamed an *Assertion* for a sibling test's failure, which
+            # REQ-d00258-G forbids one level down.
 
         # Implements: REQ-d00069-A, REQ-d00255-C, REQ-d00256
         # UAT roll-up: source each validating journey's verdict from its
@@ -1653,7 +1683,7 @@ def annotate_coverage(graph: FederatedGraph, credit: CoverageCreditConfig | None
 
         # Compute code_tested dimension from coverage data
         _compute_code_tested(node, metrics, region_cache)
-        _compute_lcov_tested(node, metrics, credit, app_status, region_cache)
+        _compute_lcov_tested(node, metrics, policy, app_status_by_owner, region_cache)
 
         # Store in node metrics
         node.set_metric("rollup_metrics", metrics)
@@ -1688,44 +1718,42 @@ def _conduct_refines_coverage(graph: FederatedGraph) -> None:
     requirement contributes its own rolled-up coverage as one equal-weight
     incoming edge to the targeted parent *Assertion* (REQ-d00069-J).
 
-    Per assertion A of requirement R, for each dimension and each strictness
-    ``mode`` ("direct" = assertion-targeted only, "indirect" = also
-    whole-requirement):
+    This pass computes the two ROLLED measures of REQ-d00069-L,
+    ``rolled_direct_by_label`` and ``rolled_indirect_by_label``. They hold
+    conducted value ONLY, never the evidence attached to the *Assertion* itself
+    -- that is the immediate pair, written earlier and read here as fixed
+    input. Each measure conducts into the same measure, direct into direct and
+    indirect into indirect, so no measure is ever composed of another. The
+    refining citation's shape decides only WHICH assertions receive a conducted
+    value: the one it names, or every assertion where it names the requirement
+    alone. A blanket citation therefore conducts the refining requirement's
+    DIRECT coverage into the parent's rolled DIRECT measure -- the citation
+    shape it was written in does not change which measure the value belongs to.
 
-    - direct contributors = (1.0 if A has local direct leaf evidence) plus
-      ``coverage(child)`` for every assertion-targeted REFINES edge naming A.
-      The direct value is their mean (0.0 if there are none). Whole-requirement
-      (blanket) credit never enters the direct footing -- it stays a precise,
-      non-transitive locator (REQ-d00069-J/L).
-    - the indirect (generous) footing is MONOTONE: it is the max of the direct
-      mean and any whole-requirement credit, so adding assertion-targeted
-      (possibly partial) evidence never lowers it below what blanket evidence
-      already established. Whole-requirement credit is the stronger of:
-        * 1.0, if A has local whole-requirement leaf evidence (a whole-req test
-          genuinely exercises every assertion); or
-        * ``mean(coverage(child))`` over whole-requirement (blanket) REFINES
-          edges, averaged across blanket edges. A blanket Refines names no
-          assertion but conducts its refining requirement's own coverage at
-          FULL weight -- the previous 1/N-per-assertion deflation is retired
-          (REQ-d00069-J).
+    A refining requirement's own coverage in a measure is the mean over its
+    assertions of that *Assertion*'s coverage in that measure, an *Assertion*'s
+    coverage being the greater of what is attached to it and what is conducted
+    into it (REQ-d00069-N). It is computed recursively, memoized, with a
+    visited guard so an unexpected cycle degrades to 0 rather than recursing
+    forever. Contributions are equal-weight per incoming edge.
 
-    ``coverage(child)`` is the child requirement's mean assertion coverage in
-    the same dimension/mode, computed recursively (memoized, with a visited
-    guard so an unexpected cycle degrades to 0 rather than recursing forever).
+    Total per *Assertion* is the greatest of the four measures (REQ-d00069-N),
+    taken by ``CoverageDimension.total_by_label``.
     """
     from elspais.graph import NodeKind
 
     reqs = list(graph.nodes_by_kind(NodeKind.REQUIREMENT))
 
-    # Snapshot per-requirement assertion labels and local (pre-conduction) leaf
-    # evidence so the recursion reads immutable input while we overwrite dims.
+    # Snapshot per-requirement assertion labels and the immediate measures
+    # (REQ-d00069-L) so the recursion reads immutable input while we write the
+    # rolled measures. The immediate maps are what the rolled ones are
+    # conducted FROM, and nothing here writes them, so the recursion below
+    # reads a fixed picture. They carry per-label FRACTIONS, not just label
+    # membership: most dimensions attach all-or-nothing evidence (1.0), but
+    # uat_verified is fractional (a partially-verified journey credits its
+    # verified-step ratio, REQ-d00255-C).
     labels_by_req: dict[str, list[str]] = {}
-    # Snapshot the local per-label FRACTIONS (not just label membership) so
-    # conduction preserves fractional local evidence. Most dimensions have
-    # all-or-nothing local evidence (1.0), but uat_verified is fractional
-    # (a partially-verified journey credits its verified-step ratio,
-    # REQ-d00255-C); snapping it back to 1.0 here would discard that partial.
-    local_evidence: dict[str, dict[str, tuple[dict[str, float], dict[str, float]]]] = {}
+    immediate: dict[str, dict[str, tuple[dict[str, float], dict[str, float]]]] = {}
     for req in reqs:
         metrics = req.get_metric("rollup_metrics")
         if metrics is None:
@@ -1736,78 +1764,106 @@ def _conduct_refines_coverage(graph: FederatedGraph) -> None:
             if child.kind == NodeKind.ASSERTION and child.get_field("label", "")
         ]
         labels_by_req[req.id] = labels
-        ev: dict[str, tuple[dict[str, float], dict[str, float]]] = {}
+        imm: dict[str, tuple[dict[str, float], dict[str, float]]] = {}
         for dim_name in _PROPAGATING_DIMENSIONS:
             dim = getattr(metrics, dim_name)
-            ev[dim_name] = (dict(dim.direct_pct_by_label), dict(dim.indirect_pct_by_label))
-        local_evidence[req.id] = ev
+            imm[dim_name] = (
+                dict(dim.immediate_direct_by_label),
+                dict(dim.immediate_indirect_by_label),
+            )
+        immediate[req.id] = imm
 
-    memo: dict[tuple[str, str, str], float] = {}
+    # Implements: REQ-d00069-J, REQ-d00069-L
+    # The four-measure conduction. Conducted values ONLY: local evidence is
+    # not mixed in here, because it is already recorded in the immediate
+    # measures, and averaging the two would make an *Assertion*'s own citation
+    # read lower merely because something refining it is unfinished.
+    measure_memo: dict[tuple[str, str], tuple[float, float]] = {}
 
-    def assertion_fraction(
+    def rolled_values(
         req: GraphNode,
         label: str,
         dim_name: str,
-        mode: str,
         visiting: frozenset[str],
-    ) -> float:
-        direct_pct_local, indirect_pct_local = local_evidence[req.id][dim_name]
-        direct_vals: list[float] = []
-        local_direct = direct_pct_local.get(label, 0.0)
-        if local_direct > 0:
-            direct_vals.append(local_direct)
-        blanket_refines_vals: list[float] = []
+    ) -> tuple[float, float, bool]:
+        """The (direct, indirect) values conducted INTO ``label`` of ``req``,
+        and whether the answer was truncated by the cycle guard.
+
+        The third element rides along so a truncated answer is never cached:
+        it is an artefact of WHERE the walk started, not a property of the
+        requirement.
+        """
+        contributions: list[tuple[float, float]] = []
+        truncated = False
         for edge in req.iter_outgoing_edges():
             if not edge.kind.conducts_coverage():
                 continue
-            if edge.assertion_targets:
-                if label in edge.assertion_targets:
-                    direct_vals.append(req_coverage(edge.target, dim_name, mode, visiting))
-            else:
-                blanket_refines_vals.append(req_coverage(edge.target, dim_name, mode, visiting))
+            # The citation shape decides WHICH assertions receive a conducted
+            # value -- the *Assertion* it names, or every *Assertion* where it
+            # names only the requirement (REQ-d00069-J).
+            if edge.assertion_targets and label not in edge.assertion_targets:
+                continue
+            direct, indirect, was_truncated = req_measures(edge.target, dim_name, visiting)
+            contributions.append((direct, indirect))
+            truncated = truncated or was_truncated
+        if not contributions:
+            return 0.0, 0.0, truncated
+        # Same measure into the same measure (REQ-d00069-J): the citation shape
+        # decided which assertions receive a value, above; it does not decide
+        # which measure the value belongs to. Equal weight per incoming edge.
+        count = len(contributions)
+        return (
+            sum(c[0] for c in contributions) / count,
+            sum(c[1] for c in contributions) / count,
+            truncated,
+        )
 
-        # Direct (strict) footing: assertion-specific evidence only, equal-weight
-        # mean. Whole-requirement/blanket credit never enters the direct footing
-        # (keeps the ~ caveat a precise, non-transitive locator, REQ-d00069-J/L).
-        direct_mean = (sum(direct_vals) / len(direct_vals)) if direct_vals else 0.0
-        if mode != "indirect":
-            return direct_mean
-        # Indirect (generous) footing is MONOTONE: it is the max of the direct
-        # mean and any whole-requirement credit, so adding assertion-targeted
-        # (possibly partial) evidence never LOWERS the generous headline.
-        candidates: list[float] = []
-        if direct_vals:
-            candidates.append(direct_mean)
-        local_indirect = indirect_pct_local.get(label, 0.0)
-        if local_indirect > 0:
-            # Local whole-requirement leaf evidence (a whole-req test/code/journey)
-            # exercises every assertion -> its own local fraction (1.0, or a
-            # partial uat_verified ratio, REQ-d00255-C).
-            candidates.append(local_indirect)
-        if blanket_refines_vals:
-            # A blanket `Refines:` conducts the refining requirement's OWN rolled-up
-            # coverage at FULL weight (mean across blanket edges) -- the 1/N
-            # deflation is retired (REQ-d00069-J). The fraction reflects the child's
-            # actual coverage, not an arbitrary discount.
-            candidates.append(sum(blanket_refines_vals) / len(blanket_refines_vals))
-        return max(candidates) if candidates else 0.0
+    def req_measures(
+        req: GraphNode, dim_name: str, visiting: frozenset[str]
+    ) -> tuple[float, float, bool]:
+        """A requirement's own (direct, indirect) coverage, for conducting up.
 
-    def req_coverage(req: GraphNode, dim_name: str, mode: str, visiting: frozenset[str]) -> float:
-        key = (dim_name, mode, req.id)
-        cached = memo.get(key)
+        Per REQ-d00069-J it is the mean over the requirement's assertions of
+        that *Assertion*'s coverage in the measure being conducted, an
+        *Assertion*'s coverage in a measure being the greater of what is
+        attached to it and what is conducted into it -- the greater of TWO
+        values within ONE measure, since each measure conducts into itself
+        (REQ-d00069-J). This is not REQ-d00069-N's total, which is the
+        greatest of an *Assertion*'s four measures and is never conducted.
+        """
+        key = (dim_name, req.id)
+        cached = measure_memo.get(key)
         if cached is not None:
-            return cached
+            return cached[0], cached[1], False
         if req.id in visiting:
-            return 0.0  # cycle guard -- valid graphs are DAGs (CUR-1521)
+            # Cycle guard. The zero is not this requirement's coverage; it is
+            # the walk refusing to re-enter a requirement already on the path.
+            # It is reported as TRUNCATED so no caller caches it, directly or
+            # as a contribution to its own answer.
+            return 0.0, 0.0, True
         labels = labels_by_req.get(req.id)
         if not labels:
-            memo[key] = 0.0
-            return 0.0
+            measure_memo[key] = (0.0, 0.0)
+            return 0.0, 0.0, False
+        imm_direct, imm_indirect = immediate[req.id][dim_name]
         inner = visiting | {req.id}
-        total = sum(assertion_fraction(req, lbl, dim_name, mode, inner) for lbl in labels)
-        value = total / len(labels)
-        memo[key] = value
-        return value
+        direct_total = 0.0
+        indirect_total = 0.0
+        truncated = False
+        for lbl in labels:
+            rolled_d, rolled_i, was_truncated = rolled_values(req, lbl, dim_name, inner)
+            direct_total += max(imm_direct.get(lbl, 0.0), rolled_d)
+            indirect_total += max(imm_indirect.get(lbl, 0.0), rolled_i)
+            truncated = truncated or was_truncated
+        value = (direct_total / len(labels), indirect_total / len(labels))
+        # A value that depended on the cycle guard is NOT memoized. The memo is
+        # keyed by (dimension, requirement) alone, so caching a truncated answer
+        # would hand it to a later walk that entered from somewhere else and
+        # would not have truncated -- which is how the numbers came to depend on
+        # which requirement the walk happened to start from.
+        if not truncated:
+            measure_memo[key] = value
+        return value[0], value[1], truncated
 
     eps = 1e-9
     for req in reqs:
@@ -1819,19 +1875,10 @@ def _conduct_refines_coverage(graph: FederatedGraph) -> None:
             continue
         for dim_name in _PROPAGATING_DIMENSIONS:
             dim = getattr(metrics, dim_name)
-            direct_pct = {
-                lbl: assertion_fraction(req, lbl, dim_name, "direct", frozenset()) for lbl in labels
-            }
-            indirect_pct = {
-                lbl: assertion_fraction(req, lbl, dim_name, "indirect", frozenset())
-                for lbl in labels
-            }
-            dim.direct_pct_by_label = direct_pct
-            dim.indirect_pct_by_label = indirect_pct
-            dim.direct = sum(direct_pct.values())
-            dim.indirect = sum(indirect_pct.values())
-            dim.direct_labels = {lbl for lbl, v in direct_pct.items() if v > eps}
-            dim.indirect_labels = {lbl for lbl, v in indirect_pct.items() if v > eps}
+            # Implements: REQ-d00069-J
+            rolled = {lbl: rolled_values(req, lbl, dim_name, frozenset()) for lbl in labels}
+            dim.rolled_direct_by_label = {lbl: v[0] for lbl, v in rolled.items() if v[0] > eps}
+            dim.rolled_indirect_by_label = {lbl: v[1] for lbl, v in rolled.items() if v[1] > eps}
 
 
 # =============================================================================
@@ -1964,27 +2011,6 @@ class KeywordsConfig:
 
     stopwords: frozenset[str]
     min_length: int = 3
-
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> KeywordsConfig:
-        """Create config from dictionary.
-
-        Args:
-            data: Dict with optional 'stopwords' list and 'min_length' int.
-
-        Returns:
-            KeywordsConfig instance.
-        """
-        stopwords_list = data.get("stopwords")
-        if stopwords_list is not None:
-            stopwords = frozenset(stopwords_list)
-        else:
-            stopwords = DEFAULT_STOPWORDS
-
-        return cls(
-            stopwords=stopwords,
-            min_length=data.get("min_length", 3),
-        )
 
 
 def extract_keywords(
@@ -2192,7 +2218,6 @@ __all__ = [
     "count_by_git_status",
     "count_implementation_files",
     "collect_topics",
-    "get_implementation_status",
     "annotate_coverage",
     "annotate_journey_verification",
     "JourneyVerification",

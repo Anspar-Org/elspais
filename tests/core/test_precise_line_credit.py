@@ -6,14 +6,16 @@ specific Dart test() call) credits only ITS own assertion-targets: the
 passing result credits its assertions; the failing result flags only its own
 test without dragging down unrelated assertions.
 
-A source RESULT carrying ``match_scope = "file"`` keeps the existing
-file-level semantics: any failure in the file flags the whole file and
-withholds credit from all assertions (regression guard).
+A source RESULT that resolves no further than its file carries
+``match_scope = "file"``: it names every test written there and so names none
+of them, and contributes no verdict in either direction.
 """
+
 from __future__ import annotations
 
 import pytest
 
+from elspais.config.schema import ElspaisConfig
 from elspais.graph.annotators import CoverageCreditConfig, annotate_coverage
 from elspais.graph.parsers.lark import FileDispatcher
 from elspais.utilities.patterns import IdPatternConfig, IdResolver
@@ -23,6 +25,20 @@ from tests.core.graph_test_helpers import (
     make_requirement,
     make_test_result,
 )
+
+
+def _validated(config: dict) -> dict:
+    """Return ``config`` after checking a configuration file could hold it.
+
+    ``IdPatternConfig.from_dict`` takes a raw dictionary and never consults the
+    config schema, so a fixture built here could describe a repository no
+    ``.elspais.toml`` can produce -- and pin grammar behaviour no user can
+    reach. Every fixture is therefore validated the way a file on disk is,
+    before any resolver is built from it.
+    """
+    ElspaisConfig.model_validate(config)
+    return config
+
 
 # ---------------------------------------------------------------------------
 # Shared Dart file -- two test() calls at known lines
@@ -67,20 +83,22 @@ TEST_B_LINE = 8
 @pytest.fixture(scope="module")
 def resolver():
     config = IdPatternConfig.from_dict(
-        {
-            "project": {"namespace": "REQ"},
-            "id-patterns": {
-                "canonical": "{namespace}-{type.letter}{component}",
-                "aliases": {"short": "{type.letter}{component}"},
-                "types": {
-                    "prd": {"level": 1, "aliases": {"letter": "p"}},
-                    "ops": {"level": 2, "aliases": {"letter": "o"}},
-                    "dev": {"level": 3, "aliases": {"letter": "d"}},
+        _validated(
+            {
+                "project": {"namespace": "REQ"},
+                "levels": {
+                    "prd": {"rank": 1, "letter": "p", "implements": ["prd"]},
+                    "ops": {"rank": 2, "letter": "o", "implements": ["ops", "prd"]},
+                    "dev": {"rank": 3, "letter": "d", "implements": ["dev", "ops", "prd"]},
                 },
-                "component": {"style": "numeric", "digits": 5, "leading_zeros": True},
-                "assertions": {"label_style": "uppercase", "max_count": 26},
-            },
-        }
+                "id-patterns": {
+                    "canonical": "{namespace}-{level.letter}{component}",
+                    "aliases": {"short": "{level.letter}{component}"},
+                    "component": {"style": "numeric", "digits": 5, "leading_zeros": True},
+                    "assertions": {"label_style": "uppercase", "max_count": 26},
+                },
+            }
+        )
     )
     return IdResolver(config)
 
@@ -136,8 +154,8 @@ def graph_per_test_credit(resolver):
 def graph_file_scope_fallback(resolver):
     """Both results use match_scope=file (line=None -> fallback to all tests).
 
-    Mixed pass+fail: file-level semantics apply -- any failure withholds
-    credit from all assertions and flags has_failures.
+    Mixed pass+fail, and neither result resolved to a test: no verdict reaches
+    either assertion.
     """
     items = _dart_items(resolver)
     r_pass = make_test_result(
@@ -168,17 +186,17 @@ def test_per_test_pass_credits_only_its_assertions(graph_per_test_credit):
     """Assertion A is credited because test-A (match_scope='test') passed,
     even though test-B failed."""
     m = graph_per_test_credit.find_by_id("REQ-p00001").get_metric("rollup_metrics")
-    assert (
-        m.verified.direct_pct_by_label.get("A", 0.0) == 1.0
-    ), "A should be credited since r_pass (match_scope='test') passed for test-A"
+    assert m.verified.total_by_label.get("A", 0.0) == 1.0, (
+        "A should be credited since r_pass (match_scope='test') passed for test-A"
+    )
 
 
 def test_per_test_fail_does_not_credit_its_own_assertion(graph_per_test_credit):
     """Assertion B is NOT credited because test-B (match_scope='test') failed."""
     m = graph_per_test_credit.find_by_id("REQ-p00001").get_metric("rollup_metrics")
-    assert (
-        m.verified.direct_pct_by_label.get("B", 0.0) == 0.0
-    ), "B should not be credited since r_fail (match_scope='test') failed for test-B"
+    assert m.verified.total_by_label.get("B", 0.0) == 0.0, (
+        "B should not be credited since r_fail (match_scope='test') failed for test-B"
+    )
 
 
 def test_per_test_failure_sets_has_failures(graph_per_test_credit):
@@ -193,33 +211,36 @@ def test_per_test_match_scope_is_test_for_line_resolved_results(graph_per_test_c
     r_fail = graph_per_test_credit.find_by_id("r_fail")
     assert r_pass is not None
     assert r_fail is not None
-    assert (
-        r_pass.get_field("match_scope") == "test"
-    ), f"r_pass should have match_scope='test', got {r_pass.get_field('match_scope')!r}"
-    assert (
-        r_fail.get_field("match_scope") == "test"
-    ), f"r_fail should have match_scope='test', got {r_fail.get_field('match_scope')!r}"
+    assert r_pass.get_field("match_scope") == "test", (
+        f"r_pass should have match_scope='test', got {r_pass.get_field('match_scope')!r}"
+    )
+    assert r_fail.get_field("match_scope") == "test", (
+        f"r_fail should have match_scope='test', got {r_fail.get_field('match_scope')!r}"
+    )
 
 
 # ---------------------------------------------------------------------------
-# Regression: file-scope fallback semantics are preserved
+# A result that stopped at the file names no test
 # ---------------------------------------------------------------------------
 
 
-def test_file_scope_any_fail_withholds_all_credit(graph_file_scope_fallback):
-    """match_scope='file' results (line=None fallback): any failure in the
-    file withholds credit from all assertions and sets has_failures.
+# Verifies: REQ-d00254-A
+def test_file_scope_results_carry_no_verdict(graph_file_scope_fallback):
+    """match_scope='file' results (line=None fallback) credit nothing and
+    flag nothing.
 
-    This guards the semantics of test_edges_do_not_change_file_level_metric_semantics
-    in test_precise_result_links.py."""
+    A failing result in the file is not evidence against an assertion the
+    failing test never named, and a passing one beside it is not evidence for
+    it either. Both assertions are tested and awaiting a result."""
     m = graph_file_scope_fallback.find_by_id("REQ-p00001").get_metric("rollup_metrics")
-    assert m.verified.has_failures is True
-    assert (
-        m.verified.direct_pct_by_label.get("A", 0.0) == 0.0
-    ), "A should NOT be credited when the file-scope result set contains a failure"
-    assert (
-        m.verified.direct_pct_by_label.get("B", 0.0) == 0.0
-    ), "B should NOT be credited when the file-scope result set contains a failure"
+    # The `Verifies:` linkage is live for both assertions...
+    assert m.tested.total_by_label.get("A") == 1.0
+    assert m.tested.total_by_label.get("B") == 1.0
+    # ...and the results reached neither of them.
+    assert m.verified.has_failures is False
+    assert m.verified.failing_labels == set()
+    assert m.verified.total_by_label.get("A", 0.0) == 0.0
+    assert m.verified.total_by_label.get("B", 0.0) == 0.0
 
 
 def test_file_scope_match_scope_is_file_for_null_line(graph_file_scope_fallback):
@@ -228,9 +249,9 @@ def test_file_scope_match_scope_is_file_for_null_line(graph_file_scope_fallback)
     r_fail = graph_file_scope_fallback.find_by_id("r_fail2")
     assert r_pass is not None
     assert r_fail is not None
-    assert (
-        r_pass.get_field("match_scope") == "file"
-    ), f"r_pass2 should have match_scope='file', got {r_pass.get_field('match_scope')!r}"
-    assert (
-        r_fail.get_field("match_scope") == "file"
-    ), f"r_fail2 should have match_scope='file', got {r_fail.get_field('match_scope')!r}"
+    assert r_pass.get_field("match_scope") == "file", (
+        f"r_pass2 should have match_scope='file', got {r_pass.get_field('match_scope')!r}"
+    )
+    assert r_fail.get_field("match_scope") == "file", (
+        f"r_fail2 should have match_scope='file', got {r_fail.get_field('match_scope')!r}"
+    )

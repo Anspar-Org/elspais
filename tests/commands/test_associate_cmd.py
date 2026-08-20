@@ -6,6 +6,7 @@ Validates REQ-p00005-E: Clear error reporting for invalid paths/configs.
 Validates REQ-d00202-I: Candidate dirs with unloadable configs are skipped
 with a reported reason; the scan completes.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -440,9 +441,9 @@ class TestAssociateBrokenSiblingConfig:
 
         result = discover_associate_from_path(broken)
 
-        assert isinstance(
-            result, str
-        ), f"Expected an error message string for an unloadable config, got {result!r}"
+        assert isinstance(result, str), (
+            f"Expected an error message string for an unloadable config, got {result!r}"
+        )
         assert str(broken) in result, f"Skip reason must name the path: {result!r}"
         # The message must carry the underlying reason, not just the path.
         lowered = result.lower()
@@ -501,9 +502,9 @@ class TestAssociateBrokenSiblingConfig:
         assert "a-stale-repo" not in doc.get("associates", {})
 
         # The broken candidate is reported with its path and a reason.
-        assert (
-            str(broken) in combined
-        ), f"skip report must name the broken sibling's path; output was:\n{combined}"
+        assert str(broken) in combined, (
+            f"skip report must name the broken sibling's path; output was:\n{combined}"
+        )
         lowered = combined.lower()
         assert any(frag in lowered for frag in reason_fragments), (
             f"skip report must include the reason (one of {reason_fragments}); "
@@ -511,9 +512,9 @@ class TestAssociateBrokenSiblingConfig:
         )
 
         # A dir without .elspais.toml is not a candidate: no report at all.
-        assert (
-            "b-plain-dir" not in combined
-        ), f"plain dirs without .elspais.toml must stay silent; output was:\n{combined}"
+        assert "b-plain-dir" not in combined, (
+            f"plain dirs without .elspais.toml must stay silent; output was:\n{combined}"
+        )
 
 
 class TestAssociateList:

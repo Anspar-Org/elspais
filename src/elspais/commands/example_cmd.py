@@ -10,18 +10,12 @@ from typing import Any
 
 from elspais.config.schema import ElspaisConfig
 
-_SCHEMA_FIELDS = {f.alias or name for name, f in ElspaisConfig.model_fields.items()} | set(
-    ElspaisConfig.model_fields.keys()
-)
-
 
 def _validate_config(config: dict[str, Any]) -> ElspaisConfig:
-    """Validate a config dict into ElspaisConfig, stripping non-schema keys."""
-    filtered = {k: v for k, v in config.items() if k in _SCHEMA_FIELDS}
-    assoc = filtered.get("associates")
-    if isinstance(assoc, dict) and "paths" in assoc:
-        filtered.pop("associates", None)
-    return ElspaisConfig.model_validate(filtered)
+    """Validate a config dict into ElspaisConfig (see config.validate_config)."""
+    from elspais.config import validate_config
+
+    return validate_config(config)
 
 
 # ============================================================================
@@ -123,7 +117,7 @@ Tests can reference specific assertions:
 ## Configuration
 
 ```toml
-[patterns.assertions]
+[id-patterns.assertions]
 label_style = "uppercase"  # "uppercase", "numeric", "alphanumeric"
 max_count = 26
 
@@ -207,6 +201,7 @@ Run `elspais checks` to check format compliance.
 """
 
 
+# Implements: REQ-d00259-A
 def run(args: argparse.Namespace) -> int:
     """
     Run the example command.
@@ -238,6 +233,7 @@ def run(args: argparse.Namespace) -> int:
         return 0
 
 
+# Implements: REQ-d00259-B
 def show_requirement_template(args: argparse.Namespace) -> int:
     """Show requirement template."""
     print("# Requirement Templates\n")
@@ -250,18 +246,21 @@ def show_requirement_template(args: argparse.Namespace) -> int:
     return 0
 
 
+# Implements: REQ-d00259-C
 def show_journey_template(args: argparse.Namespace) -> int:
     """Show user journey template."""
     print(JOURNEY_TEMPLATE)
     return 0
 
 
+# Implements: REQ-d00259-D
 def show_assertion_rules(args: argparse.Namespace) -> int:
     """Show assertion format rules."""
     print(ASSERTION_RULES)
     return 0
 
 
+# Implements: REQ-d00259-E
 def show_id_patterns(args: argparse.Namespace) -> int:
     """Show ID patterns from current configuration."""
     from elspais.config import config_defaults, load_config
@@ -293,6 +292,7 @@ def show_id_patterns(args: argparse.Namespace) -> int:
     return 0
 
 
+# Implements: REQ-d00259-F
 def show_full_spec(args: argparse.Namespace) -> int:
     """Display the full requirements-spec.md if it exists."""
     from elspais.config import load_config
@@ -300,10 +300,13 @@ def show_full_spec(args: argparse.Namespace) -> int:
     try:
         config = load_config(args.config if hasattr(args, "config") else None)
     except Exception:
-        config = {"directories": {"spec": "spec"}}
+        # No configuration to read: fall back to the defaults, which is what
+        # this stood for. It named a `directories` section that has never
+        # existed, and was silently discarded on the way to validation, so
+        # the command has always run on defaults here anyway.
+        config = {}
 
-    raw = config
-    typed_config = _validate_config(raw)
+    typed_config = _validate_config(config)
     spec_dirs = typed_config.scanning.spec.directories
     spec_dir = spec_dirs[0] if spec_dirs else "spec"
     spec_path = Path.cwd() / spec_dir / "requirements-spec.md"

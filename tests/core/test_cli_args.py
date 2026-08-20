@@ -3,6 +3,7 @@
 
 Validates REQ-p00001-A: CLI entry point argument parsing and subcommand routing.
 """
+
 from __future__ import annotations
 
 import dataclasses
@@ -303,6 +304,6 @@ class TestCliArgsDataclasses:
                 _, *metadata = typing.get_args(arg)
                 for m in metadata:
                     if hasattr(m, "name"):
-                        assert (
-                            m.name in help_text
-                        ), f"Subcommand {m.name!r} not found in help output"
+                        assert m.name in help_text, (
+                            f"Subcommand {m.name!r} not found in help output"
+                        )

@@ -10,6 +10,7 @@ resolution path in builder.py wires TEST -> STEP and TEST -> JOURNEY
 VERIFIES edges correctly, and that unknown step refs become
 BrokenReferences.
 """
+
 from __future__ import annotations
 
 import shutil
@@ -17,9 +18,25 @@ from pathlib import Path
 
 import pytest
 
+from elspais.config.schema import ElspaisConfig
+from elspais.graph.aggregation import absolute_tier
 from elspais.graph.parsers.lark.transformers.reference import ReferenceTransformer
 from elspais.graph.parsers.patterns import JOURNEY_REF_PATTERN
 from elspais.utilities.patterns import IdPatternConfig, IdResolver
+
+
+def _validated(config: dict) -> dict:
+    """Return ``config`` after checking a configuration file could hold it.
+
+    ``IdPatternConfig.from_dict`` takes a raw dictionary and never consults the
+    config schema, so a fixture built here could describe a repository no
+    ``.elspais.toml`` can produce -- and pin grammar behaviour no user can
+    reach. Every fixture is therefore validated the way a file on disk is,
+    before any resolver is built from it.
+    """
+    ElspaisConfig.model_validate(config)
+    return config
+
 
 # ---------------------------------------------------------------------------
 # Fixture directory for on-disk build tests
@@ -112,7 +129,7 @@ def graph_whole_journey_pass(tmp_path):
 def test_all_steps_pass_gives_full_direct(graph_steps_all_pass):
     """All steps' tests pass + Validates names an assertion -> full."""
     req = graph_steps_all_pass.find_by_id("REQ-d00001")
-    assert req.get_metric("rollup_metrics").uat_verified.tier == "full"
+    assert absolute_tier(req.get_metric("rollup_metrics").uat_verified, measure="total") == "full"
 
 
 # Verifies: REQ-d00256
@@ -120,7 +137,9 @@ def test_one_step_fails_gives_failing(graph_one_step_fails):
     """A single failing step's test flips the REQ uat_verified tier to failing,
     and the journey records the failing step's label."""
     req = graph_one_step_fails.find_by_id("REQ-d00001")
-    assert req.get_metric("rollup_metrics").uat_verified.tier == "failing"
+    assert (
+        absolute_tier(req.get_metric("rollup_metrics").uat_verified, measure="total") == "failing"
+    )
     jny = graph_one_step_fails.find_by_id("JNY-OQ-Login-01")
     jv = jny.get_metric("journey_verification")
     assert jv.tier == "failing"
@@ -149,11 +168,11 @@ def test_untested_step_credits_partial_uat(graph_untested_step):
     """
     req = graph_untested_step.find_by_id("REQ-d00001")
     uat = req.get_metric("rollup_metrics").uat_verified
-    assert uat.tier == "partial"
+    assert absolute_tier(uat, measure="total") == "partial"
     assert uat.has_failures is False
     # Validates: REQ-d00001-A is assertion-targeted -> the fraction lands on A,
     # strictly between 0 and 1 (2 of 3 steps verified ~= 0.667).
-    frac = uat.indirect_pct_by_label["A"]
+    frac = uat.total_by_label["A"]
     assert 0.0 < frac < 1.0
     assert frac == pytest.approx(2 / 3)
 
@@ -168,7 +187,9 @@ def test_partial_journey_consistency_standing_and_tier(graph_untested_step):
 
     req = graph_untested_step.find_by_id("REQ-d00001")
     # Requirement-level dimension tier.
-    assert req.get_metric("rollup_metrics").uat_verified.tier == "partial"
+    assert (
+        absolute_tier(req.get_metric("rollup_metrics").uat_verified, measure="total") == "partial"
+    )
     # Per-assertion standing for the validated assertion A.
     states = compute_assertion_coverage_states(req)
     assert states["A"]["uat_verified"] == "partial"
@@ -179,9 +200,9 @@ def test_all_steps_pass_credits_full_uat(graph_steps_all_pass):
     """A fully-verified journey credits FULL (1.0) uat_verified -- unchanged."""
     req = graph_steps_all_pass.find_by_id("REQ-d00001")
     uat = req.get_metric("rollup_metrics").uat_verified
-    assert uat.tier == "full"
+    assert absolute_tier(uat, measure="total") == "full"
     assert uat.has_failures is False
-    assert uat.indirect_pct_by_label["A"] == pytest.approx(1.0)
+    assert uat.total_by_label["A"] == pytest.approx(1.0)
 
 
 # Verifies: REQ-d00255-C
@@ -190,7 +211,7 @@ def test_failing_step_credits_failure_signal(graph_one_step_fails):
     positive uat_verified credit (REQ-d00255-C)."""
     req = graph_one_step_fails.find_by_id("REQ-d00001")
     uat = req.get_metric("rollup_metrics").uat_verified
-    assert uat.tier == "failing"
+    assert absolute_tier(uat, measure="total") == "failing"
     assert uat.has_failures is True
 
 
@@ -200,7 +221,7 @@ def test_whole_journey_pass_no_steps_full(graph_whole_journey_pass):
     jny = graph_whole_journey_pass.find_by_id("JNY-OQ-Login-01")
     assert jny.get_metric("journey_verification").fully_verified is True
     req = graph_whole_journey_pass.find_by_id("REQ-d00001")
-    assert req.get_metric("rollup_metrics").uat_verified.tier == "full"
+    assert absolute_tier(req.get_metric("rollup_metrics").uat_verified, measure="total") == "full"
 
 
 # ---------------------------------------------------------------------------
@@ -240,9 +261,9 @@ def test_step_verifying_tests_include_file_and_line(tmp_path):
         assert "file" in vt, f"verifying_tests entry missing 'file': {vt}"
         assert "line" in vt, f"verifying_tests entry missing 'line': {vt}"
         assert vt["file"], f"'file' should be a repo-relative path, got {vt!r}"
-        assert not Path(
-            vt["file"]
-        ).is_absolute(), f"'file' must be repo-relative, got absolute {vt['file']!r}"
+        assert not Path(vt["file"]).is_absolute(), (
+            f"'file' must be repo-relative, got absolute {vt['file']!r}"
+        )
         assert vt["file"].startswith("tests/"), vt["file"]
         assert isinstance(vt["line"], int) and vt["line"] >= 1, vt
         # Aggregated pass/fail status preserved alongside the new fields.
@@ -321,20 +342,22 @@ def capture_broken_refs():
 def resolver():
     """Minimal IdResolver using standard REQ namespace."""
     config = IdPatternConfig.from_dict(
-        {
-            "project": {"namespace": "REQ"},
-            "id-patterns": {
-                "canonical": "{namespace}-{type.letter}{component}",
-                "aliases": {"short": "{type.letter}{component}"},
-                "types": {
-                    "prd": {"level": 1, "aliases": {"letter": "p"}},
-                    "ops": {"level": 2, "aliases": {"letter": "o"}},
-                    "dev": {"level": 3, "aliases": {"letter": "d"}},
+        _validated(
+            {
+                "project": {"namespace": "REQ"},
+                "levels": {
+                    "prd": {"rank": 1, "letter": "p", "implements": ["prd"]},
+                    "ops": {"rank": 2, "letter": "o", "implements": ["ops", "prd"]},
+                    "dev": {"rank": 3, "letter": "d", "implements": ["dev", "ops", "prd"]},
                 },
-                "component": {"style": "numeric", "digits": 5, "leading_zeros": True},
-                "assertions": {"label_style": "uppercase", "max_count": 26},
-            },
-        }
+                "id-patterns": {
+                    "canonical": "{namespace}-{level.letter}{component}",
+                    "aliases": {"short": "{level.letter}{component}"},
+                    "component": {"style": "numeric", "digits": 5, "leading_zeros": True},
+                    "assertions": {"label_style": "uppercase", "max_count": 26},
+                },
+            }
+        )
     )
     return IdResolver(config)
 
@@ -437,7 +460,7 @@ def test_whole_journey_owns_outgoing_verifies_edge(journey_with_whole_test_graph
 
 # Verifies: REQ-d00256
 def test_unknown_step_is_broken_reference(journey_with_bad_step_graph, capture_broken_refs):
-    """A ``Verifies:`` targeting a non-existent step produces a BrokenReference."""
+    """A ``Verifies:`` targeting a non-existent step produces a ReferenceFault."""
     refs = capture_broken_refs(journey_with_bad_step_graph)
     assert any(r.target_id == "JNY-OQ-Login-01/9" for r in refs)
 
@@ -446,7 +469,7 @@ def test_unknown_step_is_broken_reference(journey_with_bad_step_graph, capture_b
 def test_implements_journey_is_broken_reference(
     journey_with_implements_ref_graph, capture_broken_refs
 ):
-    """``Implements: JNY-OQ-Login-01`` targeting a journey produces a BrokenReference,
+    """``Implements: JNY-OQ-Login-01`` targeting a journey produces a ReferenceFault,
     not a wired edge.  Journeys and steps are ``Verifies:`` targets only."""
     from elspais.graph.relations import EdgeKind
 
@@ -455,7 +478,7 @@ def test_implements_journey_is_broken_reference(
     assert any(
         r.target_id == "JNY-OQ-Login-01" and r.edge_kind == EdgeKind.IMPLEMENTS.value
         for r in broken
-    ), "Expected BrokenReference(target='JNY-OQ-Login-01', edge_kind=IMPLEMENTS), got: " + repr(
+    ), "Expected ReferenceFault(target='JNY-OQ-Login-01', edge_kind=IMPLEMENTS), got: " + repr(
         broken
     )
     # The journey must NOT have been wired via an IMPLEMENTS edge

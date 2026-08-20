@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from elspais.graph.GraphNode import GraphNode, NodeKind, make_file_id
+from elspais.graph.GraphNode import GraphNode, NodeKind
 from elspais.graph.relations import EdgeKind, Stereotype
 from elspais.utilities.hasher import (
     HASH_VALUE_PATTERN,
@@ -27,6 +27,7 @@ from elspais.utilities.hasher import (
     compute_normalized_hash,
     compute_version_hash,
 )
+from elspais.utilities.patterns import GrammarUnavailable
 
 if TYPE_CHECKING:
     from elspais.graph.federated import FederatedGraph
@@ -74,6 +75,7 @@ def parse_end_marker(line: str) -> EndMarker | None:
     return EndMarker(title=m.group("title"), hash_value=m.group("hash"))
 
 
+# Implements: REQ-d00131-K
 def format_changelog_entry(entry: dict[str, str]) -> str:
     """Format a changelog entry dict into its markdown line.
 
@@ -89,6 +91,7 @@ def format_changelog_entry(entry: dict[str, str]) -> str:
     )
 
 
+# Implements: REQ-d00250-D
 def _effective_depth(stored: int | None, min_depth: int) -> int:
     """Effective rendered depth: stored, clamped to [min_depth, 6].
 
@@ -220,6 +223,29 @@ def _file_version_text(node: GraphNode) -> str:
     return f"{node.get_field('relative_path') or ''}\x1d{ordered}"
 
 
+_DIGEST_GRAMMAR: Any | None = None
+
+
+def _digest_grammar() -> Any:
+    """The fixed grammar a version digest is computed under.
+
+    A version is content-addressed and never shown to anyone as a reference,
+    so REQ-p00014-U — which binds what the tool *emits* — does not reach it.
+    What does bind it is agreement: a token is minted on a read and checked
+    on a write, and if those two computed the same node under different
+    grammars every write would be rejected as a conflict. One fixed
+    convention, taken from the default configuration rather than spelled
+    here, makes that disagreement impossible.
+    """
+    global _DIGEST_GRAMMAR
+    if _DIGEST_GRAMMAR is None:
+        from elspais.config import config_defaults
+        from elspais.utilities.patterns import build_resolver
+
+        _DIGEST_GRAMMAR = build_resolver(config_defaults())
+    return _DIGEST_GRAMMAR
+
+
 # Implements: REQ-d00131-L
 def node_version(node: GraphNode) -> str:
     """Compute a node's concurrency version.
@@ -247,7 +273,7 @@ def node_version(node: GraphNode) -> str:
         text = node.get_field("raw_text") or ""
     else:
         try:
-            text = render_node(node)
+            text = render_node(node, resolver=_digest_grammar())
         except ValueError:
             # Not independently renderable and has no owning authoring unit.
             text = node.get_label() or ""
@@ -675,11 +701,14 @@ def _derive_refs_for_edge_kind(
         if whole or not labels:
             refs.add(src)
         if labels:
-            sorted_labels = sorted(labels)
-            if resolver is not None:
-                refs.add(resolver.make_assertion_ref(src, sorted_labels))
-            else:
-                refs.add(f"{src}-{'+'.join(sorted_labels)}")
+            # Implements: REQ-p00014-U
+            if resolver is None:
+                raise GrammarUnavailable(
+                    f"Cannot render {node.id!r}: citing assertions of {src!r} means "
+                    f"spelling the characters that bound a component from its "
+                    f"labels, and those are the owning repository's configuration."
+                )
+            refs.add(resolver.make_assertion_ref(src, sorted(labels)))
 
     # Union in the unresolved leftovers (REQ-d00132-G)
     stored = node.get_field(stored_field)
@@ -704,11 +733,16 @@ def _derive_refines_refs(node: GraphNode, resolver: Any | None = None) -> list[s
 # ─────────────────────────────────────────────────────────────────────────
 
 
-def _find_dirty_files(graph: FederatedGraph, resolver: Any | None = None) -> set[str]:
-    """Identify FILE node IDs whose subtree has pending mutations.
+def _find_dirty_files(graph: FederatedGraph) -> list[Any]:
+    """Identify the FILE nodes whose subtree has pending mutations.
 
     Walks the mutation log and for each mutated node, finds its FILE
-    ancestor. Returns the set of FILE node IDs that need re-rendering.
+    ancestor. Returns the FILE NODES that need re-rendering, not their
+    ids: a structural id repeats across federation members, so a caller
+    that kept only the id would have to ask which member holds it and
+    could be answered with a different member that holds the same path.
+    Walking to the FILE ancestor of the node that was actually mutated
+    yields the file that was actually edited.
 
     Handles deleted nodes by looking up parent requirement IDs from
     the mutation entry's before_state.
@@ -717,9 +751,13 @@ def _find_dirty_files(graph: FederatedGraph, resolver: Any | None = None) -> set
         graph: The traceability graph with pending mutations.
 
     Returns:
-        Set of FILE node IDs that contain mutated content.
+        The FILE nodes containing mutated content, unique by identity.
     """
-    dirty_file_ids: set[str] = set()
+    dirty_files: dict[int, Any] = {}
+
+    def _mark(node: Any) -> None:
+        if node is not None and node.kind == NodeKind.FILE:
+            dirty_files[id(node)] = node
 
     def _mark_node_file(node_id: str) -> None:
         """Find the FILE ancestor of a node and mark it dirty."""
@@ -727,11 +765,30 @@ def _find_dirty_files(graph: FederatedGraph, resolver: Any | None = None) -> set
         if node is None:
             return
         if node.kind == NodeKind.FILE:
-            dirty_file_ids.add(node.id)
+            _mark(node)
         else:
-            fn = node.file_node()
-            if fn is not None:
-                dirty_file_ids.add(fn.id)
+            _mark(node.file_node())
+
+    def _mark_owning_file_of_assertion(assertion_id: str) -> None:
+        """Mark the file holding a deleted assertion's requirement.
+
+        The assertion is gone from the index, so its parent has to be
+        recovered from the id itself. Which characters divide the parent
+        from the label is the grammar of the member that CLAIMS the id, not
+        of whichever member happens to be serving — so each member is asked
+        under its own grammar and the first to recognise the string answers
+        (REQ-d00251-L). A string no member claims names nothing here, and
+        marking a file on a guess would rewrite the wrong one.
+        """
+        for member in graph.iter_repos():
+            member_graph = getattr(member, "graph", None)
+            member_resolver = getattr(member_graph, "_resolver", None)
+            if member_resolver is None:
+                continue
+            split = member_resolver.split_assertion_ref(assertion_id)
+            if split is not None:
+                _mark_node_file(split[0])
+                return
 
     for entry in graph.mutation_log.iter_entries():
         target_id = entry.target_id
@@ -744,6 +801,14 @@ def _find_dirty_files(graph: FederatedGraph, resolver: Any | None = None) -> set
             ref_id = entry.before_state.get(key) or entry.after_state.get(key, "")
             if ref_id:
                 _mark_node_file(ref_id)
+
+        # Implements: REQ-p00017-B
+        # A rename corrects the cached body of every journey citing the
+        # renamed node. Those journeys are not themselves the target of the
+        # mutation, so their files would otherwise never be rewritten and
+        # the correction would stay in memory.
+        for journey_id in entry.after_state.get("journeys_reconciled", ()) or ():
+            _mark_node_file(journey_id)
 
         # For remainder mutations, find the parent requirement's file
         if entry.operation in (
@@ -768,14 +833,7 @@ def _find_dirty_files(graph: FederatedGraph, resolver: Any | None = None) -> set
             if parent_id:
                 _mark_node_file(parent_id)
             else:
-                # Derive parent from assertion ID (REQ-xxx-A -> REQ-xxx)
-                split = resolver.split_assertion_ref(target_id) if resolver else None
-                if split is None and "-" in target_id:
-                    parts = target_id.rsplit("-", 1)
-                    if len(parts) == 2:
-                        split = (parts[0], parts[1])
-                if split:
-                    _mark_node_file(split[0])
+                _mark_owning_file_of_assertion(target_id)
 
         # For add_requirement, the target file is the parent's file
         if entry.operation == "add_requirement":
@@ -783,13 +841,13 @@ def _find_dirty_files(graph: FederatedGraph, resolver: Any | None = None) -> set
             if parent_id:
                 _mark_node_file(parent_id)
 
-        # For delete_requirement, use the stored source_path
+        # For delete_requirement, use the FILE id stored at delete time.
+        # The path stored beside it cannot name the repository, so it is
+        # not a fallback here -- it is display data.
         if entry.operation == "delete_requirement":
-            source_path = entry.before_state.get("source_path")
-            if source_path:
-                file_id = make_file_id(source_path)
-                if graph.find_by_id(file_id) is not None:
-                    dirty_file_ids.add(file_id)
+            source_file_id = entry.before_state.get("source_file_id")
+            if source_file_id:
+                _mark(graph.find_by_id(source_file_id))
             # Also try parent IDs from before_state
             for pid in entry.before_state.get("parent_ids", []):
                 _mark_node_file(pid)
@@ -822,15 +880,15 @@ def _find_dirty_files(graph: FederatedGraph, resolver: Any | None = None) -> set
             old_file = entry.before_state.get("file_id", "")
             new_file = entry.after_state.get("file_id", "")
             if old_file:
-                dirty_file_ids.add(old_file)
+                _mark(graph.find_by_id(old_file))
             if new_file:
-                dirty_file_ids.add(new_file)
+                _mark(graph.find_by_id(new_file))
 
         # For rename_file - mark the new file ID (old ID no longer exists)
         if entry.operation == "rename_file":
             new_file_id = entry.after_state.get("id", "")
             if new_file_id:
-                dirty_file_ids.add(new_file_id)
+                _mark(graph.find_by_id(new_file_id))
 
     # Also mark files containing requirements with structural parse-dirty reasons.
     # "stale_hash" is excluded: that is a hash-value change only, handled by
@@ -841,11 +899,9 @@ def _find_dirty_files(graph: FederatedGraph, resolver: Any | None = None) -> set
             continue
         reasons = node.get_field("parse_dirty_reasons") or []
         if not reasons or any(r != "stale_hash" for r in reasons):
-            fn = node.file_node()
-            if fn is not None:
-                dirty_file_ids.add(fn.id)
+            _mark(node.file_node())
 
-    return dirty_file_ids
+    return list(dirty_files.values())
 
 
 # Implements: REQ-d00132-A, REQ-d00132-C
@@ -901,20 +957,21 @@ def render_save(
     _wire_new_requirements_to_files(graph)
 
     # Find dirty FILE nodes
-    dirty_file_ids = _find_dirty_files(graph, resolver=resolver)
+    dirty_files = _find_dirty_files(graph)
 
     # Federation: by default, fix/save writes only primary-repo files.
     # Ownership resolution lives in ONE place: is_associate_owned() in
     # graph/federated.py (shared with the fix command's report lines).
+    # It is asked about the node, not its id: a file an associate owns can
+    # share its repo-relative path with one in the primary repo, and the
+    # guard answering for the wrong one is the guard not firing.
     # Implements: REQ-d00253-B
     if not write_associates:
         from elspais.graph.federated import is_associate_owned
 
-        dirty_file_ids = {
-            file_id for file_id in dirty_file_ids if not is_associate_owned(graph, file_id)
-        }
+        dirty_files = [node for node in dirty_files if not is_associate_owned(graph, node)]
 
-    if not dirty_file_ids:
+    if not dirty_files:
         # No dirty files — clear log and return
         graph.mutation_log.clear()
         return {
@@ -940,20 +997,19 @@ def render_save(
             if sp:
                 duplicate_source_paths.add(sp)
     if duplicate_source_paths:
-        filtered: set[str] = set()
-        for file_id in dirty_file_ids:
-            file_node = graph.find_by_id(file_id)
-            rel = file_node.get_field("relative_path") if file_node else None
+        filtered: list[Any] = []
+        for file_node in dirty_files:
+            rel = file_node.get_field("relative_path")
             if rel and rel in duplicate_source_paths:
                 msg = (
-                    f"{file_id}: file participates in a cross-file duplicate "
+                    f"{file_node.id}: file participates in a cross-file duplicate "
                     f"REQ ID collision; resolve the collision before saving"
                 )
                 skipped.append(msg)
                 errors.append(msg)
                 continue
-            filtered.add(file_id)
-        dirty_file_ids = filtered
+            filtered.append(file_node)
+        dirty_files = filtered
 
     # Handle file renames on disk before rendering
     for entry in graph.mutation_log.iter_entries():
@@ -961,13 +1017,19 @@ def render_save(
             old_rel = entry.before_state.get("relative_path", "")
             new_rel = entry.after_state.get("relative_path", "")
             if old_rel and new_rel:
-                # Resolve rename paths via owning repo's root.
+                # Resolve the rename against the root of the repository
+                # holding the renamed node. The log carries an id, and a
+                # structural id repeats across members, so which node it
+                # recovers is only as unambiguous as the id -- but asking
+                # the node itself at least keeps the root and the node from
+                # coming from two different repositories.
                 rename_root = repo_root
-                new_file_id = entry.after_state.get("id", "")
-                try:
-                    rename_root = graph.repo_for(new_file_id).repo_root
-                except KeyError:
-                    pass
+                renamed = graph.find_by_id(entry.after_state.get("id", ""))
+                if renamed is not None:
+                    try:
+                        rename_root = graph.repo_for_node(renamed).repo_root
+                    except (KeyError, AttributeError):
+                        pass
                 old_path = rename_root / old_rel
                 new_path = rename_root / new_rel
                 if old_path.exists() and not new_path.exists():
@@ -975,37 +1037,40 @@ def render_save(
                     old_path.rename(new_path)
 
     # Render and write each dirty FILE
-    for file_id in sorted(dirty_file_ids):
-        file_node = graph.find_by_id(file_id)
-        if file_node is None or file_node.kind != NodeKind.FILE:
-            skipped.append(f"{file_id}: FILE node not found")
-            continue
+    for file_node in sorted(dirty_files, key=lambda n: n.id):
+        file_id = file_node.id
 
         rel_path = file_node.get_field("relative_path")
         if not rel_path:
             skipped.append(f"{file_id}: no relative_path")
             continue
 
-        # Resolve absolute path using owning repo's root.
+        # Resolve the absolute path against the root of the repository
+        # HOLDING THIS NODE. Resolving it from the id would answer with
+        # whichever member the ownership map happened to record for that
+        # path, and the file written would belong to a repository the
+        # caller never edited -- while the edit that was made is lost.
+        owning_entry = None
+        try:
+            owning_entry = graph.repo_for_node(file_node)
+        except (KeyError, AttributeError):
+            pass
+
         abs_path = Path(rel_path)
         if not abs_path.is_absolute():
-            file_root = repo_root
-            try:
-                file_root = graph.repo_for(file_id).repo_root
-            except KeyError:
-                pass
+            file_root = owning_entry.repo_root if owning_entry is not None else repo_root
             abs_path = file_root / rel_path
 
         try:
-            # Prefer caller-supplied resolver; otherwise pull from the TraceGraph
-            # that owns this file so citations use the configured separator.
-            file_resolver = resolver
+            # Implements: REQ-d00251-L
+            # The grammar of the member that owns this file, not the caller's:
+            # with write_associates a single save writes several members, and
+            # one caller-supplied grammar would spell every one of them in the
+            # root repository's separators. The caller's is a fallback only for
+            # a file no member claims.
+            file_resolver = getattr(getattr(owning_entry, "graph", None), "_resolver", None)
             if file_resolver is None:
-                try:
-                    owning_tg = graph.repo_for(file_id).graph
-                    file_resolver = getattr(owning_tg, "_resolver", None)
-                except KeyError:
-                    pass
+                file_resolver = resolver
             content = render_file(file_node, resolver=file_resolver)
             # Ensure file ends with newline
             if content and not content.endswith("\n"):

@@ -40,7 +40,11 @@ class TestFullPipeline:
         deserializer = DomainFile(spec_dir, patterns=["*.md"])
 
         # Build graph
-        builder = GraphBuilder(repo_root=integration_spec_dir)
+        builder = GraphBuilder(
+            repo_root=integration_spec_dir,
+            namespace=resolver.config.namespace,
+            resolver=resolver,
+        )
         for content in deserializer.dispatch(dispatcher.dispatch_spec):
             builder.add_parsed_content(content)
 
@@ -65,7 +69,11 @@ class TestFullPipeline:
         spec_dir = integration_spec_dir / "spec"
         deserializer = DomainFile(spec_dir, patterns=["*.md"])
 
-        builder = GraphBuilder(repo_root=integration_spec_dir)
+        builder = GraphBuilder(
+            repo_root=integration_spec_dir,
+            namespace=resolver.config.namespace,
+            resolver=resolver,
+        )
         for content in deserializer.dispatch(dispatcher.dispatch_spec):
             builder.add_parsed_content(content)
 
@@ -93,7 +101,11 @@ class TestFullPipeline:
         spec_dir = integration_spec_dir / "spec"
         deserializer = DomainFile(spec_dir, patterns=["*.md"])
 
-        builder = GraphBuilder(repo_root=integration_spec_dir)
+        builder = GraphBuilder(
+            repo_root=integration_spec_dir,
+            namespace=resolver.config.namespace,
+            resolver=resolver,
+        )
         for content in deserializer.dispatch(dispatcher.dispatch_spec):
             builder.add_parsed_content(content)
 
@@ -126,7 +138,11 @@ class TestFullPipeline:
         spec_dir = integration_spec_dir / "spec"
         deserializer = DomainFile(spec_dir, patterns=["*.md"])
 
-        builder = GraphBuilder(repo_root=integration_spec_dir)
+        builder = GraphBuilder(
+            repo_root=integration_spec_dir,
+            namespace=resolver.config.namespace,
+            resolver=resolver,
+        )
         for content in deserializer.dispatch(dispatcher.dispatch_spec):
             builder.add_parsed_content(content)
 
@@ -152,7 +168,11 @@ class TestFullPipeline:
         spec_dir = integration_spec_dir / "spec"
         deserializer = DomainFile(spec_dir, patterns=["*.md"])
 
-        builder = GraphBuilder(repo_root=integration_spec_dir)
+        builder = GraphBuilder(
+            repo_root=integration_spec_dir,
+            namespace=resolver.config.namespace,
+            resolver=resolver,
+        )
         for content in deserializer.dispatch(dispatcher.dispatch_spec):
             builder.add_parsed_content(content)
 
@@ -175,7 +195,7 @@ class TestMultiAssertionPipelineExpansion:
 
     Validates REQ-d00081-D: Spec files using multi-assertion syntax expand into
     individual edges.
-    Validates REQ-d00081-E: Code comments using multi-assertion syntax also expand
+    Validates REQ-d00081-D: Code comments using multi-assertion syntax also expand
     (proving centralization).
     Validates REQ-d00081-G: When separator is empty/disabled, no expansion occurs.
     """
@@ -193,6 +213,9 @@ class TestMultiAssertionPipelineExpansion:
         """
         config_path = find_config_file(root_dir)
         config = load_config(config_path)
+        # The separator is grammar, not a builder knob: say it in the config
+        # the grammar is derived from so parser and builder agree on it.
+        config["id-patterns"]["assertions"]["multi_separator"] = multi_assertion_separator
         resolver = _make_resolver(config)
 
         # Lark dispatcher for spec files
@@ -204,7 +227,8 @@ class TestMultiAssertionPipelineExpansion:
 
         builder = GraphBuilder(
             repo_root=root_dir,
-            multi_assertion_separator=multi_assertion_separator,
+            namespace=resolver.config.namespace,
+            resolver=resolver,
         )
         for content in spec_deserializer.dispatch(dispatcher.dispatch_spec):
             builder.add_parsed_content(content)
@@ -279,9 +303,9 @@ class TestMultiAssertionPipelineExpansion:
         assert p00001 is not None
 
         # Code node should be a child of p00001 (via assertion target resolution)
-        assert code_node.has_parent(
-            p00001
-        ), "CODE node should have REQ-p00001 as parent via assertion resolution"
+        assert code_node.has_parent(p00001), (
+            "CODE node should have REQ-p00001 as parent via assertion resolution"
+        )
 
         # Collect assertion targets across all edges from p00001 to the code node.
         # Both assertions A and B should be resolved from the code references.
@@ -329,38 +353,31 @@ class TestMultiAssertionPipelineExpansion:
 
         # With no expansion, the literal "REQ-p00001-A+B+C" won't match
         # any node, so o00001 should NOT be a child of p00001
-        assert not o00001.has_parent(
-            p00001
-        ), "With empty separator, multi-assertion should NOT expand"
+        assert not o00001.has_parent(p00001), (
+            "With empty separator, multi-assertion should NOT expand"
+        )
 
         # The broken reference should be recorded
         broken = graph.broken_references()
         literal_targets = [br.target_id for br in broken]
         assert "REQ-p00001-A+B+C" in literal_targets, (
-            f"Expected broken reference for literal 'REQ-p00001-A+B+C', " f"got {literal_targets}"
+            f"Expected broken reference for literal 'REQ-p00001-A+B+C', got {literal_targets}"
         )
 
 
 # Verifies: REQ-d00081-D+E
 class TestMultiAssertionSeparatorRoundTrip:
-    """Regression tests for the configured-separator multi-assertion bug.
+    """The configured separators survive a full parse/build/render round trip.
 
-    The user reported that with ``[id-patterns.assertions]`` configured as
-    ``separator = "/"`` and ``multi_separator = "/"``, references of the
-    form ``EVS-PRD-event-log/A/B`` silently fail to resolve: the builder
-    creates assertion node IDs using a hardcoded ``-`` (e.g.
-    ``EVS-PRD-event-log-A``) while the multi-assertion expansion path uses
-    the resolver's ``render_canonical()`` which honors the configured
-    separator (producing ``EVS-PRD-event-log/A``). The mismatch lands the
-    refs in ``_broken_references`` and no REFINES edges get wired.
+    Assertion node IDs, multi-assertion expansion, and the rendered
+    ``Refines:`` line all take the boundary between a requirement ID and an
+    assertion label from ``[id-patterns.assertions] separator``, and join
+    several labels with ``multi_separator``. When any of those three
+    disagree, the expanded refs land in ``_broken_references`` and no
+    REFINES edges wire, or the render emits a reference nothing can parse.
 
-    A symmetric bug exists on the render side: the ``_derive_*_refs``
-    helpers in ``graph/render.py`` hardcode ``-`` between requirement ID
-    and assertion label, and emit one ref per ``assertion_targets`` entry
-    with no multi-assertion aggregation.
-
-    These tests assert the CORRECT post-fix behavior. They are expected to
-    FAIL until both bugs are fixed.
+    The component style here is ``kebab-case``, so the separator has to be
+    a character a component cannot contain.
     """
 
     # Minimal config common to both parametrizations.
@@ -450,7 +467,6 @@ The system SHALL store event records.
 
         builder = GraphBuilder(
             repo_root=root,
-            multi_assertion_separator=multi_sep,
             resolver=resolver,
             namespace="EVS",
         )
@@ -473,11 +489,11 @@ The system SHALL store event records.
                 id="slash-separator",
             ),
             pytest.param(
-                "-",
+                ".",
                 "+",
-                "EVS-PRD-event-log-A+B",
-                ("EVS-PRD-event-log-A", "EVS-PRD-event-log-B"),
-                id="default-plus-separator",
+                "EVS-PRD-event-log.A+B",
+                ("EVS-PRD-event-log.A", "EVS-PRD-event-log.B"),
+                id="dot-plus-separator",
             ),
         ],
     )
@@ -486,10 +502,10 @@ The system SHALL store event records.
     ):
         """Multi-assertion refines refs resolve to edges with assertion_targets.
 
-        After the fix, the configured assertion separator must be honored by
-        BOTH assertion node creation and reference expansion, so the lookup
-        finds the assertion's parent requirement and a REFINES edge gets
-        wired with ``assertion_targets`` containing the labels.
+        The configured assertion separator is honored by BOTH assertion node
+        creation and reference expansion, so the lookup finds the assertion's
+        parent requirement and a REFINES edge gets wired with
+        ``assertion_targets`` containing the labels.
         """
         with tempfile.TemporaryDirectory() as tmpdir:
             graph, dev_node, prd_node = self._build_project(
@@ -503,7 +519,7 @@ The system SHALL store event records.
             for assertion_id in expected_assertion_ids:
                 node = graph.find_by_id(assertion_id)
                 assert node is not None, (
-                    f"Assertion node {assertion_id!r} should exist " f"(separator={assert_sep!r})"
+                    f"Assertion node {assertion_id!r} should exist (separator={assert_sep!r})"
                 )
                 assert node.kind == NodeKind.ASSERTION
 
@@ -533,32 +549,23 @@ The system SHALL store event records.
         "assert_sep, multi_sep, refines_ref",
         [
             pytest.param("/", "/", "EVS-PRD-event-log/A/B", id="slash-separator"),
-            pytest.param("-", "+", "EVS-PRD-event-log-A+B", id="default-plus-separator"),
+            pytest.param(".", "+", "EVS-PRD-event-log.A+B", id="dot-plus-separator"),
         ],
     )
     def test_multi_assertion_round_trips_through_render(self, assert_sep, multi_sep, refines_ref):
         """Rendering a requirement aggregates multi-assertion refines refs.
 
-        Post-fix, the renderer must:
-        1. Use the configured assertion separator between requirement ID
-           and label (not hardcoded ``-``).
-        2. Aggregate multiple labels for the same target requirement using
+        The renderer:
+        1. Uses the configured assertion separator between requirement ID
+           and label, never a hardcoded ``-``.
+        2. Aggregates multiple labels for the same target requirement with
            the configured ``multi_separator`` (e.g.
-           ``EVS-PRD-event-log-A+B``), not emit one ref per label
-           comma-separated.
+           ``EVS-PRD-event-log:A+B``) rather than emitting one
+           comma-separated ref per label.
 
-        Currently:
-        - Slash config: render produces the correct aggregated string by
-          accident, because edges fail to wire (bug #1) so render falls
-          back to the raw stored ``refines_refs`` field.
-        - Default config: edges ARE wired but render emits
-          ``EVS-PRD-event-log-A, EVS-PRD-event-log-B`` (one per label,
-          comma-separated, no aggregation).
-
-        Once bug #1 is fixed for the slash case, edges will wire and this
-        test will exercise the same broken aggregation path that the
-        default config exercises today — so locking down aggregation
-        protects against both regressions.
+        Both parametrizations reach the renderer through wired edges, so
+        the aggregation path is exercised whether or not the separator and
+        the multi-separator are the same character.
         """
         with tempfile.TemporaryDirectory() as tmpdir:
             graph, dev_node, _prd_node = self._build_project(

@@ -1,5 +1,6 @@
 # Verifies: REQ-p00001-A
 """Tests for elspais.commands.install_cmd — install/uninstall management."""
+
 from __future__ import annotations
 
 import argparse

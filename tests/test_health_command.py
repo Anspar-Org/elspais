@@ -11,6 +11,7 @@ those are module-level references resolved on the `health` module itself.
 `run_configured_targets` runs for real (no mocking) against real shell
 commands so the `--targets` subset selection is exercised end to end.
 """
+
 from __future__ import annotations
 
 import argparse

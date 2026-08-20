@@ -37,7 +37,14 @@ def _make_app(tmp_path: Path) -> TestClient:
     graph._index["file:spec/glossary.md"] = file_node
     graph._roots.append(file_node)
 
-    repos = [RepoEntry(name="root", graph=graph, config={}, repo_root=tmp_path)]
+    repos = [
+        RepoEntry(
+            name="root",
+            graph=graph,
+            config={"project": {"name": "root", "namespace": "REQ"}},
+            repo_root=tmp_path,
+        )
+    ]
     federated = FederatedGraph(repos)
 
     terms = TermDictionary()
@@ -86,7 +93,7 @@ class TestTermHighlightJs:
         assert resp.status_code == 200
         html = resp.text
         assert "termsRegex" in html, (
-            "Expected 'termsRegex' in the rendered HTML " "(cached regex built from termsLookup)"
+            "Expected 'termsRegex' in the rendered HTML (cached regex built from termsLookup)"
         )
 
     def test_REQ_d00245_A_defined_term_class_in_js(self, tmp_path: Path) -> None:
@@ -95,9 +102,9 @@ class TestTermHighlightJs:
         resp = client.get("/")
         assert resp.status_code == 200
         html = resp.text
-        assert (
-            "defined-term" in html
-        ), "Expected 'defined-term' CSS class reference in the rendered HTML"
+        assert "defined-term" in html, (
+            "Expected 'defined-term' CSS class reference in the rendered HTML"
+        )
 
     def test_REQ_d00245_B_delegated_click_handler(self, tmp_path: Path) -> None:
         """GET '/' HTML contains a delegated click handler for .defined-term
@@ -107,9 +114,9 @@ class TestTermHighlightJs:
         assert resp.status_code == 200
         html = resp.text
         # The delegation pattern: getElementById('card-stack-body') + addEventListener('click', ...)
-        assert (
-            "card-stack-body" in html
-        ), "Expected 'card-stack-body' element reference in the rendered HTML"
+        assert "card-stack-body" in html, (
+            "Expected 'card-stack-body' element reference in the rendered HTML"
+        )
         # Check that the click handler references .defined-term via closest()
         assert (
             ".defined-term" in html
@@ -126,17 +133,17 @@ class TestTermHighlightJs:
         assert resp.status_code == 200
         html = resp.text
         # buildTermCardHtml must exist
-        assert (
-            "buildTermCardHtml" in html
-        ), "Expected buildTermCardHtml function in the rendered HTML"
+        assert "buildTermCardHtml" in html, (
+            "Expected buildTermCardHtml function in the rendered HTML"
+        )
         # Inside buildTermCardHtml, simpleMarkdown is called for the definition.
         # It must NOT pass true as the second argument.
         # The actual call is: simpleMarkdown(data.definition || '')
         # (no second arg, so annotateTerms is undefined/falsy)
-        assert (
-            "simpleMarkdown(data.definition" in html
-        ), "Expected simpleMarkdown call for term definition in buildTermCardHtml"
+        assert "simpleMarkdown(data.definition" in html, (
+            "Expected simpleMarkdown call for term definition in buildTermCardHtml"
+        )
         # Ensure it does NOT pass true for term definitions
-        assert (
-            "simpleMarkdown(data.definition || '', true)" not in html
-        ), "Term definition rendering must NOT pass true for annotateTerms"
+        assert "simpleMarkdown(data.definition || '', true)" not in html, (
+            "Term definition rendering must NOT pass true for annotateTerms"
+        )

@@ -96,8 +96,7 @@ By comment -- in test files, all three recognized keywords
 
 ```python
 # Verifies: REQ-d00001-A, REQ-d00001-B
-def test_full_auth_flow():
-    ...
+def test_full_auth_flow(): ...
 ```
 
 In code files, the keyword determines the edge kind:
@@ -171,8 +170,7 @@ Verifying tests target steps with `Verifies: JNY-.../step-N`:
 
 ```python
 # Verifies: JNY-OQ-Login-01/step-2
-def test_coordinator_can_submit_credentials():
-    ...
+def test_coordinator_can_submit_credentials(): ...
 ```
 
 ### FILE
@@ -180,7 +178,9 @@ def test_coordinator_can_submit_credentials():
 A source file as a first-class graph node. Created automatically when
 elspais scans your directories.
 
-ID format: `file:src/auth/password.py`
+ID format: `file:REQ:src/auth/password.py` — the segment after the prefix is the namespace of the
+repository holding the file, so two federated repositories with a file at the same path own
+distinct nodes.
 
 FILE nodes are structural roots -- every parsed content node (requirement,
 code reference, test, etc.) is connected to its FILE node via a CONTAINS
@@ -281,12 +281,11 @@ def test_password_hashing():
 
 ```python
 # Verifies: JNY-OQ-Login-01
-def test_full_login_flow():
-    ...
+def test_full_login_flow(): ...
+
 
 # Verifies: JNY-OQ-Login-01/step-2
-def test_coordinator_submits_credentials():
-    ...
+def test_coordinator_submits_credentials(): ...
 ```
 
 Targeting a whole journey treats it as a single unit. Targeting a step
@@ -315,13 +314,23 @@ def run_performance_benchmark():
 User journey validates a requirement or assertion.
 **Contributes to coverage (UAT).**
 
-Written in journey files using the `Validates:` field:
+Written in journey files using the `Validates:` field, in the journey's
+metadata -- beside `Actor` and `Goal`, before the first section:
 
 ```markdown
 ## JNY-CHECKOUT-01: Complete Purchase
 
 Validates: REQ-p00005, REQ-p00006-A
 ```
+
+The metadata is the only place a journey may declare this, and the
+declaration applies to the journey as a whole. A `Validates:` line inside a
+section is not read, and is reported as a declared reference that produced
+no relationship -- a journey is regenerated from the graph when saved, so a
+second copy of the declaration would come back naming whatever it named
+when it was typed. Scoping a declaration to particular steps is a
+refinement the tool does not compute, so the syntax for it is not accepted
+rather than accepted and discarded.
 
 #### SATISFIES
 

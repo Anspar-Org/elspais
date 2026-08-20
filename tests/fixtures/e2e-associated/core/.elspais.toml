@@ -38,13 +38,6 @@ leading_zeros = true
 label_style = "uppercase"
 max_count = 26
 
-[id-patterns.associated]
-enabled = true
-position = "after_prefix"
-format = "uppercase"
-length = 3
-separator = "-"
-
 [rules.hierarchy]
 allow_structural_orphans = false
 
@@ -52,10 +45,14 @@ allow_structural_orphans = false
 require_hash = true
 require_assertions = true
 require_status = true
-allowed_statuses = ["Active", "Draft", "Deprecated", "Superseded"]
 
 [changelog]
 hash_current = false
 
-[associates]
-paths = ["../alpha", "../beta"]
+[associates.alpha]
+path = "../alpha"
+namespace = "REQ-ALP"
+
+[associates.beta]
+path = "../beta"
+namespace = "REQ-BET"

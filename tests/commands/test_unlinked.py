@@ -4,6 +4,7 @@
 Unlinked = scanned code/test FILE with no traceability markers found
 (no CODE/TEST child nodes).
 """
+
 from __future__ import annotations
 
 import argparse

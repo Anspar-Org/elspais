@@ -190,9 +190,9 @@ class TestFixSingleNAHash:
         assert result == 0
 
         captured = capsys.readouterr()
-        assert (
-            "already up to date" in captured.out.lower()
-        ), f"Expected 'already up to date' message, got: {captured.out!r}"
+        assert "already up to date" in captured.out.lower(), (
+            f"Expected 'already up to date' message, got: {captured.out!r}"
+        )
 
         # File should be unchanged
         spec_file = project / "spec" / "requirements.md"

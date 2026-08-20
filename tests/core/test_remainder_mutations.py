@@ -8,6 +8,7 @@ from elspais.graph.builder import GraphBuilder, TraceGraph
 from elspais.graph.GraphNode import NodeKind
 from elspais.graph.parsers import ParsedContent
 from elspais.graph.relations import EdgeKind
+from tests.core.graph_test_helpers import grammar_for
 
 
 def make_req(
@@ -40,7 +41,7 @@ def make_req(
 
 def build_graph_with_sections() -> TraceGraph:
     """Build a graph with a requirement that has sections."""
-    builder = GraphBuilder()
+    builder = GraphBuilder(namespace="REQ", resolver=grammar_for("REQ"))
     builder.add_parsed_content(
         make_req(
             "REQ-p00001",
@@ -56,7 +57,7 @@ def build_graph_with_sections() -> TraceGraph:
 
 def build_graph_with_definition_block() -> TraceGraph:
     """Build a graph with a requirement that has a definition block."""
-    builder = GraphBuilder()
+    builder = GraphBuilder(namespace="REQ", resolver=grammar_for("REQ"))
     content = ParsedContent(
         content_type="requirement",
         parsed_data={
@@ -151,6 +152,54 @@ class TestUpdateRemainder:
         with pytest.raises(ValueError, match="At least one"):
             graph.update_remainder("REQ-p00001:section:1")
 
+    # Verifies: REQ-o00062-U
+    @pytest.mark.parametrize("reserved", ["Assertions", "**changelog**:", "changelog."])
+    def test_update_refuses_reserved_heading(self, reserved):
+        """A section stored under the parser's own heading words is not a
+        section on reparse -- case, emphasis and punctuation tolerance included."""
+        graph = build_graph_with_sections()
+
+        with pytest.raises(ValueError, match="reserved"):
+            graph.update_remainder("REQ-p00001:section:1", heading=reserved)
+
+        section = graph.find_by_id("REQ-p00001:section:1")
+        assert section.get_field("heading") == "Rationale"
+        assert len(graph.mutation_log) == 0
+
+    # Verifies: REQ-o00062-U
+    def test_update_refuses_heading_line_break(self):
+        """A heading is one line of grammar; a break splits it."""
+        graph = build_graph_with_sections()
+
+        with pytest.raises(ValueError, match="line break"):
+            graph.update_remainder("REQ-p00001:section:1", heading="Two\nlines")
+
+        assert len(graph.mutation_log) == 0
+
+    # Verifies: REQ-o00062-U
+    def test_update_refuses_end_marker_in_text(self):
+        """Section text carrying an End-marker line ends the requirement early."""
+        graph = build_graph_with_sections()
+
+        with pytest.raises(ValueError, match="End-marker"):
+            graph.update_remainder(
+                "REQ-p00001:section:1", text="Fine text\n*End* *Requirement with Sections*"
+            )
+
+        assert len(graph.mutation_log) == 0
+
+    # Verifies: REQ-o00062-U
+    def test_update_accepts_sub_heading_in_text(self):
+        """A sub-heading inside section text is legal content -- only End
+        markers are structure a section cannot carry."""
+        graph = build_graph_with_sections()
+
+        text = "Some prose.\n\n### Details\n\nMore prose."
+        entry = graph.update_remainder("REQ-p00001:section:1", text=text)
+
+        assert entry.operation == "update_remainder"
+        assert graph.find_by_id("REQ-p00001:section:1").get_field("text") == text
+
     def test_undo(self):
         """Update then undo restores original values."""
         graph = build_graph_with_sections()
@@ -237,6 +286,41 @@ class TestAddRemainder:
 
         with pytest.raises(ValueError, match="not a requirement"):
             graph.add_remainder(section.id, "Heading", "Text")
+
+    # Verifies: REQ-o00062-U
+    @pytest.mark.parametrize("reserved", ["assertions", "*Changelog*", "ASSERTIONS:"])
+    def test_add_refuses_reserved_heading(self, reserved):
+        """A new section cannot claim the parser's own heading words."""
+        graph = build_graph_with_sections()
+
+        with pytest.raises(ValueError, match="reserved"):
+            graph.add_remainder("REQ-p00001", reserved, "Text")
+
+        assert len(graph.mutation_log) == 0
+
+    # Verifies: REQ-o00062-U
+    def test_add_refuses_end_marker_in_text(self):
+        """New section text carrying an End-marker line is refused."""
+        graph = build_graph_with_sections()
+
+        with pytest.raises(ValueError, match="End-marker"):
+            graph.add_remainder("REQ-p00001", "Notes", "*End* *Anything*")
+
+        assert len(graph.mutation_log) == 0
+
+    # Verifies: REQ-o00062-U
+    def test_add_accepts_rationale_heading_and_sub_headings(self):
+        """'Rationale' is an ordinary heading, and sub-headings in section
+        text are legal content."""
+        graph = build_graph_with_sections()
+
+        entry = graph.add_remainder(
+            "REQ-p00001", "Rationale", "Why.\n\n#### Fine print\n\nStill why."
+        )
+
+        node = graph.find_by_id(entry.target_id)
+        assert node.get_field("heading") == "Rationale"
+        assert "#### Fine print" in node.get_field("text")
 
     def test_not_found(self):
         """KeyError for missing parent."""

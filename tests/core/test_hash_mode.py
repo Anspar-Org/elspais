@@ -12,6 +12,7 @@ from elspais.graph.builder import GraphBuilder, TraceGraph
 from elspais.graph.parsers import ParsedContent
 from elspais.graph.render import reconstruct_body_text
 from elspais.utilities.hasher import calculate_hash, compute_normalized_hash
+from tests.core.graph_test_helpers import grammar_for
 
 
 def make_req(
@@ -55,7 +56,7 @@ def build_graph(hash_mode: str = "full-text") -> TraceGraph:
     Returns:
         A TraceGraph with one requirement (REQ-p00001) and two assertions (A, B).
     """
-    builder = GraphBuilder(hash_mode=hash_mode)
+    builder = GraphBuilder(hash_mode=hash_mode, namespace="REQ", resolver=grammar_for("REQ"))
     builder.add_parsed_content(
         make_req(
             "REQ-p00001",
@@ -72,7 +73,7 @@ class TestFullTextMode:
     # Verifies: REQ-d00131-J
     def test_hash_mode_normalized_text_is_default(self):
         """GraphBuilder defaults to normalized-text hash mode."""
-        builder = GraphBuilder()
+        builder = GraphBuilder(namespace="REQ", resolver=grammar_for("REQ"))
         assert builder.hash_mode == "normalized-text"
 
     # Verifies: REQ-p00004-A
@@ -162,9 +163,9 @@ class TestNormalizedTextMode:
         graph._recompute_requirement_hash(parent)
 
         hash_after = parent.get_field("hash")
-        assert (
-            hash_before == hash_after
-        ), "Non-assertion body text change should NOT affect hash in normalized-text mode"
+        assert hash_before == hash_after, (
+            "Non-assertion body text change should NOT affect hash in normalized-text mode"
+        )
 
     # Verifies: REQ-d00131-J
     def test_hash_mode_normalized_assertion_text_change_hash_changes(self):
@@ -181,9 +182,9 @@ class TestNormalizedTextMode:
         graph.update_assertion("REQ-p00001-A", "The system SHALL reject invalid input.")
 
         hash_after = parent.get_field("hash")
-        assert (
-            hash_before != hash_after
-        ), "Assertion text change SHOULD affect hash in normalized-text mode"
+        assert hash_before != hash_after, (
+            "Assertion text change SHOULD affect hash in normalized-text mode"
+        )
 
     # Verifies: REQ-d00131-J
     def test_hash_mode_normalized_assertion_reorder_hash_changes(self):
@@ -201,9 +202,9 @@ class TestNormalizedTextMode:
         graph.rename_assertion("REQ-p00001-A", "X")
 
         hash_after = parent.get_field("hash")
-        assert (
-            hash_before != hash_after
-        ), "Assertion label rename SHOULD affect hash in normalized-text mode"
+        assert hash_before != hash_after, (
+            "Assertion label rename SHOULD affect hash in normalized-text mode"
+        )
 
     # Verifies: REQ-d00131-J
     def test_hash_mode_normalized_trailing_space_hash_unchanged(self):
@@ -222,7 +223,11 @@ class TestNormalizedTextMode:
             {"label": "B", "text": "The system SHALL log errors.  "},
         ]
 
-        builder_clean = GraphBuilder(hash_mode="normalized-text")
+        builder_clean = GraphBuilder(
+            hash_mode="normalized-text",
+            namespace="REQ",
+            resolver=grammar_for("REQ"),
+        )
         builder_clean.add_parsed_content(
             make_req(
                 "REQ-p00001",
@@ -231,7 +236,11 @@ class TestNormalizedTextMode:
         )
         graph_clean = builder_clean.build()
 
-        builder_trailing = GraphBuilder(hash_mode="normalized-text")
+        builder_trailing = GraphBuilder(
+            hash_mode="normalized-text",
+            namespace="REQ",
+            resolver=grammar_for("REQ"),
+        )
         builder_trailing.add_parsed_content(
             make_req(
                 "REQ-p00001",
@@ -248,9 +257,9 @@ class TestNormalizedTextMode:
 
         hash_clean = parent_clean.get_field("hash")
         hash_trailing = parent_trailing.get_field("hash")
-        assert (
-            hash_clean == hash_trailing
-        ), "Trailing whitespace should NOT affect hash in normalized-text mode"
+        assert hash_clean == hash_trailing, (
+            "Trailing whitespace should NOT affect hash in normalized-text mode"
+        )
 
     # Verifies: REQ-d00131-J
     def test_hash_mode_normalized_case_change_hash_changes(self):
@@ -268,9 +277,9 @@ class TestNormalizedTextMode:
         graph.update_assertion("REQ-p00001-A", "the system shall validate input.")
         hash_lower = parent.get_field("hash")
 
-        assert (
-            hash_upper != hash_lower
-        ), "Case change in assertion text SHOULD affect hash in normalized-text mode"
+        assert hash_upper != hash_lower, (
+            "Case change in assertion text SHOULD affect hash in normalized-text mode"
+        )
 
     # Verifies: REQ-d00131-J
     def test_hash_mode_normalized_hash_matches_compute_normalized_hash(self):
@@ -307,9 +316,9 @@ class TestNormalizedTextMode:
         graph.add_assertion("REQ-p00001", "The system SHALL notify users.")
         hash_after = parent.get_field("hash")
 
-        assert (
-            hash_before != hash_after
-        ), "Adding an assertion SHOULD change the hash in normalized-text mode"
+        assert hash_before != hash_after, (
+            "Adding an assertion SHOULD change the hash in normalized-text mode"
+        )
 
     # Verifies: REQ-d00131-J
     def test_hash_mode_normalized_delete_assertion_changes_hash(self):
@@ -322,9 +331,9 @@ class TestNormalizedTextMode:
         graph.delete_assertion("REQ-p00001-A", compact=False)
         hash_after = parent.get_field("hash")
 
-        assert (
-            hash_before != hash_after
-        ), "Deleting an assertion SHOULD change the hash in normalized-text mode"
+        assert hash_before != hash_after, (
+            "Deleting an assertion SHOULD change the hash in normalized-text mode"
+        )
 
 
 class TestHashModeDifference:
@@ -353,7 +362,11 @@ B. The system SHALL log errors."""
         ]
 
         def _build_with_sections(hash_mode: str) -> TraceGraph:
-            builder = GraphBuilder(hash_mode=hash_mode)
+            builder = GraphBuilder(
+                hash_mode=hash_mode,
+                namespace="REQ",
+                resolver=grammar_for("REQ"),
+            )
             builder.add_parsed_content(
                 ParsedContent(
                     content_type="requirement",
@@ -402,11 +415,19 @@ B. The system SHALL log errors."""
         Two requirements with identical assertions should have the same hash
         in normalized-text mode, regardless of other content differences.
         """
-        builder1 = GraphBuilder(hash_mode="normalized-text")
+        builder1 = GraphBuilder(
+            hash_mode="normalized-text",
+            namespace="REQ",
+            resolver=grammar_for("REQ"),
+        )
         builder1.add_parsed_content(make_req("REQ-p00001", assertions=ASSERTIONS))
         graph1 = builder1.build()
 
-        builder2 = GraphBuilder(hash_mode="normalized-text")
+        builder2 = GraphBuilder(
+            hash_mode="normalized-text",
+            namespace="REQ",
+            resolver=grammar_for("REQ"),
+        )
         builder2.add_parsed_content(make_req("REQ-p00001", assertions=ASSERTIONS))
         graph2 = builder2.build()
 
@@ -438,7 +459,7 @@ B. The system SHALL log errors."""
             {"heading": "preamble", "content": "Introduction version 2 (different).", "line": 2}
         ]
 
-        builder1 = GraphBuilder(hash_mode="full-text")
+        builder1 = GraphBuilder(hash_mode="full-text", namespace="REQ", resolver=grammar_for("REQ"))
         builder1.add_parsed_content(
             ParsedContent(
                 content_type="requirement",
@@ -460,7 +481,7 @@ B. The system SHALL log errors."""
         )
         graph1 = builder1.build()
 
-        builder2 = GraphBuilder(hash_mode="full-text")
+        builder2 = GraphBuilder(hash_mode="full-text", namespace="REQ", resolver=grammar_for("REQ"))
         builder2.add_parsed_content(
             ParsedContent(
                 content_type="requirement",

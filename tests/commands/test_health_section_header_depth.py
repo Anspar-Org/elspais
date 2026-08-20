@@ -47,9 +47,9 @@ def test_health_flags_too_shallow_section(tmp_path):
     check = check_spec_needs_rewrite(graph)
     assert not check.passed
     messages = [f.message for f in check.findings]
-    assert any(
-        "section_header_depth" in m for m in messages
-    ), f"Expected section_header_depth in findings; got {messages!r}"
+    assert any("section_header_depth" in m for m in messages), (
+        f"Expected section_header_depth in findings; got {messages!r}"
+    )
 
 
 def test_health_flags_h6_unfixable(tmp_path):
@@ -68,9 +68,9 @@ def test_health_flags_h6_unfixable(tmp_path):
     assert not check.passed
     assert check.severity == "error"
     messages = [f.message for f in check.findings]
-    assert any(
-        "section_header_depth_unfixable" in m for m in messages
-    ), f"Expected section_header_depth_unfixable in findings; got {messages!r}"
+    assert any("section_header_depth_unfixable" in m for m in messages), (
+        f"Expected section_header_depth_unfixable in findings; got {messages!r}"
+    )
 
 
 def test_health_unfixable_clean_when_no_issues(tmp_path):

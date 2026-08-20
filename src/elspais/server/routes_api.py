@@ -7,6 +7,7 @@
 All logic delegates to pure functions in ``elspais.mcp.server``.
 State is accessed via ``request.app.state.app_state`` (an AppState instance).
 """
+
 from __future__ import annotations
 
 import functools
@@ -28,11 +29,12 @@ from elspais.graph.comment_store import (
     parse_anchor,
 )
 from elspais.graph.comments import CommentEvent, CommentThread
-from elspais.graph.GraphNode import make_file_id
+from elspais.graph.GraphNode import make_file_id, parse_structural_id
 from elspais.graph.parsers.patterns import JNY_ID_PATTERN
 from elspais.mcp.server import (
     _attach_version,
     _automatic_save_record,
+    _executable_difference,
     _get_assertion_code_map,
     _get_assertion_refines_map,
     _get_assertion_test_map,
@@ -71,6 +73,7 @@ from elspais.mcp.server import (
 )
 from elspais.utilities.git import get_author_info
 from elspais.utilities.patterns import build_resolver
+from elspais.utilities.spec_paths import file_id_for_reference
 from elspais.view_model import build_levels, build_namespaces, build_statuses
 
 
@@ -515,7 +518,7 @@ async def api_status(request: Request) -> JSONResponse:
     except Exception:
         typed = ElspaisConfig.model_validate({})
     result["levels"] = build_levels(typed)
-    result["namespaces"] = build_namespaces(typed)
+    result["namespaces"] = build_namespaces(typed, state.graph)
     result["statuses"] = build_statuses(typed)
 
     return JSONResponse(result)
@@ -571,7 +574,7 @@ async def api_node(request: Request) -> JSONResponse:
     from elspais.html.generator import (
         DIMENSION_KEYS,
         DIMENSION_TIPS,
-        compute_assertion_coverage_caveats,
+        compute_assertion_coverage_measures,
         compute_assertion_coverage_states,
         compute_coverage_tiers,
     )
@@ -579,6 +582,17 @@ async def api_node(request: Request) -> JSONResponse:
     state = _st(request)
     node_id = request.path_params["node_id"]
     result = _get_node(state.graph, node_id)
+    if "error" in result:
+        # A file may be named by bare repo-relative path here for the same
+        # reason the mutation routes accept one: the page knows the path it
+        # is showing, not which repository's namespace to write into the id.
+        # Reading has to accept what writing accepts, or a caller can be
+        # required to present a version token it has no way to obtain.
+        resolved = file_id_for_reference(node_id, state.config)
+        if resolved != node_id:
+            result = _get_node(state.graph, resolved)
+            if "error" not in result:
+                node_id = resolved
     if "error" in result:
         return JSONResponse(result, status_code=404)
 
@@ -601,10 +615,10 @@ async def api_node(request: Request) -> JSONResponse:
                 entry: dict[str, Any] = {
                     "color": tiers.get(f"{prefix}_color", ""),
                     "tip": DIMENSION_TIPS.get(dim_key, ""),
+                    # The tip names the four measures behind the headline
+                    # standing (REQ-d00258-A); no marker stands in for a
+                    # measure the badge does not show (REQ-d00258-J).
                     "status_tip": tiers.get(f"{prefix}_tip", ""),
-                    # Per-dimension provenance caveat (REQ-d00069-L): "~" when the
-                    # dimension's evidence is not fully direct (indirect > direct).
-                    "marker": tiers.get(f"{prefix}_marker", ""),
                 }
                 # UAT dims carry the per-level expectation so the viewer can
                 # render a (red) UAT badge on a journey-less expects_validation
@@ -624,9 +638,10 @@ async def api_node(request: Request) -> JSONResponse:
             result["assertion_coverage_states"] = compute_assertion_coverage_states(
                 node, state.config
             )
-            # Per-assertion "leans on whole-requirement evidence" caveat (~),
-            # unified with the header ~ marker (REQ-d00069-L).
-            result["assertion_coverage_caveats"] = compute_assertion_coverage_caveats(node)
+            # The measures behind each per-assertion standing (REQ-d00069-L),
+            # phrased server-side so the pill can show what produced its
+            # standing instead of a caveat marker (REQ-d00258-G/J).
+            result["assertion_coverage_measures"] = compute_assertion_coverage_measures(node)
 
             # Reverse-traceability: what points AT this requirement (REQ-p00006-A)
             result["incoming_links"] = _compute_incoming_links(node)
@@ -719,7 +734,6 @@ async def api_refines_coverage(request: Request) -> JSONResponse:
 
 async def api_tree_data(request: Request) -> JSONResponse:
     """GET /api/tree-data - Build tree data for nav panel."""
-    import re
 
     from elspais.html.generator import compute_coverage_tiers
     from elspais.view_model import local_namespace_from_config
@@ -733,7 +747,7 @@ async def api_tree_data(request: Request) -> JSONResponse:
         _typed_cfg = ElspaisConfig.model_validate(state.config)
     except Exception:
         _typed_cfg = ElspaisConfig.model_validate({})
-    ns_catalog: dict[str, dict] = {n["code"]: n for n in build_namespaces(_typed_cfg)}
+    ns_catalog: dict[str, dict] = {n["code"]: n for n in build_namespaces(_typed_cfg, g)}
 
     # Cache resolvers per repo. Keyed by namespace string (stable across the
     # request) rather than `id(cfg)` (object ids can be reused by Python after
@@ -785,11 +799,6 @@ async def api_tree_data(request: Request) -> JSONResponse:
                     if nid:
                         unsaved_ids.add(nid)
 
-    # "CORE" is the legacy sentinel for "local repo" set by annotators.py; the
-    # JSON we emit uses the actual local namespace string instead so JS clients
-    # can compare `repo_prefix` against the configured namespace.
-    _LOCAL_SENTINEL = "CORE"
-
     def _repo_namespace(node) -> str | None:
         """Resolve the node's owning-repo namespace via the federated graph.
         Returns None if the graph isn't federated or the lookup fails. Catches
@@ -806,44 +815,29 @@ async def api_tree_data(request: Request) -> JSONResponse:
         return ns or None
 
     def _is_associated(node) -> bool:
+        # Which repository holds a node is a question the federation
+        # answers. Guessing it from the shape of an identifier would dress
+        # a heuristic as an answer, and an identifier's shape is the
+        # repository's to configure, not this surface's to assume.
         ns = _repo_namespace(node)
         if ns is not None:
             return ns != local_ns
-        if re.match(r"^REQ-[A-Z]{2,4}-[a-z]", node.id):
-            return True
-        rp = node.get_metric("repo_prefix", "")
-        if rp and rp != _LOCAL_SENTINEL and rp != local_ns:
-            return True
         _fn = node.file_node()
         if _fn and _fn.get_field("repo"):
             return True
         return bool(node.get_field("associated", False))
 
     def _get_repo_prefix(node) -> str:
-        # 1. Federation-aware lookup wins — the FederatedGraph knows which
-        #    repo each node came from.
+        # The federation knows which repo each node came from.
         ns = _repo_namespace(node)
         if ns is not None:
             return ns
-        # 2. Fall back to the per-node `repo_prefix` metric set by
-        #    annotators.py, except for the legacy "CORE" sentinel which means
-        #    "local repo" — handled below.
-        rp = node.get_metric("repo_prefix", "")
-        if rp and rp != _LOCAL_SENTINEL:
-            return rp
         _fn = node.file_node()
         if _fn and _fn.get_field("repo"):
             return _fn.get_field("repo")
-        m = re.match(r"^REQ-([A-Z]{2,4})-[a-z]", node.id)
-        if m:
-            return m.group(1)
-        # 3. Final fallback: treat as local. Previously emitted the literal
-        #    "CORE" sentinel; we now emit the configured local namespace so
-        #    JS clients can compare `repo_prefix` against the same string they
-        #    receive in NAMESPACES. Any pre-existing "CORE"-marked node that
-        #    survived the metric-replace step (line 547) is relabelled to the
-        #    local namespace here — that's intentional and matches the new
-        #    "no `CORE` literal anywhere on the wire" invariant.
+        # Otherwise local. The wire carries the configured namespace rather
+        # than the "CORE" sentinel, so a JS client compares it against the
+        # same string it receives in NAMESPACES.
         return local_ns
 
     def _walk(node, depth: int, parent_id: str | None, ancestors: frozenset[str]) -> None:
@@ -1002,14 +996,13 @@ async def api_file_content(request: Request) -> JSONResponse:
 
     1. ``repo_name`` (highest priority) — when supplied, look up the
        owning federated repo by name via ``iter_repos()`` and resolve
-       strictly against its root. This bypasses ``_ownership`` for
-       FILE-id-based callers (FILE ids legitimately collide across
-       federated repos; ownership map keeps only the first-iterated
-       repo, which can be wrong).
+       strictly against its root. A caller that already knows which
+       repository it is reading from says so and skips the lookup; it
+       is a shortcut, not a correction.
     2. ``node_id`` — when supplied and the federated graph knows the
        node, resolve via ``FederatedGraph.repo_root_for(node_id)``.
-       Reliable for non-structural node ids (REQ/ASSERTION/CODE/TEST —
-       collisions raise FederationError) but unreliable for FILE ids.
+       Every node id names its repository, structural ids included, so
+       this answers for the node the caller named.
     3. Federation root (``state.repo_root``).
     4. Fallback: scan every ``state.allowed_roots`` entry — covers raw
        file paths sent without any disambiguator (test/code references
@@ -1191,6 +1184,10 @@ async def api_dirty(request: Request) -> JSONResponse:
     record = _automatic_save_record(state.repo_root)
     if record is not None:
         body["automatic_save"] = record
+    # Implements: REQ-o00077-A
+    difference = _executable_difference()
+    if difference is not None:
+        body["executable_difference"] = difference
     # Implements: REQ-p00083-F
     notice = _lost_changes_notice(state.repo_root)
     if notice is not None:
@@ -1237,6 +1234,12 @@ async def api_check_freshness(request: Request) -> JSONResponse:
             # The poll every client already runs, so a save the daemon
             # performed reaches the next client without it having to ask.
             "automatic_save": _automatic_save_record(state.repo_root),
+            # Implements: REQ-o00077-A
+            # Beside the content-staleness answer above, never merged
+            # into it: "the tree's files moved" and "the program serving
+            # them moved" are different conditions with different
+            # remedies, and one cannot stand in for the other.
+            "executable_difference": _executable_difference(),
             # Implements: REQ-p00083-F
             # Same poll, same reason: a process that died holding changes
             # reaches the next client without it having to ask.
@@ -1651,6 +1654,8 @@ async def api_mutate_requirement_add(request: Request) -> JSONResponse:
 
     # The destination file was never validated: an unknown file_id created an
     # unparented requirement and returned 200.
+    if file_id:
+        file_id = file_id_for_reference(file_id, state.config)
     conflict = _version_conflict(state, data, file_id)
     if conflict is not None:
         return conflict
@@ -1727,7 +1732,6 @@ async def api_mutate_edge(request: Request) -> JSONResponse:
             target_id,
             edge_kind,
             assertion_targets,
-            config=state.config,
         )
     elif action == "change_kind":
         new_kind = data.get("new_kind", "")
@@ -1841,6 +1845,7 @@ async def api_mutate_journey_add(request: Request) -> JSONResponse:
             status_code=400,
         )
 
+    file_id = file_id_for_reference(file_id, state.config)
     conflict = _version_conflict(state, data, file_id)
     if conflict is not None:
         return conflict
@@ -1929,9 +1934,14 @@ async def api_mutate_move_to_file(request: Request) -> JSONResponse:
             status_code=400,
         )
 
-    # Check if the target file exists on disk; if not, create it
+    # Check if the target file exists on disk; if not, create it.
+    # The path comes out of the id through the one helper that knows where
+    # a structural id's colons fall -- this path is written to disk below.
     if target_file_id.startswith(FILE_ID_PREFIX):
-        relative_path = target_file_id[len(FILE_ID_PREFIX) :]
+        try:
+            relative_path = parse_structural_id(target_file_id)[2]
+        except ValueError as exc:
+            return JSONResponse({"success": False, "error": str(exc)}, status_code=400)
     else:
         relative_path = target_file_id
 
@@ -1993,7 +2003,13 @@ async def api_mutate_move_to_file(request: Request) -> JSONResponse:
         # + render_save all see the new node consistently.
         from elspais.graph.GraphNode import FileType
 
-        state.graph.add_file_node(target_path, FileType.SPEC)
+        _created = state.graph.add_file_node(target_path, FileType.SPEC)
+        # The graph mints the id, in the namespace of the repository it
+        # belongs to. Using the caller's string here would put whatever
+        # they sent into the graph.
+        target_file_id = getattr(_created, "target_id", target_file_id)
+    else:
+        target_file_id = file_id_for_reference(target_file_id, state.config)
 
     result = _mutate_move_node_to_file(state.graph, node_id, target_file_id)
     result = _with_version(state, result, node_id)
@@ -2015,6 +2031,8 @@ async def api_mutate_rename_file(request: Request) -> JSONResponse:
     data = await request.json()
     file_id = data.get("file_id", "")
     new_relative_path = data.get("new_relative_path", "")
+    if file_id:
+        file_id = file_id_for_reference(file_id, state.config)
     if not file_id or not new_relative_path:
         return JSONResponse(
             {"success": False, "error": "file_id and new_relative_path required"},
@@ -2024,7 +2042,7 @@ async def api_mutate_rename_file(request: Request) -> JSONResponse:
     if conflict is not None:
         return conflict
     # The rename changes the FILE's id, so report the version under the new one.
-    _renamed_file_id = make_file_id(new_relative_path)
+    _renamed_file_id = make_file_id(parse_structural_id(file_id)[1], new_relative_path)
     result = _mutate_rename_file(
         state.graph,
         file_id,
@@ -2558,9 +2576,8 @@ async def api_term(request: Request) -> JSONResponse:
 
     # Resolve `defined_in` (a node id — REQUIREMENT or FILE) into a concrete
     # (file_path, line) pair for the file-viewer link in the term card.
-    # REQ ids are always unique across the federation (collisions raise
-    # FederationError); FILE ids are not, so the JS also uses `repo_name`
-    # to disambiguate when calling /api/file-content.
+    # Every id names its repository, so `repo_name` accompanies the call to
+    # /api/file-content as a shortcut rather than as a disambiguator.
     defined_in_path = ""
     defined_in_line = entry.defined_at_line or 1
     if entry.defined_in:

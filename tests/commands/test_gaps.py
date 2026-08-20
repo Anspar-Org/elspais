@@ -14,6 +14,7 @@ from elspais.commands.gaps import (
     render_gap_markdown,
     render_gap_text,
 )
+from elspais.graph.aggregation import work_verdict
 from elspais.graph.builder import TraceGraph
 from elspais.graph.federated import FederatedGraph
 from elspais.graph.GraphNode import GraphNode, NodeKind  # noqa: N817
@@ -27,18 +28,23 @@ from elspais.graph.metrics import RollupMetrics
 
 
 # Verifies: REQ-d00069-J, REQ-d00258-A
-def test_uncovered_assertions_carry_fractions() -> None:
-    """_uncovered_assertions returns (id, fraction) pairs.
+# Verifies: REQ-d00258-M
+def test_conducted_coverage_leaves_an_uncited_assertion_a_gap() -> None:
+    """_uncovered_assertions reports an *Assertion* no citation names.
 
     The canonical hht-like fixture has no REFINES-conduction scenario, so this
-    builds a minimal REFINES scenario on the ``implemented`` dimension:
-    REQ-100 has assertions A-D; REQ-010 assertion-targeted-refines REQ-100-A
-    and is itself only half-covered (its own X implemented via CODE, Y not);
-    REQ-020 implements REQ-100-B directly. Full-weight conduction
-    (REQ-d00069-J) credits REQ-100-A with REQ-010's own actual coverage, 0.5
-    -- genuinely partial, since REQ-100-A has no local evidence of its own to
-    floor it at 1.0 (monotone max has nothing else to max against). B is
-    fully covered (1.0, excluded from the gap list), and C/D remain at 0.0.
+    builds a minimal one on the ``implemented`` dimension: REQ-100 has
+    assertions A-D; REQ-010 assertion-targeted-refines REQ-100-A and is itself
+    half-covered (its own X implemented via CODE, Y not); REQ-020 implements
+    REQ-100-B directly.
+
+    Conduction (REQ-d00069-J) credits REQ-100-A with REQ-010's own coverage,
+    and the estate summary counts that. This list does not: a gap surface
+    reads the immediate direct measure (REQ-d00258-M), and nobody has written
+    evidence naming REQ-100-A, so it is reported with no coverage at all --
+    however far along the requirement refining it may be. B, named by an
+    assertion-targeted `Implements:`, is not a gap; C and D were never cited
+    either.
     """
     from elspais.commands.gaps import _uncovered_assertions
     from elspais.graph.annotators import annotate_coverage
@@ -70,13 +76,17 @@ def test_uncovered_assertions_carry_fractions() -> None:
         if child.kind == NodeKind.ASSERTION
     ]
 
-    uncov = _uncovered_assertions(metrics, assertion_nodes, "implemented")
-    by_id = dict(uncov)
+    verdict = work_verdict(
+        metrics, "implemented", [a.get_field("label", "") for a in assertion_nodes]
+    )
+    uncov = _uncovered_assertions(verdict, assertion_nodes)
+    by_id = {aid: frac for aid, _label, frac in uncov}
 
-    partial = [(aid, f) for aid, f in uncov if 0 < f < 1]
-    assert partial, "expected a partially-conducted assertion in fixture"
-    assert by_id["REQ-100-A"] == 0.5
-    assert "REQ-100-B" not in by_id  # fully covered (1.0) -- not a gap
+    # The conducted credit is real and reported elsewhere -- the work list
+    # simply does not read it.
+    assert metrics.implemented.rolled_direct_by_label["A"] == 0.5
+    assert by_id["REQ-100-A"] == 0.0  # nothing names A
+    assert "REQ-100-B" not in by_id  # named by an assertion-targeted reference
     assert by_id["REQ-100-C"] == 0.0
     assert by_id["REQ-100-D"] == 0.0
 
@@ -124,7 +134,7 @@ class TestCollectGaps:
         assert "REQ-p00001" in ids
         assert "REQ-p00002" in ids
 
-    # Verifies: REQ-d00258, REQ-d00069-J
+    # Verifies: REQ-d00258-M, REQ-d00069-J
     def test_unimplemented_reqs_not_untested_but_uncovered(self, gap_graph: FederatedGraph) -> None:
         """A REQ with no implementation is NOT a testing gap (nothing built to
         test yet) -- but it stays visible as an implementation gap in
@@ -165,13 +175,13 @@ class TestCollectGaps:
         assert "REQ-p00001" not in ids
 
     def test_tested_req_not_in_untested(self) -> None:
-        """A requirement with tested.direct > 0 is NOT in untested."""
+        """A requirement with tested.immediate_direct > 0 is NOT in untested."""
         from elspais.graph.metrics import CoverageDimension
 
         req = _make_req("REQ-p00001", "Tested")
         metrics = RollupMetrics(
             total_assertions=1,
-            tested=CoverageDimension(total=1, direct=1, indirect=1),
+            tested=CoverageDimension(total=1, immediate_direct_by_label={"A": 1.0}),
         )
         req.set_metric("rollup_metrics", metrics)
         graph = _make_graph(req)
@@ -221,7 +231,7 @@ class TestCollectGaps:
             "rollup_metrics",
             RollupMetrics(
                 total_assertions=1,
-                uat_coverage=CoverageDimension(total=1, direct=0, indirect=0),
+                uat_coverage=CoverageDimension(total=1),
             ),
         )
         dev = GraphNode(id="REQ-d00001", kind=NodeKind.REQUIREMENT, label="Internal")
@@ -231,7 +241,7 @@ class TestCollectGaps:
             "rollup_metrics",
             RollupMetrics(
                 total_assertions=1,
-                uat_coverage=CoverageDimension(total=1, direct=0, indirect=0),
+                uat_coverage=CoverageDimension(total=1),
             ),
         )
         graph = _make_graph(prd, dev)
@@ -304,11 +314,15 @@ def _req_with_assertions(
         req.link(assertion, EdgeKind.STRUCTURES)
 
     def _dim(fractions: dict[str, float]) -> CoverageDimension:
+        # The supplied fractions model assertion-targeted (named) evidence
+        # attached to this requirement, so they populate the IMMEDIATE DIRECT
+        # measure the gap surfaces read (REQ-d00258-M) as well as the legacy
+        # footings the reporting surfaces still read. Whole-requirement-only
+        # evidence and conducted coverage are exercised separately, on graphs
+        # built from real references.
         return CoverageDimension(
             total=len(labels),
-            direct=sum(1 for f in fractions.values() if f >= 1.0),
-            indirect=sum(fractions.values()),
-            indirect_pct_by_label=dict(fractions),
+            immediate_direct_by_label=dict(fractions),
         )
 
     req.set_metric(
@@ -354,7 +368,7 @@ class TestTestingGapDenominator:
         )
         data = collect_gaps(_make_graph(req), exclude_status=set())
         entry = next(e for e in data.untested if e.req_id == "REQ-p00001")
-        gap_labels = {aid.rsplit("-", 1)[-1] for aid, _ in entry.assertions}
+        gap_labels = {label for _aid, label, _frac in entry.assertions}
         assert gap_labels == {"B"}
 
     # Verifies: REQ-d00258, REQ-d00069-J
@@ -465,7 +479,7 @@ class TestRenderGapText:
                 GapEntry(
                     "REQ-p00001",
                     "Login",
-                    [("REQ-p00001-C", 0.0), ("REQ-p00001-D", 0.0)],
+                    [("REQ-p00001-C", "C", 0.0), ("REQ-p00001-D", "D", 0.0)],
                 ),
             ]
         )
@@ -473,23 +487,24 @@ class TestRenderGapText:
         assert "REQ-p00001" in output
         assert "[C, D]" in output
 
-    # Verifies: REQ-d00069-J, REQ-d00258-A
+    # Verifies: REQ-d00069-M, REQ-d00258-A, REQ-d00258-M
     def test_partial_gap_shows_fraction_and_via(self) -> None:
-        """A partially-conducted assertion (0 < fraction < 1, REQ-d00069-J) is
-        annotated with its percentage and 'via refines-conduction' so it reads
-        differently from an assertion with no coverage at all."""
+        """An *Assertion* with partial direct evidence (0 < fraction < 1,
+        REQ-d00069-M) is annotated with its percentage and 'direct' so it
+        reads differently from an *Assertion* with no evidence here at
+        all."""
         data = GapData(
             uncovered=[
                 GapEntry(
                     "REQ-p00001",
                     "Login",
-                    [("REQ-p00001-C", 0.4), ("REQ-p00001-D", 0.0)],
+                    [("REQ-p00001-C", "C", 0.4), ("REQ-p00001-D", "D", 0.0)],
                 ),
             ]
         )
         output = render_gap_text("uncovered", data)
-        assert "% via refines-conduction" in output
-        assert "40% via refines-conduction" in output
+        assert "% direct" in output
+        assert "40% direct" in output
         # Fully-uncovered sibling still renders as a bare label
         assert ", D]" in output or "D]" in output
 
@@ -522,17 +537,17 @@ class TestRenderGapMarkdown:
         # Header, separator, data row
         assert any("|---" in line for line in lines)
 
-    # Verifies: REQ-d00069-J, REQ-d00258-A
+    # Verifies: REQ-d00069-M, REQ-d00258-A
     def test_partial_fraction_annotated(self) -> None:
-        """A partially-conducted assertion (REQ-d00069-J) shows its percentage
-        and 'via refines-conduction' in the markdown table cell."""
+        """An *Assertion* with partial direct evidence (REQ-d00069-M) shows
+        its percentage and 'direct' in the markdown table cell."""
         data = GapData(
             uncovered=[
-                GapEntry("REQ-p00001", "Login", [("REQ-p00001-C", 0.4)]),
+                GapEntry("REQ-p00001", "Login", [("REQ-p00001-C", "C", 0.4)]),
             ]
         )
         output = render_gap_markdown("uncovered", data)
-        assert "40% via refines-conduction" in output
+        assert "40% direct" in output
 
 
 # Verifies: REQ-d00069-J, REQ-d00258-A
@@ -543,14 +558,16 @@ class TestGapEntrySerialization:
     def test_gap_entry_to_list_serializes_fraction(self) -> None:
         from elspais.commands.gaps import _gap_entry_to_list
 
-        entry = GapEntry("REQ-p00001", "Login", [("REQ-p00001-C", 0.4), ("REQ-p00001-D", 0.0)])
+        entry = GapEntry(
+            "REQ-p00001", "Login", [("REQ-p00001-C", "C", 0.4), ("REQ-p00001-D", "D", 0.0)]
+        )
         result = _gap_entry_to_list(entry)
         assert result == [
             "REQ-p00001",
             "Login",
             [
-                {"id": "REQ-p00001-C", "fraction": 0.4},
-                {"id": "REQ-p00001-D", "fraction": 0.0},
+                {"id": "REQ-p00001-C", "label": "C", "fraction": 0.4},
+                {"id": "REQ-p00001-D", "label": "D", "fraction": 0.0},
             ],
         ]
 
@@ -559,9 +576,9 @@ class TestGapEntrySerialization:
         (REQ-d00258-C) instead of serializing raw floats."""
         from elspais.commands.gaps import _gap_entry_to_list
 
-        entry = GapEntry("REQ-p00001", "Login", [("REQ-p00001-C", 1 / 3)])
+        entry = GapEntry("REQ-p00001", "Login", [("REQ-p00001-C", "C", 1 / 3)])
         result = _gap_entry_to_list(entry)
-        assert result[2] == [{"id": "REQ-p00001-C", "fraction": 0.3333}]
+        assert result[2] == [{"id": "REQ-p00001-C", "label": "C", "fraction": 0.3333}]
 
     def test_gap_data_from_dict_round_trips_fraction(self) -> None:
         from elspais.commands.gaps import _gap_data_from_dict
@@ -571,7 +588,7 @@ class TestGapEntrySerialization:
                 [
                     "REQ-p00001",
                     "Login",
-                    [{"id": "REQ-p00001-C", "fraction": 0.4}],
+                    [{"id": "REQ-p00001-C", "label": "C", "fraction": 0.4}],
                 ]
             ],
             "untested": [],
@@ -580,7 +597,7 @@ class TestGapEntrySerialization:
             "no_assertions": [],
         }
         gd = _gap_data_from_dict(d)
-        assert gd.uncovered[0].assertions == [("REQ-p00001-C", 0.4)]
+        assert gd.uncovered[0].assertions == [("REQ-p00001-C", "C", 0.4)]
 
 
 class TestRenderSection:
@@ -742,3 +759,107 @@ class TestGapsIntegrates:
         }
         gd = _gap_data_from_dict(d)
         assert gd.integrated == {}
+
+
+# ===========================================================================
+# REQ-d00258-M: gap surfaces answer on the STRICT footing, so an assertion
+# with no evidence naming it is reported however much whole-requirement
+# evidence its requirement carries.
+# ===========================================================================
+
+
+@pytest.fixture
+def blanket_evidence_graph():
+    """REQ-700 with assertions A and B.
+
+    Evidence:
+      * a whole-requirement ``Implements: REQ-700`` code ref (blanket) --
+        credits A and B on the generous footing only,
+      * an assertion-targeted ``Implements: REQ-700-B`` code ref -- credits B
+        on the strict footing,
+      * a whole-requirement ``Verifies: REQ-700`` test ref (blanket) -- credits
+        A and B as tested on the generous footing only.
+
+    So on the strict footing: implemented = {B}, tested = {}. On the generous
+    footing both dimensions are fully covered.
+    """
+    from elspais.graph.annotators import annotate_coverage
+    from tests.core.graph_test_helpers import (
+        build_graph,
+        make_code_ref,
+        make_requirement,
+        make_test_ref,
+    )
+
+    graph = build_graph(
+        make_requirement(
+            "REQ-700",
+            level="PRD",
+            assertions=[
+                {"label": "A", "text": "Assertion A"},
+                {"label": "B", "text": "Assertion B"},
+            ],
+        ),
+        make_code_ref(implements=["REQ-700"], source_path="src/whole.py"),
+        make_code_ref(implements=["REQ-700-B"], source_path="src/b.py"),
+        make_test_ref(verifies=["REQ-700"], source_path="tests/test_whole.py"),
+    )
+    annotate_coverage(graph)
+    return graph
+
+
+class TestStrictFootingGaps:
+    """Validates REQ-d00258-M: gaps are determined on the strict footing."""
+
+    def _gap_labels(self, data, section: str, req_id: str = "REQ-700") -> set[str]:
+        labels: set[str] = set()
+        for entry in getattr(data, section):
+            if entry.req_id != req_id:
+                continue
+            for _aid, label, _frac in entry.assertions:
+                labels.add(label)
+        return labels
+
+    # Verifies: REQ-d00258-M
+    def test_REQ_d00258_M_whole_req_only_assertion_is_implementation_gap(
+        self, blanket_evidence_graph
+    ) -> None:
+        """(a) A has ONLY whole-requirement implementation evidence, so it is
+        reported as an implementation gap even though the requirement is fully
+        implemented on the generous footing."""
+        data = collect_gaps(blanket_evidence_graph, exclude_status=set(), config={})
+        assert "A" in self._gap_labels(data, "uncovered")
+
+    # Verifies: REQ-d00258-M
+    def test_REQ_d00258_M_directly_referenced_assertion_is_not_a_gap(
+        self, blanket_evidence_graph
+    ) -> None:
+        """(b) B is named by an assertion-targeted `Implements:` reference, so
+        it is NOT an implementation gap."""
+        data = collect_gaps(blanket_evidence_graph, exclude_status=set(), config={})
+        assert "B" not in self._gap_labels(data, "uncovered")
+
+    # Verifies: REQ-d00258-M
+    def test_REQ_d00258_M_reporting_surface_still_headlines_the_total(
+        self, blanket_evidence_graph
+    ) -> None:
+        """(c) REQ-d00258-A is untouched: the shared aggregation the reporting
+        surfaces read still credits whole-requirement evidence to every
+        assertion (total 2.0 vs immediate direct 1.0 on the same graph)."""
+        from elspais.graph.aggregation import aggregate_dimension, relative_tier_for
+
+        agg = aggregate_dimension(blanket_evidence_graph, "implemented", config={})
+        assert agg.total_covered == pytest.approx(2.0)  # total: A and B
+        assert agg.immediate_direct == pytest.approx(1.0)  # cited by name: B only
+
+        rollup = blanket_evidence_graph.find_by_id("REQ-700").get_metric("rollup_metrics")
+        tier, is_na = relative_tier_for(rollup, "tested", measure="total")
+        assert (tier, is_na) == ("full", False)
+
+    # Verifies: REQ-d00258-M
+    def test_REQ_d00258_M_relative_denominator_is_also_strict(self, blanket_evidence_graph) -> None:
+        """(d) The testing denominator is strict too: A (implemented only by
+        whole-requirement evidence) is NOT a testing gap, while B (implemented
+        by name, tested only by a whole-requirement test) IS."""
+        data = collect_gaps(blanket_evidence_graph, exclude_status=set(), config={})
+        assert self._gap_labels(data, "untested") == {"B"}

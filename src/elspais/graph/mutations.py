@@ -1,8 +1,9 @@
 # Implements: REQ-o00062-E
 """Mutation types for TraceGraph operations.
 
-This module provides dataclasses for tracking graph mutations,
-broken references, and other graph state changes.
+This module provides dataclasses for tracking graph mutations and other
+graph state changes. Reference faults live in
+``elspais.graph.reference_faults``.
 """
 
 from __future__ import annotations
@@ -12,39 +13,6 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 from uuid import uuid4
-
-
-@dataclass(frozen=True)
-class BrokenReference:
-    """A reference to a non-existent target node.
-
-    Captured during graph build when a link cannot be resolved.
-
-    Attributes:
-        source_id: ID of the node containing the reference.
-        target_id: ID that was referenced but doesn't exist.
-        edge_kind: Type of relationship ("implements", "refines", "verifies").
-        presumed_foreign: True when target_id does not match the source repo's
-            ID pattern, indicating a likely cross-repo reference to a repo that
-            isn't configured or available.
-        diagnostic: Optional human-readable explanation of why the reference
-            is broken. Used by the template-marker validation matrix to give
-            authors actionable guidance (e.g. "X is not marked **Template**;
-            mark X with **Template** if it's intended to be satisfiable.").
-            Empty string for plain "target does not exist" broken-refs.
-    """
-
-    source_id: str
-    target_id: str
-    edge_kind: str
-    presumed_foreign: bool = False
-    # Implements: REQ-p00014-F
-    diagnostic: str = ""
-
-    def __str__(self) -> str:
-        """Human-readable representation."""
-        foreign = " [foreign]" if self.presumed_foreign else ""
-        return f"{self.source_id} --[{self.edge_kind}]--> {self.target_id} (missing{foreign})"
 
 
 @dataclass
@@ -232,4 +200,4 @@ class MutationLog:
             self._notify_dirty(False)
 
 
-__all__ = ["BrokenReference", "MutationEntry", "MutationLog"]
+__all__ = ["MutationEntry", "MutationLog"]

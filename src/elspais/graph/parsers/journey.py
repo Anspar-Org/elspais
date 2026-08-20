@@ -17,6 +17,7 @@ from elspais.graph.parsers.patterns import (
     JNY_ID_LINE_PATTERN,
     VALIDATES_PATTERN,
 )
+from elspais.graph.reference_faults import refs_and_verdicts
 
 
 class JourneyParser:
@@ -32,6 +33,16 @@ class JourneyParser:
     """
 
     priority = 60
+
+    def __init__(self, reader: Any) -> None:
+        """Args:
+        reader: The identifier reader of the federation this repository
+            belongs to. A journey's ``Validates:`` line is a list of
+            references like any other, and dividing one is the reader's
+            job; a parser that split the line itself would be a second
+            answer to which characters divide a list.
+        """
+        self.reader = reader
 
     HEADER_PATTERN = JNY_ID_LINE_PATTERN
     ACTOR_PATTERN = ACTOR_PATTERN
@@ -139,7 +150,9 @@ class JourneyParser:
 
         validates_match = self.VALIDATES_PATTERN.search(text)
         if validates_match:
-            refs_str = validates_match.group("validates")
-            data["validates"] = [ref.strip() for ref in refs_str.split(",") if ref.strip()]
+            items = self.reader.parse_ref_list(validates_match.group("validates"))
+            refs, verdicts = refs_and_verdicts(items, "validates")
+            data["validates"] = refs
+            data["reference_verdicts"] = verdicts
 
         return data

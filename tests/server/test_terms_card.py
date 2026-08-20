@@ -40,7 +40,14 @@ def _make_app(tmp_path: Path) -> TestClient:
     req_node.set_field("title", "Authentication System")
     graph._index["REQ-p00001"] = req_node
 
-    repos = [RepoEntry(name="root", graph=graph, config={}, repo_root=tmp_path)]
+    repos = [
+        RepoEntry(
+            name="root",
+            graph=graph,
+            config={"project": {"name": "root", "namespace": "REQ"}},
+            repo_root=tmp_path,
+        )
+    ]
     federated = FederatedGraph(repos)
 
     terms = TermDictionary()
@@ -97,9 +104,9 @@ class TestTermCardJsRendered:
         resp = client.get("/")
         assert resp.status_code == 200
         html = resp.text
-        assert (
-            "buildTermCardHtml" in html
-        ), "Expected 'buildTermCardHtml' function in the rendered HTML"
+        assert "buildTermCardHtml" in html, (
+            "Expected 'buildTermCardHtml' function in the rendered HTML"
+        )
 
     def test_REQ_d00244_C_term_kind_in_renderCardStack(self, tmp_path: Path) -> None:
         """GET '/' HTML contains 'term' kind in the card rendering dispatch logic."""
@@ -109,9 +116,9 @@ class TestTermCardJsRendered:
         html = resp.text
         # The renderCardStack dispatch should have a branch for kind === 'term'
         # that calls buildTermCardHtml
-        assert (
-            "buildTermCardHtml" in html
-        ), "Expected buildTermCardHtml in card rendering dispatch logic"
+        assert "buildTermCardHtml" in html, (
+            "Expected buildTermCardHtml in card rendering dispatch logic"
+        )
 
 
 # ---------------------------------------------------------------------------

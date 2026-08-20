@@ -10,29 +10,45 @@ from __future__ import annotations
 
 import pytest
 
+from elspais.config.schema import ElspaisConfig
 from elspais.graph.parsers.lark import GrammarFactory
 from elspais.graph.parsers.lark.transformers.requirement import RequirementTransformer
 from elspais.utilities.patterns import IdPatternConfig, IdResolver
+
+
+def _validated(config: dict) -> dict:
+    """Return ``config`` after checking a configuration file could hold it.
+
+    ``IdPatternConfig.from_dict`` takes a raw dictionary and never consults the
+    config schema, so a fixture built here could describe a repository no
+    ``.elspais.toml`` can produce -- and pin grammar behaviour no user can
+    reach. Every fixture is therefore validated the way a file on disk is,
+    before any resolver is built from it.
+    """
+    ElspaisConfig.model_validate(config)
+    return config
 
 
 @pytest.fixture
 def hht_resolver():
     """IdResolver for standard HHT-like pattern (with short alias)."""
     config = IdPatternConfig.from_dict(
-        {
-            "project": {"namespace": "REQ"},
-            "id-patterns": {
-                "canonical": "{namespace}-{type.letter}{component}",
-                "aliases": {"short": "{type.letter}{component}"},
-                "types": {
-                    "prd": {"level": 1, "aliases": {"letter": "p"}},
-                    "ops": {"level": 2, "aliases": {"letter": "o"}},
-                    "dev": {"level": 3, "aliases": {"letter": "d"}},
+        _validated(
+            {
+                "project": {"namespace": "REQ"},
+                "levels": {
+                    "prd": {"rank": 1, "letter": "p", "implements": ["prd"]},
+                    "ops": {"rank": 2, "letter": "o", "implements": ["ops", "prd"]},
+                    "dev": {"rank": 3, "letter": "d", "implements": ["dev", "ops", "prd"]},
                 },
-                "component": {"style": "numeric", "digits": 5, "leading_zeros": True},
-                "assertions": {"label_style": "uppercase", "max_count": 26},
-            },
-        }
+                "id-patterns": {
+                    "canonical": "{namespace}-{level.letter}{component}",
+                    "aliases": {"short": "{level.letter}{component}"},
+                    "component": {"style": "numeric", "digits": 5, "leading_zeros": True},
+                    "assertions": {"label_style": "uppercase", "max_count": 26},
+                },
+            }
+        )
     )
     return IdResolver(config)
 
@@ -428,9 +444,9 @@ C. Third assertion in group B.
         info = [
             (s.get("heading"), s.get("heading_style"), s.get("heading_level")) for s in sections
         ]
-        assert (
-            len(h4_named) == 2
-        ), f"Expected 2 H4 named sections (heading_style=None), got {len(h4_named)}: {info}"
+        assert len(h4_named) == 2, (
+            f"Expected 2 H4 named sections (heading_style=None), got {len(h4_named)}: {info}"
+        )
         headings = [s["heading"] for s in h4_named]
         assert headings == [
             "Group A",
@@ -498,9 +514,9 @@ C. Third assertion.
         )
         hash_sec = next((s for s in sections if s.get("heading") == "Hash"), None)
         assert hash_sec is not None
-        assert (
-            hash_sec.get("heading_level") == 3
-        ), f"### Hash section should have heading_level=3, got {hash_sec.get('heading_level')!r}"
+        assert hash_sec.get("heading_level") == 3, (
+            f"### Hash section should have heading_level=3, got {hash_sec.get('heading_level')!r}"
+        )
 
 
 class TestLarkCaseInsensitiveHeaders:
@@ -966,7 +982,7 @@ Body text.
         sections = d["sections"]
         headings = [s.get("heading") for s in sections]
         assert "Assertions Foo" in headings, (
-            f"'## Assertions Foo' must be a named section. " f"Got headings: {headings}"
+            f"'## Assertions Foo' must be a named section. Got headings: {headings}"
         )
 
     def test_named_section_about_assertions_with_decoration_still_named(self):
@@ -1077,8 +1093,6 @@ class TestLarkPerformance:
         Typical observed time: ~10 ms (mean), max ~11 ms in 10-run cold
         measurements. Headroom of >10x over normal max.
         """
-        import time
-
         # Generate a large synthetic spec file
         lines = []
         for i in range(50):
@@ -1101,10 +1115,21 @@ class TestLarkPerformance:
         content = "\n".join(lines) + "\n"
         assert len(content.splitlines()) > 700
 
+        # The fastest of several runs, not a single one. What this guards
+        # against -- a systemic blowup -- is slow on EVERY run, so the best
+        # run detects it just as surely; a single timed run additionally
+        # measures whatever GC or scheduling the rest of the suite happens to
+        # be doing, which is not a property of the parser. Measured margin is
+        # ~4.6 ms against the 150 ms bar, so only a systemic change closes it.
+        elapsed = min(self._timed_parse(content) for _ in range(5))
+        n_lines = len(content.splitlines())
+        assert elapsed < 0.150, (
+            f"LALR parser took {elapsed * 1000:.2f}ms on {n_lines} lines (threshold 150ms)"
+        )
+
+    def _timed_parse(self, content: str) -> float:
+        import time
+
         t0 = time.perf_counter()
         self.parser.parse(content)
-        elapsed = time.perf_counter() - t0
-        n_lines = len(content.splitlines())
-        assert (
-            elapsed < 0.150
-        ), f"LALR parser took {elapsed*1000:.2f}ms on {n_lines} lines (threshold 150ms)"
+        return time.perf_counter() - t0

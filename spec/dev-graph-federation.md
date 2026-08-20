@@ -80,9 +80,9 @@ The config system SHALL parse `[associates.<name>]` sections from `.elspais.toml
 
 ### Assertions
 
-A. `get_associates_config(config)` SHALL read `[associates]` sections and return a `dict[str, dict]` mapping associate name to `{path: str, git: str | None}`.
+A. A repository's associate declarations SHALL be read from its `[associates]` sections, each declaration yielding the associate's name together with its path, its namespace, and its git remote.
 
-B. The `path` field SHALL be required for each associate. The `git` field SHALL be optional (for clone assistance).
+B. A declaration SHALL require a path and a namespace. The git remote SHALL be optional and SHALL serve clone assistance only.
 
 C. When no `[associates]` section exists in config, `get_associates_config()` SHALL return an empty dict.
 
@@ -98,12 +98,27 @@ H. When two federated repositories both claim the same requirement ID, the build
 
 I. When scanning directories for candidate associates, a directory whose elspais configuration fails to parse or validate SHALL be skipped without aborting the scan, and each skip SHALL be reported with the directory path and the reason. Directories without an elspais configuration are not candidates and need no report.
 
+J. When two distinct repositories would enter one federation under the same declared name, the build SHALL fail with an error naming both repository paths and the declaration chain that reached each.
+
+K. When two distinct repositories would enter one federation declaring the same namespace, the build SHALL fail with an error naming both repository paths and the declaration chain that reached each.
+
+L. When the repository at an associate's declared path declares a namespace other than the one the declaration names, the build SHALL fail with an error naming the path, the namespace the declaration named, and the namespace found.
+
 ### Rationale
 
-Associates are declared in `.elspais.toml` using a structured TOML section. Each associate specifies a relative filesystem path and optional git remote URL. Transitivity (assertion D) is what makes symmetric or chained repo arrangements usable from any repository rather than only from the root, and what allows federating an org-policy repository reachable through a chain. Directed cycles remain a genuine error because dependency direction drives resolution order; diamonds are convergence, not cycles, and the git-origin identity rule (assertion G) is what makes the two distinguishable. Disjoint ID spaces (assertion H) are required because a shared ID would make resolution ambiguous — federating repositories must use non-overlapping ID patterns.
+Associates are declared in `.elspais.toml` using a structured TOML section. Each associate specifies a relative filesystem path, a namespace, and an optional git remote URL. Transitive resolution (assertion D) is what lets the tool work from any repository in a dependency chain rather than from the root alone, and it is what allows an org-policy repository reachable only through a chain to be federated at all. Directed cycles are a genuine error because dependency direction drives resolution order; diamonds are convergence, not cycles, and the git-origin identity rule (assertion G) is what makes the two distinguishable. Disjoint ID spaces (assertion H) are a precondition of federation rather than a preference: a reference resolves to a repository by asking which one claims the identifier, so two claimants make the answer arbitrary.
+
+A repository declares everything it directly needs in order to resolve on its own, without regard to what its associates happen to declare. Redundancy between those declarations is therefore expected rather than exceptional, and assertion F is what makes it harmless: a repository reached both directly and through a chain resolves to one entry, so declaring it twice is idempotent. Pruning a declaration because some other repository already reaches it would couple the two configurations and break the pruned repository's own invocations.
+
+Name uniqueness (assertion J) becomes an obligation only once declarations from several repositories are combined. A single declaration table cannot collide with itself, so under root-only resolution uniqueness was guaranteed by TOML's own syntax. A federation keys repositories by name, so two repositories arriving under one name would leave only the later of them reachable — the earlier repository's requirements would resolve against the wrong configuration and its graph would never be read at all. Failing is the honest outcome because the alternative is a silent partial federation.
+
+A namespace answers whose identifiers these are, so a federation in which two repositories claim one namespace can answer nothing — the same argument disjoint requirement IDs rest on under H. A repository owns its own namespace; an associate declaration does not name a second one but states the namespace the declaring repository expects at that path, so a mismatch means the declaration points somewhere its author did not intend. Both are declaration-time failures, reported before any graph is built, because a federation assembled on an ambiguous or mistaken namespace produces wrong answers rather than missing ones.
 
 ### Changelog
 
+- 2026-08-10 | 0522f86c | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-10 | b599e6ec | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: require a namespace to be unique across a federation (K) and to match the repository the declaration points at (L)
+- 2026-08-08 | b599e6ec | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-02 | 9b0f1733 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-02 | 2a648c8e | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-02 | 1bc0e4b5 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -113,7 +128,7 @@ Associates are declared in `.elspais.toml` using a structured TOML section. Each
 - 2026-05-11 | 479dcbb8 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 479dcbb8 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Associates Config Loading* | **Hash**: 9b0f1733
+*End* *Associates Config Loading* | **Hash**: 0522f86c
 ---
 
 ## REQ-d00203: Multi-Repo Build Pipeline
@@ -165,7 +180,7 @@ C. Per-repo checks SHALL produce a separate `HealthCheck` per repo per check typ
 
 D. `HealthFinding` SHALL support an optional `repo` field (str | None) for per-repo attribution.
 
-E. `check_broken_references` SHALL distinguish within-repo broken references (error severity) from cross-repo broken references where the target repo is in error state (warning severity with clone assistance info).
+E. A reference that fails to resolve because the repository owning its target is in an error state SHALL still be reported, and the report SHALL carry what a reader needs to obtain that repository. How loudly it is reported SHALL follow from the class the reference reached, not from the state of the repository that would have owned it.
 
 F. `run_spec_checks` SHALL accept a `FederatedGraph` and iterate `iter_repos()` for config-sensitive checks, using `FederatedGraph.from_single()` to create per-repo sub-federations.
 
@@ -179,12 +194,16 @@ J. Findings attributed to repositories outside the invocation's write scope SHAL
 
 ### Rationale
 
+E once tied a reference's severity to whether the repository that would own its target happened to be loadable. That made the same defect report at two different volumes depending on a condition the author of the reference has no control over and often cannot see, and it duplicated a decision that belongs to the classification: how far reading the reference got. Severity now follows the class and nothing else. What survives from the old rule is the part that helped — a reader who cannot resolve a reference because a repository is missing needs to know how to obtain it, and that belongs in the report whatever severity the project has chosen for the class.
+
 Without per-repo delegation, all nodes are validated against the root repo's config. When repos have different hierarchy rules, format rules, or changelog policies, this produces false positives (root config rejects valid associate nodes) or false negatives (root config allows invalid associate nodes). Per-repo delegation ensures each repo is validated by its own rules.
 
 Assertions H–J realize REQ-p00082's verdict-scoping invariants for the checks surface: a broken reference from the caller's repository *into* an org repository is the caller's bug and must gate the caller's change, while a malformed requirement *inside* a repository the caller cannot write to must never turn the command into noise by failing runs the caller cannot fix.
 
 ### Changelog
 
+- 2026-08-16 | 15c6ff55 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-16 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: severity follows the class a reference reached, not the load state of the repository that would own its target (E)
 - 2026-07-31 | 7e0f5586 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-30 | 32a98213 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-30 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-38: add finding-ownership attribution (H) and write-scope verdict scoping (I, J)
@@ -192,7 +211,7 @@ Assertions H–J realize REQ-p00082's verdict-scoping invariants for the checks 
 - 2026-05-11 | 2313140d | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 2313140d | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Per-Repo Health Check Delegation* | **Hash**: 7e0f5586
+*End* *Per-Repo Health Check Delegation* | **Hash**: 15c6ff55
 ---
 
 ## REQ-d00252: External Library Integration via Integrates Keyword
@@ -209,27 +228,34 @@ B. The `Integrates:` keyword SHALL be valid only in spec files; in code, test, a
 
 C. When the resolved target of an `Integrates:` reference belongs to the same repository as the declaring requirement, the build SHALL report it as a broken reference.
 
-D. When the associate owning an `Integrates:` target participates in the federated build, the build SHALL wire an INTEGRATES edge from the declaring requirement to the target library node such that the declaring requirement counts as implemented and inherits the library node's implemented and passing coverage (result-verified or line-coverage-credited), while the library's own source files SHALL remain unmodified.
+D. When the associate owning an `Integrates:` target participates in the federated build, the build SHALL wire an INTEGRATES edge from the declaring requirement to the target library node such that the declaring requirement counts as implemented and inherits the library node's implemented and passing coverage, while the library's own source files SHALL remain unmodified.
 
 E. When an `Integrates:` target cannot be resolved, the build SHALL report a broken reference if a configured associate claims the target's ID format but lacks the ID, and SHALL record a presumed-foreign reference that does not fail the build if no configured associate claims the ID format.
 
-F. Coverage inherited through `Integrates:` edges SHALL count toward the declaring requirement's implemented status in coverage reports (so an integrating requirement is not reported as an uncovered gap), and coverage reports SHALL summarize integrated requirements' implemented and passing coverage (result-verified or line-coverage-credited) grouped by the owning associate, with a federation total.
+F. Coverage inherited through `Integrates:` edges SHALL count toward the declaring requirement's implemented status in coverage reports (so an integrating requirement is not reported as an uncovered gap), and coverage reports SHALL summarize integrated requirements' implemented and passing coverage grouped by the owning associate, with a federation total.
 
-G. The generic presumed-foreign determination applied after cross-repo wiring to any broken *Traceability* reference that does not already carry a diagnostic (independent of the `Integrates:`-specific determination in assertion E) SHALL NOT mark a reference foreign when the federation has no configured associates, since there is no other repository the reference could belong to. It also SHALL NOT mark a reference foreign when the target's leading token matches the declaring repo's own configured namespace and no configured associate declares that same namespace; such a reference is a malformed same-repo reference, not a cross-repo one, and SHALL remain a hard broken reference carrying a diagnostic naming the likely cause (e.g. an `[id-patterns.assertions]` separator/multi_separator mismatch).
+G. The generic presumed-foreign determination applied after cross-repo wiring to any broken *Traceability* reference that does not already carry a diagnostic (independent of the `Integrates:`-specific determination in assertion E) SHALL NOT mark a reference foreign when the federation has no configured associates, since there is no other repository the reference could belong to. It also SHALL NOT mark a reference foreign when the target's leading token matches the declaring repo's own configured namespace and no configured associate declares that same namespace; such a reference is a malformed same-repo reference, not a cross-repo one, and SHALL remain a hard broken reference whose cause is named.
+
+K. A cause is named by recording the code that identifies it together with the file and the line the reference was written on, where that code's meaning is documented for a reader. Prose accompanying a code SHALL NOT name a cause the code does not.
 
 ### Rationale
 
-The bottom-up reference model (`Implements:` authored on the implementer) would force a reusable library to name each consumer's requirement IDs, coupling the library to its consumers and breaking isolated builds. `Integrates:` is the top-down inverse: authored and stored on the consumer, it points into the library and is wired as a distinct INTEGRATES edge during federation. A dedicated edge kind keeps the library's `Implements:` derivation clean (no consumer IDs leak into library files on render), while contributing to coverage like IMPLEMENTS. Passing status (the result-verified or line-coverage-credited union, REQ-d00258-B) propagates by a live-query overlay that reads the library node's own metrics, consistent with the existing cross-repo inheritance mechanism.
+K settles what naming a cause requires, because the obligation was being met by a sentence and a sentence cannot be relied on to stay true. A fixed string that reads "check the assertion separator" is correct for the defect it was written for and wrong for every other defect that reaches the same code path — and it went wrong exactly when the tool became able to say something more precise, which is the worst moment for a report to start misdescribing what it found. What is durable is the code: it is decided where the defect is decided, it carries no claim beyond its own definition, and a reader who does not know it can look it up. Recording where the reference was written is what makes it actionable, and documenting the code is what makes it legible; a code without either is an opaque string, and prose that contradicts one is worse than no prose at all.
+
+The bottom-up reference model (`Implements:` authored on the implementer) would force a reusable library to name each consumer's requirement IDs, coupling the library to its consumers and breaking isolated builds. `Integrates:` is the top-down inverse: authored and stored on the consumer, it points into the library and is wired as a distinct INTEGRATES edge during federation. A dedicated edge kind keeps the library's `Implements:` derivation clean (no consumer IDs leak into library files on render), while contributing to coverage like IMPLEMENTS. Passing status (REQ-d00258-N) propagates by a live-query overlay that reads the library node's own metrics, consistent with the existing cross-repo inheritance mechanism.
 
 ### Changelog
 
+- 2026-08-17 | 42cdc868 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-16 | be93221f | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-16 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: naming a cause means a recorded code with its file and line and a documented meaning, not a fixed sentence (K)
 - 2026-07-31 | 8e07589c | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-03 | d9d4bc98 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-03 | 425d61aa | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-31 | d1f691f0 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-31 | b576d134 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms, update hash, add missing changelog section
 
-*End* *External Library Integration via Integrates Keyword* | **Hash**: 8e07589c
+*End* *External Library Integration via Integrates Keyword* | **Hash**: 42cdc868
 ---
 
 ## REQ-d00253: Federation Write/Generation Scope
@@ -357,3 +383,108 @@ Reference repositories exist so cross-cutting obligations resolve and surface (R
 - 2026-07-30 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-38: author federation role model
 
 *End* *Federation Role Model* | **Hash**: fb8db8a9
+---
+
+## REQ-d00269: Cross-Repository Coverage Credit
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00005
+
+Evidence recorded in one repository of a federation credits the requirement it names in another. A federated view reports the coverage its declared *Traceability* edges justify, whichever repository each end of an edge lives in.
+
+### Assertions
+
+A. Coverage SHALL be computed after every cross-repository *Traceability* edge has been wired, so that no coverage number depends on the order in which a federation was assembled.
+
+B. A cross-repository *Traceability* edge SHALL carry the same shape as the equivalent same-repository edge, including the *Assertion* labels the reference targets, so that one coverage computation reads both.
+
+C. An identifier owned by any repository in a federation SHALL be recognised in the code and test annotations of every repository in that federation.
+
+D. A *Traceability* reference whose target identifier cannot be resolved SHALL be recorded as a broken reference, whatever kind of file it appears in.
+
+E. A *Traceability* keyword SHALL introduce a reference only where it is the first content of a comment or of a metadata line, with the separator that ends the keyword abutting it. The same keyword occurring elsewhere in a line, or within inline-quoted or fenced text, SHALL NOT introduce a reference. What a keyword is SHALL NOT depend on its case.
+
+F. Every reference recognised under E that produces no relationship SHALL be reported, at a severity the project configures among informational, warning and failing independently for each class R distinguishes.
+
+G. The content a *Traceability* keyword introduces SHALL be a separated list of references, and each item of that list SHALL be judged on its own: an item the grammar accounts for produces its relationship, and an item it does not is reported under the class it reached. An item SHALL be matched whole, so that a reference is never resolved by an identifier found within a larger item.
+
+H. A list whose content ends with the separator SHALL continue onto the next line that may hold reference content. A line holding no content, and a line whose own first content is a *Traceability* keyword, SHALL NOT be such a line. A list ending with the separator and having no such line to continue onto SHALL bind the references it holds and report the separator that introduced nothing.
+
+J. Where a reference is spelled in a way the grammar does not accept, the report SHALL name the defect it can determine and SHALL NOT produce the relationship the reference would have produced had it been spelled acceptably.
+
+### Rationale
+
+Cross-repository credit is what multi-repository *Traceability* is for: a sponsor repository's tests verifying a platform requirement is the ordinary case, not an exotic one. The obligations here are separated because each fails independently and each fails silently. Computing coverage before the federation is wired starves the computation of the very edges that cross repositories (A). Wiring those edges in a shape the coverage computation does not read starves it a second time, so ordering alone is not sufficient (B). Refusing to recognise a foreign identifier in a code or test comment drops the evidence before any edge exists at all (C), which bites hardest because annotating code and tests is where cross-repository evidence is most naturally authored.
+
+D is the diagnostic floor beneath C. A reference the tool cannot resolve is a fact about the estate that its author needs to see; discarding it silently is worse than reporting it broken, because a requirement with no evidence and a requirement whose evidence was thrown away read identically in every report.
+
+E is what makes D decidable. A target no repository claims is by definition outside every configured grammar, so nothing about its *shape* can be trusted to say whether it was meant as a reference — guessing from the target invents findings out of prose, and an unrestricted net over this estate produced thirty-five of them from sentences that merely contain a keyword. Position is the property that can be relied on instead: a reference is written where a reference belongs, and prose that discusses one is quoted. That also gives documentation a way to name a keyword without invoking it, which a shape-based rule cannot offer at any strictness.
+
+F exists because the honest report of an unresolvable reference is not always an error. A repository may reference a requirement that a sibling has not authored yet, and the same finding is informational to one project and a build failure to another. Severity is therefore the project's decision, while noticing is not. The decision is per class rather than for unresolvability as a whole, because the classes differ in what would resolve them: a repository nobody configured is answered by configuring it, and a name that never read as a reference is answered only by rewriting it. A project silencing the first while still hearing the second is expressing a real position, and one severity for both denies it.
+
+E settles where a keyword may introduce a reference; G settles what it may introduce. Searching the introduced content for anything identifier-shaped reads a reference out of text that names one only incidentally — a description mentioning a requirement becomes a citation of it, and an identifier that merely contains another repository's namespace resolves to a requirement its author did not write. Both are silent: the reference resolves, so nothing reports it. Matching each item whole makes the unresolvable case visible on the channel D already provides.
+
+Judging items one at a time does not weaken that. A defect in one item is evidence about that item, not about the list, and refusing the whole list makes a single typo cost every reference beside it — silently, since the refusal reads in every report exactly like a line nobody annotated. What must not vary with the number of items is how a reference is recognised, and matching whole is what holds that fixed.
+
+The prohibition on shape in E is about recognition, and does not extend to describing an item on a line already recognised. Nothing about a target's shape can say whether it was *meant* as a reference, which is why position decides that; but once position has decided it, the author has said the item is a reference, and shape is the only evidence left about which kind of defect it carries. A repository declaring the namespace an item opens with is what separates an identifier of this estate written wrongly from a name belonging to a repository nobody configured, and the two send an author to different work. J keeps that separation honest in the direction that matters: describing a defect is not licence to act on the description, because a relationship built from a guess about what an author meant is indistinguishable, everywhere downstream, from one they declared.
+
+H exists because a list long enough to need a second line is ordinary, and a form the tool neither accepts nor rejects is the worst of the three answers available. The separator already means the list has not ended, so continuation asks nothing of an author that spelling the list correctly did not already ask; and a separator with nothing after it says the same thing about a list that has, in fact, ended.
+
+Two lines are excluded from continuing a list, and both exclusions keep continuation from overriding something that was already decided. A line whose first content is a keyword is a declaration, and E makes that the whole of what opens a reference list; letting a separator on the line above capture it would take a plainly intended declaration, read it as one item holding spaces, and lose every reference in it. A line holding no content cannot be where the list resumes either, because reading past it would mean looking further than the line that follows — and a lookahead that skips is a lookahead with no bound, which is how a list reaches content written far below it and never meant for it.
+
+The complementary negative rule — that federation membership alone credits nothing — belongs to the federation role model and is not restated here. Together the two bound the behaviour from both sides: coverage crosses a boundary exactly where a *Traceability* edge crosses it, and nowhere else.
+
+Coverage computed over a wired federation is idempotent, so a surface may recompute without double-counting.
+
+A concurrency version is derived from a node's content and its outgoing *Traceability* edges, so normalizing a cross-repository edge onto the owning requirement per B brings that edge into the requirement's version. That is the correct outcome and not a side effect to be engineered away: a version guards against a writer modifying state it has not seen, and within one federated view that edge is state a writer can add. Each federated view answers for its own membership, so the same requirement legitimately carries different versions in two federations that reach it — versions are compared only against the graph that issued them, never between them.
+
+### Changelog
+
+- 2026-08-19 | 4a7dd275 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-15 | af36a1b3 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-15 | c861d2bc | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-15 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: neither an empty line nor a line opening with a keyword may continue a list (H)
+- 2026-08-15 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: judge list items one at a time (G); keyword recognition is case-independent with an abutting separator (E); severity per failure class (F); list continuation onto a following line (H); a named defect never yields the relationship (J)
+- 2026-08-11 | 8cac4dcd | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-11 | f5855c6e | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: a keyword introduces a list of references and nothing else (G)
+- 2026-08-09 | f5855c6e | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-08 | bd05142f | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-08 | bc8f5d09 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-08 | bd05142f | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
+- 2026-08-09 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: cross-repository coverage credit
+
+*End* *Cross-Repository Coverage Credit* | **Hash**: 4a7dd275
+---
+
+## REQ-d00275: Whose Configuration Governs a Federated Answer
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00005
+
+A federated answer is computed from several repositories, each carrying its own configuration. This requirement settles which of those configurations decides each part of the answer, so that the same estate does not answer differently depending on where the tool was invoked without saying that it did.
+
+### Assertions
+
+A. Where a configured setting decides how a finding is judged, scored or reported, the configuration of the repository the tool was invoked from SHALL govern for the whole federation.
+
+B. An identifier SHALL be read under the grammar of the repository that owns it, whichever repository the tool was invoked from.
+
+C. Where a setting states a fact about a repository rather than a rule for judging one -- where its files are, what it calls its identifiers, its namespace, where its results are written -- that repository's own configuration SHALL be read, whichever repository the tool was invoked from.
+
+D. Where a member's configuration would have decided a governed setting differently from the invoking repository's, the tool SHALL disclose the difference, naming the setting, both values, and the member. The disclosure SHALL NOT fail the run.
+
+### Rationale
+
+A federated answer is one report, and a reader has to be able to predict the rules it was produced under. Deciding each finding's severity by the configuration of whichever repository it came from would make one report speak in several voices, and would let a repository outside the reader's control change the verdict on the reader's own run.
+
+B is the exception because grammar is not a judgment. A repository declares only the identifiers it owns (REQ-d00251-L), so reading one repository's identifier under another's grammar does not judge it differently -- it fails to read it at all.
+
+C is the boundary that keeps A from swallowing what is not a rule. Where a repository's files are, what it calls its identifiers, and where its results are written are facts about that repository. Overriding a fact from outside does not make an answer stricter or more generous; it makes it wrong, and wrong in a direction that reads as an absence -- a federation whose member configures test targets, described as configuring none, sends a reader looking for a missing configuration instead of missing results.
+
+The rules by which a repository's own content is judged well-formed -- its hierarchy, its format conventions, its changelog policy -- are not covered here and stay where REQ-d00204-A puts them, with the repository whose content is being judged. The line A draws is between judging a finding and judging the content a finding is about.
+
+D exists because A is silent by construction. A setting the invoking project chose governs a member whose maintainer never chose it, and where the two differ the member's own repository would have reported something else. Undisclosed, a finding silenced by the invoking configuration is indistinguishable from a finding that was never there, which is the omission the anti-pattern template names. It cannot fail the run, because the difference is not a defect: federations are assembled from repositories that legitimately configure themselves differently.
+
+### Changelog
+
+- 2026-08-19 | 9ab2ef7c | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: add missing changelog section
+
+*End* *Whose Configuration Governs a Federated Answer* | **Hash**: 9ab2ef7c

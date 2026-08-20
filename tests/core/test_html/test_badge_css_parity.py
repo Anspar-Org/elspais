@@ -48,6 +48,6 @@ def test_REQ_d00258_H_assertion_badge_has_fill_rule_for_each_standing_color(val_
     # The per-assertion badges must stay in parity with the requirement badges so
     # an assertion badge reads identically to the requirement badge it projects.
     css = (_CSS_DIR / "_card-stack.css.j2").read_text()
-    assert (
-        f".assertion-tested-btn.val-{val_color}" in css
-    ), f"missing per-assertion CSS fill rule for val-{val_color}"
+    assert f".assertion-tested-btn.val-{val_color}" in css, (
+        f"missing per-assertion CSS fill rule for val-{val_color}"
+    )

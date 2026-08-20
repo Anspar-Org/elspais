@@ -1,7 +1,17 @@
-# Verifies: REQ-d00010
-"""Tests for daemon lifecycle — no orphan servers."""
+# Verifies: REQ-d00010, REQ-o00076-K
+"""Tests for daemon lifecycle — no orphan servers, and a stable address.
 
+A daemon is replaced often: on a config change, on an idle expiry, on a
+developer restarting it. The record naming the process currently serving
+a tree is removed when none is, so it cannot also be what tells a client
+where the tree is reached — the address has to outlive there being
+nothing to reach. These tests cover the separate record that holds it.
+"""
+
+import json
 from unittest.mock import patch
+
+import pytest
 
 
 def test_start_daemon_stops_existing_first(tmp_path):
@@ -89,3 +99,132 @@ def test_viewer_atexit_removes_daemon_json(tmp_path):
     # The atexit handler is a closure over daemon_json path
     path.unlink(missing_ok=True)
     assert not path.exists()
+
+
+# ---------------------------------------------------------------------------
+# The address a working tree is reached at (REQ-o00076-K)
+# ---------------------------------------------------------------------------
+
+
+# Verifies: REQ-o00076-K
+def test_REQ_o00076_K_reserved_port_round_trips_the_recorded_address(tmp_path):
+    """Validates REQ-o00076-K: the address survives replacement only if it
+    is written down somewhere a later process reads it back. A client that
+    resolved the address once holds it for the rest of its session, so the
+    next daemon has to be able to learn where its predecessor answered and
+    ask for the same place.
+    """
+    from elspais.mcp.daemon import reserve_port, reserved_port
+
+    assert reserved_port(tmp_path) is None
+
+    reserve_port(tmp_path, 45678)
+
+    assert reserved_port(tmp_path) == 45678
+
+
+# Verifies: REQ-o00076-K
+@pytest.mark.parametrize(
+    "payload",
+    [
+        pytest.param("not json at all", id="unparseable"),
+        pytest.param(json.dumps({"port": "45678"}), id="non-integer"),
+        pytest.param(json.dumps({"port": 0}), id="zero"),
+        pytest.param(json.dumps({"port": 70000}), id="out-of-range"),
+        pytest.param(json.dumps({}), id="absent"),
+    ],
+)
+def test_REQ_o00076_K_unusable_record_reads_as_no_reservation(tmp_path, payload):
+    """Validates REQ-o00076-K: a record that cannot name an address must
+    read as no address rather than as a bad one. Everything downstream
+    hands what it reads to the daemon as the port to bind, and a truthy
+    nonsense value would be passed straight through — a tree that would
+    have been served on any free port instead fails to be served at all,
+    which is a worse outcome than losing the reservation.
+    """
+    from elspais.mcp.daemon import _port_record_path, reserved_port
+
+    path = _port_record_path(tmp_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(payload)
+
+    assert reserved_port(tmp_path) is None
+
+
+# Verifies: REQ-o00076-K, REQ-o00076-E
+def test_REQ_o00076_K_address_outlives_the_record_of_what_is_serving(tmp_path):
+    """Validates REQ-o00076-K: the address is a different fact from the
+    process currently serving, and holding them apart is what lets a tree
+    be reached in the same place after serving has stopped and begun
+    again. daemon.json is removed whenever nothing serves the tree
+    (REQ-o00076-E), so an address kept inside it would be destroyed by the
+    ordinary act of shutting the daemon down — exactly when a client that
+    resolved it once still needs it to be true.
+    """
+    from elspais.mcp.daemon import (
+        _daemon_json_path,
+        _port_record_path,
+        reserve_port,
+        reserved_port,
+        write_daemon_json,
+    )
+
+    write_daemon_json(repo_root=tmp_path, pid=99999, port=45678, server_type="daemon")
+    reserve_port(tmp_path, 45678)
+
+    daemon_json = _daemon_json_path(tmp_path)
+    assert _port_record_path(tmp_path) != daemon_json
+
+    daemon_json.unlink()
+
+    assert reserved_port(tmp_path) == 45678
+
+
+# Verifies: REQ-o00076-K
+def test_REQ_o00076_K_unwritable_reservation_warns_instead_of_failing(tmp_path, capsys):
+    """Validates REQ-o00076-K: a tree whose reservation cannot be written
+    still gets served. Losing the stable address is a degradation — a
+    client that resolved it once may have to resolve it again — while
+    raising here would turn it into a tree that cannot be served at all.
+    The warning is what keeps the degradation visible rather than silent.
+    """
+    from elspais.mcp.daemon import reserve_port, reserved_port
+
+    # `.elspais` occupied by a file, so the directory cannot be created.
+    (tmp_path / ".elspais").write_text("not a directory")
+
+    reserve_port(tmp_path, 45678)
+
+    assert "warning" in capsys.readouterr().err.lower()
+    assert reserved_port(tmp_path) is None
+
+
+# Verifies: REQ-o00076-K
+@pytest.mark.parametrize(
+    ("reservation", "expected"),
+    [
+        pytest.param(45678, "45678", id="reserved"),
+        pytest.param(None, "0", id="never-served"),
+    ],
+)
+def test_REQ_o00076_K_start_daemon_asks_for_the_reserved_address(tmp_path, reservation, expected):
+    """Validates REQ-o00076-K: recording the address is only half of it —
+    the replacement process has to actually ask for it, or the client that
+    held the old address still finds nothing there. A tree that has never
+    been served has no address to preserve and asks for any free port, so
+    the reservation is a request rather than a requirement.
+    """
+    from elspais.mcp.daemon import reserve_port, start_daemon
+
+    if reservation is not None:
+        reserve_port(tmp_path, reservation)
+
+    with (
+        patch("elspais.mcp.daemon.subprocess.Popen") as popen,
+        patch("elspais.mcp.daemon.time.time", side_effect=[0, 0, 0, 20]),
+    ):
+        with pytest.raises(RuntimeError):
+            start_daemon(tmp_path, ttl_minutes=1)
+
+    argv = popen.call_args[0][0]
+    assert argv[argv.index("--port") + 1] == expected

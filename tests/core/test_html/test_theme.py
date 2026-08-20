@@ -63,9 +63,19 @@ class TestCatalogEntries:
 
     def test_REQ_p00006_A_entries_have_descriptions(self):
         catalog = get_catalog()
-        entry = catalog.by_key("coverage_caveat.indirect")
+        entry = catalog.by_key("severity.neutral")
         assert entry.description
-        assert entry.long_description
+
+    # Verifies: REQ-d00258-J
+    def test_REQ_d00258_J_no_caveat_category_in_the_legend(self):
+        """The legend advertises no caveat standing in for a measure.
+
+        The legend is built from the catalog's categories, so an entry left
+        behind here would keep teaching a marker no surface renders.
+        """
+        catalog = get_catalog()
+        assert not catalog.by_category("coverage_caveat")
+        assert all(not e.key.startswith("coverage_caveat") for e in catalog.entries)
 
     def test_REQ_p00006_A_coverage_standing_have_color_key(self):
         catalog = get_catalog()
@@ -134,9 +144,9 @@ class TestComputeValidationColorCatalog:
 
         rollup = RollupMetrics(
             total_assertions=2,
-            implemented=CoverageDimension(total=2, direct=2, indirect=2),
-            tested=CoverageDimension(total=2, direct=2, indirect=2),
-            verified=CoverageDimension(total=2, direct=2, indirect=2),
+            implemented=CoverageDimension(total=2, immediate_direct_by_label={"A": 1.0, "B": 1.0}),
+            tested=CoverageDimension(total=2, immediate_direct_by_label={"A": 1.0, "B": 1.0}),
+            verified=CoverageDimension(total=2, immediate_direct_by_label={"A": 1.0, "B": 1.0}),
         )
         node = self._make_active_node_with_metrics(rollup)
         tiers = compute_coverage_tiers(node)
@@ -155,31 +165,25 @@ class TestComputeValidationColorCatalog:
         expected_entry = catalog.by_key("coverage_standing.failing")
 
         # A/B both implemented and tested; the Passing dim FAILS on A (within the
-        # tested denominator) -> relative 'failing' tier -> red (REQ-d00258-B).
+        # tested denominator) -> relative 'failing' tier -> red (REQ-d00258-D).
         rollup = RollupMetrics(
             total_assertions=2,
             implemented=CoverageDimension(
                 total=2,
-                direct=2,
-                indirect=2,
-                direct_pct_by_label={"A": 1.0, "B": 1.0},
-                indirect_pct_by_label={"A": 1.0, "B": 1.0},
+                immediate_direct_by_label={"A": 1.0, "B": 1.0},
+                immediate_indirect_by_label={"A": 1.0, "B": 1.0},
             ),
             tested=CoverageDimension(
                 total=2,
-                direct=2,
-                indirect=2,
-                direct_pct_by_label={"A": 1.0, "B": 1.0},
-                indirect_pct_by_label={"A": 1.0, "B": 1.0},
+                immediate_direct_by_label={"A": 1.0, "B": 1.0},
+                immediate_indirect_by_label={"A": 1.0, "B": 1.0},
             ),
             verified=CoverageDimension(
                 total=2,
-                direct=1,
-                indirect=1,
                 has_failures=True,
                 failing_labels={"A"},
-                direct_pct_by_label={"B": 1.0},
-                indirect_pct_by_label={"B": 1.0},
+                immediate_direct_by_label={"B": 1.0},
+                immediate_indirect_by_label={"B": 1.0},
             ),
         )
         node = self._make_active_node_with_metrics(rollup)
@@ -201,9 +205,9 @@ class TestComputeValidationColorCatalog:
 
         rollup = RollupMetrics(
             total_assertions=3,
-            implemented=CoverageDimension(total=3, direct=1, indirect=1),
-            tested=CoverageDimension(total=3, direct=1, indirect=1),
-            verified=CoverageDimension(total=3, direct=1, indirect=1),
+            implemented=CoverageDimension(total=3, immediate_direct_by_label={"A": 1.0}),
+            tested=CoverageDimension(total=3, immediate_direct_by_label={"A": 1.0}),
+            verified=CoverageDimension(total=3, immediate_direct_by_label={"A": 1.0}),
         )
         node = self._make_active_node_with_metrics(rollup)
         tiers = compute_coverage_tiers(node)
@@ -230,21 +234,15 @@ class TestComputeValidationColorCatalog:
             total_assertions=2,
             implemented=CoverageDimension(
                 total=2,
-                direct=0,
-                indirect=2,
-                indirect_pct_by_label={"A": 1.0, "B": 1.0},
+                immediate_indirect_by_label={"A": 1.0, "B": 1.0},
             ),
             tested=CoverageDimension(
                 total=2,
-                direct=0,
-                indirect=2,
-                indirect_pct_by_label={"A": 1.0, "B": 1.0},
+                immediate_indirect_by_label={"A": 1.0, "B": 1.0},
             ),
             verified=CoverageDimension(
                 total=2,
-                direct=0,
-                indirect=2,
-                indirect_pct_by_label={"A": 1.0, "B": 1.0},
+                immediate_indirect_by_label={"A": 1.0, "B": 1.0},
             ),
         )
         node = self._make_active_node_with_metrics(rollup)
@@ -269,9 +267,9 @@ class TestComputeValidationColorCatalog:
 
         rollup = RollupMetrics(
             total_assertions=2,
-            implemented=CoverageDimension(total=2, direct=0, indirect=0),
-            tested=CoverageDimension(total=2, direct=0, indirect=0),
-            verified=CoverageDimension(total=2, direct=0, indirect=0),
+            implemented=CoverageDimension(total=2),
+            tested=CoverageDimension(total=2),
+            verified=CoverageDimension(total=2),
         )
         node = self._make_active_node_with_metrics(rollup)
         tiers = compute_coverage_tiers(node)
@@ -372,11 +370,11 @@ class TestSeverityCatalog:
 
         rollup = RollupMetrics(
             total_assertions=2,
-            implemented=CoverageDimension(total=2, direct=2, indirect=2),
-            tested=CoverageDimension(total=2, direct=2, indirect=2),
-            verified=CoverageDimension(total=2, direct=2, indirect=2),
-            uat_coverage=CoverageDimension(total=2, direct=0, indirect=0),
-            uat_verified=CoverageDimension(total=2, direct=0, indirect=0),
+            implemented=CoverageDimension(total=2, immediate_direct_by_label={"A": 1.0, "B": 1.0}),
+            tested=CoverageDimension(total=2, immediate_direct_by_label={"A": 1.0, "B": 1.0}),
+            verified=CoverageDimension(total=2, immediate_direct_by_label={"A": 1.0, "B": 1.0}),
+            uat_coverage=CoverageDimension(total=2),
+            uat_verified=CoverageDimension(total=2),
         )
         node = self._make_active_node_with_metrics(rollup)
         tiers = compute_coverage_tiers(node)
@@ -396,11 +394,11 @@ class TestSeverityCatalog:
 
         rollup = RollupMetrics(
             total_assertions=2,
-            implemented=CoverageDimension(total=2, direct=2, indirect=2),
-            tested=CoverageDimension(total=2, direct=2, indirect=2),
-            verified=CoverageDimension(total=2, direct=2, indirect=2),
+            implemented=CoverageDimension(total=2, immediate_direct_by_label={"A": 1.0, "B": 1.0}),
+            tested=CoverageDimension(total=2, immediate_direct_by_label={"A": 1.0, "B": 1.0}),
+            verified=CoverageDimension(total=2, immediate_direct_by_label={"A": 1.0, "B": 1.0}),
             # A journey validates 1 of 2 assertions -> partial.
-            uat_coverage=CoverageDimension(total=2, direct=1, indirect=1),
+            uat_coverage=CoverageDimension(total=2, immediate_direct_by_label={"A": 1.0}),
         )
         node = self._make_active_node_with_metrics(rollup)
         tiers = compute_coverage_tiers(node)
@@ -419,9 +417,9 @@ class TestSeverityCatalog:
 
         rollup = RollupMetrics(
             total_assertions=2,
-            implemented=CoverageDimension(total=2, direct=0, indirect=0),
-            tested=CoverageDimension(total=2, direct=2, indirect=2),
-            verified=CoverageDimension(total=2, direct=2, indirect=2),
+            implemented=CoverageDimension(total=2),
+            tested=CoverageDimension(total=2, immediate_direct_by_label={"A": 1.0, "B": 1.0}),
+            verified=CoverageDimension(total=2, immediate_direct_by_label={"A": 1.0, "B": 1.0}),
         )
         node = self._make_active_node_with_metrics(rollup)
         tiers = compute_coverage_tiers(node)
@@ -441,26 +439,20 @@ class TestSeverityCatalog:
             total_assertions=2,
             implemented=CoverageDimension(
                 total=2,
-                direct=2,
-                indirect=2,
-                direct_pct_by_label={"A": 1.0, "B": 1.0},
-                indirect_pct_by_label={"A": 1.0, "B": 1.0},
+                immediate_direct_by_label={"A": 1.0, "B": 1.0},
+                immediate_indirect_by_label={"A": 1.0, "B": 1.0},
             ),
             tested=CoverageDimension(
                 total=2,
-                direct=2,
-                indirect=2,
-                direct_pct_by_label={"A": 1.0, "B": 1.0},
-                indirect_pct_by_label={"A": 1.0, "B": 1.0},
+                immediate_direct_by_label={"A": 1.0, "B": 1.0},
+                immediate_indirect_by_label={"A": 1.0, "B": 1.0},
             ),
             verified=CoverageDimension(
                 total=2,
-                direct=1,
-                indirect=1,
                 has_failures=True,
                 failing_labels={"A"},
-                direct_pct_by_label={"B": 1.0},
-                indirect_pct_by_label={"B": 1.0},
+                immediate_direct_by_label={"B": 1.0},
+                immediate_indirect_by_label={"B": 1.0},
             ),
         )
         node = self._make_active_node_with_metrics(rollup)
@@ -469,15 +461,16 @@ class TestSeverityCatalog:
         assert tiers["verified_tier"] == "failing"
         assert tiers["combined_bucket"] == "failing"
 
-    # Verifies: REQ-d00258-B
-    def test_passing_badge_credits_lcov_only_coverage(self):
-        """A requirement fully credited via lcov only (no `Verifies:` refs at
-        all) must still show a full "Passing" badge -- the 'verified' slot in
-        compute_coverage_tiers is `tested_and_passing(rollup)`, the union of
-        `verified` and `lcov_tested` (REQ-d00258-B), not the raw `verified`
-        dimension. combined_bucket must not degrade to 'partial' solely
-        because the evidence came from line coverage rather than a Verifies:
-        reference."""
+    # Verifies: REQ-d00258-N
+    def test_passing_badge_does_not_credit_lcov_only_coverage(self):
+        """A requirement credited via lcov only (no `Verifies:` refs at all)
+        must show a MISSING "Passing" badge. The 'verified' slot in
+        compute_coverage_tiers is `tested_and_passing(rollup)`, which counts
+        only what a test declared against an assertion returned; line
+        coverage credits no *Traceability* dimension (REQ-d00254-B). The
+        requirement is fully implemented and fully tested with nothing having
+        returned a verdict, so combined_bucket degrades to 'partial' -- which
+        is the honest reading, not a defect in the badge."""
         from elspais.graph.metrics import CoverageDimension, RollupMetrics
         from elspais.html.generator import compute_coverage_tiers
 
@@ -485,35 +478,29 @@ class TestSeverityCatalog:
             total_assertions=2,
             implemented=CoverageDimension(
                 total=2,
-                direct=2,
-                indirect=2,
-                direct_pct_by_label={"A": 1.0, "B": 1.0},
-                indirect_pct_by_label={"A": 1.0, "B": 1.0},
+                immediate_direct_by_label={"A": 1.0, "B": 1.0},
+                immediate_indirect_by_label={"A": 1.0, "B": 1.0},
             ),
             tested=CoverageDimension(
                 total=2,
-                direct=2,
-                indirect=2,
-                direct_pct_by_label={"A": 1.0, "B": 1.0},
-                indirect_pct_by_label={"A": 1.0, "B": 1.0},
+                immediate_direct_by_label={"A": 1.0, "B": 1.0},
+                immediate_indirect_by_label={"A": 1.0, "B": 1.0},
             ),
             # No Verifies: coverage at all on this dimension...
-            verified=CoverageDimension(total=2, direct=0, indirect=0),
-            # ...but full line-coverage credit via lcov_tested (label-keyed so
-            # tested_and_passing() credits the tested denominator labels).
+            verified=CoverageDimension(total=2),
+            # ...and full line-coverage credit, label-keyed over exactly the
+            # tested denominator labels, which still reaches Passing nowhere.
             lcov_tested=CoverageDimension(
                 total=2,
-                direct=2,
-                indirect=2,
-                direct_pct_by_label={"A": 1.0, "B": 1.0},
-                indirect_pct_by_label={"A": 1.0, "B": 1.0},
+                immediate_direct_by_label={"A": 1.0, "B": 1.0},
+                immediate_indirect_by_label={"A": 1.0, "B": 1.0},
             ),
         )
         node = self._make_active_node_with_metrics(rollup)
         tiers = compute_coverage_tiers(node)
 
-        assert tiers["verified_tier"] == "full"
-        assert tiers["combined_bucket"] == "full"
+        assert tiers["verified_tier"] == "missing"
+        assert tiers["combined_bucket"] == "partial"
 
     # Verifies: REQ-d00258-F
     def test_expects_validation_uat_none_is_red_and_drags(self):
@@ -525,11 +512,11 @@ class TestSeverityCatalog:
 
         rollup = RollupMetrics(
             total_assertions=2,
-            implemented=CoverageDimension(total=2, direct=2, indirect=2),
-            tested=CoverageDimension(total=2, direct=2, indirect=2),
-            verified=CoverageDimension(total=2, direct=2, indirect=2),
-            uat_coverage=CoverageDimension(total=2, direct=0, indirect=0),
-            uat_verified=CoverageDimension(total=2, direct=0, indirect=0),
+            implemented=CoverageDimension(total=2, immediate_direct_by_label={"A": 1.0, "B": 1.0}),
+            tested=CoverageDimension(total=2, immediate_direct_by_label={"A": 1.0, "B": 1.0}),
+            verified=CoverageDimension(total=2, immediate_direct_by_label={"A": 1.0, "B": 1.0}),
+            uat_coverage=CoverageDimension(total=2),
+            uat_verified=CoverageDimension(total=2),
         )
         node = self._make_active_node_with_metrics(rollup)  # level PRD
         config = {"levels": {"prd": {"expects_validation": True}}}
@@ -550,11 +537,11 @@ class TestSeverityCatalog:
 
         rollup = RollupMetrics(
             total_assertions=2,
-            implemented=CoverageDimension(total=2, direct=2, indirect=2),
-            tested=CoverageDimension(total=2, direct=2, indirect=2),
-            verified=CoverageDimension(total=2, direct=2, indirect=2),
-            uat_coverage=CoverageDimension(total=2, direct=0, indirect=0),
-            uat_verified=CoverageDimension(total=2, direct=0, indirect=0),
+            implemented=CoverageDimension(total=2, immediate_direct_by_label={"A": 1.0, "B": 1.0}),
+            tested=CoverageDimension(total=2, immediate_direct_by_label={"A": 1.0, "B": 1.0}),
+            verified=CoverageDimension(total=2, immediate_direct_by_label={"A": 1.0, "B": 1.0}),
+            uat_coverage=CoverageDimension(total=2),
+            uat_verified=CoverageDimension(total=2),
         )
         node = self._make_active_node_with_metrics(rollup)  # level PRD
         # Config where prd does NOT expect validation.
@@ -642,9 +629,9 @@ class TestStatusRoleGating:
 
         return RollupMetrics(
             total_assertions=2,
-            implemented=CoverageDimension(total=2, direct=2, indirect=2),
-            tested=CoverageDimension(total=2, direct=2, indirect=2),
-            verified=CoverageDimension(total=2, direct=2, indirect=2),
+            implemented=CoverageDimension(total=2, immediate_direct_by_label={"A": 1.0, "B": 1.0}),
+            tested=CoverageDimension(total=2, immediate_direct_by_label={"A": 1.0, "B": 1.0}),
+            verified=CoverageDimension(total=2, immediate_direct_by_label={"A": 1.0, "B": 1.0}),
         )
 
     # Verifies: REQ-d00258-C

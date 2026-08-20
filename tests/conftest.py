@@ -44,6 +44,17 @@ def pytest_configure(config):
     os.environ.setdefault("GIT_AUTHOR_NAME", "Test User")
     os.environ.setdefault("GIT_AUTHOR_EMAIL", "test@test.org")
 
+    # Declare this process as the client of every daemon the run
+    # starts. Without it the client handle resolves to whatever
+    # long-lived session invoked pytest — an editor, an agent session,
+    # a login shell — and a daemon bound to that outlives the run by
+    # hours while its idle timeout keeps re-arming, because a daemon
+    # with a live client does not reap itself. Set here rather than in
+    # a fixture so it precedes collection, and exported rather than
+    # passed so the elspais subprocesses the e2e helpers spawn declare
+    # the same client this process does.
+    os.environ["ELSPAIS_CLIENT_PID"] = str(os.getpid())
+
     config.addinivalue_line(
         "markers",
         "incremental: mark test class for sequential execution with xfail on prior failure",
@@ -248,26 +259,31 @@ def assertions_fixture() -> Path:
 
 @pytest.fixture
 def hht_resolver():
-    """Return an IdResolver configured for the standard HHT-like pattern."""
-    from elspais.utilities.patterns import IdPatternConfig, IdResolver
+    """Return an IdResolver configured for the standard HHT-like pattern.
 
-    config = IdPatternConfig.from_dict(
-        {
-            "project": {"namespace": "REQ"},
-            "id-patterns": {
-                "canonical": "{namespace}-{type.letter}{component}",
-                "aliases": {"short": "{type.letter}{component}"},
-                "types": {
-                    "prd": {"level": 1, "aliases": {"letter": "p"}},
-                    "ops": {"level": 2, "aliases": {"letter": "o"}},
-                    "dev": {"level": 3, "aliases": {"letter": "d"}},
-                },
-                "component": {"style": "numeric", "digits": 5, "leading_zeros": True},
-                "assertions": {"label_style": "uppercase", "max_count": 26},
-            },
-        }
-    )
-    return IdResolver(config)
+    Written the way a repository writes it — levels in their own section —
+    and validated the way a config file is, so this fixture cannot describe
+    a repository the tool would refuse to load.
+    """
+    from elspais.config.schema import ElspaisConfig
+    from elspais.utilities.patterns import build_resolver
+
+    config = {
+        "project": {"name": "hht-like", "namespace": "REQ"},
+        "levels": {
+            "prd": {"rank": 1, "letter": "p", "implements": ["prd"]},
+            "ops": {"rank": 2, "letter": "o", "implements": ["ops", "prd"]},
+            "dev": {"rank": 3, "letter": "d", "implements": ["dev", "ops", "prd"]},
+        },
+        "id-patterns": {
+            "canonical": "{namespace}-{level.letter}{component}",
+            "aliases": {"short": "{level.letter}{component}"},
+            "component": {"style": "numeric", "digits": 5, "leading_zeros": True},
+            "assertions": {"label_style": "uppercase", "max_count": 26},
+        },
+    }
+    ElspaisConfig.model_validate(config)
+    return build_resolver(config)
 
 
 @pytest.fixture

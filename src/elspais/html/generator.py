@@ -15,7 +15,13 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from elspais import __version__
-from elspais.graph.aggregation import absolute_tier, relative_tier
+from elspais.graph.aggregation import (
+    HEADLINE_MEASURE,
+    assertion_measures,
+    dimension_measures,
+    measure_phrase,
+    relative_tier_for,
+)
 from elspais.graph.parsers.patterns import JNY_ID_PATTERN
 from elspais.html.theme import get_catalog
 from elspais.utilities.patterns import INSTANCE_SEPARATOR
@@ -44,18 +50,11 @@ class TreeRow:
     is_changed: bool
     is_uncommitted: bool
     is_unsaved: bool
-    is_roadmap: bool
-    is_code: bool
-    is_test: bool  # TEST node for traceability
-    is_test_result: bool  # RESULT node (test execution result)
     has_children: bool
     has_failures: bool
     is_associated: bool  # From sponsor/associated repository
-    coverage_indirect: str = "none"  # "none", "partial", "full" (including indirect)
     validation_color: str = ""  # val-green/val-yellow-green/val-yellow/val-red/val-orange or ""
     validation_tip: str = ""  # Hover tooltip explaining the validation color
-    source_file: str = ""  # Relative path to source file
-    source_line: int = 0  # Line number in source file
     result_status: str = ""  # For RESULT: passed/failed/error/skipped
 
 
@@ -104,8 +103,9 @@ class ViewStats:
 SEVERITY_PRIORITY: dict[str, int] = {"error": 0, "warning": 1, "info": 2, "neutral": 2, "ok": 3}
 
 
+# Implements: REQ-d00258-D
 def _severity_color(severity: str) -> str:
-    """Resolve a severity name to its theme-catalog color_key (REQ-d00258-D)."""
+    """Resolve a severity name to its theme-catalog color_key."""
     from elspais.html.theme import get_catalog
 
     try:
@@ -115,7 +115,7 @@ def _severity_color(severity: str) -> str:
 
 
 # Dimension labels (the "Implemented/Tested/Passing/UAT Covered/UAT Passed"
-# vocabulary, REQ-d00258-B) now live in a single per-relationship source:
+# vocabulary, REQ-d00258-K) now live in a single per-relationship source:
 # elspais.config.status_words.get_status_words(config).
 
 # Tooltip definitions for card-view badges
@@ -187,28 +187,24 @@ def compute_coverage_tiers(node: GraphNode, config: dict[str, Any] | None = None
     """
     from elspais.config.schema import CoverageConfig, CoverageSeverityConfig
     from elspais.config.status_words import get_status_words
+    from elspais.graph.metrics import fmt_assertion_count, tested_partition
 
     empty: dict[str, Any] = {
         "impl_color": "",
         "impl_tip": "",
         "impl_tier": "",
-        "impl_marker": "",
         "tested_color": "",
         "tested_tip": "",
         "tested_tier": "",
-        "tested_marker": "",
         "verified_color": "",
         "verified_tip": "",
         "verified_tier": "",
-        "verified_marker": "",
         "uat_cov_color": "",
         "uat_cov_tip": "",
         "uat_cov_tier": "",
-        "uat_cov_marker": "",
         "uat_ver_color": "",
         "uat_ver_tip": "",
         "uat_ver_tier": "",
-        "uat_ver_marker": "",
         "combined_color": "",
         "combined_tip": "",
         "combined_bucket": "",
@@ -267,38 +263,26 @@ def compute_coverage_tiers(node: GraphNode, config: dict[str, Any] | None = None
         uat_cov_cfg = uat_cov_cfg.model_copy(update={"missing": "error"})
         uat_ver_cfg = uat_ver_cfg.model_copy(update={"missing": "error"})
 
-    # Relative-denominator label sets (REQ-d00258, Phase-2 chain). Each chained
-    # dimension is measured over the label-set that qualified at the PRIOR link,
-    # not over every assertion: Tested over IMPLEMENTED labels, Passing over
-    # TESTED labels, UAT-Passed over UAT-COVERED labels. `Implemented` and
-    # `UAT-Covered` stay ABSOLUTE (denom = None below -> use dim.tier over all
-    # assertions). An EMPTY denominator means "nothing to measure" -> N/A, which
-    # resolves to NEUTRAL (info) severity so it renders grey and does not drag
-    # combined_bucket (fixes the DIARY-GUI "Passing: no coverage shows yellow").
-    # Each relative denominator is the set of labels ACTUALLY covered in the
-    # prior dimension (fraction > 0), NOT every label present in the per-label
-    # map: ``_conduct_refines_coverage`` seeds a 0.0 entry for every assertion
-    # label (incl. unimplemented ones), so building the set from the dict keys
-    # would silently make the "relative" chain absolute and disagree with the
-    # gaps/MCP surfaces (which filter frac > 0) and the aggregation buckets.
-    # REQ-d00258-I.
+    # The chain of relative denominators (REQ-d00258-I) is NOT derived here.
+    # Coverage aggregation has ONE home (`graph/aggregation.py`), so which
+    # label-set a chained dimension is measured over -- and whether it is
+    # chained at all -- is answered by `relative_tier_for`, the same helper the
+    # shared tier buckets read. The badge and the rollup therefore cannot
+    # disagree about what a dimension counts.
+    #
+    # Map dimension key -> (CoverageDimension, CoverageSeverityConfig, prefix).
+    # The dimension is carried for the hover text only; the tier comes from the
+    # shared helper, whose "verified" numerator is tested_and_passing()
+    # (REQ-d00258-N): what the declared tests returned, with an assertion its
+    # own tests failed excluded from the figures. Line coverage credits nothing
+    # here; it is reported as its own dimension (REQ-d00254-B).
     passing = tested_and_passing(rollup)
-    impl_labels = {lbl for lbl, f in rollup.implemented.indirect_pct_by_label.items() if f > 0}
-    tested_labels = {lbl for lbl, f in rollup.tested.indirect_pct_by_label.items() if f > 0}
-    uatcov_labels = {lbl for lbl, f in rollup.uat_coverage.indirect_pct_by_label.items() if f > 0}
-
-    # Map dimension key → (CoverageDimension, CoverageSeverityConfig, prefix,
-    # denom-label-set-or-None-for-absolute).
-    # "verified" (rendered as the "Passing" badge) uses tested_and_passing(),
-    # the union of result-verified and line-coverage-credited evidence
-    # (REQ-d00258-B) -- NOT the raw `rollup.verified` dimension, which would
-    # miss lcov-only credit and understate the badge/bucket.
     dim_map = [
-        ("implemented", rollup.implemented, cov_config.implemented, "impl", None),
-        ("tested", rollup.tested, cov_config.tested, "tested", impl_labels),
-        ("verified", passing, cov_config.verified, "verified", tested_labels),
-        ("uat_coverage", rollup.uat_coverage, uat_cov_cfg, "uat_cov", None),
-        ("uat_verified", rollup.uat_verified, uat_ver_cfg, "uat_ver", uatcov_labels),
+        ("implemented", rollup.implemented, cov_config.implemented, "impl"),
+        ("tested", rollup.tested, cov_config.tested, "tested"),
+        ("verified", passing, cov_config.verified, "verified"),
+        ("uat_coverage", rollup.uat_coverage, uat_cov_cfg, "uat_cov"),
+        ("uat_verified", rollup.uat_verified, uat_ver_cfg, "uat_ver"),
     ]
 
     status_words = get_status_words(config)
@@ -310,14 +294,14 @@ def compute_coverage_tiers(node: GraphNode, config: dict[str, Any] | None = None
     any_failing = False
     tip_parts: list[str] = []
 
-    for dim_key, dim, sev_cfg, prefix, denom in dim_map:
-        if denom is None:
-            # absolute: measured over all assertions. When allow_indirect is
-            # False, only direct coverage credits the state (REQ-d00258, Phase 4).
-            tier = absolute_tier(dim, allow_indirect=cov_config.allow_indirect)
-            is_na = False
-        else:
-            tier, is_na = relative_tier(dim, denom, allow_indirect=cov_config.allow_indirect)
+    # The measure the badge scores: TOTAL, each *Assertion* counted once at the
+    # greatest of its four measures (REQ-d00069-N). Headlining it is what
+    # REQ-d00258-A asks of every reporting surface; the four measures behind it
+    # are published in the hover text below rather than hinted at by a marker
+    # (REQ-d00258-J).
+    measure = HEADLINE_MEASURE
+    for dim_key, dim, sev_cfg, prefix in dim_map:
+        tier, is_na = relative_tier_for(rollup, dim_key, measure=measure)
         # A `missing` tier that is N/A (empty relative denominator) is neutral:
         # nothing to measure, so it resolves to the `neutral` severity (GREY,
         # REQ-d00258-H) regardless of the dimension's configured `missing`
@@ -363,39 +347,27 @@ def compute_coverage_tiers(node: GraphNode, config: dict[str, Any] | None = None
         label = status_words[dim_key]
         desc = _TIER_DESCRIPTIONS.get(tier, tier)
 
-        # Implements: REQ-d00258-J
-        # Provenance caveat (REQ-d00069-L). The badge STATE color no longer
-        # distinguishes direct from indirect coverage (Phase 1 collapsed
-        # full-direct/full-indirect into one green); the distinction is surfaced
-        # HERE instead -- in the hover tip and a per-dimension ``~`` marker. The
-        # marker is set whenever ``indirect > direct`` (evidence is not fully
-        # direct), matching the CLI headline ``~`` semantics (summary/trace).
-        eps = 1e-9
-        if dim.total > 0:
-            direct_pct = round(100 * dim.direct / dim.total)
-            indirect_pct = round(100 * dim.indirect / dim.total)
-        else:
-            direct_pct = 0
-            indirect_pct = 0
-        mixed = dim.indirect > dim.direct + eps
-        provenance = f"{direct_pct}% direct"
-        if mixed:
-            indirect_extra = indirect_pct - direct_pct
-            if cov_config.allow_indirect:
-                provenance += f", {indirect_extra}% indirect"
-            else:
-                # Indirect coverage does not credit the state under this config,
-                # so it is annotated rather than counted toward the footing.
-                provenance += f" ({indirect_extra}% indirect, not credited)"
-        marker = "~" if mixed else ""
-        tip = f"{label}: {desc} — {provenance}"
-        if marker:
-            tip += " ~"
+        # Implements: REQ-d00069-L, REQ-d00258-A, REQ-d00258-J
+        # The four measures behind the headline standing, published in the
+        # hover text. A marker standing in for a measure the badge does not
+        # show is retired (REQ-d00258-J): a reader who wants to know what
+        # produced the figure reads the measures themselves.
+        tip = f"{label}: {desc} — {measure_phrase(dimension_measures(dim))}"
+        # Implements: REQ-d00258-O
+        # The Tested badge is where the breakdown belongs on this surface: it
+        # qualifies that figure and introduces no badge of its own.
+        if prefix == "tested":
+            part = tested_partition(rollup)
+            if part.tested:
+                tip += (
+                    f" — {fmt_assertion_count(part.passed)} passed, "
+                    f"{fmt_assertion_count(part.failed)} failed,"
+                    f" {fmt_assertion_count(part.awaiting)} awaiting a result"
+                )
 
         result[f"{prefix}_color"] = color
         result[f"{prefix}_tip"] = tip
         result[f"{prefix}_tier"] = tier
-        result[f"{prefix}_marker"] = marker
 
         # Track worst severity for combined
         sev_pri = SEVERITY_PRIORITY.get(severity, 999)
@@ -435,6 +407,7 @@ def compute_coverage_tiers(node: GraphNode, config: dict[str, Any] | None = None
 COVERAGE_STANDINGS = ("full", "partial", "failing", "missing")
 
 
+# Implements: REQ-d00258-D
 def _standing_color(standing: str) -> str:
     """Resolve a coverage standing to its theme-catalog color_key (REQ-d00258-G).
 
@@ -447,24 +420,6 @@ def _standing_color(standing: str) -> str:
         return get_catalog().by_key(f"coverage_standing.{standing}").color_key
     except KeyError:
         return ""
-
-
-def standing_class_map() -> dict[str, str]:
-    """Return ``{standing: css_class}`` resolved from the theme catalog.
-
-    Used to hand the viewer a config-driven standing->class lookup so the client
-    colors per-assertion badges without any hard-coded color logic of its own.
-    """
-    from elspais.html.theme import get_catalog
-
-    catalog = get_catalog()
-    out: dict[str, str] = {}
-    for standing in COVERAGE_STANDINGS:
-        try:
-            out[standing] = catalog.by_key(f"coverage_standing.{standing}").css_class
-        except KeyError:
-            out[standing] = ""
-    return out
 
 
 def compute_assertion_coverage_states(
@@ -483,13 +438,13 @@ def compute_assertion_coverage_states(
     dimension ``has_failures``.
 
     Dimension -> RollupMetrics source:
-      - implemented  : ``implemented.indirect_pct_by_label``
-      - tested       : ``tested.indirect_pct_by_label``
+      - implemented  : ``implemented`` total measure
+      - tested       : ``tested`` total measure
       - verified     : ``tested_and_passing(rollup)`` union per label (+ its
                        ``failing_labels``, so red lands only on the assertion
                        that itself failed)
-      - uat_coverage : ``uat_coverage.indirect_pct_by_label``
-      - uat_verified : ``uat_verified.indirect_pct_by_label`` (+ its
+      - uat_coverage : ``uat_coverage`` total measure
+      - uat_verified : ``uat_verified`` total measure (+ its
                        ``failing_labels``)
 
     Standing rule: ``full`` at ~100%, ``partial`` at 0<f<1 with no own failure,
@@ -518,14 +473,20 @@ def compute_assertion_coverage_states(
             if label:
                 labels.append(label)
 
-    from elspais.graph.aggregation import allow_indirect_from_config
+    from elspais.graph.aggregation import measure_by_label
 
     eps = 1e-9
-    allow_indirect = allow_indirect_from_config(config)
 
     def _frac(dim: CoverageDimension, label: str) -> float:
-        pct = dim.indirect_pct_by_label if allow_indirect else dim.direct_pct_by_label
-        return pct.get(label, 0.0)
+        """This *Assertion*'s TOTAL coverage on ``dim``.
+
+        The greatest of its four measures (REQ-d00069-N), so an *Assertion*
+        covered more than one way is counted once and the pill headlines the
+        same figure the requirement badge does (REQ-d00258-A). Which measures
+        produced it is published beside the standing rather than hinted at
+        (REQ-d00258-J) -- see ``compute_assertion_coverage_measures``.
+        """
+        return measure_by_label(dim, HEADLINE_MEASURE).get(label, 0.0)
 
     def _simple_standing(dim: CoverageDimension, label: str) -> str:
         f = _frac(dim, label)
@@ -544,12 +505,19 @@ def compute_assertion_coverage_states(
         set the requirement-wide ``has_failures`` flag (REQ-d00258-G). The
         requirement-level badge still goes red for any failing assertion via the
         dimension-wide ``has_failures`` in ``compute_coverage_tiers``.
+
+        The failure is read BEFORE the credit, because credit does not answer
+        it: line coverage never observes a verdict, so a failing test whose
+        lines were executed leaves this assertion at full credit and failing at
+        once. Reading credit first would paint it green while the Passing
+        figures beside it exclude it (REQ-d00258-N), which is the same
+        disagreement REQ-d00258-G exists to prevent.
         """
+        if label in passing.failing_labels:
+            return "failing"
         f = _frac(passing, label)
         if f >= 1.0 - eps:
             return "full"
-        if label in passing.failing_labels:
-            return "failing"
         if f > eps:
             return "partial"
         return "missing"
@@ -567,15 +535,25 @@ def compute_assertion_coverage_states(
     return states
 
 
-def compute_assertion_coverage_caveats(node: GraphNode) -> dict[str, dict[str, bool]]:
-    """Per-assertion, per-dimension "leans on whole-requirement evidence" flag.
+# Implements: REQ-d00069-L, REQ-d00258-A, REQ-d00258-G, REQ-d00258-J
+def compute_assertion_coverage_measures(node: GraphNode) -> dict[str, dict[str, str]]:
+    """The measures behind each per-*Assertion* standing, ready to display.
 
-    The one unified indirect caveat (REQ-d00069-L, REQ-d00258): for each label
-    and dimension, True when the assertion's coverage is not fully direct
-    (``indirect_pct_by_label > direct_pct_by_label``). Derived from the same
-    floats that drive the header ``~`` marker -- NOT stored on the dimension --
-    so header and per-assertion caveats can never disagree. Independent of
-    ``allow_indirect`` (that governs crediting; this is provenance).
+    Returns ``{label: {dimension: phrase}}``, the phrase naming all four
+    measures of REQ-d00069-L for that *Assertion* on that dimension: what a
+    citation named (direct or whole-requirement) crossed with where the
+    evidence sits (attached here, or conducted up a `Refines:` chain).
+
+    A pill headlines the TOTAL standing, and this is how a reader sees what
+    produced it (REQ-d00258-G). It replaces the retired ``~`` caveat, which
+    stood in for a measure the pill did not show (REQ-d00258-J). The phrase is
+    composed HERE, from the one shared vocabulary, so the viewer never spells a
+    second wording for measures the CLI already names.
+
+    'verified' reads ``tested_and_passing`` and 'uat_verified' its own
+    dimension, matching exactly what ``compute_assertion_coverage_states``
+    scored, so the measures shown can never belong to a different figure than
+    the standing beside them.
     """
     from elspais.graph.GraphNode import NodeKind
     from elspais.graph.metrics import tested_and_passing
@@ -588,21 +566,17 @@ def compute_assertion_coverage_caveats(node: GraphNode) -> dict[str, dict[str, b
         for c in node.iter_children()
         if c.kind == NodeKind.ASSERTION and c.get_field("label", "")
     ]
-    eps = 1e-9
-    passing = tested_and_passing(rollup)
-
-    def _cav(dim: CoverageDimension, label: str) -> bool:
-        ind = dim.indirect_pct_by_label.get(label, 0.0)
-        dir_ = dim.direct_pct_by_label.get(label, 0.0)
-        return ind > dir_ + eps
-
+    dims = {
+        "implemented": rollup.implemented,
+        "tested": rollup.tested,
+        "verified": tested_and_passing(rollup),
+        "uat_coverage": rollup.uat_coverage,
+        "uat_verified": rollup.uat_verified,
+    }
     return {
         label: {
-            "implemented": _cav(rollup.implemented, label),
-            "tested": _cav(rollup.tested, label),
-            "verified": _cav(passing, label),
-            "uat_coverage": _cav(rollup.uat_coverage, label),
-            "uat_verified": _cav(rollup.uat_verified, label),
+            dim_key: measure_phrase(assertion_measures(dim, label), as_percent=True)
+            for dim_key, dim in dims.items()
         }
         for label in labels
     }
@@ -723,7 +697,7 @@ class HTMLGenerator:
         except Exception:
             typed_cfg = ElspaisConfig.model_validate({})
         levels_ctx = build_levels(typed_cfg)
-        namespaces_ctx = build_namespaces(typed_cfg)
+        namespaces_ctx = build_namespaces(typed_cfg, self.graph)
         statuses_ctx = build_statuses(typed_cfg, candidates=sorted(statuses))
 
         # Render template
@@ -824,8 +798,8 @@ class HTMLGenerator:
         """Compute statistics for the header.
 
         REQ-d00258-C: level counts and assertion counts derive from the
-        shared aggregation module (graph/aggregation.py) on the generous
-        footing, so the viewer header agrees with CLI summary and MCP
+        shared aggregation module (graph/aggregation.py) on the per-*Assertion*
+        total, so the viewer header agrees with CLI summary and MCP
         get_project_summary. Node-kind tallies (CODE/TEST/RESULT) and the
         viewer-specific associated-repo count are simple index counts, not
         coverage rollups, and stay local.
@@ -909,17 +883,19 @@ class HTMLGenerator:
                 return False
             return "roadmap" in (_fn.get_field("relative_path") or "").lower()
 
-        def compute_coverage(node: GraphNode) -> tuple[str, str, bool]:
+        def compute_coverage(node: GraphNode) -> tuple[str, bool]:
             """Get coverage status and failure flag from pre-computed metrics.
 
-            Uses RollupMetrics computed by annotate_coverage().
+            Uses RollupMetrics computed by annotate_coverage(). Reports on the
+            per-*Assertion* total (REQ-d00069-N) -- the greatest of an
+            *Assertion*'s four measures -- like every other coverage headline
+            (REQ-d00258-A).
 
             Returns:
-                Tuple of (coverage_status, coverage_indirect, has_failures)
-                coverage_status: "none", "partial", or "full" (strict)
-                coverage_indirect: "none", "partial", or "full" (includes indirect)
+                Tuple of (coverage_status, has_failures), coverage_status
+                being "none", "partial", or "full".
             """
-            from elspais.graph.metrics import RollupMetrics
+            from elspais.graph.metrics import RollupMetrics, tested_and_passing
 
             rollup: RollupMetrics | None = node.get_metric("rollup_metrics")
 
@@ -930,26 +906,20 @@ class HTMLGenerator:
                     if child.kind == NodeKind.CODE:
                         has_code = True
                         break
-                cov = "full" if has_code else "none"
-                return (cov, cov, False)
+                return ("full" if has_code else "none", False)
 
-            # Strict coverage (excludes INDIRECT)
-            if rollup.implemented.direct_pct == 0:
-                strict = "none"
-            elif rollup.implemented.direct_pct < 100:
-                strict = "partial"
+            dim = rollup.implemented
+            pct = (dim.covered / dim.total * 100) if dim.total else 0.0
+            if pct <= 0:
+                cov = "none"
+            elif pct < 100:
+                cov = "partial"
             else:
-                strict = "full"
+                cov = "full"
 
-            # Indirect coverage (includes INDIRECT)
-            if rollup.implemented.indirect_pct == 0:
-                indirect = "none"
-            elif rollup.implemented.indirect_pct < 100:
-                indirect = "partial"
-            else:
-                indirect = "full"
-
-            return (strict, indirect, rollup.verified.has_failures)
+            # Passing-dimension failures, so an lcov-side failure is seen
+            # as well as a result-verified one (REQ-d00258-N).
+            return (cov, tested_and_passing(rollup).has_failures)
 
         def get_assertion_letters(node: GraphNode, parent_id: str | None) -> list[str]:
             """Get assertion letters that this node implements from a specific parent."""
@@ -1021,19 +991,13 @@ class HTMLGenerator:
             is_test = node.kind == NodeKind.TEST
             is_test_result = node.kind == NodeKind.RESULT
             is_impl_node = is_code or is_test or is_test_result  # Implementation/evidence nodes
-            coverage, coverage_indirect, has_failures = (
-                ("none", "none", False) if is_impl_node else compute_coverage(node)
-            )
+            coverage, has_failures = ("none", False) if is_impl_node else compute_coverage(node)
             val_color, val_tip = ("", "") if is_impl_node else compute_validation_color(node)
             assertion_letters = (
                 get_assertion_letters(node, parent_id)
                 if parent_assertions is None
                 else parent_assertions
             )
-
-            # Get source location
-            source_file = node.file_node().get_field("relative_path") if node.file_node() else ""
-            source_line = node.get_field("parse_line") or 0
 
             # Get result status for RESULT nodes
             result_status = ""
@@ -1061,7 +1025,6 @@ class HTMLGenerator:
                 level=(node.level or "").upper() if not is_impl_node else "",
                 status=(node.status or "").upper() if not is_impl_node else "",
                 coverage=coverage,
-                coverage_indirect=coverage_indirect,
                 validation_color=val_color,
                 validation_tip=val_tip,
                 topic=get_topic(node) if not is_impl_node else "",
@@ -1078,15 +1041,9 @@ class HTMLGenerator:
                 is_uncommitted=node.get_metric("is_uncommitted", False)
                 or node.get_metric("is_untracked", False),
                 is_unsaved=False,
-                is_roadmap=is_roadmap(node),
-                is_code=is_code,
-                is_test=is_test,
-                is_test_result=is_test_result,
                 has_children=node_has_children,
                 has_failures=has_failures,
                 is_associated=self._is_associated(node) if not is_impl_node else False,
-                source_file=source_file,
-                source_line=source_line,
                 result_status=result_status,
             )
 
@@ -1169,9 +1126,6 @@ class HTMLGenerator:
             if node.id in visited_node_ids:
                 continue
 
-            source_file = node.file_node().get_field("relative_path") if node.file_node() else ""
-            source_line = node.get_field("parse_line") or 0
-
             row = TreeRow(
                 id=f"{node.id}_0_root",
                 display_id=node.id,
@@ -1187,15 +1141,9 @@ class HTMLGenerator:
                 is_changed=False,
                 is_uncommitted=False,
                 is_unsaved=False,
-                is_roadmap=False,
-                is_code=False,
-                is_test=True,
-                is_test_result=False,
                 has_children=has_test_result_children(node),
                 has_failures=False,
                 is_associated=False,
-                source_file=source_file,
-                source_line=source_line,
                 result_status="",
             )
             rows.append(row)
@@ -1204,10 +1152,6 @@ class HTMLGenerator:
             # Render RESULT children under this TEST node
             for child in node.iter_children():
                 if child.kind == NodeKind.RESULT:
-                    child_source_file = (
-                        child.file_node().get_field("relative_path") if child.file_node() else ""
-                    )
-                    child_source_line = child.get_field("parse_line") or 0
                     child_result_status = (child.get_field("status", "") or "").lower()
 
                     child_row = TreeRow(
@@ -1225,15 +1169,9 @@ class HTMLGenerator:
                         is_changed=False,
                         is_uncommitted=False,
                         is_unsaved=False,
-                        is_roadmap=False,
-                        is_code=False,
-                        is_test=False,
-                        is_test_result=True,
                         has_children=False,
                         has_failures=child_result_status in ("failed", "fail", "failure", "error"),
                         is_associated=False,
-                        source_file=child_source_file,
-                        source_line=child_source_line,
                         result_status=child_result_status,
                     )
                     rows.append(child_row)
@@ -1244,8 +1182,6 @@ class HTMLGenerator:
             if node.id in visited_node_ids:
                 continue
 
-            source_file = node.file_node().get_field("relative_path") if node.file_node() else ""
-            source_line = node.get_field("parse_line") or 0
             result_status = (node.get_field("status", "") or "").lower()
 
             # Create a short display ID from test name
@@ -1277,15 +1213,9 @@ class HTMLGenerator:
                 is_changed=False,
                 is_uncommitted=False,
                 is_unsaved=False,
-                is_roadmap=False,
-                is_code=False,
-                is_test=False,
-                is_test_result=True,
                 has_children=False,
                 has_failures=result_status in ("failed", "fail", "failure", "error"),
                 is_associated=False,
-                source_file=source_file,
-                source_line=source_line,
                 result_status=result_status,
             )
             rows.append(row)

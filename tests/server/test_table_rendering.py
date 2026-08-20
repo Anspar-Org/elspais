@@ -41,7 +41,14 @@ def _make_app(tmp_path: Path) -> TestClient:
     graph._index["file:spec/example.md"] = file_node
     graph._roots.append(file_node)
 
-    repos = [RepoEntry(name="root", graph=graph, config={}, repo_root=tmp_path)]
+    repos = [
+        RepoEntry(
+            name="root",
+            graph=graph,
+            config={"project": {"name": "root", "namespace": "REQ"}},
+            repo_root=tmp_path,
+        )
+    ]
     federated = FederatedGraph(repos)
 
     state = AppState(graph=federated, repo_root=tmp_path, config=config_defaults())
@@ -65,9 +72,9 @@ class TestTableRenderingPartialsWired:
         resp = client.get("/")
         assert resp.status_code == 200
         html = resp.text
-        assert (
-            "extractMdTables" in html
-        ), "Expected 'extractMdTables' function name in the rendered viewer HTML"
+        assert "extractMdTables" in html, (
+            "Expected 'extractMdTables' function name in the rendered viewer HTML"
+        )
 
     def test_REQ_d00010_reinsertMdTables_function_included(self, tmp_path: Path) -> None:
         """GET '/' HTML contains the reinsertMdTables function name,
@@ -76,9 +83,9 @@ class TestTableRenderingPartialsWired:
         resp = client.get("/")
         assert resp.status_code == 200
         html = resp.text
-        assert (
-            "reinsertMdTables" in html
-        ), "Expected 'reinsertMdTables' function name in the rendered viewer HTML"
+        assert "reinsertMdTables" in html, (
+            "Expected 'reinsertMdTables' function name in the rendered viewer HTML"
+        )
 
     def test_REQ_d00010_md_table_css_selector_and_border_collapse(self, tmp_path: Path) -> None:
         """GET '/' HTML contains the .md-table CSS selector and
@@ -89,9 +96,9 @@ class TestTableRenderingPartialsWired:
         assert resp.status_code == 200
         html = resp.text
         assert ".md-table" in html, "Expected '.md-table' CSS selector in the rendered viewer HTML"
-        assert (
-            "border-collapse: collapse" in html
-        ), "Expected 'border-collapse: collapse' rule in the rendered viewer HTML"
+        assert "border-collapse: collapse" in html, (
+            "Expected 'border-collapse: collapse' rule in the rendered viewer HTML"
+        )
 
     def test_REQ_d00010_md_table_full_grid_border_rule(self, tmp_path: Path) -> None:
         """GET '/' HTML contains the full-grid border rule on <th>/<td>

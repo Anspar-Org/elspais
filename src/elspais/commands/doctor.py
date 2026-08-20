@@ -11,6 +11,7 @@ Checks the elspais setup on this machine:
 - Associate path resolution
 - Local config overrides
 """
+
 from __future__ import annotations
 
 import argparse
@@ -20,18 +21,12 @@ from typing import Any
 from elspais.commands.health import HealthCheck, HealthReport
 from elspais.config.schema import ElspaisConfig
 
-_SCHEMA_FIELDS = {f.alias or name for name, f in ElspaisConfig.model_fields.items()} | set(
-    ElspaisConfig.model_fields.keys()
-)
 
+def _validate_config(config: dict[str, Any]) -> ElspaisConfig:
+    """Validate a config dict into ElspaisConfig (see config.validate_config)."""
+    from elspais.config import validate_config
 
-def _validate_config(config: dict) -> ElspaisConfig:
-    """Validate a config dict into ElspaisConfig, stripping non-schema keys."""
-    filtered = {k: v for k, v in config.items() if k in _SCHEMA_FIELDS}
-    assoc = filtered.get("associates")
-    if isinstance(assoc, dict) and "paths" in assoc:
-        filtered.pop("associates", None)
-    return ElspaisConfig.model_validate(filtered)
+    return validate_config(config)
 
 
 # =============================================================================
@@ -310,14 +305,20 @@ def check_config_project_type(config: dict[str, Any]) -> HealthCheck:
 
 
 def check_config_associated_section(raw: dict) -> HealthCheck:
-    """Check that associates configuration is valid."""
+    """Check the `[associates]` declarations in this repository's own config.
+
+    This reads one file and reports what that file says. The federation
+    the tool actually builds is usually wider, because associates carry
+    declarations of their own; the associate path and configuration
+    checks are what speak for the federation as a whole.
+    """
     typed_config = _validate_config(raw)
     associates = typed_config.associates
     if not associates:
         return HealthCheck(
             name="config.associated_section",
             passed=True,
-            message="No associated projects configured",
+            message="No associated projects declared in this configuration",
             category="config",
             severity="info",
         )
@@ -326,7 +327,7 @@ def check_config_associated_section(raw: dict) -> HealthCheck:
     return HealthCheck(
         name="config.associated_section",
         passed=True,
-        message=f"{len(names)} associate(s) configured: {', '.join(names)}",
+        message=(f"{len(names)} associate(s) declared in this configuration: {', '.join(names)}"),
         category="config",
     )
 
@@ -373,13 +374,28 @@ def check_worktree_status(git_root: Path | None) -> HealthCheck:
 
 
 def check_associate_paths(config: dict, git_root: Path | None) -> HealthCheck:
-    """Check that each configured associate path exists on disk."""
-    # Implements: REQ-d00202-A, REQ-d00212-K
-    from elspais.config import get_associates_config
+    """Check that every federated project's path exists on disk.
 
-    associates = get_associates_config(config)
+    Membership is the whole federation: a project reached through an
+    associate's own declarations is built into the same graph, so a
+    report that covered only the projects named here would describe less
+    than the tool actually uses.
+    """
+    # Implements: REQ-d00202-A+D+I, REQ-d00203-C, REQ-d00212-K
+    from elspais.graph.federation_plan import plan_federation_or_error
 
-    if not associates:
+    plan, plan_error = plan_federation_or_error(config, git_root or Path.cwd())
+    if plan_error is not None:
+        return HealthCheck(
+            name="associate.paths_resolvable",
+            passed=False,
+            message=f"Associated projects could not be resolved: {plan_error}",
+            category="environment",
+            details={"error": plan_error},
+        )
+
+    members = plan[1:]
+    if not members:
         return HealthCheck(
             name="associate.paths_resolvable",
             passed=True,
@@ -390,15 +406,12 @@ def check_associate_paths(config: dict, git_root: Path | None) -> HealthCheck:
 
     missing = []
     found = []
-    for assoc_name, assoc_info in associates.items():
-        path_str = assoc_info["path"]
-        p = Path(path_str)
-        if not p.is_absolute() and git_root:
-            p = git_root / p
-        if p.exists():
-            found.append(str(path_str))
+    for member in members:
+        via = " -> ".join(member.declaration_path)
+        if member.repo_root.exists():
+            found.append(str(member.repo_root))
         else:
-            missing.append(f"{assoc_name}: {path_str} (expected at {p})")
+            missing.append(f"{member.name}: {member.repo_root} (declared via {via})")
 
     if missing:
         return HealthCheck(
@@ -412,20 +425,34 @@ def check_associate_paths(config: dict, git_root: Path | None) -> HealthCheck:
     return HealthCheck(
         name="associate.paths_resolvable",
         passed=True,
-        message=f"All {len(found)} associated project paths exist",
+        message=f"All {len(found)} federated project paths exist",
         category="environment",
         details={"found": found},
     )
 
 
 def check_associate_configs(config: dict, git_root: Path | None) -> HealthCheck:
-    """Check that each discovered associate has valid configuration."""
+    """Check that every federated project has a usable configuration.
+
+    A project whose configuration cannot be loaded is named here with its
+    path and the reason, wherever in the federation it was declared.
+    """
+    # Implements: REQ-d00202-A+D+I, REQ-d00203-C, REQ-d00212-K
     from elspais.associates import discover_associate_from_path
-    from elspais.config import get_associates_config  # Implements: REQ-d00202-A, REQ-d00212-K
+    from elspais.graph.federation_plan import plan_federation_or_error
 
-    associates = get_associates_config(config)
+    plan, plan_error = plan_federation_or_error(config, git_root or Path.cwd())
+    if plan_error is not None:
+        return HealthCheck(
+            name="associate.configs_valid",
+            passed=False,
+            message=f"Associated project configuration could not be resolved: {plan_error}",
+            category="environment",
+            details={"error": plan_error},
+        )
 
-    if not associates:
+    members = plan[1:]
+    if not members:
         return HealthCheck(
             name="associate.configs_valid",
             passed=True,
@@ -436,18 +463,21 @@ def check_associate_configs(config: dict, git_root: Path | None) -> HealthCheck:
 
     invalid = []
     valid = []
-    for assoc_name, assoc_info in associates.items():
-        path_str = assoc_info["path"]
-        p = Path(path_str)
-        if not p.is_absolute() and git_root:
-            p = git_root / p
-        if not p.exists():
-            continue  # Already reported by check_associate_paths
-        result = discover_associate_from_path(p)
+    for member in members:
+        via = " -> ".join(member.declaration_path)
+        if member.error is not None:
+            if not member.repo_root.exists():
+                continue  # Already reported by check_associate_paths
+            invalid.append(f"{member.name} (declared via {via}): {member.error}")
+            continue
+        # Loading a configuration for a directory is not the same question
+        # as the directory being an elspais project of its own; discovery
+        # is what answers the second.
+        result = discover_associate_from_path(member.repo_root)
         if isinstance(result, str):
-            invalid.append(f"{assoc_name}: {result}")
+            invalid.append(f"{member.name} (declared via {via}): {result}")
         else:
-            valid.append(f"{assoc_name} ({result.code})")
+            valid.append(f"{member.name} ({result.code})")
 
     if invalid:
         return HealthCheck(
@@ -461,7 +491,7 @@ def check_associate_configs(config: dict, git_root: Path | None) -> HealthCheck:
     return HealthCheck(
         name="associate.configs_valid",
         passed=True,
-        message=f"All {len(valid)} associated projects have valid configuration",
+        message=f"All {len(valid)} federated projects have valid configuration",
         category="environment",
         details={"valid": valid},
     )

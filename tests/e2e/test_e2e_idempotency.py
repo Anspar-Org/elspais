@@ -232,9 +232,9 @@ class TestFixIdempotency:
         # First run: settle the project. May produce hash updates, generated
         # glossary/term-index artifacts, etc.
         first = run_elspais("fix", cwd=project)
-        assert (
-            first.returncode == 0
-        ), f"first `elspais fix` failed: stderr={first.stderr!r} stdout={first.stdout!r}"
+        assert first.returncode == 0, (
+            f"first `elspais fix` failed: stderr={first.stderr!r} stdout={first.stdout!r}"
+        )
 
         # Commit so that any subsequent disk diffs are attributable to the
         # second `fix` run rather than to remnants of the first.
@@ -245,9 +245,9 @@ class TestFixIdempotency:
 
         # Second run: must be a complete no-op on disk.
         second = run_elspais("fix", cwd=project)
-        assert (
-            second.returncode == 0
-        ), f"second `elspais fix` failed: stderr={second.stderr!r} stdout={second.stdout!r}"
+        assert second.returncode == 0, (
+            f"second `elspais fix` failed: stderr={second.stderr!r} stdout={second.stdout!r}"
+        )
 
         after = _snapshot_tree(project)
 

@@ -41,7 +41,7 @@ class AuthorResolutionError(Exception):
     @staticmethod
     def _format(missing: list[str]) -> str:
         fields = ", ".join(missing) if missing else "author identity"
-        return f"Cannot determine changelog author: missing {fields}. " f"{_FIX_HINT}"
+        return f"Cannot determine changelog author: missing {fields}. {_FIX_HINT}"
 
 
 def resolve_changelog_author(

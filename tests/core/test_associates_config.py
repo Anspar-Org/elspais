@@ -3,13 +3,12 @@
 Validates REQ-d00202-A: Read associate definitions from config.
 Validates REQ-d00202-B: Path is required, namespace is required.
 Validates REQ-d00202-C: Missing or empty associates section returns empty dict.
-Validates REQ-d00202-D: Transitive associates raise FederationError.
+Validates REQ-d00202-D: Associates are resolved transitively.
+Validates REQ-d00203-B: An associate's own config is loaded and its
+    declarations are discovered.
 """
 
-import pytest
-
-from elspais.config import get_associates_config, validate_no_transitive_associates
-from elspais.graph.federated import FederationError
+from elspais.config import get_associates_config
 
 
 class TestGetAssociatesConfig:
@@ -63,24 +62,41 @@ class TestGetAssociatesConfig:
 
 
 class TestTransitiveAssociateDetection:
-    """Validates REQ-d00202-D: transitive associates are a hard error."""
+    """Validates REQ-d00202-D, REQ-d00203-B: transitive associates resolve."""
 
-    def test_REQ_d00202_D_associate_with_associates_raises(self):
-        """Associate declaring its own associates raises FederationError."""
-        associate_config = {
-            "associates": {
-                "sub-module": {"path": "../sub-module"},
-            }
+    # Verifies: REQ-d00202-D, REQ-d00203-B
+    def test_REQ_d00202_D_associate_with_associates_resolves(self, tmp_path):
+        """An associate declaring its own associates joins ONE federation.
+
+        The sub-associate is only reachable by loading the associate's own
+        config, so its presence proves the walk recursed rather than stopped.
+        """
+        from elspais.config import load_config
+        from elspais.graph.factory import build_graph
+        from tests.config.test_federation_config import make_repo
+
+        make_repo(tmp_path, "sub-module")
+        make_repo(tmp_path, "core", associates={"sub-module": "../sub-module"})
+        root = make_repo(tmp_path, "app", associates={"core": "../core"})
+
+        federated = build_graph(config=load_config(root / ".elspais.toml"), repo_root=root)
+
+        assert {repo.name for repo in federated.iter_repos()} == {
+            "app",
+            "core",
+            "sub-module",
         }
 
-        with pytest.raises(FederationError, match="declares its own associates"):
-            validate_no_transitive_associates("core", associate_config)
+    # Verifies: REQ-d00202-D
+    def test_REQ_d00202_D_associate_without_associates_is_a_leaf(self, tmp_path):
+        """An associate with no [associates] section terminates the walk."""
+        from elspais.config import load_config
+        from elspais.graph.factory import build_graph
+        from tests.config.test_federation_config import make_repo
 
-    def test_REQ_d00202_D_associate_without_associates_ok(self):
-        """Associate without [associates] section passes validation."""
-        associate_config = {
-            "scanning": {"spec": {"directories": ["spec"]}},
-        }
+        make_repo(tmp_path, "core")
+        root = make_repo(tmp_path, "app", associates={"core": "../core"})
 
-        # Should not raise
-        validate_no_transitive_associates("core", associate_config)
+        federated = build_graph(config=load_config(root / ".elspais.toml"), repo_root=root)
+
+        assert {repo.name for repo in federated.iter_repos()} == {"app", "core"}
