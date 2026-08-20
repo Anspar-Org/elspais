@@ -464,6 +464,57 @@ K. The system SHALL report a finding under one description only, so that a count
 *End* *Truthful Reporting and Error Discipline* | **Hash**: 946a0e4c
 ---
 
+# REQ-p00084: Audience-Scoped Reporting
+
+**Level**: prd | **Status**: Draft | **Implements**: REQ-p00003
+**Satisfies**: REQ-p00019
+
+A *Traceability* report is read by an audience, and an audience is rarely served by every requirement the estate holds. This requirement covers telling a reporting surface which requirements its audience needs, and what has to remain true of the report it then produces.
+
+## Assertions
+
+A. A surface that reports over a set of requirements SHALL accept a scope naming which requirements its audience needs.
+
+B. A scoped report SHALL emit as its answer the requirements its scope selects and no others.
+
+C. The requirements a scoped report presents SHALL NOT depend on the format the report is rendered in.
+
+D. A scoped report SHALL disclose the scope under which it was produced.
+
+E. A coverage figure a report states for an emitted requirement, together with each measure it publishes behind that figure, SHALL equal the figure and measures an unscoped report states for that requirement.
+
+F. A figure or verdict a report aggregates over requirements SHALL be aggregated over the requirements its scope selects.
+
+G. A scope SHALL be expressible without enumerating the values a project has configured for a property the scope selects on.
+
+H. A scope SHALL be recordable in the project, so that a report committed alongside the project can be reproduced by a reader who did not compose it.
+
+I. A surface SHALL accept any scope it admits together with any degree of detail it admits about an emitted requirement.
+
+## Rationale
+
+Withholding content from a report is ordinarily a defect: a reader cannot tell a report that was narrowed on purpose from one that lost requirements on the way. REQ-p00015-A settles that question for content the tool declines to admit at all; a scope admits everything and narrows what is emitted, which is the same hazard reached by a different route. D is what resolves it. A scoped report that names its scope is an answer to a stated question, and a reader who wanted a different question asked can see that they got the wrong one; without D the narrowed report and the broken one are the same artifact.
+
+This requirement declares `Satisfies:` against the REQ-p00019 anti-pattern template. A scoped report omits from its answer requirements that lie inside the estate it draws on, and delivers a part of the estate where the whole was available, so the template's silent-omission and undisclosed-substitution classes are the ones a scoped report is most exposed to. D concretizes both: naming the scope reports the omission and its cause in a single act, and identifies the answer as the part it is. F concretizes the verdict-integrity class for figures taken over many requirements, where a denominator drawn from a different population than the answer would let a report certify a completeness it never measured. The template's remaining classes bind to this subsystem through the instance without a subsystem-specific strengthening.
+
+A names the surfaces this obligation falls on by what they do rather than by listing them: the sections of a composed report, the compiled review document, the read surfaces the tool offers a program, and the view a reader browses the estate through are all answers computed over a set of requirements for somebody. Generating a file that mirrors the estate's own structure — an index of what exists, a glossary of the terms it uses — is not reporting over a set of requirements for an audience, and carries no scope.
+
+E and F draw the fence that keeps scoping a matter of emission, and they divide the question by what the figure is a fact about. A requirement's own coverage is a fact about the whole estate — what implements it, what tests it, what refines it — and none of that changes because a reader asked to see fewer requirements. Evidence held by a requirement a scope excludes still conducts to a requirement the scope emits, so a report for an audience that never reads detailed requirements still states the coverage those detailed requirements earn for the ones it does read. A figure aggregated across requirements is a different kind of fact: it answers "how far along is this set", and the set it is taken over is the set the reader asked for. A verdict is an aggregate of the same kind, which is why a gate scoped to the requirements a project has committed to reaches a verdict about those and is not dragged by requirements the project has said it is not building yet. Stating E against what an unscoped report says gives it a referent rather than leaving "unchanged" to be argued, and rules out the degenerate settlement where scoped reports agree with each other and with nothing else. Extending E to the measures published behind a headline figure closes the same gap one level down: a headline held steady while the evidence behind it moves is a figure whose meaning has quietly changed.
+
+B and C are separate because they fail separately. B is about honouring a scope at all; C is about renderings of one report agreeing with each other. A tool can honour a scope in the rendering a reader checks and quietly drop a requirement from the one they file, and only C catches that — the disagreement is invisible in either output taken alone. C reaches everything a report puts in front of a reader, not only what it offers as its answer, because a requirement shown for the sake of its descendants is content a reader sees; a format that shows it and a format that does not are two reports, and the reader who compares them has no way to learn which one was right.
+
+G and H are what make a scope survive contact with a project. A scope that has to name every configured value is wrong the day the project configures one more, and silently so — it selects what it always did, which is now less than the reader means. A scope that exists only in the invocation that produced a report cannot be checked by the person reading the report, so the report is evidence of a selection nobody can re-derive, and the audience definition drifts into whatever tooling produced it. Together they are the difference between a report that can be committed and one that can only be taken on trust.
+
+I keeps two independent choices independent. Which requirements a report emits and how much it renders of each — body text, assertions, evidence — are decided by different people for different reasons: a compliance pack wants few requirements described fully, a status review wants many described briefly. The obligation is that neither choice narrows the other; a product combining a particular scope with a particular depth is a convenience the obligation neither requires nor forbids. Binding them would force a project to declare a scope for every depth it reports at, multiplying exactly the declarations H exists to consolidate.
+
+## Changelog
+
+- 2026-08-20 | - | - | Michael Lewis (<michael@anspar.org>) | Initial authoring: reports may be narrowed to an audience, provided the scope is disclosed, agrees across formats, leaves each emitted requirement's figures estate-true while aggregates follow the scope, and is expressible, recordable and independent of reporting depth
+
+*End* *Audience-Scoped Reporting* | **Hash**: fe035883
+
+---
+
 ## REQ-d00220: TermDictionary Data Model
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-p00002

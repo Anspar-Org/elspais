@@ -563,3 +563,133 @@ H. The tool SHALL report style findings through the standard checks reporting su
 Agent-generated code routinely cannot reliably be constrained to generate assertions according to a set of rules, so we must rely on checks instead. Not all checks can be automated, but those that can, are.
 
 *End* *Mechanical Style Checks* | **Hash**: 084c17a0
+
+---
+
+## REQ-d00278: Report Scope Selection Vocabulary
+
+**Level**: dev | **Status**: Draft | **Implements**: REQ-p00084
+
+A scope is written by a person and read by the tool, so it needs a vocabulary: which properties of a requirement can be selected on, which values those properties admit, how the values named for them combine, whose configuration a name is read against, and what becomes of a name the vocabulary does not account for. This requirement fixes that vocabulary and leaves it open to properties not yet named.
+
+### Assertions
+
+A. A requirement's level SHALL be a property a scope can select on.
+
+B. A requirement's status SHALL be a property a scope can select on.
+
+C. A scope SHALL admit several values for one property, so that a requirement carrying any of those values satisfies that property.
+
+D. Where a scope names more than one property, a requirement SHALL be in scope only if it satisfies every property named.
+
+E. Among the values a scope may name for a requirement's status, it SHALL admit a role the project assigns to statuses, standing for every status carrying that role.
+
+F. For a property a scope names, the scope SHALL admit the values a requirement must carry to satisfy that property.
+
+G. For a property a scope names, the scope SHALL admit the values a requirement must not carry to satisfy that property.
+
+H. Where a scope names for one property both the values a requirement must carry and the values it must not, a requirement SHALL satisfy that property only where it carries one of the former and none of the latter.
+
+I. The values a scope may name for a property SHALL be those a member's configuration defines for that property together with those that member's requirements carry.
+
+J. A name a scope uses SHALL be resolved in the vocabulary of the member that owns the requirement being judged, never in a vocabulary merged from more than one member.
+
+K. Where a scope names a property or a value the vocabulary it is resolved against does not admit, the tool SHALL report the unadmitted name together with the vocabulary it was resolved against.
+
+L. A name the vocabulary does not admit SHALL select no requirement in that vocabulary, leaving the rest of the scope to select as it otherwise would.
+
+M. Where a scope selects no requirement from an estate that holds requirements, the tool SHALL report the empty selection as the scope's answer rather than as an absence of requirements.
+
+N. Admitting a further property a scope can select on SHALL NOT change which requirements an already expressible scope selects.
+
+### Rationale
+
+C and D are opposite halves of one reading habit and are stated apart because they answer different questions. Values named for one property are alternatives — asking for two levels means either — while properties named together are conditions the requirement meets at once. That is the same narrowing a reader performs when browsing the estate interactively, and a vocabulary that meant something else would give a reader incompatible ways to say the same thing. Any other pairing produces scopes whose meaning depends on the order they were written in.
+
+F, G and H are stated per property rather than per scope because the audiences that scoping exists to serve are usually defined one way on one property and the other way on another: the requirements at a level a reader reads, minus the ones whose status marks them as not yet adjudicated. With F and G fixed to a single property each, D is what joins them, and a scope mixing the forms across properties needs nothing further said about it. H settles the one case D cannot reach, where the forms meet on the same property; defining that as an admission followed by a rejection keeps a single reading of what the property means and spares the vocabulary a refusal it would otherwise have to grow.
+
+E is what makes REQ-p00084-G reachable for statuses. A project's statuses are its own and grow; the roles they carry are the stable vocabulary underneath them, so a scope naming a role stays correct through a status the project has not invented yet. A role is a value the status property admits rather than a property of its own, so a role and a named status stand side by side as alternatives and one scope can ask for everything a role covers and a status besides. G does the same work from the other side: an audience defined by what it does not want is defined against a set that grows, and the include form obliges it to be rewritten each time the set does. Defining exclusion as the values a requirement must not carry keeps the forms one vocabulary, so an author reasoning about either is reasoning about the same selection.
+
+I and J divide a question that would otherwise be answered by whichever member happened to be asked. I says what a vocabulary holds. A value a requirement carries is part of the vocabulary whether or not the configuration names it, because a requirement carrying a status the project never listed is a requirement a reader can see and therefore one a reader can ask for; leaving it unnameable would make a scope unable to describe an estate the tool itself displays. J says whose vocabulary is consulted. Each requirement is judged under the vocabulary of the project that wrote it, never under one assembled from several; a merged vocabulary would let one member's configuration decide what another member's requirements are, and would make a scope's meaning depend on which repository happened to ask for the report. REQ-d00251-L settles the same question for identifiers, and the reasons carry over unchanged. The two properties are not governed alike — the roles a project assigns to statuses are settled across a federation, while the levels a project defines are its own — so the vocabulary a scope keyed on level speaks varies member by member in a way the role vocabulary does not, and I and J have to hold for the harder of the two.
+
+K, L and M are the honesty group, and they are separate because opposite situations produce the same thin report. A name the vocabulary does not admit selects nothing while looking like it selected something, and a federated estate is where that hides best: members configure their own levels and their own statuses, so a name one member admits and another does not is an ordinary state of affairs that quietly removes that member's requirements from the answer. K is the disclosure; L is what keeps the disclosure from becoming a refusal, since a cross-member scope naming a level only some members define is a legitimate scope and a report that stops at the first such name is useless to the reader who wrote it. M is the other side: a scope selecting nothing is frequently the correct result — an audience whose requirements have all been withdrawn, a status nothing carries yet — and reporting it as the answer keeps it distinguishable from the conditions REQ-d00080-B and REQ-d00080-E report, which are about an estate or a member holding no requirements at all rather than about a question that legitimately has no members in its answer.
+
+N is what allows the vocabulary to grow, and growth is owed. Selection axes beyond level and status are foreseeable, and a compiled document that offers its stakeholder audience the product-level requirements of every member of a federation (REQ-p00080-F), or a ranking narrowed to one level (REQ-d00125-E), are selections of this kind and are expressed in this vocabulary; the first of them asks for a property that names a requirement's owning repository, which the vocabulary is open to admitting. The cost of admitting a property must fall on the scopes that use it and on nothing else — a project whose committed scopes shifted meaning because the tool learned a new property would have to re-audit every report it ever committed.
+
+### Changelog
+
+- 2026-08-20 | - | - | Michael Lewis (<michael@anspar.org>) | Initial authoring: level and status as selectable properties with status roles admitted as status values, per-property include and exclude forms and their composition, alternatives within a property and conditions across properties, a property's vocabulary defined and resolved in the owning member, unadmitted names disclosed without refusing the report, empty selections reported as answers, and room for further properties
+
+*End* *Report Scope Selection Vocabulary* | **Hash**: 0368ac23
+
+---
+
+## REQ-d00279: One Authority for Report Scope Membership
+
+**Level**: dev | **Status**: Draft | **Implements**: REQ-p00084
+
+Whether a requirement falls within a scope is a judgement, and a judgement made independently in several places drifts. This requirement fixes where that judgement is made, what is owed by a surface that answers it elsewhere, and what becomes of the hierarchy when a scope excludes a requirement that other requirements hang from.
+
+### Assertions
+
+A. There SHALL be one authority determining whether a requirement falls within a scope.
+
+B. A surface that answers whether a requirement falls within a scope without consulting that authority SHALL yield the membership that authority yields for that scope over the same requirement set.
+
+C. Where a report is produced by composing sections rather than by emitting a section alone, or by a serving process rather than where it was asked for, every such path SHALL yield the same scoped set.
+
+D. Excluding a requirement from a scope SHALL NOT remove from the report a requirement the scope includes.
+
+E. Where a report presents a requirement its scope excludes, the report SHALL distinguish that requirement from the ones its scope includes.
+
+### Rationale
+
+A is what makes the promises above this requirement hold everywhere at once instead of being re-established path by path, which is how paths that agreed at first stop agreeing later. The agreement REQ-p00084-C asks for between renderings is one instance; C names the seams that are not about rendering at all. A report composed of several sections is assembled differently from the same section asked for alone — REQ-d00085-D binds the single-section case to a standalone invocation, and C is what carries the same agreement into the composed one, where a reporting option lost in assembly costs a reader the requirements it selected. A report computed by a process serving several readers runs a different route again from one computed where it was asked for. A lost scope is worse than a lost option because the output still looks complete.
+
+B grants a second evaluator without granting a second semantics. A view that must answer immediately as a reader narrows it cannot wait on an authority elsewhere, and that responsiveness is worth having; what it is not worth is a reader seeing one set on screen and a different set in the report they then take away. Naming the authority's answer as the comparand is what makes the permission safe to grant: agreement is decided by comparison against a stated referent, so a second evaluator that is consistent with itself and wrong is not conforming. The estate elsewhere requires a shared decision to be computed once and read by every surface — the per-*Assertion* coverage standing of REQ-d00258-G is computed where the graph is and applied on first render rather than being re-derived by the reader's view. That is the right settlement where the decision is expensive and the inputs are not to hand. Scope membership is the opposite case on both counts: it is a comparison of properties the view already holds for every requirement it is displaying, and the reader is changing it continuously, so equivalence is the obligation that fits and derivation is not owed.
+
+D is about what exclusion means. A requirement is reached through its parents, and a scope drawn on a requirement's own properties will routinely exclude a parent while including its children — the audience that reads product-level requirements and the audience that reads the detailed ones are exactly the audiences scoping exists to serve. A requirement excluded from a scope is not a requirement deleted from the estate, and treating it as one would silently take its descendants with it, so an audience asking not to see one level would lose requirements it explicitly asked for without a report anywhere saying so. E follows from D rather than restating it: once an excluded requirement can appear for the sake of the ones below it, a reader who cannot tell it apart from a selected one reads it as part of the answer, and the scope has been misreported rather than honoured. Whether such a requirement appears at all is a decision belonging to the report; REQ-p00084-C is what stops it being decided differently by each rendering.
+
+### Changelog
+
+- 2026-08-20 | - | - | Michael Lewis (<michael@anspar.org>) | Initial authoring: one authority for scope membership, a separate evaluator permitted only where it yields the authority's own membership, composition and serving paths yielding the same scoped set, exclusion never removing an included requirement, and an excluded requirement presented for context marked as such
+
+*End* *One Authority for Report Scope Membership* | **Hash**: f103db89
+
+---
+
+## REQ-d00280: Named Report Scopes
+
+**Level**: dev | **Status**: Draft | **Implements**: REQ-p00084
+
+A scope spelled out at the moment a report is run is known only to whoever spelled it. This requirement covers scopes a project declares under a name, whose declaration a name is read against, what such a name selects, and what a report owes a reader about the name it used.
+
+### Assertions
+
+A. A project SHALL be able to declare a scope under a name in its own configuration.
+
+B. A scope referred to by name SHALL select the requirements that the scope declared under that name selects when stated in full.
+
+C. A scope name SHALL be resolved in the configuration of the repository the report is asked of.
+
+D. A report naming a scope the project has not declared SHALL report the undeclared name.
+
+E. The tool SHALL NOT produce a report under a scope name the project has not declared.
+
+F. A report produced under a named scope SHALL name that scope where it discloses its scope.
+
+### Rationale
+
+A and B are what REQ-p00084-H asks for in a form a project can commit and a reader can check. A is where the scope comes to rest — in the project, beside the requirements it selects over, versioned with them — and B is what keeps the name honest: a name is a reference to a scope, never a second selection that happens to share a spelling. An author reading a declaration then knows what a report produced under it contains without running it; once the two can differ, a committed report is evidence of a scope nobody can reconstruct.
+
+C settles the name across a federation. A scope name is a label for a whole selection, not a value inside one, so the question REQ-d00278-J answers for the properties and values a scope names does not answer this one: the members a report spans each hold their own configuration, and a name declared in several of them would otherwise stand for several selections in a single report. Reading the name in the repository the report is asked of gives it one meaning and one owner, and leaves the selection it stands for to be resolved member by member as REQ-d00278-J requires — so a name declared once still means each member's own levels and statuses when it is applied to that member's requirements.
+
+D and E are the pair a misspelling needs. An undeclared name has no selection behind it, so a report produced under one narrows to nothing or to everything depending on how the absence is read, and either way it looks like an answer. D makes the absence visible; E is what keeps it from being papered over, and it is the opposite disposition from the one REQ-d00278-L takes for a value the vocabulary does not admit. That difference is deliberate. An unadmitted value sits inside a scope whose remaining terms still say something the author meant, so the report can go on with the disclosure attached. An unadmitted name is the whole of what the author said, so continuing means the tool choosing a selection nobody asked for.
+
+F is what a name costs. REQ-p00084-D obliges a report to disclose its scope; a report produced under a name discloses less than it could if it shows only the resulting selection, because the name is the thing a reader can look up, re-run, and hold the project to.
+
+### Changelog
+
+- 2026-08-20 | - | - | Michael Lewis (<michael@anspar.org>) | Initial authoring: scopes declared by name in project configuration, the name resolved in the repository the report is asked of, a name selecting exactly what its declaration stated in full selects, undeclared names reported and not reported under, and the name carried in the report's disclosure
+
+*End* *Named Report Scopes* | **Hash**: 26e2811c
