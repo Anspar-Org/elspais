@@ -30,7 +30,7 @@
 | REQ-p00081 | Org-Wide Requirement Visibility                  | prd-features.md | 17fa4417 |
 | REQ-p00082 | Federated Authority and Verdict Scoping          | prd-features.md | a8311d6c |
 | REQ-p00083 | Durability of Uncommitted Work                   | prd-core.md     | 80cf3ca1 |
-| REQ-p00084 | Audience-Scoped Reporting                        | prd-core.md     | fe035883 |
+| REQ-p00084 | Audience-Scoped Reporting                        | prd-core.md     | cb0c87bf |
 
 ### elspais
 
@@ -193,8 +193,8 @@
 | REQ-d00276 | Tests Outside the Requirement Estate                          | dev-graph-core.md       | 922d1382 |
 | REQ-d00277 | Coverage Dimensions                                           | dev-graph-core.md       | b097dcd7 |
 | REQ-d00278 | Report Scope Selection Vocabulary                             | dev-cli.md              | ef2221cc |
-| REQ-d00279 | One Authority for Report Scope Membership                     | dev-cli.md              | f103db89 |
-| REQ-d00280 | Named Report Scopes                                           | dev-cli.md              | 26e2811c |
+| REQ-d00279 | One Authority for Report Scope Membership                     | dev-cli.md              | 2b755b50 |
+| REQ-d00280 | Named Report Scopes                                           | dev-cli.md              | 9ddbf905 |
 | REQ-d00281 | Level Vocabulary of a Reported Graph                          | dev-graph-core.md       | 4bde246d |
 
 ## User Journeys

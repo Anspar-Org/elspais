@@ -862,8 +862,4 @@ D is REQ-p00015-A reached by a second route. Content excluded from an answer is 
 
 E settles an ordering that would otherwise be decided independently by each surface, and decided differently. The levels a project defines are ordered by the ranks it gave them; a level it did not define has no rank to be ordered by, and inventing one would put it somewhere a reader has no way to predict. Placing such groups after the ranked ones keeps the familiar shape of a report intact and gathers what the configuration does not account for in one place, where D's report is about the same requirements.
 
-### Changelog
-
-- 2026-08-20 | - | - | Michael Lewis (<michael@anspar.org>) | Initial authoring: a report's level groups are drawn from the requirements it reports on rather than from the invoking configuration, every included requirement falls in exactly one group, an undefined level never decides whether a requirement is counted, such requirements are reported, and their groups are ordered after the defined ones
-
 *End* *Level Vocabulary of a Reported Graph* | **Hash**: 4bde246d
