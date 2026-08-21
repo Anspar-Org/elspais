@@ -687,7 +687,11 @@ N. [Removed - moved to REQ-d00277-C, where every coverage dimension is defined. 
 
 O. Tested SHALL be reported with a breakdown of the assertions it counts into those that passed, those that failed, and those awaiting a result, and the three counts SHALL together account for every tested *Assertion*. The breakdown qualifies the Tested figure and SHALL NOT introduce a coverage dimension of its own.
 
+P. A coverage figure a surface states for a group of requirements SHALL be the credit and the assertions of that group each summed, so that a group is measured over the same assertions its members are.
+
 ### Rationale
+
+P settles what a figure over many requirements means, because there is more than one defensible answer and they disagree. Summing the credit and the assertions weights each requirement by how much it obliges; averaging the members' own proportions weights each requirement equally, and answers how far along the typical requirement is rather than how far along the work is. Both are worth knowing and only one can be the figure a surface states unasked, or two surfaces answer the same question differently -- which is the divergence this requirement exists to prevent. Summing is the one chosen because it is what a per-*Assertion* credit already is: REQ-d00069-M makes coverage a real number so that partial evidence counts in proportion, and summing those proportions keeps a group's figure made of the same evidence as its members'. A surface that later offers the other has to name which it states, since the two share a shape and not a meaning.
 
 The measures answer different questions, so the surfaces divide along the same line: what still needs doing is read from the immediate direct measure, because an *Assertion* no citation names is work whatever is happening below it, while a summary headlines total, because a reader asking how far along something is wants one number that counts each *Assertion* once.
 
@@ -703,6 +707,7 @@ A reports how the estate is doing and M reports what is left to do; the two ques
 
 ### Changelog
 
+- 2026-08-21 | 6c978321 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-21 | 24015cbc | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-19 | 879012b7 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-18 | e6e17ee9 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -726,7 +731,7 @@ A reports how the estate is doing and M reports what is left to do; the two ques
 - 2026-07-03 | c843c727 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-02 | be97c170 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: add missing changelog section
 
-*End* *Reporting Surface Consistency* | **Hash**: 24015cbc
+*End* *Reporting Surface Consistency* | **Hash**: 6c978321
 
 ---
 

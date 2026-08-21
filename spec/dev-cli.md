@@ -648,11 +648,11 @@ B grants a second evaluator without granting a second semantics. A view that mus
 
 **Level**: dev | **Status**: Draft | **Implements**: REQ-p00084
 
-A report states facts about each requirement it emits, one fact to a column. Which requirements it emits is a scope; which facts it states about them is this. The two are separate choices about one report, and a reader making one of them says nothing about the other.
+A report states facts in columns, whether each row is a requirement or a group of them. Which requirements a report is about is a scope; which facts it states is this. The two are separate choices about one report, and a reader making one of them says nothing about the other.
 
 ### Assertions
 
-A. A report that states facts about each requirement it emits, one fact to a column, SHALL accept a selection naming which of the columns it offers it states.
+A. A report that states facts in columns SHALL accept a selection naming which of the columns it offers it states.
 
 B. For each coverage dimension of REQ-d00277, a report SHALL admit selecting that dimension's total and each of the four measures behind it (REQ-d00069-L) in their own right.
 
@@ -666,15 +666,17 @@ F. A report SHALL NOT be produced under a selection the tool did not honour in f
 
 G. Offering a further column SHALL NOT change which columns an already expressible selection states.
 
-H. Selecting which columns a report states SHALL NOT change which requirements it emits.
+H. Selecting which columns a report states SHALL NOT change which requirements the report is about.
 
-I. Selecting which requirements a report emits SHALL NOT change which columns it states.
+I. Selecting which requirements a report is about SHALL NOT change which columns it states.
 
 J. The names a selection uses SHALL be independent of the words a project configures its columns to display.
 
 K. A report SHALL state its columns in the order the selection names them.
 
-L. A report SHALL state the identity of each requirement it emits whatever the selection names.
+L. A report SHALL state what each of its rows is about whatever the selection names.
+
+M. A column in which a report states no figure SHALL be distinguishable from one in which it states a figure of zero.
 
 ### Rationale
 
@@ -690,9 +692,11 @@ F is the opposite disposition from the one REQ-d00278-K takes for a value a scop
 
 G and J are what a committed selection is worth. G bounds what the tool may do: a project whose committed selections changed meaning because the tool learned a new column would have to re-audit every report it committed under one. A default set may grow, and E leaves it free to; a selection is what a project commits when it needs the shape to hold. J bounds what the project may do to itself: the words a column is displayed under are configurable (REQ-d00258-K), so a selection written in display words would break every committed report the day someone renamed a label, which is the same churn arriving by the other door.
 
-K and L are what make a stated selection a stated shape. A committed artifact is read by something that expects its columns where it left them, so an order decided differently on two runs breaks a consumer exactly as a changed column set would. L is the floor beneath every selection: a row that cannot be attributed to the requirement it is about is not a report about requirements at all, whatever else it states.
+K and L are what make a stated selection a stated shape. A committed artifact is read by something that expects its columns where it left them, so an order decided differently on two runs breaks a consumer exactly as a changed column set would. L is the floor beneath every selection: a row that cannot be attributed to what it is a fact about is not a report about anything, whatever else it states.
 
-*End* *Report Column Selection* | **Hash**: 0f93c3c1
+M is the distinction between having nothing to say and saying nothing. Not every column a report offers has a figure for every row -- a column carrying a requirement's title has no figure at all, and a coverage column has none for a group whose requirements confer none. Where those two look alike a reader reads absence as zero and concludes work is undone that was never owed, which is the same defect REQ-d00258-E keeps out of line coverage by recording whether a measurement was taken rather than letting an absent one read as none.
+
+*End* *Report Column Selection* | **Hash**: e02f43b5
 
 ---
 
