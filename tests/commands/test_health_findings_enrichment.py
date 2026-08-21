@@ -17,6 +17,7 @@ from elspais.commands.health import (
     check_spec_implements_resolve,
     check_spec_no_duplicates,
     check_spec_refines_resolve,
+    check_spec_undefined_levels,
     check_test_results,
 )
 from elspais.config import _merge_configs, config_defaults, get_config
@@ -229,6 +230,96 @@ A. The system SHALL also exist.
         finding = check.findings[0]
         assert isinstance(finding, HealthFinding)
         assert finding.node_id is not None, "Finding should have node_id"
+
+
+class TestCheckSpecUndefinedLevelsFindings:
+    """REQ-d00281-D: a requirement carrying a level this configuration does not
+    define is reported together with the level it carries.
+
+    The check never fails -- an undefined level is a disclosure, since the
+    requirement is still counted and still grouped (REQ-d00281-A+C). What it
+    cannot do is pass silently, so the findings are the whole discriminator.
+    """
+
+    # Verifies: REQ-d00281-D
+    def test_undefined_level_is_reported_with_the_spelling_it_carries(self, tmp_path: Path) -> None:
+        config_path = _make_config(tmp_path)
+        spec_dir = tmp_path / "spec"
+        spec_dir.mkdir()
+        (spec_dir / "reqs.md").write_text(
+            """# REQ-p00001: Defined Level
+
+**Level**: PRD | **Status**: Active
+
+## Assertions
+
+A. The system SHALL exist.
+
+*End* *Defined Level* | **Hash**: eeee5555
+
+# REQ-p00002: Undefined Level
+
+**Level**: ArchTier | **Status**: Active
+
+## Assertions
+
+A. The system SHALL also exist.
+
+*End* *Undefined Level* | **Hash**: ffff6666
+"""
+        )
+
+        graph = _build(tmp_path, config_path)
+        config = _load_config(config_path)
+        check = check_spec_undefined_levels(graph, config)
+
+        assert check.name == "spec.undefined_levels"
+        assert check.category == "spec"
+        assert check.severity == "info"
+        assert check.passed, "an undefined level is disclosed, not a failure"
+        # Only the requirement whose level the configuration lacks is named.
+        assert [f.node_id for f in check.findings] == ["REQ-p00002"]
+        finding = check.findings[0]
+        assert isinstance(finding, HealthFinding)
+        assert "ArchTier" in finding.message, "the level carried must be named"
+        assert "REQ-p00002" in finding.message
+
+    # Verifies: REQ-d00281-D
+    def test_every_level_defined_reports_no_findings(self, tmp_path: Path) -> None:
+        config_path = _make_config(tmp_path)
+        spec_dir = tmp_path / "spec"
+        spec_dir.mkdir()
+        (spec_dir / "reqs.md").write_text(
+            """# REQ-p00001: A Product Requirement
+
+**Level**: PRD | **Status**: Active
+
+## Assertions
+
+A. The system SHALL exist.
+
+*End* *A Product Requirement* | **Hash**: eeee5555
+
+# REQ-d00001: A Dev Requirement
+
+**Level**: DEV | **Status**: Active
+**Implements**: REQ-p00001
+
+## Assertions
+
+A. The system SHALL also exist.
+
+*End* *A Dev Requirement* | **Hash**: ffff6666
+"""
+        )
+
+        graph = _build(tmp_path, config_path)
+        config = _load_config(config_path)
+        check = check_spec_undefined_levels(graph, config)
+
+        assert check.passed
+        assert check.findings == [], "every level here is configured"
+        assert "Every requirement" in check.message
 
 
 class TestCheckBrokenReferencesFindings:

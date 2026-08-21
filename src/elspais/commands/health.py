@@ -508,6 +508,56 @@ def _parse_hierarchy_rules(hierarchy: dict[str, Any]) -> dict[str, list[str]]:
     return result
 
 
+# Implements: REQ-d00281-D
+def check_spec_undefined_levels(graph: FederatedGraph, config: dict[str, Any]) -> HealthCheck:
+    """Report requirements carrying a level this configuration does not define.
+
+    Such a requirement is counted and grouped like any other (REQ-d00281-A+C) --
+    it is real work somebody owes, and dropping it would flatter every figure it
+    would have lowered. What it cannot do is pass silently: a level the
+    configuration never names is as likely a misspelling, or a level deleted
+    while its requirements remained, as it is a deliberate federated difference,
+    and the report is the only place an author would find out.
+    """
+    from elspais.graph import NodeKind
+
+    typed_config = _validate_config(config)
+    defined = {k.lower() for k in typed_config.levels}
+
+    findings: list[HealthFinding] = []
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+        level = (node.level or "").strip()
+        if level and level.lower() not in defined:
+            findings.append(
+                HealthFinding(
+                    message=(
+                        f"{node.id} carries level '{level}', "
+                        "which this configuration does not define"
+                    ),
+                    node_id=node.id,
+                )
+            )
+
+    if findings:
+        return HealthCheck(
+            name="spec.undefined_levels",
+            passed=True,
+            message=(
+                f"{len(findings)} requirement(s) carry a level this configuration does not define"
+            ),
+            category="spec",
+            severity="info",
+            findings=findings,
+        )
+    return HealthCheck(
+        name="spec.undefined_levels",
+        passed=True,
+        message="Every requirement carries a level this configuration defines",
+        category="spec",
+        severity="info",
+    )
+
+
 def check_spec_hierarchy_levels(graph: FederatedGraph, config: dict[str, Any]) -> HealthCheck:
     """Check that hierarchy levels follow configured rules."""
     from elspais.graph import NodeKind
@@ -2345,6 +2395,12 @@ def run_spec_checks(
         checks.append(
             _annotate_findings(
                 check_spec_hierarchy_levels(repo_graph, repo_config),
+                entry.name,
+            )
+        )
+        checks.append(
+            _annotate_findings(
+                check_spec_undefined_levels(repo_graph, repo_config),
                 entry.name,
             )
         )

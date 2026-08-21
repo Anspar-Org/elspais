@@ -801,6 +801,47 @@ def _accumulate(sums: DimensionSums, dim: CoverageDimension) -> None:
     sums.total_covered += dim.covered
 
 
+# Implements: REQ-d00281-A+B+C+E
+def level_group_keys(
+    graph: Any,
+    config: dict[str, Any] | None = None,
+    node_ids: set[str] | None = None,
+) -> list[str]:
+    """The ordered level groups a report over ``node_ids`` forms.
+
+    The ONE derivation of a report's level groups (REQ-d00281). Groups are the
+    configured ``[levels]`` keys followed by every other level the requirements
+    themselves carry, so a level the configuration does not define still forms a
+    group instead of taking its requirements out of the report. Configured keys
+    are kept even where nothing carries them, which is why this is a union and
+    not the observed set alone.
+
+    Ordering follows REQ-d00281-E: configured keys first in the rank order
+    ``_level_keys`` gives them, then the undefined ones, which have no rank to be
+    ordered by and so are sorted for reproducibility rather than left in scan
+    order.
+
+    ``node_ids`` restricts the population a report covers; ``None`` means every
+    requirement in the graph. Callers accounting for requirements a coverage gate
+    excludes (see ``collect_coverage``) must pass ``None``, since a level whose
+    only requirements are excluded still has to be reportable.
+    """
+    configured = _level_keys(config)
+    known = {k.lower() for k in configured}
+    undefined: dict[str, str] = {}
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+        if node_ids is not None and node.id not in node_ids:
+            continue
+        raw = (node.level or "").strip()
+        if not raw:
+            continue
+        low = raw.lower()
+        if low in known:
+            continue
+        undefined.setdefault(low, raw)
+    return configured + [undefined[k] for k in sorted(undefined)]
+
+
 def _counts_for_coverage(config: dict[str, Any] | None, status: str | None) -> bool:
     """Whether a requirement STATUS is INCLUDED in coverage aggregation.
 
@@ -820,7 +861,7 @@ def _counts_for_coverage(config: dict[str, Any] | None, status: str | None) -> b
 
 def aggregate_by_level(graph: Any, config: dict[str, Any] | None = None) -> list[LevelAggregate]:
     """Per-level assertion-fraction sums, on each of the four measures."""
-    keys = _level_keys(config)
+    keys = level_group_keys(graph, config)
     groups: dict[str, LevelAggregate] = {k.lower(): LevelAggregate(level=k.upper()) for k in keys}
 
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
@@ -1073,16 +1114,26 @@ def collect_coverage(graph: Any, config: dict[str, Any] | None = None) -> dict[s
     Per-level rows come from :func:`aggregate_by_level`; excluded-status
     counts, the per-associate Integrates rollup, and (for selective runs)
     carry-forward provenance are assembled here so every consumer renders
-    from one payload. Level membership uses :func:`_level_keys` -- the SAME
-    derivation ``aggregate_by_level`` uses (rank-less ``[levels]`` keys
-    included), so ``excluded`` counts exactly the requirements that land in a
-    rendered level bucket.
+    from one payload.
+
+    Level membership comes from :func:`level_group_keys`, the one derivation
+    ``aggregate_by_level`` also reads, so the groups agree. The ``excluded``
+    tally reads those groups over EVERY requirement rather than the
+    coverage-eligible ones ``aggregate_by_level`` sums: a requirement is
+    counted as excluded precisely because a coverage gate kept it out of the
+    sums, so drawing the groups from what survived that gate would lose the
+    level whose requirements are all excluded -- the one case the tally exists
+    to report.
     """
     from elspais.config import get_status_roles
 
     roles = get_status_roles(config or {})
     exclude_status = roles.coverage_excluded_statuses()
-    known_levels = {k.lower() for k in _level_keys(config)}
+    # REQ-d00281-C: the same groups aggregate_by_level forms, so a requirement an
+    # excluded status keeps out of the sums is still counted as excluded rather
+    # than vanishing. Deliberately over every requirement, not the covered set --
+    # a level whose only requirements are excluded has to stay reportable.
+    known_levels = {k.lower() for k in level_group_keys(graph, config)}
 
     # excluded counts are computed locally (aggregate_by_level excludes these
     # statuses from its sums but doesn't report per-status counts).

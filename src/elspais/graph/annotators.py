@@ -368,11 +368,14 @@ def count_by_level(
     """
     from elspais.config.status_roles import StatusRolesConfig
     from elspais.graph import NodeKind
+    from elspais.graph.aggregation import level_group_keys
 
-    # Derive level keys from config or use hardcoded defaults
     if config is not None:
+        # Implements: REQ-d00281-A
+        # Groups come from the one derivation every reporting surface reads, so
+        # this count and the per-level coverage rollup form the same groups.
+        level_keys = level_group_keys(graph, config)
         typed_config = _validate_config(config)
-        level_keys = list(typed_config.levels.keys())
         status_roles_data = typed_config.rules.format.status_roles
         roles = (
             StatusRolesConfig.from_dict(status_roles_data)
@@ -380,6 +383,9 @@ def count_by_level(
             else StatusRolesConfig.default()
         )
     else:
+        # No config names no levels to group by; these uppercase keys are the
+        # documented fallback. A level a requirement carries is still counted
+        # below, so nothing is dropped for want of a configured key.
         level_keys = ["PRD", "OPS", "DEV"]
         roles = StatusRolesConfig.default()
 
@@ -395,41 +401,6 @@ def count_by_level(
             if not roles.is_excluded_from_analysis(status):
                 counts["active"][level] = counts["active"].get(level, 0) + 1
     return counts
-
-
-def group_by_level(
-    graph: FederatedGraph,
-    config: dict[str, Any] | None = None,
-) -> dict[str, list[GraphNode]]:
-    """Group requirements by level.
-
-    Args:
-        graph: The TraceGraph to query.
-        config: Optional config dict. If provided, derives level keys from
-                typed config levels. Otherwise uses hardcoded defaults.
-
-    Returns:
-        Dict mapping level to list of requirement nodes, plus "other" for unrecognized.
-    """
-    from elspais.graph import NodeKind
-
-    # Derive level keys from config or use hardcoded defaults
-    if config is not None:
-        typed_config = _validate_config(config)
-        level_keys = list(typed_config.levels.keys())
-    else:
-        level_keys = ["PRD", "OPS", "DEV"]
-
-    groups: dict[str, list[GraphNode]] = {k: [] for k in level_keys}
-    groups["other"] = []
-
-    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
-        level = node.get_field("level") or ""
-        if level in groups:
-            groups[level].append(node)
-        else:
-            groups["other"].append(node)
-    return groups
 
 
 def count_by_repo(
@@ -2210,7 +2181,6 @@ __all__ = [
     "annotate_display_info",
     "annotate_implementation_files",
     "count_by_level",
-    "group_by_level",
     "count_by_repo",
     "count_by_coverage",
     "count_code_coverage",

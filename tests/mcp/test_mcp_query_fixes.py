@@ -267,27 +267,6 @@ class TestLevelNormalization:
         assert "OPS" in counts["all"]
         assert "DEV" in counts["all"]
 
-    # Verifies: REQ-o00061-C
-    def test_group_by_level_with_config(self, graph_with_body):
-        """group_by_level() uses config-derived keys when config is provided."""
-        from elspais.graph.annotators import group_by_level
-
-        config: dict[str, Any] = {
-            "levels": {
-                "prd": {"rank": 1, "letter": "p", "implements": ["prd"]},
-                "ops": {"rank": 2, "letter": "o", "implements": ["ops", "prd"]},
-                "dev": {"rank": 3, "letter": "d", "implements": ["dev", "ops", "prd"]},
-            },
-        }
-        groups = group_by_level(graph_with_body, config=config)
-
-        assert "prd" in groups
-        assert "ops" in groups
-        assert "dev" in groups
-        assert len(groups["prd"]) == 1
-        assert len(groups["ops"]) == 1
-        assert len(groups["dev"]) == 1
-
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Fix 2: Keywords Wiring

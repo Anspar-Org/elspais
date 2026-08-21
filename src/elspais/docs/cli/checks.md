@@ -43,6 +43,7 @@ Configuration checks always run as part of traceability verification. For focuse
 | `spec.implements_resolve` | All Implements: references resolve |
 | `spec.refines_resolve` | All Refines: references resolve |
 | `spec.hierarchy_levels` | Requirements follow hierarchy rules |
+| `spec.undefined_levels` | No requirement carries a level the configuration does not define; severity: info (such a requirement is still counted and grouped, so this discloses it rather than dropping it) |
 | `spec.structural_orphans` | No nodes without a FILE ancestor (build bugs) |
 | `references.malformed` | No reference fails to read as a reference at all; default severity: warning |
 | `references.unknown_namespace` | No reference names a target no configured repository claims; default severity: info |

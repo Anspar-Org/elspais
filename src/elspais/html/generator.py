@@ -857,10 +857,13 @@ class HTMLGenerator:
         visited_at_depth: dict[tuple[str, int, str | None], bool] = {}
         visited_node_ids: set[str] = set()  # Track all rendered node IDs
 
-        from elspais.config import default_level_keys
+        from elspais.graph.aggregation import level_group_keys
 
-        _level_keys = list((self.config.get("levels") or {}).keys()) or default_level_keys()
-        level_prefixes = tuple(f"{k.lower()}-" for k in _level_keys)
+        # A spec file is named for the level it holds, so the prefixes worth
+        # stripping from a filename are the level groups this graph forms -- the
+        # same derivation the rollups use, rather than a second reading of the
+        # configuration that would not know a level only the requirements carry.
+        level_prefixes = tuple(f"{k.lower()}-" for k in level_group_keys(self.graph, self.config))
 
         def get_topic(node: GraphNode) -> str:
             """Extract topic from file path."""

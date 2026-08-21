@@ -13,9 +13,11 @@ from elspais.graph.aggregation import (
     aggregate_by_level,
     aggregate_dimension,
     authored_dimension,
+    collect_coverage,
     covered_labels,
     denominator_labels,
     iter_uncredited_evidence,
+    level_group_keys,
     numerator_dimension,
     relative_tier,
     relative_tier_for,
@@ -241,6 +243,94 @@ class TestLevelKeys:
         assert "EXTRA" in levels
         assert levels["EXTRA"].total_requirements == 1
         assert levels["EXTRA"].implemented.total_covered == pytest.approx(1.0)
+
+
+class TestLevelGroupKeys:
+    """REQ-d00281: a report's level groups are the configured [levels] UNIONED
+    with every level the requirements it covers actually carry -- the graph
+    decides the vocabulary, not the configuration the report was invoked under."""
+
+    CONFIG = {"levels": {"dev": {"rank": 3}, "prd": {"rank": 1}, "ops": {"rank": 2}}}
+
+    # Verifies: REQ-d00281-A, REQ-d00281-E
+    def test_configured_keys_precede_carried_levels_sorted_case_insensitively(self):
+        # "Biz" is added first and sorts second: undefined groups are ordered,
+        # not left in scan order, and the comparison ignores case. Only `prd`
+        # is carried, so `ops`/`dev` prove configured keys survive an empty
+        # group instead of being trimmed to the observed set.
+        graph = _make_graph(
+            _make_req("REQ-x00001", level="Biz"),
+            _make_req("REQ-x00002", level="arch"),
+            _make_req("REQ-x00003", level="prd"),
+        )
+        assert level_group_keys(graph, self.CONFIG) == ["prd", "ops", "dev", "arch", "Biz"]
+
+    # Verifies: REQ-d00281-B
+    @pytest.mark.parametrize("carried", ["PRD", "Prd", "prd", "  PRD  "])
+    def test_case_variant_of_a_configured_level_forms_no_second_group(self, carried):
+        # One requirement must fall in exactly one group, so a spelling that
+        # differs from the configured key only in case (or surrounding space)
+        # must not raise a rival group beside it.
+        graph = _make_graph(_make_req("REQ-x00001", level=carried))
+        assert level_group_keys(graph, self.CONFIG) == ["prd", "ops", "dev"]
+
+    # Verifies: REQ-d00281-A
+    @pytest.mark.parametrize(
+        "node_ids,expected",
+        [
+            (None, ["prd", "ops", "dev", "arch"]),
+            ({"REQ-x00001"}, ["prd", "ops", "dev", "arch"]),
+            ({"REQ-x00002"}, ["prd", "ops", "dev"]),
+            (set(), ["prd", "ops", "dev"]),
+        ],
+    )
+    def test_node_ids_restricts_the_population_the_groups_are_drawn_from(self, node_ids, expected):
+        graph = _make_graph(
+            _make_req("REQ-x00001", level="arch"),
+            _make_req("REQ-x00002", level="dev"),
+        )
+        assert level_group_keys(graph, self.CONFIG, node_ids=node_ids) == expected
+
+    # Verifies: REQ-d00281-A, REQ-d00281-C, REQ-d00281-E
+    def test_aggregate_by_level_forms_a_group_for_an_unconfigured_level(self):
+        arch = _make_req("REQ-x00001", level="arch")
+        arch.set_metric(
+            "rollup_metrics",
+            RollupMetrics(
+                total_assertions=2,
+                implemented=CoverageDimension(
+                    total=2, immediate_direct_by_label={"A": 1.0, "B": 0.5}
+                ),
+            ),
+        )
+        dev = _make_req("REQ-x00002", level="dev")
+        dev.set_metric(
+            "rollup_metrics",
+            RollupMetrics(
+                total_assertions=1,
+                implemented=CoverageDimension(total=1, immediate_direct_by_label={"A": 1.0}),
+            ),
+        )
+        rows = aggregate_by_level(_make_graph(arch, dev), self.CONFIG)
+        assert [row.level for row in rows] == ["PRD", "OPS", "DEV", "ARCH"]
+        group = rows[-1]
+        # The unconfigured level's requirement is counted where it landed --
+        # not dropped, and not folded into a configured group.
+        assert group.total_requirements == 1
+        assert group.total_assertions == 2
+        assert group.implemented.total == 2
+        assert group.implemented.immediate_direct == pytest.approx(1.5)
+        assert group.implemented.total_covered == pytest.approx(1.5)
+        assert {r.level: r.total_requirements for r in rows}["DEV"] == 1
+
+    # Verifies: REQ-d00281-C, REQ-d00281-D
+    def test_collect_coverage_reports_exclusions_at_an_unconfigured_level(self):
+        # The excluded gate reads the groups over EVERY requirement, so a level
+        # whose only requirements carry a coverage-excluded status still has its
+        # exclusions counted. Gating on the configured keys alone lost them:
+        # the requirement is in no sum and in no excluded tally either.
+        graph = _make_graph(_make_req("REQ-x00001", level="arch", status="Deprecated"))
+        assert collect_coverage(graph, self.CONFIG)["excluded"] == {"Deprecated": 1}
 
 
 class TestAggregateDimension:

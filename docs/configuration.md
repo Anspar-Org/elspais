@@ -93,6 +93,12 @@ name = "my-project"
 # Lower rank = higher in hierarchy (PRD=1 is parent of DEV=3).
 # The `implements` list declares which levels this level may implement.
 #
+# A requirement may carry a level this configuration does not define -- an
+# associate declaring its own levels, a misspelling, or a level removed while
+# its requirements remained. Such a requirement is still counted and still forms
+# its own group in reports, ordered after the levels declared here, and the
+# `spec.undefined_levels` check names it so the difference is visible.
+#
 # expects_validation (bool, default false): set true for levels that should have
 # a user-journey validating them (a USER_JOURNEY that `Validates:` the requirement).
 # When true, a requirement of that level with no UAT coverage is a reported gap
