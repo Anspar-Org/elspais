@@ -379,15 +379,20 @@ class TestAnalysisOptions:
         result = run_elspais("analysis", "--level", "dev", "--format", "json")
         assert result.returncode == 0
         data = json.loads(result.stdout)
+        # A filter that selects nothing would satisfy the per-node loop below
+        # vacuously, which is how a broken --level stayed green.
+        assert data["ranked_nodes"], "level scope selected no nodes"
         for node in data["ranked_nodes"]:
-            assert node["level"] == "DEV"
+            # The level is the config level key, which is lowercase.
+            assert node["level"] == "dev"
 
     def test_REQ_d00125_E_level_filter_prd(self):
         result = run_elspais("analysis", "--level", "prd", "--format", "json")
         assert result.returncode == 0
         data = json.loads(result.stdout)
+        assert data["ranked_nodes"], "level scope selected no nodes"
         for node in data["ranked_nodes"]:
-            assert node["level"] == "PRD"
+            assert node["level"] == "prd"
 
     def test_REQ_d00125_F_include_code_smoke(self):
         result = run_elspais("analysis", "--include-code")
