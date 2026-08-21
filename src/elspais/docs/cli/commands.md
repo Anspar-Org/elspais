@@ -90,6 +90,15 @@ Generate traceability matrix and reports.
   `--tests`              Show test references
   `--output PATH`        Output file path
 
+**Scoping the report** (see `elspais docs scoping`):
+
+  `--level LVL ...`        Report only requirements at these levels
+  `--not-level LVL ...`    Report no requirement at these levels
+  `--status ST ...`        Report only requirements carrying these statuses
+  `--not-status ST ...`    Report no requirement carrying these statuses
+  `--match-status-roles`   Read each named status as every status sharing its role
+  `--scope NAME`           Report under a scope declared in `[scopes.NAME]`
+
 ## search
 
 Search requirements by keyword, with ranked results.
@@ -230,6 +239,15 @@ integrations (by associate)" section listing inherited coverage grouped by the
 owning associate with a federation total, and `gaps` lists integrating
 requirements under "Covered via external associate" instead of flagging them as
 uncovered.
+
+**Scoping the report** (see `elspais docs scoping`):
+
+  `--level LVL ...`        Report only requirements at these levels
+  `--not-level LVL ...`    Report no requirement at these levels
+  `--status ST ...`        Report only requirements carrying these statuses
+  `--not-status ST ...`    Report no requirement carrying these statuses
+  `--match-status-roles`   Read each named status as every status sharing its role
+  `--scope NAME`           Report under a scope declared in `[scopes.NAME]`
 
 ## changed
 

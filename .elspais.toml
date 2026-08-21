@@ -346,3 +346,13 @@ canonical_form = "info"
 formats = []
 # Directory for generated output files
 dir = ""
+
+#──────────────────────────────────────────────────────────────────────────────
+# SCOPES - Named Report Selections
+#──────────────────────────────────────────────────────────────────────────────
+
+# The product-level view a stakeholder reads, with withdrawn requirements out of
+# the way. Used as `elspais trace --scope overview`.
+[scopes.overview]
+level = ["prd"]
+not_status = ["Deprecated", "Superseded"]

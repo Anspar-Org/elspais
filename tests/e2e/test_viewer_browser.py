@@ -2674,3 +2674,155 @@ class TestAssertionPillMeasures:
         assert page.locator("#card-stack-body .dim-caveat").count() == 0, (
             "a caveat element is still rendered in the card"
         )
+
+
+# ---------------------------------------------------------------------------
+# Scope membership: the client's own answer against the authority's.
+# ---------------------------------------------------------------------------
+
+_FILTERS_READY = """
+() => typeof filterGroups !== 'undefined'
+      && !!filterGroups.level
+      && !!filterGroups.repo
+      && typeof editState !== 'undefined'
+      && Array.isArray(editState.treeData)
+      && editState.treeData.length > 0
+"""
+
+_VOCABULARY = """
+() => ({
+    levels: filterGroups.level.buttons.map(b => b.key),
+    statuses: filterGroups.status.buttons.map(b => b.key),
+    carriedLevels: Array.from(new Set(
+        editState.treeData.filter(r => r.level).map(r => r.level))),
+    carriedStatuses: Array.from(new Set(
+        editState.treeData.filter(r => r.level).map(r => (r.status || '').toLowerCase()))),
+})
+"""
+
+# Every group is put in its unconstrained state first, because the status group
+# starts with the default-hidden statuses off and a scope naming only a level
+# would otherwise be compared against a narrowing the reader never wrote.
+_CLIENT_MEMBERSHIP = """
+(narrowing) => {
+    for (const name in filterGroups) {
+        const g = filterGroups[name];
+        g._on = new Set(g.buttons.map(b => b.key));
+    }
+    for (const name in narrowing) {
+        if (narrowing[name] !== null) filterGroups[name]._on = new Set(narrowing[name]);
+    }
+    const seen = new Set();
+    const selected = [];
+    for (const row of editState.treeData) {
+        if (seen.has(row.id)) continue;
+        seen.add(row.id);
+        if (!row.level) continue;   // the requirement tab shows requirements
+        let match = true;
+        for (const name in filterGroups) {
+            if (!filterGroups[name].matches(row)) { match = false; break; }
+        }
+        if (match) selected.push(row.id);
+    }
+    return selected.sort();
+}
+"""
+
+
+def _client_scope_membership(page, **narrowing) -> list[str]:
+    """What the viewer shows, evaluated by the viewer's own filter groups."""
+    return page.evaluate(_CLIENT_MEMBERSHIP, dict(narrowing))
+
+
+def _authority_scope_membership(page, viewer_url: str, params: str = "") -> list[str]:
+    """What ``scoped_requirements`` yields, asked over the wire."""
+    resp = page.request.get(f"{viewer_url}/api/scope{('?' + params) if params else ''}")
+    assert resp.status == 200, f"/api/scope returned {resp.status}"
+    return sorted(resp.json()["ids"])
+
+
+class TestScopeMembershipAgreesWithAuthority:
+    """Validates REQ-d00279-B: the viewer decides scope membership for itself,
+    over rows it already holds, so that it can answer as fast as a reader
+    narrows. What it owes for that permission is the membership the authority
+    yields for the same scope — not a rule that is merely consistent with
+    itself. These tests drive the client's real ``filterGroups`` and compare
+    against ``/api/scope``."""
+
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    def test_unconstrained_scope_membership_matches_authority(self, page, viewer_url):
+        # Verifies: REQ-d00279-B
+        """The neutral state is a scope too, and the one the comparison rests on.
+
+        Were the client never shown some requirement, it could hide it under
+        every scope and still look equivalent.
+        """
+        page.goto(viewer_url, wait_until="domcontentloaded")
+        page.wait_for_function(_FILTERS_READY, timeout=30_000)
+
+        client = _client_scope_membership(page)
+        authority = _authority_scope_membership(page, viewer_url)
+
+        assert client == authority, (
+            f"the viewer shows {len(client)} requirements unconstrained where the "
+            f"authority yields {len(authority)}; "
+            f"only the viewer: {sorted(set(client) - set(authority))[:10]}, "
+            f"only the authority: {sorted(set(authority) - set(client))[:10]}"
+        )
+
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    def test_narrowed_scope_membership_matches_authority(self, page, viewer_url):
+        # Verifies: REQ-d00279-B
+        """A scope a reader could write, answered both ways.
+
+        The scopes are derived from what this estate actually carries rather
+        than spelled out here, so the comparison keeps deciding something as the
+        estate's levels and statuses change.
+        """
+        page.goto(viewer_url, wait_until="domcontentloaded")
+        page.wait_for_function(_FILTERS_READY, timeout=30_000)
+
+        vocab = page.evaluate(_VOCABULARY)
+        carried_levels = sorted(
+            k for k in vocab["levels"] if k.upper() in {v.upper() for v in vocab["carriedLevels"]}
+        )
+        carried_statuses = sorted(set(vocab["statuses"]) & set(vocab["carriedStatuses"]))
+        assert carried_levels, f"no level button matches a carried level: {vocab}"
+        assert carried_statuses, f"no status button matches a carried status: {vocab}"
+
+        level, status = carried_levels[0], carried_statuses[0]
+        cases: dict[str, tuple[dict[str, list[str] | None], str]] = {
+            "one level": ({"level": [level]}, f"scope_level={level}"),
+            "one status": ({"status": [status]}, f"scope_status={status}"),
+            "status excluded": (
+                {"status": [s for s in vocab["statuses"] if s != status]},
+                f"scope_not_status={status}",
+            ),
+            "level and status": (
+                {"level": [level], "status": [status]},
+                f"scope_level={level}&scope_status={status}",
+            ),
+        }
+
+        divergences: list[str] = []
+        for name, (narrowing, params) in cases.items():
+            client = _client_scope_membership(page, **narrowing)
+            authority = _authority_scope_membership(page, viewer_url, params)
+            if client != authority:
+                divergences.append(
+                    f"{name} ({params}): viewer {len(client)} vs authority "
+                    f"{len(authority)}; only the viewer "
+                    f"{sorted(set(client) - set(authority))[:5]}, only the authority "
+                    f"{sorted(set(authority) - set(client))[:5]}"
+                )
+        assert not divergences, "; ".join(divergences)
+
+        # A scope that decides nothing would let any rule pass the comparison.
+        whole = _authority_scope_membership(page, viewer_url)
+        narrowed = _authority_scope_membership(page, viewer_url, f"scope_level={level}")
+        assert 0 < len(narrowed) < len(whole), (
+            f"scope_level={level} selects {len(narrowed)} of {len(whole)}: "
+            "these cases must divide the estate to decide anything"
+        )

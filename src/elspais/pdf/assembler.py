@@ -284,11 +284,16 @@ class MarkdownAssembler:
                     continue
         level_buckets = self._partition_by_level(file_groups)
 
-        # Emit each level group
-        if self._overview:
-            levels_to_emit = ("PRD",)
-        else:
-            levels_to_emit = ("PRD", "OPS", "DEV")
+        # Emit each level group. Implements: REQ-d00281-A
+        # The levels this project declares, in the rank order it gave them --
+        # never a fixed list, which would omit a level a project configured and
+        # would be a second place deciding what a report contains.
+        ordered_levels = tuple(
+            level for level, _rank in sorted(self._level_order.items(), key=lambda kv: kv[1])
+        )
+        # REQ-p00080-F: an overview carries the requirements the stakeholder
+        # audience reads, which is the topmost level this project declares.
+        levels_to_emit = ordered_levels[:1] if self._overview else ordered_levels
 
         for level in levels_to_emit:
             files = level_buckets.get(level, [])

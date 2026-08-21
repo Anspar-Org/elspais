@@ -899,6 +899,7 @@ def format_view(
 def render_section(
     graph: FederatedGraph,
     args: argparse.Namespace,
+    config: dict | None = None,
 ) -> tuple[str, int]:
     """Render trace as a composed report section.
 
@@ -940,7 +941,7 @@ def render_section(
     # A section composed with others honours the same scope it honours alone.
     from elspais.commands._scope import resolve_scope_for_report, scope_disclosure
 
-    result = resolve_scope_for_report(graph, args, getattr(args, "_config", None))
+    result = resolve_scope_for_report(graph, args, config)
     scope_ids = None if len(result.ids) == result.population else result.ids
     lines = list(scope_disclosure(result))
     lines += list(formatter(graph, preset, scope_ids))

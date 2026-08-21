@@ -52,7 +52,7 @@ class ScopeOptions:
 # Health command
 # ---------------------------------------------------------------------------
 @dataclasses.dataclass
-class ChecksArgs(ScopeOptions):
+class ChecksArgs:
     """Verify requirements traceability and configuration.
 
     With --run-tests, executes each configured [[scanning.test.targets]]
@@ -676,6 +676,7 @@ DOCS_TOPICS = Literal[
     "assertions",
     "authoring",
     "traceability",
+    "scoping",
     "linking",
     "satisfies",
     "validation",

@@ -186,7 +186,7 @@ def _render_section(
     elif name == "trace":
         from elspais.commands.trace import render_section
 
-        return render_section(graph, args)
+        return render_section(graph, args, config)
     elif name == "changed":
         return _render_changed(args)
     elif name in ("uncovered", "untested", "unvalidated", "failing", "no_assertions"):

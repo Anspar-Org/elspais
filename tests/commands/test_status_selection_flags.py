@@ -212,6 +212,12 @@ class TestOptionSurface:
         assert "only_status" not in fields, (
             f"{class_name} must not offer --only-status; fields were {sorted(fields)}"
         )
+        if class_name == "ChecksArgs":
+            # checks reaches a verdict over the whole estate; it does not yet
+            # honour a scope, and a flag it cannot honour would be worse than
+            # its absence.
+            assert "status" not in fields
+            return
         assert "status" in fields, (
             f"{class_name} must offer --status to scope what it emits; fields were {sorted(fields)}"
         )

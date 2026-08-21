@@ -17,6 +17,39 @@ from elspais.view_model import build_levels, build_namespaces, build_statuses
 _USER_RELATIONSHIP_KINDS = ["implements", "refines", "satisfies"]
 
 
+# Implements: REQ-d00279-B, REQ-d00281-A
+def _levels_with_carried(typed, graph) -> list[dict[str, Any]]:
+    """The level catalog the viewer filters by, including levels only carried.
+
+    A view that judges membership for itself has to be able to judge every
+    requirement it displays. Building the catalog from the configuration alone
+    leaves a requirement whose level only its own repository declares matching no
+    button at all, so the view would exclude it under any selection while the
+    authority admits it -- a second semantics rather than a second evaluator.
+    """
+    catalog = build_levels(typed)
+    known = {str(entry.get("key", "")).lower() for entry in catalog}
+    if graph is None or not hasattr(graph, "nodes_by_kind"):
+        return catalog
+    from elspais.graph.aggregation import level_group_keys
+
+    for key in level_group_keys(graph, None):
+        if key.lower() in known:
+            continue
+        known.add(key.lower())
+        catalog.append(
+            {
+                "key": key,
+                "label": key,
+                "rank": 9999,
+                "letter": "",
+                "bg": "",
+                "text": "",
+            }
+        )
+    return catalog
+
+
 def _extract_viewer_config(config: dict[str, Any], federation: Any = None) -> dict[str, Any]:
     """Extract viewer-relevant values from the config dict.
 
@@ -56,7 +89,7 @@ def _extract_viewer_config(config: dict[str, Any], federation: Any = None) -> di
         "config_types": config_types,
         "config_relationship_kinds": list(_USER_RELATIONSHIP_KINDS),
         "config_statuses": config_statuses,
-        "levels": build_levels(typed),
+        "levels": _levels_with_carried(typed, federation),
         "namespaces": build_namespaces(typed, federation),
     }
 
@@ -104,6 +137,12 @@ async def index(request: Request):
             "statuses": statuses,
             "topics": topics,
             "default_hidden_statuses": sorted(default_hidden),
+            # Implements: REQ-d00279-B
+            # The role a project assigns each status, so a view evaluating
+            # membership for itself can widen a status to its role the way the
+            # authority does. Without it the browser knows only which statuses
+            # were hidden by default and could not reach the same answer.
+            "status_roles": {s: roles.role_of(s).value for s in status_keys},
             "version": gen.version,
             "base_path": str(state.repo_root),
             # `typed` is already validated above (with a fallback to the
