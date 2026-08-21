@@ -30,6 +30,7 @@
 | REQ-p00081 | Org-Wide Requirement Visibility                  | prd-features.md | 17fa4417 |
 | REQ-p00082 | Federated Authority and Verdict Scoping          | prd-features.md | a8311d6c |
 | REQ-p00083 | Durability of Uncommitted Work                   | prd-core.md     | 80cf3ca1 |
+| REQ-p00084 | Audience-Scoped Reporting                        | prd-core.md     | cb0c87bf |
 
 ### elspais
 
@@ -40,6 +41,7 @@
 | REQ-p00080::REQ-p00019 | Truthful Reporting and Error Discipline |      | 946a0e4c |
 | REQ-p00081::REQ-p00019 | Truthful Reporting and Error Discipline |      | 946a0e4c |
 | REQ-p00083::REQ-p00019 | Truthful Reporting and Error Discipline |      | 946a0e4c |
+| REQ-p00084::REQ-p00019 | Truthful Reporting and Error Discipline |      | 946a0e4c |
 
 ## OPERATIONS
 
@@ -101,7 +103,7 @@
 | REQ-d00082 | Unified Reference Configuration                               | dev-cli.md              | f0808bb9 |
 | REQ-d00084 | Trace Command                                                 | dev-cli.md              | 67887c51 |
 | REQ-d00085 | Unified Report Composition                                    | dev-cli.md              | 587285b0 |
-| REQ-d00086 | Coverage Report Section                                       | dev-cli.md              | 4559fce7 |
+| REQ-d00086 | Coverage Report Section                                       | dev-cli.md              | 067a62c4 |
 | REQ-d00124 | Graph Analysis Engine                                         | dev-cli.md              | b153d5f6 |
 | REQ-d00125 | Analysis CLI Command                                          | dev-cli.md              | 474fa8af |
 | REQ-d00126 | FILE Node Data Model                                          | dev-graph-file-nodes.md | 070e173b |
@@ -190,6 +192,10 @@
 | REQ-d00275 | Whose Configuration Governs a Federated Answer                | dev-graph-federation.md | 9ab2ef7c |
 | REQ-d00276 | Tests Outside the Requirement Estate                          | dev-graph-core.md       | 922d1382 |
 | REQ-d00277 | Coverage Dimensions                                           | dev-graph-core.md       | b097dcd7 |
+| REQ-d00278 | Report Scope Selection Vocabulary                             | dev-cli.md              | ef2221cc |
+| REQ-d00279 | One Authority for Report Scope Membership                     | dev-cli.md              | 2b755b50 |
+| REQ-d00280 | Named Report Scopes                                           | dev-cli.md              | 9ddbf905 |
+| REQ-d00281 | Level Vocabulary of a Reported Graph                          | dev-graph-core.md       | 4bde246d |
 
 ## User Journeys
 

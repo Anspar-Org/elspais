@@ -464,6 +464,43 @@ K. The system SHALL report a finding under one description only, so that a count
 *End* *Truthful Reporting and Error Discipline* | **Hash**: 946a0e4c
 ---
 
+# REQ-p00084: Audience-Scoped Reporting
+
+**Level**: prd | **Status**: Draft | **Implements**: REQ-p00003
+**Satisfies**: REQ-p00019
+
+A *Traceability* report is read by an audience, and an audience is rarely served by every requirement the estate holds. This requirement covers telling a reporting surface which requirements its audience needs, and what has to remain true of the report it then produces.
+
+## Assertions
+
+A. A surface that reports over a set of requirements SHALL accept a scope naming which requirements its audience needs.
+
+B. A scoped report SHALL emit as its answer the requirements its scope selects and no others.
+
+C. The requirements a scoped report presents SHALL NOT depend on the format the report is rendered in.
+
+D. A scoped report SHALL disclose the scope under which it was produced.
+
+E. A coverage figure a report states for an emitted requirement, together with each measure it publishes behind that figure, SHALL equal the figure and measures an unscoped report states for that requirement.
+
+F. A scope SHALL be recordable in the project, so that a report committed alongside the project can be reproduced by a reader who did not compose it.
+
+## Rationale
+
+Withholding content from a report is ordinarily a defect: a reader cannot tell a report narrowed on purpose from one that lost requirements on the way. REQ-p00015-A settles that question for content the tool never admits; a scope admits everything and narrows what is emitted, which is the same hazard reached by another route. D resolves it — a report that names its scope is an answer to a stated question, and a reader who wanted a different question asked can see that they got the wrong one. D is also how this requirement concretizes the REQ-p00019 anti-pattern template it declares `Satisfies:` against: a scoped report omits requirements from its answer and delivers a part of the estate where the whole was available, so the silent-omission and undisclosed-substitution classes are the ones it is most exposed to, and naming the scope answers both in a single act. The template's remaining classes bind to this subsystem through the instance without a subsystem-specific strengthening.
+
+A names the surfaces this obligation falls on by what they do rather than by listing them: the sections of a composed report, the compiled review document, the read surfaces the tool offers a program, and the view a reader browses the estate through are all answers computed over a set of requirements for somebody. Generating a file that mirrors the estate's own structure — an index of what exists, a glossary of the terms it uses — is not reporting over a set of requirements for an audience, and carries no scope.
+
+E keeps scoping a matter of emission. A requirement's own coverage is a fact about the whole estate — what implements it, what tests it, what refines it — and none of that changes because a reader asked to see fewer requirements. Evidence held by a requirement a scope excludes still conducts to a requirement the scope emits, so a report for an audience that never reads detailed requirements still states the coverage those detailed requirements earn for the ones it does read. Stating E against what an unscoped report says gives it a referent rather than leaving "unchanged" to be argued, and extending it to the measures published behind a headline figure closes the same gap one level down: a headline held steady while the evidence behind it moves is a figure whose meaning has quietly changed.
+
+B and C are separate because they fail separately. B is about honouring a scope at all; C is about renderings of one report agreeing with each other. A tool can honour a scope in the rendering a reader checks and quietly drop a requirement from the one they file, and only C catches that — the disagreement is invisible in either output taken alone.
+
+F is what makes a scope survive contact with a project. A scope that exists only in the invocation that produced a report cannot be checked by the person reading the report, so the report is evidence of a selection nobody can re-derive, and the audience definition drifts into whatever tooling happened to produce it.
+
+*End* *Audience-Scoped Reporting* | **Hash**: cb0c87bf
+
+---
+
 ## REQ-d00220: TermDictionary Data Model
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-p00002
