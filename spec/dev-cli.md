@@ -129,18 +129,19 @@ The `trace` command SHALL generate *Traceability* output from the requirement gr
 
 A. The command SHALL support structured JSON graph output via `--graph-json`, including git change annotations when available.
 
-B. The command SHALL support column presets (`--preset minimal|standard|full`) controlling which columns appear in tabular output: minimal (ID, Title, Level, Status), standard and full (+ Implemented, Tested, Passing per *Assertion* D).
+B. The command SHALL offer named default column sets, each selecting columns as REQ-d00282 governs, so that a reader who names none is answered with a set chosen for the report rather than with every column the tool can state.
 
 C. The command SHALL support independent detail flags (`--body`, `--assertions`, `--tests`) that control whether expanded rows appear beneath each requirement, orthogonal to column presets.
 
-D. The standard and full presets SHALL include per-requirement coverage columns for Implemented, Tested and Passing as REQ-d00277 defines them, each displayed as N/M (%) on the total coverage of REQ-d00069-N, with the measures behind it available per REQ-d00258-A and no caveat marker standing in for one not shown.
+D. The default column sets other than the most compact SHALL state the Implemented, Tested and Passing dimensions of REQ-d00277, each as the per-*Assertion* total of REQ-d00069-N.
 
 ### Rationale
 
-A JSON graph output mode enables programmatic consumption of the full *Traceability* graph with git-aware change tracking, supporting dashboard integrations and automated analysis pipelines. Column presets and detail flags are independent axes of control: a user may want a compact table with full coverage columns, or a minimal table with expanded *Assertion* rows.
+A JSON graph output mode enables programmatic consumption of the full *Traceability* graph with git-aware change tracking, supporting dashboard integrations and automated analysis pipelines. Named default sets and detail flags are independent axes of control: a reader may want a compact table with full coverage columns, or a minimal table with expanded *Assertion* rows. A default set is what a reader who names nothing receives; which columns a report may be asked for, and what a column stating a measure must say about itself, are REQ-d00282's.
 
 ### Changelog
 
+- 2026-08-21 | a6ede1e4 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-19 | 67887c51 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-18 | 3a6da144 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-17 | 66981b81 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -150,7 +151,7 @@ A JSON graph output mode enables programmatic consumption of the full *Traceabil
 - 2026-05-11 | f8f0e0f2 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | f8f0e0f2 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *Trace Command* | **Hash**: 67887c51
+*End* *Trace Command* | **Hash**: a6ede1e4
 ---
 
 ## REQ-d00085: Unified Report Composition
@@ -253,7 +254,7 @@ The `coverage` section SHALL produce a coverage report showing implemented, test
 
 A. The report SHALL group requirements by level as REQ-d00281 determines those groups, and show counts and percentages of requirements with code references, test references, and passing tests.
 
-B. The report SHALL compute per-requirement *Assertion* coverage for Implemented, Tested and Passing as REQ-d00277 defines them, each on the total coverage of REQ-d00069-N, with the measures behind it available per REQ-d00258-A and no caveat marker standing in for one not shown.
+B. The report SHALL compute per-requirement *Assertion* coverage for Implemented, Tested and Passing as REQ-d00277 defines them, each on the total coverage of REQ-d00069-N.
 
 C. The report SHALL support `text`, `markdown`, `json`, and `csv` output formats.
 
@@ -265,6 +266,7 @@ Coverage data is already computed during graph construction but is only surfaced
 
 ### Changelog
 
+- 2026-08-21 | 8e02f52d | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-20 | 067a62c4 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-20 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-74: level groups follow the requirements reported on rather than a fixed set named here
 - 2026-08-19 | 4559fce7 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -275,7 +277,7 @@ Coverage data is already computed during graph construction but is only surfaced
 - 2026-05-11 | 2fd4ab13 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | 2fd4ab13 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *Coverage Report Section* | **Hash**: 067a62c4
+*End* *Coverage Report Section* | **Hash**: 8e02f52d
 ---
 
 ## REQ-d00073: Link Suggestion CLI Command
@@ -642,11 +644,63 @@ B grants a second evaluator without granting a second semantics. A view that mus
 
 ---
 
-## REQ-d00280: Named Report Scopes
+## REQ-d00282: Report Column Selection
 
 **Level**: dev | **Status**: Draft | **Implements**: REQ-p00084
 
-A scope spelled out at the moment a report is run is known only to whoever spelled it. This requirement covers scopes a project declares under a name, and what such a name selects.
+A report states facts about each requirement it emits, one fact to a column. Which requirements it emits is a scope; which facts it states about them is this. The two are separate choices about one report, and a reader making one of them says nothing about the other.
+
+### Assertions
+
+A. A report that states facts about each requirement it emits, one fact to a column, SHALL accept a selection naming which of the columns it offers it states.
+
+B. For each coverage dimension of REQ-d00277, a report SHALL admit selecting that dimension's total and each of the four measures behind it (REQ-d00069-L) in their own right.
+
+C. A column stating a measure SHALL name both the coverage dimension it measures and the measure it states.
+
+D. The value a report states in a column SHALL equal the value a report stating every column it offers states in that column.
+
+E. The columns a report states SHALL NOT depend on the format it is rendered in.
+
+F. A report SHALL NOT be produced under a selection the tool did not honour in full.
+
+G. Offering a further column SHALL NOT change which columns an already expressible selection states.
+
+H. Selecting which columns a report states SHALL NOT change which requirements it emits.
+
+I. Selecting which requirements a report emits SHALL NOT change which columns it states.
+
+J. The names a selection uses SHALL be independent of the words a project configures its columns to display.
+
+K. A report SHALL state its columns in the order the selection names them.
+
+L. A report SHALL state the identity of each requirement it emits whatever the selection names.
+
+### Rationale
+
+B is what the coverage vocabulary already makes possible. A coverage figure is computed on four measures with a total taken from them (REQ-d00069-L+N), so those are the units a reader can meaningfully ask for, and offering only whole dimensions makes a reader who wants evidence cited by name against journeys take every measure of every dimension to get it. It names the dimensions of REQ-d00277 rather than coverage at large because line coverage is measured in lines and has no four measures to select among (REQ-d00254-B); a rule written over every coverage figure would oblige a surface to offer what that one cannot.
+
+C is what keeps B honest, and it is the hazard peculiar to columns. A narrowed report is missing rows a reader cannot see, which is why a scope discloses itself; a narrowed table is missing columns a reader sees in the header, so its absence needs no announcement. What a reader cannot see is which evidence a figure counts. A requirement whose implementation is entirely conducted or cited whole shows nothing against the measure counting citations that name its assertions, and a column headed only with the dimension would state that as the dimension's figure -- the reader is not missing information, they are being given the wrong information. Naming both halves is what settles it: the dimension alone leaves the evidence unsaid, and the measure alone leaves unsaid what it is a measure of.
+
+D fixes what a selection may not disturb, and names its own comparand rather than leaving "unchanged" to be argued. Choosing which facts to see is a choice about the report, never about the estate, and a figure computed differently because fewer were asked for would make the narrow report and the wide one disagree about the same requirement. The risk it guards is real rather than theoretical: coverage conducted up a `Refines:` chain is expensive, and a surface that skipped conducting because no conducted measure was selected would move the total, which is a different question's answer.
+
+E, H and I are three independences, and they fail separately. E is between renderings of one report: a selection meaning one thing in the artifact a reader checks and another in the one they file is the divergence REQ-p00084-C forbids for requirements, reached here for the facts stated about them. H and I are between the two axes. Selecting fewer columns cannot drop a requirement and selecting fewer requirements cannot drop a column, so a reader may reach the same report by narrowing either first -- which is what makes the two genuinely separate choices rather than one choice with two names. A column set that also filtered rows would be a second row-selection outside the authority REQ-d00279-A establishes, and no reader could predict which one won.
+
+F is the opposite disposition from the one REQ-d00278-K takes for a value a scope's vocabulary does not admit, and the difference is in where the vocabulary lives. A scope is read against each member's own vocabulary, so a name one member does not admit is an ordinary state of a federated estate and must not stop the rest of the scope selecting. The columns a report offers are the tool's own and identical everywhere, so a name among them that does not resolve is a mistake rather than a difference, and honouring the rest of the selection would hand the reader a narrower report than they asked for while looking exactly like the one they wanted.
+
+G and J are what a committed selection is worth. G bounds what the tool may do: a project whose committed selections changed meaning because the tool learned a new column would have to re-audit every report it committed under one. A default set may grow, and E leaves it free to; a selection is what a project commits when it needs the shape to hold. J bounds what the project may do to itself: the words a column is displayed under are configurable (REQ-d00258-K), so a selection written in display words would break every committed report the day someone renamed a label, which is the same churn arriving by the other door.
+
+K and L are what make a stated selection a stated shape. A committed artifact is read by something that expects its columns where it left them, so an order decided differently on two runs breaks a consumer exactly as a changed column set would. L is the floor beneath every selection: a row that cannot be attributed to the requirement it is about is not a report about requirements at all, whatever else it states.
+
+*End* *Report Column Selection* | **Hash**: 0f93c3c1
+
+---
+
+## REQ-d00280: Named Report Declarations
+
+**Level**: dev | **Status**: Draft | **Implements**: REQ-p00084
+
+A report run from an invocation is defined only where that invocation was written down. This requirement covers what a project declares under a name, and what a report produced under that name contains.
 
 ### Assertions
 
@@ -654,8 +708,12 @@ A. A project SHALL be able to declare a scope under a name in its own configurat
 
 B. A scope referred to by name SHALL select the requirements that the scope declared under that name selects when stated in full.
 
+C. A project SHALL be able to declare, under one name, both the scope a report is produced under and the columns it states.
+
 ### Rationale
 
-A and B are what REQ-p00084-F asks for in a form a project can commit and a reader can check. A is where the scope comes to rest — in the project, beside the requirements it selects over, versioned with them — and B is what keeps the name honest: a name is a reference to a scope, never a second selection that happens to share a spelling. An author reading a declaration then knows what a report produced under it contains without running it; once the two can differ, a committed report is evidence of a scope nobody can reconstruct.
+A, B and C are what REQ-p00084-F asks for in a form a project can commit and a reader can check. A is where the scope comes to rest — in the project, beside the requirements it selects over, versioned with them — and B is what keeps the name honest: a name is a reference to a scope, never a second selection that happens to share a spelling. An author reading a declaration then knows what a report produced under it contains without running it; once the two can differ, a committed report is evidence of a scope nobody can reconstruct.
 
-*End* *Named Report Scopes* | **Hash**: 9ddbf905
+C is what makes a declaration answer for a whole audience rather than half of one. An audience is defined by the requirements it reads and by the facts it reads about them, and a project able to commit only the first carries the second in whatever invoked the report, which is the drift a declaration exists to end. One name for both does not join the two choices: they remain independent everywhere REQ-d00282-H and REQ-d00282-I say they are, a declaration naming no columns constrains none, and a selection stated on an invocation stands without a declaration to belong to. What the name buys is that an audience can be referred to once.
+
+*End* *Named Report Declarations* | **Hash**: 49c64d5d

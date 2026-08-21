@@ -231,7 +231,7 @@ Whole-requirement tests (e.g., `test_implements_req_d00087` with no *Assertion* 
 
 **Level**: dev | **Status**: Superseded | **Implements**: REQ-p00006
 
-This requirement offered a reader a choice between two coverage views because only one could be shown at a time. Coverage is no longer measured as a pair of nested footings to choose between: it is four independent measures, each reported in its own right, with a total taken per *Assertion* (REQ-d00069-L, REQ-d00069-N). A surface now shows the total and makes the measures behind it available (REQ-d00258-A), so the question the toggle asked is answered without asking the reader to pick a mode first.
+This requirement offered a reader a choice between two coverage views because only one could be shown at a time. Coverage is no longer measured as a pair of nested footings to choose between: it is four independent measures, each reported in its own right, with a total taken per *Assertion* (REQ-d00069-L, REQ-d00069-N). A surface names the evidence each figure it shows counts (REQ-d00258-A), and a reader may ask for any measure in its own right (REQ-d00282-B), so the question the toggle asked is answered without asking the reader to pick a mode first.
 
 The need its rationale named is met and not withdrawn: a strict *Traceability* view is the immediate direct measure, which is also what every work-listing surface answers on (REQ-d00258-M), and the progress-indicator view is the total.
 
@@ -657,7 +657,7 @@ Reporting surfaces (trace, summary, MCP project summary, HTML viewer) SHALL pres
 
 ### Assertions
 
-A. A surface reporting a coverage figure SHALL headline total coverage (REQ-d00069-N) and SHALL make the measures behind it available, so that a reader is never shown a figure without being able to see what evidence produced it.
+A. A surface reporting a coverage figure SHALL name the evidence the figure counts, so that a reader is never shown a figure without being told what produced it.
 
 B. [Removed - a fixed set of display words, which REQ-d00258-K had already made configurable per project. Each dimension is now stated on its own in REQ-d00277, so one can be added, redefined or withdrawn without rewriting a list.]
 
@@ -677,7 +677,7 @@ I. A chained dimension (REQ-d00277) SHALL be measured within one measure, so tha
 
 J. A surface SHALL NOT annotate a coverage figure with a caveat standing in for a measure it did not show. Where the difference between measures matters, the measures themselves SHALL be reported (REQ-d00069-L).
 
-K. The coverage dimension labels SHALL be derived from a single configurable mapping from each coverage-conferring relationship to its display word, and every surface SHALL render dimension labels through that one mapping.
+K. The coverage dimension labels and the labels of the measures behind them SHALL each be derived from a single configurable mapping — from each coverage-conferring relationship to its display word, and from each measure to its display word — and every surface SHALL render those labels through those mappings.
 
 L. A per-status `expects_implementation` flag SHALL declare whether a requirement in that status is expected to have implementation; its default SHALL be derived from the status's role, so that active-role statuses expect implementation and others do not. When a status does not expect implementation, absent implementation SHALL be neither flagged as a gap, nor error-colored, nor counted against aggregate implemented coverage. All surfaces SHALL resolve this flag through a single shared helper, and it SHALL supersede the coverage-exclusion role when determining coverage inclusion.
 
@@ -703,6 +703,7 @@ A reports how the estate is doing and M reports what is left to do; the two ques
 
 ### Changelog
 
+- 2026-08-21 | 24015cbc | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-19 | 879012b7 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-18 | e6e17ee9 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-18 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: a per-assertion pill shows the measures behind its standing rather than a caveat standing in for one (G)
@@ -725,7 +726,7 @@ A reports how the estate is doing and M reports what is left to do; the two ques
 - 2026-07-03 | c843c727 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-02 | be97c170 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: add missing changelog section
 
-*End* *Reporting Surface Consistency* | **Hash**: 879012b7
+*End* *Reporting Surface Consistency* | **Hash**: 24015cbc
 
 ---
 

@@ -469,7 +469,7 @@ K. The system SHALL report a finding under one description only, so that a count
 **Level**: prd | **Status**: Draft | **Implements**: REQ-p00003
 **Satisfies**: REQ-p00019
 
-A *Traceability* report is read by an audience, and an audience is rarely served by every requirement the estate holds. This requirement covers telling a reporting surface which requirements its audience needs, and what has to remain true of the report it then produces.
+A *Traceability* report is read by an audience, and an audience is rarely served by every requirement the estate holds, nor by every fact the tool can state about one. This requirement covers telling a reporting surface which requirements its audience needs and which facts about them, and what has to remain true of the report it then produces.
 
 ## Assertions
 
@@ -483,7 +483,9 @@ D. A scoped report SHALL disclose the scope under which it was produced.
 
 E. A coverage figure a report states for an emitted requirement, together with each measure it publishes behind that figure, SHALL equal the figure and measures an unscoped report states for that requirement.
 
-F. A scope SHALL be recordable in the project, so that a report committed alongside the project can be reproduced by a reader who did not compose it.
+F. The selections determining which requirements a report emits and which facts it states about them SHALL be recordable in the project, so that a report committed alongside the project can be reproduced by a reader who did not compose it.
+
+G. A surface that states facts about each requirement it emits SHALL accept a selection naming which of those facts its audience needs.
 
 ## Rationale
 
@@ -495,9 +497,11 @@ E keeps scoping a matter of emission. A requirement's own coverage is a fact abo
 
 B and C are separate because they fail separately. B is about honouring a scope at all; C is about renderings of one report agreeing with each other. A tool can honour a scope in the rendering a reader checks and quietly drop a requirement from the one they file, and only C catches that — the disagreement is invisible in either output taken alone.
 
-F is what makes a scope survive contact with a project. A scope that exists only in the invocation that produced a report cannot be checked by the person reading the report, so the report is evidence of a selection nobody can re-derive, and the audience definition drifts into whatever tooling happened to produce it.
+F is what makes a selection survive contact with a project. A selection that exists only in the invocation that produced a report cannot be checked by the person reading the report, so the report is evidence of a choice nobody can re-derive, and the audience definition drifts into whatever tooling happened to produce it. It covers both selections together because an audience is defined by both, and a project able to commit only one of them keeps the other wherever the report was run from.
 
-*End* *Audience-Scoped Reporting* | **Hash**: cb0c87bf
+G is the second axis, and it is separate from A because the two are separate questions a reader answers independently. Which requirements a report is about and which facts it states about them are decided for different reasons and by different readers -- a compliance pack wants few requirements described fully, a status review wants many described briefly -- so a reader answering one says nothing about the other. What is common to them is everything else this requirement asks: an answer is honoured, disclosed where its absence would otherwise be invisible, and does not vary by the format it is rendered in. REQ-d00282 fixes the vocabulary the second answer is written in, as REQ-d00278 does for the first.
+
+*End* *Audience-Scoped Reporting* | **Hash**: 199562bd
 
 ---
 
