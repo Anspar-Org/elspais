@@ -234,6 +234,18 @@ class TraceArgs(ScopeOptions):
     format: Literal["text", "markdown", "html", "json", "csv"] = "markdown"
     """Output format."""
 
+    # Implements: REQ-d00282-A
+    # Stated on the commands that report facts in columns and nowhere else: a
+    # flag a command accepts and cannot honour is worse than one it does not
+    # offer, which is the defect column selection exists to remove.
+    columns: str | None = None
+    """State these columns, in this order (comma-separated column keys).
+    Keys are stable names, never the words a project displays them under:
+    id, title, level, status, implements, hash, file, journeys; the coverage
+    dimensions implemented, tested, verified, uat_coverage, uat_verified, each
+    also selectable per measure (e.g. tested.immediate_direct); and the
+    line-coverage columns code_tested and lcov_tested."""
+
     preset: Literal["minimal", "standard", "full"] | None = None
     """Column preset."""
 
@@ -247,12 +259,11 @@ class TraceArgs(ScopeOptions):
     """Show test references in detail rows."""
 
     dimension: str = ""
-    """Restrict the report to a dimension group.  Use 'uat' to show only UAT
-    (journey) coverage: requirements validated by at least one journey (named
-    on a journey's Validates: line), their validating journeys and verdicts,
-    and the uat_coverage/uat_verified tiers.
-    Code columns (implemented/tested/verified/code_tested/lcov_tested) are
-    excluded from the UAT view."""
+    """Report a named default column set.  Use 'uat' for user-acceptance
+    evidence: the journeys validating each requirement with their verdicts, and
+    the UAT coverage figures.  It states no implementation, test-verification or
+    line-coverage figure, and selects no requirements -- every requirement is
+    reported, including those no journey validates."""
 
     targets: list[str] | None = None
     """Mark only these [[scanning.test.targets]] as freshly-run; render the rest
@@ -367,6 +378,18 @@ class SummaryArgs(ScopeOptions):
 
     format: Literal["text", "markdown", "json", "csv"] = "text"
     """Output format."""
+
+    # Implements: REQ-d00282-A
+    # The columns this report offers are the ones a GROUP of requirements has:
+    # level, the two counts describing the group, and each coverage dimension
+    # with the four measures behind it. Per-requirement columns and the
+    # line-coverage ones are not among them -- a level has no line figure.
+    columns: str | None = None
+    """State these columns, in this order (comma-separated column keys).
+    Keys are stable names, never the words a project displays them under:
+    level, requirements, assertions, and the coverage dimensions implemented,
+    tested, verified, uat_coverage, uat_verified -- each also selectable per
+    measure (e.g. tested.immediate_direct)."""
 
     targets: list[str] | None = None
     """Mark only these [[scanning.test.targets]] as freshly-run; render the rest

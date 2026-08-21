@@ -112,23 +112,66 @@ this requires.
 ## trace Command Options
 
   `--format {text,markdown,html,json,csv}`  Output format (default: markdown)
-  `--preset {minimal,standard,full}`        Column preset
+  `--preset {minimal,standard,full}`        Named default column set
+  `--columns KEY,KEY,...` State exactly these columns, in this order
   `--body`                Show requirement body text
   `--assertions`          Show individual assertions
   `--tests`               Show test references
   `--output PATH`         Output file path
-  `--dimension uat`       UAT-scoped report: only requirements validated by at least one journey (named on a journey's `Validates:` line), with validating journeys + verdicts and uat_coverage/uat_verified tiers; excludes code columns
+  `--dimension uat`       UAT-scoped column set: UAT Covered, UAT Passed and the validating journeys with their verdicts; excludes the code columns
+
+## Choosing Columns
+
+  $ elspais trace --columns id,title,tested,tested.immediate_direct
+  $ elspais trace --format csv --columns uat_coverage.immediate_direct,code_tested
+
+`--preset` names a DEFAULT set -- what you get when you ask for no columns in
+particular. `--columns` states the report's columns outright, replacing that
+set, in the order you name them. The report is refused if any name is not a
+column it offers; a report is never produced under half a selection.
+
+Which columns a report states and which requirements it is about are separate
+choices: `--columns` never changes which rows appear, and `--level`/`--status`/
+`--scope` never change which columns do.
+
+Column keys are stable names, never the words a project displays them under --
+rename a display label and every committed selection still means what it meant:
+
+  identity    `id` `title` `level` `status` `implements` `hash` `file` `journeys`
+  dimensions  `implemented` `tested` `verified` `uat_coverage` `uat_verified`
+  measures    `<dimension>.immediate_direct` `.immediate_indirect`
+              `.rolled_direct` `.rolled_indirect`
+  line cover  `code_tested` `lcov_tested` (measured in lines; no measures)
+
+A dimension key states that dimension's per-*Assertion* total; a measure key
+states one of the four measures behind it, and its heading names both the
+dimension and the measure. `id` is always stated, so every row says what it is
+about. The columns are the same in every format -- markdown, csv, html and json
+state the set you selected and nothing else.
+
+One named column is one column. A figure carries its denominator and its
+proportion inside its own cell (`5/5 (100%)`), and the Tested breakdown rides
+inside the Tested cell (`5/5 (100%) [3P 0F 2A]`) because it qualifies that
+figure rather than being a figure of its own.
+
+A project can declare a column set under a name beside the scope it belongs to
+(`[scopes.<name>] columns = [...]`), so one name refers to a whole audience:
+the requirements it reads and the facts it reads about them. `--columns` on the
+invocation replaces a declared set rather than narrowing it.
 
 ## UAT Dimension
 
   $ elspais trace --dimension uat
   $ elspais trace --dimension uat --format markdown -o uat-traceability.md
 
-Emits a focused UAT traceability report. Only requirements validated by at least
-one user journey (i.e., named on a journey's `Validates:` line) appear in the
-output. Columns: ID, Title, Level, Status, UAT Covered, UAT Passed, Journeys
-(`JNY-id:verdict` pairs). Code-dimension columns (Implemented, Tested, Passing,
-etc.) are excluded.
+Emits a focused UAT traceability report. Columns: ID, Title, Level, Status, UAT
+Covered, UAT Passed, Journeys (`JNY-id:verdict` pairs). Code-dimension columns
+(Implemented, Tested, Passing, etc.) are excluded.
+
+`--dimension uat` chooses columns, not rows. Every requirement the scope selects
+appears; one no journey validates is a row with an empty Journeys cell, which is
+the fact worth seeing. To report only the validated ones, narrow the rows -- that
+is what a scope is for.
 
 Coverage counts headline the per-*Assertion* total (the greatest of the four
 measures behind it) -- see *Total headline + the four measures behind it*

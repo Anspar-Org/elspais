@@ -87,6 +87,12 @@ def parse_shared_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--not-status", nargs="*", default=None, dest="not_status")
     parser.add_argument("--match-status-roles", action="store_true", dest="match_status_roles")
     parser.add_argument("--scope", default=None)
+    # Implements: REQ-d00282-E
+    # The other axis of the same report, registered here for the same reason:
+    # a selection this parser does not read is one the composed report cannot
+    # honour, and a section composed with others would state different columns
+    # from the same section asked for alone.
+    parser.add_argument("--columns", default=None)
     parser.add_argument("--treat-active", nargs="*", default=None, dest="treat_active")
     # Trace-specific shared flags
     parser.add_argument("--preset", choices=["minimal", "standard", "full"])
@@ -94,6 +100,60 @@ def parse_shared_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--assertions", dest="show_assertions", action="store_true")
     parser.add_argument("--tests", dest="show_tests", action="store_true")
     return parser.parse_args(argv)
+
+
+# Implements: REQ-d00282-F
+# name: COLUMN_SECTIONS
+# use:  which composable sections state facts in columns at all.
+# def:  section name -> the module owning the columns it offers.
+#
+# The rest emit lists of what is missing rather than tables of facts about
+# requirements, so they have no columns to select among. A selection reaching
+# one of them is a selection the composed report cannot honour, and F wants no
+# report produced under one honoured in part.
+COLUMN_SECTIONS: dict[str, str] = {
+    "summary": "elspais.commands.summary",
+    "trace": "elspais.commands.trace",
+}
+
+
+# Implements: REQ-d00282-F
+def _refuse_unhonourable_columns(sections: list[str], args: argparse.Namespace) -> str | None:
+    """The reason this composition cannot honour its selection, or None.
+
+    Judged before anything is built and before anything is written, because a
+    refusal that has already produced an artifact has produced the report it
+    refused. A reader who names a column no section offers, and a reader who
+    names a section that states no columns, are both asking for a report the
+    tool cannot assemble.
+    """
+    from importlib import import_module
+
+    from elspais.commands._columns import UnofferedColumns, columns_from_args
+    from elspais.config import get_config
+    from elspais.graph.columns import resolve_columns
+
+    # Read against the project's own declarations too: a selection a named
+    # scope carries (REQ-d00280-C) is refused on the same terms as one written
+    # on the invocation.
+    selection = columns_from_args(args, get_config(getattr(args, "config", None)))
+    if selection is None:
+        return None
+    silent = [s for s in sections if s not in COLUMN_SECTIONS]
+    if silent:
+        named = ", ".join(sorted(set(silent)))
+        return (
+            f"--columns states which facts a report gives about each requirement, "
+            f"and '{named}' states none: it lists what is missing. "
+            "Ask for it without --columns, or compose only sections that state columns."
+        )
+    for section in sections:
+        module = import_module(COLUMN_SECTIONS[section])
+        try:
+            resolve_columns(selection, module.OFFERED_COLUMNS)
+        except UnofferedColumns as exc:
+            return f"{section}: {exc}"
+    return None
 
 
 # Implements: REQ-d00085-A+B+C
@@ -115,6 +175,12 @@ def run(
                 file=sys.stderr,
             )
             return 1
+
+    # Implements: REQ-d00282-F
+    refusal = _refuse_unhonourable_columns(sections, args)
+    if refusal is not None:
+        print(f"Error: {refusal}", file=sys.stderr)
+        return 1
 
     # Build graph once for sections that need it
     graph = None

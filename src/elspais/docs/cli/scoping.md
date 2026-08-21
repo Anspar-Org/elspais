@@ -109,6 +109,50 @@ answer "how far along is this set", and the set is the one the reader asked for.
 `checks` does not. It reaches a verdict over the whole estate, and a flag it
 could not honour would be worse than its absence.
 
+## The other axis: which columns a report states
+
+Which requirements a report is about and which facts it states about them are
+two separate choices. `--scope`/`--level`/`--status` make the first; `--columns`
+makes the second. They do not interfere: selecting fewer columns never drops a
+requirement, and selecting fewer requirements never drops a column, so you can
+reach the same report by narrowing either first. The column vocabulary is in
+`elspais docs traceability` under *Choosing Columns*.
+
+```sh
+elspais summary --format csv --columns implemented,tested
+elspais summary --format csv --columns uat_coverage.immediate_direct
+elspais summary --columns verified --level prd
+```
+
+`summary` aggregates, so its rows are levels rather than requirements. Its
+identity column is `level` — always stated, whatever the selection names — and
+it offers the five coverage dimensions with their four measures each, plus
+`requirements` and `assertions`: the count of requirements in the group and the
+count of assertions they confer. It does not offer the per-requirement identity
+columns (`id`, `title`, ...), nor the line-coverage columns, which are measured
+in lines and have no level figure.
+
+One named column is one column, in every format. A coverage figure carries its
+own denominator and its own proportion inside its cell — `102/187 (54.5%)` —
+rather than spilling into companion columns, and the Tested breakdown (passed /
+failed / awaiting a result) rides inside the Tested cell, qualifying that figure
+rather than standing beside it. So `--columns implemented` states two columns,
+`Level` and `Implemented`, whether it is rendered as text, markdown, CSV or
+JSON.
+
+A column in which a report states no figure is never written as zero. In a
+table it is marked `-`, and in JSON it is `null`. A level whose requirements
+confer no *Assertion* has no coverage figure to state at all, which is a
+different fact from a figure of zero — the text report says that once for the
+group rather than repeating the mark across every column of the row.
+
+`--columns` is offered by `trace` and `summary`, the two reports that state
+facts in columns. The gap listings (`gaps`, `uncovered`, `untested`,
+`unvalidated`, `failing`) and `analysis` do not offer it: they list what is
+missing rather than tabulating facts about requirements, and a flag a command
+cannot honour is worse than its absence. A composed report is refused outright
+if `--columns` reaches a section that states no columns.
+
 ## Not the same as `--treat-active`
 
 `--treat-active` widens what COUNTS: it promotes a status so requirements

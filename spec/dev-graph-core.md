@@ -639,13 +639,19 @@ E. Test results SHALL be attributed per step: a step's verification status and i
 
 ### Assertions
 
-A. The `trace` command SHALL accept a `--dimension uat` flag that selects a UAT-scoped output mode.
+A. The *Traceability* report SHALL offer a named default column set stating what user-acceptance evidence a requirement carries.
 
-B. The UAT report SHALL include only requirements that have at least one incoming VALIDATES edge, and for each such requirement SHALL list the validating journeys with their verification verdicts and the `uat_coverage`/`uat_verified` coverage tiers.
+B. That column set SHALL state, for each requirement, the journeys validating it with their verification verdicts, and the requirement's UAT coverage figures.
 
-C. The UAT report SHALL exclude code implementation and test verification columns (`implemented`, `tested`, `verified`, `code_tested`, `lcov_tested`).
+C. That column set SHALL state no figure for implementation, for test verification, or for line coverage.
 
-*End* *UAT-Scoped Traceability Report* | **Hash**: 2a8aab8b
+### Rationale
+
+A reader asking what a journey has established is asking about a different kind of evidence from a reader asking what a test has, and a set of columns is how a report answers one question rather than both at once.
+
+The set states no implementation or test figure because those answer the other question. It is a set of columns and nothing more: it does not decide which requirements the report is about. A report of user-acceptance evidence over every requirement tells a reader which ones have none, which is usually what they came to find out; and selecting requirements by whether a journey validates them is a question about requirements, which REQ-d00282-H keeps out of a column set and REQ-d00278 is where it would belong.
+
+*End* *UAT-Scoped Traceability Report* | **Hash**: 253ea802
 
 ---
 

@@ -1299,11 +1299,20 @@ async def api_run_broken(request: Request) -> JSONResponse:
 
 async def api_run_summary(request: Request) -> JSONResponse:
     """GET /api/run/summary - Coverage summary data."""
+    from elspais.commands._columns import UnofferedColumns
     from elspais.commands.summary import compute_summary
 
     state = _st(request)
     params = dict(request.query_params)
-    return JSONResponse(compute_summary(state.graph, state.config, params))
+    try:
+        return JSONResponse(compute_summary(state.graph, state.config, params))
+    except UnofferedColumns as exc:
+        # Implements: REQ-d00282-F
+        # A report is not produced under a selection honoured in part, and a
+        # caller asking for a column this report does not offer is told so
+        # rather than handed a narrower report that looks like the one asked
+        # for.
+        return JSONResponse({"error": "unoffered_columns", "message": str(exc)}, status_code=400)
 
 
 async def api_run_gaps(request: Request) -> JSONResponse:
@@ -1344,11 +1353,20 @@ async def api_run_analysis(request: Request) -> JSONResponse:
 
 async def api_run_trace(request: Request) -> JSONResponse:
     """GET /api/run/trace - Traceability matrix data as JSON."""
+    from elspais.commands._columns import UnofferedColumns
     from elspais.commands.trace import compute_trace
 
     state = _st(request)
     params = dict(request.query_params)
-    return JSONResponse(compute_trace(state.graph, state.config, params))
+    try:
+        return JSONResponse(compute_trace(state.graph, state.config, params))
+    except UnofferedColumns as exc:
+        # Implements: REQ-d00282-F
+        # A report is not produced under a selection honoured in part, and a
+        # caller asking for a column this report does not offer is told so
+        # rather than handed a narrower report that looks like the one asked
+        # for.
+        return JSONResponse({"error": "unoffered_columns", "message": str(exc)}, status_code=400)
 
 
 # ─────────────────────────────────────────────────────────────────

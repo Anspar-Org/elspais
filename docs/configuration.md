@@ -339,12 +339,31 @@ dir = ""
 # A level or status a member's configuration does not define is still nameable
 # where that member's requirements carry it; a name nothing admits selects
 # nothing there and is reported rather than passing silently.
+#
+# One name also carries the columns a report states, so an audience is referred
+# to once rather than half in the configuration and half in whatever invoked the
+# report. The two remain independent: a declaration naming no columns constrains
+# none, and naming columns selects no requirements.
+#
+# `columns` names column KEYS, never the words a project displays a column under
+# -- display words are configurable (`[rules.coverage] status_words`), and a
+# selection written in them would break the day someone renamed one. A coverage
+# dimension's key states its total; a measure behind it is keyed beneath the
+# dimension it measures (`implemented.immediate_direct`). The keys are:
+#   id, title, level, status, implements, hash, file, journeys
+#   implemented, tested, verified, uat_coverage, uat_verified
+#     and, for each of those five, `.immediate_direct`, `.immediate_indirect`,
+#     `.rolled_direct`, `.rolled_indirect`
+#   code_tested, lcov_tested   (measured in lines, so they carry no measures)
+# A name the report being produced does not offer is refused rather than
+# skipped: a report is never produced under a selection honoured in part.
 #──────────────────────────────────────────────────────────────────────────────
 
 [scopes.sponsor]
 level = ["prd"]
 not_status = ["Deprecated"]
 match_status_roles = false
+columns = ["id", "title", "status", "implemented", "tested", "verified"]
 
 #──────────────────────────────────────────────────────────────────────────────
 # ASSOCIATES - Cross-Repository Federation

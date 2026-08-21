@@ -172,7 +172,7 @@
 | REQ-d00254 | Test Evidence: Attribution, Ingestion, and Coverage Crediting | dev-graph-core.md       | b7f71d81 |
 | REQ-d00255 | Test-to-Journey UAT Verification                              | dev-graph-core.md       | ab5cb648 |
 | REQ-d00256 | Step-Level UAT Verification                                   | dev-graph-core.md       | 8bf40a7c |
-| REQ-d00257 | UAT-Scoped Traceability Report                                | dev-graph-core.md       | 2a8aab8b |
+| REQ-d00257 | UAT-Scoped Traceability Report                                | dev-graph-core.md       | 253ea802 |
 | REQ-d00258 | Reporting Surface Consistency                                 | dev-graph-core.md       | 6c978321 |
 | REQ-d00259 | Requirement Format Reference Command                          | dev-cli.md              | c3b67490 |
 | REQ-d00260 | Workspace Registry and Federated View Assembly                | dev-graph-federation.md | 510a0f67 |

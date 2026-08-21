@@ -112,6 +112,40 @@ def status_expects_implementation(config: dict[str, Any], status: str | None) ->
     return get_status_roles(config or {}).role_of(status) == StatusRole.ACTIVE
 
 
+def _declaration(config: dict[str, Any], name: str) -> Any:
+    """The declaration a project makes under ``name``.
+
+    One name carries both halves of what an audience reads -- the requirements a
+    report is about and the facts it states (REQ-d00280-C) -- so both accessors
+    find the declaration the same way rather than each deciding for itself which
+    spelling matches which declaration.
+
+    Raises:
+        KeyError: If the project declares nothing under that name.
+    """
+    declared = (config or {}).get("scopes") or {}
+    if not isinstance(declared, dict):
+        declared = {}
+    match = None
+    for key, value in declared.items():
+        if isinstance(key, str) and key.lower() == name.lower():
+            match = value
+            break
+    if match is None:
+        known = ", ".join(sorted(str(k) for k in declared)) or "none"
+        raise KeyError(
+            f"No scope named {name!r} is declared in this project; declared scopes: {known}"
+        )
+    return match
+
+
+def _declared_field(declaration: Any, field: str) -> Any:
+    """One field of a declaration, whether it arrived as a mapping or a model."""
+    if isinstance(declaration, dict):
+        return declaration.get(field)
+    return getattr(declaration, field, None)
+
+
 # Implements: REQ-d00280-B
 def declared_scope(config: dict[str, Any], name: str) -> Any:
     """The scope a project declares under ``name``.
@@ -131,32 +165,45 @@ def declared_scope(config: dict[str, Any], name: str) -> Any:
     """
     from elspais.graph.scope import ReportScope
 
-    declared = (config or {}).get("scopes") or {}
-    if not isinstance(declared, dict):
-        declared = {}
-    match = None
-    for key, value in declared.items():
-        if isinstance(key, str) and key.lower() == name.lower():
-            match = value
-            break
-    if match is None:
-        known = ", ".join(sorted(str(k) for k in declared)) or "none"
-        raise KeyError(
-            f"No scope named {name!r} is declared in this project; declared scopes: {known}"
-        )
+    match = _declaration(config, name)
 
     def _listed(field: str) -> tuple[str, ...]:
-        raw = match.get(field) if isinstance(match, dict) else getattr(match, field, None)
-        return tuple(str(v) for v in (raw or []))
+        return tuple(str(v) for v in (_declared_field(match, field) or []))
 
     include = {p: v for p in ("level", "status") if (v := _listed(p))}
     exclude = {p: v for p in ("level", "status") if (v := _listed(f"not_{p}"))}
-    roles = (
-        match.get("match_status_roles")
-        if isinstance(match, dict)
-        else getattr(match, "match_status_roles", False)
-    )
+    roles = _declared_field(match, "match_status_roles")
     return ReportScope(include=include, exclude=exclude, match_status_roles=bool(roles))
+
+
+# Implements: REQ-d00280-C
+def declared_columns(config: dict[str, Any], name: str) -> Any:
+    """The column selection a project declares under ``name``, or None.
+
+    The companion to :func:`declared_scope`: one name answers for a whole
+    audience, the requirements it reads and the facts it reads about them
+    (REQ-d00280-C). The two remain independent choices -- a declaration naming
+    no columns constrains none, which is what None says here, and a report
+    answering None states the columns it would have anyway.
+
+    The names read here are column keys, never the words a project displays a
+    column under (REQ-d00282-J). They are not judged against any report: which
+    columns are on offer is known only where the report is produced, and that is
+    where a name among them that does not resolve is refused (REQ-d00282-F).
+
+    Raises:
+        KeyError: If the project declares nothing under that name -- the same
+            condition, and the same message, as an undeclared scope.
+    """
+    from elspais.graph.columns import parse_column_selection
+
+    match = _declaration(config, name)
+    raw = _declared_field(match, "columns")
+    if raw is None:
+        return None
+    if isinstance(raw, str):
+        return parse_column_selection(raw)
+    return parse_column_selection([str(v) for v in raw])
 
 
 CURRENT_CONFIG_VERSION = 4

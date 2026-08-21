@@ -16,9 +16,10 @@ from pathlib import Path
 
 import pytest
 
-from elspais.commands.summary import _pct, _render
+from elspais.commands.summary import DEFAULT_COLUMNS, _pct, _render
 from elspais.graph.aggregation import collect_coverage
 from elspais.graph.builder import TraceGraph
+from elspais.graph.columns import header_for as _header
 from elspais.graph.GraphNode import GraphNode, NodeKind
 from elspais.graph.metrics import RollupMetrics
 
@@ -416,8 +417,13 @@ class TestMarkdownFormat:
 
         assert "# Coverage Summary" in output
 
+    # Verifies: REQ-d00086-C, REQ-d00282-E+K
     def test_REQ_d00086_C_markdown_level_summary_table(self):
-        """Markdown output has a level summary table with correct headers."""
+        """Markdown states one header per column of the default set, in order.
+
+        The default set is everything this report offers: what a row is about,
+        the two counts describing the group, then each dimension's total with
+        the four measures behind it (REQ-d00258-A)."""
         graph = _make_graph()
         node = _add_requirement(graph, "REQ-p00001", "Test", level="prd")
         _set_rollup(node, total=2, covered=1, tested=1, validated=1)
@@ -426,8 +432,20 @@ class TestMarkdownFormat:
         output = _render(data, "markdown")
 
         assert "## Summary by Level" in output
-        assert "| Level | Requirements | Assertions | Implemented | Tested | Passing |" in output
-        assert "|-------|" in output
+        header = next(ln for ln in output.splitlines() if ln.startswith("| Level"))
+        cells = [c.strip() for c in header.strip("|").split("|")]
+        assert cells[:6] == [
+            "Level",
+            "Requirements",
+            "Assertions",
+            "Implemented",
+            "Implemented (cited by name here)",
+            "Implemented (whole-requirement)",
+        ], cells
+        assert cells == [_header(k) for k in DEFAULT_COLUMNS]
+        # Nothing rides beside a column: a figure states its own denominator
+        # and its own proportion inside its own cell (REQ-d00282-E).
+        assert "Implemented %" not in cells
 
     def test_REQ_d00086_C_markdown_no_per_requirement_table(self):
         """Markdown output does not contain per-requirement table."""
@@ -521,31 +539,18 @@ class TestCsvFormat:
         reader = csv.reader(io.StringIO(output))
         headers = next(reader)
 
+        # One header per stated column and nothing beside it: the same set,
+        # in the same order, that markdown and JSON state (REQ-d00282-E).
         measure_headers = [
-            "Immediate Direct",
-            "Immediate Indirect",
-            "Rolled Direct",
-            "Rolled Indirect",
+            "cited by name here",
+            "whole-requirement",
+            "conducted direct",
+            "conducted indirect",
         ]
-        expected_headers = [
-            "Level",
-            "Requirements",
-            "Assertions",
-            "Implemented",
-            "Implemented %",
-            *[f"Implemented {m}" for m in measure_headers],
-            "Tested",
-            "Tested %",
-            # The Tested breakdown (REQ-d00258-O) rides on Tested, so its three
-            # columns sit with it rather than beside the other dimensions.
-            "Tested Passed",
-            "Tested Failed",
-            "Tested Awaiting",
-            *[f"Tested {m}" for m in measure_headers],
-            "Passing",
-            "Passing %",
-            *[f"Passing {m}" for m in measure_headers],
-        ]
+        expected_headers = ["Level", "Requirements", "Assertions"]
+        for dimension in ("Implemented", "Tested", "Passing", "UAT Covered", "UAT Passed"):
+            expected_headers.append(dimension)
+            expected_headers.extend(f"{dimension} ({m})" for m in measure_headers)
         assert headers == expected_headers
 
     def test_REQ_d00086_C_csv_row_count(self):
@@ -588,21 +593,17 @@ class TestCsvFormat:
         assert row["Level"] == "PRD"
         assert row["Requirements"] == "1"
         assert row["Assertions"] == "4"
-        assert row["Implemented"] == "3.0"
-        assert row["Implemented %"] == "75.0"
-        assert row["Implemented Immediate Direct"] == "3.0"
-        assert row["Tested"] == "2.0"
-        assert row["Tested %"] == "50.0"
-        # The breakdown counts assertions, not fractional credit, so it is
-        # rendered as plain ints. Two assertions are tested; one of them also
-        # has a passing result, the other is still awaiting one.
-        assert row["Tested Passed"] == "1"
-        assert row["Tested Failed"] == "0"
-        assert row["Tested Awaiting"] == "1"
-        assert row["Tested Immediate Direct"] == "2.0"
-        assert row["Passing"] == "1.0"
-        assert row["Passing %"] == "25.0"
-        assert row["Passing Immediate Direct"] == "1.0"
+        # A figure, the assertions it was taken over and its proportion are one
+        # fact and so one cell (REQ-d00282-E).
+        assert row["Implemented"] == "3/4 (75.0%)"
+        assert row["Implemented (cited by name here)"] == "3/4 (75.0%)"
+        # The breakdown qualifies the Tested figure, so it rides inside the
+        # Tested cell (REQ-d00258-O). Two assertions are tested; one of them
+        # also has a passing result, the other is still awaiting one.
+        assert row["Tested"] == "2/4 (50.0%) [1 passed, 0 failed, 1 awaiting a result]"
+        assert row["Tested (cited by name here)"] == "2/4 (50.0%)"
+        assert row["Passing"] == "1/4 (25.0%)"
+        assert row["Passing (cited by name here)"] == "1/4 (25.0%)"
 
     def test_REQ_d00086_C_csv_parseable(self):
         """CSV output is parseable by Python csv module without errors."""
@@ -616,15 +617,17 @@ class TestCsvFormat:
         assert len(rows) == 3  # 3 levels
         for row in rows:
             int(row["Requirements"])
-            int(row["Assertions"])
-            # Coverage counts are fractional sums (REQ-d00069-J) rendered as
-            # floats in machine formats; parse as float, not int.
-            float(row["Implemented"])
-            float(row["Implemented %"])
-            float(row["Tested"])
-            float(row["Tested %"])
-            float(row["Passing"])
-            float(row["Passing %"])
+            total = int(row["Assertions"])
+            # Coverage counts are fractional sums (REQ-d00069-J), stated over
+            # the assertions of the group they were summed across
+            # (REQ-d00258-P), with the proportion beside them.
+            for dimension in ("Implemented", "Tested", "Passing"):
+                cell = row[dimension].split(" [")[0]
+                covered, _, rest = cell.partition("/")
+                denominator, _, percent = rest.partition(" ")
+                float(covered)
+                assert int(denominator) == total
+                assert percent.startswith("(") and percent.endswith("%)")
 
 
 # ===========================================================================
@@ -1358,14 +1361,19 @@ class TestTestedBreakdown:
 
         assert "[1 passed, 1 failed, 1 awaiting a result]" in output
 
-    # Verifies: REQ-d00258-O
-    def test_csv_columns_carry_the_breakdown(self):
+    # Verifies: REQ-d00258-O, REQ-d00282-E
+    def test_csv_states_the_breakdown_inside_the_tested_cell(self):
+        """The breakdown qualifies the Tested figure and so rides in its cell
+        here exactly as it does in markdown and in text.
+
+        Cells of its own would be three further columns -- a display term of
+        its own, which REQ-d00258-O forbids -- and would make selecting
+        `tested` state four columns in CSV and one in markdown."""
         data = collect_coverage(self._graph_with_breakdown())
         output = _render(data, "csv")
 
+        headers = next(csv.reader(io.StringIO(output)))
+        assert not [h for h in headers if h.startswith("Tested Passed")], headers
         row = next(csv.DictReader(io.StringIO(output)))
-        assert row["Tested Passed"] == "1"
-        assert row["Tested Failed"] == "1"
-        assert row["Tested Awaiting"] == "1"
         # The three account for every tested assertion the Tested column counts.
-        assert float(row["Tested"]) == 3.0
+        assert row["Tested"] == "3/3 (100.0%) [1 passed, 1 failed, 1 awaiting a result]"

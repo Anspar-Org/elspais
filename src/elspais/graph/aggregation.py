@@ -692,6 +692,7 @@ def iter_uncredited_evidence(
     return out
 
 
+# Implements: REQ-d00258-P
 @dataclass
 class DimensionSums:
     """One dimension's assertion-fraction sums for a level.
@@ -699,6 +700,13 @@ class DimensionSums:
     The four measures of REQ-d00069-L and the per-*Assertion* total of
     REQ-d00069-N, each summed in its own right, so a surface can report a
     figure and show the evidence behind it (REQ-d00258-A).
+
+    A group's figure is the credit and the assertions of that group each
+    SUMMED, never the average of its members' own proportions: summing weights
+    each requirement by how much it obliges, and keeps the group's figure made
+    of the same evidence its members' are. ``total`` accumulates the assertions
+    the same way the credit accumulates, so the two are always taken over the
+    same set.
     """
 
     total: int = 0

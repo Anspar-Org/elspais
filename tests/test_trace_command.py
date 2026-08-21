@@ -64,49 +64,68 @@ class TestTraceCommand:
         assert isinstance(parsed, list)
         assert any(item["id"] == "REQ-p00001" for item in parsed)
 
-    # Verifies: REQ-d00069-L, REQ-d00258-A
-    def test_json_carries_the_four_measures_per_dimension(self, canonical_federated_graph, capsys):
-        """REQ-d00258-A: JSON is where the measures are cheap to make
-        available without widening the text/markdown/html table."""
+    # Verifies: REQ-d00069-L, REQ-d00282-B+E
+    def test_the_measures_are_selected_not_granted_by_the_format(
+        self, canonical_federated_graph, capsys
+    ):
+        """A measure is a column a reader names, in whatever format they read.
+
+        Bolting the four measures onto JSON alone made the columns a report
+        states depend on the format it was rendered in, which REQ-d00282-E
+        forbids: the same report read as a table stated fewer facts than the
+        same report read as JSON."""
         data = compute_trace(canonical_federated_graph, {}, {})
         preset = ReportPreset(
             name="standard",
             columns=list(REPORT_PRESETS["standard"].columns),
         )
+
         _render_json_from_data(data, preset)
+        default_item = next(
+            i for i in json.loads(capsys.readouterr().out) if i["id"] == "REQ-p00001"
+        )
+        assert "tested" in default_item
+        assert not [k for k in default_item if k.startswith("tested_")], (
+            f"The default set states the totals, not the measures; got {list(default_item)}"
+        )
 
-        content = capsys.readouterr().out
-        parsed = json.loads(content)
-        item = next(i for i in parsed if i["id"] == "REQ-p00001")
-        for suffix in (
-            "_immediate_direct",
-            "_immediate_indirect",
-            "_rolled_direct",
-            "_rolled_indirect",
-        ):
-            assert f"tested{suffix}" in item
-            assert f"implemented{suffix}" in item
-        # code_tested/lcov_tested are outside the REQ-d00258-K vocabulary
-        # and carry no measure split.
-        assert "code_tested_immediate_direct" not in item
+        chosen = ["id", "tested.immediate_direct", "implemented.rolled_indirect"]
+        _render_json_from_data(data, preset, chosen)
+        item = next(i for i in json.loads(capsys.readouterr().out) if i["id"] == "REQ-p00001")
+        assert list(item.keys()) == [
+            "id",
+            "tested_immediate_direct",
+            "implemented_rolled_indirect",
+        ]
 
-    # Verifies: REQ-d00069-L, REQ-d00258-A
-    def test_format_json_graph_path_carries_the_four_measures(
+    # Verifies: REQ-d00069-L, REQ-d00282-E
+    def test_format_json_graph_path_states_the_same_columns(
         self, canonical_federated_graph, capsys
     ):
-        """The live-graph JSON path (``format_json``) matches the
-        daemon-payload path (``_render_json_from_data``) above."""
+        """The live-graph JSON path (``format_json``) states what the
+        daemon-payload path (``_render_json_from_data``) states, for one
+        selection: a report answered by a serving process cannot state
+        different columns from a locally computed one."""
         from elspais.commands.trace import format_json
 
         preset = ReportPreset(
             name="standard",
             columns=list(REPORT_PRESETS["standard"].columns),
         )
-        out = "".join(format_json(canonical_federated_graph, preset))
-        parsed = json.loads(out)
-        item = next(i for i in parsed if i["id"] == "REQ-p00001")
-        assert "tested_rolled_direct" in item
-        assert "implemented_immediate_indirect" in item
+        chosen = ["id", "tested.rolled_direct", "implemented.immediate_indirect"]
+
+        live = json.loads("".join(format_json(canonical_federated_graph, preset, None, chosen)))
+        _render_json_from_data(compute_trace(canonical_federated_graph, {}, {}), preset, chosen)
+        served = json.loads(capsys.readouterr().out)
+
+        live_item = next(i for i in live if i["id"] == "REQ-p00001")
+        served_item = next(i for i in served if i["id"] == "REQ-p00001")
+        assert list(live_item.keys()) == [
+            "id",
+            "tested_rolled_direct",
+            "implemented_immediate_indirect",
+        ]
+        assert live_item == served_item
 
 
 # Verifies: REQ-d00069-N, REQ-d00258-A, REQ-d00258-J
@@ -1100,11 +1119,12 @@ class TestTraceFooting:
         assert not data["code_tested"].startswith("0/")
         assert data["code_tested"] == "n/a"
 
-    # Verifies: REQ-d00258-E
-    def test_code_tested_labels_without_attribution_is_na(self, code_tested_no_attribution_project):
-        """The --assertions (label) render path must apply the same n/a guard
-        as the count path: aggregate-only coverage must not surface "0/N"/"0%"
-        in code_tested_labels / code_tested_pct."""
+    # Verifies: REQ-d00258-E, REQ-d00282-E
+    def test_code_tested_without_attribution_is_na_under_assertion_labels_too(
+        self, code_tested_no_attribution_project
+    ):
+        """The detail flag changes what a cell says, never how many cells there
+        are: aggregate-only coverage must not surface "0/N" in either mode."""
         from elspais.commands.trace import _get_node_data
 
         graph = _build_project_graph(code_tested_no_attribution_project, targets=None)
@@ -1114,8 +1134,7 @@ class TestTraceFooting:
         assert rollup.code_tested.covered_lines > 0
 
         data = _get_node_data(node, graph, assertion_labels=True)
-        assert data["code_tested_labels"] == "n/a"
-        assert data["code_tested_pct"] == "n/a"
+        assert data["code_tested"] == "n/a"
 
     # Verifies: REQ-d00258-E
     def test_code_tested_with_contexts_but_no_verifying_test_is_zero_of_n(
@@ -1141,11 +1160,11 @@ class TestTraceFooting:
         assert data["code_tested"] != "n/a"
 
         labelled = _get_node_data(node, graph, assertion_labels=True)
-        assert labelled["code_tested_labels"].startswith("0/")
-        assert labelled["code_tested_pct"] == "0%"
+        assert labelled["code_tested"].startswith("0/")
+        assert labelled["code_tested"].endswith("(0%)")
 
     # Verifies: REQ-d00258-E
-    def test_lcov_tested_labels_empty_set_renders_zero_of_total(
+    def test_lcov_tested_empty_label_set_renders_zero_of_total(
         self, code_tested_no_attribution_project
     ):
         """An lcov_tested dimension with total > 0 but an empty label set must
@@ -1161,8 +1180,8 @@ class TestTraceFooting:
         rollup.lcov_tested = CoverageDimension(total=2)
 
         data = _get_node_data(node, graph, assertion_labels=True)
-        assert data["lcov_tested_labels"] == "0/2"
-        assert data["lcov_tested_labels"] != "-"
+        assert data["lcov_tested"].startswith("0/2")
+        assert data["lcov_tested"] != "-"
 
     # Verifies: REQ-d00258-A, REQ-d00254-I
     # Verifies: REQ-d00069-N, REQ-d00258-A, REQ-d00258-J, REQ-d00254-I
@@ -1389,41 +1408,87 @@ class TestTraceTestedBreakdown:
         assert "> Tested breakdown:" not in out
         assert "1P" not in out
 
-    # Verifies: REQ-d00258-O
-    def test_csv_gives_the_breakdown_columns_of_its_own(self, tested_breakdown_project):
-        """A machine format should not need to parse the figures out of a
-        bracket, so CSV carries them as three columns beside Tested and the
-        Tested cell stays a bare count."""
+    # Verifies: REQ-d00258-O, REQ-d00282-E
+    def test_csv_states_the_breakdown_inside_the_one_tested_column(self, tested_breakdown_project):
+        """The breakdown qualifies the Tested figure, so it rides in that
+        figure's cell here exactly as it does in markdown.
+
+        Given cells of its own it would be three further columns -- a display
+        term of its own, which REQ-d00258-O forbids -- and selecting `tested`
+        would state four columns in CSV and one in markdown."""
         import csv as csv_module
         import io as io_module
 
         from elspais.commands.trace import format_csv
 
         graph = _build_project_graph(tested_breakdown_project)
-        out = "\n".join(format_csv(graph))
+        rows = list(csv_module.reader(io_module.StringIO("\n".join(format_csv(graph)))))
+        headers, first = rows[0], rows[1]
 
-        reader = csv_module.reader(io_module.StringIO(out))
-        headers = next(reader)
-        tested_idx = headers.index("Tested")
-        assert headers[tested_idx + 1 : tested_idx + 4] == [
-            "Tested Passed",
-            "Tested Failed",
-            "Tested Awaiting",
-        ]
+        assert headers.count("Tested") == 1
+        assert not [h for h in headers if h.startswith("Tested ")], (
+            f"Nothing rides beside the Tested column; got {headers}"
+        )
+        assert first[headers.index("Tested")] == "3/3 (100%) [1P 1F 1A]"
 
-        row = next(csv_module.reader(io_module.StringIO(out.splitlines()[1])))
-        assert row[tested_idx] == "3/3 (100%)"
-        assert row[tested_idx + 1 : tested_idx + 4] == ["1", "1", "1"]
-        assert "1P" not in out
+    # Verifies: REQ-d00069-L, REQ-d00258-A, REQ-d00282-B+E
+    def test_a_measure_is_a_column_a_selection_names_in_every_format(
+        self, tested_breakdown_project
+    ):
+        """A measure is reachable by selecting it, not by choosing a format.
 
-    # Verifies: REQ-d00069-L, REQ-d00258-A
-    def test_csv_carries_a_column_per_measure(self, tested_breakdown_project):
-        """REQ-d00258-A: a reader can see what evidence produced a total --
-        the four measures behind Tested are columns of their own."""
-        from elspais.commands.trace import format_csv
+        The default set states the dimension totals; naming a measure states
+        that measure, and CSV and JSON state the same column set for the one
+        selection (REQ-d00282-E)."""
+        import csv as csv_module
+        import io as io_module
+        import json as json_module
+
+        from elspais.commands.trace import REPORT_PRESETS, ReportPreset, format_csv, format_json
 
         graph = _build_project_graph(tested_breakdown_project)
-        out = "\n".join(format_csv(graph))
-        header = out.splitlines()[0].split(",")
-        for col in ("Tested", "Tested Immediate Direct", "Tested Rolled Direct"):
-            assert col in header
+        preset = ReportPreset(name="standard", columns=list(REPORT_PRESETS["standard"].columns))
+
+        default_header = next(
+            csv_module.reader(io_module.StringIO("\n".join(format_csv(graph, preset))))
+        )
+        assert "Tested" in default_header
+        assert not [h for h in default_header if h.startswith("Tested (")], (
+            f"A measure is stated only where the selection names it; got {default_header}"
+        )
+
+        chosen = ["id", "tested", "tested.immediate_direct"]
+        header = next(
+            csv_module.reader(
+                io_module.StringIO("\n".join(format_csv(graph, preset, None, chosen)))
+            )
+        )
+        # REQ-d00282-C: the heading names the dimension AND the measure.
+        assert header == ["ID", "Tested", "Tested (cited by name here)"]
+
+        rows = json_module.loads("".join(format_json(graph, preset, None, chosen)))
+        assert list(rows[0].keys()) == ["id", "tested", "tested_immediate_direct"]
+
+    # Verifies: REQ-d00258-K, REQ-d00282-C+J
+    def test_headings_come_from_the_configured_display_words(self, tested_breakdown_project):
+        """Every heading is read through the configured mapping, the measure
+        columns included: a project that renames Tested renames it here, while
+        the key the selection names stays what it was (REQ-d00282-J)."""
+        import csv as csv_module
+        import io as io_module
+
+        from elspais.commands.trace import REPORT_PRESETS, ReportPreset, format_csv
+
+        graph = _build_project_graph(tested_breakdown_project)
+        preset = ReportPreset(name="standard", columns=list(REPORT_PRESETS["standard"].columns))
+        # Keyed by the RELATIONSHIP conferring the coverage, as REQ-d00258-K
+        # defines the mapping -- `Verifies:` is what confers Tested.
+        config = {"rules": {"coverage": {"status_words": {"verifies": "Exercised"}}}}
+
+        chosen = ["id", "tested", "tested.rolled_direct"]
+        header = next(
+            csv_module.reader(
+                io_module.StringIO("\n".join(format_csv(graph, preset, None, chosen, config)))
+            )
+        )
+        assert header == ["ID", "Exercised", "Exercised (conducted direct)"]
