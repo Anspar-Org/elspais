@@ -103,7 +103,7 @@
 | REQ-d00082 | Unified Reference Configuration                               | dev-cli.md              | f0808bb9 |
 | REQ-d00084 | Trace Command                                                 | dev-cli.md              | 67887c51 |
 | REQ-d00085 | Unified Report Composition                                    | dev-cli.md              | 587285b0 |
-| REQ-d00086 | Coverage Report Section                                       | dev-cli.md              | 4559fce7 |
+| REQ-d00086 | Coverage Report Section                                       | dev-cli.md              | 067a62c4 |
 | REQ-d00124 | Graph Analysis Engine                                         | dev-cli.md              | b153d5f6 |
 | REQ-d00125 | Analysis CLI Command                                          | dev-cli.md              | 474fa8af |
 | REQ-d00126 | FILE Node Data Model                                          | dev-graph-file-nodes.md | 070e173b |
@@ -195,6 +195,7 @@
 | REQ-d00278 | Report Scope Selection Vocabulary                             | dev-cli.md              | ef2221cc |
 | REQ-d00279 | One Authority for Report Scope Membership                     | dev-cli.md              | f103db89 |
 | REQ-d00280 | Named Report Scopes                                           | dev-cli.md              | 26e2811c |
+| REQ-d00281 | Level Vocabulary of a Reported Graph                          | dev-graph-core.md       | 4bde246d |
 
 ## User Journeys
 

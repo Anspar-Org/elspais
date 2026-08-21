@@ -829,3 +829,41 @@ The word each dimension is reported under is configurable (REQ-d00258-K); the na
 - 2026-08-19 | b097dcd7 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash, add missing changelog section
 
 *End* *Coverage Dimensions* | **Hash**: b097dcd7
+
+---
+
+## REQ-d00281: Level Vocabulary of a Reported Graph
+
+**Level**: dev | **Status**: Draft | **Implements**: REQ-p00015
+
+A report that groups requirements by level draws those groups from somewhere, and the graph a report is computed over is not the same thing as the configuration it was invoked under. A federated graph holds every member's requirements, and the levels they carry are the union of the members' vocabularies. This requirement fixes which of the two the grouping follows.
+
+### Assertions
+
+A. Every level carried by a requirement a report includes SHALL form a group in that report.
+
+B. Every requirement a report includes SHALL fall in exactly one of that report's groups.
+
+C. Whether the configuration a report is produced under defines a requirement's level SHALL NOT decide whether that requirement is counted in a figure the report aggregates.
+
+D. Where a requirement carries a level the configuration a report is produced under does not define, the tool SHALL report that requirement together with the level it carries.
+
+E. A group formed from a level the configuration does not define SHALL be ordered after the groups formed from levels it does define.
+
+### Rationale
+
+The subject of a report is the graph, and in a federation that graph is an assembly: each member declares its own levels, and every requirement any member holds is part of what the report is about. Forming the groups from the invoking configuration instead makes the report's shape a fact about who asked rather than about what was asked, so a member whose vocabulary differs from the asker's contributes requirements the report has nowhere to put. Drawing the groups from the requirements themselves is what makes one graph yield one answer whoever runs the report, and it is the same settlement REQ-d00251-L reaches for identifiers, reached here for the vocabulary a report is organised by.
+
+A and B are the two halves of accounting for every requirement, and neither is sufficient alone. A says no requirement's level is missing a group; B says each requirement lands in one group and is not divided between several or counted in two. Without B a report could satisfy A and still misstate its totals; without A a requirement can be complete inside a group that was never formed, which is a completeness nothing checks. Stating both is what lets a reader add the groups up and get the report back.
+
+C is where the asymmetry between a requirement's level and its status is deliberate. A status carries a role the project assigns it, and that role is a statement about whether the obligation is live — a withdrawn requirement genuinely should not drag a coverage figure, so status decides membership in that figure. A level says who the requirement is for and at what altitude it sits; it makes no claim about whether the obligation is owed. A requirement at a level this configuration happens not to define is real work somebody owes, and dropping it flatters every figure it would have lowered. C bars the definedness of the level from deciding the question, which leaves a reader's own selection free to narrow a report deliberately — a narrowing REQ-p00084 governs, and which discloses itself.
+
+D is REQ-p00015-A reached by a second route. Content excluded from an answer is reportable whether it was refused admission or admitted and then passed over, because the reader cannot tell the two apart from the answer they are holding. It also catches the case no comparison between configurations would: a single repository where a level was misspelled on a requirement, or removed from the configuration while requirements still carry it, has no second configuration to differ from, and the requirements simply stop being counted. Naming the requirement and the level it carries is what turns that into something an author can act on, rather than a figure that quietly moved.
+
+E settles an ordering that would otherwise be decided independently by each surface, and decided differently. The levels a project defines are ordered by the ranks it gave them; a level it did not define has no rank to be ordered by, and inventing one would put it somewhere a reader has no way to predict. Placing such groups after the ranked ones keeps the familiar shape of a report intact and gathers what the configuration does not account for in one place, where D's report is about the same requirements.
+
+### Changelog
+
+- 2026-08-20 | - | - | Michael Lewis (<michael@anspar.org>) | Initial authoring: a report's level groups are drawn from the requirements it reports on rather than from the invoking configuration, every included requirement falls in exactly one group, an undefined level never decides whether a requirement is counted, such requirements are reported, and their groups are ordered after the defined ones
+
+*End* *Level Vocabulary of a Reported Graph* | **Hash**: 4bde246d
