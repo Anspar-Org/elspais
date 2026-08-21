@@ -859,12 +859,25 @@ def _counts_for_coverage(config: dict[str, Any] | None, status: str | None) -> b
     return status_expects_implementation(config or {}, status)
 
 
-def aggregate_by_level(graph: Any, config: dict[str, Any] | None = None) -> list[LevelAggregate]:
-    """Per-level assertion-fraction sums, on each of the four measures."""
-    keys = level_group_keys(graph, config)
+def aggregate_by_level(
+    graph: Any,
+    config: dict[str, Any] | None = None,
+    node_ids: set[str] | frozenset[str] | None = None,
+) -> list[LevelAggregate]:
+    """Per-level assertion-fraction sums, on each of the four measures.
+
+    ``node_ids`` restricts the report to a scope's membership. A figure taken
+    across requirements answers "how far along is this set", so the set it is
+    taken over is the one the reader asked for (REQ-p00084-B); the per-assertion
+    measures each requirement contributes are unchanged by the narrowing, which
+    is what keeps an emitted requirement's own figures estate-true.
+    """
+    keys = level_group_keys(graph, config, node_ids)
     groups: dict[str, LevelAggregate] = {k.lower(): LevelAggregate(level=k.upper()) for k in keys}
 
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+        if node_ids is not None and node.id not in node_ids:
+            continue
         agg = groups.get((node.level or "").lower())
         if agg is None or not _counts_for_coverage(config, node.status):
             continue
@@ -1108,7 +1121,11 @@ def _measure_fields(prefix: str, sums: DimensionSums) -> dict[str, float]:
 
 
 # Implements: REQ-d00086-A, REQ-d00258-C
-def collect_coverage(graph: Any, config: dict[str, Any] | None = None) -> dict[str, Any]:
+def collect_coverage(
+    graph: Any,
+    config: dict[str, Any] | None = None,
+    node_ids: set[str] | frozenset[str] | None = None,
+) -> dict[str, Any]:
     """Full coverage-summary payload shared by CLI summary and MCP.
 
     Per-level rows come from :func:`aggregate_by_level`; excluded-status
@@ -1139,11 +1156,13 @@ def collect_coverage(graph: Any, config: dict[str, Any] | None = None) -> dict[s
     # statuses from its sums but doesn't report per-status counts).
     excluded_counts: dict[str, int] = {}
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+        if node_ids is not None and node.id not in node_ids:
+            continue
         if (node.level or "").lower() in known_levels and node.status in exclude_status:
             excluded_counts[node.status] = excluded_counts.get(node.status, 0) + 1
 
     levels = []
-    for agg in aggregate_by_level(graph, config):
+    for agg in aggregate_by_level(graph, config, node_ids):
         levels.append(
             {
                 "level": agg.level,

@@ -719,6 +719,47 @@
       "title": "ReferenceSeverityConfig",
       "type": "object"
     },
+    "ReportScopeConfig": {
+      "additionalProperties": false,
+      "description": "A scope a project declares under a name, for reports to be produced under.\n\nA scope spelled out at the moment a report is run is known only to whoever\nspelled it; declared here it is versioned beside the requirements it selects\nover, and a reader holding a committed report can look up what produced it.",
+      "properties": {
+        "level": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Level",
+          "type": "array"
+        },
+        "not_level": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Not Level",
+          "type": "array"
+        },
+        "status": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Status",
+          "type": "array"
+        },
+        "not_status": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Not Status",
+          "type": "array"
+        },
+        "match_status_roles": {
+          "default": false,
+          "title": "Match Status Roles",
+          "type": "boolean"
+        }
+      },
+      "title": "ReportScopeConfig",
+      "type": "object"
+    },
     "RulesConfig": {
       "additionalProperties": false,
       "properties": {
@@ -1151,6 +1192,13 @@
         "$ref": "#/$defs/StatusConfig"
       },
       "title": "Statuses",
+      "type": "object"
+    },
+    "scopes": {
+      "additionalProperties": {
+        "$ref": "#/$defs/ReportScopeConfig"
+      },
+      "title": "Scopes",
       "type": "object"
     },
     "stats": {

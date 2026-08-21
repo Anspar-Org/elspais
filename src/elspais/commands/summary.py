@@ -36,14 +36,32 @@ def render_section(
     Returns (formatted_output, exit_code).
     """
     fmt = getattr(args, "format", "text") or "text"
-    data = collect_coverage(graph, config=config)
+    # Implements: REQ-p00084-A+D, REQ-d00279-C
+    from elspais.commands._scope import resolve_scope_for_report, scope_disclosure
+
+    result = resolve_scope_for_report(graph, args, config)
+    ids = None if len(result.ids) == result.population else result.ids
+    data = collect_coverage(graph, config=config, node_ids=ids)
+    data["scope"] = scope_disclosure(result)
     content = _render(data, fmt)
     return content.rstrip("\n"), 0
 
 
+# Implements: REQ-d00279-C
 def compute_summary(graph: FederatedGraph, config: dict, params: dict[str, str]) -> dict:
-    """Engine-compatible wrapper around the shared coverage collector."""
-    return collect_coverage(graph, config=config)
+    """Engine-compatible wrapper around the shared coverage collector.
+
+    Reads the scope from ``params``: this is the path a summary takes when a
+    serving process answers it, and a scope that did not survive the trip would
+    make that answer differ from a locally computed one.
+    """
+    from elspais.commands._scope import resolve_scope_for_report, scope_disclosure
+
+    result = resolve_scope_for_report(graph, params, config)
+    ids = None if len(result.ids) == result.population else result.ids
+    data = collect_coverage(graph, config=config, node_ids=ids)
+    data["scope"] = scope_disclosure(result)
+    return data
 
 
 def run(args: argparse.Namespace) -> int:
@@ -55,6 +73,7 @@ def run(args: argparse.Namespace) -> int:
     which targets this invocation considers fresh).
     """
     from elspais.commands._engine import call as engine_call
+    from elspais.commands._scope import scope_params_from_args
 
     fmt = getattr(args, "format", "text") or "text"
     spec_dir = getattr(args, "spec_dir", None)
@@ -72,12 +91,14 @@ def run(args: argparse.Namespace) -> int:
             fresh_targets=fresh_targets,
         )
         config = get_config(config_path)
-        data = compute_summary(graph, config, {})
+        data = compute_summary(graph, config, scope_params_from_args(args, config))
         data["graph_source"] = {"type": "local"}
     else:
+        from elspais.config import get_config
+
         data = engine_call(
             "/api/run/summary",
-            {},
+            scope_params_from_args(args, get_config(getattr(args, "config", None))),
             compute_summary,
             skip_daemon=bool(spec_dir),
             config_path=getattr(args, "config", None),
@@ -153,6 +174,9 @@ def _render_text(data: dict) -> str:
     lines = []
     lines.append("Coverage Summary")
     lines.append("=" * 60)
+    # Implements: REQ-p00084-D
+    for line in data.get("scope") or []:
+        lines.append(line)
 
     # Level summary
     lines.append("")
@@ -258,6 +282,10 @@ def _render_markdown(data: dict) -> str:
     lines = []
     lines.append("# Coverage Summary")
     lines.append("")
+    # Implements: REQ-p00084-D
+    for line in data.get("scope") or []:
+        lines.append(f"*{line}*")
+        lines.append("")
 
     # Level summary
     lines.append("## Summary by Level")

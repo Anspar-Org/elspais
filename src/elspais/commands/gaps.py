@@ -104,6 +104,7 @@ def collect_gaps(
     graph: FederatedGraph,
     exclude_status: set[str],
     config: dict[str, Any] | None = None,
+    node_ids: set[str] | frozenset[str] | None = None,
 ) -> GapData:
     """Single-pass collection of coverage gaps from the graph.
 
@@ -124,13 +125,17 @@ def collect_gaps(
 
     excluded_ids: set[str] = set()
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
-        if node.status in exclude_status:
+        # Implements: REQ-p00084-B
+        # A requirement a scope does not select is not a gap in this report: the
+        # reader asked a question about a set, and work outside it is not an
+        # answer to that question.
+        if node.status in exclude_status or (node_ids is not None and node.id not in node_ids):
             excluded_ids.add(node.id)
 
     code_covered = _reqs_with_code_refs(graph, excluded_ids)
 
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
-        if node.status in exclude_status:
+        if node.id in excluded_ids:
             continue
 
         req_id = node.id
@@ -373,7 +378,13 @@ def render_section(
         gap_types = _ALL_GAP_TYPES
 
     exclude_status = _resolve_exclude_status(args, config=config or {})
-    data = collect_gaps(graph, exclude_status, config=config)
+    # Implements: REQ-p00084-A+B
+    from elspais.commands._scope import resolve_scope_for_report, scope_disclosure
+
+    scope_result = resolve_scope_for_report(graph, args, config)
+    scope_ids = None if len(scope_result.ids) == scope_result.population else scope_result.ids
+    data = collect_gaps(graph, exclude_status, config=config, node_ids=scope_ids)
+    scope_lines = scope_disclosure(scope_result)
 
     fmt = getattr(args, "format", "text")
 
@@ -389,10 +400,14 @@ def render_section(
                 result[gt] = [_gap_entry_to_list(entry) for entry in items]
         if show_integrated and data.integrated:
             result["integrated"] = {k: sorted(v) for k, v in data.integrated.items()}
+        # Implements: REQ-p00084-D
+        if scope_lines:
+            result["scope"] = scope_lines
         return json.dumps(result, indent=2), 0
 
     if fmt == "markdown":
-        sections = [render_gap_markdown(gt, data) for gt in gap_types]
+        sections = [f"*{line}*" for line in scope_lines]
+        sections += [render_gap_markdown(gt, data) for gt in gap_types]
         if show_integrated:
             seg = render_integrated_markdown(data)
             if seg:
@@ -400,7 +415,8 @@ def render_section(
         return "\n\n".join(sections), 0
 
     # Default: text
-    sections = [render_gap_text(gt, data) for gt in gap_types]
+    sections = list(scope_lines)
+    sections += [render_gap_text(gt, data) for gt in gap_types]
     text = "\n\n".join(sections)
     if show_integrated:
         text += render_integrated_text(data)
@@ -478,7 +494,13 @@ def compute_gaps(graph: FederatedGraph, config: dict, params: dict[str, str]) ->
     treat_str = params.get("treat_active", None)
     fake_args.treat_active = treat_str.split(",") if treat_str else None
     exclude_status = _resolve_exclude_status(fake_args, config=config)
-    data = collect_gaps(graph, exclude_status, config=config)
+    # Implements: REQ-d00279-C
+    from elspais.commands._scope import resolve_scope_for_report, scope_disclosure
+
+    scope_result = resolve_scope_for_report(graph, params, config)
+    ids = None if len(scope_result.ids) == scope_result.population else scope_result.ids
+    data = collect_gaps(graph, exclude_status, config=config, node_ids=ids)
+    scope_lines = scope_disclosure(scope_result)
 
     def _serialize_gap_list(gt: str) -> list:
         items = getattr(data, gt)
@@ -499,6 +521,9 @@ def compute_gaps(graph: FederatedGraph, config: dict, params: dict[str, str]) ->
         out = {gap_type: _serialize_gap_list(gap_type)}
         if gap_type == "uncovered" and integrated:
             out["integrated"] = integrated  # type: ignore[assignment]
+        # Implements: REQ-p00084-D
+        if scope_lines:
+            out["scope"] = scope_lines  # type: ignore[assignment]
         return out
 
     result: dict[str, Any] = {}
@@ -506,6 +531,9 @@ def compute_gaps(graph: FederatedGraph, config: dict, params: dict[str, str]) ->
         result[gt] = _serialize_gap_list(gt)
     if integrated:
         result["integrated"] = integrated
+    # Implements: REQ-p00084-D
+    if scope_lines:
+        result["scope"] = scope_lines
     return result
 
 
@@ -532,6 +560,13 @@ def run(args: argparse.Namespace) -> int:
     if treat_active:
         params["treat_active"] = ",".join(treat_active)
 
+    # Implements: REQ-d00279-C
+    # The scope reaches the compute path the same way and for the same reason.
+    from elspais.commands._scope import scope_params_from_args
+    from elspais.config import get_config
+
+    params.update(scope_params_from_args(args, get_config(getattr(args, "config", None))))
+
     data = engine_call(
         "/api/run/gaps",
         params,
@@ -540,6 +575,7 @@ def run(args: argparse.Namespace) -> int:
         skip_daemon=bool(spec_dir),
     )
 
+    scope_lines = data.get("scope") or []
     if fmt == "json":
         output = json.dumps(data, indent=2)
     else:
@@ -547,14 +583,16 @@ def run(args: argparse.Namespace) -> int:
         types_to_render = gap_types or _ALL_GAP_TYPES
         show_integrated = "uncovered" in types_to_render
         if fmt == "markdown":
-            sections = [render_gap_markdown(gt, gap_data) for gt in types_to_render]
+            sections = [f"*{line}*" for line in scope_lines]
+            sections += [render_gap_markdown(gt, gap_data) for gt in types_to_render]
             if show_integrated:
                 seg = render_integrated_markdown(gap_data)
                 if seg:
                     sections.append(seg)
             output = "\n\n".join(sections)
         else:
-            sections = [render_gap_text(gt, gap_data) for gt in types_to_render]
+            sections = list(scope_lines)
+            sections += [render_gap_text(gt, gap_data) for gt in types_to_render]
             output = "\n\n".join(sections)
             if show_integrated:
                 output += render_integrated_text(gap_data)

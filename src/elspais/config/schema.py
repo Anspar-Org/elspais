@@ -657,6 +657,22 @@ class AssociateEntryConfig(_StrictModel):
         return _validate_hex_color(v)
 
 
+# Implements: REQ-d00280-A
+class ReportScopeConfig(_StrictModel):
+    """A scope a project declares under a name, for reports to be produced under.
+
+    A scope spelled out at the moment a report is run is known only to whoever
+    spelled it; declared here it is versioned beside the requirements it selects
+    over, and a reader holding a committed report can look up what produced it.
+    """
+
+    level: list[str] = Field(default_factory=list)
+    not_level: list[str] = Field(default_factory=list)
+    status: list[str] = Field(default_factory=list)
+    not_status: list[str] = Field(default_factory=list)
+    match_status_roles: bool = False
+
+
 class StatusConfig(_StrictModel):
     """Optional per-status metadata. Keys match status names from status_roles."""
 
@@ -735,6 +751,7 @@ class ElspaisConfig(_StrictModel):
     associates: dict[str, AssociateEntryConfig] = Field(default_factory=dict)
     federation: FederationConfig = Field(default_factory=FederationConfig)
     statuses: dict[str, StatusConfig] = Field(default_factory=dict)
+    scopes: dict[str, ReportScopeConfig] = Field(default_factory=dict)
     stats: str = Field(default="", description="File path for MCP tool usage statistics")
 
     @field_validator("levels")
@@ -780,6 +797,16 @@ class ElspaisConfig(_StrictModel):
         # Status keys flow into `.status-badge.{key|lower}` CSS class selectors,
         # JS string literals, and `data-key` attributes. Same identifier shape
         # as namespaces / levels.
+        for key in v or {}:
+            _validate_namespace(key)
+        return v
+
+    @field_validator("scopes")
+    @classmethod
+    def _v_scope_keys(cls, v: dict[str, Any]) -> dict[str, Any]:
+        # A scope name is written on a command line and read back out of a
+        # report's disclosure, so it takes the same identifier shape as the
+        # other names a project declares.
         for key in v or {}:
             _validate_namespace(key)
         return v

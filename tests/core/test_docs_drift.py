@@ -35,6 +35,7 @@ EXPECTED_SCHEMA_SECTIONS = {
     "terms",
     "output",
     "statuses",
+    "scopes",
     "stats",
     "cli_ttl",
     "federation",

@@ -189,10 +189,16 @@ class TestOptionSurface:
     """Pins which status selector each command's CLI dataclass exposes."""
 
     @pytest.mark.parametrize("class_name", COVERAGE_ARG_CLASSES)
-    def test_coverage_commands_expose_treat_active_alone(self, class_name):
-        """Every coverage command offers exactly one status selector,
-        ``treat_active`` (widen). Neither the ambiguous ``status`` nor a
-        narrowing ``only_status`` exists.
+    # Verifies: REQ-d00278-B
+    def test_coverage_commands_separate_measurement_from_emission(self, class_name):
+        """A coverage command offers two status options answering two questions.
+
+        ``treat_active`` widens what COUNTS: it promotes a status so requirements
+        carrying it are measured alongside Active ones. ``status`` selects what is
+        EMITTED: the requirements this report is about at all. They are not two
+        spellings of one selector, which is why a narrowing ``only_status`` --
+        which would have been a second, ambiguous way to say ``status`` -- still
+        does not exist.
         """
         from elspais.commands import args as args_mod
 
@@ -206,8 +212,11 @@ class TestOptionSurface:
         assert "only_status" not in fields, (
             f"{class_name} must not offer --only-status; fields were {sorted(fields)}"
         )
-        assert "status" not in fields, (
-            f"{class_name} must not offer the ambiguous --status; fields were {sorted(fields)}"
+        assert "status" in fields, (
+            f"{class_name} must offer --status to scope what it emits; fields were {sorted(fields)}"
+        )
+        assert "not_status" in fields, (
+            f"{class_name} must offer --not-status; fields were {sorted(fields)}"
         )
 
     def test_errors_exposes_no_status_option(self):

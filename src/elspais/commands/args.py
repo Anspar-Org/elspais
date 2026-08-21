@@ -19,11 +19,40 @@ from typing import Annotated, Literal
 import tyro
 
 
+# Implements: REQ-d00278-A+B+C, REQ-p00084-A
+@dataclasses.dataclass
+class ScopeOptions:
+    """Selection shared by every surface that reports over a set of requirements.
+
+    One definition rather than a copy per command: REQ-d00279-C obliges every
+    path producing a report to yield the same scoped set, and flags duplicated
+    per command are how two paths start disagreeing.
+    """
+
+    level: list[str] | None = None
+    """Report only requirements at these levels (space-separated)."""
+
+    not_level: list[str] | None = None
+    """Report no requirement at these levels."""
+
+    status: list[str] | None = None
+    """Report only requirements carrying these statuses (space-separated)."""
+
+    not_status: list[str] | None = None
+    """Report no requirement carrying these statuses."""
+
+    match_status_roles: bool = False
+    """Read each named status as every status sharing its role."""
+
+    scope: str | None = None
+    """Report under a scope the project declares by this name."""
+
+
 # ---------------------------------------------------------------------------
 # Health command
 # ---------------------------------------------------------------------------
 @dataclasses.dataclass
-class ChecksArgs:
+class ChecksArgs(ScopeOptions):
     """Verify requirements traceability and configuration.
 
     With --run-tests, executes each configured [[scanning.test.targets]]
@@ -76,7 +105,7 @@ class ChecksArgs:
 # Gap listing commands
 # ---------------------------------------------------------------------------
 @dataclasses.dataclass
-class GapsArgs:
+class GapsArgs(ScopeOptions):
     """List all traceability gaps."""
 
     format: Literal["text", "markdown", "json"] = "text"
@@ -90,7 +119,7 @@ class GapsArgs:
 
 
 @dataclasses.dataclass
-class UncoveredArgs:
+class UncoveredArgs(ScopeOptions):
     """List requirements without code coverage."""
 
     format: Literal["text", "markdown", "json"] = "text"
@@ -104,7 +133,7 @@ class UncoveredArgs:
 
 
 @dataclasses.dataclass
-class UntestedArgs:
+class UntestedArgs(ScopeOptions):
     """List requirements without test coverage."""
 
     format: Literal["text", "markdown", "json"] = "text"
@@ -118,7 +147,7 @@ class UntestedArgs:
 
 
 @dataclasses.dataclass
-class UnvalidatedArgs:
+class UnvalidatedArgs(ScopeOptions):
     """List requirements without UAT (journey) coverage."""
 
     format: Literal["text", "markdown", "json"] = "text"
@@ -132,7 +161,7 @@ class UnvalidatedArgs:
 
 
 @dataclasses.dataclass
-class FailingArgs:
+class FailingArgs(ScopeOptions):
     """List requirements with failing test or UAT results."""
 
     format: Literal["text", "markdown", "json"] = "text"
@@ -199,7 +228,7 @@ class DoctorArgs:
 # Trace command
 # ---------------------------------------------------------------------------
 @dataclasses.dataclass
-class TraceArgs:
+class TraceArgs(ScopeOptions):
     """Generate traceability matrix."""
 
     format: Literal["text", "markdown", "html", "json", "csv"] = "markdown"
@@ -333,7 +362,7 @@ class TermIndexArgs:
 # Summary command
 # ---------------------------------------------------------------------------
 @dataclasses.dataclass
-class SummaryArgs:
+class SummaryArgs(ScopeOptions):
     """Coverage summary by level (Implemented, Tested, Passing, UAT Covered, UAT Passed)."""
 
     format: Literal["text", "markdown", "json", "csv"] = "text"
@@ -371,7 +400,7 @@ class ChangedArgs:
 # Analysis command
 # ---------------------------------------------------------------------------
 @dataclasses.dataclass
-class AnalysisArgs:
+class AnalysisArgs(ScopeOptions):
     """Analyze foundational requirement importance."""
 
     top: Annotated[int, tyro.conf.arg(aliases=["-n"])] = 10
@@ -385,9 +414,6 @@ class AnalysisArgs:
 
     show: Literal["foundations", "leaves", "all"] = "all"
     """Which sections to show."""
-
-    level: str | None = None
-    """Filter results by requirement level (any key from [levels] config)."""
 
     include_code: bool = False
     """Include CODE nodes in the analysis."""

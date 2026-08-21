@@ -316,6 +316,37 @@ formats = []
 dir = ""
 
 #──────────────────────────────────────────────────────────────────────────────
+# SCOPES - Named Report Selections
+# A report is read by an audience, and an audience is rarely served by every
+# requirement the estate holds. A scope declared here can be handed to any
+# reporting command with `--scope <name>`, so the selection that produced a
+# committed report is versioned beside the requirements it selects over and can
+# be re-run by a reader who did not compose it.
+#
+# The same selection can be stated on the command line instead
+# (`--level`, `--not-level`, `--status`, `--not-status`, `--match-status-roles`);
+# a name selects exactly what the same scope stated in full selects. Flags given
+# alongside `--scope` narrow the named scope rather than replacing it.
+#
+# Values named for one property are alternatives; different properties are all
+# required at once. `not_*` refuses a value outright, so a value both required
+# and refused is refused.
+#
+# match_status_roles reads each status named as every status sharing its role,
+# so "everything an active-role status carries" needs no list that goes stale
+# the day the project adds a status.
+#
+# A level or status a member's configuration does not define is still nameable
+# where that member's requirements carry it; a name nothing admits selects
+# nothing there and is reported rather than passing silently.
+#──────────────────────────────────────────────────────────────────────────────
+
+[scopes.sponsor]
+level = ["prd"]
+not_status = ["Deprecated"]
+match_status_roles = false
+
+#──────────────────────────────────────────────────────────────────────────────
 # ASSOCIATES - Cross-Repository Federation
 # Each associate is a named entry with `path` and `namespace`.
 # Relative paths resolve from the canonical repo root (worktree-safe).

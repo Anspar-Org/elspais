@@ -142,16 +142,24 @@ def _get_uat_journeys(req_node) -> list[dict]:
     return results
 
 
+# Implements: REQ-d00279-C
 def compute_trace(
     graph: FederatedGraph,
-    config: dict,  # noqa: ARG001
-    params: dict[str, str],  # noqa: ARG001
+    config: dict,
+    params: dict[str, str],
 ) -> dict:
-    """Compute trace data for engine.call.  Returns {"nodes": [...]}."""
-    nodes = []
-    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
-        nodes.append(_get_node_data(node, graph))
-    return {"nodes": nodes}
+    """Compute trace data for engine.call.  Returns {"nodes": [...], "scope": [...]}.
+
+    Reads the scope out of ``params`` because this is the path a report takes
+    when a serving process answers it: a scope that did not survive the trip
+    would make a daemon-served report disagree with a locally computed one.
+    """
+    from elspais.commands._scope import resolve_scope_for_report, scope_disclosure
+
+    result = resolve_scope_for_report(graph, params, config)
+    scope_ids = None if len(result.ids) == result.population else result.ids
+    nodes = [_get_node_data(node, graph) for node in _scoped_requirements(graph, scope_ids)]
+    return {"nodes": nodes, "scope": scope_disclosure(result)}
 
 
 def _compact_labels(labels: set[str]) -> str:
@@ -509,7 +517,24 @@ def _format_row(data: dict, columns: list[str]) -> list[str]:
     return values
 
 
-def format_markdown(graph: FederatedGraph, preset: ReportPreset | None = None) -> Iterator[str]:
+# Implements: REQ-p00084-B+C
+def _scoped_requirements(graph: FederatedGraph, scope_ids: frozenset[str] | None):
+    """The requirements a rendering emits, honouring the scope it was given.
+
+    Every formatter in this module iterates through here, so REQ-p00084-C holds
+    structurally: a requirement cannot be present in one rendering of a report
+    and missing from another, because there is one place that decides.
+    """
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+        if scope_ids is None or node.id in scope_ids:
+            yield node
+
+
+def format_markdown(
+    graph: FederatedGraph,
+    preset: ReportPreset | None = None,
+    scope_ids: frozenset[str] | None = None,
+) -> Iterator[str]:
     """Generate markdown table. Streams one node at a time."""
     if preset is None:
         preset = REPORT_PRESETS[DEFAULT_PRESET]
@@ -535,7 +560,7 @@ def format_markdown(graph: FederatedGraph, preset: ReportPreset | None = None) -
     # Implements: REQ-d00258-O
     has_tested_breakdown = False
 
-    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+    for node in _scoped_requirements(graph, scope_ids):
         if preset.dimension == "uat":
             uat_jnys = _get_uat_journeys(node)
             if not uat_jnys:
@@ -613,7 +638,11 @@ def format_markdown(graph: FederatedGraph, preset: ReportPreset | None = None) -
         )
 
 
-def format_csv(graph: FederatedGraph, preset: ReportPreset | None = None) -> Iterator[str]:
+def format_csv(
+    graph: FederatedGraph,
+    preset: ReportPreset | None = None,
+    scope_ids: frozenset[str] | None = None,
+) -> Iterator[str]:
     """Generate CSV. Streams one node at a time.
 
     When test refs are included, adds a Kind column (first) and Assertion/Test Ref
@@ -637,7 +666,7 @@ def format_csv(graph: FederatedGraph, preset: ReportPreset | None = None) -> Ite
         header_names = [col_headers.get(c, c.title()) for c in uat_csv_cols]
         yield ",".join(header_names)
 
-        for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+        for node in _scoped_requirements(graph, scope_ids):
             uat_jnys = _get_uat_journeys(node)
             if not uat_jnys:
                 continue
@@ -683,7 +712,7 @@ def format_csv(graph: FederatedGraph, preset: ReportPreset | None = None) -> Ite
 
     yield ",".join(extra_prefix + header_names + extra_suffix)
 
-    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+    for node in _scoped_requirements(graph, scope_ids):
         data = _get_node_data(node, graph, assertion_labels=preset.include_assertions)
         row_values = [escape(v) for v in _format_row(data, csv_columns)]
 
@@ -706,7 +735,11 @@ def format_csv(graph: FederatedGraph, preset: ReportPreset | None = None) -> Ite
                     yield ",".join(["TEST"] + empty_cols + [key, escape(ref)])
 
 
-def format_html(graph: FederatedGraph, preset: ReportPreset | None = None) -> Iterator[str]:
+def format_html(
+    graph: FederatedGraph,
+    preset: ReportPreset | None = None,
+    scope_ids: frozenset[str] | None = None,
+) -> Iterator[str]:
     """Generate basic HTML table. Streams one node at a time."""
     if preset is None:
         preset = REPORT_PRESETS[DEFAULT_PRESET]
@@ -741,7 +774,7 @@ def format_html(graph: FederatedGraph, preset: ReportPreset | None = None) -> It
     yield "<table>"
     yield "<tr>" + "".join(f"<th>{h}</th>" for h in headers) + "</tr>"
 
-    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+    for node in _scoped_requirements(graph, scope_ids):
         if preset.dimension == "uat":
             uat_jnys = _get_uat_journeys(node)
             if not uat_jnys:
@@ -779,14 +812,18 @@ def format_html(graph: FederatedGraph, preset: ReportPreset | None = None) -> It
     yield "</table></body></html>"
 
 
-def format_json(graph: FederatedGraph, preset: ReportPreset | None = None) -> Iterator[str]:
+def format_json(
+    graph: FederatedGraph,
+    preset: ReportPreset | None = None,
+    scope_ids: frozenset[str] | None = None,
+) -> Iterator[str]:
     """Generate JSON array. Streams one node at a time."""
     if preset is None:
         preset = REPORT_PRESETS[DEFAULT_PRESET]
 
     yield "["
     first = True
-    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+    for node in _scoped_requirements(graph, scope_ids):
         if preset.dimension == "uat":
             uat_jnys = _get_uat_journeys(node)
             if not uat_jnys:
@@ -899,12 +936,23 @@ def render_section(
     if not formatter:
         return f"Error: Unknown format '{fmt}'", 1
 
-    lines = list(formatter(graph, preset))
+    # Implements: REQ-p00084-A+B+D, REQ-d00279-C
+    # A section composed with others honours the same scope it honours alone.
+    from elspais.commands._scope import resolve_scope_for_report, scope_disclosure
+
+    result = resolve_scope_for_report(graph, args, getattr(args, "_config", None))
+    scope_ids = None if len(result.ids) == result.population else result.ids
+    lines = list(scope_disclosure(result))
+    lines += list(formatter(graph, preset, scope_ids))
     return "\n".join(lines), 0
 
 
 def _render_json_from_data(data: dict, preset: ReportPreset) -> None:
     """Render JSON output from compute_trace data dict."""
+    # Implements: REQ-p00084-D
+    # The scope reaches this path inside the computed data, so a JSON report
+    # declares the same scope a table one does.
+    _print_scope(data.get("scope") or [])
     nodes = []
     for node_data in data["nodes"]:
         node_dict: dict = {}
@@ -928,7 +976,19 @@ def _render_json_from_data(data: dict, preset: ReportPreset) -> None:
     print(json.dumps(nodes, indent=2))
 
 
-def _render_table_from_graph(graph: FederatedGraph, fmt: str, preset: ReportPreset) -> int:
+# Implements: REQ-p00084-D
+def _print_scope(lines: list[str]) -> None:
+    """Declare the scope beside the report, on stderr so a piped table is unchanged."""
+    for line in lines:
+        print(line, file=sys.stderr)
+
+
+def _render_table_from_graph(
+    graph: FederatedGraph,
+    fmt: str,
+    preset: ReportPreset,
+    scope_ids: frozenset[str] | None = None,
+) -> int:
     """Render table or JSON formats using graph-based formatters. Returns exit code."""
     formatters = {
         "text": format_markdown,
@@ -943,7 +1003,7 @@ def _render_table_from_graph(graph: FederatedGraph, fmt: str, preset: ReportPres
     if not formatter:
         print(f"Error: Unknown format '{fmt}'", file=sys.stderr)
         return 1
-    for line in formatter(graph, preset):
+    for line in formatter(graph, preset, scope_ids):
         print(line)
     return 0
 
@@ -1008,27 +1068,40 @@ def run(args: argparse.Namespace) -> int:
         include_test_refs=getattr(args, "show_tests", False),
     )
 
+    # Implements: REQ-p00084-A+D, REQ-d00279-C
+    from elspais.commands._scope import (
+        resolve_scope_for_report,
+        scope_disclosure,
+        scope_params_from_args,
+    )
+    from elspais.config import get_config
+
+    config_path = getattr(args, "config", None)
+    scope_params = scope_params_from_args(args, get_config(config_path))
+
     if skip_daemon:
         # Custom spec_dir (or --targets): build graph directly
         from elspais.graph.factory import build_graph
 
-        config_path = getattr(args, "config", None)
         graph = build_graph(
             spec_dirs=[spec_dir] if spec_dir else None,
             config_path=config_path,
             fresh_targets=fresh_targets,
         )
         if fmt == "json":
-            data = compute_trace(graph, {}, {})
+            data = compute_trace(graph, get_config(config_path), scope_params)
             _render_json_from_data(data, preset)
         else:
-            return _render_table_from_graph(graph, fmt, preset)
+            result = resolve_scope_for_report(graph, scope_params, get_config(config_path))
+            _print_scope(scope_disclosure(result))
+            ids = None if len(result.ids) == result.population else result.ids
+            return _render_table_from_graph(graph, fmt, preset, ids)
     else:
         data = _engine.call(
             "/api/run/trace",
-            {},
+            scope_params,
             compute_trace,
-            config_path=getattr(args, "config", None),
+            config_path=config_path,
         )
 
         # Implements: REQ-d00084-A
@@ -1037,7 +1110,10 @@ def run(args: argparse.Namespace) -> int:
         else:
             # For non-JSON formats we need the graph to stream through formatters.
             graph = _engine.get_graph()
-            return _render_table_from_graph(graph, fmt, preset)
+            result = resolve_scope_for_report(graph, scope_params, get_config(config_path))
+            _print_scope(scope_disclosure(result))
+            ids = None if len(result.ids) == result.population else result.ids
+            return _render_table_from_graph(graph, fmt, preset, ids)
 
     return 0
 

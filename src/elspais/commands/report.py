@@ -77,6 +77,17 @@ def parse_shared_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--mode", choices=["core", "combined"], default="core")
     parser.add_argument("--config", type=Path)
     parser.add_argument("--spec-dir", type=Path, dest="spec_dir")
+    # Implements: REQ-d00279-C
+    # A composed report is assembled differently from the same section asked for
+    # alone, and this parser is where the difference would show: a selection it
+    # does not register is a selection the composed report cannot honour.
+    parser.add_argument("--level", nargs="*", default=None)
+    parser.add_argument("--not-level", nargs="*", default=None, dest="not_level")
+    parser.add_argument("--status", nargs="*", default=None)
+    parser.add_argument("--not-status", nargs="*", default=None, dest="not_status")
+    parser.add_argument("--match-status-roles", action="store_true", dest="match_status_roles")
+    parser.add_argument("--scope", default=None)
+    parser.add_argument("--treat-active", nargs="*", default=None, dest="treat_active")
     # Trace-specific shared flags
     parser.add_argument("--preset", choices=["minimal", "standard", "full"])
     parser.add_argument("--body", action="store_true")

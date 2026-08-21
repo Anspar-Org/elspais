@@ -112,6 +112,53 @@ def status_expects_implementation(config: dict[str, Any], status: str | None) ->
     return get_status_roles(config or {}).role_of(status) == StatusRole.ACTIVE
 
 
+# Implements: REQ-d00280-B
+def declared_scope(config: dict[str, Any], name: str) -> Any:
+    """The scope a project declares under ``name``.
+
+    A name is a reference to a scope, never a second selection that happens to
+    share a spelling: what a report produced under a name contains is what the
+    declaration says and nothing else, so an author reading the declaration knows
+    the answer without running the report.
+
+    Consumers MUST reach a declared scope through here rather than reading the
+    configuration, so one name has one meaning.
+
+    Raises:
+        KeyError: If the project declares no scope under that name. An
+            undeclared name has no selection behind it, so there is nothing to
+            report under.
+    """
+    from elspais.graph.scope import ReportScope
+
+    declared = (config or {}).get("scopes") or {}
+    if not isinstance(declared, dict):
+        declared = {}
+    match = None
+    for key, value in declared.items():
+        if isinstance(key, str) and key.lower() == name.lower():
+            match = value
+            break
+    if match is None:
+        known = ", ".join(sorted(str(k) for k in declared)) or "none"
+        raise KeyError(
+            f"No scope named {name!r} is declared in this project; declared scopes: {known}"
+        )
+
+    def _listed(field: str) -> tuple[str, ...]:
+        raw = match.get(field) if isinstance(match, dict) else getattr(match, field, None)
+        return tuple(str(v) for v in (raw or []))
+
+    include = {p: v for p in ("level", "status") if (v := _listed(p))}
+    exclude = {p: v for p in ("level", "status") if (v := _listed(f"not_{p}"))}
+    roles = (
+        match.get("match_status_roles")
+        if isinstance(match, dict)
+        else getattr(match, "match_status_roles", False)
+    )
+    return ReportScope(include=include, exclude=exclude, match_status_roles=bool(roles))
+
+
 CURRENT_CONFIG_VERSION = 4
 
 
