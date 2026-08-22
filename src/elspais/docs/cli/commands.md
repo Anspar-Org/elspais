@@ -79,16 +79,26 @@ Generate traceability matrix and reports.
   $ elspais trace                        # Markdown table (default)
   $ elspais trace --format html          # Basic HTML matrix
   $ elspais trace --format csv           # Spreadsheet export
-  $ elspais trace --preset full          # All columns
+  $ elspais trace --preset full          # Widest default value set
 
 **Options:**
 
   `--format {text,markdown,html,json,csv}`  Output format (default: markdown)
-  `--preset {minimal,standard,full}`        Column preset
+  `--preset {minimal,standard,full}`        Named default value set
+  `--values KEY,KEY,...` State exactly these values, in this order. A coverage figure is also selectable as the numbers behind it -- `implemented.count`, `implemented.total`, `implemented.ratio` -- and `verified.carried` states whether the Passing verdict was carried from a baseline (see `elspais docs traceability`)
   `--body`               Show requirement body text
   `--assertions`         Show individual assertions
   `--tests`              Show test references
   `--output PATH`        Output file path
+
+**Scoping the report** (see `elspais docs scoping`):
+
+  `--level LVL ...`        Report only requirements at these levels
+  `--not-level LVL ...`    Report no requirement at these levels
+  `--status ST ...`        Report only requirements carrying these statuses
+  `--not-status ST ...`    Report no requirement carrying these statuses
+  `--match-status-roles`   Read each named status as every status sharing its role
+  `--scope NAME`           Report under a scope declared in `[scopes.NAME]`
 
 ## search
 
@@ -160,8 +170,7 @@ Compile spec files into a PDF document.
   $ elspais pdf                              # Generate spec-output.pdf
   $ elspais pdf --output review.pdf          # Custom output path
   $ elspais pdf --title "My Project Specs"   # Custom title
-  $ elspais pdf --overview                   # PRD-only stakeholder overview
-  $ elspais pdf --overview --max-depth 2     # Overview with depth limit
+  $ elspais pdf --cover spec/cover.tex       # Custom cover page
 
 **Options:**
 
@@ -170,21 +179,11 @@ Compile spec files into a PDF document.
   `--template PATH`     Custom pandoc LaTeX template
   `--title TITLE`       Document title
   `--cover PATH`        Markdown file for custom cover page
-  `--overview`          Generate stakeholder overview (PRD only, no OPS/DEV)
-  `--max-depth N`       Max graph depth for core PRDs in overview mode
 
 **Prerequisites:**
 
 - pandoc: <https://pandoc.org/installing.html>
 - xelatex: Install TeX Live, MiKTeX, or MacTeX
-
-**Overview Mode:**
-
-Generates a lighter document for stakeholders:
-- Only PRD-level requirements from all repos
-- No OPS or DEV requirements
-- Default title: "Product Requirements Overview"
-- `--max-depth` limits core PRD depth (associates always fully included)
 
 **Federated projects:**
 
@@ -224,12 +223,29 @@ Generate coverage summary reports.
 **Options:**
 
   `--format {text,markdown,json,csv}`  Output format (default: text)
+  `--values KEY,KEY,...` State exactly these values, in this order. Its rows
+  are levels, so it offers `level`, `requirements`, `assertions` and the five
+  coverage dimensions with their four measures each, plus the scalars behind
+  every figure (`.count`, `.total`, `.ratio`) -- not the per-requirement
+  values, nor `verified.carried` (a level has no per-requirement provenance
+  bit), nor the line-coverage ones (a level has no line figure). A table
+  states a figure as one cell; `--format json` states it as an object of its
+  numbers, in the same row shape `trace` uses. See `elspais docs scoping`.
 
 When `Integrates:` references are present, `summary` adds an "External
 integrations (by associate)" section listing inherited coverage grouped by the
 owning associate with a federation total, and `gaps` lists integrating
 requirements under "Covered via external associate" instead of flagging them as
 uncovered.
+
+**Scoping the report** (see `elspais docs scoping`):
+
+  `--level LVL ...`        Report only requirements at these levels
+  `--not-level LVL ...`    Report no requirement at these levels
+  `--status ST ...`        Report only requirements carrying these statuses
+  `--not-status ST ...`    Report no requirement carrying these statuses
+  `--match-status-roles`   Read each named status as every status sharing its role
+  `--scope NAME`           Report under a scope declared in `[scopes.NAME]`
 
 ## changed
 

@@ -112,6 +112,100 @@ def status_expects_implementation(config: dict[str, Any], status: str | None) ->
     return get_status_roles(config or {}).role_of(status) == StatusRole.ACTIVE
 
 
+def _declaration(config: dict[str, Any], name: str) -> Any:
+    """The declaration a project makes under ``name``.
+
+    One name carries both halves of what an audience reads -- the requirements a
+    report is about and the facts it states (REQ-d00280-C) -- so both accessors
+    find the declaration the same way rather than each deciding for itself which
+    spelling matches which declaration.
+
+    Raises:
+        KeyError: If the project declares nothing under that name.
+    """
+    declared = (config or {}).get("scopes") or {}
+    if not isinstance(declared, dict):
+        declared = {}
+    match = None
+    for key, value in declared.items():
+        if isinstance(key, str) and key.lower() == name.lower():
+            match = value
+            break
+    if match is None:
+        known = ", ".join(sorted(str(k) for k in declared)) or "none"
+        raise KeyError(
+            f"No scope named {name!r} is declared in this project; declared scopes: {known}"
+        )
+    return match
+
+
+def _declared_field(declaration: Any, field: str) -> Any:
+    """One field of a declaration, whether it arrived as a mapping or a model."""
+    if isinstance(declaration, dict):
+        return declaration.get(field)
+    return getattr(declaration, field, None)
+
+
+# Implements: REQ-d00280-B
+def declared_scope(config: dict[str, Any], name: str) -> Any:
+    """The scope a project declares under ``name``.
+
+    A name is a reference to a scope, never a second selection that happens to
+    share a spelling: what a report produced under a name contains is what the
+    declaration says and nothing else, so an author reading the declaration knows
+    the answer without running the report.
+
+    Consumers MUST reach a declared scope through here rather than reading the
+    configuration, so one name has one meaning.
+
+    Raises:
+        KeyError: If the project declares no scope under that name. An
+            undeclared name has no selection behind it, so there is nothing to
+            report under.
+    """
+    from elspais.graph.scope import ReportScope
+
+    match = _declaration(config, name)
+
+    def _listed(field: str) -> tuple[str, ...]:
+        return tuple(str(v) for v in (_declared_field(match, field) or []))
+
+    include = {p: v for p in ("level", "status") if (v := _listed(p))}
+    exclude = {p: v for p in ("level", "status") if (v := _listed(f"not_{p}"))}
+    roles = _declared_field(match, "match_status_roles")
+    return ReportScope(include=include, exclude=exclude, match_status_roles=bool(roles))
+
+
+# Implements: REQ-d00280-C
+def declared_values(config: dict[str, Any], name: str) -> Any:
+    """The value selection a project declares under ``name``, or None.
+
+    The companion to :func:`declared_scope`: one name answers for a whole
+    audience, the requirements it reads and the facts it reads about them
+    (REQ-d00280-C). The two remain independent choices -- a declaration naming
+    no values constrains none, which is what None says here, and a report
+    answering None states the values it would have anyway.
+
+    The names read here are value keys, never the words a project displays a
+    value under (REQ-d00282-J). They are not judged against any report: which
+    values are on offer is known only where the report is produced, and that is
+    where a name among them that does not resolve is refused (REQ-d00282-F).
+
+    Raises:
+        KeyError: If the project declares nothing under that name -- the same
+            condition, and the same message, as an undeclared scope.
+    """
+    from elspais.graph.values import parse_value_selection
+
+    match = _declaration(config, name)
+    raw = _declared_field(match, "values")
+    if raw is None:
+        return None
+    if isinstance(raw, str):
+        return parse_value_selection(raw)
+    return parse_value_selection([str(v) for v in raw])
+
+
 CURRENT_CONFIG_VERSION = 4
 
 
@@ -915,3 +1009,87 @@ def get_status_roles(config: dict[str, Any]):
     if roles_data:
         return StatusRolesConfig.from_dict(roles_data)
     return StatusRolesConfig.default()
+
+
+# Implements: REQ-d00283-A+B+C
+def target_groups(target: Any) -> frozenset[str]:
+    """The groups *target* belongs to.
+
+    Every target belongs to ``all`` (REQ-d00283-B), and a target claiming no
+    group beyond that belongs to ``default`` (REQ-d00283-C) -- so a project
+    that declares no groups has every target in ``default`` and a run that
+    selects nothing executes exactly what it executed before groups existed.
+
+    Consumers MUST reach a target's membership through here rather than reading
+    ``target.groups``, which records what the target *claimed* and not what it
+    belongs to.
+    """
+    from elspais.config.schema import GROUP_ALL, GROUP_DEFAULT
+
+    claimed = {g.strip().lower() for g in (getattr(target, "groups", None) or []) if g.strip()}
+    claimed.discard(GROUP_ALL)
+    if not claimed:
+        claimed = {GROUP_DEFAULT}
+    return frozenset(claimed | {GROUP_ALL})
+
+
+# Implements: REQ-d00283-D+E+H+I
+def targets_in_groups(config: Any, selected: list[str] | None) -> set[str]:
+    """The names of the test targets *selected* names.
+
+    ``None`` selects the ``default`` group (REQ-d00283-D); a selection names
+    the targets belonging to any group in it (REQ-d00283-E).
+
+    Raises:
+        ValueError: If a selected name is neither declared nor reserved.
+            Refused rather than resolved to no targets, because a selection
+            that quietly selects nothing produces a report a reader cannot
+            tell from one whose targets all passed (REQ-d00283-H).
+    """
+    from elspais.config.schema import GROUP_DEFAULT, RESERVED_GROUPS
+
+    test_cfg = config.scanning.test
+    wanted = (
+        {GROUP_DEFAULT} if selected is None else {g.strip().lower() for g in selected if g.strip()}
+    )
+    known = {name.strip().lower() for name in test_cfg.groups} | RESERVED_GROUPS
+    unknown = sorted(wanted - known)
+    if unknown:
+        raise ValueError(
+            f"unknown test group(s): {', '.join(unknown)}. "
+            f"Known groups: {', '.join(sorted(known))}."
+        )
+    return {t.name for t in test_cfg.targets if target_groups(t) & wanted}
+
+
+# Implements: REQ-d00283-D+E+I, REQ-d00254-I+J
+def selected_targets(
+    config: Any, targets: list[str] | None, groups: list[str] | None
+) -> set[str] | None:
+    """The test targets a run naming *targets* and *groups* covers.
+
+    Each selector narrows (REQ-d00283-I), and naming neither selects the
+    ``default`` group (REQ-d00283-D).
+
+    ``None`` is returned where the selection covers every configured target,
+    which is what makes a run full rather than selective (REQ-d00254-J). That
+    is why the answer is a set of names and not the flags that produced it: a
+    project declaring no groups has every target in ``default``, so its bare
+    run covers everything and renders exactly as it did before groups existed.
+
+    Raises:
+        ValueError: If a named group is neither declared nor reserved.
+    """
+    configured = {t.name for t in config.scanning.test.targets}
+    if targets is None and groups is None:
+        selection = targets_in_groups(config, None)
+    elif groups is None:
+        # A named target is taken as named. Whether it is configured is a
+        # question for the caller that runs targets, which reports an unknown
+        # name; narrowing it away here would turn that report into silence.
+        selection = set(targets or ())
+    elif targets is None:
+        selection = targets_in_groups(config, groups)
+    else:
+        selection = set(targets) & targets_in_groups(config, groups)
+    return None if selection == configured else selection

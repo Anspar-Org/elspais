@@ -719,6 +719,54 @@
       "title": "ReferenceSeverityConfig",
       "type": "object"
     },
+    "ReportScopeConfig": {
+      "additionalProperties": false,
+      "description": "A scope a project declares under a name, for reports to be produced under.\n\nA scope spelled out at the moment a report is run is known only to whoever\nspelled it; declared here it is versioned beside the requirements it selects\nover, and a reader holding a committed report can look up what produced it.\n\nOne name carries both halves of what an audience reads: the requirements a\nreport is about and the facts it states about them (REQ-d00280-C). The two\nstay independent choices -- a declaration naming no values constrains none,\nand naming values selects no requirements.",
+      "properties": {
+        "level": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Level",
+          "type": "array"
+        },
+        "not_level": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Not Level",
+          "type": "array"
+        },
+        "status": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Status",
+          "type": "array"
+        },
+        "not_status": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Not Status",
+          "type": "array"
+        },
+        "match_status_roles": {
+          "default": false,
+          "title": "Match Status Roles",
+          "type": "boolean"
+        },
+        "values": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Values",
+          "type": "array"
+        }
+      },
+      "title": "ReportScopeConfig",
+      "type": "object"
+    },
     "RulesConfig": {
       "additionalProperties": false,
       "properties": {
@@ -988,6 +1036,13 @@
           "title": "Reference Patterns",
           "type": "array"
         },
+        "groups": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Groups",
+          "type": "object"
+        },
         "targets": {
           "items": {
             "$ref": "#/$defs/TestTargetConfig"
@@ -1035,6 +1090,18 @@
         "match": {
           "default": "source",
           "title": "Match",
+          "type": "string"
+        },
+        "groups": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Groups",
+          "type": "array"
+        },
+        "classname": {
+          "default": "",
+          "title": "Classname",
           "type": "string"
         },
         "credit_coverage": {
@@ -1151,6 +1218,13 @@
         "$ref": "#/$defs/StatusConfig"
       },
       "title": "Statuses",
+      "type": "object"
+    },
+    "scopes": {
+      "additionalProperties": {
+        "$ref": "#/$defs/ReportScopeConfig"
+      },
+      "title": "Scopes",
       "type": "object"
     },
     "stats": {

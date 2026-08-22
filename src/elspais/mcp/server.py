@@ -4166,6 +4166,7 @@ def _query_nodes(
     match_all: bool = True,
     filters: dict[str, str] | None = None,
     limit: int = 50,
+    config: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Combined property + keyword filter query for any node kind.
 
@@ -4202,14 +4203,32 @@ def _query_nodes(
         keyword_ids = {n.id for n in find_by_keywords(graph, keywords, match_all, kind=kind_enum)}
         candidates = [n for n in candidates if n.id in keyword_ids]
 
-    # 3. Property post-filters (known safe keys only)
-    allowed_filter_keys = {"level", "status", "actor"}
+    # 3. Property post-filters.
+    # Implements: REQ-d00279-A
+    # Level and status are scope properties, so they are judged by the one
+    # authority rather than compared here -- a second comparison is how two
+    # surfaces asked the same question start giving different answers. Each
+    # value may name several alternatives, as a scope does everywhere else.
     if filters:
-        for key, value in filters.items():
-            if key not in allowed_filter_keys:
-                continue
+        from elspais.graph.scope import SCOPE_VALUE_SEPARATOR, ReportScope, scoped_requirements
+
+        scoped = {k: v for k, v in filters.items() if k in ("level", "status")}
+        if scoped:
+            scope = ReportScope(
+                include={
+                    prop: tuple(v.strip() for v in value.split(SCOPE_VALUE_SEPARATOR) if v.strip())
+                    for prop, value in scoped.items()
+                }
+            )
+            in_scope = scoped_requirements(graph, scope, config).ids
             candidates = [
-                n for n in candidates if (n.get_field(key, "") or "").upper() == value.upper()
+                n for n in candidates if n.kind != NodeKind.REQUIREMENT or n.id in in_scope
+            ]
+        # `actor` belongs to journeys, not to the requirement scope vocabulary.
+        actor = filters.get("actor")
+        if actor:
+            candidates = [
+                n for n in candidates if (n.get_field("actor", "") or "").upper() == actor.upper()
             ]
 
     # 4. Serialize and limit
@@ -5821,6 +5840,7 @@ def _materialize_cursor_items(
             match_all=params.get("match_all", True),
             filters=filters or None,
             limit=params.get("limit", 50),
+            config=getattr(graph, "config", None),
         )
         return result.get("results", [])
 
@@ -6637,7 +6657,9 @@ def create_server(
             filters["status"] = status
         if actor:
             filters["actor"] = actor
-        return _query_nodes(_state["graph"], kind, kw_list, match_all, filters or None, limit)
+        return _query_nodes(
+            _state["graph"], kind, kw_list, match_all, filters or None, limit, _state.get("config")
+        )
 
     @mcp.tool()
     def get_hierarchy(req_id: str) -> dict[str, Any]:

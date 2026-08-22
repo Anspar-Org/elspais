@@ -7,8 +7,8 @@ Uses the graph-based system to generate traceability reports in various formats.
 Commands only work with graph data (zero file I/O for reading requirements).
 
 OUTPUT FORMATS:
-- markdown: Table with columns based on report preset
-- csv: Same columns, comma-separated with proper escaping
+- markdown: Table with columns based on the report preset
+- csv: The same values, comma-separated with proper escaping
 - html: Basic styled HTML table
 - json: Full requirement data including body, assertions, hash, file_path
 - both: Generates both markdown and csv (legacy mode)
@@ -29,7 +29,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -37,18 +37,60 @@ if TYPE_CHECKING:
     from elspais.graph.federated import FederatedGraph
 
 from elspais.graph import NodeKind
+from elspais.graph.values import (
+    CARRIED_DIMENSION,
+    COUNT_PARTS,
+    FLAG_CARRIED,
+    MEASURE_KEY_SEPARATOR,
+    PART_ATTRIBUTED,
+    SCALAR_PARTS,
+    VALUE_SPECS,
+    UnofferedValues,
+    figure_cell,
+    flag_cell,
+    header_for,
+    scalar_cell,
+    scalar_value,
+    structured_row,
+)
+
+# Implements: REQ-d00282-A
+# Every value this report can state. A selection is judged against this set
+# and nothing narrower: the values a report offers are the tool's own, so a
+# name among them that does not resolve is a mistake rather than a difference
+# (REQ-d00282-F). Offering a further value changes nothing an already
+# expressible selection states (REQ-d00282-G) -- a selection names what it
+# names, and a default set is a separate thing that may grow.
+# Group-only values are left out: every row here is ONE requirement, and a
+# count of the requirements in a row that is one requirement is a name for
+# nothing. Offering it would be offering a value that could only be blank.
+OFFERED_VALUES: tuple[str, ...] = tuple(
+    key for key, spec in VALUE_SPECS.items() if not spec.group_only
+)
+
+
+def _data_key(value: str) -> str:
+    """The ``_get_node_data`` field a value reads.
+
+    A measure is keyed beneath its dimension in the selection vocabulary
+    (``tested.immediate_direct``) and beside it in the data (``tested_immediate_direct``);
+    this is the one place the two spellings meet.
+    """
+    return value.replace(MEASURE_KEY_SEPARATOR, "_")
 
 
 @dataclass
 class ReportPreset:
     """Configuration for a report preset.
 
-    Columns control what appears in the table.
+    ``values`` is a named DEFAULT set (REQ-d00084-B) -- what a reader who names
+    no values is answered with. A selection stated on the invocation replaces
+    it (REQ-d00282-A) and reaches the formatters as their ``values`` argument.
     Detail flags (include_body, etc.) are set independently via CLI flags.
     """
 
     name: str
-    columns: list[str]
+    values: list[str]
     include_body: bool = False
     include_assertions: bool = False
     include_code_refs: bool = False
@@ -58,15 +100,15 @@ class ReportPreset:
 
 
 # Implements: REQ-d00084-B
-# Define report presets — columns only, detail flags set via CLI
+# Define report presets — value sets only, detail flags set via CLI
 REPORT_PRESETS = {
     "minimal": ReportPreset(
         name="minimal",
-        columns=["id", "title", "level", "status"],
+        values=["id", "title", "level", "status"],
     ),
     "standard": ReportPreset(
         name="standard",
-        columns=[
+        values=[
             "id",
             "title",
             "level",
@@ -82,7 +124,7 @@ REPORT_PRESETS = {
     ),
     "full": ReportPreset(
         name="full",
-        columns=[
+        values=[
             "id",
             "title",
             "level",
@@ -100,9 +142,9 @@ REPORT_PRESETS = {
 
 DEFAULT_PRESET = "standard"
 
-# Columns for the UAT dimension report -- excludes all code-dimension columns.
-# A synthetic "journeys" column is appended by the formatters.
-_UAT_COLUMNS = ["id", "title", "level", "status", "uat_coverage", "uat_verified"]
+# Values for the UAT dimension report -- excludes all code-dimension values.
+# A synthetic "journeys" value is appended by the formatters.
+_UAT_VALUES = ["id", "title", "level", "status", "uat_coverage", "uat_verified"]
 
 
 def _get_uat_journey_verdict(journey_node) -> str:
@@ -142,16 +184,39 @@ def _get_uat_journeys(req_node) -> list[dict]:
     return results
 
 
+# Implements: REQ-d00279-C
 def compute_trace(
     graph: FederatedGraph,
-    config: dict,  # noqa: ARG001
-    params: dict[str, str],  # noqa: ARG001
+    config: dict,
+    params: dict[str, str],
 ) -> dict:
-    """Compute trace data for engine.call.  Returns {"nodes": [...]}."""
-    nodes = []
-    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
-        nodes.append(_get_node_data(node, graph))
-    return {"nodes": nodes}
+    """Compute trace data for engine.call.  Returns {"nodes": [...], "scope": [...]}.
+
+    Reads the scope AND the value selection out of ``params`` because this is
+    the path a report takes when a serving process answers it: a selection that
+    did not survive the trip would make a daemon-served report disagree with a
+    locally computed one, about which requirements it is about (REQ-d00279-C)
+    or about which facts it states (REQ-d00282-E).
+    """
+    from elspais.commands._scope import resolve_scope_for_report, scope_disclosure
+    from elspais.commands._values import values_from_params
+    from elspais.graph.values import resolve_values
+
+    result = resolve_scope_for_report(graph, params, config)
+    scope_ids = None if len(result.ids) == result.population else result.ids
+    nodes = [_get_node_data(node, graph) for node in _scoped_requirements(graph, scope_ids)]
+    payload: dict = {"nodes": nodes, "scope": scope_disclosure(result)}
+    # Implements: REQ-d00282-A+F
+    # Resolved here as well as where the report is rendered, so a serving
+    # process refuses a selection it cannot honour in full rather than
+    # answering with a report nobody asked for. Carried back so any consumer
+    # of this payload states the values the selection named; where no
+    # selection was made the named default set decides and is not this
+    # process's to choose.
+    selection = values_from_params(params)
+    if selection is not None:
+        payload["values"] = list(resolve_values(selection, OFFERED_VALUES))
+    return payload
 
 
 def _compact_labels(labels: set[str]) -> str:
@@ -202,10 +267,44 @@ def _compact_labels(labels: set[str]) -> str:
     return ",".join(parts)
 
 
+# Implements: REQ-d00282-M
+# The mark a value with no figure to state carries in the formats people read.
+# JSON carries ``null``, which is the same distinction in a format that has one.
+ABSENT_FIGURE = "n/a"
+
+# Implements: REQ-d00254-J, REQ-d00282-M
+# The mark a figure that was NEVER TAKEN carries, distinct from a figure taken
+# and found empty. A selective run that skipped a test target has nothing to
+# say about the requirements that target covers; printing "0/5 (0%)" would say
+# their tests failed to cover them, which is a different and untrue answer.
+NOT_RUN_FIGURE = "\u2014"  # em dash
+
+
+# Implements: REQ-d00282-B+M
+# name: _store_scalars
+# use:  record one coverage figure's three scalar parts on a row, beside the
+#       whole figure the read formats state in one cell.
+# def:  the credit, the assertions it was counted over and their proportion,
+#       as NUMBERS -- or None for each where there is no figure to decompose.
+#
+# Kept as numbers all the way to the renderer: a value composed into prose here
+# is a value a consumer has to take apart again, and the proportion it recovers
+# would be the rounded one rather than the derived one. A row conferring no
+# *Assertion* stores None rather than zero, so an absence never reads as work
+# undone that was never owed -- and so does a row whose figure was never taken
+# at all (``present=False``, REQ-d00254-J), which is the same absence reached
+# by a different route.
+def _store_scalars(
+    data: dict, base: str, covered: float, total: int, *, present: bool = True
+) -> None:
+    for part in SCALAR_PARTS:
+        data[f"{base}_{part}"] = scalar_value(covered, total, part) if (total and present) else None
+
+
 def _get_node_data(node, graph: FederatedGraph, *, assertion_labels: bool = False) -> dict:
     """Extract data from a node for use in formatters.
 
-    When assertion_labels is True, coverage columns show compact assertion
+    When assertion_labels is True, coverage values show compact assertion
     label ranges (e.g. "A-E (100%)") instead of counts ("5/5 (100%)").
     """
     from elspais.graph.metrics import (
@@ -249,7 +348,7 @@ def _get_node_data(node, graph: FederatedGraph, *, assertion_labels: bool = Fals
             )
 
     # Implements: REQ-d00084-D
-    # Coverage columns from RollupMetrics
+    # Coverage values from RollupMetrics
     rollup: RollupMetrics | None = node.get_metric("rollup_metrics")
     total_a = rollup.total_assertions if rollup else 0
 
@@ -258,30 +357,46 @@ def _get_node_data(node, graph: FederatedGraph, *, assertion_labels: bool = Fals
     selective = fresh_targets is not None
 
     def _fmt_count(num: float, total: int) -> str:
+        # Implements: REQ-d00282-E
+        # Through the shared cell authority, so a figure reads the same here as
+        # in every other report that states one.
         if total == 0:
-            return "n/a"
-        pct = round(num / total * 100)
-        return f"{fmt_assertion_count(num)}/{total} ({pct}%)"
+            return ABSENT_FIGURE
+        return figure_cell(num, total)
 
-    def _fmt_code_tested(lines: LineCoverage) -> str:
-        if lines.total_lines == 0 or not lines.has_attribution:
-            # Aggregate-only tooling (e.g. lcov/coverage.json without per-test
-            # attribution), and an estate with no coverage ingested at all,
-            # record no context naming a test, so neither can produce an
-            # attribution count -- rendering "0/N (0%)" would say no test
-            # exercises this code when nothing was ever asked (REQ-d00258-E).
-            # Where contexts ARE present the cell reads "0/N": that is a real
-            # answer, and suppressing it would hide unattributed code.
-            return "n/a"
-        pct = round(lines.attributed_lines / lines.total_lines * 100)
-        return f"{fmt_assertion_count(lines.attributed_lines)}/{lines.total_lines} ({pct}%)"
+    # Implements: REQ-d00254-B, REQ-d00258-E, REQ-d00282-C+M+N
+    def _lines_measured(lines: LineCoverage) -> bool:
+        """Whether a coverage run measured these lines at all.
+
+        Two conditions, and both are real. ``total_lines`` is derived from the
+        `Implements:` lines themselves, so it is nonzero for a requirement whose
+        implementation nobody ran; ``has_measurement`` is recorded at ingestion
+        and is what says a run happened. Either failing means there is no line
+        figure to state, and a figure of zero would say the code was measured
+        and never reached (REQ-d00282-M).
+        """
+        return lines.has_measurement and lines.total_lines > 0
+
+    def _fmt_code_tested(lines: LineCoverage) -> str | None:
+        """The line figure itself: lines covered out of lines measured.
+
+        Named for the figure, so it states the figure (REQ-d00282-C). The
+        attribution -- how many of those lines a verifying test can be named
+        for -- is a different question with its own name and its own
+        suppression (REQ-d00258-E); it used to be what this cell showed, which
+        took the measured lines down with it whenever the tooling recorded no
+        per-test contexts.
+        """
+        if not _lines_measured(lines):
+            return None
+        return figure_cell(lines.covered_lines, lines.total_lines)
 
     # Implements: REQ-d00258-A, REQ-d00258-J
-    # (column_key, rollup_attr). All five dimensions headline on the
+    # (value_key, rollup_attr). All five dimensions headline on the
     # per-*Assertion* TOTAL (REQ-d00069-N, the greatest of an *Assertion*'s
     # four measures), and no marker stands in for a measure the surface does
     # not show -- the four measures behind the total are published as their
-    # own columns instead (below).
+    # own values instead (below).
     _DIMS = [
         ("implemented", "implemented"),
         ("tested", "tested"),
@@ -306,17 +421,49 @@ def _get_node_data(node, graph: FederatedGraph, *, assertion_labels: bool = Fals
         },
     )
 
+    # Implements: REQ-d00282-H, REQ-d00282-L
+    # Read for every requirement whatever the selection names: the journeys
+    # value states a fact ABOUT a row, and a value switch that decided
+    # whether the row existed would be a second row-selection.
+    journeys = _get_uat_journeys(node)
+    data["journeys_detail"] = journeys
+    data["journeys"] = "; ".join(f"{j['id']}:{j['verdict']}" for j in journeys)
+
     if rollup:
         from elspais.graph.aggregation import (
             HEADLINE_MEASURE,
+            MEASURES,
             covered_labels,
             measure_total,
         )
         from elspais.graph.metrics import tested_and_passing, tested_partition
 
+        # Implements: REQ-d00254-J, REQ-d00282-M
+        # Whether this requirement's verified figure was TAKEN AT ALL, decided
+        # before any of it is recorded. "Not run" (REQ-d00254-J) means the
+        # referenced TEST nodes have zero RESULT records in a selective run --
+        # the target was skipped and nothing was seeded. Keyed on RESULT
+        # existence, not on "no pass/fail signal": results can exist yet
+        # contribute no verified signal (all skipped, say), and those are a
+        # real zero rather than an absence.
+        #
+        # Decided HERE, above the figures, because the absence has to reach the
+        # numbers and not only the cell. Deciding it afterwards left the cell
+        # reading "—" while `verified.count` stated a flat 0, so a reader who
+        # selected the number was told work had failed that was never run.
+        has_any_result = any(
+            child.kind == NodeKind.RESULT
+            for edge in node.iter_outgoing_edges()
+            if edge.target.kind == NodeKind.TEST
+            for child in edge.target.iter_children()
+        )
+        _verified_not_run = (
+            selective and rollup.verified.total > 0 and bool(test_refs) and not has_any_result
+        )
+
         for key, attr in _DIMS:
             # Implements: REQ-d00258-A, REQ-d00258-N
-            # "Passing" (the verified column) counts what the declared tests
+            # "Passing" (the verified dimension) counts what the declared tests
             # returned, excluding an assertion its own tests failed.
             dim: CoverageDimension = (
                 tested_and_passing(rollup) if key == "verified" else getattr(rollup, attr)
@@ -325,191 +472,254 @@ def _get_node_data(node, graph: FederatedGraph, *, assertion_labels: bool = Fals
             # The headline is the per-*Assertion* TOTAL -- the greatest of
             # the four measures, taken once per *Assertion* -- with no
             # marker standing in for a measure the cell does not show; the
-            # four measures are published as their own columns below.
-            if assertion_labels:
+            # four measures are published as their own values below.
+            # Implements: REQ-d00282-E
+            # ONE value per name, whatever the detail flag asks for: the
+            # labels form replaces the count in the cell rather than splitting
+            # the value in the formats that could carry two.
+            # Implements: REQ-d00254-J, REQ-d00282-M
+            # A dimension whose figure was never taken states none, in every
+            # form it is offered in: the cell reads "not run" and the numbers
+            # beneath it are absent rather than zero.
+            taken = not (key == "verified" and _verified_not_run)
+            if not taken:
+                data[key] = NOT_RUN_FIGURE
+            elif assertion_labels:
                 labels = covered_labels(dim, HEADLINE_MEASURE)
                 label_str = _compact_labels(labels) if labels else f"0/{dim.total}"
                 pct = round(dim.covered / dim.total * 100) if dim.total else 0
-                data[key] = f"{label_str} ({pct}%)" if dim.total else "n/a"
-                data[key + "_labels"] = label_str if dim.total else "n/a"
-                data[key + "_pct"] = f"{pct}%" if dim.total else "n/a"
+                data[key] = f"{label_str} ({pct}%)" if dim.total else ABSENT_FIGURE
             else:
                 data[key] = _fmt_count(dim.covered, total_a)
-            for suffix, _header in _MEASURE_COLUMNS:
-                measure = suffix.lstrip("_")
-                data[key + suffix] = _fmt_count(measure_total(dim, measure), total_a)
-        # Implements: REQ-d00258-O
-        # Carried beside the Tested cell rather than inside it, so each format
-        # places it: the table appends it, CSV gives it columns of its own.
-        # Empty when nothing is tested -- there is no breakdown of an empty set.
+            _store_scalars(data, key, dim.covered, total_a, present=taken)
+            for measure in MEASURES:
+                measured = measure_total(dim, measure)
+                data[f"{key}_{measure}"] = (
+                    NOT_RUN_FIGURE if not taken else _fmt_count(measured, total_a)
+                )
+                _store_scalars(data, f"{key}_{measure}", measured, total_a, present=taken)
+            # Implements: REQ-d00254-I, REQ-d00282-B+M
+            # The provenance bit as a value of its own. It used to be legible
+            # only inside the whole figure's cell, so a reader selecting the
+            # credit alone could not tell a carried verdict from a fresh one.
+            # Absent, not False, where no verdict was taken: "this was not
+            # carried" would be a claim about a verdict that does not exist.
+            if key == CARRIED_DIMENSION:
+                data[f"{key}_{FLAG_CARRIED}"] = (
+                    bool(dim.carried) if taken and dim.total > 0 else None
+                )
+        # Implements: REQ-d00258-O, REQ-d00282-E
+        # The breakdown QUALIFIES the Tested figure, so it is put inside that
+        # figure's value once, here, and every format states the one cell.
+        # Given cells of its own in one format and a bracket in another, the
+        # Tested value produced four columns in CSV and one in markdown --
+        # and three of them were a display term of its own, which O forbids.
+        # Empty when nothing is tested: there is no breakdown of an empty set.
         part = tested_partition(rollup)
-        # Formatted here rather than left raw: these reach CSV columns of
-        # their own, and an assertion count reads the same way on every
-        # surface -- fractional where the credit is, whole where it is.
-        data["tested_passed"] = fmt_assertion_count(part.passed)
-        data["tested_failed"] = fmt_assertion_count(part.failed)
-        data["tested_awaiting"] = fmt_assertion_count(part.awaiting)
+        # Implements: REQ-d00258-O, REQ-d00282-B
+        # The same three counts the breakdown states in prose, each selectable
+        # on its own. Read from the partition rather than parsed back out of
+        # the sentence below it -- which is the defect the scalars exist to
+        # end. Absent, not zero, for a requirement conferring no *Assertion*
+        # (REQ-d00282-M).
+        for count_part in COUNT_PARTS:
+            data[f"tested_{count_part}"] = getattr(part, count_part) if total_a else None
         data["tested_breakdown"] = (
             f"[{fmt_assertion_count(part.passed)}P {fmt_assertion_count(part.failed)}F "
             f"{fmt_assertion_count(part.awaiting)}A]"
             if part.tested
             else ""
         )
+        if data["tested_breakdown"]:
+            data["tested"] = f"{data['tested']} {data['tested_breakdown']}"
 
         ct = rollup.code_tested
         data["code_tested"] = _fmt_code_tested(ct)
-        if assertion_labels:
-            # Same guard as _fmt_code_tested (REQ-d00258-E): aggregate-only
-            # coverage has no per-test attribution to report, so the cells
-            # must not claim "0/N"/"0%".
-            if ct.total_lines == 0 or not ct.has_attribution:
-                data["code_tested_labels"] = "n/a"
-                data["code_tested_pct"] = "n/a"
-            else:
-                data["code_tested_labels"] = f"{ct.attributed_lines:.0f}/{ct.total_lines}"
-                data["code_tested_pct"] = f"{round(ct.attributed_lines / ct.total_lines * 100)}%"
-        # Implements: REQ-d00254-I+J
-        # Special-case the "verified" cell: distinguish "not run, no baseline"
-        # from a carried (baseline) verdict, ahead of the "n/a"/count rendering
-        # above. "No baseline" (REQ-d00254-J) means the referenced TEST nodes
-        # have *zero* RESULT records -- the target was skipped this PR and
-        # nothing was seeded. Key on RESULT existence, not on "no pass/fail
-        # signal": results can exist yet contribute no verified signal (e.g. all
-        # skipped / xfailed), and those must NOT render as "not run".
-        vdim = rollup.verified
-        has_any_result = any(
-            child.kind == NodeKind.RESULT
-            for edge in node.iter_outgoing_edges()
-            if edge.target.kind == NodeKind.TEST
-            for child in edge.target.iter_children()
+        # Implements: REQ-d00282-N
+        # The lines covered, the lines measured and their proportion, each in
+        # its own right and each a NUMBER -- so a consumer reads what the cell
+        # was made from rather than cutting it back out of the sentence.
+        _store_scalars(
+            data, "code_tested", ct.covered_lines, ct.total_lines, present=ct.has_measurement
         )
-        if selective and vdim.total > 0 and test_refs and not has_any_result:
-            data["verified"] = "—"  # em dash: not run this PR, no baseline
-        elif vdim.carried and vdim.total > 0:
+        # Implements: REQ-d00258-E, REQ-d00282-M+N
+        # Suppressed where the tooling recorded no per-test contexts: with
+        # nothing to attribute a line to a test with, a count would answer a
+        # question never asked. Absent rather than zero, and absent ALONE --
+        # the three values above stand, because those lines were measured.
+        data[f"code_tested_{PART_ATTRIBUTED}"] = (
+            ct.attributed_lines if _lines_measured(ct) and ct.has_attribution else None
+        )
+        # Implements: REQ-d00254-I
+        # The whole figure discloses its provenance in the cell as well, for a
+        # reader reading the table rather than selecting the bit.
+        vdim = rollup.verified
+        if not _verified_not_run and vdim.carried and vdim.total > 0:
             data["verified"] = f"{data['verified']} (baseline)"
 
         lt = rollup.lcov_tested
+        # Implements: REQ-d00254-B, REQ-d00282-B
+        # An *Assertion*-counted dimension like any other, so it decomposes
+        # like one: only its EVIDENCE is lines.
+        _store_scalars(data, "lcov_tested", lt.covered, lt.total)
         if lt.total > 0:
             # Implements: REQ-d00069-N, REQ-d00258-A
             # The per-*Assertion* total, like every other dimension headline.
-            lt_by_label = lt.total_by_label
             lt_pct = round(lt.covered / lt.total * 100)
-            data["lcov_tested"] = f"lcov {lt_pct}%"
             if assertion_labels:
-                labels = {lbl for lbl, frac in lt_by_label.items() if frac > 0}
+                # The labels the credit landed on, in the cell the count would
+                # otherwise hold -- one value either way (REQ-d00282-E).
+                labels = {lbl for lbl, frac in lt.total_by_label.items() if frac > 0}
                 label_str = _compact_labels(labels) if labels else f"0/{lt.total}"
-                data["lcov_tested_labels"] = label_str
-                data["lcov_tested_pct"] = f"{lt_pct}%"
+                data["lcov_tested"] = f"{label_str} ({lt_pct}%)"
+            else:
+                data["lcov_tested"] = f"lcov {lt_pct}%"
         else:
-            data["lcov_tested"] = "n/a"
-            if assertion_labels:
-                data["lcov_tested_labels"] = "n/a"
-                data["lcov_tested_pct"] = "n/a"
+            data["lcov_tested"] = None
     else:
+        from elspais.graph.aggregation import MEASURES
+
         for key, _ in _DIMS:
-            data[key] = "n/a"
-            if assertion_labels:
-                data[key + "_labels"] = "n/a"
-                data[key + "_pct"] = "n/a"
-            for suffix, _header in _MEASURE_COLUMNS:
-                data[key + suffix] = "n/a"
-        data["code_tested"] = "n/a"
-        if assertion_labels:
-            data["code_tested_labels"] = "n/a"
-            data["code_tested_pct"] = "n/a"
-        data["lcov_tested"] = "n/a"
-        if assertion_labels:
-            data["lcov_tested_labels"] = "n/a"
-            data["lcov_tested_pct"] = "n/a"
+            data[key] = ABSENT_FIGURE
+            _store_scalars(data, key, 0.0, 0)
+            for measure in MEASURES:
+                data[f"{key}_{measure}"] = ABSENT_FIGURE
+                _store_scalars(data, f"{key}_{measure}", 0.0, 0)
+        data[f"{CARRIED_DIMENSION}_{FLAG_CARRIED}"] = None
+        for count_part in COUNT_PARTS:
+            data[f"tested_{count_part}"] = None
+        data["code_tested"] = None
+        _store_scalars(data, "code_tested", 0.0, 0)
+        data[f"code_tested_{PART_ATTRIBUTED}"] = None
+        data["lcov_tested"] = None
+        _store_scalars(data, "lcov_tested", 0.0, 0)
 
     return data
 
 
-def _column_headers() -> dict[str, str]:
-    """Map column keys to display headers."""
-    return {
-        "id": "ID",
-        "title": "Title",
-        "level": "Level",
-        "status": "Status",
-        "implements": "Implements",
-        "implemented": "Implemented",
-        "tested": "Tested",
-        "verified": "Passing",
-        "uat_coverage": "UAT Covered",
-        "uat_verified": "UAT Passed",
-        "code_tested": "Code Tested",
-        "lcov_tested": "LCOV Tested",
-        "hash": "Hash",
-        "file": "File",
-        "journeys": "Journeys",
-    }
+# Implements: REQ-d00282-C, REQ-d00258-K
+def _value_headers(config: dict | None = None) -> dict[str, str]:
+    """The words each offered value is displayed under.
 
-
-# The 6 coverage dimension column keys (plus lcov_tested)
-_COVERAGE_COLUMNS = [
-    "implemented",
-    "tested",
-    "verified",
-    "uat_coverage",
-    "uat_verified",
-    "code_tested",
-    "lcov_tested",
-]
-
-# Implements: REQ-d00069-L, REQ-d00258-A
-# The four measures behind each of the 5 REQ-d00277 dimensions, published
-# as their own CSV columns beside the dimension's total so a reader can see
-# what evidence produced it without a caveat marker (REQ-d00258-J). The
-# ``data`` key suffix (``_get_node_data``) and the display-header suffix,
-# named once so the CSV writer and the data builder cannot drift apart.
-_MEASURE_COLUMNS: list[tuple[str, str]] = [
-    ("_immediate_direct", "Immediate Direct"),
-    ("_immediate_indirect", "Immediate Indirect"),
-    ("_rolled_direct", "Rolled Direct"),
-    ("_rolled_indirect", "Rolled Indirect"),
-]
-
-# The 5 REQ-d00277 display dimensions -- code_tested/lcov_tested are
-# diagnostic columns outside that vocabulary and carry no total/measure
-# split of their own.
-_COVERAGE_COLUMNS_WITH_MEASURES = [
-    "implemented",
-    "tested",
-    "verified",
-    "uat_coverage",
-    "uat_verified",
-]
-
-
-def _add_measure_fields(node_dict: dict, data: dict, columns: list[str]) -> None:
-    """Add the four REQ-d00069-L measure fields for each rendered dimension.
-
-    JSON's per-requirement object is where REQ-d00258-A's "available" is
-    cheapest to satisfy without widening the text/markdown/html table: a
-    field costs nothing to a reader who is not looking at it. Only for
-    dimensions actually present in ``columns`` (the UAT preset excludes the
-    code dimensions; the minimal preset excludes coverage entirely).
+    Projected from the one authority (``header_for``) rather than spelled here,
+    so a project that renames a dimension renames it on every surface while the
+    key a selection names stays what it was (REQ-d00282-J).
     """
-    for col in columns:
-        if col not in _COVERAGE_COLUMNS_WITH_MEASURES:
+    return {key: header_for(key, config) for key in OFFERED_VALUES}
+
+
+# Implements: REQ-d00282-E
+# The measures behind each dimension are values like any other, named in the
+# selection vocabulary (``tested.immediate_direct``) and stated only where the
+# selection names them. They were previously bolted onto CSV and JSON alone,
+# which made the values a report states depend on the format it was rendered
+# in -- the divergence REQ-d00282-E forbids.
+
+
+# Implements: REQ-d00282-E+M
+def _format_row(data: dict, keys: Sequence[str]) -> list[str]:
+    """One row as the formats people read state it, one cell per stated value.
+
+    A scalar part is a number, and this is where it is SPELLED for a table --
+    the value itself stays a number for the formats that have them
+    (REQ-d00282-E). A value with nothing behind it reads as the absence mark
+    rather than as zero (REQ-d00282-M), whatever kind of value it is.
+    """
+    cells: list[str] = []
+    for key in keys:
+        if key == "implements":
+            cells.append(", ".join(data["implements"]) or "-")
             continue
-        for suffix, _header in _MEASURE_COLUMNS:
-            node_dict[col + suffix] = data.get(col + suffix)
-
-
-def _format_row(data: dict, columns: list[str]) -> list[str]:
-    """Format a single row from node data according to columns."""
-    values = []
-    for col in columns:
-        if col == "implements":
-            values.append(", ".join(data["implements"]) or "-")
+        spec = VALUE_SPECS.get(key)
+        value = data.get(_data_key(key), "")
+        if value is None:
+            cells.append(ABSENT_FIGURE)
+        elif spec is not None and spec.is_flag:
+            cells.append(flag_cell(value))
+        elif spec is not None and spec.is_scalar:
+            cells.append(scalar_cell(value, spec.part))
         else:
-            values.append(str(data.get(col, "")))
+            cells.append(str(value))
+    return cells
+
+
+# Implements: REQ-d00084-B, REQ-d00282-A
+def _default_values(preset: ReportPreset) -> list[str]:
+    """The named default set this preset states, absent a selection.
+
+    A preset is a default set and nothing more: it decides what a reader who
+    named no values is answered with, never which requirements the report is
+    about (REQ-d00282-H).
+    """
+    values = list(preset.values)
+    if preset.dimension == "uat" and "journeys" not in values:
+        values.append("journeys")
     return values
 
 
-def format_markdown(graph: FederatedGraph, preset: ReportPreset | None = None) -> Iterator[str]:
+def _report_values(preset: ReportPreset, values: Sequence[str] | None) -> list[str]:
+    """The values a rendering states: the selection if one was made, else the default."""
+    return list(values) if values is not None else _default_values(preset)
+
+
+# Implements: REQ-d00282-B+E+K+M
+def _json_row(data: dict, keys: Sequence[str], node=None) -> dict:
+    """One JSON object stating exactly the values the report states.
+
+    Shared by the live-graph path and the path a serving process answers, so
+    the two cannot state different values for one selection.
+
+    The shape comes from ``structured_row``, which the coverage summary also
+    builds through, so one selection reads the same in both reports. A figure
+    is stated as an OBJECT of its numbers rather than as the sentence a table
+    renders, keyed to mirror the path the selection names it by: a consumer
+    holding ``implemented.count`` reads ``count`` inside ``implemented``, and
+    never has to parse "3/7 (43%)" back into the numbers it was made from
+    (REQ-d00282-E).
+    """
+
+    def part_value(key: str):
+        return data.get(_data_key(key))
+
+    def plain_value(key: str):
+        if key == "journeys":
+            return data.get("journeys_detail") or []
+        if key == "file":
+            # Implements: REQ-d00129-D, REQ-d00129-E
+            fn = node.file_node() if node is not None else None
+            return {
+                "path": fn.get_field("relative_path") if fn else data.get("file"),
+                "line": node.get_field("parse_line") if node is not None else None,
+            }
+        return data.get(_data_key(key))
+
+    # The file reference is stated under the name this format has always given
+    # it, which is a spelling and so the format's own (REQ-d00282-E).
+    return structured_row(
+        keys, part_value, plain_value, offers=OFFERED_VALUES, path_of={"file": "source"}
+    )
+
+
+# Implements: REQ-p00084-B+C
+def _scoped_requirements(graph: FederatedGraph, scope_ids: frozenset[str] | None):
+    """The requirements a rendering emits, honouring the scope it was given.
+
+    Every formatter in this module iterates through here, so REQ-p00084-C holds
+    structurally: a requirement cannot be present in one rendering of a report
+    and missing from another, because there is one place that decides.
+    """
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+        if scope_ids is None or node.id in scope_ids:
+            yield node
+
+
+def format_markdown(
+    graph: FederatedGraph,
+    preset: ReportPreset | None = None,
+    scope_ids: frozenset[str] | None = None,
+    values: Sequence[str] | None = None,
+    config: dict | None = None,
+) -> Iterator[str]:
     """Generate markdown table. Streams one node at a time."""
     if preset is None:
         preset = REPORT_PRESETS[DEFAULT_PRESET]
@@ -517,13 +727,11 @@ def format_markdown(graph: FederatedGraph, preset: ReportPreset | None = None) -
     yield "# Traceability Matrix"
     yield ""
 
-    # Determine columns: UAT dimension uses fixed UAT columns + synthetic journeys column
-    column_headers = _column_headers()
-    if preset.dimension == "uat":
-        columns = list(_UAT_COLUMNS) + ["journeys"]
-    else:
-        columns = preset.columns
-    headers = [column_headers.get(col, col.title()) for col in columns]
+    # Implements: REQ-d00282-C, REQ-d00282-K
+    # Stated in the order the selection names them, headed by words the project
+    # configures rather than words spelled here.
+    cols = _report_values(preset, values)
+    headers = [header_for(col, config) for col in cols]
     yield "| " + " | ".join(headers) + " |"
     yield "|" + "|".join(["----"] * len(headers)) + "|"
 
@@ -535,35 +743,25 @@ def format_markdown(graph: FederatedGraph, preset: ReportPreset | None = None) -
     # Implements: REQ-d00258-O
     has_tested_breakdown = False
 
-    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
-        if preset.dimension == "uat":
-            uat_jnys = _get_uat_journeys(node)
-            if not uat_jnys:
-                continue  # exclude requirements with no VALIDATES edges
-            data = _get_node_data(node, graph, assertion_labels=preset.include_assertions)
-            data["journeys"] = "; ".join(f"{j['id']}:{j['verdict']}" for j in uat_jnys)
-        else:
-            data = _get_node_data(node, graph, assertion_labels=preset.include_assertions)
+    for node in _scoped_requirements(graph, scope_ids):
+        data = _get_node_data(node, graph, assertion_labels=preset.include_assertions)
 
-        if "verified" in columns:
+        if "verified" in cols:
             verified_cell = data.get("verified", "")
             if "(baseline)" in verified_cell or "—" in verified_cell:
                 has_carry_marker = True
         # Implements: REQ-d00258-O
-        # Only where the Tested column is rendered: a breakdown of a figure
-        # this preset does not show explains nothing, and its legend would
-        # point at a column that is not there.
-        if "tested" in columns and data.get("tested_breakdown"):
-            data["tested"] = f"{data['tested']} {data['tested_breakdown']}"
+        # The breakdown is already inside the Tested cell (one cell in every
+        # format); this only decides whether the key explaining it is worth
+        # printing. Only where the Tested value is stated: a legend pointing
+        # at a value this selection does not show explains nothing.
+        if "tested" in cols and data.get("tested_breakdown"):
             has_tested_breakdown = True
 
-        row_values = _format_row(data, columns)
+        row_values = _format_row(data, cols)
         yield "| " + " | ".join(row_values) + " |"
 
-        if preset.dimension == "uat":
-            continue  # no detail rows in UAT view
-
-        # Detail rows (controlled by flags, independent of preset)
+        # Detail rows (controlled by flags, independent of the values stated)
         if preset.include_body and data["body"]:
             yield ""
             yield "<details><summary>Body</summary>"
@@ -591,9 +789,8 @@ def format_markdown(graph: FederatedGraph, preset: ReportPreset | None = None) -
             yield "</details>"
 
     # Implements: REQ-d00254-I+J
-    # Only surface the legend when a row actually used a marker it explains,
-    # and never for the UAT dimension (which has no verified column).
-    if has_carry_marker and preset.dimension != "uat":
+    # Only surface the legend when a row actually used a marker it explains.
+    if has_carry_marker:
         yield ""
         yield (
             "> Legend: `(baseline)` = carried from a prior run (not re-run this PR, "
@@ -613,14 +810,17 @@ def format_markdown(graph: FederatedGraph, preset: ReportPreset | None = None) -
         )
 
 
-def format_csv(graph: FederatedGraph, preset: ReportPreset | None = None) -> Iterator[str]:
+def format_csv(
+    graph: FederatedGraph,
+    preset: ReportPreset | None = None,
+    scope_ids: frozenset[str] | None = None,
+    values: Sequence[str] | None = None,
+    config: dict | None = None,
+) -> Iterator[str]:
     """Generate CSV. Streams one node at a time.
 
     When test refs are included, adds a Kind column (first) and Assertion/Test Ref
     columns (last). Each test ref gets its own TEST row after its parent REQ row.
-
-    When dimension == 'uat', uses UAT columns only (no code columns) and adds a
-    Journeys column; only requirements with incoming VALIDATES edges are emitted.
     """
     if preset is None:
         preset = REPORT_PRESETS[DEFAULT_PRESET]
@@ -630,50 +830,13 @@ def format_csv(graph: FederatedGraph, preset: ReportPreset | None = None) -> Ite
             return '"' + s.replace('"', '""') + '"'
         return s
 
-    if preset.dimension == "uat":
-        # UAT dimension: fixed columns + journeys, no code columns, no test-ref rows
-        col_headers = _column_headers()
-        uat_csv_cols = list(_UAT_COLUMNS) + ["journeys"]
-        header_names = [col_headers.get(c, c.title()) for c in uat_csv_cols]
-        yield ",".join(header_names)
-
-        for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
-            uat_jnys = _get_uat_journeys(node)
-            if not uat_jnys:
-                continue
-            data = _get_node_data(node, graph)
-            data["journeys"] = "; ".join(f"{j['id']}:{j['verdict']}" for j in uat_jnys)
-            row_values = [escape(str(data.get(c, ""))) for c in uat_csv_cols]
-            yield ",".join(row_values)
-        return
-
-    # Build header — split coverage columns into Labels + % for CSV
-    # when --assertions is active
-    col_headers = _column_headers()
-    header_names: list[str] = []
-    csv_columns: list[str] = []  # actual data keys per CSV cell
-    for c in preset.columns:
-        if preset.include_assertions and c in _COVERAGE_COLUMNS:
-            display = col_headers.get(c, c.title())
-            header_names.extend([display, f"{display} %"])
-            csv_columns.extend([c + "_labels", c + "_pct"])
-        else:
-            header_names.append(col_headers.get(c, c.title()))
-            csv_columns.append(c)
-        # Implements: REQ-d00258-O
-        # Columns rather than a bracket inside the Tested cell: a machine
-        # format should not need to parse a figure out of prose.
-        if c == "tested":
-            header_names.extend(["Tested Passed", "Tested Failed", "Tested Awaiting"])
-            csv_columns.extend(["tested_passed", "tested_failed", "tested_awaiting"])
-        # Implements: REQ-d00069-L, REQ-d00258-A, REQ-d00258-J
-        # The four measures behind this dimension's total, as columns of
-        # their own -- what REQ-d00258-A requires a reader be able to see,
-        # published rather than summarized by a caveat marker (REQ-d00258-J).
-        if c in _COVERAGE_COLUMNS_WITH_MEASURES:
-            display = col_headers.get(c, c.title())
-            header_names.extend(f"{display} {label}" for _suffix, label in _MEASURE_COLUMNS)
-            csv_columns.extend(c + suffix for suffix, _label in _MEASURE_COLUMNS)
+    # Implements: REQ-d00282-C+E+K
+    # One header and one cell per stated value, headed by the words the
+    # project configures (REQ-d00258-K). Nothing rides alongside: a figure's
+    # proportion lives inside its own cell and the Tested breakdown inside the
+    # Tested one, so this states the same values markdown, html and json do.
+    cols = _report_values(preset, values)
+    header_names = [header_for(c, config) for c in cols]
 
     extra_prefix = []
     extra_suffix = []
@@ -683,22 +846,22 @@ def format_csv(graph: FederatedGraph, preset: ReportPreset | None = None) -> Ite
 
     yield ",".join(extra_prefix + header_names + extra_suffix)
 
-    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+    for node in _scoped_requirements(graph, scope_ids):
         data = _get_node_data(node, graph, assertion_labels=preset.include_assertions)
-        row_values = [escape(v) for v in _format_row(data, csv_columns)]
+        row_values = [escape(v) for v in _format_row(data, cols)]
 
         # Build REQ row
         req_prefix = ["REQ"] if preset.include_test_refs else []
         req_suffix = []
         if preset.include_test_refs:
-            req_suffix.extend(["", ""])  # Empty Assertion and Test Ref columns for REQ row
+            req_suffix.extend(["", ""])  # Empty Assertion and Test Ref cells for REQ row
 
         yield ",".join(req_prefix + row_values + req_suffix)
 
         # Emit TEST child rows
         if preset.include_test_refs:
             grouped = data["test_refs_grouped"]
-            empty_cols = [""] * len(csv_columns)
+            empty_cols = [""] * len(cols)
             for key in ["*"] + sorted(k for k in grouped if k != "*"):
                 if key not in grouped:
                     continue
@@ -706,7 +869,13 @@ def format_csv(graph: FederatedGraph, preset: ReportPreset | None = None) -> Ite
                     yield ",".join(["TEST"] + empty_cols + [key, escape(ref)])
 
 
-def format_html(graph: FederatedGraph, preset: ReportPreset | None = None) -> Iterator[str]:
+def format_html(
+    graph: FederatedGraph,
+    preset: ReportPreset | None = None,
+    scope_ids: frozenset[str] | None = None,
+    values: Sequence[str] | None = None,
+    config: dict | None = None,
+) -> Iterator[str]:
     """Generate basic HTML table. Streams one node at a time."""
     if preset is None:
         preset = REPORT_PRESETS[DEFAULT_PRESET]
@@ -727,34 +896,18 @@ def format_html(graph: FederatedGraph, preset: ReportPreset | None = None) -> It
     yield "</style></head><body>"
     yield "<h1>Traceability Matrix</h1>"
 
-    # Determine columns for UAT dimension
-    col_hdrs = _column_headers()
-    if preset.dimension == "uat":
-        columns = list(_UAT_COLUMNS) + ["journeys"]
-        headers = [col_hdrs.get(col, col.title()) for col in columns]
-    else:
-        columns = preset.columns
-        headers = [col_hdrs.get(col, col.title()) for col in columns]
-        if preset.include_test_refs:
-            headers.append("Test Refs")
+    cols = _report_values(preset, values)
+    headers = [header_for(col, config) for col in cols]
+    if preset.include_test_refs:
+        headers.append("Test Refs")
 
     yield "<table>"
     yield "<tr>" + "".join(f"<th>{h}</th>" for h in headers) + "</tr>"
 
-    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
-        if preset.dimension == "uat":
-            uat_jnys = _get_uat_journeys(node)
-            if not uat_jnys:
-                continue
-            data = _get_node_data(node, graph)
-            data["journeys"] = "; ".join(f"{j['id']}:{j['verdict']}" for j in uat_jnys)
-            cells = [f"<td>{escape_html(str(data.get(col, '')))}</td>" for col in columns]
-            yield f"<tr>{''.join(cells)}</tr>"
-            continue
-
+    for node in _scoped_requirements(graph, scope_ids):
         data = _get_node_data(node, graph, assertion_labels=preset.include_assertions)
         cells = []
-        for val in _format_row(data, preset.columns):
+        for val in _format_row(data, cols):
             cells.append(f"<td>{escape_html(val)}</td>")
 
         if preset.include_test_refs:
@@ -779,51 +932,28 @@ def format_html(graph: FederatedGraph, preset: ReportPreset | None = None) -> It
     yield "</table></body></html>"
 
 
-def format_json(graph: FederatedGraph, preset: ReportPreset | None = None) -> Iterator[str]:
+def format_json(
+    graph: FederatedGraph,
+    preset: ReportPreset | None = None,
+    scope_ids: frozenset[str] | None = None,
+    values: Sequence[str] | None = None,
+    config: dict | None = None,
+) -> Iterator[str]:
     """Generate JSON array. Streams one node at a time."""
     if preset is None:
         preset = REPORT_PRESETS[DEFAULT_PRESET]
 
+    cols = _report_values(preset, values)
+
     yield "["
     first = True
-    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
-        if preset.dimension == "uat":
-            uat_jnys = _get_uat_journeys(node)
-            if not uat_jnys:
-                continue  # exclude requirements with no VALIDATES edges
-
+    for node in _scoped_requirements(graph, scope_ids):
         if not first:
             yield ","
         first = False
 
         data = _get_node_data(node, graph, assertion_labels=preset.include_assertions)
-
-        if preset.dimension == "uat":
-            # UAT view: only uat_coverage, uat_verified, and journeys; no code columns
-            node_dict: dict = {col: data.get(col) for col in _UAT_COLUMNS}
-            _add_measure_fields(node_dict, data, _UAT_COLUMNS)
-            node_dict["journeys"] = uat_jnys
-            yield json.dumps(node_dict, indent=2)
-            continue
-
-        # Build node dict based on preset columns
-        node_dict = {}
-        for col in preset.columns:
-            if col == "file":
-                # Implements: REQ-d00129-D, REQ-d00129-E
-                _fn = node.file_node()
-                node_dict["source"] = {
-                    "path": _fn.get_field("relative_path") if _fn else None,
-                    "line": node.get_field("parse_line"),
-                }
-            else:
-                node_dict[col] = data.get(col)
-        # Implements: REQ-d00069-L, REQ-d00258-A
-        # JSON carries the four measures behind each dimension's total as
-        # fields of their own -- the brief requires it, and unlike the
-        # text/markdown/html table (already 11 columns wide) a JSON object
-        # has no readability cost to adding four fields per dimension.
-        _add_measure_fields(node_dict, data, preset.columns)
+        node_dict = _json_row(data, cols, node)
 
         # Add detail fields (controlled by flags)
         if preset.include_body:
@@ -862,6 +992,7 @@ def format_view(
 def render_section(
     graph: FederatedGraph,
     args: argparse.Namespace,
+    config: dict | None = None,
 ) -> tuple[str, int]:
     """Render trace as a composed report section.
 
@@ -871,7 +1002,7 @@ def render_section(
     if dimension == "uat":
         preset = ReportPreset(
             name="uat",
-            columns=list(_UAT_COLUMNS),
+            values=list(_UAT_VALUES),
             dimension="uat",
         )
     else:
@@ -881,7 +1012,7 @@ def render_section(
             return f"Error: Unknown preset '{preset_name}'\nAvailable: {available}", 1
         preset = ReportPreset(
             name=preset_name,
-            columns=list(REPORT_PRESETS[preset_name].columns),
+            values=list(REPORT_PRESETS[preset_name].values),
             include_body=getattr(args, "body", False),
             include_assertions=getattr(args, "show_assertions", False),
             include_test_refs=getattr(args, "show_tests", False),
@@ -899,25 +1030,46 @@ def render_section(
     if not formatter:
         return f"Error: Unknown format '{fmt}'", 1
 
-    lines = list(formatter(graph, preset))
+    # Implements: REQ-d00282-A+F
+    # A section composed with others states the same values it states alone,
+    # and refuses the same selections -- a report is never produced under a
+    # selection honoured in part.
+    from elspais.commands._values import resolve_report_values
+
+    try:
+        values = resolve_report_values(args, OFFERED_VALUES, _default_values(preset), config)
+    except UnofferedValues as err:
+        return f"Error: {err}", 1
+
+    # Implements: REQ-p00084-A+B+D, REQ-d00279-C
+    # A section composed with others honours the same scope it honours alone.
+    from elspais.commands._scope import resolve_scope_for_report, scope_disclosure
+
+    result = resolve_scope_for_report(graph, args, config)
+    scope_ids = None if len(result.ids) == result.population else result.ids
+    lines = list(scope_disclosure(result))
+    lines += list(formatter(graph, preset, scope_ids, values, config))
     return "\n".join(lines), 0
 
 
-def _render_json_from_data(data: dict, preset: ReportPreset) -> None:
+def _render_json_from_data(
+    data: dict,
+    preset: ReportPreset,
+    values: Sequence[str] | None = None,
+) -> None:
     """Render JSON output from compute_trace data dict."""
+    # Implements: REQ-p00084-D
+    # The scope reaches this path inside the computed data, so a JSON report
+    # declares the same scope a table one does.
+    _print_scope(data.get("scope") or [])
+    cols = _report_values(preset, values)
     nodes = []
     for node_data in data["nodes"]:
-        node_dict: dict = {}
-        for col in preset.columns:
-            if col == "file":
-                node_dict["source"] = {
-                    "path": node_data.get("file"),
-                    "line": None,
-                }
-            else:
-                node_dict[col] = node_data.get(col)
-        # Implements: REQ-d00069-L, REQ-d00258-A
-        _add_measure_fields(node_dict, node_data, preset.columns)
+        # Implements: REQ-d00282-E
+        # The same row builder the live-graph path uses, so a selection reaches
+        # the same values whether a serving process or this process computed
+        # the report.
+        node_dict = _json_row(node_data, cols)
         if preset.include_body:
             node_dict["body"] = node_data.get("body", "")
         if preset.include_assertions:
@@ -928,7 +1080,21 @@ def _render_json_from_data(data: dict, preset: ReportPreset) -> None:
     print(json.dumps(nodes, indent=2))
 
 
-def _render_table_from_graph(graph: FederatedGraph, fmt: str, preset: ReportPreset) -> int:
+# Implements: REQ-p00084-D
+def _print_scope(lines: list[str]) -> None:
+    """Declare the scope beside the report, on stderr so a piped table is unchanged."""
+    for line in lines:
+        print(line, file=sys.stderr)
+
+
+def _render_table_from_graph(
+    graph: FederatedGraph,
+    fmt: str,
+    preset: ReportPreset,
+    scope_ids: frozenset[str] | None = None,
+    values: Sequence[str] | None = None,
+    config: dict | None = None,
+) -> int:
     """Render table or JSON formats using graph-based formatters. Returns exit code."""
     formatters = {
         "text": format_markdown,
@@ -943,9 +1109,30 @@ def _render_table_from_graph(graph: FederatedGraph, fmt: str, preset: ReportPres
     if not formatter:
         print(f"Error: Unknown format '{fmt}'", file=sys.stderr)
         return 1
-    for line in formatter(graph, preset):
+    for line in formatter(graph, preset, scope_ids, values, config):
         print(line)
     return 0
+
+
+def _resolve_values_or_report(
+    args: argparse.Namespace,
+    preset: ReportPreset,
+    config: dict | None,
+) -> tuple[tuple[str, ...], dict[str, str]] | None:
+    """The values this invocation states and the params carrying them onward.
+
+    Returns None once it has told the reader why the selection was refused:
+    REQ-d00282-F wants no report produced under a selection honoured in part,
+    and the refusal reaches the reader as a message rather than a traceback.
+    """
+    from elspais.commands._values import resolve_report_values, value_params_from_args
+
+    try:
+        values = resolve_report_values(args, OFFERED_VALUES, _default_values(preset), config)
+    except UnofferedValues as err:
+        print(f"Error: {err}", file=sys.stderr)
+        return None
+    return values, value_params_from_args(args, config)
 
 
 def run(args: argparse.Namespace) -> int:
@@ -954,90 +1141,109 @@ def run(args: argparse.Namespace) -> int:
     Uses engine.call for daemon-vs-local, then renders in the requested format.
     """
     from elspais.commands import _engine
+    from elspais.config import get_config
 
     fmt = getattr(args, "format", "markdown")
     spec_dir = getattr(args, "spec_dir", None)
-    # Implements: REQ-d00254-I
-    # --targets marks provenance on the rendered graph; force a local build
-    # (bypassing any cached daemon graph) so the fresh set actually threads
-    # into build_graph().
-    fresh_targets = set(args.targets) if getattr(args, "targets", None) else None
-    skip_daemon = bool(spec_dir) or fresh_targets is not None
+    # Implements: REQ-d00254-I, REQ-d00283-D+E+I
+    # --targets/--groups mark provenance on the rendered graph; force a local
+    # build (bypassing any cached daemon graph) so the fresh set actually
+    # threads into build_graph().
+    from elspais.commands._targets import resolve_fresh_targets
+
     dimension = getattr(args, "dimension", "")
+    config_path = getattr(args, "config", None)
+    config = get_config(config_path)
+    try:
+        fresh_targets = resolve_fresh_targets(args, config)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    skip_daemon = bool(spec_dir) or fresh_targets is not None
 
     if dimension == "uat":
-        # Implements: REQ-d00257
-        # UAT dimension always uses graph-based rendering (needs VALIDATES edge access)
+        # Implements: REQ-d00257-A+C, REQ-d00282-H
+        # `--dimension uat` is a named default value set and nothing else: it
+        # states the UAT dimensions and the journeys validating each row, and
+        # leaves the code dimensions out. Which requirements the report is
+        # about is the scope's to decide, so a requirement no journey validates
+        # is a row reading "no journeys" rather than a row a value switch
+        # removed.
         preset = ReportPreset(
             name="uat",
-            columns=list(_UAT_COLUMNS),
+            values=list(_UAT_VALUES),
             dimension="uat",
         )
-        config_path = getattr(args, "config", None)
-        if skip_daemon:
-            from elspais.graph.factory import build_graph
+    else:
+        # Implements: REQ-d00084-B+C
+        # Parse --preset and apply independent detail flags
+        preset_name = getattr(args, "preset", None) or DEFAULT_PRESET
+        if preset_name not in REPORT_PRESETS:
+            available = ", ".join(REPORT_PRESETS.keys())
+            print(f"Error: Unknown preset '{preset_name}'", file=sys.stderr)
+            print(f"Available presets: {available}", file=sys.stderr)
+            return 1
+        preset = ReportPreset(
+            name=preset_name,
+            values=list(REPORT_PRESETS[preset_name].values),
+            include_body=getattr(args, "body", False),
+            include_assertions=getattr(args, "show_assertions", False),
+            include_test_refs=getattr(args, "show_tests", False),
+        )
 
-            graph = build_graph(
-                spec_dirs=[spec_dir] if spec_dir else None,
-                config_path=config_path,
-                fresh_targets=fresh_targets,
-            )
-        else:
-            _engine.call(
-                "/api/run/trace",
-                {},
-                compute_trace,
-                config_path=config_path,
-            )
-            graph = _engine.get_graph()
-        return _render_table_from_graph(graph, fmt, preset)
-
-    # Implements: REQ-d00084-B+C
-    # Parse --preset and apply independent detail flags
-    preset_name = getattr(args, "preset", None) or DEFAULT_PRESET
-    if preset_name not in REPORT_PRESETS:
-        available = ", ".join(REPORT_PRESETS.keys())
-        print(f"Error: Unknown preset '{preset_name}'", file=sys.stderr)
-        print(f"Available presets: {available}", file=sys.stderr)
+    # Implements: REQ-d00282-A+E+F
+    # Resolved before anything is built or asked of a serving process, and
+    # carried in the same parameters the scope travels in.
+    resolved = _resolve_values_or_report(args, preset, config)
+    if resolved is None:
         return 1
-    preset = ReportPreset(
-        name=preset_name,
-        columns=list(REPORT_PRESETS[preset_name].columns),
-        include_body=getattr(args, "body", False),
-        include_assertions=getattr(args, "show_assertions", False),
-        include_test_refs=getattr(args, "show_tests", False),
+    values, value_params = resolved
+
+    # Implements: REQ-p00084-A+D, REQ-d00279-C
+    from elspais.commands._scope import (
+        resolve_scope_for_report,
+        scope_disclosure,
+        scope_params_from_args,
     )
 
+    params = dict(scope_params_from_args(args, config))
+    params.update(value_params)
+
     if skip_daemon:
-        # Custom spec_dir (or --targets): build graph directly
+        # Custom spec_dir (or a target selection): build graph directly
         from elspais.graph.factory import build_graph
 
-        config_path = getattr(args, "config", None)
         graph = build_graph(
             spec_dirs=[spec_dir] if spec_dir else None,
             config_path=config_path,
             fresh_targets=fresh_targets,
         )
-        if fmt == "json":
-            data = compute_trace(graph, {}, {})
-            _render_json_from_data(data, preset)
+        if fmt == "json" and dimension != "uat":
+            data = compute_trace(graph, config, params)
+            _render_json_from_data(data, preset, values)
         else:
-            return _render_table_from_graph(graph, fmt, preset)
+            result = resolve_scope_for_report(graph, params, config)
+            _print_scope(scope_disclosure(result))
+            ids = None if len(result.ids) == result.population else result.ids
+            return _render_table_from_graph(graph, fmt, preset, ids, values, config)
     else:
         data = _engine.call(
             "/api/run/trace",
-            {},
+            params,
             compute_trace,
-            config_path=getattr(args, "config", None),
+            config_path=config_path,
         )
 
         # Implements: REQ-d00084-A
-        if fmt == "json":
-            _render_json_from_data(data, preset)
+        if fmt == "json" and dimension != "uat":
+            _render_json_from_data(data, preset, values)
         else:
             # For non-JSON formats we need the graph to stream through formatters.
             graph = _engine.get_graph()
-            return _render_table_from_graph(graph, fmt, preset)
+            result = resolve_scope_for_report(graph, params, config)
+            _print_scope(scope_disclosure(result))
+            ids = None if len(result.ids) == result.population else result.ids
+            return _render_table_from_graph(graph, fmt, preset, ids, values, config)
 
     return 0
 
@@ -1051,12 +1257,15 @@ def run_graph(args: argparse.Namespace) -> int:
 
     spec_dir = getattr(args, "spec_dir", None)
     config_path = getattr(args, "config", None)
-    fresh_targets = set(args.targets) if getattr(args, "targets", None) else None
 
+    # This command exports the graph's structure, not a report over it, and
+    # `GraphArgs` carries no target selector to narrow one with. Marking a
+    # target set here would render the export as a selective run that nothing
+    # on this surface could widen back, so the export covers every target.
     graph = build_graph(
         spec_dirs=[spec_dir] if spec_dir else None,
         config_path=config_path,
-        fresh_targets=fresh_targets,
+        fresh_targets=None,
     )
 
     annotate_graph_git_state(graph)

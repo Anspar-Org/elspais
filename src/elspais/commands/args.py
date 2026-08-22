@@ -19,6 +19,35 @@ from typing import Annotated, Literal
 import tyro
 
 
+# Implements: REQ-d00278-A+B+C, REQ-p00084-A
+@dataclasses.dataclass
+class ScopeOptions:
+    """Selection shared by every surface that reports over a set of requirements.
+
+    One definition rather than a copy per command: REQ-d00279-C obliges every
+    path producing a report to yield the same scoped set, and flags duplicated
+    per command are how two paths start disagreeing.
+    """
+
+    level: list[str] | None = None
+    """Report only requirements at these levels (space-separated)."""
+
+    not_level: list[str] | None = None
+    """Report no requirement at these levels."""
+
+    status: list[str] | None = None
+    """Report only requirements carrying these statuses (space-separated)."""
+
+    not_status: list[str] | None = None
+    """Report no requirement carrying these statuses."""
+
+    match_status_roles: bool = False
+    """Read each named status as every status sharing its role."""
+
+    scope: str | None = None
+    """Report under a scope the project declares by this name."""
+
+
 # ---------------------------------------------------------------------------
 # Health command
 # ---------------------------------------------------------------------------
@@ -65,8 +94,14 @@ class ChecksArgs:
 
     targets: list[str] | None = None
     """Run/mark only these [[scanning.test.targets]] by name (space-separated).
-    Default: all. With --run-tests, executes only this subset; on summary/trace,
-    marks the rest as carried baselines."""
+    Default: the targets of the `default` group. With --run-tests, executes only
+    this subset; on summary/trace, marks the rest as carried baselines."""
+
+    groups: list[str] | None = None
+    """Run/mark only the [[scanning.test.targets]] in these groups (space-separated).
+    `all` names every target, `default` the ones a run with no selection executes,
+    and a project declares the rest in [scanning.test.groups]. Narrows alongside
+    --targets rather than adding to it."""
 
     output: Annotated[Path | None, tyro.conf.arg(aliases=["-o"])] = None
     """Write output to file instead of stdout."""
@@ -76,7 +111,7 @@ class ChecksArgs:
 # Gap listing commands
 # ---------------------------------------------------------------------------
 @dataclasses.dataclass
-class GapsArgs:
+class GapsArgs(ScopeOptions):
     """List all traceability gaps."""
 
     format: Literal["text", "markdown", "json"] = "text"
@@ -90,7 +125,7 @@ class GapsArgs:
 
 
 @dataclasses.dataclass
-class UncoveredArgs:
+class UncoveredArgs(ScopeOptions):
     """List requirements without code coverage."""
 
     format: Literal["text", "markdown", "json"] = "text"
@@ -104,7 +139,7 @@ class UncoveredArgs:
 
 
 @dataclasses.dataclass
-class UntestedArgs:
+class UntestedArgs(ScopeOptions):
     """List requirements without test coverage."""
 
     format: Literal["text", "markdown", "json"] = "text"
@@ -118,7 +153,7 @@ class UntestedArgs:
 
 
 @dataclasses.dataclass
-class UnvalidatedArgs:
+class UnvalidatedArgs(ScopeOptions):
     """List requirements without UAT (journey) coverage."""
 
     format: Literal["text", "markdown", "json"] = "text"
@@ -132,7 +167,7 @@ class UnvalidatedArgs:
 
 
 @dataclasses.dataclass
-class FailingArgs:
+class FailingArgs(ScopeOptions):
     """List requirements with failing test or UAT results."""
 
     format: Literal["text", "markdown", "json"] = "text"
@@ -199,14 +234,33 @@ class DoctorArgs:
 # Trace command
 # ---------------------------------------------------------------------------
 @dataclasses.dataclass
-class TraceArgs:
+class TraceArgs(ScopeOptions):
     """Generate traceability matrix."""
 
     format: Literal["text", "markdown", "html", "json", "csv"] = "markdown"
     """Output format."""
 
+    # Implements: REQ-d00282-A
+    # Stated on the commands that report facts about each row and nowhere else:
+    # a flag a command accepts and cannot honour is worse than one it does not
+    # offer, which is the defect value selection exists to remove.
+    values: str | None = None
+    """State these values, in this order (comma-separated value keys).
+    Keys are stable names, never the words a project displays them under:
+    id, title, level, status, implements, hash, file, journeys; the coverage
+    dimensions implemented, tested, verified, uat_coverage, uat_verified, each
+    also selectable per measure (e.g. tested.immediate_direct); and the
+    lcov_tested dimension. Every coverage figure also offers the scalars
+    behind it -- .count, .total and .ratio, as numbers (e.g.
+    implemented.ratio, tested.immediate_direct.count) -- plus the counts-only
+    tested.passed, tested.failed and tested.awaiting, and the provenance bit
+    verified.carried. code_tested is measured in LINES: code_tested.count is
+    the lines covered, .total the lines measured, .ratio their proportion,
+    and .attributed the lines a verifying test can be named for (absent where
+    the coverage data carries no per-test contexts)."""
+
     preset: Literal["minimal", "standard", "full"] | None = None
-    """Column preset."""
+    """Named default value set."""
 
     body: bool = False
     """Show requirement body text in detail rows."""
@@ -218,16 +272,20 @@ class TraceArgs:
     """Show test references in detail rows."""
 
     dimension: str = ""
-    """Restrict the report to a dimension group.  Use 'uat' to show only UAT
-    (journey) coverage: requirements validated by at least one journey (named
-    on a journey's Validates: line), their validating journeys and verdicts,
-    and the uat_coverage/uat_verified tiers.
-    Code columns (implemented/tested/verified/code_tested/lcov_tested) are
-    excluded from the UAT view."""
+    """Report a named default value set.  Use 'uat' for user-acceptance
+    evidence: the journeys validating each requirement with their verdicts, and
+    the UAT coverage figures.  It states no implementation, test-verification or
+    line-coverage figure, and selects no requirements -- every requirement is
+    reported, including those no journey validates."""
 
     targets: list[str] | None = None
     """Mark only these [[scanning.test.targets]] as freshly-run; render the rest
     as carried baselines."""
+
+    groups: list[str] | None = None
+    """Mark only the [[scanning.test.targets]] in these groups as freshly-run;
+    render the rest as carried baselines. `all` names every target, `default` the
+    ones a run with no selection executes."""
 
     output: Annotated[Path | None, tyro.conf.arg(aliases=["-o"])] = None
     """Write output to file instead of stdout."""
@@ -333,15 +391,38 @@ class TermIndexArgs:
 # Summary command
 # ---------------------------------------------------------------------------
 @dataclasses.dataclass
-class SummaryArgs:
+class SummaryArgs(ScopeOptions):
     """Coverage summary by level (Implemented, Tested, Passing, UAT Covered, UAT Passed)."""
 
     format: Literal["text", "markdown", "json", "csv"] = "text"
     """Output format."""
 
+    # Implements: REQ-d00282-A
+    # The values this report offers are the ones a GROUP of requirements has:
+    # level, the two counts describing the group, each coverage dimension with
+    # the four measures behind it, and the line figure summed over the group.
+    # Per-requirement values are not among them.
+    values: str | None = None
+    """State these values, in this order (comma-separated value keys).
+    Keys are stable names, never the words a project displays them under:
+    level, requirements, assertions, and the coverage dimensions implemented,
+    tested, verified, uat_coverage, uat_verified -- each also selectable per
+    measure (e.g. tested.immediate_direct), and every figure also by the
+    scalars behind it: .count, .total and .ratio, as numbers. The three counts
+    of the Tested breakdown are tested.passed, tested.failed and
+    tested.awaiting. code_tested is the group's line coverage, measured in
+    LINES: .count the lines covered, .total the lines measured, .ratio their
+    proportion, and .attributed the lines a verifying test can be named for
+    (absent where the coverage data carries no per-test contexts)."""
+
     targets: list[str] | None = None
     """Mark only these [[scanning.test.targets]] as freshly-run; render the rest
     as carried baselines."""
+
+    groups: list[str] | None = None
+    """Mark only the [[scanning.test.targets]] in these groups as freshly-run;
+    render the rest as carried baselines. `all` names every target, `default` the
+    ones a run with no selection executes."""
 
     output: Annotated[Path | None, tyro.conf.arg(aliases=["-o"])] = None
     """Write output to file instead of stdout."""
@@ -371,7 +452,7 @@ class ChangedArgs:
 # Analysis command
 # ---------------------------------------------------------------------------
 @dataclasses.dataclass
-class AnalysisArgs:
+class AnalysisArgs(ScopeOptions):
     """Analyze foundational requirement importance."""
 
     top: Annotated[int, tyro.conf.arg(aliases=["-n"])] = 10
@@ -385,9 +466,6 @@ class AnalysisArgs:
 
     show: Literal["foundations", "leaves", "all"] = "all"
     """Which sections to show."""
-
-    level: str | None = None
-    """Filter results by requirement level (any key from [levels] config)."""
 
     include_code: bool = False
     """Include CODE nodes in the analysis."""
@@ -650,6 +728,7 @@ DOCS_TOPICS = Literal[
     "assertions",
     "authoring",
     "traceability",
+    "scoping",
     "linking",
     "satisfies",
     "validation",
@@ -727,12 +806,6 @@ class PdfArgs:
 
     cover: Path | None = None
     """Markdown file for custom cover page."""
-
-    overview: bool = False
-    """Generate stakeholder overview (PRD requirements only)."""
-
-    max_depth: int | None = None
-    """Max graph depth for core PRDs in overview mode."""
 
 
 # ---------------------------------------------------------------------------

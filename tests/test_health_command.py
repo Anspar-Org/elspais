@@ -1,5 +1,8 @@
 # Verifies: REQ-d00254-H
-"""Unit tests for `elspais checks --run-tests --targets` selection/validation.
+"""Unit tests for `elspais checks --run-tests` target selection/validation.
+
+Covers both selectors: `--targets`, which names targets outright, and
+`--groups`, which names them through the group model of REQ-d00283.
 
 `health.run()` imports `get_config`/`find_git_root` (from `elspais.config`)
 and `run_configured_targets` (from `elspais.commands.test_runner`) locally
@@ -9,7 +12,7 @@ does not intercept them. These tests patch the real import sources
 patch `health._validate_config`/`health._run_local_checks` directly since
 those are module-level references resolved on the `health` module itself.
 `run_configured_targets` runs for real (no mocking) against real shell
-commands so the `--targets` subset selection is exercised end to end.
+commands so the selected subset is exercised end to end.
 """
 
 from __future__ import annotations
@@ -25,15 +28,20 @@ from elspais.config.schema import (
 )
 
 
-def _cfg_with_targets(targets: list[TestTargetConfig]) -> ElspaisConfig:
-    return ElspaisConfig(scanning=ScanningConfig(test=TestScanningConfig(targets=targets)))
+def _cfg_with_targets(
+    targets: list[TestTargetConfig], groups: dict[str, str] | None = None
+) -> ElspaisConfig:
+    return ElspaisConfig(
+        scanning=ScanningConfig(test=TestScanningConfig(groups=dict(groups or {}), targets=targets))
+    )
 
 
-def _base_args(targets: list[str] | None) -> argparse.Namespace:
+def _base_args(targets: list[str] | None, groups: list[str] | None = None) -> argparse.Namespace:
     return argparse.Namespace(
         run_tests=True,
         fail_fast=False,
         targets=targets,
+        groups=groups,
         config=None,
         format="text",
         lenient=True,
@@ -114,17 +122,19 @@ def test_absent_targets_flag_runs_all(monkeypatch, tmp_path):
     assert marker_b.exists()
 
 
-# Verifies: REQ-d00254-I
-def test_run_stashes_fresh_targets_on_args(monkeypatch, tmp_path):
-    """health.run() with --run-tests --targets a stashes {'a'} as args._fresh_targets."""
-    marker_a = tmp_path / "a.txt"
-    cfg = _cfg_with_targets(
-        [TestTargetConfig(name="a", command=f"touch {marker_a}", reporter="junit")]
-    )
-    monkeypatch.setattr("elspais.config.get_config", lambda *a, **k: {})
-    monkeypatch.setattr("elspais.config.find_git_root", lambda *a, **k: tmp_path)
-    monkeypatch.setattr(health, "_validate_config", lambda d: cfg)
+def _two_commandful_targets(tmp_path, groups_for_b=()):
+    return [
+        TestTargetConfig(name="a", command=f"touch {tmp_path / 'a.txt'}", reporter="junit"),
+        TestTargetConfig(
+            name="b",
+            command=f"touch {tmp_path / 'b.txt'}",
+            reporter="junit",
+            groups=list(groups_for_b),
+        ),
+    ]
 
+
+def _capture_local_checks(monkeypatch) -> list[argparse.Namespace]:
     captured_args: list[argparse.Namespace] = []
 
     def _fake_local_checks(args, params):
@@ -132,6 +142,17 @@ def test_run_stashes_fresh_targets_on_args(monkeypatch, tmp_path):
         return {"healthy": True, "checks": []}
 
     monkeypatch.setattr(health, "_run_local_checks", _fake_local_checks)
+    return captured_args
+
+
+# Verifies: REQ-d00254-I, REQ-d00283-I
+def test_run_stashes_fresh_targets_on_args(monkeypatch, tmp_path):
+    """A selective run stashes the executed subset as args._fresh_targets."""
+    cfg = _cfg_with_targets(_two_commandful_targets(tmp_path))
+    monkeypatch.setattr("elspais.config.get_config", lambda *a, **k: {})
+    monkeypatch.setattr("elspais.config.find_git_root", lambda *a, **k: tmp_path)
+    monkeypatch.setattr(health, "_validate_config", lambda d: cfg)
+    captured_args = _capture_local_checks(monkeypatch)
 
     args = _base_args(["a"])
     rc = health.run(args)
@@ -139,6 +160,91 @@ def test_run_stashes_fresh_targets_on_args(monkeypatch, tmp_path):
     assert rc == 0
     assert captured_args, "_run_local_checks should have been called"
     assert captured_args[0]._fresh_targets == {"a"}
+
+
+# Verifies: REQ-d00254-J
+def test_run_naming_every_configured_target_is_a_full_run(monkeypatch, tmp_path):
+    """Whether a run is selective follows from the targets it executed, not
+    from how the selection was expressed -- so naming them all is a full run."""
+    cfg = _cfg_with_targets(_two_commandful_targets(tmp_path))
+    monkeypatch.setattr("elspais.config.get_config", lambda *a, **k: {})
+    monkeypatch.setattr("elspais.config.find_git_root", lambda *a, **k: tmp_path)
+    monkeypatch.setattr(health, "_validate_config", lambda d: cfg)
+    captured_args = _capture_local_checks(monkeypatch)
+
+    args = _base_args(["a", "b"])
+    rc = health.run(args)
+
+    assert rc == 0
+    assert captured_args, "_run_local_checks should have been called"
+    assert captured_args[0]._fresh_targets is None, (
+        "a run that executed every configured target is full, however it was asked for"
+    )
+
+
+# Verifies: REQ-d00283-E
+def test_groups_flag_executes_only_that_groups_targets(monkeypatch, tmp_path):
+    marker_a = tmp_path / "a.txt"
+    marker_b = tmp_path / "b.txt"
+    cfg = _cfg_with_targets(
+        _two_commandful_targets(tmp_path, groups_for_b=["uat"]),
+        groups={"uat": "needs a live backend"},
+    )
+    monkeypatch.setattr("elspais.config.get_config", lambda *a, **k: {})
+    monkeypatch.setattr("elspais.config.find_git_root", lambda *a, **k: tmp_path)
+    monkeypatch.setattr(health, "_validate_config", lambda d: cfg)
+    captured_args = _capture_local_checks(monkeypatch)
+
+    rc = health.run(_base_args(None, groups=["uat"]))
+
+    assert rc == 0
+    assert marker_b.exists(), "the selected group's target must run"
+    assert not marker_a.exists(), "a target outside the selected group must not run"
+    assert captured_args[0]._fresh_targets == {"b"}
+
+
+# Verifies: REQ-d00283-D
+def test_no_selection_runs_the_default_group(monkeypatch, tmp_path):
+    """With a group declared and claimed, a bare run executes `default` only."""
+    marker_a = tmp_path / "a.txt"
+    marker_b = tmp_path / "b.txt"
+    cfg = _cfg_with_targets(
+        _two_commandful_targets(tmp_path, groups_for_b=["uat"]),
+        groups={"uat": "needs a live backend"},
+    )
+    monkeypatch.setattr("elspais.config.get_config", lambda *a, **k: {})
+    monkeypatch.setattr("elspais.config.find_git_root", lambda *a, **k: tmp_path)
+    monkeypatch.setattr(health, "_validate_config", lambda d: cfg)
+    captured_args = _capture_local_checks(monkeypatch)
+
+    rc = health.run(_base_args(None))
+
+    assert rc == 0
+    assert marker_a.exists(), "the default group's target must run"
+    assert not marker_b.exists(), "a target that claimed a group is out of `default`"
+    assert captured_args[0]._fresh_targets == {"a"}
+
+
+# Verifies: REQ-d00283-H
+def test_unknown_group_name_errors(capsys, monkeypatch, tmp_path):
+    cfg = _cfg_with_targets(
+        _two_commandful_targets(tmp_path, groups_for_b=["uat"]),
+        groups={"uat": "needs a live backend"},
+    )
+    monkeypatch.setattr("elspais.config.get_config", lambda *a, **k: {})
+    monkeypatch.setattr("elspais.config.find_git_root", lambda *a, **k: tmp_path)
+    monkeypatch.setattr(health, "_validate_config", lambda d: cfg)
+    monkeypatch.setattr(
+        health, "_run_local_checks", lambda args, params: {"healthy": True, "checks": []}
+    )
+
+    rc = health.run(_base_args(None, groups=["uta"]))
+
+    err = capsys.readouterr().err
+    assert rc == 2
+    assert "uta" in err, "the refusal must name the group it could not resolve"
+    assert not (tmp_path / "a.txt").exists(), "a refused selection must execute nothing"
+    assert not (tmp_path / "b.txt").exists()
 
 
 # Verifies: REQ-d00254-I

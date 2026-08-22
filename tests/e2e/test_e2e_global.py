@@ -247,17 +247,6 @@ class TestPdf:
         with open(out, "rb") as f:
             assert f.read(4) == b"%PDF"
 
-    @requires_pandoc
-    @requires_xelatex
-    def test_REQ_p00080_F_generates_overview_pdf(self, tmp_path):
-        out = tmp_path / "overview.pdf"
-        result = run_elspais("pdf", "--overview", "--output", str(out))
-        assert result.returncode == 0, f"stderr: {result.stderr}"
-        assert out.exists()
-        assert out.stat().st_size > 0
-        with open(out, "rb") as f:
-            assert f.read(4) == b"%PDF"
-
 
 # ===================================================================
 # From test_analysis_cmd.py
@@ -379,15 +368,20 @@ class TestAnalysisOptions:
         result = run_elspais("analysis", "--level", "dev", "--format", "json")
         assert result.returncode == 0
         data = json.loads(result.stdout)
+        # A filter that selects nothing would satisfy the per-node loop below
+        # vacuously, which is how a broken --level stayed green.
+        assert data["ranked_nodes"], "level scope selected no nodes"
         for node in data["ranked_nodes"]:
-            assert node["level"] == "DEV"
+            # The level is the config level key, which is lowercase.
+            assert node["level"] == "dev"
 
     def test_REQ_d00125_E_level_filter_prd(self):
         result = run_elspais("analysis", "--level", "prd", "--format", "json")
         assert result.returncode == 0
         data = json.loads(result.stdout)
+        assert data["ranked_nodes"], "level scope selected no nodes"
         for node in data["ranked_nodes"]:
-            assert node["level"] == "PRD"
+            assert node["level"] == "prd"
 
     def test_REQ_d00125_F_include_code_smoke(self):
         result = run_elspais("analysis", "--include-code")

@@ -22,6 +22,7 @@ TOPIC_ORDER = [
     "assertions",
     "authoring",
     "traceability",
+    "scoping",
     "linking",
     "satisfies",
     "validation",

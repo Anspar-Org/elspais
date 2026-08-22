@@ -44,14 +44,18 @@ def compute_analysis(graph: Any, config: dict[str, Any], params: dict[str, str])
         top_n=top_n,
     )
 
-    level_filter = params.get("level", None)
-    if level_filter:
-        level_upper = level_filter.upper()
-        report.ranked_nodes = [ns for ns in report.ranked_nodes if ns.level == level_upper]
-        report.top_foundations = [ns for ns in report.top_foundations if ns.level == level_upper]
-        report.actionable_leaves = [
-            ns for ns in report.actionable_leaves if ns.level == level_upper
-        ]
+    # Implements: REQ-d00279-A
+    # Membership comes from the one authority rather than a comparison of this
+    # command's own; a second reading is how two surfaces answering the same
+    # question start giving different answers.
+    from elspais.commands._scope import resolve_scope_for_report
+
+    result = resolve_scope_for_report(graph, params, config)
+    if len(result.ids) != result.population:
+        keep = result.ids
+        report.ranked_nodes = [ns for ns in report.ranked_nodes if ns.node_id in keep]
+        report.top_foundations = [ns for ns in report.top_foundations if ns.node_id in keep]
+        report.actionable_leaves = [ns for ns in report.actionable_leaves if ns.node_id in keep]
 
     return asdict(report)
 
@@ -142,8 +146,6 @@ def run(args: argparse.Namespace) -> int:
 
     output_format = getattr(args, "format", "table")
     show = getattr(args, "show", "all")
-    level_filter = getattr(args, "level", None)
-
     # Build params dict from args
     params: dict[str, str] = {}
     top_n = getattr(args, "top", 10)
@@ -153,8 +155,11 @@ def run(args: argparse.Namespace) -> int:
     weights_str = getattr(args, "weights", None)
     if weights_str:
         params["weights"] = weights_str
-    if level_filter:
-        params["level"] = level_filter
+    # Implements: REQ-d00279-C
+    from elspais.commands._scope import scope_params_from_args
+    from elspais.config import get_config
+
+    params.update(scope_params_from_args(args, get_config(getattr(args, "config", None))))
 
     # Validate weights BEFORE engine call (bug fix: was skipped on daemon path)
     if weights_str:

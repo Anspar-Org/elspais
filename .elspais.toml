@@ -346,3 +346,23 @@ canonical_form = "info"
 formats = []
 # Directory for generated output files
 dir = ""
+
+#──────────────────────────────────────────────────────────────────────────────
+# SCOPES - Named Report Selections
+#──────────────────────────────────────────────────────────────────────────────
+
+# The product-level view a stakeholder reads, with withdrawn requirements out of
+# the way. Used as `elspais trace --scope overview`.
+[scopes.overview]
+level = ["prd"]
+not_status = ["Deprecated", "Superseded"]
+# The facts a stakeholder overview states: whether the work is built, tested and
+# passing. Value keys, not display words -- renaming a display label leaves this
+# declaration standing.
+#
+# Deliberately names no identity value. Every report already states what each of
+# its rows is about, and which value that is differs by report: the per-requirement
+# report says which requirement, the coverage summary says which level. A
+# declaration naming `id` would be unusable by a report whose rows are not
+# requirements.
+values = ["implemented", "tested", "verified"]

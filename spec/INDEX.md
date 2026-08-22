@@ -26,10 +26,11 @@
 | REQ-p00050 | Unified Graph Architecture                       | prd-features.md | 3a0fb899 |
 | REQ-p00060 | MCP Server for AI-Driven Requirements Management | prd-features.md | a729a853 |
 | REQ-p00061 | Requirement Decomposition Rules                  | prd-core.md     | 462c146e |
-| REQ-p00080 | Spec-to-PDF Compilation                          | prd-core.md     | acc97ca9 |
+| REQ-p00080 | Spec-to-PDF Compilation                          | prd-core.md     | 3296bc86 |
 | REQ-p00081 | Org-Wide Requirement Visibility                  | prd-features.md | 17fa4417 |
 | REQ-p00082 | Federated Authority and Verdict Scoping          | prd-features.md | a8311d6c |
 | REQ-p00083 | Durability of Uncommitted Work                   | prd-core.md     | 80cf3ca1 |
+| REQ-p00084 | Audience-Scoped Reporting                        | prd-core.md     | 199562bd |
 
 ### elspais
 
@@ -40,6 +41,7 @@
 | REQ-p00080::REQ-p00019 | Truthful Reporting and Error Discipline |      | 946a0e4c |
 | REQ-p00081::REQ-p00019 | Truthful Reporting and Error Discipline |      | 946a0e4c |
 | REQ-p00083::REQ-p00019 | Truthful Reporting and Error Discipline |      | 946a0e4c |
+| REQ-p00084::REQ-p00019 | Truthful Reporting and Error Discipline |      | 946a0e4c |
 
 ## OPERATIONS
 
@@ -99,9 +101,9 @@
 | REQ-d00080 | Diagnostic Command Exit Code Contract                         | dev-cli.md              | acc2aa77 |
 | REQ-d00081 | Multi-Assertion Reference Expansion                           | dev-cli.md              | b1812806 |
 | REQ-d00082 | Unified Reference Configuration                               | dev-cli.md              | f0808bb9 |
-| REQ-d00084 | Trace Command                                                 | dev-cli.md              | 67887c51 |
+| REQ-d00084 | Trace Command                                                 | dev-cli.md              | 5728e809 |
 | REQ-d00085 | Unified Report Composition                                    | dev-cli.md              | 587285b0 |
-| REQ-d00086 | Coverage Report Section                                       | dev-cli.md              | 4559fce7 |
+| REQ-d00086 | Coverage Report Section                                       | dev-cli.md              | 8e02f52d |
 | REQ-d00124 | Graph Analysis Engine                                         | dev-cli.md              | b153d5f6 |
 | REQ-d00125 | Analysis CLI Command                                          | dev-cli.md              | 474fa8af |
 | REQ-d00126 | FILE Node Data Model                                          | dev-graph-file-nodes.md | 070e173b |
@@ -167,11 +169,11 @@
 | REQ-d00251 | A Repository's Identifier Grammar                             | dev-graph-config.md     | 09f5a257 |
 | REQ-d00252 | External Library Integration via Integrates Keyword           | dev-graph-federation.md | 42cdc868 |
 | REQ-d00253 | Federation Write/Generation Scope                             | dev-graph-federation.md | f454041e |
-| REQ-d00254 | Test Evidence: Attribution, Ingestion, and Coverage Crediting | dev-graph-core.md       | b7f71d81 |
+| REQ-d00254 | Test Evidence: Attribution, Ingestion, and Coverage Crediting | dev-graph-core.md       | 00518ba3 |
 | REQ-d00255 | Test-to-Journey UAT Verification                              | dev-graph-core.md       | ab5cb648 |
 | REQ-d00256 | Step-Level UAT Verification                                   | dev-graph-core.md       | 8bf40a7c |
-| REQ-d00257 | UAT-Scoped Traceability Report                                | dev-graph-core.md       | 2a8aab8b |
-| REQ-d00258 | Reporting Surface Consistency                                 | dev-graph-core.md       | 879012b7 |
+| REQ-d00257 | UAT-Scoped Traceability Report                                | dev-graph-core.md       | 1ea68210 |
+| REQ-d00258 | Reporting Surface Consistency                                 | dev-graph-core.md       | 6c978321 |
 | REQ-d00259 | Requirement Format Reference Command                          | dev-cli.md              | c3b67490 |
 | REQ-d00260 | Workspace Registry and Federated View Assembly                | dev-graph-federation.md | 510a0f67 |
 | REQ-d00261 | Federation Role Model                                         | dev-graph-federation.md | fb8db8a9 |
@@ -190,6 +192,13 @@
 | REQ-d00275 | Whose Configuration Governs a Federated Answer                | dev-graph-federation.md | 9ab2ef7c |
 | REQ-d00276 | Tests Outside the Requirement Estate                          | dev-graph-core.md       | 922d1382 |
 | REQ-d00277 | Coverage Dimensions                                           | dev-graph-core.md       | b097dcd7 |
+| REQ-d00278 | Report Scope Selection Vocabulary                             | dev-cli.md              | ef2221cc |
+| REQ-d00279 | One Authority for Report Scope Membership                     | dev-cli.md              | 2b755b50 |
+| REQ-d00280 | Named Report Declarations                                     | dev-cli.md              | ab0a70bb |
+| REQ-d00281 | Level Vocabulary of a Reported Graph                          | dev-graph-core.md       | 4bde246d |
+| REQ-d00282 | Report Value Selection                                        | dev-cli.md              | 70ab39ac |
+| REQ-d00283 | Test Target Groups                                            | dev-graph-core.md       | bc95d36b |
+| REQ-d00284 | How a Result Names Its Test                                   | dev-graph-core.md       | 7baae0b0 |
 
 ## User Journeys
 

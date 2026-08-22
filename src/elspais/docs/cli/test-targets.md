@@ -45,6 +45,8 @@ This is the correct pattern for CI.
 | `results` | string | `""` | Glob pattern for result files (file-channel reporters) |
 | `coverage` | string | `""` | Path to an lcov.info or coverage.py JSON file (format auto-detected), relative to `cwd` |
 | `match` | string | `"source"` | `"source"` or `"aggregate"` -- matching strategy |
+| `classname` | string | `""` (the reporter's own) | `"python-module"` or `"source-file"` -- how this target's results name the test that produced them |
+| `groups` | list | `[]` (the `default` group) | Which groups this target belongs to |
 | `credit_coverage` | string | `"off"` | `"off"`, `"tested"`, or `"verified"` -- lcov_tested credit |
 | `min_coverage_fraction` | float | `0.0` | Fraction of impl lines that must be covered (0.0-1.0) |
 
@@ -303,19 +305,32 @@ Three things must be true:
    natively, so point `[scanning.test].prescan_command` at an external scanner
    that emits `test_`-prefixed functions for each `test(...)` call, and add the
    spec directories / `*.spec.ts` to the test `directories` / `file_patterns`.
-2. **The JUnit XML carries `file`.**  Playwright's JUnit reporter omits the
-   per-`<testcase>` `file` attribute, so a small post-processing step in the
-   runner injects `file="<repo-relative spec path>"` (derivable from
-   `classname`) into each `<testcase>` before elspais ingests it.
+2. **elspais knows what the recorded name means.**  Playwright's JUnit reporter
+   omits the per-`<testcase>` `file` attribute and writes the spec's basename
+   into `classname`.  Left to itself elspais reads a `classname` as a Python
+   module path -- right for pytest, and never a match for a `.spec.ts` -- so
+   the result binds to nothing and the coverage figure reads zero.  Declare
+   `classname = "source-file"` on the target and the name is read as naming the
+   test's source file instead.
 3. **The target uses `match = "source"`.**
 
 ```toml
 [[scanning.test.targets]]
-name     = "e2e"
-reporter = "junit"
-results  = "test-results/junit.xml"   # glob relative to cwd
-match    = "source"                    # per-spec binding via <testcase file=...>
+name      = "e2e"
+reporter  = "junit"
+results   = "test-results/junit.xml"   # glob relative to cwd
+match     = "source"                    # per-spec binding
+classname = "source-file"               # <testcase classname="foo.spec.ts">
 ```
+
+A name declared to be a source file is resolved among the tests scanned under
+this target's `cwd`, and binds only where it picks out exactly one of them.
+Where it picks out none, or more than one, the result binds to nothing and
+`elspais checks` reports it under `tests.unmatched_results` saying which
+happened -- a name pointing at a file that is not there, or two files sharing
+one name.  Post-processing the XML to inject `file="<repo-relative path>"` into
+each `<testcase>` still works and takes precedence, since a producer that names
+the source file leaves nothing to resolve.
 
 Because JUnit `line` values are not true source lines, binding is
 **file-granular**: a passing spec credits all of its `// Verifies:` step-edges;
@@ -391,13 +406,63 @@ Run elspais in CI after the test step:
 elspais checks
 ```
 
+## Groups
+
+Not every target costs the same to run. A unit suite is a compilation away; an
+end-to-end suite may need a live backend, a device farm, or an account somebody
+pays for. Groups are how a project says which of its targets a run is about.
+
+Declare them as a keyword and a description:
+
+```toml
+[scanning.test.groups]
+uat    = "End-to-end journeys needing a live stack"
+device = "Mobile suites needing a real device or a cloud device farm"
+```
+
+Then a target claims the groups it belongs to:
+
+```toml
+[[scanning.test.targets]]
+name   = "diary-e2e-uat"
+groups = ["uat"]
+command = "./scripts/run-enroll-e2e.sh"
+```
+
+Two names are reserved and cannot be declared:
+
+- **`default`** — what a run executes when it selects no group. A target that
+  claims no group belongs here, so a project that declares no groups has every
+  target in `default` and a bare run does exactly what it always did.
+- **`all`** — every target. Every target belongs to it whether it says so or
+  not, so selecting `all` selects everything.
+
+Select with `--groups`, accepted wherever `--targets` is:
+
+```text
+elspais checks --run-tests                 # the `default` group
+elspais checks --run-tests --groups uat    # only the UAT targets
+elspais checks --run-tests --groups all    # everything
+```
+
+A description is required with each declaration: a group named `slow` tells a
+newcomer nothing about whether their change should have run it, and this is the
+only place that explanation has to live. A name that is neither declared nor
+reserved is refused — whether a target claims it or a run selects it — because a
+selection that quietly selects nothing produces a report that reads exactly like
+one whose targets all passed.
+
+`--groups` and `--targets` each narrow: naming both runs the targets that are in
+the named groups **and** named individually.
+
 ## Per-PR selectivity
 
 `--targets NAME ...` (accepted by `checks`, `summary`, and `trace`) names the
 subset of `[[scanning.test.targets]]` that are **fresh** for this invocation.
 Everything else is the **complement** — targets not named on `--targets`.
-Omitting `--targets` entirely runs/marks everything as fresh (the full-run
-behavior is unchanged from before this flag existed).
+A run that covers every configured target is a full run; one that leaves any
+configured target out is selective, and that distinction follows from which
+targets ran rather than from whether a flag was passed.
 
 The flag means something slightly different depending on the command:
 
@@ -414,23 +479,28 @@ The flag means something slightly different depending on the command:
   earlier run.
 
 On `trace`, the complement (non-named) targets render one of two ways in the
-per-requirement `verified` column, depending on whether prior result data
+per-requirement `verified` value, depending on whether prior result data
 exists for them:
 
 - **`(baseline)`** — carried. The target has existing RESULT data from a
   previous run; that verdict is reused and rendered with a `(baseline)`
   suffix (e.g. `4/4 100% (baseline)`). A carried **failing** target still
   fails/gates — carrying only skips re-execution, it never launders a
-  failure into a pass.
+  failure into a pass. The same provenance is selectable on its own as
+  `verified.carried`, which states `baseline` or `fresh` in a cell and a
+  boolean in json, so a reader taking only the numbers still gets it.
 - **`—`** (em dash) — no baseline. The target has test references (so
   coverage is expected) but zero result data at all — nothing to carry.
   This renders as skipped and is **not** gating; it's treated as "not run
-  this PR" rather than a regression.
+  this PR" rather than a regression. Nothing was measured, so the numbers
+  behind the figure are absent rather than zero: `verified.count`,
+  `verified.ratio` and `verified.carried` each state `null` in json and
+  `n/a` in a cell.
 
 A `> Legend: ...` line explaining both markers is appended to `trace`'s
 markdown output whenever at least one row actually used one (never shown on
-a full run, and never shown for `--dimension uat`, which has no `verified`
-column).
+a full run, and never shown for `--dimension uat`, which does not state
+`verified`).
 
 `summary` is level-aggregated, not per-requirement, so it can't show
 `(baseline)`/`—` inline. Instead, when any RESULT target was carried, the

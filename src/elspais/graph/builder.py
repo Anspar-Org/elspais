@@ -4545,6 +4545,12 @@ class GraphBuilder:
             # source_path/source_file which name the test's source.
             "result_file": data.get("result_file"),
             "result_line": data.get("result_line"),
+            # Implements: REQ-d00284-C
+            # Why a recorded name picked out no single test, and what it did
+            # pick out, so a result that binds to nothing can be reported
+            # rather than silently contributing no verdict.
+            "name_match": data.get("name_match"),
+            "name_candidates": data.get("name_candidates"),
         }
         self._nodes[result_id] = node
 

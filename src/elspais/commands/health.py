@@ -508,6 +508,56 @@ def _parse_hierarchy_rules(hierarchy: dict[str, Any]) -> dict[str, list[str]]:
     return result
 
 
+# Implements: REQ-d00281-D
+def check_spec_undefined_levels(graph: FederatedGraph, config: dict[str, Any]) -> HealthCheck:
+    """Report requirements carrying a level this configuration does not define.
+
+    Such a requirement is counted and grouped like any other (REQ-d00281-A+C) --
+    it is real work somebody owes, and dropping it would flatter every figure it
+    would have lowered. What it cannot do is pass silently: a level the
+    configuration never names is as likely a misspelling, or a level deleted
+    while its requirements remained, as it is a deliberate federated difference,
+    and the report is the only place an author would find out.
+    """
+    from elspais.graph import NodeKind
+
+    typed_config = _validate_config(config)
+    defined = {k.lower() for k in typed_config.levels}
+
+    findings: list[HealthFinding] = []
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+        level = (node.level or "").strip()
+        if level and level.lower() not in defined:
+            findings.append(
+                HealthFinding(
+                    message=(
+                        f"{node.id} carries level '{level}', "
+                        "which this configuration does not define"
+                    ),
+                    node_id=node.id,
+                )
+            )
+
+    if findings:
+        return HealthCheck(
+            name="spec.undefined_levels",
+            passed=True,
+            message=(
+                f"{len(findings)} requirement(s) carry a level this configuration does not define"
+            ),
+            category="spec",
+            severity="info",
+            findings=findings,
+        )
+    return HealthCheck(
+        name="spec.undefined_levels",
+        passed=True,
+        message="Every requirement carries a level this configuration defines",
+        category="spec",
+        severity="info",
+    )
+
+
 def check_spec_hierarchy_levels(graph: FederatedGraph, config: dict[str, Any]) -> HealthCheck:
     """Check that hierarchy levels follow configured rules."""
     from elspais.graph import NodeKind
@@ -2348,6 +2398,12 @@ def run_spec_checks(
                 entry.name,
             )
         )
+        checks.append(
+            _annotate_findings(
+                check_spec_undefined_levels(repo_graph, repo_config),
+                entry.name,
+            )
+        )
         _typed_repo = _validate_config(repo_config)
         _allow_so = _typed_repo.rules.hierarchy.allow_structural_orphans
         checks.append(
@@ -3751,6 +3807,61 @@ def check_uat_results(graph: FederatedGraph, config: dict[str, Any] | None = Non
     )
 
 
+# Implements: REQ-d00284-C
+def check_unmatched_results(graph: FederatedGraph) -> HealthCheck:
+    """Report results that matched no test.
+
+    A result matching nothing is not an error where it happens: the parse
+    succeeded, the file was read, and the only trace is a coverage figure lower
+    than expected. Saying whether a result's recorded name picked out no test
+    or more than one tells an author which problem they have -- a name pointing
+    at a file that is not there, or two files sharing one name.
+    """
+    from elspais.graph import EdgeKind, NodeKind
+
+    findings = []
+    for result in graph.nodes_by_kind(NodeKind.RESULT):
+        # A YIELDS edge is built as ``test.link(result)``, so the test is the
+        # RESULT's parent: a result that matched a test has one.
+        if any(True for _ in result.iter_parents(edge_kinds={EdgeKind.YIELDS})):
+            continue
+        if result.get_field("match") == "aggregate":
+            continue  # an aggregate result names no test and never matches one
+        target = result.get_field("target") or "?"
+        recorded = result.get_field("classname") or result.get_field("name") or result.id
+        candidates = result.get_field("name_candidates") or []
+        if candidates:
+            detail = f"matched {len(candidates)} tests: {', '.join(candidates)}"
+        else:
+            detail = "matched no test"
+        findings.append(
+            HealthFinding(
+                message=(f"target {target!r}: result named {recorded!r} {detail}"),
+                node_id=result.id,
+                file_path=result.get_field("result_file"),
+                line=result.get_field("result_line"),
+            )
+        )
+
+    if not findings:
+        return HealthCheck(
+            name="tests.unmatched_results",
+            passed=True,
+            message="Every ingested result matched a test",
+            category="tests",
+            severity="warning",
+        )
+    return HealthCheck(
+        name="tests.unmatched_results",
+        passed=False,
+        message=f"{len(findings)} ingested result(s) matched no test",
+        category="tests",
+        severity="warning",
+        details={"count": len(findings)},
+        findings=findings,
+    )
+
+
 def run_test_checks(
     graph: FederatedGraph,
     exclude_status: set[str] | None = None,
@@ -3770,6 +3881,7 @@ def run_test_checks(
         check_external_tests(graph, config),
         check_test_results(graph, config=config),
         check_test_results_stale(graph),
+        check_unmatched_results(graph),
         _check_status_references(
             graph, NodeKind.TEST, StatusRole.RETIRED, ref_sev.retired, exclude_status
         ),
@@ -3991,10 +4103,9 @@ def run(args: argparse.Namespace) -> int:
         # _validate_config is defined in this module (health.py near line 35).
         cfg = _validate_config(cfg_dict)
         selected = getattr(args, "targets", None)
-        only = set(selected) if selected else None
         target_names = {t.name for t in cfg.scanning.test.targets}
-        if only is not None:
-            unknown = sorted(only - target_names)
+        if selected:
+            unknown = sorted(set(selected) - target_names)
             if unknown:
                 print(
                     f"error: unknown --targets: {', '.join(unknown)}. "
@@ -4002,6 +4113,17 @@ def run(args: argparse.Namespace) -> int:
                     file=sys.stderr,
                 )
                 return 2
+        # Implements: REQ-d00283-D+E+H+I
+        # One authority resolves both selectors; None means every configured
+        # target, which is what keeps a project declaring no groups rendering
+        # exactly as it did before (REQ-d00254-J).
+        from elspais.config import selected_targets
+
+        try:
+            only = selected_targets(cfg, selected or None, getattr(args, "groups", None) or None)
+        except ValueError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
         commandful = [
             t for t in cfg.scanning.test.targets if t.command and (only is None or t.name in only)
         ]
@@ -4009,7 +4131,8 @@ def run(args: argparse.Namespace) -> int:
             print(
                 "error: --run-tests requires at least one "
                 "[[scanning.test.targets]] entry with a command field "
-                "(within --targets when given). "
+                "(within the selected --targets/--groups when given; a run "
+                "naming neither executes the `default` group). "
                 "See docs/cli/test-targets.md for configuration examples.",
                 file=sys.stderr,
             )

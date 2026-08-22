@@ -1,4 +1,4 @@
-# Implements: REQ-p00080-B, REQ-p00080-C, REQ-p00080-D, REQ-p00080-E, REQ-p00080-F
+# Implements: REQ-p00080-B, REQ-p00080-C, REQ-p00080-D, REQ-p00080-E
 # Implements: REQ-p00080-H, REQ-p00080-I, REQ-p00080-J, REQ-p00080-K
 """Markdown assembler for PDF compilation.
 
@@ -156,20 +156,11 @@ class MarkdownAssembler:
         self,
         graph: FederatedGraph,
         title: str | None = None,
-        overview: bool = False,
-        max_depth: int | None = None,
         resolver: IdResolver | None = None,
         config: dict | None = None,
     ) -> None:
         self._graph = graph
-        self._overview = overview
-        self._max_depth = max_depth
-        if title:
-            self._title = title
-        elif overview:
-            self._title = "Product Requirements Overview"
-        else:
-            self._title = "Requirements Specification"
+        self._title = title or "Requirements Specification"
         if resolver is None:
             # An empty dict is not the default configuration: it declares no
             # levels, so the grammar it yields matches no identifier.
@@ -284,21 +275,15 @@ class MarkdownAssembler:
                     continue
         level_buckets = self._partition_by_level(file_groups)
 
-        # Emit each level group
-        if self._overview:
-            levels_to_emit = ("PRD",)
-        else:
-            levels_to_emit = ("PRD", "OPS", "DEV")
-
-        for level in levels_to_emit:
+        # Emit each level group. Implements: REQ-d00281-A
+        # The levels this project declares, in the rank order it gave them --
+        # never a fixed list, which would omit a level a project configured and
+        # would be a second place deciding what a report contains.
+        ordered_levels = tuple(
+            level for level, _rank in sorted(self._level_order.items(), key=lambda kv: kv[1])
+        )
+        for level in ordered_levels:
             files = level_buckets.get(level, [])
-            if not files:
-                continue
-
-            # Apply max_depth filter for core files in overview mode
-            if self._overview and self._max_depth is not None:
-                files = self._filter_by_depth(files, file_groups)
-
             if not files:
                 continue
 
@@ -313,18 +298,7 @@ class MarkdownAssembler:
                 owner_root = self._repo_root_for_owner(file_owners.get(file_path))
                 parts.extend(self._render_file(file_path, owning_repo_root=owner_root))
 
-        # Topic index — scope to rendered files only in overview mode
-        if self._overview:
-            rendered_files: set[str] = set()
-            for level in levels_to_emit:
-                bucket = level_buckets.get(level, [])
-                if self._max_depth is not None:
-                    bucket = self._filter_by_depth(bucket, file_groups)
-                rendered_files.update(bucket)
-            index_groups = {k: v for k, v in file_groups.items() if k in rendered_files}
-        else:
-            index_groups = file_groups
-        index_section = self._build_topic_index(index_groups, file_owners=file_owners)
+        index_section = self._build_topic_index(file_groups, file_owners=file_owners)
         if index_section:
             parts.append("# Topic Index")
             parts.append("")
@@ -970,46 +944,6 @@ class MarkdownAssembler:
                 break
         return depth
 
-    def _is_associated_node(self, node: GraphNode) -> bool:
-        """Check if a node belongs to an associated repository.
-
-        Detects associated-repo IDs by checking for an uppercase segment
-        after the namespace prefix (e.g., REQ-CAL-p00001 has "CAL" segment).
-        """
-        import re
-
-        namespace = self._resolver.config.namespace
-        prefix = f"{namespace}-"
-        if node.id.startswith(prefix):
-            after_prefix = node.id[len(prefix) :]
-            if re.match(r"^[A-Z]{2,}-[a-z]", after_prefix):
-                return True
-        return False
-
-    def _filter_by_depth(
-        self,
-        file_paths: list[str],
-        file_groups: dict[str, list[GraphNode]],
-    ) -> list[str]:
-        """Filter files by max depth, excluding associated-repo files from filtering.
-
-        Associated-repo files (detected via namespace pattern) are always included.
-        Core files are included only if their minimum depth < max_depth.
-        """
-        result: list[str] = []
-        for path in file_paths:
-            nodes = file_groups.get(path, [])
-            if any(self._is_associated_node(n) for n in nodes):
-                result.append(path)
-                continue
-            min_depth = min(
-                (self._node_depth(n) for n in nodes),
-                default=999,
-            )
-            if min_depth < self._max_depth:
-                result.append(path)
-        return result
-
     # ------------------------------------------------------------------
     # Topic index
     # ------------------------------------------------------------------
@@ -1107,9 +1041,9 @@ class MarkdownAssembler:
             file_path, owning_repo_root=owning_repo_root
         )
         if not resolved or not resolved.exists():
-            # Recorded here too because overview mode can index a file it
-            # never renders. `_record_diagnostic` dedupes, so a file missed
-            # by both passes is still reported once.
+            # Recorded here too because the index pass reaches a file the
+            # render pass may have failed on. `_record_diagnostic` dedupes,
+            # so a file missed by both passes is still reported once.
             self._record_unreadable_source_file(file_path, owning_repo_root, searched)
             return []
         text = resolved.read_text(encoding="utf-8")

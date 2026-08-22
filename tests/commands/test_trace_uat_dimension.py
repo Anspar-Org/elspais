@@ -12,7 +12,7 @@ import pytest
 from elspais.graph import NodeKind
 
 _JOURNEY_UAT_FIX = Path(__file__).parents[1] / "fixtures" / "journey-uat"
-_CODE_COLUMNS = {"implemented", "tested", "verified", "code_tested", "lcov_tested"}
+_CODE_VALUES = {"implemented", "tested", "verified", "code_tested", "lcov_tested"}
 
 
 def _build_uat_graph(tmp_path: Path, slug: str):
@@ -32,8 +32,8 @@ def _build_uat_graph(tmp_path: Path, slug: str):
 def _build_mixed_graph(tmp_path: Path):
     """Build a graph with two requirements -- one validated, one not.
 
-    REQ-d00001 has an incoming VALIDATES edge from JNY-OQ-01.
-    REQ-d00002 has NO journey, so it must be excluded from UAT reports.
+    REQ-d00001 is validated by JNY-OQ-01. REQ-d00002 has no journey at all, so
+    it is the row that shows a UAT report stating what carries no evidence.
     """
     from elspais.graph.factory import build_graph
 
@@ -153,74 +153,85 @@ def mixed_graph(tmp_path):
 @pytest.fixture()
 def uat_preset():
     """ReportPreset with dimension='uat'."""
-    from elspais.commands.trace import _UAT_COLUMNS, ReportPreset
+    from elspais.commands.trace import _UAT_VALUES, ReportPreset
 
     return ReportPreset(
         name="uat",
-        columns=list(_UAT_COLUMNS),
+        values=list(_UAT_VALUES),
         dimension="uat",
     )
 
 
 # ---------------------------------------------------------------------------
-# Row-filtering tests
+# A value set chooses values, never rows
 # ---------------------------------------------------------------------------
 
 
-class TestUATRowFiltering:
-    """Verify that only requirements with incoming VALIDATES edges appear."""
+class TestUATStatesEveryRequirement:
+    """The UAT set is a set of VALUES and nothing more.
 
-    def test_mixed_graph_json_includes_validated_req(self, mixed_graph, uat_preset):
-        """REQ-d00001 (validated) must appear in UAT JSON output."""
+    A requirement no journey validates is the one a reader asking about
+    user-acceptance evidence most needs to see, and a value set that dropped
+    it would be a second row-selection outside the scope authority
+    (REQ-d00282-H). REQ-d00002 carries no journey; it is a row that says so.
+    """
+
+    # Verifies: REQ-d00257-B, REQ-d00282-H
+    def test_json_states_the_requirement_no_journey_validates(self, mixed_graph, uat_preset):
         from elspais.commands.trace import format_json
 
         rows = json.loads("\n".join(format_json(mixed_graph, uat_preset)))
         ids = {r["id"] for r in rows}
-        assert "REQ-d00001" in ids, f"REQ-d00001 should be in UAT report; got {ids}"
+        assert ids == {"REQ-d00001", "REQ-d00002"}, (
+            f"Every requirement is reported whatever validates it; got {ids}"
+        )
 
-    def test_mixed_graph_json_excludes_unvalidated_req(self, mixed_graph, uat_preset):
-        """REQ-d00002 (no VALIDATES edge) must NOT appear in UAT JSON output."""
+    # Verifies: REQ-d00257-B, REQ-d00282-H
+    def test_json_row_with_no_journey_states_an_empty_journeys_list(self, mixed_graph, uat_preset):
+        """The unvalidated row states the absence rather than being removed."""
         from elspais.commands.trace import format_json
 
-        rows = json.loads("\n".join(format_json(mixed_graph, uat_preset)))
-        ids = {r["id"] for r in rows}
-        assert "REQ-d00002" not in ids, f"REQ-d00002 should be excluded; got {ids}"
+        rows = {r["id"]: r for r in json.loads("\n".join(format_json(mixed_graph, uat_preset)))}
+        assert rows["REQ-d00002"]["journeys"] == [], (
+            f"Expected no journeys for REQ-d00002; got {rows['REQ-d00002']['journeys']}"
+        )
+        assert [j["id"] for j in rows["REQ-d00001"]["journeys"]] == ["JNY-OQ-01"]
 
-    def test_only_validated_reqs_in_json(self, mixed_graph, uat_preset):
-        """Every row in UAT JSON must have at least one validating journey."""
-        from elspais.commands.trace import format_json
-        from elspais.graph.relations import EdgeKind
-
-        rows = json.loads("\n".join(format_json(mixed_graph, uat_preset)))
-        for row in rows:
-            req_id = row["id"]
-            req_node = next(
-                (n for n in mixed_graph.nodes_by_kind(NodeKind.REQUIREMENT) if n.id == req_id),
-                None,
-            )
-            assert req_node is not None, f"Row id {req_id} not found in graph"
-            # VALIDATES edges go FROM requirement TO journey (outgoing on req)
-            has_validates = any(
-                e.kind == EdgeKind.VALIDATES for e in req_node.iter_outgoing_edges()
-            )
-            assert has_validates, f"{req_id} has no VALIDATES edges but appears in UAT report"
-
-    def test_markdown_excludes_unvalidated_req(self, mixed_graph, uat_preset):
-        """Markdown UAT table must not contain requirements with no VALIDATES edges."""
+    # Verifies: REQ-d00257-B, REQ-d00282-H+I
+    def test_markdown_states_every_requirement(self, mixed_graph, uat_preset):
         from elspais.commands.trace import format_markdown
 
         output = "\n".join(format_markdown(mixed_graph, uat_preset))
         assert "REQ-d00001" in output, "REQ-d00001 should appear in UAT markdown"
-        assert "REQ-d00002" not in output, "REQ-d00002 should be excluded from UAT markdown"
+        assert "REQ-d00002" in output, (
+            "REQ-d00002 should appear in UAT markdown: a value set selects no rows"
+        )
+
+    # Verifies: REQ-d00257-B+C
+    def test_the_set_states_uat_figures_and_no_other_dimension(self, mixed_graph, uat_preset):
+        """What the set DOES state, beside what it does not.
+
+        B wants the journeys, their verdicts and the UAT figures; C wants no
+        implementation, test-verification or line figure anywhere in the row.
+        """
+        from elspais.commands.trace import format_json
+
+        rows = json.loads("\n".join(format_json(mixed_graph, uat_preset)))
+        assert rows, "Expected at least one row"
+        for row in rows:
+            assert "uat_coverage" in row and "uat_verified" in row, row
+            assert "journeys" in row, row
+            for key in _CODE_VALUES:
+                assert key not in row, f"Code value '{key}' should be absent; row: {row}"
 
 
 # ---------------------------------------------------------------------------
-# UAT column presence tests
+# UAT value presence tests
 # ---------------------------------------------------------------------------
 
 
-class TestUATColumns:
-    """Verify correct columns appear / do NOT appear in UAT output."""
+class TestUATValues:
+    """Verify correct values appear / do NOT appear in UAT output."""
 
     def test_json_has_uat_coverage(self, mixed_graph, uat_preset):
         """UAT JSON rows must include 'uat_coverage' field."""
@@ -240,15 +251,15 @@ class TestUATColumns:
         for row in rows:
             assert "uat_verified" in row, f"Missing uat_verified in {row.get('id')}"
 
-    def test_json_excludes_code_columns(self, mixed_graph, uat_preset):
-        """Code-dimension columns must be absent from UAT JSON output."""
+    def test_json_excludes_code_values(self, mixed_graph, uat_preset):
+        """Code-dimension values must be absent from UAT JSON output."""
         from elspais.commands.trace import format_json
 
         rows = json.loads("\n".join(format_json(mixed_graph, uat_preset)))
         assert rows, "Expected at least one row"
         for row in rows:
-            for col in _CODE_COLUMNS:
-                assert col not in row, f"Code column '{col}' should be excluded; row: {row}"
+            for key in _CODE_VALUES:
+                assert key not in row, f"Code value '{key}' should be excluded; row: {row}"
 
     def test_markdown_header_has_uat_coverage(self, mixed_graph, uat_preset):
         """Markdown UAT header must include 'UAT Covered' column (REQ-d00258-K)."""
@@ -302,8 +313,13 @@ class TestUATColumns:
 class TestUATJourneyVerdicts:
     """Verify journey verdict derivation in UAT output."""
 
+    # Verifies: REQ-d00257-B, REQ-d00282-L
     def test_json_has_journeys_field(self, mixed_graph, uat_preset):
-        """Each UAT JSON row must have a 'journeys' list."""
+        """Each UAT JSON row states a 'journeys' list -- possibly an empty one.
+
+        Every row states the value; whether it has journeys to name in it is
+        a fact about that requirement, not a condition of being reported.
+        """
         from elspais.commands.trace import format_json
 
         rows = json.loads("\n".join(format_json(mixed_graph, uat_preset)))
@@ -311,7 +327,8 @@ class TestUATJourneyVerdicts:
         for row in rows:
             assert "journeys" in row, f"Missing 'journeys' key in {row.get('id')}"
             assert isinstance(row["journeys"], list), "'journeys' should be a list"
-            assert len(row["journeys"]) > 0, "Expected at least one journey per validated req"
+        validated = next(r for r in rows if r["id"] == "REQ-d00001")
+        assert len(validated["journeys"]) > 0, "Expected the validated req to name its journey"
 
     def test_json_journey_has_id_and_verdict(self, mixed_graph, uat_preset):
         """Each journey entry in JSON must have 'id' and 'verdict' fields."""
@@ -371,10 +388,10 @@ class TestUATJourneyVerdicts:
 
     def test_one_step_fails_verdict_is_fail(self, tmp_path):
         """In the one-step-fails fixture, failing journey has verdict 'fail'."""
-        from elspais.commands.trace import _UAT_COLUMNS, ReportPreset, format_json
+        from elspais.commands.trace import _UAT_VALUES, ReportPreset, format_json
 
         graph = _build_uat_graph(tmp_path, "one-step-fails")
-        preset = ReportPreset(name="uat", columns=list(_UAT_COLUMNS), dimension="uat")
+        preset = ReportPreset(name="uat", values=list(_UAT_VALUES), dimension="uat")
         rows = json.loads("\n".join(format_json(graph, preset)))
         assert rows, "Expected at least one UAT row in one-step-fails graph"
         for row in rows:

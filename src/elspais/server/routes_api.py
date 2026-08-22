@@ -649,6 +649,31 @@ async def api_node(request: Request) -> JSONResponse:
     return JSONResponse(result)
 
 
+# Implements: REQ-d00279-B
+async def api_scope(request: Request) -> JSONResponse:
+    """GET /api/scope - the authority's membership for a scope.
+
+    A view that narrows itself as the reader works cannot wait on an authority
+    elsewhere, so it evaluates membership itself. What it owes in return is the
+    authority's own answer, and this is where that answer can be had: without a
+    way to ask, equivalence could only be assumed rather than checked.
+    """
+    from elspais.commands._scope import scope_disclosure
+    from elspais.graph.scope import scope_from_params, scoped_requirements
+
+    state = _st(request)
+    scope = scope_from_params(dict(request.query_params))
+    result = scoped_requirements(state.graph, scope, state.config)
+    return JSONResponse(
+        {
+            "ids": sorted(result.ids),
+            "population": result.population,
+            "scope": scope_disclosure(result),
+            "selected_nothing": result.selected_nothing_from_a_populated_estate,
+        }
+    )
+
+
 async def api_query(request: Request) -> JSONResponse:
     """GET /api/query - Combined property + keyword filter endpoint."""
     state = _st(request)
@@ -663,7 +688,7 @@ async def api_query(request: Request) -> JSONResponse:
         if val:
             filters[prop] = val
     return JSONResponse(
-        _query_nodes(state.graph, kind, keywords, match_all, filters or None, limit)
+        _query_nodes(state.graph, kind, keywords, match_all, filters or None, limit, state.config)
     )
 
 
@@ -1274,11 +1299,20 @@ async def api_run_broken(request: Request) -> JSONResponse:
 
 async def api_run_summary(request: Request) -> JSONResponse:
     """GET /api/run/summary - Coverage summary data."""
+    from elspais.commands._values import UnofferedValues
     from elspais.commands.summary import compute_summary
 
     state = _st(request)
     params = dict(request.query_params)
-    return JSONResponse(compute_summary(state.graph, state.config, params))
+    try:
+        return JSONResponse(compute_summary(state.graph, state.config, params))
+    except UnofferedValues as exc:
+        # Implements: REQ-d00282-F
+        # A report is not produced under a selection honoured in part, and a
+        # caller asking for a value this report does not offer is told so
+        # rather than handed a narrower report that looks like the one asked
+        # for.
+        return JSONResponse({"error": "unoffered_values", "message": str(exc)}, status_code=400)
 
 
 async def api_run_gaps(request: Request) -> JSONResponse:
@@ -1319,11 +1353,20 @@ async def api_run_analysis(request: Request) -> JSONResponse:
 
 async def api_run_trace(request: Request) -> JSONResponse:
     """GET /api/run/trace - Traceability matrix data as JSON."""
+    from elspais.commands._values import UnofferedValues
     from elspais.commands.trace import compute_trace
 
     state = _st(request)
     params = dict(request.query_params)
-    return JSONResponse(compute_trace(state.graph, state.config, params))
+    try:
+        return JSONResponse(compute_trace(state.graph, state.config, params))
+    except UnofferedValues as exc:
+        # Implements: REQ-d00282-F
+        # A report is not produced under a selection honoured in part, and a
+        # caller asking for a value this report does not offer is told so
+        # rather than handed a narrower report that looks like the one asked
+        # for.
+        return JSONResponse({"error": "unoffered_values", "message": str(exc)}, status_code=400)
 
 
 # ─────────────────────────────────────────────────────────────────

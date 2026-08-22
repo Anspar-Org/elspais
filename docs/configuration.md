@@ -93,6 +93,12 @@ name = "my-project"
 # Lower rank = higher in hierarchy (PRD=1 is parent of DEV=3).
 # The `implements` list declares which levels this level may implement.
 #
+# A requirement may carry a level this configuration does not define -- an
+# associate declaring its own levels, a misspelling, or a level removed while
+# its requirements remained. Such a requirement is still counted and still forms
+# its own group in reports, ordered after the levels declared here, and the
+# `spec.undefined_levels` check names it so the difference is visible.
+#
 # expects_validation (bool, default false): set true for levels that should have
 # a user-journey validating them (a USER_JOURNEY that `Validates:` the requirement).
 # When true, a requirement of that level with no UAT coverage is a reported gap
@@ -245,6 +251,16 @@ reference_keyword = "Verifies"
 # ones are "fresh" for a given invocation is a per-command-line decision, not
 # a persistent config setting. See `elspais docs test-targets` (Per-PR
 # selectivity section).
+
+# Test groups - which targets a run is about. Declared as a keyword and a
+# description; a target then claims the groups it belongs to via `groups`.
+# `default` (what a run selects nothing executes) and `all` (every target)
+# are reserved and cannot be declared. A target claiming no group belongs to
+# `default`, so declaring nothing here leaves every run as it was.
+# Select with `--groups NAME ...` wherever `--targets` is accepted.
+# [scanning.test.groups]
+# uat = "End-to-end journeys needing a live stack"
+
 [[scanning.test.targets]]
 name     = "app"
 cwd      = "app"                    # relative to repo root; empty = repo root
@@ -259,6 +275,11 @@ coverage = "coverage/lcov.info"     # optional; lcov or coverage.py JSON
 # reporter = "junit"
 # results  = "results/*.xml"        # glob relative to cwd
 # match    = "source"
+# groups   = ["uat"]                # default: the `default` group
+# classname = "source-file"         # how the results name their test:
+#                                   # "python-module" (pytest) | "source-file"
+#                                   # (a spec basename, e.g. Playwright).
+#                                   # Default: whatever the reporter declares.
 
 # User journey file scanning
 [scanning.journey]
@@ -308,6 +329,65 @@ formats = []
 
 # Output directory
 dir = ""
+
+#──────────────────────────────────────────────────────────────────────────────
+# SCOPES - Named Report Selections
+# A report is read by an audience, and an audience is rarely served by every
+# requirement the estate holds. A scope declared here can be handed to any
+# reporting command with `--scope <name>`, so the selection that produced a
+# committed report is versioned beside the requirements it selects over and can
+# be re-run by a reader who did not compose it.
+#
+# The same selection can be stated on the command line instead
+# (`--level`, `--not-level`, `--status`, `--not-status`, `--match-status-roles`);
+# a name selects exactly what the same scope stated in full selects. Flags given
+# alongside `--scope` narrow the named scope rather than replacing it.
+#
+# Values named for one property are alternatives; different properties are all
+# required at once. `not_*` refuses a value outright, so a value both required
+# and refused is refused.
+#
+# match_status_roles reads each status named as every status sharing its role,
+# so "everything an active-role status carries" needs no list that goes stale
+# the day the project adds a status.
+#
+# A level or status a member's configuration does not define is still nameable
+# where that member's requirements carry it; a name nothing admits selects
+# nothing there and is reported rather than passing silently.
+#
+# One name also carries the values a report states, so an audience is referred
+# to once rather than half in the configuration and half in whatever invoked the
+# report. The two remain independent: a declaration naming no values constrains
+# none, and naming values selects no requirements.
+#
+# `values` names value KEYS, never the words a project displays a value under
+# -- display words are configurable (`[rules.coverage] status_words`), and a
+# selection written in them would break the day someone renamed one. A coverage
+# dimension's key states its total; a measure behind it is keyed beneath the
+# dimension it measures (`implemented.immediate_direct`). A table states a
+# figure as one cell and a structured format states it as an object of its
+# numbers, nested to mirror the key. The keys are:
+#   id, title, level, status, implements, hash, file, journeys
+#   implemented, tested, verified, uat_coverage, uat_verified
+#     and, for each of those five, `.immediate_direct`, `.immediate_indirect`,
+#     `.rolled_direct`, `.rolled_indirect`
+#   `.count`, `.total` and `.ratio` beneath any of those figures -- the
+#     assertions credited, the assertions the credit was counted over, and
+#     their proportion, each as a number rather than a composite cell
+#   tested.passed, tested.failed, tested.awaiting  (counts only, no `.ratio`)
+#   verified.carried   (whether the Passing verdict was carried from a
+#     baseline; offered by `trace`, which reports per requirement, and not by
+#     `summary`, which reports per level)
+#   code_tested, lcov_tested   (measured in lines, so they carry no measures)
+# A name the report being produced does not offer is refused rather than
+# skipped: a report is never produced under a selection honoured in part.
+#──────────────────────────────────────────────────────────────────────────────
+
+[scopes.sponsor]
+level = ["prd"]
+not_status = ["Deprecated"]
+match_status_roles = false
+values = ["id", "title", "status", "implemented", "tested", "verified"]
 
 #──────────────────────────────────────────────────────────────────────────────
 # ASSOCIATES - Cross-Repository Federation

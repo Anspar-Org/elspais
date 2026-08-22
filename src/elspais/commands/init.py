@@ -237,6 +237,9 @@ _FIELD_COMMENTS: dict[str, str] = {
     ),
     "scanning.test.reference_keyword": 'Keyword for test->requirement refs (e.g. "Verifies")',
     "scanning.test.reference_patterns": "Additional regex patterns for reference detection",
+    "scanning.test.groups": (
+        "Declared test groups: keyword = description. `all` and `default` are reserved"
+    ),
     "scanning.test.targets": ("Per-package/suite test-ingestion targets (array of tables)"),
     "scanning.test.targets.name": "Unique label for this target (required)",
     "scanning.test.targets.cwd": (
@@ -254,6 +257,13 @@ _FIELD_COMMENTS: dict[str, str] = {
     "scanning.test.targets.coverage": ("Path to lcov/coverage-json file, relative to cwd"),
     "scanning.test.targets.match": (
         '"source" (per-file) | "aggregate" (whole-app green/red, default)'
+    ),
+    "scanning.test.targets.groups": (
+        "Groups this target belongs to (default: the `default` group)"
+    ),
+    "scanning.test.targets.classname": (
+        '"python-module" | "source-file" -- how results name their test'
+        " (default: the reporter's own)"
     ),
     "scanning.test.targets.credit_coverage": (
         '"off" | "tested" | "verified" -- lcov_tested dimension credit (default off)'

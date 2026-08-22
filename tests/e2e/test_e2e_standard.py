@@ -239,14 +239,61 @@ class TestSummaryFormats:
 
 
 class TestSummaryStatusFilter:
-    """Summary --status filters by status."""
+    """Summary --status scopes which requirements the report emits.
 
-    def test_status_filter_draft(self, project):
+    The fixture holds 11 requirements: 8 Active, 2 Draft, 1 Deprecated. Only
+    Active expects implementation, so it alone is counted for coverage. That
+    fence between emission and measurement is what these two tests separate.
+    """
+
+    # Verifies: REQ-p00084-B, REQ-p00084-E
+    def test_status_scope_active_narrows_emission_and_still_counts(self, project):
+        """An Active scope emits only Active requirements and counts them all."""
+        result = run_elspais("summary", "--format", "json", "--status", "Active", cwd=project)
+        assert result.returncode == 0
+        data = json.loads(result.stdout)
+
+        # REQ-p00084-B/D: the scope is honoured and discloses itself.
+        disclosure = " ".join(data["scope"])
+        assert "status Active" in disclosure
+        assert "8 of 11" in disclosure
+
+        # The Draft and Deprecated requirements were not emitted at all, so
+        # they cannot appear as excluded-from-coverage. An unscoped report
+        # emits them and does report them there (asserted below).
+        assert data["excluded"] == {}
+
+        scoped_totals = {lv["level"]: lv["total"] for lv in data["levels"]}
+        assert sum(scoped_totals.values()) == 8
+
+        # REQ-p00084-E: the coverage figures for an emitted requirement are
+        # what an unscoped report states for it — scoping changes emission,
+        # never measurement.
+        unscoped = run_elspais("summary", "--format", "json", cwd=project)
+        assert unscoped.returncode == 0
+        unscoped_data = json.loads(unscoped.stdout)
+        assert unscoped_data["scope"] == []
+        assert unscoped_data["excluded"] == {"Draft": 2, "Deprecated": 1}
+        assert {lv["level"]: lv["total"] for lv in unscoped_data["levels"]} == scoped_totals
+
+    # Verifies: REQ-p00084-B, REQ-p00084-E
+    def test_status_scope_draft_emits_requirements_that_are_not_counted(self, project):
+        """A Draft scope selects requirements whose status keeps them uncounted."""
         result = run_elspais("summary", "--format", "json", "--status", "Draft", cwd=project)
-        if result.returncode == 0 and result.stdout.strip():
-            data = json.loads(result.stdout)
-            total = sum(lv.get("total", 0) for lv in data.get("levels", []))
-            assert total >= 1
+        assert result.returncode == 0
+        data = json.loads(result.stdout)
+
+        # REQ-p00084-B/D: the two Draft requirements were selected and emitted.
+        disclosure = " ".join(data["scope"])
+        assert "status Draft" in disclosure
+        assert "2 of 11" in disclosure
+        assert data["excluded"] == {"Draft": 2}
+
+        # REQ-p00084-E: Draft carries the provisional role, so those emitted
+        # requirements are outside the coverage measurement — exactly as they
+        # are in an unscoped report. Emission selected them; measurement did
+        # not, and the scope did not move that line.
+        assert sum(lv["total"] for lv in data["levels"]) == 0
 
 
 class TestTraceOutput:

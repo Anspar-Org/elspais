@@ -264,15 +264,13 @@ The compiler declares `Satisfies:` against the REQ-p00019 anti-pattern template:
 
 A. The tool SHALL provide an `elspais pdf` CLI command that compiles spec files into a PDF document.
 
-B. The assembled Markdown SHALL group requirements by level (PRD, OPS, DEV) with each level as a top-level section, and order files within each level by graph depth (root requirements first).
+B. The assembled Markdown SHALL group requirements by the levels the project declares, in the rank order it gave them, with each level as a top-level section, and order files within each level by graph depth (root requirements first).
 
 C. The generated PDF SHALL include an auto-generated table of contents derived from requirement headings.
 
 D. The tool SHALL generate an alphabetized topic index with entries derived from filename words, file-level Topics lines, and requirement-level Topics lines, rendered as a Markdown section with hyperlinks.
 
 E. The tool SHALL insert page breaks before each requirement heading to ensure each requirement starts on a new page.
-
-F. The tool SHALL support an `--overview` flag that generates a stakeholder-oriented PDF containing only PRD-level requirements, with an optional `--max-depth` flag to limit core PRD graph depth while always including all associated-repo PRDs.
 
 G. The PDF generator SHALL support content derived from a variety of sources and media types.
 
@@ -286,6 +284,9 @@ K. When referenced content was omitted from the compiled document or substituted
 
 ## Changelog
 
+- 2026-08-22 | 3296bc86 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: sync changelog hash
+- 2026-08-22 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-74: retire the overview flag and its depth limit — the estate's audience document is compiled by its own pipeline over the graph, so a second selection mechanism here answered to nobody (F withdrawn); state the level grouping as the levels a project declares rather than a fixed three (B)
+- 2026-08-22 | 3296bc86 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-07 | acc97ca9 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-07 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-31/TOOL-32: concretize the REQ-p00019 anti-pattern instance with assertions I (unresolvable asset reference reported), J (unreadable owning-repo source file reported), and K (completion report discloses degradation)
 - 2026-08-01 | 01da5fa4 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: sync changelog hash
@@ -296,7 +297,7 @@ K. When referenced content was omitted from the compiled document or substituted
 - 2026-07-31 | 24f063f6 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-04-23 | bfc0cadf | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Spec-to-PDF Compilation* | **Hash**: acc97ca9
+*End* *Spec-to-PDF Compilation* | **Hash**: 3296bc86
 ---
 
 # REQ-p00015: Complete and Current Reporting
@@ -462,6 +463,47 @@ K. The system SHALL report a finding under one description only, so that a count
 - 2026-08-01 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-47: author behavioral anti-pattern template — silent omission, staleness, substitution, phantom success, unreported non-performance, verdict integrity, unactionable failures, suppressed error signals
 
 *End* *Truthful Reporting and Error Discipline* | **Hash**: 946a0e4c
+---
+
+# REQ-p00084: Audience-Scoped Reporting
+
+**Level**: prd | **Status**: Draft | **Implements**: REQ-p00003
+**Satisfies**: REQ-p00019
+
+A *Traceability* report is read by an audience, and an audience is rarely served by every requirement the estate holds, nor by every fact the tool can state about one. This requirement covers telling a reporting surface which requirements its audience needs and which facts about them, and what has to remain true of the report it then produces.
+
+## Assertions
+
+A. A surface that reports over a set of requirements SHALL accept a scope naming which requirements its audience needs.
+
+B. A scoped report SHALL emit as its answer the requirements its scope selects and no others.
+
+C. The requirements a scoped report presents SHALL NOT depend on the format the report is rendered in.
+
+D. A scoped report SHALL disclose the scope under which it was produced.
+
+E. A coverage figure a report states for an emitted requirement, together with each measure it publishes behind that figure, SHALL equal the figure and measures an unscoped report states for that requirement.
+
+F. The selections determining which requirements a report emits and which facts it states about them SHALL be recordable in the project, so that a report committed alongside the project can be reproduced by a reader who did not compose it.
+
+G. A surface that states facts about each requirement it emits SHALL accept a selection naming which of those facts its audience needs.
+
+## Rationale
+
+Withholding content from a report is ordinarily a defect: a reader cannot tell a report narrowed on purpose from one that lost requirements on the way. REQ-p00015-A settles that question for content the tool never admits; a scope admits everything and narrows what is emitted, which is the same hazard reached by another route. D resolves it — a report that names its scope is an answer to a stated question, and a reader who wanted a different question asked can see that they got the wrong one. D is also how this requirement concretizes the REQ-p00019 anti-pattern template it declares `Satisfies:` against: a scoped report omits requirements from its answer and delivers a part of the estate where the whole was available, so the silent-omission and undisclosed-substitution classes are the ones it is most exposed to, and naming the scope answers both in a single act. The template's remaining classes bind to this subsystem through the instance without a subsystem-specific strengthening.
+
+A names the surfaces this obligation falls on by what they do rather than by listing them: the sections of a composed report, the compiled review document, the read surfaces the tool offers a program, and the view a reader browses the estate through are all answers computed over a set of requirements for somebody. Generating a file that mirrors the estate's own structure — an index of what exists, a glossary of the terms it uses — is not reporting over a set of requirements for an audience, and carries no scope.
+
+E keeps scoping a matter of emission. A requirement's own coverage is a fact about the whole estate — what implements it, what tests it, what refines it — and none of that changes because a reader asked to see fewer requirements. Evidence held by a requirement a scope excludes still conducts to a requirement the scope emits, so a report for an audience that never reads detailed requirements still states the coverage those detailed requirements earn for the ones it does read. Stating E against what an unscoped report says gives it a referent rather than leaving "unchanged" to be argued, and extending it to the measures published behind a headline figure closes the same gap one level down: a headline held steady while the evidence behind it moves is a figure whose meaning has quietly changed.
+
+B and C are separate because they fail separately. B is about honouring a scope at all; C is about renderings of one report agreeing with each other. A tool can honour a scope in the rendering a reader checks and quietly drop a requirement from the one they file, and only C catches that — the disagreement is invisible in either output taken alone.
+
+F is what makes a selection survive contact with a project. A selection that exists only in the invocation that produced a report cannot be checked by the person reading the report, so the report is evidence of a choice nobody can re-derive, and the audience definition drifts into whatever tooling happened to produce it. It covers both selections together because an audience is defined by both, and a project able to commit only one of them keeps the other wherever the report was run from.
+
+G is the second axis, and it is separate from A because the two are separate questions a reader answers independently. Which requirements a report is about and which facts it states about them are decided for different reasons and by different readers -- a compliance pack wants few requirements described fully, a status review wants many described briefly -- so a reader answering one says nothing about the other. What is common to them is everything else this requirement asks: an answer is honoured, disclosed where its absence would otherwise be invisible, and does not vary by the format it is rendered in. REQ-d00282 fixes the vocabulary the second answer is written in, as REQ-d00278 does for the first.
+
+*End* *Audience-Scoped Reporting* | **Hash**: 199562bd
+
 ---
 
 ## REQ-d00220: TermDictionary Data Model

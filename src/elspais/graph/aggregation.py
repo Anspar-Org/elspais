@@ -26,6 +26,7 @@ from elspais.graph.GraphNode import NodeKind
 from elspais.graph.metrics import (
     CoverageDimension,
     CoverageSource,
+    LineCoverage,
     RollupMetrics,
     has_integration,
     integrates_by_associate,
@@ -692,6 +693,7 @@ def iter_uncredited_evidence(
     return out
 
 
+# Implements: REQ-d00258-P
 @dataclass
 class DimensionSums:
     """One dimension's assertion-fraction sums for a level.
@@ -699,6 +701,13 @@ class DimensionSums:
     The four measures of REQ-d00069-L and the per-*Assertion* total of
     REQ-d00069-N, each summed in its own right, so a surface can report a
     figure and show the evidence behind it (REQ-d00258-A).
+
+    A group's figure is the credit and the assertions of that group each
+    SUMMED, never the average of its members' own proportions: summing weights
+    each requirement by how much it obliges, and keeps the group's figure made
+    of the same evidence its members' are. ``total`` accumulates the assertions
+    the same way the credit accumulates, so the two are always taken over the
+    same set.
     """
 
     total: int = 0
@@ -727,6 +736,12 @@ class LevelAggregate:
     tested_passed: int = 0
     tested_failed: int = 0
     tested_awaiting: int = 0
+    # Implements: REQ-d00254-B, REQ-d00282-N
+    # Line coverage summed over the same requirements, kept in its own field
+    # rather than beside the assertion sums: it is measured in LINES, and a
+    # figure a reader could add to an assertion count is a figure that will be
+    # added to one.
+    lines: LineAggregate = field(default_factory=lambda: LineAggregate())
 
 
 @dataclass
@@ -801,6 +816,47 @@ def _accumulate(sums: DimensionSums, dim: CoverageDimension) -> None:
     sums.total_covered += dim.covered
 
 
+# Implements: REQ-d00281-A+B+C+E
+def level_group_keys(
+    graph: Any,
+    config: dict[str, Any] | None = None,
+    node_ids: set[str] | None = None,
+) -> list[str]:
+    """The ordered level groups a report over ``node_ids`` forms.
+
+    The ONE derivation of a report's level groups (REQ-d00281). Groups are the
+    configured ``[levels]`` keys followed by every other level the requirements
+    themselves carry, so a level the configuration does not define still forms a
+    group instead of taking its requirements out of the report. Configured keys
+    are kept even where nothing carries them, which is why this is a union and
+    not the observed set alone.
+
+    Ordering follows REQ-d00281-E: configured keys first in the rank order
+    ``_level_keys`` gives them, then the undefined ones, which have no rank to be
+    ordered by and so are sorted for reproducibility rather than left in scan
+    order.
+
+    ``node_ids`` restricts the population a report covers; ``None`` means every
+    requirement in the graph. Callers accounting for requirements a coverage gate
+    excludes (see ``collect_coverage``) must pass ``None``, since a level whose
+    only requirements are excluded still has to be reportable.
+    """
+    configured = _level_keys(config)
+    known = {k.lower() for k in configured}
+    undefined: dict[str, str] = {}
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+        if node_ids is not None and node.id not in node_ids:
+            continue
+        raw = (node.level or "").strip()
+        if not raw:
+            continue
+        low = raw.lower()
+        if low in known:
+            continue
+        undefined.setdefault(low, raw)
+    return configured + [undefined[k] for k in sorted(undefined)]
+
+
 def _counts_for_coverage(config: dict[str, Any] | None, status: str | None) -> bool:
     """Whether a requirement STATUS is INCLUDED in coverage aggregation.
 
@@ -818,12 +874,25 @@ def _counts_for_coverage(config: dict[str, Any] | None, status: str | None) -> b
     return status_expects_implementation(config or {}, status)
 
 
-def aggregate_by_level(graph: Any, config: dict[str, Any] | None = None) -> list[LevelAggregate]:
-    """Per-level assertion-fraction sums, on each of the four measures."""
-    keys = _level_keys(config)
+def aggregate_by_level(
+    graph: Any,
+    config: dict[str, Any] | None = None,
+    node_ids: set[str] | frozenset[str] | None = None,
+) -> list[LevelAggregate]:
+    """Per-level assertion-fraction sums, on each of the four measures.
+
+    ``node_ids`` restricts the report to a scope's membership. A figure taken
+    across requirements answers "how far along is this set", so the set it is
+    taken over is the one the reader asked for (REQ-p00084-B); the per-assertion
+    measures each requirement contributes are unchanged by the narrowing, which
+    is what keeps an emitted requirement's own figures estate-true.
+    """
+    keys = level_group_keys(graph, config, node_ids)
     groups: dict[str, LevelAggregate] = {k.lower(): LevelAggregate(level=k.upper()) for k in keys}
 
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+        if node_ids is not None and node.id not in node_ids:
+            continue
         agg = groups.get((node.level or "").lower())
         if agg is None or not _counts_for_coverage(config, node.status):
             continue
@@ -856,6 +925,8 @@ def aggregate_by_level(graph: Any, config: dict[str, Any] | None = None) -> list
         agg.tested_passed += part.passed
         agg.tested_failed += part.failed
         agg.tested_awaiting += part.awaiting
+        # Implements: REQ-d00254-B, REQ-d00282-N
+        _accumulate_lines(agg.lines, rollup.code_tested)
 
     return [groups[k.lower()] for k in keys]
 
@@ -970,6 +1041,32 @@ class LineAggregate:
         return self.has_contexts
 
 
+# Implements: REQ-d00254-B, REQ-d00258-C, REQ-d00282-N
+# name: _accumulate_lines
+# use:  the ONE way a requirement's line coverage joins a running sum, so a
+#       per-level figure and the whole-estate one are the same arithmetic.
+# def:  the lines, plus the two bits recorded at ingestion OR-ed across the
+#       group -- one target measured, or one carrying contexts, means the
+#       question was asked of the group.
+#
+# A requirement with no implementation lines is not counted at all: it has no
+# line figure, and counting it would put a zero denominator into a sum whose
+# `req_count` is meant to say how many requirements the figure is about.
+def _accumulate_lines(agg: LineAggregate, lines: LineCoverage) -> None:
+    if lines.total_lines == 0:
+        return
+    agg.req_count += 1
+    agg.total_lines += lines.total_lines
+    agg.attributed_lines += lines.attributed_lines
+    agg.covered_lines += lines.covered_lines
+    if lines.covered_lines > 0:
+        agg.req_with_covered += 1
+    if lines.attributed_lines > 0:
+        agg.req_with_attribution += 1
+    agg.has_measurement = agg.has_measurement or lines.has_measurement
+    agg.has_contexts = agg.has_contexts or lines.has_contexts
+
+
 # Implements: REQ-d00254-B
 def aggregate_line_coverage(
     graph: Any,
@@ -991,22 +1088,10 @@ def aggregate_line_coverage(
         rollup: RollupMetrics | None = node.get_metric("rollup_metrics")
         if rollup is None:
             continue
-        lines = rollup.code_tested
-        if lines.total_lines == 0:
-            continue
-        agg.req_count += 1
-        agg.total_lines += lines.total_lines
-        agg.attributed_lines += lines.attributed_lines
-        agg.covered_lines += lines.covered_lines
-        if lines.covered_lines > 0:
-            agg.req_with_covered += 1
-        if lines.attributed_lines > 0:
-            agg.req_with_attribution += 1
         # Implements: REQ-d00258-E
         # What the tooling provided is an OR across the estate: one target
         # measured, or one carrying contexts, means the question was asked.
-        agg.has_measurement = agg.has_measurement or lines.has_measurement
-        agg.has_contexts = agg.has_contexts or lines.has_contexts
+        _accumulate_lines(agg, rollup.code_tested)
     return agg
 
 
@@ -1067,32 +1152,48 @@ def _measure_fields(prefix: str, sums: DimensionSums) -> dict[str, float]:
 
 
 # Implements: REQ-d00086-A, REQ-d00258-C
-def collect_coverage(graph: Any, config: dict[str, Any] | None = None) -> dict[str, Any]:
+def collect_coverage(
+    graph: Any,
+    config: dict[str, Any] | None = None,
+    node_ids: set[str] | frozenset[str] | None = None,
+) -> dict[str, Any]:
     """Full coverage-summary payload shared by CLI summary and MCP.
 
     Per-level rows come from :func:`aggregate_by_level`; excluded-status
     counts, the per-associate Integrates rollup, and (for selective runs)
     carry-forward provenance are assembled here so every consumer renders
-    from one payload. Level membership uses :func:`_level_keys` -- the SAME
-    derivation ``aggregate_by_level`` uses (rank-less ``[levels]`` keys
-    included), so ``excluded`` counts exactly the requirements that land in a
-    rendered level bucket.
+    from one payload.
+
+    Level membership comes from :func:`level_group_keys`, the one derivation
+    ``aggregate_by_level`` also reads, so the groups agree. The ``excluded``
+    tally reads those groups over EVERY requirement rather than the
+    coverage-eligible ones ``aggregate_by_level`` sums: a requirement is
+    counted as excluded precisely because a coverage gate kept it out of the
+    sums, so drawing the groups from what survived that gate would lose the
+    level whose requirements are all excluded -- the one case the tally exists
+    to report.
     """
     from elspais.config import get_status_roles
 
     roles = get_status_roles(config or {})
     exclude_status = roles.coverage_excluded_statuses()
-    known_levels = {k.lower() for k in _level_keys(config)}
+    # REQ-d00281-C: the same groups aggregate_by_level forms, so a requirement an
+    # excluded status keeps out of the sums is still counted as excluded rather
+    # than vanishing. Deliberately over every requirement, not the covered set --
+    # a level whose only requirements are excluded has to stay reportable.
+    known_levels = {k.lower() for k in level_group_keys(graph, config)}
 
     # excluded counts are computed locally (aggregate_by_level excludes these
     # statuses from its sums but doesn't report per-status counts).
     excluded_counts: dict[str, int] = {}
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+        if node_ids is not None and node.id not in node_ids:
+            continue
         if (node.level or "").lower() in known_levels and node.status in exclude_status:
             excluded_counts[node.status] = excluded_counts.get(node.status, 0) + 1
 
     levels = []
-    for agg in aggregate_by_level(graph, config):
+    for agg in aggregate_by_level(graph, config, node_ids):
         levels.append(
             {
                 "level": agg.level,
@@ -1104,6 +1205,16 @@ def collect_coverage(graph: Any, config: dict[str, Any] | None = None) -> dict[s
                 "tested_passed": agg.tested_passed,
                 "tested_failed": agg.tested_failed,
                 "tested_awaiting": agg.tested_awaiting,
+                # Implements: REQ-d00254-B, REQ-d00282-N
+                # The line figure of this group, kept in lines and named for
+                # lines. The two ingestion bits travel with it: without them a
+                # zero says both "measured and never reached" and "never
+                # measured", which is the confusion REQ-d00258-E exists to end.
+                "code_tested_covered": agg.lines.covered_lines,
+                "code_tested_total": agg.lines.total_lines,
+                "code_tested_attributed": agg.lines.attributed_lines,
+                "code_tested_measured": agg.lines.has_measurement,
+                "code_tested_has_contexts": agg.lines.has_contexts,
                 **_measure_fields("implemented", agg.implemented),
                 **_measure_fields("tested", agg.tested),
                 **_measure_fields("passing", agg.passing),
@@ -1148,7 +1259,7 @@ def collect_coverage(graph: Any, config: dict[str, Any] | None = None) -> dict[s
 
     # Implements: REQ-d00254-I
     # Carry-forward provenance (distinct RESULT target names + how many are
-    # carried baselines) is meaningful only for a selective `--targets` run, so
+    # carried baselines) is meaningful only for a selective run, so
     # a selective run isn't a silent no-op on rendered output. Omit it entirely
     # otherwise, so a full run stays byte-identical to the pre-selectivity
     # output in every format (JSON keys and the CSV row included).

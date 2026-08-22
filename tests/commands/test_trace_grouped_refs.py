@@ -336,7 +336,7 @@ file_patterns = ["test_*.py"]
 
         preset = ReportPreset(
             name="test",
-            columns=["id", "title", "level", "status"],
+            values=["id", "title", "level", "status"],
             include_test_refs=True,
         )
         return "\n".join(format_markdown(graph, preset))
@@ -470,7 +470,7 @@ file_patterns = ["test_*.py"]
 
         preset = ReportPreset(
             name="test",
-            columns=["id", "title", "level", "status"],
+            values=["id", "title", "level", "status"],
             include_test_refs=True,
         )
         return "\n".join(format_html(graph, preset))
@@ -589,7 +589,7 @@ file_patterns = ["test_*.py"]
 
         preset = ReportPreset(
             name="test",
-            columns=["id", "title", "level", "status"],
+            values=["id", "title", "level", "status"],
             include_test_refs=True,
         )
         raw = "\n".join(format_json(graph, preset))
@@ -721,7 +721,7 @@ file_patterns = ["test_*.py"]
 
         preset = ReportPreset(
             name="test",
-            columns=["id", "title", "level", "status"],
+            values=["id", "title", "level", "status"],
             include_test_refs=include_test_refs,
         )
         return list(format_csv(graph, preset))

@@ -518,6 +518,21 @@ class CodeScanningConfig(ScanningKindConfig):
 
 
 # Implements: REQ-d00254-C
+# Implements: REQ-d00283-B+C
+# The two group names the tool defines. REQ-d00283-G requires a declared
+# keyword to be unique among every group name, these included, so a project
+# cannot declare either.
+GROUP_ALL = "all"
+GROUP_DEFAULT = "default"
+RESERVED_GROUPS = frozenset({GROUP_ALL, GROUP_DEFAULT})
+
+# Implements: REQ-d00284-A
+# The forms a target may declare for the name its results give the test that
+# produced them. "python-module" reads the name as a dotted module path;
+# "source-file" reads it as naming the test's source file.
+CLASSNAME_FORMS = ("python-module", "source-file")
+
+
 class TestTargetConfig(_StrictModel):
     """One test target: how its results + coverage are produced and ingested."""
 
@@ -532,6 +547,15 @@ class TestTargetConfig(_StrictModel):
     )
     coverage: str = ""  # lcov/coverage file (relative to cwd); empty = no coverage
     match: str = "source"  # "source" | "aggregate"
+    # Implements: REQ-d00283-A+C+F
+    # The groups this target belongs to. Empty means the target claims none,
+    # which REQ-d00283-C places in `default`; `all` is claimable but conveys
+    # nothing, since REQ-d00283-B already holds every target.
+    groups: list[str] = Field(default_factory=list)
+    # Implements: REQ-d00284-A
+    # How this target's results name the test that produced them. Empty means
+    # the form its reporter declares.
+    classname: str = ""
     credit_coverage: str = "off"  # "off" | "tested" | "verified" (lcov_tested dimension)
     min_coverage_fraction: float = 0.0  # [0.0, 1.0]
     # Implements: REQ-d00254-O
@@ -552,6 +576,14 @@ class TestTargetConfig(_StrictModel):
     def _check_match(cls, v: str) -> str:
         if v not in ("source", "aggregate"):
             raise ValueError('match must be "source" or "aggregate"')
+        return v
+
+    @field_validator("classname")
+    @classmethod
+    def _check_classname(cls, v: str) -> str:
+        if v and v not in CLASSNAME_FORMS:
+            forms = ", ".join(f'"{f}"' for f in CLASSNAME_FORMS)
+            raise ValueError(f"classname must be empty or one of {forms}")
         return v
 
     @field_validator("credit_coverage")
@@ -584,7 +616,44 @@ class TestScanningConfig(ScanningKindConfig):
     prescan_command: str = ""
     reference_keyword: str = "Verifies"
     reference_patterns: list[str] = Field(default_factory=list)
+    # Implements: REQ-d00283-G
+    # Each declared group binds a keyword to a description of what the group
+    # is for. The description is required: a group named `slow` says nothing
+    # about whether a change should have run it, and this is the only place
+    # that explanation has to live.
+    groups: dict[str, str] = Field(default_factory=dict)
     targets: list[TestTargetConfig] = Field(default_factory=list)
+
+    # Implements: REQ-d00283-F+G
+    @model_validator(mode="after")
+    def _check_groups(self) -> TestScanningConfig:
+        seen: dict[str, str] = {}
+        for name, description in self.groups.items():
+            key = name.strip().lower()
+            if not key:
+                raise ValueError("a declared test group must have a keyword")
+            if key in RESERVED_GROUPS:
+                raise ValueError(
+                    f'test group "{name}" is reserved and cannot be declared; '
+                    f"the reserved groups are {', '.join(sorted(RESERVED_GROUPS))}"
+                )
+            if key in seen:
+                raise ValueError(
+                    f'test groups "{seen[key]}" and "{name}" differ only in case or spacing'
+                )
+            if not str(description).strip():
+                raise ValueError(f'test group "{name}" must have a description')
+            seen[key] = name
+
+        known = set(seen) | RESERVED_GROUPS
+        for target in self.targets:
+            for claimed in target.groups:
+                if claimed.strip().lower() not in known:
+                    raise ValueError(
+                        f'test target "{target.name}" claims undeclared group "{claimed}"; '
+                        f"declared groups are {', '.join(sorted(known))}"
+                    )
+        return self
 
 
 class JourneyScanningConfig(ScanningKindConfig):
@@ -655,6 +724,33 @@ class AssociateEntryConfig(_StrictModel):
     @classmethod
     def _v_color(cls, v):
         return _validate_hex_color(v)
+
+
+# Implements: REQ-d00280-A
+class ReportScopeConfig(_StrictModel):
+    """A scope a project declares under a name, for reports to be produced under.
+
+    A scope spelled out at the moment a report is run is known only to whoever
+    spelled it; declared here it is versioned beside the requirements it selects
+    over, and a reader holding a committed report can look up what produced it.
+
+    One name carries both halves of what an audience reads: the requirements a
+    report is about and the facts it states about them (REQ-d00280-C). The two
+    stay independent choices -- a declaration naming no values constrains none,
+    and naming values selects no requirements.
+    """
+
+    level: list[str] = Field(default_factory=list)
+    not_level: list[str] = Field(default_factory=list)
+    status: list[str] = Field(default_factory=list)
+    not_status: list[str] = Field(default_factory=list)
+    match_status_roles: bool = False
+    # Value keys, not the words a project displays them under (REQ-d00282-J).
+    # A measure is keyed beneath its dimension: "implemented.immediate_direct".
+    # Not judged here: a name the report does not offer is refused where the
+    # report is produced (REQ-d00282-F), which is the only place that knows
+    # what is on offer.
+    values: list[str] = Field(default_factory=list)
 
 
 class StatusConfig(_StrictModel):
@@ -735,6 +831,7 @@ class ElspaisConfig(_StrictModel):
     associates: dict[str, AssociateEntryConfig] = Field(default_factory=dict)
     federation: FederationConfig = Field(default_factory=FederationConfig)
     statuses: dict[str, StatusConfig] = Field(default_factory=dict)
+    scopes: dict[str, ReportScopeConfig] = Field(default_factory=dict)
     stats: str = Field(default="", description="File path for MCP tool usage statistics")
 
     @field_validator("levels")
@@ -780,6 +877,16 @@ class ElspaisConfig(_StrictModel):
         # Status keys flow into `.status-badge.{key|lower}` CSS class selectors,
         # JS string literals, and `data-key` attributes. Same identifier shape
         # as namespaces / levels.
+        for key in v or {}:
+            _validate_namespace(key)
+        return v
+
+    @field_validator("scopes")
+    @classmethod
+    def _v_scope_keys(cls, v: dict[str, Any]) -> dict[str, Any]:
+        # A scope name is written on a command line and read back out of a
+        # report's disclosure, so it takes the same identifier shape as the
+        # other names a project declares.
         for key in v or {}:
             _validate_namespace(key)
         return v

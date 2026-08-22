@@ -188,12 +188,14 @@ class TestInheritedCoverageEndToEnd:
         template = rows.get("LIB-p00001")
         assert template is not None, f"LIB-p00001 not present in trace; saw {sorted(rows)}"
         # The library implements LIB-p00001-A in src/library.py — coverage
-        # for the template assertion must be non-zero. Parse the numerator
-        # so we catch nonsense like "0/2" without accepting it through a
-        # loose ``startswith`` branch.
-        implemented = template.get("implemented", "")
-        covered_count = int(implemented.split("/", 1)[0]) if "/" in implemented else 0
-        assert covered_count >= 1, (
+        # for the template assertion must be non-zero. Read as the numbers the
+        # figure is made of (REQ-d00282-B), so a credit of zero over a real
+        # population is caught rather than passing on the presence of a key.
+        implemented = template.get("implemented")
+        assert isinstance(implemented, dict), (
+            f"A coverage figure is stated as its numbers; got {implemented!r}"
+        )
+        assert implemented["count"] >= 1, (
             f"Expected template LIB-p00001 to have at least one implementation "
             f"(from library/src/library.py); got implemented={implemented!r}"
         )

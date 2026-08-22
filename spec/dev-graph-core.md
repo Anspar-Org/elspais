@@ -231,7 +231,7 @@ Whole-requirement tests (e.g., `test_implements_req_d00087` with no *Assertion* 
 
 **Level**: dev | **Status**: Superseded | **Implements**: REQ-p00006
 
-This requirement offered a reader a choice between two coverage views because only one could be shown at a time. Coverage is no longer measured as a pair of nested footings to choose between: it is four independent measures, each reported in its own right, with a total taken per *Assertion* (REQ-d00069-L, REQ-d00069-N). A surface now shows the total and makes the measures behind it available (REQ-d00258-A), so the question the toggle asked is answered without asking the reader to pick a mode first.
+This requirement offered a reader a choice between two coverage views because only one could be shown at a time. Coverage is no longer measured as a pair of nested footings to choose between: it is four independent measures, each reported in its own right, with a total taken per *Assertion* (REQ-d00069-L, REQ-d00069-N). A surface names the evidence each figure it shows counts (REQ-d00258-A), and a reader may ask for any measure in its own right (REQ-d00282-B), so the question the toggle asked is answered without asking the reader to pick a mode first.
 
 The need its rationale named is met and not withdrawn: a strict *Traceability* view is the immediate direct measure, which is also what every work-listing surface answers on (REQ-d00258-M), and the progress-indicator view is the total.
 
@@ -531,7 +531,7 @@ A. Where no result record binds to a test, that test SHALL contribute no verdict
 
 B. The annotator SHALL compute a separate `lcov_tested` dimension by measuring the fraction of implementation lines (from `Implements:` edges) covered by execution data. When the fraction meets or exceeds the configured minimum, the relevant assertions SHALL be credited in `lcov_tested`. That dimension SHALL be reported in its own right and SHALL NOT credit any *Traceability* coverage dimension.
 
-C. The configuration surface SHALL express test result and coverage ingestion via `[[scanning.test.targets]]` entries, each declaring how a target's results and coverage are produced (`command`) and ingested (`reporter`, `results`, `coverage`, `match`, `credit_coverage`, `min_coverage_fraction`). User documentation SHALL include a `test-targets` topic describing the target model, the available reporters, and a worked Flutter recipe.
+C. The configuration surface SHALL express test result and coverage ingestion via `[[scanning.test.targets]]` entries, each declaring how a target's results and coverage are produced (`command`, `groups`) and ingested (`reporter`, `results`, `coverage`, `match`, `classname`, `credit_coverage`, `min_coverage_fraction`). User documentation SHALL include a `test-targets` topic describing the target model, the available reporters, and a worked Flutter recipe.
 
 D. When an `// Implements:` marker has no function range (i.e., `impl_start_line == impl_end_line`), the annotator SHALL attribute coverage via block-scoped attribution: a run of consecutive marker lines with no executable line strictly between them forms one block, and that block owns the executable lines that follow it up to the next block's first marker or end-of-file. This enables languages without function detection (e.g. Dart) to receive lcov coverage credit for the code each marker precedes.
 
@@ -541,11 +541,11 @@ F. For each configured target, the system SHALL obtain the reporter's output (ca
 
 G. Each target SHALL select its result-to-test matching via `match`: `source` SHALL bind each result at the most precise scope available — first step scope, when the result's recorded test name embeds exactly one journey-step reference (in the configured reference form) that resolves to a step whose verifying test(s) live in the result's source file; then test scope, resolving the result's real source-file path and `test()` source line to the specific test node at that `(path, line)`. A result that binds at neither scope SHALL credit nothing. `aggregate` SHALL derive the per-app green/red signal, which informs the line-coverage dimension only.
 
-H. `elspais checks --run-tests` SHALL accept a `--targets` selector naming a subset of `[[scanning.test.targets]]` to execute; an unknown target name SHALL be an error, and an absent selector SHALL execute all targets. The same `--targets` flag on `summary`/`trace` SHALL mark provenance without executing anything.
+H. `elspais checks --run-tests` SHALL accept a `--targets` selector naming a subset of `[[scanning.test.targets]]` to execute; an unknown target name SHALL be an error, and an absent selector SHALL execute the targets a run executes when no selection is made (REQ-d00283). The same `--targets` flag on `summary`/`trace` SHALL mark provenance without executing anything.
 
-I. A target absent from `--targets` (the fresh set) whose results are ingested from disk SHALL be tagged *carried*; its verdict SHALL be honored faithfully (a carried failing result still flags the requirement as failing), and the `verified` dimension SHALL carry a `carried` flag orthogonal to its pass/fail tier so the matrix can render it as `(baseline)`.
+I. A configured target a run did not execute, whose results are ingested from disk, SHALL be tagged *carried*; its verdict SHALL be honored faithfully (a carried failing result still flags the requirement as failing), and the `verified` dimension SHALL carry a `carried` flag orthogonal to its pass/fail tier so the matrix can render it as `(baseline)`.
 
-J. In a selective run (a `--targets` set is present), a requirement with test references but zero result records SHALL render as not-run (`—`), distinct from a run-but-uncovered `0%`; in a full run (no `--targets`) zero results SHALL keep the existing rendering.
+J. In a selective run (a run that did not execute every configured target), a requirement with test references but zero result records SHALL render as not-run (`—`), distinct from a run-but-uncovered `0%`; in a full run zero results SHALL keep the existing rendering. Which of the two a run is SHALL follow from the targets it executed and not from how its selection was expressed.
 
 K. For every configured test framework, the system SHALL bind each scanned test to its own identity within its source file and to that test's line extent, regardless of the framework's implementation language.
 
@@ -573,6 +573,9 @@ N resolves per file, not per configuration, because both routes are routinely li
 
 ### Changelog
 
+- 2026-08-22 | 00518ba3 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-22 | cbc2e2cd | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-22 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-74: a run with no selection executes a named set a project can narrow rather than every configured target; whether a run counts as selective follows from the targets it executed rather than from how it was asked; the target model carries the two settings that make that set and a recorded identity's form declarable (C, H, I, J)
 - 2026-08-17 | b7f71d81 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-17 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: a reporter's line numbers are read in the origin it counts from, declared with the reporter and normalised at ingestion (O)
 - 2026-08-17 | 11ca8985 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms, update hash
@@ -591,7 +594,7 @@ N resolves per file, not per configuration, because both routes are routinely li
 - 2026-06-20 | 98120740 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-06-20 | 00000000 | - | Michael Lewis (<michael@anspar.org>) | CUR-1533: initial
 
-*End* *Test Evidence: Attribution, Ingestion, and Coverage Crediting* | **Hash**: b7f71d81
+*End* *Test Evidence: Attribution, Ingestion, and Coverage Crediting* | **Hash**: 00518ba3
 
 ---
 
@@ -639,13 +642,19 @@ E. Test results SHALL be attributed per step: a step's verification status and i
 
 ### Assertions
 
-A. The `trace` command SHALL accept a `--dimension uat` flag that selects a UAT-scoped output mode.
+A. The *Traceability* report SHALL offer a named default set of values stating what user-acceptance evidence a requirement carries.
 
-B. The UAT report SHALL include only requirements that have at least one incoming VALIDATES edge, and for each such requirement SHALL list the validating journeys with their verification verdicts and the `uat_coverage`/`uat_verified` coverage tiers.
+B. That set SHALL state, for each requirement, the journeys validating it with their verification verdicts, and the requirement's UAT coverage figures.
 
-C. The UAT report SHALL exclude code implementation and test verification columns (`implemented`, `tested`, `verified`, `code_tested`, `lcov_tested`).
+C. That set SHALL state no figure for implementation, for test verification, or for line coverage.
 
-*End* *UAT-Scoped Traceability Report* | **Hash**: 2a8aab8b
+### Rationale
+
+A reader asking what a journey has established is asking about a different kind of evidence from a reader asking what a test has, and a named set of values is how a report answers one question rather than both at once.
+
+The set states no implementation or test figure because those answer the other question. It is a set of values and nothing more: it does not decide which requirements the report is about. A report of user-acceptance evidence over every requirement tells a reader which ones have none, which is usually what they came to find out; and selecting requirements by whether a journey validates them is a question about requirements, which REQ-d00282-H keeps out of a set of values and REQ-d00278 is where it would belong.
+
+*End* *UAT-Scoped Traceability Report* | **Hash**: 1ea68210
 
 ---
 
@@ -657,7 +666,7 @@ Reporting surfaces (trace, summary, MCP project summary, HTML viewer) SHALL pres
 
 ### Assertions
 
-A. A surface reporting a coverage figure SHALL headline total coverage (REQ-d00069-N) and SHALL make the measures behind it available, so that a reader is never shown a figure without being able to see what evidence produced it.
+A. A surface reporting a coverage figure SHALL name the evidence the figure counts, so that a reader is never shown a figure without being told what produced it.
 
 B. [Removed - a fixed set of display words, which REQ-d00258-K had already made configurable per project. Each dimension is now stated on its own in REQ-d00277, so one can be added, redefined or withdrawn without rewriting a list.]
 
@@ -677,7 +686,7 @@ I. A chained dimension (REQ-d00277) SHALL be measured within one measure, so tha
 
 J. A surface SHALL NOT annotate a coverage figure with a caveat standing in for a measure it did not show. Where the difference between measures matters, the measures themselves SHALL be reported (REQ-d00069-L).
 
-K. The coverage dimension labels SHALL be derived from a single configurable mapping from each coverage-conferring relationship to its display word, and every surface SHALL render dimension labels through that one mapping.
+K. The coverage dimension labels and the labels of the measures behind them SHALL each be derived from a single configurable mapping — from each coverage-conferring relationship to its display word, and from each measure to its display word — and every surface SHALL render those labels through those mappings.
 
 L. A per-status `expects_implementation` flag SHALL declare whether a requirement in that status is expected to have implementation; its default SHALL be derived from the status's role, so that active-role statuses expect implementation and others do not. When a status does not expect implementation, absent implementation SHALL be neither flagged as a gap, nor error-colored, nor counted against aggregate implemented coverage. All surfaces SHALL resolve this flag through a single shared helper, and it SHALL supersede the coverage-exclusion role when determining coverage inclusion.
 
@@ -687,7 +696,11 @@ N. [Removed - moved to REQ-d00277-C, where every coverage dimension is defined. 
 
 O. Tested SHALL be reported with a breakdown of the assertions it counts into those that passed, those that failed, and those awaiting a result, and the three counts SHALL together account for every tested *Assertion*. The breakdown qualifies the Tested figure and SHALL NOT introduce a coverage dimension of its own.
 
+P. A coverage figure a surface states for a group of requirements SHALL be the credit and the assertions of that group each summed, so that a group is measured over the same assertions its members are.
+
 ### Rationale
+
+P settles what a figure over many requirements means, because there is more than one defensible answer and they disagree. Summing the credit and the assertions weights each requirement by how much it obliges; averaging the members' own proportions weights each requirement equally, and answers how far along the typical requirement is rather than how far along the work is. Both are worth knowing and only one can be the figure a surface states unasked, or two surfaces answer the same question differently -- which is the divergence this requirement exists to prevent. Summing is the one chosen because it is what a per-*Assertion* credit already is: REQ-d00069-M makes coverage a real number so that partial evidence counts in proportion, and summing those proportions keeps a group's figure made of the same evidence as its members'. A surface that later offers the other has to name which it states, since the two share a shape and not a meaning.
 
 The measures answer different questions, so the surfaces divide along the same line: what still needs doing is read from the immediate direct measure, because an *Assertion* no citation names is work whatever is happening below it, while a summary headlines total, because a reader asking how far along something is wants one number that counts each *Assertion* once.
 
@@ -703,6 +716,8 @@ A reports how the estate is doing and M reports what is left to do; the two ques
 
 ### Changelog
 
+- 2026-08-21 | 6c978321 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-21 | 24015cbc | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-19 | 879012b7 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-18 | e6e17ee9 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-18 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: a per-assertion pill shows the measures behind its standing rather than a caveat standing in for one (G)
@@ -725,7 +740,7 @@ A reports how the estate is doing and M reports what is left to do; the two ques
 - 2026-07-03 | c843c727 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-02 | be97c170 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: add missing changelog section
 
-*End* *Reporting Surface Consistency* | **Hash**: 879012b7
+*End* *Reporting Surface Consistency* | **Hash**: 6c978321
 
 ---
 
@@ -829,3 +844,110 @@ The word each dimension is reported under is configurable (REQ-d00258-K); the na
 - 2026-08-19 | b097dcd7 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash, add missing changelog section
 
 *End* *Coverage Dimensions* | **Hash**: b097dcd7
+
+---
+
+## REQ-d00283: Test Target Groups
+
+**Level**: dev | **Status**: Draft | **Implements**: REQ-o00051
+
+A project's test targets are not alike in what it costs to run them. Some are a
+compilation away; others need a live backend, a device farm, or an account
+somebody pays for. Groups are how a project says which of its targets a run is
+about.
+
+### Assertions
+
+A. Every test target SHALL belong to one or more groups.
+
+B. Every test target SHALL belong to the group `all`.
+
+C. A test target that claims no other group SHALL belong to the group `default`.
+
+D. A run that selects no group SHALL execute the targets of the group `default`.
+
+E. A run that selects one or more groups SHALL execute only targets belonging to those groups.
+
+F. A test target SHALL be able to claim any declared group, and SHALL NOT claim a name no declaration and no reservation defines.
+
+G. A project SHALL be able to declare any number of groups, each declared with a keyword unique among every group name, the reserved names included, and a description of what the group is for.
+
+H. A run selecting a name no declaration and no reservation defines SHALL be refused rather than resolved to no targets.
+
+I. Each selector a run states SHALL narrow the targets it executes.
+
+### Rationale
+
+The cost of a target is not something the tool can read off its configuration, and it is not the tool's judgement to make. What the tool can do is let the project say it once, in a place a reader of the configuration will find, and then honour it. A description is required with each declaration for that reason: a group called `slow` tells a newcomer nothing about whether their change should have run it, and the declaration is the only place that explanation has to live.
+
+B makes `all` a membership rather than a selector, so E needs no exception for it: selecting `all` selects every target by the same rule that selects any other group, and nothing has to know that one name means something different from the rest.
+
+C is what keeps this addition from changing what an existing project's run does. A project that declares no groups has every target in `default`, so the targets a bare run executes are the targets it executed before. The capability arrives inert and is switched on by declaring a group, which is the only way to introduce a selection mechanism into an estate where reports are already committed.
+
+F and H are the same discipline reached from the two directions a name arrives from. A group that exists because a target claimed it can never be wrong, so a misspelling in configuration silently creates a group nobody selects and quietly removes that target from every run. A selection that resolves to nothing is indistinguishable, in the report it produces, from a selection whose targets all passed — and the second is the reading a reader will reach for. In both directions the undefined name is refused, because refusal is the only answer neither can be misread.
+
+G requires uniqueness across every group name rather than across the declared ones, which is what bars a project from declaring `all` or `default`. Their meanings are fixed by B, C and D; a project able to attach its own description to either could describe something the tool does not do, and a reader would have no way to tell which was true.
+
+I settles what two selectors mean together. Both name what a run is to execute, so a run stating both is describing its subject twice, and the targets it executes are those both descriptions admit. The alternative — each selector adding to the set — would make naming a target *widen* a run that named a group, so a caller narrowing their invocation would watch it grow.
+
+*End* *Test Target Groups* | **Hash**: bc95d36b
+
+## REQ-d00284: How a Result Names Its Test
+
+**Level**: dev | **Status**: Draft | **Implements**: REQ-o00051
+
+A results file says which test produced each result. Some name the test's source
+file; others give only a name whose meaning depends on the tool that wrote the
+file. This says how that name is read.
+
+### Assertions
+
+A. Each test target SHALL declare how its results name the test that produced them.
+
+B. A result SHALL be matched to a test only where its name picks out exactly one test scanned for that target.
+
+C. A result matched to no test SHALL be reported, saying whether its name picked out no test or more than one.
+
+### Rationale
+
+When a results file names the test's source file there is nothing to work out. When it does not, all the tool has is a name -- `epistaxis-diary.spec.ts`, say, or `tests.test_login` -- and what that name refers to depends entirely on the tool that wrote it. The tool currently assumes a Python module path. That is right for one producer and wrong for every other, and it fails quietly: the name matches no test, the result is dropped, and the coverage figure that follows reads zero. Accurate about what the tool could read, and misleading about what was actually run.
+
+A asks the project to say what the name is rather than leaving the tool to guess. Which form a producer writes is a fixed fact about that producer, so it only has to be said once. The reporter says what its format usually carries and a target may say otherwise, because several producers write the same format and disagree about what goes in that field. This is the same arrangement REQ-d00254-O makes for the line numbers a producer counts.
+
+B keeps the match strict. The tests it looks among are the ones scanned for that target: a name matching a file some other target scans says nothing about where this result came from. Requiring a single match matters because a result attached to the wrong test looks exactly like one attached to the right test in every figure afterwards. It also rules out trying a second reading when the first finds nothing, which would rescue some results and misattach others with no way to tell the two apart later.
+
+C makes the failure visible. A result matching nothing is not an error where it happens, so without C nothing mentions it and the only sign is a coverage figure lower than expected. Saying whether the name matched nothing or matched several tells an author which problem they have: a name pointing at a file that is not there, or two files sharing one name.
+
+*End* *How a Result Names Its Test* | **Hash**: 7baae0b0
+
+## REQ-d00281: Level Vocabulary of a Reported Graph
+
+**Level**: dev | **Status**: Draft | **Implements**: REQ-p00015
+
+A report that groups requirements by level draws those groups from somewhere, and the graph a report is computed over is not the same thing as the configuration it was invoked under. A federated graph holds every member's requirements, and the levels they carry are the union of the members' vocabularies. This requirement fixes which of the two the grouping follows.
+
+### Assertions
+
+A. Every level carried by a requirement a report includes SHALL form a group in that report.
+
+B. Every requirement a report includes SHALL fall in exactly one of that report's groups.
+
+C. Whether the configuration a report is produced under defines a requirement's level SHALL NOT decide whether that requirement is counted in a figure the report aggregates.
+
+D. Where a requirement carries a level the configuration a report is produced under does not define, the tool SHALL report that requirement together with the level it carries.
+
+E. A group formed from a level the configuration does not define SHALL be ordered after the groups formed from levels it does define.
+
+### Rationale
+
+The subject of a report is the graph, and in a federation that graph is an assembly: each member declares its own levels, and every requirement any member holds is part of what the report is about. Forming the groups from the invoking configuration instead makes the report's shape a fact about who asked rather than about what was asked, so a member whose vocabulary differs from the asker's contributes requirements the report has nowhere to put. Drawing the groups from the requirements themselves is what makes one graph yield one answer whoever runs the report, and it is the same settlement REQ-d00251-L reaches for identifiers, reached here for the vocabulary a report is organised by.
+
+A and B are the two halves of accounting for every requirement, and neither is sufficient alone. A says no requirement's level is missing a group; B says each requirement lands in one group and is not divided between several or counted in two. Without B a report could satisfy A and still misstate its totals; without A a requirement can be complete inside a group that was never formed, which is a completeness nothing checks. Stating both is what lets a reader add the groups up and get the report back.
+
+C is where the asymmetry between a requirement's level and its status is deliberate. A status carries a role the project assigns it, and that role is a statement about whether the obligation is live — a withdrawn requirement genuinely should not drag a coverage figure, so status decides membership in that figure. A level says who the requirement is for and at what altitude it sits; it makes no claim about whether the obligation is owed. A requirement at a level this configuration happens not to define is real work somebody owes, and dropping it flatters every figure it would have lowered. C bars the definedness of the level from deciding the question, which leaves a reader's own selection free to narrow a report deliberately — a narrowing REQ-p00084 governs, and which discloses itself.
+
+D is REQ-p00015-A reached by a second route. Content excluded from an answer is reportable whether it was refused admission or admitted and then passed over, because the reader cannot tell the two apart from the answer they are holding. It also catches the case no comparison between configurations would: a single repository where a level was misspelled on a requirement, or removed from the configuration while requirements still carry it, has no second configuration to differ from, and the requirements simply stop being counted. Naming the requirement and the level it carries is what turns that into something an author can act on, rather than a figure that quietly moved.
+
+E settles an ordering that would otherwise be decided independently by each surface, and decided differently. The levels a project defines are ordered by the ranks it gave them; a level it did not define has no rank to be ordered by, and inventing one would put it somewhere a reader has no way to predict. Placing such groups after the ranked ones keeps the familiar shape of a report intact and gathers what the configuration does not account for in one place, where D's report is about the same requirements.
+
+*End* *Level Vocabulary of a Reported Graph* | **Hash**: 4bde246d

@@ -6,7 +6,7 @@ Compile spec files into a single PDF document.
 
 ```
 elspais pdf [--output PATH] [--engine ENGINE] [--template PATH]
-            [--title TITLE] [--cover PATH] [--overview] [--max-depth N]
+            [--title TITLE] [--cover PATH]
 ```
 
 ## What it does
@@ -19,9 +19,14 @@ invokes pandoc with a LaTeX template to produce the PDF.
 # Full specification document
 elspais pdf
 
-# Stakeholder overview: PRD requirements only, no OPS or DEV
-elspais pdf --overview --title "Product Requirements Overview"
+# Custom title and cover
+elspais pdf --title "Product Requirements" --cover spec/cover.tex
 ```
+
+The command compiles the whole estate. It takes no selection: a document
+narrowed to one audience is assembled by a pipeline of its own over
+`elspais graph`, which is where the selection belongs -- one that can say more
+than a level cut, and can be committed beside the document it produces.
 
 ## Options
 
@@ -32,8 +37,6 @@ elspais pdf --overview --title "Product Requirements Overview"
 | `--template PATH` | Custom pandoc LaTeX template |
 | `--title TITLE` | Document title (default: project name from config) |
 | `--cover PATH` | Markdown file for a custom cover page |
-| `--overview` | Stakeholder overview (PRD only, no OPS/DEV) |
-| `--max-depth N` | Max graph depth for core PRDs in overview mode |
 
 ## Prerequisites
 

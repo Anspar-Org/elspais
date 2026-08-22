@@ -13,12 +13,16 @@ import json
 import pytest
 
 from elspais.commands.trace import (
+    ABSENT_FIGURE,
     REPORT_PRESETS,
     ReportPreset,
+    _format_row,
     _render_json_from_data,
     _render_table_from_graph,
     compute_trace,
 )
+from elspais.graph.aggregation import MEASURES
+from elspais.graph.values import figure_cell
 
 
 class TestTraceCommand:
@@ -40,7 +44,7 @@ class TestTraceCommand:
         """Test trace command produces correct table output for each format."""
         preset = ReportPreset(
             name="standard",
-            columns=list(REPORT_PRESETS["standard"].columns),
+            values=list(REPORT_PRESETS["standard"].values),
         )
         result = _render_table_from_graph(canonical_federated_graph, fmt, preset)
         assert result == 0
@@ -55,7 +59,7 @@ class TestTraceCommand:
         data = compute_trace(canonical_federated_graph, {}, {})
         preset = ReportPreset(
             name="standard",
-            columns=list(REPORT_PRESETS["standard"].columns),
+            values=list(REPORT_PRESETS["standard"].values),
         )
         _render_json_from_data(data, preset)
 
@@ -64,49 +68,65 @@ class TestTraceCommand:
         assert isinstance(parsed, list)
         assert any(item["id"] == "REQ-p00001" for item in parsed)
 
-    # Verifies: REQ-d00069-L, REQ-d00258-A
-    def test_json_carries_the_four_measures_per_dimension(self, canonical_federated_graph, capsys):
-        """REQ-d00258-A: JSON is where the measures are cheap to make
-        available without widening the text/markdown/html table."""
+    # Verifies: REQ-d00069-L, REQ-d00282-B+E
+    def test_the_measures_are_selected_not_granted_by_the_format(
+        self, canonical_federated_graph, capsys
+    ):
+        """A measure is a value a reader names, in whatever format they read.
+
+        Bolting the four measures onto JSON alone made the values a report
+        states depend on the format it was rendered in, which REQ-d00282-E
+        forbids: the same report read as a table stated fewer facts than the
+        same report read as JSON."""
         data = compute_trace(canonical_federated_graph, {}, {})
         preset = ReportPreset(
             name="standard",
-            columns=list(REPORT_PRESETS["standard"].columns),
+            values=list(REPORT_PRESETS["standard"].values),
         )
+
         _render_json_from_data(data, preset)
+        default_item = next(
+            i for i in json.loads(capsys.readouterr().out) if i["id"] == "REQ-p00001"
+        )
+        assert "tested" in default_item
+        assert not set(default_item["tested"]) & set(MEASURES), (
+            f"The default set states the totals, not the measures; got {default_item['tested']}"
+        )
 
-        content = capsys.readouterr().out
-        parsed = json.loads(content)
-        item = next(i for i in parsed if i["id"] == "REQ-p00001")
-        for suffix in (
-            "_immediate_direct",
-            "_immediate_indirect",
-            "_rolled_direct",
-            "_rolled_indirect",
-        ):
-            assert f"tested{suffix}" in item
-            assert f"implemented{suffix}" in item
-        # code_tested/lcov_tested are outside the REQ-d00258-K vocabulary
-        # and carry no measure split.
-        assert "code_tested_immediate_direct" not in item
+        chosen = ["id", "tested.immediate_direct", "implemented.rolled_indirect"]
+        _render_json_from_data(data, preset, chosen)
+        item = next(i for i in json.loads(capsys.readouterr().out) if i["id"] == "REQ-p00001")
+        # The key a selection names is a PATH, and the object mirrors it: a
+        # measure of a dimension is stated INSIDE that dimension (REQ-d00282-B).
+        assert list(item.keys()) == ["id", "tested", "implemented"]
+        assert list(item["tested"]) == ["immediate_direct"]
+        assert list(item["implemented"]) == ["rolled_indirect"]
+        assert set(item["tested"]["immediate_direct"]) == {"count", "total", "ratio"}
 
-    # Verifies: REQ-d00069-L, REQ-d00258-A
-    def test_format_json_graph_path_carries_the_four_measures(
-        self, canonical_federated_graph, capsys
-    ):
-        """The live-graph JSON path (``format_json``) matches the
-        daemon-payload path (``_render_json_from_data``) above."""
+    # Verifies: REQ-d00069-L, REQ-d00282-E
+    def test_format_json_graph_path_states_the_same_values(self, canonical_federated_graph, capsys):
+        """The live-graph JSON path (``format_json``) states what the
+        daemon-payload path (``_render_json_from_data``) states, for one
+        selection: a report answered by a serving process cannot state
+        different values from a locally computed one."""
         from elspais.commands.trace import format_json
 
         preset = ReportPreset(
             name="standard",
-            columns=list(REPORT_PRESETS["standard"].columns),
+            values=list(REPORT_PRESETS["standard"].values),
         )
-        out = "".join(format_json(canonical_federated_graph, preset))
-        parsed = json.loads(out)
-        item = next(i for i in parsed if i["id"] == "REQ-p00001")
-        assert "tested_rolled_direct" in item
-        assert "implemented_immediate_indirect" in item
+        chosen = ["id", "tested.rolled_direct", "implemented.immediate_indirect"]
+
+        live = json.loads("".join(format_json(canonical_federated_graph, preset, None, chosen)))
+        _render_json_from_data(compute_trace(canonical_federated_graph, {}, {}), preset, chosen)
+        served = json.loads(capsys.readouterr().out)
+
+        live_item = next(i for i in live if i["id"] == "REQ-p00001")
+        served_item = next(i for i in served if i["id"] == "REQ-p00001")
+        assert list(live_item.keys()) == ["id", "tested", "implemented"]
+        assert list(live_item["tested"]) == ["rolled_direct"]
+        assert list(live_item["implemented"]) == ["immediate_indirect"]
+        assert live_item == served_item
 
 
 # Verifies: REQ-d00069-N, REQ-d00258-A, REQ-d00258-J
@@ -166,7 +186,7 @@ class TestTraceReportPresets:
     def _make_preset(self, preset_name):
         return ReportPreset(
             name=preset_name,
-            columns=list(REPORT_PRESETS[preset_name].columns),
+            values=list(REPORT_PRESETS[preset_name].values),
         )
 
     # Verifies: REQ-d00084-B
@@ -331,10 +351,13 @@ class TestLcovTestedTrace:
                 )
                 has_lcov_node = True
             else:
-                # Nodes without lcov data must render as "n/a"
-                assert data["lcov_tested"] == "n/a", (
-                    f"Expected 'n/a' for {node.id} but got: {data['lcov_tested']!r}"
+                # Nodes without lcov data carry an ABSENCE in the data, and a
+                # table spells that absence "n/a" (REQ-d00282-M): the value is
+                # not the string, so a format with nulls can state one.
+                assert data["lcov_tested"] is None, (
+                    f"Expected an absence for {node.id} but got: {data['lcov_tested']!r}"
                 )
+                assert _format_row(data, ["lcov_tested"]) == [ABSENT_FIGURE]
 
         # At least one node must have lcov data in the canonical graph
         # (the canonical graph includes LCOV result fixtures)
@@ -348,22 +371,22 @@ class TestLcovTestedTrace:
 
         preset = ReportPreset(
             name="standard",
-            columns=list(REPORT_PRESETS["standard"].columns),
+            values=list(REPORT_PRESETS["standard"].values),
             include_assertions=True,
         )
-        # Must not raise KeyError when lcov_tested is in _COVERAGE_COLUMNS
+        # Must not raise KeyError when lcov_tested is among the stated values
         result = _render_table_from_graph(canonical_federated_graph, "csv", preset)
         assert result == 0
 
     def test_lcov_tested_in_standard_preset(self):
-        """lcov_tested column is present in the standard and full preset definitions."""
+        """lcov_tested is a value the standard and full presets state."""
         from elspais.commands.trace import REPORT_PRESETS
 
-        assert "lcov_tested" in REPORT_PRESETS["standard"].columns, (
-            "lcov_tested must be in standard preset columns"
+        assert "lcov_tested" in REPORT_PRESETS["standard"].values, (
+            "lcov_tested must be in the standard preset's values"
         )
-        assert "lcov_tested" in REPORT_PRESETS["full"].columns, (
-            "lcov_tested must be in full preset columns"
+        assert "lcov_tested" in REPORT_PRESETS["full"].values, (
+            "lcov_tested must be in the full preset's values"
         )
 
 
@@ -472,6 +495,163 @@ directories = ["spec"]
         trace.run(args)
 
         assert captured["fresh_targets"] is None
+
+    @staticmethod
+    def _make_grouped_project(tmp_path):
+        """A project declaring one group, claimed by one of its two targets."""
+        spec_dir = tmp_path / "spec"
+        spec_dir.mkdir()
+        (spec_dir / "reqs.md").write_text(
+            """\
+### REQ-p00001: Test Req
+
+**Level**: PRD | **Status**: Active
+
+The system SHALL do something testable.
+
+*End* *Test Req* | **Hash**: ________
+""",
+            encoding="utf-8",
+        )
+        config_path = tmp_path / ".elspais.toml"
+        config_path.write_text(
+            """\
+version = 3
+
+[project]
+name = "grouped-targets"
+namespace = "REQ"
+
+[scanning.spec]
+directories = ["spec"]
+
+[scanning.test.groups]
+uat = "needs a live backend"
+
+[[scanning.test.targets]]
+name = "a"
+
+[[scanning.test.targets]]
+name = "b"
+groups = ["uat"]
+""",
+            encoding="utf-8",
+        )
+        return config_path
+
+    @staticmethod
+    def _trace_args(config_path, targets, groups):
+        import argparse
+
+        return argparse.Namespace(
+            targets=targets,
+            groups=groups,
+            format="json",
+            config=config_path,
+            spec_dir=None,
+            preset=None,
+            body=False,
+            show_assertions=False,
+            show_tests=False,
+            dimension="",
+            output=None,
+        )
+
+    # Verifies: REQ-d00283-E+I
+    @pytest.mark.parametrize(
+        "targets,groups,expected",
+        [
+            (None, ["uat"], {"b"}),
+            # Each selector narrows: `a` is not in `uat`, so nothing is fresh.
+            (["a"], ["uat"], set()),
+            (["a", "b"], ["uat"], {"b"}),
+        ],
+    )
+    def test_trace_groups_thread_resolved_set_into_build_graph(
+        self, tmp_path, monkeypatch, targets, groups, expected
+    ):
+        """--groups resolves through the group model before reaching the graph."""
+        import elspais.graph.factory as factory_mod
+        from elspais.commands import trace
+
+        config_path = self._make_grouped_project(tmp_path)
+
+        captured: dict = {}
+        original_build_graph = factory_mod.build_graph
+
+        def spy(*a, **k):
+            captured["fresh_targets"] = k.get("fresh_targets")
+            return original_build_graph(*a, **k)
+
+        monkeypatch.setattr(factory_mod, "build_graph", spy)
+
+        result = trace.run(self._trace_args(config_path, targets, groups))
+
+        assert result is None or result == 0
+        assert captured["fresh_targets"] == expected
+
+    # Verifies: REQ-d00254-I
+    def test_trace_with_no_selection_marks_nothing_fresh(self, tmp_path, monkeypatch):
+        """Naming neither selector marks nothing -- even with groups declared.
+
+        `trace` executes no target; it reads whatever results are already on
+        disk. The `default` group of REQ-d00283-D belongs to a run that
+        *executes* targets, so resolving one here would have the tool state
+        which targets were freshly run on the strength of a flag the caller
+        never passed. Do not "fix" this back to the default set.
+        """
+        import elspais.graph.factory as factory_mod
+        from elspais.commands import trace
+
+        config_path = self._make_grouped_project(tmp_path)
+
+        built: list = []
+        original_build_graph = factory_mod.build_graph
+
+        def spy(*a, **k):
+            built.append(k.get("fresh_targets"))
+            return original_build_graph(*a, **k)
+
+        monkeypatch.setattr(factory_mod, "build_graph", spy)
+
+        called: dict = {}
+
+        def fake_engine_call(endpoint, params, compute_fn, config_path=None, **kwargs):
+            called["endpoint"] = endpoint
+            return {"nodes": [], "scope": []}
+
+        monkeypatch.setattr("elspais.commands._engine.call", fake_engine_call)
+
+        result = trace.run(self._trace_args(config_path, None, None))
+
+        assert result is None or result == 0
+        assert called["endpoint"] == "/api/run/trace", (
+            "marking nothing must not force a local build"
+        )
+        assert not built, "an absent selector marks no fresh subset"
+
+    # Verifies: REQ-d00283-H
+    def test_trace_unknown_group_is_refused(self, tmp_path, monkeypatch, capsys):
+        """A selection naming an undefined group renders nothing at all."""
+        import elspais.graph.factory as factory_mod
+        from elspais.commands import trace
+
+        config_path = self._make_grouped_project(tmp_path)
+
+        built: list = []
+        original_build_graph = factory_mod.build_graph
+
+        def spy(*a, **k):
+            built.append(k.get("fresh_targets"))
+            return original_build_graph(*a, **k)
+
+        monkeypatch.setattr(factory_mod, "build_graph", spy)
+
+        result = trace.run(self._trace_args(config_path, None, ["uta"]))
+
+        assert result == 2
+        assert "uta" in capsys.readouterr().err
+        assert not built, "nothing may be rendered under a refused selection"
 
 
 def _render_trace_markdown(project, targets=None):
@@ -767,10 +947,10 @@ class TestTraceLegendGating:
 
     # Verifies: REQ-d00254-I+J
     def test_legend_absent_on_uat_dimension(self, two_target_project):
-        from elspais.commands.trace import _UAT_COLUMNS, ReportPreset, format_markdown
+        from elspais.commands.trace import _UAT_VALUES, ReportPreset, format_markdown
 
         graph = _build_project_graph(two_target_project, targets=["a"])
-        preset = ReportPreset(name="uat", columns=list(_UAT_COLUMNS), dimension="uat")
+        preset = ReportPreset(name="uat", values=list(_UAT_VALUES), dimension="uat")
         out = "\n".join(format_markdown(graph, preset=preset))
 
         assert "> Legend:" not in out
@@ -847,7 +1027,7 @@ def marker_verified_project(tmp_path):
     A blanket reference credits every assertion INDIRECTly but none
     DIRECTly, so `tested_and_passing(rollup).covered > .immediate_direct` -- the
     trace 'verified' cell must headline the total (REQ-d00069-N), with the
-    immediate-direct and immediate-indirect measure columns showing which
+    immediate-direct and immediate-indirect measure values showing which
     measure carried the evidence rather than a `~` marker (REQ-d00258-J).
     """
     project = tmp_path / "project"
@@ -1048,7 +1228,7 @@ def marker_carried_project(tmp_path):
 class TestTraceFooting:
     """Verifies REQ-d00258-A, REQ-d00258-K, REQ-d00258-E, REQ-d00258-J:
     dimensions headline the per-*Assertion* TOTAL (REQ-d00069-N) with the
-    four measures behind it published as their own columns rather than a
+    four measures behind it published as their own values rather than a
     caveat marker, the reporting vocabulary reads Passing/UAT Covered/UAT
     Passed (no "Validated"), and aggregate-only line coverage never renders
     a misleading direct-attribution count."""
@@ -1059,7 +1239,7 @@ class TestTraceFooting:
         immediate-indirect measure; the headline is still the total (equal
         to that measure here), and no `~` stands in for the fact that no
         citation named the *Assertion* directly -- the immediate-direct and
-        immediate-indirect columns say that on their own."""
+        immediate-indirect values say that on their own."""
         from elspais.commands.trace import _get_node_data
         from elspais.graph.metrics import fmt_assertion_count, tested_and_passing
 
@@ -1078,56 +1258,75 @@ class TestTraceFooting:
 
     # Verifies: REQ-d00258-K
     def test_headers_use_passing_vocabulary(self):
-        from elspais.commands.trace import _column_headers
+        from elspais.commands.trace import _value_headers
 
-        h = _column_headers()
+        h = _value_headers()
         assert h["verified"] == "Passing"
         assert h["uat_coverage"] == "UAT Covered"
         assert h["uat_verified"] == "UAT Passed"
         assert "Validated" not in h.values()
 
-    # Verifies: REQ-d00258-E
-    def test_code_tested_without_attribution_is_na(self, code_tested_no_attribution_project):
+    # Verifies: REQ-d00258-E, REQ-d00282-C+N
+    def test_only_the_attribution_is_suppressed_without_contexts(
+        self, code_tested_no_attribution_project
+    ):
+        """Aggregate-only coverage states its lines and withholds only the
+        attribution.
+
+        The suppression REQ-d00258-E requires is of the ATTRIBUTION figure --
+        how many lines a verifying test can be named for. The lines a run
+        covered were measured, so a report holding them states them
+        (REQ-d00282-N), and the value named for the figure states the figure
+        rather than one particular reading of it (REQ-d00282-C).
+        """
         from elspais.commands.trace import _get_node_data
 
         graph = _build_project_graph(code_tested_no_attribution_project, targets=None)
         node = graph.find_by_id("REQ-d00001")
         rollup = node.get_metric("rollup_metrics")
+        assert rollup.code_tested.has_contexts is False
         assert rollup.code_tested.attributed_lines == 0
         assert rollup.code_tested.covered_lines > 0
 
         data = _get_node_data(node, graph)
-        assert not data["code_tested"].startswith("0/")
-        assert data["code_tested"] == "n/a"
+        lines = rollup.code_tested
+        assert data["code_tested"] == figure_cell(lines.covered_lines, lines.total_lines)
+        assert data["code_tested_count"] == lines.covered_lines
+        assert data["code_tested_total"] == lines.total_lines
+        # The one absence, spelled "n/a" by a table (REQ-d00282-M).
+        assert data["code_tested_attributed"] is None
+        assert _format_row(data, ["code_tested.attributed"]) == [ABSENT_FIGURE]
+        assert ABSENT_FIGURE == "n/a"
 
-    # Verifies: REQ-d00258-E
-    def test_code_tested_labels_without_attribution_is_na(self, code_tested_no_attribution_project):
-        """The --assertions (label) render path must apply the same n/a guard
-        as the count path: aggregate-only coverage must not surface "0/N"/"0%"
-        in code_tested_labels / code_tested_pct."""
+    # Verifies: REQ-d00258-E, REQ-d00282-E+N
+    def test_the_line_figure_is_unmoved_by_the_assertion_label_flag(
+        self, code_tested_no_attribution_project
+    ):
+        """The detail flag changes what an *Assertion*-counted cell says. A
+        line figure counts lines, has no labels to compact, and reads the same
+        in either mode."""
         from elspais.commands.trace import _get_node_data
 
         graph = _build_project_graph(code_tested_no_attribution_project, targets=None)
         node = graph.find_by_id("REQ-d00001")
-        rollup = node.get_metric("rollup_metrics")
-        assert rollup.code_tested.attributed_lines == 0
-        assert rollup.code_tested.covered_lines > 0
 
-        data = _get_node_data(node, graph, assertion_labels=True)
-        assert data["code_tested_labels"] == "n/a"
-        assert data["code_tested_pct"] == "n/a"
+        plain = _get_node_data(node, graph)
+        labelled = _get_node_data(node, graph, assertion_labels=True)
+        for key in ("code_tested", "code_tested_count", "code_tested_total", "code_tested_ratio"):
+            assert labelled[key] == plain[key]
+        assert labelled["code_tested_attributed"] is None
 
-    # Verifies: REQ-d00258-E
-    def test_code_tested_with_contexts_but_no_verifying_test_is_zero_of_n(
+    # Verifies: REQ-d00258-E, REQ-d00282-M+N
+    def test_a_zero_attribution_is_stated_where_contexts_were_recorded(
         self, code_tested_context_carrying_project
     ):
         """Where the tooling DID record per-test contexts, a zero attribution
-        count is a real answer and must be rendered as `0/N`.
+        count is a real answer and is stated as zero.
 
         This is the other half of REQ-d00258-E: the suppression is about what
-        the tooling provides, not about how the count came out. Rendering
-        `n/a` here would hide implementation no verifying test reaches, which
-        is exactly the fact worth surfacing."""
+        the tooling provides, not about how the count came out. Withholding it
+        here would hide implementation no verifying test reaches, which is
+        exactly the fact worth surfacing."""
         from elspais.commands.trace import _get_node_data
 
         graph = _build_project_graph(code_tested_context_carrying_project, targets=None)
@@ -1136,16 +1335,16 @@ class TestTraceFooting:
         assert rollup.code_tested.has_contexts is True
         assert rollup.code_tested.attributed_lines == 0
 
-        data = _get_node_data(node, graph)
-        assert data["code_tested"].startswith("0/")
-        assert data["code_tested"] != "n/a"
-
-        labelled = _get_node_data(node, graph, assertion_labels=True)
-        assert labelled["code_tested_labels"].startswith("0/")
-        assert labelled["code_tested_pct"] == "0%"
+        for labels in (False, True):
+            data = _get_node_data(node, graph, assertion_labels=labels)
+            assert data["code_tested_attributed"] == 0
+            assert _format_row(data, ["code_tested.attributed"]) == ["0"]
+            assert data["code_tested"] == figure_cell(
+                rollup.code_tested.covered_lines, rollup.code_tested.total_lines
+            )
 
     # Verifies: REQ-d00258-E
-    def test_lcov_tested_labels_empty_set_renders_zero_of_total(
+    def test_lcov_tested_empty_label_set_renders_zero_of_total(
         self, code_tested_no_attribution_project
     ):
         """An lcov_tested dimension with total > 0 but an empty label set must
@@ -1161,8 +1360,8 @@ class TestTraceFooting:
         rollup.lcov_tested = CoverageDimension(total=2)
 
         data = _get_node_data(node, graph, assertion_labels=True)
-        assert data["lcov_tested_labels"] == "0/2"
-        assert data["lcov_tested_labels"] != "-"
+        assert data["lcov_tested"].startswith("0/2")
+        assert data["lcov_tested"] != "-"
 
     # Verifies: REQ-d00258-A, REQ-d00254-I
     # Verifies: REQ-d00069-N, REQ-d00258-A, REQ-d00258-J, REQ-d00254-I
@@ -1362,21 +1561,19 @@ class TestTraceTestedBreakdown:
         self, tested_breakdown_project, preset_name
     ):
         """A breakdown of a figure the preset does not show explains nothing,
-        and its key would point at a column that is not there. The UAT report
-        excludes the test columns outright (REQ-d00257-C)."""
+        and its key would point at a value that is not stated. The UAT report
+        excludes the test values outright (REQ-d00257-C)."""
         from elspais.commands.trace import (
-            _UAT_COLUMNS,
+            _UAT_VALUES,
             REPORT_PRESETS,
             ReportPreset,
             format_markdown,
         )
 
         if preset_name == "uat":
-            preset = ReportPreset(name="uat", columns=list(_UAT_COLUMNS), dimension="uat")
+            preset = ReportPreset(name="uat", values=list(_UAT_VALUES), dimension="uat")
         else:
-            preset = ReportPreset(
-                name=preset_name, columns=list(REPORT_PRESETS[preset_name].columns)
-            )
+            preset = ReportPreset(name=preset_name, values=list(REPORT_PRESETS[preset_name].values))
 
         graph = _build_project_graph(tested_breakdown_project)
         out = "\n".join(format_markdown(graph, preset=preset))
@@ -1389,41 +1586,90 @@ class TestTraceTestedBreakdown:
         assert "> Tested breakdown:" not in out
         assert "1P" not in out
 
-    # Verifies: REQ-d00258-O
-    def test_csv_gives_the_breakdown_columns_of_its_own(self, tested_breakdown_project):
-        """A machine format should not need to parse the figures out of a
-        bracket, so CSV carries them as three columns beside Tested and the
-        Tested cell stays a bare count."""
+    # Verifies: REQ-d00258-O, REQ-d00282-E
+    def test_csv_states_the_breakdown_inside_the_one_tested_column(self, tested_breakdown_project):
+        """The breakdown qualifies the Tested figure, so it rides in that
+        figure's cell here exactly as it does in markdown.
+
+        Given cells of its own it would be three further columns -- a display
+        term of its own, which REQ-d00258-O forbids -- and selecting `tested`
+        would state four columns in CSV and one in markdown."""
         import csv as csv_module
         import io as io_module
 
         from elspais.commands.trace import format_csv
 
         graph = _build_project_graph(tested_breakdown_project)
-        out = "\n".join(format_csv(graph))
+        rows = list(csv_module.reader(io_module.StringIO("\n".join(format_csv(graph)))))
+        headers, first = rows[0], rows[1]
 
-        reader = csv_module.reader(io_module.StringIO(out))
-        headers = next(reader)
-        tested_idx = headers.index("Tested")
-        assert headers[tested_idx + 1 : tested_idx + 4] == [
-            "Tested Passed",
-            "Tested Failed",
-            "Tested Awaiting",
-        ]
+        assert headers.count("Tested") == 1
+        assert not [h for h in headers if h.startswith("Tested ")], (
+            f"Nothing rides beside the Tested column; got {headers}"
+        )
+        assert first[headers.index("Tested")] == "3/3 (100%) [1P 1F 1A]"
 
-        row = next(csv_module.reader(io_module.StringIO(out.splitlines()[1])))
-        assert row[tested_idx] == "3/3 (100%)"
-        assert row[tested_idx + 1 : tested_idx + 4] == ["1", "1", "1"]
-        assert "1P" not in out
+    # Verifies: REQ-d00069-L, REQ-d00258-A, REQ-d00282-B+E
+    def test_a_measure_is_a_value_a_selection_names_in_every_format(self, tested_breakdown_project):
+        """A measure is reachable by selecting it, not by choosing a format.
 
-    # Verifies: REQ-d00069-L, REQ-d00258-A
-    def test_csv_carries_a_column_per_measure(self, tested_breakdown_project):
-        """REQ-d00258-A: a reader can see what evidence produced a total --
-        the four measures behind Tested are columns of their own."""
-        from elspais.commands.trace import format_csv
+        The default set states the dimension totals; naming a measure states
+        that measure, and CSV and JSON state the same value set for the one
+        selection (REQ-d00282-E)."""
+        import csv as csv_module
+        import io as io_module
+        import json as json_module
+
+        from elspais.commands.trace import REPORT_PRESETS, ReportPreset, format_csv, format_json
 
         graph = _build_project_graph(tested_breakdown_project)
-        out = "\n".join(format_csv(graph))
-        header = out.splitlines()[0].split(",")
-        for col in ("Tested", "Tested Immediate Direct", "Tested Rolled Direct"):
-            assert col in header
+        preset = ReportPreset(name="standard", values=list(REPORT_PRESETS["standard"].values))
+
+        default_header = next(
+            csv_module.reader(io_module.StringIO("\n".join(format_csv(graph, preset))))
+        )
+        assert "Tested" in default_header
+        assert not [h for h in default_header if h.startswith("Tested (")], (
+            f"A measure is stated only where the selection names it; got {default_header}"
+        )
+
+        chosen = ["id", "tested", "tested.immediate_direct"]
+        header = next(
+            csv_module.reader(
+                io_module.StringIO("\n".join(format_csv(graph, preset, None, chosen)))
+            )
+        )
+        # REQ-d00282-C: the heading names the dimension AND the measure.
+        assert header == ["ID", "Tested", "Tested (cited by name here)"]
+
+        rows = json_module.loads("".join(format_json(graph, preset, None, chosen)))
+        # Two cells in a table, one nested object in a format that has numbers:
+        # naming the figure AND a measure of it names one place twice, and the
+        # measure lands inside the figure rather than beside it (REQ-d00282-D).
+        assert list(rows[0].keys()) == ["id", "tested"]
+        assert {"count", "total", "ratio", "immediate_direct"} <= set(rows[0]["tested"])
+        assert set(rows[0]["tested"]["immediate_direct"]) == {"count", "total", "ratio"}
+
+    # Verifies: REQ-d00258-K, REQ-d00282-C+J
+    def test_headings_come_from_the_configured_display_words(self, tested_breakdown_project):
+        """Every heading is read through the configured mapping, the measure
+        values included: a project that renames Tested renames it here, while
+        the key the selection names stays what it was (REQ-d00282-J)."""
+        import csv as csv_module
+        import io as io_module
+
+        from elspais.commands.trace import REPORT_PRESETS, ReportPreset, format_csv
+
+        graph = _build_project_graph(tested_breakdown_project)
+        preset = ReportPreset(name="standard", values=list(REPORT_PRESETS["standard"].values))
+        # Keyed by the RELATIONSHIP conferring the coverage, as REQ-d00258-K
+        # defines the mapping -- `Verifies:` is what confers Tested.
+        config = {"rules": {"coverage": {"status_words": {"verifies": "Exercised"}}}}
+
+        chosen = ["id", "tested", "tested.rolled_direct"]
+        header = next(
+            csv_module.reader(
+                io_module.StringIO("\n".join(format_csv(graph, preset, None, chosen, config)))
+            )
+        )
+        assert header == ["ID", "Exercised", "Exercised (conducted direct)"]
