@@ -1,4 +1,4 @@
-# Verifies: REQ-p00080-A, REQ-p00080-F
+# Verifies: REQ-p00080-A
 """Tests for the pdf CLI command registration and tool checks.
 
 Validates REQ-p00080-A: The tool SHALL provide an elspais pdf CLI command.
@@ -104,30 +104,6 @@ class TestToolAvailability:
         with patch("elspais.commands.pdf_cmd._check_tool", side_effect=selective_check):
             rc = run(args)
         assert rc == 1
-
-
-class TestOverviewArgs:
-    """Validates REQ-p00080-F: --overview and --max-depth CLI arguments."""
-
-    def test_REQ_p00080_F_overview_flag_registered(self):
-        """The --overview flag is available on the pdf parser."""
-        args = parse_args(["pdf", "--overview"])
-        assert args.overview is True
-
-    def test_REQ_p00080_F_overview_default_false(self):
-        """The --overview flag defaults to False."""
-        args = parse_args(["pdf"])
-        assert args.overview is False
-
-    def test_REQ_p00080_F_max_depth_registered(self):
-        """The --max-depth flag is available on the pdf parser."""
-        args = parse_args(["pdf", "--max-depth", "2"])
-        assert args.max_depth == 2
-
-    def test_REQ_p00080_F_max_depth_default_none(self):
-        """The --max-depth flag defaults to None."""
-        args = parse_args(["pdf"])
-        assert args.max_depth is None
 
 
 # ─────────────────────────────────────────────────────────────────────────────

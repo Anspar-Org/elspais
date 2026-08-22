@@ -807,12 +807,6 @@ class PdfArgs:
     cover: Path | None = None
     """Markdown file for custom cover page."""
 
-    overview: bool = False
-    """Generate stakeholder overview (PRD requirements only)."""
-
-    max_depth: int | None = None
-    """Max graph depth for core PRDs in overview mode."""
-
 
 # ---------------------------------------------------------------------------
 # Install subcommands

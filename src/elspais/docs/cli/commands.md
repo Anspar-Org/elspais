@@ -170,8 +170,7 @@ Compile spec files into a PDF document.
   $ elspais pdf                              # Generate spec-output.pdf
   $ elspais pdf --output review.pdf          # Custom output path
   $ elspais pdf --title "My Project Specs"   # Custom title
-  $ elspais pdf --overview                   # PRD-only stakeholder overview
-  $ elspais pdf --overview --max-depth 2     # Overview with depth limit
+  $ elspais pdf --cover spec/cover.tex       # Custom cover page
 
 **Options:**
 
@@ -180,21 +179,11 @@ Compile spec files into a PDF document.
   `--template PATH`     Custom pandoc LaTeX template
   `--title TITLE`       Document title
   `--cover PATH`        Markdown file for custom cover page
-  `--overview`          Generate stakeholder overview (PRD only, no OPS/DEV)
-  `--max-depth N`       Max graph depth for core PRDs in overview mode
 
 **Prerequisites:**
 
 - pandoc: <https://pandoc.org/installing.html>
 - xelatex: Install TeX Live, MiKTeX, or MacTeX
-
-**Overview Mode:**
-
-Generates a lighter document for stakeholders:
-- Only PRD-level requirements from all repos
-- No OPS or DEV requirements
-- Default title: "Product Requirements Overview"
-- `--max-depth` limits core PRD depth (associates always fully included)
 
 **Federated projects:**
 

@@ -1,4 +1,4 @@
-# Implements: REQ-p00080-A, REQ-p00080-E, REQ-p00080-F, REQ-p00080-I, REQ-p00080-J, REQ-p00080-K
+# Implements: REQ-p00080-A, REQ-p00080-E, REQ-p00080-I, REQ-p00080-J, REQ-p00080-K
 """
 elspais.commands.pdf_cmd - Compile spec files into a PDF document.
 
@@ -65,13 +65,9 @@ def run(args: argparse.Namespace) -> int:
 
     title = getattr(args, "title", None)
     cover = getattr(args, "cover", None)
-    overview = getattr(args, "overview", False)
-    max_depth = getattr(args, "max_depth", None)
     assembler = MarkdownAssembler(
         graph,
         title=title,
-        overview=overview,
-        max_depth=max_depth,
         resolver=resolver,
         config=config,
     )

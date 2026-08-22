@@ -264,15 +264,13 @@ The compiler declares `Satisfies:` against the REQ-p00019 anti-pattern template:
 
 A. The tool SHALL provide an `elspais pdf` CLI command that compiles spec files into a PDF document.
 
-B. The assembled Markdown SHALL group requirements by level (PRD, OPS, DEV) with each level as a top-level section, and order files within each level by graph depth (root requirements first).
+B. The assembled Markdown SHALL group requirements by the levels the project declares, in the rank order it gave them, with each level as a top-level section, and order files within each level by graph depth (root requirements first).
 
 C. The generated PDF SHALL include an auto-generated table of contents derived from requirement headings.
 
 D. The tool SHALL generate an alphabetized topic index with entries derived from filename words, file-level Topics lines, and requirement-level Topics lines, rendered as a Markdown section with hyperlinks.
 
 E. The tool SHALL insert page breaks before each requirement heading to ensure each requirement starts on a new page.
-
-F. The tool SHALL support an `--overview` flag that generates a stakeholder-oriented PDF containing only PRD-level requirements, with an optional `--max-depth` flag to limit core PRD graph depth while always including all associated-repo PRDs.
 
 G. The PDF generator SHALL support content derived from a variety of sources and media types.
 
@@ -286,6 +284,9 @@ K. When referenced content was omitted from the compiled document or substituted
 
 ## Changelog
 
+- 2026-08-22 | 3296bc86 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: sync changelog hash
+- 2026-08-22 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-74: retire the overview flag and its depth limit — the estate's audience document is compiled by its own pipeline over the graph, so a second selection mechanism here answered to nobody (F withdrawn); state the level grouping as the levels a project declares rather than a fixed three (B)
+- 2026-08-22 | 3296bc86 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-07 | acc97ca9 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-07 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-31/TOOL-32: concretize the REQ-p00019 anti-pattern instance with assertions I (unresolvable asset reference reported), J (unreadable owning-repo source file reported), and K (completion report discloses degradation)
 - 2026-08-01 | 01da5fa4 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: sync changelog hash
@@ -296,7 +297,7 @@ K. When referenced content was omitted from the compiled document or substituted
 - 2026-07-31 | 24f063f6 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-04-23 | bfc0cadf | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Spec-to-PDF Compilation* | **Hash**: acc97ca9
+*End* *Spec-to-PDF Compilation* | **Hash**: 3296bc86
 ---
 
 # REQ-p00015: Complete and Current Reporting

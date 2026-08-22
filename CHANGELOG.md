@@ -49,6 +49,10 @@ All notable changes to elspais will be documented in this file.
 
 ### Changed
 
+- **`elspais pdf --overview` and `--max-depth` are retired (REQ-p00080-F withdrawn)** — the command now compiles the whole estate and takes no selection. `--overview` emitted the topmost level only, and `--max-depth` limited core graph depth while always including every associated repo's requirements at that level. Both were a second place deciding what a document contains, expressible in neither the scope vocabulary nor a declared `[scopes.NAME]`, and undisclosed in the document they produced. Nothing consumed them: an estate that compiles an audience document does it with a pipeline of its own over `elspais graph`, where the selection can say more than a level cut and can be committed beside the document. `--template`, `--cover`, `--title`, `--engine` and `--output` are unchanged. Scoping `pdf` through REQ-d00278's vocabulary remains unbuilt, and is no longer blocked by a requirement mandating a different mechanism.
+
+  REQ-p00080-B also stops naming a fixed `(PRD, OPS, DEV)` and states the levels a project declares, in the rank order it gave them — which is what the assembler already did.
+
 - **Whether a run counts as selective now follows from the targets it executed (REQ-d00254-I, REQ-d00254-J)** — previously the presence of `--targets` decided it, which would have made every run "selective" once an absent selector resolved to the `default` group. A run covering every configured target is a full run however it was asked for, so a project declaring no groups renders exactly as before; a run leaving any configured target out is selective, so its unexecuted targets are tagged *carried* and a requirement with no results renders as not-run rather than as zero.
 
 ### Fixed

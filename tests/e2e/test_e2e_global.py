@@ -247,17 +247,6 @@ class TestPdf:
         with open(out, "rb") as f:
             assert f.read(4) == b"%PDF"
 
-    @requires_pandoc
-    @requires_xelatex
-    def test_REQ_p00080_F_generates_overview_pdf(self, tmp_path):
-        out = tmp_path / "overview.pdf"
-        result = run_elspais("pdf", "--overview", "--output", str(out))
-        assert result.returncode == 0, f"stderr: {result.stderr}"
-        assert out.exists()
-        assert out.stat().st_size > 0
-        with open(out, "rb") as f:
-            assert f.read(4) == b"%PDF"
-
 
 # ===================================================================
 # From test_analysis_cmd.py
