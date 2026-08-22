@@ -169,7 +169,7 @@
 | REQ-d00251 | A Repository's Identifier Grammar                             | dev-graph-config.md     | 09f5a257 |
 | REQ-d00252 | External Library Integration via Integrates Keyword           | dev-graph-federation.md | 42cdc868 |
 | REQ-d00253 | Federation Write/Generation Scope                             | dev-graph-federation.md | f454041e |
-| REQ-d00254 | Test Evidence: Attribution, Ingestion, and Coverage Crediting | dev-graph-core.md       | b7f71d81 |
+| REQ-d00254 | Test Evidence: Attribution, Ingestion, and Coverage Crediting | dev-graph-core.md       | 00518ba3 |
 | REQ-d00255 | Test-to-Journey UAT Verification                              | dev-graph-core.md       | ab5cb648 |
 | REQ-d00256 | Step-Level UAT Verification                                   | dev-graph-core.md       | 8bf40a7c |
 | REQ-d00257 | UAT-Scoped Traceability Report                                | dev-graph-core.md       | 1ea68210 |
@@ -197,6 +197,8 @@
 | REQ-d00280 | Named Report Declarations                                     | dev-cli.md              | ab0a70bb |
 | REQ-d00281 | Level Vocabulary of a Reported Graph                          | dev-graph-core.md       | 4bde246d |
 | REQ-d00282 | Report Value Selection                                        | dev-cli.md              | 70ab39ac |
+| REQ-d00283 | Test Target Groups                                            | dev-graph-core.md       | bc95d36b |
+| REQ-d00284 | How a Result Names Its Test                                   | dev-graph-core.md       | 7baae0b0 |
 
 ## User Journeys
 

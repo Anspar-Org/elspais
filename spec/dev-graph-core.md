@@ -531,7 +531,7 @@ A. Where no result record binds to a test, that test SHALL contribute no verdict
 
 B. The annotator SHALL compute a separate `lcov_tested` dimension by measuring the fraction of implementation lines (from `Implements:` edges) covered by execution data. When the fraction meets or exceeds the configured minimum, the relevant assertions SHALL be credited in `lcov_tested`. That dimension SHALL be reported in its own right and SHALL NOT credit any *Traceability* coverage dimension.
 
-C. The configuration surface SHALL express test result and coverage ingestion via `[[scanning.test.targets]]` entries, each declaring how a target's results and coverage are produced (`command`) and ingested (`reporter`, `results`, `coverage`, `match`, `credit_coverage`, `min_coverage_fraction`). User documentation SHALL include a `test-targets` topic describing the target model, the available reporters, and a worked Flutter recipe.
+C. The configuration surface SHALL express test result and coverage ingestion via `[[scanning.test.targets]]` entries, each declaring how a target's results and coverage are produced (`command`, `groups`) and ingested (`reporter`, `results`, `coverage`, `match`, `classname`, `credit_coverage`, `min_coverage_fraction`). User documentation SHALL include a `test-targets` topic describing the target model, the available reporters, and a worked Flutter recipe.
 
 D. When an `// Implements:` marker has no function range (i.e., `impl_start_line == impl_end_line`), the annotator SHALL attribute coverage via block-scoped attribution: a run of consecutive marker lines with no executable line strictly between them forms one block, and that block owns the executable lines that follow it up to the next block's first marker or end-of-file. This enables languages without function detection (e.g. Dart) to receive lcov coverage credit for the code each marker precedes.
 
@@ -541,11 +541,11 @@ F. For each configured target, the system SHALL obtain the reporter's output (ca
 
 G. Each target SHALL select its result-to-test matching via `match`: `source` SHALL bind each result at the most precise scope available — first step scope, when the result's recorded test name embeds exactly one journey-step reference (in the configured reference form) that resolves to a step whose verifying test(s) live in the result's source file; then test scope, resolving the result's real source-file path and `test()` source line to the specific test node at that `(path, line)`. A result that binds at neither scope SHALL credit nothing. `aggregate` SHALL derive the per-app green/red signal, which informs the line-coverage dimension only.
 
-H. `elspais checks --run-tests` SHALL accept a `--targets` selector naming a subset of `[[scanning.test.targets]]` to execute; an unknown target name SHALL be an error, and an absent selector SHALL execute all targets. The same `--targets` flag on `summary`/`trace` SHALL mark provenance without executing anything.
+H. `elspais checks --run-tests` SHALL accept a `--targets` selector naming a subset of `[[scanning.test.targets]]` to execute; an unknown target name SHALL be an error, and an absent selector SHALL execute the targets a run executes when no selection is made (REQ-d00283). The same `--targets` flag on `summary`/`trace` SHALL mark provenance without executing anything.
 
-I. A target absent from `--targets` (the fresh set) whose results are ingested from disk SHALL be tagged *carried*; its verdict SHALL be honored faithfully (a carried failing result still flags the requirement as failing), and the `verified` dimension SHALL carry a `carried` flag orthogonal to its pass/fail tier so the matrix can render it as `(baseline)`.
+I. A configured target a run did not execute, whose results are ingested from disk, SHALL be tagged *carried*; its verdict SHALL be honored faithfully (a carried failing result still flags the requirement as failing), and the `verified` dimension SHALL carry a `carried` flag orthogonal to its pass/fail tier so the matrix can render it as `(baseline)`.
 
-J. In a selective run (a `--targets` set is present), a requirement with test references but zero result records SHALL render as not-run (`—`), distinct from a run-but-uncovered `0%`; in a full run (no `--targets`) zero results SHALL keep the existing rendering.
+J. In a selective run (a run that did not execute every configured target), a requirement with test references but zero result records SHALL render as not-run (`—`), distinct from a run-but-uncovered `0%`; in a full run zero results SHALL keep the existing rendering. Which of the two a run is SHALL follow from the targets it executed and not from how its selection was expressed.
 
 K. For every configured test framework, the system SHALL bind each scanned test to its own identity within its source file and to that test's line extent, regardless of the framework's implementation language.
 
@@ -573,6 +573,9 @@ N resolves per file, not per configuration, because both routes are routinely li
 
 ### Changelog
 
+- 2026-08-22 | 00518ba3 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-22 | cbc2e2cd | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-22 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-74: a run with no selection executes a named set a project can narrow rather than every configured target; whether a run counts as selective follows from the targets it executed rather than from how it was asked; the target model carries the two settings that make that set and a recorded identity's form declarable (C, H, I, J)
 - 2026-08-17 | b7f71d81 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-17 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: a reporter's line numbers are read in the origin it counts from, declared with the reporter and normalised at ingestion (O)
 - 2026-08-17 | 11ca8985 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms, update hash
@@ -591,7 +594,7 @@ N resolves per file, not per configuration, because both routes are routinely li
 - 2026-06-20 | 98120740 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-06-20 | 00000000 | - | Michael Lewis (<michael@anspar.org>) | CUR-1533: initial
 
-*End* *Test Evidence: Attribution, Ingestion, and Coverage Crediting* | **Hash**: b7f71d81
+*End* *Test Evidence: Attribution, Ingestion, and Coverage Crediting* | **Hash**: 00518ba3
 
 ---
 
@@ -843,6 +846,79 @@ The word each dimension is reported under is configurable (REQ-d00258-K); the na
 *End* *Coverage Dimensions* | **Hash**: b097dcd7
 
 ---
+
+## REQ-d00283: Test Target Groups
+
+**Level**: dev | **Status**: Draft | **Implements**: REQ-o00051
+
+A project's test targets are not alike in what it costs to run them. Some are a
+compilation away; others need a live backend, a device farm, or an account
+somebody pays for. Groups are how a project says which of its targets a run is
+about.
+
+### Assertions
+
+A. Every test target SHALL belong to one or more groups.
+
+B. Every test target SHALL belong to the group `all`.
+
+C. A test target that claims no other group SHALL belong to the group `default`.
+
+D. A run that selects no group SHALL execute the targets of the group `default`.
+
+E. A run that selects one or more groups SHALL execute only targets belonging to those groups.
+
+F. A test target SHALL be able to claim any declared group, and SHALL NOT claim a name no declaration and no reservation defines.
+
+G. A project SHALL be able to declare any number of groups, each declared with a keyword unique among every group name, the reserved names included, and a description of what the group is for.
+
+H. A run selecting a name no declaration and no reservation defines SHALL be refused rather than resolved to no targets.
+
+I. Each selector a run states SHALL narrow the targets it executes.
+
+### Rationale
+
+The cost of a target is not something the tool can read off its configuration, and it is not the tool's judgement to make. What the tool can do is let the project say it once, in a place a reader of the configuration will find, and then honour it. A description is required with each declaration for that reason: a group called `slow` tells a newcomer nothing about whether their change should have run it, and the declaration is the only place that explanation has to live.
+
+B makes `all` a membership rather than a selector, so E needs no exception for it: selecting `all` selects every target by the same rule that selects any other group, and nothing has to know that one name means something different from the rest.
+
+C is what keeps this addition from changing what an existing project's run does. A project that declares no groups has every target in `default`, so the targets a bare run executes are the targets it executed before. The capability arrives inert and is switched on by declaring a group, which is the only way to introduce a selection mechanism into an estate where reports are already committed.
+
+F and H are the same discipline reached from the two directions a name arrives from. A group that exists because a target claimed it can never be wrong, so a misspelling in configuration silently creates a group nobody selects and quietly removes that target from every run. A selection that resolves to nothing is indistinguishable, in the report it produces, from a selection whose targets all passed — and the second is the reading a reader will reach for. In both directions the undefined name is refused, because refusal is the only answer neither can be misread.
+
+G requires uniqueness across every group name rather than across the declared ones, which is what bars a project from declaring `all` or `default`. Their meanings are fixed by B, C and D; a project able to attach its own description to either could describe something the tool does not do, and a reader would have no way to tell which was true.
+
+I settles what two selectors mean together. Both name what a run is to execute, so a run stating both is describing its subject twice, and the targets it executes are those both descriptions admit. The alternative — each selector adding to the set — would make naming a target *widen* a run that named a group, so a caller narrowing their invocation would watch it grow.
+
+*End* *Test Target Groups* | **Hash**: bc95d36b
+
+## REQ-d00284: How a Result Names Its Test
+
+**Level**: dev | **Status**: Draft | **Implements**: REQ-o00051
+
+A results file says which test produced each result. Some name the test's source
+file; others give only a name whose meaning depends on the tool that wrote the
+file. This says how that name is read.
+
+### Assertions
+
+A. Each test target SHALL declare how its results name the test that produced them.
+
+B. A result SHALL be matched to a test only where its name picks out exactly one test scanned for that target.
+
+C. A result matched to no test SHALL be reported, saying whether its name picked out no test or more than one.
+
+### Rationale
+
+When a results file names the test's source file there is nothing to work out. When it does not, all the tool has is a name -- `epistaxis-diary.spec.ts`, say, or `tests.test_login` -- and what that name refers to depends entirely on the tool that wrote it. The tool currently assumes a Python module path. That is right for one producer and wrong for every other, and it fails quietly: the name matches no test, the result is dropped, and the coverage figure that follows reads zero. Accurate about what the tool could read, and misleading about what was actually run.
+
+A asks the project to say what the name is rather than leaving the tool to guess. Which form a producer writes is a fixed fact about that producer, so it only has to be said once. The reporter says what its format usually carries and a target may say otherwise, because several producers write the same format and disagree about what goes in that field. This is the same arrangement REQ-d00254-O makes for the line numbers a producer counts.
+
+B keeps the match strict. The tests it looks among are the ones scanned for that target: a name matching a file some other target scans says nothing about where this result came from. Requiring a single match matters because a result attached to the wrong test looks exactly like one attached to the right test in every figure afterwards. It also rules out trying a second reading when the first finds nothing, which would rescue some results and misattach others with no way to tell the two apart later.
+
+C makes the failure visible. A result matching nothing is not an error where it happens, so without C nothing mentions it and the only sign is a coverage figure lower than expected. Saying whether the name matched nothing or matched several tells an author which problem they have: a name pointing at a file that is not there, or two files sharing one name.
+
+*End* *How a Result Names Its Test* | **Hash**: 7baae0b0
 
 ## REQ-d00281: Level Vocabulary of a Reported Graph
 
