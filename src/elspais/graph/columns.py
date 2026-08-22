@@ -13,6 +13,18 @@ those words would break the day someone did (REQ-d00282-J). A coverage
 dimension's total is the dimension's own key; the measures behind it are keyed
 beneath it, so a reader can ask for the evidence they came for rather than
 taking every measure of every dimension to reach it (REQ-d00282-B).
+
+A coverage figure is a credit counted over a population, and REQ-d00282-B makes
+each of the three -- the credit, the population, their proportion -- selectable
+in its own right, for a dimension's total as for each measure behind it. So a
+figure is offered two ways: the COMPOSITE, which is what a table wants and
+states all three in one cell, and the SCALAR PARTS beneath it, which are what a
+program wants and each state one. A proportion is derived from the other two
+rather than being a third fact, so it is carried unrounded and only a rendering
+rounds it. Some values have only the one form: the assertions a dimension
+counted as passed, failed or awaiting a result are counts with no proportion of
+their own (REQ-d00258-O), and though the three sum to the tested count a reader
+wanting only the failures is owed only the failures.
 """
 
 from __future__ import annotations
@@ -28,8 +40,51 @@ from elspais.graph.aggregation import COVERAGE_DIMENSIONS, MEASURE_WORDS, MEASUR
 COLUMN_LIST_SEPARATOR = ","
 
 # A measure is keyed beneath the dimension it measures, so the key says what it
-# is a measure OF as well as which measure it is (REQ-d00282-C).
+# is a measure OF as well as which measure it is (REQ-d00282-C). A scalar part
+# is keyed beneath whichever of the two it decomposes, by the same character.
 MEASURE_KEY_SEPARATOR = "."
+
+# Implements: REQ-d00282-B
+# name: SCALAR_PARTS
+# use:  the three ways one coverage figure decomposes into a single number.
+# def:  the credit, the assertions the credit was counted over, and the
+#       proportion the first is of the second.
+PART_COUNT = "count"
+PART_TOTAL = "total"
+PART_RATIO = "ratio"
+SCALAR_PARTS: tuple[str, ...] = (PART_COUNT, PART_TOTAL, PART_RATIO)
+
+# Implements: REQ-d00258-O, REQ-d00282-B
+# name: COUNT_PARTS
+# use:  the parts of the Tested figure that are counts and nothing else.
+# def:  what came back for the assertions a dimension counted as tested.
+#
+# These decompose no figure, so they take no proportion of their own and are
+# offered on the Tested dimension alone. They are individually selectable
+# because a reader watching for failures is owed the failures and not the two
+# counts that happen to sum with them.
+COUNT_PARTS: tuple[str, ...] = ("passed", "failed", "awaiting")
+
+# The dimension whose figure carries the breakdown of REQ-d00258-O.
+BREAKDOWN_DIMENSION = "tested"
+
+# The words a part is displayed under. Display words only -- a selection names
+# the part by its key, which no project can rename (REQ-d00282-J).
+_PART_WORDS: dict[str, str] = {
+    PART_COUNT: "credited",
+    PART_TOTAL: "counted over",
+    PART_RATIO: "proportion",
+    "passed": "passed",
+    "failed": "failed",
+    "awaiting": "awaiting a result",
+}
+
+# The decimals a proportion is ROUNDED TO when a cell renders it. The value
+# itself is never rounded (REQ-d00282-B's Rationale: a proportion is derived
+# from the other two, and a report stating all three states one fact three ways
+# rather than three facts) -- this is a spelling, which REQ-d00282-E leaves to
+# the format.
+RATIO_CELL_DECIMALS = 3
 
 
 @dataclass(frozen=True)
@@ -44,6 +99,14 @@ class ColumnSpec:
     measure: str = ""
     """The measure of that dimension, where the column states one rather than
     the dimension's total."""
+    part: str = ""
+    """The single scalar this column states of the figure named above it.
+
+    Empty for the COMPOSITE, which states the credit, what it was counted over
+    and their proportion in one value because that is what a table wants. One
+    of ``SCALAR_PARTS`` or ``COUNT_PARTS`` where the column states one number
+    in its own right (REQ-d00282-B).
+    """
     group_only: bool = False
     """Whether this column states a fact only a GROUP of requirements has.
 
@@ -61,6 +124,16 @@ class ColumnSpec:
         tell them apart reads absence as nothing-done.
         """
         return bool(self.dimension)
+
+    @property
+    def is_scalar(self) -> bool:
+        """Whether this column states ONE number rather than a composite.
+
+        What separates the two is not how the value looks but what it IS: a
+        scalar is a number wherever it is stated, and a format with numbers
+        states it as one (REQ-d00282-E).
+        """
+        return bool(self.part)
 
 
 # Columns naming what a row is about, or a property it carries. These state no
@@ -104,23 +177,74 @@ _DIMENSION_HEADERS: dict[str, str] = {
 }
 
 
+def _qualified_header(head: str, measure: str, part: str) -> str:
+    """The words one column is displayed under, absent a project override.
+
+    REQ-d00282-C: a value taken on a measure names the dimension AND the
+    measure. Either half alone leaves the reader guessing -- the dimension
+    alone hides which evidence the figure counts, and the measure alone hides
+    what it is a measure of. A scalar part is a third qualifier on the same
+    heading rather than a heading of its own, for the same reason: "credited"
+    on its own says nothing about what was credited.
+    """
+    qualifiers = [MEASURE_WORDS[measure]] if measure else []
+    if part:
+        qualifiers.append(_PART_WORDS[part])
+    return f"{head} ({', '.join(qualifiers)})" if qualifiers else head
+
+
+def _figure_specs(dim: str, head: str, measure: str) -> list[ColumnSpec]:
+    """One figure of one dimension: its composite, then its scalar parts.
+
+    The composite comes first because it is what an unqualified name has always
+    meant, and REQ-d00282-G forbids a further value moving what an already
+    expressible selection states.
+    """
+    base = f"{dim}{MEASURE_KEY_SEPARATOR}{measure}" if measure else dim
+    specs = [
+        ColumnSpec(
+            key=base,
+            header=_qualified_header(head, measure, ""),
+            dimension=dim,
+            measure=measure,
+        )
+    ]
+    specs += [
+        ColumnSpec(
+            key=f"{base}{MEASURE_KEY_SEPARATOR}{part}",
+            header=_qualified_header(head, measure, part),
+            dimension=dim,
+            measure=measure,
+            part=part,
+        )
+        for part in SCALAR_PARTS
+    ]
+    return specs
+
+
 def _build_specs() -> dict[str, ColumnSpec]:
     specs: dict[str, ColumnSpec] = {c.key: c for c in _IDENTITY_COLUMNS}
     for dim in COVERAGE_DIMENSIONS:
         head = _DIMENSION_HEADERS.get(dim, dim.replace("_", " ").title())
-        specs[dim] = ColumnSpec(key=dim, header=head, dimension=dim)
+        for spec in _figure_specs(dim, head, ""):
+            specs[spec.key] = spec
+        # Implements: REQ-d00258-O, REQ-d00282-B
+        # Counts, and only counts: what came back for the tested assertions
+        # takes no proportion of its own, so no `.ratio` is offered beneath
+        # one and asking for it is refused like any other name the report does
+        # not offer (REQ-d00282-F).
+        if dim == BREAKDOWN_DIMENSION:
+            for part in COUNT_PARTS:
+                key = f"{dim}{MEASURE_KEY_SEPARATOR}{part}"
+                specs[key] = ColumnSpec(
+                    key=key,
+                    header=_qualified_header(head, "", part),
+                    dimension=dim,
+                    part=part,
+                )
         for measure in MEASURES:
-            key = f"{dim}{MEASURE_KEY_SEPARATOR}{measure}"
-            # REQ-d00282-C: the heading names the dimension AND the measure.
-            # Either half alone leaves the reader guessing -- the dimension
-            # alone hides which evidence the figure counts, and the measure
-            # alone hides what it is a measure of.
-            specs[key] = ColumnSpec(
-                key=key,
-                header=f"{head} ({MEASURE_WORDS[measure]})",
-                dimension=dim,
-                measure=measure,
-            )
+            for spec in _figure_specs(dim, head, measure):
+                specs[spec.key] = spec
     for spec in _LINE_COLUMNS:
         specs[spec.key] = spec
     return specs
@@ -147,6 +271,45 @@ def figure_cell(covered: float, total: float, *, decimals: int = 0) -> str:
 
     pct = (covered / total * 100) if total else 0.0
     return f"{fmt_assertion_count(covered)}/{fmt_assertion_count(total)} ({pct:.{decimals}f}%)"
+
+
+# Implements: REQ-d00282-B+E
+# name: scalar_value
+# use:  the ONE number a scalar part of a coverage figure states, wherever it
+#       is stated.
+# def:  the credit, the assertions it was counted over, or the proportion the
+#       first is of the second -- as a number and nothing else.
+#
+# The proportion is DERIVED here rather than carried anywhere, and it is
+# returned unrounded: it is not a third fact beside the other two, and a
+# consumer that re-derives it from them must not disagree with one that read
+# it. Rounding is a rendering decision and belongs to whatever renders a cell.
+def scalar_value(covered: float, total: float, part: str) -> float:
+    """One part of one figure. The caller decides what an ABSENT figure reads
+    as (REQ-d00282-M) -- this decomposes a figure that exists."""
+    if part == PART_COUNT:
+        return covered
+    if part == PART_TOTAL:
+        return float(total)
+    if part == PART_RATIO:
+        return (covered / total) if total else 0.0
+    raise ValueError(f"{part} is not a part of a coverage figure")
+
+
+# Implements: REQ-d00282-E
+def scalar_cell(value: float, part: str) -> str:
+    """A scalar part as a table renders it.
+
+    REQ-d00282-E binds which values a report states, never how each is spelled,
+    so a format with numbers states the number and a table states this. A
+    proportion is rounded HERE and never in the value, which is what keeps the
+    number a consumer reads equal to the one it can re-derive.
+    """
+    if part == PART_RATIO:
+        return f"{value:.{RATIO_CELL_DECIMALS}f}"
+    from elspais.graph.metrics import fmt_assertion_count
+
+    return fmt_assertion_count(value)
 
 
 class UnofferedColumns(ValueError):
@@ -257,6 +420,4 @@ def header_for(key: str, config: Mapping[str, Any] | None = None) -> str:
 
     words = get_status_words(config or {})
     word = words.get(spec.dimension) or _DIMENSION_HEADERS.get(spec.dimension, spec.header)
-    if spec.measure:
-        return f"{word} ({MEASURE_WORDS[spec.measure]})"
-    return word
+    return _qualified_header(word, spec.measure, spec.part)

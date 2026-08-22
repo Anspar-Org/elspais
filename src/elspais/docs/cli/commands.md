@@ -85,7 +85,7 @@ Generate traceability matrix and reports.
 
   `--format {text,markdown,html,json,csv}`  Output format (default: markdown)
   `--preset {minimal,standard,full}`        Named default column set
-  `--columns KEY,KEY,...` State exactly these columns, in this order (see `elspais docs traceability`)
+  `--columns KEY,KEY,...` State exactly these columns, in this order. A coverage figure is also selectable as the numbers behind it -- `implemented.count`, `implemented.total`, `implemented.ratio` (see `elspais docs traceability`)
   `--body`               Show requirement body text
   `--assertions`         Show individual assertions
   `--tests`              Show test references
@@ -236,9 +236,10 @@ Generate coverage summary reports.
   `--format {text,markdown,json,csv}`  Output format (default: text)
   `--columns KEY,KEY,...` State exactly these columns, in this order. Its rows
   are levels, so it offers `level`, `requirements`, `assertions` and the five
-  coverage dimensions with their four measures each -- not the
-  per-requirement columns, nor the line-coverage ones (a level has no line
-  figure). See `elspais docs scoping`.
+  coverage dimensions with their four measures each, plus the scalars behind
+  every figure (`.count`, `.total`, `.ratio`) -- not the per-requirement
+  columns, nor the line-coverage ones (a level has no line figure). See
+  `elspais docs scoping`.
 
 When `Integrates:` references are present, `summary` adds an "External
 integrations (by associate)" section listing inherited coverage grouped by the

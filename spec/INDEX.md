@@ -101,7 +101,7 @@
 | REQ-d00080 | Diagnostic Command Exit Code Contract                         | dev-cli.md              | acc2aa77 |
 | REQ-d00081 | Multi-Assertion Reference Expansion                           | dev-cli.md              | b1812806 |
 | REQ-d00082 | Unified Reference Configuration                               | dev-cli.md              | f0808bb9 |
-| REQ-d00084 | Trace Command                                                 | dev-cli.md              | a6ede1e4 |
+| REQ-d00084 | Trace Command                                                 | dev-cli.md              | 5728e809 |
 | REQ-d00085 | Unified Report Composition                                    | dev-cli.md              | 587285b0 |
 | REQ-d00086 | Coverage Report Section                                       | dev-cli.md              | 8e02f52d |
 | REQ-d00124 | Graph Analysis Engine                                         | dev-cli.md              | b153d5f6 |
@@ -172,7 +172,7 @@
 | REQ-d00254 | Test Evidence: Attribution, Ingestion, and Coverage Crediting | dev-graph-core.md       | b7f71d81 |
 | REQ-d00255 | Test-to-Journey UAT Verification                              | dev-graph-core.md       | ab5cb648 |
 | REQ-d00256 | Step-Level UAT Verification                                   | dev-graph-core.md       | 8bf40a7c |
-| REQ-d00257 | UAT-Scoped Traceability Report                                | dev-graph-core.md       | 253ea802 |
+| REQ-d00257 | UAT-Scoped Traceability Report                                | dev-graph-core.md       | 1ea68210 |
 | REQ-d00258 | Reporting Surface Consistency                                 | dev-graph-core.md       | 6c978321 |
 | REQ-d00259 | Requirement Format Reference Command                          | dev-cli.md              | c3b67490 |
 | REQ-d00260 | Workspace Registry and Federated View Assembly                | dev-graph-federation.md | 510a0f67 |
@@ -194,9 +194,9 @@
 | REQ-d00277 | Coverage Dimensions                                           | dev-graph-core.md       | b097dcd7 |
 | REQ-d00278 | Report Scope Selection Vocabulary                             | dev-cli.md              | ef2221cc |
 | REQ-d00279 | One Authority for Report Scope Membership                     | dev-cli.md              | 2b755b50 |
-| REQ-d00280 | Named Report Declarations                                     | dev-cli.md              | 49c64d5d |
+| REQ-d00280 | Named Report Declarations                                     | dev-cli.md              | ab0a70bb |
 | REQ-d00281 | Level Vocabulary of a Reported Graph                          | dev-graph-core.md       | 4bde246d |
-| REQ-d00282 | Report Column Selection                                       | dev-cli.md              | e02f43b5 |
+| REQ-d00282 | Report Value Selection                                        | dev-cli.md              | 620f30ea |
 
 ## User Journeys
 

@@ -639,19 +639,19 @@ E. Test results SHALL be attributed per step: a step's verification status and i
 
 ### Assertions
 
-A. The *Traceability* report SHALL offer a named default column set stating what user-acceptance evidence a requirement carries.
+A. The *Traceability* report SHALL offer a named default set of values stating what user-acceptance evidence a requirement carries.
 
-B. That column set SHALL state, for each requirement, the journeys validating it with their verification verdicts, and the requirement's UAT coverage figures.
+B. That set SHALL state, for each requirement, the journeys validating it with their verification verdicts, and the requirement's UAT coverage figures.
 
-C. That column set SHALL state no figure for implementation, for test verification, or for line coverage.
+C. That set SHALL state no figure for implementation, for test verification, or for line coverage.
 
 ### Rationale
 
-A reader asking what a journey has established is asking about a different kind of evidence from a reader asking what a test has, and a set of columns is how a report answers one question rather than both at once.
+A reader asking what a journey has established is asking about a different kind of evidence from a reader asking what a test has, and a named set of values is how a report answers one question rather than both at once.
 
-The set states no implementation or test figure because those answer the other question. It is a set of columns and nothing more: it does not decide which requirements the report is about. A report of user-acceptance evidence over every requirement tells a reader which ones have none, which is usually what they came to find out; and selecting requirements by whether a journey validates them is a question about requirements, which REQ-d00282-H keeps out of a column set and REQ-d00278 is where it would belong.
+The set states no implementation or test figure because those answer the other question. It is a set of values and nothing more: it does not decide which requirements the report is about. A report of user-acceptance evidence over every requirement tells a reader which ones have none, which is usually what they came to find out; and selecting requirements by whether a journey validates them is a question about requirements, which REQ-d00282-H keeps out of a set of values and REQ-d00278 is where it would belong.
 
-*End* *UAT-Scoped Traceability Report* | **Hash**: 253ea802
+*End* *UAT-Scoped Traceability Report* | **Hash**: 1ea68210
 
 ---
 

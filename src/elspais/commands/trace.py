@@ -39,10 +39,14 @@ if TYPE_CHECKING:
 from elspais.graph import NodeKind
 from elspais.graph.columns import (
     COLUMN_SPECS,
+    COUNT_PARTS,
     MEASURE_KEY_SEPARATOR,
+    SCALAR_PARTS,
     UnofferedColumns,
     figure_cell,
     header_for,
+    scalar_cell,
+    scalar_value,
 )
 
 # Implements: REQ-d00282-A
@@ -258,6 +262,29 @@ def _compact_labels(labels: set[str]) -> str:
     return ",".join(parts)
 
 
+# Implements: REQ-d00282-M
+# The mark a column with no figure to state carries in the formats people read.
+# JSON carries ``null``, which is the same distinction in a format that has one.
+ABSENT_FIGURE = "n/a"
+
+
+# Implements: REQ-d00282-B+M
+# name: _store_scalars
+# use:  record one coverage figure's three scalar parts on a row, beside the
+#       composite that states all three at once.
+# def:  the credit, the assertions it was counted over and their proportion,
+#       as NUMBERS -- or None for each where there is no figure to decompose.
+#
+# Kept as numbers all the way to the renderer: a value composed into prose here
+# is a value a consumer has to take apart again, and the proportion it recovers
+# would be the rounded one rather than the derived one. A row conferring no
+# *Assertion* stores None rather than zero, so an absence never reads as work
+# undone that was never owed.
+def _store_scalars(data: dict, base: str, covered: float, total: int) -> None:
+    for part in SCALAR_PARTS:
+        data[f"{base}_{part}"] = scalar_value(covered, total, part) if total else None
+
+
 def _get_node_data(node, graph: FederatedGraph, *, assertion_labels: bool = False) -> dict:
     """Extract data from a node for use in formatters.
 
@@ -404,8 +431,11 @@ def _get_node_data(node, graph: FederatedGraph, *, assertion_labels: bool = Fals
                 data[key] = f"{label_str} ({pct}%)" if dim.total else "n/a"
             else:
                 data[key] = _fmt_count(dim.covered, total_a)
+            _store_scalars(data, key, dim.covered, total_a)
             for measure in MEASURES:
-                data[f"{key}_{measure}"] = _fmt_count(measure_total(dim, measure), total_a)
+                measured = measure_total(dim, measure)
+                data[f"{key}_{measure}"] = _fmt_count(measured, total_a)
+                _store_scalars(data, f"{key}_{measure}", measured, total_a)
         # Implements: REQ-d00258-O, REQ-d00282-E
         # The breakdown QUALIFIES the Tested figure, so it is put inside that
         # figure's value once, here, and every format states the one cell.
@@ -414,6 +444,14 @@ def _get_node_data(node, graph: FederatedGraph, *, assertion_labels: bool = Fals
         # and three of them were a display term of its own, which O forbids.
         # Empty when nothing is tested: there is no breakdown of an empty set.
         part = tested_partition(rollup)
+        # Implements: REQ-d00258-O, REQ-d00282-B
+        # The same three counts the breakdown states in prose, each selectable
+        # on its own. Read from the partition rather than parsed back out of
+        # the sentence below it -- which is the defect the scalars exist to
+        # end. Absent, not zero, for a requirement conferring no *Assertion*
+        # (REQ-d00282-M).
+        for count_part in COUNT_PARTS:
+            data[f"tested_{count_part}"] = getattr(part, count_part) if total_a else None
         data["tested_breakdown"] = (
             f"[{fmt_assertion_count(part.passed)}P {fmt_assertion_count(part.failed)}F "
             f"{fmt_assertion_count(part.awaiting)}A]"
@@ -465,8 +503,12 @@ def _get_node_data(node, graph: FederatedGraph, *, assertion_labels: bool = Fals
 
         for key, _ in _DIMS:
             data[key] = "n/a"
+            _store_scalars(data, key, 0.0, 0)
             for measure in MEASURES:
                 data[f"{key}_{measure}"] = "n/a"
+                _store_scalars(data, f"{key}_{measure}", 0.0, 0)
+        for count_part in COUNT_PARTS:
+            data[f"tested_{count_part}"] = None
         data["code_tested"] = "n/a"
         data["lcov_tested"] = "n/a"
 
@@ -492,14 +534,26 @@ def _column_headers(config: dict | None = None) -> dict[str, str]:
 # in -- the divergence REQ-d00282-E forbids.
 
 
+# Implements: REQ-d00282-E+M
 def _format_row(data: dict, columns: list[str]) -> list[str]:
-    """Format a single row from node data according to columns."""
+    """One row as the formats people read state it, column by column.
+
+    A scalar part is a number, and this is where it is SPELLED for a table --
+    the value itself stays a number for the formats that have them
+    (REQ-d00282-E). A part with no figure behind it reads as the absence mark
+    rather than as zero (REQ-d00282-M).
+    """
     values = []
     for col in columns:
         if col == "implements":
             values.append(", ".join(data["implements"]) or "-")
+            continue
+        spec = COLUMN_SPECS.get(col)
+        value = data.get(_data_key(col), "")
+        if spec is not None and spec.is_scalar:
+            values.append(ABSENT_FIGURE if value is None else scalar_cell(value, spec.part))
         else:
-            values.append(str(data.get(_data_key(col), "")))
+            values.append(str(value))
     return values
 
 
@@ -528,6 +582,12 @@ def _json_row(data: dict, columns: Sequence[str], node=None) -> dict:
 
     Shared by the live-graph path and the path a serving process answers, so
     the two cannot state different columns for one selection.
+
+    A scalar part reaches here as the NUMBER it is and is emitted as one: this
+    format has numbers, and REQ-d00282-E leaves how a value is spelled to the
+    format while binding which values are stated. The composite stays a string
+    in every format, because a credit stated with what it was counted over and
+    their proportion is what that value IS.
     """
     out: dict = {}
     for col in columns:
@@ -683,7 +743,6 @@ def format_csv(
     # Tested one, so this states the same columns markdown, html and json do.
     cols = _report_columns(preset, columns)
     header_names = [header_for(c, config) for c in cols]
-    csv_columns = [_data_key(c) for c in cols]
 
     extra_prefix = []
     extra_suffix = []
@@ -695,7 +754,7 @@ def format_csv(
 
     for node in _scoped_requirements(graph, scope_ids):
         data = _get_node_data(node, graph, assertion_labels=preset.include_assertions)
-        row_values = [escape(v) for v in _format_row(data, csv_columns)]
+        row_values = [escape(v) for v in _format_row(data, cols)]
 
         # Build REQ row
         req_prefix = ["REQ"] if preset.include_test_refs else []
@@ -708,7 +767,7 @@ def format_csv(
         # Emit TEST child rows
         if preset.include_test_refs:
             grouped = data["test_refs_grouped"]
-            empty_cols = [""] * len(csv_columns)
+            empty_cols = [""] * len(cols)
             for key in ["*"] + sorted(k for k in grouped if k != "*"):
                 if key not in grouped:
                     continue

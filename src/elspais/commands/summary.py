@@ -36,25 +36,33 @@ from elspais.graph.aggregation import (
 )
 from elspais.graph.columns import (
     COLUMN_SPECS,
+    COUNT_PARTS,
     MEASURE_KEY_SEPARATOR,
     figure_cell,
     header_for,
+    scalar_cell,
+    scalar_value,
 )
 from elspais.graph.metrics import fmt_assertion_count
 
 
-# Implements: REQ-d00282-A+B+L
-# name: OFFERED_COLUMNS
-# use:  the columns this report offers, in the order it states them absent a
-#       selection. Built from the estate's own vocabularies rather than written
-#       out, so a dimension or a measure added to REQ-d00277/REQ-d00069-L is
-#       offered here without this module being edited.
+# Implements: REQ-d00084-B, REQ-d00282-G
+# name: DEFAULT_COLUMNS
+# use:  what a reader who names no columns is answered with. This report
+#       declares no named default sets, so it has the one.
 # def:  the identity column naming what each row is about (REQ-d00282-L -- a
 #       level, not a requirement), the two counts describing the group itself,
 #       then each coverage dimension's per-*Assertion* total and the four
-#       measures behind it. The counts are OFFERED rather than prepended: a
-#       reader who named one column is answered with one column.
-def _offered_columns() -> tuple[str, ...]:
+#       measures behind it. The counts are stated rather than prepended
+#       unasked: a reader who named one column is answered with one column.
+#
+# Deliberately NOT "everything offered". The scalar parts of REQ-d00282-B are
+# offered beneath every figure, and a default set that swept them in would
+# state a hundred columns to a reader who asked for none -- and would move what
+# the unselected report says every time a further value is offered, which is
+# what REQ-d00282-G forbids for a selection and what makes a default worth
+# holding still anyway.
+def _default_columns() -> tuple[str, ...]:
     keys: list[str] = ["level", "requirements", "assertions"]
     for dimension in COVERAGE_DIMENSIONS:
         keys.append(dimension)
@@ -62,11 +70,27 @@ def _offered_columns() -> tuple[str, ...]:
     return tuple(keys)
 
 
-OFFERED_COLUMNS: tuple[str, ...] = _offered_columns()
+DEFAULT_COLUMNS: tuple[str, ...] = _default_columns()
 
-# This report declares no named default sets, so a reader who names nothing is
-# answered with everything it offers.
-DEFAULT_COLUMNS: tuple[str, ...] = OFFERED_COLUMNS
+
+# Implements: REQ-d00282-A+B+L
+# name: OFFERED_COLUMNS
+# use:  every column a selection may name here. Read off the one column
+#       authority rather than written out, so a dimension, a measure or a
+#       scalar part added there is offered here without this module being
+#       edited.
+# def:  the default set, and beneath each figure in it the three scalars it
+#       decomposes into plus the counts-only parts of the Tested breakdown.
+#       The line dimensions of REQ-d00254-B stay out: they are measured in
+#       lines, and a level has no line figure.
+def _offered_columns() -> tuple[str, ...]:
+    keys: list[str] = ["level", "requirements", "assertions"]
+    for dimension in COVERAGE_DIMENSIONS:
+        keys.extend(k for k, spec in COLUMN_SPECS.items() if spec.dimension == dimension)
+    return tuple(keys)
+
+
+OFFERED_COLUMNS: tuple[str, ...] = _offered_columns()
 
 # The identity column: these rows are groups of requirements, so what a row is
 # about is a level (REQ-d00282-L).
@@ -103,6 +127,28 @@ def _figure(level_row: dict, key: str) -> float | None:
     prefix = _PAYLOAD_PREFIX[spec.dimension]
     field = f"{prefix}_{spec.measure}" if spec.measure else f"{prefix}_total_covered"
     return level_row.get(field)
+
+
+# Implements: REQ-d00282-B+M
+def _scalar(level_row: dict, key: str) -> float | None:
+    """The NUMBER one level states in one scalar column, or None where none.
+
+    Kept a number all the way to the renderer, and the proportion derived here
+    rather than carried: a report stating the credit, what it was counted over
+    and their proportion states one fact three ways, and a consumer must not be
+    able to make the three disagree by reading one and re-deriving another.
+    """
+    spec = COLUMN_SPECS[key]
+    if not level_row.get("total_assertions"):
+        return None
+    if spec.part in COUNT_PARTS:
+        # Implements: REQ-d00258-O
+        # Counts of what came back, with no proportion of their own.
+        return level_row.get(f"tested_{spec.part}")
+    figure = _figure(level_row, key)
+    if figure is None:
+        return None
+    return scalar_value(figure, level_row["total_assertions"], spec.part)
 
 
 def _stated_columns(data: dict) -> tuple[str, ...]:
@@ -314,10 +360,15 @@ def _cell(level_row: dict, key: str, carry: str = "") -> str:
         return str(level_row["total"])
     if key == "assertions":
         return str(level_row["total_assertions"])
+    spec = COLUMN_SPECS[key]
+    if spec.is_scalar:
+        # A number, spelled for a table. The proportion is rounded HERE and
+        # never in the value (REQ-d00282-E).
+        value = _scalar(level_row, key)
+        return ABSENT_FIGURE if value is None else scalar_cell(value, spec.part)
     figure = _figure(level_row, key)
     if figure is None:
         return ABSENT_FIGURE
-    spec = COLUMN_SPECS[key]
     cell = figure_cell(figure, level_row["total_assertions"], decimals=1)
     if spec.measure:
         return cell
@@ -347,14 +398,18 @@ def _column_groups(keys: tuple[str, ...]) -> list[tuple[str, str, tuple[str, ...
     index = 0
     while index < len(keys):
         spec = COLUMN_SPECS[keys[index]]
-        if not spec.measure:
+        # A scalar part is laid out as a column of its own however it is keyed:
+        # gathered into a measures run it would render as "cited by name here:
+        # 3", indistinguishable from the composite that measure states
+        # (REQ-d00282-C).
+        if not spec.measure or spec.is_scalar:
             groups.append(("column", spec.dimension, (keys[index],)))
             index += 1
             continue
         run: list[str] = []
         while index < len(keys):
             nxt = COLUMN_SPECS[keys[index]]
-            if not nxt.measure or nxt.dimension != spec.dimension:
+            if not nxt.measure or nxt.is_scalar or nxt.dimension != spec.dimension:
                 break
             run.append(keys[index])
             index += 1
@@ -431,7 +486,8 @@ def _level_lines(lv: dict, keys: tuple[str, ...], config: dict | None, carry: st
         (
             len(header_for(k, config)) + 1
             for k in keys
-            if COLUMN_SPECS[k].states_a_figure and not COLUMN_SPECS[k].measure
+            if COLUMN_SPECS[k].states_a_figure
+            and (COLUMN_SPECS[k].is_scalar or not COLUMN_SPECS[k].measure)
         ),
         default=0,
     )
@@ -454,7 +510,10 @@ def _level_lines(lv: dict, keys: tuple[str, ...], config: dict | None, carry: st
             continue
         label = f"{header_for(run[0], config)}:"
         lines.append(f"    {label:<{width}} {_cell(lv, run[0], carry)}")
-        headline_dimension = spec.dimension
+        # Only a dimension's own headline can say what a run beneath it
+        # measures. A scalar part states one number of one figure, so a
+        # measures run following one still names its dimension (REQ-d00282-C).
+        headline_dimension = "" if spec.is_scalar else spec.dimension
     return lines
 
 
@@ -676,6 +735,10 @@ def _project_level(lv: dict, keys: tuple[str, ...]) -> dict:
             row[key] = lv["total_assertions"]
         elif key == IDENTITY_COLUMN:
             row[key] = lv["level"]
+        elif COLUMN_SPECS[key].is_scalar:
+            # A number in the format that has numbers (REQ-d00282-E), null
+            # where there is no figure to decompose (REQ-d00282-M).
+            row[key] = _scalar(lv, key)
         elif _figure(lv, key) is None:
             row[key] = None
         else:

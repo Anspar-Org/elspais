@@ -140,6 +140,58 @@ rather than standing beside it. So `--columns implemented` states two columns,
 `Level` and `Implemented`, whether it is rendered as text, markdown, CSV or
 JSON.
 
+### Asking for the numbers instead of the cell
+
+That composite is what a table wants. A program wants the numbers, and having
+to recover them from `5/5 (100%)` with a regular expression is worse than not
+having them — the proportion in the string is rounded, so a consumer that
+parses it disagrees with one that re-derives it. So every coverage figure also
+offers the three scalars it was built from, each selectable in its own right:
+
+| Suffix | States |
+|--------|--------|
+| `.count` | the assertions credited |
+| `.total` | the assertions the credit was counted over |
+| `.ratio` | their proportion, as a number between 0 and 1 |
+
+They are offered beneath a dimension's total and beneath each of its four
+measures alike, so `implemented`, `implemented.count`, `implemented.ratio`,
+`implemented.immediate_direct` and `implemented.immediate_direct.total` are all
+names a selection may use.
+
+```sh
+elspais trace   --format json --columns implemented.count,implemented.total,implemented.ratio
+elspais trace   --format csv  --columns implemented.count,implemented.ratio
+elspais summary --format json --columns implemented.count,implemented.ratio
+elspais trace   --format json --columns tested.immediate_direct.ratio
+```
+
+A scalar is a number, and JSON states it as one — `"implemented_count": 5.0`,
+not `"5/5 (100%)"`. The proportion is never rounded in the value, so it always
+equals `.count` divided by `.total`; a table renders it rounded to three places
+because that is a cell, not the value. Which values a selection states does not
+depend on the format: `--columns implemented.count` states that one value in
+CSV, markdown, HTML and JSON alike, as a number where the format has numbers
+and as a cell where it has cells.
+
+The three counts behind the Tested figure are selectable the same way, and are
+counts only — there is nothing for a proportion of a returned verdict to be of,
+so no `.ratio` is offered beneath them and asking for one is refused:
+
+```sh
+elspais trace --format json --columns tested.passed,tested.failed,tested.awaiting
+elspais trace --format json --columns tested.failed   # only the failures
+```
+
+`.count`, `.total` and `.ratio` are offered under the five assertion-counted
+coverage dimensions. The line-coverage columns (`code_tested`, `lcov_tested`)
+are measured in lines rather than assertions and carry no measures or scalars
+to select among.
+
+Adding these names changed nothing an existing selection states: `--columns
+implemented` renders exactly what it always did, and a report asked for no
+columns is answered with the same default set it always was.
+
 A column in which a report states no figure is never written as zero. In a
 table it is marked `-`, and in JSON it is `null`. A level whose requirements
 confer no *Assertion* has no coverage figure to state at all, which is a

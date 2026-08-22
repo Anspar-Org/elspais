@@ -354,6 +354,10 @@ dir = ""
 #   implemented, tested, verified, uat_coverage, uat_verified
 #     and, for each of those five, `.immediate_direct`, `.immediate_indirect`,
 #     `.rolled_direct`, `.rolled_indirect`
+#   `.count`, `.total` and `.ratio` beneath any of those figures -- the
+#     assertions credited, the assertions the credit was counted over, and
+#     their proportion, each as a number rather than a composite cell
+#   tested.passed, tested.failed, tested.awaiting  (counts only, no `.ratio`)
 #   code_tested, lcov_tested   (measured in lines, so they carry no measures)
 # A name the report being produced does not offer is refused rather than
 # skipped: a report is never produced under a selection honoured in part.

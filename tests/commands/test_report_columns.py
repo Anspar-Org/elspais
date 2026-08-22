@@ -376,3 +376,284 @@ class TestSelectingColumnsChangesNothingElse:
             "\n".join(trace_cmd.format_json(canonical_federated_graph, None, None, ["id"], None))
         )
         assert [r["id"] for r in wide] == [r["id"] for r in narrow]
+
+
+# ---------------------------------------------------------------------------
+# REQ-d00282-B: a figure decomposes into the three scalars it was built from
+# ---------------------------------------------------------------------------
+
+
+def _thirds_graph() -> TraceGraph:
+    """One requirement conferring three assertions with one of them credited.
+
+    A third is deliberately not a round number: a proportion that survives the
+    trip unrounded proves it was derived rather than parsed back out of a cell
+    that had already lost the precision.
+    """
+    graph = TraceGraph()
+    node = GraphNode("REQ-p00002", NodeKind.REQUIREMENT, label="Thirds")
+    node.set_field("level", "prd")
+    node.set_field("status", "Active")
+    node.set_metric(
+        "rollup_metrics",
+        RollupMetrics(
+            total_assertions=3,
+            implemented=CoverageDimension(total=3, immediate_direct_by_label={"A": 1.0}),
+            tested=CoverageDimension(total=3, immediate_indirect_by_label={"B": 1.0}),
+        ),
+    )
+    graph._index[node.id] = node
+    graph._roots.append(node)
+    return graph
+
+
+def _thirds_level() -> dict:
+    """The same estate as a level row: one assertion credited out of three."""
+    row = _level_row("PRD", 1, 3)
+    row["implemented_total_covered"] = 1.0
+    row["implemented_immediate_direct"] = 1.0
+    row["tested_failed"] = 2
+    return row
+
+
+def _trace_json(graph, columns: list[str]) -> dict:
+    return json.loads("\n".join(trace_cmd.format_json(graph, None, None, columns, None)))[0]
+
+
+def _summary_json(row: dict, columns: list[str]) -> dict:
+    payload = {"levels": [row], "excluded": {}, "integrations": [], "columns": columns}
+    return json.loads(summary_cmd._render(payload, "json", None))["levels"][0]
+
+
+class TestAFigureDecomposesIntoItsScalars:
+    # Verifies: REQ-d00282-B
+    @pytest.mark.parametrize("base", ("implemented", "implemented.immediate_direct"))
+    def test_trace_states_the_credit_the_population_and_their_proportion(self, base):
+        """Each in its own right, for a dimension's total as for a measure
+        behind it. Selecting one states one -- the reader is not made to take
+        three to reach the number they came for."""
+        row = _trace_json(_thirds_graph(), [f"{base}.{p}" for p in ("count", "total", "ratio")])
+        key = base.replace(".", "_")
+        assert row[f"{key}_count"] == 1.0
+        assert row[f"{key}_total"] == 3.0
+        assert row[f"{key}_ratio"] == 1 / 3
+
+    # Verifies: REQ-d00282-B
+    @pytest.mark.parametrize("base", ("implemented", "implemented.immediate_direct"))
+    def test_summary_states_the_same_three_about_a_group(self, base):
+        row = _summary_json(
+            _thirds_level(), ["level"] + [f"{base}.{p}" for p in ("count", "total", "ratio")]
+        )
+        assert row[f"{base}.count"] == 1.0
+        assert row[f"{base}.total"] == 3.0
+        assert row[f"{base}.ratio"] == 1 / 3
+
+    # Verifies: REQ-d00282-B
+    def test_selecting_one_scalar_states_that_scalar_alone(self):
+        """The defect this ends: a reader wanting the credit had to take the
+        composite and cut the other two back out of it."""
+        row = _trace_json(_thirds_graph(), ["id", "implemented.count"])
+        assert row == {"id": "REQ-p00002", "implemented_count": 1.0}
+
+    # Verifies: REQ-d00282-B
+    def test_a_scalar_is_a_number_and_not_a_sentence_about_one(self):
+        """The whole point: a program consuming this must not have to regex a
+        number back out of prose."""
+        row = _trace_json(_thirds_graph(), ["implemented.count", "implemented.ratio"])
+        assert isinstance(row["implemented_count"], float)
+        assert isinstance(row["implemented_ratio"], float)
+        assert not isinstance(row["implemented_count"], str)
+
+    # Verifies: REQ-d00282-B
+    def test_the_proportion_is_not_rounded_into_the_value(self):
+        """A proportion is derived from the other two rather than being a third
+        fact, so a consumer re-deriving it must not disagree with one reading
+        it. Rounded to the composite's precision this would be 0.33."""
+        row = _trace_json(
+            _thirds_graph(), ["implemented.count", "implemented.total", "implemented.ratio"]
+        )
+        assert row["implemented_ratio"] == row["implemented_count"] / row["implemented_total"]
+        assert repr(row["implemented_ratio"]) == repr(1 / 3)
+
+    # Verifies: REQ-d00282-B, REQ-d00282-E
+    def test_a_table_may_round_the_proportion_the_value_carries_whole(self):
+        """REQ-d00282-E binds which values are stated, never how each is
+        spelled: a cell states a rounded proportion and the number stays the
+        number."""
+        rows = list(
+            csv.reader(
+                io.StringIO(
+                    "\n".join(
+                        trace_cmd.format_csv(
+                            _thirds_graph(), None, None, ["id", "implemented.ratio"], None
+                        )
+                    )
+                )
+            )
+        )
+        assert rows[1] == ["REQ-p00002", "0.333"]
+        assert _trace_json(_thirds_graph(), ["implemented.ratio"])["implemented_ratio"] == 1 / 3
+
+    # Verifies: REQ-d00282-B, REQ-d00282-D
+    def test_a_scalar_agrees_with_the_composite_it_decomposes(self):
+        """A value a report states equals the one a report stating everything
+        states for the same row -- the composite and the scalars are one fact
+        seen two ways, so they cannot be allowed to disagree."""
+        row = _trace_json(
+            _thirds_graph(), ["implemented", "implemented.count", "implemented.total"]
+        )
+        assert row["implemented"] == "1/3 (33%)"
+        assert (row["implemented_count"], row["implemented_total"]) == (1.0, 3.0)
+
+
+# ---------------------------------------------------------------------------
+# REQ-d00258-O + REQ-d00282-B: some values are counts and nothing else
+# ---------------------------------------------------------------------------
+
+
+class TestCountsOnlyValues:
+    # Verifies: REQ-d00258-O, REQ-d00282-B
+    @pytest.mark.parametrize("part", ("passed", "failed", "awaiting"))
+    def test_each_count_of_the_breakdown_is_selectable_on_its_own(self, part):
+        """Though the three sum to the tested count, a reader wanting only the
+        failures is owed only the failures."""
+        row = _trace_json(_thirds_graph(), ["id", f"tested.{part}"])
+        assert set(row) == {"id", f"tested_{part}"}
+        assert isinstance(row[f"tested_{part}"], (int, float))
+
+    # Verifies: REQ-d00258-O, REQ-d00282-B
+    def test_the_summary_states_one_count_of_the_breakdown_alone(self):
+        row = _summary_json(_thirds_level(), ["level", "tested.failed"])
+        assert row == {"level": "PRD", "tested.failed": 2}
+
+    # Verifies: REQ-d00258-O, REQ-d00282-B+F
+    @pytest.mark.parametrize("part", ("passed", "failed", "awaiting"))
+    def test_a_count_has_no_proportion_to_ask_for(self, part):
+        """A count of what came back is not a credit taken over a population,
+        so there is nothing for a proportion to be OF -- and a name the report
+        does not offer is refused rather than quietly dropped."""
+        from elspais.graph.columns import COLUMN_SPECS
+
+        assert f"tested.{part}" in COLUMN_SPECS
+        assert f"tested.{part}.ratio" not in COLUMN_SPECS
+        with pytest.raises(trace_cmd.UnofferedColumns):
+            summary_cmd._resolve_columns(
+                argparse.Namespace(columns=f"tested.{part}.ratio", scope=None), None
+            )
+        message, code = trace_cmd.render_section(
+            _thirds_graph(),
+            argparse.Namespace(
+                format="json",
+                preset=None,
+                scope=None,
+                columns=f"tested.{part}.ratio",
+                dimension="",
+                body=False,
+                show_assertions=False,
+                show_tests=False,
+            ),
+            None,
+        )
+        assert code == 1
+        assert f"tested.{part}.ratio" in message
+
+    # Verifies: REQ-d00258-O, REQ-d00282-B
+    def test_only_the_tested_figure_carries_a_breakdown(self):
+        """The breakdown is of what came back for a tested assertion. No other
+        dimension has one, so no other dimension offers its counts."""
+        from elspais.graph.columns import COLUMN_SPECS
+
+        assert "implemented.failed" not in COLUMN_SPECS
+        assert "verified.passed" not in COLUMN_SPECS
+
+
+# ---------------------------------------------------------------------------
+# REQ-d00282-E+M: a scalar is one value in every format, and absent is not zero
+# ---------------------------------------------------------------------------
+
+
+class TestScalarsStateOneValueSetInEveryFormat:
+    # Verifies: REQ-d00282-E
+    def test_trace_states_the_same_scalar_set_in_every_format(self):
+        """Rendered as a number where the format has numbers and as text where
+        it has cells -- the same values either way."""
+        columns = ["id", "implemented.count", "implemented.ratio", "tested.failed"]
+        graph = _thirds_graph()
+        stated = {fmt: _trace_columns(graph, fmt, columns) for fmt in ("csv", "markdown", "html")}
+        expected = [trace_cmd.header_for(c, None) for c in columns]
+        for fmt, cols in stated.items():
+            assert cols == expected, f"{fmt} states {cols}"
+        assert list(_trace_json(graph, columns)) == [c.replace(".", "_") for c in columns]
+
+    # Verifies: REQ-d00282-E
+    def test_summary_states_the_same_scalar_set_in_every_format(self):
+        columns = ["level", "implemented.count", "implemented.ratio", "tested.failed"]
+        payload = {
+            "levels": [_thirds_level()],
+            "excluded": {},
+            "integrations": [],
+            "columns": columns,
+        }
+        expected = [summary_cmd.header_for(c, None) for c in columns]
+        for fmt in ("csv", "markdown"):
+            assert _summary_columns(payload, fmt) == expected, fmt
+        assert _summary_columns(payload, "json") == columns
+        # The text rendering states them too: a selection that meant one thing
+        # on screen and another in the filed artifact is the divergence E ends.
+        text = summary_cmd._render(dict(payload), "text", None)
+        for column in columns[1:]:
+            assert summary_cmd.header_for(column, None) in text, column
+
+    # Verifies: REQ-d00282-M
+    @pytest.mark.parametrize("part", ("count", "total", "ratio"))
+    def test_a_group_owed_no_coverage_states_no_scalar_either(self, coverage_payload, part):
+        """Including the population: stating 0 assertions counted over would be
+        a figure where there is none, which is the confusion M forbids."""
+        columns = ["level", f"implemented.{part}"]
+        levels = {
+            lv["level"]: lv
+            for lv in json.loads(
+                summary_cmd._render({**coverage_payload, "columns": columns}, "json", None)
+            )["levels"]
+        }
+        assert levels["OPS"][f"implemented.{part}"] is None
+        # PRD confers four assertions and nothing covers them: a real zero
+        # credited, over a real population of four.
+        assert (
+            levels["PRD"][f"implemented.{part}"] == {"count": 0.0, "total": 4.0, "ratio": 0.0}[part]
+        )
+
+    # Verifies: REQ-d00282-M
+    def test_a_cell_with_no_scalar_to_state_is_not_a_zero(self, coverage_payload):
+        payload = {**coverage_payload, "columns": ["level", "implemented.count"]}
+        out = summary_cmd._render(payload, "csv", None)
+        rows = {r[0]: r[1] for r in csv.reader(io.StringIO(out)) if r}
+        assert rows["PRD"] == "0"
+        assert rows["OPS"] == summary_cmd.ABSENT_FIGURE
+
+
+# ---------------------------------------------------------------------------
+# REQ-d00282-G: offering a further value moves nothing already expressible
+# ---------------------------------------------------------------------------
+
+
+class TestOfferingAValueMovesNothing:
+    # Verifies: REQ-d00282-G
+    def test_the_composite_states_what_it_always_stated(self):
+        """`--columns implemented` is the selection projects committed before
+        the scalars existed, and it states the one composite cell it did."""
+        row = _trace_json(_thirds_graph(), ["id", "implemented"])
+        assert row == {"id": "REQ-p00002", "implemented": "1/3 (33%)"}
+
+    # Verifies: REQ-d00282-G
+    def test_a_report_asked_for_nothing_is_not_handed_the_new_values(self):
+        """A default set may grow; one that swept in every value offered would
+        move what an unselected report states each time one was added."""
+        assert set(summary_cmd.DEFAULT_COLUMNS) < set(summary_cmd.OFFERED_COLUMNS)
+        assert not [k for k in summary_cmd.DEFAULT_COLUMNS if k.endswith((".count", ".ratio"))]
+        assert "implemented.count" in summary_cmd.OFFERED_COLUMNS
+
+    # Verifies: REQ-d00282-G
+    def test_the_named_default_sets_state_composites(self):
+        for preset in trace_cmd.REPORT_PRESETS.values():
+            assert not [c for c in preset.columns if "." in c], preset.name

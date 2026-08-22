@@ -141,6 +141,9 @@ rename a display label and every committed selection still means what it meant:
   dimensions  `implemented` `tested` `verified` `uat_coverage` `uat_verified`
   measures    `<dimension>.immediate_direct` `.immediate_indirect`
               `.rolled_direct` `.rolled_indirect`
+  scalars     `<figure>.count` `<figure>.total` `<figure>.ratio`
+              where `<figure>` is a dimension or one of its measures
+  tested only `tested.passed` `tested.failed` `tested.awaiting` (counts only)
   line cover  `code_tested` `lcov_tested` (measured in lines; no measures)
 
 A dimension key states that dimension's per-*Assertion* total; a measure key
@@ -153,6 +156,24 @@ One named column is one column. A figure carries its denominator and its
 proportion inside its own cell (`5/5 (100%)`), and the Tested breakdown rides
 inside the Tested cell (`5/5 (100%) [3P 0F 2A]`) because it qualifies that
 figure rather than being a figure of its own.
+
+That composite is what a table wants; a program wants the numbers, and should
+not have to cut them back out of a sentence. Every figure therefore also offers
+the three scalars behind it -- `.count` (the assertions credited), `.total` (the
+assertions the credit was counted over) and `.ratio` (their proportion) -- each
+selectable alone:
+
+  $ elspais trace --format json --columns implemented.count,implemented.ratio
+  $ elspais trace --format json --columns tested.immediate_direct.total
+  $ elspais trace --format json --columns tested.failed
+
+JSON states a scalar as a number, never as a string. The proportion is derived
+rather than stored and is never rounded in the value, so it always equals
+`.count` over `.total`; a table rounds it to three places, which is a cell and
+not the value. `tested.passed`, `tested.failed` and `tested.awaiting` are the
+same three counts the breakdown states in prose, individually selectable -- ask
+for the failures and you get the failures. They are counts and nothing else, so
+no `.ratio` is offered beneath them.
 
 A project can declare a column set under a name beside the scope it belongs to
 (`[scopes.<name>] columns = [...]`), so one name refers to a whole audience:
