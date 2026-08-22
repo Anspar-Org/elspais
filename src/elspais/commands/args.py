@@ -235,22 +235,23 @@ class TraceArgs(ScopeOptions):
     """Output format."""
 
     # Implements: REQ-d00282-A
-    # Stated on the commands that report facts in columns and nowhere else: a
-    # flag a command accepts and cannot honour is worse than one it does not
-    # offer, which is the defect column selection exists to remove.
-    columns: str | None = None
-    """State these columns, in this order (comma-separated column keys).
+    # Stated on the commands that report facts about each row and nowhere else:
+    # a flag a command accepts and cannot honour is worse than one it does not
+    # offer, which is the defect value selection exists to remove.
+    values: str | None = None
+    """State these values, in this order (comma-separated value keys).
     Keys are stable names, never the words a project displays them under:
     id, title, level, status, implements, hash, file, journeys; the coverage
     dimensions implemented, tested, verified, uat_coverage, uat_verified, each
     also selectable per measure (e.g. tested.immediate_direct); and the
-    line-coverage columns code_tested and lcov_tested. Every coverage figure
+    line-coverage values code_tested and lcov_tested. Every coverage figure
     also offers the scalars behind it -- .count, .total and .ratio, as numbers
     (e.g. implemented.ratio, tested.immediate_direct.count) -- plus the
-    counts-only tested.passed, tested.failed and tested.awaiting."""
+    counts-only tested.passed, tested.failed and tested.awaiting, and the
+    provenance bit verified.carried."""
 
     preset: Literal["minimal", "standard", "full"] | None = None
-    """Column preset."""
+    """Named default value set."""
 
     body: bool = False
     """Show requirement body text in detail rows."""
@@ -262,7 +263,7 @@ class TraceArgs(ScopeOptions):
     """Show test references in detail rows."""
 
     dimension: str = ""
-    """Report a named default column set.  Use 'uat' for user-acceptance
+    """Report a named default value set.  Use 'uat' for user-acceptance
     evidence: the journeys validating each requirement with their verdicts, and
     the UAT coverage figures.  It states no implementation, test-verification or
     line-coverage figure, and selects no requirements -- every requirement is
@@ -383,12 +384,12 @@ class SummaryArgs(ScopeOptions):
     """Output format."""
 
     # Implements: REQ-d00282-A
-    # The columns this report offers are the ones a GROUP of requirements has:
+    # The values this report offers are the ones a GROUP of requirements has:
     # level, the two counts describing the group, and each coverage dimension
-    # with the four measures behind it. Per-requirement columns and the
+    # with the four measures behind it. Per-requirement values and the
     # line-coverage ones are not among them -- a level has no line figure.
-    columns: str | None = None
-    """State these columns, in this order (comma-separated column keys).
+    values: str | None = None
+    """State these values, in this order (comma-separated value keys).
     Keys are stable names, never the words a project displays them under:
     level, requirements, assertions, and the coverage dimensions implemented,
     tested, verified, uat_coverage, uat_verified -- each also selectable per

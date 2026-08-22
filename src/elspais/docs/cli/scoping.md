@@ -109,36 +109,39 @@ answer "how far along is this set", and the set is the one the reader asked for.
 `checks` does not. It reaches a verdict over the whole estate, and a flag it
 could not honour would be worse than its absence.
 
-## The other axis: which columns a report states
+## The other axis: which values a report states
 
 Which requirements a report is about and which facts it states about them are
-two separate choices. `--scope`/`--level`/`--status` make the first; `--columns`
-makes the second. They do not interfere: selecting fewer columns never drops a
-requirement, and selecting fewer requirements never drops a column, so you can
-reach the same report by narrowing either first. The column vocabulary is in
-`elspais docs traceability` under *Choosing Columns*.
+two separate choices. `--scope`/`--level`/`--status` make the first; `--values`
+makes the second. They do not interfere: selecting fewer values never drops a
+requirement, and selecting fewer requirements never drops a value, so you can
+reach the same report by narrowing either first. The value vocabulary is in
+`elspais docs traceability` under *Choosing Values*.
 
 ```sh
-elspais summary --format csv --columns implemented,tested
-elspais summary --format csv --columns uat_coverage.immediate_direct
-elspais summary --columns verified --level prd
+elspais summary --format csv --values implemented,tested
+elspais summary --format csv --values uat_coverage.immediate_direct
+elspais summary --values verified --level prd
 ```
 
 `summary` aggregates, so its rows are levels rather than requirements. Its
-identity column is `level` — always stated, whatever the selection names — and
+identity value is `level` — always stated, whatever the selection names — and
 it offers the five coverage dimensions with their four measures each, plus
 `requirements` and `assertions`: the count of requirements in the group and the
 count of assertions they confer. It does not offer the per-requirement identity
-columns (`id`, `title`, ...), nor the line-coverage columns, which are measured
-in lines and have no level figure.
+values (`id`, `title`, ...), nor `verified.carried` (a level has no
+per-requirement provenance bit), nor the line-coverage values, which are
+measured in lines and have no level figure.
 
-One named column is one column, in every format. A coverage figure carries its
-own denominator and its own proportion inside its cell — `102/187 (54.5%)` —
-rather than spilling into companion columns, and the Tested breakdown (passed /
-failed / awaiting a result) rides inside the Tested cell, qualifying that figure
-rather than standing beside it. So `--columns implemented` states two columns,
-`Level` and `Implemented`, whether it is rendered as text, markdown, CSV or
-JSON.
+One named value is one value, in every format, stated in that format's own
+kind. A coverage figure carries its own denominator and its own proportion
+inside one table cell — `102/187 (54.5%)` — rather than spilling into companion
+columns, and the Tested breakdown (passed / failed / awaiting a result) rides
+inside the Tested cell, qualifying that figure rather than standing beside it.
+A structured format states that same figure as an object of its numbers. So
+`--values implemented` gives a two-column table, `Level` and `Implemented`, and
+the same selection under `--format json` gives every row an `implemented`
+object.
 
 ### Asking for the numbers instead of the cell
 
@@ -160,50 +163,61 @@ measures alike, so `implemented`, `implemented.count`, `implemented.ratio`,
 names a selection may use.
 
 ```sh
-elspais trace   --format json --columns implemented.count,implemented.total,implemented.ratio
-elspais trace   --format csv  --columns implemented.count,implemented.ratio
-elspais summary --format json --columns implemented.count,implemented.ratio
-elspais trace   --format json --columns tested.immediate_direct.ratio
+elspais trace   --format json --values implemented.count,implemented.total,implemented.ratio
+elspais trace   --format csv  --values implemented.count,implemented.ratio
+elspais summary --format json --values implemented.count,implemented.ratio
+elspais trace   --format json --values tested.immediate_direct.ratio
 ```
 
-A scalar is a number, and JSON states it as one — `"implemented_count": 5.0`,
-not `"5/5 (100%)"`. The proportion is never rounded in the value, so it always
-equals `.count` divided by `.total`; a table renders it rounded to three places
-because that is a cell, not the value. Which values a selection states does not
-depend on the format: `--columns implemented.count` states that one value in
-CSV, markdown, HTML and JSON alike, as a number where the format has numbers
+A scalar is a number, and JSON states it as one. A value key is a path and the
+object mirrors it: asking for `implemented.count` states
+`{"implemented": {"count": 5.0}}`, and `implemented.immediate_direct.total`
+nests one level deeper again. The proportion is never rounded in the value, so
+it always equals `.count` divided by `.total`; a table renders it rounded to
+three places because that is a cell, not the value. Which values a selection
+states does not depend on the format: `implemented.count` states that one value
+in CSV, markdown, HTML and JSON alike, as a number where the format has numbers
 and as a cell where it has cells.
+
+`trace` and `summary` state a figure the same way, so one row shape answers
+both: `summary --format json --values implemented` gives each entry of its
+`levels` array the same `implemented` object that `trace` gives each
+requirement.
 
 The three counts behind the Tested figure are selectable the same way, and are
 counts only — there is nothing for a proportion of a returned verdict to be of,
 so no `.ratio` is offered beneath them and asking for one is refused:
 
 ```sh
-elspais trace --format json --columns tested.passed,tested.failed,tested.awaiting
-elspais trace --format json --columns tested.failed   # only the failures
+elspais trace --format json --values tested.passed,tested.failed,tested.awaiting
+elspais trace --format json --values tested.failed   # only the failures
 ```
 
+They sit inside the same `tested` object as the figure they break down, so
+`--values tested` states `count`, `total` and `ratio` beside `passed`, `failed`
+and `awaiting`.
+
 `.count`, `.total` and `.ratio` are offered under the five assertion-counted
-coverage dimensions. The line-coverage columns (`code_tested`, `lcov_tested`)
+coverage dimensions. The line-coverage values (`code_tested`, `lcov_tested`)
 are measured in lines rather than assertions and carry no measures or scalars
 to select among.
 
-Adding these names changed nothing an existing selection states: `--columns
-implemented` renders exactly what it always did, and a report asked for no
-columns is answered with the same default set it always was.
+A value in which a report states no figure is never written as zero. A `trace`
+table marks it `n/a`, a `summary` table `-`, and JSON states `null`. A level
+whose requirements confer no *Assertion* has no coverage figure to state at
+all, which is a different fact from a figure of zero — the text report says
+that once for the group rather than repeating the mark across every column of
+the row. The same distinction holds under `--targets`: a requirement carrying
+test references but no result record at all has taken no verdict, so its
+`trace` cell reads `—` and its `verified.count`, `verified.ratio` and
+`verified.carried` are `null` rather than `0`.
 
-A column in which a report states no figure is never written as zero. In a
-table it is marked `-`, and in JSON it is `null`. A level whose requirements
-confer no *Assertion* has no coverage figure to state at all, which is a
-different fact from a figure of zero — the text report says that once for the
-group rather than repeating the mark across every column of the row.
-
-`--columns` is offered by `trace` and `summary`, the two reports that state
-facts in columns. The gap listings (`gaps`, `uncovered`, `untested`,
+`--values` is offered by `trace` and `summary`, the two reports that state
+facts about each row. The gap listings (`gaps`, `uncovered`, `untested`,
 `unvalidated`, `failing`) and `analysis` do not offer it: they list what is
 missing rather than tabulating facts about requirements, and a flag a command
 cannot honour is worse than its absence. A composed report is refused outright
-if `--columns` reaches a section that states no columns.
+if `--values` reaches a section that states no values.
 
 ## Not the same as `--treat-active`
 

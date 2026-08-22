@@ -667,8 +667,8 @@ class ReportScopeConfig(_StrictModel):
 
     One name carries both halves of what an audience reads: the requirements a
     report is about and the facts it states about them (REQ-d00280-C). The two
-    stay independent choices -- a declaration naming no columns constrains none,
-    and naming columns selects no requirements.
+    stay independent choices -- a declaration naming no values constrains none,
+    and naming values selects no requirements.
     """
 
     level: list[str] = Field(default_factory=list)
@@ -676,12 +676,12 @@ class ReportScopeConfig(_StrictModel):
     status: list[str] = Field(default_factory=list)
     not_status: list[str] = Field(default_factory=list)
     match_status_roles: bool = False
-    # Column keys, not the words a project displays them under (REQ-d00282-J).
+    # Value keys, not the words a project displays them under (REQ-d00282-J).
     # A measure is keyed beneath its dimension: "implemented.immediate_direct".
     # Not judged here: a name the report does not offer is refused where the
     # report is produced (REQ-d00282-F), which is the only place that knows
     # what is on offer.
-    columns: list[str] = Field(default_factory=list)
+    values: list[str] = Field(default_factory=list)
 
 
 class StatusConfig(_StrictModel):

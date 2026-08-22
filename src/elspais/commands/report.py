@@ -90,9 +90,9 @@ def parse_shared_args(argv: list[str]) -> argparse.Namespace:
     # Implements: REQ-d00282-E
     # The other axis of the same report, registered here for the same reason:
     # a selection this parser does not read is one the composed report cannot
-    # honour, and a section composed with others would state different columns
+    # honour, and a section composed with others would state different values
     # from the same section asked for alone.
-    parser.add_argument("--columns", default=None)
+    parser.add_argument("--values", default=None)
     parser.add_argument("--treat-active", nargs="*", default=None, dest="treat_active")
     # Trace-specific shared flags
     parser.add_argument("--preset", choices=["minimal", "standard", "full"])
@@ -103,55 +103,55 @@ def parse_shared_args(argv: list[str]) -> argparse.Namespace:
 
 
 # Implements: REQ-d00282-F
-# name: COLUMN_SECTIONS
-# use:  which composable sections state facts in columns at all.
-# def:  section name -> the module owning the columns it offers.
+# name: VALUE_SECTIONS
+# use:  which composable sections state facts about each requirement at all.
+# def:  section name -> the module owning the values it offers.
 #
 # The rest emit lists of what is missing rather than tables of facts about
-# requirements, so they have no columns to select among. A selection reaching
+# requirements, so they have no values to select among. A selection reaching
 # one of them is a selection the composed report cannot honour, and F wants no
 # report produced under one honoured in part.
-COLUMN_SECTIONS: dict[str, str] = {
+VALUE_SECTIONS: dict[str, str] = {
     "summary": "elspais.commands.summary",
     "trace": "elspais.commands.trace",
 }
 
 
 # Implements: REQ-d00282-F
-def _refuse_unhonourable_columns(sections: list[str], args: argparse.Namespace) -> str | None:
+def _refuse_unhonourable_values(sections: list[str], args: argparse.Namespace) -> str | None:
     """The reason this composition cannot honour its selection, or None.
 
     Judged before anything is built and before anything is written, because a
     refusal that has already produced an artifact has produced the report it
-    refused. A reader who names a column no section offers, and a reader who
-    names a section that states no columns, are both asking for a report the
+    refused. A reader who names a value no section offers, and a reader who
+    names a section that states no values, are both asking for a report the
     tool cannot assemble.
     """
     from importlib import import_module
 
-    from elspais.commands._columns import UnofferedColumns, columns_from_args
+    from elspais.commands._values import UnofferedValues, values_from_args
     from elspais.config import get_config
-    from elspais.graph.columns import resolve_columns
+    from elspais.graph.values import resolve_values
 
     # Read against the project's own declarations too: a selection a named
     # scope carries (REQ-d00280-C) is refused on the same terms as one written
     # on the invocation.
-    selection = columns_from_args(args, get_config(getattr(args, "config", None)))
+    selection = values_from_args(args, get_config(getattr(args, "config", None)))
     if selection is None:
         return None
-    silent = [s for s in sections if s not in COLUMN_SECTIONS]
+    silent = [s for s in sections if s not in VALUE_SECTIONS]
     if silent:
         named = ", ".join(sorted(set(silent)))
         return (
-            f"--columns states which facts a report gives about each requirement, "
+            f"--values states which facts a report gives about each requirement, "
             f"and '{named}' states none: it lists what is missing. "
-            "Ask for it without --columns, or compose only sections that state columns."
+            "Ask for it without --values, or compose only sections that state values."
         )
     for section in sections:
-        module = import_module(COLUMN_SECTIONS[section])
+        module = import_module(VALUE_SECTIONS[section])
         try:
-            resolve_columns(selection, module.OFFERED_COLUMNS)
-        except UnofferedColumns as exc:
+            resolve_values(selection, module.OFFERED_VALUES)
+        except UnofferedValues as exc:
             return f"{section}: {exc}"
     return None
 
@@ -177,7 +177,7 @@ def run(
             return 1
 
     # Implements: REQ-d00282-F
-    refusal = _refuse_unhonourable_columns(sections, args)
+    refusal = _refuse_unhonourable_values(sections, args)
     if refusal is not None:
         print(f"Error: {refusal}", file=sys.stderr)
         return 1

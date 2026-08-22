@@ -177,33 +177,33 @@ def declared_scope(config: dict[str, Any], name: str) -> Any:
 
 
 # Implements: REQ-d00280-C
-def declared_columns(config: dict[str, Any], name: str) -> Any:
-    """The column selection a project declares under ``name``, or None.
+def declared_values(config: dict[str, Any], name: str) -> Any:
+    """The value selection a project declares under ``name``, or None.
 
     The companion to :func:`declared_scope`: one name answers for a whole
     audience, the requirements it reads and the facts it reads about them
     (REQ-d00280-C). The two remain independent choices -- a declaration naming
-    no columns constrains none, which is what None says here, and a report
-    answering None states the columns it would have anyway.
+    no values constrains none, which is what None says here, and a report
+    answering None states the values it would have anyway.
 
-    The names read here are column keys, never the words a project displays a
-    column under (REQ-d00282-J). They are not judged against any report: which
-    columns are on offer is known only where the report is produced, and that is
+    The names read here are value keys, never the words a project displays a
+    value under (REQ-d00282-J). They are not judged against any report: which
+    values are on offer is known only where the report is produced, and that is
     where a name among them that does not resolve is refused (REQ-d00282-F).
 
     Raises:
         KeyError: If the project declares nothing under that name -- the same
             condition, and the same message, as an undeclared scope.
     """
-    from elspais.graph.columns import parse_column_selection
+    from elspais.graph.values import parse_value_selection
 
     match = _declaration(config, name)
-    raw = _declared_field(match, "columns")
+    raw = _declared_field(match, "values")
     if raw is None:
         return None
     if isinstance(raw, str):
-        return parse_column_selection(raw)
-    return parse_column_selection([str(v) for v in raw])
+        return parse_value_selection(raw)
+    return parse_value_selection([str(v) for v in raw])
 
 
 CURRENT_CONFIG_VERSION = 4

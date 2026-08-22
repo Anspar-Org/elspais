@@ -16,12 +16,12 @@ from pathlib import Path
 
 import pytest
 
-from elspais.commands.summary import DEFAULT_COLUMNS, _pct, _render
+from elspais.commands.summary import DEFAULT_VALUES, _pct, _render
 from elspais.graph.aggregation import collect_coverage
 from elspais.graph.builder import TraceGraph
-from elspais.graph.columns import header_for as _header
 from elspais.graph.GraphNode import GraphNode, NodeKind
 from elspais.graph.metrics import RollupMetrics
+from elspais.graph.values import header_for as _header
 
 _INTEGRATES_FIX = Path(__file__).parents[1] / "fixtures" / "e2e-integrates"
 
@@ -442,7 +442,7 @@ class TestMarkdownFormat:
             "Implemented (cited by name here)",
             "Implemented (whole-requirement)",
         ], cells
-        assert cells == [_header(k) for k in DEFAULT_COLUMNS]
+        assert cells == [_header(k) for k in DEFAULT_VALUES]
         # Nothing rides beside a column: a figure states its own denominator
         # and its own proportion inside its own cell (REQ-d00282-E).
         assert "Implemented %" not in cells

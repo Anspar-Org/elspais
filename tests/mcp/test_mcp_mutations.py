@@ -1077,7 +1077,8 @@ class TestMutateChangeEdgeTargets:
         ]
         assert len(edges) == 1
         assert edges[0].assertion_targets == ["A"]
-        # Verifies: REQ-d00205-C -- the rewrite is disclosed in the result.
+        # Verifies: REQ-d00205-C
+        # The rewrite is disclosed in the result.
         assert "(normalized: REQ-p00001-A -> A)" in result["message"]
 
     # Verifies: REQ-d00205-C

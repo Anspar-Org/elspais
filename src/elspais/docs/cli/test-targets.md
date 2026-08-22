@@ -414,23 +414,28 @@ The flag means something slightly different depending on the command:
   earlier run.
 
 On `trace`, the complement (non-named) targets render one of two ways in the
-per-requirement `verified` column, depending on whether prior result data
+per-requirement `verified` value, depending on whether prior result data
 exists for them:
 
 - **`(baseline)`** — carried. The target has existing RESULT data from a
   previous run; that verdict is reused and rendered with a `(baseline)`
   suffix (e.g. `4/4 100% (baseline)`). A carried **failing** target still
   fails/gates — carrying only skips re-execution, it never launders a
-  failure into a pass.
+  failure into a pass. The same provenance is selectable on its own as
+  `verified.carried`, which states `baseline` or `fresh` in a cell and a
+  boolean in json, so a reader taking only the numbers still gets it.
 - **`—`** (em dash) — no baseline. The target has test references (so
   coverage is expected) but zero result data at all — nothing to carry.
   This renders as skipped and is **not** gating; it's treated as "not run
-  this PR" rather than a regression.
+  this PR" rather than a regression. Nothing was measured, so the numbers
+  behind the figure are absent rather than zero: `verified.count`,
+  `verified.ratio` and `verified.carried` each state `null` in json and
+  `n/a` in a cell.
 
 A `> Legend: ...` line explaining both markers is appended to `trace`'s
 markdown output whenever at least one row actually used one (never shown on
-a full run, and never shown for `--dimension uat`, which has no `verified`
-column).
+a full run, and never shown for `--dimension uat`, which does not state
+`verified`).
 
 `summary` is level-aggregated, not per-requirement, so it can't show
 `(baseline)`/`—` inline. Instead, when any RESULT target was carried, the

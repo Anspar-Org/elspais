@@ -721,7 +721,7 @@
     },
     "ReportScopeConfig": {
       "additionalProperties": false,
-      "description": "A scope a project declares under a name, for reports to be produced under.\n\nA scope spelled out at the moment a report is run is known only to whoever\nspelled it; declared here it is versioned beside the requirements it selects\nover, and a reader holding a committed report can look up what produced it.\n\nOne name carries both halves of what an audience reads: the requirements a\nreport is about and the facts it states about them (REQ-d00280-C). The two\nstay independent choices -- a declaration naming no columns constrains none,\nand naming columns selects no requirements.",
+      "description": "A scope a project declares under a name, for reports to be produced under.\n\nA scope spelled out at the moment a report is run is known only to whoever\nspelled it; declared here it is versioned beside the requirements it selects\nover, and a reader holding a committed report can look up what produced it.\n\nOne name carries both halves of what an audience reads: the requirements a\nreport is about and the facts it states about them (REQ-d00280-C). The two\nstay independent choices -- a declaration naming no values constrains none,\nand naming values selects no requirements.",
       "properties": {
         "level": {
           "items": {
@@ -756,11 +756,11 @@
           "title": "Match Status Roles",
           "type": "boolean"
         },
-        "columns": {
+        "values": {
           "items": {
             "type": "string"
           },
-          "title": "Columns",
+          "title": "Values",
           "type": "array"
         }
       },

@@ -340,16 +340,18 @@ dir = ""
 # where that member's requirements carry it; a name nothing admits selects
 # nothing there and is reported rather than passing silently.
 #
-# One name also carries the columns a report states, so an audience is referred
+# One name also carries the values a report states, so an audience is referred
 # to once rather than half in the configuration and half in whatever invoked the
-# report. The two remain independent: a declaration naming no columns constrains
-# none, and naming columns selects no requirements.
+# report. The two remain independent: a declaration naming no values constrains
+# none, and naming values selects no requirements.
 #
-# `columns` names column KEYS, never the words a project displays a column under
+# `values` names value KEYS, never the words a project displays a value under
 # -- display words are configurable (`[rules.coverage] status_words`), and a
 # selection written in them would break the day someone renamed one. A coverage
 # dimension's key states its total; a measure behind it is keyed beneath the
-# dimension it measures (`implemented.immediate_direct`). The keys are:
+# dimension it measures (`implemented.immediate_direct`). A table states a
+# figure as one cell and a structured format states it as an object of its
+# numbers, nested to mirror the key. The keys are:
 #   id, title, level, status, implements, hash, file, journeys
 #   implemented, tested, verified, uat_coverage, uat_verified
 #     and, for each of those five, `.immediate_direct`, `.immediate_indirect`,
@@ -358,6 +360,9 @@ dir = ""
 #     assertions credited, the assertions the credit was counted over, and
 #     their proportion, each as a number rather than a composite cell
 #   tested.passed, tested.failed, tested.awaiting  (counts only, no `.ratio`)
+#   verified.carried   (whether the Passing verdict was carried from a
+#     baseline; offered by `trace`, which reports per requirement, and not by
+#     `summary`, which reports per level)
 #   code_tested, lcov_tested   (measured in lines, so they carry no measures)
 # A name the report being produced does not offer is refused rather than
 # skipped: a report is never produced under a selection honoured in part.
@@ -367,7 +372,7 @@ dir = ""
 level = ["prd"]
 not_status = ["Deprecated"]
 match_status_roles = false
-columns = ["id", "title", "status", "implemented", "tested", "verified"]
+values = ["id", "title", "status", "implemented", "tested", "verified"]
 
 #──────────────────────────────────────────────────────────────────────────────
 # ASSOCIATES - Cross-Repository Federation

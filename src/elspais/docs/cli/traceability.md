@@ -18,9 +18,9 @@ This answers: "How do we know this requirement is satisfied?"
   $ elspais viewer --static          # Interactive HTML tree (static file)
   $ elspais graph                    # Export graph structure as JSON
 
-## Coverage Columns
+## Coverage Values
 
-`trace` (standard/full presets) and `summary` report five coverage columns
+`trace` (standard/full presets) and `summary` report five coverage values
 using exactly this display vocabulary: **Implemented, Tested, Passing, UAT
 Covered, UAT Passed** (plus `Code Tested` and `LCOV Tested` for line
 coverage). These are the only words that denote a coverage dimension; in
@@ -28,22 +28,21 @@ particular "Validated" is not one of them, since it collides with the
 `Validates:` keyword (journey → requirement UAT links).
 
 **Total headline + the four measures behind it.** Every one of the five
-assertion-based columns headlines the per-*Assertion* TOTAL: for each
+assertion-based values headlines the per-*Assertion* TOTAL: for each
 assertion, the greatest of four measures, so an assertion covered more than
 one way is counted once and a requirement's total can never exceed its
 assertion count. The four measures answer two independent questions: what a
 citation named (*direct* -- it named the assertion; *indirect* -- it named
 only the whole requirement) crossed with where the evidence sits (*immediate*
 -- attached to this requirement; *rolled-up* -- conducted from a refining
-requirement's own coverage via `Refines:`). `trace --format csv` publishes
-all four as columns of their own beside each dimension's total (`Tested
-Immediate Direct`, `Tested Immediate Indirect`, `Tested Rolled Direct`,
-`Tested Rolled Indirect`, and likewise for the other four dimensions);
-`trace --format json` carries the same four fields per dimension in each
-requirement's object. The text/markdown/html table intentionally does NOT
-grow four more numbers per dimension -- it is already eleven columns wide,
-and REQ-d00258-A requires the measures to be *available*, which `--format
-json`/`csv` already satisfy without making the default table unreadable.
+requirement's own coverage via `Refines:`). Each is selectable in its own
+right beside the dimension's total: `--values tested,tested.immediate_direct`
+states a `Tested` column and a `Tested (cited by name here)` column under
+`--format csv`, and nests the measure inside the dimension's object under
+`--format json`. No report states all four uninvited -- the default table is
+already eleven columns wide, and REQ-d00258-A requires the measures to be
+*available*, which naming them satisfies without making the default
+unreadable.
 `summary` prints the four measures beneath each level's headline, naming
 each one directly: "cited by name here" (immediate-direct), "whole-requirement"
 (immediate-indirect), "conducted direct"/"conducted indirect" (the two
@@ -64,10 +63,10 @@ reported. See `elspais docs checks`
 denominator, not the whole spec: `Tested` is tested / **implemented** and
 `Passing` is passing / **tested**. A row with nothing implemented shows an
 empty `Tested`/`Passing` denominator as neutral `missing` (grey), never a red
-gap -- the "not all built" story lives on the `Implemented` column. A failing
+gap -- the "not all built" story lives on the `Implemented` value. A failing
 in-denominator label always reads `failing` (red).
 
-**What Passing takes.** The `Passing` column (dimension key `verified`) counts
+**What Passing takes.** The `Passing` value (dimension key `verified`) counts
 an assertion when a test *declared against that assertion* returned a passing
 result, and none returned a failure. Nothing else credits it. Line coverage of
 the code implementing an assertion does not: executing a line says the code was
@@ -78,7 +77,7 @@ Tested.
 
 **Line coverage is its own dimension.** `Code Tested` and `LCOV Tested` report
 how much of the implementation a run exercised. That is worth knowing and it is
-reported in its own right, beside the traceability columns and never folded
+reported in its own right, beside the traceability values and never folded
 into them. `credit_coverage` on a target governs whether that dimension is
 computed at all; it no longer credits any traceability dimension.
 
@@ -97,7 +96,7 @@ Passing figure gets a trailing `*` (footnoted) when any underlying RESULT
 data was carried from a previous run -- see `elspais docs test-targets`
 (*Per-PR selectivity*).
 
-**Code Tested: per-test or `n/a`.** The `Code Tested` column reports
+**Code Tested: per-test or `n/a`.** The `Code Tested` value reports
 `code_tested.attributed_lines` -- implementation lines whose coverage.py **context**
 names the specific test that exercised them (Python only, via pytest-cov's
 `--cov-context=test`). When no per-test context data is available for a
@@ -112,29 +111,29 @@ this requires.
 ## trace Command Options
 
   `--format {text,markdown,html,json,csv}`  Output format (default: markdown)
-  `--preset {minimal,standard,full}`        Named default column set
-  `--columns KEY,KEY,...` State exactly these columns, in this order
+  `--preset {minimal,standard,full}`        Named default value set
+  `--values KEY,KEY,...`  State exactly these values, in this order
   `--body`                Show requirement body text
   `--assertions`          Show individual assertions
   `--tests`               Show test references
   `--output PATH`         Output file path
-  `--dimension uat`       UAT-scoped column set: UAT Covered, UAT Passed and the validating journeys with their verdicts; excludes the code columns
+  `--dimension uat`       UAT-scoped value set: UAT Covered, UAT Passed and the validating journeys with their verdicts; excludes the code values
 
-## Choosing Columns
+## Choosing Values
 
-  $ elspais trace --columns id,title,tested,tested.immediate_direct
-  $ elspais trace --format csv --columns uat_coverage.immediate_direct,code_tested
+  $ elspais trace --values id,title,tested,tested.immediate_direct
+  $ elspais trace --format csv --values uat_coverage.immediate_direct,code_tested
 
-`--preset` names a DEFAULT set -- what you get when you ask for no columns in
-particular. `--columns` states the report's columns outright, replacing that
+`--preset` names a DEFAULT set -- what you get when you ask for no values in
+particular. `--values` states the report's values outright, replacing that
 set, in the order you name them. The report is refused if any name is not a
-column it offers; a report is never produced under half a selection.
+value it offers; a report is never produced under half a selection.
 
-Which columns a report states and which requirements it is about are separate
-choices: `--columns` never changes which rows appear, and `--level`/`--status`/
-`--scope` never change which columns do.
+Which values a report states and which requirements it is about are separate
+choices: `--values` never changes which rows appear, and `--level`/`--status`/
+`--scope` never change which values do.
 
-Column keys are stable names, never the words a project displays them under --
+Value keys are stable names, never the words a project displays them under --
 rename a display label and every committed selection still means what it meant:
 
   identity    `id` `title` `level` `status` `implements` `hash` `file` `journeys`
@@ -144,40 +143,62 @@ rename a display label and every committed selection still means what it meant:
   scalars     `<figure>.count` `<figure>.total` `<figure>.ratio`
               where `<figure>` is a dimension or one of its measures
   tested only `tested.passed` `tested.failed` `tested.awaiting` (counts only)
+  provenance  `verified.carried` (`trace` only)
   line cover  `code_tested` `lcov_tested` (measured in lines; no measures)
 
 A dimension key states that dimension's per-*Assertion* total; a measure key
 states one of the four measures behind it, and its heading names both the
 dimension and the measure. `id` is always stated, so every row says what it is
-about. The columns are the same in every format -- markdown, csv, html and json
-state the set you selected and nothing else.
+about. The selection is the same in every format -- markdown, csv, html and
+json state what you named and nothing else, each in its own kind.
 
-One named column is one column. A figure carries its denominator and its
-proportion inside its own cell (`5/5 (100%)`), and the Tested breakdown rides
-inside the Tested cell (`5/5 (100%) [3P 0F 2A]`) because it qualifies that
-figure rather than being a figure of its own.
+One named value is one value. A table states a figure in one cell, carrying its
+denominator and its proportion inside that cell (`5/5 (100%)`), with the Tested
+breakdown riding in the Tested cell (`5/5 (100%) [3P 0F 2A]`) because it
+qualifies that figure rather than being a figure of its own. A structured
+format states the same figure as an object of the numbers behind it:
+
+  $ elspais trace --format json --values implemented
+
+  { "id": "REQ-d00081", "implemented": { "count": 3.0, "total": 7.0, "ratio": 0.42857142857142855 } }
 
 That composite is what a table wants; a program wants the numbers, and should
 not have to cut them back out of a sentence. Every figure therefore also offers
 the three scalars behind it -- `.count` (the assertions credited), `.total` (the
 assertions the credit was counted over) and `.ratio` (their proportion) -- each
-selectable alone:
+selectable alone. A key is a path and the object mirrors it: asking for
+`implemented.count` states `{"implemented": {"count": 3.0}}`, and a measure's
+scalar nests one level deeper again:
 
-  $ elspais trace --format json --columns implemented.count,implemented.ratio
-  $ elspais trace --format json --columns tested.immediate_direct.total
-  $ elspais trace --format json --columns tested.failed
+  $ elspais trace --format json --values implemented.count,implemented.ratio
+  $ elspais trace --format json --values tested.immediate_direct.total
+  $ elspais trace --format json --values tested.failed
 
 JSON states a scalar as a number, never as a string. The proportion is derived
 rather than stored and is never rounded in the value, so it always equals
 `.count` over `.total`; a table rounds it to three places, which is a cell and
 not the value. `tested.passed`, `tested.failed` and `tested.awaiting` are the
 same three counts the breakdown states in prose, individually selectable -- ask
-for the failures and you get the failures. They are counts and nothing else, so
-no `.ratio` is offered beneath them.
+for the failures and you get the failures. They sit in the Tested object beside
+its three scalars, and they are counts and nothing else, so no `.ratio` is
+offered beneath them.
 
-A project can declare a column set under a name beside the scope it belongs to
-(`[scopes.<name>] columns = [...]`), so one name refers to a whole audience:
-the requirements it reads and the facts it reads about them. `--columns` on the
+`verified.carried` is the provenance behind the Passing figure: whether the
+verdict was carried from a baseline rather than produced by the run being
+reported. It is not a number, so a table states it as a word -- `baseline` or
+`fresh` -- while json states a boolean, or `null` where no verdict was taken.
+`trace` offers it; `summary` does not, having no per-requirement bit to state,
+and discloses carried results for the report as a whole instead.
+
+A value a row does not have is stated as an absence and never as zero: `null`
+in json, `n/a` in a `trace` cell, `-` in a `summary` cell. Under `--targets`, a
+requirement carrying test references but no result record at all has no
+verified verdict to state, so its `trace` cell reads `—` and its
+`verified.count`, `verified.ratio` and `verified.carried` are each `null`.
+
+A project can declare a value set under a name beside the scope it belongs to
+(`[scopes.<name>] values = [...]`), so one name refers to a whole audience:
+the requirements it reads and the facts it reads about them. `--values` on the
 invocation replaces a declared set rather than narrowing it.
 
 ## UAT Dimension
@@ -185,11 +206,11 @@ invocation replaces a declared set rather than narrowing it.
   $ elspais trace --dimension uat
   $ elspais trace --dimension uat --format markdown -o uat-traceability.md
 
-Emits a focused UAT traceability report. Columns: ID, Title, Level, Status, UAT
-Covered, UAT Passed, Journeys (`JNY-id:verdict` pairs). Code-dimension columns
-(Implemented, Tested, Passing, etc.) are excluded.
+Emits a focused UAT traceability report. It states ID, Title, Level, Status,
+UAT Covered, UAT Passed and Journeys (`JNY-id:verdict` pairs). Code-dimension
+values (Implemented, Tested, Passing, etc.) are excluded.
 
-`--dimension uat` chooses columns, not rows. Every requirement the scope selects
+`--dimension uat` chooses values, not rows. Every requirement the scope selects
 appears; one no journey validates is a row with an empty Journeys cell, which is
 the fact worth seeing. To report only the validated ones, narrow the rows -- that
 is what a scope is for.

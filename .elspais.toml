@@ -357,12 +357,12 @@ dir = ""
 level = ["prd"]
 not_status = ["Deprecated", "Superseded"]
 # The facts a stakeholder overview states: whether the work is built, tested and
-# passing. Column keys, not display words -- renaming a display label leaves this
+# passing. Value keys, not display words -- renaming a display label leaves this
 # declaration standing.
 #
-# Deliberately names no identity column. Every report already states what each of
-# its rows is about, and which column that is differs by report: the per-requirement
+# Deliberately names no identity value. Every report already states what each of
+# its rows is about, and which value that is differs by report: the per-requirement
 # report says which requirement, the coverage summary says which level. A
 # declaration naming `id` would be unusable by a report whose rows are not
 # requirements.
-columns = ["implemented", "tested", "verified"]
+values = ["implemented", "tested", "verified"]
