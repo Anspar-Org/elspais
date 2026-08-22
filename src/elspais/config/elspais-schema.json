@@ -1036,6 +1036,13 @@
           "title": "Reference Patterns",
           "type": "array"
         },
+        "groups": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Groups",
+          "type": "object"
+        },
         "targets": {
           "items": {
             "$ref": "#/$defs/TestTargetConfig"
@@ -1083,6 +1090,18 @@
         "match": {
           "default": "source",
           "title": "Match",
+          "type": "string"
+        },
+        "groups": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Groups",
+          "type": "array"
+        },
+        "classname": {
+          "default": "",
+          "title": "Classname",
           "type": "string"
         },
         "credit_coverage": {

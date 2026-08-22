@@ -944,6 +944,188 @@ directories = ["spec"]
 
         assert captured["skip_daemon"] is False
 
+    @staticmethod
+    def _make_grouped_project(tmp_path):
+        """A project declaring one group, claimed by one of its two targets."""
+        spec_dir = tmp_path / "spec"
+        spec_dir.mkdir()
+        (spec_dir / "reqs.md").write_text(
+            """\
+### REQ-p00001: Test Req
+
+**Level**: PRD | **Status**: Active
+
+The system SHALL do something testable.
+
+*End* *Test Req* | **Hash**: ________
+""",
+            encoding="utf-8",
+        )
+        config_path = tmp_path / ".elspais.toml"
+        config_path.write_text(
+            """\
+version = 3
+
+[project]
+name = "grouped-targets"
+namespace = "REQ"
+
+[scanning.spec]
+directories = ["spec"]
+
+[scanning.test.groups]
+uat = "needs a live backend"
+
+[[scanning.test.targets]]
+name = "a"
+
+[[scanning.test.targets]]
+name = "b"
+groups = ["uat"]
+""",
+            encoding="utf-8",
+        )
+        return config_path
+
+    @staticmethod
+    def _spy_build_graph(monkeypatch) -> dict:
+        import elspais.graph.factory as factory_mod
+
+        captured: dict = {}
+        original_build_graph = factory_mod.build_graph
+
+        def spy(*a, **k):
+            captured["fresh_targets"] = k.get("fresh_targets")
+            return original_build_graph(*a, **k)
+
+        monkeypatch.setattr(factory_mod, "build_graph", spy)
+        return captured
+
+    # Verifies: REQ-d00283-E+I
+    @pytest.mark.parametrize(
+        "targets,groups,expected",
+        [
+            # A group selection resolves to the targets claiming it.
+            (None, ["uat"], {"b"}),
+            # Each selector narrows: `a` is not in `uat`, so nothing is fresh.
+            (["a"], ["uat"], set()),
+            (["a", "b"], ["uat"], {"b"}),
+        ],
+    )
+    def test_summary_groups_thread_resolved_set_into_build_graph(
+        self, tmp_path, monkeypatch, targets, groups, expected
+    ):
+        """--groups resolves through the group model before reaching the graph."""
+        import argparse
+
+        from elspais.commands import summary
+
+        config_path = self._make_grouped_project(tmp_path)
+        captured = self._spy_build_graph(monkeypatch)
+
+        args = argparse.Namespace(
+            targets=targets,
+            groups=groups,
+            format="json",
+            config=config_path,
+            spec_dir=None,
+        )
+        result = summary.run(args)
+
+        assert result == 0
+        assert captured["fresh_targets"] == expected
+
+    # Verifies: REQ-d00254-I
+    def test_summary_with_no_selection_marks_nothing_fresh(self, tmp_path, monkeypatch):
+        """Naming neither selector marks nothing -- even with groups declared.
+
+        `summary` executes no target; it reads whatever results are already on
+        disk. The `default` group of REQ-d00283-D belongs to a run that
+        *executes* targets, so resolving one here would have the tool state
+        which targets were freshly run on the strength of a flag the caller
+        never passed. Do not "fix" this back to the default set.
+        """
+        import argparse
+
+        from elspais.commands import summary
+
+        config_path = self._make_grouped_project(tmp_path)
+        built = self._spy_build_graph(monkeypatch)
+
+        called: dict = {}
+
+        def fake_engine_call(endpoint, params, compute_fn, skip_daemon=False, config_path=None):
+            called["skip_daemon"] = skip_daemon
+            return {"levels": [], "graph_source": {"type": "local"}}
+
+        monkeypatch.setattr("elspais.commands._engine.call", fake_engine_call)
+
+        args = argparse.Namespace(
+            targets=None,
+            groups=None,
+            format="json",
+            config=config_path,
+            spec_dir=None,
+        )
+
+        assert summary.run(args) == 0
+        assert called["skip_daemon"] is False, "marking nothing must not force a local build"
+        assert "fresh_targets" not in built, "an absent selector marks no fresh subset"
+
+    # Verifies: REQ-d00283-E, REQ-d00254-J
+    def test_summary_selecting_all_is_a_full_run(self, tmp_path, monkeypatch):
+        """`all` covers every configured target, so nothing is marked carried
+        and the daemon-vs-local decision is left to the engine."""
+        import argparse
+
+        from elspais.commands import summary
+
+        config_path = self._make_grouped_project(tmp_path)
+        built = self._spy_build_graph(monkeypatch)
+
+        called: dict = {}
+
+        def fake_engine_call(endpoint, params, compute_fn, skip_daemon=False, config_path=None):
+            called["skip_daemon"] = skip_daemon
+            return {"levels": [], "graph_source": {"type": "local"}}
+
+        monkeypatch.setattr("elspais.commands._engine.call", fake_engine_call)
+
+        args = argparse.Namespace(
+            targets=None,
+            groups=["all"],
+            format="json",
+            config=config_path,
+            spec_dir=None,
+        )
+
+        assert summary.run(args) == 0
+        assert called["skip_daemon"] is False, "a full run must not force a local build"
+        assert "fresh_targets" not in built, "a full run marks no fresh subset"
+
+    # Verifies: REQ-d00283-H
+    def test_summary_unknown_group_is_refused(self, tmp_path, monkeypatch, capsys):
+        """A selection naming an undefined group produces no report at all."""
+        import argparse
+
+        from elspais.commands import summary
+
+        config_path = self._make_grouped_project(tmp_path)
+        captured = self._spy_build_graph(monkeypatch)
+
+        args = argparse.Namespace(
+            targets=None,
+            groups=["uta"],
+            format="json",
+            config=config_path,
+            spec_dir=None,
+        )
+        result = summary.run(args)
+
+        assert result == 2
+        assert "uta" in capsys.readouterr().err
+        assert "fresh_targets" not in captured, "nothing may be rendered under a refused selection"
+
 
 _TWO_TARGET_CONFIG_SUMMARY = """\
 version = 3

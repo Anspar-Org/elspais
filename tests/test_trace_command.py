@@ -496,6 +496,163 @@ directories = ["spec"]
 
         assert captured["fresh_targets"] is None
 
+    @staticmethod
+    def _make_grouped_project(tmp_path):
+        """A project declaring one group, claimed by one of its two targets."""
+        spec_dir = tmp_path / "spec"
+        spec_dir.mkdir()
+        (spec_dir / "reqs.md").write_text(
+            """\
+### REQ-p00001: Test Req
+
+**Level**: PRD | **Status**: Active
+
+The system SHALL do something testable.
+
+*End* *Test Req* | **Hash**: ________
+""",
+            encoding="utf-8",
+        )
+        config_path = tmp_path / ".elspais.toml"
+        config_path.write_text(
+            """\
+version = 3
+
+[project]
+name = "grouped-targets"
+namespace = "REQ"
+
+[scanning.spec]
+directories = ["spec"]
+
+[scanning.test.groups]
+uat = "needs a live backend"
+
+[[scanning.test.targets]]
+name = "a"
+
+[[scanning.test.targets]]
+name = "b"
+groups = ["uat"]
+""",
+            encoding="utf-8",
+        )
+        return config_path
+
+    @staticmethod
+    def _trace_args(config_path, targets, groups):
+        import argparse
+
+        return argparse.Namespace(
+            targets=targets,
+            groups=groups,
+            format="json",
+            config=config_path,
+            spec_dir=None,
+            preset=None,
+            body=False,
+            show_assertions=False,
+            show_tests=False,
+            dimension="",
+            output=None,
+        )
+
+    # Verifies: REQ-d00283-E+I
+    @pytest.mark.parametrize(
+        "targets,groups,expected",
+        [
+            (None, ["uat"], {"b"}),
+            # Each selector narrows: `a` is not in `uat`, so nothing is fresh.
+            (["a"], ["uat"], set()),
+            (["a", "b"], ["uat"], {"b"}),
+        ],
+    )
+    def test_trace_groups_thread_resolved_set_into_build_graph(
+        self, tmp_path, monkeypatch, targets, groups, expected
+    ):
+        """--groups resolves through the group model before reaching the graph."""
+        import elspais.graph.factory as factory_mod
+        from elspais.commands import trace
+
+        config_path = self._make_grouped_project(tmp_path)
+
+        captured: dict = {}
+        original_build_graph = factory_mod.build_graph
+
+        def spy(*a, **k):
+            captured["fresh_targets"] = k.get("fresh_targets")
+            return original_build_graph(*a, **k)
+
+        monkeypatch.setattr(factory_mod, "build_graph", spy)
+
+        result = trace.run(self._trace_args(config_path, targets, groups))
+
+        assert result is None or result == 0
+        assert captured["fresh_targets"] == expected
+
+    # Verifies: REQ-d00254-I
+    def test_trace_with_no_selection_marks_nothing_fresh(self, tmp_path, monkeypatch):
+        """Naming neither selector marks nothing -- even with groups declared.
+
+        `trace` executes no target; it reads whatever results are already on
+        disk. The `default` group of REQ-d00283-D belongs to a run that
+        *executes* targets, so resolving one here would have the tool state
+        which targets were freshly run on the strength of a flag the caller
+        never passed. Do not "fix" this back to the default set.
+        """
+        import elspais.graph.factory as factory_mod
+        from elspais.commands import trace
+
+        config_path = self._make_grouped_project(tmp_path)
+
+        built: list = []
+        original_build_graph = factory_mod.build_graph
+
+        def spy(*a, **k):
+            built.append(k.get("fresh_targets"))
+            return original_build_graph(*a, **k)
+
+        monkeypatch.setattr(factory_mod, "build_graph", spy)
+
+        called: dict = {}
+
+        def fake_engine_call(endpoint, params, compute_fn, config_path=None, **kwargs):
+            called["endpoint"] = endpoint
+            return {"nodes": [], "scope": []}
+
+        monkeypatch.setattr("elspais.commands._engine.call", fake_engine_call)
+
+        result = trace.run(self._trace_args(config_path, None, None))
+
+        assert result is None or result == 0
+        assert called["endpoint"] == "/api/run/trace", (
+            "marking nothing must not force a local build"
+        )
+        assert not built, "an absent selector marks no fresh subset"
+
+    # Verifies: REQ-d00283-H
+    def test_trace_unknown_group_is_refused(self, tmp_path, monkeypatch, capsys):
+        """A selection naming an undefined group renders nothing at all."""
+        import elspais.graph.factory as factory_mod
+        from elspais.commands import trace
+
+        config_path = self._make_grouped_project(tmp_path)
+
+        built: list = []
+        original_build_graph = factory_mod.build_graph
+
+        def spy(*a, **k):
+            built.append(k.get("fresh_targets"))
+            return original_build_graph(*a, **k)
+
+        monkeypatch.setattr(factory_mod, "build_graph", spy)
+
+        result = trace.run(self._trace_args(config_path, None, ["uta"]))
+
+        assert result == 2
+        assert "uta" in capsys.readouterr().err
+        assert not built, "nothing may be rendered under a refused selection"
+
 
 def _render_trace_markdown(project, targets=None):
     """Build a real graph for `project` and render it via format_markdown().

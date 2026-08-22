@@ -1259,7 +1259,7 @@ def collect_coverage(
 
     # Implements: REQ-d00254-I
     # Carry-forward provenance (distinct RESULT target names + how many are
-    # carried baselines) is meaningful only for a selective `--targets` run, so
+    # carried baselines) is meaningful only for a selective run, so
     # a selective run isn't a silent no-op on rendered output. Omit it entirely
     # otherwise, so a full run stays byte-identical to the pre-selectivity
     # output in every format (JSON keys and the CSV row included).

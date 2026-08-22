@@ -94,8 +94,14 @@ class ChecksArgs:
 
     targets: list[str] | None = None
     """Run/mark only these [[scanning.test.targets]] by name (space-separated).
-    Default: all. With --run-tests, executes only this subset; on summary/trace,
-    marks the rest as carried baselines."""
+    Default: the targets of the `default` group. With --run-tests, executes only
+    this subset; on summary/trace, marks the rest as carried baselines."""
+
+    groups: list[str] | None = None
+    """Run/mark only the [[scanning.test.targets]] in these groups (space-separated).
+    `all` names every target, `default` the ones a run with no selection executes,
+    and a project declares the rest in [scanning.test.groups]. Narrows alongside
+    --targets rather than adding to it."""
 
     output: Annotated[Path | None, tyro.conf.arg(aliases=["-o"])] = None
     """Write output to file instead of stdout."""
@@ -276,6 +282,11 @@ class TraceArgs(ScopeOptions):
     """Mark only these [[scanning.test.targets]] as freshly-run; render the rest
     as carried baselines."""
 
+    groups: list[str] | None = None
+    """Mark only the [[scanning.test.targets]] in these groups as freshly-run;
+    render the rest as carried baselines. `all` names every target, `default` the
+    ones a run with no selection executes."""
+
     output: Annotated[Path | None, tyro.conf.arg(aliases=["-o"])] = None
     """Write output to file instead of stdout."""
 
@@ -407,6 +418,11 @@ class SummaryArgs(ScopeOptions):
     targets: list[str] | None = None
     """Mark only these [[scanning.test.targets]] as freshly-run; render the rest
     as carried baselines."""
+
+    groups: list[str] | None = None
+    """Mark only the [[scanning.test.targets]] in these groups as freshly-run;
+    render the rest as carried baselines. `all` names every target, `default` the
+    ones a run with no selection executes."""
 
     output: Annotated[Path | None, tyro.conf.arg(aliases=["-o"])] = None
     """Write output to file instead of stdout."""

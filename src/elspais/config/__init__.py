@@ -1009,3 +1009,87 @@ def get_status_roles(config: dict[str, Any]):
     if roles_data:
         return StatusRolesConfig.from_dict(roles_data)
     return StatusRolesConfig.default()
+
+
+# Implements: REQ-d00283-A+B+C
+def target_groups(target: Any) -> frozenset[str]:
+    """The groups *target* belongs to.
+
+    Every target belongs to ``all`` (REQ-d00283-B), and a target claiming no
+    group beyond that belongs to ``default`` (REQ-d00283-C) -- so a project
+    that declares no groups has every target in ``default`` and a run that
+    selects nothing executes exactly what it executed before groups existed.
+
+    Consumers MUST reach a target's membership through here rather than reading
+    ``target.groups``, which records what the target *claimed* and not what it
+    belongs to.
+    """
+    from elspais.config.schema import GROUP_ALL, GROUP_DEFAULT
+
+    claimed = {g.strip().lower() for g in (getattr(target, "groups", None) or []) if g.strip()}
+    claimed.discard(GROUP_ALL)
+    if not claimed:
+        claimed = {GROUP_DEFAULT}
+    return frozenset(claimed | {GROUP_ALL})
+
+
+# Implements: REQ-d00283-D+E+H+I
+def targets_in_groups(config: Any, selected: list[str] | None) -> set[str]:
+    """The names of the test targets *selected* names.
+
+    ``None`` selects the ``default`` group (REQ-d00283-D); a selection names
+    the targets belonging to any group in it (REQ-d00283-E).
+
+    Raises:
+        ValueError: If a selected name is neither declared nor reserved.
+            Refused rather than resolved to no targets, because a selection
+            that quietly selects nothing produces a report a reader cannot
+            tell from one whose targets all passed (REQ-d00283-H).
+    """
+    from elspais.config.schema import GROUP_DEFAULT, RESERVED_GROUPS
+
+    test_cfg = config.scanning.test
+    wanted = (
+        {GROUP_DEFAULT} if selected is None else {g.strip().lower() for g in selected if g.strip()}
+    )
+    known = {name.strip().lower() for name in test_cfg.groups} | RESERVED_GROUPS
+    unknown = sorted(wanted - known)
+    if unknown:
+        raise ValueError(
+            f"unknown test group(s): {', '.join(unknown)}. "
+            f"Known groups: {', '.join(sorted(known))}."
+        )
+    return {t.name for t in test_cfg.targets if target_groups(t) & wanted}
+
+
+# Implements: REQ-d00283-D+E+I, REQ-d00254-I+J
+def selected_targets(
+    config: Any, targets: list[str] | None, groups: list[str] | None
+) -> set[str] | None:
+    """The test targets a run naming *targets* and *groups* covers.
+
+    Each selector narrows (REQ-d00283-I), and naming neither selects the
+    ``default`` group (REQ-d00283-D).
+
+    ``None`` is returned where the selection covers every configured target,
+    which is what makes a run full rather than selective (REQ-d00254-J). That
+    is why the answer is a set of names and not the flags that produced it: a
+    project declaring no groups has every target in ``default``, so its bare
+    run covers everything and renders exactly as it did before groups existed.
+
+    Raises:
+        ValueError: If a named group is neither declared nor reserved.
+    """
+    configured = {t.name for t in config.scanning.test.targets}
+    if targets is None and groups is None:
+        selection = targets_in_groups(config, None)
+    elif groups is None:
+        # A named target is taken as named. Whether it is configured is a
+        # question for the caller that runs targets, which reports an unknown
+        # name; narrowing it away here would turn that report into silence.
+        selection = set(targets or ())
+    elif targets is None:
+        selection = targets_in_groups(config, groups)
+    else:
+        selection = set(targets) & targets_in_groups(config, groups)
+    return None if selection == configured else selection

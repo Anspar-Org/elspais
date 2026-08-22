@@ -318,7 +318,7 @@ def run(args: argparse.Namespace) -> int:
     """Run the coverage command.
 
     Tries a running daemon/viewer first for fast results,
-    falls back to local graph build. --targets forces a local build so the
+    falls back to local graph build. A target selection forces a local build so the
     fresh set threads into build_graph() (a cached daemon graph can't know
     which targets this invocation considers fresh).
     """
@@ -331,8 +331,14 @@ def run(args: argparse.Namespace) -> int:
     spec_dir = getattr(args, "spec_dir", None)
     config_path = getattr(args, "config", None)
     config = get_config(config_path)
-    # Implements: REQ-d00254-I
-    fresh_targets = set(args.targets) if getattr(args, "targets", None) else None
+    # Implements: REQ-d00254-I, REQ-d00283-D+E+I
+    from elspais.commands._targets import resolve_fresh_targets
+
+    try:
+        fresh_targets = resolve_fresh_targets(args, config)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
 
     # Implements: REQ-d00282-F
     # Judged before anything is built or asked of a serving process: a report is

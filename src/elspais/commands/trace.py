@@ -1145,15 +1145,21 @@ def run(args: argparse.Namespace) -> int:
 
     fmt = getattr(args, "format", "markdown")
     spec_dir = getattr(args, "spec_dir", None)
-    # Implements: REQ-d00254-I
-    # --targets marks provenance on the rendered graph; force a local build
-    # (bypassing any cached daemon graph) so the fresh set actually threads
-    # into build_graph().
-    fresh_targets = set(args.targets) if getattr(args, "targets", None) else None
-    skip_daemon = bool(spec_dir) or fresh_targets is not None
+    # Implements: REQ-d00254-I, REQ-d00283-D+E+I
+    # --targets/--groups mark provenance on the rendered graph; force a local
+    # build (bypassing any cached daemon graph) so the fresh set actually
+    # threads into build_graph().
+    from elspais.commands._targets import resolve_fresh_targets
+
     dimension = getattr(args, "dimension", "")
     config_path = getattr(args, "config", None)
     config = get_config(config_path)
+    try:
+        fresh_targets = resolve_fresh_targets(args, config)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    skip_daemon = bool(spec_dir) or fresh_targets is not None
 
     if dimension == "uat":
         # Implements: REQ-d00257-A+C, REQ-d00282-H
@@ -1204,7 +1210,7 @@ def run(args: argparse.Namespace) -> int:
     params.update(value_params)
 
     if skip_daemon:
-        # Custom spec_dir (or --targets): build graph directly
+        # Custom spec_dir (or a target selection): build graph directly
         from elspais.graph.factory import build_graph
 
         graph = build_graph(
@@ -1251,12 +1257,15 @@ def run_graph(args: argparse.Namespace) -> int:
 
     spec_dir = getattr(args, "spec_dir", None)
     config_path = getattr(args, "config", None)
-    fresh_targets = set(args.targets) if getattr(args, "targets", None) else None
 
+    # This command exports the graph's structure, not a report over it, and
+    # `GraphArgs` carries no target selector to narrow one with. Marking a
+    # target set here would render the export as a selective run that nothing
+    # on this surface could widen back, so the export covers every target.
     graph = build_graph(
         spec_dirs=[spec_dir] if spec_dir else None,
         config_path=config_path,
-        fresh_targets=fresh_targets,
+        fresh_targets=None,
     )
 
     annotate_graph_git_state(graph)

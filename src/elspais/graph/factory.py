@@ -66,6 +66,22 @@ def _resolve_coverage_file_node(graph, source_file, lcov_path, repo_root):
 
 
 # Implements: REQ-d00254-F, REQ-d00254-I
+# Implements: REQ-d00284-B
+def _tests_named(name: str, scanned: frozenset[str]) -> list[str]:
+    """The scanned test files *name* picks out, as repo-relative paths.
+
+    A name matches a file whose path ends at a component boundary, so a bare
+    basename reaches a test nested any depth below the target and a name
+    carrying directories still has to match them. The candidates are the files
+    scanned for the target that produced the result: a name matching a file
+    some other target scans says nothing about where this result came from.
+    """
+    needle = name.replace("\\", "/").strip("/")
+    if not needle:
+        return []
+    return sorted(p for p in scanned if p == needle or p.endswith("/" + needle))
+
+
 def _ingest_target_results(
     builder,
     target,
@@ -74,6 +90,7 @@ def _ingest_target_results(
     source_path: str = "",
     *,
     carried: bool = False,
+    scanned_tests: frozenset[str] = frozenset(),
 ) -> int:
     """Parse a target's reporter output and add RESULT ParsedContent.
 
@@ -115,6 +132,26 @@ def _ingest_target_results(
             for key in ("line", "root_line"):
                 if isinstance(rec.get(key), int):
                     rec[key] = rec[key] + line_shift
+    # Implements: REQ-d00284-A+B+C
+    # Where a result names no source file, its recorded name is read in the
+    # form declared for this target, falling back to the one its reporter
+    # declares. A name read as a source file binds only where it picks out
+    # exactly one test scanned for this target; otherwise it binds to nothing
+    # and carries why, so the result can be reported rather than dropped.
+    form = target.classname or spec.classname
+    for rec in records:
+        if not rec.get("test_id"):
+            continue  # already bound by a source file the producer named
+        if form == "python-module":
+            continue  # the synthesized identifier already reads it that way
+        matches = _tests_named(rec.get("classname", ""), scanned_tests) if form else []
+        rec["test_id"] = None
+        if len(matches) == 1:
+            rec["source_path"] = matches[0]
+        else:
+            rec["name_match"] = "ambiguous" if matches else "unmatched"
+            rec["name_candidates"] = matches
+
     repo_root_resolved = Path(repo_root).resolve()
     count = 0
     for rec in records:
@@ -176,6 +213,9 @@ def _ingest_target_results(
             "root_file": root_file,
             "result_file": result_file,
             "result_line": result_line,
+            # Implements: REQ-d00284-C
+            "name_match": rec.get("name_match"),
+            "name_candidates": rec.get("name_candidates"),
         }
         content = ParsedContent(
             content_type="test_result",
@@ -577,7 +617,7 @@ def build_graph(
         captured_results: Optional mapping of target name -> captured stdout/results
             text, bypassing the on-disk results glob for that target.
         fresh_targets: Optional set of [[scanning.test.targets]] names considered
-            "freshly run" (e.g. via ``--targets``). When set, every RESULT node
+            "freshly run" (e.g. via ``--targets``/``--groups``). When set, every RESULT node
             ingested for a target NOT in this set is tagged ``carried=True``.
             When None (the default), no target is considered carried. Stashed
             on the returned FederatedGraph as ``render_fresh_targets``.
@@ -807,6 +847,8 @@ def build_graph(
                     content, file_path, prescan_data=prescan_data
                 )
 
+            scanned_test_files: set[str] = set()
+            resolved_root = repo_root.resolve()
             for dir_pattern in test_dirs:
                 # Resolve glob pattern to get directories
                 matched_dirs = glob(str(repo_root / dir_pattern), recursive=True)
@@ -825,6 +867,15 @@ def build_graph(
                             fn = None
                             if source_path:
                                 fn = _get_or_create_file_node(Path(source_path), FileType.TEST)
+                                # Implements: REQ-d00284-B
+                                # The candidates a result's recorded name is
+                                # resolved among, gathered as they are scanned.
+                                try:
+                                    scanned_test_files.add(
+                                        str(Path(source_path).resolve().relative_to(resolved_root))
+                                    )
+                                except ValueError:
+                                    pass
                             builder.add_parsed_content(parsed_content, file_node=fn)
 
             # 6b-target. Ingest results from [[scanning.test.targets]] via reporter registry.
@@ -832,7 +883,6 @@ def build_graph(
             # RemainderParser is NOT registered for RESULT file types.
             # When targets is empty (the default) this loop is a no-op.
             _captured = captured_results or {}
-            resolved_root = repo_root.resolve()
             for target in typed_config.scanning.test.targets:
                 if not target.reporter:
                     continue
@@ -849,9 +899,27 @@ def build_graph(
                         target.cwd,
                     )
                     continue
+                # Implements: REQ-d00284-B
+                # The candidates are the tests scanned under this target's own
+                # cwd: a name matching a file some other target scans says
+                # nothing about where this result came from.
+                try:
+                    cwd_rel = str(cwd_path.resolve().relative_to(resolved_root))
+                except ValueError:
+                    cwd_rel = ""
+                prefix = "" if cwd_rel in ("", ".") else cwd_rel.rstrip("/") + "/"
+                target_tests = frozenset(
+                    f for f in scanned_test_files if not prefix or f.startswith(prefix)
+                )
                 if target.name in _captured:
                     _ingest_target_results(
-                        builder, target, _captured[target.name], repo_root, "", carried=carried
+                        builder,
+                        target,
+                        _captured[target.name],
+                        repo_root,
+                        "",
+                        carried=carried,
+                        scanned_tests=target_tests,
                     )
                 elif target.results:
                     matched = glob(str(cwd_path / target.results), recursive=True)
@@ -867,6 +935,7 @@ def build_graph(
                                     repo_root,
                                     str(Path(f)),
                                     carried=carried,
+                                    scanned_tests=target_tests,
                                 )
                     else:
                         _log.debug("target %r: no files matched %r", target.name, target.results)

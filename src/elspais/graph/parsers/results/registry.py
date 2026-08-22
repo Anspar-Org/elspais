@@ -32,6 +32,16 @@ class ReporterSpec:
     # the tool numbers source lines from one. A target may override it for a
     # producer that departs from its format's convention.
     line_base: int = 1
+    # Implements: REQ-d00284-A
+    # How this format's results name the test that produced them, where they
+    # name no source file. Declared here, where the format is known, and
+    # overridable per target -- the same arrangement REQ-d00254-O makes for the
+    # origin a producer counts lines from. A format is not always a convention:
+    # JUnit XML carries Java class names, Python module paths and JavaScript
+    # spec basenames alike, so what stands here is the prevailing convention
+    # among the producers that write it, and a producer departing from that
+    # says so on its target.
+    classname: str = "python-module"
 
 
 REPORTER_REGISTRY: dict[str, ReporterSpec] = {}

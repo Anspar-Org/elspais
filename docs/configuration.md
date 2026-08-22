@@ -251,6 +251,16 @@ reference_keyword = "Verifies"
 # ones are "fresh" for a given invocation is a per-command-line decision, not
 # a persistent config setting. See `elspais docs test-targets` (Per-PR
 # selectivity section).
+
+# Test groups - which targets a run is about. Declared as a keyword and a
+# description; a target then claims the groups it belongs to via `groups`.
+# `default` (what a run selects nothing executes) and `all` (every target)
+# are reserved and cannot be declared. A target claiming no group belongs to
+# `default`, so declaring nothing here leaves every run as it was.
+# Select with `--groups NAME ...` wherever `--targets` is accepted.
+# [scanning.test.groups]
+# uat = "End-to-end journeys needing a live stack"
+
 [[scanning.test.targets]]
 name     = "app"
 cwd      = "app"                    # relative to repo root; empty = repo root
@@ -265,6 +275,11 @@ coverage = "coverage/lcov.info"     # optional; lcov or coverage.py JSON
 # reporter = "junit"
 # results  = "results/*.xml"        # glob relative to cwd
 # match    = "source"
+# groups   = ["uat"]                # default: the `default` group
+# classname = "source-file"         # how the results name their test:
+#                                   # "python-module" (pytest) | "source-file"
+#                                   # (a spec basename, e.g. Playwright).
+#                                   # Default: whatever the reporter declares.
 
 # User journey file scanning
 [scanning.journey]
