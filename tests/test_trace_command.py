@@ -22,6 +22,7 @@ from elspais.commands.trace import (
     compute_trace,
 )
 from elspais.graph.aggregation import MEASURES
+from elspais.graph.values import figure_cell
 
 
 class TestTraceCommand:
@@ -1108,51 +1109,67 @@ class TestTraceFooting:
         assert h["uat_verified"] == "UAT Passed"
         assert "Validated" not in h.values()
 
-    # Verifies: REQ-d00258-E
-    def test_code_tested_without_attribution_is_na(self, code_tested_no_attribution_project):
+    # Verifies: REQ-d00258-E, REQ-d00282-C+N
+    def test_only_the_attribution_is_suppressed_without_contexts(
+        self, code_tested_no_attribution_project
+    ):
+        """Aggregate-only coverage states its lines and withholds only the
+        attribution.
+
+        The suppression REQ-d00258-E requires is of the ATTRIBUTION figure --
+        how many lines a verifying test can be named for. The lines a run
+        covered were measured, so a report holding them states them
+        (REQ-d00282-N), and the value named for the figure states the figure
+        rather than one particular reading of it (REQ-d00282-C).
+        """
         from elspais.commands.trace import _get_node_data
 
         graph = _build_project_graph(code_tested_no_attribution_project, targets=None)
         node = graph.find_by_id("REQ-d00001")
         rollup = node.get_metric("rollup_metrics")
+        assert rollup.code_tested.has_contexts is False
         assert rollup.code_tested.attributed_lines == 0
         assert rollup.code_tested.covered_lines > 0
 
         data = _get_node_data(node, graph)
-        # An absence in the data, spelled "n/a" by a table (REQ-d00282-M).
-        assert data["code_tested"] is None
-        assert _format_row(data, ["code_tested"]) == [ABSENT_FIGURE]
+        lines = rollup.code_tested
+        assert data["code_tested"] == figure_cell(lines.covered_lines, lines.total_lines)
+        assert data["code_tested_count"] == lines.covered_lines
+        assert data["code_tested_total"] == lines.total_lines
+        # The one absence, spelled "n/a" by a table (REQ-d00282-M).
+        assert data["code_tested_attributed"] is None
+        assert _format_row(data, ["code_tested.attributed"]) == [ABSENT_FIGURE]
         assert ABSENT_FIGURE == "n/a"
 
-    # Verifies: REQ-d00258-E, REQ-d00282-E
-    def test_code_tested_without_attribution_is_na_under_assertion_labels_too(
+    # Verifies: REQ-d00258-E, REQ-d00282-E+N
+    def test_the_line_figure_is_unmoved_by_the_assertion_label_flag(
         self, code_tested_no_attribution_project
     ):
-        """The detail flag changes what a cell says, never how many cells there
-        are: aggregate-only coverage must not surface "0/N" in either mode."""
+        """The detail flag changes what an *Assertion*-counted cell says. A
+        line figure counts lines, has no labels to compact, and reads the same
+        in either mode."""
         from elspais.commands.trace import _get_node_data
 
         graph = _build_project_graph(code_tested_no_attribution_project, targets=None)
         node = graph.find_by_id("REQ-d00001")
-        rollup = node.get_metric("rollup_metrics")
-        assert rollup.code_tested.attributed_lines == 0
-        assert rollup.code_tested.covered_lines > 0
 
-        data = _get_node_data(node, graph, assertion_labels=True)
-        assert data["code_tested"] is None
-        assert _format_row(data, ["code_tested"]) == [ABSENT_FIGURE]
+        plain = _get_node_data(node, graph)
+        labelled = _get_node_data(node, graph, assertion_labels=True)
+        for key in ("code_tested", "code_tested_count", "code_tested_total", "code_tested_ratio"):
+            assert labelled[key] == plain[key]
+        assert labelled["code_tested_attributed"] is None
 
-    # Verifies: REQ-d00258-E
-    def test_code_tested_with_contexts_but_no_verifying_test_is_zero_of_n(
+    # Verifies: REQ-d00258-E, REQ-d00282-M+N
+    def test_a_zero_attribution_is_stated_where_contexts_were_recorded(
         self, code_tested_context_carrying_project
     ):
         """Where the tooling DID record per-test contexts, a zero attribution
-        count is a real answer and must be rendered as `0/N`.
+        count is a real answer and is stated as zero.
 
         This is the other half of REQ-d00258-E: the suppression is about what
-        the tooling provides, not about how the count came out. Rendering
-        `n/a` here would hide implementation no verifying test reaches, which
-        is exactly the fact worth surfacing."""
+        the tooling provides, not about how the count came out. Withholding it
+        here would hide implementation no verifying test reaches, which is
+        exactly the fact worth surfacing."""
         from elspais.commands.trace import _get_node_data
 
         graph = _build_project_graph(code_tested_context_carrying_project, targets=None)
@@ -1161,13 +1178,13 @@ class TestTraceFooting:
         assert rollup.code_tested.has_contexts is True
         assert rollup.code_tested.attributed_lines == 0
 
-        data = _get_node_data(node, graph)
-        assert data["code_tested"].startswith("0/")
-        assert data["code_tested"] != "n/a"
-
-        labelled = _get_node_data(node, graph, assertion_labels=True)
-        assert labelled["code_tested"].startswith("0/")
-        assert labelled["code_tested"].endswith("(0%)")
+        for labels in (False, True):
+            data = _get_node_data(node, graph, assertion_labels=labels)
+            assert data["code_tested_attributed"] == 0
+            assert _format_row(data, ["code_tested.attributed"]) == ["0"]
+            assert data["code_tested"] == figure_cell(
+                rollup.code_tested.covered_lines, rollup.code_tested.total_lines
+            )
 
     # Verifies: REQ-d00258-E
     def test_lcov_tested_empty_label_set_renders_zero_of_total(

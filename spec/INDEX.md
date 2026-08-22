@@ -196,7 +196,7 @@
 | REQ-d00279 | One Authority for Report Scope Membership                     | dev-cli.md              | 2b755b50 |
 | REQ-d00280 | Named Report Declarations                                     | dev-cli.md              | ab0a70bb |
 | REQ-d00281 | Level Vocabulary of a Reported Graph                          | dev-graph-core.md       | 4bde246d |
-| REQ-d00282 | Report Value Selection                                        | dev-cli.md              | 620f30ea |
+| REQ-d00282 | Report Value Selection                                        | dev-cli.md              | 70ab39ac |
 
 ## User Journeys
 

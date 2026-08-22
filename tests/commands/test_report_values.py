@@ -25,7 +25,7 @@ from elspais.commands import summary as summary_cmd
 from elspais.commands import trace as trace_cmd
 from elspais.graph.builder import TraceGraph
 from elspais.graph.GraphNode import GraphNode, NodeKind
-from elspais.graph.metrics import CoverageDimension, RollupMetrics
+from elspais.graph.metrics import CoverageDimension, LineCoverage, RollupMetrics
 
 # The selections the invariance is checked over: one dimension, two dimensions,
 # and one naming its identity value out of its usual place (REQ-d00282-K).
@@ -338,12 +338,17 @@ class TestOnlyReportsThatStateValuesOfferTheFlag:
         fields = {f.name for f in dataclasses.fields(getattr(args_mod, args_class))}
         assert "values" in fields
 
-    # Verifies: REQ-d00282-A
+    # Verifies: REQ-d00282-A+N
     def test_summary_offers_the_group_values_and_not_the_per_requirement_ones(self):
-        """Its rows are levels: it has a requirement count and no title."""
+        """Its rows are levels: it has a requirement count and no title.
+
+        The line figure IS offered: a level sums the lines its requirements
+        measure, so narrowing from a requirement to the group it belongs to
+        must not lose the answer (REQ-d00282-N).
+        """
         offered = set(summary_cmd.OFFERED_VALUES)
-        assert {"level", "requirements", "assertions"} <= offered
-        assert not offered & {"id", "title", "hash", "file", "code_tested", "lcov_tested"}
+        assert {"level", "requirements", "assertions", "code_tested"} <= offered
+        assert not offered & {"id", "title", "hash", "file", "lcov_tested"}
 
     # Verifies: REQ-d00282-A
     def test_trace_offers_no_value_only_a_group_could_state(self):
@@ -1135,3 +1140,284 @@ class TestADeclaredScopeCarriesItsValues:
         assert ReportScopeConfig(values=["tested"]).values == ["tested"]
         with pytest.raises(pydantic.ValidationError):
             ReportScopeConfig(columns=["tested"])
+
+
+# ---------------------------------------------------------------------------
+# REQ-d00282-N: a figure measured in lines decomposes too
+# ---------------------------------------------------------------------------
+
+
+def _lines_graph(
+    *, total: int = 20, covered: float = 16.0, attributed: float = 4.0, **bits: bool
+) -> TraceGraph:
+    """One requirement whose implementation is measured in LINES.
+
+    Sixteen of twenty is deliberately not a round proportion of the assertion
+    counts elsewhere in this file: a line figure is counted over lines, and a
+    report that leaned on the assertion count for its denominator would be
+    caught by the arithmetic rather than by inspection.
+    """
+    graph = TraceGraph()
+    node = GraphNode("REQ-p00003", NodeKind.REQUIREMENT, label="Lines")
+    node.set_field("level", "prd")
+    node.set_field("status", "Active")
+    node.set_metric(
+        "rollup_metrics",
+        RollupMetrics(
+            total_assertions=2,
+            implemented=CoverageDimension(total=2, immediate_direct_by_label={"A": 1.0}),
+            code_tested=LineCoverage(
+                total_lines=total,
+                covered_lines=covered,
+                attributed_lines=attributed,
+                has_measurement=bits.get("has_measurement", True),
+                has_contexts=bits.get("has_contexts", True),
+            ),
+        ),
+    )
+    graph._index[node.id] = node
+    graph._roots.append(node)
+    return graph
+
+
+def _lines_level(
+    *, total: int = 20, covered: float = 16.0, attributed: float = 4.0, **bits: bool
+) -> dict:
+    """The same estate as a level row, so both reports answer from one shape."""
+    row = _level_row("PRD", 1, 2)
+    row["implemented_total_covered"] = 1.0
+    row["code_tested_total"] = total
+    row["code_tested_covered"] = covered
+    row["code_tested_attributed"] = attributed
+    row["code_tested_measured"] = bits.get("has_measurement", True)
+    row["code_tested_has_contexts"] = bits.get("has_contexts", True)
+    return row
+
+
+LINE_PARTS = ("code_tested.count", "code_tested.total", "code_tested.ratio")
+
+
+class TestALineFigureDecomposesIntoItsLines:
+    # Verifies: REQ-d00282-N
+    @pytest.mark.parametrize(
+        "path,expected",
+        (
+            ("code_tested.count", 16.0),
+            ("code_tested.total", 20.0),
+            ("code_tested.ratio", 0.8),
+            ("code_tested.attributed", 4.0),
+        ),
+    )
+    def test_each_part_of_the_line_figure_is_selectable_alone(self, path, expected):
+        """The lines covered, the lines measured and their proportion, each in
+        its own right -- and the attribution as the further reading it is."""
+        assert _at(_trace_json(_lines_graph(), [path]), path) == expected
+        assert _at(_summary_json(_lines_level(), [path]), path) == expected
+
+    # Verifies: REQ-d00282-C+N
+    def test_the_bare_value_states_the_lines_covered_not_the_attribution(self):
+        """A value named for the figure states the figure.
+
+        The attribution is one reading of those lines and has its own name; a
+        bare value that silently stated it would be the naming defect
+        REQ-d00282-C exists to prevent -- and, since attribution is suppressed
+        far more often than measurement is, it read as "no line coverage" for
+        an estate with plenty.
+        """
+        graph = _lines_graph(covered=16.0, attributed=4.0)
+        figure = _at(_trace_json(graph, ["code_tested"]), "code_tested")
+        assert figure["count"] == 16.0
+        assert figure["attributed"] == 4.0
+
+        preset = trace_cmd.ReportPreset(name="p", values=["code_tested"])
+        rows = list(trace_cmd.format_csv(graph, preset, None, ["code_tested"], None))
+        body = list(csv.reader(io.StringIO("\n".join(rows))))[1]
+        # The lines covered, not the four a verifying test could be named for.
+        assert body[0].startswith("16/20")
+
+    # Verifies: REQ-d00282-N, REQ-d00069-M
+    def test_the_line_proportion_is_counted_over_lines_not_assertions(self):
+        """A line figure carries its own population. Sharing the assertion
+        count would make the proportion a ratio of two different things."""
+        row = _summary_json(_lines_level(total=20, covered=16.0), ["code_tested"])
+        assert row["code_tested"]["total"] == 20.0  # not the 2 assertions
+        assert row["code_tested"]["ratio"] == 0.8
+
+    # Verifies: REQ-d00282-E+N
+    @pytest.mark.parametrize("fmt", ("csv", "markdown"))
+    def test_a_table_states_one_cell_per_line_value(self, fmt):
+        """One named value is one value wherever it is stated: the figure is a
+        cell, each part is a cell, and neither format states more than the
+        other."""
+        values = ["code_tested", *LINE_PARTS, "code_tested.attributed"]
+        stated = _trace_stated(_lines_graph(), fmt, values)
+        assert len(stated) == len(values)
+
+
+class TestMeasuredLinesSurviveTheAttributionSuppression:
+    """REQ-d00258-E suppresses the attribution; it must take nothing with it.
+
+    This is the boundary the defect lived on, so it is checked by MOVING it:
+    one estate, rendered twice, differing only in whether the tooling recorded
+    per-test contexts.
+    """
+
+    # Verifies: REQ-d00258-E, REQ-d00282-M+N
+    def test_without_contexts_the_lines_are_stated_and_only_attribution_is_absent(self):
+        row = _trace_json(_lines_graph(has_contexts=False, attributed=0.0), ["code_tested"])
+        assert row["code_tested"]["count"] == 16.0
+        assert row["code_tested"]["total"] == 20.0
+        assert row["code_tested"]["ratio"] == 0.8
+        assert row["code_tested"]["attributed"] is None
+
+    # Verifies: REQ-d00258-E, REQ-d00282-M+N
+    def test_flipping_the_context_bit_moves_the_attribution_and_nothing_else(self):
+        """The falsifiable half: with contexts a zero attribution is STATED as
+        zero, without them it is absent, and the three line values are byte
+        identical across the two.
+
+        A report that suppressed the figure along with the attribution would
+        differ in all four; a report that never suppressed anything would
+        differ in none.
+        """
+        values = ["code_tested", *LINE_PARTS, "code_tested.attributed"]
+        with_ctx = _trace_json(_lines_graph(has_contexts=True, attributed=0.0), values)
+        without = _trace_json(_lines_graph(has_contexts=False, attributed=0.0), values)
+
+        assert _at(with_ctx, "code_tested.attributed") == 0.0
+        assert _at(without, "code_tested.attributed") is None
+        for path in LINE_PARTS:
+            assert _at(with_ctx, path) == _at(without, path)
+
+    # Verifies: REQ-d00258-E, REQ-d00282-M+N
+    def test_summary_suppresses_the_attribution_on_the_same_terms(self):
+        values = ["code_tested", *LINE_PARTS, "code_tested.attributed"]
+        with_ctx = _summary_json(_lines_level(has_contexts=True, attributed=0.0), values)
+        without = _summary_json(_lines_level(has_contexts=False, attributed=0.0), values)
+
+        assert _at(with_ctx, "code_tested.attributed") == 0.0
+        assert _at(without, "code_tested.attributed") is None
+        for path in LINE_PARTS:
+            assert _at(with_ctx, path) == _at(without, path)
+
+
+class TestNoMeasurementIsAbsentNotZero:
+    """A run that never happened and a run that reached nothing are different
+    facts, and the line total cannot tell them apart on its own: it is derived
+    from the `Implements:` lines, so it stands whether or not anything ran.
+    """
+
+    # Verifies: REQ-d00282-M+N, REQ-d00254-B
+    @pytest.mark.parametrize("path", ("code_tested", *LINE_PARTS, "code_tested.attributed"))
+    def test_an_unmeasured_estate_states_no_line_value_at_all(self, path):
+        graph = _lines_graph(has_measurement=False, has_contexts=False, covered=0.0, attributed=0.0)
+        assert _at(_trace_json(graph, [path]), path) is None
+        level = _lines_level(has_measurement=False, has_contexts=False, covered=0.0, attributed=0.0)
+        assert _at(_summary_json(level, [path]), path) is None
+
+    # Verifies: REQ-d00282-M+N
+    def test_a_measured_estate_reaching_no_line_states_a_real_zero(self):
+        """The opposite polarity, and the reason the bit is read rather than
+        the count: a run that reached nothing is a finding, not an absence."""
+        graph = _lines_graph(has_measurement=True, has_contexts=True, covered=0.0, attributed=0.0)
+        figure = _at(_trace_json(graph, ["code_tested"]), "code_tested")
+        assert figure["count"] == 0.0
+        assert figure["total"] == 20.0
+        assert figure["ratio"] == 0.0
+
+    # Verifies: REQ-d00282-M+N
+    @pytest.mark.parametrize("fmt", ("csv", "markdown"))
+    def test_a_table_marks_an_unstated_line_value_rather_than_printing_zero(self, fmt):
+        graph = _lines_graph(has_measurement=False, has_contexts=False, covered=0.0, attributed=0.0)
+        preset = trace_cmd.ReportPreset(name="p", values=["code_tested"])
+        formatter = {"csv": trace_cmd.format_csv, "markdown": trace_cmd.format_markdown}[fmt]
+        out = "\n".join(formatter(graph, preset, None, ["code_tested", *LINE_PARTS], None))
+        assert "0/20" not in out
+        assert trace_cmd.ABSENT_FIGURE in out
+
+
+class TestTraceAndSummaryAnswerTheLineQuestionAlike:
+    # Verifies: REQ-d00282-N, REQ-d00258-C
+    def test_both_reports_offer_the_line_figure_and_its_parts(self):
+        wanted = {"code_tested", *LINE_PARTS, "code_tested.attributed"}
+        assert wanted <= set(trace_cmd.OFFERED_VALUES)
+        assert wanted <= set(summary_cmd.OFFERED_VALUES)
+
+    # Verifies: REQ-d00282-D+N
+    def test_one_estate_states_one_line_figure_through_either_report(self):
+        """The same lines, asked of a requirement and of the group holding it,
+        arrive as the same numbers under the same path."""
+        values = ["code_tested", *LINE_PARTS, "code_tested.attributed"]
+        from_trace = _at(_trace_json(_lines_graph(), values), "code_tested")
+        from_summary = _at(_summary_json(_lines_level(), values), "code_tested")
+        assert from_trace == from_summary
+
+    # Verifies: REQ-d00282-C+J
+    def test_the_line_values_are_headed_in_the_words_of_lines(self):
+        """A key is one grammar and a display word is another: `.count` is the
+        credit of whatever figure it sits beneath, and beneath a line figure
+        the credit is a line."""
+        from elspais.graph.values import header_for
+
+        assert header_for("code_tested.count") == "Code Tested (lines covered)"
+        assert header_for("code_tested.total") == "Code Tested (lines measured)"
+        assert header_for("code_tested.attributed") == "Code Tested (lines attributed)"
+        # The *Assertion*-counted figures keep their own words.
+        assert header_for("implemented.count") == "Implemented (credited)"
+
+
+class TestLcovTestedIsCountedInAssertions:
+    """REQ-d00254-B credits *Assertions* from line evidence, so `lcov_tested`
+    is a coverage dimension whose EVIDENCE is lines -- not a line figure. It
+    decomposes over assertions and REQ-d00282-N does not reach it.
+    """
+
+    # Verifies: REQ-d00254-B, REQ-d00282-B
+    def test_lcov_tested_decomposes_over_assertions(self):
+        from elspais.graph.values import LINE_DIMENSIONS
+
+        assert "lcov_tested" not in LINE_DIMENSIONS
+        graph = _lines_graph()
+        rollup = graph.find_by_id("REQ-p00003").get_metric("rollup_metrics")
+        rollup.lcov_tested = CoverageDimension(total=2, immediate_direct_by_label={"A": 1.0})
+        figure = _at(_trace_json(graph, ["lcov_tested"]), "lcov_tested")
+        assert figure == {"count": 1.0, "total": 2.0, "ratio": 0.5}
+
+    # Verifies: REQ-d00254-B, REQ-d00282-F
+    def test_lcov_tested_offers_no_line_reading(self):
+        """It counts no lines, so it has no attribution to name and asking for
+        one is refused like any other name the report does not offer."""
+        assert "lcov_tested.attributed" not in set(trace_cmd.OFFERED_VALUES)
+
+
+class TestALineFigureSurvivesAnAssertionLessGroup:
+    """A whole-requirement `Implements:` attributes code to a requirement that
+    confers no *Assertion*, so a level can hold lines and no assertions. The
+    two figures are counted over different populations, and the absence of one
+    is not the absence of the other.
+    """
+
+    # Verifies: REQ-d00282-E+M+N
+    @pytest.mark.parametrize("fmt", ("text", "csv", "markdown", "json"))
+    def test_every_format_states_the_lines_of_a_group_with_no_assertions(self, fmt):
+        row = _lines_level()
+        row["total_assertions"] = 0
+        payload = {
+            "levels": [row],
+            "excluded": {},
+            "integrations": [],
+            "values": ["level", "code_tested"],
+        }
+        out = summary_cmd._render(dict(payload), fmt, None)
+        if fmt == "json":
+            assert json.loads(out)["levels"][0]["code_tested"]["count"] == 16.0
+        else:
+            assert "16/20" in out
+
+    # Verifies: REQ-d00282-M
+    def test_the_assertion_figures_of_that_group_are_still_absent(self):
+        row = _lines_level()
+        row["total_assertions"] = 0
+        stated = _summary_json(row, ["implemented", "code_tested"])
+        assert stated["implemented"] is None
+        assert stated["code_tested"]["count"] == 16.0

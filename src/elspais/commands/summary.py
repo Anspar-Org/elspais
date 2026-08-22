@@ -12,8 +12,11 @@ invocation and carried to a serving process so a daemon-answered report states
 the same values a locally computed one does. Every coverage dimension of
 REQ-d00277 is offered here -- Implemented, Tested, Passing, UAT Covered and UAT
 Passed -- each as its per-*Assertion* total and each of the four measures behind
-it (REQ-d00069-L). The line dimensions of REQ-d00254-B are deliberately absent:
-they are measured in lines, and a level has no line figure.
+it (REQ-d00069-L). The line figure of REQ-d00254-B is offered too, summed over
+the same requirements under the same status gate, so a reader asking `trace` and
+`summary` the same question about line coverage is answered the same way
+(REQ-d00282-N). It is measured in LINES and stays in its own denominator: a
+level's assertion count is not what a line figure is taken over.
 """
 
 from __future__ import annotations
@@ -37,7 +40,9 @@ from elspais.graph.aggregation import (
 from elspais.graph.metrics import fmt_assertion_count
 from elspais.graph.values import (
     COUNT_PARTS,
+    LINE_DIMENSIONS,
     MEASURE_KEY_SEPARATOR,
+    PART_ATTRIBUTED,
     VALUE_SPECS,
     figure_cell,
     header_for,
@@ -81,16 +86,20 @@ DEFAULT_VALUES: tuple[str, ...] = _default_values()
 #       scalar part added there is offered here without this module being
 #       edited.
 # def:  the default set, and beneath each figure in it the three scalars it
-#       decomposes into plus the counts-only parts of the Tested breakdown.
-#       The line dimensions of REQ-d00254-B stay out: they are measured in
-#       lines, and a level has no line figure. The provenance bit of
-#       REQ-d00254-I stays out too: it is recorded per requirement, and an
-#       `or` over a level would answer a different question under the same
-#       name. This report discloses carried results for the report as a whole
-#       instead, in its carried/total result-target counts.
+#       decomposes into plus the counts-only parts of the Tested breakdown,
+#       then the line figure of REQ-d00254-B with its own three scalars and its
+#       attribution reading. That figure is offered because a report and its
+#       neighbour must answer one question one way: `trace` states it per
+#       requirement, so a reader who narrows to a level must not lose it
+#       (REQ-d00282-N). The provenance bit of REQ-d00254-I stays out: it is
+#       recorded per requirement, and an `or` over a level would answer a
+#       different question under the same name -- this report discloses carried
+#       results for the report as a whole instead, in its carried/total
+#       result-target counts. ``lcov_tested`` stays out because nothing sums it
+#       per level; it is offered by `trace` alone until something does.
 def _offered_values() -> tuple[str, ...]:
     keys: list[str] = ["level", "requirements", "assertions"]
-    for dimension in COVERAGE_DIMENSIONS:
+    for dimension in (*COVERAGE_DIMENSIONS, *sorted(LINE_DIMENSIONS)):
         keys.extend(
             k for k, spec in VALUE_SPECS.items() if spec.dimension == dimension and not spec.is_flag
         )
@@ -117,6 +126,33 @@ _PAYLOAD_PREFIX: dict[str, str] = {
 }
 
 
+# Implements: REQ-d00254-B, REQ-d00258-E, REQ-d00282-M+N
+def _lines_measured(level_row: dict) -> bool:
+    """Whether a coverage run measured this level's implementation lines.
+
+    Both halves are load-bearing. A level's line total is derived from the
+    `Implements:` lines themselves, so it stands for a group nobody ran; the
+    measurement bit is recorded at ingestion and is what says a run happened.
+    Either failing means there is no line figure, and a figure of zero would
+    say the code was measured and never reached.
+    """
+    return bool(level_row.get("code_tested_measured")) and bool(level_row.get("code_tested_total"))
+
+
+# Implements: REQ-d00254-B, REQ-d00282-N
+def _population(level_row: dict, key: str) -> float:
+    """What one value's figure was counted OVER.
+
+    An assertion-counted figure is taken over the group's assertions; a line
+    figure over the lines a coverage run measured. Answered here rather than at
+    each renderer, because a line figure rendered over an assertion count is a
+    proportion of two different populations.
+    """
+    if VALUE_SPECS[key].dimension in LINE_DIMENSIONS:
+        return level_row.get("code_tested_total") or 0
+    return level_row.get("total_assertions") or 0
+
+
 # Implements: REQ-d00282-M
 def _figure(level_row: dict, key: str) -> float | None:
     """The figure one level states in one value, or None where it states none.
@@ -129,6 +165,12 @@ def _figure(level_row: dict, key: str) -> float | None:
     spec = VALUE_SPECS[key]
     if not spec.states_a_figure:
         return None
+    # Implements: REQ-d00254-B, REQ-d00282-N
+    # The line figure states the lines COVERED, which is what it is named for
+    # (REQ-d00282-C). The attribution is a reading of its own, reached by its
+    # own name and suppressed on its own terms.
+    if spec.dimension in LINE_DIMENSIONS:
+        return level_row.get("code_tested_covered") if _lines_measured(level_row) else None
     if not level_row.get("total_assertions"):
         return None
     prefix = _PAYLOAD_PREFIX[spec.dimension]
@@ -146,6 +188,22 @@ def _scalar(level_row: dict, key: str) -> float | None:
     able to make the three disagree by reading one and re-deriving another.
     """
     spec = VALUE_SPECS[key]
+    if spec.dimension in LINE_DIMENSIONS:
+        if not _lines_measured(level_row):
+            return None
+        # Implements: REQ-d00258-E, REQ-d00282-N
+        # Absent where the tooling recorded no per-test contexts, and absent
+        # ALONE: the lines covered and the lines measured stand, because they
+        # were measured.
+        if spec.part == PART_ATTRIBUTED:
+            if not level_row.get("code_tested_has_contexts"):
+                return None
+            return float(level_row.get("code_tested_attributed") or 0.0)
+        return scalar_value(
+            level_row.get("code_tested_covered") or 0.0,
+            level_row["code_tested_total"],
+            spec.part,
+        )
     if not level_row.get("total_assertions"):
         return None
     if spec.part in COUNT_PARTS:
@@ -376,7 +434,7 @@ def _cell(level_row: dict, key: str, carry: str = "") -> str:
     figure = _figure(level_row, key)
     if figure is None:
         return ABSENT_FIGURE
-    cell = figure_cell(figure, level_row["total_assertions"], decimals=1)
+    cell = figure_cell(figure, _population(level_row, key), decimals=1)
     if spec.measure:
         return cell
     if spec.dimension == "verified":
@@ -482,11 +540,20 @@ def _level_heading(lv: dict, keys: tuple[str, ...]) -> str:
 def _level_lines(lv: dict, keys: tuple[str, ...], config: dict | None, carry: str) -> list[str]:
     """One level's stated figures, as text, in the order they were named.
 
-    A group conferring no *Assertion* states no coverage figure at all, and says
-    so once rather than printing a row of zeros (REQ-d00282-M).
+    A group conferring no *Assertion* is owed no assertion coverage, and says so
+    once rather than printing a row of zeros (REQ-d00282-M).
     """
+    # Implements: REQ-d00282-E+M+N
+    # A group conferring no *Assertion* is owed no assertion coverage and says
+    # so once. It may still have LINES -- a whole-requirement `Implements:`
+    # citation attributes code to a requirement with no assertions of its own
+    # -- and a line figure the structured format states is a line figure this
+    # one states too, or the values would depend on the format.
     total_assertions = lv["total_assertions"]
-    if not total_assertions:
+    states_lines = _lines_measured(lv) and any(
+        VALUE_SPECS[k].dimension in LINE_DIMENSIONS for k in keys
+    )
+    if not total_assertions and not states_lines:
         return ["    (no assertions in this group; no coverage figure is stated)"]
 
     width = max(
@@ -778,12 +845,23 @@ def _render_json(data: dict) -> str:
 # real group reports are real answers and are untouched -- nothing tested and
 # nothing failing is a finding, not an absence.
 def _absent_figures_as_null(lv: dict) -> dict:
-    if lv.get("total_assertions"):
+    fields: set[str] = set()
+    if not lv.get("total_assertions"):
+        fields |= {"tested_passed", "tested_failed", "tested_awaiting"}
+        for prefix in _PAYLOAD_PREFIX.values():
+            fields.add(f"{prefix}_total_covered")
+            fields.update(f"{prefix}_{measure}" for measure in MEASURES)
+    # Implements: REQ-d00254-B, REQ-d00258-E, REQ-d00282-M+N
+    # The same distinction for the figure measured in lines, which reaches it
+    # by two routes: no run measured this group at all, and a run that recorded
+    # no per-test contexts. The first takes the whole figure; the second takes
+    # the attribution alone, because the lines covered WERE measured.
+    if not _lines_measured(lv):
+        fields |= {"code_tested_covered", "code_tested_total", "code_tested_attributed"}
+    elif not lv.get("code_tested_has_contexts"):
+        fields.add("code_tested_attributed")
+    if not fields:
         return lv
-    fields = {"tested_passed", "tested_failed", "tested_awaiting"}
-    for prefix in _PAYLOAD_PREFIX.values():
-        fields.add(f"{prefix}_total_covered")
-        fields.update(f"{prefix}_{measure}" for measure in MEASURES)
     return {k: (None if k in fields else v) for k, v in lv.items()}
 
 

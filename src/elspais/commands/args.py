@@ -244,11 +244,14 @@ class TraceArgs(ScopeOptions):
     id, title, level, status, implements, hash, file, journeys; the coverage
     dimensions implemented, tested, verified, uat_coverage, uat_verified, each
     also selectable per measure (e.g. tested.immediate_direct); and the
-    line-coverage values code_tested and lcov_tested. Every coverage figure
-    also offers the scalars behind it -- .count, .total and .ratio, as numbers
-    (e.g. implemented.ratio, tested.immediate_direct.count) -- plus the
-    counts-only tested.passed, tested.failed and tested.awaiting, and the
-    provenance bit verified.carried."""
+    lcov_tested dimension. Every coverage figure also offers the scalars
+    behind it -- .count, .total and .ratio, as numbers (e.g.
+    implemented.ratio, tested.immediate_direct.count) -- plus the counts-only
+    tested.passed, tested.failed and tested.awaiting, and the provenance bit
+    verified.carried. code_tested is measured in LINES: code_tested.count is
+    the lines covered, .total the lines measured, .ratio their proportion,
+    and .attributed the lines a verifying test can be named for (absent where
+    the coverage data carries no per-test contexts)."""
 
     preset: Literal["minimal", "standard", "full"] | None = None
     """Named default value set."""
@@ -385,9 +388,9 @@ class SummaryArgs(ScopeOptions):
 
     # Implements: REQ-d00282-A
     # The values this report offers are the ones a GROUP of requirements has:
-    # level, the two counts describing the group, and each coverage dimension
-    # with the four measures behind it. Per-requirement values and the
-    # line-coverage ones are not among them -- a level has no line figure.
+    # level, the two counts describing the group, each coverage dimension with
+    # the four measures behind it, and the line figure summed over the group.
+    # Per-requirement values are not among them.
     values: str | None = None
     """State these values, in this order (comma-separated value keys).
     Keys are stable names, never the words a project displays them under:
@@ -396,7 +399,10 @@ class SummaryArgs(ScopeOptions):
     measure (e.g. tested.immediate_direct), and every figure also by the
     scalars behind it: .count, .total and .ratio, as numbers. The three counts
     of the Tested breakdown are tested.passed, tested.failed and
-    tested.awaiting."""
+    tested.awaiting. code_tested is the group's line coverage, measured in
+    LINES: .count the lines covered, .total the lines measured, .ratio their
+    proportion, and .attributed the lines a verifying test can be named for
+    (absent where the coverage data carries no per-test contexts)."""
 
     targets: list[str] | None = None
     """Mark only these [[scanning.test.targets]] as freshly-run; render the rest

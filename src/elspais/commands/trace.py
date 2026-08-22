@@ -42,6 +42,7 @@ from elspais.graph.values import (
     COUNT_PARTS,
     FLAG_CARRIED,
     MEASURE_KEY_SEPARATOR,
+    PART_ATTRIBUTED,
     SCALAR_PARTS,
     VALUE_SPECS,
     UnofferedValues,
@@ -363,18 +364,32 @@ def _get_node_data(node, graph: FederatedGraph, *, assertion_labels: bool = Fals
             return ABSENT_FIGURE
         return figure_cell(num, total)
 
+    # Implements: REQ-d00254-B, REQ-d00258-E, REQ-d00282-C+M+N
+    def _lines_measured(lines: LineCoverage) -> bool:
+        """Whether a coverage run measured these lines at all.
+
+        Two conditions, and both are real. ``total_lines`` is derived from the
+        `Implements:` lines themselves, so it is nonzero for a requirement whose
+        implementation nobody ran; ``has_measurement`` is recorded at ingestion
+        and is what says a run happened. Either failing means there is no line
+        figure to state, and a figure of zero would say the code was measured
+        and never reached (REQ-d00282-M).
+        """
+        return lines.has_measurement and lines.total_lines > 0
+
     def _fmt_code_tested(lines: LineCoverage) -> str | None:
-        if lines.total_lines == 0 or not lines.has_attribution:
-            # Aggregate-only tooling (e.g. lcov/coverage.json without per-test
-            # attribution), and an estate with no coverage ingested at all,
-            # record no context naming a test, so neither can produce an
-            # attribution count -- rendering "0/N (0%)" would say no test
-            # exercises this code when nothing was ever asked (REQ-d00258-E).
-            # Where contexts ARE present the cell reads "0/N": that is a real
-            # answer, and suppressing it would hide unattributed code.
+        """The line figure itself: lines covered out of lines measured.
+
+        Named for the figure, so it states the figure (REQ-d00282-C). The
+        attribution -- how many of those lines a verifying test can be named
+        for -- is a different question with its own name and its own
+        suppression (REQ-d00258-E); it used to be what this cell showed, which
+        took the measured lines down with it whenever the tooling recorded no
+        per-test contexts.
+        """
+        if not _lines_measured(lines):
             return None
-        pct = round(lines.attributed_lines / lines.total_lines * 100)
-        return f"{fmt_assertion_count(lines.attributed_lines)}/{lines.total_lines} ({pct}%)"
+        return figure_cell(lines.covered_lines, lines.total_lines)
 
     # Implements: REQ-d00258-A, REQ-d00258-J
     # (value_key, rollup_attr). All five dimensions headline on the
@@ -520,6 +535,21 @@ def _get_node_data(node, graph: FederatedGraph, *, assertion_labels: bool = Fals
 
         ct = rollup.code_tested
         data["code_tested"] = _fmt_code_tested(ct)
+        # Implements: REQ-d00282-N
+        # The lines covered, the lines measured and their proportion, each in
+        # its own right and each a NUMBER -- so a consumer reads what the cell
+        # was made from rather than cutting it back out of the sentence.
+        _store_scalars(
+            data, "code_tested", ct.covered_lines, ct.total_lines, present=ct.has_measurement
+        )
+        # Implements: REQ-d00258-E, REQ-d00282-M+N
+        # Suppressed where the tooling recorded no per-test contexts: with
+        # nothing to attribute a line to a test with, a count would answer a
+        # question never asked. Absent rather than zero, and absent ALONE --
+        # the three values above stand, because those lines were measured.
+        data[f"code_tested_{PART_ATTRIBUTED}"] = (
+            ct.attributed_lines if _lines_measured(ct) and ct.has_attribution else None
+        )
         # Implements: REQ-d00254-I
         # The whole figure discloses its provenance in the cell as well, for a
         # reader reading the table rather than selecting the bit.
@@ -528,6 +558,10 @@ def _get_node_data(node, graph: FederatedGraph, *, assertion_labels: bool = Fals
             data["verified"] = f"{data['verified']} (baseline)"
 
         lt = rollup.lcov_tested
+        # Implements: REQ-d00254-B, REQ-d00282-B
+        # An *Assertion*-counted dimension like any other, so it decomposes
+        # like one: only its EVIDENCE is lines.
+        _store_scalars(data, "lcov_tested", lt.covered, lt.total)
         if lt.total > 0:
             # Implements: REQ-d00069-N, REQ-d00258-A
             # The per-*Assertion* total, like every other dimension headline.
@@ -555,7 +589,10 @@ def _get_node_data(node, graph: FederatedGraph, *, assertion_labels: bool = Fals
         for count_part in COUNT_PARTS:
             data[f"tested_{count_part}"] = None
         data["code_tested"] = None
+        _store_scalars(data, "code_tested", 0.0, 0)
+        data[f"code_tested_{PART_ATTRIBUTED}"] = None
         data["lcov_tested"] = None
+        _store_scalars(data, "lcov_tested", 0.0, 0)
 
     return data
 

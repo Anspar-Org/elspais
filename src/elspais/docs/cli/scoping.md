@@ -198,9 +198,30 @@ They sit inside the same `tested` object as the figure they break down, so
 and `awaiting`.
 
 `.count`, `.total` and `.ratio` are offered under the five assertion-counted
-coverage dimensions. The line-coverage values (`code_tested`, `lcov_tested`)
-are measured in lines rather than assertions and carry no measures or scalars
-to select among.
+coverage dimensions and under `lcov_tested`, which credits assertions from line
+evidence and so is counted over assertions like any other dimension. None of
+them carries measures except the five: nothing conducts `lcov_tested` up a
+`Refines:` chain, so it has no conducted measure to name.
+
+`code_tested` is the one figure measured in LINES rather than assertions, and it
+decomposes the same way:
+
+```sh
+elspais trace --format json --values code_tested
+# { "id": "REQ-d00081",
+#   "code_tested": { "count": 16.0, "total": 20.0, "ratio": 0.8,
+#                    "attributed": null } }
+
+elspais summary --format csv --values level,code_tested.count,code_tested.total
+```
+
+`.count` is the lines covered, `.total` the lines measured, `.ratio` their
+proportion. `.attributed` is a further reading of the same lines — how many of
+them a verifying test can be named for — and it is stated only where the
+coverage tooling recorded per-test contexts; aggregate-only coverage states
+`null` there while the other three stand. `trace` and `summary` offer it
+identically, the second summing over the requirements of each level under the
+same status gate `checks --code` uses, so the two reconcile.
 
 A value in which a report states no figure is never written as zero. A `trace`
 table marks it `n/a`, a `summary` table `-`, and JSON states `null`. A level

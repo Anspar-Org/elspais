@@ -26,6 +26,7 @@ from elspais.graph.GraphNode import NodeKind
 from elspais.graph.metrics import (
     CoverageDimension,
     CoverageSource,
+    LineCoverage,
     RollupMetrics,
     has_integration,
     integrates_by_associate,
@@ -735,6 +736,12 @@ class LevelAggregate:
     tested_passed: int = 0
     tested_failed: int = 0
     tested_awaiting: int = 0
+    # Implements: REQ-d00254-B, REQ-d00282-N
+    # Line coverage summed over the same requirements, kept in its own field
+    # rather than beside the assertion sums: it is measured in LINES, and a
+    # figure a reader could add to an assertion count is a figure that will be
+    # added to one.
+    lines: LineAggregate = field(default_factory=lambda: LineAggregate())
 
 
 @dataclass
@@ -918,6 +925,8 @@ def aggregate_by_level(
         agg.tested_passed += part.passed
         agg.tested_failed += part.failed
         agg.tested_awaiting += part.awaiting
+        # Implements: REQ-d00254-B, REQ-d00282-N
+        _accumulate_lines(agg.lines, rollup.code_tested)
 
     return [groups[k.lower()] for k in keys]
 
@@ -1032,6 +1041,32 @@ class LineAggregate:
         return self.has_contexts
 
 
+# Implements: REQ-d00254-B, REQ-d00258-C, REQ-d00282-N
+# name: _accumulate_lines
+# use:  the ONE way a requirement's line coverage joins a running sum, so a
+#       per-level figure and the whole-estate one are the same arithmetic.
+# def:  the lines, plus the two bits recorded at ingestion OR-ed across the
+#       group -- one target measured, or one carrying contexts, means the
+#       question was asked of the group.
+#
+# A requirement with no implementation lines is not counted at all: it has no
+# line figure, and counting it would put a zero denominator into a sum whose
+# `req_count` is meant to say how many requirements the figure is about.
+def _accumulate_lines(agg: LineAggregate, lines: LineCoverage) -> None:
+    if lines.total_lines == 0:
+        return
+    agg.req_count += 1
+    agg.total_lines += lines.total_lines
+    agg.attributed_lines += lines.attributed_lines
+    agg.covered_lines += lines.covered_lines
+    if lines.covered_lines > 0:
+        agg.req_with_covered += 1
+    if lines.attributed_lines > 0:
+        agg.req_with_attribution += 1
+    agg.has_measurement = agg.has_measurement or lines.has_measurement
+    agg.has_contexts = agg.has_contexts or lines.has_contexts
+
+
 # Implements: REQ-d00254-B
 def aggregate_line_coverage(
     graph: Any,
@@ -1053,22 +1088,10 @@ def aggregate_line_coverage(
         rollup: RollupMetrics | None = node.get_metric("rollup_metrics")
         if rollup is None:
             continue
-        lines = rollup.code_tested
-        if lines.total_lines == 0:
-            continue
-        agg.req_count += 1
-        agg.total_lines += lines.total_lines
-        agg.attributed_lines += lines.attributed_lines
-        agg.covered_lines += lines.covered_lines
-        if lines.covered_lines > 0:
-            agg.req_with_covered += 1
-        if lines.attributed_lines > 0:
-            agg.req_with_attribution += 1
         # Implements: REQ-d00258-E
         # What the tooling provided is an OR across the estate: one target
         # measured, or one carrying contexts, means the question was asked.
-        agg.has_measurement = agg.has_measurement or lines.has_measurement
-        agg.has_contexts = agg.has_contexts or lines.has_contexts
+        _accumulate_lines(agg, rollup.code_tested)
     return agg
 
 
@@ -1182,6 +1205,16 @@ def collect_coverage(
                 "tested_passed": agg.tested_passed,
                 "tested_failed": agg.tested_failed,
                 "tested_awaiting": agg.tested_awaiting,
+                # Implements: REQ-d00254-B, REQ-d00282-N
+                # The line figure of this group, kept in lines and named for
+                # lines. The two ingestion bits travel with it: without them a
+                # zero says both "measured and never reached" and "never
+                # measured", which is the confusion REQ-d00258-E exists to end.
+                "code_tested_covered": agg.lines.covered_lines,
+                "code_tested_total": agg.lines.total_lines,
+                "code_tested_attributed": agg.lines.attributed_lines,
+                "code_tested_measured": agg.lines.has_measurement,
+                "code_tested_has_contexts": agg.lines.has_contexts,
                 **_measure_fields("implemented", agg.implemented),
                 **_measure_fields("tested", agg.tested),
                 **_measure_fields("passing", agg.passing),

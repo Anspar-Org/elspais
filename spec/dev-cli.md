@@ -679,6 +679,8 @@ L. A report SHALL state what each of its rows is about whatever the selection na
 
 M. A value a report does not state for a row SHALL be distinguishable from one it states as zero.
 
+N. For a figure measured in lines, a report SHALL admit selecting the lines covered, the lines measured, and their proportion, each in its own right.
+
 ### Rationale
 
 B is what the coverage vocabulary already makes possible, taken down to the scalar. A coverage figure is computed on four measures with a total taken from them (REQ-d00069-L+N), and each of those is itself a credit counted over a population -- so a reader may want the credit, the population it was counted over, their proportion, or any combination. Offering only the composite makes a reader who wants one number take three, and makes a program parse a sentence to recover what was a number before it was rendered. Naming each separately is also what keeps a proportion honest: it is derived from the other two, and a report stating all three states the same fact three ways rather than three facts. It names the dimensions of REQ-d00277 rather than coverage at large because line coverage is measured in lines and has no four measures to select among (REQ-d00254-B); a rule written over every coverage figure would oblige a surface to offer what that one cannot.
@@ -697,9 +699,11 @@ G and J are what a committed selection is worth. G bounds what the tool may do: 
 
 K and L are what make a stated selection a stated shape. A committed artifact is read by something that expects its values where it left them, so an order decided differently on two runs breaks a consumer exactly as a changed set would. L is the floor beneath every selection: a row that cannot be attributed to what it is a fact about is not a report about anything, whatever else it states.
 
+N reaches the one figure B cannot. Line coverage is measured in lines and confers no assertion credit (REQ-d00254-B), so it has none of the four measures B decomposes and was left whole -- but whole is not the same as indivisible. It is a count of lines covered out of lines measured, and a reader wanting the proportion should not have to take a rendering and read the numbers back out of it. A further reading of the same lines, how many of them a verifying test can be named for, is a different question again: it is named for that attribution rather than for the figure at large (C), and where the tooling records no test contexts it is not stated at all rather than stated as none (REQ-d00258-E). What that suppression must not do is take the lines covered with it -- they were measured, and a report that has them and says nothing has withheld an answer it holds.
+
 M is the distinction between having nothing to say and saying nothing. Not every value a report offers exists for every row -- a coverage figure has none for a group whose requirements confer none. Where those two look alike a reader reads absence as zero and concludes work is undone that was never owed, which is the same defect REQ-d00258-E keeps out of line coverage by recording whether a measurement was taken rather than letting an absent one read as none.
 
-*End* *Report Value Selection* | **Hash**: 620f30ea
+*End* *Report Value Selection* | **Hash**: 70ab39ac
 
 ---
 

@@ -73,10 +73,36 @@ COUNT_PARTS: tuple[str, ...] = ("passed", "failed", "awaiting")
 # The dimension whose figure carries the breakdown of REQ-d00258-O.
 BREAKDOWN_DIMENSION = "tested"
 
-# Measured in lines rather than assertions (REQ-d00254-B), so these decompose
-# into no credit, population and proportion and are stated whole in every
-# format.
-LINE_DIMENSIONS: frozenset[str] = frozenset({"code_tested", "lcov_tested"})
+# Implements: REQ-d00254-B, REQ-d00282-N
+# name: LINE_DIMENSIONS
+# use:  tell a figure counted in LINES from one counted in *Assertions*, so no
+#       surface adds the two or reads one under the other's denominator.
+# def:  the figures REQ-d00254-B measures in lines. ``lcov_tested`` is NOT one
+#       of them: it is a `CoverageDimension` crediting *Assertions* from line
+#       evidence, so it is counted over assertions like any other dimension and
+#       only its EVIDENCE is lines.
+#
+# A line figure has none of the four measures REQ-d00282-B decomposes -- there
+# is no citation naming an *Assertion* behind a line, and nothing conducts one
+# up a `Refines:` chain -- but it is still a count over a population, so
+# REQ-d00282-N gives it the same three scalars every figure has.
+LINE_DIMENSIONS: frozenset[str] = frozenset({"code_tested"})
+
+# Implements: REQ-d00258-E, REQ-d00282-N
+# name: PART_ATTRIBUTED
+# use:  the READING of a line figure that says how many of its lines a
+#       verifying test can be named for.
+# def:  a fourth part beneath a line figure, offered on the dimension that
+#       records per-test contexts and absent where the tooling recorded none.
+#
+# A different question from the figure itself, so it is named for the
+# attribution rather than for the figure at large (REQ-d00282-C) and carries
+# its own absence: REQ-d00258-E suppresses it where no context was recorded,
+# and that suppression must not take the lines COVERED with it -- those were
+# measured, and a report holding them and saying nothing has withheld an
+# answer it has.
+PART_ATTRIBUTED = "attributed"
+ATTRIBUTION_DIMENSION = "code_tested"
 
 # Implements: REQ-d00254-I, REQ-d00282-B
 # name: FLAG_CARRIED
@@ -107,6 +133,19 @@ _PART_WORDS: dict[str, str] = {
     "passed": "passed",
     "failed": "failed",
     "awaiting": "awaiting a result",
+}
+
+# Implements: REQ-d00282-C+N
+# The same three parts, named for what a LINE figure counts. A key is stable and
+# a display word is not (REQ-d00282-J), so the domain reads in the words while
+# the grammar a selection is written in stays one grammar: ``.count`` is the
+# credit of whatever figure it sits beneath, and beneath a line figure the
+# credit is a line.
+_LINE_PART_WORDS: dict[str, str] = {
+    PART_COUNT: "lines covered",
+    PART_TOTAL: "lines measured",
+    PART_RATIO: "proportion",
+    PART_ATTRIBUTED: "lines attributed",
 }
 
 # The decimals a proportion is ROUNDED TO when a cell renders it. The value
@@ -208,24 +247,28 @@ _IDENTITY_VALUES: tuple[ValueSpec, ...] = (
     ValueSpec(key="assertions", header="Assertions", group_only=True),
 )
 
-# Measured in lines rather than assertions (REQ-d00254-B), so these carry no
-# measures to select among -- which is why REQ-d00282-B is written over the
-# dimensions of REQ-d00277 rather than over coverage at large.
-_LINE_VALUES: tuple[ValueSpec, ...] = (
-    ValueSpec(key="code_tested", header="Code Tested", dimension="code_tested"),
-    ValueSpec(key="lcov_tested", header="LCOV Tested", dimension="lcov_tested"),
-)
-
 _DIMENSION_HEADERS: dict[str, str] = {
     "implemented": "Implemented",
     "tested": "Tested",
     "verified": "Passing",
     "uat_coverage": "UAT Covered",
     "uat_verified": "UAT Passed",
+    # Not dimensions of REQ-d00277, but figures a value is named for all the
+    # same, and their heading is derived here for the same reason: a part's
+    # heading is the figure's heading with a qualifier, and deriving it from a
+    # spec that already carries one qualifies it twice.
+    "code_tested": "Code Tested",
+    "lcov_tested": "LCOV Tested",
 }
 
 
-def _qualified_header(head: str, measure: str, part: str, flag: str = "") -> str:
+def _qualified_header(
+    head: str,
+    measure: str,
+    part: str,
+    flag: str = "",
+    words: Mapping[str, str] | None = None,
+) -> str:
     """The words one value is displayed under, absent a project override.
 
     REQ-d00282-C: a value taken on a measure names the dimension AND the
@@ -237,13 +280,15 @@ def _qualified_header(head: str, measure: str, part: str, flag: str = "") -> str
     """
     qualifiers = [MEASURE_WORDS[measure]] if measure else []
     if part:
-        qualifiers.append(_PART_WORDS[part])
+        qualifiers.append((words or _PART_WORDS)[part])
     if flag:
         qualifiers.append(_FLAG_WORDS[flag])
     return f"{head} ({', '.join(qualifiers)})" if qualifiers else head
 
 
-def _figure_specs(dim: str, head: str, measure: str) -> list[ValueSpec]:
+def _figure_specs(
+    dim: str, head: str, measure: str, words: Mapping[str, str] | None = None
+) -> list[ValueSpec]:
     """One figure of one dimension: its composite, then its scalar parts.
 
     The composite comes first because it is what an unqualified name has always
@@ -254,7 +299,7 @@ def _figure_specs(dim: str, head: str, measure: str) -> list[ValueSpec]:
     specs = [
         ValueSpec(
             key=base,
-            header=_qualified_header(head, measure, ""),
+            header=_qualified_header(head, measure, "", words=words),
             dimension=dim,
             measure=measure,
         )
@@ -262,7 +307,7 @@ def _figure_specs(dim: str, head: str, measure: str) -> list[ValueSpec]:
     specs += [
         ValueSpec(
             key=f"{base}{MEASURE_KEY_SEPARATOR}{part}",
-            header=_qualified_header(head, measure, part),
+            header=_qualified_header(head, measure, part, words=words),
             dimension=dim,
             measure=measure,
             part=part,
@@ -307,7 +352,31 @@ def _build_specs() -> dict[str, ValueSpec]:
         for measure in MEASURES:
             for spec in _figure_specs(dim, head, measure):
                 specs[spec.key] = spec
-    for spec in _LINE_VALUES:
+    # Implements: REQ-d00254-B, REQ-d00282-N
+    # A line figure carries none of the four measures -- there is no citation
+    # naming an *Assertion* behind a line -- but it is still a count over a
+    # population, so it takes the same three scalars every figure takes. The
+    # attribution is a FOURTH reading of the same lines rather than a part of
+    # the figure, so it is offered beside them and carries its own absence
+    # (REQ-d00258-E).
+    for dim in sorted(LINE_DIMENSIONS):
+        head = _DIMENSION_HEADERS[dim]
+        for spec in _figure_specs(dim, head, "", words=_LINE_PART_WORDS):
+            specs[spec.key] = spec
+        if dim == ATTRIBUTION_DIMENSION:
+            key = f"{dim}{MEASURE_KEY_SEPARATOR}{PART_ATTRIBUTED}"
+            specs[key] = ValueSpec(
+                key=key,
+                header=_qualified_header(head, "", PART_ATTRIBUTED, words=_LINE_PART_WORDS),
+                dimension=dim,
+                part=PART_ATTRIBUTED,
+            )
+    # Implements: REQ-d00254-B, REQ-d00282-B
+    # ``lcov_tested`` credits *Assertions* from line evidence, so it is counted
+    # over assertions and decomposes like any other figure. It is not one of
+    # REQ-d00277's dimensions and nothing conducts it, so it carries no measures
+    # -- the whole figure and the three scalars behind it, and no more.
+    for spec in _figure_specs("lcov_tested", _DIMENSION_HEADERS["lcov_tested"], ""):
         specs[spec.key] = spec
     return specs
 
@@ -501,7 +570,7 @@ def structured_row(
     for key in keys:
         spec = VALUE_SPECS.get(key)
         path = (path_of or {}).get(key, key)
-        if spec is None or not spec.states_a_figure or spec.dimension in LINE_DIMENSIONS:
+        if spec is None or not spec.states_a_figure:
             items.append((path, plain_value(key)))
         elif spec.is_scalar or spec.is_flag:
             items.append((path, part_value(key)))
@@ -519,6 +588,14 @@ def structured_row(
                 candidates = COUNT_PARTS if spec.dimension == BREAKDOWN_DIMENSION else ()
                 if spec.dimension == CARRIED_DIMENSION:
                     candidates = (*candidates, FLAG_CARRIED)
+                # Implements: REQ-d00258-E, REQ-d00282-N
+                # The attribution reading rides inside the line figure's object
+                # for the same reason: a reader naming the figure is stated
+                # what naming its parts would have stated. Its suppression is
+                # its own -- the object carries null there while the lines
+                # covered stand.
+                if spec.dimension == ATTRIBUTION_DIMENSION:
+                    candidates = (*candidates, PART_ATTRIBUTED)
                 extra = tuple(
                     part for part in candidates if f"{key}{MEASURE_KEY_SEPARATOR}{part}" in offered
                 )
@@ -633,4 +710,5 @@ def header_for(key: str, config: Mapping[str, Any] | None = None) -> str:
 
     words = get_status_words(config or {})
     word = words.get(spec.dimension) or _DIMENSION_HEADERS.get(spec.dimension, spec.header)
-    return _qualified_header(word, spec.measure, spec.part, spec.flag)
+    part_words = _LINE_PART_WORDS if spec.dimension in LINE_DIMENSIONS else _PART_WORDS
+    return _qualified_header(word, spec.measure, spec.part, spec.flag, words=part_words)

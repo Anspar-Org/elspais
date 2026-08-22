@@ -144,7 +144,9 @@ rename a display label and every committed selection still means what it meant:
               where `<figure>` is a dimension or one of its measures
   tested only `tested.passed` `tested.failed` `tested.awaiting` (counts only)
   provenance  `verified.carried` (`trace` only)
-  line cover  `code_tested` `lcov_tested` (measured in lines; no measures)
+  lcov credit `lcov_tested` (counts assertions from line evidence; no measures)
+  line cover  `code_tested` and `.count` `.total` `.ratio` `.attributed`
+              (measured in LINES; no measures)
 
 A dimension key states that dimension's per-*Assertion* total; a measure key
 states one of the four measures behind it, and its heading names both the
@@ -182,6 +184,25 @@ same three counts the breakdown states in prose, individually selectable -- ask
 for the failures and you get the failures. They sit in the Tested object beside
 its three scalars, and they are counts and nothing else, so no `.ratio` is
 offered beneath them.
+
+`code_tested` is the one figure measured in LINES rather than assertions, and
+it decomposes the same way -- `.count` is the lines covered, `.total` the lines
+measured, `.ratio` their proportion:
+
+  $ elspais trace --format json --values code_tested
+
+  { "id": "REQ-d00081", "code_tested": { "count": 16.0, "total": 20.0, "ratio": 0.8, "attributed": null } }
+
+`.attributed` is a further reading of the same lines: how many of them a
+verifying test can be named for. It is a different question from the figure, so
+it has its own name and its own absence -- coverage tooling that records no
+per-test contexts can attribute nothing, and the value is `null` rather than
+`0`. The lines covered and measured stand regardless, because those were
+measured. `summary` offers `code_tested` too, summed over each level's
+requirements under the same status gate `checks --code` uses, so the two
+reconcile. `lcov_tested` is not a line figure: it credits assertions from line
+evidence, so it is counted over assertions and decomposes into the same three
+scalars every assertion-counted figure does.
 
 `verified.carried` is the provenance behind the Passing figure: whether the
 verdict was carried from a baseline rather than produced by the run being
