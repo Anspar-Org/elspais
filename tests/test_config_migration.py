@@ -8,11 +8,19 @@ class TestMigrateV3ToV4:
     """Validates REQ-d00212-N: config migration from v3 to v4 for terms severity."""
 
     # Verifies: REQ-d00212-N
-    def test_REQ_d00212_N_current_config_version_is_4(self):
-        """CURRENT_CONFIG_VERSION should be 4 after adding this migration."""
-        from elspais.config import CURRENT_CONFIG_VERSION
+    def test_REQ_d00212_N_the_migration_chain_reaches_the_current_version(self):
+        """The v3 migration is one step of a chain, and the chain must have no
+        hole in it: `load_config` runs the steps it finds between the version a
+        file declares and the current one, so a missing step leaves the config
+        half-migrated and says nothing. The constant moves as the schema does;
+        what must not move is that every step up to it exists.
+        """
+        from elspais.config import CURRENT_CONFIG_VERSION, MIGRATIONS
 
-        assert CURRENT_CONFIG_VERSION == 4
+        first = min(MIGRATIONS)
+        missing = [v for v in range(first, CURRENT_CONFIG_VERSION) if v not in MIGRATIONS]
+        assert missing == [], f"no migration out of config version(s) {missing}"
+        assert first == 3, "a version earlier than 3 gained a migration; extend these tests"
 
     # Verifies: REQ-d00212-N
     def test_REQ_d00212_N_flat_severity_fields_migrated_to_nested(self):
@@ -116,7 +124,7 @@ class TestLoadConfigV3File:
         guard, so the flat fields survived and Pydantic `extra="forbid"` rejected the
         config. Loading should now succeed and expose the migrated severity values.
         """
-        from elspais.config import load_config
+        from elspais.config import CURRENT_CONFIG_VERSION, load_config
 
         config_path = tmp_path / ".elspais.toml"
         config_path.write_text(
@@ -136,7 +144,9 @@ class TestLoadConfigV3File:
 
         result = load_config(config_path)
 
-        assert result["version"] == 4
+        # A v3 file is carried through every later step, not just the first:
+        # loading leaves it at the current version.
+        assert result["version"] == CURRENT_CONFIG_VERSION
         terms = result["terms"]
         assert terms["severity"]["duplicate"] == "error"
         assert terms["severity"]["undefined"] == "warning"

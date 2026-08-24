@@ -90,6 +90,21 @@ A scope that matches nothing is an answer, not an empty estate:
 Scope: no requirement matches this scope; the estate holds 47
 ```
 
+## Where the disclosure appears
+
+Inside the report, in whatever format it is rendered in — never only on the
+terminal. A report redirected to a file with `--output` carries its own scope,
+so the artifact still answers the question months after the terminal that
+produced it was closed:
+
+- text and markdown — the lines beneath the title, in italics
+- csv — leading `# Scope: ...` comment rows, one field each, ahead of the header
+- html — a subtitle beneath the heading
+- json — a `scope` array beside the report's own content
+
+A report narrowed by nothing declares nothing, and its JSON stays the bare array
+of requirements it has always been.
+
 ## What scoping does not change
 
 Scoping selects what a report emits. It does not change the coverage figures

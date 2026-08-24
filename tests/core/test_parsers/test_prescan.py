@@ -14,6 +14,8 @@ text route rather than its presence.  Naming an assertion they do not
 establish would report coverage the estate has not earned.
 """
 
+import pytest
+
 from elspais.graph.parsers.prescan import (
     ast_prescan,
     build_line_context,
@@ -299,3 +301,134 @@ class TestPrescanFuncEndLine:
         assert len(line_context[1]) == 4
         assert line_context[1][0] == "test_foo"
         assert line_context[1][3] == 3  # func_end_line of test_foo
+
+
+# ---------------------------------------------------------------------------
+# Forward binding, shared by every built-in route
+#
+# A comment carrying a citation describes the declaration below it.  The three
+# built-in routes -- ast_prescan (Python), text_prescan (the fallback for every
+# other language) and build_line_context (ordinary code) -- answer that the
+# same way: walk down from the unowned comment while only further comments and
+# blank lines are met, and bind at the first declaration reached.  The length
+# of the comment block is not a bound on the search; the first line that is
+# neither a comment nor a declaration is.
+#
+# These name REQ-d00254-K.  Binding a citation to the test it was written above
+# is how that test's evidence reaches that test's identity and extent, and
+# binding one to a declaration it was not written above would attribute
+# evidence to a test it says nothing about.
+# ---------------------------------------------------------------------------
+
+
+def _numbered(source: str) -> list[tuple[int, str]]:
+    return [(i + 1, text) for i, text in enumerate(source.rstrip("\n").split("\n"))]
+
+
+def _via_ast(source: str):
+    line_context, _funcs, _first = ast_prescan(source, _numbered(source))
+    return line_context
+
+
+def _via_text(source: str):
+    line_context, _funcs, _first = text_prescan(_numbered(source))
+    return line_context
+
+
+def _via_line_context(source: str):
+    return build_line_context(_numbered(source), "python")
+
+
+ROUTES = [
+    pytest.param(_via_ast, id="ast_prescan"),
+    pytest.param(_via_text, id="text_prescan"),
+    pytest.param(_via_line_context, id="build_line_context"),
+]
+
+
+# A citation six lines above its declaration, and a second citation two lines
+# above it.  Both name the same test and both must bind to it.
+#   1: # Verifies: REQ-p00001-A   <- reachable by no five-line window
+#   6: # Verifies: REQ-p00001-B
+#   7: def test_alpha():
+LONG_PROSE = """\
+# Verifies: REQ-p00001-A
+# The test below is described at length because the shape of a comment
+# block says nothing about what it describes: a citation may sit above
+# six lines of prose or above one, and it describes the same
+# declaration either way.
+# Verifies: REQ-p00001-B
+def test_alpha():
+    assert True
+"""
+
+# A citation written one line above its declaration -- the ordinary shape, kept
+# beside the long one so the pair distinguishes "no window" from "a window".
+SHORT_PROSE = """\
+# Verifies: REQ-p00001-A
+def test_alpha():
+    assert True
+"""
+
+# A file header, a blank line, and then an import.  The import is neither a
+# comment nor a declaration, so it ends the search: the header describes the
+# file and must not claim the first test in it.
+#   1: # Copyright 2026 Example.
+#   2: # Verifies: REQ-p00001-A
+#   4: import pytest
+#   7: def test_alpha():
+HEADER_THEN_IMPORT = """\
+# Copyright 2026 Example.
+# Verifies: REQ-p00001-A
+
+import pytest
+
+
+def test_alpha():
+    assert True
+"""
+
+# The same header with the import removed: only blank lines stand between it
+# and the declaration, so it does bind.  This is what makes the case above a
+# statement about the import rather than about the distance.
+HEADER_NO_IMPORT = """\
+# Copyright 2026 Example.
+# Verifies: REQ-p00001-A
+
+
+def test_alpha():
+    assert True
+"""
+
+
+@pytest.mark.parametrize("route", ROUTES)
+@pytest.mark.parametrize(
+    ("source", "comment_line", "declaration_line"),
+    [
+        pytest.param(LONG_PROSE, 1, 7, id="citation-above-five-prose-lines"),
+        pytest.param(LONG_PROSE, 6, 7, id="second-citation-above-same-test"),
+        pytest.param(SHORT_PROSE, 1, 2, id="citation-directly-above"),
+        pytest.param(HEADER_NO_IMPORT, 2, 5, id="header-reaching-declaration-over-blanks"),
+    ],
+)
+def test_REQ_d00254_K_comment_binds_to_first_declaration_below(
+    route, source, comment_line, declaration_line
+):
+    """A citation is attributed to the declaration below it, at any distance."""
+    line_context = route(source)
+    func_name, _class_name, func_line, _end = line_context[comment_line]
+    assert func_name == "test_alpha"
+    assert func_line == declaration_line
+
+
+@pytest.mark.parametrize("route", ROUTES)
+@pytest.mark.parametrize(
+    "comment_line",
+    [pytest.param(1, id="header-first-line"), pytest.param(2, id="header-citation-line")],
+)
+def test_REQ_d00254_K_comment_does_not_bind_across_a_non_comment_line(route, comment_line):
+    """A header separated from the first declaration by an import binds to nothing."""
+    line_context = route(HEADER_THEN_IMPORT)
+    func_name, _class_name, func_line, _end = line_context[comment_line]
+    assert func_name is None
+    assert func_line == 0

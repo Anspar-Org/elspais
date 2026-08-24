@@ -13,6 +13,7 @@ import pytest
 from elspais.config.schema import ElspaisConfig
 from elspais.graph.parsers.lark import FileDispatcher, GrammarFactory
 from elspais.graph.parsers.lark.transformers.reference import ReferenceTransformer
+from elspais.graph.parsers.patterns import comment_markers_for_path
 from elspais.graph.reference_faults import FaultCode
 from elspais.utilities.patterns import IdPatternConfig, IdResolver
 
@@ -53,18 +54,25 @@ def resolver():
     return IdResolver(config)
 
 
+# The grammar is compiled for one language's comment pattern (REQ-d00269-K),
+# so a conformance fixture must name a language.  Shell-like stands in for the
+# general case here because most fixtures below are written with ``#``; a test
+# about a different language names its own file below.
+_SHELL_LIKE_FILE = "demo.py"
+
+
 @pytest.fixture
 def code_parser(resolver):
     factory = GrammarFactory(resolver)
-    return factory.get_reference_parser()
+    return factory.get_reference_parser(comment_markers_for_path(_SHELL_LIKE_FILE))
 
 
-def _parse_code(content, resolver, code_parser):
-    """Parse as code_ref."""
+def _parse_code(content, resolver, code_parser, path=_SHELL_LIKE_FILE):
+    """Parse as code_ref, in the comment pattern of *path*'s language."""
     if not content.endswith("\n"):
         content += "\n"
     tree = code_parser.parse(content)
-    tx = ReferenceTransformer(resolver, "code_ref")
+    tx = ReferenceTransformer(resolver, "code_ref", comment_markers=comment_markers_for_path(path))
     return tx.transform(tree)
 
 
@@ -80,7 +88,9 @@ def parse_code(resolver, code_parser):
     def _parse(content):
         text = content if content.endswith("\n") else content + "\n"
         tree = code_parser.parse(text)
-        tx = ReferenceTransformer(resolver, "code_ref")
+        tx = ReferenceTransformer(
+            resolver, "code_ref", comment_markers=comment_markers_for_path(_SHELL_LIKE_FILE)
+        )
         return tx.transform(tree), tx
 
     return _parse
@@ -115,12 +125,14 @@ def _diagnostics(result):
     return [*tx.faults, *tx.undeclared]
 
 
-def _parse_test(content, resolver, code_parser, **kwargs):
-    """Parse as test_ref."""
+def _parse_test(content, resolver, code_parser, path=_SHELL_LIKE_FILE, **kwargs):
+    """Parse as test_ref, in the comment pattern of *path*'s language."""
     if not content.endswith("\n"):
         content += "\n"
     tree = code_parser.parse(content)
-    tx = ReferenceTransformer(resolver, "test_ref", **kwargs)
+    tx = ReferenceTransformer(
+        resolver, "test_ref", comment_markers=comment_markers_for_path(path), **kwargs
+    )
     return tx.transform(tree)
 
 
@@ -164,9 +176,14 @@ def foo(): pass
         assert refs[0].start_line == 1
         assert refs[0].end_line == 3
 
-    def test_js_style_comments(self, resolver, code_parser):
+    def test_js_style_comments(self, resolver):
+        # A c-like file is parsed under its own pattern -- the shell-like
+        # parser the other tests use cannot see a `//` comment at all.
         content = "// Implements: REQ-p00001\nfunction foo() {}\n"
-        results = _parse_code(content, resolver, code_parser)
+        js_parser = GrammarFactory(resolver).get_reference_parser(
+            comment_markers_for_path("demo.js")
+        )
+        results = _parse_code(content, resolver, js_parser, path="demo.js")
         refs = [r for r in results if r.content_type == "code_ref"]
         assert len(refs) == 1
         assert refs[0].parsed_data["implements"] == ["REQ-p00001"]
@@ -234,13 +251,18 @@ class TestTestRefParsing:
         # Unlinked test function should inherit file defaults
         assert refs[0].parsed_data["file_default_verifies"] == ["REQ-p00001"]
 
-    def test_block_verifies(self, resolver, code_parser):
+    def test_block_verifies(self, resolver):
+        # The legacy block header, written in a function-like file -- `--`
+        # opens a comment in SQL and nowhere else this suite parses.
         content = """\
 -- VERIFIES REQUIREMENTS:
 --   REQ-p00001: First test
 --   REQ-p00002: Second test
 """
-        results = _parse_test(content, resolver, code_parser)
+        sql_parser = GrammarFactory(resolver).get_reference_parser(
+            comment_markers_for_path("t.sql")
+        )
+        results = _parse_test(content, resolver, sql_parser, path="t.sql")
         refs = [r for r in results if r.content_type == "test_ref"]
         assert len(refs) == 1
         assert "REQ-p00001" in refs[0].parsed_data["verifies"]

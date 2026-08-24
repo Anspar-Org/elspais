@@ -15,6 +15,56 @@ import re
 import sys
 from pathlib import Path
 
+# A comment carrying a citation sits above the declaration it describes, and the
+# length of that comment block says nothing about what it describes.  The scan
+# therefore has no line limit: it walks down from an unowned comment while it
+# meets only further comments and blank lines, and binds at the first
+# declaration it reaches.  Anything else ends the search, so a file header does
+# not attach itself to the first declaration in the file.
+#
+# These prefixes are DELIBERATELY not the named set of comment patterns, and
+# deliberately wider than it.  They answer a different question: "does this
+# line keep the downward walk alive?", which is about the layout of a file,
+# not about whether a *Traceability* keyword written here would count.  A
+# block comment carries no citation (REQ-d00082-H), but a citation may sit
+# below one, and narrowing this set to the file's own single pattern would
+# stop the walk at the block and cost that citation its declaration.  Which
+# marker may introduce a keyword is decided once, elsewhere, by
+# ``graph/parsers/patterns.comment_pattern_for_path``; nothing recognised
+# here is thereby admitted as a reference.
+_COMMENT_PREFIXES: tuple[str, ...] = ("#", "//", "--", "/*", "<!--")
+
+
+def is_comment_line(text: str) -> bool:
+    """Whether a source line's first content looks like a comment opener.
+
+    Eligibility for the downward walk only -- see ``_COMMENT_PREFIXES``.
+    """
+    stripped = text.strip()
+    return any(stripped.startswith(prefix) for prefix in _COMMENT_PREFIXES)
+
+
+def bind_unowned_comments(lines, is_owned, target_at, assign) -> None:
+    """Bind each unowned comment line to the next declaration below it.
+
+    ``is_owned(line_number)`` says whether a line already has an owner,
+    ``target_at(index, line_number, text)`` returns the binding target for a
+    line or None if it is not a declaration, and ``assign(line_number, target)``
+    records the binding.
+    """
+    for idx, (ln, text) in enumerate(lines):
+        if is_owned(ln) or not is_comment_line(text):
+            continue
+        for ahead in range(idx + 1, len(lines)):
+            ahead_ln, ahead_text = lines[ahead]
+            target = target_at(ahead, ahead_ln, ahead_text)
+            if target is not None:
+                assign(ln, target)
+                break
+            if ahead_text.strip() and not is_comment_line(ahead_text):
+                break
+
+
 # Language-aware function/class patterns for context tracking
 # Python: def name(
 _PYTHON_FUNC = re.compile(r"^(\s*)(?:async\s+)?def\s+(\w+)\s*\(")
@@ -216,38 +266,26 @@ def build_line_context(
         # func_end_line=0 sentinel: text-based scanning can't reliably determine end lines
         line_context[ln] = (current_func, current_class, current_func_line, 0)
 
-    # Forward-looking fixup: if a comment line has no function context,
-    # look ahead up to 5 lines for the next function definition.
-    # This handles "# Implements: <REQ-ID>" placed above a function.
-    for idx, (ln, text) in enumerate(lines):
-        func_name, class_name, func_line, _func_end = line_context[ln]
-        if func_name is not None:
-            continue
+    # Bind "# Implements: <REQ-ID>" and its like to the declaration below it.
+    def _declaration_at(_idx, ahead_ln, ahead_text):
+        for pattern in func_patterns:
+            m = pattern.match(ahead_text)
+            if m:
+                _, ahead_class, _, _ = line_context.get(ahead_ln, (None, None, 0, 0))
+                return (m.group(2), ahead_class, ahead_ln)
+        return None
 
-        stripped = text.strip()
-        # Only fixup comment lines
-        is_comment = False
-        for prefix in ("#", "//", "--", "/*", "<!--"):
-            if stripped.startswith(prefix):
-                is_comment = True
-                break
-        if not is_comment:
-            continue
+    def _assign(ln, target):
+        ahead_func, ahead_class, ahead_ln = target
+        _, class_name, _, _ = line_context[ln]
+        line_context[ln] = (ahead_func, ahead_class or class_name, ahead_ln, 0)
 
-        # Look ahead up to 5 lines for a function definition
-        for ahead in range(1, min(6, len(lines) - idx)):
-            ahead_ln, ahead_text = lines[idx + ahead]
-            for pattern in func_patterns:
-                m = pattern.match(ahead_text)
-                if m:
-                    ahead_func = m.group(2)
-                    # Use the class context from the ahead line if available
-                    _, ahead_class, _, _ = line_context.get(ahead_ln, (None, None, 0, 0))
-                    line_context[ln] = (ahead_func, ahead_class or class_name, ahead_ln, 0)
-                    break
-            else:
-                continue
-            break
+    bind_unowned_comments(
+        lines,
+        lambda ln: line_context[ln][0] is not None,
+        _declaration_at,
+        _assign,
+    )
 
     return line_context
 
@@ -377,31 +415,18 @@ def ast_prescan(
                 break
         line_context[ln] = (func_name, class_name, func_line, func_end_line)
 
-    # Forward-looking fixup: comment lines above a function def fall outside
-    # the AST range.  Look ahead up to 5 lines to bind them to the next
-    # function — same logic that text_prescan already applies.
-    for idx, (ln, text) in enumerate(lines):
-        func_name, _class_name, _func_line, _func_end = line_context[ln]
-        if func_name is not None:
-            continue
+    # Comment lines above a function def fall outside the AST range; bind them
+    # to the function they describe.
+    def _declaration_at(_idx, ahead_ln, _ahead_text):
+        entry = line_context.get(ahead_ln, (None, None, 0, 0))
+        return entry if entry[0] is not None else None
 
-        stripped = text.strip()
-        is_comment = False
-        for prefix in ("#", "//", "--", "/*", "<!--"):
-            if stripped.startswith(prefix):
-                is_comment = True
-                break
-        if not is_comment:
-            continue
-
-        for ahead in range(1, min(6, len(lines) - idx)):
-            ahead_ln, _ahead_text = lines[idx + ahead]
-            ahead_func, ahead_class, ahead_fline, ahead_fend = line_context.get(
-                ahead_ln, (None, None, 0, 0)
-            )
-            if ahead_func is not None:
-                line_context[ln] = (ahead_func, ahead_class, ahead_fline, ahead_fend)
-                break
+    bind_unowned_comments(
+        lines,
+        lambda ln: line_context[ln][0] is not None,
+        _declaration_at,
+        lambda ln, target: line_context.__setitem__(ln, target),
+    )
 
     return line_context, all_test_funcs, first_def_line
 
@@ -472,6 +497,22 @@ def text_prescan(
 
         # func_end_line=0 sentinel: text-based scanning can't reliably determine end lines
         line_context[ln] = (current_func, current_class, current_func_line, 0)
+
+    # A citation written above a test binds to it here too; without this a file
+    # reaching this branch has no forward binding at all.
+    def _declaration_at(_idx, ahead_ln, ahead_text):
+        m = func_pattern.match(ahead_text)
+        if not m:
+            return None
+        _, ahead_class, _, _ = line_context.get(ahead_ln, (None, None, 0, 0))
+        return (m.group(2), ahead_class, ahead_ln)
+
+    bind_unowned_comments(
+        lines,
+        lambda ln: line_context[ln][0] is not None,
+        _declaration_at,
+        lambda ln, target: line_context.__setitem__(ln, (target[0], target[1], target[2], 0)),
+    )
 
     return line_context, all_test_funcs, first_def_line
 
@@ -641,20 +682,22 @@ def dart_prescan(
                 best, owner_start, owner_end = s, s, e
         line_context[ln] = (None, None, owner_start, owner_end)
 
-    # 3) forward-look: a comment with no owner binds to the next test() within 5 lines
-    span_starts = {s for s, _e in spans}
-    span_by_start = dict(spans)
-    for idx, (ln, text) in enumerate(lines):
-        if line_context[ln][2]:
-            continue
-        stripped = text.strip()
-        if not any(stripped.startswith(p) for p in ("//", "/*")):
-            continue
-        for ahead in range(1, min(6, len(lines) - idx)):
-            aln = lines[idx + ahead][0]
-            if aln in span_starts:
-                line_context[ln] = (None, None, aln, span_by_start[aln])
-                break
+    # 3) an unowned comment binds to the declaration below it.  Group starts are
+    #    binding targets as well as test starts: a citation describing a whole
+    #    group otherwise attaches to nothing however close it is written.
+    bindable: dict[int, tuple[int, int]] = {s: (s, e) for s, e in spans}
+    for i, (ln, text) in enumerate(arr):
+        if _DART_GROUP.match(text) and ln not in bindable:
+            nxt = next((s for s in start_lines if s > ln), None)
+            end, _accurate = _match_brace_end(arr, i, stop_line=nxt)
+            bindable[ln] = (ln, end)
+
+    bind_unowned_comments(
+        lines,
+        lambda ln: bool(line_context[ln][2]),
+        lambda _idx, aln, _atext: bindable.get(aln),
+        lambda ln, target: line_context.__setitem__(ln, (None, None, target[0], target[1])),
+    )
 
     all_test_funcs = [(s, None, None) for s, _e in spans]
     return line_context, all_test_funcs, first_def_line

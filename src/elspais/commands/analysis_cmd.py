@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from collections.abc import Sequence
 from dataclasses import asdict
 from typing import TYPE_CHECKING, Any
 
@@ -48,7 +49,7 @@ def compute_analysis(graph: Any, config: dict[str, Any], params: dict[str, str])
     # Membership comes from the one authority rather than a comparison of this
     # command's own; a second reading is how two surfaces answering the same
     # question start giving different answers.
-    from elspais.commands._scope import resolve_scope_for_report
+    from elspais.commands._scope import resolve_scope_for_report, scope_disclosure
 
     result = resolve_scope_for_report(graph, params, config)
     if len(result.ids) != result.population:
@@ -57,11 +58,29 @@ def compute_analysis(graph: Any, config: dict[str, Any], params: dict[str, str])
         report.top_foundations = [ns for ns in report.top_foundations if ns.node_id in keep]
         report.actionable_leaves = [ns for ns in report.actionable_leaves if ns.node_id in keep]
 
-    return asdict(report)
+    payload = asdict(report)
+    # Implements: REQ-p00084-D
+    # A ranking narrowed to part of the estate reads exactly like a ranking of
+    # the whole of it unless the narrowing travels with it, so the disclosure
+    # rides on the payload and every surface rendering it states it.
+    scope_lines = scope_disclosure(result)
+    if scope_lines:
+        payload["scope"] = scope_lines
+    return payload
 
 
-def _render_table(report: FoundationReport, show: str) -> None:
+def _render_table(
+    report: FoundationReport,
+    show: str,
+    scope_lines: Sequence[str] | None = None,
+) -> None:
     """Render the report as a formatted table."""
+    # Implements: REQ-p00084-C+D
+    for line in scope_lines or []:
+        print(line)
+    if scope_lines:
+        print()
+
     if show in ("all", "foundations") and report.top_foundations:
         print("Top Foundations:")
         print(
@@ -106,9 +125,14 @@ def _render_table(report: FoundationReport, show: str) -> None:
         print("No requirements found for analysis.")
 
 
-def _render_json(report: FoundationReport) -> None:
+def _render_json(report: FoundationReport, scope_lines: Sequence[str] | None = None) -> None:
     """Render the report as JSON."""
-    print(json.dumps(asdict(report), indent=2))
+    # Implements: REQ-p00084-C+D
+    # The same disclosure the table states, in the document a reader files.
+    payload = asdict(report)
+    if scope_lines:
+        payload["scope"] = list(scope_lines)
+    print(json.dumps(payload, indent=2))
 
 
 def _report_from_dict(data: dict) -> FoundationReport:
@@ -179,10 +203,11 @@ def run(args: argparse.Namespace) -> int:
         config_path=getattr(args, "config", None),
     )
     report = _report_from_dict(data)
+    scope_lines = data.get("scope") or []
 
     if output_format == "json":
-        _render_json(report)
+        _render_json(report, scope_lines)
     else:
-        _render_table(report, show)
+        _render_table(report, show, scope_lines)
 
     return 0

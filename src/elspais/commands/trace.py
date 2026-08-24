@@ -719,6 +719,7 @@ def format_markdown(
     scope_ids: frozenset[str] | None = None,
     values: Sequence[str] | None = None,
     config: dict | None = None,
+    scope_lines: Sequence[str] | None = None,
 ) -> Iterator[str]:
     """Generate markdown table. Streams one node at a time."""
     if preset is None:
@@ -726,6 +727,13 @@ def format_markdown(
 
     yield "# Traceability Matrix"
     yield ""
+
+    # Implements: REQ-p00084-C+D
+    # The scope rides inside the rendering, so the artifact a reader files
+    # declares what selected its rows -- in this format as in every other.
+    for line in scope_lines or []:
+        yield f"*{line}*"
+        yield ""
 
     # Implements: REQ-d00282-C, REQ-d00282-K
     # Stated in the order the selection names them, headed by words the project
@@ -816,6 +824,7 @@ def format_csv(
     scope_ids: frozenset[str] | None = None,
     values: Sequence[str] | None = None,
     config: dict | None = None,
+    scope_lines: Sequence[str] | None = None,
 ) -> Iterator[str]:
     """Generate CSV. Streams one node at a time.
 
@@ -829,6 +838,13 @@ def format_csv(
         if "," in s or '"' in s or "\n" in s:
             return '"' + s.replace('"', '""') + '"'
         return s
+
+    # Implements: REQ-p00084-C+D
+    # A leading comment row per disclosure line. It is one escaped field, so a
+    # consumer still reads the file as CSV, and it precedes the header so the
+    # table beneath it is the shape it always was.
+    for line in scope_lines or []:
+        yield escape(f"# {line}")
 
     # Implements: REQ-d00282-C+E+K
     # One header and one cell per stated value, headed by the words the
@@ -875,6 +891,7 @@ def format_html(
     scope_ids: frozenset[str] | None = None,
     values: Sequence[str] | None = None,
     config: dict | None = None,
+    scope_lines: Sequence[str] | None = None,
 ) -> Iterator[str]:
     """Generate basic HTML table. Streams one node at a time."""
     if preset is None:
@@ -895,6 +912,12 @@ def format_html(
     yield "summary { cursor: pointer; color: #4CAF50; }"
     yield "</style></head><body>"
     yield "<h1>Traceability Matrix</h1>"
+
+    # Implements: REQ-p00084-C+D
+    # A subtitle beneath the heading: the page states the scope that produced
+    # it, so the file a reader saves is not silent about what it left out.
+    for line in scope_lines or []:
+        yield f"<p style='color: #555; font-style: italic;'>{escape_html(line)}</p>"
 
     cols = _report_values(preset, values)
     headers = [header_for(col, config) for col in cols]
@@ -938,14 +961,26 @@ def format_json(
     scope_ids: frozenset[str] | None = None,
     values: Sequence[str] | None = None,
     config: dict | None = None,
+    scope_lines: Sequence[str] | None = None,
 ) -> Iterator[str]:
-    """Generate JSON array. Streams one node at a time."""
+    """Generate JSON array, or an object carrying the scope beside it.
+
+    A report narrowed by a scope answers with ``{"scope": [...], "nodes": [...]}``
+    so the document states what selected its rows (REQ-p00084-D); one narrowed by
+    nothing has nothing to declare and stays the bare array it has always been.
+    """
     if preset is None:
         preset = REPORT_PRESETS[DEFAULT_PRESET]
 
     cols = _report_values(preset, values)
 
-    yield "["
+    # Implements: REQ-p00084-C+D
+    if scope_lines:
+        yield "{"
+        yield f'"scope": {json.dumps(list(scope_lines), indent=2)},'
+        yield '"nodes": ['
+    else:
+        yield "["
     first = True
     for node in _scoped_requirements(graph, scope_ids):
         if not first:
@@ -963,6 +998,8 @@ def format_json(
 
         yield json.dumps(node_dict, indent=2)
     yield "]"
+    if scope_lines:
+        yield "}"
 
 
 # Implements: REQ-p00006-A
@@ -1047,8 +1084,12 @@ def render_section(
 
     result = resolve_scope_for_report(graph, args, config)
     scope_ids = None if len(result.ids) == result.population else result.ids
-    lines = list(scope_disclosure(result))
-    lines += list(formatter(graph, preset, scope_ids, values, config))
+    # Implements: REQ-p00084-C+D
+    # The disclosure goes THROUGH the formatter rather than ahead of it, so a
+    # composed section declares its scope in the shape of the format it is
+    # rendered in -- a bare line ahead of a CSV or JSON section is neither.
+    scope_lines = scope_disclosure(result)
+    lines = list(formatter(graph, preset, scope_ids, values, config, scope_lines))
     return "\n".join(lines), 0
 
 
@@ -1058,10 +1099,11 @@ def _render_json_from_data(
     values: Sequence[str] | None = None,
 ) -> None:
     """Render JSON output from compute_trace data dict."""
-    # Implements: REQ-p00084-D
-    # The scope reaches this path inside the computed data, so a JSON report
-    # declares the same scope a table one does.
-    _print_scope(data.get("scope") or [])
+    # Implements: REQ-p00084-C+D
+    # The scope reaches this path inside the computed data, and leaves it the
+    # same way: the document states the scope a table rendering states, rather
+    # than leaving it on a stream the artifact does not carry.
+    scope_lines = data.get("scope") or []
     cols = _report_values(preset, values)
     nodes = []
     for node_data in data["nodes"]:
@@ -1077,14 +1119,8 @@ def _render_json_from_data(
         if preset.include_test_refs:
             node_dict["test_refs"] = node_data.get("test_refs_grouped", {})
         nodes.append(node_dict)
-    print(json.dumps(nodes, indent=2))
-
-
-# Implements: REQ-p00084-D
-def _print_scope(lines: list[str]) -> None:
-    """Declare the scope beside the report, on stderr so a piped table is unchanged."""
-    for line in lines:
-        print(line, file=sys.stderr)
+    payload = {"scope": scope_lines, "nodes": nodes} if scope_lines else nodes
+    print(json.dumps(payload, indent=2))
 
 
 def _render_table_from_graph(
@@ -1094,6 +1130,7 @@ def _render_table_from_graph(
     scope_ids: frozenset[str] | None = None,
     values: Sequence[str] | None = None,
     config: dict | None = None,
+    scope_lines: Sequence[str] | None = None,
 ) -> int:
     """Render table or JSON formats using graph-based formatters. Returns exit code."""
     formatters = {
@@ -1109,7 +1146,7 @@ def _render_table_from_graph(
     if not formatter:
         print(f"Error: Unknown format '{fmt}'", file=sys.stderr)
         return 1
-    for line in formatter(graph, preset, scope_ids, values, config):
+    for line in formatter(graph, preset, scope_ids, values, config, scope_lines):
         print(line)
     return 0
 
@@ -1223,9 +1260,10 @@ def run(args: argparse.Namespace) -> int:
             _render_json_from_data(data, preset, values)
         else:
             result = resolve_scope_for_report(graph, params, config)
-            _print_scope(scope_disclosure(result))
             ids = None if len(result.ids) == result.population else result.ids
-            return _render_table_from_graph(graph, fmt, preset, ids, values, config)
+            return _render_table_from_graph(
+                graph, fmt, preset, ids, values, config, scope_disclosure(result)
+            )
     else:
         data = _engine.call(
             "/api/run/trace",
@@ -1241,9 +1279,10 @@ def run(args: argparse.Namespace) -> int:
             # For non-JSON formats we need the graph to stream through formatters.
             graph = _engine.get_graph()
             result = resolve_scope_for_report(graph, params, config)
-            _print_scope(scope_disclosure(result))
             ids = None if len(result.ids) == result.population else result.ids
-            return _render_table_from_graph(graph, fmt, preset, ids, values, config)
+            return _render_table_from_graph(
+                graph, fmt, preset, ids, values, config, scope_disclosure(result)
+            )
 
     return 0
 

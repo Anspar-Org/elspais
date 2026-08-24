@@ -293,7 +293,7 @@ class TestSeverityCatalog:
 
         cat = get_catalog()
         colors = {}
-        for sev in ("ok", "info", "warning", "error"):
+        for sev in ("off", "info", "warning", "error"):
             entry = cat.by_key(f"severity.{sev}")
             assert entry.color_key, f"severity.{sev} has no color_key"
             colors[sev] = entry.color_key
@@ -562,11 +562,11 @@ class TestUnifiedSeverityVocabulary:
 
     # Verifies: REQ-d00258-A
     def test_severity_config_default_keys(self):
-        """Default severities: full->ok, partial->warning, failing/missing->error."""
+        """Default severities: full->off, partial->warning, failing/missing->error."""
         from elspais.config.schema import CoverageSeverityConfig
 
         cfg = CoverageSeverityConfig()
-        assert cfg.full == "ok"
+        assert cfg.full == "off"
         assert cfg.partial == "warning"
         assert cfg.failing == "error"
         assert cfg.missing == "error"
@@ -597,7 +597,7 @@ class TestUnifiedSeverityVocabulary:
 
         cfg = CoverageSeverityConfig()
         assert _tier_to_severity("missing", cfg) == "error"
-        assert _tier_to_severity("full", cfg) == "ok"
+        assert _tier_to_severity("full", cfg) == "off"
 
 
 class TestStatusRoleGating:
@@ -642,7 +642,7 @@ class TestStatusRoleGating:
         from elspais.html.generator import compute_coverage_tiers
         from elspais.html.theme import get_catalog
 
-        expected = get_catalog().by_key("severity.ok").color_key
+        expected = get_catalog().by_key("severity.off").color_key
         # active includes Draft: essentially every req is Draft during build-out.
         config = {"rules": {"format": {"status_roles": {"active": ["Active", "Draft"]}}}}
         node = self._make_node_with_status("Draft", self._full_rollup())

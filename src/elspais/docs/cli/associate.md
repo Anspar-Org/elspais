@@ -165,8 +165,9 @@ federation and does not have it.
 would own it. That is `references.unknown_namespace`, reported at the
 severity the project configures in `[rules.references].unknown_namespace`
 (`info` by default) — a sibling repository that has not been written yet is
-advisory to one project and a build failure to another. Set it to `"ok"` to
-silence expected cross-repository references entirely.
+advisory to one project and a build failure to another. Set it to `"off"` to
+silence expected cross-repository references entirely — the check then reports
+as skipped and lists nothing.
 
 List both with `elspais broken`. A requirement with no evidence and a
 requirement whose evidence could not be resolved otherwise read identically in

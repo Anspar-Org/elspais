@@ -53,7 +53,7 @@ specify the keys you want to override. Environment variables always win.
 ### version
 
 ```toml
-version = 4   # Config schema version (required)
+version = 5   # Config schema version (required)
 ```
 
 ### [project] Section
@@ -251,6 +251,15 @@ active = ["Active"]                 # Counted in coverage and analysis
 provisional = ["Draft", "Proposed"] # Excluded from coverage
 aspirational = ["Roadmap", "Future"]  # Excluded from coverage and analysis
 retired = ["Deprecated", "Superseded"]  # Excluded from everything
+
+# Severity for every check with no named setting of its own, keyed by the
+# name the check reports under. Quote the key -- check names contain a dot.
+# Values: "off" | "info" | "warning" | "error". "off" reports the check as
+# skipped with no findings; "info" lists the findings without failing the
+# run. `elspais docs checks` lists every name this table accepts.
+[rules.severity]
+# "spec.parseable" = "off"
+# "tests.results" = "info"
 ```
 
 ### [validation] Section

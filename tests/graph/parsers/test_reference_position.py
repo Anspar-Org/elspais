@@ -384,13 +384,26 @@ class TestATargetHoldingMoreThanReferencesIsUnresolved:
 
         assert _implements(dispatcher, source) == ["REQ-p00001 and see XREQ-d00002"]
 
-    # Verifies: REQ-d00269-G
+    # Verifies: REQ-d00269-G, REQ-d00272-R
     def test_REQ_d00269_G_trailing_prose_after_a_readable_reference_is_not_read(
         self, dispatcher: FileDispatcher
     ) -> None:
-        source = "# Implements: REQ-p00001 -- the flag path\ndef impl():\n    pass\n"
+        """Prose that opens neither a further reference nor a comment leaves
+        the target holding the whole line: the reference is described in the
+        report, never resolved out of it."""
+        source = "# Implements: REQ-p00001 the flag path\ndef impl():\n    pass\n"
 
-        assert _implements(dispatcher, source) == ["REQ-p00001 -- the flag path"]
+        assert _implements(dispatcher, source) == ["REQ-p00001 the flag path"]
+
+    # Verifies: REQ-d00272-Q
+    def test_REQ_d00272_Q_a_comment_after_a_readable_reference_ends_it(
+        self, dispatcher: FileDispatcher
+    ) -> None:
+        """A marker that opens a comment closes the reference before it, so
+        what follows is prose rather than part of the target."""
+        source = "# Implements: REQ-p00001 # the flag path\ndef impl():\n    pass\n"
+
+        assert _implements(dispatcher, source) == ["REQ-p00001"]
 
     # Verifies: REQ-d00269-D
     @pytest.mark.parametrize(

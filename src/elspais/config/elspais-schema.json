@@ -288,11 +288,23 @@
         },
         "uncredited_evidence": {
           "default": "error",
+          "enum": [
+            "off",
+            "info",
+            "warning",
+            "error"
+          ],
           "title": "Uncredited Evidence",
           "type": "string"
         },
         "external_test_failure": {
           "default": "warning",
+          "enum": [
+            "off",
+            "info",
+            "warning",
+            "error"
+          ],
           "title": "External Test Failure",
           "type": "string"
         },
@@ -309,25 +321,49 @@
     },
     "CoverageSeverityConfig": {
       "additionalProperties": false,
-      "description": "Severity mapping for a single coverage dimension's tier states.\n\nEach tier maps to a severity: 'ok', 'info', 'warning', or 'error'. Tiers\nare the unified vocabulary (REQ-d00258): full / partial / failing / missing.",
+      "description": "Severity mapping for a single coverage dimension's tier states.\n\nEach tier maps to a severity in the one vocabulary (REQ-d00212-U): 'off',\n'info', 'warning' or 'error'. Tiers are the unified vocabulary\n(REQ-d00258): full / partial / failing / missing. A tier mapped to 'off'\nis one this dimension says nothing about -- which is what a fully covered\ndimension has to say, and why `full` defaults to it.",
       "properties": {
         "full": {
-          "default": "ok",
+          "default": "off",
+          "enum": [
+            "off",
+            "info",
+            "warning",
+            "error"
+          ],
           "title": "Full",
           "type": "string"
         },
         "partial": {
           "default": "warning",
+          "enum": [
+            "off",
+            "info",
+            "warning",
+            "error"
+          ],
           "title": "Partial",
           "type": "string"
         },
         "failing": {
           "default": "error",
+          "enum": [
+            "off",
+            "info",
+            "warning",
+            "error"
+          ],
           "title": "Failing",
           "type": "string"
         },
         "missing": {
           "default": "error",
+          "enum": [
+            "off",
+            "info",
+            "warning",
+            "error"
+          ],
           "title": "Missing",
           "type": "string"
         }
@@ -438,11 +474,23 @@
         },
         "no_assertions_severity": {
           "default": "warning",
+          "enum": [
+            "off",
+            "info",
+            "warning",
+            "error"
+          ],
           "title": "No Assertions Severity",
           "type": "string"
         },
         "no_traceability_severity": {
           "default": "warning",
+          "enum": [
+            "off",
+            "info",
+            "warning",
+            "error"
+          ],
           "title": "No Traceability Severity",
           "type": "string"
         }
@@ -662,56 +710,122 @@
       "properties": {
         "retired": {
           "default": "warning",
+          "enum": [
+            "off",
+            "info",
+            "warning",
+            "error"
+          ],
           "title": "Retired",
           "type": "string"
         },
         "provisional": {
           "default": "info",
+          "enum": [
+            "off",
+            "info",
+            "warning",
+            "error"
+          ],
           "title": "Provisional",
           "type": "string"
         },
         "aspirational": {
           "default": "info",
+          "enum": [
+            "off",
+            "info",
+            "warning",
+            "error"
+          ],
           "title": "Aspirational",
           "type": "string"
         },
         "malformed": {
           "default": "warning",
+          "enum": [
+            "off",
+            "info",
+            "warning",
+            "error"
+          ],
           "title": "Malformed",
           "type": "string"
         },
         "unknown_namespace": {
           "default": "info",
+          "enum": [
+            "off",
+            "info",
+            "warning",
+            "error"
+          ],
           "title": "Unknown Namespace",
           "type": "string"
         },
         "unknown_requirement": {
           "default": "error",
+          "enum": [
+            "off",
+            "info",
+            "warning",
+            "error"
+          ],
           "title": "Unknown Requirement",
           "type": "string"
         },
         "unknown_assertion": {
           "default": "error",
+          "enum": [
+            "off",
+            "info",
+            "warning",
+            "error"
+          ],
           "title": "Unknown Assertion",
           "type": "string"
         },
         "forbidden": {
           "default": "error",
+          "enum": [
+            "off",
+            "info",
+            "warning",
+            "error"
+          ],
           "title": "Forbidden",
           "type": "string"
         },
         "keyword_form": {
           "default": "warning",
+          "enum": [
+            "off",
+            "info",
+            "warning",
+            "error"
+          ],
           "title": "Keyword Form",
           "type": "string"
         },
         "identifier_form": {
           "default": "warning",
+          "enum": [
+            "off",
+            "info",
+            "warning",
+            "error"
+          ],
           "title": "Identifier Form",
           "type": "string"
         },
         "undeclared": {
           "default": "warning",
+          "enum": [
+            "off",
+            "info",
+            "warning",
+            "error"
+          ],
           "title": "Undeclared",
           "type": "string"
         }
@@ -781,6 +895,19 @@
         },
         "references": {
           "$ref": "#/$defs/ReferenceSeverityConfig"
+        },
+        "severity": {
+          "additionalProperties": {
+            "enum": [
+              "off",
+              "info",
+              "warning",
+              "error"
+            ],
+            "type": "string"
+          },
+          "title": "Severity",
+          "type": "object"
         },
         "content_rules": {
           "items": {
@@ -941,41 +1068,89 @@
       "properties": {
         "duplicate": {
           "default": "error",
+          "enum": [
+            "off",
+            "info",
+            "warning",
+            "error"
+          ],
           "title": "Duplicate",
           "type": "string"
         },
         "undefined": {
           "default": "warning",
+          "enum": [
+            "off",
+            "info",
+            "warning",
+            "error"
+          ],
           "title": "Undefined",
           "type": "string"
         },
         "unmarked": {
           "default": "warning",
+          "enum": [
+            "off",
+            "info",
+            "warning",
+            "error"
+          ],
           "title": "Unmarked",
           "type": "string"
         },
         "unused": {
           "default": "warning",
+          "enum": [
+            "off",
+            "info",
+            "warning",
+            "error"
+          ],
           "title": "Unused",
           "type": "string"
         },
         "bad_definition": {
           "default": "error",
+          "enum": [
+            "off",
+            "info",
+            "warning",
+            "error"
+          ],
           "title": "Bad Definition",
           "type": "string"
         },
         "collection_empty": {
           "default": "warning",
+          "enum": [
+            "off",
+            "info",
+            "warning",
+            "error"
+          ],
           "title": "Collection Empty",
           "type": "string"
         },
         "canonical_form": {
           "default": "warning",
+          "enum": [
+            "off",
+            "info",
+            "warning",
+            "error"
+          ],
           "title": "Canonical Form",
           "type": "string"
         },
         "changed": {
           "default": "warning",
+          "enum": [
+            "off",
+            "info",
+            "warning",
+            "error"
+          ],
           "title": "Changed",
           "type": "string"
         }
@@ -1165,7 +1340,7 @@
   "additionalProperties": false,
   "properties": {
     "version": {
-      "default": 4,
+      "default": 5,
       "title": "Version",
       "type": "integer"
     },

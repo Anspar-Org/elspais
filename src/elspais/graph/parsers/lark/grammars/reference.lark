@@ -18,7 +18,13 @@
 //   __NAMESPACE__       e.g. "REQ"
 //   __TYPE_PATTERN__    e.g. "p|o|d"
 //   __DIGITS_PATTERN__  e.g. "\\d{1,5}"
-//   __COMMENT_STYLES__  e.g. "\\#|//|\\-\\-"
+//   __COMMENT_STYLES__  the ONE marker opening a comment in the language of
+//                       the file this parser reads -- e.g. "\\#" for a
+//                       shell-like file, "//" for a c-like one.  A language
+//                       the named set does not cover substitutes "(?!)", which
+//                       never matches, so no keyword is read in such a file.
+//                       Built by graph/parsers/patterns.comment_style_fragment;
+//                       never spelled here.
 //   __IMPL_KEYWORDS__   e.g. "[Ii][Mm][Pp]...", matching any case
 //   __VER_KEYWORDS__    e.g. "[Vv][Ee][Rr]...", matching any case
 //   __KEYWORDS__        every keyword, case-insensitive, alternated

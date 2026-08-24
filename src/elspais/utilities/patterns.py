@@ -51,6 +51,32 @@ REF_LIST_SEPARATOR = ","
 # as a name from a repository nobody configured.
 RESERVED_IDENTIFIER_CHARACTERS = (":",)
 
+
+# Implements: REQ-d00272-Q
+def default_comment_markers() -> tuple[str, ...]:
+    """The markers that end a reference on a line that belongs to no language.
+
+    A spec or journey metadata line is markdown, not source: it is not a
+    comment in any language, so no language's comment pattern governs it and
+    ``REQ-d00269-K`` -- which says where a keyword may be READ inside a
+    comment -- has nothing to say about it.  What such a line still needs is
+    an answer to a narrower question: an author who writes a note after a
+    reference on a metadata line conventionally opens it with one of the
+    three markers below, and that note must not be read as a further
+    reference (REQ-d00272-Q).
+
+    A caller reading an actual source file does NOT come here.  It holds the
+    file's path, asks ``comment_pattern_for_path`` for that language's one
+    marker, and passes it to ``parse_ref_list``.
+
+    Named from the one set of comment patterns rather than respelled here,
+    so this convention and the languages cannot drift apart.
+    """
+    from elspais.graph.parsers.patterns import METADATA_COMMENT_MARKERS
+
+    return METADATA_COMMENT_MARKERS
+
+
 # --- Shared regex patterns ---
 
 # Matches 3+ consecutive newlines for cleanup (collapse to double-newline)
@@ -591,6 +617,27 @@ class IdResolver:
             rf"(?:{grammar.namespace})(?:{re.escape(grammar.namespace_separator)}|$)"
         )
         return bool(pattern.match(item))
+
+    # Implements: REQ-d00272-E, REQ-d00272-F, REQ-d00272-R
+    def opening_reference(self, item: str) -> tuple[str, str] | None:
+        """*item* split into the reference it opens with and the rest of it,
+        or None where it does not open with one.
+
+        The identifier ends at the first character this repository's grammar
+        does not admit, and no configuration can admit a space, so a space is
+        always such a character.  That is the whole of the split: the head is
+        an acceptable reference and the tail is content the grammar did not
+        account for, which is exactly the pair a report of trailing content
+        has to name (REQ-d00272-E).
+
+        Splitting describes; it never binds.  The tail is content nobody
+        wrote as part of an identifier, so an item with a non-empty tail is
+        still an item that failed to read (REQ-d00272-F).
+        """
+        match = self.multi_assertion_reference_regex().match(item)
+        if match is None or match.end() == 0:
+            return None
+        return item[: match.end()], item[match.end() :]
 
     # Implements: REQ-d00081-D
     def multi_assertion_reference_regex(self) -> re.Pattern[str]:
@@ -1286,6 +1333,7 @@ class FederatedIdReader:
         self._resolvers: tuple[IdResolver, ...] = tuple(resolvers)
         self._ref_regex: re.Pattern[str] | None = None
         self._extra_item_regexes: dict[tuple[str, ...], tuple[re.Pattern[str], ...]] = {}
+        self._comment_regexes: dict[tuple[str, ...], re.Pattern[str]] = {}
 
     @property
     def own(self) -> IdResolver:
@@ -1362,6 +1410,66 @@ class FederatedIdReader:
                 refs.append(ref)
         return refs
 
+    # Implements: REQ-d00272-E, REQ-d00272-C
+    def opening_reference(self, item: str) -> tuple[str, str] | None:
+        """*item* split into the reference it opens with and the rest of it,
+        under the grammar of whichever member reads furthest into it.
+
+        Longest head, not the first member that matches: the members are
+        scanned own-repo-first, so a first-match pick would read
+        ``REQ-ALP-p00001 gloss`` as the ``REQ-`` member's ``REQ`` plus a tail
+        starting ``-ALP``, attributing it to a repository that does not own
+        it -- the misattribution REQ-d00272-C exists to prevent, arriving
+        through the diagnosis rather than through the binding.
+        """
+        best: tuple[str, str] | None = None
+        for resolver in self._resolvers:
+            split = resolver.opening_reference(item)
+            if split is not None and (best is None or len(split[0]) > len(best[0])):
+                best = split
+        return best
+
+    def _comment_pattern(self, markers: tuple[str, ...]) -> re.Pattern[str]:
+        """Match a comment opening: whitespace, then one of *markers*.
+
+        The whitespace is required.  Without it a marker's characters are
+        just characters an identifier may hold or abut, and ``REQ-d00001--A``
+        would be read as a requirement plus a comment rather than as the
+        separator defect it is.  A space before the marker is what no
+        identifier can contain, so it is what makes the boundary decidable.
+        """
+        compiled = self._comment_regexes.get(markers)
+        if compiled is None:
+            longest_first = sorted(markers, key=len, reverse=True)
+            alternation = "|".join(re.escape(m) for m in longest_first)
+            compiled = re.compile(rf"\s(?:{alternation})")
+            self._comment_regexes[markers] = compiled
+        return compiled
+
+    # Implements: REQ-d00272-Q
+    def _without_comment(self, text: str, markers: tuple[str, ...]) -> str:
+        """*text* with a trailing comment removed, where one opens after a
+        reference.
+
+        The comment is taken off before the list is divided, because a
+        comment may hold the character that divides one: splitting first
+        would shred a prose remainder into items and report each fragment as
+        a reference nobody wrote.
+
+        A marker only opens a comment where what precedes it is a reference,
+        so the item ending at the marker must open with one.  The earliest
+        such marker wins -- everything after it is prose, marker characters
+        in that prose included.
+        """
+        if not markers:
+            return text
+        for match in self._comment_pattern(markers).finditer(text):
+            head = text[: match.start()]
+            last_item = head.rsplit(REF_LIST_SEPARATOR, 1)[-1].strip()
+            if last_item and self.opening_reference(last_item) is not None:
+                return head.rstrip()
+        return text
+
     def _extra_patterns(self, extra_items: Sequence[str]) -> tuple[re.Pattern[str], ...]:
         key = tuple(extra_items)
         compiled = self._extra_item_regexes.get(key)
@@ -1370,7 +1478,7 @@ class FederatedIdReader:
             self._extra_item_regexes[key] = compiled
         return compiled
 
-    # Implements: REQ-d00272-B, REQ-d00272-C, REQ-d00272-M
+    # Implements: REQ-d00272-B, REQ-d00272-C, REQ-d00272-E, REQ-d00272-M
     def classify_unmatched(self, candidate: str) -> tuple[FaultClass, tuple[FaultCode, ...]]:
         """How far reading *candidate* got, for an item no grammar accepted.
 
@@ -1384,10 +1492,21 @@ class FederatedIdReader:
         namespace the item opens with is a fact the federation holds, and it
         separates an identifier of this estate spelled wrongly from a name
         belonging outside it.
+
+        A space decides that the item does not *bind*, and that is all it
+        decides.  Where the item nonetheless opens with an acceptable
+        reference, what it is worth telling the author is which reference was
+        found and what followed it, so such an item is diagnosed the same way
+        an unspaced one is (REQ-d00272-E) -- it still resolves to nothing,
+        and it is still never described as naming a repository, because the
+        member whose grammar read the head is the member that reports it.
         """
         from elspais.graph.reference_faults import FaultClass, FaultCode
 
-        if any(ch.isspace() or ch in RESERVED_IDENTIFIER_CHARACTERS for ch in candidate):
+        if any(ch in RESERVED_IDENTIFIER_CHARACTERS for ch in candidate):
+            return FaultClass.MALFORMED, (FaultCode.NOT_AN_IDENTIFIER,)
+        spaced = any(ch.isspace() for ch in candidate)
+        if spaced and self.opening_reference(candidate) is None:
             return FaultClass.MALFORMED, (FaultCode.NOT_AN_IDENTIFIER,)
         declaring = [r for r in self._resolvers if r.declares_namespace(candidate)]
         if declaring:
@@ -1410,6 +1529,13 @@ class FederatedIdReader:
             ):
                 codes = (FaultCode.LABEL_OUT_OF_SERIES,)
             return FaultClass.MALFORMED, codes
+        # Implements: REQ-d00272-B
+        # No member claims the namespace this item opens with. An item
+        # holding a space is not an identifier at all, so saying it names a
+        # repository nobody configured would be the misattribution the space
+        # test exists to prevent -- it is reported as what it is instead.
+        if spaced:
+            return FaultClass.MALFORMED, (FaultCode.NOT_AN_IDENTIFIER,)
         return FaultClass.UNKNOWN_NAMESPACE, ()
 
     # Implements: REQ-d00269-G, REQ-p00014-T
@@ -1418,6 +1544,7 @@ class FederatedIdReader:
         text: str,
         *,
         extra_items: Sequence[str] = (),
+        comment_markers: Sequence[str] | None = None,
     ) -> list[RefItem]:
         """The items *text* spells as a separated list, each with its verdict.
 
@@ -1441,6 +1568,11 @@ class FederatedIdReader:
             extra_items: Patterns for items belonging to a grammar this
                 reader does not own -- a journey step, say -- which are
                 accepted verbatim rather than normalized.
+            comment_markers: The markers that open a comment in the language
+                *text* was written in.  Defaults to the markers the
+                reference grammar accepts, which is the answer available
+                until the caller carries the file's kind; passing an empty
+                sequence says the language has none.
 
         Returns:
             A ``RefItem`` per item, never ``None``.  An empty list means the
@@ -1451,6 +1583,13 @@ class FederatedIdReader:
         stripped = text.strip()
         if not stripped:
             return []
+        # Implements: REQ-d00272-Q
+        # A comment ends the reference before it, so it is taken off before
+        # the list is divided -- prose may hold the dividing character, and
+        # dividing first would report each fragment of a sentence as a
+        # reference its author never wrote.
+        markers = default_comment_markers() if comment_markers is None else tuple(comment_markers)
+        stripped = self._without_comment(stripped, markers)
         extras = self._extra_patterns(extra_items)
         parts = stripped.split(REF_LIST_SEPARATOR)
         last_index = len(parts) - 1

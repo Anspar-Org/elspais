@@ -264,9 +264,9 @@ the traceability graph."""
 # a figure are a separate question, published beside it (REQ-d00258-A).
 # ---------------------------------------------------------------------------
 
-[severity.ok]
-label = "Ok"
-description = "A standing this dimension treats as needing no attention (full, by default)"
+[severity.off]
+label = "Off"
+description = "A standing this dimension does not report on (full, by default)"
 
 [severity.info]
 label = "Info"

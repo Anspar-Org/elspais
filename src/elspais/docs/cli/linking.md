@@ -21,15 +21,59 @@ function hashPassword(plain) { ... }
 CREATE PROCEDURE hash_password ...
 ```
 
-HTML and CSS use block comments:
+## Comment Patterns
 
-```html
-<!-- Implements: REQ-d00001-A -->
-```
+Every scannable file type is associated with exactly ONE comment pattern,
+drawn from this named set. A *Traceability* keyword is read only in a comment
+opened by that file's own pattern. A double dash introduces a reference in SQL
+and is arithmetic in Python; a hash introduces one in Python and is nothing in
+JavaScript.
+
+| Name            | Marker | Languages (extensions)                                                                                                          |
+|-----------------|--------|---------------------------------------------------------------------------------------------------------------------------------|
+| `c-like`        | `//`   | `.c` `.cc` `.cjs` `.cpp` `.cs` `.cxx` `.dart` `.go` `.h` `.hpp` `.java` `.js` `.jsx` `.kt` `.kts` `.less` `.mjs` `.php` `.proto` `.rs` `.scala` `.scss` `.swift` `.ts` `.tsx` `.zig` |
+| `shell-like`    | `#`    | `.bash` `.cmake` `.ex` `.exs` `.hcl` `.jl` `.ksh` `.mk` `.nix` `.pl` `.pm` `.ps1` `.py` `.r` `.rb` `.sh` `.tf` `.tfvars` `.toml` `.yaml` `.yml` `.zsh` |
+| `function-like` | `--`   | `.ada` `.adb` `.ads` `.elm` `.hs` `.lua` `.sql` `.vhd` `.vhdl`                                                                    |
+| `lisp-like`     | `;`    | `.clj` `.cljc` `.cljs` `.edn` `.el` `.lisp` `.lsp` `.rkt` `.scm` `.ss`                                                            |
+| `math-like`     | `%`    | `.cls` `.erl` `.hrl` `.sty` `.tex`                                                                                               |
+| `basic-like`    | `'`    | `.bas` `.frm` `.vb` `.vbs`                                                                                                       |
+
+This decides WHERE a reference may be written, never WHAT it may say. The
+identifier grammar is one set of rules in every context that accepts a
+reference -- a Python comment, a SQL comment and a spec metadata line all
+admit exactly the same targets. There are no per-file reference overrides.
+
+### Block comments carry no reference
+
+Block comment forms -- `/* ... */` and `<!-- ... -->` -- are NOT supported for
+linking. A *Traceability* keyword written inside one is never read:
 
 ```css
-/* Implements: REQ-d00001-A */
+/* Implements: REQ-d00001-A */   <-- NOT read. CSS has no line comment.
 ```
+
+```html
+<!-- Implements: REQ-d00001-A -->   <-- NOT read.
+```
+
+A language whose only comment form is a block therefore has no reference form
+at all. `.css`, `.html`, `.xml` and `.svg` are in that position, and are
+associated with no pattern above. A Jinja template that RENDERS to one of them
+is a different matter -- see below.
+
+### Extensions outside the set
+
+An extension the set does not name has no comment pattern, so no keyword in
+that file is read anywhere. This is deliberately the restrictive answer:
+guessing a marker would bind references off the strength of a shape. `.m`
+(MATLAB `%` vs Objective-C `//`) and `.s` (assembler dialects disagree) are
+left out for exactly that reason -- they cannot name ONE pattern.
+
+A template (`.j2`) is `c-like` whatever it renders to -- `viewer.js.j2`,
+`page.css.j2` and `conf.yml.j2` all annotate with `//`. A template is one
+scannable file type, so it carries one pattern; reading the suffix beneath it
+would give it several, and would silence the annotations in every template
+rendering to a block-comment language.
 
 Multiple requirements on one line:
 
@@ -234,9 +278,22 @@ configured, so a reference written some other way is reported rather than
 quietly resolved.
 
 The keyword that introduces a reference in a test file is
-`scanning.test.reference_keyword` (default `Verifies`). Comment styles are not
-configurable: `#`, `//` and `--` introduce a reference, and a keyword inside a
-block comment is not read.
+`scanning.test.reference_keyword` (default `Verifies`). Comment patterns are NOT
+configurable: each file type is associated with exactly one, from the named set
+above, and a keyword inside a block comment is not read.
+
+That file's own marker also *ends* a reference. A marker written after
+whitespace closes the reference before it, and everything from there is comment,
+so in a Python file `# Implements: REQ-d00001-A  # the only place this happens`
+binds `REQ-d00001-A` and reads the rest as prose. Only that language's own
+marker does this: in a `.js` file, `// Implements: REQ-d00001-A -- why` does NOT
+end at the double dash, because `--` opens no comment there -- the trailing text
+stays part of the item and is reported as malformed rather than silently
+dropped.
+
+The whitespace is required: without it the marker's characters are just
+characters an identifier may abut, so `REQ-d00001--A` is read as a reference
+written wrongly rather than as one with a comment after it.
 
 See `elspais docs config` for the full configuration reference.
 
@@ -261,7 +318,10 @@ before an *Assertion* label, `+` between labels), and the repository holds
 | `# Implements: REQ-d00001-A-B` | malformed | `E_WRONG_MULTI_SEPARATOR` |
 | `# Implements: REQ-d00001-1` | malformed | `E_LABEL_OUT_OF_SERIES` |
 | `# Implements: REQ-d00001-AB` | malformed | `E_IDENTIFIER_WITH_TRAILING_TEXT` |
-| `# Implements: REQ-d00001 (A, C)` | malformed | `E_NOT_AN_IDENTIFIER` on the first item; the second reads as a name no repository claims |
+| `# Implements: REQ-d00001 (A, C)` | malformed | `E_IDENTIFIER_WITH_TRAILING_TEXT` on the first item; the second reads as a name no repository claims |
+| `# Implements: REQ-d00001-A - one environment` | malformed | `E_IDENTIFIER_WITH_TRAILING_TEXT` |
+| `# Implements: REQ-d00001-A + B` | malformed | `E_IDENTIFIER_WITH_TRAILING_TEXT` |
+| `# Implements: REQ-d00001-A # why` | — | binds `REQ-d00001-A`; the rest is comment |
 | `# Implements: REQ-d00001,,REQ-d00002` | malformed | `E_EMPTY_ITEM` |
 | `# Implements: REQ-d00001,` (nothing follows) | malformed | `E_TRAILING_SEPARATOR` |
 | `# Implements:` | malformed | `E_EMPTY_REFERENCE_LIST` |
@@ -280,6 +340,13 @@ before an *Assertion* label, `+` between labels), and the repository holds
 The `forbidden` class covers every reference that reads and resolves and whose
 relationship is refused anyway. Its description says only what is true of all
 of them; which refusal it was is the finding's code.
+
+Where the code names a defect in how the reference was spelled, the report
+also carries a sentence naming what the code alone cannot: which separators
+this repository configures, and — for content the grammar could not account
+for — where the reference ended and the leftover began. A reference that was
+spelled correctly and simply names nothing this graph holds carries no such
+sentence, because there is nothing about its spelling to describe.
 
 `E_SYNTAX_ERROR` accompanies every reported fault. Carried *alone* it is the
 report that nothing more specific is known — the tool declining to guess, not

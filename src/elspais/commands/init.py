@@ -296,17 +296,17 @@ _FIELD_COMMENTS: dict[str, str] = {
     "rules.format.require_status": "Require Status field in requirement metadata",
     "rules.format.require_rationale": "Require Rationale section in requirements",
     "rules.format.no_assertions_severity": (
-        '"warning" | "info" — severity for REQs with no assertions'
+        '"off" | "info" | "warning" | "error" — severity for REQs with no assertions'
     ),
     "rules.format.no_traceability_severity": (
-        '"warning" | "info" — severity for code/test files with no REQ markers'
+        '"off" | "info" | "warning" | "error" — severity for code/test files with no REQ markers'
     ),
     "rules.format.status_roles": "Status role classification (metrics/viewer behavior)",
     "rules.format.status_roles.active": "Committed, normative — counted in all metrics",
     "rules.format.status_roles.provisional": "In-progress toward active — excluded from coverage",
     "rules.format.status_roles.aspirational": "Future/planning — excluded from coverage+analysis",
     "rules.format.status_roles.retired": "Concluded — excluded from everything, hidden by default",
-    "rules.coverage": "Coverage severity tiers per dimension (ok | info | warning | error)",
+    "rules.coverage": "Coverage severity tiers per dimension (off | info | warning | error)",
     "rules.coverage.implemented": "Code implements assertions",
     "rules.coverage.tested": "Tests reference assertions",
     "rules.coverage.verified": "Test results exist for assertions",
@@ -321,6 +321,11 @@ _FIELD_COMMENTS: dict[str, str] = {
         "evidence naming an assertion its dimension does not count (a test on an "
         "assertion nothing implements), which reaches no coverage figure"
     ),
+    "rules.coverage.external_test_failure": (
+        'warning (default): severity for the "tests.external" check -- a test that '
+        "failed and reaches no requirement, so nobody will find the failure through "
+        "the spec"
+    ),
     "rules.coverage.status_words": (
         "Per-relationship coverage labels. Keys: implements|verifies|yields|"
         'validates|validated. Defaults: Implemented / Tested / Passing / "UAT '
@@ -331,37 +336,45 @@ _FIELD_COMMENTS: dict[str, str] = {
     "rules.coverage.status_words.yields": "Label for passing dimension",
     "rules.coverage.status_words.validates": "Label for UAT-covered dimension",
     "rules.coverage.status_words.validated": "Label for UAT-passed dimension",
+    "rules.severity": (
+        "Severity for every check with no named setting of its own, keyed by the name "
+        'the check reports under -- quote the key, it contains a dot: "spec.parseable" = '
+        '"off". Values: "off" | "info" | "warning" | "error" ("off" reports the check as '
+        'skipped with no findings; "info" lists the findings without failing the run). '
+        "A name no check reports under, or one that has a named setting of its own, is "
+        "refused when the config is read. `elspais docs checks` lists the names"
+    ),
     "rules.references": "Severity for the reference checks",
-    "rules.references.retired": ('"ok" | "info" | "warning" | "error" — refs to retired REQs'),
+    "rules.references.retired": ('"off" | "info" | "warning" | "error" — refs to retired REQs'),
     "rules.references.provisional": (
-        '"ok" | "info" | "warning" | "error" — refs to provisional REQs'
+        '"off" | "info" | "warning" | "error" — refs to provisional REQs'
     ),
     "rules.references.aspirational": (
-        '"ok" | "info" | "warning" | "error" — refs to aspirational REQs'
+        '"off" | "info" | "warning" | "error" — refs to aspirational REQs'
     ),
     "rules.references.malformed": (
-        '"ok" | "info" | "warning" | "error" — refs that do not read as a reference'
+        '"off" | "info" | "warning" | "error" — refs that do not read as a reference'
     ),
     "rules.references.unknown_namespace": (
-        '"ok" | "info" | "warning" | "error" — refs to targets no repo claims'
+        '"off" | "info" | "warning" | "error" — refs to targets no repo claims'
     ),
     "rules.references.unknown_requirement": (
-        '"ok" | "info" | "warning" | "error" — claimed refs to a requirement that does not exist'
+        '"off" | "info" | "warning" | "error" — claimed refs to a requirement that does not exist'
     ),
     "rules.references.unknown_assertion": (
-        '"ok" | "info" | "warning" | "error" — refs naming a label the requirement lacks'
+        '"off" | "info" | "warning" | "error" — refs naming a label the requirement lacks'
     ),
     "rules.references.forbidden": (
-        '"ok" | "info" | "warning" | "error" — refs using a keyword the file kind refuses'
+        '"off" | "info" | "warning" | "error" — refs using a keyword the file kind refuses'
     ),
     "rules.references.keyword_form": (
-        '"ok" | "info" | "warning" | "error" — a keyword written in a non-canonical form'
+        '"off" | "info" | "warning" | "error" — a keyword written in a non-canonical form'
     ),
     "rules.references.identifier_form": (
-        '"ok" | "info" | "warning" | "error" — a reference spelled non-canonically'
+        '"off" | "info" | "warning" | "error" — a reference spelled non-canonically'
     ),
     "rules.references.undeclared": (
-        '"ok" | "info" | "warning" | "error" — a comment citing a requirement without a keyword'
+        '"off" | "info" | "warning" | "error" — a comment citing a requirement without a keyword'
     ),
     # --- [changelog] ---
     "changelog": "Changelog enforcement for requirement changes",

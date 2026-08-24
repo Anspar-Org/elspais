@@ -1123,20 +1123,28 @@ class TestCheckUncreditedEvidence:
         check = check_uncredited_evidence(graph, config=cfg)
 
         assert check.severity == "warning"
-        # "warning" still leaves the finding unresolved -- only "ok" passes.
+        # "warning" still leaves the finding unresolved -- only "off", which
+        # withholds the condition entirely, passes.
         assert check.passed is False
 
     # Verifies: REQ-d00274-C
-    def test_ok_severity_passes_the_check(self):
+    def test_off_severity_withholds_the_condition(self):
+        """A project that sets the check "off" is not told about the condition
+        at all: the check reports as skipped and carries no findings, where the
+        same graph under the default severity produces one."""
         from elspais.graph.annotators import annotate_coverage
 
         graph = self._built_graph()
         annotate_coverage(graph)
-        cfg = {"rules": {"coverage": {"uncredited_evidence": "ok"}}}
+        assert check_uncredited_evidence(graph).findings, "graph no longer exercises the check"
+
+        cfg = {"rules": {"coverage": {"uncredited_evidence": "off"}}}
         check = check_uncredited_evidence(graph, config=cfg)
 
-        assert check.severity == "ok"
         assert check.passed is True
+        assert check.severity == "info"
+        assert check.findings == []
+        assert check.details["skipped"] is True
 
     # Verifies: REQ-d00274
     def test_healthy_shape_produces_no_finding(self):
@@ -1336,17 +1344,25 @@ class TestCheckExternalTests:
         assert "(awaiting a result)" in located[("tests/test_n.py", 7)]
 
     # Verifies: REQ-d00276-C
-    def test_configuring_ok_suppresses_the_failure_but_not_the_report(self):
-        """C: a project may decide a failing outsider is not its problem; the
-        set is still reported."""
+    def test_configuring_off_withholds_the_report(self):
+        """C: a project may decide a failing outsider is not its problem. Set
+        "off", the condition is not reported here at all -- the check is
+        emitted as skipped, where the same graph under the default severity
+        fails and names the test."""
+        graph = self._graph(("tests/test_out.py", 9, "failed"))
+        reported = check_external_tests(graph, {})
+        assert reported.passed is False
+        assert len(reported.findings) == 1
+
         check = check_external_tests(
-            self._graph(("tests/test_out.py", 9, "failed")),
-            {"rules": {"coverage": {"external_test_failure": "ok"}}},
+            graph,
+            {"rules": {"coverage": {"external_test_failure": "off"}}},
         )
 
         assert check.passed is True
-        assert check.details["failed"] == 1
-        assert len(check.findings) == 1
+        assert check.severity == "info"
+        assert check.findings == []
+        assert check.details["skipped"] is True
 
     # Verifies: REQ-d00276-A
     def test_every_test_reaching_a_requirement_passes_and_says_so(self):

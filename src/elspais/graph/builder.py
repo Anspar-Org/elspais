@@ -37,6 +37,7 @@ from elspais.graph.mutations import MutationEntry, MutationLog
 from elspais.graph.parsers import ParsedContent
 from elspais.graph.reference_faults import (
     FaultClass,
+    FaultCode,
     IdentifierFormFinding,
     ReferenceFault,
     StyleFinding,
@@ -4710,17 +4711,50 @@ class GraphBuilder:
         individually, and only the whole item's raw text is ever a verdict
         key).
 
-        No prose accompanies either answer. A cause is named by the code, the
-        file and the line the reference was written on, and that code's
-        documented meaning (REQ-d00252-K); all three reach every surface, so
-        a sentence guessing at a separator mismatch would only add a fourth
-        naming that the input does not determine -- and, on the fallback
-        path, would name a defect an item that parsed perfectly and is simply
-        absent does not have.
+        Prose accompanies an answer only where the input determines it.  A
+        cause is already named by the code, the file and the line the
+        reference was written on, and that code's documented meaning
+        (REQ-d00252-K), and all three reach every surface; a sentence
+        guessing at a defect would add a fourth naming that the input does
+        not support.  ``_fault_diagnostic`` is therefore keyed on the codes
+        and stays silent for the fallback path, where an item that parsed
+        perfectly and is simply absent has no defect to describe.
         """
         if (keyword, target_id) in verdicts:
             return verdicts[(keyword, target_id)]
         return self._resolution_class(target_id), ()
+
+    # Implements: REQ-d00272-E, REQ-d00269-F
+    def _fault_diagnostic(self, target_id: str, codes: tuple[str, ...]) -> str:
+        """What to tell the author about a reference that produced nothing.
+
+        Only what the codes determine. A separator defect is answered by the
+        separators this repository configures, which the author cannot read
+        off the failing line; content the grammar could not account for is
+        answered by naming both halves of the item, since the codes and the
+        verbatim text never say where one ends and the other begins
+        (REQ-d00272-E). Everything else gets nothing rather than a guess.
+        """
+        assertions = getattr(getattr(self._resolver, "config", None), "assertions", None)
+        if assertions is None:
+            return ""
+        configured = (
+            f"This repository writes an *Assertion* label after "
+            f"{assertions.separator!r} and joins two labels with "
+            f"{assertions.multi_separator!r}."
+        )
+        if FaultCode.WRONG_ASSERTION_SEPARATOR in codes or FaultCode.WRONG_MULTI_SEPARATOR in codes:
+            return configured
+        if FaultCode.IDENTIFIER_WITH_TRAILING_TEXT in codes:
+            split = self._resolver.opening_reference(target_id)
+            if split is None or not split[1]:
+                return ""
+            found, trailing = split
+            return (
+                f"Read {found!r} and then {trailing.strip()!r}, which no "
+                f"identifier accounts for. {configured}"
+            )
+        return ""
 
     # Implements: REQ-d00272-A, REQ-d00272-J
     def _forbidden_keyword_faults(
@@ -5298,6 +5332,7 @@ class GraphBuilder:
                         edge_kind=edge_kind.value,
                         fault_class=fault_class,
                         codes=codes,
+                        diagnostic=self._fault_diagnostic(target_id, codes),
                     )
                 )
 

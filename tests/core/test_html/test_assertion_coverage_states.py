@@ -286,9 +286,9 @@ class TestRequirementAssertionConsistency:
 
     def test_REQ_d00258_G_full_standing_shares_requirement_full_color(self):
         """A 'full' standing resolves (through the catalog) to the same color the
-        requirement full badge uses (severity 'ok'/green) -- the same decoupling
+        requirement full badge uses (severity 'off'/green) -- the same decoupling
         REQ-d00258-D established for severity, extended to standings."""
-        assert _standing_color("full") == _severity_color("ok")  # both green
+        assert _standing_color("full") == _severity_color("off")  # both green
         # failing -> red, missing -> a distinct neutral key (not a coverage color).
         assert _standing_color("failing") == _severity_color("error")
         assert _standing_color("missing") not in {

@@ -24,6 +24,12 @@ from typing import TYPE_CHECKING
 
 from lark import Lark
 
+from elspais.graph.parsers.patterns import (
+    METADATA_COMMENT_MARKERS,
+    comment_markers_for_path,
+    comment_style_fragment,
+)
+
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
@@ -59,7 +65,11 @@ class GrammarFactory:
     # Token builders (derive regex fragments from IdResolver / config)
     # ------------------------------------------------------------------
 
-    def _build_tokens(self, federated: bool = False) -> dict[str, str]:
+    def _build_tokens(
+        self,
+        federated: bool = False,
+        comment_markers: Sequence[str] = METADATA_COMMENT_MARKERS,
+    ) -> dict[str, str]:
         """Build substitution tokens from the resolver's identifier grammar.
 
         Args:
@@ -68,6 +78,10 @@ class GrammarFactory:
                 name an identifier any member owns (REQ-d00269-C); a spec
                 file declares only identifiers its own repository owns, so
                 its grammar stays narrow.
+            comment_markers: The markers that open a comment in the language
+                this grammar will read.  Only the reference grammar has such
+                a token; the requirement grammar reads markdown, which has no
+                language to ask.
         """
         # Every fragment comes from the one derivation authority,
         # so the grammar this parser recognises and the identifiers the resolver
@@ -86,8 +100,20 @@ class GrammarFactory:
             "__MULTI_SEP__": g.multi_separator,
         }
 
-        # Reference grammar tokens (comment styles + keywords)
-        tokens["__COMMENT_STYLES__"] = r"\#|\/\/|\-\-"
+        # Reference grammar tokens (comment styles + keywords).
+        #
+        # Implements: REQ-d00269-K
+        # The marker comes from the one association between a file type and
+        # its comment pattern, so a keyword is recognised only where the
+        # language of the file actually opens a comment: `--` introduces a
+        # reference in SQL and is arithmetic in Python.  A language the set
+        # does not name yields a fragment that never matches, so the keyword
+        # is read nowhere in such a file rather than everywhere.
+        #
+        # This narrows WHERE a reference may be written, never WHAT it may
+        # say: the identifier grammar above is the same in every language
+        # (REQ-p00014-T).
+        tokens["__COMMENT_STYLES__"] = comment_style_fragment(comment_markers)
 
         # Implements: REQ-d00269-E
         # What a keyword is does not depend on its case, nor on whether it is
@@ -149,9 +175,19 @@ class GrammarFactory:
             )
         return self._cache[key]
 
-    def get_reference_parser(self) -> Lark:
-        """Compile (or retrieve cached) reference grammar parser."""
-        tokens = self._build_tokens(federated=True)
+    def get_reference_parser(self, comment_markers: Sequence[str]) -> Lark:
+        """Compile (or retrieve cached) reference grammar parser.
+
+        Args:
+            comment_markers: The markers opening a comment in the language of
+                the files this parser will read.  Required, and empty is a
+                legitimate answer -- there is no marker set that stands for
+                "any language", because reading a keyword in a marker the
+                file's language does not admit is exactly what REQ-d00269-K
+                forbids.  Parsers are cached by the hash of the substituted
+                grammar, so one instance is shared per distinct pattern.
+        """
+        tokens = self._build_tokens(federated=True, comment_markers=comment_markers)
         full_grammar = self._substitute(self._read_grammar("reference.lark"), tokens)
 
         key = self._grammar_hash(full_grammar)
@@ -197,17 +233,26 @@ class FileDispatcher:
         self._reader = FederatedIdReader(resolver, member_resolvers)
         self._factory = GrammarFactory(resolver, member_resolvers)
         self._req_parser: Lark | None = None
-        self._ref_parser: Lark | None = None
+        # Implements: REQ-d00269-K
+        # One parser per comment pattern, not one per dispatcher: the marker
+        # a reference may be written behind differs between the files this
+        # dispatcher reads, so a single cached parser would serve one
+        # language's grammar to every other language's files.
+        self._ref_parsers: dict[tuple[str, ...], Lark] = {}
 
     def _get_req_parser(self) -> Lark:
         if self._req_parser is None:
             self._req_parser = self._factory.get_requirement_parser()
         return self._req_parser
 
-    def _get_ref_parser(self) -> Lark:
-        if self._ref_parser is None:
-            self._ref_parser = self._factory.get_reference_parser()
-        return self._ref_parser
+    def _get_ref_parser(self, file_path: str) -> Lark:
+        """The reference parser for the language *file_path* is written in."""
+        markers = comment_markers_for_path(file_path)
+        parser = self._ref_parsers.get(markers)
+        if parser is None:
+            parser = self._factory.get_reference_parser(markers)
+            self._ref_parsers[markers] = parser
+        return parser
 
     @staticmethod
     def _neutralize_fenced_blocks(content: str) -> str:
@@ -304,7 +349,7 @@ class FileDispatcher:
             lines = [(i + 1, line) for i, line in enumerate(content.split("\n"))]
             line_context = build_line_context(lines, language)
 
-        parser = self._get_ref_parser()
+        parser = self._get_ref_parser(file_path)
         tree = parser.parse(content)
         transformer = ReferenceTransformer(
             self._resolver,
@@ -313,6 +358,7 @@ class FileDispatcher:
             source_id=file_path,
             reader=self._reader,
             quoted_lines=self._quoted_line_numbers(content, file_path),
+            comment_markers=comment_markers_for_path(file_path),
         )
         results = transformer.transform(tree)
         results.extend(_fault_and_style_content(transformer))
@@ -363,8 +409,9 @@ class FileDispatcher:
             line_context, all_test_funcs, first_def_line = text_prescan(lines)
 
         # Extract file-level default verifies from the parse tree
-        parser = self._get_ref_parser()
+        parser = self._get_ref_parser(file_path)
         tree = parser.parse(content)
+        comment_markers = comment_markers_for_path(file_path)
 
         from elspais.graph.parsers.patterns import KEYWORD_PATTERN
 
@@ -381,7 +428,11 @@ class FileDispatcher:
         # to fold the tree once, before the real transformer -- which needs
         # file_default_verifies to construct -- exists.
         _fold_tx = ReferenceTransformer(
-            self._resolver, "test_ref", reader=self._reader, quoted_lines=quoted_lines
+            self._resolver,
+            "test_ref",
+            reader=self._reader,
+            quoted_lines=quoted_lines,
+            comment_markers=comment_markers,
         )
         _fold_tx._fold_continuations(tree.children)
 
@@ -424,7 +475,7 @@ class FileDispatcher:
                     # each item is judged on its own, so one item the
                     # grammar cannot account for does not cost the items
                     # that did resolve (REQ-d00269-G).
-                    items = read_reference_list(self._reader, text)
+                    items = read_reference_list(self._reader, text, comment_markers)
                     for ref in (i.resolved for i in items if i.resolved):
                         if ref not in file_default_verifies:
                             file_default_verifies.append(ref)
@@ -438,6 +489,7 @@ class FileDispatcher:
             source_id=file_path,
             reader=self._reader,
             quoted_lines=quoted_lines,
+            comment_markers=comment_markers,
         )
         results = transformer.transform(tree)
         results.extend(_fault_and_style_content(transformer))

@@ -103,10 +103,18 @@ class TestElspaisConfigRestructuring:
         """ElspaisConfig does NOT have an 'associated' field."""
         assert "associated" not in ElspaisConfig.model_fields
 
-    def test_REQ_d00212_F_version_defaults_to_4(self):
-        """ElspaisConfig.version defaults to 4."""
+    def test_REQ_d00212_F_version_defaults_to_the_current_schema_version(self):
+        """A config built from the schema's own defaults is already current.
+
+        The default is what `elspais init` writes and what `config_defaults()`
+        merges under a user's TOML, so a default lagging behind
+        `CURRENT_CONFIG_VERSION` would send every fresh project through a
+        migration on its first load.
+        """
+        from elspais.config import CURRENT_CONFIG_VERSION
+
         cfg = ElspaisConfig()
-        assert cfg.version == 4
+        assert cfg.version == CURRENT_CONFIG_VERSION
 
 
 # ---------------------------------------------------------------------------

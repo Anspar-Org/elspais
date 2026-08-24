@@ -92,7 +92,7 @@ class TestCollectBroken:
         """collect_broken always shows the whole population.
 
         Silencing a class of reference is now a review-time severity choice
-        (``[rules.references] unknown_namespace = "ok"``, say), not a
+        (``[rules.references] unknown_namespace = "off"``, say), not a
         listing-time filter -- ``allow_unresolved_cross_repo`` is retired,
         so a foreign-looking reference is kept regardless of what *config*
         says.
@@ -101,7 +101,7 @@ class TestCollectBroken:
         local_ref = _make_ref(source="REQ-p00002", target="REQ-p00099", foreign=False)
         graph = _make_graph(foreign_ref, local_ref)
         result = collect_broken(
-            graph, config={"rules": {"references": {"unknown_namespace": "ok"}}}
+            graph, config={"rules": {"references": {"unknown_namespace": "off"}}}
         )
         assert len(result) == 2
 

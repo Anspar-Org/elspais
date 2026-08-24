@@ -383,8 +383,24 @@ def apply_link_to_file(
 
     Returns:
         The comment line that was (or would be) inserted, or None on error.
+        ``None`` also where *file_path* is written in a language associated
+        with no comment pattern -- see below.
     """
-    comment = f"# {keyword}: {req_id}"
+    # Implements: REQ-d00269-K
+    # The marker comes from the same association the reader uses, so a link
+    # this tool writes is a link the next scan reads. Spelling `#` into a
+    # JavaScript file would write a citation that is neither valid there nor
+    # ever read back -- a relationship the author was told existed and that
+    # nothing records.
+    from elspais.graph.parsers.patterns import comment_pattern_for_path
+
+    pattern = comment_pattern_for_path(str(file_path))
+    if pattern is None:
+        # No pattern means no comment this file could carry a keyword in.
+        # Refusing is the honest answer: writing one anyway would leave a line
+        # that looks like a declaration and declares nothing.
+        return None
+    comment = f"{pattern.marker} {keyword}: {req_id}"
 
     if dry_run:
         return comment

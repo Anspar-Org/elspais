@@ -20,64 +20,39 @@ if TYPE_CHECKING:
     from elspais.graph.TraceGraph import TraceGraph
 
 from elspais.graph.GraphNode import FileType, NodeKind
+from elspais.graph.parsers.patterns import COMMENT_PATTERN_BY_EXTENSION, CommentPattern
 from elspais.graph.terms import TermRef
 
 # -- Language extension maps ---------------------------------------------------
 
+# Implements: REQ-d00236-H
+# Which marker opens a comment in a language is stated once, in the named set
+# under ``graph/parsers/patterns.py``.  These are views over that one
+# association, not a second list: an extension added there is scanned for
+# terms here without being named twice.
+#
 # Implements: REQ-d00236-D
 _HASH_LANGS: frozenset[str] = frozenset(
-    {
-        ".rb",
-        ".sh",
-        ".bash",
-        ".yaml",
-        ".yml",
-        ".tf",
-        ".tfvars",
-        ".hcl",
-    }
+    ext for ext, p in COMMENT_PATTERN_BY_EXTENSION.items() if p is CommentPattern.SHELL_LIKE
 )
 
 # Implements: REQ-d00236-C
 _SLASH_LANGS: frozenset[str] = frozenset(
-    {
-        ".js",
-        ".ts",
-        ".jsx",
-        ".tsx",
-        ".java",
-        ".c",
-        ".h",
-        ".cpp",
-        ".go",
-        ".rs",
-        ".dart",
-    }
+    ext for ext, p in COMMENT_PATTERN_BY_EXTENSION.items() if p is CommentPattern.C_LIKE
 )
 
 # Implements: REQ-d00236-E
-_DASH_LANGS: frozenset[str] = frozenset({".sql", ".lua"})
+_DASH_LANGS: frozenset[str] = frozenset(
+    ext for ext, p in COMMENT_PATTERN_BY_EXTENSION.items() if p is CommentPattern.FUNCTION_LIKE
+)
 
 # Implements: REQ-d00236-F
+# Markup has no line-comment pattern, so it appears in no named-set
+# association.  Term scanning still reads its block comments, because reading
+# prose for a *Defined Term* is a different question from admitting a
+# *Traceability* keyword: a keyword in a block comment is never read
+# (REQ-d00082-H), and a term written in one is.
 _HTML_LANGS: frozenset[str] = frozenset({".html", ".xml", ".svg"})
-
-# Implements: REQ-d00236-C
-_BLOCK_LANGS: frozenset[str] = frozenset(
-    {
-        ".js",
-        ".ts",
-        ".jsx",
-        ".tsx",
-        ".java",
-        ".c",
-        ".h",
-        ".cpp",
-        ".go",
-        ".rs",
-        ".dart",
-        ".css",
-    }
-)
 
 _LINE_COMMENT_RE = re.compile(r"//\s?(.*)")
 _HASH_COMMENT_RE = re.compile(r"#\s?(.*)")

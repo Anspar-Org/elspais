@@ -100,7 +100,7 @@ class ViewStats:
 # `neutral` (the forced N/A override, REQ-d00258-H) sits at the same low
 # priority as `info` so it never out-ranks a real gap (error/warning) for the
 # combined worst-severity — a genuine gap still wins the combined badge/bucket.
-SEVERITY_PRIORITY: dict[str, int] = {"error": 0, "warning": 1, "info": 2, "neutral": 2, "ok": 3}
+SEVERITY_PRIORITY: dict[str, int] = {"error": 0, "warning": 1, "info": 2, "neutral": 2, "off": 3}
 
 
 # Implements: REQ-d00258-D
@@ -138,7 +138,8 @@ _SEVERITY_TO_BUCKET: dict[str, str] = {
     # `neutral` (N/A override, REQ-d00258-H) is non-dragging exactly like `info`:
     # a not-applicable dimension must never pull the combined bucket below "full".
     "neutral": "full",
-    "ok": "full",
+    # A tier the dimension says nothing about (REQ-d00212-U): never a gap.
+    "off": "full",
 }
 
 # Tier descriptions for tooltip text

@@ -206,7 +206,7 @@ def declared_values(config: dict[str, Any], name: str) -> Any:
     return parse_value_selection([str(v) for v in raw])
 
 
-CURRENT_CONFIG_VERSION = 4
+CURRENT_CONFIG_VERSION = 5
 
 
 # Implements: REQ-d00212-N
@@ -242,8 +242,75 @@ def _migrate_v3_to_v4(config: dict) -> dict:
     return config
 
 
+# The severity settings, by the path each one lives at. Enumerated rather than
+# walked: a blind walk over the configuration would rewrite any string that
+# happened to read "ok" -- a status word, a level name -- and the migration
+# would corrupt settings it knows nothing about.
+def _severity_paths() -> list[tuple[str, ...]]:
+    paths: list[tuple[str, ...]] = [
+        ("rules", "format", "no_assertions_severity"),
+        ("rules", "format", "no_traceability_severity"),
+        ("rules", "coverage", "uncredited_evidence"),
+        ("rules", "coverage", "external_test_failure"),
+    ]
+    for dimension in ("implemented", "tested", "verified", "uat_coverage", "uat_verified"):
+        for tier in ("full", "partial", "failing", "missing"):
+            paths.append(("rules", "coverage", dimension, tier))
+    for field in (
+        "retired",
+        "provisional",
+        "aspirational",
+        "malformed",
+        "unknown_namespace",
+        "unknown_requirement",
+        "unknown_assertion",
+        "forbidden",
+        "keyword_form",
+        "identifier_form",
+        "undeclared",
+    ):
+        paths.append(("rules", "references", field))
+    for field in (
+        "duplicate",
+        "undefined",
+        "unmarked",
+        "unused",
+        "bad_definition",
+        "collection_empty",
+        "canonical_form",
+        "changed",
+    ):
+        paths.append(("terms", "severity", field))
+    return paths
+
+
+# Implements: REQ-d00212-U, REQ-d00212-V
+def _migrate_v4_to_v5(config: dict) -> dict:
+    """Rewrite the retired `ok` severity to `off`.
+
+    The two words meant one thing between them and neither was honoured
+    everywhere: `ok` passed a check while still listing its findings, `off`
+    withheld them. One word now says it -- `off` means the condition is not
+    reported here -- so a setting written `ok` is rewritten rather than
+    refused, which is what keeps an existing configuration loadable.
+    """
+    for path in _severity_paths():
+        container: Any = config
+        for key in path[:-1]:
+            container = container.get(key) if isinstance(container, dict) else None
+            if container is None:
+                break
+        if not isinstance(container, dict):
+            continue
+        if container.get(path[-1]) == "ok":
+            container[path[-1]] = "off"
+    config["version"] = 5
+    return config
+
+
 MIGRATIONS: dict[int, Callable[[dict], dict]] = {
     3: _migrate_v3_to_v4,  # flat terms severity -> nested [terms.severity]
+    4: _migrate_v4_to_v5,  # retired "ok" severity -> "off"
 }
 
 

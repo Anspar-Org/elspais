@@ -18,8 +18,9 @@ import argparse
 from pathlib import Path
 from typing import Any
 
-from elspais.commands.health import HealthCheck, HealthReport
+from elspais.commands.health import HealthCheck, HealthReport, skipped_check
 from elspais.config.schema import ElspaisConfig
+from elspais.utilities.findings import Severity, severity_for
 
 
 def _validate_config(config: dict[str, Any]) -> ElspaisConfig:
@@ -34,8 +35,14 @@ def _validate_config(config: dict[str, Any]) -> ElspaisConfig:
 # =============================================================================
 
 
-def check_config_exists(config_path: Path | None, start_path: Path) -> HealthCheck:
+def check_config_exists(
+    config_path: Path | None, start_path: Path, config: dict[str, Any] | None = None
+) -> HealthCheck:
     """Check if config file exists and is accessible."""
+    severity = severity_for("config.exists", config)
+    if severity == Severity.OFF:
+        return skipped_check("config.exists", "A missing configuration file")
+
     from elspais.config import find_config_file
 
     if config_path and config_path.exists():
@@ -66,8 +73,14 @@ def check_config_exists(config_path: Path | None, start_path: Path) -> HealthChe
     )
 
 
-def check_config_syntax(config_path: Path | None, start_path: Path) -> HealthCheck:
+def check_config_syntax(
+    config_path: Path | None, start_path: Path, config: dict[str, Any] | None = None
+) -> HealthCheck:
     """Check if config file has valid TOML syntax."""
+    severity = severity_for("config.syntax", config)
+    if severity == Severity.OFF:
+        return skipped_check("config.syntax", "A configuration file that does not parse")
+
     from elspais.config import find_config_file
 
     actual_path = (
@@ -100,12 +113,19 @@ def check_config_syntax(config_path: Path | None, start_path: Path) -> HealthChe
             passed=False,
             message=f"Configuration file has a formatting error: {e}",
             category="config",
+            severity=severity,
             details={"error": str(e), "path": str(actual_path)},
         )
 
 
 def check_config_required_fields(config: dict[str, Any]) -> HealthCheck:
     """Check that required configuration sections exist."""
+    severity = severity_for("config.required_fields", config)
+    if severity == Severity.OFF:
+        return skipped_check(
+            "config.required_fields", "Required configuration fields that are absent"
+        )
+
     typed_config = _validate_config(config)
     missing = []
 
@@ -125,6 +145,7 @@ def check_config_required_fields(config: dict[str, Any]) -> HealthCheck:
             passed=False,
             message=f"Configuration is missing required settings: {', '.join(missing)}",
             category="config",
+            severity=severity,
             details={"missing": missing},
         )
 
@@ -138,6 +159,10 @@ def check_config_required_fields(config: dict[str, Any]) -> HealthCheck:
 
 def check_config_pattern_tokens(config: dict[str, Any]) -> HealthCheck:
     """Validate that the ID pattern template uses valid placeholders."""
+    severity = severity_for("config.pattern_tokens", config)
+    if severity == Severity.OFF:
+        return skipped_check("config.pattern_tokens", "Identifier patterns that do not read")
+
     import re
 
     typed_config = _validate_config(config)
@@ -161,6 +186,7 @@ def check_config_pattern_tokens(config: dict[str, Any]) -> HealthCheck:
                 f"Valid ones are: {', '.join(sorted(valid_tokens))} and {{level.<field>}}"
             ),
             category="config",
+            severity=severity,
             details={"invalid_tokens": list(invalid), "valid_tokens": list(valid_tokens)},
         )
 
@@ -172,6 +198,7 @@ def check_config_pattern_tokens(config: dict[str, Any]) -> HealthCheck:
             passed=False,
             message=f"ID pattern is missing required placeholders: {', '.join(missing)}",
             category="config",
+            severity=severity,
             details={"missing": list(missing)},
         )
 
@@ -185,6 +212,10 @@ def check_config_pattern_tokens(config: dict[str, Any]) -> HealthCheck:
 
 def check_config_hierarchy_rules(config: dict[str, Any]) -> HealthCheck:
     """Validate hierarchy rules are consistent."""
+    severity = severity_for("config.hierarchy_rules", config)
+    if severity == Severity.OFF:
+        return skipped_check("config.hierarchy_rules", "Hierarchy rules that do not read")
+
     typed_config = _validate_config(config)
     levels = typed_config.levels
 
@@ -194,6 +225,7 @@ def check_config_hierarchy_rules(config: dict[str, Any]) -> HealthCheck:
             passed=False,
             message=f"Levels should be a table, but found {type(levels).__name__}",
             category="config",
+            severity=severity,
         )
 
     issues = []
@@ -215,6 +247,7 @@ def check_config_hierarchy_rules(config: dict[str, Any]) -> HealthCheck:
             passed=False,
             message=f"Hierarchy rule issues: {'; '.join(issues)}",
             category="config",
+            severity=severity,
             details={"issues": issues},
         )
 
@@ -228,6 +261,10 @@ def check_config_hierarchy_rules(config: dict[str, Any]) -> HealthCheck:
 
 def check_config_paths_exist(config: dict[str, Any], start_path: Path) -> HealthCheck:
     """Check that configured spec directories exist on disk."""
+    severity = severity_for("config.paths_exist", config)
+    if severity == Severity.OFF:
+        return skipped_check("config.paths_exist", "Configured directories that do not exist")
+
     typed_config = _validate_config(config)
     spec_dirs = typed_config.scanning.spec.directories
 
@@ -237,6 +274,7 @@ def check_config_paths_exist(config: dict[str, Any], start_path: Path) -> Health
             passed=False,
             message=f"Spec directories setting should be a list, found {type(spec_dirs).__name__}",
             category="config",
+            severity=severity,
         )
 
     missing = []
@@ -255,6 +293,7 @@ def check_config_paths_exist(config: dict[str, Any], start_path: Path) -> Health
             passed=False,
             message=f"Spec directories not found on disk: {', '.join(missing)}",
             category="config",
+            severity=severity,
             details={"missing": missing, "found": found},
         )
 
@@ -269,6 +308,10 @@ def check_config_paths_exist(config: dict[str, Any], start_path: Path) -> Health
 
 def check_config_project_type(config: dict[str, Any]) -> HealthCheck:
     """Check project configuration is valid."""
+    severity = severity_for("config.project_type", config)
+    if severity == Severity.OFF:
+        return skipped_check("config.project_type", "A project type the tool does not know")
+
     from pydantic import ValidationError
 
     raw = config
@@ -282,6 +325,7 @@ def check_config_project_type(config: dict[str, Any]) -> HealthCheck:
             passed=False,
             message=errors[0] if errors else str(exc),
             category="config",
+            severity=severity,
             details={"errors": errors},
         )
 
@@ -304,7 +348,7 @@ def check_config_project_type(config: dict[str, Any]) -> HealthCheck:
     )
 
 
-def check_config_associated_section(raw: dict) -> HealthCheck:
+def check_config_associated_section(raw: dict, config: dict[str, Any] | None = None) -> HealthCheck:
     """Check the `[associates]` declarations in this repository's own config.
 
     This reads one file and reports what that file says. The federation
@@ -312,6 +356,10 @@ def check_config_associated_section(raw: dict) -> HealthCheck:
     declarations of their own; the associate path and configuration
     checks are what speak for the federation as a whole.
     """
+    severity = severity_for("config.associated_section", config)
+    if severity == Severity.OFF:
+        return skipped_check("config.associated_section", "Associate declarations that do not read")
+
     typed_config = _validate_config(raw)
     associates = typed_config.associates
     if not associates:
@@ -337,11 +385,11 @@ def run_config_checks(
 ) -> list[HealthCheck]:
     """Run all configuration checks."""
     return [
-        check_config_exists(config_path, start_path),
-        check_config_syntax(config_path, start_path),
+        check_config_exists(config_path, start_path, config),
+        check_config_syntax(config_path, start_path, config),
         check_config_required_fields(config),
         check_config_project_type(config),
-        check_config_associated_section(config),
+        check_config_associated_section(config, config),
         check_config_pattern_tokens(config),
         check_config_hierarchy_rules(config),
         check_config_paths_exist(config, start_path),
@@ -353,8 +401,14 @@ def run_config_checks(
 # =============================================================================
 
 
-def check_worktree_status(git_root: Path | None) -> HealthCheck:
+def check_worktree_status(
+    git_root: Path | None, config: dict[str, Any] | None = None
+) -> HealthCheck:
     """Report git repository status."""
+    severity = severity_for("worktree.status", config)
+    if severity == Severity.OFF:
+        return skipped_check("worktree.status", "The state of the git worktree")
+
     if git_root is None:
         return HealthCheck(
             name="worktree.status",
@@ -381,6 +435,10 @@ def check_associate_paths(config: dict, git_root: Path | None) -> HealthCheck:
     report that covered only the projects named here would describe less
     than the tool actually uses.
     """
+    severity = severity_for("associate.paths_resolvable", config)
+    if severity == Severity.OFF:
+        return skipped_check("associate.paths_resolvable", "Associate paths that do not resolve")
+
     # Implements: REQ-d00202-A+D+I, REQ-d00203-C, REQ-d00212-K
     from elspais.graph.federation_plan import plan_federation_or_error
 
@@ -391,6 +449,7 @@ def check_associate_paths(config: dict, git_root: Path | None) -> HealthCheck:
             passed=False,
             message=f"Associated projects could not be resolved: {plan_error}",
             category="environment",
+            severity=severity,
             details={"error": plan_error},
         )
 
@@ -419,6 +478,7 @@ def check_associate_paths(config: dict, git_root: Path | None) -> HealthCheck:
             passed=False,
             message=f"Associated project paths not found: {'; '.join(missing)}",
             category="environment",
+            severity=severity,
             details={"missing": missing, "found": found},
         )
 
@@ -437,6 +497,10 @@ def check_associate_configs(config: dict, git_root: Path | None) -> HealthCheck:
     A project whose configuration cannot be loaded is named here with its
     path and the reason, wherever in the federation it was declared.
     """
+    severity = severity_for("associate.configs_valid", config)
+    if severity == Severity.OFF:
+        return skipped_check("associate.configs_valid", "Associate configurations that do not load")
+
     # Implements: REQ-d00202-A+D+I, REQ-d00203-C, REQ-d00212-K
     from elspais.associates import discover_associate_from_path
     from elspais.graph.federation_plan import plan_federation_or_error
@@ -448,6 +512,7 @@ def check_associate_configs(config: dict, git_root: Path | None) -> HealthCheck:
             passed=False,
             message=f"Associated project configuration could not be resolved: {plan_error}",
             category="environment",
+            severity=severity,
             details={"error": plan_error},
         )
 
@@ -485,6 +550,7 @@ def check_associate_configs(config: dict, git_root: Path | None) -> HealthCheck:
             passed=False,
             message=f"Associated project configuration issues: {'; '.join(invalid)}",
             category="environment",
+            severity=severity,
             details={"invalid": invalid, "valid": valid},
         )
 
@@ -497,8 +563,12 @@ def check_associate_configs(config: dict, git_root: Path | None) -> HealthCheck:
     )
 
 
-def check_local_toml_exists(start_path: Path) -> HealthCheck:
+def check_local_toml_exists(start_path: Path, config: dict[str, Any] | None = None) -> HealthCheck:
     """Check if local config override file exists."""
+    severity = severity_for("local_toml.exists", config)
+    if severity == Severity.OFF:
+        return skipped_check("local_toml.exists", "A local configuration override")
+
     local_path = start_path / ".elspais.local.toml"
 
     if local_path.exists():
@@ -522,8 +592,16 @@ def check_local_toml_exists(start_path: Path) -> HealthCheck:
     )
 
 
-def check_cross_repo_in_committed_config(config_path: Path | None) -> HealthCheck:
+def check_cross_repo_in_committed_config(
+    config_path: Path | None, config: dict[str, Any] | None = None
+) -> HealthCheck:
     """Warn if cross-repo paths are in the committed config file."""
+    severity = severity_for("cross_repo.in_committed", config)
+    if severity == Severity.OFF:
+        return skipped_check(
+            "cross_repo.in_committed", "Cross-project paths in shared configuration"
+        )
+
     if not config_path or not config_path.exists():
         return HealthCheck(
             name="cross_repo.in_committed",
@@ -573,7 +651,7 @@ def check_cross_repo_in_committed_config(config_path: Path | None) -> HealthChec
                 "Move these to .elspais.local.toml so they don't affect other developers."
             ),
             category="environment",
-            severity="warning",
+            severity=severity,
             details={"paths": cross_repo_paths},
         )
 
@@ -593,11 +671,11 @@ def run_environment_checks(
 ) -> list[HealthCheck]:
     """Run all environment checks."""
     return [
-        check_worktree_status(git_root),
+        check_worktree_status(git_root, config),
         check_associate_paths(config, git_root),
         check_associate_configs(config, git_root),
-        check_local_toml_exists(start_path),
-        check_cross_repo_in_committed_config(config_path),
+        check_local_toml_exists(start_path, config),
+        check_cross_repo_in_committed_config(config_path, config),
     ]
 
 
@@ -667,8 +745,12 @@ def _parse_docs_sections(docs_path: Path) -> set[str]:
     return sections
 
 
-def check_docs_drift(docs_path: Path) -> HealthCheck:
+def check_docs_drift(docs_path: Path, config: dict[str, Any] | None = None) -> HealthCheck:
     """Check for drift between ElspaisConfig schema and docs/configuration.md."""
+    severity = severity_for("docs.config_drift", config)
+    if severity == Severity.OFF:
+        return skipped_check("docs.config_drift", "Documentation that has drifted from the schema")
+
     if not docs_path.exists():
         return HealthCheck(
             name="docs.config_drift",
@@ -703,7 +785,7 @@ def check_docs_drift(docs_path: Path) -> HealthCheck:
         passed=False,
         message=f"Config docs drift detected: {'; '.join(parts)}",
         category="docs",
-        severity="warning",
+        severity=severity,
         details={"undocumented": undocumented, "stale": stale},
     )
 
@@ -799,7 +881,7 @@ def run(args: argparse.Namespace) -> int:
 
     # Docs drift check
     docs_path = (git_root or start_path) / "docs" / "configuration.md"
-    report.add(check_docs_drift(docs_path))
+    report.add(check_docs_drift(docs_path, config_dict))
 
     # Output
     fmt = getattr(args, "format", "text") or "text"

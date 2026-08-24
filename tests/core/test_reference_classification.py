@@ -811,12 +811,15 @@ def test_a_reference_that_parsed_and_is_absent_carries_no_prose(
     )
 
 
-# Verifies: REQ-d00252-K, REQ-d00272-A
+# Verifies: REQ-d00252-K, REQ-d00272-A, REQ-d00272-D
 def test_a_malformed_own_namespace_reference_names_its_cause_by_code_and_location(
     tmp_path, repo_root
 ):
     """What names the cause is the code together with where the reference was
-    written, and both reach the surface that reports it."""
+    written, and both reach the surface that reports it. Where the code names
+    a separator defect, the separators this repository configures are a fact
+    of its configuration rather than a guess at the author, and the author
+    cannot read them off the failing line -- so they accompany the code."""
     from elspais.commands.health import _fault_location
 
     graph = _project(tmp_path, repo_root, "# Implements: REQ-d00001+A\ndef f():\n    return 1\n")
@@ -828,7 +831,10 @@ def test_a_malformed_own_namespace_reference_names_its_cause_by_code_and_locatio
     file_path, line = _fault_location(graph, fault.source_id, fault.line)
     assert file_path and file_path.endswith("m.py")
     assert line == 1
-    assert fault.diagnostic == ""
+    assert "'-'" in fault.diagnostic and "'+'" in fault.diagnostic, (
+        "the separators this repository configures are what the author needs "
+        f"and cannot see: {fault.diagnostic!r}"
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -947,3 +953,222 @@ def test_repeated_colons_after_a_keyword_bind_nothing(tmp_path, repo_root):
     assert len(faults) == 1, f"expected one fault, got {faults}"
     assert faults[0].fault_class is FaultClass.MALFORMED
     assert FaultCode.NOT_AN_IDENTIFIER in faults[0].codes
+
+
+# --------------------------------------------------------------------------- #
+# A reference followed by content the grammar does not account for
+# --------------------------------------------------------------------------- #
+
+
+# Verifies: REQ-d00272-E, REQ-d00272-R
+@pytest.mark.parametrize(
+    "item",
+    [
+        "REQ-d00001-A - one environment",
+        "REQ-d00001-A (gloss)",
+        "REQ-d00001-A see also",
+        "REQ-d00001 as amended",
+    ],
+)
+def test_a_reference_followed_by_prose_names_the_reference_and_the_remainder(reader, item):
+    """A space stops an identifier, and what follows it is content no grammar
+    accounts for. Reporting that as "not an identifier" describes a line the
+    author did not write: they wrote a reference and then kept typing, and the
+    report worth reading names the reference found and the content left over."""
+    fault_class, codes = reader.classify_unmatched(item)
+    assert fault_class is FaultClass.MALFORMED
+    assert codes == (FaultCode.IDENTIFIER_WITH_TRAILING_TEXT,), (
+        f"a reference plus unaccounted content, not an unrecognised string: {codes!r}"
+    )
+    found, trailing = reader.opening_reference(item)
+    assert found == item.split(" ", 1)[0]
+    assert trailing.strip(), "the remainder is what the report has to name alongside it"
+
+
+# Verifies: REQ-d00272-B, REQ-d00272-F
+@pytest.mark.parametrize(
+    "item",
+    [
+        "REQ-d00001-A - one environment",
+        "REQ-d00001-A (gloss)",
+        "REQ-d00001-A + B",
+    ],
+)
+def test_a_reference_followed_by_prose_still_binds_nothing(reader, item):
+    """Reading within an item informs the report and contributes no
+    relationship. A better diagnosis must not become a licence to resolve: a
+    space is still what no identifier contains."""
+    items = reader.parse_ref_list(item)
+    assert len(items) == 1
+    assert items[0].resolved is None
+    assert items[0].fault_class is FaultClass.MALFORMED
+
+
+# Verifies: REQ-d00272-L
+def test_a_spaced_multi_separator_is_trailing_content_not_a_relaxation(reader):
+    """`REQ-d00001-A + B` cannot be reached from an acceptable reference by
+    re-reading a separator, because no relaxation admits the spaces around it.
+    Trailing content is the account that applies when nothing more specific
+    does, and this is that case."""
+    fault_class, codes = reader.classify_unmatched("REQ-d00001-A + B")
+    assert fault_class is FaultClass.MALFORMED
+    assert codes == (FaultCode.IDENTIFIER_WITH_TRAILING_TEXT,)
+    assert FaultCode.WRONG_MULTI_SEPARATOR not in codes
+
+
+# Verifies: REQ-d00272-B
+@pytest.mark.parametrize(
+    "item",
+    ["blah blah", "see the design note", "and so on"],
+)
+def test_prose_that_opens_with_no_reference_is_still_not_an_identifier(reader, item):
+    """The trailing-content account is reachable only from an acceptable
+    reference. Prose that opens with none names no repository -- declared or
+    undeclared -- and saying otherwise sends its author to configure an
+    associate that would not fix anything."""
+    fault_class, codes = reader.classify_unmatched(item)
+    assert fault_class is FaultClass.MALFORMED
+    assert fault_class is not FaultClass.UNKNOWN_NAMESPACE
+    assert codes == (FaultCode.NOT_AN_IDENTIFIER,)
+
+
+# Verifies: REQ-d00269-G, REQ-d00272-B
+def test_a_trailing_separator_followed_by_prose_reports_only_the_prose(reader):
+    """A defect in one item is evidence about that item. The named reference
+    still binds, and the prose after the dividing character is reported as
+    what it is rather than attributed to a repository."""
+    items = reader.parse_ref_list("REQ-d00001-A, blah blah")
+    assert items[0].resolved == "REQ-d00001-A"
+    assert items[0].fault_class is None
+    assert items[1].resolved is None
+    assert items[1].fault_class is FaultClass.MALFORMED
+    assert items[1].codes == (FaultCode.NOT_AN_IDENTIFIER,)
+
+
+# --------------------------------------------------------------------------- #
+# A comment ends the reference before it
+# --------------------------------------------------------------------------- #
+
+
+# Verifies: REQ-d00272-Q
+@pytest.mark.parametrize("marker", ["#", "//", "--"])
+def test_a_comment_after_a_reference_ends_it_rather_than_breaking_it(reader, marker):
+    """Citing a requirement and then explaining, on the same line, why the
+    code answers to it is a natural way to write. The comment is comment; the
+    reference before it is read."""
+    items = reader.parse_ref_list(f"REQ-d00001-A {marker} explains why this one")
+    assert len(items) == 1
+    assert items[0].resolved == "REQ-d00001-A"
+    assert items[0].fault_class is None
+    assert items[0].raw == "REQ-d00001-A", (
+        "the comment is not part of what the author wrote as a target"
+    )
+
+
+# Verifies: REQ-d00272-Q
+def test_a_comment_may_hold_the_character_that_divides_a_list(reader):
+    """The comment comes off before the list is divided. Dividing first would
+    shred a sentence into items and report each fragment as a reference its
+    author never wrote."""
+    items = reader.parse_ref_list("REQ-d00001-A, REQ-d00002 # first, second and third")
+    assert [i.resolved for i in items] == ["REQ-d00001-A", "REQ-d00002"]
+    assert all(i.fault_class is None for i in items)
+
+
+# Verifies: REQ-d00272-Q
+def test_a_marker_needs_whitespace_before_it_to_open_a_comment(reader):
+    """Without the space a marker's characters are just characters an
+    identifier may abut, and `REQ-d00001--A` is a separator defect rather than
+    a requirement with a comment after it."""
+    items = reader.parse_ref_list("REQ-d00001--A")
+    assert len(items) == 1
+    assert items[0].resolved is None, (
+        "reading this as a reference plus a comment would resolve a citation "
+        "whose assertion label the author did not manage to spell"
+    )
+    assert items[0].fault_class is FaultClass.MALFORMED
+
+
+# Verifies: REQ-d00272-Q
+def test_a_marker_opens_no_comment_where_no_reference_precedes_it(reader):
+    """A marker ends a reference. With none before it there is nothing for it
+    to end, so the item is judged whole."""
+    fault_class, codes = reader.classify_unmatched("not a reference -- at all")
+    assert fault_class is FaultClass.MALFORMED
+    assert codes == (FaultCode.NOT_AN_IDENTIFIER,)
+
+
+# Verifies: REQ-d00272-Q
+def test_a_caller_naming_its_language_decides_which_markers_end_a_reference(reader):
+    """Which markers open a comment is a property of a language. A caller that
+    knows the file's kind says so, and a language with no such marker reads the
+    whole item."""
+    items = reader.parse_ref_list("REQ-d00001-A # not a comment here", comment_markers=())
+    assert len(items) == 1
+    assert items[0].resolved is None
+    assert items[0].codes == (FaultCode.IDENTIFIER_WITH_TRAILING_TEXT,)
+
+
+# --------------------------------------------------------------------------- #
+# Whitespace around the character that divides a list
+# --------------------------------------------------------------------------- #
+
+
+# Verifies: REQ-d00269-G
+@pytest.mark.parametrize(
+    "text",
+    [
+        "REQ-d00001-A,REQ-d00002-B",
+        "REQ-d00001-A, REQ-d00002-B",
+        "REQ-d00001-A , REQ-d00002-B",
+        "  REQ-d00001-A  ,  REQ-d00002-B  ",
+    ],
+)
+def test_space_around_the_dividing_character_is_not_part_of_an_item(reader, text):
+    """Whitespace divides nothing on its own; the dividing character does. An
+    author who spaces a list out has written the same list."""
+    items = reader.parse_ref_list(text)
+    assert [i.resolved for i in items] == ["REQ-d00001-A", "REQ-d00002-B"]
+    assert all(i.fault_class is None for i in items)
+
+
+# --------------------------------------------------------------------------- #
+# The same reading in a real annotation
+# --------------------------------------------------------------------------- #
+
+
+# Verifies: REQ-d00272-E, REQ-d00272-R
+def test_an_annotation_glossing_its_reference_is_reported_naming_both_halves(tmp_path, repo_root):
+    """The reader's account has to survive to the surface that reports it. An
+    author who cited a requirement and then explained it in prose is told which
+    reference was read and what was left over, on the line they wrote."""
+    graph = _project(
+        tmp_path,
+        repo_root,
+        "# Implements: REQ-d00001-A - one environment\ndef f():\n    return 1\n",
+    )
+    faults = [f for f in graph.broken_references() if f.source_id.startswith("code:")]
+    assert len(faults) == 1, f"expected one fault, got {faults}"
+    fault = faults[0]
+    assert fault.fault_class is FaultClass.MALFORMED
+    assert FaultCode.IDENTIFIER_WITH_TRAILING_TEXT in fault.codes
+    assert "REQ-d00001-A" in fault.diagnostic
+    assert "one environment" in fault.diagnostic
+
+
+# Verifies: REQ-d00272-Q, REQ-d00272-F
+def test_an_annotation_commenting_on_its_reference_binds_the_reference(tmp_path, repo_root):
+    """The comment costs the citation nothing: the edge the author declared is
+    built, and no relationship is invented from the prose."""
+    from elspais.graph.relations import EdgeKind as _EdgeKind
+
+    graph = _project(
+        tmp_path,
+        repo_root,
+        "# Implements: REQ-d00001-A  # the only place this happens\ndef f():\n    return 1\n",
+    )
+    assert not [f for f in graph.broken_references() if f.source_id.startswith("code:")]
+    node = graph.find_by_id("REQ-d00001")
+    assert node is not None
+    implementers = list(node.iter_edges_by_kind(_EdgeKind.IMPLEMENTS))
+    assert implementers, "the reference before the comment declares its relationship"

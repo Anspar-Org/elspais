@@ -45,10 +45,13 @@ In implementing requirements:
 **Implements**: REQ-p00001-A
 ```
 
-In code comments (multiple comment styles supported: `#`, `//`, `--`, `<!-- -->`, `/* */`):
+In code comments, using the comment pattern of that file's own language --
+`#` in Python, `//` in JavaScript, `--` in SQL. See `elspais docs linking` for
+the full named set. A keyword inside a block comment (`/* */`, `<!-- -->`) is
+never read:
 ```
-# Implements: REQ-p00001-A
-// Implements: REQ-p00001-A
+# Implements: REQ-p00001-A     <- in a .py file
+// Implements: REQ-p00001-A    <- in a .js file
 ```
 
 In tests (via function names or `Validates`/`Tests` comments):

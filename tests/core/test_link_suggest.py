@@ -526,7 +526,9 @@ class TestApplyLinkToFile:
         assert "# Implements: REQ-001" in f.read_text()
 
     def test_REQ_o00065_F_apply_link_dry_run(self) -> None:
-        result = apply_link_to_file(Path("/nonexistent"), 1, "REQ-001", dry_run=True)
+        # A dry run needs no file on disk, but it still needs a language:
+        # the marker is the one that file's own comment pattern uses.
+        result = apply_link_to_file(Path("/nonexistent.py"), 1, "REQ-001", dry_run=True)
         assert result == "# Implements: REQ-001"
 
     def test_REQ_o00065_F_apply_link_at_line_zero_top(self, tmp_path: Path) -> None:
@@ -548,7 +550,7 @@ class TestApplyLinkToFile:
         assert result is None
 
     def test_REQ_o00065_F_apply_link_dry_run_no_file_needed(self) -> None:
-        result = apply_link_to_file(Path("/no/file"), 1, "REQ-001", dry_run=True)
+        result = apply_link_to_file(Path("/no/file.py"), 1, "REQ-001", dry_run=True)
         assert result is not None
 
     def test_REQ_o00065_F_apply_link_beyond_end_of_file(self, tmp_path: Path) -> None:

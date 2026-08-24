@@ -753,13 +753,15 @@ class TestCheckUnclaimedReferences:
         assert sum(counts.values()) == 1
         assert report.skipped == 0
 
-    @pytest.mark.parametrize("severity", ["ok", "error"])
-    def test_REQ_d00269_F_unknown_namespace_ok_silences_the_finding(self, severity: str) -> None:
+    @pytest.mark.parametrize("severity", ["off", "error"])
+    def test_REQ_d00269_F_unknown_namespace_off_withholds_the_finding(self, severity: str) -> None:
         """A project that does not want to hear about references into
-        unconfigured repositories sets ``unknown_namespace = "ok"`` --
+        unconfigured repositories sets ``unknown_namespace = "off"`` --
         the successor to ``allow_unresolved_cross_repo``, which named a
         boolean flag rather than the severity the project actually wanted.
-        Any other value keeps reporting it.
+        ``off`` means the condition is not reported here at all: the check
+        reports as skipped and carries no findings. Any other value keeps
+        reporting it.
         """
         from elspais.graph.reference_faults import ReferenceFault
 
@@ -800,10 +802,16 @@ class TestCheckUnclaimedReferences:
 
         check = check_unclaimed_references(fed, host_config)
 
-        # Silenced ("ok") still passes and still names the finding -- "ok"
-        # is a severity that reports without failing the run, not a filter.
-        assert check.passed is (severity == "ok")
-        assert any("widget-42" in f.message for f in check.findings)
+        if severity == "off":
+            # Withheld: the condition is not reported here, so the check is
+            # emitted as a skipped one carrying nothing to read.
+            assert check.passed is True
+            assert check.severity == "info"
+            assert check.findings == []
+            assert check.details["skipped"] is True
+        else:
+            assert check.passed is False
+            assert any("widget-42" in f.message for f in check.findings)
 
 
 # =============================================================================

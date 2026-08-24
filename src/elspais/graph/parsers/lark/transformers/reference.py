@@ -43,6 +43,9 @@ from elspais.graph.parsers.patterns import (
 from elspais.graph.parsers.patterns import (
     KEYWORD_PATTERN as _KEYWORD_RE,
 )
+from elspais.graph.parsers.patterns import (
+    comment_style_fragment,
+)
 from elspais.graph.reference_faults import (
     FaultClass,
     FaultCode,
@@ -53,12 +56,11 @@ from elspais.graph.reference_faults import (
 from elspais.utilities.patterns import REF_LIST_SEPARATOR
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from elspais.utilities.patterns import FederatedIdReader, IdResolver
 
 _log = logging.getLogger(__name__)
-
-# Hardcoded comment styles for empty-comment detection
-_COMMENT_STYLES = ["#", "//", "--"]
 
 
 def reference_target(text: str) -> str:
@@ -97,16 +99,33 @@ def reference_target(text: str) -> str:
     return tail.strip()
 
 
-# Implements: REQ-d00269-G
-def read_reference_list(reader: FederatedIdReader, text: str) -> list[RefItem]:
+# Implements: REQ-d00269-G, REQ-d00272-Q
+def read_reference_list(
+    reader: FederatedIdReader,
+    text: str,
+    comment_markers: Sequence[str],
+) -> list[RefItem]:
     """The items a reference line names, each with its verdict.
 
     One reading for every surface that has a whole annotation line in hand,
     so a file-level default and the annotation above a function admit the
     same targets.  A journey step belongs to its own grammar rather than to
     any repository's identifiers, so it is offered alongside them.
+
+    Args:
+        reader: The federation's identifier reader.
+        text: The whole annotation line, keyword included.
+        comment_markers: The markers opening a comment in the language of the
+            file *text* was read from.  A second comment after a reference
+            ends it (REQ-d00272-Q), and only this language's own marker may
+            do so -- ``REQ-d00001-A -- why`` ends at the dash in SQL and is a
+            malformed item in Python.  Empty says the language has none.
     """
-    return reader.parse_ref_list(reference_target(text), extra_items=(_JOURNEY_REF_RE.pattern,))
+    return reader.parse_ref_list(
+        reference_target(text),
+        extra_items=(_JOURNEY_REF_RE.pattern,),
+        comment_markers=comment_markers,
+    )
 
 
 class ReferenceTransformer:
@@ -124,6 +143,12 @@ class ReferenceTransformer:
         quoted_lines: Line numbers holding quoted text -- the interior of a
             fenced block.  A keyword there is displayed, not invoked, so the
             line is left ordinary text however it lexed.
+        comment_markers: The markers opening a comment in the language of the
+            file being read (REQ-d00269-K).  The same answer the grammar was
+            compiled with, so the marker a line is recognised behind and the
+            marker this transformer then reads it apart by cannot differ.
+            Defaults to none, which reads a keyword nowhere -- the safe
+            direction for a caller that has not said which language it holds.
     """
 
     def __init__(
@@ -136,6 +161,7 @@ class ReferenceTransformer:
         source_id: str = "",
         reader: FederatedIdReader | None = None,
         quoted_lines: set[int] | None = None,
+        comment_markers: Sequence[str] = (),
     ) -> None:
         from elspais.utilities.patterns import FederatedIdReader as _Reader
 
@@ -147,6 +173,10 @@ class ReferenceTransformer:
         self.all_test_funcs = all_test_funcs or []
         self.source_id = source_id
         self.quoted_lines = quoted_lines or set()
+        self.comment_markers: tuple[str, ...] = tuple(comment_markers)
+        # One compiled matcher for this file's own marker, used everywhere
+        # this transformer needs to find where a comment opens.
+        self._comment_marker_re = re.compile(comment_style_fragment(self.comment_markers))
         self.warnings: list[str] = []
         self.faults: list[tuple[RefItem, int, str]] = []
         # Continuation state (REQ-d00269-H), rebuilt once per transform() call
@@ -550,7 +580,7 @@ class ReferenceTransformer:
             # earlier, so its own verdict rides along here exactly as it does
             # on the admitted path -- reporting the refusal for it would name
             # a later stage than reading actually reached.
-            items = read_reference_list(self.reader, text)
+            items = read_reference_list(self.reader, text, self.comment_markers)
             targets, verdicts = refs_and_verdicts(items, keyword)
             if not targets:
                 return None
@@ -576,7 +606,7 @@ class ReferenceTransformer:
                 parsed_data=parsed_data,
             )
 
-        items = read_reference_list(self.reader, text)
+        items = read_reference_list(self.reader, text, self.comment_markers)
         # Implements: REQ-d00272-H
         if not items:
             self.faults.append(
@@ -776,7 +806,7 @@ class ReferenceTransformer:
         continues no list (REQ-d00269-H).
         """
         stripped = text.lstrip(" \t")
-        marker = re.match(r"#|//|--", stripped)
+        marker = self._comment_marker_re.match(stripped)
         if not marker:
             return None
         content = stripped[marker.end() :].strip()
@@ -821,7 +851,7 @@ class ReferenceTransformer:
         reading unaffected by style may ignore the return value entirely.
         """
         stripped = text.lstrip(" \t")
-        marker_match = re.match(r"#|//|--", stripped)
+        marker_match = self._comment_marker_re.match(stripped)
         if not marker_match:
             return ()
         after_marker = stripped[marker_match.end() :]
@@ -877,11 +907,21 @@ class ReferenceTransformer:
         return (None, None, 0, 0)
 
     def _is_empty_comment(self, text: str) -> bool:
-        """Check if a line is an empty comment."""
+        """Whether *text* is a comment with nothing in it.
+
+        Read in this file's own comment pattern (REQ-d00269-K), so a rule of
+        dashes decorating a SQL file is an empty comment there and an
+        expression in a Python one.  Only the marker's OWN characters are
+        stripped from the tail, so a decorative rule counts as empty just
+        where it is drawn in them: ``# ####`` is an empty comment in a
+        shell-like file and ``-- ----`` in a function-like one, while
+        ``# ------`` holds content, because dashes are not a Python comment's
+        characters.
+        """
         stripped = text.strip()
-        for style in _COMMENT_STYLES:
+        for style in self.comment_markers:
             if stripped.startswith(style):
-                remainder = stripped[len(style) :].strip().rstrip("#/-").strip()
+                remainder = stripped[len(style) :].strip().strip(style).strip()
                 if not remainder:
                     return True
         return False

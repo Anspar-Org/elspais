@@ -413,11 +413,11 @@ def _run_prescan_command(
 # Jinja templates are included because a template is where a viewer's
 # JavaScript is written -- the code is real, the annotations in it are real,
 # and leaving the extension out meant every one of them was invisible while
-# the requirements they implement read as unimplemented. What a `.j2` file
-# holds is decided by the comment markers found in it, exactly as for any
-# other extension: a `//` line in a `.js.j2` reads, and a `/* */` block in a
-# `.css.j2` does not, which is the block-comment gap and not specific to
-# templates.
+# the requirements they implement read as unimplemented. A template is
+# associated with the c-like comment pattern, whatever it renders to, like
+# every other scannable file type is associated with exactly one
+# (REQ-d00236-H): a `//` line reads in a `.js.j2` and in a `.css.j2` alike.
+# Block comments carry no citation in a template any more than anywhere else.
 DEFAULT_CODE_PATTERNS = [
     "*.py",
     "*.js",

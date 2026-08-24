@@ -142,20 +142,26 @@ once:
 **Implements**: REQ-p00001-A+B, REQ-p00002
 ```
 
-A target holding anything else -- a note after the reference, prose around
-it, an identifier from another estate that merely contains one of yours --
-resolves to nothing and is reported as an unresolved reference carrying the
-line as written. No identifier is picked out of it: an edge to a
-requirement you never named would be evidence filed against the wrong
+A target holding anything else -- prose around the reference, trailing
+words the grammar cannot account for, an identifier from another estate that
+merely contains one of yours -- resolves to nothing and is reported,
+carrying the line as written. No identifier is picked out of it: an edge to
+a requirement you never named would be evidence filed against the wrong
 requirement, and nothing would report it.
 
 ```text
-# Implements: REQ-p00001 -- the flag path        (a note is not a reference)
+# Implements: REQ-p00001 the flag path           (trailing words are not a reference)
 # Verifies: exit code is worst-of-all (REQ-p00001-C)   (prose is not a list)
 # Implements: XREQ-d00001                        (not your REQ-d00001)
 ```
 
-Put the note on the line below, and the line above stays a reference.
+A note is the exception, because a note says it is one. Open it with a
+comment marker -- `#`, `//` or `--` after a space -- and the reference before
+it is read while the rest is comment:
+
+```text
+# Implements: REQ-p00001  # the flag path
+```
 
 ## JSON Output
 

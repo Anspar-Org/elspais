@@ -229,7 +229,7 @@ def test_journey_validates_across_separator_combinations(
     assert covered_labels(rollup.uat_coverage, "immediate_direct") == set(expected_labels)
 
 
-# Verifies: REQ-d00082-E, REQ-p00014-R, REQ-d00272-A, REQ-d00252-G, REQ-d00252-K
+# Verifies: REQ-d00082-E, REQ-p00014-R, REQ-d00272-A, REQ-d00272-E, REQ-d00252-G, REQ-d00252-K
 def test_journey_dash_style_ref_under_slash_config_is_hard_broken(tmp_path):
     """A journey `Validates:` ref that still uses "-" when the project is
     configured with a "/" separator must remain a hard broken reference
@@ -290,9 +290,17 @@ def test_journey_dash_style_ref_under_slash_config_is_hard_broken(tmp_path):
     assert file_path.endswith(".md")
     assert line, "a cause is named with the line the reference was written on"
 
-    assert br.diagnostic == "", (
-        "The code and the location name the cause; prose guessing at a "
-        f"separator would name one the input does not determine: {br.diagnostic!r}"
+    # A trailing-content report names both halves: neither the code nor the
+    # verbatim target says where the reference ends and the residue begins.
+    assert "REQ-p-widget" in br.diagnostic, (
+        f"the reference that was found is named: {br.diagnostic!r}"
+    )
+    assert "-A+C" in br.diagnostic, (
+        f"the content no identifier accounts for is named: {br.diagnostic!r}"
+    )
+    assert "'/'" in br.diagnostic, (
+        "an author who wrote the dash style is told which separator this "
+        f"repository configures: {br.diagnostic!r}"
     )
 
 
