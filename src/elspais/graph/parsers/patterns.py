@@ -166,6 +166,7 @@ COMMENT_PATTERN_BY_EXTENSION: dict[str, CommentPattern] = {
         (
             ".bash",
             ".cmake",
+            ".dockerfile",
             ".ex",
             ".exs",
             ".hcl",
@@ -262,6 +263,17 @@ COMMENT_PATTERN_BY_EXTENSION: dict[str, CommentPattern] = {
 # implementing real requirements.
 
 
+# Implements: REQ-d00236-H
+# A few scannable file types name their language in the whole file name rather
+# than in an extension. They are associated the same way every other type is --
+# one type, one pattern -- and they are listed here rather than in the
+# extension map because there is no extension to key them by.
+COMMENT_PATTERN_BY_NAME: dict[str, CommentPattern] = {
+    "containerfile": CommentPattern.SHELL_LIKE,
+    "dockerfile": CommentPattern.SHELL_LIKE,
+}
+
+
 # Implements: REQ-d00269-K
 def comment_pattern_for_path(path: str) -> CommentPattern | None:
     """The one comment pattern the language of *path* is associated with.
@@ -273,6 +285,9 @@ def comment_pattern_for_path(path: str) -> CommentPattern | None:
     of a shape, which is the failure this association exists to remove.
     """
     name = path.replace("\\", "/").rsplit("/", 1)[-1].lower()
+    named = COMMENT_PATTERN_BY_NAME.get(name)
+    if named is not None:
+        return named
     _, dot, extension = name.rpartition(".")
     if not dot:
         return None

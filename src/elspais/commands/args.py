@@ -64,14 +64,33 @@ class ChecksArgs:
     spec_only: Annotated[bool, tyro.conf.arg(name="spec")] = False
     """Run spec file checks only."""
 
-    code_only: Annotated[bool, tyro.conf.arg(name="code")] = False
-    """Run code reference checks only."""
+    code_only: Annotated[bool, tyro.conf.arg(name="code-checks")] = False
+    """Run code reference checks only. Named `--code-checks` rather than
+    `--code` because `--code` selects findings by diagnostic code."""
 
     tests_only: Annotated[bool, tyro.conf.arg(name="tests")] = False
     """Run test mapping checks only."""
 
     terms_only: Annotated[bool, tyro.conf.arg(name="terms")] = False
     """Run defined-term checks only."""
+
+    severity: list[str] | None = None
+    """Report only findings whose check carries these severities
+    (error, warning, info; space-separated)."""
+
+    category: list[str] | None = None
+    """Report only findings in these categories (config, spec, references,
+    code, tests, uat, terms; space-separated)."""
+
+    code: list[str] | None = None
+    """Report only findings carrying these diagnostic codes, e.g.
+    E_IDENTIFIER_WITH_TRAILING_TEXT (space-separated). Selects findings, not
+    checks: use --code-checks to run the code checks alone."""
+
+    file: list[str] | None = None
+    """Report only findings located in files matching these glob patterns
+    (space-separated), e.g. 'spec/*.md'. Named `--file` rather than `--path`
+    because `--path` already names the repository root to work from."""
 
     format: Literal["text", "markdown", "json", "junit", "sarif"] = "text"
     """Output format."""

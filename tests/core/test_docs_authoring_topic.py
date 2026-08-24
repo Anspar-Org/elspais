@@ -1,4 +1,4 @@
-# Verifies: REQ-p00013-A
+# Verifies: REQ-d00286-C
 from elspais.utilities.docs_loader import TOPIC_ORDER, get_available_topics, load_topic
 
 

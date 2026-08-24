@@ -287,6 +287,42 @@ Classes of REQ-p00019 not concretized here are bound through the instance rather
 
 *End* *The Shape of a Finding* | **Hash**: f7488e72
 
+## REQ-d00286: Built-In User Documentation
+
+**Level**: dev | **Status**: Draft | **Implements**: REQ-p00001
+
+A user asks the tool what one of its subjects means and the tool answers, without a network and without the repository it was built from. This states where that documentation lives, what it must cover, and why it cannot drift from the program it describes.
+
+### Assertions
+
+A. The tool's user documentation SHALL have one source.
+
+B. Every surface presenting that documentation SHALL render it from that source.
+
+C. Each subject the tool exposes SHALL have a documentation topic.
+
+D. The documentation SHALL travel with the installed program, so that an installation and a checkout answer alike.
+
+E. A set the program defines and the documentation presents SHALL be presented from that definition, so that the two cannot disagree.
+
+F. The tool SHALL render a topic without display formatting on request.
+
+### Rationale
+
+Documentation that is copied is documentation that diverges, and the copy a reader happens to open is the one that misleads them. A and B put the whole estate behind one source so there is no second copy to fall behind, and D carries that source into the installed program so a user who never cloned anything gets the same answer as a developer reading the file.
+
+E is the sharper form of the same rule, and it is the one that fails silently. A hand-maintained list of what the program offers — its checks, its settings, the comment patterns it reads — is correct on the day it is written and wrong on the day the program gains one more. Deriving the presentation from the definition removes the opportunity: the two cannot disagree because there is only one of them. Where a fact is genuinely prose, this does not apply; it binds only where the program already holds the set.
+
+C is what makes a subject discoverable at all. A command or a setting a user can reach and cannot read about is indistinguishable, to them, from one that does not work.
+
+F exists because documentation is read by programs as well as people, and display formatting that cannot be turned off makes the text unusable to anything that is not a terminal.
+
+### Changelog
+
+- 2026-08-24 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-66: Initial authoring — one source for the tool's documentation, carried into the installed program, with any set the program defines presented from that definition
+
+*End* *Built-In User Documentation* | **Hash**: d246f21a
+
 ---
 
 ## REQ-d00086: Coverage Report Section

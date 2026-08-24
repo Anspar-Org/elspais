@@ -42,12 +42,11 @@ index_file = "INDEX.md"
 skip_files = ["README.md", "requirements-format.md", "INDEX.md"]
 
 [scanning.code]
-directories = ["apps", "packages", "server", "tools"]
-file_patterns = [
-    "database/**/*.sql",
-    "apps/**/*.dart",
-    "packages/**/*.dart",
-]
+# A pattern selects within the directories this kind declares, so every
+# directory holding scannable code is named here and the patterns say only
+# which files inside them count (REQ-d00212-W).
+directories = ["apps", "packages", "server", "tools", "database"]
+file_patterns = ["*.sql", "*.dart"]
 
 [scanning.test]
 enabled = true

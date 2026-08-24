@@ -139,6 +139,39 @@ _PLACEMENT_EDGE_KINDS = frozenset(
 )
 
 
+# Implements: REQ-d00241-F
+@dataclass(frozen=True)
+class UnscannedKeywordFile:
+    """A file the scan reached, declined to read, and that cites anyway.
+
+    It sits inside a directory the project declared for one of its scanning
+    kinds, the ignore configuration does not exclude it, and the patterns
+    that kind declares do not select it -- yet it carries a *Traceability*
+    keyword. An honest zero and a dropped citation are the same number, so
+    the fact that the tool passed the file over is recorded here rather than
+    left to be inferred from a requirement reading as uncovered.
+
+    This record belongs beside the other parse-time findings in
+    ``reference_faults``; it is here because it is not a reference fault --
+    nothing was read, so nothing failed to bind.
+
+    Attributes:
+        path: The file, relative to the repository root.
+        kind: The scanning kind whose directories contain it ("spec",
+            "code", "test").
+        keyword: The *Traceability* keyword as the author spelled it.
+        line: The 1-based line that keyword was written on.
+    """
+
+    path: str
+    kind: str
+    keyword: str
+    line: int
+
+
+# A mutation is applied in place to this live graph, whatever level or kind of node
+# it touches, and the graph stays readable between one mutation and the next.
+# Implements: REQ-d00134-A, REQ-d00134-B, REQ-d00134-C
 @dataclass
 class TraceGraph:
     """Container for the complete traceability graph.
@@ -233,6 +266,13 @@ class TraceGraph:
     # References the configuration admits but did not spell canonically --
     # each produced its relationship, so kept apart from _broken_references.
     _identifier_form_findings: list[IdentifierFormFinding] = field(
+        default_factory=list, init=False, repr=False
+    )
+    # Implements: REQ-d00241-F
+    # Files a scan reached, declined to read, and that carry a *Traceability*
+    # keyword regardless. Not a reference fault: no reference was read, so
+    # none failed -- what is recorded is that the tool passed the file over.
+    _unscanned_keyword_files: list[UnscannedKeywordFile] = field(
         default_factory=list, init=False, repr=False
     )
     # Detection: duplicate REQ IDs across files (populated at build time).
@@ -441,6 +481,18 @@ class TraceGraph:
         """Get every reference spelled in a non-canonical admitted form."""
         return list(self._identifier_form_findings)
 
+    # Implements: REQ-d00241-F
+    def unscanned_keyword_files(self) -> list[UnscannedKeywordFile]:
+        """Every file the scan declined to read that cites a requirement.
+
+        A file inside a scanned directory that the ignore configuration does
+        not exclude, that the patterns declared for its kind do not select,
+        and that carries a *Traceability* keyword anyway. The keyword was
+        never read, so nothing here says whether it would have bound -- only
+        that a citation was written where the tool was not looking.
+        """
+        return list(self._unscanned_keyword_files)
+
     def duplicate_req_ids(self) -> dict[str, list[str]]:
         """Return cross-file duplicate REQ IDs detected at build time.
 
@@ -541,6 +593,7 @@ class TraceGraph:
         """Check if any nodes have been deleted."""
         return len(self._deleted_nodes) > 0
 
+    # Implements: REQ-d00134-F
     def undo_last(self) -> MutationEntry | None:
         """Undo the most recent mutation.
 
@@ -3768,11 +3821,27 @@ class GraphBuilder:
         self._undeclared_relationships: list[UndeclaredRelationship] = []
         # Implements: REQ-d00272-N
         self._identifier_form_findings: list[IdentifierFormFinding] = []
+        # Implements: REQ-d00241-F
+        self._unscanned_keyword_files: list[UnscannedKeywordFile] = []
         # Detection: duplicate REQ IDs across files. Maps the canonical (real)
         # requirement ID -> ordered list of source paths that defined it. First
         # occurrence keeps the real ID; subsequent occurrences get a synthetic
         # ID (see _add_requirement) but their source paths are recorded here.
         self._duplicate_req_ids: dict[str, list[str]] = {}
+
+    # Implements: REQ-d00241-F
+    def record_unscanned_keyword_file(self, path: str, kind: str, keyword: str, line: int) -> None:
+        """Record a file the scan declined to read that cites a requirement.
+
+        One file is recorded once. Two scanning kinds may both reach a file
+        and both decline it; that is one file the tool passed over, not two,
+        and reporting it twice would say the opposite.
+        """
+        if any(existing.path == path for existing in self._unscanned_keyword_files):
+            return
+        self._unscanned_keyword_files.append(
+            UnscannedKeywordFile(path=path, kind=kind, keyword=keyword, line=line)
+        )
 
     # Implements: REQ-d00128-D
     def register_file_node(self, file_node: GraphNode) -> None:
@@ -5483,6 +5552,7 @@ class GraphBuilder:
         graph._style_findings = list(self._style_findings)
         graph._undeclared_relationships = list(self._undeclared_relationships)
         graph._identifier_form_findings = list(self._identifier_form_findings)
+        graph._unscanned_keyword_files = list(self._unscanned_keyword_files)
         graph._duplicate_req_ids = {k: list(v) for k, v in self._duplicate_req_ids.items()}
 
         # Implements: REQ-d00222-A, REQ-d00222-B

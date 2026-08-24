@@ -904,7 +904,7 @@ def _find_dirty_files(graph: FederatedGraph) -> list[Any]:
     return list(dirty_files.values())
 
 
-# Implements: REQ-d00132-A, REQ-d00132-C
+# Implements: REQ-d00132-A, REQ-d00132-C, REQ-d00134-D, REQ-d00134-E
 def render_save(
     graph: FederatedGraph,
     repo_root: Path | None = None,

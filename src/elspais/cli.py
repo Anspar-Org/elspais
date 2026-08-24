@@ -495,6 +495,7 @@ def _print_help() -> None:
     print(generate_help(__version__))
 
 
+# Implements: REQ-d00286-B
 def docs_command(args: argparse.Namespace) -> int:
     """Handle docs command - display user documentation from markdown files."""
     import pydoc
@@ -504,6 +505,7 @@ def docs_command(args: argparse.Namespace) -> int:
 
     topic = args.topic
     use_pager = not args.no_pager and sys.stdout.isatty()
+    # Implements: REQ-d00286-F
     use_color = not args.plain and sys.stdout.isatty()
 
     # Load content from markdown files

@@ -106,8 +106,8 @@ index_file = ""
 [scanning.code]
 # Directories to scan for code files
 directories = ["src", ".github/workflows"]
-# Glob patterns for code files
-file_patterns = ["tests/conftest.py", "tests/e2e/test_scenario_mutations.py"]
+# Glob patterns for code files (empty = the built-in defaults for this kind)
+file_patterns = []
 # Filenames to skip in code directories
 skip_files = []
 # Subdirectories to skip in code directories

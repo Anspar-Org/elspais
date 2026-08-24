@@ -16,7 +16,7 @@
 | REQ-p00004 | Change Detection and Auditability                | prd-core.md     | b7e19864 |
 | REQ-p00005 | Multi-Repository Requirements                    | prd-features.md | de05471c |
 | REQ-p00006 | Interactive Traceability Viewer                  | prd-features.md | 185217a3 |
-| REQ-p00013 | Automated Testing                                | prd-core.md     | 4318202c |
+| REQ-p00013 | End-to-End Tests Exercise the Installed Command  | prd-core.md     | 1b5c65b2 |
 | REQ-p00014 | Satisfies Relationship                           | prd-features.md | ca4892c1 |
 | REQ-p00015 | Complete and Current Reporting                   | prd-core.md     | 9aa9a8aa |
 | REQ-p00016 | NOT APPLICABLE Status                            | prd-features.md | 2211802a |
@@ -115,7 +115,7 @@
 | REQ-d00131 | Render Protocol for Graph Nodes                               | dev-graph-file-nodes.md | 4bd2b48b |
 | REQ-d00132 | Render-Based Save Operation                                   | dev-graph-file-nodes.md | f5a4193c |
 | REQ-d00133 | MCP FILE Node Integration                                     | dev-mcp-tools.md        | 08e2973f |
-| REQ-d00134 | Comprehensive Mutation Round-Trip Scenario Test               | dev-graph-file-nodes.md | 6c865949 |
+| REQ-d00134 | Mutation Round-Trip Fidelity                                  | dev-graph-file-nodes.md | 19cb065b |
 | REQ-d00200 | FederatedGraph Read-Only Delegation                           | dev-graph-federation.md | 06b84d97 |
 | REQ-d00201 | FederatedGraph Mutation Delegation                            | dev-graph-federation.md | 85081cae |
 | REQ-d00202 | Associates Config Loading                                     | dev-graph-federation.md | 0522f86c |
@@ -201,6 +201,7 @@
 | REQ-d00283 | Test Target Groups                                            | dev-graph-core.md       | bc95d36b |
 | REQ-d00284 | How a Result Names Its Test                                   | dev-graph-core.md       | 7baae0b0 |
 | REQ-d00285 | The Shape of a Finding                                        | dev-cli.md              | f7488e72 |
+| REQ-d00286 | Built-In User Documentation                                   | dev-cli.md              | d246f21a |
 
 ## User Journeys
 

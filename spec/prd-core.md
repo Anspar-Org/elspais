@@ -187,41 +187,40 @@ O. When the tool reloads the graph from disk, the tool SHALL bring the change-de
 *End* *Change Detection and Auditability* | **Hash**: b7e19864
 ---
 
-# REQ-p00013: Automated Testing
+# REQ-p00013: End-to-End Tests Exercise the Installed Command
 
 **Level**: prd | **Status**: Active | **Implements**: REQ-p00001
 
-## Rationale
-
-A requirements management tool must itself be rigorously tested to maintain credibility. Unit tests verify individual components in isolation, but integration and end-to-end tests are essential to catch cross-component failures, CLI subprocess regressions, and real-world workflow breakages that mocked unit tests miss.
-
-The testing strategy follows a pyramid:
-
-- **Unit tests**: Fast, isolated tests for individual functions and classes
-- **Integration tests**: Tests that exercise multiple components together
-- **End-to-end tests**: Subprocess-based tests that invoke the CLI binary and verify real output
-- **Self-validation**: The tool validates its own repository as the strongest regression test
+A test that claims to exercise the command line and instead calls a function in the same process proves that the function works. It does not prove that the command exists, that its arguments parse, that it exits with the code it means, or that anything was installed. This states the one obligation that distinguishes the two.
 
 ## Assertions
 
-A. The project SHALL maintain unit tests for all core modules with *Assertion*-linked test names.
+A. <RETIRED>
 
-B. The project SHALL maintain end-to-end tests that invoke the CLI as a subprocess and verify command output, exit codes, and file artifacts.
+B. <RETIRED>
 
-C. The project SHALL include self-validation tests that run elspais against its own repository and assert health, summary, and trace outputs are correct.
+C. <RETIRED>
 
-D. The project SHALL include multi-command workflow tests that verify cross-command consistency and sequential operation correctness.
+D. <RETIRED>
 
-E. The project SHALL include MCP protocol tests that verify tool invocation, search, cursor pagination, and mutation roundtrips via the stdio transport.
+E. <RETIRED>
 
 F. All tests marked `@pytest.mark.e2e` SHALL invoke the `elspais` CLI as a subprocess. Tests that call internal Python functions or submodules directly SHALL NOT be marked e2e; they are unit or integration tests.
 
+## Rationale
+
+The distinction F draws is worth an obligation because it is invisible once broken. An e2e test rewritten to call a function directly still passes, still carries its marker, and still reports as end-to-end coverage — while the surface it was written to protect goes unexercised. The suite reads exactly as it did the day before, which is why nothing surfaces the change.
+
+A requirement states what the product must be, and a test suite is not the product. A through E specified the suite itself — which modules carry unit tests, which protocols are covered — so nothing in the program could implement them and the tests naming them credited no figure. What those tests actually verify is the behaviour of the commands they run, and they name it directly now. F survives because it is not about the suite's contents: it constrains what a marker is allowed to mean, and a marker that lies costs the reader their grounds for trusting every test carrying it.
+
 ## Changelog
 
+- 2026-08-24 | 1b5c65b2 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-24 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-66: A-E retired — they specified the test suite rather than the product, so nothing could implement them; F retained and the requirement restated around it
 - 2026-07-31 | 4318202c | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-04-23 | 962216d8 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Automated Testing* | **Hash**: 4318202c
+*End* *End-to-End Tests Exercise the Installed Command* | **Hash**: 1b5c65b2
 ---
 
 ## REQ-p00061: Requirement Decomposition Rules

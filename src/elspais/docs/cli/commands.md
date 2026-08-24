@@ -17,7 +17,7 @@ Verify requirements traceability across configuration, spec files, code, and tes
 
   $ elspais checks                     # Run all checks
   $ elspais checks --spec              # Spec file checks
-  $ elspais checks --code              # Code reference checks
+  $ elspais checks --code-checks       # Code reference checks
   $ elspais checks --tests             # Test mapping checks
   $ elspais checks --format json       # JSON output
 

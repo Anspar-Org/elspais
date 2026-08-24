@@ -249,6 +249,25 @@ def test_the_marker_a_file_type_uses_has_one_spelling_across_the_tool():
 
 
 # Verifies: REQ-d00236-H
+@pytest.mark.parametrize(
+    "path",
+    ["Dockerfile", "infra/Containerfile", "infra/service.Dockerfile", "build/DOCKERFILE"],
+)
+def test_a_container_image_file_is_associated_with_the_shell_pattern(dispatcher, path):
+    """A file type named by its whole file name is associated like any other.
+
+    ``Dockerfile`` and ``Containerfile`` carry their language in the name
+    rather than in an extension, so the association is keyed by name; a
+    ``service.Dockerfile`` carries it in an extension and is keyed there. One
+    type, one pattern either way -- and the pattern is the shell one, so a
+    ``//`` line is not a comment here any more than it is in a shell script.
+    """
+    assert comment_pattern_for_path(path) is CommentPattern.SHELL_LIKE
+    assert _bound(dispatcher, "# Implements: REQ-d00001-A\n", path) == {"REQ-d00001-A"}
+    assert _bound(dispatcher, "// Implements: REQ-d00001-A\n", path) == set()
+
+
+# Verifies: REQ-d00236-H
 def test_a_block_comment_language_is_associated_with_no_pattern():
     """Block comments carry no citation, so they name no pattern.
 

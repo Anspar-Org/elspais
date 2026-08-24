@@ -9,13 +9,13 @@ summary line, and hint string.
 from __future__ import annotations
 
 from elspais.commands.health import (
-    _FOLLOWUP_COMMANDS,
     HealthCheck,
     HealthReport,
     _build_hint,
     _build_report_data,
     _render_markdown,
 )
+from elspais.utilities.findings import NO_KNOWN_REMEDY, REGISTRY
 
 
 def _make_mixed_report() -> HealthReport:
@@ -270,28 +270,73 @@ def _checks_cli_flags() -> set[str]:
     return flags
 
 
-class TestFollowupCommandsAreValid:
-    """Regression: hints in _FOLLOWUP_COMMANDS must use real CLI flags.
+def _subcommands() -> set[str]:
+    """The subcommand names `elspais` accepts, from the CLI's own union."""
+    import typing
 
-    Commit c04d237 added `--terms` to hints for terms.* checks but never
-    added the corresponding flag to ChecksArgs, so every hint referencing
-    `--terms` produced an "Unrecognized options" error when users ran it.
+    from elspais.commands.args import Command
+
+    names: set[str] = set()
+    for member in typing.get_args(Command):
+        for meta in typing.get_args(member)[1:]:
+            name = getattr(meta, "name", None)
+            if name:
+                names.add(name)
+    return names
+
+
+# Verifies: REQ-d00285-B
+class TestRemediesAreRunnable:
+    """Every remedy a finding carries must be a command a reader can run.
+
+    A remedy is the action REQ-d00285-B obliges each finding to name, and one
+    naming a command that no longer exists is worse than naming none: the
+    reader runs it and is told the tool has no such subcommand.
     """
 
-    def test_followup_checks_flags_are_real(self) -> None:
+    def test_every_remedy_names_a_real_subcommand(self) -> None:
+        import shlex
+
+        subcommands = _subcommands()
+        for name, rule in REGISTRY.items():
+            if rule.remedy == NO_KNOWN_REMEDY:
+                continue
+            tokens = shlex.split(rule.remedy)
+            assert tokens[0] == "elspais", (
+                f"remedy for {name!r} is {rule.remedy!r}, which does not invoke elspais"
+            )
+            sub = next((t for t in tokens[1:] if not t.startswith("-")), None)
+            assert sub in subcommands, (
+                f"remedy for {name!r} names unknown subcommand {sub!r} "
+                f"in {rule.remedy!r}; known: {sorted(subcommands)}"
+            )
+
+    def test_every_remedy_on_checks_uses_real_flags(self) -> None:
         import shlex
 
         valid = _checks_cli_flags()
-        for name, cmd in _FOLLOWUP_COMMANDS.items():
-            tokens = shlex.split(cmd)
-            if tokens[:2] != ["elspais", "checks"]:
+        for name, rule in REGISTRY.items():
+            tokens = shlex.split(rule.remedy)
+            if "checks" not in tokens:
                 continue
-            for tok in tokens[2:]:
+            for tok in tokens[tokens.index("checks") + 1 :]:
                 if tok.startswith("-"):
                     assert tok in valid, (
-                        f"_FOLLOWUP_COMMANDS[{name!r}] uses unknown flag {tok!r} "
-                        f"in {cmd!r}; known flags: {sorted(valid)}"
+                        f"remedy for {name!r} uses unknown flag {tok!r} "
+                        f"in {rule.remedy!r}; known flags: {sorted(valid)}"
                     )
+
+    def test_a_check_with_no_recorded_remedy_says_so(self) -> None:
+        """REQ-d00285-B: naming that none is known, rather than staying silent."""
+        check = HealthCheck(
+            name="worktree.status",
+            passed=False,
+            message="dirty",
+            category="environment",
+            severity="warning",
+        )
+        assert check.remedy == NO_KNOWN_REMEDY
+        assert check.remedy.strip()
 
     def test_build_hint_uses_real_flags(self) -> None:
         """_build_hint output for each single-category failure is a valid CLI invocation."""

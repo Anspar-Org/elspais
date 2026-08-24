@@ -535,6 +535,69 @@ class LevelConfig(_StrictModel):
         return _validate_hex_color(v)
 
 
+# Implements: REQ-d00212-Q+W
+# The patterns a kind selects by when its configuration declares none. They
+# are the DEFAULTS of the one selection mechanism, not a second one: a kind
+# always selects the files its `file_patterns` match, and these are what that
+# setting holds until a project writes its own. An empty list means "the
+# defaults", so a configuration written before the setting had a default
+# still scans what it always scanned.
+DEFAULT_SPEC_PATTERNS = ["*.md"]
+DEFAULT_TEST_PATTERNS = ["test_*.py", "*_test.py"]
+DEFAULT_JOURNEY_PATTERNS = ["*.md"]
+DEFAULT_DOCS_PATTERNS = ["*.md"]
+
+# Covers every language named in the comment-pattern table
+# (``graph/parsers/patterns.py``), because a file whose language has a comment
+# marker is a file a *Traceability* keyword can be written in.
+#
+# Jinja templates are included because a template is where a viewer's
+# JavaScript is written -- the code is real, the annotations in it are real,
+# and leaving the extension out meant every one of them was invisible while
+# the requirements they implement read as unimplemented. A template is
+# associated with the c-like comment pattern, whatever it renders to, like
+# every other scannable file type is associated with exactly one
+# (REQ-d00236-H): a `//` line reads in a `.js.j2` and in a `.css.j2` alike.
+# Block comments carry no citation in a template any more than anywhere else.
+#
+# Container image files are included for the same reason a `.tf` file is: an
+# image is where a deployment's configuration values are bound, so it is a
+# normal place to cite a requirement from.
+DEFAULT_CODE_PATTERNS = [
+    "*.py",
+    "*.js",
+    "*.ts",
+    "*.jsx",
+    "*.tsx",
+    "*.java",
+    "*.c",
+    "*.cpp",
+    "*.h",
+    "*.hpp",
+    "*.go",
+    "*.rs",
+    "*.rb",
+    "*.sh",
+    "*.bash",
+    "*.sql",
+    "*.lua",
+    "*.yml",
+    "*.yaml",
+    "*.dart",
+    "*.swift",
+    "*.kt",
+    "*.css",
+    "*.scss",
+    "*.tf",
+    "*.tfvars",
+    "*.hcl",
+    "*.j2",
+    "Dockerfile",
+    "*.Dockerfile",
+    "Containerfile",
+]
+
+
 # Implements: REQ-d00212-B
 class ScanningKindConfig(_StrictModel):
     directories: list[str] = Field(default_factory=list)
@@ -545,12 +608,13 @@ class ScanningKindConfig(_StrictModel):
 
 class SpecScanningConfig(ScanningKindConfig):
     directories: list[str] = Field(default_factory=lambda: ["spec"])
-    file_patterns: list[str] = Field(default_factory=lambda: ["*.md"])
+    file_patterns: list[str] = Field(default_factory=lambda: list(DEFAULT_SPEC_PATTERNS))
     index_file: str = ""
 
 
 class CodeScanningConfig(ScanningKindConfig):
     directories: list[str] = Field(default_factory=lambda: ["src"])
+    file_patterns: list[str] = Field(default_factory=lambda: list(DEFAULT_CODE_PATTERNS))
     source_roots: list[str] = Field(default_factory=lambda: ["src", ""])
 
 
@@ -648,7 +712,7 @@ class TestScanningConfig(ScanningKindConfig):
     __test__ = False  # Prevent pytest collection
 
     directories: list[str] = Field(default_factory=lambda: ["tests"])
-    file_patterns: list[str] = Field(default_factory=lambda: ["test_*.py", "*_test.py"])
+    file_patterns: list[str] = Field(default_factory=lambda: list(DEFAULT_TEST_PATTERNS))
     enabled: bool = False
     prescan_command: str = ""
     reference_keyword: str = "Verifies"
@@ -695,7 +759,7 @@ class TestScanningConfig(ScanningKindConfig):
 
 class JourneyScanningConfig(ScanningKindConfig):
     directories: list[str] = Field(default_factory=lambda: ["spec"])
-    file_patterns: list[str] = Field(default_factory=lambda: ["*.md"])
+    file_patterns: list[str] = Field(default_factory=lambda: list(DEFAULT_JOURNEY_PATTERNS))
     # Where UAT results are read from. The health check has always read this
     # setting and the shipped docs have always described it; only the field
     # was missing, so the path was fixed at its default and a project that
@@ -705,7 +769,7 @@ class JourneyScanningConfig(ScanningKindConfig):
 
 class DocsScanningConfig(ScanningKindConfig):
     directories: list[str] = Field(default_factory=lambda: ["docs"])
-    file_patterns: list[str] = Field(default_factory=lambda: ["*.md"])
+    file_patterns: list[str] = Field(default_factory=lambda: list(DEFAULT_DOCS_PATTERNS))
 
 
 # Implements: REQ-d00212-C

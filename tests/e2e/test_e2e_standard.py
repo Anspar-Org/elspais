@@ -172,19 +172,48 @@ class TestHealthFormats:
 
 
 class TestHealthScopeFlags:
-    """Health command with --spec, --code, --tests scope flags."""
+    """Health command with --spec, --code-checks, --tests scope flags."""
 
     def test_health_spec_only(self, project):
         result = run_elspais("checks", "--spec", "--lenient", cwd=project)
         assert result.returncode == 0
 
+    # Verifies: REQ-d00285-G
     def test_health_code_only(self, project):
-        result = run_elspais("checks", "--code", "--lenient", cwd=project)
+        """The code-check scope flag is `--code-checks`; `--code` names a code."""
+        result = run_elspais("checks", "--code-checks", "--lenient", cwd=project)
         assert result.returncode == 0
 
     def test_health_tests_only(self, project):
         result = run_elspais("checks", "--tests", "--lenient", cwd=project)
         assert result.returncode == 0
+
+    # Verifies: REQ-d00285-A+B
+    def test_verbose_checks_names_the_findings_and_their_remedies(self, project):
+        """`-v checks` renders each failing check's findings, not just a count."""
+        terse = run_elspais("checks", "--lenient", cwd=project)
+        verbose = run_elspais("-v", "checks", "--lenient", cwd=project)
+
+        assert verbose.returncode == 0
+        assert len(verbose.stdout) > len(terse.stdout), (
+            "the report promises detail under -v; it must render more than the terse one"
+        )
+        assert "remedy:" in verbose.stdout
+
+    # Verifies: REQ-d00285-G
+    def test_a_narrowed_report_says_what_it_withheld(self, project):
+        result = run_elspais("checks", "--category", "spec", "--lenient", cwd=project)
+        assert result.returncode == 0
+        assert "Filtered by --category spec" in result.stdout
+        shown, total = re.search(r"showing (\d+) of (\d+) checks", result.stdout).groups()
+        assert int(shown) < int(total), "a narrowing that withheld nothing would not be one"
+        assert "CODE" not in result.stdout, "only the named category is rendered"
+
+    # Verifies: REQ-d00285-G
+    def test_a_category_outside_the_vocabulary_is_refused(self, project):
+        result = run_elspais("checks", "--category", "nonsuch", "--lenient", cwd=project)
+        assert result.returncode == 2
+        assert "--category nonsuch" in result.stderr
 
     def test_health_terms_only(self, project):
         result = run_elspais("checks", "--terms", "--lenient", "--format", "json", cwd=project)

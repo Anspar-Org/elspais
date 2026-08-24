@@ -176,6 +176,35 @@ editor rejects it before the tool is run.
 Unified file scanning configuration. Each kind has its own
 sub-section with directories, file_patterns, skip_files, skip_dirs.
 
+File selection works the same way for every kind, and this is the only place
+it is decided:
+
+1. The kind's `directories` say where to look.
+2. Anything the ignore configuration excludes is dropped first --
+   `[scanning].skip`, plus that kind's own `skip_files` and `skip_dirs`.
+   An excluded file is never read, and is never reported on.
+3. Whatever the kind's `file_patterns` match is scanned. A pattern is
+   matched against the file's name and against its path relative to the
+   scanned directory, so `*.py` selects at any depth and `api/*.py`
+   selects within a subdirectory.
+
+Patterns are `fnmatch` globs, matched the same way the ignore lists are:
+`*` matches any characters **including** `/`, and `**` is not special (it
+behaves as `*`). So `*.sql` selects a `.sql` file at any depth, while
+`database/**/*.sql` requires a literal `database/` prefix and at least one
+more `/` -- it does NOT match `database/schema.sql`. A pattern that reached
+files through the retired repository-root glob usually wants rewriting: name
+the holding directory under `directories` and match on the file, not the path.
+
+`file_patterns` never reaches outside `directories`, in any kind. A file
+inside a scanned directory that survives step 2 but matches nothing in step 3
+is simply not scanned -- and if it carries a *Traceability* keyword anyway,
+the tool reports it rather than passing over the citation in silence.
+
+An empty `file_patterns` means that kind's built-in defaults, not "no files".
+`elspais init` writes the defaults out in full, so what a kind scans is
+visible and editable rather than implied.
+
 ```toml
 [scanning]
 skip = ["node_modules", ".git", "__pycache__", "*.pyc", ".venv", ".env"]
@@ -189,7 +218,14 @@ skip_dirs = []
 
 [scanning.code]
 directories = ["src"]
-file_patterns = []
+# The default list covers every language with a comment pattern, container
+# image files included. Written out in full by `elspais init`; an empty list
+# means these same defaults.
+file_patterns = ["*.py", "*.js", "*.ts", "*.jsx", "*.tsx", "*.java", "*.c",
+                 "*.cpp", "*.h", "*.hpp", "*.go", "*.rs", "*.rb", "*.sh",
+                 "*.bash", "*.sql", "*.lua", "*.yml", "*.yaml", "*.dart",
+                 "*.swift", "*.kt", "*.css", "*.scss", "*.tf", "*.tfvars",
+                 "*.hcl", "*.j2", "Dockerfile", "*.Dockerfile", "Containerfile"]
 skip_files = []
 skip_dirs = []
 # source_roots = []             # Root directories for import resolution

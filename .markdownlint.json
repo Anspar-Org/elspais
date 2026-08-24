@@ -49,5 +49,13 @@
 
   // Table column style: Disabled because pipe spacing style is a preference
   // and does not affect rendering or readability.
-  "MD060": false
+  "MD060": false,
+
+  // Inline HTML: RETIRED is an assertion parsing directive defined by
+  // spec/requirements-spec.md, not markup. An assertion carrying it is
+  // excluded from coverage while its label stays allocated, so the letter
+  // is never reused. The angle brackets are the directive's delimiters.
+  "MD033": {
+    "allowed_elements": ["RETIRED"]
+  }
 }

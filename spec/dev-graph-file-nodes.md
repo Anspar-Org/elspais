@@ -319,35 +319,39 @@ Render-based save replaces the brittle text surgery in persistence.py with graph
 *End* *Render-Based Save Operation* | **Hash**: f5a4193c
 ---
 
-## REQ-d00134: Comprehensive Mutation Round-Trip Scenario Test
+## REQ-d00134: Mutation Round-Trip Fidelity
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-d00132
 
-The system SHALL pass a comprehensive end-to-end scenario test that exercises all mutation types through the Flask API layer, saves to disk, reloads, and verifies round-trip fidelity.
+A mutation is applied to a graph held in memory and later written to disk. This states what must survive that passage: what a sequence of mutations leaves behind, what a save preserves, what a reload restores, and what an undo removes.
 
 ### Assertions
 
-A. The scenario test SHALL exercise at least 50 mutation operations across all mutation types (status, title, *Assertion* CRUD, edge CRUD, requirement CRUD, undo) in a single deterministic run.
+A. Mutations of every kind the system offers SHALL compose in one session, each taking effect in the order it was applied.
 
-B. The scenario test SHALL build a starting fixture with at least 6 requirements across all three levels (PRD, OPS, DEV) with proper hierarchy and assertions.
+B. Mutation SHALL be available over a graph spanning every configured level, whatever hierarchy and *Assertion* content its requirements carry.
 
-C. The scenario test SHALL verify intermediate graph state at multiple checkpoints during the mutation sequence, not just at the end.
+C. The graph SHALL be observable between the mutations of a sequence, so that a state reached part-way through is readable and not only the state left at the end.
 
-D. The scenario test SHALL save to disk via the Flask API, then reload from saved files and verify that the reloaded graph matches expected state for all surviving requirements, assertions, and edges.
+D. A graph saved and reloaded SHALL carry every requirement, *Assertion* and relationship the save was given.
 
-E. The scenario test SHALL perform a second round of mutations after reload and verify a second save-reload cycle produces correct results.
+E. A reloaded graph SHALL accept further mutation and save it as faithfully as the graph it was reloaded from.
 
-F. The scenario test SHALL exercise undo operations at various points and verify that undone mutations are properly reverted in the final saved state.
+F. An undone mutation SHALL leave no trace in a later save.
 
 ### Rationale
 
-A single large scenario test that exercises the full mutation API in a realistic sequence provides confidence that mutation operations compose correctly and that the render-save-reload pipeline is faithful. This complements the existing per-mutation-type unit tests with a holistic integration test.
+Mutation and persistence fail in different ways, and each of these assertions isolates one of them. A mutation can be correct alone and wrong in sequence (A); correct on a simple graph and wrong on one carrying real hierarchy (B); correct at the end of a run while passing through a state nothing could observe (C). Persistence can drop content on the way out (D), or accept a first cycle and corrupt a second (E). Undo can revert what is displayed while leaving what is written (F).
+
+The obligations are stated as properties of the system rather than as instructions to a test. What exercises them is a matter for the suite; a requirement that described the test instead would be satisfied by a test that ran and proved nothing, and could never be implemented by the code it is really about.
 
 ### Changelog
 
+- 2026-08-24 | 19cb065b | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-24 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-66: Restated as properties of mutation and persistence rather than as instructions to a scenario test; assertion letters preserved
 - 2026-07-31 | 6c865949 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | be52daed | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | be52daed | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *Comprehensive Mutation Round-Trip Scenario Test* | **Hash**: 6c865949
+*End* *Mutation Round-Trip Fidelity* | **Hash**: 19cb065b
 ---

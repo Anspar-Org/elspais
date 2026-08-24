@@ -197,6 +197,21 @@ malformed reference is reported, not just this one.
 # Each kind (spec, code, test, result, journey, docs) has its own sub-section
 # with directories, file_patterns, skip_files, and skip_dirs.
 # The global `skip` list applies to all kinds.
+#
+# Selection means the same thing for every kind, and is decided only here:
+#   1. `directories` says where to look.
+#   2. The ignore configuration (`[scanning].skip` plus that kind's own
+#      `skip_files`/`skip_dirs`) excludes. An excluded file is never read
+#      and is never reported on.
+#   3. `file_patterns` selects, from what is left, the files to scan. A
+#      pattern is matched against the file's name and against its path
+#      relative to the scanned directory; it never reaches outside
+#      `directories`. Patterns are fnmatch globs: `*` matches across `/`
+#      and `**` is not special, so `*.sql` reaches any depth while
+#      `database/**/*.sql` does NOT match `database/schema.sql`.
+# An empty `file_patterns` means that kind's built-in defaults, not "no
+# files". A file that survives step 2, matches nothing in step 3, and carries
+# a *Traceability* keyword anyway is reported rather than passed over.
 #──────────────────────────────────────────────────────────────────────────────
 
 [scanning]
@@ -222,6 +237,10 @@ index_file = "INDEX.md"
 # Code scanning (for REQ references in source code)
 [scanning.code]
 directories = ["src", "apps", "packages"]
+# Defaults cover every language with a comment pattern, container image files
+# included (`Dockerfile`, `*.Dockerfile`, `Containerfile`). `elspais init`
+# writes the list out in full; an empty list means those same defaults.
+file_patterns = []
 source_roots = []          # Optional: root directories for import resolution
 
 # Test file scanning

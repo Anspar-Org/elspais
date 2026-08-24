@@ -1,4 +1,4 @@
-# Verifies: REQ-p00013-A+B+C+D+E+F
+# Verifies: REQ-p00013-F
 """
 pytest configuration and shared fixtures for elspais tests.
 """

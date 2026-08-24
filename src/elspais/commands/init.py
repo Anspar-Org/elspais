@@ -216,20 +216,29 @@ _FIELD_COMMENTS: dict[str, str] = {
     "scanning.skip": "Global skip patterns (applied to all scan kinds)",
     "scanning.spec": "Spec file scanning",
     "scanning.spec.directories": "Directories to scan for spec files",
-    "scanning.spec.file_patterns": "Glob patterns for spec files",
+    "scanning.spec.file_patterns": (
+        "Glob patterns selecting among the files in the directories above "
+        "(empty = this kind's defaults)"
+    ),
     "scanning.spec.skip_files": "Filenames to skip in spec directories",
     "scanning.spec.skip_dirs": "Subdirectories to skip in spec directories",
     "scanning.spec.index_file": "Index file for ordering (e.g. INDEX.md)",
     "scanning.code": "Code file scanning",
     "scanning.code.directories": "Directories to scan for code files",
-    "scanning.code.file_patterns": "Glob patterns for code files",
+    "scanning.code.file_patterns": (
+        "Glob patterns selecting among the files in the directories above "
+        "(empty = this kind's defaults)"
+    ),
     "scanning.code.skip_files": "Filenames to skip in code directories",
     "scanning.code.skip_dirs": "Subdirectories to skip in code directories",
     "scanning.code.source_roots": "Import resolution roots",
     "scanning.test": "Test file scanning and reference detection",
     "scanning.test.enabled": "Enable test file scanning",
     "scanning.test.directories": "Directories to scan for test files",
-    "scanning.test.file_patterns": "Glob patterns for test files",
+    "scanning.test.file_patterns": (
+        "Glob patterns selecting among the files in the directories above "
+        "(empty = this kind's defaults)"
+    ),
     "scanning.test.skip_files": "Filenames to skip in test directories",
     "scanning.test.skip_dirs": "Subdirectories to skip in test directories",
     "scanning.test.prescan_command": (
@@ -273,12 +282,18 @@ _FIELD_COMMENTS: dict[str, str] = {
     ),
     "scanning.journey": "User journey file scanning",
     "scanning.journey.directories": "Directories to scan for journey files",
-    "scanning.journey.file_patterns": "Glob patterns for journey files",
+    "scanning.journey.file_patterns": (
+        "Glob patterns selecting among the files in the directories above "
+        "(empty = this kind's defaults)"
+    ),
     "scanning.journey.skip_files": "Filenames to skip in journey directories",
     "scanning.journey.skip_dirs": "Subdirectories to skip in journey directories",
     "scanning.docs": "Documentation file scanning",
     "scanning.docs.directories": "Directories to scan for documentation",
-    "scanning.docs.file_patterns": "Glob patterns for doc files",
+    "scanning.docs.file_patterns": (
+        "Glob patterns selecting among the files in the directories above "
+        "(empty = this kind's defaults)"
+    ),
     "scanning.docs.skip_files": "Filenames to skip in docs directories",
     "scanning.docs.skip_dirs": "Subdirectories to skip in docs directories",
     # --- [rules] ---

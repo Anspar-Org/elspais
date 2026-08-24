@@ -9,10 +9,18 @@ The `elspais checks` command performs **traceability verification** — confirmi
 elspais checks
 
 # Check specific category only
-elspais checks --spec      # Spec file checks
-elspais checks --code      # Code reference checks
-elspais checks --tests     # Test mapping checks
-elspais checks --terms     # Defined-term checks
+elspais checks --spec         # Spec file checks
+elspais checks --code-checks  # Code reference checks
+elspais checks --tests        # Test mapping checks
+elspais checks --terms        # Defined-term checks
+
+# See what each failing check actually found
+elspais -v checks
+
+# Narrow the findings to the ones you are working on
+elspais -v checks --severity error
+elspais checks --code E_IDENTIFIER_WITH_TRAILING_TEXT
+elspais checks --file 'spec/*.md'
 ```
 
 ## Check Severity
@@ -216,7 +224,7 @@ When a template requirement's content changes (stale hash), all requirements
 that declare `Satisfies:` pointing to it are flagged for review. This ensures
 that changes to cross-cutting requirements are propagated to their consumers.
 
-### Code Reference Checks (`--code`)
+### Code Reference Checks (`--code-checks`)
 
 | Check | Description | Default severity | Configured by |
 |-------|-------------|------------------|---------------|
@@ -736,6 +744,79 @@ Produces [SARIF v2.1.0](https://docs.oasis-open.org/sarif/sarif/v2.1.0/sarif-v2.
     sarif_file: health-results.sarif
     category: elspais-health
 ```
+
+## Findings
+
+A check reports a verdict; its findings are what it found. Every finding
+carries the same four things whatever format it is rendered in:
+
+| It carries | Which is |
+|------------|----------|
+| its identity | the check it belongs to, the node it is about, and the diagnostic codes it reached |
+| its severity | the severity its check carries, decided by the project |
+| its location | the file, and the line within that file, where the finding has one |
+| its remedy | the command that resolves it — or a statement that no command does |
+
+### Seeing them
+
+The default report is one line per check: a verdict and a count. `-v` expands
+each failing check into the findings behind it.
+
+```text
+⚠ REFERENCES (6 passed, 1 failed)
+----------------------------------------
+  ⚠ references.identifier_form: 2 reference(s) spelled in a non-canonical form
+      remedy: elspais -v checks --spec
+      - spec/dev-cli.md:247: req-d1 -- spelled in a form the configuration admits...
+        node=REQ-d00285 repo=core
+      - spec/ops-mcp.md:88: REQ-O00076 -- spelled in a form the configuration admits...
+        node=REQ-o00076 repo=core
+```
+
+A passing check's findings are a separate request: `--include-passing-details`
+shows them, and `-v` on its own does not.
+
+Every format carries the findings. `--format json` and `--format sarif` carry
+them as values; `--format markdown` renders them as a nested list; `--format
+junit` puts them, with the remedy, in each failure body.
+
+### Narrowing them
+
+Four flags select among findings. They compose with each other and with the
+scope flags above.
+
+| Flag | Selects |
+|------|---------|
+| `--severity error warning` | findings whose check carries one of these severities (`error`, `warning`, `info` — a check configured `off` reports nothing to select) |
+| `--category references tests` | findings in one of these check categories |
+| `--code E_IDENTIFIER_WITH_TRAILING_TEXT` | findings carrying one of these diagnostic codes |
+| `--file 'spec/*.md'` | findings located in a file matching one of these glob patterns |
+
+Values named for one flag are alternatives; values named for different flags
+are conditions met at once. So `--category references --file 'spec/*.md'`
+selects the reference findings that are in a spec file, and nothing else.
+
+`--code` and `--file` select findings by name, so the findings they select are
+rendered whether or not `-v` was given.
+
+A narrowed report says what it withheld — `showing 2 of 47 checks, 3 of 310
+findings` — because a report that showed a reader some of what it found and
+did not say so reads exactly like a clean run. The exit code is the whole
+run's: narrowing chooses what to look at, never what the run found.
+
+A `--severity` or `--category` naming something outside the tool's vocabulary
+is refused (exit code 2) rather than silently selecting nothing. `--code` and
+`--file` are values the estate carries rather than a fixed list, so they are
+not judged that way — a code nothing raised simply selects nothing.
+
+### Two names that were already taken
+
+`--code` names a diagnostic code. The scope flag that used to hold that name —
+"run the code reference checks only" — is `--code-checks`. Both meanings
+wanted `--code`, and the one a reader types a value after won it.
+
+The file filter is `--file` rather than `--path` because `--path` already means
+something across every command: the repository root the run works from.
 
 ## Command Options
 

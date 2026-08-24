@@ -1,11 +1,14 @@
-# Verifies: REQ-d00054-A
+# Verifies: REQ-d00212-Q, REQ-d00212-W
 # Verifies: REQ-d00128-A, REQ-d00128-D, REQ-p00003-B
 # Validates REQ-d00055-D, REQ-o00061-B
-"""Tests for graph factory build_graph() — code directory scanning and coverage annotation.
+"""Tests for graph factory build_graph() — file selection and coverage annotation.
 
-Verifies that build_graph() correctly scans [directories].code in addition
-to [traceability].scan_patterns, with de-duplication and ignore filtering.
-Also verifies that build_graph() annotates coverage metrics on requirement nodes.
+One mechanism decides whether a file is scanned: a scanning kind walks the
+directories it declares, the ignore configuration excludes, and the kind's
+declared patterns select among what is left. These tests pin that meaning for
+the code and test kinds alike, and pin that a kind reaches nothing outside the
+directories it declared. Also verifies that build_graph() annotates coverage
+metrics on requirement nodes.
 """
 
 from pathlib import Path
@@ -47,11 +50,14 @@ def _write_code_file(file_path: Path, req_id: str = "REQ-p00001") -> None:
 class TestCodeDirectoryScanning:
     """Tests for [directories].code scanning in build_graph()."""
 
-    def test_REQ_d00054_A_code_directories_scanned_when_scan_patterns_empty(
-        self, tmp_path: Path
-    ) -> None:
-        """When [directories].code is set but scan_patterns is absent,
-        CODE nodes from the code directory still appear in the graph."""
+    # Verifies: REQ-d00212-Q
+    def test_REQ_d00212_Q_a_declared_code_directory_is_scanned(self, tmp_path: Path) -> None:
+        """A code directory with no pattern declared beside it is still scanned.
+
+        Declaring a directory is the whole of asking for it to be scanned; the
+        patterns say which files inside it count, and their absence means the
+        kind's defaults rather than nothing.
+        """
         # Config with code dirs but NO scan_patterns
         config_file = tmp_path / ".elspais.toml"
         config_file.write_text(
@@ -87,31 +93,39 @@ directories = ["src"]
         has_ref = any("main.py" in cid for cid in code_ids)
         assert has_ref, f"Expected a CODE node from src/main.py, got: {code_ids}"
 
-    def test_REQ_d00054_A_scan_patterns_and_code_directories_both_work(
+    # Verifies: REQ-d00212-W, REQ-d00241-F
+    def test_REQ_d00212_W_code_patterns_reach_nothing_outside_declared_directories(
         self, tmp_path: Path
     ) -> None:
-        """When BOTH scan_patterns and [directories].code are set,
-        CODE nodes appear from both sources."""
+        """A path-shaped pattern selects within the declared directories only.
+
+        A pattern naming a path outside them used to be resolved against the
+        repository root, so `[scanning.code]` could reach a file no declared
+        directory contained. It now selects among what the declared
+        directories hold and nothing else -- and because it selects nothing
+        here, the annotated file inside `src` is one the scan passed over,
+        which is recorded rather than left to be inferred.
+        """
         config_file = tmp_path / ".elspais.toml"
         config_file.write_text(
             """\
 [project]
-name = "test-both-sources"
+name = "test-patterns-stay-inside"
 namespace = "REQ"
 
 [scanning.spec]
 directories = ["spec"]
 
 [scanning.code]
-directories = ["lib"]
-file_patterns = ["scripts/*.py"]
+directories = ["src"]
+file_patterns = ["tests/conftest.py"]
 """,
             encoding="utf-8",
         )
 
         _write_spec(tmp_path / "spec")
-        _write_code_file(tmp_path / "lib" / "core.py")
-        _write_code_file(tmp_path / "scripts" / "deploy.py")
+        _write_code_file(tmp_path / "src" / "app.py")
+        _write_code_file(tmp_path / "tests" / "conftest.py")
 
         graph = build_graph(
             config_path=config_file,
@@ -119,18 +133,35 @@ file_patterns = ["scripts/*.py"]
             scan_tests=False,
         )
 
-        code_nodes = list(graph.nodes_by_kind(NodeKind.CODE))
-        code_ids = [n.id for n in code_nodes]
+        code_ids = [n.id for n in graph.nodes_by_kind(NodeKind.CODE)]
+        assert not any("conftest.py" in cid for cid in code_ids), (
+            f"A code pattern must not reach outside [scanning.code].directories: {code_ids}"
+        )
+        assert graph.find_by_id(make_file_id("REQ", "tests/conftest.py")) is None
+        assert not any("app.py" in cid for cid in code_ids), (
+            f"The pattern selects no file in src/, so nothing there is scanned: {code_ids}"
+        )
 
-        has_lib = any("core.py" in cid for cid in code_ids)
-        has_scripts = any("deploy.py" in cid for cid in code_ids)
+        declined = {(u.path, u.kind) for u in graph.unscanned_keyword_files()}
+        assert ("src/app.py", "code") in declined, (
+            f"The annotated file the patterns declined must be recorded: {declined}"
+        )
+        assert not any(path.endswith("conftest.py") for path, _ in declined), (
+            "A file no declared directory contains was never reached, so it is "
+            f"not something the code kind declined: {declined}"
+        )
 
-        assert has_lib, f"Expected CODE node from lib/core.py, got: {code_ids}"
-        assert has_scripts, f"Expected CODE node from scripts/deploy.py, got: {code_ids}"
+    # Verifies: REQ-d00212-Q
+    def test_REQ_d00212_Q_a_file_two_declared_directories_hold_is_scanned_once(
+        self, tmp_path: Path
+    ) -> None:
+        """Nested declared directories reach the same file; it is scanned once.
 
-    def test_REQ_d00054_A_duplicate_files_not_double_counted(self, tmp_path: Path) -> None:
-        """When a file is matched by BOTH scan_patterns AND [directories].code,
-        only one CODE node is created (de-duplication via scanned_code_files set)."""
+        `src` and `src/sub` are both declared, so the walk for each reaches
+        `src/sub/overlap.py`. One file scanned twice would be one requirement
+        credited twice, so the second walk must recognise what the first
+        already read.
+        """
         config_file = tmp_path / ".elspais.toml"
         config_file.write_text(
             """\
@@ -142,14 +173,14 @@ namespace = "REQ"
 directories = ["spec"]
 
 [scanning.code]
-directories = ["src"]
-file_patterns = ["src/**/*.py"]
+directories = ["src", "src/sub"]
+file_patterns = ["*.py"]
 """,
             encoding="utf-8",
         )
 
         _write_spec(tmp_path / "spec")
-        _write_code_file(tmp_path / "src" / "overlap.py")
+        _write_code_file(tmp_path / "src" / "sub" / "overlap.py")
 
         graph = build_graph(
             config_path=config_file,
@@ -166,9 +197,14 @@ file_patterns = ["src/**/*.py"]
             f"got {len(overlap_nodes)}: {[n.id for n in overlap_nodes]}"
         )
 
-    def test_REQ_d00054_A_ignore_dirs_respected_for_code_directories(self, tmp_path: Path) -> None:
-        """When [directories].ignore lists a subdirectory, files within that
-        subdirectory inside a [directories].code path are NOT scanned."""
+    # Verifies: REQ-d00241-G
+    def test_REQ_d00241_G_skip_dirs_excludes_a_subdirectory_of_a_code_directory(
+        self, tmp_path: Path
+    ) -> None:
+        """A subdirectory the kind excludes is not descended into.
+
+        The exclusion half of selection is settled inside the walk, so the
+        excluded directory's contents are never reached at all."""
         config_file = tmp_path / ".elspais.toml"
         config_file.write_text(
             """\
@@ -355,6 +391,39 @@ class TestDefaultCodePatternFileTypes:
         )
         implementing_parents = {
             p.id for p in code_node.iter_parents(edge_kinds={EdgeKind.IMPLEMENTS})
+        }
+        assert implementing_parents == {"REQ-p00001"}
+
+    # Verifies: REQ-d00236-H, REQ-d00212-Q
+    @pytest.mark.parametrize("filename", ["Dockerfile", "Containerfile", "service.Dockerfile"])
+    def test_REQ_d00236_H_a_container_image_file_is_scanned_and_read_as_shell(
+        self, tmp_path: Path, filename: str
+    ) -> None:
+        """A container image file is selected by default and its `#` line is read.
+
+        An image file is where a deployment's configuration values are bound,
+        so it is a normal place to cite a requirement from -- and it names its
+        language in the file name rather than in an extension, which is why
+        both halves have to hold: the default patterns must select it, and the
+        comment pattern associated with it must read the citation. Only the
+        annotation line matters to either half, so the body the shared writer
+        produces is beside the point.
+        """
+        graph = _build_graph_for_annotated_file(tmp_path, filename)
+
+        file_node = graph.find_by_id(make_file_id("REQ", f"src/{filename}"))
+        assert file_node is not None, f"{filename} should be selected by the code defaults"
+
+        contained_code = [
+            c
+            for c in file_node.iter_children(edge_kinds={EdgeKind.CONTAINS})
+            if c.kind == NodeKind.CODE
+        ]
+        assert len(contained_code) == 1, (
+            f"Expected one CODE node in src/{filename}, got {[c.id for c in contained_code]}"
+        )
+        implementing_parents = {
+            p.id for p in contained_code[0].iter_parents(edge_kinds={EdgeKind.IMPLEMENTS})
         }
         assert implementing_parents == {"REQ-p00001"}
 
@@ -602,11 +671,17 @@ A. The system SHALL do A.
 class TestMultiRoleFileScanning:
     """Tests for files scanned as both CODE and TEST (dual-type)."""
 
-    def test_file_in_code_patterns_and_test_dirs_has_both_content_types(
+    # Verifies: REQ-d00212-W
+    def test_REQ_d00212_W_a_file_both_kinds_select_has_both_content_types(
         self, tmp_path: Path
     ) -> None:
-        """A file matched by scanning.code.file_patterns AND scanning.test.directories
-        produces one FILE node with both CODE and TEST content children and file_types set."""
+        """A file both the code and the test kind select produces one FILE node
+        with both CODE and TEST content children and file_types set.
+
+        Both kinds declare `tests` and both kinds' patterns select the file
+        there, which is the only way one file now holds two roles: a pattern
+        selects within its own kind's declared directories.
+        """
         config_file = tmp_path / ".elspais.toml"
         config_file.write_text(
             """\
@@ -618,8 +693,8 @@ namespace = "REQ"
 directories = ["spec"]
 
 [scanning.code]
-directories = ["src"]
-file_patterns = ["tests/test_dual.py"]
+directories = ["src", "tests"]
+file_patterns = ["*.py"]
 
 [scanning.test]
 enabled = true
@@ -666,3 +741,294 @@ file_patterns = ["test_*.py"]
         assert NodeKind.TEST in child_kinds, (
             f"Expected TEST child from test function, got kinds: {child_kinds}"
         )
+
+
+# --- One selection mechanism, one meaning for every kind ------------------- #
+
+
+def _toml_list(values) -> str:
+    """A TOML array literal for a list of strings."""
+    return "[" + ", ".join(f'"{value}"' for value in values) + "]"
+
+
+def _write_selection_config(
+    tmp_path: Path,
+    *,
+    global_skip=(),
+    code_dirs=("src",),
+    code_patterns=("*.py",),
+    code_skip_files=(),
+    code_skip_dirs=(),
+    test_dirs=("tests",),
+    test_patterns=("test_*.py",),
+    test_skip_files=(),
+    test_skip_dirs=(),
+) -> Path:
+    """Write a project whose two scanning kinds are configured the same way.
+
+    The code and test kinds are given the same shape of configuration so a
+    test can vary one setting and compare the two kinds' answers.
+    """
+    config_file = tmp_path / ".elspais.toml"
+    config_file.write_text(
+        f"""\
+[project]
+name = "test-selection"
+namespace = "REQ"
+
+[scanning]
+skip = {_toml_list(global_skip)}
+
+[scanning.spec]
+directories = ["spec"]
+
+[scanning.code]
+directories = {_toml_list(code_dirs)}
+file_patterns = {_toml_list(code_patterns)}
+skip_files = {_toml_list(code_skip_files)}
+skip_dirs = {_toml_list(code_skip_dirs)}
+
+[scanning.test]
+enabled = true
+directories = {_toml_list(test_dirs)}
+file_patterns = {_toml_list(test_patterns)}
+skip_files = {_toml_list(test_skip_files)}
+skip_dirs = {_toml_list(test_skip_dirs)}
+""",
+        encoding="utf-8",
+    )
+    _write_spec(tmp_path / "spec")
+    return config_file
+
+
+def _write_annotated(tmp_path: Path, relative: str, keyword: str) -> None:
+    """Write a Python file citing REQ-p00001 with *keyword*, holding one function."""
+    target = tmp_path / relative
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(
+        f"# {keyword}: REQ-p00001\ndef test_thing():\n    assert True\n",
+        encoding="utf-8",
+    )
+
+
+def _scanned(graph, relative: str) -> bool:
+    """Whether the file at *relative* was read by the build."""
+    return graph.find_by_id(make_file_id("REQ", relative)) is not None
+
+
+class TestOneSelectionMechanism:
+    """File selection means one thing, and it means it for every kind.
+
+    A kind walks the directories it declares, the ignore configuration
+    excludes, and the kind's declared patterns select what is left
+    (REQ-d00212-Q). The patterns select WITHIN those directories, with the
+    same meaning wherever they are written (REQ-d00212-W) -- so the code kind
+    and the test kind are compared against each other rather than each
+    against its own former behaviour.
+    """
+
+    _KINDS = [
+        pytest.param("code", "src", "tests", "Implements", id="code"),
+        pytest.param("test", "tests", "src", "Verifies", id="test"),
+    ]
+
+    @staticmethod
+    def _one_kind_config(tmp_path: Path, kind: str, own_dir: str, patterns) -> Path:
+        """Configure exactly one kind to scan *own_dir*, silencing the other."""
+        if kind == "code":
+            return _write_selection_config(
+                tmp_path,
+                code_dirs=[own_dir],
+                code_patterns=patterns,
+                test_dirs=[],
+            )
+        return _write_selection_config(
+            tmp_path,
+            code_dirs=[],
+            test_dirs=[own_dir],
+            test_patterns=patterns,
+        )
+
+    # Verifies: REQ-d00212-W
+    @pytest.mark.parametrize(("kind", "own_dir", "other_dir", "keyword"), _KINDS)
+    def test_REQ_d00212_W_a_pattern_narrows_each_kind_identically(
+        self, tmp_path: Path, kind: str, own_dir: str, other_dir: str, keyword: str
+    ) -> None:
+        """The same pattern, written for either kind, selects the same files.
+
+        Both trees are laid out identically and both hold an annotated file the
+        pattern does not select and one it does. Whichever kind is configured,
+        the same file is read and the same one is passed over -- and neither
+        kind reaches the tree it did not declare.
+        """
+        for directory in ("src", "tests"):
+            _write_annotated(tmp_path, f"{directory}/api/handler.py", keyword)
+            _write_annotated(tmp_path, f"{directory}/app.py", keyword)
+
+        config_file = self._one_kind_config(tmp_path, kind, own_dir, ["api/*.py"])
+        graph = build_graph(config_path=config_file, repo_root=tmp_path)
+
+        assert _scanned(graph, f"{own_dir}/api/handler.py"), (
+            f"The {kind} kind's pattern selects {own_dir}/api/handler.py"
+        )
+        assert not _scanned(graph, f"{own_dir}/app.py"), (
+            f"The {kind} kind's pattern does not select {own_dir}/app.py"
+        )
+        assert not _scanned(graph, f"{other_dir}/api/handler.py"), (
+            f"The {kind} kind declared only {own_dir}, so {other_dir} is out of reach"
+        )
+        assert not _scanned(graph, f"{other_dir}/app.py")
+
+    # Verifies: REQ-d00212-Q
+    @pytest.mark.parametrize(("kind", "own_dir", "other_dir", "keyword"), _KINDS)
+    def test_REQ_d00212_Q_declaring_no_pattern_scans_the_kinds_defaults(
+        self, tmp_path: Path, kind: str, own_dir: str, other_dir: str, keyword: str
+    ) -> None:
+        """An empty `file_patterns` means the kind's defaults, not nothing.
+
+        The defaults are what this one setting holds until a project writes
+        its own, so a configuration that declares none still scans what it
+        always scanned.
+        """
+        _write_annotated(tmp_path, f"{own_dir}/test_main.py", keyword)
+
+        config_file = self._one_kind_config(tmp_path, kind, own_dir, [])
+        graph = build_graph(config_path=config_file, repo_root=tmp_path)
+
+        assert _scanned(graph, f"{own_dir}/test_main.py"), (
+            f"With no {kind} pattern declared, the {kind} defaults select the file"
+        )
+        assert graph.unscanned_keyword_files() == [], (
+            "A file the defaults select was scanned, so nothing was passed over"
+        )
+
+    # Verifies: REQ-d00241-G
+    @pytest.mark.parametrize(
+        ("kind", "keyword", "excluded", "kept", "settings"),
+        [
+            pytest.param(
+                "test",
+                "Verifies",
+                "tests/test_legacy.py",
+                "tests/test_kept.py",
+                {"global_skip": ["test_legacy.py"]},
+                id="test-global-skip",
+            ),
+            pytest.param(
+                "test",
+                "Verifies",
+                "tests/test_legacy.py",
+                "tests/test_kept.py",
+                {"test_skip_files": ["test_legacy.py"]},
+                id="test-skip-files",
+            ),
+            pytest.param(
+                "test",
+                "Verifies",
+                "tests/legacy/test_legacy.py",
+                "tests/test_kept.py",
+                {"test_skip_dirs": ["legacy"]},
+                id="test-skip-dirs",
+            ),
+            pytest.param(
+                "code",
+                "Implements",
+                "src/legacy.py",
+                "src/kept.py",
+                {"global_skip": ["legacy.py"]},
+                id="code-global-skip",
+            ),
+            pytest.param(
+                "code",
+                "Implements",
+                "src/legacy.py",
+                "src/kept.py",
+                {"code_skip_files": ["legacy.py"]},
+                id="code-skip-files",
+            ),
+            pytest.param(
+                "code",
+                "Implements",
+                "src/legacy/thing.py",
+                "src/kept.py",
+                {"code_skip_dirs": ["legacy"]},
+                id="code-skip-dirs",
+            ),
+        ],
+    )
+    def test_REQ_d00241_G_an_excluded_file_is_neither_scanned_nor_reported(
+        self, tmp_path: Path, kind: str, keyword: str, excluded: str, kept: str, settings: dict
+    ) -> None:
+        """Every route to exclusion removes a file from the scan and from the report.
+
+        The test kind never consulted the ignore configuration at all, so its
+        own exclusions decided nothing. Excluding a file is also a decision
+        about reporting: the project said not to look there, so a citation
+        found in such a file is not something to be told about.
+        """
+        _write_annotated(tmp_path, excluded, keyword)
+        _write_annotated(tmp_path, kept, keyword)
+
+        config_file = _write_selection_config(tmp_path, **settings)
+        graph = build_graph(config_path=config_file, repo_root=tmp_path)
+
+        assert _scanned(graph, kept), f"The {kind} kind still scans {kept}"
+        assert not _scanned(graph, excluded), f"An excluded file must not be scanned: {excluded}"
+        reported = {record.path for record in graph.unscanned_keyword_files()}
+        assert excluded not in reported, (
+            f"An excluded file must not be reported as passed over: {reported}"
+        )
+
+    # Verifies: REQ-d00241-F
+    def test_REQ_d00241_F_a_declined_file_carrying_a_keyword_is_recorded(
+        self, tmp_path: Path
+    ) -> None:
+        """A file reached, not excluded, not selected, and citing anyway is recorded.
+
+        The record names where the citation is and how it was spelled, because
+        a citation nothing read and a requirement genuinely uncovered produce
+        the same coverage figure otherwise.
+        """
+        notes = tmp_path / "src" / "notes.txt"
+        notes.parent.mkdir(parents=True, exist_ok=True)
+        notes.write_text(
+            "Release notes\n\n# Implements: REQ-p00001\n",
+            encoding="utf-8",
+        )
+        _write_annotated(tmp_path, "src/app.py", "Implements")
+
+        config_file = _write_selection_config(tmp_path, test_dirs=[])
+        graph = build_graph(config_path=config_file, repo_root=tmp_path)
+
+        assert _scanned(graph, "src/app.py")
+        assert not _scanned(graph, "src/notes.txt")
+
+        records = graph.unscanned_keyword_files()
+        assert len(records) == 1, f"Expected one declined citing file, got {records}"
+        record = records[0]
+        assert (record.path, record.kind, record.keyword, record.line) == (
+            "src/notes.txt",
+            "code",
+            "Implements",
+            3,
+        )
+
+    # Verifies: REQ-d00241-F
+    def test_REQ_d00241_F_a_declined_file_without_a_keyword_is_not_recorded(
+        self, tmp_path: Path
+    ) -> None:
+        """Passing over an ordinary file is not a finding.
+
+        Only a declined file that cites is worth reporting; every scanned tree
+        holds files no kind selects, and reporting each of them would bury the
+        one that matters.
+        """
+        quiet = tmp_path / "src" / "notes.txt"
+        quiet.parent.mkdir(parents=True, exist_ok=True)
+        quiet.write_text("Release notes, mentioning no requirement.\n", encoding="utf-8")
+        _write_annotated(tmp_path, "src/app.py", "Implements")
+
+        config_file = _write_selection_config(tmp_path, test_dirs=[])
+        graph = build_graph(config_path=config_file, repo_root=tmp_path)
+
+        assert graph.unscanned_keyword_files() == []

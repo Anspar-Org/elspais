@@ -1,4 +1,4 @@
-# Verifies: REQ-p00002, REQ-p00003, REQ-p00004, REQ-p00013-C, REQ-p00080
+# Verifies: REQ-p00002, REQ-p00003, REQ-p00004, REQ-p00080
 #            REQ-d00010, REQ-d00080, REQ-d00085-A,
 #            REQ-d00125-A, REQ-d00125-B, REQ-d00125-C, REQ-d00125-D,
 #            REQ-d00125-E, REQ-d00125-F, REQ-d00125-G, REQ-d00125-H
@@ -416,13 +416,13 @@ class TestAnalysisOptions:
 
 
 class TestHealthSelfValidation:
-    """Validates REQ-p00013-C: health command passes on own repo."""
+    """Validates REQ-d00080-A: `checks --lenient` exits zero on this repository."""
 
-    def test_REQ_p00013_C_health_passes(self):
+    def test_REQ_d00080_A_health_passes(self):
         result = run_elspais("checks", "--lenient")
         assert result.returncode == 0, f"health --lenient failed: {result.stderr}"
 
-    def test_REQ_p00013_C_health_json_zero_errors(self):
+    def test_REQ_d00080_A_health_json_zero_errors(self):
         result = run_elspais("checks", "--format", "json", "--lenient")
         assert result.returncode == 0
         data = json.loads(result.stdout)
@@ -430,7 +430,7 @@ class TestHealthSelfValidation:
             f"Expected 0 failures, got {data['summary']['failed']}"
         )
 
-    def test_REQ_p00013_C_health_is_healthy(self):
+    def test_REQ_d00080_A_health_is_healthy(self):
         result = run_elspais("checks", "--format", "json", "--lenient")
         assert result.returncode == 0
         data = json.loads(result.stdout)
@@ -438,15 +438,16 @@ class TestHealthSelfValidation:
 
 
 class TestDoctorSelfValidation:
-    """Validates REQ-p00013-C: doctor command passes on own repo."""
+    """Validates REQ-d00080-A: `doctor` exits zero on this repository."""
 
-    def test_REQ_p00013_C_doctor_passes(self):
+    def test_REQ_d00080_A_doctor_passes(self):
         result = run_elspais("doctor")
         assert result.returncode == 0, f"doctor failed: {result.stderr}"
 
 
 class TestSummarySelfValidation:
-    """Validates REQ-p00013-C: summary reflects real repo content."""
+    """Validates REQ-d00281-A, REQ-d00086-A: summary groups every level this
+    repository's requirements carry and counts them."""
 
     @pytest.fixture()
     def summary_data(self):
@@ -454,24 +455,24 @@ class TestSummarySelfValidation:
         assert result.returncode == 0
         return json.loads(result.stdout)
 
-    def test_REQ_p00013_C_summary_has_all_levels(self, summary_data):
+    def test_REQ_d00281_A_summary_has_all_levels(self, summary_data):
         level_names = {entry["level"] for entry in summary_data["levels"]}
         for expected in ("PRD", "OPS", "DEV"):
             assert expected in level_names, (
                 f"Missing level {expected} in summary; found {level_names}"
             )
 
-    def test_REQ_p00013_C_summary_nonzero_counts(self, summary_data):
+    def test_REQ_d00086_A_summary_nonzero_counts(self, summary_data):
         for entry in summary_data["levels"]:
             assert entry["total"] > 0, f"Level {entry['level']} has total=0"
 
-    def test_REQ_p00013_C_summary_has_assertions(self, summary_data):
+    def test_REQ_d00086_A_summary_has_assertions(self, summary_data):
         for entry in summary_data["levels"]:
             assert entry["total_assertions"] > 0, f"Level {entry['level']} has total_assertions=0"
 
 
 class TestTraceSelfValidation:
-    """Validates REQ-p00013-C: trace output contains requirements and tests."""
+    """Validates REQ-p00003-B: trace derives requirement-to-test links from the graph."""
 
     @pytest.fixture()
     def trace_data(self, tmp_path):
@@ -483,19 +484,19 @@ class TestTraceSelfValidation:
         assert found, f"No trace output file found among {candidates}"
         return json.loads(found[0].read_text())
 
-    def test_REQ_p00013_C_trace_json_has_requirements(self, trace_data):
+    def test_REQ_p00003_B_trace_json_has_requirements(self, trace_data):
         text = json.dumps(trace_data).lower()
         assert "req" in text, "Trace JSON contains no requirement references"
 
-    def test_REQ_p00013_C_trace_json_has_tests(self, trace_data):
+    def test_REQ_p00003_B_trace_json_has_tests(self, trace_data):
         text = json.dumps(trace_data).lower()
         assert "test" in text, "Trace JSON contains no test references"
 
 
 class TestGraphSelfValidation:
-    """Validates REQ-p00013-C: graph command produces meaningful output."""
+    """Validates REQ-d00084-A: `graph` exports the structured graph of this repository."""
 
-    def test_REQ_p00013_C_graph_has_node_kinds(self):
+    def test_REQ_d00084_A_graph_has_node_kinds(self):
         result = run_elspais("graph")
         assert result.returncode == 0, f"graph failed: {result.stderr}"
         output = result.stdout.lower()
@@ -504,9 +505,9 @@ class TestGraphSelfValidation:
 
 
 class TestSubdirDetection:
-    """Validates REQ-p00013-C: git root auto-detection from subdirectory."""
+    """Validates REQ-d00080-A: `checks --lenient` exits zero when invoked from a subdirectory."""
 
-    def test_REQ_p00013_C_works_from_subdirectory(self):
+    def test_REQ_d00080_A_works_from_subdirectory(self):
         subdir = REPO_ROOT / "tests"
         result = run_elspais("checks", "--lenient", cwd=subdir)
         assert result.returncode == 0, f"health --lenient failed from subdirectory: {result.stderr}"

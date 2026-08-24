@@ -236,7 +236,7 @@ them a verifying test can be named for — and it is stated only where the
 coverage tooling recorded per-test contexts; aggregate-only coverage states
 `null` there while the other three stand. `trace` and `summary` offer it
 identically, the second summing over the requirements of each level under the
-same status gate `checks --code` uses, so the two reconcile.
+same status gate `checks --code-checks` uses, so the two reconcile.
 
 A value in which a report states no figure is never written as zero. A `trace`
 table marks it `n/a`, a `summary` table `-`, and JSON states `null`. A level

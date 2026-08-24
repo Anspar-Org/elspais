@@ -31,7 +31,7 @@ from elspais.graph.reference_faults import (
 from elspais.graph.relations import EdgeKind
 
 if TYPE_CHECKING:
-    from elspais.graph.builder import TraceGraph
+    from elspais.graph.builder import TraceGraph, UnscannedKeywordFile
     from elspais.graph.comments import CommentThread
     from elspais.graph.terms import TermDictionary
     from elspais.utilities.patterns import IdResolver
@@ -817,6 +817,17 @@ class FederatedGraph:
         result: list[IdentifierFormFinding] = []
         for _name, graph in self._live_graphs():
             result.extend(graph.identifier_form_findings())
+        return result
+
+    # Implements: REQ-d00241-F
+    def unscanned_keyword_files(self) -> list[UnscannedKeywordFile]:
+        """Every declined file carrying a citation, across all repos.
+
+        # Strategy: aggregate
+        """
+        result: list[UnscannedKeywordFile] = []
+        for _name, graph in self._live_graphs():
+            result.extend(graph.unscanned_keyword_files())
         return result
 
     # Implements: REQ-d00272-O

@@ -2704,6 +2704,7 @@ def _get_faq(topic: str) -> dict[str, Any]:
     }
 
 
+# Implements: REQ-d00286-B
 def _get_docs(topic: str) -> dict[str, Any]:
     """Return documentation content for a topic, or search all help surfaces.
 

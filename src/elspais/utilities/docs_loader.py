@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     pass
 
 
+# Implements: REQ-d00286-C
 # Ordered list of documentation topics
 TOPIC_ORDER = [
     "quickstart",
@@ -43,6 +44,7 @@ TOPIC_ORDER = [
 ]
 
 
+# Implements: REQ-d00286-A+D
 def find_docs_dir() -> Path | None:
     """Locate the shipped CLI documentation directory.
 

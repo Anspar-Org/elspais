@@ -25,7 +25,15 @@ from elspais.config.schema import ElspaisConfig
 from elspais.config.status_roles import StatusRole
 from elspais.graph.aggregation import EvidenceResult
 from elspais.graph.reference_faults import FaultClass, FaultCode
-from elspais.utilities.findings import REGISTRY, REPORTED_SEVERITIES, Severity, severity_for
+from elspais.utilities.findings import (
+    NO_KNOWN_REMEDY,
+    REGISTRY,
+    REPORTED_SEVERITIES,
+    Severity,
+    is_registered,
+    remedy_for,
+    severity_for,
+)
 
 if TYPE_CHECKING:
     from elspais.graph.federated import FederatedGraph
@@ -52,6 +60,10 @@ class HealthFinding:
     related: list[str] = field(default_factory=list)
     repo: str | None = None
     retired: bool = False
+    # The diagnostic codes the finding reached, as a field rather than only as
+    # text inside `message`, so a reader can select on one (`checks --code`)
+    # and a structured format can carry it as a value.
+    codes: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         d: dict[str, Any] = {
@@ -64,7 +76,15 @@ class HealthFinding:
         }
         if self.retired:
             d["retired"] = True
+        if self.codes:
+            d["codes"] = list(self.codes)
         return d
+
+    def location(self) -> str | None:
+        """Where the finding is about, as `path:line` -- or None where it has none."""
+        if not self.file_path:
+            return None
+        return f"{self.file_path}:{self.line}" if self.line is not None else self.file_path
 
 
 @dataclass
@@ -78,8 +98,13 @@ class HealthCheck:
     severity: str = "error"  # one of REPORTED_SEVERITIES
     details: dict[str, Any] = field(default_factory=dict)
     findings: list[HealthFinding] = field(default_factory=list)
+    # The action that resolves what this check reports. Left empty by every
+    # caller: it is resolved from the one registry below, so a finding carries
+    # its remedy into every format rather than into the one whose renderer
+    # remembered to consult a table (REQ-d00285-B+C).
+    remedy: str = ""
 
-    # Implements: REQ-d00212-U, REQ-d00285-D
+    # Implements: REQ-d00212-U, REQ-d00285-D, REQ-d00285-B
     def __post_init__(self) -> None:
         # A severity outside the vocabulary matched none of the branches that
         # count a check, so the check was neither failed, warned nor skipped
@@ -92,6 +117,12 @@ class HealthCheck:
                 f"{self.name}: {self.severity!r} is not a severity a check can be "
                 f"reported at. Reported severities: {', '.join(REPORTED_SEVERITIES)}."
             )
+        if not self.remedy:
+            # A name outside the registry has no remedy anyone recorded, and
+            # saying so is the obligation. Every name the tool itself reports
+            # under is registered -- that is what `severity_for` enforces at
+            # the point each check is built.
+            self.remedy = remedy_for(self.name) if is_registered(self.name) else NO_KNOWN_REMEDY
 
 
 # Implements: REQ-d00285-G
@@ -173,6 +204,7 @@ class HealthReport:
                     "message": c.message,
                     "category": c.category,
                     "severity": c.severity,
+                    "remedy": c.remedy,
                     "details": c.details,
                     "findings": [f.to_dict() for f in c.findings],
                 }
@@ -949,6 +981,7 @@ def check_reference_class(
                 repo=repo_name,
                 file_path=file_path,
                 line=line,
+                codes=list(f.codes),
             )
         )
     # Implements: REQ-d00204-E
@@ -1080,6 +1113,7 @@ def check_reference_identifier_form(
                 repo=repo_name,
                 file_path=file_path,
                 line=line,
+                codes=list(f.codes),
             )
         )
     return HealthCheck(
@@ -4036,6 +4070,7 @@ def check_unmatched_results(
                 node_id=result.id,
                 file_path=result.get_field("result_file"),
                 line=result.get_field("result_line"),
+                related=list(candidates),
             )
         )
 
@@ -4045,7 +4080,7 @@ def check_unmatched_results(
             passed=True,
             message="Every ingested result matched a test",
             category="tests",
-            severity="warning",
+            severity=severity,
         )
     return HealthCheck(
         name="tests.unmatched_results",
@@ -4251,6 +4286,7 @@ def _report_from_dict(data: dict[str, Any]) -> HealthReport:
                 related=f.get("related", []),
                 repo=f.get("repo"),
                 retired=f.get("retired", False),
+                codes=f.get("codes", []),
             )
             for f in c.get("findings", [])
         ]
@@ -4263,6 +4299,7 @@ def _report_from_dict(data: dict[str, Any]) -> HealthReport:
                 severity=c.get("severity", "error"),
                 details=c.get("details", {}),
                 findings=findings,
+                remedy=c.get("remedy", ""),
             )
         )
     return report
@@ -4279,6 +4316,15 @@ def run(args: argparse.Namespace) -> int:
     from elspais.commands import _engine
     from elspais.commands.test_runner import run_configured_targets
     from elspais.config import find_git_root, get_config
+
+    # A narrowing naming something the vocabulary does not admit selects
+    # nothing while looking like it selected something, so it is refused
+    # before the run rather than reported as a clean report (REQ-d00282-F).
+    unadmitted = FindingFilter.from_args(args).unadmitted()
+    if unadmitted:
+        for problem in unadmitted:
+            print(f"error: {problem}", file=sys.stderr)
+        return 2
 
     run_tests = getattr(args, "run_tests", False)
     fail_fast = getattr(args, "fail_fast", False)
@@ -4476,6 +4522,197 @@ def _format_graph_source(source: dict | None) -> str | None:
     return source_type
 
 
+# Implements: REQ-d00285-C+G
+@dataclass(frozen=True)
+class FindingFilter:
+    """A narrowing of a report over the fields every finding carries.
+
+    Values named for one field are alternatives and values named for
+    different fields are conditions met at once -- the same reading a scope
+    over requirements takes (REQ-d00278-E+D), so a reader who has narrowed one
+    report knows how to narrow the other.
+
+    `severities` and `categories` select CHECKS: severity and category are
+    properties of the check a finding belongs to, and a check they exclude is
+    withheld whole. `codes` and `paths` select FINDINGS within the checks that
+    survive, and a check left holding none of them is withheld with them. The
+    flag spelling `paths` is read from is `--file`: `--path` already names the
+    repository root a run works from.
+    """
+
+    severities: tuple[str, ...] = ()
+    categories: tuple[str, ...] = ()
+    codes: tuple[str, ...] = ()
+    paths: tuple[str, ...] = ()
+
+    @classmethod
+    def from_args(cls, args: argparse.Namespace) -> FindingFilter:
+        def _get(name: str) -> tuple[str, ...]:
+            value = getattr(args, name, None)
+            return tuple(value) if value else ()
+
+        return cls(
+            severities=_get("severity"),
+            categories=_get("category"),
+            codes=_get("code"),
+            paths=_get("file"),
+        )
+
+    @property
+    def active(self) -> bool:
+        return bool(self.severities or self.categories or self.codes or self.paths)
+
+    @property
+    def narrows_findings(self) -> bool:
+        """Whether the filter selects among findings rather than among checks.
+
+        A reader who named a code or a path asked for those findings by name,
+        so they are rendered whether or not the report as a whole is verbose.
+        """
+        return bool(self.codes or self.paths)
+
+    def unadmitted(self) -> list[str]:
+        """The names this filter uses that the report's vocabulary does not admit.
+
+        Severities and categories are the tool's own vocabulary, identical in
+        every project, so a name among them that does not resolve is a mistake
+        rather than a difference -- and a report narrowed by a name that
+        selects nothing looks exactly like a report with nothing to say
+        (REQ-d00282-F). Codes and paths are values the estate carries rather
+        than a fixed list, so they are not judged here.
+        """
+        problems = []
+        for value in self.severities:
+            if value not in REPORTED_SEVERITIES:
+                problems.append(
+                    f"--severity {value}: not a severity. "
+                    f"Severities: {', '.join(REPORTED_SEVERITIES)}."
+                )
+        for value in self.categories:
+            if value not in REPORT_CATEGORIES:
+                problems.append(
+                    f"--category {value}: not a category. "
+                    f"Categories: {', '.join(REPORT_CATEGORIES)}."
+                )
+        return problems
+
+    def matches_check(self, check: HealthCheck) -> bool:
+        if self.severities and check.severity not in self.severities:
+            return False
+        if self.categories and check.category not in self.categories:
+            return False
+        return True
+
+    def matches_finding(self, finding: HealthFinding) -> bool:
+        from fnmatch import fnmatch
+
+        if self.codes and not any(c in self.codes for c in finding.codes):
+            return False
+        if self.paths:
+            path = finding.file_path or ""
+            if not any(fnmatch(path, pattern) for pattern in self.paths):
+                return False
+        return True
+
+    def describe(self) -> str:
+        """The filter as the flags that produced it, for echoing back."""
+        parts: list[str] = []
+        for flag, values in (
+            ("--severity", self.severities),
+            ("--category", self.categories),
+            ("--code", self.codes),
+            ("--file", self.paths),
+        ):
+            if values:
+                parts.append(f"{flag} {' '.join(values)}")
+        return " ".join(parts)
+
+
+@dataclass(frozen=True)
+class _FilterOutcome:
+    """A narrowed report, and what the narrowing withheld."""
+
+    report: HealthReport
+    checks_shown: int
+    checks_total: int
+    findings_shown: int
+    findings_total: int
+    filter: FindingFilter
+
+    def disclosure(self) -> str | None:
+        if not self.filter.active:
+            return None
+        return (
+            f"Filtered by {self.filter.describe()}: showing "
+            f"{self.checks_shown} of {self.checks_total} checks, "
+            f"{self.findings_shown} of {self.findings_total} findings."
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "severity": list(self.filter.severities),
+            "category": list(self.filter.categories),
+            "code": list(self.filter.codes),
+            "file": list(self.filter.paths),
+            "checks_shown": self.checks_shown,
+            "checks_total": self.checks_total,
+            "findings_shown": self.findings_shown,
+            "findings_total": self.findings_total,
+        }
+
+
+# Implements: REQ-d00285-G
+def apply_finding_filter(report: HealthReport, filt: FindingFilter) -> _FilterOutcome:
+    """Narrow a report to the checks and findings a filter admits.
+
+    The verdict is NOT recomputed from what survives: a reader narrowing a
+    report is choosing what to look at, never what the run found, and an exit
+    code that moved with the filter would let a narrowing pass a run that
+    failed.
+    """
+    checks_total = len(report.checks)
+    findings_total = sum(len(c.findings) for c in report.checks)
+    if not filt.active:
+        return _FilterOutcome(
+            report=report,
+            checks_shown=checks_total,
+            checks_total=checks_total,
+            findings_shown=findings_total,
+            findings_total=findings_total,
+            filter=filt,
+        )
+
+    narrowed = HealthReport()
+    findings_shown = 0
+    for check in report.checks:
+        if not filt.matches_check(check):
+            continue
+        kept = [f for f in check.findings if filt.matches_finding(f)]
+        if filt.narrows_findings and not kept:
+            continue
+        findings_shown += len(kept)
+        narrowed.add(
+            HealthCheck(
+                name=check.name,
+                passed=check.passed,
+                message=check.message,
+                category=check.category,
+                severity=check.severity,
+                details=check.details,
+                findings=kept,
+                remedy=check.remedy,
+            )
+        )
+    return _FilterOutcome(
+        report=narrowed,
+        checks_shown=len(narrowed.checks),
+        checks_total=checks_total,
+        findings_shown=findings_shown,
+        findings_total=findings_total,
+        filter=filt,
+    )
+
+
 def _format_report(
     report: HealthReport,
     args: argparse.Namespace,
@@ -4488,6 +4725,16 @@ def _format_report(
     verbose = getattr(args, "verbose", False)
     include_passing = getattr(args, "include_passing_details", False)
 
+    # The narrowing is applied once, here, so every format renders the same
+    # narrowed report (REQ-d00285-C) and no renderer has to know a filter
+    # exists. The verdict is still the whole run's -- see `apply_finding_filter`.
+    outcome = apply_finding_filter(report, FindingFilter.from_args(args))
+    whole_run = report
+    report = outcome.report
+    disclosure = outcome.disclosure()
+    # A reader who named a code or a path asked for those findings by name.
+    show_findings = verbose or outcome.filter.narrows_findings
+
     # Build active flags summary from args
     flag_parts: list[str] = []
     treat_active_list = getattr(args, "treat_active", None)
@@ -4498,11 +4745,13 @@ def _format_report(
     if getattr(args, "spec_only", False):
         flag_parts.append("--spec")
     if getattr(args, "code_only", False):
-        flag_parts.append("--code")
+        flag_parts.append("--code-checks")
     if getattr(args, "tests_only", False):
         flag_parts.append("--tests")
     if getattr(args, "terms_only", False):
         flag_parts.append("--terms")
+    if outcome.filter.active:
+        flag_parts.append(outcome.filter.describe())
     active_flags = ", ".join(flag_parts) if flag_parts else None
 
     from elspais.utilities.report_meta import report_metadata
@@ -4512,9 +4761,22 @@ def _format_report(
     if fmt == "json":
         d = report.to_dict(lenient=lenient)
         d["meta"] = meta
+        if outcome.filter.active:
+            # The verdict and its counts are the whole run's; only the checks
+            # listed are narrowed, and the filter block says by how much.
+            verdict = whole_run.to_dict(lenient=lenient)
+            d["healthy"] = verdict["healthy"]
+            d["summary"] = verdict["summary"]
+            d["filter"] = outcome.to_dict()
         return json.dumps(d, indent=2)
     elif fmt == "markdown":
-        data = _build_report_data(report)
+        data = _build_report_data(
+            report,
+            verbose=show_findings,
+            include_passing_details=include_passing,
+            disclosure=disclosure,
+            verdict_report=whole_run,
+        )
         data.graph_source = graph_source
         data.active_flags = active_flags
         data.meta = meta
@@ -4522,11 +4784,17 @@ def _format_report(
     elif fmt == "junit":
         return _render_junit(report, include_passing_details=include_passing)
     elif fmt == "sarif":
-        return _render_sarif(report)
+        return _render_sarif(report, verdict=whole_run)
     else:
         if quiet:
-            return _build_report_data(report, verbose=verbose).summary_line
-        data = _build_report_data(report, verbose=verbose)
+            return _build_summary_line(whole_run)
+        data = _build_report_data(
+            report,
+            verbose=show_findings,
+            include_passing_details=include_passing,
+            disclosure=disclosure,
+            verdict_report=whole_run,
+        )
         data.graph_source = graph_source
         data.active_flags = active_flags
         data.meta = meta
@@ -4538,45 +4806,6 @@ def _format_report(
 # =============================================================================
 
 
-# Maps check names to the follow-up command a user should run.
-_FOLLOWUP_COMMANDS: dict[str, str] = {
-    "spec.hash_integrity": "elspais fix",
-    "spec.needs_rewrite": "elspais fix",
-    "spec.format_rules": "elspais errors",
-    "spec.no_assertions": "elspais errors",
-    "spec.index_current": "elspais fix",
-    "spec.no_duplicates": "elspais checks --spec --format json",
-    "spec.implements_resolve": "elspais broken",
-    "spec.refines_resolve": "elspais broken",
-    "spec.satisfies_resolve": "elspais broken",
-    "references.malformed": "elspais broken",
-    "references.unknown_namespace": "elspais broken",
-    "references.unknown_requirement": "elspais broken",
-    "references.unknown_assertion": "elspais broken",
-    "references.forbidden": "elspais broken",
-    "references.keyword_form": "elspais checks --spec --format json",
-    "references.identifier_form": "elspais checks --spec --format json",
-    "references.undeclared": "elspais checks --spec --format json",
-    "spec.structural_orphans": "elspais checks --spec --format json",
-    "spec.hierarchy_levels": "elspais checks --spec --format json",
-    "spec.changelog_present": "elspais fix",
-    "spec.changelog_current": "elspais fix -m 'Update changelog'",
-    "spec.changelog_format": "elspais checks --spec --format json",
-    "code.unlinked": "elspais unlinked",
-    "tests.unlinked": "elspais unlinked",
-    "tests.uncredited_evidence": "elspais checks --tests --format json",
-    "tests.results": "elspais failing",
-    "uat.results": "elspais failing",
-    "terms.duplicates": "elspais checks --terms --format json",
-    "terms.undefined": "elspais checks --terms --format json",
-    "terms.unmarked": "elspais checks --terms --format json",
-    "terms.unused": "elspais checks --terms --format json",
-    "terms.bad_definition": "elspais checks --terms --format json",
-    "terms.collection_empty": "elspais checks --terms --format json",
-    "terms.canonical_form": "elspais fix",
-}
-
-
 @dataclass
 class _CheckLine:
     """Pre-computed display data for a single health check."""
@@ -4584,7 +4813,15 @@ class _CheckLine:
     icon: str  # "\u2713", "\u2717", "\u26a0", "~"
     name: str
     message: str
-    followup: str | None = None
+    severity: str = "error"
+    remedy: str = NO_KNOWN_REMEDY
+    # The check's own findings, carried into the line so text and markdown
+    # render what json and sarif have always carried (REQ-d00285-C). Empty
+    # where the report is not being asked for detail.
+    findings: list[HealthFinding] = field(default_factory=list)
+    # Whether this line stands for a check a reader should act on -- which is
+    # what decides whether its remedy is worth stating.
+    actionable: bool = False
 
 
 @dataclass
@@ -4608,6 +4845,11 @@ class _ReportData:
     graph_source: str | None = None
     active_flags: str | None = None
     meta: dict[str, str] | None = None
+    verbose: bool = False
+    # What a narrowing withheld, where the report was narrowed. A report that
+    # showed a reader some of what it found and did not say so is one they
+    # cannot tell from a clean run (REQ-d00285-G).
+    disclosure: str | None = None
 
 
 def _build_hint(report: HealthReport, already_verbose: bool) -> str | None:
@@ -4627,7 +4869,7 @@ def _build_hint(report: HealthReport, already_verbose: bool) -> str | None:
     category_flags = {
         "spec": "--spec",
         "references": "--spec",
-        "code": "--code",
+        "code": "--code-checks",
         "tests": "--tests",
         "config": "",
         "terms": "--terms",
@@ -4651,6 +4893,36 @@ def _build_hint(report: HealthReport, already_verbose: bool) -> str | None:
         )
 
 
+# The categories a check can report under, in the order the report renders
+# them. One list, so a `--category` a reader types is judged against the same
+# vocabulary the sections are built from.
+REPORT_CATEGORIES: tuple[str, ...] = (
+    "config",
+    "spec",
+    "references",
+    "code",
+    "tests",
+    "uat",
+    "terms",
+    "docs",
+    "environment",
+)
+
+
+def _ordered_categories(report: HealthReport) -> list[str]:
+    """The categories to render, in report order, with none left out.
+
+    A renderer walking a literal list drops every check reporting under a
+    category nobody added to it -- and drops it in silence, since the summary
+    counts it either way. Categories the report holds but the list does not
+    are rendered after the ones it does.
+    """
+    seen = {c.category for c in report.checks}
+    ordered = [c for c in REPORT_CATEGORIES if c in seen]
+    ordered.extend(sorted(seen - set(REPORT_CATEGORIES)))
+    return ordered
+
+
 def _build_summary_line(report: HealthReport) -> str:
     """Build the summary line string (matches _print_summary_line logic)."""
     counted = len(report.checks) - report.skipped
@@ -4668,14 +4940,37 @@ def _build_summary_line(report: HealthReport) -> str:
         return f"UNHEALTHY: {report.failed} errors, {report.warnings} warnings{skip_suffix}"
 
 
-def _build_report_data(report: HealthReport, verbose: bool = False) -> _ReportData:
+# Implements: REQ-d00085-K+M, REQ-d00285-A+B+C
+def _build_report_data(
+    report: HealthReport,
+    verbose: bool = False,
+    include_passing_details: bool = False,
+    disclosure: str | None = None,
+    verdict_report: HealthReport | None = None,
+) -> _ReportData:
     """Build the intermediate representation for rendering a health report.
 
     Extracts all stat computation logic: category icon selection, pass/fail/skip
     counting (excluding info-severity from pass/total), check icon selection,
     summary line, and hint string.
+
+    Args:
+        report: The checks to render.
+        verbose: Expand all available detail -- which means each failing
+            check's findings, with the location and the remedy each carries.
+            The default stays as terse as it was: one line per check.
+        include_passing_details: Also render the findings of checks that
+            passed. Separate from `verbose` because they are separate requests
+            (REQ-d00085-K against REQ-d00085-M): a reader asking for the
+            detail of what is wrong is not asking for the detail of what is
+            right.
+        disclosure: What a narrowing withheld, where the report was narrowed.
+        verdict_report: The report the summary line and the hint speak for.
+            Defaults to `report`, and differs from it only where the report
+            was narrowed: the verdict is the whole run's, so a reader who
+            filtered down to one category is still told what the run found.
     """
-    categories = ["config", "spec", "references", "code", "tests", "uat", "terms"]
+    categories = _ordered_categories(report)
     sections: list[_SectionData] = []
 
     for category in categories:
@@ -4710,11 +5005,28 @@ def _build_report_data(report: HealthReport, verbose: bool = False) -> _ReportDa
                 c_icon = "\u26a0"
             else:
                 c_icon = "\u2717"
-            followup = None
-            if not check.passed and check.severity in ("error", "warning"):
-                followup = _FOLLOWUP_COMMANDS.get(check.name)
+            # What decides whether a check's findings need a request of their
+            # own is whether the check PASSED, not how loud it is: an
+            # info-severity check that reported a condition has findings a
+            # reader came for, while a passing check's are noise until asked
+            # for (REQ-d00085-M). `actionable` is a narrower question again --
+            # whether the reader is being asked to do something about it --
+            # and it decides only the follow-up table.
+            if check.passed:
+                shown = check.findings if include_passing_details else []
+            else:
+                shown = check.findings if verbose else []
+            actionable = not check.passed and check.severity in ("error", "warning")
             check_lines.append(
-                _CheckLine(icon=c_icon, name=check.name, message=check.message, followup=followup)
+                _CheckLine(
+                    icon=c_icon,
+                    name=check.name,
+                    message=check.message,
+                    severity=check.severity,
+                    remedy=check.remedy,
+                    findings=list(shown),
+                    actionable=actionable,
+                )
             )
 
         sections.append(
@@ -4726,16 +5038,49 @@ def _build_report_data(report: HealthReport, verbose: bool = False) -> _ReportDa
             )
         )
 
-    summary_line = _build_summary_line(report)
-    is_healthy = report.is_healthy
-    hint = _build_hint(report, verbose) if not is_healthy else None
+    verdict = verdict_report if verdict_report is not None else report
+    summary_line = _build_summary_line(verdict)
+    is_healthy = verdict.is_healthy
+    hint = _build_hint(verdict, verbose) if not is_healthy else None
 
     return _ReportData(
         sections=sections,
         summary_line=summary_line,
         is_healthy=is_healthy,
         hint=hint,
+        verbose=verbose,
+        disclosure=disclosure,
     )
+
+
+# Implements: REQ-d00285-A+B+C
+def _finding_text_lines(finding: HealthFinding, indent: str) -> list[str]:
+    """One finding, as the lines that carry what it is about and where it is.
+
+    The location leads because it is what a reader acts on: a finding they
+    cannot place costs them the search the tool already performed
+    (REQ-d00285-A). What the finding names -- the node, the repository that
+    owns it, the things it relates to -- follows on a line of its own, and is
+    omitted entirely where the finding names none of them.
+    """
+    location = finding.location()
+    if location:
+        head = f"{indent}- {location}: {finding.message}"
+    else:
+        head = f"{indent}- {finding.message}"
+    lines = [head]
+    attrs: list[str] = []
+    if finding.node_id:
+        attrs.append(f"node={finding.node_id}")
+    if finding.repo:
+        attrs.append(f"repo={finding.repo}")
+    if finding.codes:
+        attrs.append(f"codes={' '.join(finding.codes)}")
+    if finding.related:
+        attrs.append(f"related={', '.join(finding.related)}")
+    if attrs:
+        lines.append(f"{indent}  {' '.join(attrs)}")
+    return lines
 
 
 def _render_text(data: _ReportData) -> str:
@@ -4746,18 +5091,30 @@ def _render_text(data: _ReportData) -> str:
         lines.append("-" * 40)
         for check in section.checks:
             lines.append(f"  {check.icon} {check.name}: {check.message}")
+            if check.findings:
+                lines.append(f"      remedy: {check.remedy}")
+            for finding in check.findings:
+                lines.extend(_finding_text_lines(finding, "      "))
 
-    # Collect follow-up commands for failing/warning checks
-    followups = [
-        (check.name, check.followup)
-        for section in data.sections
-        for check in section.checks
-        if check.followup
-    ]
+    # The follow-up table is what carries each failing check's remedy when the
+    # report is terse. Where the findings are rendered, each check has already
+    # named its own remedy above and the table would only repeat it.
+    followups = (
+        []
+        if data.verbose
+        else [
+            (check.name, check.remedy)
+            for section in data.sections
+            for check in section.checks
+            if check.actionable
+        ]
+    )
 
     lines.append("")
     lines.append("=" * 40)
     lines.append(data.summary_line)
+    if data.disclosure:
+        lines.append(data.disclosure)
     if data.active_flags:
         lines.append(f"Flags: {data.active_flags}")
     if data.meta:
@@ -4809,11 +5166,34 @@ def _render_markdown(data: _ReportData) -> str:
                 lines.append(f"- [x] {check.name}: {check.message}")
             else:
                 lines.append(f"- [ ] {check.name}: {check.message}")
+            if check.findings:
+                # A command is code and reads as code; "no command resolves
+                # this" is a sentence and would read as one if it were not.
+                spelled = check.remedy if check.remedy == NO_KNOWN_REMEDY else f"`{check.remedy}`"
+                lines.append(f"  - remedy: {spelled}")
+            for finding in check.findings:
+                location = finding.location()
+                head = f"`{location}`: {finding.message}" if location else finding.message
+                lines.append(f"  - {head}")
+                attrs: list[str] = []
+                if finding.node_id:
+                    attrs.append(f"node={finding.node_id}")
+                if finding.repo:
+                    attrs.append(f"repo={finding.repo}")
+                if finding.codes:
+                    attrs.append(f"codes={' '.join(finding.codes)}")
+                if finding.related:
+                    attrs.append(f"related={', '.join(finding.related)}")
+                if attrs:
+                    lines.append(f"    - {' '.join(attrs)}")
         lines.append("")
 
     lines.append("---")
     lines.append("")
     lines.append(data.summary_line)
+    if data.disclosure:
+        lines.append("")
+        lines.append(data.disclosure)
     if data.hint:
         lines.append("")
         lines.append(data.hint)
@@ -4835,7 +5215,7 @@ def _render_junit(
     import xml.etree.ElementTree as ET
 
     testsuites = ET.Element("testsuites")
-    categories = ["config", "spec", "references", "code", "tests", "uat", "terms"]
+    categories = _ordered_categories(report)
 
     for category in categories:
         checks = list(report.iter_by_category(category))
@@ -4864,19 +5244,32 @@ def _render_junit(
                 sys_out = ET.SubElement(tc, "system-out")
                 sys_out.text = check.message
             elif not check.passed:
+                # The remedy and the findings travel here too, so a report
+                # filed to CI names what a report read on a terminal names.
+                # Implements: REQ-d00285-A+B+C
+                body = _failure_body(check)
                 if check.severity == "error":
                     failure = ET.SubElement(tc, "failure", message=check.message)
-                    if check.details:
-                        failure.text = _format_details(check.details)
+                    failure.text = body
                 elif check.severity == "warning":
                     sys_err = ET.SubElement(tc, "system-err")
-                    sys_err.text = f"WARNING: {check.message}"
+                    sys_err.text = f"WARNING: {check.message}\n{body}"
             elif check.passed and include_passing_details and check.findings:
                 sys_out = ET.SubElement(tc, "system-out")
                 finding_lines = [f.message for f in check.findings]
                 sys_out.text = "\n".join(finding_lines)
 
     return ET.tostring(testsuites, encoding="unicode", xml_declaration=True)
+
+
+def _failure_body(check: HealthCheck) -> str:
+    """The body of a failing check: its remedy, its findings, then its details."""
+    parts: list[str] = [f"remedy: {check.remedy}"]
+    for finding in check.findings:
+        parts.extend(_finding_text_lines(finding, ""))
+    if check.details:
+        parts.append(_format_details(check.details))
+    return "\n".join(parts)
 
 
 def _format_details(details: dict[str, Any]) -> str:
@@ -4890,8 +5283,22 @@ def _format_details(details: dict[str, Any]) -> str:
     return "\n".join(parts)
 
 
+def _finding_properties(check: HealthCheck, finding: HealthFinding) -> dict[str, Any]:
+    """The values a finding carries beyond its message and its location."""
+    props: dict[str, Any] = {"remedy": check.remedy}
+    if finding.node_id:
+        props["nodeId"] = finding.node_id
+    if finding.repo:
+        props["repo"] = finding.repo
+    if finding.codes:
+        props["codes"] = list(finding.codes)
+    if finding.related:
+        props["related"] = list(finding.related)
+    return props
+
+
 # Implements: REQ-d00085-J
-def _render_sarif(report: HealthReport) -> str:
+def _render_sarif(report: HealthReport, verdict: HealthReport | None = None) -> str:
     """Render health report as SARIF v2.1.0 JSON.
 
     One reportingDescriptor per unique failing check name, one result per
@@ -4915,6 +5322,10 @@ def _render_sarif(report: HealthReport) -> str:
                 {
                     "id": check.name,
                     "shortDescription": {"text": check.message},
+                    # The action that resolves the condition, stated where a
+                    # SARIF consumer looks for it.
+                    # Implements: REQ-d00285-B
+                    "help": {"text": check.remedy},
                 }
             )
 
@@ -4928,6 +5339,7 @@ def _render_sarif(report: HealthReport) -> str:
                     "ruleIndex": idx,
                     "level": level,
                     "message": {"text": finding.message},
+                    "properties": _finding_properties(check, finding),
                 }
                 if finding.file_path:
                     loc: dict[str, Any] = {
@@ -4945,6 +5357,7 @@ def _render_sarif(report: HealthReport) -> str:
                     "ruleIndex": idx,
                     "level": level,
                     "message": {"text": check.message},
+                    "properties": {"remedy": check.remedy},
                 }
             )
 
@@ -4964,9 +5377,11 @@ def _render_sarif(report: HealthReport) -> str:
                 },
                 "results": results,
                 "properties": {
-                    "passed": report.passed,
-                    "failed": report.failed,
-                    "warnings": report.warnings,
+                    # The run's counts, not the narrowed view's -- a filtered
+                    # report states what the run found and lists a subset.
+                    "passed": (verdict or report).passed,
+                    "failed": (verdict or report).failed,
+                    "warnings": (verdict or report).warnings,
                 },
             }
         ],
