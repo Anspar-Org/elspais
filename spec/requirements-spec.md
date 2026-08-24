@@ -188,7 +188,7 @@ A directive the tool does not recognize is never silently treated as ordinary as
 An assertion carrying the `RETIRED` directive does not exist for coverage and traceability purposes:
 
 - It is excluded from all coverage and traceability calculations — not counted among assertions expected to be implemented, tested, or validated.
-- References targeting it are invalid, exactly as references to a nonexistent assertion: they do not resolve, and surface as broken references.
+- References targeting it are invalid, exactly as references to a nonexistent assertion: they do not resolve, and surface as unresolved references.
 - Its label remains allocated — the letter is never reused, preserving the label-stability rule above.
 
 `RETIRED` supersedes the informal `[Removed - ...]` placeholder convention, which the parser admits as an ordinary assertion that then counts as permanently uncovered in every coverage denominator.

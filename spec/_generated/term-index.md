@@ -49,6 +49,7 @@
 - REQ-d00269-E
 - REQ-d00269-G
 - REQ-d00269-H
+- REQ-d00269-K
 - REQ-d00128-I
 - REQ-d00131-L
 - REQ-d00133-B
@@ -62,6 +63,7 @@
 - REQ-d00241-C
 - REQ-d00241-D
 - REQ-d00241-E
+- REQ-d00241-F
 - REQ-p00005-B
 - rem:REQ:spec/AI-AGENT.md:20
 - REQ-d00084:section:0

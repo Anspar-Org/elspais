@@ -243,6 +243,50 @@ D is what keeps B from becoming guesswork. Reporting several respects in which a
 - 2026-08-15 | - | - | Michael Lewis (<michael@anspar.org>) | Initial authoring: closed categories over open codes, multiple codes per finding, a generic code, and issuance only where determined
 
 *End* *Diagnostic Code Vocabulary* | **Hash**: 6f4019d1
+
+## REQ-d00285: The Shape of a Finding
+
+**Level**: dev | **Status**: Draft | **Implements**: REQ-p00015
+**Satisfies**: REQ-p00019
+
+A finding is what the tool hands back when something is wrong with the content or the configuration it was given. REQ-d00271 governs the vocabulary a finding names its defect in. This governs what a finding must carry besides that name, so that a reader can act on it and so that two surfaces reporting the same condition cannot disagree about it.
+
+### Assertions
+
+A. Every finding SHALL carry the location of what it is about — the file, and the line within that file — where what it is about has one.
+
+B. Every finding SHALL carry the action available to resolve it, naming that none is known where that is so.
+
+C. A finding SHALL carry the same identity, severity, location and remedy whatever format the report is rendered in.
+
+D. Every finding SHALL fall in a category for which a severity can be configured.
+
+E. One authority SHALL decide a finding's severity from its category.
+
+F. A name under which findings are reported SHALL identify one condition.
+
+G. Where a condition the tool detected is not reported, the point at which it is withheld SHALL record what was withheld and why.
+
+### Rationale
+
+A finding a reader cannot locate costs them the search the tool already performed, and a finding that names no remedy leaves them to infer one from the defect — which is exactly the inference the tool is better placed to make. A and B put both on the finding itself rather than in a table consulted at render time, because a table keyed by name covers only the names someone remembered to add, and it cannot travel to a surface that renders differently.
+
+C is the same property REQ-p00084-C establishes for scope, applied to findings: a report a reader checks and a report they file must not disagree. A finding that reaches one format and not another is indistinguishable, to the reader of the quieter format, from a finding that was never raised.
+
+D and E separate two questions that are easy to merge. D is about coverage — no finding may sit outside the settings a project can reach, which is what leaves a condition unconfigurable. E is about agreement — one finding, one severity, however many surfaces ask. Where two places decide severity independently, a project that changes a setting sees one of them move.
+
+F concretizes REQ-p00019-J and -K in the direction those assertions do not reach. They oblige a description to be true of every finding it covers and a finding to be reported once; F obliges the converse, that a name not be reused for a second condition. Two conditions under one name make a count uninterpretable in the same way double-reporting does, and the reader has no way to see it.
+
+G concretizes REQ-p00019-H. Suppression is legitimate; silent suppression is not, and the difference is a record at the point the decision is made. Without it, a condition detected and dropped is indistinguishable from a condition never detected, and the code that drops it reads as if nothing were being decided.
+
+Classes of REQ-p00019 not concretized here are bound through the instance rather than left uncovered: A, C, D, E and F are properties of what a report says overall, which REQ-p00015 governs for this tool; B is governed for content staleness by the hash and index checks. This requirement concretizes G through B, H through G, and J and K through F.
+
+### Changelog
+
+- 2026-08-24 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-66: Initial authoring — a finding carries its location, its remedy and one severity decided in one place, and reads the same in every format
+
+*End* *The Shape of a Finding* | **Hash**: f7488e72
+
 ---
 
 ## REQ-d00086: Coverage Report Section

@@ -382,18 +382,19 @@ F. The tool SHALL NOT assign an identifier previously borne by a requirement who
 
 G. While an *Assertion* carries the RETIRED parsing directive, the tool SHALL exclude that *Assertion* from every coverage and *Traceability* calculation.
 
-H. If a reference targets an *Assertion* carrying the RETIRED parsing directive, then the tool SHALL treat the reference exactly as a reference to a nonexistent *Assertion*: unresolved, and surfaced as a broken reference.
+H. If a reference targets an *Assertion* carrying the RETIRED parsing directive, then the tool SHALL treat the reference exactly as a reference to a nonexistent *Assertion*: unresolved, and surfaced as a unresolved reference.
 
 I. The tool SHALL NOT assign a label borne by an *Assertion* carrying the RETIRED parsing directive to a different *Assertion*.
 
 ## Changelog
 
+- 2026-08-24 | 3e4c9ddb | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | 8ddf7122 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-47: author RETIRED-directive semantics — coverage/traceability nonexistence (G), broken-reference resolution (H), permanent label allocation (I)
 - 2026-07-31 | c0aae59d | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms, update hash
 - 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-20: author reference-integrity-under-mutation invariant (GI-3)
 
-*End* *Reference Integrity Under Mutation* | **Hash**: 8ddf7122
+*End* *Reference Integrity Under Mutation* | **Hash**: 3e4c9ddb
 ---
 
 # REQ-p00018: Compiled Risk Register
@@ -683,15 +684,21 @@ F. For markup languages (`.html`, `.xml`, `.svg`), the extractor SHALL extract `
 
 G. For file extensions with no known comment style, `extract_comments()` SHALL return an empty list.
 
+H. Each scannable file type SHALL be associated with exactly one comment pattern, drawn from a named set defined in one place.
+
+J. The named set of comment patterns SHALL appear in the tool's help documentation.
+
 ### Changelog
 
+- 2026-08-24 | 26d0fdd6 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-24 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-66: one comment pattern per file type, from a named set defined once and published in the help documentation
 - 2026-08-08 | 683718c0 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-08 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-57: Terraform/HCL extensions join the hash-comment languages (D)
 - 2026-07-31 | 2e5b4960 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 499123f1 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 499123f1 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Comment Extraction Utilities* | **Hash**: 683718c0
+*End* *Comment Extraction Utilities* | **Hash**: 26d0fdd6
 
 ## REQ-d00237: Term Reference Scanner Core
 
@@ -855,8 +862,14 @@ D. The `tests.unlinked` check (`check_unlinked_tests()`) SHALL flag a test file 
 
 E. A file carrying a *Traceability* marker that produced no relationship SHALL NOT be reported as carrying no marker. Carrying none and carrying only markers that bound nothing are distinct findings, and each SHALL be reported under a description true of it.
 
+F. A file within a scanned directory that is not ignored and does not match the patterns declared for its kind SHALL be reported where it carries a *Traceability* keyword, at the severity the project configures for it.
+
+G. A file the ignore configuration excludes SHALL NOT be reported.
+
 ### Changelog
 
+- 2026-08-24 | a0c9c65d | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-24 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-66: an unscanned file carrying a Traceability keyword is reported; an ignored file is passed over silently
 - 2026-08-15 | f4149861 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-15 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: separate carrying no marker from carrying markers that bound nothing
 - 2026-07-31 | de72736f | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -866,7 +879,7 @@ E. A file carrying a *Traceability* marker that produced no relationship SHALL N
 - 2026-03-30 | e1272219 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: sync changelog hash
 - 2026-03-29 | 6e481d63 | - | Michael Lewis (<michael@anspar.org>) | Initial creation
 
-*End* *Code No-Traceability Health Check* | **Hash**: f4149861
+*End* *Code No-Traceability Health Check* | **Hash**: a0c9c65d
 
 ## REQ-d00246: Markdown Emphasis Normalization Utility
 

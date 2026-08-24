@@ -181,6 +181,12 @@ S. Reading an identifier without regard to case and padding SHALL NOT extend to 
 
 T. Where a component is configured as numeric, its value SHALL be its identity, and the configured digit count SHALL bound that value rather than the number of characters written. A component whose value exceeds what the configuration admits SHALL resolve to nothing.
 
+U. The values a severity setting admits SHALL be fixed by the schema.
+
+V. A severity value the schema does not admit SHALL be refused when the configuration is read.
+
+W. The patterns declared for a scanning kind SHALL select among the files within that kind's declared directories, with the same meaning for every kind.
+
 ### Rationale
 
 Most lettered entries inventory the v3/v4 model shapes; G and O–R state the organising invariants those shapes must converge on.
@@ -203,6 +209,8 @@ R is a condition on resolving, never on writing, which is what keeps a reference
 
 ### Changelog
 
+- 2026-08-24 | 43f7602a | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-24 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-66: severity values are fixed by the schema and an unadmitted value is refused; scanning patterns select within declared directories with one meaning for every kind
 - 2026-08-16 | 468cf0e9 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-16 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: case decides resolution where a component's style makes case part of the pattern it must match (R)
 - 2026-08-15 | a2917c2b | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -228,7 +236,7 @@ R is a condition on resolving, never on writing, which is what keeps a reference
 - 2026-03-30 | db4ad28c | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 - 2026-03-29 | c75b87f8 | - | Michael Lewis (<michael@anspar.org>) | Add assertion N for config migration v3 to v4
 
-*End* *Config Schema v3 Models* | **Hash**: 468cf0e9
+*End* *Config Schema v3 Models* | **Hash**: 43f7602a
 ---
 
 ## REQ-d00251: A Repository's Identifier Grammar

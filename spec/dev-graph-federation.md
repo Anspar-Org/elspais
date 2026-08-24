@@ -198,7 +198,7 @@ E once tied a reference's severity to whether the repository that would own its 
 
 Without per-repo delegation, all nodes are validated against the root repo's config. When repos have different hierarchy rules, format rules, or changelog policies, this produces false positives (root config rejects valid associate nodes) or false negatives (root config allows invalid associate nodes). Per-repo delegation ensures each repo is validated by its own rules.
 
-Assertions H–J realize REQ-p00082's verdict-scoping invariants for the checks surface: a broken reference from the caller's repository *into* an org repository is the caller's bug and must gate the caller's change, while a malformed requirement *inside* a repository the caller cannot write to must never turn the command into noise by failing runs the caller cannot fix.
+Assertions H–J realize REQ-p00082's verdict-scoping invariants for the checks surface: a unresolved reference from the caller's repository *into* an org repository is the caller's bug and must gate the caller's change, while a malformed requirement *inside* a repository the caller cannot write to must never turn the command into noise by failing runs the caller cannot fix.
 
 ### Changelog
 
@@ -226,15 +226,15 @@ A. A requirement in a spec file MAY declare an `Integrates:` metadata field nami
 
 B. The `Integrates:` keyword SHALL be valid only in spec files; in code, test, and journey files it SHALL NOT create a *Traceability* edge.
 
-C. When the resolved target of an `Integrates:` reference belongs to the same repository as the declaring requirement, the build SHALL report it as a broken reference.
+C. When the resolved target of an `Integrates:` reference belongs to the same repository as the declaring requirement, the build SHALL report it as a unresolved reference.
 
 D. When the associate owning an `Integrates:` target participates in the federated build, the build SHALL wire an INTEGRATES edge from the declaring requirement to the target library node such that the declaring requirement counts as implemented and inherits the library node's implemented and passing coverage, while the library's own source files SHALL remain unmodified.
 
-E. When an `Integrates:` target cannot be resolved, the build SHALL report a broken reference if a configured associate claims the target's ID format but lacks the ID, and SHALL record a presumed-foreign reference that does not fail the build if no configured associate claims the ID format.
+E. When an `Integrates:` target cannot be resolved, the build SHALL report a unresolved reference if a configured associate claims the target's ID format but lacks the ID, and SHALL record a presumed-foreign reference that does not fail the build if no configured associate claims the ID format.
 
 F. Coverage inherited through `Integrates:` edges SHALL count toward the declaring requirement's implemented status in coverage reports (so an integrating requirement is not reported as an uncovered gap), and coverage reports SHALL summarize integrated requirements' implemented and passing coverage grouped by the owning associate, with a federation total.
 
-G. The generic presumed-foreign determination applied after cross-repo wiring to any broken *Traceability* reference that does not already carry a diagnostic (independent of the `Integrates:`-specific determination in assertion E) SHALL NOT mark a reference foreign when the federation has no configured associates, since there is no other repository the reference could belong to. It also SHALL NOT mark a reference foreign when the target's leading token matches the declaring repo's own configured namespace and no configured associate declares that same namespace; such a reference is a malformed same-repo reference, not a cross-repo one, and SHALL remain a hard broken reference whose cause is named.
+G. The generic presumed-foreign determination applied after cross-repo wiring to any unresolved *Traceability* reference that does not already carry a diagnostic (independent of the `Integrates:`-specific determination in assertion E) SHALL NOT mark a reference foreign when the federation has no configured associates, since there is no other repository the reference could belong to. It also SHALL NOT mark a reference foreign when the target's leading token matches the declaring repo's own configured namespace and no configured associate declares that same namespace; such a reference is a malformed same-repo reference, not a cross-repo one, and SHALL remain a hard unresolved reference whose cause is named.
 
 K. A cause is named by recording the code that identifies it together with the file and the line the reference was written on, where that code's meaning is documented for a reader. Prose accompanying a code SHALL NOT name a cause the code does not.
 
@@ -246,6 +246,7 @@ The bottom-up reference model (`Implements:` authored on the implementer) would 
 
 ### Changelog
 
+- 2026-08-24 | 1de716cb | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-17 | 42cdc868 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-16 | be93221f | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-16 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: naming a cause means a recorded code with its file and line and a documented meaning, not a fixed sentence (K)
@@ -255,7 +256,7 @@ The bottom-up reference model (`Implements:` authored on the implementer) would 
 - 2026-05-31 | d1f691f0 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-31 | b576d134 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms, update hash, add missing changelog section
 
-*End* *External Library Integration via Integrates Keyword* | **Hash**: 42cdc868
+*End* *External Library Integration via Integrates Keyword* | **Hash**: 1de716cb
 ---
 
 ## REQ-d00253: Federation Write/Generation Scope
@@ -399,7 +400,7 @@ B. A cross-repository *Traceability* edge SHALL carry the same shape as the equi
 
 C. An identifier owned by any repository in a federation SHALL be recognised in the code and test annotations of every repository in that federation.
 
-D. A *Traceability* reference whose target identifier cannot be resolved SHALL be recorded as a broken reference, whatever kind of file it appears in.
+D. A *Traceability* reference whose target identifier cannot be resolved SHALL be recorded as a unresolved reference, whatever kind of file it appears in.
 
 E. A *Traceability* keyword SHALL introduce a reference only where it is the first content of a comment or of a metadata line, with the separator that ends the keyword abutting it. The same keyword occurring elsewhere in a line, or within inline-quoted or fenced text, SHALL NOT introduce a reference. What a keyword is SHALL NOT depend on its case.
 
@@ -410,6 +411,8 @@ G. The content a *Traceability* keyword introduces SHALL be a separated list of 
 H. A list whose content ends with the separator SHALL continue onto the next line that may hold reference content. A line holding no content, and a line whose own first content is a *Traceability* keyword, SHALL NOT be such a line. A list ending with the separator and having no such line to continue onto SHALL bind the references it holds and report the separator that introduced nothing.
 
 J. Where a reference is spelled in a way the grammar does not accept, the report SHALL name the defect it can determine and SHALL NOT produce the relationship the reference would have produced had it been spelled acceptably.
+
+K. A *Traceability* keyword SHALL be read only in a comment introduced by the pattern associated with the language of the file it appears in.
 
 ### Rationale
 
@@ -439,6 +442,8 @@ A concurrency version is derived from a node's content and its outgoing *Traceab
 
 ### Changelog
 
+- 2026-08-24 | 8f0b55df | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-24 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-66: a keyword is read only in the comment pattern its file's language uses
 - 2026-08-19 | 4a7dd275 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-15 | af36a1b3 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-15 | c861d2bc | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -452,7 +457,7 @@ A concurrency version is derived from a node's content and its outgoing *Traceab
 - 2026-08-08 | bd05142f | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 - 2026-08-09 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: cross-repository coverage credit
 
-*End* *Cross-Repository Coverage Credit* | **Hash**: 4a7dd275
+*End* *Cross-Repository Coverage Credit* | **Hash**: 8f0b55df
 ---
 
 ## REQ-d00275: Whose Configuration Governs a Federated Answer

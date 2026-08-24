@@ -474,6 +474,12 @@ N. An identifier SHALL have one canonical spelling. A reference written in anoth
 
 O. Where an identifier is the first content of a comment that no *Traceability* keyword introduces, and the comment does not continue a list, the tool SHALL report that a relationship appears to be intended and is not declared, at a severity the project configures. It SHALL produce no relationship.
 
+P. The report SHALL distinguish a reference that did not read as an identifier from one that read as an identifier and named nothing the federation holds, naming the first malformed and the second unresolved.
+
+Q. Where an acceptable reference is followed by content that opens a comment in the language of the file it is written in, the reference SHALL be read and the remainder treated as comment.
+
+R. Where an acceptable reference is followed by content that opens neither a further reference nor a comment the language of its file admits, the item SHALL be reported at the severity the project configures for it.
+
 ### Rationale
 
 B and C are the whole of the decidability claim, and they are stated as tests on the item rather than as descriptions of what an identifier looks like because a shape can always be argued with. A space is what no identifier of any configuration contains, and a declared namespace is a fact the federation holds rather than an inference about the text; between them they separate three populations that a project acts on differently — text that was never a reference, an estate identifier spelled wrongly, and a name belonging to a repository nobody configured. Collapsing any two of those sends an author to work that will not fix anything.
@@ -508,6 +514,8 @@ One class has no purchase here and is left visibly uncovered rather than answere
 
 ### Changelog
 
+- 2026-08-24 | 3a1ca059 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-24 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-66: malformed and unresolved named against the failure classes; a comment ends a reference, and content that opens neither a reference nor a comment is reported
 - 2026-08-16 | d01290ac | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-16 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: an identifier opening a comment with no keyword is reported as an undeclared relationship and produces none (O)
 - 2026-08-16 | fadb924e | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: sync changelog hash
@@ -517,7 +525,7 @@ One class has no purchase here and is left visibly uncovered rather than answere
 - 2026-08-15 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: record how each REQ-p00019 class is answered for this subsystem — concretized, bound through the instance, or left visibly uncovered with its reason
 - 2026-08-15 | - | - | Michael Lewis (<michael@anspar.org>) | Initial authoring: the rule assigning reference failure classes — the space and namespace tests, minimal relaxation, and reading within an item without binding from it
 
-*End* *Reference Fault Classification* | **Hash**: d01290ac
+*End* *Reference Fault Classification* | **Hash**: 3a1ca059
 
 ## REQ-d00254: Test Evidence: Attribution, Ingestion, and Coverage Crediting
 
@@ -764,6 +772,10 @@ E. Reporting SHALL NOT alter what the evidence credits: the *Assertion* SHALL re
 
 F. Where a dimension counts no *Assertion* of a requirement at all, the tool SHALL report that once for the requirement rather than once for each *Assertion* the evidence names.
 
+G. A citation in a scanned test file that binds to no test SHALL be reported at the severity the project configures for it.
+
+H. A citation that binds to no test SHALL contribute no coverage to the assertions it names.
+
 ### Rationale
 
 An error default is the honest reading of what the condition means. A test that names an *Assertion* nothing implements is one of two defects: the implementation exists and its `Implements:` reference was never written, or the test is aimed at an *Assertion* it does not exercise. Neither is a matter of style, and both cost the estate the same thing — a requirement that reads as untested when it is tested, or as tested when it is not. A warning would leave the author to decide which of those two they are looking at without telling them there is a decision to make.
@@ -776,10 +788,12 @@ This is not the question REQ-d00258-M answers. That assertion governs surfaces l
 
 ### Changelog
 
+- 2026-08-24 | b29be09f | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-24 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-66: a citation binding to no test is reported and credits nothing
 - 2026-08-18 | 2f1e6599 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-17 | b7624174 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: add missing changelog section
 
-*End* *Uncredited Coverage Evidence* | **Hash**: 2f1e6599
+*End* *Uncredited Coverage Evidence* | **Hash**: b29be09f
 
 ## REQ-d00276: Tests Outside the Requirement Estate
 
@@ -797,6 +811,8 @@ C. A failing test that reaches no requirement SHALL be reported at the severity 
 
 D. The report SHALL name the file and the line each reported test was written at.
 
+E. A scanned test file that no configured target can execute SHALL be reported at the severity the project configures for it.
+
 ### Rationale
 
 The two states this set holds are different problems wearing one shape. A test that fails and belongs to nothing is most often a defect in the test itself -- aimed at something that no longer exists, or never named what it was for -- and it cannot be found through any requirement, because it hangs off none. A test that passes and belongs to nothing is work the estate cannot see: either its `Verifies:` was never written, or it exercises something no requirement claims, and which of those it is only the author can say.
@@ -805,7 +821,11 @@ Neither belongs in a coverage figure, and putting them there is what the figures
 
 C defaults to warning rather than error because the condition is not always a defect. A repository legitimately carries tests for things it has not written requirements for. What is not legitimate is not knowing.
 
-*End* *Tests Outside the Requirement Estate* | **Hash**: 922d1382
+### Changelog
+
+- 2026-08-24 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-66: a scanned test file nothing configured can run is reported
+
+*End* *Tests Outside the Requirement Estate* | **Hash**: 137a052e
 
 ---
 
