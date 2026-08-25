@@ -1812,7 +1812,7 @@ class FederatedGraph:
                     if claim is not None:
                         target_repo_name, target_id_canonical = claim
                 if target_repo_name is None:
-                    # Implements: REQ-d00272-A, REQ-d00272-B
+                    # Implements: REQ-d00272-A, REQ-d00287-A
                     # An item the reader itself refused keeps the class it
                     # reached. Reading is staged, and this rewrite speaks for
                     # a later stage than an unread item got to: text that is

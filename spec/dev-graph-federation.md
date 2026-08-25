@@ -409,7 +409,7 @@ E. A *Traceability* keyword SHALL introduce a reference only where it is the fir
 
 F. Every reference recognised under E that produces no relationship SHALL be reported, and each class R distinguishes SHALL be configurable independently of the others.
 
-G. The content a *Traceability* keyword introduces SHALL be a separated list of references, and each item of that list SHALL be judged on its own: an item the grammar accounts for produces its relationship, and an item it does not is reported under the class it reached. An item SHALL be matched whole, so that a reference is never resolved by an identifier found within a larger item.
+G. The content a *Traceability* keyword introduces SHALL be a separated list of references, and each item of that list SHALL be judged on its own: an item the grammar accounts for produces its relationship, and an item it does not is reported under the class it reached. A reference SHALL be read from the start of its item, so that a reference is never resolved by an identifier found within a larger one.
 
 H. A list whose content ends with the separator SHALL continue onto the next line that may hold reference content. A line holding no content, and a line whose own first content is a *Traceability* keyword, SHALL NOT be such a line. A list ending with the separator and having no such line to continue onto SHALL bind the references it holds and report the separator that introduced nothing.
 
@@ -449,6 +449,7 @@ A concurrency version is derived from a node's content and its outgoing *Traceab
 
 ### Changelog
 
+- 2026-08-25 | 8c9eb97a | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-25 | 09843cb9 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-24 | a7f382b1 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-24 | 8f0b55df | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -467,7 +468,7 @@ A concurrency version is derived from a node's content and its outgoing *Traceab
 - 2026-08-08 | bd05142f | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 - 2026-08-09 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: cross-repository coverage credit
 
-*End* *Cross-Repository Coverage Credit* | **Hash**: 09843cb9
+*End* *Cross-Repository Coverage Credit* | **Hash**: 8c9eb97a
 ---
 
 ## REQ-d00275: Whose Configuration Governs a Federated Answer

@@ -40,7 +40,7 @@ INSTANCE_SEPARATOR = "::"
 # metadata line and a code annotation admit exactly the same target.
 REF_LIST_SEPARATOR = ","
 
-# Implements: REQ-p00014-S, REQ-d00272-M
+# Implements: REQ-p00014-S, REQ-d00287-A
 # The characters no identifier configuration may produce. `:` separates the
 # parts of a node identifier, so configuration validation refuses any pattern
 # element able to put one into an identifier -- which makes an item carrying
@@ -52,7 +52,7 @@ REF_LIST_SEPARATOR = ","
 RESERVED_IDENTIFIER_CHARACTERS = (":",)
 
 
-# Implements: REQ-d00272-Q
+# Implements: REQ-d00287-B
 def default_comment_markers() -> tuple[str, ...]:
     """The markers that end a reference on a line that belongs to no language.
 
@@ -63,7 +63,7 @@ def default_comment_markers() -> tuple[str, ...]:
     an answer to a narrower question: an author who writes a note after a
     reference on a metadata line conventionally opens it with one of the
     three markers below, and that note must not be read as a further
-    reference (REQ-d00272-Q).
+    reference (REQ-d00287-B).
 
     A caller reading an actual source file does NOT come here.  It holds the
     file's path, asks ``comment_pattern_for_path`` for that language's one
@@ -575,7 +575,7 @@ class IdResolver:
         )
         return bool(pattern.match(item))
 
-    # Implements: REQ-d00272-E, REQ-d00272-F, REQ-d00272-R
+    # Implements: REQ-d00272-E, REQ-d00287-E
     def opening_reference(self, item: str) -> tuple[str, str] | None:
         """*item* split into the reference it opens with and the rest of it,
         or None where it does not open with one.
@@ -589,7 +589,7 @@ class IdResolver:
 
         Splitting describes; it never binds.  The tail is content nobody
         wrote as part of an identifier, so an item with a non-empty tail is
-        still an item that failed to read (REQ-d00272-F).
+        still an item that failed to read (REQ-d00287-E).
         """
         match = self.multi_assertion_reference_regex().match(item)
         if match is None or match.end() == 0:
@@ -1297,7 +1297,7 @@ class FederatedIdReader:
             self._comment_regexes[markers] = compiled
         return compiled
 
-    # Implements: REQ-d00272-Q
+    # Implements: REQ-d00287-B
     def _without_comment(self, text: str, markers: tuple[str, ...]) -> str:
         """*text* with a trailing comment removed, where one opens after a
         reference.
@@ -1329,7 +1329,7 @@ class FederatedIdReader:
             self._extra_item_regexes[key] = compiled
         return compiled
 
-    # Implements: REQ-d00272-B, REQ-d00272-C, REQ-d00272-E, REQ-d00272-M
+    # Implements: REQ-d00287-A, REQ-d00272-C, REQ-d00272-E
     def classify_unmatched(self, candidate: str) -> tuple[FaultClass, tuple[FaultCode, ...]]:
         """How far reading *candidate* got, for an item no grammar accepted.
 
@@ -1339,7 +1339,7 @@ class FederatedIdReader:
         not written as an identifier and must not be described as naming a
         repository -- a space is such a character whichever one it is, and so
         is a character reserved out of every identifier pattern
-        (REQ-d00272-M).  Past that, whether some member *declares* the
+        (REQ-d00287-A).  Past that, whether some member *declares* the
         namespace the item opens with is a fact the federation holds, and it
         separates an identifier of this estate spelled wrongly from a name
         belonging outside it.
@@ -1380,7 +1380,7 @@ class FederatedIdReader:
             ):
                 codes = (FaultCode.LABEL_OUT_OF_SERIES,)
             return FaultClass.MALFORMED, codes
-        # Implements: REQ-d00272-B
+        # Implements: REQ-d00287-A
         # No member claims the namespace this item opens with. An item
         # holding a space is not an identifier at all, so saying it names a
         # repository nobody configured would be the misattribution the space
@@ -1434,7 +1434,7 @@ class FederatedIdReader:
         stripped = text.strip()
         if not stripped:
             return []
-        # Implements: REQ-d00272-Q
+        # Implements: REQ-d00287-B
         # A comment ends the reference before it, so it is taken off before
         # the list is divided -- prose may hold the dividing character, and
         # dividing first would report each fragment of a sentence as a

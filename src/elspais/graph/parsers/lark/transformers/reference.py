@@ -93,7 +93,7 @@ def reference_target(text: str) -> str:
     # ``# Implements:::: REQ-d00001`` would bind as though it were written
     # correctly -- the same silent repair the "**" strip above is bounded to
     # avoid. A second colon is content, and content carrying a character no
-    # identifier may contain is reported (REQ-d00272-M), not tidied away.
+    # identifier may contain is reported (REQ-d00287-A), not tidied away.
     tail = text[match.end() :]
     if tail.startswith("**"):
         tail = tail[2:]
@@ -104,7 +104,7 @@ def reference_target(text: str) -> str:
     return tail.strip()
 
 
-# Implements: REQ-d00269-G, REQ-d00272-Q
+# Implements: REQ-d00269-G, REQ-d00287-B
 def read_reference_list(
     reader: FederatedIdReader,
     text: str,
@@ -122,7 +122,7 @@ def read_reference_list(
         text: The whole annotation line, keyword included.
         comment_markers: The markers opening a comment in the language of the
             file *text* was read from.  A second comment after a reference
-            ends it (REQ-d00272-Q), and only this language's own marker may
+            ends it (REQ-d00287-B), and only this language's own marker may
             do so -- ``REQ-d00001-A -- why`` ends at the dash in SQL and is a
             malformed item in Python.  Empty says the language has none.
     """

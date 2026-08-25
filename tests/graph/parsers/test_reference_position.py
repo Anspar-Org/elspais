@@ -424,7 +424,7 @@ class TestATargetHoldingMoreThanReferencesIsUnresolved:
 
         assert _implements(dispatcher, source) == ["REQ-p00001 and see XREQ-d00002"]
 
-    # Verifies: REQ-d00269-G, REQ-d00272-R
+    # Verifies: REQ-d00269-G, REQ-d00272-E
     def test_REQ_d00269_G_trailing_prose_after_a_readable_reference_is_not_read(
         self, dispatcher: FileDispatcher
     ) -> None:
@@ -435,7 +435,7 @@ class TestATargetHoldingMoreThanReferencesIsUnresolved:
 
         assert _implements(dispatcher, source) == ["REQ-p00001 the flag path"]
 
-    # Verifies: REQ-d00272-Q
+    # Verifies: REQ-d00287-B
     def test_REQ_d00272_Q_a_comment_after_a_readable_reference_ends_it(
         self, dispatcher: FileDispatcher
     ) -> None:

@@ -373,7 +373,7 @@ def _targets(reader, line):
 
     ONE reading of a reference list, so what a journey id may be written
     beside is what any other reference may be written beside. A shell-like
-    comment marker is named because a comment ends a reference (REQ-d00272-Q)
+    comment marker is named because a comment ends a reference (REQ-d00287-B)
     and which characters open one is a fact about the file's language.
     """
     return [item.resolved for item in read_reference_list(reader, line, ("#",)) if item.resolved]

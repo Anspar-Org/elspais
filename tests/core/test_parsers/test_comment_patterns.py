@@ -115,7 +115,7 @@ def test_a_python_file_reads_a_double_dash_as_arithmetic_not_as_a_comment(dispat
 # --- A comment ends a reference, in that language only --------------------- #
 
 
-# Verifies: REQ-d00272-Q
+# Verifies: REQ-d00287-B
 @pytest.mark.parametrize(
     ("path", "marker"),
     [("svc.py", "#"), ("svc.js", "//"), ("schema.sql", "--")],
@@ -128,7 +128,7 @@ def test_a_reference_followed_by_its_own_comment_resolves_with_the_remainder_ign
     assert _bound(dispatcher, content, path) == {"REQ-d00001-A"}
 
 
-# Verifies: REQ-d00272-R
+# Verifies: REQ-d00272-E
 def test_another_languages_marker_does_not_end_a_reference(dispatcher):
     """``--`` closes nothing in a c-like file, so it cannot silently truncate.
 

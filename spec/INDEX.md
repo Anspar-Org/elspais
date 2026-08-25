@@ -184,10 +184,10 @@
 | REQ-d00266 | Mechanical Style Checks                                       | dev-cli.md              | 084c17a0 |
 | REQ-d00267 | Viewer Pending-Work Indicator Truth                           | prd-features.md         | c1be85e3 |
 | REQ-d00268 | Report Malformed Assertion Labels                             | dev-graph-core.md       | cb7e96dd |
-| REQ-d00269 | Cross-Repository Coverage Credit                              | dev-graph-federation.md | 09843cb9 |
+| REQ-d00269 | Cross-Repository Coverage Credit                              | dev-graph-federation.md | 8c9eb97a |
 | REQ-d00270 | Single-Authority Identifier Grammar Derivation                | dev-graph-config.md     | fe29efc0 |
 | REQ-d00271 | Diagnostic Code Vocabulary                                    | dev-cli.md              | 6f4019d1 |
-| REQ-d00272 | Reference Fault Classification                                | dev-graph-core.md       | 27a0182e |
+| REQ-d00272 | Reference Fault Diagnosis                                     | dev-graph-core.md       | e46b563e |
 | REQ-d00273 | Requirement Metadata Block                                    | dev-graph-file-nodes.md | 2d7e25e8 |
 | REQ-d00274 | Uncredited Coverage Evidence                                  | dev-graph-core.md       | 01a8f7d7 |
 | REQ-d00275 | Whose Configuration Governs a Federated Answer                | dev-graph-federation.md | 9ab2ef7c |
@@ -202,6 +202,7 @@
 | REQ-d00284 | How a Result Names Its Test                                   | dev-graph-core.md       | 7baae0b0 |
 | REQ-d00285 | The Shape of a Finding                                        | dev-cli.md              | bedec247 |
 | REQ-d00286 | Built-In User Documentation                                   | dev-cli.md              | d246f21a |
+| REQ-d00287 | Reading a Reference                                           | dev-graph-core.md       | 0803d023 |
 
 ## User Journeys
 

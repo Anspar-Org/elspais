@@ -463,7 +463,7 @@ def test_markdown_emphasis_in_a_code_comment_still_binds(parse_code):
     assert (1, FaultCode.KEYWORD_MARKDOWN_EMPHASIS_OFF_MARKDOWN) in tx.style_findings
 
 
-# Verifies: REQ-d00272-B
+# Verifies: REQ-d00287-A
 def test_a_stray_leading_asterisk_on_the_target_does_not_bind(parse_code):
     """A malformed target must stay malformed, not be laundered by the
     emphasis-stripping fix.
@@ -615,7 +615,7 @@ def test_a_continuation_candidate_need_not_be_identifier_shaped(parse_code):
     identifier.  Narrowing the fold to identifier-shaped lines would leave
     ``XREQ-d00002`` (no configured namespace opens with ``X``) as silent
     prose instead of a reported, unbound item -- the anti-silence failure
-    this requirement exists to remove.  The space test (REQ-d00272-B) still
+    this requirement exists to remove.  The space test (REQ-d00287-A) still
     refuses to guess: the item is read and reported, never bound.
     """
     results, tx = parse_code(

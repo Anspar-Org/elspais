@@ -161,7 +161,7 @@ class TestIntegratesRefusedByReader:
         )
         return app_root
 
-    # Verifies: REQ-d00272-A, REQ-d00272-B
+    # Verifies: REQ-d00272-A, REQ-d00287-A
     def test_a_malformed_integrates_target_is_reported_as_malformed(self, tmp_path):
         """An item holding a space was never written as an identifier, so it
         must not be reported as naming a repository -- configured or not."""

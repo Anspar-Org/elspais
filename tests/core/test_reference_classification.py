@@ -188,7 +188,7 @@ def test_an_underscore_notation_item_resolves_to_nothing(reader):
     )
 
 
-# Verifies: REQ-d00272-B
+# Verifies: REQ-d00287-A
 @pytest.mark.parametrize(
     "item",
     ["not a reference at all", "see REQ-d00001", "REQ-d00001 (A, C, F)"],
@@ -198,7 +198,7 @@ def test_an_item_holding_a_space_is_not_an_identifier(reader, item):
     assert cls is FaultClass.MALFORMED
 
 
-# Verifies: REQ-d00272-B
+# Verifies: REQ-d00287-A
 def test_a_spaced_item_is_never_called_a_repository(reader):
     cls, _ = reader.classify_unmatched("not a reference at all")
     assert cls is not FaultClass.UNKNOWN_NAMESPACE
@@ -614,7 +614,7 @@ def _satisfies_project(tmp_path, repo_root, satisfies: str):
     )
 
 
-# Verifies: REQ-d00272-A, REQ-d00272-B
+# Verifies: REQ-d00272-A, REQ-d00287-A
 def test_a_malformed_satisfies_target_keeps_the_class_reading_reached(tmp_path, repo_root):
     """A ``Satisfies:`` target is resolved across the federation, and the
     missing-associate branch that runs when nobody claims it speaks for a
@@ -939,7 +939,7 @@ def test_a_component_value_beyond_the_configured_bound_resolves_to_nothing(reade
 # --------------------------------------------------------------------------- #
 
 
-# Verifies: REQ-d00272-M
+# Verifies: REQ-d00287-A
 @pytest.mark.parametrize("item", ["REQ-d00001:A", ":", "file:REQ:spec/r.md"])
 def test_an_item_holding_a_reserved_character_is_not_an_identifier(reader, item):
     """`:` separates the parts of a node identifier, so configuration
@@ -953,7 +953,7 @@ def test_an_item_holding_a_reserved_character_is_not_an_identifier(reader, item)
     assert codes == (FaultCode.NOT_AN_IDENTIFIER,)
 
 
-# Verifies: REQ-d00272-M, REQ-d00269-G
+# Verifies: REQ-d00287-A, REQ-d00269-G
 def test_repeated_colons_after_a_keyword_bind_nothing(tmp_path, repo_root):
     """The keyword's own colon is one character. Removing every colon an
     author typed would let `# Implements:::: REQ-d00001` bind as though it
@@ -979,7 +979,7 @@ def test_repeated_colons_after_a_keyword_bind_nothing(tmp_path, repo_root):
 # --------------------------------------------------------------------------- #
 
 
-# Verifies: REQ-d00272-E, REQ-d00272-R
+# Verifies: REQ-d00272-E
 @pytest.mark.parametrize(
     "item",
     [
@@ -1004,7 +1004,7 @@ def test_a_reference_followed_by_prose_names_the_reference_and_the_remainder(rea
     assert trailing.strip(), "the remainder is what the report has to name alongside it"
 
 
-# Verifies: REQ-d00272-B, REQ-d00272-F
+# Verifies: REQ-d00287-A, REQ-d00287-E
 @pytest.mark.parametrize(
     "item",
     [
@@ -1035,7 +1035,7 @@ def test_a_spaced_multi_separator_is_trailing_content_not_a_relaxation(reader):
     assert FaultCode.WRONG_MULTI_SEPARATOR not in codes
 
 
-# Verifies: REQ-d00272-B
+# Verifies: REQ-d00287-A
 @pytest.mark.parametrize(
     "item",
     ["blah blah", "see the design note", "and so on"],
@@ -1051,7 +1051,7 @@ def test_prose_that_opens_with_no_reference_is_still_not_an_identifier(reader, i
     assert codes == (FaultCode.NOT_AN_IDENTIFIER,)
 
 
-# Verifies: REQ-d00269-G, REQ-d00272-B
+# Verifies: REQ-d00269-G, REQ-d00287-A
 def test_a_trailing_separator_followed_by_prose_reports_only_the_prose(reader):
     """A defect in one item is evidence about that item. The named reference
     still binds, and the prose after the dividing character is reported as
@@ -1069,7 +1069,7 @@ def test_a_trailing_separator_followed_by_prose_reports_only_the_prose(reader):
 # --------------------------------------------------------------------------- #
 
 
-# Verifies: REQ-d00272-Q
+# Verifies: REQ-d00287-B
 @pytest.mark.parametrize("marker", ["#", "//", "--"])
 def test_a_comment_after_a_reference_ends_it_rather_than_breaking_it(reader, marker):
     """Citing a requirement and then explaining, on the same line, why the
@@ -1084,7 +1084,7 @@ def test_a_comment_after_a_reference_ends_it_rather_than_breaking_it(reader, mar
     )
 
 
-# Verifies: REQ-d00272-Q
+# Verifies: REQ-d00287-B
 def test_a_comment_may_hold_the_character_that_divides_a_list(reader):
     """The comment comes off before the list is divided. Dividing first would
     shred a sentence into items and report each fragment as a reference its
@@ -1094,7 +1094,7 @@ def test_a_comment_may_hold_the_character_that_divides_a_list(reader):
     assert all(i.fault_class is None for i in items)
 
 
-# Verifies: REQ-d00272-Q
+# Verifies: REQ-d00287-B
 def test_a_marker_needs_whitespace_before_it_to_open_a_comment(reader):
     """Without the space a marker's characters are just characters an
     identifier may abut, and `REQ-d00001--A` is a separator defect rather than
@@ -1108,7 +1108,7 @@ def test_a_marker_needs_whitespace_before_it_to_open_a_comment(reader):
     assert items[0].fault_class is FaultClass.MALFORMED
 
 
-# Verifies: REQ-d00272-Q
+# Verifies: REQ-d00287-B
 def test_a_marker_opens_no_comment_where_no_reference_precedes_it(reader):
     """A marker ends a reference. With none before it there is nothing for it
     to end, so the item is judged whole."""
@@ -1117,7 +1117,7 @@ def test_a_marker_opens_no_comment_where_no_reference_precedes_it(reader):
     assert codes == (FaultCode.NOT_AN_IDENTIFIER,)
 
 
-# Verifies: REQ-d00272-Q
+# Verifies: REQ-d00287-B
 def test_a_caller_naming_its_language_decides_which_markers_end_a_reference(reader):
     """Which markers open a comment is a property of a language. A caller that
     knows the file's kind says so, and a language with no such marker reads the
@@ -1156,7 +1156,7 @@ def test_space_around_the_dividing_character_is_not_part_of_an_item(reader, text
 # --------------------------------------------------------------------------- #
 
 
-# Verifies: REQ-d00272-E, REQ-d00272-R
+# Verifies: REQ-d00272-E
 def test_an_annotation_glossing_its_reference_is_reported_naming_both_halves(tmp_path, repo_root):
     """The reader's account has to survive to the surface that reports it. An
     author who cited a requirement and then explained it in prose is told which
@@ -1175,7 +1175,7 @@ def test_an_annotation_glossing_its_reference_is_reported_naming_both_halves(tmp
     assert "one environment" in fault.diagnostic
 
 
-# Verifies: REQ-d00272-Q, REQ-d00272-F
+# Verifies: REQ-d00287-B, REQ-d00287-E
 def test_an_annotation_commenting_on_its_reference_binds_the_reference(tmp_path, repo_root):
     """The comment costs the citation nothing: the edge the author declared is
     built, and no relationship is invented from the prose."""
