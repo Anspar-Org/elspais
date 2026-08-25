@@ -853,7 +853,7 @@ Definitions can be authored org-wide while each generated document carries only 
 
 ### Assertions
 
-A. A code file carrying no *Traceability* marker SHALL be reported at the severity the project configures for it.
+A. A code file carrying no *Traceability* marker SHALL be reported.
 
 B. <RETIRED> Named the routine that reports the population and the traversal that finds it; A states the obligation without naming either.
 
@@ -863,7 +863,7 @@ D. A test file SHALL be reported where no test it holds reaches a requirement, w
 
 E. A file carrying a *Traceability* marker that produced no relationship SHALL NOT be reported as carrying no marker. Carrying none and carrying only markers that bound nothing are distinct findings, and each SHALL be reported under a description true of it.
 
-F. A file within a scanned directory that is not ignored and does not match the patterns declared for its kind SHALL be reported where it carries a *Traceability* keyword, at the severity the project configures for it.
+F. A file within a scanned directory that is not ignored and does not match the patterns declared for its kind SHALL be reported where it carries a *Traceability* keyword.
 
 G. A file the ignore configuration excludes SHALL NOT be reported.
 
@@ -877,6 +877,7 @@ H is why the code description and the test description are stated separately rat
 
 ### Changelog
 
+- 2026-08-25 | 0a2e48b7 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-24 | bdfbd910 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-24 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-66: A and D restated as properties rather than as routines and signatures; B retired as mechanism; H added so one file is not reported twice
 - 2026-08-24 | a0c9c65d | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -890,7 +891,7 @@ H is why the code description and the test description are stated separately rat
 - 2026-03-30 | e1272219 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: sync changelog hash
 - 2026-03-29 | 6e481d63 | - | Michael Lewis (<michael@anspar.org>) | Initial creation
 
-*End* *Code No-Traceability Health Check* | **Hash**: bdfbd910
+*End* *Code No-Traceability Health Check* | **Hash**: 0a2e48b7
 
 ## REQ-d00246: Markdown Emphasis Normalization Utility
 

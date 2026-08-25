@@ -458,7 +458,7 @@ E. An item that opens with an acceptable reference and continues into content no
 
 F. Reading within an item SHALL inform what is reported about it and SHALL NOT contribute a relationship, so that no relationship exists that its author did not spell.
 
-G. A *Traceability* keyword SHALL have one canonical spelling. A keyword recognised in any other SHALL be reported at a severity the project configures, and SHALL produce the relationships it introduced regardless.
+G. A *Traceability* keyword SHALL have one canonical spelling. A keyword recognised in any other SHALL be reported, and SHALL produce the relationships it introduced regardless.
 
 H. A keyword introducing no content SHALL be reported as having introduced none.
 
@@ -470,15 +470,15 @@ L. Where an item both opens with an acceptable reference and can be read as diff
 
 M. An item holding any character no identifier configuration can admit SHALL be treated under B. A character the writing system counts as a space is such a character, whichever one it is, as is any character reserved out of every identifier pattern.
 
-N. An identifier SHALL have one canonical spelling. A reference written in another spelling the configuration admits SHALL be reported at a severity the project configures, and SHALL produce the relationship it names regardless.
+N. An identifier SHALL have one canonical spelling. A reference written in another spelling the configuration admits SHALL be reported, and SHALL produce the relationship it names regardless.
 
-O. Where an identifier is the first content of a comment that no *Traceability* keyword introduces, and the comment does not continue a list, the tool SHALL report that a relationship appears to be intended and is not declared, at a severity the project configures. It SHALL produce no relationship.
+O. Where an identifier is the first content of a comment that no *Traceability* keyword introduces, and the comment does not continue a list, the tool SHALL report that a relationship appears to be intended and is not declared. It SHALL produce no relationship.
 
 P. The report SHALL distinguish a reference that did not read as an identifier from one that read as an identifier and named nothing the federation holds, naming the first malformed and the second unresolved.
 
 Q. Where an acceptable reference is followed by content that opens a comment in the language of the file it is written in, the reference SHALL be read and the remainder treated as comment.
 
-R. Where an acceptable reference is followed by content that opens neither a further reference nor a comment the language of its file admits, the item SHALL be reported at the severity the project configures for it.
+R. Where an acceptable reference is followed by content that opens neither a further reference nor a comment the language of its file admits, the item SHALL be reported.
 
 ### Rationale
 
@@ -514,6 +514,7 @@ One class has no purchase here and is left visibly uncovered rather than answere
 
 ### Changelog
 
+- 2026-08-25 | 27a0182e | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-24 | 3a1ca059 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-24 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-66: malformed and unresolved named against the failure classes; a comment ends a reference, and content that opens neither a reference nor a comment is reported
 - 2026-08-16 | d01290ac | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -525,7 +526,7 @@ One class has no purchase here and is left visibly uncovered rather than answere
 - 2026-08-15 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: record how each REQ-p00019 class is answered for this subsystem — concretized, bound through the instance, or left visibly uncovered with its reason
 - 2026-08-15 | - | - | Michael Lewis (<michael@anspar.org>) | Initial authoring: the rule assigning reference failure classes — the space and namespace tests, minimal relaxation, and reading within an item without binding from it
 
-*End* *Reference Fault Classification* | **Hash**: 3a1ca059
+*End* *Reference Fault Classification* | **Hash**: 27a0182e
 
 ## REQ-d00254: Test Evidence: Attribution, Ingestion, and Coverage Crediting
 
@@ -565,9 +566,9 @@ N. Where an external test-prescan command returns attribution records for a scan
 
 O. A line number a reporter records SHALL be read in the origin that reporter counts from. That origin SHALL be declared with the reporter and SHALL be overridable per target, and a recorded line SHALL be normalised to the numbering the tool uses for source lines before it is matched against a test or shown to a reader.
 
-P. An artifact ingestion could not read SHALL be reported naming the artifact, at the severity the project configures for it.
+P. A file the tool cannot read in full SHALL still yield the results it could read.
 
-Q. An artifact ingestion read only in part SHALL be reported as such, distinctly from one it could not read at all.
+Q. A result derived from a partial read SHALL be distinguishable from one derived from a complete read.
 
 ### Rationale
 
@@ -583,8 +584,13 @@ M binds each record to a starting line only. Extent on the external route is der
 
 N resolves per file, not per configuration, because both routes are routinely live in a single run: a project may configure a command that returns records for one file type while every other scanned test file falls to built-in attribution.
 
+P and Q are about what a partial read produces, not about how it is announced. A file that will not parse in full is common and usually benign -- a coverage tool that cannot re-analyse a template still knows which of its lines ran -- and discarding what was read would lose evidence over a defect in a part of it.
+
+Q is the half that bites. Evidence read in part yields a figure whose basis is not the one a reader assumes: lines that never ran are absent from the denominator, so a file reads as fully covered on the strength of a failure. Stating the distinction against a COMPLETE read rather than against no read at all is deliberate -- nobody acts differently on "could not read" versus "read in part", but a reader comparing a partial figure with a whole one acts on it constantly.
+
 ### Changelog
 
+- 2026-08-25 | 8264ac9a | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-24 | e16eaff7 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-24 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-66: an artifact ingestion could not read is reported, and a partial read is told apart from a total one
 - 2026-08-22 | 00518ba3 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -608,7 +614,7 @@ N resolves per file, not per configuration, because both routes are routinely li
 - 2026-06-20 | 98120740 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-06-20 | 00000000 | - | Michael Lewis (<michael@anspar.org>) | CUR-1533: initial
 
-*End* *Test Evidence: Attribution, Ingestion, and Coverage Crediting* | **Hash**: e16eaff7
+*End* *Test Evidence: Attribution, Ingestion, and Coverage Crediting* | **Hash**: 8264ac9a
 
 ---
 
@@ -779,7 +785,7 @@ E. Reporting SHALL NOT alter what the evidence credits: the *Assertion* SHALL re
 
 F. Where a dimension counts no *Assertion* of a requirement at all, the tool SHALL report that once for the requirement rather than once for each *Assertion* the evidence names.
 
-G. A citation in a scanned test file that binds to no test SHALL be reported at the severity the project configures for it.
+G. A citation in a scanned test file that binds to no test SHALL be reported.
 
 H. A citation that binds to no test SHALL contribute no coverage to the assertions it names.
 
@@ -795,12 +801,13 @@ This is not the question REQ-d00258-M answers. That assertion governs surfaces l
 
 ### Changelog
 
+- 2026-08-25 | 01a8f7d7 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-24 | b29be09f | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-24 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-66: a citation binding to no test is reported and credits nothing
 - 2026-08-18 | 2f1e6599 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-17 | b7624174 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: add missing changelog section
 
-*End* *Uncredited Coverage Evidence* | **Hash**: b29be09f
+*End* *Uncredited Coverage Evidence* | **Hash**: 01a8f7d7
 
 ## REQ-d00276: Tests Outside the Requirement Estate
 
@@ -814,11 +821,11 @@ A. Tests that reach no requirement SHALL be reported together as their own set, 
 
 B. The report SHALL say what each such test returned, distinguishing one that passed, one that failed, and one awaiting a result.
 
-C. A failing test that reaches no requirement SHALL be reported at the severity the project configures for it, and SHALL be a warning where the project configures nothing.
+C. A failing test that reaches no requirement SHALL be reported, and SHALL be a warning where the project configures nothing.
 
 D. The report SHALL name the file and the line each reported test was written at.
 
-E. A scanned test file that no configured target can execute SHALL be reported at the severity the project configures for it.
+E. A scanned test file that no configured target can execute SHALL be reported.
 
 ### Rationale
 
@@ -832,7 +839,7 @@ C defaults to warning rather than error because the condition is not always a de
 
 - 2026-08-24 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-66: a scanned test file nothing configured can run is reported
 
-*End* *Tests Outside the Requirement Estate* | **Hash**: 137a052e
+*End* *Tests Outside the Requirement Estate* | **Hash**: ca4cd1fc
 
 ---
 

@@ -116,8 +116,8 @@
 | REQ-d00132 | Render-Based Save Operation                                   | dev-graph-file-nodes.md | f5a4193c |
 | REQ-d00133 | MCP FILE Node Integration                                     | dev-mcp-tools.md        | 08e2973f |
 | REQ-d00134 | Mutation Round-Trip Fidelity                                  | dev-graph-file-nodes.md | 19cb065b |
-| REQ-d00200 | FederatedGraph Read-Only Delegation                           | dev-graph-federation.md | b351e9ad |
-| REQ-d00201 | FederatedGraph Mutation Delegation                            | dev-graph-federation.md | 85081cae |
+| REQ-d00200 | FederatedGraph Read-Only Delegation                           | dev-graph-federation.md | ed077a7c |
+| REQ-d00201 | FederatedGraph Mutation Delegation                            | dev-graph-federation.md | c51794b3 |
 | REQ-d00202 | Associates Config Loading                                     | dev-graph-federation.md | 0522f86c |
 | REQ-d00203 | Multi-Repo Build Pipeline                                     | dev-graph-federation.md | 957568b6 |
 | REQ-d00204 | Per-Repo Health Check Delegation                              | dev-graph-federation.md | 15c6ff55 |
@@ -157,7 +157,7 @@
 | REQ-d00238 | Graph-Wide Term Scan                                          | prd-core.md             | b14edde9 |
 | REQ-d00239 | Federated Graph Term Scanner Pass                             | prd-core.md             | e27abfeb |
 | REQ-d00240 | New Term Health Checks                                        | prd-core.md             | b4e70076 |
-| REQ-d00241 | Code No-Traceability Health Check                             | prd-core.md             | bdfbd910 |
+| REQ-d00241 | Code No-Traceability Health Check                             | prd-core.md             | 0a2e48b7 |
 | REQ-d00242 | Terms API Endpoints                                           | prd-features.md         | a4522e0f |
 | REQ-d00243 | Terms Tab in Viewer Nav Tree                                  | prd-features.md         | 2873ed03 |
 | REQ-d00244 | Term Cards in Viewer Card Stack                               | prd-features.md         | 0a48035f |
@@ -170,7 +170,7 @@
 | REQ-d00251 | A Repository's Identifier Grammar                             | dev-graph-config.md     | b49bd5ee |
 | REQ-d00252 | External Library Integration via Integrates Keyword           | dev-graph-federation.md | 1de716cb |
 | REQ-d00253 | Federation Write/Generation Scope                             | dev-graph-federation.md | f454041e |
-| REQ-d00254 | Test Evidence: Attribution, Ingestion, and Coverage Crediting | dev-graph-core.md       | e16eaff7 |
+| REQ-d00254 | Test Evidence: Attribution, Ingestion, and Coverage Crediting | dev-graph-core.md       | 8264ac9a |
 | REQ-d00255 | Test-to-Journey UAT Verification                              | dev-graph-core.md       | ab5cb648 |
 | REQ-d00256 | Step-Level UAT Verification                                   | dev-graph-core.md       | 8bf40a7c |
 | REQ-d00257 | UAT-Scoped Traceability Report                                | dev-graph-core.md       | 1ea68210 |
@@ -184,14 +184,14 @@
 | REQ-d00266 | Mechanical Style Checks                                       | dev-cli.md              | 084c17a0 |
 | REQ-d00267 | Viewer Pending-Work Indicator Truth                           | prd-features.md         | c1be85e3 |
 | REQ-d00268 | Report Malformed Assertion Labels                             | dev-graph-core.md       | cb7e96dd |
-| REQ-d00269 | Cross-Repository Coverage Credit                              | dev-graph-federation.md | a7f382b1 |
+| REQ-d00269 | Cross-Repository Coverage Credit                              | dev-graph-federation.md | 09843cb9 |
 | REQ-d00270 | Single-Authority Identifier Grammar Derivation                | dev-graph-config.md     | fe29efc0 |
 | REQ-d00271 | Diagnostic Code Vocabulary                                    | dev-cli.md              | 6f4019d1 |
-| REQ-d00272 | Reference Fault Classification                                | dev-graph-core.md       | 3a1ca059 |
+| REQ-d00272 | Reference Fault Classification                                | dev-graph-core.md       | 27a0182e |
 | REQ-d00273 | Requirement Metadata Block                                    | dev-graph-file-nodes.md | 2d7e25e8 |
-| REQ-d00274 | Uncredited Coverage Evidence                                  | dev-graph-core.md       | b29be09f |
+| REQ-d00274 | Uncredited Coverage Evidence                                  | dev-graph-core.md       | 01a8f7d7 |
 | REQ-d00275 | Whose Configuration Governs a Federated Answer                | dev-graph-federation.md | 9ab2ef7c |
-| REQ-d00276 | Tests Outside the Requirement Estate                          | dev-graph-core.md       | 137a052e |
+| REQ-d00276 | Tests Outside the Requirement Estate                          | dev-graph-core.md       | ca4cd1fc |
 | REQ-d00277 | Coverage Dimensions                                           | dev-graph-core.md       | b097dcd7 |
 | REQ-d00278 | Report Scope Selection Vocabulary                             | dev-cli.md              | ef2221cc |
 | REQ-d00279 | One Authority for Report Scope Membership                     | dev-cli.md              | 2b755b50 |

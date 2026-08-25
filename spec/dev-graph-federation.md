@@ -8,21 +8,21 @@ FederatedGraph SHALL wrap one or more TraceGraph instances, each paired with its
 
 ### Assertions
 
-A. FederatedGraph SHALL wrap one or more TraceGraph instances via RepoEntry dataclass containing: name, graph (TraceGraph | None), config (ConfigLoader | None), repo_root (Path), git_origin (str | None), error (str | None).
+A. FederatedGraph SHALL wrap one or more TraceGraph instances, directly or indirectly
 
-B. FederatedGraph.from_single() classmethod SHALL create a federation-of-one from a single TraceGraph, config, and repo_root, using "root" as the default repo name.
+B. FederatedGraph SHALL provide a way to create a federation-of-one from a single TraceGraph, config, and repo_root, using "root" as the default repo name.
 
 C. All read-only TraceGraph public methods SHALL be explicitly implemented on FederatedGraph with a strategy comment (by_id, aggregate, or special).
 
-D. by_id strategy methods (find_by_id, has_root) SHALL look up the owning graph via an internal ownership mapping and delegate to the correct sub-graph.
+D. `by_id strategy` methods SHALL look up the owning graph via an internal ownership mapping and delegate to the correct sub-graph.
 
-E. aggregate strategy methods (iter_roots, all_nodes, node_count, root_count, iter_by_kind, nodes_by_kind, all_connected_nodes, orphaned_nodes, has_orphans, orphan_count, unresolved_references, has_unresolved_references, iter_unlinked, iter_structural_orphans, deleted_nodes, has_deletions) SHALL combine results from all sub-graphs.
+E. `Aggregate` strategy methods SHALL combine results from all sub-graphs.
 
-F. Aggregate methods SHALL skip repos with graph set to None (error-state repos).
+F. `Aggregate` strategy methods SHALL skip repos with graph set to None (error-state repos).
 
-G. repo_for(node_id) SHALL return the RepoEntry for the graph owning that node. config_for(node_id) SHALL return the config for that node's owning repo.
+G. FederatedGraph SHALL provide a way to get the repositry and config based on a node
 
-H. iter_repos() SHALL yield all RepoEntry objects including error-state repos.
+H. FederatedGraph SHALL provide a way to iterate over all repos regardless of their error state.
 
 ### Rationale
 
@@ -30,12 +30,13 @@ FederatedGraph provides config isolation for multi-repo builds while presenting 
 
 ### Changelog
 
-- 2026-08-25 | b351e9ad | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-25 | ed077a7c | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-25 | b351e9ad | - | Michael Lewis (<michael@anspar.org>) | Made assertions less fragile
 - 2026-07-31 | 06b84d97 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 72471144 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 72471144 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *FederatedGraph Read-Only Delegation* | **Hash**: b351e9ad
+*End* *FederatedGraph Read-Only Delegation* | **Hash**: ed077a7c
 ---
 
 ## REQ-d00201: FederatedGraph Mutation Delegation
@@ -46,7 +47,7 @@ FederatedGraph SHALL delegate all mutation operations to the appropriate sub-gra
 
 ### Assertions
 
-A. by_id mutation methods (rename_node, update_title, change_status, delete_requirement, add_assertion, delete_assertion, update_assertion, rename_assertion, rename_file, fix_broken_reference) SHALL look up the owning repo via `_ownership`, delegate to the sub-graph, and update `_ownership` when IDs change.
+A. by_id mutation methods SHALL look up the owning repo via `_ownership`, delegate to the sub-graph, and update `_ownership` when IDs change.
 
 B. FederatedGraph SHALL maintain a unified mutation log that records lightweight entries pointing to the repo name and sub-graph mutation ID, providing chronological ordering across all repos.
 
@@ -66,11 +67,12 @@ Mutation delegation preserves TraceGraph's existing mutation+undo logic while ad
 
 ### Changelog
 
+- 2026-08-25 | c51794b3 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | 85081cae | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 1a0942a4 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 1a0942a4 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *FederatedGraph Mutation Delegation* | **Hash**: 85081cae
+*End* *FederatedGraph Mutation Delegation* | **Hash**: c51794b3
 ---
 
 ## REQ-d00202: Associates Config Loading
@@ -405,7 +407,7 @@ D. A *Traceability* reference whose target identifier cannot be resolved SHALL b
 
 E. A *Traceability* keyword SHALL introduce a reference only where it is the first content of a comment or of a metadata line, with the separator that ends the keyword abutting it. The same keyword occurring elsewhere in a line, or within inline-quoted or fenced text, SHALL NOT introduce a reference. What a keyword is SHALL NOT depend on its case.
 
-F. Every reference recognised under E that produces no relationship SHALL be reported, at a severity the project configures among informational, warning and failing independently for each class R distinguishes.
+F. Every reference recognised under E that produces no relationship SHALL be reported, and each class R distinguishes SHALL be configurable independently of the others.
 
 G. The content a *Traceability* keyword introduces SHALL be a separated list of references, and each item of that list SHALL be judged on its own: an item the grammar accounts for produces its relationship, and an item it does not is reported under the class it reached. An item SHALL be matched whole, so that a reference is never resolved by an identifier found within a larger item.
 
@@ -447,6 +449,7 @@ A concurrency version is derived from a node's content and its outgoing *Traceab
 
 ### Changelog
 
+- 2026-08-25 | 09843cb9 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-24 | a7f382b1 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-24 | 8f0b55df | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-24 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-66: a keyword introducing a reference list is the only form that declares a relationship (L)
@@ -464,7 +467,7 @@ A concurrency version is derived from a node's content and its outgoing *Traceab
 - 2026-08-08 | bd05142f | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 - 2026-08-09 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: cross-repository coverage credit
 
-*End* *Cross-Repository Coverage Credit* | **Hash**: a7f382b1
+*End* *Cross-Repository Coverage Credit* | **Hash**: 09843cb9
 ---
 
 ## REQ-d00275: Whose Configuration Governs a Federated Answer

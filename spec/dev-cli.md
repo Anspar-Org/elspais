@@ -295,6 +295,8 @@ H and I govern a report narrowed to the findings a reader asked for, by severity
 
 Classes of REQ-p00019 not concretized here are bound through the instance rather than left uncovered: D, E and F are properties of what a report says overall, which REQ-p00015 governs for this tool; B is governed for content staleness by the hash and index checks. This requirement concretizes A and C through I, a report narrowed to the findings a reader asked for being one that omits the rest and hands back a part of what the run found; G through B, H through G, and J and K through F.
 
+D and E are where a finding's severity is settled, for every finding the tool produces. No other requirement states that a condition is reported at a configurable severity: saying it again would put a second copy of this rule somewhere it could drift from, and a requirement that named its own severity would be describing the registry rather than an obligation.
+
 ### Changelog
 
 - 2026-08-24 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-66: govern narrowing a report to selected findings — the verdict stays the run's, and the narrowing and the extent of what it withheld are disclosed
