@@ -179,9 +179,9 @@ def test_REQ_p00014_V_metadata_declaration_produces_validates_edges(sep, multi, 
         "Both labels cited in the journey's metadata must reach the graph as "
         f"targeted VALIDATES edges (sep={sep!r}, multi={multi!r})"
     )
-    assert not graph.broken_references(), (
+    assert not graph.unresolved_references(), (
         "A declaration in the one place the rule admits must resolve, not be "
-        f"reported; got {graph.broken_references()}"
+        f"reported; got {graph.unresolved_references()}"
     )
 
 
@@ -216,12 +216,12 @@ def test_REQ_p00014_R_section_declaration_is_reported_as_a_broken_reference(tmp_
 
     reported = [
         br
-        for br in graph.broken_references()
+        for br in graph.unresolved_references()
         if br.edge_kind == "validates" and br.source_id == "JNY-001"
     ]
     assert len(reported) == 1, (
         "the declaration the builder refused to read must be reported exactly "
-        f"once against the journey that made it; got {graph.broken_references()}"
+        f"once against the journey that made it; got {graph.unresolved_references()}"
     )
     assert "REQ-p00001" in reported[0].target_id, (
         f"the report must name what was declared; got {reported[0].target_id!r}"

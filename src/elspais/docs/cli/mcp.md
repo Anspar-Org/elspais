@@ -78,7 +78,7 @@ Get current graph health and statistics.
     node_counts       Count by node kind (requirement, assertion, code, test)
     total_nodes       Total nodes in graph
     has_orphans       Whether orphaned nodes exist
-    has_broken_references  Whether broken references exist
+    has_unresolved_references  Whether unresolved references exist
 
   Example response:
     {
@@ -86,7 +86,7 @@ Get current graph health and statistics.
       "node_counts": {"requirement": 45, "assertion": 120, "code": 30},
       "total_nodes": 195,
       "has_orphans": false,
-      "has_broken_references": false
+      "has_unresolved_references": false
     }
 
 **refresh_graph(path, force, if_tip_mutation_id)**
@@ -255,7 +255,7 @@ Get summary statistics for the project.
       - branch_changed    Changed vs main branch
     total_nodes            Total nodes in graph
     orphan_count           Requirements without parents
-    broken_reference_count References to non-existent requirements
+    unresolved_reference_count References to non-existent requirements
 
 **get_test_coverage(req_id)** / **get_uncovered_assertions(req_id?, source?)**
 
@@ -365,7 +365,7 @@ Add to Cursor's MCP settings:
 
 ### Project Health Check
 
-1. `get_graph_status()` - Check for orphans/broken refs
+1. `get_graph_status()` - Check for orphans/unresolved refs
 2. `get_project_summary()` - Review coverage stats
 3. Address requirements with `coverage: none`
 

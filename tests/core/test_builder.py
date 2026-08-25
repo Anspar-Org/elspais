@@ -379,9 +379,11 @@ class TestTestToRequirementLinking:
         # Result should exist but have broken reference to test_id
         result = graph.find_by_id("result-1")
         assert result is not None
-        assert graph.has_broken_references()
+        assert graph.has_unresolved_references()
         broken = [
-            br for br in graph.broken_references() if br.target_id == "test:TestAuth::test_login"
+            br
+            for br in graph.unresolved_references()
+            if br.target_id == "test:TestAuth::test_login"
         ]
         assert len(broken) == 1
 
@@ -633,8 +635,8 @@ class TestGeneralizedOrphanDetection:
         assert any(n.kind == NodeKind.RESULT for n in orphans)
 
         # Also a broken reference
-        assert graph.has_broken_references()
-        broken_targets = {br.target_id for br in graph.broken_references()}
+        assert graph.has_unresolved_references()
+        broken_targets = {br.target_id for br in graph.unresolved_references()}
         assert "test:nonexistent::test_func" in broken_targets
 
     # Verifies: REQ-d00071-B
@@ -1138,10 +1140,10 @@ class TestValidatesEdges:
         assert len(domain_parents) == 0
 
         # Should have a broken reference recorded
-        assert graph.has_broken_references()
+        assert graph.has_unresolved_references()
         broken = [
             br
-            for br in graph.broken_references()
+            for br in graph.unresolved_references()
             if br.source_id == "JNY-Dev-02" and br.target_id == "REQ-NONEXIST"
         ]
         assert len(broken) == 1

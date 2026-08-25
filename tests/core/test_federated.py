@@ -248,8 +248,8 @@ class TestFederatedGraphReadOnly:
         assert fed.orphan_count() == simple_graph.orphan_count()
 
     # Verifies: REQ-d00200-E
-    def test_REQ_d00200_E_broken_references_aggregates(self, config: dict) -> None:
-        """broken_references combines lists from all repos."""
+    def test_REQ_d00200_E_unresolved_references_aggregates(self, config: dict) -> None:
+        """unresolved_references combines lists from all repos."""
         # Build graph with a broken reference (implements non-existent ID)
         graph = build_graph(
             make_requirement(
@@ -261,10 +261,10 @@ class TestFederatedGraphReadOnly:
             repo_root=Path("/repo/core"),
         )
         fed = FederatedGraph.from_single(graph, config, repo_root=Path("/repo/core"))
-        fed_broken = fed.broken_references()
-        graph_broken = graph.broken_references()
+        fed_broken = fed.unresolved_references()
+        graph_broken = graph.unresolved_references()
         assert len(fed_broken) == len(graph_broken)
-        assert fed.has_broken_references() == graph.has_broken_references()
+        assert fed.has_unresolved_references() == graph.has_unresolved_references()
 
     # Verifies: REQ-d00200-E
     def test_REQ_d00200_E_deleted_nodes_aggregates(

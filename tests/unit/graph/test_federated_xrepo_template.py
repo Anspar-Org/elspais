@@ -169,7 +169,7 @@ class TestCrossRepoCloneShape:
         composite = "APP-p00001::LIB-p00001"
         node = fed.find_by_id(composite)
         if node is None:
-            brs = [(br.source_id, br.target_id, br.edge_kind) for br in fed.broken_references()]
+            brs = [(br.source_id, br.target_id, br.edge_kind) for br in fed.unresolved_references()]
             raise AssertionError(
                 f"expected cloned REQ {composite} to be present in the app's index; "
                 f"got broken refs: {brs}"
@@ -263,7 +263,7 @@ class TestCrossRepoCloneShape:
     def test_broken_ref_is_resolved(self, tmp_path: Path) -> None:
         """The Satisfies broken-ref against the foreign template is consumed."""
         fed = _build_federation(tmp_path)
-        brs = list(fed.broken_references())
+        brs = list(fed.unresolved_references())
         assert not any(
             br.source_id == "APP-p00001" and br.edge_kind == EdgeKind.SATISFIES.value for br in brs
         ), f"expected APP-p00001 satisfies broken-ref to be resolved, got {brs}"
@@ -383,7 +383,7 @@ class TestCrossRepoCloneShape:
 
         # And the Satisfies broken-ref against the non-canonical target must
         # have been consumed, not left dangling under either spelling.
-        brs = list(fed.broken_references())
+        brs = list(fed.unresolved_references())
         assert not any(
             br.source_id == "APP-p00001" and br.edge_kind == EdgeKind.SATISFIES.value for br in brs
         ), f"expected satisfies broken-ref to be resolved, got {brs}"
@@ -702,12 +702,12 @@ class TestFederatedDiagnostics:
         fed = build_graph(repo_root=app, scan_code=False, scan_tests=False)
         brs = [
             br
-            for br in fed.broken_references()
+            for br in fed.unresolved_references()
             if br.source_id == "APP-p00001" and br.edge_kind == EdgeKind.SATISFIES.value
         ]
         assert brs, (
             "expected a broken-ref for APP-p00001 satisfies EVS-p00001; "
-            f"got {[(b.source_id, b.target_id, b.edge_kind) for b in fed.broken_references()]}"
+            f"got {[(b.source_id, b.target_id, b.edge_kind) for b in fed.unresolved_references()]}"
         )
         diag = brs[0].diagnostic
         assert "EVS-p00001" in diag, f"target ID missing from diagnostic: {diag!r}"
@@ -774,12 +774,12 @@ class TestFederatedDiagnostics:
         fed = build_graph(repo_root=app, scan_code=False, scan_tests=False)
         brs = [
             br
-            for br in fed.broken_references()
+            for br in fed.unresolved_references()
             if br.source_id == "APP-p00001" and br.edge_kind == EdgeKind.SATISFIES.value
         ]
         assert brs, (
             "expected a broken-ref for APP-p00001 satisfies EVS-p00001; "
-            f"got {[(b.source_id, b.target_id, b.edge_kind) for b in fed.broken_references()]}"
+            f"got {[(b.source_id, b.target_id, b.edge_kind) for b in fed.unresolved_references()]}"
         )
         diag = brs[0].diagnostic
         assert "EVS-p00001" in diag, f"target ID missing from diagnostic: {diag!r}"
@@ -905,7 +905,7 @@ class TestFederatedDiagnostics:
             root_repo="repo_a",
         )
 
-        brs = list(fed.broken_references())
+        brs = list(fed.unresolved_references())
         cycle_brs = [br for br in brs if "cycle" in br.diagnostic.lower()]
         assert cycle_brs, (
             f"expected a cycle diagnostic, got: "

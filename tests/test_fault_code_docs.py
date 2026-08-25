@@ -332,7 +332,7 @@ def reported(tmp_path_factory) -> dict[str, Reported]:
                 return text
         return None
 
-    for fault in graph.broken_references():
+    for fault in graph.unresolved_references():
         text = owner(fault.source_id)
         if text is not None:
             found[text].faults.append(

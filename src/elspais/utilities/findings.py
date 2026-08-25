@@ -142,20 +142,20 @@ _REMEDIES: dict[str, str] = {
     "spec.index_current": "elspais fix",
     "spec.no_duplicates": "elspais -v checks --spec",
     "spec.no_cycles": "elspais -v checks --spec",
-    "spec.implements_resolve": "elspais broken",
-    "spec.refines_resolve": "elspais broken",
-    "spec.satisfies_resolve": "elspais broken",
+    "spec.implements_resolve": "elspais unresolved",
+    "spec.refines_resolve": "elspais unresolved",
+    "spec.satisfies_resolve": "elspais unresolved",
     "spec.structural_orphans": "elspais -v checks --spec",
     "spec.hierarchy_levels": "elspais -v checks --spec",
     "spec.changelog_present": "elspais fix",
     "spec.changelog_current": "elspais fix -m 'Update changelog'",
     "spec.changelog_format": "elspais -v checks --spec",
     # -- references ------------------------------------------------------
-    "references.malformed": "elspais broken",
-    "references.unknown_namespace": "elspais broken",
-    "references.unknown_requirement": "elspais broken",
-    "references.unknown_assertion": "elspais broken",
-    "references.forbidden": "elspais broken",
+    "references.malformed": "elspais unresolved",
+    "references.unknown_namespace": "elspais unresolved",
+    "references.unknown_requirement": "elspais unresolved",
+    "references.unknown_assertion": "elspais unresolved",
+    "references.forbidden": "elspais unresolved",
     "references.keyword_form": "elspais -v checks --spec",
     "references.identifier_form": "elspais -v checks --spec",
     "references.undeclared": "elspais -v checks --spec",
@@ -663,6 +663,84 @@ REGISTRY: dict[str, CheckRule] = _registry()
 def is_registered(check_name: str) -> bool:
     """Whether a check name has a registered category and severity."""
     return check_name in REGISTRY
+
+
+# Implements: REQ-d00285-C+F
+# name: PRESETS
+# use:  which checks each shortcut command lists.
+# def:  command name -> the checks it selects, as a narrowing of the one
+#       findings stream.
+#
+# `elspais unresolved`, `elspais errors` and `elspais uncited` are not reports
+# of their own. Each is `elspais checks` narrowed to the checks that answer one
+# question, so a shortcut cannot say less about a finding than the report it is
+# a view of -- which is what a second renderer, reading the same facts and
+# rendering fewer of them, always ends up doing (REQ-d00285-C).
+#
+# A preset names CHECKS rather than a category, because a category is not the
+# question. `references` holds the five fault classes AND the style and
+# undeclared-reference checks, and a reader asking what does not resolve is not
+# asking about spelling.
+PRESETS: dict[str, tuple[str, ...]] = {
+    # The five classes partition every reference that resolves to nothing: a
+    # fault belongs to exactly one, so the listing counts distinct facts
+    # (REQ-p00019-K). `spec.implements_resolve` and its two siblings answer
+    # over the same population by another route and are deliberately NOT here:
+    # under both, one unresolved target would be listed twice.
+    "unresolved": (
+        "references.malformed",
+        "references.unknown_namespace",
+        "references.unknown_requirement",
+        "references.unknown_assertion",
+        "references.forbidden",
+    ),
+    # What is wrong with a spec file itself, as opposed to what it points at.
+    "errors": (
+        "spec.parseable",
+        "spec.format_rules",
+        "spec.no_assertions",
+        "spec.unfixable_issues",
+    ),
+    # Both read one predicate (`collect_uncited`), so the two checks and this
+    # listing cannot report different sets.
+    "uncited": (
+        "code.uncited_file",
+        "tests.uncited_file",
+    ),
+}
+
+
+def preset_checks(preset: str) -> tuple[str, ...]:
+    """The checks one shortcut command lists.
+
+    Raises:
+        KeyError: If no preset carries that name.
+    """
+    try:
+        return PRESETS[preset]
+    except KeyError:
+        raise KeyError(
+            f"{preset!r} is not a preset listing. The presets are: {', '.join(sorted(PRESETS))}."
+        ) from None
+
+
+def _check_presets() -> None:
+    """Refuse a preset naming a check the tool does not run.
+
+    A preset is resolved into a narrowing of the report, and a name the report
+    never carries would narrow it to nothing while looking like a selection --
+    the condition REQ-d00282-F refuses for a reader's own narrowing, applied to
+    the one the tool ships.
+    """
+    for preset, names in PRESETS.items():
+        stray = sorted(set(names) - set(REGISTRY))
+        if stray:
+            raise ValueError(
+                f"The {preset!r} preset names checks that are not registered: {', '.join(stray)}."
+            )
+
+
+_check_presets()
 
 
 def _lookup(container: Any, key: str) -> Any:

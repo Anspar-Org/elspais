@@ -119,7 +119,7 @@ the `Integrates:` keyword:
 ```
 
 `Integrates:` is external-only -- the target must resolve to an associate
-repo (a same-repo target is a broken reference), the library is never
+repo (a same-repo target is an unresolved reference), the library is never
 modified and contains no reference back, and the consumer inherits the
 library requirement's implemented/verified coverage. See
 `elspais docs graph-model` (INTEGRATES edge) and `elspais docs format`.
@@ -170,7 +170,7 @@ advisory to one project and a build failure to another. Set it to `"off"` to
 silence expected cross-repository references entirely — the check then reports
 as skipped and lists nothing.
 
-List both with `elspais broken`. A requirement with no evidence and a
+List both with `elspais unresolved`. A requirement with no evidence and a
 requirement whose evidence could not be resolved otherwise read identically in
 every report.
 

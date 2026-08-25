@@ -252,7 +252,7 @@ class TestReferencesToRetiredAssertions:
         """It reaches the class a reference to a nonexistent *Assertion* of an
         existing requirement reaches -- not a class of its own."""
         _, _, graph = built
-        faults = [f for f in graph._broken_references if f.target_id == "REQ-p00001-B"]
+        faults = [f for f in graph._unresolved_references if f.target_id == "REQ-p00001-B"]
         assert len(faults) == 1
         assert faults[0].fault_class == FaultClass.UNKNOWN_ASSERTION
         assert faults[0].edge_kind == EdgeKind.IMPLEMENTS.value

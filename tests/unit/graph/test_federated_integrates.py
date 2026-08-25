@@ -117,7 +117,7 @@ class TestIntegratesWiresEdge:
         assert len(integ) == 1
         assert integ[0].target.id == "LIB-d00007"
         # no broken ref for the suffixed target
-        assert not fed._repos["app"].graph._broken_references
+        assert not fed._repos["app"].graph._unresolved_references
 
 
 class TestIntegratesUnresolved:
@@ -128,7 +128,7 @@ class TestIntegratesUnresolved:
         # Copy only app/ so ../library does not exist: associate soft-fails.
         app_root = _copy_app_only(tmp_path)
         fed = _federate(app_root)  # must not raise
-        brs = fed._repos["app"].graph._broken_references
+        brs = fed._repos["app"].graph._unresolved_references
         matches = [b for b in brs if b.target_id == "LIB-d00007"]
         assert len(matches) == 1
         assert matches[0].presumed_foreign is True
@@ -141,7 +141,7 @@ class TestIntegratesUnresolved:
             spec.read_text().replace("**Integrates**: LIB-d00007", "**Integrates**: LIB-d99999")
         )
         fed = _federate(app_root)
-        brs = fed._repos["app"].graph._broken_references
+        brs = fed._repos["app"].graph._unresolved_references
         matches = [b for b in brs if b.target_id == "LIB-d99999"]
         assert len(matches) == 1
         assert matches[0].presumed_foreign is False
@@ -169,7 +169,7 @@ class TestIntegratesRefusedByReader:
 
         app_root = self._retarget(tmp_path, "not a reference")
         fed = _federate(app_root)
-        brs = fed._repos["app"].graph._broken_references
+        brs = fed._repos["app"].graph._unresolved_references
         matches = [b for b in brs if b.target_id == "not a reference"]
         assert len(matches) == 1, f"the refused item must be reported once; got {brs}"
         assert matches[0].fault_class is FaultClass.MALFORMED
@@ -230,7 +230,7 @@ class TestIntegratesSameRepo:
         app_req = fed._repos["app"].graph._index["APP-d00001"]
         # No INTEGRATES edge created for a same-repo target.
         assert _outgoing_integrates(app_req) == []
-        brs = fed._repos["app"].graph._broken_references
+        brs = fed._repos["app"].graph._unresolved_references
         matches = [b for b in brs if b.target_id == "APP-d00002"]
         assert len(matches) == 1
 
@@ -404,7 +404,7 @@ class TestIntegratesHierarchyLevels:
         # (3) No surviving broken reference for the resolved Integrates target.
         leftover = [
             br
-            for br in fed._repos["assoc_a"].graph._broken_references
+            for br in fed._repos["assoc_a"].graph._unresolved_references
             if br.target_id == "BBB-p00001"
         ]
         assert leftover == [], f"resolved Integrates target left a broken ref: {leftover}"
@@ -542,7 +542,7 @@ class TestMultiAssertionCrossRepoReference:
         shapes = self._shapes(lib_req)
         assert (EdgeKind.IMPLEMENTS, ("A",), "APP-d00001") in shapes
         assert (EdgeKind.IMPLEMENTS, ("B",), "APP-d00001") in shapes
-        assert fed._repos["app"].graph._broken_references == []
+        assert fed._repos["app"].graph._unresolved_references == []
 
     # Verifies: REQ-d00269-C
     def test_multi_assertion_code_annotation_wires_one_edge_per_label(self, tmp_path):
@@ -556,7 +556,7 @@ class TestMultiAssertionCrossRepoReference:
             if e.kind == EdgeKind.IMPLEMENTS and e.target.kind.name == "CODE"
         }
         assert labels == {("A",), ("B",)}
-        assert fed._repos["app"].graph._broken_references == []
+        assert fed._repos["app"].graph._unresolved_references == []
 
     # Verifies: REQ-d00269-D, REQ-d00269-F
     def test_label_the_owner_lacks_is_a_hard_broken_reference(self, tmp_path):
@@ -567,7 +567,7 @@ class TestMultiAssertionCrossRepoReference:
         lib_req = fed._repos["library"].graph._index["LIB-p00001"]
         assert (EdgeKind.IMPLEMENTS, ("A",), "APP-d00001") in self._shapes(lib_req)
 
-        brs = fed._repos["app"].graph._broken_references
+        brs = fed._repos["app"].graph._unresolved_references
         assert [b.target_id for b in brs] == ["LIB-p00001-C"]
         assert brs[0].presumed_foreign is False
         assert brs[0].diagnostic

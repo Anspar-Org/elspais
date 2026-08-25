@@ -83,7 +83,7 @@ class TestOrphanDetection:
         graph = builder.build()
 
         # Child tried to link but target doesn't exist
-        assert graph.has_broken_references()
+        assert graph.has_unresolved_references()
         # Both parentless REQs are roots (broken ref doesn't establish a parent)
         assert graph.root_count() == 2
         assert graph.orphan_count() == 0
@@ -103,8 +103,8 @@ class TestBrokenReferenceDetection:
 
         graph = builder.build()
 
-        assert not graph.has_broken_references()
-        assert graph.broken_references() == []
+        assert not graph.has_unresolved_references()
+        assert graph.unresolved_references() == []
 
     # Verifies: REQ-p00002-B
     def test_broken_ref_implements(self):
@@ -116,8 +116,8 @@ class TestBrokenReferenceDetection:
 
         graph = builder.build()
 
-        assert graph.has_broken_references()
-        broken = graph.broken_references()
+        assert graph.has_unresolved_references()
+        broken = graph.unresolved_references()
         assert len(broken) == 1
         assert broken[0].source_id == "REQ-o00001"
         assert broken[0].target_id == fake_reqs.FAKE_NONEXISTENT_REQ
@@ -135,8 +135,8 @@ class TestBrokenReferenceDetection:
 
         graph = builder.build()
 
-        assert graph.has_broken_references()
-        broken = graph.broken_references()
+        assert graph.has_unresolved_references()
+        broken = graph.unresolved_references()
         assert len(broken) == 1
         assert broken[0].edge_kind == "refines"
 
@@ -153,8 +153,8 @@ class TestBrokenReferenceDetection:
 
         graph = builder.build()
 
-        assert graph.has_broken_references()
-        broken = graph.broken_references()
+        assert graph.has_unresolved_references()
+        broken = graph.unresolved_references()
         assert len(broken) == 2
         target_ids = {b.target_id for b in broken}
         assert target_ids == {"REQ-MISSING1", "REQ-MISSING2"}
@@ -197,8 +197,8 @@ class TestCodeAndTestOrphans:
 
         graph = builder.build()
 
-        assert graph.has_broken_references()
-        broken = graph.broken_references()
+        assert graph.has_unresolved_references()
+        broken = graph.unresolved_references()
         assert len(broken) == 1
         assert broken[0].target_id == fake_reqs.FAKE_NONEXISTENT_REQ
         assert broken[0].edge_kind == "implements"
@@ -223,8 +223,8 @@ class TestCodeAndTestOrphans:
 
         graph = builder.build()
 
-        assert graph.has_broken_references()
-        broken = graph.broken_references()
+        assert graph.has_unresolved_references()
+        broken = graph.unresolved_references()
         assert len(broken) == 1
         assert broken[0].target_id == fake_reqs.FAKE_NONEXISTENT_REQ
         assert broken[0].edge_kind == "verifies"
@@ -250,8 +250,8 @@ class TestIntegration:
         graph = builder.build()
 
         # Should have one broken reference
-        assert graph.has_broken_references()
-        assert len(graph.broken_references()) == 1
+        assert graph.has_unresolved_references()
+        assert len(graph.unresolved_references()) == 1
 
         # Valid child should be linked
         valid_node = graph.find_by_id("REQ-o00001")
@@ -272,7 +272,7 @@ class TestIntegration:
 
         # These methods should work on a real graph
         orphan_count = graph.orphan_count()
-        broken_refs = graph.broken_references()
+        broken_refs = graph.unresolved_references()
 
         # Results may vary by repo state, but methods should work
         assert isinstance(orphan_count, int)

@@ -693,15 +693,6 @@ def _serialize_mutation_entry(entry: MutationEntry) -> dict[str, Any]:
     }
 
 
-def _serialize_broken_reference(ref: Any) -> dict[str, Any]:
-    """Serialize a ReferenceFault to dict format."""
-    return {
-        "source_id": ref.source_id,
-        "target_id": ref.target_id,
-        "edge_kind": str(ref.edge_kind) if hasattr(ref.edge_kind, "value") else ref.edge_kind,
-    }
-
-
 # ─────────────────────────────────────────────────────────────────────────────
 # Core Tool Functions (REQ-o00060)
 # ─────────────────────────────────────────────────────────────────────────────
@@ -842,7 +833,7 @@ def _get_graph_status(
         "node_counts": node_counts,
         "total_nodes": graph.node_count(),
         "has_orphans": graph.has_orphans(),
-        "has_broken_references": graph.has_broken_references(),
+        "has_unresolved_references": graph.has_unresolved_references(),
         "terms_dirty": _has_dirty_terms(graph),
     }
     record = _automatic_save_record(working_dir)
@@ -1891,7 +1882,7 @@ def _build_assertion_format(config: dict[str, Any]) -> dict[str, Any]:
     # Read the assertion separators from id-patterns assertions. Both examples
     # are rendered with the configured characters: an agent handed a hardcoded
     # "-A" in a repo configured for "/A" writes references this repo does not
-    # accept, and an off-separator reference is a broken reference, not an
+    # accept, and an off-separator reference is an unresolved reference, not an
     # alternate spelling.
     sep = assertions.separator
     ma_sep = assertions.multi_separator
@@ -2119,9 +2110,9 @@ def _workspace_profile_manager(
     result["coverage_stats"] = _build_coverage_stats(graph, config)
     result["health"] = {
         "has_orphans": graph.has_orphans() if graph else None,
-        "has_broken_references": graph.has_broken_references() if graph else None,
+        "has_unresolved_references": graph.has_unresolved_references() if graph else None,
         "orphan_count": graph.orphan_count() if graph else None,
-        "broken_reference_count": (len(graph.broken_references()) if graph else None),
+        "unresolved_reference_count": (len(graph.unresolved_references()) if graph else None),
     }
     result["change_metrics"] = _build_change_metrics(graph)
 
@@ -2183,9 +2174,9 @@ def _workspace_profile_all(
     result["coverage_stats"] = _build_coverage_stats(graph, config)
     result["health"] = {
         "has_orphans": graph.has_orphans() if graph else None,
-        "has_broken_references": graph.has_broken_references() if graph else None,
+        "has_unresolved_references": graph.has_unresolved_references() if graph else None,
         "orphan_count": graph.orphan_count() if graph else None,
-        "broken_reference_count": (len(graph.broken_references()) if graph else None),
+        "unresolved_reference_count": (len(graph.unresolved_references()) if graph else None),
     }
     result["change_metrics"] = _build_change_metrics(graph)
 
@@ -2329,7 +2320,7 @@ def _get_project_summary(
         "changes": change_metrics,
         "total_nodes": graph.node_count(),
         "orphan_count": graph.orphan_count(),
-        "broken_reference_count": len(graph.broken_references()),
+        "unresolved_reference_count": len(graph.unresolved_references()),
     }
 
     # REQ-d00258-C: per-level coverage stats reuse the CLI summary's collector
@@ -3845,7 +3836,7 @@ def _mutate_fix_broken_reference(
     old_target_id: str,
     new_target_id: str,
 ) -> dict[str, Any]:
-    """Fix a broken reference by redirecting to a valid target.
+    """Repair an unresolved reference by redirecting it to a valid target.
 
     REQ-d00065-D: Only parameter validation and delegation.
     REQ-o00062-E: Returns MutationEntry for audit.
@@ -3859,7 +3850,7 @@ def _mutate_fix_broken_reference(
         # since a variant spelling owns no index entry. FederatedIdReader is
         # the one authority for reading an identifier across members; a
         # reference no member claims stays as given, so the reference remains
-        # broken and is reported, not silently respelled.
+        # unresolved and is reported, not silently respelled.
         resolvers = [
             build_resolver(entry.config)
             for entry in getattr(graph, "iter_repos", lambda: [])()
@@ -4089,16 +4080,53 @@ def _get_unlinked_nodes(graph: FederatedGraph, kind: str | None = None) -> dict[
     }
 
 
-def _get_broken_references(graph: FederatedGraph) -> dict[str, Any]:
-    """Get all broken references.
+# Implements: REQ-d00285-C+F, REQ-d00275-A
+def _get_unresolved_references(
+    graph: FederatedGraph, config: dict[str, Any] | None = None
+) -> dict[str, Any]:
+    """Every reference that names nothing the federation holds.
 
-    Returns edges that point to non-existent nodes.
+    This is the SAME stream `elspais unresolved` and `elspais checks` report:
+    the five reference checks, each finding carrying the check that raised it,
+    the severity that check resolved to, the diagnostic codes the fault
+    reached, its location and its remedy. Reading them here rather than
+    serializing `ReferenceFault` again is what keeps this surface from saying
+    less about a reference than the CLI does about the same one
+    (REQ-d00285-C).
     """
-    refs = [_serialize_broken_reference(ref) for ref in graph.broken_references()]
+    from elspais.commands.health import _REFERENCE_CHECKS, check_reference_class
+
+    checks = [
+        check_reference_class(graph, config, fault_class, name, description)
+        for fault_class, name, description in _REFERENCE_CHECKS
+    ]
+
+    findings: list[dict[str, Any]] = []
+    for check in checks:
+        for finding in check.findings:
+            entry = finding.to_dict()
+            entry["check"] = check.name
+            entry["severity"] = check.severity
+            entry["remedy"] = check.remedy
+            findings.append(entry)
 
     return {
-        "broken_references": refs,
-        "count": len(refs),
+        "unresolved_references": findings,
+        "count": len(findings),
+        # A class a project turned off produced no findings, and saying which
+        # is the difference between "none" and "not reported" (REQ-d00285-G).
+        "checks": [
+            {
+                "name": check.name,
+                "passed": check.passed,
+                "message": check.message,
+                "severity": check.severity,
+                "remedy": check.remedy,
+                "skipped": bool(check.details.get("skipped")),
+                "count": len(check.findings),
+            }
+            for check in checks
+        ],
     }
 
 
@@ -6015,7 +6043,7 @@ The graph is the single source of truth - all tools read directly from it.
 - `agent_instructions()` - Project-specific authoring rules and conventions
 
 ### Graph Status & Control
-- `get_graph_status()` - Node counts, orphan/broken reference flags
+- `get_graph_status()` - Node counts, orphan/unresolved reference flags
 - `refresh_graph(path="", force=False, if_tip_mutation_id="")` -
   Rebuild after spec file changes
   - path: switch to a different project directory before rebuilding
@@ -6100,7 +6128,8 @@ Implements:/Refines: line changes.
 - `mutate_change_edge_targets(source_id, target_id, assertion_targets,
   if_version)` - Change assertion targets
 - `mutate_delete_edge(source_id, target_id, if_version, confirm=True)` - Delete (requires confirm)
-- `mutate_fix_broken_reference(source_id, old_target, new_target, if_version)` - Fix broken ref
+- `mutate_fix_broken_reference(source_id, old_target, new_target, if_version)`
+  - Redirect an unresolved ref to a valid target
 
 ### File Mutations (in-memory)
 - `mutate_move_node_to_file(node_id, target_file_id, if_version,
@@ -6119,7 +6148,7 @@ tip: current_tip from get_mutation_log() ("" = nothing pending).
 - `get_mutation_log(limit=50)` - Mutation history, newest first; includes current_tip
 - `get_versions(node_ids)` - Refresh version tokens in bulk (unknown IDs omitted)
 - `get_orphaned_nodes()` - List orphaned nodes
-- `get_broken_references()` - List broken references
+- `get_unresolved_references()` - List references that resolve to nothing
 
 ### Test Coverage Analysis
 - `get_test_coverage(req_id)` - Get TEST nodes and coverage stats for a requirement
@@ -6240,7 +6269,7 @@ identical body. Full details: docs("concurrency").
 2. get_hierarchy() on results to navigate relationships
 
 **Checking project health:**
-1. get_graph_status() for orphans/broken refs
+1. get_graph_status() for orphans/unresolved refs
 2. get_project_summary() for coverage statistics
 
 **Finding coverage gaps:**
@@ -6383,7 +6412,8 @@ def create_server(
 
     @mcp.tool()
     def get_graph_status() -> dict[str, Any]:
-        """Quick health snapshot: requirement/assertion/test counts, orphan and broken-ref flags.
+        """Quick health snapshot: requirement/assertion/test counts, plus the
+        orphan and unresolved-reference flags.
 
         Use when: you need a fast overview of project health without running full checks.
         """
@@ -7329,7 +7359,7 @@ def create_server(
     def mutate_fix_broken_reference(
         source_id: str, old_target_id: str, new_target_id: str, if_version: str
     ) -> dict[str, Any]:
-        """Repair a broken reference by redirecting it to a valid target node.
+        """Repair an unresolved reference by redirecting it to a valid target node.
         Args:
             if_version: The version of source_id from your last read. Only the
                 source's rendered reference line changes, so only the source is
@@ -7576,12 +7606,18 @@ def create_server(
         return _get_unlinked_nodes(_state["graph"], kind)
 
     @mcp.tool()
-    def get_broken_references() -> dict[str, Any]:
-        """Find Implements/Refines references that point to non-existent requirement IDs.
+    def get_unresolved_references() -> dict[str, Any]:
+        """List every reference that names nothing the federation holds.
 
-        Use when: checking for broken links after renaming or deleting requirements.
+        The same findings `elspais unresolved` prints: each carries the check
+        that raised it (one of the five reference classes), its severity, its
+        diagnostic codes, its location and its remedy. `checks` says what each
+        class found, including a class this project turned off.
+
+        Use when: checking for unresolved links after renaming or deleting
+        requirements.
         """
-        return _get_broken_references(_state["graph"])
+        return _get_unresolved_references(_state["graph"], _state["config"])
 
     # ─────────────────────────────────────────────────────────────────────
     # Keyword Search Tools (Phase 4)

@@ -20,8 +20,8 @@ Complete reference for all elspais commands.
 | `untested` | Gaps & Issues | List requirements without test coverage |
 | `unvalidated` | Gaps & Issues | List requirements without UAT (journey) coverage |
 | `failing` | Gaps & Issues | List requirements with failing test or UAT results |
-| `errors` | Gaps & Issues | List spec format violations and requirements with no assertions |
-| `broken` | Gaps & Issues | List broken references (edges targeting non-existent nodes) |
+| `errors` | Gaps & Issues | List what is wrong with the spec files themselves |
+| `unresolved` | Gaps & Issues | List references that name nothing the federation holds |
 | `uncited` | Gaps & Issues | List scanned code and test files that cite no requirement |
 | `analysis` | Authoring | Analyze foundational requirement importance |
 | `fix` | Authoring | Auto-fix spec file issues (hashes, formatting) |
@@ -71,12 +71,20 @@ Verify requirements traceability across configuration, spec files, code, and tes
 
 To auto-fix issues, use: `elspais fix`
 To see specific errors, use: `elspais errors`
+To see unresolved references, use: `elspais unresolved`
 
 **Options:**
 
   `--spec`         Run spec file checks only
-  `--code`         Run code reference checks only
+  `--code-checks`  Run code reference checks only
   `--tests`        Run test mapping checks only
+  `--terms`        Run defined-term checks only
+  `--severity S...`  Report only findings whose check carries these severities
+  `--category C...`  Report only findings in these check categories
+  `--check NAME...`  Report only these checks by name (what the `unresolved`,
+                   `errors` and `uncited` listings are)
+  `--code CODE...`   Report only findings carrying these diagnostic codes
+  `--file GLOB...`   Report only findings located in matching files
   `--format {text,markdown,json,junit,sarif}`  Output format (default: text)
   `--lenient`      Allow warnings without affecting exit code
   `--skip-passing-details`     Hide details for passing checks (default)
@@ -85,12 +93,18 @@ To see specific errors, use: `elspais errors`
 
 ## errors
 
-List spec format violations and requirements with no assertions.
+List what is wrong with the spec files themselves.
 
   $ elspais errors                     # Show all spec errors
   $ elspais errors --format markdown   # Markdown table
   $ elspais errors --format json       # JSON output
   $ elspais errors -o errors.txt       # Write to file
+
+This is `elspais checks` narrowed to the spec-file checks — exactly `elspais
+checks --check spec.parseable spec.format_rules spec.no_assertions
+spec.unfixable_issues`. A file that would not parse is listed here alongside a
+format-rule violation, because both are defects in the file rather than in
+what it points at.
 
 Every requirement is weighed whatever its status, so the listing accounts for
 exactly what `elspais checks` counted. There is no status option here: format
@@ -99,8 +113,12 @@ nothing worth narrowing.
 
 **Options:**
 
-  `--format {text,markdown,json}`  Output format (default: text)
+  `--format {text,markdown,json,junit,sarif}`  Output format (default: text)
+  `-v, --verbose`                  Show the full detail of every check
+  `--lenient`                      Allow warnings without affecting exit code
   `-o, --output PATH`              Write output to file instead of stdout
+
+**Exit code:** 0 when no selected check failed, 1 otherwise.
 
 Follow-up from `elspais checks` when `spec.format_rules` or `spec.no_assertions` fails.
 
@@ -246,27 +264,43 @@ test-targets`).
 Follow-up from `elspais checks` when `tests.verified`, `tests.results` or
 `uat.uat_verified` fails.
 
-## broken
+## unresolved
 
-List references that name a target the graph does not hold.
+List references that name nothing the federation holds.
 
-  $ elspais broken                     # Every broken reference
-  $ elspais broken --format json       # JSON output
-  $ elspais broken -o broken.txt       # Write to file
+  $ elspais unresolved                 # Every unresolved reference
+  $ elspais unresolved --format json   # JSON output
+  $ elspais unresolved -o refs.txt     # Write to file
 
-Each is listed as source, target and the relationship its keyword declared,
-with the diagnostic sentence saying what reading it found. A target no
-configured repository claims is marked `[foreign]`, so a reference into a repo
-you have not checked out is told apart from one that is simply wrong. See
-`elspais docs linking` (*What a reference report says*).
+This is `elspais checks` narrowed to the five reference checks, and nothing
+else — it is exactly `elspais checks --check references.malformed
+references.unknown_namespace references.unknown_requirement
+references.unknown_assertion references.forbidden`. Each finding therefore
+carries what every finding carries: the check that raised it (which names the
+class the reference reached), its severity, the diagnostic codes reading it
+produced, its location and its remedy.
 
-There is no scoping here: a broken reference is broken whatever the status of
-the requirement holding it.
+A reference is *malformed* when it did not read as an identifier at all, and
+*unresolved* when it read as one and named nothing. The listing covers both,
+which is why it is named for the union.
+
+The listing opens by naming the narrowing and how much of the run it withheld,
+so a short list is never mistaken for a clean run.
+
+There is no scoping here: a reference resolves or it does not, whatever the
+status of the requirement holding it. What the listing DOES honour is the
+severity a project configured: a class set to `"off"` reports as skipped and
+lists nothing, and the skipped line says so.
 
 **Options:**
 
-  `--format {text,markdown,json}`  Output format (default: text)
+  `--format {text,markdown,json,junit,sarif}`  Output format (default: text)
+  `-v, --verbose`                  Show the full detail of every check
+  `--lenient`                      Allow warnings without affecting exit code
   `-o, --output PATH`              Write output to file instead of stdout
+
+**Exit code:** 0 when no selected check failed, 1 otherwise. The verdict is
+taken over the five reference checks alone, never over the rest of the run.
 
 Follow-up from `elspais checks` when a `references.*` check fails.
 
@@ -284,9 +318,10 @@ test is enough to keep the file out of the listing. A test file whose only
 citation attached to no test carries a marker, so it is left to
 `tests.unbound_citation`, which says what is actually wrong with it.
 
-The text and markdown listings name each file; `--format json` carries each
-file node's id beside its path, because the id names the repository holding
-the file and a bare path does not.
+This is `elspais checks` narrowed to the two uncited-file checks — exactly
+`elspais checks --check code.uncited_file tests.uncited_file`. Each finding
+names the file it is about, alongside the check that raised it, its severity
+and its remedy.
 
 This is not the *unlinked* population. An unlinked node is a single test
 function or citation block that exists and reaches no requirement; the MCP
@@ -295,9 +330,12 @@ and nine unlinked ones is full of unlinked nodes and is not uncited.
 
 **Options:**
 
-  `--format {text,markdown,json}`  Output format (default: text)
-  `-v, --verbose`                  Accepted, and adds nothing to the listing
+  `--format {text,markdown,json,junit,sarif}`  Output format (default: text)
+  `-v, --verbose`                  Show the full detail of every check
+  `--lenient`                      Allow warnings without affecting exit code
   `-o, --output PATH`              Write output to file instead of stdout
+
+**Exit code:** 0 when no selected check failed, 1 otherwise.
 
 Follow-up from `elspais checks` when `code.uncited_file` or
 `tests.uncited_file` reports.

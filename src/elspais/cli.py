@@ -39,7 +39,6 @@ from elspais.commands import (
 from elspais.commands.args import (
     AnalysisArgs,
     AssociateArgs,
-    BrokenArgs,
     ChangedArgs,
     ChecksArgs,
     CommentsArgs,
@@ -89,6 +88,7 @@ from elspais.commands.args import (
     UncitedArgs,
     UncoveredArgs,
     UninstallArgs,
+    UnresolvedArgs,
     UntestedArgs,
     UnvalidatedArgs,
     VersionArgs,
@@ -132,7 +132,7 @@ def _to_namespace(global_args: GlobalArgs) -> argparse.Namespace:
         UnvalidatedArgs: "unvalidated",
         FailingArgs: "failing",
         ErrorsArgs: "errors",
-        BrokenArgs: "broken",
+        UnresolvedArgs: "unresolved",
         UncitedArgs: "uncited",
         DoctorArgs: "doctor",
         TraceArgs: "trace",
@@ -393,18 +393,12 @@ def main(argv: list[str] | None = None) -> int:
             from elspais.commands import gaps
 
             return gaps.run(args)
-        elif args.command == "errors":
-            from elspais.commands import errors
-
-            return errors.run(args)
-        elif args.command == "broken":
-            from elspais.commands import broken
-
-            return broken.run(args)
-        elif args.command == "uncited":
-            from elspais.commands import uncited
-
-            return uncited.run(args)
+        elif args.command in ("unresolved", "errors", "uncited"):
+            # Each is the checks report narrowed to the checks that answer one
+            # question -- never a second renderer over the same facts
+            # (REQ-d00285-C). The population each names is `PRESETS` in
+            # `utilities.findings`.
+            return health.run_preset(args, args.command)
         elif args.command == "doctor":
             return doctor.run(args)
         elif args.command == "trace":

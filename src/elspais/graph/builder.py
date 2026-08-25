@@ -359,13 +359,13 @@ class TraceGraph:
     _roots: list[GraphNode] = field(default_factory=list, init=False)
     _index: dict[str, GraphNode] = field(default_factory=dict, init=False, repr=False)
 
-    # Detection: orphans and broken references (populated at build time)
+    # Detection: orphans and unresolved references (populated at build time)
     _orphaned_ids: set[str] = field(default_factory=set, init=False)
-    _broken_references: list[ReferenceFault] = field(default_factory=list, init=False)
+    _unresolved_references: list[ReferenceFault] = field(default_factory=list, init=False)
     # Implements: REQ-d00272-G
     # Keyword-form findings (non-canonical case/spacing/emphasis) -- never
     # cost the edge their keyword introduces, so kept apart from
-    # _broken_references rather than joining a bucket that counts
+    # _unresolved_references rather than joining a bucket that counts
     # references that failed to bind.
     _style_findings: list[StyleFinding] = field(default_factory=list, init=False, repr=False)
     # Implements: REQ-d00272-O
@@ -376,7 +376,7 @@ class TraceGraph:
     )
     # Implements: REQ-d00272-N
     # References the configuration admits but did not spell canonically --
-    # each produced its relationship, so kept apart from _broken_references.
+    # each produced its relationship, so kept apart from _unresolved_references.
     _identifier_form_findings: list[IdentifierFormFinding] = field(
         default_factory=list, init=False, repr=False
     )
@@ -389,7 +389,7 @@ class TraceGraph:
     )
     # Implements: REQ-d00274-G
     # Citations in scanned test files that found no test to attach to. Kept
-    # apart from _broken_references because nothing failed to resolve: the
+    # apart from _unresolved_references because nothing failed to resolve: the
     # reference read and named a real assertion, and it is the binding to a
     # test that was never made.
     _unbound_citations: list[UnboundCitation] = field(default_factory=list, init=False, repr=False)
@@ -548,7 +548,7 @@ class TraceGraph:
         return copy.deepcopy(self)
 
     # ─────────────────────────────────────────────────────────────────────────
-    # Detection API: Orphans and Broken References
+    # Detection API: Orphans and Unresolved References
     # ─────────────────────────────────────────────────────────────────────────
 
     def orphaned_nodes(self) -> Iterator[GraphNode]:
@@ -574,20 +574,21 @@ class TraceGraph:
         """Return the number of orphaned nodes."""
         return len(self._orphaned_ids)
 
-    def broken_references(self) -> list[ReferenceFault]:
-        """Get all broken references detected during build.
+    def unresolved_references(self) -> list[ReferenceFault]:
+        """Every reference that resolved to nothing, detected during build.
 
-        Broken references occur when a node references a target ID
-        that doesn't exist in the graph.
+        A reference is unresolved when it named a target the graph does not
+        hold -- including one that never read as an identifier at all, which
+        `FaultClass.MALFORMED` distinguishes.
 
         Returns:
             List of ReferenceFault instances.
         """
-        return list(self._broken_references)
+        return list(self._unresolved_references)
 
-    def has_broken_references(self) -> bool:
-        """Check if the graph has broken references."""
-        return len(self._broken_references) > 0
+    def has_unresolved_references(self) -> bool:
+        """Whether the graph holds a reference that resolved to nothing."""
+        return len(self._unresolved_references) > 0
 
     # Implements: REQ-d00272-G
     def style_findings(self) -> list[StyleFinding]:
@@ -869,7 +870,7 @@ class TraceGraph:
         the render agrees with the broken-reference report (REQ-d00132-G).
         """
         suffix_prefix = old_id + "-"
-        for i, br in enumerate(self._broken_references):
+        for i, br in enumerate(self._unresolved_references):
             new_source = new_id if br.source_id == old_id else br.source_id
             if br.target_id == old_id:
                 new_target = new_id
@@ -879,7 +880,7 @@ class TraceGraph:
                 new_target = br.target_id
             if (new_source, new_target) == (br.source_id, br.target_id):
                 continue
-            self._broken_references[i] = replace(br, source_id=new_source, target_id=new_target)
+            self._unresolved_references[i] = replace(br, source_id=new_source, target_id=new_target)
             if new_target != br.target_id:
                 source_node = self._index.get(new_source)
                 ref_kind = EdgeKind(br.edge_kind)
@@ -1006,7 +1007,7 @@ class TraceGraph:
 
         # Restore broken references retired with the node (REQ-d00132-G)
         for br_dict in entry.before_state.get("purged_broken_refs", []):
-            self._broken_references.append(ReferenceFault(**br_dict))
+            self._unresolved_references.append(ReferenceFault(**br_dict))
 
     # Stored ref fields hold UNRESOLVED leftovers only (REQ-d00132-F/G):
     # build() strips refs that became edges, and the mutation paths below
@@ -1055,9 +1056,9 @@ class TraceGraph:
             # Check if this was a broken reference (never created actual edge)
             if entry.after_state.get("broken"):
                 # Remove from broken references
-                self._broken_references = [
+                self._unresolved_references = [
                     br
-                    for br in self._broken_references
+                    for br in self._unresolved_references
                     if not (br.source_id == source_id and br.target_id == target_id)
                 ]
                 kind_val = entry.after_state.get("edge_kind", "")
@@ -1200,15 +1201,15 @@ class TraceGraph:
                     self._restore_journey_bodies(entry)
             else:
                 # Remove from broken references (with new target)
-                self._broken_references = [
+                self._unresolved_references = [
                     br
-                    for br in self._broken_references
+                    for br in self._unresolved_references
                     if not (br.source_id == source_id and br.target_id == new_target_id)
                 ]
                 self._remove_leftover_ref(source, EdgeKind(edge_kind_str), new_target_id)
 
             # Restore the original broken reference and its leftover (REQ-d00132-G)
-            self._broken_references.append(
+            self._unresolved_references.append(
                 ReferenceFault(
                     source_id=source_id,
                     target_id=old_target_id,
@@ -1947,10 +1948,10 @@ class TraceGraph:
         # Retire broken references sourced from the deleted node — a node
         # that no longer exists has no references to report as broken.
         # Recorded for undo restoration. Implements: REQ-d00132-G
-        purged_broken = [br for br in self._broken_references if br.source_id == node_id]
+        purged_broken = [br for br in self._unresolved_references if br.source_id == node_id]
         if purged_broken:
-            self._broken_references = [
-                br for br in self._broken_references if br.source_id != node_id
+            self._unresolved_references = [
+                br for br in self._unresolved_references if br.source_id != node_id
             ]
             entry.before_state["purged_broken_refs"] = [asdict(br) for br in purged_broken]
 
@@ -2450,7 +2451,7 @@ class TraceGraph:
         """Add a new edge (reference).
 
         Creates a relationship from source to target. If target doesn't exist,
-        adds to _broken_references instead of creating an edge.
+        adds to _unresolved_references instead of creating an edge.
 
         Args:
             source_id: The child/source node ID.
@@ -2514,7 +2515,7 @@ class TraceGraph:
             self._reconcile_journey_bodies(source, target)
         else:
             # Target doesn't exist - record as broken reference
-            self._broken_references.append(
+            self._unresolved_references.append(
                 ReferenceFault(
                     source_id=source_id,
                     target_id=target_id,
@@ -3011,7 +3012,7 @@ class TraceGraph:
         # Find the broken reference
         broken_ref = None
         broken_ref_index = None
-        for i, br in enumerate(self._broken_references):
+        for i, br in enumerate(self._unresolved_references):
             if br.source_id == source_id and br.target_id == old_target_id:
                 broken_ref = br
                 broken_ref_index = i
@@ -3045,7 +3046,7 @@ class TraceGraph:
         )
 
         # Remove the old broken reference and its rendered leftover (REQ-d00132-G)
-        self._broken_references.pop(broken_ref_index)
+        self._unresolved_references.pop(broken_ref_index)
         self._remove_leftover_ref(source, edge_kind, old_target_id)
 
         if new_target:
@@ -3058,7 +3059,7 @@ class TraceGraph:
             entry.after_state["fixed"] = True
         else:
             # New target also doesn't exist - remains broken
-            self._broken_references.append(
+            self._unresolved_references.append(
                 ReferenceFault(
                     source_id=source_id,
                     target_id=new_target_id,
@@ -3982,7 +3983,7 @@ class GraphBuilder:
             tuple[str, str, dict[tuple[str, str], tuple[FaultClass, tuple[str, ...]]]]
         ] = []
         # Detection: broken references
-        self._broken_references: list[ReferenceFault] = []
+        self._unresolved_references: list[ReferenceFault] = []
         # Implements: REQ-d00272-G
         self._style_findings: list[StyleFinding] = []
         # Implements: REQ-d00272-O
@@ -4150,7 +4151,7 @@ class GraphBuilder:
             # node of its own (an empty reference list, a trailing separator).
             data = content.parsed_data
             source_id = file_node.id if file_node is not None else data.get("source_id", "")
-            self._broken_references.append(
+            self._unresolved_references.append(
                 ReferenceFault(
                     source_id=source_id,
                     target_id=data["raw"],
@@ -4511,7 +4512,7 @@ class GraphBuilder:
             if kw != EdgeKind.INTEGRATES.value or not reader_refused(verdict):
                 continue
             fault_class, codes = verdict
-            self._broken_references.append(
+            self._unresolved_references.append(
                 ReferenceFault(
                     source_id=req_id,
                     target_id=raw,
@@ -4596,7 +4597,7 @@ class GraphBuilder:
         # that validated everything.
         for section_name, declared in data.get("misplaced_validates", []):
             where = f'section "{section_name}"' if section_name else "a section"
-            self._broken_references.append(
+            self._unresolved_references.append(
                 ReferenceFault(
                     source_id=journey_id,
                     target_id=declared,
@@ -4676,7 +4677,7 @@ class GraphBuilder:
         # anchored to the same CODE node an admitted keyword would use.
         if forbidden:
             code_id = _ensure_code_node()
-            self._broken_references.extend(
+            self._unresolved_references.extend(
                 self._forbidden_keyword_faults(
                     code_id,
                     data.get("forbidden_keyword", ""),
@@ -4778,7 +4779,7 @@ class GraphBuilder:
         # gives the actual test function its file-default Verifies.
         forbidden = data.get("forbidden") or []
         if forbidden:
-            self._broken_references.extend(
+            self._unresolved_references.extend(
                 self._forbidden_keyword_faults(
                     test_id,
                     data.get("forbidden_keyword", ""),
@@ -5138,7 +5139,7 @@ class GraphBuilder:
             template_roots.setdefault(template_id, []).append(declaring_id)
 
         for declaring_id, template_id, fault_class, codes in refused_items:
-            self._broken_references.append(
+            self._unresolved_references.append(
                 ReferenceFault(
                     source_id=declaring_id,
                     target_id=template_id,
@@ -5166,7 +5167,7 @@ class GraphBuilder:
                     continue
                 # Genuinely missing — record a plain broken-ref and skip clone.
                 for declaring_id in template_roots[template_id]:
-                    self._broken_references.append(
+                    self._unresolved_references.append(
                         ReferenceFault(
                             source_id=declaring_id,
                             target_id=template_id,
@@ -5183,7 +5184,7 @@ class GraphBuilder:
                 # we don't manufacture an INSTANCE subtree against a concrete
                 # node.
                 for declaring_id in template_roots[template_id]:
-                    self._broken_references.append(
+                    self._unresolved_references.append(
                         ReferenceFault(
                             source_id=declaring_id,
                             target_id=template_id,
@@ -5208,7 +5209,7 @@ class GraphBuilder:
                 # Composite that still doesn't resolve after cloning passes —
                 # genuinely broken.
                 if not template_node and INSTANCE_SEPARATOR in template_id:
-                    self._broken_references.append(
+                    self._unresolved_references.append(
                         ReferenceFault(
                             source_id=declaring_id,
                             target_id=template_id,
@@ -5221,7 +5222,7 @@ class GraphBuilder:
             # resolved to an INSTANCE node (typically cloned earlier in this
             # very loop by a sibling satisfier). Refuse to clone again.
             if template_node.get_field("stereotype") == Stereotype.INSTANCE:
-                self._broken_references.append(
+                self._unresolved_references.append(
                     ReferenceFault(
                         source_id=declaring_id,
                         target_id=template_id,
@@ -5239,7 +5240,7 @@ class GraphBuilder:
             # non-composite case. For composites this is still possible —
             # emit rule-1 diagnostic.
             if template_node.get_field("stereotype") != Stereotype.TEMPLATE:
-                self._broken_references.append(
+                self._unresolved_references.append(
                     ReferenceFault(
                         source_id=declaring_id,
                         target_id=template_id,
@@ -5374,7 +5375,7 @@ class GraphBuilder:
         """
         # Expand multi-assertion refs (e.g. REQ-X-A+B+C) to base targets.
         for expanded in self._expand_multi_assertion(ref_id):
-            self._broken_references.append(
+            self._unresolved_references.append(
                 ReferenceFault(
                     source_id=template_id,
                     target_id=expanded,
@@ -5498,7 +5499,7 @@ class GraphBuilder:
                     # so one mistake reads as one error — and name the remedy
                     # (Satisfies:) plainly, since the bare "(refines)" line plus a
                     # passing refines_resolve check is what misleads authors.
-                    self._broken_references.append(
+                    self._unresolved_references.append(
                         ReferenceFault(
                             source_id=source_id,
                             target_id=target_id,
@@ -5515,7 +5516,7 @@ class GraphBuilder:
                     continue
                 if edge_kind == EdgeKind.REFINES and target_stereotype == Stereotype.INSTANCE:
                     # Rule 4: refining instance content is not supported.
-                    self._broken_references.append(
+                    self._unresolved_references.append(
                         ReferenceFault(
                             source_id=source_id,
                             target_id=target_id,
@@ -5533,7 +5534,7 @@ class GraphBuilder:
                     continue
                 if edge_kind == EdgeKind.IMPLEMENTS and target_stereotype == Stereotype.INSTANCE:
                     # Rule 5: composite IDs are not authoring syntax.
-                    self._broken_references.append(
+                    self._unresolved_references.append(
                         ReferenceFault(
                             source_id=source_id,
                             target_id=target_id,
@@ -5550,7 +5551,7 @@ class GraphBuilder:
                     continue
                 if edge_kind == EdgeKind.VERIFIES and target_stereotype == Stereotype.INSTANCE:
                     # Rule 6: same reasoning as rule 5, TEST source.
-                    self._broken_references.append(
+                    self._unresolved_references.append(
                         ReferenceFault(
                             source_id=source_id,
                             target_id=target_id,
@@ -5571,7 +5572,7 @@ class GraphBuilder:
                 ):
                     # Journeys and steps are verification targets only; rejecting
                     # Implements/Refines here prevents invalid traceability edges.
-                    self._broken_references.append(
+                    self._unresolved_references.append(
                         ReferenceFault(
                             source_id=source_id,
                             target_id=target_id,
@@ -5629,7 +5630,7 @@ class GraphBuilder:
                 # matched but names no node here falls back to the
                 # resolution-stage decision (REQ-p00014-R).
                 fault_class, codes = self._fault_verdict(target_id, edge_kind.value, verdicts)
-                self._broken_references.append(
+                self._unresolved_references.append(
                     ReferenceFault(
                         source_id=source_id,
                         target_id=target_id,
@@ -5783,7 +5784,7 @@ class GraphBuilder:
         graph._roots = roots
         graph._index = dict(self._nodes)
         graph._orphaned_ids = orphaned_ids
-        graph._broken_references = list(self._broken_references)
+        graph._unresolved_references = list(self._unresolved_references)
         graph._style_findings = list(self._style_findings)
         graph._undeclared_relationships = list(self._undeclared_relationships)
         graph._identifier_form_findings = list(self._identifier_form_findings)

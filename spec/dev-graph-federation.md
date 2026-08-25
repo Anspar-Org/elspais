@@ -16,7 +16,7 @@ C. All read-only TraceGraph public methods SHALL be explicitly implemented on Fe
 
 D. by_id strategy methods (find_by_id, has_root) SHALL look up the owning graph via an internal ownership mapping and delegate to the correct sub-graph.
 
-E. aggregate strategy methods (iter_roots, all_nodes, node_count, root_count, iter_by_kind, nodes_by_kind, all_connected_nodes, orphaned_nodes, has_orphans, orphan_count, broken_references, has_broken_references, iter_unlinked, iter_structural_orphans, deleted_nodes, has_deletions) SHALL combine results from all sub-graphs.
+E. aggregate strategy methods (iter_roots, all_nodes, node_count, root_count, iter_by_kind, nodes_by_kind, all_connected_nodes, orphaned_nodes, has_orphans, orphan_count, unresolved_references, has_unresolved_references, iter_unlinked, iter_structural_orphans, deleted_nodes, has_deletions) SHALL combine results from all sub-graphs.
 
 F. Aggregate methods SHALL skip repos with graph set to None (error-state repos).
 
@@ -30,11 +30,12 @@ FederatedGraph provides config isolation for multi-repo builds while presenting 
 
 ### Changelog
 
+- 2026-08-25 | b351e9ad | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | 06b84d97 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 72471144 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 72471144 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *FederatedGraph Read-Only Delegation* | **Hash**: 06b84d97
+*End* *FederatedGraph Read-Only Delegation* | **Hash**: b351e9ad
 ---
 
 ## REQ-d00201: FederatedGraph Mutation Delegation

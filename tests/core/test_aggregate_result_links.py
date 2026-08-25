@@ -92,7 +92,7 @@ class TestAggregateMode:
     def test_no_broken_reference_in_aggregate_mode(self):
         """Aggregate mode must NOT produce a broken reference for unmatched test_id."""
         graph = _build_with_flag(link_results=False)
-        assert not graph.has_broken_references(), (
+        assert not graph.has_unresolved_references(), (
             "Aggregate mode: unmatched RESULT should never create a broken reference"
         )
 
@@ -147,10 +147,10 @@ class TestDefaultMode:
 
         result = graph.find_by_id("result-precise-1")
         assert result is not None, "RESULT node must exist in default mode too"
-        assert graph.has_broken_references(), (
+        assert graph.has_unresolved_references(), (
             "Default mode + source: unmatched test_id must still produce a broken reference"
         )
-        broken_targets = {br.target_id for br in graph.broken_references()}
+        broken_targets = {br.target_id for br in graph.unresolved_references()}
         assert "test:does/not/exist.py::x" in broken_targets, (
             "Broken reference must target the unmatched test_id"
         )
@@ -202,7 +202,7 @@ class TestMatchBasedSuppression:
         assert len(yields_edges) == 0, (
             "match='aggregate' must suppress YIELDS even when link_results_to_tests=True"
         )
-        assert not graph.has_broken_references(), (
+        assert not graph.has_unresolved_references(), (
             "match='aggregate' must not produce a broken reference"
             " even with link_results_to_tests=True"
         )
@@ -247,10 +247,10 @@ class TestMatchBasedSuppression:
         # The TEST node does not exist, so the YIELDS becomes a broken reference
         # (not a live edge). Verify the broken reference IS present -- precise
         # mode does NOT suppress the attempt the way aggregate does.
-        assert graph.has_broken_references(), (
+        assert graph.has_unresolved_references(), (
             "match='source' must produce a broken reference when TEST node is absent"
         )
-        broken_targets = {br.target_id for br in graph.broken_references()}
+        broken_targets = {br.target_id for br in graph.unresolved_references()}
         assert "test:does/not/exist.py::x" in broken_targets, (
             "match='source' broken reference must target the unmatched test_id"
         )

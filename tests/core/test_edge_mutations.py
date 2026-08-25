@@ -149,15 +149,15 @@ class TestAddEdge:
     def test_add_edge_target_not_found_creates_broken_ref(self):
         """Adding edge with non-existent target creates broken reference."""
         graph = build_disconnected_graph()
-        initial_broken_count = len(graph.broken_references())
+        initial_broken_count = len(graph.unresolved_references())
 
         entry = graph.add_edge("REQ-p00002", "REQ-nonexistent", EdgeKind.IMPLEMENTS)
 
         assert entry.after_state.get("broken") is True
-        assert len(graph.broken_references()) == initial_broken_count + 1
+        assert len(graph.unresolved_references()) == initial_broken_count + 1
 
         # Find the broken reference
-        broken = graph.broken_references()[-1]
+        broken = graph.unresolved_references()[-1]
         assert broken.source_id == "REQ-p00002"
         assert broken.target_id == "REQ-nonexistent"
         assert broken.edge_kind == "implements"
@@ -278,14 +278,14 @@ class TestAddEdge:
     def test_add_edge_undo_removes_broken_ref(self):
         """Undo removes broken reference if target didn't exist."""
         graph = build_disconnected_graph()
-        initial_broken_count = len(graph.broken_references())
+        initial_broken_count = len(graph.unresolved_references())
 
         graph.add_edge("REQ-p00002", "REQ-nonexistent", EdgeKind.IMPLEMENTS)
-        assert len(graph.broken_references()) == initial_broken_count + 1
+        assert len(graph.unresolved_references()) == initial_broken_count + 1
 
         graph.undo_last()
 
-        assert len(graph.broken_references()) == initial_broken_count
+        assert len(graph.unresolved_references()) == initial_broken_count
 
 
 class TestChangeEdgeKind:
@@ -768,7 +768,7 @@ class TestFixBrokenReference:
         graph = build_graph_with_broken_reference()
 
         # Has broken reference
-        broken = graph.broken_references()
+        broken = graph.unresolved_references()
         assert len(broken) == 1
         assert broken[0].source_id == "REQ-p00002"
         assert broken[0].target_id == "REQ-nonexistent"
@@ -781,7 +781,7 @@ class TestFixBrokenReference:
         assert entry.after_state.get("fixed") is True
 
         # Broken reference removed
-        assert len(graph.broken_references()) == 0
+        assert len(graph.unresolved_references()) == 0
 
         # Valid edge created
         parent = graph.find_by_id("REQ-p00001")
@@ -814,7 +814,7 @@ class TestFixBrokenReference:
         assert entry.after_state.get("still_broken") is True
 
         # Still has broken reference (with new target)
-        broken = graph.broken_references()
+        broken = graph.unresolved_references()
         assert len(broken) == 1
         assert broken[0].source_id == "REQ-p00002"
         assert broken[0].target_id == "REQ-also-nonexistent"
@@ -850,13 +850,13 @@ class TestFixBrokenReference:
         parent = graph.find_by_id("REQ-p00001")
         child = graph.find_by_id("REQ-p00002")
         assert parent.has_child(child)
-        assert len(graph.broken_references()) == 0
+        assert len(graph.unresolved_references()) == 0
 
         graph.undo_last()
 
         # Edge removed, broken reference restored
         assert not parent.has_child(child)
-        broken = graph.broken_references()
+        broken = graph.unresolved_references()
         assert len(broken) == 1
         assert broken[0].source_id == "REQ-p00002"
         assert broken[0].target_id == "REQ-nonexistent"
@@ -882,12 +882,12 @@ class TestFixBrokenReference:
         # Fix to another non-existent target
         graph.fix_broken_reference("REQ-p00002", "REQ-nonexistent", "REQ-also-nonexistent")
 
-        broken = graph.broken_references()
+        broken = graph.unresolved_references()
         assert broken[0].target_id == "REQ-also-nonexistent"
 
         graph.undo_last()
 
-        broken = graph.broken_references()
+        broken = graph.unresolved_references()
         assert len(broken) == 1
         assert broken[0].target_id == "REQ-nonexistent"
 

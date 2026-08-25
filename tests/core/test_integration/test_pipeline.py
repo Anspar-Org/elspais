@@ -361,7 +361,7 @@ class TestMultiAssertionPipelineExpansion:
         )
 
         # The broken reference should be recorded
-        broken = graph.broken_references()
+        broken = graph.unresolved_references()
         literal_targets = [br.target_id for br in broken]
         assert "REQ-p00001-A+B+C" in literal_targets, (
             f"Expected broken reference for literal 'REQ-p00001-A+B+C', got {literal_targets}"
@@ -376,7 +376,7 @@ class TestMultiAssertionSeparatorRoundTrip:
     ``Refines:`` line all take the boundary between a requirement ID and an
     assertion label from ``[id-patterns.assertions] separator``, and join
     several labels with ``multi_separator``. When any of those three
-    disagree, the expanded refs land in ``_broken_references`` and no
+    disagree, the expanded refs land in ``_unresolved_references`` and no
     REFINES edges wire, or the render emits a reference nothing can parse.
 
     The component style here is ``kebab-case``, so the separator has to be
@@ -528,7 +528,7 @@ The system SHALL store event records.
 
             # No broken references for the multi-assertion form. The bug
             # currently records both expanded refs as broken.
-            broken = graph.broken_references()
+            broken = graph.unresolved_references()
             broken_targets = [br.target_id for br in broken]
             offending = [t for t in broken_targets if t.startswith("EVS-PRD-event-log")]
             assert not offending, (

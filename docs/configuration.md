@@ -187,7 +187,7 @@ line, a code or test comment, a journey.
 
 `/` is the form authors most often reach for when it is not the configured
 separator, so it is detected in every context: with the settings above,
-`Implements: REQ-p00001/A` is reported as a broken reference rather than
+`Implements: REQ-p00001/A` is reported as an unresolved reference rather than
 quietly read as a whole-requirement reference (which would credit every
 assertion of `REQ-p00001`, not just `A`). Configure `separator = "/"` if that
 is the form your authors should write. On a requirement's metadata line, any
@@ -434,7 +434,7 @@ values = ["id", "title", "status", "implemented", "tested", "verified"]
 # Associates also enable top-down `Integrates: <ASSOCIATE-REQ>` references:
 # a consumer requirement declares that its implementation is provided by a
 # requirement in a linked library. It is external-only (the target must
-# resolve to an associate; a same-repo target is a broken reference), the
+# resolve to an associate; a same-repo target is an unresolved reference), the
 # library is never modified, and the consumer inherits the library
 # requirement's implemented/verified coverage via an INTEGRATES edge wired
 # during federation. See `elspais docs graph-model`.
@@ -597,7 +597,7 @@ retired = ["Deprecated", "Superseded", "Rejected"]
 #     the same target more than once.
 #   keyword_form -- a keyword written in a non-canonical case, spacing, or
 #     markdown-emphasis form. Never costs the edge its keyword introduces;
-#     a style finding, not a broken reference.
+#     a style finding, not an unresolved reference.
 #   identifier_form -- a reference spelled in a form the configuration
 #     admits that is not the canonical one (case, padding, an alias).
 #     Never costs the relationship it names; a style finding, like

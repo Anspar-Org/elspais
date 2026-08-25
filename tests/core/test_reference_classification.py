@@ -155,7 +155,7 @@ def test_a_code_file_binds_the_good_items_of_a_mixed_line(tmp_path, repo_root):
         scan_code=True,
         scan_tests=False,
     )
-    targets = {f.target_id for f in graph.broken_references()}
+    targets = {f.target_id for f in graph.unresolved_references()}
     assert "REQ-d0000X" in targets
     assert "REQ-d00001-A" not in targets  # the good item bound
 
@@ -295,14 +295,14 @@ def test_the_longest_declared_namespace_owns_the_diagnosis():
 # Verifies: REQ-p00014-R
 def test_an_absent_requirement_is_unknown_requirement(tmp_path, repo_root):
     graph = _project(tmp_path, repo_root, "# Implements: REQ-d00099\ndef f():\n    return 1\n")
-    fault = next(f for f in graph.broken_references() if f.target_id == "REQ-d00099")
+    fault = next(f for f in graph.unresolved_references() if f.target_id == "REQ-d00099")
     assert fault.fault_class is FaultClass.UNKNOWN_REQUIREMENT
 
 
 # Verifies: REQ-p00014-R
 def test_an_absent_label_on_a_present_requirement_is_unknown_assertion(tmp_path, repo_root):
     graph = _project(tmp_path, repo_root, "# Implements: REQ-d00001-Z\ndef f():\n    return 1\n")
-    fault = next(f for f in graph.broken_references() if f.target_id == "REQ-d00001-Z")
+    fault = next(f for f in graph.unresolved_references() if f.target_id == "REQ-d00001-Z")
     assert fault.fault_class is FaultClass.UNKNOWN_ASSERTION
 
 
@@ -310,7 +310,7 @@ def test_an_absent_label_on_a_present_requirement_is_unknown_assertion(tmp_path,
 def test_a_multi_assertion_item_binds_the_labels_that_exist(tmp_path, repo_root):
     """A+Z: A binds, Z is reported. Salvage applies inside the expansion too."""
     graph = _project(tmp_path, repo_root, "# Implements: REQ-d00001-A+Z\ndef f():\n    return 1\n")
-    targets = {f.target_id for f in graph.broken_references()}
+    targets = {f.target_id for f in graph.unresolved_references()}
     assert any("Z" in t for t in targets)
     assert not any(t.endswith("-A") for t in targets)
 
@@ -319,7 +319,7 @@ def test_a_multi_assertion_item_binds_the_labels_that_exist(tmp_path, repo_root)
 def test_a_keyword_a_code_file_may_not_use_is_refused_not_passed_over(tmp_path, repo_root):
     """Refines: is requirement-to-requirement only; a code file may not use it."""
     graph = _project(tmp_path, repo_root, "# Refines: REQ-d00001-A\ndef f():\n    return 1\n")
-    fault = next(f for f in graph.broken_references() if f.target_id == "REQ-d00001-A")
+    fault = next(f for f in graph.unresolved_references() if f.target_id == "REQ-d00001-A")
     assert fault.fault_class is FaultClass.FORBIDDEN
     assert "refines" in fault.diagnostic.lower()
     assert "code" in fault.diagnostic.lower()
@@ -358,7 +358,7 @@ def test_a_keyword_a_test_file_may_not_use_is_refused_not_passed_over(tmp_path, 
         scan_code=False,
         scan_tests=True,
     )
-    fault = next(f for f in graph.broken_references() if f.target_id == "REQ-d00001-A")
+    fault = next(f for f in graph.unresolved_references() if f.target_id == "REQ-d00001-A")
     assert fault.fault_class is FaultClass.FORBIDDEN
     assert "implements" in fault.diagnostic.lower()
     assert "test" in fault.diagnostic.lower()
@@ -409,7 +409,7 @@ def test_a_duplicated_existing_target_binds_nothing_and_reports_twice(tmp_path, 
     assert not any(node.iter_edges_by_kind(EdgeKind.IMPLEMENTS)), (
         "a duplicated target must produce no relationship, even though the target itself exists"
     )
-    faults = [f for f in graph.broken_references() if f.target_id == "REQ-d00001"]
+    faults = [f for f in graph.unresolved_references() if f.target_id == "REQ-d00001"]
     assert len(faults) == 2, f"expected one fault per instance, got {faults}"
     assert all(f.fault_class is FaultClass.FORBIDDEN for f in faults)
     assert all(FaultCode.DUPLICATE_ITEM in f.codes for f in faults)
@@ -497,14 +497,14 @@ def _journey_project(tmp_path, repo_root, validates: str):
 def test_a_malformed_spec_reference_is_not_reported_as_a_missing_requirement(tmp_path, repo_root):
     """Stage 0 must not be reported as stage 2."""
     graph = _spec_project(tmp_path, repo_root, implements="not a reference")
-    fault = next(f for f in graph.broken_references() if "not a reference" in f.target_id)
+    fault = next(f for f in graph.unresolved_references() if "not a reference" in f.target_id)
     assert fault.fault_class is FaultClass.MALFORMED
 
 
 # Verifies: REQ-d00272-C
 def test_a_foreign_spec_reference_is_not_reported_as_a_missing_requirement(tmp_path, repo_root):
     graph = _spec_project(tmp_path, repo_root, implements="WIDGET-42")
-    fault = next(f for f in graph.broken_references() if f.target_id == "WIDGET-42")
+    fault = next(f for f in graph.unresolved_references() if f.target_id == "WIDGET-42")
     assert fault.fault_class is FaultClass.UNKNOWN_NAMESPACE
 
 
@@ -518,7 +518,7 @@ def test_a_duplicated_spec_reference_binds_nothing_and_reports_twice(tmp_path, r
     assert node is not None
     edges = [e for e in node.iter_edges_by_kind(EdgeKind.IMPLEMENTS) if e.source.id == "REQ-d00002"]
     assert edges == []
-    faults = [f for f in graph.broken_references() if f.target_id == "REQ-d00001"]
+    faults = [f for f in graph.unresolved_references() if f.target_id == "REQ-d00001"]
     assert len(faults) == 2
     assert all(FaultCode.DUPLICATE_ITEM in f.codes for f in faults)
 
@@ -532,7 +532,7 @@ def test_a_duplicated_refines_reference_binds_nothing_and_reports_twice(tmp_path
     assert node is not None
     edges = [e for e in node.iter_edges_by_kind(EdgeKind.REFINES) if e.source.id == "REQ-d00002"]
     assert edges == []
-    faults = [f for f in graph.broken_references() if f.target_id == "REQ-d00001"]
+    faults = [f for f in graph.unresolved_references() if f.target_id == "REQ-d00001"]
     assert len(faults) == 2
     assert all(FaultCode.DUPLICATE_ITEM in f.codes for f in faults)
 
@@ -573,7 +573,7 @@ def test_a_duplicate_under_one_keyword_leaves_another_keywords_clean_reference_b
     dup_edges = [e for e in node.iter_edges_by_kind(duplicated_kind) if e.target.id == "REQ-d00002"]
     assert dup_edges == [], "the repeated keyword's items must still bind nothing"
 
-    faults = [f for f in graph.broken_references() if f.target_id == "REQ-d00001"]
+    faults = [f for f in graph.unresolved_references() if f.target_id == "REQ-d00001"]
     assert len(faults) == 2, f"one report per repeated instance, and no more; got {faults}"
     assert all(f.edge_kind == duplicated_field for f in faults), (
         f"only the repeating keyword is at fault; got {[f.edge_kind for f in faults]}"
@@ -626,7 +626,7 @@ def test_a_malformed_satisfies_target_keeps_the_class_reading_reached(tmp_path, 
     graph = _satisfies_project(tmp_path, repo_root, "not a reference")
     faults = [
         f
-        for f in graph.broken_references()
+        for f in graph.unresolved_references()
         if f.edge_kind == EdgeKind.SATISFIES.value and "not a reference" in f.target_id
     ]
     assert len(faults) == 1, f"the refused item is reported once; got {faults}"
@@ -661,7 +661,7 @@ def test_a_duplicated_satisfies_reference_instantiates_no_template(tmp_path, rep
     )
     faults = [
         f
-        for f in graph.broken_references()
+        for f in graph.unresolved_references()
         if f.target_id == "REQ-d00001" and f.edge_kind == EdgeKind.SATISFIES.value
     ]
     assert len(faults) == 2, (
@@ -676,7 +676,7 @@ def test_a_malformed_journey_validates_reference_is_not_reported_as_a_missing_re
     tmp_path, repo_root
 ):
     graph = _journey_project(tmp_path, repo_root, validates="not a reference")
-    fault = next(f for f in graph.broken_references() if "not a reference" in f.target_id)
+    fault = next(f for f in graph.unresolved_references() if "not a reference" in f.target_id)
     assert fault.fault_class is FaultClass.MALFORMED
 
 
@@ -685,7 +685,7 @@ def test_a_foreign_journey_validates_reference_is_not_reported_as_a_missing_requ
     tmp_path, repo_root
 ):
     graph = _journey_project(tmp_path, repo_root, validates="WIDGET-42")
-    fault = next(f for f in graph.broken_references() if f.target_id == "WIDGET-42")
+    fault = next(f for f in graph.unresolved_references() if f.target_id == "WIDGET-42")
     assert fault.fault_class is FaultClass.UNKNOWN_NAMESPACE
 
 
@@ -702,7 +702,7 @@ def test_a_duplicated_journey_validates_reference_binds_nothing_and_reports_twic
     assert jny is not None
     edges = [e for e in node.iter_outgoing_edges() if e.kind == EdgeKind.VALIDATES]
     assert edges == []
-    faults = [f for f in graph.broken_references() if f.target_id == "REQ-d00001"]
+    faults = [f for f in graph.unresolved_references() if f.target_id == "REQ-d00001"]
     assert len(faults) == 2
     assert all(FaultCode.DUPLICATE_ITEM in f.codes for f in faults)
 
@@ -733,7 +733,7 @@ def test_a_duplicated_multi_assertion_reference_binds_nothing_and_reports_each_i
     assert not any(node.iter_edges_by_kind(EdgeKind.IMPLEMENTS)), (
         "a duplicated multi-assertion target must produce no relationship, for either label"
     )
-    faults = [f for f in graph.broken_references() if "REQ-d00001" in f.target_id]
+    faults = [f for f in graph.unresolved_references() if "REQ-d00001" in f.target_id]
     assert len(faults) == 2, f"expected one fault per instance, got {faults}"
     assert all(f.fault_class is FaultClass.FORBIDDEN for f in faults)
     assert all(FaultCode.DUPLICATE_ITEM in f.codes for f in faults)
@@ -819,7 +819,7 @@ def test_a_reference_that_parsed_and_is_absent_carries_no_prose(
     place of the check's description, it would replace the one true sentence
     about the fault with a false one."""
     graph = _project(tmp_path, repo_root, annotation + "def f():\n    return 1\n")
-    faults = [f for f in graph.broken_references() if f.source_id.startswith("code:")]
+    faults = [f for f in graph.unresolved_references() if f.source_id.startswith("code:")]
     assert len(faults) == 1, f"expected one fault, got {faults}"
     assert faults[0].fault_class is expected_class
     assert faults[0].diagnostic == "", (
@@ -840,7 +840,7 @@ def test_a_malformed_own_namespace_reference_names_its_cause_by_code_and_locatio
     from elspais.commands.health import _fault_location
 
     graph = _project(tmp_path, repo_root, "# Implements: REQ-d00001+A\ndef f():\n    return 1\n")
-    faults = [f for f in graph.broken_references() if f.source_id.startswith("code:")]
+    faults = [f for f in graph.unresolved_references() if f.source_id.startswith("code:")]
     assert len(faults) == 1, f"expected one fault, got {faults}"
     fault = faults[0]
     assert fault.fault_class is FaultClass.MALFORMED
@@ -865,7 +865,7 @@ def test_an_item_that_never_read_is_not_reported_as_refused(tmp_path, repo_root)
     verdict on a relationship the item named -- and this item named none. Its
     own, earlier verdict is what is reported."""
     graph = _project(tmp_path, repo_root, "# Refines: not a reference\ndef f():\n    return 1\n")
-    faults = [f for f in graph.broken_references() if f.source_id.startswith("code:")]
+    faults = [f for f in graph.unresolved_references() if f.source_id.startswith("code:")]
     assert len(faults) == 1, f"expected one fault, got {faults}"
     assert faults[0].fault_class is FaultClass.MALFORMED
     assert faults[0].fault_class is not FaultClass.FORBIDDEN
@@ -884,7 +884,9 @@ def test_a_mixed_forbidden_line_reports_each_item_at_the_stage_it_reached(tmp_pa
         repo_root,
         "# Refines: not a reference, REQ-d00001-A\ndef f():\n    return 1\n",
     )
-    faults = {f.target_id: f for f in graph.broken_references() if f.source_id.startswith("code:")}
+    faults = {
+        f.target_id: f for f in graph.unresolved_references() if f.source_id.startswith("code:")
+    }
     assert set(faults) == {"not a reference", "REQ-d00001-A"}, faults
     assert faults["not a reference"].fault_class is FaultClass.MALFORMED
     assert faults["REQ-d00001-A"].fault_class is FaultClass.FORBIDDEN
@@ -966,7 +968,7 @@ def test_repeated_colons_after_a_keyword_bind_nothing(tmp_path, repo_root):
         "an annotation with three colons the keyword did not write is not the "
         "annotation the author meant, and must not bind as though it were"
     )
-    faults = [f for f in graph.broken_references() if f.source_id.startswith("code:")]
+    faults = [f for f in graph.unresolved_references() if f.source_id.startswith("code:")]
     assert len(faults) == 1, f"expected one fault, got {faults}"
     assert faults[0].fault_class is FaultClass.MALFORMED
     assert FaultCode.NOT_AN_IDENTIFIER in faults[0].codes
@@ -1164,7 +1166,7 @@ def test_an_annotation_glossing_its_reference_is_reported_naming_both_halves(tmp
         repo_root,
         "# Implements: REQ-d00001-A - one environment\ndef f():\n    return 1\n",
     )
-    faults = [f for f in graph.broken_references() if f.source_id.startswith("code:")]
+    faults = [f for f in graph.unresolved_references() if f.source_id.startswith("code:")]
     assert len(faults) == 1, f"expected one fault, got {faults}"
     fault = faults[0]
     assert fault.fault_class is FaultClass.MALFORMED
@@ -1184,7 +1186,7 @@ def test_an_annotation_commenting_on_its_reference_binds_the_reference(tmp_path,
         repo_root,
         "# Implements: REQ-d00001-A  # the only place this happens\ndef f():\n    return 1\n",
     )
-    assert not [f for f in graph.broken_references() if f.source_id.startswith("code:")]
+    assert not [f for f in graph.unresolved_references() if f.source_id.startswith("code:")]
     node = graph.find_by_id("REQ-d00001")
     assert node is not None
     implementers = list(node.iter_edges_by_kind(_EdgeKind.IMPLEMENTS))

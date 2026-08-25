@@ -785,23 +785,23 @@ class FederatedGraph:
         return sum(graph.orphan_count() for _name, graph in self._live_graphs())
 
     # Implements: REQ-d00200-E
-    def broken_references(self) -> list[ReferenceFault]:
-        """Get all broken references across all repos.
+    def unresolved_references(self) -> list[ReferenceFault]:
+        """Every reference that resolved to nothing, across all repos.
 
         # Strategy: aggregate
         """
         result: list[ReferenceFault] = []
         for _name, graph in self._live_graphs():
-            result.extend(graph.broken_references())
+            result.extend(graph.unresolved_references())
         return result
 
     # Implements: REQ-d00200-E
-    def has_broken_references(self) -> bool:
-        """Check if any repo has broken references.
+    def has_unresolved_references(self) -> bool:
+        """Whether any repo holds a reference that resolved to nothing.
 
         # Strategy: aggregate
         """
-        return any(graph.has_broken_references() for _name, graph in self._live_graphs())
+        return any(graph.has_unresolved_references() for _name, graph in self._live_graphs())
 
     # Implements: REQ-d00272-G
     def style_findings(self) -> list[StyleFinding]:
@@ -1578,7 +1578,7 @@ class FederatedGraph:
             # Broken references that survive wiring in a different shape than
             # they were written: index -> the references that replace it.
             replacements: dict[int, list[ReferenceFault]] = {}
-            for i, br in enumerate(source_entry.graph._broken_references):
+            for i, br in enumerate(source_entry.graph._unresolved_references):
                 # SATISFIES is handled by _instantiate_cross_repo_satisfies,
                 # which clones the template subtree instead of wiring a
                 # direct cross-graph edge.  Skip it here so the broken-ref
@@ -1656,12 +1656,12 @@ class FederatedGraph:
             if resolved or replacements:
                 dropped = set(resolved)
                 rebuilt: list[ReferenceFault] = []
-                for idx, ref in enumerate(source_entry.graph._broken_references):
+                for idx, ref in enumerate(source_entry.graph._unresolved_references):
                     if idx in replacements:
                         rebuilt.extend(replacements[idx])
                     elif idx not in dropped:
                         rebuilt.append(ref)
-                source_entry.graph._broken_references[:] = rebuilt
+                source_entry.graph._unresolved_references[:] = rebuilt
 
         # Demote wired source nodes from _roots — they now have parent edges
         for repo_name, source_ids in wired_sources.items():
@@ -1798,7 +1798,7 @@ class FederatedGraph:
             resolver = self._resolver_for(source_entry)
             resolved_indices: list[int] = []
 
-            for i, br in enumerate(source_entry.graph._broken_references):
+            for i, br in enumerate(source_entry.graph._unresolved_references):
                 if br.edge_kind != EdgeKind.SATISFIES.value:
                     continue
 
@@ -1848,7 +1848,7 @@ class FederatedGraph:
                             f"add `[associates.<repo>]` to .elspais.toml."
                         ),
                     )
-                    source_entry.graph._broken_references[i] = new_br
+                    source_entry.graph._unresolved_references[i] = new_br
                     continue
                 if target_repo_name == source_entry.name:
                     # In-repo (already handled by the per-repo builder).
@@ -1951,7 +1951,7 @@ class FederatedGraph:
                 resolved_indices.append(i)
 
             for idx in reversed(resolved_indices):
-                source_entry.graph._broken_references.pop(idx)
+                source_entry.graph._unresolved_references.pop(idx)
 
     # Implements: REQ-d00252
     def _wire_integrates_edges(self) -> None:
@@ -2065,9 +2065,9 @@ class FederatedGraph:
                 # the target resolves and we wire the correct edge --
                 # _wire_cross_graph_edges deliberately skips INTEGRATES, so clear
                 # the stale broken ref here or it surfaces as a false positive.
-                source_entry.graph._broken_references = [
+                source_entry.graph._unresolved_references = [
                     br
-                    for br in source_entry.graph._broken_references
+                    for br in source_entry.graph._unresolved_references
                     if not (
                         br.source_id == source_id
                         and br.target_id == target_id
@@ -2078,7 +2078,7 @@ class FederatedGraph:
 
         # Same-repo target: external-only violation (REQ-d00252-C).
         if owner == source_entry.name:
-            source_entry.graph._broken_references.append(
+            source_entry.graph._unresolved_references.append(
                 ReferenceFault(
                     source_id=source_id,
                     target_id=target_id,
@@ -2102,7 +2102,7 @@ class FederatedGraph:
             if resolver is not None and resolver.is_local_id(target_id):
                 claimed = True
                 break
-        source_entry.graph._broken_references.append(
+        source_entry.graph._unresolved_references.append(
             ReferenceFault(
                 source_id=source_id,
                 target_id=target_id,
@@ -2185,7 +2185,7 @@ class FederatedGraph:
                 cycle = dfs(node)
                 if cycle:
                     # Emit a typed broken-ref on the originating repo.
-                    entry.graph._broken_references.append(
+                    entry.graph._unresolved_references.append(
                         ReferenceFault(
                             source_id=cycle[0],
                             target_id=cycle[-1],

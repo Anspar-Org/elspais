@@ -510,7 +510,7 @@ class TestBrokenReferenceSeverity:
             repo_root=Path("/repo/alpha"),
         )
         # One fault of every class, so each check has a finding to describe.
-        alpha_graph._broken_references = [
+        alpha_graph._unresolved_references = [
             ReferenceFault(
                 source_id="REQ-d00093",
                 target_id=f"target-{fc.label}",

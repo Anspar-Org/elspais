@@ -305,7 +305,7 @@ class TestBuilderSatisfiesEdge:
         )
         graph = build_graph(declaring)
 
-        broken = graph.broken_references()
+        broken = graph.unresolved_references()
         assert any(br.target_id == "REQ-p99999" for br in broken)
 
 

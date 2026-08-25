@@ -37,7 +37,7 @@ The `fix` command automatically corrects:
 
 **Not fixable (report only):**
 
-- Broken references to non-existent requirements
+- Unresolved references to non-existent requirements
 - Orphaned requirements (no parent)
 - Hierarchy violations
 
@@ -86,7 +86,7 @@ See `elspais docs config` for the full `[federation]` reference.
   **Stale hash** (content changed)
     Fix: $ elspais fix (after reviewing changes)
 
-  **Broken link** (implements non-existent requirement)
+  **Unresolved link** (implements non-existent requirement)
     Fix: Correct the ID or create the missing requirement
 
   **Hierarchy violation** (PRD implements DEV)

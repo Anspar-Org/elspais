@@ -84,6 +84,11 @@ class ChecksArgs:
     """Report only findings in these categories (config, spec, references,
     code, tests, uat, terms; space-separated)."""
 
+    check: list[str] | None = None
+    """Report only these checks by name, e.g. references.malformed
+    (space-separated). This is what the `unresolved`, `errors` and `uncited`
+    listings are: this report narrowed to one set of checks."""
+
     code: list[str] | None = None
     """Report only findings carrying these diagnostic codes, e.g.
     E_IDENTIFIER_WITH_TRAILING_TEXT (space-separated). Selects findings, not
@@ -202,11 +207,22 @@ class FailingArgs(ScopeOptions):
 
 
 @dataclasses.dataclass
-class BrokenArgs:
-    """List broken references (edges targeting non-existent nodes)."""
+class UnresolvedArgs:
+    """List references that name nothing the federation holds.
 
-    format: Literal["text", "markdown", "json"] = "text"
+    A shortcut for `checks` narrowed to the five reference checks: every
+    reference that did not read as an identifier, or read as one and resolved
+    to nothing.
+    """
+
+    format: Literal["text", "markdown", "json", "junit", "sarif"] = "text"
     """Output format."""
+
+    verbose: Annotated[bool, tyro.conf.arg(aliases=["-v"])] = False
+    """Show the full detail of every check, including the ones that passed."""
+
+    lenient: bool = False
+    """Allow warnings without affecting exit code."""
 
     output: Annotated[Path | None, tyro.conf.arg(aliases=["-o"])] = None
     """Write output to file instead of stdout."""
@@ -214,10 +230,21 @@ class BrokenArgs:
 
 @dataclasses.dataclass
 class ErrorsArgs:
-    """List spec format violations and requirements with no assertions."""
+    """List what is wrong with the spec files themselves.
 
-    format: Literal["text", "markdown", "json"] = "text"
+    A shortcut for `checks` narrowed to the spec-file checks: files that do
+    not parse, format-rule violations, requirements with no assertions, and
+    issues `elspais fix` cannot repair.
+    """
+
+    format: Literal["text", "markdown", "json", "junit", "sarif"] = "text"
     """Output format."""
+
+    verbose: Annotated[bool, tyro.conf.arg(aliases=["-v"])] = False
+    """Show the full detail of every check, including the ones that passed."""
+
+    lenient: bool = False
+    """Allow warnings without affecting exit code."""
 
     output: Annotated[Path | None, tyro.conf.arg(aliases=["-o"])] = None
     """Write output to file instead of stdout."""
@@ -225,13 +252,19 @@ class ErrorsArgs:
 
 @dataclasses.dataclass
 class UncitedArgs:
-    """List scanned code and test files that cite no requirement."""
+    """List scanned code and test files that cite no requirement.
 
-    format: Literal["text", "markdown", "json"] = "text"
+    A shortcut for `checks` narrowed to the two uncited-file checks.
+    """
+
+    format: Literal["text", "markdown", "json", "junit", "sarif"] = "text"
     """Output format."""
 
     verbose: Annotated[bool, tyro.conf.arg(aliases=["-v"])] = False
-    """Show individual node IDs instead of just file counts."""
+    """Show the full detail of every check, including the ones that passed."""
+
+    lenient: bool = False
+    """Allow warnings without affecting exit code."""
 
     output: Annotated[Path | None, tyro.conf.arg(aliases=["-o"])] = None
     """Write output to file instead of stdout."""
@@ -1059,7 +1092,7 @@ Command = (
     | Annotated[UnvalidatedArgs, tyro.conf.subcommand("unvalidated")]
     | Annotated[FailingArgs, tyro.conf.subcommand("failing")]
     | Annotated[ErrorsArgs, tyro.conf.subcommand("errors")]
-    | Annotated[BrokenArgs, tyro.conf.subcommand("broken")]
+    | Annotated[UnresolvedArgs, tyro.conf.subcommand("unresolved")]
     | Annotated[UncitedArgs, tyro.conf.subcommand("uncited")]
     | Annotated[DoctorArgs, tyro.conf.subcommand("doctor")]
     | Annotated[TraceArgs, tyro.conf.subcommand("trace")]
@@ -1131,7 +1164,7 @@ COMMAND_GROUPS: dict[str, str] = {
     "unvalidated": "Gaps & Issues",
     "failing": "Gaps & Issues",
     "errors": "Gaps & Issues",
-    "broken": "Gaps & Issues",
+    "unresolved": "Gaps & Issues",
     "uncited": "Gaps & Issues",
     "search": "Reports",
     "analysis": "Authoring",

@@ -342,7 +342,7 @@ def test_foreign_reference_is_not_left_broken(federated):
     app_graph = federated._repos["app"].graph
     unresolved = {
         (b.source_id, b.target_id)
-        for b in app_graph._broken_references
+        for b in app_graph._unresolved_references
         if b.target_id.startswith("LIB-")
     }
     assert unresolved == set()

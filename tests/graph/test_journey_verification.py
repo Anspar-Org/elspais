@@ -328,7 +328,7 @@ def capture_broken_refs():
     """Return a function that extracts broken references from a graph."""
 
     def _capture(graph):
-        return graph.broken_references()
+        return graph.unresolved_references()
 
     return _capture
 

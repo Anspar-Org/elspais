@@ -854,7 +854,7 @@ class TestMcpTermDirtyFlag:
         graph.root_count.return_value = 0
         graph.node_count.return_value = 0
         graph.has_orphans.return_value = False
-        graph.has_broken_references.return_value = False
+        graph.has_unresolved_references.return_value = False
         graph.nodes_by_kind.return_value = iter([])
 
         status = _get_graph_status(graph)

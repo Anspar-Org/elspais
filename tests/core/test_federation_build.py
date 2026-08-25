@@ -396,7 +396,7 @@ class TestCrossGraphWiring:
         )
 
         # The reference ROOT-d00001 -> ASSOC-p00001 should not be broken
-        broken = fed.broken_references()
+        broken = fed.unresolved_references()
         broken_targets = {br.target_id for br in broken}
         assert "ASSOC-p00001" not in broken_targets, (
             f"ASSOC-p00001 should not be a broken reference, but found: {broken}"
@@ -481,7 +481,7 @@ class TestCrossGraphWiring:
             scan_tests=False,
         )
 
-        broken = fed.broken_references()
+        broken = fed.unresolved_references()
         broken_targets = {br.target_id for br in broken}
         assert "ROOT-p99999" in broken_targets
 

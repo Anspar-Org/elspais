@@ -19,9 +19,15 @@ elspais -v checks
 
 # Narrow the findings to the ones you are working on
 elspais -v checks --severity error
+elspais checks --check references.malformed
 elspais checks --code E_IDENTIFIER_WITH_TRAILING_TEXT
 elspais checks --file 'spec/*.md'
 ```
+
+`elspais unresolved`, `elspais errors` and `elspais uncited` are that last
+narrowing under a shorter name — each is this report narrowed to the checks
+that answer one question, and each prints the `--check` flags that reproduce
+it.
 
 ## Check Severity
 
@@ -143,9 +149,9 @@ documentation says about it.
 | `spec.parseable` | All spec files can be parsed | warning | `[rules.severity]` | `elspais errors` |
 | `spec.unknown_directive` | Assertions opening with a parsing directive the tool does not recognize | warning | `[rules.severity]` | no command resolves this; resolve it by hand |
 | `spec.no_duplicates` | No duplicate requirement IDs | error | `[rules.severity]` | `elspais -v checks --spec` |
-| `spec.implements_resolve` | All Implements: references resolve | warning | `[rules.severity]` | `elspais broken` |
-| `spec.refines_resolve` | All Refines: references resolve | warning | `[rules.severity]` | `elspais broken` |
-| `spec.satisfies_resolve` | All Satisfies: references resolve | warning | `[rules.severity]` | `elspais broken` |
+| `spec.implements_resolve` | All Implements: references resolve | warning | `[rules.severity]` | `elspais unresolved` |
+| `spec.refines_resolve` | All Refines: references resolve | warning | `[rules.severity]` | `elspais unresolved` |
+| `spec.satisfies_resolve` | All Satisfies: references resolve | warning | `[rules.severity]` | `elspais unresolved` |
 | `spec.needs_rewrite` | Flags requirements that will be rewritten on next save (duplicate refs, stale hash) | warning | `[rules.severity]` | `elspais fix` |
 | `spec.unfixable_issues` | Issues `elspais fix` cannot repair, so a person has to | error | `[rules.severity]` | `elspais errors` |
 | `spec.undefined_levels` | No requirement carries a level the configuration does not define (such a requirement is still counted and grouped, so this discloses it rather than dropping it) | info | `[rules.severity]` | no command resolves this; resolve it by hand |
@@ -333,11 +339,11 @@ that never cost the relationship they name.
 
 | Check | Description | Default severity | Configured by | Remedy |
 | --- | --- | --- | --- | --- |
-| `references.malformed` | No reference fails to read as a reference at all | warning | `[rules.references] malformed` | `elspais broken` |
-| `references.unknown_namespace` | No reference names a target no configured repository claims | info | `[rules.references] unknown_namespace` | `elspais broken` |
-| `references.unknown_requirement` | No claimed reference names a requirement that repository does not hold | error | `[rules.references] unknown_requirement` | `elspais broken` |
-| `references.unknown_assertion` | No claimed reference names an assertion label its requirement lacks | error | `[rules.references] unknown_assertion` | `elspais broken` |
-| `references.forbidden` | No reference that reads and resolves has its relationship refused — a keyword the file kind may not use, or a target the list names twice | error | `[rules.references] forbidden` | `elspais broken` |
+| `references.malformed` | No reference fails to read as a reference at all | warning | `[rules.references] malformed` | `elspais unresolved` |
+| `references.unknown_namespace` | No reference names a target no configured repository claims | info | `[rules.references] unknown_namespace` | `elspais unresolved` |
+| `references.unknown_requirement` | No claimed reference names a requirement that repository does not hold | error | `[rules.references] unknown_requirement` | `elspais unresolved` |
+| `references.unknown_assertion` | No claimed reference names an assertion label its requirement lacks | error | `[rules.references] unknown_assertion` | `elspais unresolved` |
+| `references.forbidden` | No reference that reads and resolves has its relationship refused — a keyword the file kind may not use, or a target the list names twice | error | `[rules.references] forbidden` | `elspais unresolved` |
 | `references.keyword_form` | No keyword is written in a non-canonical case, spacing, or markdown-emphasis form (never costs the edge its keyword introduces) | warning | `[rules.references] keyword_form` | `elspais -v checks --spec` |
 | `references.identifier_form` | No reference is spelled in a non-canonical form the configuration admits (never costs the relationship it names) | warning | `[rules.references] identifier_form` | `elspais -v checks --spec` |
 | `references.undeclared` | No comment opens with an identifier that no keyword introduces (produces no relationship) | warning | `[rules.references] undeclared` | `elspais -v checks --spec` |
@@ -407,7 +413,7 @@ Where prose citations are house style, set `undeclared = "info"` — the
 findings still appear, and the run does not fail on them. Set `"off"` instead
 to stop reporting them altogether.
 
-**Follow-up:** Run `elspais broken` to list every unresolved reference,
+**Follow-up:** Run `elspais unresolved` to list every unresolved reference,
 across every class.
 
 ### UAT Checks
@@ -842,13 +848,14 @@ junit` puts them, with the remedy, in each failure body.
 
 ### Narrowing them
 
-Four flags select among findings. They compose with each other and with the
+Five flags select among findings. They compose with each other and with the
 scope flags above.
 
 | Flag | Selects |
 |------|---------|
 | `--severity error warning` | findings whose check carries one of these severities (`error`, `warning`, `info` — a check configured `off` reports nothing to select) |
 | `--category references tests` | findings in one of these check categories |
+| `--check references.malformed` | findings raised by one of these checks, by name |
 | `--code E_IDENTIFIER_WITH_TRAILING_TEXT` | findings carrying one of these diagnostic codes |
 | `--file 'spec/*.md'` | findings located in a file matching one of these glob patterns |
 
@@ -856,18 +863,33 @@ Values named for one flag are alternatives; values named for different flags
 are conditions met at once. So `--category references --file 'spec/*.md'`
 selects the reference findings that are in a spec file, and nothing else.
 
-`--code` and `--file` select findings by name, so the findings they select are
-rendered whether or not `-v` was given.
+`--check`, `--code` and `--file` select findings by name, so the findings they
+select are rendered whether or not `-v` was given.
+
+`--check` is what the preset listings are made of. `elspais unresolved` is
+this report narrowed to the five reference checks; `elspais errors` to the
+spec-file checks; `elspais uncited` to the two uncited-file checks. Each
+listing prints the `--check` line that reproduces it, so what a shortcut
+selected is always checkable. Because a listing IS the report, every finding
+on it carries what every finding carries — the check that raised it, its
+severity, its diagnostic codes, its location and its remedy.
 
 A narrowed report says what it withheld — `showing 2 of 47 checks, 3 of 310
 findings` — because a report that showed a reader some of what it found and
 did not say so reads exactly like a clean run. The exit code is the whole
 run's: narrowing chooses what to look at, never what the run found.
 
-A `--severity` or `--category` naming something outside the tool's vocabulary
-is refused (exit code 2) rather than silently selecting nothing. `--code` and
-`--file` are values the estate carries rather than a fixed list, so they are
-not judged that way — a code nothing raised simply selects nothing.
+A `--severity`, `--category` or `--check` naming something outside the tool's
+vocabulary is refused (exit code 2) rather than silently selecting nothing.
+`--code` and `--file` are values the estate carries rather than a fixed list,
+so they are not judged that way — a code nothing raised simply selects
+nothing.
+
+One difference between a reader's narrowing and a preset listing: the exit
+code above is the whole run's, because narrowing chooses what to look at. A
+preset listing names the population it answers about, so its exit code is
+taken over the checks it names and over nothing else — `elspais unresolved`
+does not fail on a stale hash.
 
 ### Two names that were already taken
 

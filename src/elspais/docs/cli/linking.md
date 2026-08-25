@@ -106,7 +106,7 @@ separator and continue on the next comment line:
 The separator is what says the list has not ended. Without it, the first line
 is a complete list and anything below it is a citation with no keyword of its
 own -- reported as an undeclared relationship (`references.undeclared`),
-never as part of the list above it and never as a broken reference.
+never as part of the list above it and never as an unresolved reference.
 
 A list is continued this way and no other. Nothing outside a keyword's own
 list declares a relationship: an indented identifier written beneath a

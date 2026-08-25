@@ -144,7 +144,7 @@ class TestHealthCheckNames:
             "spec.orphans",
             "tests.references_resolve",
             "code.references_resolve",
-            "spec.broken_references",
+            "spec.unresolved_references",
             "spec.unclaimed_references",
         ):
             assert name not in check_names, f"Old check name '{name}' should not be present"
@@ -999,7 +999,7 @@ class TestMCPQueryNodes:
 
 
 class TestMCPGraphHealth:
-    """MCP get_orphaned_nodes and get_broken_references."""
+    """MCP get_orphaned_nodes and get_unresolved_references."""
 
     def test_orphaned_nodes(self, project, mcp_server):
         from .helpers import mcp_call
@@ -1007,10 +1007,10 @@ class TestMCPGraphHealth:
         result = mcp_call(mcp_server, "get_orphaned_nodes", {})
         assert isinstance(result, (list, dict))
 
-    def test_broken_references(self, project, mcp_server):
+    def test_unresolved_references(self, project, mcp_server):
         from .helpers import mcp_call
 
-        result = mcp_call(mcp_server, "get_broken_references", {})
+        result = mcp_call(mcp_server, "get_unresolved_references", {})
         assert isinstance(result, (list, dict))
 
 
@@ -1848,7 +1848,7 @@ class TestStandardMCPMutations:
 
             proc = start_mcp(dst)
             try:
-                broken = mcp_call(proc, "get_broken_references", {})
+                broken = mcp_call(proc, "get_unresolved_references", {})
                 assert isinstance(broken, (list, dict))
 
                 versions = mcp_call(proc, "get_versions", {"node_ids": ["REQ-d00001"]})

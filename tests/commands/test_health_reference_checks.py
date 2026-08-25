@@ -171,7 +171,7 @@ def test_every_fault_class_is_populated_by_this_fixture(faulted_graph, config):
 
 
 # Verifies: REQ-p00019-K
-def test_reference_fault_classes_partition_the_broken_references(faulted_graph, config):
+def test_reference_fault_classes_partition_the_unresolved_references(faulted_graph, config):
     """Every broken reference the graph recorded lands in exactly one of
     the five classes: the five buckets sum to the whole population, so no
     fault is counted twice and none is dropped."""
@@ -180,7 +180,7 @@ def test_reference_fault_classes_partition_the_broken_references(faulted_graph, 
         len(next(c for c in checks if c.name == name).findings)
         for _fc, name, _desc in _REFERENCE_CHECKS
     )
-    assert bucketed == len(faulted_graph.broken_references())
+    assert bucketed == len(faulted_graph.unresolved_references())
 
 
 # Verifies: REQ-d00272-O
@@ -269,7 +269,7 @@ def test_a_non_canonical_spelling_is_reported_and_still_binds(faulted_graph, con
 def test_a_non_canonical_spelling_is_not_a_broken_reference(faulted_graph):
     """A finding that costs no edge must never join a bucket counting
     references that failed to bind."""
-    assert not any("req-d1" in f.target_id for f in faulted_graph.broken_references())
+    assert not any("req-d1" in f.target_id for f in faulted_graph.unresolved_references())
 
 
 # Verifies: REQ-d00272-N

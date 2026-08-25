@@ -32,6 +32,7 @@ from elspais.utilities.findings import (
     REPORTED_SEVERITIES,
     Severity,
     is_registered,
+    preset_checks,
     remedy_for,
     severity_for,
 )
@@ -951,7 +952,7 @@ def check_reference_class(
     if severity == Severity.OFF:
         return skipped_check(name, f"References that {description}")
 
-    faults = [f for f in graph.broken_references() if f.fault_class is fault_class]
+    faults = [f for f in graph.unresolved_references() if f.fault_class is fault_class]
     unavailable = (
         _unavailable_repos(graph) if fault_class in _CLASSES_A_MISSING_REPO_EXPLAINS else []
     )
@@ -3605,7 +3606,7 @@ def run_code_checks(
     # Implements: REQ-d00241-E
     faulted_files = {
         path
-        for f in graph.broken_references()
+        for f in graph.unresolved_references()
         if (path := _fault_location(graph, f.source_id, f.line)[0]) is not None
     }
     checks.append(check_no_traceability(unlinked_files, faulted_files=faulted_files, config=config))
@@ -4553,8 +4554,14 @@ def render_section(
     graph: FederatedGraph | None,
     config: dict[str, Any] | None,
     args: argparse.Namespace,
+    preset: str | None = None,
 ) -> tuple[str, int]:
     """Render health as a composed report section.
+
+    With *preset*, the section is this report narrowed to the checks that
+    preset names -- the composed form of `elspais unresolved` and its
+    siblings. It is the same narrowing the standalone command applies, so a
+    section composed with others says exactly what the command alone says.
 
     Returns (formatted_output, exit_code).
     """
@@ -4589,9 +4596,11 @@ def render_section(
         for check in run_term_checks(graph, config=raw_config):
             report.add(check)
 
-    output = _format_report(report, args)
+    filt = FindingFilter.for_preset(preset) if preset else None
+    output = _format_report(report, args, filt=filt, verdict_over_filtered=preset is not None)
     lenient = getattr(args, "lenient", False)
-    healthy = report.is_healthy_lenient if lenient else report.is_healthy
+    verdict = apply_finding_filter(report, filt).report if filt else report
+    healthy = verdict.is_healthy_lenient if lenient else verdict.is_healthy
     return output, 0 if healthy else 1
 
 
@@ -4832,6 +4841,61 @@ def run(args: argparse.Namespace) -> int:
     return 1 if (runner_failed or checks_exit != 0) else 0
 
 
+# Implements: REQ-d00285-C+F+H+I
+def run_preset(args: argparse.Namespace, preset: str) -> int:
+    """Run one of the preset listings -- `unresolved`, `errors`, `uncited`.
+
+    A preset listing is this report narrowed to the checks that answer one
+    question. It is deliberately NOT a second renderer over the same facts:
+    every listing rendered separately from the report has to be given each
+    field a finding carries a second time, and the field nobody remembered is
+    the one that goes missing in exactly one place (REQ-d00285-C). Narrowing
+    the one stream makes that class of loss unrepeatable rather than fixed
+    once.
+
+    Unlike a reader's own `--severity`/`--code` narrowing of `elspais checks`,
+    the verdict here is the narrowed report's: the command names the
+    population it answers about, so an unrelated failing check must not decide
+    its exit code.
+    """
+    from elspais.commands import _engine
+
+    filt = FindingFilter.for_preset(preset)
+    params: dict[str, str] = {}
+    spec_dir = getattr(args, "spec_dir", None)
+
+    if spec_dir:
+        data = _run_local_checks(args, params)
+    else:
+        data = _engine.call(
+            "/api/run/checks",
+            params,
+            compute_checks,
+            config_path=getattr(args, "config", None),
+        )
+
+    report = _report_from_dict(data)
+    graph_source = _format_graph_source(data.get("graph_source"))
+    output = _format_report(
+        report,
+        args,
+        graph_source=graph_source,
+        filt=filt,
+        verdict_over_filtered=True,
+    )
+
+    output_file = getattr(args, "output", None)
+    if output_file:
+        Path(output_file).write_text(output + "\n")
+    else:
+        print(output)
+
+    narrowed = apply_finding_filter(report, filt).report
+    lenient = getattr(args, "lenient", False)
+    healthy = narrowed.is_healthy_lenient if lenient else narrowed.is_healthy
+    return 0 if healthy else 1
+
+
 def _run_local_checks(args: argparse.Namespace, params: dict[str, str]) -> dict[str, Any]:
     """Build graph from args and run checks locally.
 
@@ -4932,18 +4996,28 @@ class FindingFilter:
     over requirements takes (REQ-d00278-E+D), so a reader who has narrowed one
     report knows how to narrow the other.
 
-    `severities` and `categories` select CHECKS: severity and category are
-    properties of the check a finding belongs to, and a check they exclude is
-    withheld whole. `codes` and `paths` select FINDINGS within the checks that
-    survive, and a check left holding none of them is withheld with them. The
-    flag spelling `paths` is read from is `--file`: `--path` already names the
-    repository root a run works from.
+    `severities`, `categories` and `names` select CHECKS: each is a property of
+    the check a finding belongs to, and a check they exclude is withheld whole.
+    `codes` and `paths` select FINDINGS within the checks that survive, and a
+    check left holding none of them is withheld with them. The flag spelling
+    `paths` is read from is `--file`: `--path` already names the repository
+    root a run works from.
+
+    `names` is what a preset listing is made of: `elspais unresolved` is this
+    report narrowed to the five reference checks, and nothing else
+    (`PRESETS` in `utilities.findings`).
     """
 
     severities: tuple[str, ...] = ()
     categories: tuple[str, ...] = ()
+    names: tuple[str, ...] = ()
     codes: tuple[str, ...] = ()
     paths: tuple[str, ...] = ()
+    # The preset this narrowing IS, where it came from one. A reader who typed
+    # `elspais unresolved` did not type five check names, and echoing five back
+    # at them describes the mechanism rather than what they asked for. The
+    # flags are still published beside it, so the listing stays reproducible.
+    label: str = ""
 
     @classmethod
     def from_args(cls, args: argparse.Namespace) -> FindingFilter:
@@ -4954,22 +5028,38 @@ class FindingFilter:
         return cls(
             severities=_get("severity"),
             categories=_get("category"),
+            names=_get("check"),
             codes=_get("code"),
             paths=_get("file"),
         )
 
+    @classmethod
+    def for_preset(cls, preset: str) -> FindingFilter:
+        """The narrowing one shortcut command is."""
+        return cls(names=preset_checks(preset), label=preset)
+
     @property
     def active(self) -> bool:
-        return bool(self.severities or self.categories or self.codes or self.paths)
+        return bool(self.severities or self.categories or self.names or self.codes or self.paths)
 
     @property
     def narrows_findings(self) -> bool:
         """Whether the filter selects among findings rather than among checks.
 
         A reader who named a code or a path asked for those findings by name,
-        so they are rendered whether or not the report as a whole is verbose.
+        so a check left holding none of them is withheld with them.
         """
         return bool(self.codes or self.paths)
+
+    @property
+    def shows_findings(self) -> bool:
+        """Whether the findings themselves are rendered rather than counted.
+
+        A reader who named a check, a code or a path asked for its findings by
+        name -- that is the whole of what a preset listing is -- so they are
+        rendered whether or not the report as a whole is verbose.
+        """
+        return bool(self.names or self.codes or self.paths)
 
     def unadmitted(self) -> list[str]:
         """The names this filter uses that the report's vocabulary does not admit.
@@ -4994,12 +5084,17 @@ class FindingFilter:
                     f"--category {value}: not a category. "
                     f"Categories: {', '.join(REPORT_CATEGORIES)}."
                 )
+        for value in self.names:
+            if not is_registered(value):
+                problems.append(f"--check {value}: not a check the tool runs.")
         return problems
 
     def matches_check(self, check: HealthCheck) -> bool:
         if self.severities and check.severity not in self.severities:
             return False
         if self.categories and check.category not in self.categories:
+            return False
+        if self.names and check.name not in self.names:
             return False
         return True
 
@@ -5020,6 +5115,7 @@ class FindingFilter:
         for flag, values in (
             ("--severity", self.severities),
             ("--category", self.categories),
+            ("--check", self.names),
             ("--code", self.codes),
             ("--file", self.paths),
         ):
@@ -5042,16 +5138,25 @@ class _FilterOutcome:
     def disclosure(self) -> str | None:
         if not self.filter.active:
             return None
-        return (
-            f"Filtered by {self.filter.describe()}: showing "
-            f"{self.checks_shown} of {self.checks_total} checks, "
+        extent = (
+            f"showing {self.checks_shown} of {self.checks_total} checks, "
             f"{self.findings_shown} of {self.findings_total} findings."
         )
+        if self.filter.label:
+            # A preset says which listing this is and how to ask for it again
+            # by hand: the narrowing has to be reproducible to be checkable.
+            return (
+                f"Listing `{self.filter.label}` -- {extent} "
+                f"The same report: elspais checks {self.filter.describe()}"
+            )
+        return f"Filtered by {self.filter.describe()}: {extent}"
 
     def to_dict(self) -> dict[str, Any]:
         return {
+            "preset": self.filter.label,
             "severity": list(self.filter.severities),
             "category": list(self.filter.categories),
+            "check": list(self.filter.names),
             "code": list(self.filter.codes),
             "file": list(self.filter.paths),
             "checks_shown": self.checks_shown,
@@ -5117,8 +5222,26 @@ def _format_report(
     report: HealthReport,
     args: argparse.Namespace,
     graph_source: str | None = None,
+    filt: FindingFilter | None = None,
+    verdict_over_filtered: bool = False,
 ) -> str:
-    """Format the health report as a string."""
+    """Format the health report as a string.
+
+    Args:
+        report: The whole run.
+        args: The command's arguments; the narrowing is read from them unless
+            *filt* names one.
+        graph_source: Where the graph came from, where that is worth saying.
+        filt: The narrowing to apply, for a caller that carries one of its own
+            rather than reading it off the arguments -- a preset listing.
+        verdict_over_filtered: Whether the verdict is the narrowed report's.
+            False for a reader narrowing `checks`, whose verdict stays the
+            whole run's (REQ-d00285-H). True for a preset listing, which is a
+            report over a declared population rather than a view of a wider
+            one: `elspais unresolved` answers about unresolved references, and
+            a verdict borrowed from an unrelated failing check would answer
+            about something else.
+    """
     fmt = getattr(args, "format", "text") or "text"
     lenient = getattr(args, "lenient", False)
     quiet = getattr(args, "quiet", False)
@@ -5127,13 +5250,13 @@ def _format_report(
 
     # The narrowing is applied once, here, so every format renders the same
     # narrowed report (REQ-d00285-C) and no renderer has to know a filter
-    # exists. The verdict is still the whole run's -- see `apply_finding_filter`.
-    outcome = apply_finding_filter(report, FindingFilter.from_args(args))
-    whole_run = report
+    # exists.
+    outcome = apply_finding_filter(report, filt or FindingFilter.from_args(args))
+    whole_run = outcome.report if verdict_over_filtered else report
     report = outcome.report
     disclosure = outcome.disclosure()
-    # A reader who named a code or a path asked for those findings by name.
-    show_findings = verbose or outcome.filter.narrows_findings
+    # A reader who named a check, a code or a path asked for those findings.
+    show_findings = verbose or outcome.filter.shows_findings
 
     # Build active flags summary from args
     flag_parts: list[str] = []
@@ -5150,7 +5273,9 @@ def _format_report(
         flag_parts.append("--tests")
     if getattr(args, "terms_only", False):
         flag_parts.append("--terms")
-    if outcome.filter.active:
+    if outcome.filter.label:
+        flag_parts.append(outcome.filter.label)
+    elif outcome.filter.active:
         flag_parts.append(outcome.filter.describe())
     active_flags = ", ".join(flag_parts) if flag_parts else None
 

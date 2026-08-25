@@ -371,7 +371,7 @@ class TestRunCodeChecksNoTraceabilityWiring:
         assert check.passed
         assert not any("orphan.py" in f.message for f in check.findings)
 
-        broken = check_broken_references(fed)
+        broken = check_unresolved_references(fed)
         assert not broken.passed
         assert any("orphan.py" in (f.file_path or "") for f in broken.findings)
 
@@ -444,7 +444,7 @@ class TestRunCodeChecksNoTraceabilityWiring:
 # =============================================================================
 
 
-def check_broken_references(graph: FederatedGraph, config: dict | None = None):
+def check_unresolved_references(graph: FederatedGraph, config: dict | None = None):
     """A claimed reference naming a requirement that does not exist."""
     return check_reference_class(
         graph,
@@ -476,7 +476,7 @@ class TestCheckBrokenReferences:
             make_requirement("REQ-p00001", title="Parent", level="PRD"),
             make_requirement("REQ-o00001", title="Child", level="OPS", implements=["REQ-p00001"]),
         )
-        check = check_broken_references(_wrap(graph))
+        check = check_unresolved_references(_wrap(graph))
         assert check.passed
         assert check.name == "references.unknown_requirement"
 
@@ -490,7 +490,7 @@ class TestCheckBrokenReferences:
         )
         # Manually inject broken references (fault_class defaults to
         # UNKNOWN_REQUIREMENT, matching the class this check reports).
-        graph._broken_references = [
+        graph._unresolved_references = [
             ReferenceFault(
                 source_id="REQ-d00001",
                 target_id="REQ-p99999",
@@ -507,7 +507,7 @@ class TestCheckBrokenReferences:
         # grammar describes -- is this check's population; the full default
         # config is what makes ``REQ-`` identifiers claimed.
         config = _claimed_config()
-        check = check_broken_references(_wrap(graph, config), config)
+        check = check_unresolved_references(_wrap(graph, config), config)
         assert not check.passed
         assert check.severity == "error"  # REQ-d00204-E: unknown_requirement is an error
         assert check.name == "references.unknown_requirement"
@@ -520,7 +520,7 @@ class TestCheckBrokenReferences:
         from elspais.graph.reference_faults import ReferenceFault
 
         graph = TraceGraph()
-        graph._broken_references = [
+        graph._unresolved_references = [
             ReferenceFault(
                 source_id="REQ-d00001",
                 target_id="REQ-p99999",
@@ -529,7 +529,7 @@ class TestCheckBrokenReferences:
         ]
 
         config = _claimed_config()
-        check = check_broken_references(_wrap(graph, config), config)
+        check = check_unresolved_references(_wrap(graph, config), config)
         assert not check.passed
         finding = check.findings[0]
         assert isinstance(finding, HealthFinding)
@@ -545,7 +545,7 @@ class TestCheckBrokenReferences:
         from elspais.graph.reference_faults import ReferenceFault
 
         graph = TraceGraph()
-        graph._broken_references = [
+        graph._unresolved_references = [
             ReferenceFault(
                 source_id="REQ-d00001",
                 target_id="HHT-p00001",
@@ -560,7 +560,7 @@ class TestCheckBrokenReferences:
         assert not unclaimed.passed
         assert any("HHT-p00001" in f.message for f in unclaimed.findings)
 
-        broken = check_broken_references(fed, config)
+        broken = check_unresolved_references(fed, config)
         assert broken.passed
         assert not any("HHT-p00001" in f.message for f in broken.findings)
 
@@ -614,23 +614,23 @@ class TestCheckUnclaimedReferences:
         assert "widget-42" in unclaimed.findings[0].message
 
         # The two checks partition the population: neither double-reports.
-        broken = check_broken_references(federated)
+        broken = check_unresolved_references(federated)
         assert not any("widget-42" in f.message for f in broken.findings)
         assert broken.passed
 
     # Verifies: REQ-d00269-F
-    def test_REQ_d00269_F_claimed_target_stays_with_broken_references(self) -> None:
+    def test_REQ_d00269_F_claimed_target_stays_with_unresolved_references(self) -> None:
         """A misspelt local identifier is a broken reference, not an unclaimed one."""
         from elspais.graph.reference_faults import ReferenceFault
 
         graph = TraceGraph()
-        graph._broken_references = [
+        graph._unresolved_references = [
             ReferenceFault(source_id="REQ-d00001", target_id="REQ-p99999", edge_kind="implements"),
         ]
         config = _claimed_config()
         fed = _wrap(graph, config)
 
-        broken = check_broken_references(fed, config)
+        broken = check_unresolved_references(fed, config)
         unclaimed = check_unclaimed_references(fed, config)
 
         assert not broken.passed
@@ -645,7 +645,7 @@ class TestCheckUnclaimedReferences:
         from elspais.graph.reference_faults import ReferenceFault
 
         graph = TraceGraph()
-        graph._broken_references = [
+        graph._unresolved_references = [
             ReferenceFault(
                 source_id="REQ-d00001",
                 target_id="widget-42",
@@ -678,7 +678,7 @@ class TestCheckUnclaimedReferences:
 
         graph = TraceGraph()
         if has_finding:
-            graph._broken_references = [
+            graph._unresolved_references = [
                 ReferenceFault(
                     source_id="REQ-d00001",
                     target_id="widget-42",
@@ -714,7 +714,7 @@ class TestCheckUnclaimedReferences:
 
         graph = TraceGraph()
         if has_finding:
-            graph._broken_references = [
+            graph._unresolved_references = [
                 ReferenceFault(
                     source_id="REQ-d00001",
                     target_id="widget-42",
@@ -751,7 +751,7 @@ class TestCheckUnclaimedReferences:
 
         graph = TraceGraph()
         if has_finding:
-            graph._broken_references = [
+            graph._unresolved_references = [
                 ReferenceFault(
                     source_id="REQ-d00001",
                     target_id="widget-42",
@@ -783,7 +783,7 @@ class TestCheckUnclaimedReferences:
         from elspais.graph.reference_faults import ReferenceFault
 
         host_graph = TraceGraph()
-        host_graph._broken_references = [
+        host_graph._unresolved_references = [
             ReferenceFault(
                 source_id="REQ-d00001",
                 target_id="widget-42",

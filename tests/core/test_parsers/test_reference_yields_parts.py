@@ -122,7 +122,7 @@ def _targets(graph, kind: EdgeKind) -> list[str]:
 
 
 def _broken(graph) -> list[str]:
-    return [br.target_id for br in graph.broken_references()]
+    return [br.target_id for br in graph.unresolved_references()]
 
 
 @pytest.mark.parametrize(
@@ -205,7 +205,7 @@ def test_an_underscore_spelling_is_not_repaired_into_one_that_resolves(tmp_path)
     )
     # Resolving to nothing is only honest because the item is still reported:
     # it is carried through verbatim, never quietly dropped.
-    broken = graph.broken_references()
+    broken = graph.unresolved_references()
     assert [br.target_id for br in broken] == ["REQ_p42_A"], (
         f"the unresolvable spelling must be reported as written; got {_broken(graph)}"
     )

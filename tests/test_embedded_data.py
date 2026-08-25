@@ -126,7 +126,7 @@ class TestBuildStatusData:
         assert "root_count" in data
         assert "total_nodes" in data
         assert "has_orphans" in data
-        assert "has_broken_references" in data
+        assert "has_unresolved_references" in data
 
     # Verifies: REQ-p00006-C
     def test_REQ_p00006_C_status_node_counts_are_positive(self, generator):

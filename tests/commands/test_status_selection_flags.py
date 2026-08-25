@@ -166,9 +166,33 @@ def _implemented_counts(graph, config, params: dict[str, str]) -> tuple[int, flo
     )
 
 
-def _error_req_ids(result: dict) -> list[str]:
-    """Requirement IDs carrying a format error in a compute_errors result."""
-    return sorted({e["req_id"] for e in result["format_errors"]})
+def _error_req_ids(graph, config) -> list[str]:
+    """Requirement IDs carrying a format error, as `elspais errors` lists them.
+
+    The listing is the findings report narrowed to the `errors` preset, so
+    this reads the same checks the command does rather than a second
+    collection walking the graph again.
+    """
+    from elspais.commands.health import (
+        FindingFilter,
+        HealthReport,
+        apply_finding_filter,
+        run_checks,
+    )
+
+    report = HealthReport()
+    for check in run_checks(graph, config):
+        report.add(check)
+    narrowed = apply_finding_filter(report, FindingFilter.for_preset("errors")).report
+    return sorted(
+        {
+            f.node_id
+            for c in narrowed.checks
+            if c.name == "spec.format_rules"
+            for f in c.findings
+            if f.node_id
+        }
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -225,6 +249,7 @@ class TestOptionSurface:
             f"{class_name} must offer --not-status; fields were {sorted(fields)}"
         )
 
+    # Verifies: REQ-d00285-C
     def test_errors_exposes_no_status_option(self):
         """``errors`` weighs every requirement whatever its status, so it
         carries no status selector of any kind.
@@ -251,21 +276,20 @@ class TestOptionSurface:
 
 
 class TestErrorsCoversEveryStatus:
-    """Pins that compute_errors excludes nothing by status."""
+    """Pins that the `errors` listing excludes nothing by status."""
 
+    # Verifies: REQ-d00285-C
     def test_errors_lists_every_status(self, built):
         """``errors`` reports format violations on every requirement
         regardless of status — a format defect is a defect on a Draft or
         Deprecated requirement too, and the listing must therefore account
         for exactly what ``checks`` counts.
         """
-        from elspais.commands.errors import compute_errors
-
         graph, config = built
-        result = compute_errors(graph, config, {})
+        listed = _error_req_ids(graph, config)
 
-        assert _error_req_ids(result) == sorted([ACTIVE_ID, DRAFT_ID, DEPRECATED_ID]), (
-            f"compute_errors must exclude nothing; got {_error_req_ids(result)}"
+        assert listed == sorted([ACTIVE_ID, DRAFT_ID, DEPRECATED_ID]), (
+            f"the errors listing must exclude nothing; got {listed}"
         )
 
 

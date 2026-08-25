@@ -455,7 +455,7 @@ def template_graph(tmp_path: Path):
     )
     # Fixture premise: exactly one broken ref (refiner -> template), carrying
     # the template-rule diagnostic, and the leftover renders.
-    brs = [br for br in graph.broken_references() if br.source_id == "REQ-p00091"]
+    brs = [br for br in graph.unresolved_references() if br.source_id == "REQ-p00091"]
     assert len(brs) == 1, f"fixture premise broken: {brs!r}"
     assert brs[0].target_id == "REQ-p00090"
     assert brs[0].diagnostic, "template rejection must carry a diagnostic"
@@ -464,7 +464,7 @@ def template_graph(tmp_path: Path):
 
 
 def _broken_refs_from(graph, source_id: str):
-    return [br for br in graph.broken_references() if br.source_id == source_id]
+    return [br for br in graph.unresolved_references() if br.source_id == source_id]
 
 
 class TestRenameRetargetsBrokenLeftovers:
@@ -497,7 +497,7 @@ class TestRenameRetargetsBrokenLeftovers:
             "still cites the stale leftover -- saving would write the old ID"
         )
         assert "REQ-p00090" not in rendered, (
-            "rename_node retargeted _broken_references but left the source "
+            "rename_node retargeted _unresolved_references but left the source "
             "node's stored leftover pointing at the old ID"
         )
 
@@ -568,7 +568,7 @@ class TestDeleteRequirementBrokenRefs:
     references, and undoing the delete restores them.
 
     ``delete_requirement`` moves the node to _deleted_nodes but must not
-    leave _broken_references entries sourced from a node that no longer
+    leave _unresolved_references entries sourced from a node that no longer
     exists -- health surfaces would report a phantom citation.
     """
 

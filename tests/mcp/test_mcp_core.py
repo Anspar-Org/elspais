@@ -1180,9 +1180,9 @@ reference_keyword = "Verifies"
         # Health should have expected keys
         health = result["health"]
         assert "has_orphans" in health
-        assert "has_broken_references" in health
+        assert "has_unresolved_references" in health
         assert "orphan_count" in health
-        assert "broken_reference_count" in health
+        assert "unresolved_reference_count" in health
 
     # Verifies: REQ-o00061-A
     def test_REQ_o00061_A_retrofit_profile_includes_all_config(self, tmp_path):
@@ -1476,7 +1476,7 @@ class TestGetProjectSummary:
         result = _get_project_summary(sample_graph, Path("/test/repo"))
 
         assert "orphan_count" in result
-        assert "broken_reference_count" in result
+        assert "unresolved_reference_count" in result
         assert "total_nodes" in result
 
     # Verifies: REQ-o00061-B

@@ -117,7 +117,7 @@ def test_in_repo_satisfies_unmarked_target_emits_broken_ref():
         assert graph.find_by_id("URS-p00002::URS-p00001") is None, (
             "Unexpected: clone created against unmarked target"
         )
-        brs = list(graph.broken_references())
+        brs = list(graph.unresolved_references())
         marker_diag = [br for br in brs if "not marked **Template**" in (br.diagnostic or "")]
         assert marker_diag, (
             f"Expected diagnostic naming **Template**; got: {[br.diagnostic for br in brs]}"

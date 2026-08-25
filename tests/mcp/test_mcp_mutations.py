@@ -1198,7 +1198,7 @@ class TestMutateFixBrokenReference:
         from elspais.mcp.server import _mutate_fix_broken_reference
 
         # Create a broken reference scenario first
-        mutation_graph._broken_references.append(
+        mutation_graph._unresolved_references.append(
             ReferenceFault(
                 source_id="REQ-o00001",
                 target_id="REQ-MISSING",
@@ -1218,7 +1218,7 @@ class TestMutateFixBrokenReference:
         pytest.importorskip("mcp")
         from elspais.mcp.server import _mutate_fix_broken_reference
 
-        mutation_graph._broken_references.append(
+        mutation_graph._unresolved_references.append(
             ReferenceFault(
                 source_id="REQ-o00001",
                 target_id="REQ-BAD",
@@ -1243,7 +1243,7 @@ class TestMutateFixBrokenReference:
         pytest.importorskip("mcp")
         from elspais.mcp.server import _mutate_fix_broken_reference
 
-        mutation_graph._broken_references.append(
+        mutation_graph._unresolved_references.append(
             ReferenceFault(
                 source_id="REQ-o00001",
                 target_id="REQ-MISSING",
@@ -1273,7 +1273,7 @@ class TestMutateFixBrokenReference:
         pytest.importorskip("mcp")
         from elspais.mcp.server import _mutate_fix_broken_reference
 
-        mutation_graph._broken_references.append(
+        mutation_graph._unresolved_references.append(
             ReferenceFault(
                 source_id="REQ-o00001",
                 target_id="REQ-MISSING",
@@ -1651,29 +1651,53 @@ class TestGetOrphanedNodes:
         assert "REQ-o00001" in [o["id"] for o in result["orphans"]]
 
 
-class TestGetBrokenReferences:
-    """Tests for get_broken_references() tool."""
+class TestGetUnresolvedReferences:
+    """Tests for get_unresolved_references() tool."""
 
-    # Verifies: REQ-o00060-A
-    def test_returns_broken_reference_list(self, mutation_graph):
-        """Returns list of broken references."""
+    # Verifies: REQ-o00060-A, REQ-d00285-C
+    def test_returns_the_findings_the_reference_checks_raised(self, mutation_graph):
+        """Returns findings, not a shape of its own.
+
+        Each entry carries the check that raised it, the severity that check
+        resolved to and the remedy it names, so an agent asking this question
+        is told what a person running `elspais unresolved` is told.
+        """
         pytest.importorskip("mcp")
-        from elspais.mcp.server import _get_broken_references
+        from elspais.graph.federated import FederatedGraph
+        from elspais.graph.reference_faults import FaultClass
+        from elspais.mcp.server import _get_unresolved_references
 
-        mutation_graph._broken_references.append(
+        mutation_graph._unresolved_references.append(
             ReferenceFault(
                 source_id="REQ-o00001",
                 target_id="REQ-MISSING",
                 edge_kind=EdgeKind.IMPLEMENTS,
+                fault_class=FaultClass.UNKNOWN_REQUIREMENT,
             )
         )
+        federated = FederatedGraph.from_single(
+            mutation_graph,
+            config={"project": {"name": "test", "namespace": NAMESPACE}},
+            repo_root=Path("/test/repo"),
+        )
 
-        result = _get_broken_references(mutation_graph)
+        result = _get_unresolved_references(federated)
 
-        assert "broken_references" in result
-        assert len(result["broken_references"]) == 1
-        assert result["broken_references"][0]["source_id"] == "REQ-o00001"
-        assert result["broken_references"][0]["target_id"] == "REQ-MISSING"
+        assert result["count"] == 1
+        entry = result["unresolved_references"][0]
+        assert entry["node_id"] == "REQ-o00001"
+        assert "REQ-MISSING" in entry["message"]
+        assert entry["check"] == "references.unknown_requirement"
+        assert entry["severity"] == "error"
+        assert entry["remedy"] == "elspais unresolved"
+        # Every class is accounted for, whether or not it found anything.
+        assert {c["name"] for c in result["checks"]} == {
+            "references.malformed",
+            "references.unknown_namespace",
+            "references.unknown_requirement",
+            "references.unknown_assertion",
+            "references.forbidden",
+        }
 
 
 # ─────────────────────────────────────────────────────────────────────────────
