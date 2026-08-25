@@ -22,7 +22,7 @@ Complete reference for all elspais commands.
 | `failing` | Gaps & Issues | List requirements with failing test or UAT results |
 | `errors` | Gaps & Issues | List spec format violations and requirements with no assertions |
 | `broken` | Gaps & Issues | List broken references (edges targeting non-existent nodes) |
-| `unlinked` | Gaps & Issues | List test and code nodes not linked to any requirement |
+| `uncited` | Gaps & Issues | List scanned code and test files that cite no requirement |
 | `analysis` | Authoring | Analyze foundational requirement importance |
 | `fix` | Authoring | Auto-fix spec file issues (hashes, formatting) |
 | `edit` | Authoring | Edit requirements in-place (implements, status, move) |
@@ -270,19 +270,28 @@ the requirement holding it.
 
 Follow-up from `elspais checks` when a `references.*` check fails.
 
-## unlinked
+## uncited
 
-List code and test nodes that reach no requirement.
+List scanned code and test files that cite nothing.
 
-  $ elspais unlinked                   # Every unlinked code and test node
-  $ elspais unlinked --format json     # JSON output, carrying each node's id
-  $ elspais unlinked -o unlinked.txt   # Write to file
+  $ elspais uncited                  # Every code and test file citing nothing
+  $ elspais uncited --format json    # JSON output, carrying each file node's id
+  $ elspais uncited -o uncited.txt   # Write to file
 
-A test file is listed where no test in it links to any requirement; one linked
-test is enough to keep the file out of the listing. The text and markdown
-listings name each file; `--format json` carries each node's id beside its
-path, because the id names the repository holding the file and a bare path
-does not.
+A code file is listed where the scan produced no citation from it at all. A
+test file is listed where no test in it links to any requirement; one linked
+test is enough to keep the file out of the listing. A test file whose only
+citation attached to no test carries a marker, so it is left to
+`tests.unbound_citation`, which says what is actually wrong with it.
+
+The text and markdown listings name each file; `--format json` carries each
+file node's id beside its path, because the id names the repository holding
+the file and a bare path does not.
+
+This is not the *unlinked* population. An unlinked node is a single test
+function or citation block that exists and reaches no requirement; the MCP
+`get_unlinked_nodes` tool answers about those. A file holding one linked test
+and nine unlinked ones is full of unlinked nodes and is not uncited.
 
 **Options:**
 
@@ -290,8 +299,8 @@ does not.
   `-v, --verbose`                  Accepted, and adds nothing to the listing
   `-o, --output PATH`              Write output to file instead of stdout
 
-Follow-up from `elspais checks` when `code.unlinked` or `tests.unlinked`
-reports.
+Follow-up from `elspais checks` when `code.uncited_file` or
+`tests.uncited_file` reports.
 
 ## fix
 

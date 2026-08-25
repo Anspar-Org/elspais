@@ -537,11 +537,11 @@ B. At most one such process SHALL serve a given working tree at a time.
 
 C. Separate working trees SHALL be served independently, each by its own process holding its own graph, whether or not they belong to the same repository.
 
-D. [Removed - stated two obligations in one assertion. Serving several clients at once is REQ-o00076-A; a client joining a process another started is REQ-o00076-B.]
+D. <RETIRED> stated two obligations in one assertion. Serving several clients at once is REQ-o00076-A; a client joining a process another started is REQ-o00076-B.
 
-E. [Removed - stated three obligations in one assertion. Locating without prior arrangement is REQ-o00076-C; remaining locatable while serving is REQ-o00076-D; the record describing the process a client would reach is REQ-o00076-E.]
+E. <RETIRED> stated three obligations in one assertion. Locating without prior arrangement is REQ-o00076-C; remaining locatable while serving is REQ-o00076-D; the record describing the process a client would reach is REQ-o00076-E.
 
-F. [Removed - stated three obligations in one assertion. Starting on behalf of a client is REQ-o00076-F; starting at an operator's request is REQ-o00076-G; the origin remaining determinable is REQ-o00076-H.]
+F. <RETIRED> stated three obligations in one assertion. Starting on behalf of a client is REQ-o00076-F; starting at an operator's request is REQ-o00076-G; the origin remaining determinable is REQ-o00076-H.
 
 G. Every operation the tool offers SHALL remain available when no such process is running or its use is declined.
 
@@ -559,6 +559,7 @@ REQ-p00005-F obliges associate paths to resolve from the canonical, non-worktree
 
 ### Changelog
 
+- 2026-08-24 | 2598192d | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-18 | b44d9887 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: sync changelog hash
 - 2026-08-18 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: move reaching the serving process out to REQ-o00076 and state exclusivity on its own
 - 2026-08-18 | b44d9887 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -566,7 +567,7 @@ REQ-p00005-F obliges associate paths to resolve from the canonical, non-worktree
 - 2026-08-08 | 1fd622fe | - | Michael Lewis (<michael@anspar.org>) | TOOL-12: introduce the shared per-working-tree graph daemon
 - 2026-08-08 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-12: introduce the shared per-working-tree graph daemon
 
-*End* *Shared Graph Daemon* | **Hash**: b44d9887
+*End* *Shared Graph Daemon* | **Hash**: 2598192d
 
 ## REQ-o00076: Reaching the Serving Process
 
@@ -638,9 +639,9 @@ Where the tool is installed such that its program can change while a process is 
 
 A. While a serving process answers from a program that differs from the one the tool is now installed from, the tool SHALL disclose that difference to the clients it is serving.
 
-B. [Removed - protected the request to persist from assertion C, which is itself removed. A process that carries held changes across a renewal never traps them, so there is nothing left to protect.]
+B. <RETIRED> protected the request to persist from assertion C, which is itself removed. A process that carries held changes across a renewal never traps them, so there is nothing left to protect.
 
-C. [Removed - treated held changes as a reason to stop answering. They are a reason to take care over a renewal, not to refuse one, and D now says so.]
+C. <RETIRED> treated held changes as a reason to stop answering. They are a reason to take care over a renewal, not to refuse one, and D now says so.
 
 D. When the program such a process is running is superseded, its working tree SHALL go on being served, from the program now installed, without a client having to ask and without discarding changes the process holds that exist nowhere else.
 
@@ -670,6 +671,7 @@ Assertion E exists because a change is rarely one file. An editor writing out a 
 
 ### Changelog
 
+- 2026-08-24 | 3488ba9c | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-18 | 2dfa09e9 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-18 | b6acd5d0 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-18 | 8ef6d965 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -678,4 +680,4 @@ Assertion E exists because a change is rarely one file. An editor writing out a 
 - 2026-08-18 | bfd8a2aa | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-18 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: state what a serving process owes its clients when its program code changes beneath it
 
-*End* *Serving From the Installed Program* | **Hash**: 2dfa09e9
+*End* *Serving From the Installed Program* | **Hash**: 3488ba9c

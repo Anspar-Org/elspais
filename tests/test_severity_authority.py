@@ -22,7 +22,7 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
-from elspais.commands.health import HealthCheck, check_term_duplicates, check_unlinked_code
+from elspais.commands.health import HealthCheck, check_term_duplicates, check_uncited_code
 from elspais.config import CURRENT_CONFIG_VERSION, load_config
 from elspais.utilities.findings import REGISTRY, SEVERITY_VALUES, severity_for
 
@@ -334,16 +334,16 @@ class TestOffProducesASkippedCheck:
 
     # Verifies: REQ-d00212-P
     def test_REQ_d00212_P_a_generally_configured_check_set_off_is_skipped(self) -> None:
-        """`[rules.severity] "code.unlinked" = "off"` -- a check with no
+        """`[rules.severity] "code.uncited_file" = "off"` -- a check with no
         setting of its own is turned off through the general table, and the
         graph that produced a finding produces none."""
         graph = self._graph_with_an_unmarked_code_file()
 
-        reported = check_unlinked_code(graph, {})
+        reported = check_uncited_code(graph, {})
         assert reported.passed is False
         assert reported.findings, "graph no longer exercises the check"
 
-        check = check_unlinked_code(graph, {"rules": {"severity": {"code.unlinked": "off"}}})
+        check = check_uncited_code(graph, {"rules": {"severity": {"code.uncited_file": "off"}}})
 
         assert check.passed is True
         assert check.severity == "info"
@@ -355,12 +355,12 @@ class TestOffProducesASkippedCheck:
         """A skipped check is still filed where its findings would have been,
         so a reader looking at the category sees the withholding rather than
         an absence."""
-        check = check_unlinked_code(
+        check = check_uncited_code(
             self._graph_with_an_unmarked_code_file(),
-            {"rules": {"severity": {"code.unlinked": "off"}}},
+            {"rules": {"severity": {"code.uncited_file": "off"}}},
         )
 
-        assert check.category == REGISTRY["code.unlinked"].category
+        assert check.category == REGISTRY["code.uncited_file"].category
 
 
 # =============================================================================
@@ -503,3 +503,72 @@ class TestHealthCheckRefusesUnreportableSeverities:
 
         counts = [report.passed, report.failed, report.warnings, report.skipped]
         assert sum(counts) == 1, f"{severity} lands in {sum(counts)} counts"
+
+
+# =============================================================================
+# One name, one condition
+# =============================================================================
+
+
+class TestOneNameOneCondition:
+    """REQ-d00285-F: a name under which findings are reported identifies one
+    condition -- so a project that moves the setting it read about sees the
+    thing it read about move, and only that."""
+
+    @staticmethod
+    def _uat_graph():
+        """One PRD requirement at an `expects_validation` level, unvalidated."""
+        from elspais.graph.annotators import annotate_coverage
+        from tests.core.graph_test_helpers import build_graph, make_requirement
+
+        graph = build_graph(
+            make_requirement(
+                "REQ-p00001", level="PRD", assertions=[{"label": "A", "text": "Assertion A"}]
+            )
+        )
+        annotate_coverage(graph)
+        return graph, {"levels": {"prd": {"rank": 1, "expects_validation": True}}}
+
+    # Verifies: REQ-d00285-F
+    def test_REQ_d00285_F_the_uat_dimension_and_its_gaps_carry_their_own_defaults(self) -> None:
+        """The dimension failing and a requirement no journey validates are
+        two conditions, and each carries the default its own name declares.
+        One name could carry only one, leaving the other decided nowhere a
+        project can reach."""
+        assert REGISTRY["uat.uat_coverage"].default == "error"
+        assert REGISTRY["uat.unvalidated"].default == "warning"
+        assert REGISTRY["uat.unvalidated"].category == "uat"
+
+    # Verifies: REQ-d00285-F, REQ-d00285-E
+    def test_REQ_d00285_F_turning_one_off_leaves_the_other_reporting(self) -> None:
+        """Each condition is reached through its own setting: silencing the
+        dimension does not silence the requirements awaiting a journey."""
+        from elspais.commands.health import check_uat_coverage, check_unvalidated_requirements
+
+        graph, config = self._uat_graph()
+
+        gaps = check_unvalidated_requirements(graph, config)
+        assert gaps.passed is False
+        assert gaps.severity == "warning"
+
+        silenced_dimension = dict(config)
+        silenced_dimension["rules"] = {"severity": {"uat.uat_coverage": "off"}}
+        assert check_uat_coverage(graph, set(), silenced_dimension).details["skipped"] is True
+        assert check_unvalidated_requirements(graph, silenced_dimension).passed is False
+
+        silenced_gaps = dict(config)
+        silenced_gaps["rules"] = {"severity": {"uat.unvalidated": "off"}}
+        assert check_unvalidated_requirements(graph, silenced_gaps).details["skipped"] is True
+        assert check_uat_coverage(graph, set(), silenced_gaps).details.get("skipped") is not True
+
+    # Verifies: REQ-d00285-F
+    def test_REQ_d00285_F_the_uncited_files_and_the_unlinked_nodes_have_two_names(self) -> None:
+        """The file population and the node population are named apart, and
+        the file checks say which one they are not."""
+        assert "code.uncited_file" in REGISTRY
+        assert "tests.uncited_file" in REGISTRY
+        assert "code.unlinked" not in REGISTRY
+        assert "tests.unlinked" not in REGISTRY
+        for name in ("code.uncited_file", "tests.uncited_file"):
+            assert "get_unlinked_nodes" in REGISTRY[name].description
+            assert REGISTRY[name].remedy == "elspais uncited"

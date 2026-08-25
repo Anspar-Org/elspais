@@ -248,11 +248,11 @@ that changes to cross-cutting requirements are propagated to their consumers.
 
 | Check | Description | Default severity | Configured by | Remedy |
 | --- | --- | --- | --- | --- |
-| `code.unlinked` | Code nodes reaching no requirement (no `# Implements:` or `# Verifies:` comment) | info | `[rules.severity]` | `elspais unlinked` |
+| `code.uncited_file` | A scanned code file that cites nothing -- no `# Implements:`, no `# Verifies:`. Not the same population as the unlinked NODES the graph API and the MCP `get_unlinked_nodes` tool answer about | info | `[rules.severity]` | `elspais uncited` |
 | `code.code_tested` | Line coverage over the implementation lines attributed to requirements | info | `[rules.severity]` | no command resolves this; resolve it by hand |
 | `code.whole_req_only_coverage` | Coverage resting entirely on whole-requirement evidence, with no citation naming an assertion | info | `[rules.severity]` | no command resolves this; resolve it by hand |
 | `code.implemented` | The `implemented` coverage dimension (CODE or child REQ covers assertions) | error | `[rules.severity]` | `elspais uncovered` |
-| `code.no_traceability` | Code files carrying no traceability marker at all (test files are covered separately by `tests.unlinked`) | warning | `[rules.format] no_traceability_severity` | `elspais unlinked` |
+| `code.no_traceability` | Code files holding a citation that reaches no requirement -- the files of the unlinked CODE nodes (test files are covered separately by `tests.uncited_file`) | warning | `[rules.format] no_traceability_severity` | no command resolves this; resolve it by hand |
 | `code.unscanned_keyword_file` | A file inside a scanned directory that the ignore configuration does not exclude, that the patterns declared for its kind do not select, and that carries a *Traceability* keyword anyway -- the citation was never read | info | `[rules.severity]` | no command resolves this; resolve it by hand |
 | `code.retired_references` | Code referencing requirements with retired status (Deprecated, Superseded, Rejected) | warning | `[rules.references] retired` | no command resolves this; resolve it by hand |
 | `code.provisional_references` | Code referencing requirements with provisional status (Draft, Proposed) | info | `[rules.references] provisional` | no command resolves this; resolve it by hand |
@@ -266,7 +266,7 @@ that changes to cross-cutting requirements are propagated to their consumers.
 
 | Check | Description | Default severity | Configured by | Remedy |
 | --- | --- | --- | --- | --- |
-| `tests.unlinked` | Test nodes reaching no requirement -- either no test functions found, or no test in the file links to any requirement (a file with at least one linked test is not flagged) | info | `[rules.severity]` | `elspais unlinked` |
+| `tests.uncited_file` | A scanned test file in which no test cites anything -- either no test functions found, or no test in the file links to any requirement (a file with at least one linked test is not flagged). Not the same population as the unlinked NODES the graph API and the MCP `get_unlinked_nodes` tool answer about | info | `[rules.severity]` | `elspais uncited` |
 | `tests.results` | Test pass/fail status from JUnit XML or pytest JSON results | warning | `[rules.severity]` | `elspais failing` |
 | `tests.results_stale` | Test results older than the code they cover | warning | `[rules.severity]` | `elspais checks --run-tests` |
 | `tests.unmatched_results` | Results matching no known test | warning | `[rules.severity]` | `elspais -v checks --tests` |
@@ -276,6 +276,7 @@ that changes to cross-cutting requirements are propagated to their consumers.
 | `tests.uncredited_evidence` | Evidence naming an assertion its dimension does not count -- a test on an assertion nothing implements -- so it reaches no coverage figure | error | `[rules.coverage] uncredited_evidence` | `elspais -v checks --tests` |
 | `tests.external` | A test that failed and reaches no requirement, so nobody will find the failure through the spec | warning | `[rules.coverage] external_test_failure` | `elspais failing` |
 | `tests.unbound_citation` | A citation in a scanned test file that found no test to attach to -- it names assertions but sits where no test was declared, so no result can ever reach it; it contributes no coverage and is reported here instead | warning | `[rules.severity]` | no command resolves this; resolve it by hand |
+| `tests.ingestion_fault` | An artifact ingestion could not read, or could not read in full -- a results or coverage report that would not parse, one in a format no reporter reads, a reporter name that matches none, a results pattern that matched nothing, a coverage file that is not there, a target whose working directory leaves the repository, or a report that was read while part of what it says was declined. What went unread is absent from every figure, and absence reads as a zero | warning | `[rules.severity]` | no command resolves this; resolve it by hand |
 | `tests.unrunnable_file` | A scanned test file that no configured test target can execute, so what it verifies can raise the Tested figure while Passing has no way to move | info | `[rules.severity]` | no command resolves this; resolve it by hand |
 | `tests.retired_references` | Tests referencing requirements with retired status (Deprecated, Superseded, Rejected) | warning | `[rules.references] retired` | no command resolves this; resolve it by hand |
 | `tests.provisional_references` | Tests referencing requirements with provisional status (Draft, Proposed) | info | `[rules.references] provisional` | no command resolves this; resolve it by hand |
@@ -420,7 +421,8 @@ coverage and results from user journey validation.
 | Check | Description | Default severity | Configured by | Remedy |
 | --- | --- | --- | --- | --- |
 | `uat.results` | Journey pass/fail status from a CSV results file | warning | `[rules.severity]` | `elspais failing` |
-| `uat.uat_coverage` | UAT coverage for requirements at levels that set `expects_validation = true`. Such a requirement with no validating USER_JOURNEY is flagged as a gap. Levels without `expects_validation` are not counted; when no level expects validation the check passes trivially. | error | `[rules.severity]` | `elspais unvalidated` |
+| `uat.uat_coverage` | The `uat_coverage` (UAT Covered) coverage dimension, counted over requirements at levels that set `expects_validation = true`. Levels without `expects_validation` are not counted; when no level expects validation the check passes trivially. Which requirements are unvalidated is reported by `uat.unvalidated` | error | `[rules.severity]` | `elspais unvalidated` |
+| `uat.unvalidated` | A requirement at a level that sets `expects_validation = true` that no USER_JOURNEY validates, or that a journey names without naming its assertions -- reported by name, on the same verdict `elspais unvalidated` reaches | warning | `[rules.severity]` | `elspais unvalidated` |
 | `uat.uat_verified` | The `uat_verified` (UAT Passed) coverage dimension | error | `[rules.severity]` | `elspais failing` |
 <!-- /generated: check-catalog:uat -->
 
@@ -636,7 +638,7 @@ switcher and silently overrides pytest-cov's nodeid-shaped contexts. See
 ✓ TESTS (1 passed, 2 skipped)
 ----------------------------------------
   ~ tests.tested: 82/87 requirements have test coverage (94.3%)
-  ✓ tests.unlinked: All tests linked to requirements
+  ✓ tests.uncited_file: All test files have traceability markers
   ~ tests.results: No test results found
 
 ✓ UAT (2 skipped)

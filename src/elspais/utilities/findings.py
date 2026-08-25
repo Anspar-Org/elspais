@@ -160,16 +160,20 @@ _REMEDIES: dict[str, str] = {
     "references.identifier_form": "elspais -v checks --spec",
     "references.undeclared": "elspais -v checks --spec",
     # -- code ------------------------------------------------------------
-    "code.unlinked": "elspais unlinked",
+    "code.uncited_file": "elspais uncited",
     "code.implemented": "elspais uncovered",
-    "code.no_traceability": "elspais unlinked",
+    # `code.no_traceability` is deliberately absent. It reports the files of
+    # UNLINKED code nodes -- a citation that was read and reached no
+    # requirement -- and no command lists that population: `elspais uncited`
+    # lists files that cite nothing, which is the other population entirely,
+    # and sending a reader there would hand them a list their file is not on.
     # The `{code,tests}.{role}_references` checks are deliberately absent: a
     # citation naming a requirement whose status carries a role is resolved by
     # editing the citation or the requirement, and no command does either.
     # Naming one would send a reader to a surface that reports the condition
     # again rather than resolving it.
     # -- tests -----------------------------------------------------------
-    "tests.unlinked": "elspais unlinked",
+    "tests.uncited_file": "elspais uncited",
     "tests.results": "elspais failing",
     "tests.results_stale": "elspais checks --run-tests",
     "tests.unmatched_results": "elspais -v checks --tests",
@@ -177,15 +181,18 @@ _REMEDIES: dict[str, str] = {
     "tests.verified": "elspais failing",
     "tests.uncredited_evidence": "elspais -v checks --tests",
     "tests.external": "elspais failing",
-    # `tests.unbound_citation` and `tests.unrunnable_file` are deliberately
-    # absent, as `code.unscanned_keyword_file` is: each is resolved by moving
-    # a citation onto the test it describes, or by editing the configuration
-    # that decides which files are scanned and what can run them. No command
-    # does either, and naming one would send a reader to a surface that
-    # reports the condition again rather than resolving it.
+    # `tests.unbound_citation`, `tests.unrunnable_file` and
+    # `tests.ingestion_fault` are deliberately absent, as
+    # `code.unscanned_keyword_file` is: each is resolved by moving a citation
+    # onto the test it describes, by repairing the artifact a target names, or
+    # by editing the configuration that decides which files are scanned and
+    # what can run them. No command does any of those, and naming one would
+    # send a reader to a surface that reports the condition again rather than
+    # resolving it.
     # -- uat -------------------------------------------------------------
     "uat.results": "elspais failing",
     "uat.uat_coverage": "elspais unvalidated",
+    "uat.unvalidated": "elspais unvalidated",
     "uat.uat_verified": "elspais failing",
     # -- terms -----------------------------------------------------------
     "terms.duplicates": "elspais -v checks --terms",
@@ -305,8 +312,10 @@ _DESCRIPTIONS: dict[str, str] = {
         "No comment opens with an identifier that no keyword introduces (produces no relationship)"
     ),
     # -- code --------------------------------------------------------------
-    "code.unlinked": (
-        "Code nodes reaching no requirement (no `# Implements:` or `# Verifies:` comment)"
+    "code.uncited_file": (
+        "A scanned code file that cites nothing -- no `# Implements:`, no `# Verifies:`. Not the "
+        "same population as the unlinked NODES the graph API and the MCP `get_unlinked_nodes` "
+        "tool answer about"
     ),
     "code.code_tested": "Line coverage over the implementation lines attributed to requirements",
     "code.whole_req_only_coverage": (
@@ -317,8 +326,8 @@ _DESCRIPTIONS: dict[str, str] = {
         "The `implemented` coverage dimension (CODE or child REQ covers assertions)"
     ),
     "code.no_traceability": (
-        "Code files carrying no traceability marker at all (test files are covered separately by "
-        "`tests.unlinked`)"
+        "Code files holding a citation that reaches no requirement -- the files of the unlinked "
+        "CODE nodes (test files are covered separately by `tests.uncited_file`)"
     ),
     "code.unscanned_keyword_file": (
         "A file inside a scanned directory that the ignore configuration does not exclude, that "
@@ -335,9 +344,11 @@ _DESCRIPTIONS: dict[str, str] = {
         "Code referencing requirements with aspirational status (Roadmap, Future, Idea)"
     ),
     # -- tests -------------------------------------------------------------
-    "tests.unlinked": (
-        "Test nodes reaching no requirement -- either no test functions found, or no test in the "
-        "file links to any requirement (a file with at least one linked test is not flagged)"
+    "tests.uncited_file": (
+        "A scanned test file in which no test cites anything -- either no test functions found, "
+        "or no test in the file links to any requirement (a file with at least one linked test is "
+        "not flagged). Not the same population as the unlinked NODES the graph API and the MCP "
+        "`get_unlinked_nodes` tool answer about"
     ),
     "tests.results": "Test pass/fail status from JUnit XML or pytest JSON results",
     "tests.results_stale": "Test results older than the code they cover",
@@ -358,6 +369,14 @@ _DESCRIPTIONS: dict[str, str] = {
         "but sits where no test was declared, so no result can ever reach it; it contributes no "
         "coverage and is reported here instead"
     ),
+    "tests.ingestion_fault": (
+        "An artifact ingestion could not read, or could not read in full -- a results or coverage "
+        "report that would not parse, one in a format no reporter reads, a reporter name that "
+        "matches none, a results pattern that matched nothing, a coverage file that is not "
+        "there, a target whose working directory leaves the repository, or a report that was "
+        "read while part of what it says was declined. What went unread is absent from every "
+        "figure, and absence reads as a zero"
+    ),
     "tests.unrunnable_file": (
         "A scanned test file that no configured test target can execute, so what it verifies can "
         "raise the Tested figure while Passing has no way to move"
@@ -374,10 +393,15 @@ _DESCRIPTIONS: dict[str, str] = {
     # -- uat ---------------------------------------------------------------
     "uat.results": "Journey pass/fail status from a CSV results file",
     "uat.uat_coverage": (
-        "UAT coverage for requirements at levels that set `expects_validation = true`. Such a "
-        "requirement with no validating USER_JOURNEY is flagged as a gap. Levels without "
-        "`expects_validation` are not counted; when no level expects validation the check passes "
-        "trivially."
+        "The `uat_coverage` (UAT Covered) coverage dimension, counted over requirements at levels "
+        "that set `expects_validation = true`. Levels without `expects_validation` are not "
+        "counted; when no level expects validation the check passes trivially. Which requirements "
+        "are unvalidated is reported by `uat.unvalidated`"
+    ),
+    "uat.unvalidated": (
+        "A requirement at a level that sets `expects_validation = true` that no USER_JOURNEY "
+        "validates, or that a journey names without naming its assertions -- reported by name, "
+        "on the same verdict `elspais unvalidated` reaches"
     ),
     "uat.uat_verified": "The `uat_verified` (UAT Passed) coverage dimension",
     # -- terms -------------------------------------------------------------
@@ -482,7 +506,7 @@ def _registry() -> dict[str, CheckRule]:
         ),
         _named("references.undeclared", "references", Severity.WARNING, *_REFERENCES, "undeclared"),
         # -- code --------------------------------------------------------
-        _general("code.unlinked", "code", Severity.INFO),
+        _general("code.uncited_file", "code", Severity.INFO),
         _general("code.code_tested", "code", Severity.INFO),
         _general("code.whole_req_only_coverage", "code", Severity.INFO),
         _general("code.implemented", "code", Severity.ERROR),
@@ -503,7 +527,7 @@ def _registry() -> dict[str, CheckRule]:
         # prose costs more than a quiet true finding about a citation.
         _general("code.unscanned_keyword_file", "code", Severity.INFO),
         # -- tests -------------------------------------------------------
-        _general("tests.unlinked", "tests", Severity.INFO),
+        _general("tests.uncited_file", "tests", Severity.INFO),
         _general("tests.results", "tests", Severity.WARNING),
         _general("tests.results_stale", "tests", Severity.WARNING),
         _general("tests.unmatched_results", "tests", Severity.WARNING),
@@ -532,6 +556,21 @@ def _registry() -> dict[str, CheckRule]:
         # ill-placed comment does. What it credits is not a severity question
         # at all -- REQ-d00274-H withdraws the coverage whatever this says.
         _general("tests.unbound_citation", "tests", Severity.WARNING),
+        # An artifact ingestion could not read, or could not read in full, is
+        # reported at `warning`, which is "needs attention" -- the true claim,
+        # and the whole of what the tool knows. `error` says "a defect", and that is not true of
+        # every cause this name covers: a results pattern matching nothing is
+        # the ordinary state of a checkout whose suite has not run yet, so an
+        # `error` default would fail every build made before its tests and
+        # push projects to turn the check off, ending the reporting outright.
+        # Severity is also not what cures the harm here. What makes an
+        # unreadable report indistinguishable from a suite that never ran is
+        # that nobody was told WHICH artifact went unread; the findings name
+        # each one with its path, its line and its target, and that is the
+        # repair. A project for which an unread artifact IS a defect -- one
+        # whose results are always present by the time the graph is built --
+        # raises it to `error` under `[rules.severity]`.
+        _general("tests.ingestion_fault", "tests", Severity.WARNING),
         # A target may legitimately carry no command -- the schema says so
         # ("omitted in CI", where the tests already ran) -- so a project whose
         # every target is ingest-only would be told at warning, on every file
@@ -541,6 +580,13 @@ def _registry() -> dict[str, CheckRule]:
         # -- uat ---------------------------------------------------------
         _general("uat.results", "uat", Severity.WARNING),
         _general("uat.uat_coverage", "uat", Severity.ERROR),
+        # A requirement no journey validates is reported at `warning` while the
+        # dimension it belongs to fails at `error`. Two conditions, two
+        # defaults (REQ-d00285-F): the dimension answers over every counted
+        # assertion and a shortfall there is a defect in the figures, while a
+        # named requirement awaiting a journey is work a reader schedules --
+        # and a project that wants it to fail the run raises it here.
+        _general("uat.unvalidated", "uat", Severity.WARNING),
         _general("uat.uat_verified", "uat", Severity.ERROR),
         # -- terms -------------------------------------------------------
         _named("terms.duplicates", "terms", Severity.ERROR, *_TERMS, "duplicate"),

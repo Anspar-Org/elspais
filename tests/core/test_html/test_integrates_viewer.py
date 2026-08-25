@@ -194,8 +194,8 @@ class TestIntegratesRollupSerialized:
             f"implemented by code, not verified); got {props['integrates_rollup']!r}"
         )
 
-    # Verifies: REQ-d00252-D, REQ-d00258-N
-    def test_REQ_d00258_N_library_failure_flag_serialized(self, federation):
+    # Verifies: REQ-d00252-D, REQ-d00277-C
+    def test_REQ_d00277_C_library_failure_flag_serialized(self, federation):
         """A library with one passing and one failing declared test reads as
         covered on the count alone, so the serialized rollup must carry
         has_failures=True for the viewer to flag the partly-red suite."""

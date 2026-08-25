@@ -312,11 +312,11 @@ class TestBuilderSatisfiesEdge:
 class TestChangeDetection:
     """Template hash changes flag SATISFIES declarations.
 
-    Validates REQ-p00004-G: Change detection for SATISFIES edges.
+    Validates REQ-p00004-K: Change detection for SATISFIES edges.
     """
 
-    # Verifies: REQ-p00004-G
-    def test_REQ_p00004_G_template_hash_change_flags_declaring_reqs(self):
+    # Verifies: REQ-p00004-K
+    def test_REQ_p00004_K_template_hash_change_flags_declaring_reqs(self):
         """When template hash changes, declaring reqs should be flagged."""
         from tests.core.graph_test_helpers import build_graph
 

@@ -27,7 +27,7 @@ COMPOSABLE_SECTIONS = (
     "no_assertions",
     "gaps",
     "broken",
-    "unlinked",
+    "uncited",
 )
 
 # Implements: REQ-d00085-E
@@ -43,7 +43,7 @@ FORMAT_SUPPORT = {
     "no_assertions": {"text", "markdown", "json"},
     "gaps": {"text", "markdown", "json"},
     "broken": {"text", "markdown", "json"},
-    "unlinked": {"text", "markdown", "json"},
+    "uncited": {"text", "markdown", "json"},
 }
 
 EXIT_BIT: dict[str, int] = {
@@ -58,7 +58,7 @@ EXIT_BIT: dict[str, int] = {
     "no_assertions": 16,
     "gaps": 16,
     "broken": 32,
-    "unlinked": 64,
+    "uncited": 64,
 }
 
 
@@ -196,7 +196,7 @@ def run(
         "no_assertions",
         "gaps",
         "broken",
-        "unlinked",
+        "uncited",
     }
     if set(sections) & graph_sections:
         from elspais.config import get_config
@@ -267,10 +267,10 @@ def _render_section(
         from elspais.commands.broken import render_section as broken_render
 
         return broken_render(graph, config, args)
-    elif name == "unlinked":
-        from elspais.commands.unlinked import render_section as unlinked_render
+    elif name == "uncited":
+        from elspais.commands.uncited import render_section as uncited_render
 
-        return unlinked_render(graph, config, args)
+        return uncited_render(graph, config, args)
     else:
         return f"Error: Unknown section '{name}'", 1
 

@@ -1332,13 +1332,13 @@ async def api_run_errors(request: Request) -> JSONResponse:
     return JSONResponse(compute_errors(state.graph, state.config, params))
 
 
-async def api_run_unlinked(request: Request) -> JSONResponse:
-    """GET /api/run/unlinked - Unlinked test and code nodes."""
-    from elspais.commands.unlinked import compute_unlinked
+async def api_run_uncited(request: Request) -> JSONResponse:
+    """GET /api/run/uncited - Scanned code and test files that cite nothing."""
+    from elspais.commands.uncited import compute_uncited
 
     state = _st(request)
     params = dict(request.query_params)
-    return JSONResponse(compute_unlinked(state.graph, state.config, params))
+    return JSONResponse(compute_uncited(state.graph, state.config, params))
 
 
 async def api_run_analysis(request: Request) -> JSONResponse:

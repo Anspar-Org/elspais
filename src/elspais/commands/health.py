@@ -3306,51 +3306,48 @@ def check_code_coverage(
     )
 
 
-def check_unlinked_code(graph: FederatedGraph, config: dict[str, Any] | None = None) -> HealthCheck:
-    """Check for code files with no traceability markers.
+# Implements: REQ-d00241-A, REQ-d00285-F
+def check_uncited_code(graph: FederatedGraph, config: dict[str, Any] | None = None) -> HealthCheck:
+    """Report scanned code files that cite nothing.
 
-    Finds FILE nodes of type CODE that were scanned but contain no
-    CODE child nodes (i.e. no Implements: or Verifies: comments found).
+    A CODE node is what a citation comment becomes, so a scanned code file
+    with none was read and said nothing about the estate.
+
+    The population is `collect_uncited`, the same predicate `elspais uncited`
+    lists, so the command and the check cannot answer differently. It is NOT
+    the *unlinked* population: an unlinked node is one that exists and reaches
+    no requirement, which the graph API and the MCP `get_unlinked_nodes` tool
+    answer about. One name over both populations puts two surfaces in
+    contradiction about the same repository, which REQ-d00285-F forbids.
     """
-    severity = severity_for("code.unlinked", config)
+    severity = severity_for("code.uncited_file", config)
     if severity == Severity.OFF:
-        return skipped_check("code.unlinked", "Code nodes reaching no requirement")
+        return skipped_check("code.uncited_file", "Code files citing nothing")
 
-    from elspais.graph import NodeKind
-    from elspais.graph.GraphNode import FileType
-    from elspais.graph.relations import EdgeKind
+    from elspais.commands.uncited import collect_uncited
 
-    unlinked_files = []
-    for file_node in graph.iter_roots(NodeKind.FILE):
-        if file_node.get_field("file_type") != FileType.CODE:
-            continue
-        has_code_child = any(
-            child.kind == NodeKind.CODE
-            for child in file_node.iter_children(edge_kinds={EdgeKind.CONTAINS})
-        )
-        if not has_code_child:
-            unlinked_files.append(file_node.get_field("relative_path") or file_node.id)
+    uncited_files = sorted(e.file for e in collect_uncited(graph).code)
 
-    if unlinked_files:
+    if uncited_files:
         findings = [
             HealthFinding(
                 message=f"No traceability markers: {f}",
                 file_path=f,
             )
-            for f in sorted(unlinked_files)
+            for f in uncited_files
         ]
         return HealthCheck(
-            name="code.unlinked",
+            name="code.uncited_file",
             passed=False,
-            message=f"{len(unlinked_files)} code file(s) with no traceability markers",
+            message=f"{len(uncited_files)} code file(s) with no traceability markers",
             category="code",
             severity=severity,
-            details={"count": len(unlinked_files), "files": sorted(unlinked_files)[:20]},
+            details={"count": len(uncited_files), "files": uncited_files[:20]},
             findings=findings,
         )
 
     return HealthCheck(
-        name="code.unlinked",
+        name="code.uncited_file",
         passed=True,
         message="All code files have traceability markers",
         category="code",
@@ -3450,11 +3447,16 @@ def check_no_traceability(
     faulted_files: frozenset[str] | set[str] = frozenset(),
     config: dict[str, Any] | None = None,
 ) -> HealthCheck:
-    """Check for code files with no traceability markers.
+    """Check for code files holding a citation that reaches no requirement.
 
-    Test files are deliberately excluded -- ``tests.unlinked``
-    (``check_unlinked_tests``) already reports marker-less test files;
-    including them here too would double-report the same file.
+    The population is the files of the UNLINKED CODE nodes -- nodes that
+    exist and reach no requirement through a traceability edge. It is not the
+    uncited population (`code.uncited_file`), which is about files that cite
+    nothing at all.
+
+    Test files are deliberately excluded -- ``tests.uncited_file``
+    (``check_uncited_tests``) already reports test files whose tests cite
+    nothing; including them here too would double-report the same file.
 
     A file whose markers produced no relationship carries markers, and
     saying it carries none sends its author to add what is already there.
@@ -3562,7 +3564,7 @@ def run_code_checks(
 
     checks = [
         check_code_coverage(graph, exclude_status=exclude_status, config=config),
-        check_unlinked_code(graph, config),
+        check_uncited_code(graph, config),
         _check_status_references(
             graph, NodeKind.CODE, StatusRole.RETIRED, exclude_status=exclude_status, config=config
         ),
@@ -3592,7 +3594,7 @@ def run_code_checks(
     if has_coverage:
         checks.append(check_line_coverage(graph, config=config))
 
-    # Implements: REQ-d00241-B, REQ-d00241-C
+    # Implements: REQ-d00241-A, REQ-d00241-C
     unlinked_files = []
     for node in graph.iter_unlinked(NodeKind.CODE):
         file_n = node.file_node()
@@ -3878,18 +3880,17 @@ def check_uat_coverage(
     non-expecting levels (the default) contribute to neither numerator nor
     denominator. When no level expects validation the check passes trivially
     (nothing to validate).
-    """
-    from elspais.config import level_expects_validation
 
+    This reports the dimension and nothing else. Which requirements a journey
+    left unvalidated is a different condition with a different answer and a
+    different severity, and it is reported under its own name by
+    ``check_unvalidated_requirements`` (REQ-d00285-F).
+    """
     if severity_for("uat.uat_coverage", config) == Severity.OFF:
         return skipped_check("uat.uat_coverage", "UAT Covered coverage failures")
 
     cfg = config or {}
-    levels = cfg.get("levels") if isinstance(cfg, dict) else None
-    any_expects = isinstance(levels, dict) and any(
-        level_expects_validation(cfg, key) for key in levels
-    )
-    if not any_expects:
+    if not _any_level_expects_validation(cfg):
         return HealthCheck(
             name="uat.uat_coverage",
             passed=True,
@@ -3899,41 +3900,82 @@ def check_uat_coverage(
             details={"dimension": "uat_coverage", "expects_validation_levels": 0},
         )
 
-    def level_filter(level: str | None) -> bool:
-        return level_expects_validation(cfg, level)
-
-    check = check_dimension_coverage(
+    return check_dimension_coverage(
         graph,
         "uat_coverage",
         exclude_status=exclude_status,
         config=config,
-        level_filter=level_filter,
+        level_filter=_validation_level_filter(cfg),
         message_suffix=" (expects_validation levels only)",
     )
 
-    # An expects_validation requirement lacking UAT coverage is a real gap:
-    # collect those reqs as findings and fail the check (REQ-d00258-F). The
-    # dimension sums come from check_dimension_coverage; this only identifies
-    # WHICH reqs are uncovered (no re-implementation of the sum walk).
+
+def _any_level_expects_validation(cfg: dict[str, Any] | Any) -> bool:
+    """Whether any configured level sets ``expects_validation``."""
+    from elspais.config import level_expects_validation
+
+    levels = cfg.get("levels") if isinstance(cfg, dict) else None
+    return isinstance(levels, dict) and any(level_expects_validation(cfg, key) for key in levels)
+
+
+def _validation_level_filter(cfg: dict[str, Any] | Any) -> Any:
+    """A predicate selecting the levels that expect validation."""
+    from elspais.config import level_expects_validation
+
+    def level_filter(level: str | None) -> bool:
+        return level_expects_validation(cfg, level)
+
+    return level_filter
+
+
+# Implements: REQ-d00258-F, REQ-d00285-F
+def check_unvalidated_requirements(
+    graph: FederatedGraph, config: dict[str, Any] | None = None
+) -> HealthCheck:
+    """Report requirements whose level expects validation and that have none.
+
+    This is a different condition from the UAT coverage dimension, and carries
+    a name and a severity of its own (REQ-d00285-F). The dimension is about
+    the figures over every counted assertion; this names the particular
+    requirements a reader must go and write a journey for. One name could
+    carry only one default, and a project moving it would move one of the two
+    questions without knowing which.
+
+    A requirement is reported here on the same verdict ``gaps unvalidated``
+    reaches (``work_verdict``), so the two surfaces cannot disagree about a
+    requirement: a blanket journey naming the requirement but none of its
+    assertions is listed here exactly as it is listed there.
+    """
+    severity = severity_for("uat.unvalidated", config)
+    if severity == Severity.OFF:
+        return skipped_check("uat.unvalidated", "Requirements no journey validates")
+
     from elspais.config import status_expects_implementation
     from elspais.graph import NodeKind
     from elspais.graph.aggregation import work_verdict
 
-    # REQ-d00258-C: the uncovered-findings walk gates on the SAME coverage
-    # inclusion resolver as ``aggregate_dimension`` above, so the sums and the
-    # findings list stay consistent (both count a status iff it expects
-    # implementation). Behavior-preserving for default config.
+    cfg = config or {}
+    if not _any_level_expects_validation(cfg):
+        return HealthCheck(
+            name="uat.unvalidated",
+            passed=True,
+            message="No levels expect validation (expects_validation)",
+            category="uat",
+            severity=severity,
+            details={"expects_validation_levels": 0},
+        )
+    level_filter = _validation_level_filter(cfg)
+
+    # REQ-d00258-C: this walk gates on the SAME coverage inclusion resolver as
+    # ``aggregate_dimension`` does for the dimension check, so the sums there
+    # and the names here stay consistent -- both count a status iff it expects
+    # implementation.
     uncovered: list[HealthFinding] = []
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
         if not status_expects_implementation(cfg, node.status) or not level_filter(node.level):
             continue
         rollup = node.get_metric("rollup_metrics")
-        # Implements: REQ-d00258-C, REQ-d00258-M
-        # The verdict is ``work_verdict``, the same one ``gaps unvalidated``
-        # reaches, so the two cannot disagree about a requirement: a blanket
-        # journey used to satisfy this check while gaps listed the assertions
-        # it named none of.
-        # Implements: REQ-p00017-G
+        # Implements: REQ-d00258-C, REQ-d00258-M, REQ-p00017-G
         labels = counted_assertion_labels(node, structural=True)
         verdict = work_verdict(rollup, "uat_coverage", labels)
         if not verdict.attached:
@@ -3960,88 +4002,70 @@ def check_uat_coverage(
                 )
             )
 
-    # A dimension the project turned off reports nothing, and an uncovered
-    # expects_validation requirement is one of the things it turned off: the
-    # skip stands rather than being overwritten here.
-    if uncovered and not check.details.get("skipped"):
-        check.passed = False
-        # The severity of a SECOND condition reported under this check's name:
-        # an expects_validation requirement a journey names without naming its
-        # assertions. It is not the dimension's own failure severity, so it is
-        # not the one `severity_for` resolves -- separating the two conditions
-        # into two names is what REQ-d00285-F asks for and is not yet done.
-        check.severity = "warning"
-        check.findings = uncovered
-        check.details["uncovered_expects_validation"] = [f.node_id for f in uncovered]
-    return check
-
-
-# Implements: REQ-d00241-D
-def check_unlinked_tests(
-    graph: FederatedGraph, config: dict[str, Any] | None = None
-) -> HealthCheck:
-    """Check for test files with no traceability markers.
-
-    Flags FILE nodes of type TEST that either contain no TEST child
-    nodes at all, or contain TEST children none of which link to any
-    requirement. The second condition is essential: the parser emits a
-    TEST node for every discovered test function whether or not it
-    carries a Verifies: marker, so a fully marker-less test file still
-    has TEST children. Files with at least one linked test are not
-    flagged (partial marking is not "unlinked").
-
-    A file whose only citation attached to no test carries a marker, and
-    saying it carries none would send its author to add what is already
-    there (REQ-d00241-E). Those files are excluded here and named by
-    ``tests.unbound_citation``, which says what is actually wrong with them.
-    """
-    severity = severity_for("tests.unlinked", config)
-    if severity == Severity.OFF:
-        return skipped_check("tests.unlinked", "Test nodes reaching no requirement")
-
-    from elspais.graph import NodeKind
-    from elspais.graph.GraphNode import FileType
-    from elspais.graph.relations import EdgeKind
-
-    # Implements: REQ-d00241-E
-    cited_but_unbound = {c.path for c in graph.unbound_citations()}
-
-    unlinked_files = []
-    for file_node in graph.iter_roots(NodeKind.FILE):
-        if file_node.get_field("file_type") != FileType.TEST:
-            continue
-        has_linked_test = any(
-            graph.is_reachable_to_requirement(child)
-            for child in file_node.iter_children(edge_kinds={EdgeKind.CONTAINS})
-            if child.kind == NodeKind.TEST
+    if not uncovered:
+        return HealthCheck(
+            name="uat.unvalidated",
+            passed=True,
+            message="Every requirement at an expects_validation level is validated",
+            category="uat",
+            severity=severity,
         )
-        if has_linked_test:
-            continue
-        relative_path = file_node.get_field("relative_path") or ""
-        if relative_path in cited_but_unbound:
-            continue
-        unlinked_files.append(relative_path or file_node.id)
+    uncovered.sort(key=lambda f: f.node_id or "")
+    return HealthCheck(
+        name="uat.unvalidated",
+        passed=False,
+        message=f"{len(uncovered)} requirement(s) at an expects_validation level are unvalidated",
+        category="uat",
+        severity=severity,
+        details={
+            "count": len(uncovered),
+            "uncovered_expects_validation": [f.node_id for f in uncovered],
+        },
+        findings=uncovered,
+    )
 
-    if unlinked_files:
+
+# Implements: REQ-d00241-D, REQ-d00285-F
+def check_uncited_tests(graph: FederatedGraph, config: dict[str, Any] | None = None) -> HealthCheck:
+    """Report scanned test files in which no test cites anything.
+
+    The population is `collect_uncited`, the same predicate `elspais uncited`
+    lists -- including its exclusion of a file whose only citation attached to
+    no test, which `tests.unbound_citation` reports with what is actually
+    wrong with it (REQ-d00241-E).
+
+    It is NOT the *unlinked* population: a file holding one linked test and
+    nine unlinked ones is full of unlinked nodes and is not uncited
+    (REQ-d00285-F).
+    """
+    severity = severity_for("tests.uncited_file", config)
+    if severity == Severity.OFF:
+        return skipped_check("tests.uncited_file", "Test files citing nothing")
+
+    from elspais.commands.uncited import collect_uncited
+
+    uncited_files = sorted(e.file for e in collect_uncited(graph).tests)
+
+    if uncited_files:
         findings = [
             HealthFinding(
                 message=f"No traceability markers: {f}",
                 file_path=f,
             )
-            for f in sorted(unlinked_files)
+            for f in uncited_files
         ]
         return HealthCheck(
-            name="tests.unlinked",
+            name="tests.uncited_file",
             passed=False,
-            message=f"{len(unlinked_files)} test file(s) with no traceability markers",
+            message=f"{len(uncited_files)} test file(s) with no traceability markers",
             category="tests",
             severity=severity,
-            details={"count": len(unlinked_files), "files": sorted(unlinked_files)[:20]},
+            details={"count": len(uncited_files), "files": uncited_files[:20]},
             findings=findings,
         )
 
     return HealthCheck(
-        name="tests.unlinked",
+        name="tests.uncited_file",
         passed=True,
         message="All test files have traceability markers",
         category="tests",
@@ -4285,6 +4309,86 @@ def check_unbound_citations(
     )
 
 
+# Implements: REQ-p00019-H, REQ-d00285-A, REQ-d00285-B
+def check_ingestion_faults(
+    graph: FederatedGraph, config: dict[str, Any] | None = None
+) -> HealthCheck:
+    """Report every artifact ingestion could not read, or not read in full.
+
+    A results file that will not parse, a coverage report in a format no
+    reporter reads, a reporter name that matches none, a target whose working
+    directory leaves the repository, a results pattern that matched nothing, a
+    coverage file that is not there: each ends with a measurement the project
+    asked for absent from the graph. A reader that got through the artifact
+    and declined PART of it records the same way -- a coverage report whose
+    per-file re-analysis failed was read, and what it says about that file was
+    not -- so the count here is of artifacts read short, not only of artifacts
+    read not at all. Each finding carries the cause, which says which it is.
+
+    Absence is the thing a reader cannot see. A requirement whose results
+    never parsed reads exactly as one whose tests never ran, and the two call
+    for opposite actions -- which is why the point that dropped the artifact
+    recorded what it dropped (REQ-d00285-G). Recording it and never saying it
+    is only marginally better than dropping it silently, so this is where the
+    record is spoken (REQ-p00019-H).
+
+    Each finding NAMES its artifact: the path the configuration reached, the
+    line where the condition has one, the target it arose under, and the cause
+    in the words the recording site chose (REQ-d00285-A). A count without the
+    names would leave the reader the search the tool already performed.
+
+    A record names its artifact relative to the repository holding it, and two
+    members of a federation may hold the same relative path, so the member is
+    read from the graph the record came out of rather than looked up
+    afterwards from a path that answers for both.
+    """
+    severity = severity_for("tests.ingestion_fault", config)
+    if severity == Severity.OFF:
+        return skipped_check("tests.ingestion_fault", "Artifacts ingestion produced nothing from")
+
+    findings: list[HealthFinding] = []
+    for entry in graph.iter_repos():
+        if entry.graph is None:
+            continue
+        for fault in sorted(
+            entry.graph.ingestion_faults(),
+            key=lambda f: (f.stage, f.path, f.target or "", f.cause),
+        ):
+            # The artifact is named first, because it is what the reader
+            # goes to. Where the configuration named no file -- a reporter
+            # nothing matches, a target whose directory left the repository
+            # -- the target is the location there is, and saying so beats
+            # saying nothing.
+            where = fault.path or (f"target {fault.target}" if fault.target else "configuration")
+            under = f" (target {fault.target})" if fault.path and fault.target else ""
+            findings.append(
+                HealthFinding(
+                    message=f"{where}{under}: {fault.cause}",
+                    file_path=fault.path or None,
+                    line=fault.line,
+                    repo=entry.name,
+                )
+            )
+
+    if not findings:
+        return HealthCheck(
+            name="tests.ingestion_fault",
+            passed=True,
+            message="Every artifact ingestion reached was read in full",
+            category="tests",
+            severity=severity,
+        )
+    return HealthCheck(
+        name="tests.ingestion_fault",
+        passed=False,
+        message=f"{len(findings)} artifact(s) ingestion could not read, or not read in full",
+        category="tests",
+        severity=severity,
+        details={"count": len(findings)},
+        findings=findings,
+    )
+
+
 # Implements: REQ-d00276-E
 def _target_reach(config: dict[str, Any] | None) -> list[str] | None:
     """The repo-relative directories this project's runnable targets reach.
@@ -4397,13 +4501,14 @@ def run_test_checks(
         check_test_coverage(graph, exclude_status=exclude_status, config=config),
         check_dimension_coverage(graph, "verified", exclude_status=exclude_status, config=config),
         check_uncredited_evidence(graph, config),
-        check_unlinked_tests(graph, config),
+        check_uncited_tests(graph, config),
         check_unbound_citations(graph, config),
         check_unrunnable_test_files(graph, config),
         check_external_tests(graph, config),
         check_test_results(graph, config=config),
         check_test_results_stale(graph, config),
         check_unmatched_results(graph, config),
+        check_ingestion_faults(graph, config),
         _check_status_references(
             graph, NodeKind.TEST, StatusRole.RETIRED, exclude_status=exclude_status, config=config
         ),
@@ -4430,6 +4535,7 @@ def run_uat_checks(
     """Run all UAT (User Acceptance Test) health checks."""
     return [
         check_uat_coverage(graph, exclude_status=exclude_status, config=config),
+        check_unvalidated_requirements(graph, config=config),
         check_dimension_coverage(
             graph, "uat_verified", exclude_status=exclude_status, config=config
         ),

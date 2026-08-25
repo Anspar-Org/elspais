@@ -15,7 +15,7 @@ import pytest
 
 from elspais.commands.health import (
     check_unbound_citations,
-    check_unlinked_tests,
+    check_uncited_tests,
     check_unrunnable_test_files,
     check_unscanned_keyword_files,
 )
@@ -305,7 +305,7 @@ class TestCitationsThatBindToNoTest:
         graph = _build(tmp_path, config_file)
         config = _config_of(graph)
 
-        unlinked = check_unlinked_tests(graph, config)
+        unlinked = check_uncited_tests(graph, config)
         reported = {f.file_path for f in unlinked.findings}
         assert "tests/test_thing.py" not in reported, (
             "A file carrying a citation that bound nothing carries a marker"

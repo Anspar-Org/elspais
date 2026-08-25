@@ -759,7 +759,7 @@ class TestSummaryIntegrations:
         assert "passing" in text.lower()
         assert "Passing" in md
 
-    # Verifies: REQ-d00252-D, REQ-d00252-F, REQ-d00258-N
+    # Verifies: REQ-d00252-D, REQ-d00252-F, REQ-d00277-C
     def test_REQ_d00252_F_lcov_only_library_is_not_passing_in_summary(self, tmp_path):
         """A library requirement whose only evidence is lcov_tested credit (no
         Verifies:-based result) contributes nothing to the passing column of
@@ -798,8 +798,8 @@ class TestSummaryIntegrations:
         assert by_name["library"]["verified_total"] == 1
         assert by_name["library"]["has_failures"] is False
 
-    # Verifies: REQ-d00252-F, REQ-d00258-N
-    def test_REQ_d00258_N_library_failures_flagged_in_summary(self, tmp_path):
+    # Verifies: REQ-d00252-F, REQ-d00277-C
+    def test_REQ_d00277_C_library_failures_flagged_in_summary(self, tmp_path):
         """A library with one passing and one failing declared test reads as
         covered on the covered/total figures alone. The summary must carry
         has_failures through to the integrations row/total and mark the
@@ -848,7 +848,7 @@ class TestSummaryIntegrations:
         assert "failing test result" in md
 
 
-# Verifies: REQ-d00258-N
+# Verifies: REQ-d00277-C
 class TestLineCoverageDoesNotCreditPassing:
     """The headline passing score counts what the declared tests returned;
     line-coverage credit reaches it from nowhere (REQ-d00254-B)."""

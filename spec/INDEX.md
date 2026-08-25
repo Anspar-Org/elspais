@@ -10,10 +10,10 @@
 
 | ID         | Title                                            | File            | Hash     |
 | ---------- | ------------------------------------------------ | --------------- | -------- |
-| REQ-p00001 | Requirements Management Tool                     | prd-core.md     | 2d10975a |
+| REQ-p00001 | Requirements Management Tool                     | prd-core.md     | 224578c6 |
 | REQ-p00002 | Requirements Validation                          | prd-core.md     | c8440f64 |
 | REQ-p00003 | Traceability Matrix Generation                   | prd-core.md     | 3121ad66 |
-| REQ-p00004 | Change Detection and Auditability                | prd-core.md     | b7e19864 |
+| REQ-p00004 | Change Detection and Auditability                | prd-core.md     | 1042856d |
 | REQ-p00005 | Multi-Repository Requirements                    | prd-features.md | de05471c |
 | REQ-p00006 | Interactive Traceability Viewer                  | prd-features.md | 185217a3 |
 | REQ-p00013 | End-to-End Tests Exercise the Installed Command  | prd-core.md     | 1b5c65b2 |
@@ -65,15 +65,15 @@
 | REQ-o00072 | Domain Deserialization Layer        | ops-architecture.md | 53789928 |
 | REQ-o00073 | MCP Org-Wide Context                | ops-mcp.md          | 346f3031 |
 | REQ-o00074 | Background Daemon Lifetime          | ops-mcp.md          | dace8fb0 |
-| REQ-o00075 | Shared Graph Daemon                 | ops-mcp.md          | b44d9887 |
+| REQ-o00075 | Shared Graph Daemon                 | ops-mcp.md          | 2598192d |
 | REQ-o00076 | Reaching the Serving Process        | ops-mcp.md          | 32c4639b |
-| REQ-o00077 | Serving From the Installed Program  | ops-mcp.md          | 2dfa09e9 |
+| REQ-o00077 | Serving From the Installed Program  | ops-mcp.md          | 3488ba9c |
 
 ## DEVELOPMENT
 
 | ID         | Title                                                         | File                    | Hash     |
 | ---------- | ------------------------------------------------------------- | ----------------------- | -------- |
-| REQ-d00010 | Traceability API Server                                       | dev-traceview-review.md | aaae0fb2 |
+| REQ-d00010 | Traceability API Server                                       | dev-traceview-review.md | cd30d3da |
 | REQ-d00050 | Node Annotator Functions                                      | dev-graph-core.md       | c9217201 |
 | REQ-d00051 | Graph Aggregate Functions                                     | dev-graph-core.md       | ca876d95 |
 | REQ-d00052 | Output Generators Consume Graph Directly                      | dev-graph-core.md       | abb3f6b8 |
@@ -89,7 +89,7 @@
 | REQ-d00067 | Uncovered Assertions Tool Implementation                      | dev-mcp-tools.md        | c838e24d |
 | REQ-d00068 | Assertion Keyword Search Tool Implementation                  | dev-mcp-tools.md        | d552fda6 |
 | REQ-d00069 | Indirect Coverage Source                                      | dev-graph-core.md       | 665b798a |
-| REQ-d00070 | Indirect Coverage Toggle Display                              | dev-graph-core.md       | 27a15cb2 |
+| REQ-d00070 | Indirect Coverage Toggle Display                              | dev-graph-core.md       | eda3f31c |
 | REQ-d00071 | Unified Root vs Orphan Classification                         | dev-graph-core.md       | f2cb5f45 |
 | REQ-d00072 | Link Suggestion Core Engine                                   | dev-graph-core.md       | 9d57c2ad |
 | REQ-d00073 | Link Suggestion CLI Command                                   | dev-cli.md              | 975970c4 |
@@ -100,8 +100,8 @@
 | REQ-d00078 | Scoped Search Implementation                                  | dev-mcp-tools.md        | c3a0cf17 |
 | REQ-d00079 | Discover Requirements Implementation                          | dev-mcp-tools.md        | 564cb7c6 |
 | REQ-d00080 | Diagnostic Command Exit Code Contract                         | dev-cli.md              | acc2aa77 |
-| REQ-d00081 | Multi-Assertion Reference Expansion                           | dev-cli.md              | b1812806 |
-| REQ-d00082 | Unified Reference Configuration                               | dev-cli.md              | f0808bb9 |
+| REQ-d00081 | Multi-Assertion Reference Expansion                           | dev-cli.md              | 6d66ba55 |
+| REQ-d00082 | Unified Reference Configuration                               | dev-cli.md              | edbd5d9a |
 | REQ-d00084 | Trace Command                                                 | dev-cli.md              | 5728e809 |
 | REQ-d00085 | Unified Report Composition                                    | dev-cli.md              | ee68f8ee |
 | REQ-d00086 | Coverage Report Section                                       | dev-cli.md              | 8e02f52d |
@@ -128,7 +128,7 @@
 | REQ-d00209 | Schema-Driven Init Template Generation                        | dev-graph-config.md     | b25e4468 |
 | REQ-d00210 | Documentation Drift Detection                                 | dev-graph-config.md     | 59023724 |
 | REQ-d00211 | Config-Driven Viewer UI Values                                | dev-graph-config.md     | 254fcba9 |
-| REQ-d00212 | Config Schema v3 Models                                       | dev-graph-config.md     | 22e31e30 |
+| REQ-d00212 | Config Schema v3 Models                                       | dev-graph-config.md     | 277219e9 |
 | REQ-d00213 | Version Check and Update Notification                         | dev-cli.md              | cedd398b |
 | REQ-d00214 | MCP Server Install/Uninstall CLI Commands                     | dev-mcp-tools.md        | 5f372b62 |
 | REQ-d00215 | Keyword Extraction Annotator                                  | dev-graph-core.md       | db477d99 |
@@ -157,7 +157,7 @@
 | REQ-d00238 | Graph-Wide Term Scan                                          | prd-core.md             | b14edde9 |
 | REQ-d00239 | Federated Graph Term Scanner Pass                             | prd-core.md             | e27abfeb |
 | REQ-d00240 | New Term Health Checks                                        | prd-core.md             | b4e70076 |
-| REQ-d00241 | Code No-Traceability Health Check                             | prd-core.md             | a0c9c65d |
+| REQ-d00241 | Code No-Traceability Health Check                             | prd-core.md             | bdfbd910 |
 | REQ-d00242 | Terms API Endpoints                                           | prd-features.md         | a4522e0f |
 | REQ-d00243 | Terms Tab in Viewer Nav Tree                                  | prd-features.md         | 2873ed03 |
 | REQ-d00244 | Term Cards in Viewer Card Stack                               | prd-features.md         | 0a48035f |
@@ -167,14 +167,14 @@
 | REQ-d00248 | Fix Command Idempotency                                       | prd-core.md             | 99bb6d77 |
 | REQ-d00249 | Configured test runner execution                              | dev-cli.md              | 784f8350 |
 | REQ-d00250 | Section Header Depth Canonicalization                         | dev-graph-core.md       | 48fc2f11 |
-| REQ-d00251 | A Repository's Identifier Grammar                             | dev-graph-config.md     | 09f5a257 |
+| REQ-d00251 | A Repository's Identifier Grammar                             | dev-graph-config.md     | b49bd5ee |
 | REQ-d00252 | External Library Integration via Integrates Keyword           | dev-graph-federation.md | 1de716cb |
 | REQ-d00253 | Federation Write/Generation Scope                             | dev-graph-federation.md | f454041e |
-| REQ-d00254 | Test Evidence: Attribution, Ingestion, and Coverage Crediting | dev-graph-core.md       | 00518ba3 |
+| REQ-d00254 | Test Evidence: Attribution, Ingestion, and Coverage Crediting | dev-graph-core.md       | e16eaff7 |
 | REQ-d00255 | Test-to-Journey UAT Verification                              | dev-graph-core.md       | ab5cb648 |
 | REQ-d00256 | Step-Level UAT Verification                                   | dev-graph-core.md       | 8bf40a7c |
 | REQ-d00257 | UAT-Scoped Traceability Report                                | dev-graph-core.md       | 1ea68210 |
-| REQ-d00258 | Reporting Surface Consistency                                 | dev-graph-core.md       | 6c978321 |
+| REQ-d00258 | Reporting Surface Consistency                                 | dev-graph-core.md       | 15129897 |
 | REQ-d00259 | Requirement Format Reference Command                          | dev-cli.md              | c3b67490 |
 | REQ-d00260 | Workspace Registry and Federated View Assembly                | dev-graph-federation.md | 510a0f67 |
 | REQ-d00261 | Federation Role Model                                         | dev-graph-federation.md | fb8db8a9 |
@@ -185,7 +185,7 @@
 | REQ-d00267 | Viewer Pending-Work Indicator Truth                           | prd-features.md         | c1be85e3 |
 | REQ-d00268 | Report Malformed Assertion Labels                             | dev-graph-core.md       | cb7e96dd |
 | REQ-d00269 | Cross-Repository Coverage Credit                              | dev-graph-federation.md | a7f382b1 |
-| REQ-d00270 | Single-Authority Identifier Grammar Derivation                | dev-graph-config.md     | c8cb35b9 |
+| REQ-d00270 | Single-Authority Identifier Grammar Derivation                | dev-graph-config.md     | fe29efc0 |
 | REQ-d00271 | Diagnostic Code Vocabulary                                    | dev-cli.md              | 6f4019d1 |
 | REQ-d00272 | Reference Fault Classification                                | dev-graph-core.md       | 3a1ca059 |
 | REQ-d00273 | Requirement Metadata Block                                    | dev-graph-file-nodes.md | 2d7e25e8 |

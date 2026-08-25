@@ -1,7 +1,7 @@
 # Verifies: REQ-d00085, REQ-d00241
 """Tests for traceability-focused health checks.
 
-Tests check_structural_orphans(), check_unlinked_tests(), check_unlinked_code(),
+Tests check_structural_orphans(), check_uncited_tests(), check_uncited_code(),
 check_reference_class(), config backward compatibility for allow_orphans, and
 the code.no_traceability wiring in run_code_checks() (REQ-d00241).
 """
@@ -18,8 +18,8 @@ from elspais.commands.health import (
     check_no_cycles,
     check_reference_class,
     check_structural_orphans,
-    check_unlinked_code,
-    check_unlinked_tests,
+    check_uncited_code,
+    check_uncited_tests,
     run_code_checks,
     run_spec_checks,
 )
@@ -116,7 +116,7 @@ class TestCheckStructuralOrphans:
 
 
 class TestCheckUnlinkedTests:
-    """Tests for check_unlinked_tests() — file-level semantics.
+    """Tests for check_uncited_tests() — file-level semantics.
 
     Unlinked means a TEST-type FILE was scanned and either contains no
     TEST child nodes at all, or contains TEST children none of which
@@ -138,13 +138,13 @@ class TestCheckUnlinkedTests:
                 end_line=5,
             ),
         )
-        check = check_unlinked_tests(graph)
+        check = check_uncited_tests(graph)
         assert check.passed
-        assert check.name == "tests.unlinked"
+        assert check.name == "tests.uncited_file"
 
     # Verifies: REQ-d00085
-    def test_REQ_d00085_unlinked_test_file_has_info_severity(self) -> None:
-        """A TEST file with no TEST child nodes is unlinked — severity info."""
+    def test_REQ_d00085_uncited_test_file_has_info_severity(self) -> None:
+        """A TEST file with no TEST child nodes is uncited — severity info."""
         graph = build_graph(
             make_requirement("REQ-p00001", title="Feature", level="PRD"),
             make_test_ref(
@@ -163,16 +163,16 @@ class TestCheckUnlinkedTests:
         graph._index["file:tests/test_empty.py"] = empty_file
         graph._roots.append(empty_file)
 
-        check = check_unlinked_tests(graph)
+        check = check_uncited_tests(graph)
         assert not check.passed
         assert check.severity == "info"
-        assert check.name == "tests.unlinked"
+        assert check.name == "tests.uncited_file"
         assert len(check.findings) >= 1
         assert check.details.get("count", 0) >= 1
 
     # Verifies: REQ-d00085
-    def test_REQ_d00085_unlinked_test_findings_have_file_path(self) -> None:
-        """Findings for unlinked test files include file_path."""
+    def test_REQ_d00085_uncited_test_findings_have_file_path(self) -> None:
+        """Findings for uncited test files include file_path."""
         graph = TraceGraph()
         empty_file = GraphNode(
             id="file:tests/test_orphan.py", kind=NodeKind.FILE, label="test_orphan.py"
@@ -182,7 +182,7 @@ class TestCheckUnlinkedTests:
         graph._index["file:tests/test_orphan.py"] = empty_file
         graph._roots.append(empty_file)
 
-        check = check_unlinked_tests(graph)
+        check = check_uncited_tests(graph)
         assert not check.passed
         assert len(check.findings) >= 1
         finding = check.findings[0]
@@ -197,7 +197,7 @@ class TestCheckUnlinkedTests:
         test function even when it has no ``Verifies:`` marker, so a
         marker-less file is NOT the zero-TEST-children case -- it has
         children, just none linked. Before REQ-d00241-D this file was
-        reported by neither tests.unlinked (which only looked for zero
+        reported by neither tests.uncited_file (which only looked for zero
         children) nor code.no_traceability (now code-only): a silent
         detection gap.
         """
@@ -216,7 +216,7 @@ class TestCheckUnlinkedTests:
             c.kind == NodeKind.TEST for c in file_node.iter_children(edge_kinds={EdgeKind.CONTAINS})
         )
 
-        check = check_unlinked_tests(graph)
+        check = check_uncited_tests(graph)
         assert not check.passed
         assert any(f.file_path == "tests/test_unmarked.py" for f in check.findings)
 
@@ -224,7 +224,7 @@ class TestCheckUnlinkedTests:
     def test_REQ_d00241_D_partially_marked_file_not_flagged(self) -> None:
         """A test FILE with at least one linked TEST child is NOT flagged.
 
-        Partial marking isn't "unlinked" -- one linked test is enough to
+        Partial marking isn't "uncited" -- one linked test is enough to
         establish file-level traceability.
         """
         graph = build_graph(
@@ -244,7 +244,7 @@ class TestCheckUnlinkedTests:
                 end_line=15,
             ),
         )
-        check = check_unlinked_tests(graph)
+        check = check_uncited_tests(graph)
         assert check.passed
         assert not any(f.file_path == "tests/test_partial.py" for f in check.findings)
 
@@ -255,7 +255,7 @@ class TestCheckUnlinkedTests:
 
 
 class TestCheckUnlinkedCode:
-    """Tests for check_unlinked_code() — file-level semantics.
+    """Tests for check_uncited_code() — file-level semantics.
 
     Unlinked means a CODE-type FILE was scanned but contains no CODE
     child nodes (no traceability markers found).
@@ -273,13 +273,13 @@ class TestCheckUnlinkedCode:
                 end_line=5,
             ),
         )
-        check = check_unlinked_code(graph)
+        check = check_uncited_code(graph)
         assert check.passed
-        assert check.name == "code.unlinked"
+        assert check.name == "code.uncited_file"
 
     # Verifies: REQ-d00085
-    def test_REQ_d00085_unlinked_code_file_has_info_severity(self) -> None:
-        """A CODE file with no CODE child nodes is unlinked — severity info."""
+    def test_REQ_d00085_uncited_code_file_has_info_severity(self) -> None:
+        """A CODE file with no CODE child nodes is uncited — severity info."""
         graph = build_graph(
             make_requirement("REQ-p00001", title="Feature", level="PRD"),
             make_code_ref(
@@ -296,10 +296,10 @@ class TestCheckUnlinkedCode:
         graph._index["file:src/unlinked.py"] = empty_file
         graph._roots.append(empty_file)
 
-        check = check_unlinked_code(graph)
+        check = check_uncited_code(graph)
         assert not check.passed
         assert check.severity == "info"
-        assert check.name == "code.unlinked"
+        assert check.name == "code.uncited_file"
         assert len(check.findings) >= 1
         assert check.details.get("count", 0) >= 1
 
@@ -313,7 +313,7 @@ class TestCheckUnlinkedCode:
         graph._index["file:src/orphan.py"] = empty_file
         graph._roots.append(empty_file)
 
-        check = check_unlinked_code(graph)
+        check = check_uncited_code(graph)
         assert not check.passed
         assert len(check.findings) >= 1
         finding = check.findings[0]
@@ -323,7 +323,7 @@ class TestCheckUnlinkedCode:
 
 # =============================================================================
 # code.no_traceability wiring — REQ-d00241 (code-only; tests owned by
-# tests.unlinked)
+# tests.uncited_file)
 # =============================================================================
 
 
@@ -337,14 +337,14 @@ class TestRunCodeChecksNoTraceabilityWiring:
     unconditionally creates a TEST node for every test function found
     (marked or not -- see ``GraphBuilder._add_test_ref``), a test file
     with unmarked functions produced marker-less TEST nodes that were
-    *also* separately reported by ``tests.unlinked``
-    (``check_unlinked_tests``), double-reporting the same file once
+    *also* separately reported by ``tests.uncited_file``
+    (``check_uncited_tests``), double-reporting the same file once
     under each category. REQ-d00241 was reworded to scope
     ``code.no_traceability`` to CODE nodes only; test files are now
-    exclusively the responsibility of ``tests.unlinked``.
+    exclusively the responsibility of ``tests.uncited_file``.
     """
 
-    # Verifies: REQ-d00241-B, REQ-d00241-E
+    # Verifies: REQ-d00241-A, REQ-d00241-E
     def test_REQ_d00241_E_dangling_implements_excluded_owned_by_reference_check(self) -> None:
         """A CODE node unlinked because its ``Implements:`` target failed to
         resolve carries a marker -- it just failed. ``code.no_traceability``
@@ -375,15 +375,15 @@ class TestRunCodeChecksNoTraceabilityWiring:
         assert not broken.passed
         assert any("orphan.py" in (f.file_path or "") for f in broken.findings)
 
-    # Verifies: REQ-d00241-A, REQ-d00241-B, REQ-d00241-D
+    # Verifies: REQ-d00241-A, REQ-d00241-D
     def test_REQ_d00241_A_marker_less_test_function_excluded(self) -> None:
-        """A marker-less test file moves from code.no_traceability to tests.unlinked.
+        """A marker-less test file moves from code.no_traceability to tests.uncited_file.
 
         Regression guard for the double-report defect AND its inverse (the
         detection gap): a test function with no ``Verifies:`` marker still
         produces an unreachable TEST node (per the parser's unconditional
         per-function emission). code.no_traceability must not surface it
-        -- that's tests.unlinked's job -- and tests.unlinked MUST surface
+        -- that's tests.uncited_file's job -- and tests.uncited_file MUST surface
         it, otherwise the file silently escapes both checks.
         """
         graph = build_graph(
@@ -405,8 +405,8 @@ class TestRunCodeChecksNoTraceabilityWiring:
         assert check.passed
         assert not any("test_unmarked.py" in f.message for f in check.findings)
 
-        # The file MUST be owned by tests.unlinked instead (REQ-d00241-D).
-        tests_check = check_unlinked_tests(_wrap(graph))
+        # The file MUST be owned by tests.uncited_file instead (REQ-d00241-D).
+        tests_check = check_uncited_tests(_wrap(graph))
         assert not tests_check.passed
         assert any(f.file_path == "tests/test_unmarked.py" for f in tests_check.findings)
 
@@ -417,7 +417,7 @@ class TestRunCodeChecksNoTraceabilityWiring:
         file is excluded because its marker failed rather than being
         absent (REQ-d00241-E, owned by ``references.unknown_requirement``);
         the TEST file was never code.no_traceability's to report
-        (REQ-d00241-A, owned by ``tests.unlinked``).
+        (REQ-d00241-A, owned by ``tests.uncited_file``).
         """
         graph = build_graph(
             make_code_ref(

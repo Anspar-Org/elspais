@@ -157,7 +157,7 @@ G. A repository's identifier configuration SHALL admit exactly one spelling of a
 
 H. `HierarchyConfig` SHALL contain only boolean flags (`allow_circular`, `allow_structural_orphans`, `allow_orphans`, `cross_repo_implements`). Per-level implement rules SHALL be defined in `LevelConfig.implements` instead. The model SHALL be strict (`extra="forbid"`).
 
-I. [Removed - named a references section of the configuration that does not exist. Identifier grammar is configured under identifier patterns, and an identifier is admitted in one spelling only, per REQ-d00212-G.]
+I. <RETIRED> named a references section of the configuration that does not exist. Identifier grammar is configured under identifier patterns, and an identifier is admitted in one spelling only, per REQ-d00212-G.
 
 J. `ProjectConfig` SHALL contain only `namespace` and `name`. The `version` and `type` fields SHALL be removed.
 
@@ -211,6 +211,7 @@ R is a condition on resolving, never on writing, which is what keeps a reference
 
 ### Changelog
 
+- 2026-08-24 | 277219e9 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-24 | 22e31e30 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-24 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-66: N retired -- a configuration is refused and named rather than upgraded in place; X states the refusal
 - 2026-08-24 | 43f7602a | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -240,7 +241,7 @@ R is a condition on resolving, never on writing, which is what keeps a reference
 - 2026-03-30 | db4ad28c | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 - 2026-03-29 | c75b87f8 | - | Michael Lewis (<michael@anspar.org>) | Add assertion N for config migration v3 to v4
 
-*End* *Config Schema v3 Models* | **Hash**: 22e31e30
+*End* *Config Schema v3 Models* | **Hash**: 277219e9
 ---
 
 ## REQ-d00251: A Repository's Identifier Grammar
@@ -263,11 +264,11 @@ E. `AssertionConfig` SHALL include a `separator` field (str, default `"-"`) used
 
 F. The *Assertion* separator SHALL NOT be a character that can legally appear in a component or in an *Assertion* label. A configuration that violates this SHALL be rejected at validation time, naming the offending character, the style that makes it legal, and a non-overlapping character to use instead.
 
-G. [Removed - stated where the component sub-pattern is derived rather than an obligation the tool meets. What a configuration admits is REQ-d00212-G; that one repository's grammar governs only its own identifiers is L below.]
+G. <RETIRED> stated where the component sub-pattern is derived rather than an obligation the tool meets. What a configuration admits is REQ-d00212-G; that one repository's grammar governs only its own identifiers is L below.
 
 H. An *Assertion* label series SHALL be one of the alphabets a repository may configure, each having a first label, a successor for every label but its last, and a last label beyond which the series does not extend.
 
-I. [Removed - enumerated one alphabet's order here. Which alphabets a repository may configure is a matter for the configuration surface; what any of them must be is H, and a series ends at its alphabet's last label rather than at a separately configured count.]
+I. <RETIRED> enumerated one alphabet's order here. Which alphabets a repository may configure is a matter for the configuration surface; what any of them must be is H, and a series ends at its alphabet's last label rather than at a separately configured count.
 
 J. The multi-*Assertion* separator SHALL NOT be a character that can legally appear in an *Assertion* label.
 
@@ -293,6 +294,7 @@ M extends F and J outward. Those two protect a boundary inside one reference; M 
 
 ### Changelog
 
+- 2026-08-24 | b49bd5ee | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-14 | 09f5a257 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-14 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: an assertion separator may not also be the character dividing two references (M)
 - 2026-08-13 | d83f4fd6 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -312,7 +314,7 @@ M extends F and J outward. Those two protect a boundary inside one reference; M 
 - 2026-05-11 | e04a4e37 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize term forms, update hash
 - 2026-05-11 | - | - | Developer (<dev@example.com>) | Initial authoring: introduce explicit case-style vocabulary and configurable assertion separator.
 
-*End* *A Repository's Identifier Grammar* | **Hash**: 09f5a257
+*End* *A Repository's Identifier Grammar* | **Hash**: b49bd5ee
 ---
 
 ## REQ-d00270: Single-Authority Identifier Grammar Derivation
@@ -323,19 +325,19 @@ This requirement stated an implementation structure rather than a property of th
 
 ### Assertions
 
-A. [Removed - stated where a derivation lives rather than an obligation the tool meets. Single-authority derivation is an engineering rule and is recorded with the others; what a configuration admits is REQ-d00212-G.]
+A. <RETIRED> stated where a derivation lives rather than an obligation the tool meets. Single-authority derivation is an engineering rule and is recorded with the others; what a configuration admits is REQ-d00212-G.
 
-B. [Removed - an interface rule about the implementation, measurable only by reading it. The observable consequence is REQ-d00212-G.]
+B. <RETIRED> an interface rule about the implementation, measurable only by reading it. The observable consequence is REQ-d00212-G.
 
-C. [Removed - prescribed how a surface obtains its patterns. What it must then answer is REQ-d00212-G, and what an inadmissible spelling may do is REQ-d00212-R.]
+C. <RETIRED> prescribed how a surface obtains its patterns. What it must then answer is REQ-d00212-G, and what an inadmissible spelling may do is REQ-d00212-R.
 
-D. [Removed - one configuration admitting one spelling is REQ-d00212-G, which every deciding surface answers under alike.]
+D. <RETIRED> one configuration admitting one spelling is REQ-d00212-G, which every deciding surface answers under alike.
 
-E. [Removed - carried by REQ-d00251-L.]
+E. <RETIRED> carried by REQ-d00251-L.
 
-F. [Removed - a rule about an optimisation, not about an answer. A string an admitting configuration spells is resolvable under REQ-d00212-G however a surface narrows candidates first.]
+F. <RETIRED> a rule about an optimisation, not about an answer. A string an admitting configuration spells is resolvable under REQ-d00212-G however a surface narrows candidates first.
 
-G. [Removed - carried by REQ-d00212-R, which admits one spelling and lets any other resolve to nothing.]
+G. <RETIRED> carried by REQ-d00212-R, which admits one spelling and lets any other resolve to nothing.
 
 ### Changelog
 
@@ -345,5 +347,5 @@ G. [Removed - carried by REQ-d00212-R, which admits one spelling and lets any ot
 - 2026-08-08 | 2e02bcf7 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: sync changelog hash
 - 2026-08-09 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: single-authority derivation for the whole identifier grammar
 
-*End* *Single-Authority Identifier Grammar Derivation* | **Hash**: c8cb35b9
+*End* *Single-Authority Identifier Grammar Derivation* | **Hash**: fe29efc0
 ---

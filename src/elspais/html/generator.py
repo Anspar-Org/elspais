@@ -1,7 +1,6 @@
 # Implements: REQ-p00006-A, REQ-p00006-B, REQ-p00006-C
 # Implements: REQ-p00050-B
 # Implements: REQ-d00052-A, REQ-d00052-D, REQ-d00052-E, REQ-d00052-F
-# Implements: REQ-d00070-A, REQ-d00070-B
 """HTML Generator for traceability reports.
 
 This module generates interactive HTML traceability views from TraceGraph.
@@ -275,7 +274,7 @@ def compute_coverage_tiers(node: GraphNode, config: dict[str, Any] | None = None
     # Map dimension key -> (CoverageDimension, CoverageSeverityConfig, prefix).
     # The dimension is carried for the hover text only; the tier comes from the
     # shared helper, whose "verified" numerator is tested_and_passing()
-    # (REQ-d00258-N): what the declared tests returned, with an assertion its
+    # (REQ-d00277-C): what the declared tests returned, with an assertion its
     # own tests failed excluded from the figures. Line coverage credits nothing
     # here; it is reported as its own dimension (REQ-d00254-B).
     passing = tested_and_passing(rollup)
@@ -507,7 +506,7 @@ def compute_assertion_coverage_states(
         it: line coverage never observes a verdict, so a failing test whose
         lines were executed leaves this assertion at full credit and failing at
         once. Reading credit first would paint it green while the Passing
-        figures beside it exclude it (REQ-d00258-N), which is the same
+        figures beside it exclude it (REQ-d00277-C), which is the same
         disagreement REQ-d00258-G exists to prevent.
         """
         if label in passing.failing_labels:
@@ -914,7 +913,7 @@ class HTMLGenerator:
                 cov = "full"
 
             # Passing-dimension failures, so an lcov-side failure is seen
-            # as well as a result-verified one (REQ-d00258-N).
+            # as well as a result-verified one (REQ-d00277-C).
             return (cov, tested_and_passing(rollup).has_failures)
 
         def get_assertion_letters(node: GraphNode, parent_id: str | None) -> list[str]:

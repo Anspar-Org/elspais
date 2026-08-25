@@ -237,15 +237,15 @@ The need its rationale named is met and not withdrawn: a strict *Traceability* v
 
 ### Assertions
 
-A. [Removed - a per-row field derived from one of two nested footings. The measures a row reports are REQ-d00258-A, and what a work list answers on is REQ-d00258-M.]
+A. <RETIRED> a per-row field derived from one of two nested footings. The measures a row reports are REQ-d00258-A, and what a work list answers on is REQ-d00258-M.
 
-B. [Removed - an attribute carrying the toggle's second mode. There is no second mode.]
+B. <RETIRED> an attribute carrying the toggle's second mode. There is no second mode.
 
-C. [Removed - the toggle itself. With every measure published there is nothing to switch between.]
+C. <RETIRED> the toggle itself. With every measure published there is nothing to switch between.
 
-D. [Removed - the toggle's default. There is no toggle.]
+D. <RETIRED> the toggle's default. There is no toggle.
 
-E. [Removed - failures showing regardless of toggle state. That a failing *Assertion* reads failing whatever else credits it is REQ-d00258-G, which does not depend on a display mode.]
+E. <RETIRED> failures showing regardless of toggle state. That a failing *Assertion* reads failing whatever else credits it is REQ-d00258-G, which does not depend on a display mode.
 
 ### Rationale
 
@@ -257,7 +257,7 @@ Retiring this cost no working behaviour. A alone was built -- a `TreeRow.coverag
 - 2026-05-11 | 3e5b1766 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | 3e5b1766 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *Indirect Coverage Toggle Display* | **Hash**: 27a15cb2
+*End* *Indirect Coverage Toggle Display* | **Hash**: eda3f31c
 ---
 
 ## REQ-d00071: Unified Root vs Orphan Classification
@@ -565,6 +565,10 @@ N. Where an external test-prescan command returns attribution records for a scan
 
 O. A line number a reporter records SHALL be read in the origin that reporter counts from. That origin SHALL be declared with the reporter and SHALL be overridable per target, and a recorded line SHALL be normalised to the numbering the tool uses for source lines before it is matched against a test or shown to a reader.
 
+P. An artifact ingestion could not read SHALL be reported naming the artifact, at the severity the project configures for it.
+
+Q. An artifact ingestion read only in part SHALL be reported as such, distinctly from one it could not read at all.
+
 ### Rationale
 
 A line number means nothing without its origin, and producers disagree: the `line` attribute pytest writes into JUnit XML counts from zero, while the tool numbers source lines from one. Read as though they agreed, every such result missed the test it named by exactly one line and bound at file granularity instead -- which the file-granular inference then papered over, so the disagreement never surfaced as an error. Declaring the origin with the reporter puts the knowledge where the format is known rather than in each project's config, and the per-target override is for a producer that departs from its format's convention. Normalising once, at ingestion, is what keeps the rest of the system able to treat a line as a line -- to match on it, and to point a reader at it.
@@ -581,6 +585,8 @@ N resolves per file, not per configuration, because both routes are routinely li
 
 ### Changelog
 
+- 2026-08-24 | e16eaff7 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-24 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-66: an artifact ingestion could not read is reported, and a partial read is told apart from a total one
 - 2026-08-22 | 00518ba3 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-22 | cbc2e2cd | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-22 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-74: a run with no selection executes a named set a project can narrow rather than every configured target; whether a run counts as selective follows from the targets it executed rather than from how it was asked; the target model carries the two settings that make that set and a recorded identity's form declarable (C, H, I, J)
@@ -602,7 +608,7 @@ N resolves per file, not per configuration, because both routes are routinely li
 - 2026-06-20 | 98120740 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-06-20 | 00000000 | - | Michael Lewis (<michael@anspar.org>) | CUR-1533: initial
 
-*End* *Test Evidence: Attribution, Ingestion, and Coverage Crediting* | **Hash**: 00518ba3
+*End* *Test Evidence: Attribution, Ingestion, and Coverage Crediting* | **Hash**: e16eaff7
 
 ---
 
@@ -676,7 +682,7 @@ Reporting surfaces (trace, summary, MCP project summary, HTML viewer) SHALL pres
 
 A. A surface reporting a coverage figure SHALL name the evidence the figure counts, so that a reader is never shown a figure without being told what produced it.
 
-B. [Removed - a fixed set of display words, which REQ-d00258-K had already made configurable per project. Each dimension is now stated on its own in REQ-d00277, so one can be added, redefined or withdrawn without rewriting a list.]
+B. <RETIRED> a fixed set of display words, which REQ-d00258-K had already made configurable per project. Each dimension is now stated on its own in REQ-d00277, so one can be added, redefined or withdrawn without rewriting a list.
 
 C. A surface reporting a coverage figure or reaching a coverage verdict SHALL derive it from the one shared aggregation, so that two surfaces asked the same question give the same answer.
 
@@ -700,7 +706,7 @@ L. A per-status `expects_implementation` flag SHALL declare whether a requiremen
 
 M. A surface reporting which assertions need work SHALL read the immediate direct measure, so that an *Assertion* no citation names is reported however much whole-requirement evidence its requirement carries and however finished the requirements refining it are.
 
-N. [Removed - moved to REQ-d00277-C, where every coverage dimension is defined. Two authorities for what Passing counts is the duplication that split exists to remove.]
+N. <RETIRED> moved to REQ-d00277-C, where every coverage dimension is defined. Two authorities for what Passing counts is the duplication that split exists to remove.
 
 O. Tested SHALL be reported with a breakdown of the assertions it counts into those that passed, those that failed, and those awaiting a result, and the three counts SHALL together account for every tested *Assertion*. The breakdown qualifies the Tested figure and SHALL NOT introduce a coverage dimension of its own.
 
@@ -724,6 +730,7 @@ A reports how the estate is doing and M reports what is left to do; the two ques
 
 ### Changelog
 
+- 2026-08-24 | 15129897 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-21 | 6c978321 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-21 | 24015cbc | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-19 | 879012b7 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -748,7 +755,7 @@ A reports how the estate is doing and M reports what is left to do; the two ques
 - 2026-07-03 | c843c727 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-02 | be97c170 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: add missing changelog section
 
-*End* *Reporting Surface Consistency* | **Hash**: 6c978321
+*End* *Reporting Surface Consistency* | **Hash**: 15129897
 
 ---
 

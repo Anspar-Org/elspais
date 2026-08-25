@@ -189,7 +189,7 @@ class TestFullPipeline:
         assert len(assertions) == 5
 
 
-# Verifies: REQ-d00081-D+E+G
+# Verifies: REQ-d00081-D+G
 class TestMultiAssertionPipelineExpansion:
     """Integration tests for multi-assertion expansion in the full pipeline.
 
@@ -283,8 +283,8 @@ class TestMultiAssertionPipelineExpansion:
             "C",
         ], f"Expected assertion_targets ['A', 'B', 'C'], got {sorted(all_targets)}"
 
-    # Verifies: REQ-d00081-E
-    def test_REQ_d00081_E_code_refs_resolve_through_same_builder(self, multi_assertion_spec_dir):
+    # Verifies: REQ-d00081-D
+    def test_REQ_d00081_D_code_refs_resolve_through_same_builder(self, multi_assertion_spec_dir):
         """Code references resolve through the same builder as spec references.
 
         Both spec multi-assertion expansion (REQ-p00001-A+B+C in OPS) and
@@ -368,7 +368,7 @@ class TestMultiAssertionPipelineExpansion:
         )
 
 
-# Verifies: REQ-d00081-D+E
+# Verifies: REQ-d00081-D
 class TestMultiAssertionSeparatorRoundTrip:
     """The configured separators survive a full parse/build/render round trip.
 

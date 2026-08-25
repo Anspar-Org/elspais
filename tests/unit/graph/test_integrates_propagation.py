@@ -1,9 +1,9 @@
-# Verifies: REQ-d00252, REQ-d00258-N
+# Verifies: REQ-d00252, REQ-d00277-C
 """Validates REQ-d00252-D.
 
 A consumer REQ inherits the library REQ's implemented + passing coverage,
 where "passing" is what the library's declared tests returned
-(REQ-d00258-N `tested_and_passing()`) -- line coverage credits none of it.
+(REQ-d00277-C `tested_and_passing()`) -- line coverage credits none of it.
 """
 
 import shutil
@@ -70,7 +70,7 @@ def test_REQ_d00252_D_no_integrates_yields_zero(tmp_path):
     assert rollup.implemented_total == 0 and rollup.verified_total == 0
 
 
-# Verifies: REQ-d00258-N
+# Verifies: REQ-d00277-C
 # Verifies: REQ-d00252-D
 def test_REQ_d00252_D_lcov_only_credit_does_not_propagate_as_passing(tmp_path):
     """A library REQ whose only evidence is line-coverage credit propagates NO
@@ -105,7 +105,7 @@ def test_REQ_d00252_D_lcov_only_credit_does_not_propagate_as_passing(tmp_path):
     assert rollup.has_failures is False
 
 
-# Verifies: REQ-d00258-N
+# Verifies: REQ-d00277-C
 # Verifies: REQ-d00252-D
 def test_REQ_d00252_D_library_failures_propagate_to_consumer(tmp_path):
     """A library whose suite is partly red must never read clean downstream.

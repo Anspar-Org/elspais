@@ -461,7 +461,7 @@ def _get_node_data(node, graph: FederatedGraph, *, assertion_labels: bool = Fals
         )
 
         for key, attr in _DIMS:
-            # Implements: REQ-d00258-A, REQ-d00258-N
+            # Implements: REQ-d00258-A, REQ-d00277-C
             # "Passing" (the verified dimension) counts what the declared tests
             # returned, excluding an assertion its own tests failed.
             dim: CoverageDimension = (

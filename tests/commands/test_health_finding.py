@@ -294,7 +294,7 @@ class TestDetailHint:
                 findings=[HealthFinding(message="bad", node_id="REQ-001")],
             ),
             HealthCheck(
-                name="code.unlinked",
+                name="code.uncited_file",
                 passed=False,
                 message="unlinked",
                 category="code",
@@ -308,5 +308,5 @@ class TestDetailHint:
         assert "Follow-up:" in output
         assert "spec.hash_integrity" in output
         assert "elspais fix" in output
-        assert "code.unlinked" in output
-        assert "elspais unlinked" in output
+        assert "code.uncited_file" in output
+        assert "elspais uncited" in output

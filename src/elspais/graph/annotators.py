@@ -1474,7 +1474,7 @@ def annotate_coverage(
                                     )
                                 )
 
-                        # Implements: REQ-d00258-N
+                        # Implements: REQ-d00277-C
                         # Deliberately NOT registered for result lookup. This
                         # test names the CODE, not the *Assertion*: its verdict
                         # says the implementing code was exercised, which is

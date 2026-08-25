@@ -224,8 +224,8 @@ class ErrorsArgs:
 
 
 @dataclasses.dataclass
-class UnlinkedArgs:
-    """List test and code nodes not linked to any requirement."""
+class UncitedArgs:
+    """List scanned code and test files that cite no requirement."""
 
     format: Literal["text", "markdown", "json"] = "text"
     """Output format."""
@@ -1060,7 +1060,7 @@ Command = (
     | Annotated[FailingArgs, tyro.conf.subcommand("failing")]
     | Annotated[ErrorsArgs, tyro.conf.subcommand("errors")]
     | Annotated[BrokenArgs, tyro.conf.subcommand("broken")]
-    | Annotated[UnlinkedArgs, tyro.conf.subcommand("unlinked")]
+    | Annotated[UncitedArgs, tyro.conf.subcommand("uncited")]
     | Annotated[DoctorArgs, tyro.conf.subcommand("doctor")]
     | Annotated[TraceArgs, tyro.conf.subcommand("trace")]
     | Annotated[ViewerArgs, tyro.conf.subcommand("viewer")]
@@ -1132,7 +1132,7 @@ COMMAND_GROUPS: dict[str, str] = {
     "failing": "Gaps & Issues",
     "errors": "Gaps & Issues",
     "broken": "Gaps & Issues",
-    "unlinked": "Gaps & Issues",
+    "uncited": "Gaps & Issues",
     "search": "Reports",
     "analysis": "Authoring",
     "fix": "Authoring",

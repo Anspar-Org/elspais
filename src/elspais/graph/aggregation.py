@@ -978,7 +978,7 @@ def aggregate_dimension(
             continue
         # Through the shared numerator, so 'verified' aggregates the Passing
         # dimension -- one kind of evidence saying it passed and neither saying
-        # it failed (REQ-d00258-N) -- rather than the raw verified field, which
+        # it failed (REQ-d00277-C) -- rather than the raw verified field, which
         # neither unions in line-coverage credit nor sees an lcov-side failure.
         # Every other dimension resolves to itself.
         if not hasattr(rollup, dimension):

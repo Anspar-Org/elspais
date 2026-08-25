@@ -450,3 +450,134 @@ def test_a_file_that_cannot_be_decoded_is_named_in_the_failure(tmp_path):
 
     assert "notes.md" in str(caught.value)
     assert caught.value.path.name == "notes.md"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# What the record is FOR: it is reported
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _fault_check(project: Path, config: dict | None = None):
+    from elspais.commands.health import check_ingestion_faults
+
+    return check_ingestion_faults(_build(project), config)
+
+
+_UNPARSEABLE_TARGET = """
+[[scanning.test.targets]]
+name = "unit"
+reporter = "junit"
+results = "results/TEST-*.xml"
+"""
+
+
+# Verifies: REQ-p00019-H, REQ-d00285-A
+def test_a_recorded_fault_is_reported_with_its_file_and_line(tmp_path):
+    """A record nobody is told about is only marginally better than a drop.
+
+    The finding NAMES the artifact and the line: a count would leave the
+    reader the search the tool already performed (REQ-d00285-A).
+    """
+    project = _project(tmp_path, _UNPARSEABLE_TARGET, {"results/TEST-a.xml": _TRUNCATED_JUNIT})
+
+    check = _fault_check(project)
+
+    assert check.name == "tests.ingestion_fault"
+    assert check.passed is False
+    (finding,) = check.findings
+    assert finding.file_path == "results/TEST-a.xml"
+    assert finding.line is not None
+    assert "results/TEST-a.xml" in finding.message
+    assert "did not parse" in finding.message
+    assert finding.location() == f"results/TEST-a.xml:{finding.line}"
+
+
+# Verifies: REQ-p00019-H
+def test_a_fault_with_no_file_names_the_target_it_arose_under(tmp_path):
+    """A reporter name nothing matches names no file. The target is the
+    location there is, and saying it beats saying nothing."""
+    project = _project(
+        tmp_path,
+        """
+[[scanning.test.targets]]
+name = "unit"
+reporter = "junitt"
+results = "results/TEST-*.xml"
+""",
+        {"results/TEST-a.xml": _GOOD_JUNIT},
+    )
+
+    (finding,) = _fault_check(project).findings
+    assert "target unit" in finding.message
+    assert "junitt" in finding.message
+
+
+# Verifies: REQ-p00019-H
+def test_a_build_that_read_everything_reports_a_passing_check(tmp_path):
+    project = _project(tmp_path, _UNPARSEABLE_TARGET, {"results/TEST-a.xml": _GOOD_JUNIT})
+
+    check = _fault_check(project)
+    assert check.passed is True
+    assert check.findings == []
+
+
+# Verifies: REQ-d00285-B, REQ-d00285-D, REQ-d00285-E
+def test_the_severity_is_the_one_the_project_configures(tmp_path):
+    """The default is `warning`; the project decides otherwise through the
+    ONE path the registry declares, and `off` stops the reporting."""
+    from elspais.utilities.findings import NO_KNOWN_REMEDY, REGISTRY, remedy_for
+
+    project = _project(tmp_path, _UNPARSEABLE_TARGET, {"results/TEST-a.xml": _TRUNCATED_JUNIT})
+
+    assert REGISTRY["tests.ingestion_fault"].default == "warning"
+    assert _fault_check(project).severity == "warning"
+
+    raised = _fault_check(project, {"rules": {"severity": {"tests.ingestion_fault": "error"}}})
+    assert raised.severity == "error"
+
+    silenced = _fault_check(project, {"rules": {"severity": {"tests.ingestion_fault": "off"}}})
+    assert silenced.details.get("skipped") is True
+    assert silenced.findings == []
+
+    # No command repairs an artifact that would not parse, and the finding
+    # says so rather than sending the reader to a surface that reports the
+    # condition again (REQ-d00285-B).
+    assert remedy_for("tests.ingestion_fault") == NO_KNOWN_REMEDY
+
+
+# Verifies: REQ-p00019-H
+def test_every_recorded_fault_reaches_the_report(tmp_path):
+    """Two targets, two faults, two findings: nothing is collapsed away."""
+    project = _project(
+        tmp_path,
+        """
+[[scanning.test.targets]]
+name = "unit"
+reporter = "junit"
+results = "results/TEST-*.xml"
+
+[[scanning.test.targets]]
+name = "cover"
+reporter = "lcov"
+coverage = "coverage/lcov.info"
+""",
+    )
+
+    graph = _build(project)
+    check = _fault_check(project)
+    assert len(check.findings) == len(graph.ingestion_faults()) == 2
+    assert {f.file_path for f in check.findings} == {
+        "results/TEST-*.xml",
+        "coverage/lcov.info",
+    }
+    assert check.details["count"] == 2
+
+
+# Verifies: REQ-p00019-H
+def test_the_check_runs_with_the_other_test_checks(tmp_path):
+    """A check nothing invokes reports nothing."""
+    from elspais.commands.health import run_test_checks
+
+    project = _project(tmp_path, _UNPARSEABLE_TARGET, {"results/TEST-a.xml": _TRUNCATED_JUNIT})
+    names = {c.name for c in run_test_checks(_build(project), config={})}
+    assert "tests.ingestion_fault" in names

@@ -4956,7 +4956,7 @@ class GraphBuilder:
             "render_order": float(content.start_line),
         }
 
-    # Implements: REQ-d00081-D+E+G
+    # Implements: REQ-d00081-D+G
     def _expand_multi_assertion(self, target_id: str) -> list[str]:
         """Expand a multi-assertion reference into its individual references.
 

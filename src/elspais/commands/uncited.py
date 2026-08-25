@@ -1,7 +1,22 @@
-"""Unlinked files mini-report -- composable section.
+# Implements: REQ-d00241-A, REQ-d00241-D, REQ-d00285-F
+"""Uncited files mini-report -- composable section.
 
-Lists code and test files that were scanned but contain no traceability
-markers (no Implements:, Verifies:, or REQ-xxx patterns found).
+Lists scanned code and test files that cite nothing: no `Implements:`, no
+`Verifies:`, nothing that reaches a requirement. The file was read and it
+said nothing about the estate.
+
+This is deliberately NOT the population the graph API calls *unlinked*.
+`TraceGraph.iter_unlinked()` and the MCP `get_unlinked_nodes` tool answer
+about NODES -- a single test function or citation block that exists in the
+file structure and reaches no requirement through a traceability edge. A file
+holding one linked test and nine unlinked ones is full of unlinked nodes and
+is not uncited. One name over both answers puts two surfaces in contradiction
+about the same repository, which is what REQ-d00285-F forbids.
+
+The predicate lives here once. The `code.uncited_file` and
+`tests.uncited_file` health checks read it from here rather than walking the
+graph again, so `elspais uncited` and `elspais checks` cannot report
+different sets.
 """
 
 from __future__ import annotations
@@ -21,8 +36,8 @@ if TYPE_CHECKING:
 
 
 @dataclass
-class UnlinkedEntry:
-    """A file with no traceability markers."""
+class UncitedEntry:
+    """A scanned file that cites nothing."""
 
     node_id: str
     file: str
@@ -31,34 +46,51 @@ class UnlinkedEntry:
 
 
 @dataclass
-class UnlinkedData:
-    """Collected unlinked files grouped by kind."""
+class UncitedData:
+    """Collected uncited files grouped by kind."""
 
-    tests: list[UnlinkedEntry] = field(default_factory=list)
-    code: list[UnlinkedEntry] = field(default_factory=list)
+    tests: list[UncitedEntry] = field(default_factory=list)
+    code: list[UncitedEntry] = field(default_factory=list)
 
 
-def collect_unlinked(graph: FederatedGraph) -> UnlinkedData:
-    """Find code and test files with no traceability markers.
+# Implements: REQ-d00241-A, REQ-d00241-D, REQ-d00241-E
+def collect_uncited(graph: FederatedGraph) -> UncitedData:
+    """Find scanned code and test files that cite nothing.
 
-    Scans FILE nodes of type CODE/TEST and checks whether they contain
-    any CODE/TEST child nodes (which are created when the parser finds
-    Implements:/Verifies:/REQ-xxx markers). Files with no such children
-    have no traceability coverage.
+    A CODE file is uncited when the scan produced no CODE node from it at
+    all: a CODE node is what a citation comment becomes, so none means none
+    was written.
+
+    A TEST file is uncited when no test in it reaches a requirement. The
+    stronger condition is required because the pre-scan emits a TEST node for
+    every test function it discovers whether or not the function carries a
+    marker, so a wholly marker-less test file still has TEST children. A file
+    with at least one linked test is not uncited -- partial marking is a
+    different question.
+
+    A test file whose only citation attached to no test DOES carry a marker,
+    and saying it carries none would send its author to add what is already
+    there (REQ-d00241-E). Those files are excluded here and named by
+    `tests.unbound_citation`, which says what is actually wrong with them.
     """
-    data = UnlinkedData()
+    data = UncitedData()
+    cited_but_unbound = {c.path for c in graph.unbound_citations()}
 
     for file_node in graph.iter_roots(NodeKind.FILE):
         file_type = file_node.get_field("file_type")
         rel_path = file_node.get_field("relative_path") or file_node.id
 
         if file_type == FileType.TEST:
-            has_child = any(
-                child.kind == NodeKind.TEST
+            has_linked_test = any(
+                graph.is_reachable_to_requirement(child)
                 for child in file_node.iter_children(edge_kinds={EdgeKind.CONTAINS})
+                if child.kind == NodeKind.TEST
             )
-            if not has_child:
-                data.tests.append(UnlinkedEntry(node_id=file_node.id, file=rel_path))
+            if has_linked_test:
+                continue
+            if (file_node.get_field("relative_path") or "") in cited_but_unbound:
+                continue
+            data.tests.append(UncitedEntry(node_id=file_node.id, file=rel_path))
 
         elif file_type == FileType.CODE:
             has_child = any(
@@ -66,7 +98,7 @@ def collect_unlinked(graph: FederatedGraph) -> UnlinkedData:
                 for child in file_node.iter_children(edge_kinds={EdgeKind.CONTAINS})
             )
             if not has_child:
-                data.code.append(UnlinkedEntry(node_id=file_node.id, file=rel_path))
+                data.code.append(UncitedEntry(node_id=file_node.id, file=rel_path))
 
     return data
 
@@ -75,11 +107,11 @@ def collect_unlinked(graph: FederatedGraph) -> UnlinkedData:
 # Rendering
 # =============================================================================
 
-_LABEL = "UNLINKED FILES"
+_LABEL = "UNCITED FILES"
 
 
-def render_unlinked_text(data: UnlinkedData, *, verbose: bool = False) -> str:
-    """Render unlinked files as plain text."""
+def render_uncited_text(data: UncitedData, *, verbose: bool = False) -> str:
+    """Render uncited files as plain text."""
     total = len(data.tests) + len(data.code)
     if total == 0:
         return f"\n{_LABEL}: none"
@@ -99,11 +131,11 @@ def render_unlinked_text(data: UnlinkedData, *, verbose: bool = False) -> str:
     return "\n".join(lines)
 
 
-def render_unlinked_markdown(data: UnlinkedData, *, verbose: bool = False) -> str:
-    """Render unlinked files as markdown."""
+def render_uncited_markdown(data: UncitedData, *, verbose: bool = False) -> str:
+    """Render uncited files as markdown."""
     total = len(data.tests) + len(data.code)
     if total == 0:
-        return f"## {_LABEL}\n\nNo unlinked files found."
+        return f"## {_LABEL}\n\nNo uncited files found."
 
     lines = [f"## {_LABEL} ({total})", ""]
 
@@ -132,8 +164,8 @@ def render_unlinked_markdown(data: UnlinkedData, *, verbose: bool = False) -> st
 # =============================================================================
 
 
-def _serialize(data: UnlinkedData) -> dict[str, Any]:
-    """Serialize UnlinkedData to a JSON-compatible dict.
+def _serialize(data: UncitedData) -> dict[str, Any]:
+    """Serialize UncitedData to a JSON-compatible dict.
 
     Carries each entry's node id alongside its path. A reader cannot
     rebuild the id from the path -- the id names the repository holding
@@ -165,13 +197,13 @@ def render_section(
     config: dict[str, Any] | None,
     args: argparse.Namespace,
 ) -> tuple[str, int]:
-    """Render unlinked files section.
+    """Render uncited files section.
 
     Returns:
         Tuple of (rendered output string, exit code).
-        Exit code is 0 when no unlinked files, non-zero otherwise.
+        Exit code is 0 when no uncited files, non-zero otherwise.
     """
-    data = collect_unlinked(graph)
+    data = collect_uncited(graph)
     total = len(data.tests) + len(data.code)
     fmt = getattr(args, "format", "text")
     verbose = getattr(args, "verbose", False)
@@ -180,9 +212,9 @@ def render_section(
         return json.dumps(_serialize(data), indent=2), 1 if total else 0
 
     if fmt == "markdown":
-        return render_unlinked_markdown(data, verbose=verbose), 1 if total else 0
+        return render_uncited_markdown(data, verbose=verbose), 1 if total else 0
 
-    return render_unlinked_text(data, verbose=verbose), 1 if total else 0
+    return render_uncited_text(data, verbose=verbose), 1 if total else 0
 
 
 # =============================================================================
@@ -190,34 +222,34 @@ def render_section(
 # =============================================================================
 
 
-def _unlinked_data_from_dict(data: dict[str, Any]) -> UnlinkedData:
-    """Reconstruct UnlinkedData from a JSON dict returned by the daemon.
+def _uncited_data_from_dict(data: dict[str, Any]) -> UncitedData:
+    """Reconstruct UncitedData from a JSON dict returned by the daemon.
 
     Reads the node ids the daemon sent. A daemon that sent only paths
-    (an older one) leaves the id empty rather than having one invented
-    for it: an id naming the wrong repository is worse than none, and
-    every reader of this data displays the path.
+    leaves the id empty rather than having one invented for it: an id
+    naming the wrong repository is worse than none, and every reader of
+    this data displays the path.
     """
-    ud = UnlinkedData()
+    ud = UncitedData()
     for kind, entries in (("tests", ud.tests), ("code", ud.code)):
         section = data.get(kind, {})
         nodes = section.get("nodes")
         if nodes:
             entries.extend(
-                UnlinkedEntry(node_id=n.get("node_id", ""), file=n.get("file", "")) for n in nodes
+                UncitedEntry(node_id=n.get("node_id", ""), file=n.get("file", "")) for n in nodes
             )
             continue
-        entries.extend(UnlinkedEntry(node_id="", file=f) for f in section.get("files", []))
+        entries.extend(UncitedEntry(node_id="", file=f) for f in section.get("files", []))
     return ud
 
 
-def compute_unlinked(graph: FederatedGraph, config: dict, params: dict[str, str]) -> dict:
-    """Engine-compatible wrapper around collect_unlinked."""
-    return _serialize(collect_unlinked(graph))
+def compute_uncited(graph: FederatedGraph, config: dict, params: dict[str, str]) -> dict:
+    """Engine-compatible wrapper around collect_uncited."""
+    return _serialize(collect_uncited(graph))
 
 
 def run(args: argparse.Namespace) -> int:
-    """Run a standalone unlinked-nodes listing.
+    """Run a standalone uncited-files listing.
 
     Tries a running daemon/viewer first for fast results,
     falls back to local graph build.
@@ -229,9 +261,9 @@ def run(args: argparse.Namespace) -> int:
     spec_dir = getattr(args, "spec_dir", None)
 
     data = engine_call(
-        "/api/run/unlinked",
+        "/api/run/uncited",
         {},
-        compute_unlinked,
+        compute_uncited,
         skip_daemon=bool(spec_dir),
         config_path=getattr(args, "config", None),
     )
@@ -241,12 +273,12 @@ def run(args: argparse.Namespace) -> int:
         total = data.get("tests", {}).get("count", 0) + data.get("code", {}).get("count", 0)
         exit_code = 1 if total else 0
     else:
-        unlinked_data = _unlinked_data_from_dict(data)
-        total = len(unlinked_data.tests) + len(unlinked_data.code)
+        uncited_data = _uncited_data_from_dict(data)
+        total = len(uncited_data.tests) + len(uncited_data.code)
         if fmt == "markdown":
-            output = render_unlinked_markdown(unlinked_data, verbose=verbose)
+            output = render_uncited_markdown(uncited_data, verbose=verbose)
         else:
-            output = render_unlinked_text(unlinked_data, verbose=verbose)
+            output = render_uncited_text(uncited_data, verbose=verbose)
         exit_code = 1 if total else 0
 
     output_file = getattr(args, "output", None)

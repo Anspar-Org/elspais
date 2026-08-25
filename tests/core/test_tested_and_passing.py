@@ -1,4 +1,4 @@
-# Verifies: REQ-d00258-N
+# Verifies: REQ-d00277-C
 """The Passing dimension: what the tests declared against an *Assertion* returned.
 
 Line coverage credits no *Traceability* dimension (REQ-d00254-B), so
@@ -26,7 +26,7 @@ def _credited(label: str, fraction: float = 1.0, **kwargs) -> CoverageDimension:
     )
 
 
-# Verifies: REQ-d00258-N
+# Verifies: REQ-d00277-C
 def test_line_coverage_of_another_assertion_does_not_enter_passing():
     """Only the *Assertion* a test declared against and passed is counted. An
     *Assertion* line coverage reached but no test named stays out of Passing
@@ -40,7 +40,7 @@ def test_line_coverage_of_another_assertion_does_not_enter_passing():
     assert u.covered == 1.0
 
 
-# Verifies: REQ-d00258-N
+# Verifies: REQ-d00277-C
 def test_line_coverage_failure_does_not_flag_passing():
     """A failure recorded against line coverage is a fact about `lcov_tested`,
     which is reported in its own right (REQ-d00254-B). It says nothing about
@@ -51,7 +51,7 @@ def test_line_coverage_failure_does_not_flag_passing():
     assert tested_and_passing(m).has_failures is False
 
 
-# Verifies: REQ-d00258-N
+# Verifies: REQ-d00277-C
 def test_line_coverage_does_not_raise_a_partial_assertion_to_full():
     """Fuller line coverage must not top up what the declared tests returned:
     the per-label fraction is the `verified` fraction, not the max of the two.
@@ -64,7 +64,7 @@ def test_line_coverage_does_not_raise_a_partial_assertion_to_full():
     assert u.covered == 0.5
 
 
-# Verifies: REQ-d00258-N
+# Verifies: REQ-d00277-C
 def test_a_failing_declared_test_excludes_its_own_assertion():
     """`no such test returned a failure` is a condition on the same evidence
     that credits: an *Assertion* one declared test passed and another failed
@@ -77,7 +77,7 @@ def test_a_failing_declared_test_excludes_its_own_assertion():
     assert u.covered == 0.0
 
 
-# Verifies: REQ-d00258-N
+# Verifies: REQ-d00277-C
 def test_line_coverage_cannot_exclude_an_assertion_its_tests_passed():
     """The mirror of the crediting rule. Line coverage is not a test declared
     against the *Assertion*, so a failure it records neither excludes the
@@ -92,7 +92,7 @@ def test_line_coverage_cannot_exclude_an_assertion_its_tests_passed():
     assert u.failing_labels == set()
 
 
-# Verifies: REQ-d00258-N
+# Verifies: REQ-d00277-C
 def test_exclusion_is_per_assertion_not_requirement_wide():
     """A sibling's failure must not cost a passing assertion the credit its
     own declared tests earned."""
@@ -110,7 +110,7 @@ def test_exclusion_is_per_assertion_not_requirement_wide():
     assert u.covered == 0.5
 
 
-# Verifies: REQ-d00258-N, REQ-d00258-G
+# Verifies: REQ-d00277-C, REQ-d00258-G
 def test_excluded_assertion_keeps_its_failing_standing():
     """A failing assertion contributes to no measure of Passing, and the record
     that it failed survives in ``failing_labels`` -- which is what a

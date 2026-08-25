@@ -45,13 +45,13 @@ A. The character joining *Assertion* labels within one reference SHALL be config
 
 B. The multi-*Assertion* separator SHALL default to `+`.
 
-C. [Removed - named a list of accepted alternate separators that no longer exists. The multi-*Assertion* separator is constrained against the characters an *Assertion* label can contain, per REQ-d00251-J.]
+C. <RETIRED> named a list of accepted alternate separators that no longer exists. The multi-*Assertion* separator is constrained against the characters an *Assertion* label can contain, per REQ-d00251-J.
 
 D. A multi-*Assertion* reference SHALL expand to the same set of individual references wherever it is written.
 
-E. [Removed - restated the derivation of a pattern rather than an obligation the tool must meet. What a multi-*Assertion* reference expands to is D; which strings the grammar admits is REQ-d00212-G.]
+E. <RETIRED> restated the derivation of a pattern rather than an obligation the tool must meet. What a multi-*Assertion* reference expands to is D; which strings the grammar admits is REQ-d00212-G.
 
-F. [Removed - an empty separator is not a configurable state. A separator is exactly one character, per REQ-d00251-K, so there is no value of it that disables expansion.]
+F. <RETIRED> an empty separator is not a configurable state. A separator is exactly one character, per REQ-d00251-K, so there is no value of it that disables expansion.
 
 G. A reference containing no multi-*Assertion* separator character SHALL pass through unchanged.
 
@@ -61,6 +61,7 @@ Expansion belongs to the identifier grammar rather than to any one parser: a com
 
 ### Changelog
 
+- 2026-08-24 | 6d66ba55 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-24 | b1812806 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: sync changelog hash
 - 2026-08-24 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-66: rationale states why expansion belongs to the grammar, not which parsers once missed it
 - 2026-08-12 | b1812806 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -73,7 +74,7 @@ Expansion belongs to the identifier grammar rather than to any one parser: a com
 - 2026-05-11 | 313fe52b | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | 313fe52b | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *Multi-Assertion Reference Expansion* | **Hash**: b1812806
+*End* *Multi-Assertion Reference Expansion* | **Hash**: 6d66ba55
 ---
 
 ## REQ-d00082: Unified Reference Configuration
@@ -84,23 +85,23 @@ The system SHALL provide a unified, configurable reference pattern system used b
 
 ### Assertions
 
-D. [Removed - named a configurable case-matching mode that does not exist. An identifier is admitted in one spelling only, per REQ-d00212-G, so there is no case-matching mode to configure.]
+D. <RETIRED> named a configurable case-matching mode that does not exist. An identifier is admitted in one spelling only, per REQ-d00212-G, so there is no case-matching mode to configure.
 
 E. Locating a reference in a source file SHALL use the separator the repository owning the referenced identifier configures, so that a reference is recognised in exactly the form that repository writes and in no other.
 
-F. [Removed - named per-file reference overrides that do not exist. One set of acceptance rules applies in every context that accepts a reference, per REQ-p00014-T.]
+F. <RETIRED> named per-file reference overrides that do not exist. One set of acceptance rules applies in every context that accepts a reference, per REQ-p00014-T.
 
 G. Reading a reference SHALL yield the parts its grammar defines, so that a consumer works from the identifier's structure rather than from the matched text.
 
-H. [Removed - named a reference-configuration artifact that does not exist. The limitation it described is real: a *Traceability* keyword inside a block comment is never read, so a block-comment-only language has no reference form.]
+H. <RETIRED> named a reference-configuration artifact that does not exist. The limitation it described is real: a *Traceability* keyword inside a block comment is never read, so a block-comment-only language has no reference form.
 
-I. [Removed - named classes that do not exist; source-file reference matching derives from the identifier grammar authority.]
+I. <RETIRED> named classes that do not exist; source-file reference matching derives from the identifier grammar authority.
 
-J. [Removed - named classes that do not exist; test-file reference matching derives from the identifier grammar authority.]
+J. <RETIRED> named classes that do not exist; test-file reference matching derives from the identifier grammar authority.
 
-K. [Removed - a result record is matched to its test by recorded identity, not by reading requirement references out of a reported test name.]
+K. <RETIRED> a result record is matched to its test by recorded identity, not by reading requirement references out of a reported test name.
 
-L. [Removed - a result record is matched to its test by recorded identity, not by reading requirement references out of a reported test name.]
+L. <RETIRED> a result record is matched to its test by recorded identity, not by reading requirement references out of a reported test name.
 
 ### Rationale
 
@@ -108,6 +109,7 @@ Different projects use different ID conventions, comment styles, and directory s
 
 ### Changelog
 
+- 2026-08-24 | edbd5d9a | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-10 | f0808bb9 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-10 | 268cdb9f | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-10 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: retire D and F, which named configuration that does not exist; G states the parts a read reference yields
@@ -118,7 +120,7 @@ Different projects use different ID conventions, comment styles, and directory s
 - 2026-05-11 | 89956cd7 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 89956cd7 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Unified Reference Configuration* | **Hash**: f0808bb9
+*End* *Unified Reference Configuration* | **Hash**: edbd5d9a
 ---
 
 ## REQ-d00084: Trace Command

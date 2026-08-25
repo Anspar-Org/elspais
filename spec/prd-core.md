@@ -26,14 +26,15 @@ B. The tool SHALL generate *Traceability* matrices showing requirement relations
 
 C. The tool SHALL detect changes to requirements using content hashing and git integration.
 
-D. [DEPRECATED]
+D. <RETIRED>
 
 ## Changelog
 
+- 2026-08-24 | 224578c6 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | 2d10975a | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-04-23 | ce489de6 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Requirements Management Tool* | **Hash**: 2d10975a
+*End* *Requirements Management Tool* | **Hash**: 224578c6
 ---
 
 # REQ-p00002: Requirements Validation
@@ -154,7 +155,7 @@ E. The tool SHALL commit modified spec files and optionally push, refusing to op
 
 F. The tool SHALL fetch and fast-forward-merge from the remote tracking branch, aborting if the merge is not fast-forwardable.
 
-G. [Removed - flagging satisfying requirements on template-subtree change is a special case of the reference-granularity review obligation stated in assertion K; superseded so one obligation family governs dependency-change review]
+G. <RETIRED> flagging satisfying requirements on template-subtree change is a special case of the reference-granularity review obligation stated in assertion K; superseded so one obligation family governs dependency-change review
 
 H. The tool SHALL list all local and remote git branches, stripping remote prefixes and deduplicating branches that exist both locally and remotely.
 
@@ -174,6 +175,7 @@ O. When the tool reloads the graph from disk, the tool SHALL bring the change-de
 
 ## Changelog
 
+- 2026-08-24 | 1042856d | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-07 | b7e19864 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-07 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-11: author O - a completed reload leaves the change-detection state in agreement with the content it loaded, on every reload surface
 - 2026-07-31 | 7930cf78 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -184,7 +186,7 @@ O. When the tool reloads the graph from disk, the tool SHALL bring the change-de
 - 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-38: G flags satisfiers on any change within the template subtree, not just the root
 - 2026-04-23 | f8ff5509 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Change Detection and Auditability* | **Hash**: b7e19864
+*End* *Change Detection and Auditability* | **Hash**: 1042856d
 ---
 
 # REQ-p00013: End-to-End Tests Exercise the Installed Command
@@ -361,7 +363,7 @@ The failure shapes this requirement guards against:
 - References the tool cannot see. Requirement IDs appear in artifacts elspais does not parse — prose documentation, SQL migrations, Terraform, shell scripts, commit messages. The tool cannot update these, but it can refuse to strand them: an identity mapping from former to successor identifiers makes out-of-graph references mechanically updatable. The obligation is the mapping's existence and availability, not its format.
 - Deletion that ignores lifecycle. The estate classifies statuses into roles (active, provisional, aspirational, retired). A provisional or aspirational requirement has attracted no committed references, so removing or renumbering it is routine. An active requirement is load-bearing; removing it outright would strand every reference to it, so it retires in place instead. A retired requirement is a historical record; editing it would falsify the record that its identifier preserves.
 
-**Assertion-level retirement (the RETIRED directive).** The estate's `[Removed - ...]` placeholder convention is convention-only: the parser builds ordinary ASSERTION nodes from placeholders, so retired letters (REQ-d00010 carries seven; REQ-p00004-G is another) count as permanently-uncovered assertions in every coverage denominator, and gap surfaces cannot distinguish "retired by design" from "never verified". The RETIRED parsing directive (syntax per REQ-p00002-E) makes retirement machine-readable: an *Assertion* carrying it "does not exist" for coverage and *Traceability* purposes — it exits every denominator (no longer counted among assertions expected to be implemented, tested, or validated), and references to it break loudly instead of designating a withdrawn obligation, which is precisely this requirement's governing invariant applied at *Assertion* granularity. What retirement does NOT release is the label: the letter stays allocated forever, the assertion-level analogue of the label-stability invariant assertion A states for reorder/delete mutations and of the identifier-reuse prohibition assertion F states for requirements. G/H/I are the *Assertion*-granularity counterparts of the requirement-level retire-in-place discipline in D/E/F. The adjacent concept in REQ-p00016 (a declaring requirement marking a template *Assertion* NOT APPLICABLE for one instance) is per-instance exclusion; RETIRED withdraws the obligation estate-wide at its definition site. Migrating existing placeholders to the directive form, the parser and coverage implementation, and the assertions-docs update are implementation-phase work: these assertions land uncovered by design, and current placeholder behavior becomes a tracked conformance gap.
+**Assertion-level retirement (the RETIRED directive).** An *Assertion* withdrawn in prose alone is still an *Assertion*: the parser builds an ordinary node from it, so the letter counts as a permanently-uncovered assertion in every coverage denominator and no gap surface can tell "retired by design" from "never verified". The RETIRED parsing directive (syntax per REQ-p00002-E) makes retirement machine-readable: an *Assertion* carrying it "does not exist" for coverage and *Traceability* purposes — it exits every denominator (no longer counted among assertions expected to be implemented, tested, or validated), and references to it break loudly instead of designating a withdrawn obligation, which is precisely this requirement's governing invariant applied at *Assertion* granularity. What retirement does NOT release is the label: the letter stays allocated forever, the assertion-level analogue of the label-stability invariant assertion A states for reorder/delete mutations and of the identifier-reuse prohibition assertion F states for requirements. G/H/I are the *Assertion*-granularity counterparts of the requirement-level retire-in-place discipline in D/E/F. The adjacent concept in REQ-p00016 (a declaring requirement marking a template *Assertion* NOT APPLICABLE for one instance) is per-instance exclusion; RETIRED withdraws the obligation estate-wide at its definition site.
 
 Interplay with existing requirements: this requirement governs what an *applied* mutation must preserve. When a mutation cannot be applied — or can be applied only partially — reporting the unapplied change and its cause is REQ-p00015-B's obligation, cited here rather than restated. REQ-d00201 and REQ-d00065 specify *which layer executes* mutations (delegation of mutation logic to the graph); they are complementary plumbing and say nothing about designation integrity, which is this requirement's subject. Protection against concurrent writers (lost updates, conflict detection) is the concern of the MCP mutation tooling spec under REQ-o00062, not of this requirement — scope here is designation integrity of the mutations that are applied.
 
@@ -851,13 +853,13 @@ Definitions can be authored org-wide while each generated document carries only 
 
 ### Assertions
 
-A. `check_no_traceability(unlinked_files, severity)` SHALL return a `HealthCheck` reporting code files with no *Traceability* markers. Default severity: `"warning"`. When `severity="off"`, return passed/info. Test files SHALL NOT be reported here because the separate `tests.unlinked` check already covers marker-less test files; including them in both would double-report the same file.
+A. A code file carrying no *Traceability* marker SHALL be reported at the severity the project configures for it.
 
-B. The check SHALL be wired into `run_code_checks()` using `graph.iter_unlinked()` to find CODE nodes not linked to any requirement.
+B. <RETIRED> Named the routine that reports the population and the traversal that finds it; A states the obligation without naming either.
 
 C. Severity SHALL be read from `[rules.format] no_traceability_severity` (default `"warning"` if None).
 
-D. The `tests.unlinked` check (`check_unlinked_tests()`) SHALL flag a test file when it contains no TEST nodes, or when it contains TEST nodes none of which link to any requirement. A test file with at least one linked test SHALL NOT be flagged. The second condition is required because the parser emits a TEST node for every discovered test function whether or not it carries a *Traceability* marker, so a fully marker-less test file still has TEST children; without it such files would escape both `tests.unlinked` and the code-only `code.no_traceability`.
+D. A test file SHALL be reported where no test it holds reaches a requirement, whether it holds no tests at all or only tests that reach none.
 
 E. A file carrying a *Traceability* marker that produced no relationship SHALL NOT be reported as carrying no marker. Carrying none and carrying only markers that bound nothing are distinct findings, and each SHALL be reported under a description true of it.
 
@@ -865,8 +867,18 @@ F. A file within a scanned directory that is not ignored and does not match the 
 
 G. A file the ignore configuration excludes SHALL NOT be reported.
 
+H. A file SHALL be reported under one of these descriptions only, so that a file answering to two of them is not counted twice.
+
+### Rationale
+
+D covers two shapes because a test node is emitted for every test function discovered, whether or not it carries a marker. A file with no marker anywhere therefore still holds test nodes, and a rule asking only whether the file holds tests would pass it. Asking instead whether any test in it reaches a requirement catches both shapes in one question.
+
+H is why the code description and the test description are stated separately rather than as one rule over files. A file answering to both would otherwise be reported twice, and a count of findings would stop being a count of distinct facts.
+
 ### Changelog
 
+- 2026-08-24 | bdfbd910 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-24 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-66: A and D restated as properties rather than as routines and signatures; B retired as mechanism; H added so one file is not reported twice
 - 2026-08-24 | a0c9c65d | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-24 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-66: an unscanned file carrying a Traceability keyword is reported; an ignored file is passed over silently
 - 2026-08-15 | f4149861 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -878,7 +890,7 @@ G. A file the ignore configuration excludes SHALL NOT be reported.
 - 2026-03-30 | e1272219 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: sync changelog hash
 - 2026-03-29 | 6e481d63 | - | Michael Lewis (<michael@anspar.org>) | Initial creation
 
-*End* *Code No-Traceability Health Check* | **Hash**: a0c9c65d
+*End* *Code No-Traceability Health Check* | **Hash**: bdfbd910
 
 ## REQ-d00246: Markdown Emphasis Normalization Utility
 

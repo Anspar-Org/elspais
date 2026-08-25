@@ -107,7 +107,7 @@ class TestAggregateByLevel:
         assert levels["DEV"].implemented.total_covered == pytest.approx(expected_impl)
         assert levels["DEV"].implemented.total == expected_total
 
-    # Verifies: REQ-d00258-N
+    # Verifies: REQ-d00277-C
     def test_passing_never_exceeds_tested(self, canonical_graph, canonical_config):
         """Passing counts a subset of the assertions Tested counts, so the two
         figures stay comparable on the same footing. Crediting evidence no test
@@ -497,7 +497,7 @@ class TestRelativeTierFor:
         )
         assert relative_tier_for(rollup, "tested", measure="total") == ("missing", True)
 
-    # Verifies: REQ-d00258-N
+    # Verifies: REQ-d00277-C
     def test_verified_ignores_line_coverage_credit(self):
         """Line coverage credits no *Traceability* dimension, so an assertion
         whose only evidence is line coverage leaves Passing a gap -- while
@@ -912,7 +912,7 @@ class TestNumeratorDimension:
         rollup = RollupMetrics(total_assertions=1, tested=_dim({"A"}, total=1))
         assert numerator_dimension(rollup, "tested") is rollup.tested
 
-    # Verifies: REQ-d00258-N
+    # Verifies: REQ-d00277-C
     def test_verified_numerator_ignores_line_coverage_credit(self):
         # verified credits nothing; lcov_tested credits A. Passing counts only
         # what a declared test returned, so the numerator must not see A.
@@ -955,7 +955,7 @@ class TestAuthoredDimension:
         """The two helpers must not be collapsed into one. A `Verifies:` result
         was written against A and it failed: authored_dimension still sees the
         evidence an author wrote, while numerator_dimension excludes A from the
-        Passing figures (REQ-d00258-N)."""
+        Passing figures (REQ-d00277-C)."""
         rollup = RollupMetrics(
             total_assertions=2,
             verified=_dim({"A", "B"}, total=2, failing={"A"}),
@@ -978,7 +978,7 @@ class TestIterUncreditedEvidenceReadsAuthoredEvidence:
     produces a finding -- while a `Verifies:` result of the identical shape
     does. And an *Assertion* a declared test reported failing is still
     evidence an author wrote, so it is still reported, even though the
-    Passing figures exclude it (REQ-d00258-N); that last case is the
+    Passing figures exclude it (REQ-d00277-C); that last case is the
     regression guard against the two helpers being collapsed into one.
     """
 
@@ -1018,7 +1018,7 @@ class TestIterUncreditedEvidenceReadsAuthoredEvidence:
         assert items[0].denominator == "tested"
         assert items[0].assertion_label == "A"
 
-    # Verifies: REQ-d00258-N
+    # Verifies: REQ-d00277-C
     def test_failing_written_evidence_outside_denominator_still_fires(self):
         """The discriminator that keeps the two helpers apart: the `Verifies:`
         result naming A FAILED, so the Passing figures exclude A. The author

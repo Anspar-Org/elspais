@@ -130,8 +130,8 @@ class TestHealthCheckNames:
         for name in (
             "spec.structural_orphans",
             "references.unknown_requirement",
-            "tests.unlinked",
-            "code.unlinked",
+            "tests.uncited_file",
+            "code.uncited_file",
         ):
             assert name in check_names, f"Expected check '{name}' not found in {check_names}"
 

@@ -72,7 +72,7 @@ allow_structural_orphans = false
 When `false`, the `spec.structural_orphans` check reports any such node as an
 error. Requirements that simply have no `Implements:` reference are a separate
 concern: they are unlinked, not structural orphans, and are reported by the
-`code.unlinked` and `tests.unlinked` checks on the artifact side.
+`code.uncited_file` and `tests.uncited_file` checks on the artifact side.
 
 ### `cross_repo_implements`
 
@@ -275,7 +275,7 @@ words; `full` defaults to `off`.
    Implements reference not found: p99999
    File: spec/dev-impl.md:120
 
-ℹ️ INFO [tests.unlinked] tests/test_widget.py
+ℹ️ INFO [tests.uncited_file] tests/test_widget.py
    Test file has no traceability markers
 
 ⚠️ WARNING [spec.hash_integrity] REQ-p00003

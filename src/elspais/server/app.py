@@ -70,7 +70,7 @@ from elspais.server.routes_api import (
     api_run_gaps,
     api_run_summary,
     api_run_trace,
-    api_run_unlinked,
+    api_run_uncited,
     api_save,
     api_scope,
     api_search,
@@ -175,7 +175,7 @@ def create_app(state: AppState, mount_mcp: bool = True) -> Starlette:
         Route("/api/run/summary", api_run_summary),
         Route("/api/run/gaps", api_run_gaps),
         Route("/api/run/errors", api_run_errors),
-        Route("/api/run/unlinked", api_run_unlinked),
+        Route("/api/run/uncited", api_run_uncited),
         Route("/api/run/analysis", api_run_analysis),
         Route("/api/run/trace", api_run_trace),
         # Mutation POST endpoints

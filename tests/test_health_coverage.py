@@ -16,6 +16,7 @@ from elspais.commands.health import (
     check_uat_coverage,
     check_uat_results,
     check_uncredited_evidence,
+    check_unvalidated_requirements,
     run_code_checks,
     run_uat_checks,
 )
@@ -293,8 +294,7 @@ class TestCoverageCheckShowsTheMeasuresBehindItsFigures:
     """
 
     @staticmethod
-    def _conducted_only_uat_check():
-        from elspais.commands.health import check_uat_coverage
+    def _conducted_only_graph():
         from elspais.graph.annotators import annotate_coverage
         from tests.core.graph_test_helpers import build_graph, make_journey, make_requirement
 
@@ -312,7 +312,21 @@ class TestCoverageCheckShowsTheMeasuresBehindItsFigures:
         )
         annotate_coverage(graph)
         config = {"levels": {"prd": {"rank": 1, "expects_validation": True}, "dev": {"rank": 3}}}
+        return graph, config
+
+    @classmethod
+    def _conducted_only_uat_check(cls):
+        graph, config = cls._conducted_only_graph()
+        from elspais.commands.health import check_uat_coverage
+
         return check_uat_coverage(graph, exclude_status=set(), config=config)
+
+    @classmethod
+    def _conducted_only_unvalidated_check(cls):
+        graph, config = cls._conducted_only_graph()
+        from elspais.commands.health import check_unvalidated_requirements
+
+        return check_unvalidated_requirements(graph, config=config)
 
     def test_message_carries_the_total_and_the_measures_behind_it(self):
         """Nothing cites REQ-900-A, and conduction covers it. Both numbers are
@@ -329,10 +343,13 @@ class TestCoverageCheckShowsTheMeasuresBehindItsFigures:
         assert check.details["total_covered"] == 1.0
         assert check.details["rolled_direct"] == 1.0
 
+    # Verifies: REQ-d00285-F
     def test_finding_says_why_the_requirement_is_listed(self):
-        """The finding explains itself against the figure above it, rather
-        than reading as its contradiction."""
-        check = self._conducted_only_uat_check()
+        """The finding explains itself against the figure the dimension check
+        reports, rather than reading as its contradiction. It is reported
+        under its own name -- one name, one condition (REQ-d00285-F)."""
+        check = self._conducted_only_unvalidated_check()
+        assert check.name == "uat.unvalidated"
         assert check.passed is False
         (finding,) = check.findings
         assert "no journey names this requirement" in finding.message
@@ -383,10 +400,12 @@ class TestCheckUatCoverage:
         assert result.details["req_coverage_percent"] == 100.0
         assert result.passed is True
 
-    # Verifies: REQ-d00258-F
+    # Verifies: REQ-d00258-F, REQ-d00285-F
     def test_expects_validation_req_without_uat_is_gap(self):
-        """An expects_validation req with no UAT coverage fails the check with
-        a finding for that req (REQ-d00258-F)."""
+        """An expects_validation req with no UAT coverage is named by
+        `uat.unvalidated`, and the dimension check reports the figure it
+        produces (REQ-d00258-F). Two conditions, two names (REQ-d00285-F).
+        """
         req = _make_req("REQ-d00001")
         metrics = RollupMetrics(
             total_assertions=2,
@@ -395,11 +414,13 @@ class TestCheckUatCoverage:
         req.set_metric("rollup_metrics", metrics)
 
         graph = _make_graph(req)
-        result = check_uat_coverage(graph, exclude_status=set(), config=_DEV_EXPECTS_CONFIG)
+        dimension = check_uat_coverage(graph, exclude_status=set(), config=_DEV_EXPECTS_CONFIG)
+        assert dimension.details["reqs_with_any_coverage"] == 0
 
-        assert result.details["reqs_with_any_coverage"] == 0
-        assert result.passed is False
-        assert any(f.node_id == "REQ-d00001" for f in result.findings)
+        gaps = check_unvalidated_requirements(graph, config=_DEV_EXPECTS_CONFIG)
+        assert gaps.passed is False
+        assert any(f.node_id == "REQ-d00001" for f in gaps.findings)
+        assert gaps.details["uncovered_expects_validation"] == ["REQ-d00001"]
 
     # Verifies: REQ-d00258-F
     def test_non_expecting_level_req_not_a_gap(self):
@@ -470,16 +491,20 @@ class TestCheckUatCoverage:
         assert result.details["total_requirements"] == 1
         assert result.details["reqs_with_any_coverage"] == 1
 
-    # Verifies: REQ-d00219-A, REQ-d00258-F
+    # Verifies: REQ-d00219-A, REQ-d00258-F, REQ-d00285-F
     def test_no_rollup_metrics_not_counted(self):
-        """Requirement with no metrics is not UAT-covered (and is a gap)."""
+        """Requirement with no metrics is not UAT-covered, and the gap is
+        named by the check whose condition it is."""
         req = _make_req("REQ-d00001")
         graph = _make_graph(req)
         result = check_uat_coverage(graph, exclude_status=set(), config=_DEV_EXPECTS_CONFIG)
 
         assert result.details["reqs_with_any_coverage"] == 0
         assert result.details["total_requirements"] == 1
-        assert result.passed is False
+
+        gaps = check_unvalidated_requirements(graph, config=_DEV_EXPECTS_CONFIG)
+        assert gaps.passed is False
+        assert [f.node_id for f in gaps.findings] == ["REQ-d00001"]
 
 
 # =============================================================================
@@ -649,15 +674,17 @@ class TestCheckUatResults:
 class TestRunUatChecks:
     """Tests for the run_uat_checks aggregation function."""
 
-    # Verifies: REQ-d00219-A
+    # Verifies: REQ-d00219-A, REQ-d00285-F
     def test_returns_coverage_verified_and_results(self):
-        """run_uat_checks returns uat.uat_coverage, uat.uat_verified, and uat.results checks."""
+        """run_uat_checks returns the dimension checks, the unvalidated-
+        requirement check and the results check -- each under its own name."""
         graph = _make_graph()
         checks = run_uat_checks(graph, exclude_status=set(), config={})
 
-        assert len(checks) == 3
+        assert len(checks) == 4
         names = {c.name for c in checks}
         assert "uat.uat_coverage" in names
+        assert "uat.unvalidated" in names
         assert "uat.uat_verified" in names
         assert "uat.results" in names
 

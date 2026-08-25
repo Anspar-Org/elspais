@@ -184,8 +184,8 @@ class TestAnnotateKeywordsAllKinds:
 class TestFindByKeywordsWithKind:
     """Tests for find_by_keywords() with optional kind parameter."""
 
-    # Verifies: REQ-d00070-A
-    def test_REQ_d00070_A_find_by_keywords_with_kind_filters_by_kind(self, multi_kind_graph):
+    # Verifies: REQ-d00215-D
+    def test_REQ_d00215_D_find_by_keywords_with_kind_filters_by_kind(self, multi_kind_graph):
         """find_by_keywords(kind=X) SHALL only return nodes of that kind."""
         from elspais.graph.annotators import annotate_keywords, find_by_keywords
 
@@ -202,8 +202,8 @@ class TestFindByKeywordsWithKind:
         result_ids = [n.id for n in results]
         assert "REQ-p00001-A" in result_ids
 
-    # Verifies: REQ-d00070-B
-    def test_REQ_d00070_B_find_by_keywords_kind_none_searches_all(self, multi_kind_graph):
+    # Verifies: REQ-d00215-D
+    def test_REQ_d00215_D_find_by_keywords_kind_none_searches_all(self, multi_kind_graph):
         """find_by_keywords(kind=None) SHALL search all node kinds."""
         from elspais.graph.annotators import annotate_keywords, find_by_keywords
 
@@ -218,8 +218,8 @@ class TestFindByKeywordsWithKind:
         # REQUIREMENT, ASSERTION, and REMAINDER all mention authentication
         assert len(result_kinds) >= 2
 
-    # Verifies: REQ-d00070-C
-    def test_REQ_d00070_C_find_by_keywords_default_is_none(self, multi_kind_graph):
+    # Verifies: REQ-d00215-D
+    def test_REQ_d00215_D_find_by_keywords_default_is_none(self, multi_kind_graph):
         """find_by_keywords() without kind parameter SHALL default to None (all kinds)."""
         from elspais.graph.annotators import annotate_keywords, find_by_keywords
 
@@ -232,8 +232,8 @@ class TestFindByKeywordsWithKind:
         result_kinds = {n.kind for n in results}
         assert len(result_kinds) >= 2
 
-    # Verifies: REQ-d00070-D
-    def test_REQ_d00070_D_find_assertions_by_keywords(self, multi_kind_graph):
+    # Verifies: REQ-d00215-D
+    def test_REQ_d00215_D_find_assertions_by_keywords(self, multi_kind_graph):
         """find_by_keywords(kind=ASSERTION) enables assertion keyword search."""
         from elspais.graph.annotators import annotate_keywords, find_by_keywords
 

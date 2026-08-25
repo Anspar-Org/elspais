@@ -1,7 +1,7 @@
 # Validates REQ-d00069-A, REQ-d00069-B, REQ-d00069-C, REQ-d00069-D
 # Validates REQ-d00069-E, REQ-d00069-F
 # Validates REQ-d00069-J, REQ-d00069-M, REQ-d00069-N
-# Validates REQ-d00070-A, REQ-d00070-B, REQ-d00070-C, REQ-d00070-D, REQ-d00070-E
+# Validates REQ-d00069-L
 """Tests for INDIRECT coverage from whole-requirement tests and transitive CODE chains.
 
 INDIRECT coverage counts whole-req tests (tests targeting a requirement without
@@ -358,11 +358,11 @@ class TestEdgeCase3WholeReqMixedResults:
     REQ has 5 assertions. Whole-req test1 passes, whole-req test2 fails.
     Strict: 0/5=0%. Indirect: 5/5=100%. has_failures=True.
 
-    Validates REQ-d00070-A: Whole-req mixed results.
+    Validates REQ-d00069-B: Whole-req mixed results.
     """
 
-    # Verifies: REQ-d00070-A
-    def test_REQ_d00070_A_whole_req_mixed_results(self):
+    # Verifies: REQ-d00069-B
+    def test_REQ_d00069_B_whole_req_mixed_results(self):
         """Whole-req tests: one pass + one fail. Indirect 100%, strict 0%."""
         assertions = [{"label": chr(65 + i), "text": f"Assertion {chr(65 + i)}"} for i in range(5)]
 
@@ -395,11 +395,11 @@ class TestEdgeCase4NoWholeReqTest:
     REQ has 5 assertions. Tests target A, B, C (all pass). D, E untested.
     Both modes: 3/5=60% partial. Indirect mode only affects empty assertion_targets.
 
-    Validates REQ-d00070-B: No whole-req test = both modes identical.
+    Validates REQ-d00069-L: No whole-req test leaves the indirect measure empty.
     """
 
-    # Verifies: REQ-d00070-B
-    def test_REQ_d00070_B_no_whole_req_test(self):
+    # Verifies: REQ-d00069-L
+    def test_REQ_d00069_L_no_whole_req_test(self):
         """Without whole-req tests, strict and indirect coverage are equal."""
         assertions = [{"label": chr(65 + i), "text": f"Assertion {chr(65 + i)}"} for i in range(5)]
 
@@ -423,19 +423,19 @@ class TestEdgeCase4NoWholeReqTest:
 class TestRollupMetricsIndirectDefaults:
     """Tests for RollupMetrics INDIRECT field defaults.
 
-    Validates REQ-d00070-C: Default values for new indirect fields.
+    Validates REQ-d00069-D: finalize() reads implementation evidence only.
     """
 
-    # Verifies: REQ-d00070-C
-    def test_REQ_d00070_C_default_dimension_fields(self):
+    # Verifies: REQ-d00069-D
+    def test_REQ_d00069_D_default_dimension_fields(self):
         """Coverage dimension fields default to zero."""
         metrics = RollupMetrics()
         assert metrics.tested.covered_pct == 0.0
         assert metrics.verified.covered == 0
         assert metrics.implemented.covered_pct == 0.0
 
-    # Verifies: REQ-d00070-C
-    def test_REQ_d00070_C_finalize_with_indirect_contributions(self):
+    # Verifies: REQ-d00069-D
+    def test_REQ_d00069_D_finalize_with_indirect_contributions(self):
         """Finalize correctly computes implemented dimension from contribution data."""
         metrics = RollupMetrics(total_assertions=4)
         # A and B covered by INDIRECT (whole-req test) — not included in implemented
@@ -458,11 +458,11 @@ class TestRollupMetricsIndirectDefaults:
 class TestIntegrationWholeReqTest:
     """Integration test: whole-req test -> implemented=0%, tested.covered=100%.
 
-    Validates REQ-d00070-D: End-to-end integration of indirect coverage.
+    Validates REQ-d00069-B+E: End-to-end integration of indirect coverage.
     """
 
-    # Verifies: REQ-d00070-D
-    def test_REQ_d00070_D_integration_whole_req(self):
+    # Verifies: REQ-d00069-B+E
+    def test_REQ_d00069_B_integration_whole_req(self):
         """End-to-end: whole-req test produces 0% implemented, 100% tested indirect."""
         graph = build_graph(
             make_requirement(
@@ -504,11 +504,11 @@ class TestIntegrationWholeReqTest:
 class TestIndirectWithExistingSources:
     """Tests that INDIRECT works alongside other coverage sources.
 
-    Validates REQ-d00070-E: INDIRECT doesn't interfere with existing sources.
+    Validates REQ-d00069-A+D: INDIRECT doesn't interfere with existing sources.
     """
 
-    # Verifies: REQ-d00070-E
-    def test_REQ_d00070_E_indirect_with_inferred(self):
+    # Verifies: REQ-d00069-A+D
+    def test_REQ_d00069_A_indirect_with_inferred(self):
         """INDIRECT from tests and INFERRED from reqs work independently."""
         graph = build_graph(
             make_requirement(
@@ -558,7 +558,7 @@ class TestTransitiveCoverageThroughCode:
     the chain REQUIREMENT <- CODE <- TEST <- TEST_RESULT records INDIRECT
     contributions in ``assertion_coverage`` as provenance (REQ-d00069-A/E).
     It does NOT carry the result's verdict into any *Traceability* dimension:
-    the test named the CODE, not the *Assertion* (REQ-d00258-N).
+    the test named the CODE, not the *Assertion* (REQ-d00277-C).
     """
 
     def _build_chain(self, *, with_result=True, result_status="passed", assertion_targets=None):
@@ -654,7 +654,7 @@ class TestTransitiveCoverageThroughCode:
         b_contribs = metrics.assertion_coverage.get("B", [])
         assert len(b_contribs) == 0
 
-    # Verifies: REQ-d00069-F, REQ-d00258-N
+    # Verifies: REQ-d00069-F, REQ-d00277-C
     def test_transitive_passing_result_credits_no_passing_coverage(self):
         """A result reached through the CODE rather than through the test
         credits nothing. This test named the CODE, never the *Assertion*, so
@@ -670,7 +670,7 @@ class TestTransitiveCoverageThroughCode:
             contribs = metrics.assertion_coverage.get(label, [])
             assert any(c.source_type == CoverageSource.INDIRECT for c in contribs)
 
-    # Verifies: REQ-d00069-F, REQ-d00258-N
+    # Verifies: REQ-d00069-F, REQ-d00277-C
     def test_transitive_failing_result_does_not_flag_the_requirement(self):
         """The mirror of the crediting rule: a failing result reached through
         the CODE flags no *Traceability* dimension either, because it makes no
@@ -796,7 +796,7 @@ class TestTransitiveCoverageThroughCode:
             contribs = metrics.assertion_coverage.get(label, [])
             assert any(c.source_type == CoverageSource.INDIRECT for c in contribs)
         # But `verified` captures none of them: a passing result reached
-        # through the CODE credits no *Traceability* dimension (REQ-d00258-N).
+        # through the CODE credits no *Traceability* dimension (REQ-d00277-C).
         assert metrics.verified.covered == 0
 
     # Verifies: REQ-d00069-E

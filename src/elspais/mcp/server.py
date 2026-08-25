@@ -537,7 +537,7 @@ def _serialize_node_generic(node: Any, graph: FederatedGraph | None = None) -> d
                     "covered_fraction": rollup.covered_fraction,
                 }
         # CUR-1419: consumer REQs declaring `Integrates:` inherit the
-        # library node's implemented/passing coverage (REQ-d00258-N: what the
+        # library node's implemented/passing coverage (REQ-d00277-C: what the
         # library's declared tests returned) across INTEGRATES
         # edges. Surface the live overlay so viewers can show inherited
         # status. Skip when there are no integrations to avoid noise.
@@ -2664,7 +2664,11 @@ _FAQ_ENTRIES: list[dict[str, str]] = [
             "Structural orphan: a node with no FILE parent (not contained in any file).\n"
             "This usually indicates a graph build error.\n"
             "Unlinked: a CODE or TEST node that exists in a file but has no traceability\n"
-            "edge to any requirement. This is normal for utility code/tests."
+            "edge to any requirement. This is normal for utility code/tests.\n"
+            "Uncited file: a scanned file that cites nothing at all. A file full of\n"
+            "unlinked nodes is not uncited if one node in it links, so the two answer\n"
+            "different questions -- `get_unlinked_nodes` for the nodes, `elspais uncited`\n"
+            "for the files."
         ),
     },
     {
@@ -6321,7 +6325,7 @@ def create_server(
             print(f"CONFIG ERROR: {e}", file=sys.stderr)
             graph = FederatedGraph.empty(name="<unconfigured>")
 
-    # Implements: REQ-o00077-A, REQ-o00077-B, REQ-o00077-C
+    # Implements: REQ-o00077-A, REQ-o00077-F
     # Every tool call reaches the transport through ``call_tool``, so the
     # rule lands there rather than on each tool: a per-tool opt-in is one
     # a later tool forgets, and REQ-o00077-C is stated over all of them at
@@ -7557,6 +7561,10 @@ def create_server(
 
         These are TEST or CODE nodes that exist in the file structure but
         are not connected to any requirement through traceability edges.
+
+        This is NOT the population `elspais uncited` lists: that names whole
+        files that cite nothing at all, and a file holding one linked test
+        and nine unlinked ones appears here and not there.
 
         Args:
             kind: Optional filter — "test" or "code". If omitted, returns both.

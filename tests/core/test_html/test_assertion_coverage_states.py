@@ -174,8 +174,8 @@ class TestAssertionCoverageStates:
         assert states["A"]["implemented"] == "partial"
         assert states["B"]["implemented"] == "missing"
 
-    # Verifies: REQ-d00258-N
-    def test_REQ_d00258_N_verified_standing_ignores_lcov_credit(self):
+    # Verifies: REQ-d00277-C
+    def test_REQ_d00277_C_verified_standing_ignores_lcov_credit(self):
         """The per-assertion Passing standing reads ``tested_and_passing()``,
         which counts only what a test declared against the assertion returned.
         A tested assertion whose implementing lines were executed but whose

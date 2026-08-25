@@ -480,7 +480,7 @@ class TestSeverityCatalog:
         assert tiers["verified_tier"] == "failing"
         assert tiers["combined_bucket"] == "failing"
 
-    # Verifies: REQ-d00258-N
+    # Verifies: REQ-d00277-C
     def test_passing_badge_does_not_credit_lcov_only_coverage(self):
         """A requirement credited via lcov only (no `Verifies:` refs at all)
         must show a MISSING "Passing" badge. The 'verified' slot in

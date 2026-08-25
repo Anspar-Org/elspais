@@ -1269,9 +1269,9 @@ class TestMultiAssertionExpansion:
         else:
             pytest.fail("Expected edge from REQ-p00001 to code:src/auth.py:10 not found")
 
-    # Verifies: REQ-d00081-E
-    def test_REQ_d00081_E_custom_separator_works(self):
-        """REQ-d00081-D: Custom separator '&' expands REQ-p00001-A&B&C correctly."""
+    # Verifies: REQ-d00081-D
+    def test_REQ_d00081_D_custom_separator_works(self):
+        """A configured separator '&' expands REQ-p00001-A&B&C to the same set."""
         config = config_defaults()
         config["project"] = {**config.get("project", {}), "namespace": "REQ"}
         config["id-patterns"]["assertions"]["multi_separator"] = "&"

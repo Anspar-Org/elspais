@@ -219,7 +219,7 @@ def collect_gaps(
             data.no_assertions.append(GapEntry(req_id, title))
 
         # Failing: test or UAT failures. Read through the Passing dimension,
-        # so a failure line coverage carries is seen too (REQ-d00258-N).
+        # so a failure line coverage carries is seen too (REQ-d00277-C).
         if metrics is not None:
             if tested_and_passing(metrics).has_failures:
                 data.failing.append((req_id, title, "test"))
