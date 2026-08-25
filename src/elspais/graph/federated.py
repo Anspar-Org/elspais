@@ -31,7 +31,7 @@ from elspais.graph.reference_faults import (
 from elspais.graph.relations import EdgeKind
 
 if TYPE_CHECKING:
-    from elspais.graph.builder import TraceGraph, UnscannedKeywordFile
+    from elspais.graph.builder import TraceGraph, UnboundCitation, UnscannedKeywordFile
     from elspais.graph.comments import CommentThread
     from elspais.graph.terms import TermDictionary
     from elspais.utilities.patterns import IdResolver
@@ -828,6 +828,17 @@ class FederatedGraph:
         result: list[UnscannedKeywordFile] = []
         for _name, graph in self._live_graphs():
             result.extend(graph.unscanned_keyword_files())
+        return result
+
+    # Implements: REQ-d00274-G
+    def unbound_citations(self) -> list[UnboundCitation]:
+        """Every citation attaching to no test, across all repos.
+
+        # Strategy: aggregate
+        """
+        result: list[UnboundCitation] = []
+        for _name, graph in self._live_graphs():
+            result.extend(graph.unbound_citations())
         return result
 
     # Implements: REQ-d00272-O

@@ -177,6 +177,12 @@ _REMEDIES: dict[str, str] = {
     "tests.verified": "elspais failing",
     "tests.uncredited_evidence": "elspais -v checks --tests",
     "tests.external": "elspais failing",
+    # `tests.unbound_citation` and `tests.unrunnable_file` are deliberately
+    # absent, as `code.unscanned_keyword_file` is: each is resolved by moving
+    # a citation onto the test it describes, or by editing the configuration
+    # that decides which files are scanned and what can run them. No command
+    # does either, and naming one would send a reader to a surface that
+    # reports the condition again rather than resolving it.
     # -- uat -------------------------------------------------------------
     "uat.results": "elspais failing",
     "uat.uat_coverage": "elspais unvalidated",
@@ -311,6 +317,11 @@ _DESCRIPTIONS: dict[str, str] = {
         "Code files carrying no traceability marker at all (test files are covered separately by "
         "`tests.unlinked`)"
     ),
+    "code.unscanned_keyword_file": (
+        "A file inside a scanned directory that the ignore configuration does not exclude, that "
+        "the patterns declared for its kind do not select, and that carries a *Traceability* "
+        "keyword anyway -- the citation was never read"
+    ),
     "code.retired_references": (
         "Code referencing requirements with retired status (Deprecated, Superseded, Rejected)"
     ),
@@ -338,6 +349,15 @@ _DESCRIPTIONS: dict[str, str] = {
     "tests.external": (
         "A test that failed and reaches no requirement, so nobody will find the failure through "
         "the spec"
+    ),
+    "tests.unbound_citation": (
+        "A citation in a scanned test file that found no test to attach to -- it names assertions "
+        "but sits where no test was declared, so no result can ever reach it; it contributes no "
+        "coverage and is reported here instead"
+    ),
+    "tests.unrunnable_file": (
+        "A scanned test file that no configured test target can execute, so what it verifies can "
+        "raise the Tested figure while Passing has no way to move"
     ),
     "tests.retired_references": (
         "Tests referencing requirements with retired status (Deprecated, Superseded, Rejected)"
@@ -470,6 +490,14 @@ def _registry() -> dict[str, CheckRule]:
             "format",
             "no_traceability_severity",
         ),
+        # A file the scan declined to read is reported at info because the
+        # probe is deliberately generous about what counts as a citation: a
+        # keyword behind a comment marker in documentation prose reads the
+        # same as a dropped citation in a grammar file, and the two cannot be
+        # told apart without reading the file the scan just declined to read.
+        # Under-reporting is the safe direction, and a false warning about
+        # prose costs more than a quiet true finding about a citation.
+        _general("code.unscanned_keyword_file", "code", Severity.INFO),
         # -- tests -------------------------------------------------------
         _general("tests.unlinked", "tests", Severity.INFO),
         _general("tests.results", "tests", Severity.WARNING),
@@ -494,6 +522,18 @@ def _registry() -> dict[str, CheckRule]:
             "coverage",
             "external_test_failure",
         ),
+        # A citation that bound to no test is reported at warning because the
+        # condition is not always the author's doing: a pre-scan that does not
+        # reach a language's declaration form produces it just as an
+        # ill-placed comment does. What it credits is not a severity question
+        # at all -- REQ-d00274-H withdraws the coverage whatever this says.
+        _general("tests.unbound_citation", "tests", Severity.WARNING),
+        # A target may legitimately carry no command -- the schema says so
+        # ("omitted in CI", where the tests already ran) -- so a project whose
+        # every target is ingest-only would be told at warning, on every file
+        # it scans, about a configuration it chose. The fact is worth stating
+        # and is not a defect, which is what `info` is for.
+        _general("tests.unrunnable_file", "tests", Severity.INFO),
         # -- uat ---------------------------------------------------------
         _general("uat.results", "uat", Severity.WARNING),
         _general("uat.uat_coverage", "uat", Severity.ERROR),

@@ -3432,6 +3432,64 @@ def check_no_traceability(
     )
 
 
+# Implements: REQ-d00241-F, REQ-d00241-G
+def check_unscanned_keyword_files(
+    graph: FederatedGraph, config: dict[str, Any] | None = None
+) -> HealthCheck:
+    """Report files the scan reached, declined to read, and that cite anyway.
+
+    The file sits inside a directory the project declared for one of its
+    scanning kinds, the ignore configuration does not exclude it, and the
+    patterns that kind declares do not select it -- and it carries a
+    *Traceability* keyword regardless. Nothing in it was read, so nothing
+    here says the citation would have bound: only that one was written where
+    the tool was not looking, and that an honest zero and a dropped citation
+    are the same number.
+
+    A file the ignore configuration excludes never reaches this check
+    (REQ-d00241-G): declining to read it is what the project asked for, and
+    reporting it would answer a question nobody asked.
+    """
+    severity = severity_for("code.unscanned_keyword_file", config)
+    if severity == Severity.OFF:
+        return skipped_check(
+            "code.unscanned_keyword_file", "Unscanned files carrying a Traceability keyword"
+        )
+
+    records = graph.unscanned_keyword_files()
+    if not records:
+        return HealthCheck(
+            name="code.unscanned_keyword_file",
+            passed=True,
+            message="No file the scan declined to read carries a Traceability keyword",
+            category="code",
+            severity=severity,
+        )
+
+    findings = [
+        HealthFinding(
+            message=(
+                f"{r.path} carries `{r.keyword}` but matches none of the patterns declared "
+                f"for the {r.kind} scan, so the citation was never read"
+            ),
+            file_path=r.path,
+            line=r.line,
+        )
+        for r in sorted(records, key=lambda r: (r.path, r.line))
+    ]
+    return HealthCheck(
+        name="code.unscanned_keyword_file",
+        passed=False,
+        message=(
+            f"{len(records)} file(s) carrying a Traceability keyword were not read by any scan"
+        ),
+        category="code",
+        severity=severity,
+        details={"count": len(records)},
+        findings=findings,
+    )
+
+
 def run_code_checks(
     graph: FederatedGraph,
     exclude_status: set[str] | None = None,
@@ -3461,6 +3519,7 @@ def run_code_checks(
             config=config,
         ),
         check_whole_req_only_coverage(graph, config),
+        check_unscanned_keyword_files(graph, config),
     ]
 
     # Add line coverage only when line coverage data is present
@@ -3872,6 +3931,11 @@ def check_unlinked_tests(
     carries a Verifies: marker, so a fully marker-less test file still
     has TEST children. Files with at least one linked test are not
     flagged (partial marking is not "unlinked").
+
+    A file whose only citation attached to no test carries a marker, and
+    saying it carries none would send its author to add what is already
+    there (REQ-d00241-E). Those files are excluded here and named by
+    ``tests.unbound_citation``, which says what is actually wrong with them.
     """
     severity = severity_for("tests.unlinked", config)
     if severity == Severity.OFF:
@@ -3880,6 +3944,9 @@ def check_unlinked_tests(
     from elspais.graph import NodeKind
     from elspais.graph.GraphNode import FileType
     from elspais.graph.relations import EdgeKind
+
+    # Implements: REQ-d00241-E
+    cited_but_unbound = {c.path for c in graph.unbound_citations()}
 
     unlinked_files = []
     for file_node in graph.iter_roots(NodeKind.FILE):
@@ -3890,8 +3957,12 @@ def check_unlinked_tests(
             for child in file_node.iter_children(edge_kinds={EdgeKind.CONTAINS})
             if child.kind == NodeKind.TEST
         )
-        if not has_linked_test:
-            unlinked_files.append(file_node.get_field("relative_path") or file_node.id)
+        if has_linked_test:
+            continue
+        relative_path = file_node.get_field("relative_path") or ""
+        if relative_path in cited_but_unbound:
+            continue
+        unlinked_files.append(relative_path or file_node.id)
 
     if unlinked_files:
         findings = [
@@ -4093,6 +4164,169 @@ def check_unmatched_results(
     )
 
 
+# Implements: REQ-d00274-G
+def check_unbound_citations(
+    graph: FederatedGraph, config: dict[str, Any] | None = None
+) -> HealthCheck:
+    """Report citations in test files that found no test to attach to.
+
+    Nothing about such a citation is malformed: the keyword read, the
+    reference resolved, and it names an assertion that exists. What is
+    missing is the other end -- the pre-scan found no test declaration
+    beneath it, because it sits above a class rather than a function, below
+    the last test in the file, or past whatever window its language's
+    pre-scan looks through.
+
+    The condition is invisible without this check, and expensively so. The
+    assertions such a citation names would otherwise read as tested and never
+    as passing, which is exactly how a stale result reads -- so the reflex is
+    to re-run the suite, which cannot move it. The coverage is withheld
+    whatever severity this carries (REQ-d00274-H); this is where the citation
+    is named.
+    """
+    severity = severity_for("tests.unbound_citation", config)
+    if severity == Severity.OFF:
+        return skipped_check("tests.unbound_citation", "Citations attaching to no test")
+
+    # A record names a file relative to the repository holding it, and two
+    # members of a federation may hold the same relative path, so the member
+    # is read from the graph the record came out of rather than looked up
+    # afterwards from a path that answers for both.
+    findings = [
+        HealthFinding(
+            message=(
+                f"{c.keyword}: {', '.join(c.targets)} -- no test was declared for this "
+                "citation, so it credits nothing; move it onto the test it describes"
+            ),
+            file_path=c.path,
+            line=c.line,
+            related=list(c.targets),
+            repo=entry.name,
+        )
+        for entry in graph.iter_repos()
+        if entry.graph is not None
+        for c in sorted(entry.graph.unbound_citations(), key=lambda c: (c.path, c.line))
+    ]
+    if not findings:
+        return HealthCheck(
+            name="tests.unbound_citation",
+            passed=True,
+            message="Every citation in a scanned test file attached to a test",
+            category="tests",
+            severity=severity,
+        )
+
+    return HealthCheck(
+        name="tests.unbound_citation",
+        passed=False,
+        message=f"{len(findings)} citation(s) in test files attached to no test",
+        category="tests",
+        severity=severity,
+        details={"count": len(findings)},
+        findings=findings,
+    )
+
+
+# Implements: REQ-d00276-E
+def _target_reach(config: dict[str, Any] | None) -> list[str] | None:
+    """The repo-relative directories this project's runnable targets reach.
+
+    A target says where it runs and nothing about which files it selects, so
+    its ``cwd`` is the whole of what the configuration knows: a target runs
+    from there and can execute what lies beneath it. ``""`` is the repository
+    root, which reaches everything.
+
+    Returns:
+        One entry per target carrying a command, each a repo-relative
+        directory prefix (``""`` meaning the whole repository). ``None``
+        where the configuration could not be read at all -- which is not the
+        same answer as "no target reaches anything".
+    """
+    if not config:
+        return None
+    try:
+        cfg = _validate_config(config)
+    except Exception:
+        return None
+    return [t.cwd.strip("/") for t in cfg.scanning.test.targets if t.command]
+
+
+def _reached_by(relative_path: str, reach: list[str]) -> bool:
+    """Whether any runnable target's directory contains *relative_path*."""
+    normalized = relative_path.replace("\\", "/").removeprefix("./")
+    return any(cwd == "" or normalized.startswith(f"{cwd}/") for cwd in reach)
+
+
+# Implements: REQ-d00276-E
+def check_unrunnable_test_files(
+    graph: FederatedGraph, config: dict[str, Any] | None = None
+) -> HealthCheck:
+    """Report scanned test files no configured target can execute.
+
+    "This file is scanned as a test, and nothing in your configuration can
+    ever run it" is a statement the tool can make and the author cannot.
+    Adding a directory to the scanned set raises the Tested figure on the
+    strength of citations in files nothing runs, while Passing has no way to
+    follow -- so the configuration change makes the report less truthful, and
+    every signal points at the results rather than at the cause.
+
+    Each member of a federation is judged by its own targets: they are its
+    configuration, and reading the invoking repository's would report every
+    associate's tests as unrunnable on the strength of a setting the
+    associate never made.
+    """
+    severity = severity_for("tests.unrunnable_file", config)
+    if severity == Severity.OFF:
+        return skipped_check("tests.unrunnable_file", "Test files no target can execute")
+
+    from elspais.graph import NodeKind
+    from elspais.graph.GraphNode import FileType
+
+    findings: list[HealthFinding] = []
+    for entry in graph.iter_repos():
+        if entry.graph is None:
+            continue
+        reach = _target_reach(entry.config)
+        if reach is None:
+            continue
+        for file_node in entry.graph.iter_roots(NodeKind.FILE):
+            if file_node.get_field("file_type") != FileType.TEST:
+                continue
+            relative_path = file_node.get_field("relative_path") or ""
+            if not relative_path or _reached_by(relative_path, reach):
+                continue
+            findings.append(
+                HealthFinding(
+                    message=(
+                        f"{relative_path} is scanned as a test file, and no configured "
+                        "test target with a command runs from a directory containing it"
+                    ),
+                    file_path=relative_path,
+                    node_id=file_node.id,
+                    repo=entry.name,
+                )
+            )
+
+    if not findings:
+        return HealthCheck(
+            name="tests.unrunnable_file",
+            passed=True,
+            message="Every scanned test file lies within a configured target's reach",
+            category="tests",
+            severity=severity,
+        )
+    findings.sort(key=lambda f: (f.repo or "", f.file_path or ""))
+    return HealthCheck(
+        name="tests.unrunnable_file",
+        passed=False,
+        message=f"{len(findings)} scanned test file(s) no configured target can execute",
+        category="tests",
+        severity=severity,
+        details={"count": len(findings)},
+        findings=findings,
+    )
+
+
 def run_test_checks(
     graph: FederatedGraph,
     exclude_status: set[str] | None = None,
@@ -4106,6 +4340,8 @@ def run_test_checks(
         check_dimension_coverage(graph, "verified", exclude_status=exclude_status, config=config),
         check_uncredited_evidence(graph, config),
         check_unlinked_tests(graph, config),
+        check_unbound_citations(graph, config),
+        check_unrunnable_test_files(graph, config),
         check_external_tests(graph, config),
         check_test_results(graph, config=config),
         check_test_results_stale(graph, config),

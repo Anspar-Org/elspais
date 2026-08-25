@@ -137,6 +137,11 @@ class ReferenceTransformer:
         line_context: Pre-scan data mapping line_number -> (func_name, class_name, func_line).
         file_default_verifies: File-level default verifies (for test files).
         all_test_funcs: All test functions from pre-scan (for emitting unlinked tests).
+        first_def_line: The line of the file's first class or function
+            definition (0 where it has none). A test-file citation above
+            it is the file-level default, which reaches every test in the
+            file; below it, a citation with no function context reached
+            nothing (REQ-d00274-G).
         reader: Reads the identifiers of every repository in this
             federation, normalizing each under the grammar of the member
             that claims it.  Defaults to this repository alone.
@@ -158,6 +163,7 @@ class ReferenceTransformer:
         line_context: dict[int, tuple[str | None, str | None, int, int]] | None = None,
         file_default_verifies: list[str] | None = None,
         all_test_funcs: list[tuple[int, str, str | None]] | None = None,
+        first_def_line: int = 0,
         source_id: str = "",
         reader: FederatedIdReader | None = None,
         quoted_lines: set[int] | None = None,
@@ -171,6 +177,7 @@ class ReferenceTransformer:
         self.line_context = line_context or {}
         self.file_default_verifies = file_default_verifies or []
         self.all_test_funcs = all_test_funcs or []
+        self.first_def_line = first_def_line
         self.source_id = source_id
         self.quoted_lines = quoted_lines or set()
         self.comment_markers: tuple[str, ...] = tuple(comment_markers)
@@ -359,6 +366,8 @@ class ReferenceTransformer:
                             "function_line": func_line,
                             "function_end_line": func_end_line,
                             "file_default_verifies": self.file_default_verifies,
+                            # Implements: REQ-d00274-G
+                            "binds_to_test": self._binds_to_test(func_line, start_ln),
                         }
 
                     if func_line:
@@ -675,6 +684,8 @@ class ReferenceTransformer:
                 "function_line": func_line,
                 "file_default_verifies": self.file_default_verifies,
                 "reference_verdicts": verdicts,
+                # Implements: REQ-d00274-G
+                "binds_to_test": self._binds_to_test(func_line, line_num),
             }
 
         return ParsedContent(
@@ -684,6 +695,24 @@ class ReferenceTransformer:
             raw_text=raw_text if raw_text is not None else text,
             parsed_data=parsed_data,
         )
+
+    # Implements: REQ-d00274-G
+    def _binds_to_test(self, func_line: int, line_num: int) -> bool:
+        """Whether a citation in a test file on *line_num* reached a test.
+
+        A citation the pre-scan placed inside a test declaration, or bound to
+        the declaration below it, reached that test. A citation above the
+        file's first definition is the file-level default, which reaches
+        every test the file declares -- and reaches none where the file
+        declares none. Anywhere else no test was found for it: the coverage
+        it appears to confer sits on a node no result can ever match, so the
+        assertions it names read as tested and never as passing.
+        """
+        if func_line:
+            return True
+        if not self.all_test_funcs:
+            return False
+        return bool(self.first_def_line) and line_num < self.first_def_line
 
     # ------------------------------------------------------------------
     # Test name reference handling

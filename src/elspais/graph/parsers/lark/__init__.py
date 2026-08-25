@@ -486,6 +486,7 @@ class FileDispatcher:
             line_context=line_context,
             file_default_verifies=file_default_verifies,
             all_test_funcs=all_test_funcs,
+            first_def_line=first_def_line,
             source_id=file_path,
             reader=self._reader,
             quoted_lines=quoted_lines,

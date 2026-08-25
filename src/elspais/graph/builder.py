@@ -169,6 +169,50 @@ class UnscannedKeywordFile:
     line: int
 
 
+# Implements: REQ-d00274-G
+@dataclass(frozen=True)
+class UnboundCitation:
+    """A citation in a scanned test file that found no test to attach to.
+
+    The keyword read, the reference resolved, and then the pre-scan found no
+    test declaration for it -- the comment sits above a class, below the last
+    test, or past whatever window its language's pre-scan looks through. What
+    it names is therefore evidence attached to nothing a test run can produce
+    a result for, so it credits no coverage (REQ-d00274-H) and is recorded
+    here instead.
+
+    Silence is the whole cost of the condition: an assertion credited by such
+    a citation reads as tested and never as passing, which is exactly how a
+    stale result reads, and re-running the suite cannot move it.
+
+    Attributes:
+        path: The test file, as the citation's source was named.
+        line: The 1-based line the citation was written on.
+        keyword: The *Traceability* keyword the citation used.
+        targets: The references the citation named, in the order written.
+    """
+
+    path: str
+    line: int
+    keyword: str
+    targets: tuple[str, ...]
+
+
+def _keyword_as_written(raw_text: str) -> str:
+    """The *Traceability* keyword a citation used, as its author spelled it.
+
+    A test file admits only ``Verifies``, but reporting the canonical
+    spelling for a comment that wrote something else would name a line the
+    reader cannot find. Where the text holds no keyword at all -- a citation
+    carried by a test function's name -- the canonical word is the honest
+    answer, because that is the relationship the name declared.
+    """
+    from elspais.graph.parsers.patterns import KEYWORD_PATTERN
+
+    match = KEYWORD_PATTERN.search(raw_text or "")
+    return match.group(0) if match else "Verifies"
+
+
 # A mutation is applied in place to this live graph, whatever level or kind of node
 # it touches, and the graph stays readable between one mutation and the next.
 # Implements: REQ-d00134-A, REQ-d00134-B, REQ-d00134-C
@@ -275,6 +319,12 @@ class TraceGraph:
     _unscanned_keyword_files: list[UnscannedKeywordFile] = field(
         default_factory=list, init=False, repr=False
     )
+    # Implements: REQ-d00274-G
+    # Citations in scanned test files that found no test to attach to. Kept
+    # apart from _broken_references because nothing failed to resolve: the
+    # reference read and named a real assertion, and it is the binding to a
+    # test that was never made.
+    _unbound_citations: list[UnboundCitation] = field(default_factory=list, init=False, repr=False)
     # Detection: duplicate REQ IDs across files (populated at build time).
     # Maps canonical REQ ID -> ordered list of source paths defining it.
     _duplicate_req_ids: dict[str, list[str]] = field(default_factory=dict, init=False, repr=False)
@@ -492,6 +542,16 @@ class TraceGraph:
         that a citation was written where the tool was not looking.
         """
         return list(self._unscanned_keyword_files)
+
+    # Implements: REQ-d00274-G
+    def unbound_citations(self) -> list[UnboundCitation]:
+        """Every citation in a test file that attached to no test.
+
+        The reference resolved; no test declaration was found beneath it. It
+        contributes no coverage (REQ-d00274-H), so what it names would read as
+        untested rather than as wrongly tested were this list not consulted.
+        """
+        return list(self._unbound_citations)
 
     def duplicate_req_ids(self) -> dict[str, list[str]]:
         """Return cross-file duplicate REQ IDs detected at build time.
@@ -3823,6 +3883,8 @@ class GraphBuilder:
         self._identifier_form_findings: list[IdentifierFormFinding] = []
         # Implements: REQ-d00241-F
         self._unscanned_keyword_files: list[UnscannedKeywordFile] = []
+        # Implements: REQ-d00274-G
+        self._unbound_citations: list[UnboundCitation] = []
         # Detection: duplicate REQ IDs across files. Maps the canonical (real)
         # requirement ID -> ordered list of source paths that defined it. First
         # occurrence keeps the real ID; subsequent occurrences get a synthetic
@@ -4526,6 +4588,13 @@ class GraphBuilder:
             label = f"Test at {source_id}:{anchor_line}"
             source_line = anchor_line
 
+        # Implements: REQ-d00274-G, REQ-d00274-H
+        # The parser says whether this citation found a test. False is its
+        # answer and nothing else's: a citation the parser never judged (a
+        # test function emitted by the unlinked-test pass, a name-carried
+        # reference) leaves the key absent and is bound by construction.
+        binds_to_test = data.get("binds_to_test") is not False
+
         if test_id not in self._nodes:
             node = GraphNode(
                 id=test_id,
@@ -4538,11 +4607,36 @@ class GraphBuilder:
             # Implements: REQ-d00131-G
             # Store raw comment text for render protocol
             node.set_field("raw_text", content.raw_text)
+            # Implements: REQ-d00274-G
+            # The node is still built, because the comment is still a line of
+            # the file and has to render back out where it was written. What
+            # it does not get is the relationship below.
+            if not binds_to_test:
+                node.set_field("binds_to_test", False)
             self._nodes[test_id] = node
 
         verdicts = data.get("reference_verdicts") or {}
-        for val_ref in data.get("verifies", []):
-            self._pending_links.append((test_id, val_ref, EdgeKind.VERIFIES, verdicts))
+        refs = data.get("verifies", [])
+        if not binds_to_test:
+            # Implements: REQ-d00274-H
+            # No result can ever reach a node standing where no test was
+            # declared, so an edge from here would credit the assertions as
+            # tested and leave them permanently short of passing. The
+            # citation is recorded instead of counted -- unconditionally,
+            # because what a citation credits is not a matter of how loudly
+            # the project asked to hear about it.
+            if refs:
+                self._unbound_citations.append(
+                    UnboundCitation(
+                        path=self._to_relative_path(source_id),
+                        line=content.start_line,
+                        keyword=_keyword_as_written(content.raw_text),
+                        targets=tuple(refs),
+                    )
+                )
+        else:
+            for val_ref in refs:
+                self._pending_links.append((test_id, val_ref, EdgeKind.VERIFIES, verdicts))
 
         # Implements: REQ-d00272-J
         # A keyword a test file may not use (anything but Verifies) is read,
@@ -5553,6 +5647,7 @@ class GraphBuilder:
         graph._undeclared_relationships = list(self._undeclared_relationships)
         graph._identifier_form_findings = list(self._identifier_form_findings)
         graph._unscanned_keyword_files = list(self._unscanned_keyword_files)
+        graph._unbound_citations = list(self._unbound_citations)
         graph._duplicate_req_ids = {k: list(v) for k, v in self._duplicate_req_ids.items()}
 
         # Implements: REQ-d00222-A, REQ-d00222-B
