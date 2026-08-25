@@ -30,28 +30,8 @@ daemon being replaced: an http client reconnects to the same address,
 where a stdio server is a process the client owns and nothing restarts
 once it exits.
 
-Installed for one project (the default), the registration names this
-working tree's address outright and there is nothing to arrange -- just
-launch the client. Each working tree keeps its own address, so parallel
-sessions in different worktrees do not collide, and the address is held
-for that tree even while nothing is serving it: restart the daemon, or
-stop and start it, and the same address answers.
-
-That address is held in `.elspais/daemon-port.json`, which is working
-state rather than tracked content. A tree that loses the file keeps the
-registration naming the old port and reserves a new one on next install,
-so a registration that must outlive a clean checkout should name a
-variable instead.
-
-A registration COMMITTED to a repository -- a `.mcp.json` every
-contributor checks out -- is that case, and cannot name a port for the
-same reason a global one cannot: the address differs by tree and by
-machine. It takes the variable form below, and every contributor's shell
-supplies the address.
-
-Installed with `--global`, one registration serves every project, so it
-cannot name any single tree's address. It names a variable instead, and
-the shell that launches the client supplies it:
+Whatever its scope, the registration names a variable rather than an
+address, and the shell that launches the client supplies it:
 
   $ eval "$(elspais mcp env)"
   $ claude
@@ -59,14 +39,38 @@ the shell that launches the client supplies it:
 `elspais mcp env` starts the daemon for the working tree you are in if
 none is running, then prints `export ELSPAIS_MCP_URL=...` for the shell
 to apply. (It prints rather than exports because no process can set a
-variable in the shell that started it.)
+variable in the shell that started it.) `--no-start` reads the address
+without starting anything.
 
-If a tree's reserved address is ever taken by something else, the daemon
-says so and serves elsewhere; re-running `elspais mcp install` records
-the new address.
+No scope can name an address outright, which is why there is only the one
+form. A registration is read wherever the client is launched, and every
+working tree of a repository reads the same one; an address settled while
+installing would name the tree that installed as though it were the tree
+reading. Resolving the variable at launch is what gives each tree its own
+answer, and it is re-derived every time, so a tree that loses its
+reservation settles a new address rather than keeping a dead one.
+
+That variable carries no default on purpose. A shell that never set it
+gets a missing-variable error naming `ELSPAIS_MCP_URL`; a default would
+fail as a refused connection and send the reader to look at the daemon.
+`elspais doctor` reports an address that does not reach the tree it is
+read in, which is otherwise indistinguishable from one nothing is
+serving yet.
+
+Within a session the address is stable. A tree's reserved address is held
+in `.elspais/daemon-port.json` and survives the process using it, so a
+daemon that restarts -- or renews itself when the program beneath it
+changes -- answers in the same place and the client reconnects. If the
+reserved address is ever taken by something else, the daemon says so and
+serves elsewhere.
+
+To point a client at a tree other than the one it is launched in, set
+`ELSPAIS_MCP_URL` to that tree's address yourself. That is per-shell and
+deliberate, which is the only way one tree's client should reach
+another's process.
 
 Running `elspais mcp install` again replaces whatever is registered, so
-switching between the two is one command either way.
+switching transport is one command either way.
 
 Use **stdio** (`elspais mcp install --transport stdio`) for a client that
 cannot speak http. A stdio server holds its own private graph: mutations

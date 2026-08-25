@@ -66,7 +66,7 @@
 | REQ-o00073 | MCP Org-Wide Context                | ops-mcp.md          | 346f3031 |
 | REQ-o00074 | Background Daemon Lifetime          | ops-mcp.md          | dace8fb0 |
 | REQ-o00075 | Shared Graph Daemon                 | ops-mcp.md          | 2598192d |
-| REQ-o00076 | Reaching the Serving Process        | ops-mcp.md          | 32c4639b |
+| REQ-o00076 | Reaching the Serving Process        | ops-mcp.md          | 0bdae779 |
 | REQ-o00077 | Serving From the Installed Program  | ops-mcp.md          | 3488ba9c |
 
 ## DEVELOPMENT

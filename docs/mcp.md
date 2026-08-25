@@ -22,10 +22,17 @@ server itself — every MCP client can enumerate its tools, and
 # Register with Claude Code (all projects) and Claude Desktop
 elspais mcp install --global --desktop
 
-# Or Claude Code only (current project)
+# Or Claude Code only (this repository, every worktree of it)
 elspais mcp install
 
+# Either way, each shell supplies the address before launching the client
+eval "$(elspais mcp env)"
 ```
+
+The registration names `ELSPAIS_MCP_URL` rather than a port. A registration
+is read wherever the client is launched -- every worktree of a repository
+reads the same one -- so the address is resolved per shell, in the tree it
+is launched from, rather than written down when installing.
 
 ### Running the Server Manually
 

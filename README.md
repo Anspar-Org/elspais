@@ -59,6 +59,9 @@ pip install elspais[mcp]
 
 # Register with Claude Code (all projects) and Claude Desktop
 elspais mcp install --global --desktop
+
+# Each shell supplies the daemon's address before launching the client
+eval "$(elspais mcp env)"
 ```
 
 The MCP server provides tools for searching requirements, navigating hierarchies, checking coverage, and drafting mutations — all operating on the live traceability graph.

@@ -599,6 +599,10 @@ J. If the process serving a working tree cannot be made to serve from the same p
 
 K. When the process serving a working tree is replaced, a client SHALL reach the replacement at the address it reached the previous process at.
 
+L. An address the tool records in a client's configuration SHALL resolve to the working tree that client is operating in.
+
+M. Where the address a client is configured to use does not reach the process serving that client's working tree, the tool SHALL report it.
+
 ### Rationale
 
 A client and the process serving it meet at one point — the client asks which process serves its working tree, and acts on the answer. Everything here is a property of that meeting: that it can happen at all, that the answer is true, and that what answers is what the client would have run. That a process exists and that exactly one of them serves a tree is REQ-o00075's subject and is not restated.
@@ -619,15 +623,24 @@ K is therefore what decides which side of REQ-o00077-D a client falls on. A proc
 
 An address that survives replacement must also survive there being nothing to replace. The record naming the process currently serving a tree is removed when none is, which is what E requires of it; the address a tree is reached at is a different fact with a different lifetime, and holding the two separately is what lets a tree be reached in the same place after serving has stopped and begun again.
 
+Assertions C through K govern the addresses the tool itself keeps. L governs the ones it writes into somebody else's configuration, which is a different obligation because such a record is read in circumstances the writing never saw. A client's configuration is read wherever that client is launched, and a tool that writes down the address it settled while installing has recorded one tree's answer as though it were every tree's. Where several working trees of a repository share a configuration, that is not a stale entry but a wrong one from the moment it is written: it names a tree the reader may not be in. An address that resolves when it is read cannot make that mistake, which is why L constrains what the recorded address must do rather than what it may say.
+
+L does not weaken C. A client that can ask which process serves its tree still needs no arrangement; L binds the tool where it has already answered on such a client's behalf, into a record the client will read later without asking again.
+
+M covers two conditions that carry different weight, and reporting them apart is what lets each be judged on its own. A shell holding an address for another tree is ordinary and transient -- moving between working trees produces it, and re-deriving the address ends it -- so it is a disclosure about the environment a command was run in. A registration that names an address rather than resolving one is a defect in what was written, wrong from the moment of writing under L and outliving any shell. Reported under one name they would have to share one severity, and the severity truthful for either is wrong for the other.
+
+M exists because the failure L describes is silent. A configured address that names the wrong tree is indistinguishable, to the client holding it, from one that names the right tree with nothing yet serving — both simply fail to connect, and both invite the reader to look at the daemon. Only the tool can compare the address a client would use against the tree that client is in, so only the tool can tell the two apart, and a condition that nothing reports is one that persists for as long as nobody happens to investigate it. M is a disclosure about a client's configuration and not about the graph: it says nothing about which repositories a working tree federates, since a tree may properly name any other tree as an associate without that bearing on where its own clients connect.
+
 ### Changelog
 
+- 2026-08-25 | 0bdae779 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-18 | 32c4639b | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-18 | cd6333aa | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: sync changelog hash
 - 2026-08-18 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: state each obligation a client relies on when it reaches the serving process as its own assertion
 - 2026-08-18 | cd6333aa | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-18 | d2a0addf | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash, add missing changelog section
 
-*End* *Reaching the Serving Process* | **Hash**: 32c4639b
+*End* *Reaching the Serving Process* | **Hash**: 0bdae779
 
 ## REQ-o00077: Serving From the Installed Program
 

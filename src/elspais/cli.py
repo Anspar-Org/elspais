@@ -623,59 +623,38 @@ def _claude_env() -> dict[str, str]:
     return env
 
 
-# Implements: REQ-o00076-K
-def _http_registration_url(global_scope: bool) -> str:
-    """The address to register, literal where one registration means one tree.
+# Implements: REQ-o00076-L
+def _http_registration_url() -> str:
+    """The address to register: always the variable, never a literal.
 
-    A registration scoped to a single project names one working tree, and
-    that tree's address is settled and survives the process serving it
-    (REQ-o00076-K), so it can be written down. Nothing then has to be
-    arranged before the client is launched.
+    A registration is read wherever the client is launched, which is not
+    where it was written. Several working trees of one repository share a
+    client configuration, so an address settled while installing names one
+    tree's answer as every tree's -- wrong from the moment it is written
+    rather than stale later (REQ-o00076-L).
 
-    A registration shared by every project cannot be written down, because
-    the address it needs differs by which tree the client was started in.
-    There the variable is the answer, and the shell supplies it.
+    The variable is resolved when the registration is read, by a shell
+    that knows which tree it is in, so one registration serves every tree
+    and each reaches its own process. `elspais mcp env` is what supplies
+    it.
 
-    Reserving the address does not start anything. Registering a client
-    says where a tree will be served, not that it is being served now,
-    and an install that spawned a daemon as a side effect would start one
-    on a machine that was only being set up.
-
-    Falls back to the variable when no address can be settled, which
-    happens when there is no working tree to settle one for. A literal
-    that was wrong would be worse than a variable that has to be set.
+    It carries no default, which is deliberate and belongs here rather
+    than at the point of use: an unset variable is reported by the client
+    as a missing variable, naming the cause, where a default address would
+    fail as a refused connection and name a symptom.
     """
-    if global_scope:
-        return _ADDRESS_VARIABLE
-
-    from elspais.config import find_git_root
-
-    repo_root = find_git_root()
-    if repo_root is None:
-        return _ADDRESS_VARIABLE
-
-    from elspais.mcp.daemon import free_port, reserve_port, reserved_port
-
-    port = reserved_port(repo_root)
-    if port is None:
-        # First registration for this tree: settle an address now so the
-        # client can be told one, and let the daemon bind it when it
-        # eventually starts.
-        port = free_port()
-        reserve_port(repo_root, port)
-    return f"http://127.0.0.1:{port}/mcp"
+    return _ADDRESS_VARIABLE
 
 
 # Implements: REQ-o00076-K
 def _mcp_install(global_scope: bool = False, transport: str = "http") -> int:
     """Register elspais MCP server with Claude Code.
 
-    Over http a project-scoped registration names this working tree's
-    address outright, so nothing has to be arranged before the client is
-    launched. A ``--global`` registration cannot: the address it needs
-    differs by which tree the client was started in, so it names a
-    variable and the shell supplies it with
-    ``eval "$(elspais mcp env)"``.
+    Over http the registration names a variable whatever its scope, and
+    the shell supplies the address with ``eval "$(elspais mcp env)"``.
+    Scope decides which projects the registration covers; it never
+    decides whether an address can be written down, because no scope
+    reaches only one working tree (REQ-o00076-L).
 
     http is the better connection and is the default. The client then
     shares one graph with the CLI and the viewer, and a daemon that is
@@ -706,7 +685,7 @@ def _mcp_install(global_scope: bool = False, transport: str = "http") -> int:
     if global_scope:
         cmd.extend(["--scope", "user"])
     if transport == "http":
-        cmd.append(_http_registration_url(global_scope))
+        cmd.append(_http_registration_url())
     else:
         cmd.extend(["--", "elspais", "mcp", "serve"])
 
@@ -756,8 +735,20 @@ def _mcp_install(global_scope: bool = False, transport: str = "http") -> int:
         print(f"Error: {result.stderr.strip()}", file=sys.stderr)
         return 1
 
-    scope_label = "all projects (user scope)" if global_scope else "current project (local scope)"
+    scope_label = (
+        "all projects (user scope)"
+        if global_scope
+        else "this repository, every working tree of it (local scope)"
+    )
     print(f"elspais MCP server registered for {scope_label}.")
+    if transport == "http":
+        # The registration names a variable, so a shell that never set it
+        # launches a client that cannot connect. Say what supplies it here,
+        # where the registration was just written, rather than leaving it to
+        # be discovered from a failure.
+        print("The registration names ELSPAIS_MCP_URL, which each shell supplies:")
+        print('  eval "$(elspais mcp env)"')
+        print("Run that before launching the client, in whichever tree you are in.")
     if not global_scope:
         print("Tip: Use --global to make elspais MCP available in all projects.")
     return 0

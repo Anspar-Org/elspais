@@ -247,3 +247,211 @@ class TestDoctorRun:
         )
         result = run(args)
         assert result == 1
+
+
+class TestMcpAddressCheck:
+    """Whether a client launched here would reach this working tree.
+
+    A client that resolves an address once cannot tell an address naming
+    another tree from one naming its own with nothing serving it yet:
+    both simply fail to connect. Only the tool holds both facts.
+    """
+
+    # Verifies: REQ-o00076-M
+    def test_REQ_o00076_M_an_address_naming_another_tree_is_reported(self, tmp_path, monkeypatch):
+        """Validates REQ-o00076-M: an address carried over from a
+        different working tree connects to that tree's process or to
+        nothing, and either way the client is not reading the graph it
+        is working in. The tool can see the disagreement, so it says so.
+        """
+        from elspais.commands.doctor import check_mcp_address
+
+        monkeypatch.setenv("ELSPAIS_MCP_URL", "http://127.0.0.1:40689/mcp")
+        monkeypatch.setattr("elspais.mcp.daemon.reserved_port", lambda root: 39709)
+        monkeypatch.setattr("elspais.mcp.daemon.get_daemon_info", lambda root: None)
+
+        check = check_mcp_address(tmp_path, {})
+
+        assert not check.passed
+        assert "40689" in check.message and "39709" in check.message
+
+    # Verifies: REQ-o00076-M
+    def test_REQ_o00076_M_an_address_reaching_this_tree_is_not_reported(
+        self, tmp_path, monkeypatch
+    ):
+        """Validates REQ-o00076-M: the report is about disagreement. A
+        client pointed at the tree it is working in is the arrangement
+        the tool is asking for, and reporting it would train the reader
+        to ignore the check.
+        """
+        from elspais.commands.doctor import check_mcp_address
+
+        monkeypatch.setenv("ELSPAIS_MCP_URL", "http://127.0.0.1:39709/mcp")
+        monkeypatch.setattr("elspais.mcp.daemon.reserved_port", lambda root: 39709)
+        monkeypatch.setattr("elspais.mcp.daemon.get_daemon_info", lambda root: None)
+
+        assert check_mcp_address(tmp_path, {}).passed
+
+    # Verifies: REQ-o00076-M
+    def test_REQ_o00076_M_a_shell_with_no_address_is_not_a_fault(self, tmp_path, monkeypatch):
+        """Validates REQ-o00076-M: the assertion is about an address a
+        client is configured to use. A shell that runs only the CLI sets
+        none and needs none, so there is no disagreement to report.
+        """
+        from elspais.commands.doctor import check_mcp_address
+
+        monkeypatch.delenv("ELSPAIS_MCP_URL", raising=False)
+        monkeypatch.setattr("elspais.mcp.daemon.reserved_port", lambda root: 39709)
+
+        assert check_mcp_address(tmp_path, {}).passed
+
+    # Verifies: REQ-o00076-M
+    def test_REQ_o00076_M_an_associate_in_another_tree_is_not_a_disagreement(
+        self, tmp_path, monkeypatch
+    ):
+        """Validates REQ-o00076-M: the report is about where a client
+        connects, not about which repositories a tree federates. A tree
+        may properly declare an associate living in any other working
+        tree, and doing so says nothing about its own clients -- a check
+        that conflated the two would fire on a correct configuration.
+        """
+        from elspais.commands.doctor import check_mcp_address
+
+        monkeypatch.setenv("ELSPAIS_MCP_URL", "http://127.0.0.1:39709/mcp")
+        monkeypatch.setattr("elspais.mcp.daemon.reserved_port", lambda root: 39709)
+        monkeypatch.setattr("elspais.mcp.daemon.get_daemon_info", lambda root: None)
+
+        elsewhere = tmp_path / "other-repo-worktree"
+        elsewhere.mkdir()
+        config = {"associates": {"Other": {"path": str(elsewhere), "namespace": "OTHER"}}}
+
+        assert check_mcp_address(tmp_path, config).passed
+
+
+class TestMcpRegistrationCheck:
+    """Whether a registration a client here reads names a fixed address.
+
+    A registration is read in every working tree that shares it. An
+    address written into one is the installing tree's answer offered to
+    every reader, so it is wrong when written rather than stale later.
+    """
+
+    @staticmethod
+    def _claude_config(tmp_path, servers=None, projects=None):
+        import json
+
+        path = tmp_path / "claude.json"
+        path.write_text(json.dumps({"mcpServers": servers or {}, "projects": projects or {}}))
+        return path
+
+    # Verifies: REQ-o00076-M
+    def test_REQ_o00076_M_a_literal_under_the_main_repo_key_is_reported(
+        self, tmp_path, monkeypatch
+    ):
+        """Validates REQ-o00076-M: this is the condition that hides. A
+        worktree reads its main repository's entry, so an address settled
+        in one tree is served to every other tree of that repository, and
+        the client holding it fails exactly as it would against an
+        address nobody serves. The shell variable can be perfectly
+        correct while this is wrong, so the check must not be satisfied
+        by the variable agreeing.
+        """
+        from elspais.commands.doctor import check_mcp_registration
+
+        worktree = tmp_path / "wt"
+        worktree.mkdir()
+        main = tmp_path / "main"
+        main.mkdir()
+        monkeypatch.setattr("elspais.commands.doctor._main_repo_root", lambda root: main)
+        cfg = self._claude_config(
+            tmp_path,
+            projects={
+                str(main): {
+                    "mcpServers": {"elspais": {"type": "http", "url": "http://127.0.0.1:40689/mcp"}}
+                }
+            },
+        )
+
+        check = check_mcp_registration(worktree, {}, claude_config=cfg)
+
+        assert not check.passed
+        assert "40689" in check.message
+
+    # Verifies: REQ-o00076-M
+    def test_REQ_o00076_M_a_registration_naming_a_variable_is_not_reported(
+        self, tmp_path, monkeypatch
+    ):
+        """Validates REQ-o00076-M: an address the reader resolves is the
+        arrangement REQ-o00076-L asks for, and reporting it would leave
+        no way to satisfy the check. Whether the reader supplies a value
+        is a different question, asked elsewhere.
+        """
+        from elspais.commands.doctor import check_mcp_registration
+
+        monkeypatch.setattr("elspais.commands.doctor._main_repo_root", lambda root: None)
+        (tmp_path / ".mcp.json").write_text(
+            '{"mcpServers": {"elspais": {"type": "http", "url": "${ELSPAIS_MCP_URL}"}}}'
+        )
+        cfg = self._claude_config(tmp_path)
+
+        assert check_mcp_registration(tmp_path, {}, claude_config=cfg).passed
+
+    # Verifies: REQ-o00076-M
+    def test_REQ_o00076_M_a_command_registration_carries_no_address_to_judge(
+        self, tmp_path, monkeypatch
+    ):
+        """Validates REQ-o00076-M: a stdio registration names a process
+        the client starts, not somewhere to connect, so there is no
+        address that could name the wrong tree. Reporting it would be
+        reporting a different condition under this one's name.
+        """
+        from elspais.commands.doctor import check_mcp_registration
+
+        monkeypatch.setattr("elspais.commands.doctor._main_repo_root", lambda root: None)
+        cfg = self._claude_config(
+            tmp_path,
+            servers={"elspais": {"type": "stdio", "command": "elspais", "args": ["mcp", "serve"]}},
+        )
+
+        assert check_mcp_registration(tmp_path, {}, claude_config=cfg).passed
+
+    # Verifies: REQ-o00076-M
+    def test_REQ_o00076_M_every_literal_is_named_not_only_the_winning_one(
+        self, tmp_path, monkeypatch
+    ):
+        """Validates REQ-o00076-M: which scope a client prefers is that
+        client's rule and it changes. Every literal is wrong whichever
+        wins, and the reader has to correct all of them, so reporting one
+        would leave the others to be found later by the same silent
+        failure.
+        """
+        from elspais.commands.doctor import check_mcp_registration
+
+        monkeypatch.setattr("elspais.commands.doctor._main_repo_root", lambda root: None)
+        (tmp_path / ".mcp.json").write_text(
+            '{"mcpServers": {"elspais": {"type": "http", "url": "http://127.0.0.1:1111/mcp"}}}'
+        )
+        cfg = self._claude_config(
+            tmp_path,
+            servers={"elspais": {"type": "http", "url": "http://127.0.0.1:2222/mcp"}},
+        )
+
+        check = check_mcp_registration(tmp_path, {}, claude_config=cfg)
+
+        assert not check.passed
+        assert "1111" in check.message and "2222" in check.message
+
+    # Verifies: REQ-o00076-M
+    def test_REQ_o00076_M_an_absent_client_config_is_not_a_finding(self, tmp_path, monkeypatch):
+        """Validates REQ-o00076-M: the condition is a registration that
+        names an address, so having no registration at all cannot be it.
+        A machine with no client installed must not be told its
+        configuration is wrong.
+        """
+        from elspais.commands.doctor import check_mcp_registration
+
+        monkeypatch.setattr("elspais.commands.doctor._main_repo_root", lambda root: None)
+
+        check = check_mcp_registration(tmp_path, {}, claude_config=tmp_path / "does-not-exist.json")
+
+        assert check.passed

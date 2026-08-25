@@ -806,9 +806,9 @@ See `elspais docs comments`.
 
 MCP (Model Context Protocol) server commands.
 
-  $ elspais mcp install                      # This project; nothing else to do
-  $ elspais mcp install --global --desktop   # Every project; needs the eval below
-  $ eval "$(elspais mcp env)"                # Only for a --global registration
+  $ elspais mcp install                      # This repository, every worktree
+  $ elspais mcp install --global --desktop   # Every project
+  $ eval "$(elspais mcp env)"                # Supplies the address; needed either way
   $ elspais mcp serve                        # Start MCP server
 
 **Note:** Requires `elspais[mcp]` extra.

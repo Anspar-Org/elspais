@@ -663,6 +663,236 @@ def check_cross_repo_in_committed_config(
     )
 
 
+# Implements: REQ-o00076-M
+def check_mcp_address(git_root: Path | None, config: dict[str, Any] | None = None) -> HealthCheck:
+    """Whether the address a client here would use reaches this tree.
+
+    A client configured with an address it resolves once cannot tell a
+    wrong address from a right one nothing is serving yet: both fail to
+    connect. Only the tool can compare the address against the tree, so
+    only the tool can say which it is.
+
+    This asks about a client's connection and nothing else. Which
+    repositories this tree federates does not bear on it -- a tree may
+    properly name any other tree as an associate.
+    """
+    severity = severity_for("mcp.address", config)
+    if severity == Severity.OFF:
+        return skipped_check("mcp.address", "An address that does not reach this working tree")
+
+    import os
+    from urllib.parse import urlparse
+
+    configured = os.environ.get("ELSPAIS_MCP_URL", "").strip()
+    if not configured:
+        return HealthCheck(
+            name="mcp.address",
+            passed=True,
+            message="No client address is set here, so nothing reaches past this tree",
+            category="environment",
+            severity="info",
+        )
+
+    if git_root is None:
+        return HealthCheck(
+            name="mcp.address",
+            passed=True,
+            message="Not a working tree, so there is no address to agree with",
+            category="environment",
+            severity="info",
+        )
+
+    try:
+        configured_port = urlparse(configured).port
+    except ValueError:
+        configured_port = None
+    if configured_port is None:
+        return HealthCheck(
+            name="mcp.address",
+            passed=False,
+            message=f"ELSPAIS_MCP_URL names no port that can be read: {configured}",
+            category="environment",
+            severity=severity,
+            details={"configured": configured},
+        )
+
+    from elspais.mcp.daemon import get_daemon_info, reserved_port
+
+    info = get_daemon_info(git_root) or {}
+    tree_port = reserved_port(git_root) or info.get("port")
+    if not isinstance(tree_port, int):
+        return HealthCheck(
+            name="mcp.address",
+            passed=True,
+            message=(
+                f"This tree has settled no address yet, so {configured_port} "
+                "cannot be judged against it"
+            ),
+            category="environment",
+            severity="info",
+            details={"configured_port": configured_port},
+        )
+
+    if configured_port == tree_port:
+        return HealthCheck(
+            name="mcp.address",
+            passed=True,
+            message=f"A client here reaches this tree, on port {tree_port}",
+            category="environment",
+            details={"port": tree_port},
+        )
+
+    return HealthCheck(
+        name="mcp.address",
+        passed=False,
+        message=(
+            f"A client here would connect to port {configured_port}, but this "
+            f"working tree is served on port {tree_port}. The address names "
+            f"another tree, or was written down rather than resolved. Re-derive "
+            f'it in this shell with: eval "$(elspais mcp env)"'
+        ),
+        category="environment",
+        severity=severity,
+        details={"configured_port": configured_port, "tree_port": tree_port},
+    )
+
+
+# Implements: REQ-o00076-M
+def _main_repo_root(git_root: Path) -> Path | None:
+    """The repository a worktree belongs to, which is where its client
+    configuration is keyed. Worktrees share it, so an entry written under
+    one is read by all of them."""
+    import subprocess
+
+    try:
+        out = subprocess.run(
+            ["git", "rev-parse", "--git-common-dir"],
+            cwd=git_root,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if out.returncode != 0 or not out.stdout.strip():
+        return None
+    common = Path(out.stdout.strip())
+    if not common.is_absolute():
+        common = (git_root / common).resolve()
+    return common.parent
+
+
+# Implements: REQ-o00076-M
+def _registration_sources(git_root: Path, claude_config: Path | None) -> list[tuple[str, dict]]:
+    """Every place a client here could read an elspais registration from.
+
+    Precedence between them is the client's business and changes with the
+    client. Every literal is wrong under REQ-o00076-L whichever one wins,
+    and the reader has to correct all of them, so all are reported rather
+    than one being picked.
+    """
+    import json
+
+    sources: list[tuple[str, dict]] = []
+
+    project_file = git_root / ".mcp.json"
+    try:
+        entry = json.loads(project_file.read_text()).get("mcpServers", {}).get("elspais")
+        if isinstance(entry, dict):
+            sources.append((".mcp.json", entry))
+    except (OSError, json.JSONDecodeError, AttributeError):
+        pass
+
+    config_path = claude_config or (Path.home() / ".claude.json")
+    try:
+        data = json.loads(config_path.read_text())
+    except (OSError, json.JSONDecodeError):
+        return sources
+    if not isinstance(data, dict):
+        return sources
+
+    entry = (data.get("mcpServers") or {}).get("elspais")
+    if isinstance(entry, dict):
+        sources.append((f"user scope in {config_path.name}", entry))
+
+    projects = data.get("projects") or {}
+    seen: set[str] = set()
+    for root in (git_root, _main_repo_root(git_root)):
+        if root is None:
+            continue
+        key = str(root)
+        if key in seen:
+            continue
+        seen.add(key)
+        entry = ((projects.get(key) or {}).get("mcpServers") or {}).get("elspais")
+        if isinstance(entry, dict):
+            sources.append((f"{key} in {config_path.name}", entry))
+    return sources
+
+
+# Implements: REQ-o00076-M
+def check_mcp_registration(
+    git_root: Path | None,
+    config: dict[str, Any] | None = None,
+    claude_config: Path | None = None,
+) -> HealthCheck:
+    """Whether any registration a client here reads names a fixed address.
+
+    A registration is read in every working tree that shares it, so an
+    address written into one names the tree that wrote it as though it
+    were the tree reading (REQ-o00076-L). Such an entry is wrong from the
+    moment it is written rather than stale later, and it fails the same
+    way an address nobody is serving fails, which is why it has to be
+    named rather than left to be inferred from a refused connection.
+
+    Registrations naming a variable are resolved by the reader and are
+    not judged here; whether the reader supplies one is `mcp.address`.
+    An entry naming a command rather than an address carries no address
+    to be wrong about.
+    """
+    severity = severity_for("mcp.registration", config)
+    if severity == Severity.OFF:
+        return skipped_check("mcp.registration", "A registration naming a fixed address")
+
+    if git_root is None:
+        return HealthCheck(
+            name="mcp.registration",
+            passed=True,
+            message="Not a working tree, so no registration belongs to it",
+            category="environment",
+            severity="info",
+        )
+
+    literals: list[str] = []
+    for where, entry in _registration_sources(git_root, claude_config):
+        url = entry.get("url")
+        if not isinstance(url, str) or "${" in url or not url.strip():
+            continue
+        literals.append(f"{where}: {url}")
+
+    if not literals:
+        return HealthCheck(
+            name="mcp.registration",
+            passed=True,
+            message="No client registration reaching this tree names a fixed address",
+            category="environment",
+        )
+
+    return HealthCheck(
+        name="mcp.registration",
+        passed=False,
+        message=(
+            f"{len(literals)} client registration(s) reaching this tree name a "
+            f"fixed address, which cannot be right for every tree that reads "
+            f"them: {'; '.join(literals)}. Re-run `elspais mcp install` to "
+            f"register the variable instead."
+        ),
+        category="environment",
+        severity=severity,
+        details={"literals": literals},
+    )
+
+
 def run_environment_checks(
     config: dict,
     git_root: Path | None,
@@ -676,6 +906,8 @@ def run_environment_checks(
         check_associate_configs(config, git_root),
         check_local_toml_exists(start_path, config),
         check_cross_repo_in_committed_config(config_path, config),
+        check_mcp_address(git_root, config),
+        check_mcp_registration(git_root, config),
     ]
 
 

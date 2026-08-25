@@ -119,6 +119,8 @@ built graph reports under **spec** and is listed there, not here.
 | `cross_repo.in_committed` | Cross-project paths written into the shared, committed configuration (they belong in the local override) | warning | `[rules.severity]` | no command resolves this; resolve it by hand |
 | `worktree.status` | The state of the git worktree the run was invoked from | info | `[rules.severity]` | no command resolves this; resolve it by hand |
 | `associate.paths_resolvable` | Every configured associate path resolves to a directory | error | `[rules.severity]` | `elspais associate list` |
+| `mcp.address` | The address a client here would use reaches this working tree | info | `[rules.severity]` | `elspais mcp env` |
+| `mcp.registration` | No client registration reaching this tree names a fixed address | warning | `[rules.severity]` | `elspais mcp install` |
 | `associate.configs_valid` | Every configured associate's own configuration loads | error | `[rules.severity]` | `elspais associate list` |
 <!-- /generated: check-catalog:environment -->
 
