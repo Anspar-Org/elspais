@@ -53,8 +53,18 @@ specify the keys you want to override. Environment variables always win.
 ### version
 
 ```toml
-version = 5   # Config schema version (required)
+version = 5   # Config schema version
 ```
+
+A file declaring any other version is refused. The refusal names each
+setting the running version does not read and what to write in its place,
+then the version line to set: an out-of-date configuration is never
+upgraded in place, so what a project configured is what it gets.
+
+The line may be omitted. A file that declares no version is making no
+claim about its shape, and its settings are checked either way -- that
+check, not the version line, is what actually catches a file written for
+an older elspais.
 
 ### [project] Section
 
@@ -246,11 +256,9 @@ prescan_command = ""             # External test discovery command
 # prescan_command receives file paths on stdin, outputs JSON on stdout:
 #   [{"file": "path", "function": "name", "class": "Name|null", "line": N}]
 #
-# Note: function-name refs like `test_REQ_p_event_store_A` rely on `_` being
-# normalized to `-` before lookup. If you've set `[id-patterns.assertions]`
-# `separator = ":"` (or anything other than `"-"`), function-name refs will
-# resolve to the parent requirement only — put assertion-level refs in a
-# comment instead: `# Verifies: REQ-p-event-store:A`.
+# A test is linked by a comment above it and by nothing else. A requirement
+# ID spelled into the function name references nothing, whatever separators
+# are configured.
 
 # Test result ingestion is configured via [[scanning.test.targets]].
 # See: elspais docs test-targets

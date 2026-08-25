@@ -33,10 +33,20 @@ def compute_analysis(graph: Any, config: dict[str, Any], params: dict[str, str])
     if weights_str:
         try:
             parts = [float(x.strip()) for x in weights_str.split(",")]
-            if len(parts) in (3, 4):
-                weights = tuple(parts)
         except ValueError:
-            pass
+            raise ValueError(
+                f"weights={weights_str!r}: each weight must be a number. Write "
+                f"three or four comma-separated numbers, one per metric: "
+                f"centrality, fan-in, [neighborhood,] uncovered "
+                f"(default 0.3,0.2,0.2,0.3)."
+            ) from None
+        if len(parts) not in (3, 4):
+            raise ValueError(
+                f"weights={weights_str!r} carries {len(parts)} values. Write "
+                f"three or four, one per metric: centrality, fan-in, "
+                f"[neighborhood,] uncovered (default 0.3,0.2,0.2,0.3)."
+            )
+        weights = tuple(parts)
 
     report = analyze_foundations(
         graph,
@@ -185,15 +195,24 @@ def run(args: argparse.Namespace) -> int:
 
     params.update(scope_params_from_args(args, get_config(getattr(args, "config", None))))
 
-    # Validate weights BEFORE engine call (bug fix: was skipped on daemon path)
+    # Validated here as well as in compute_analysis, so a daemon-served run
+    # refuses a malformed selection the same way a local one does.
     if weights_str:
         try:
             parts = [float(x.strip()) for x in weights_str.split(",")]
-            if len(parts) not in (3, 4):
-                print("Error: --weights must have 3 or 4 comma-separated values")
-                return 1
         except ValueError:
-            print("Error: --weights must be numeric values")
+            print(
+                "Error: --weights must be three or four comma-separated numbers, "
+                "one per metric: centrality, fan-in, [neighborhood,] uncovered "
+                "(default 0.3,0.2,0.2,0.3)"
+            )
+            return 1
+        if len(parts) not in (3, 4):
+            print(
+                f"Error: --weights carries {len(parts)} values; write three or "
+                f"four, one per metric: centrality, fan-in, [neighborhood,] "
+                f"uncovered (default 0.3,0.2,0.2,0.3)"
+            )
             return 1
 
     data = engine_call(

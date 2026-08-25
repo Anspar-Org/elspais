@@ -15,47 +15,56 @@ from elspais.commands.args import GlossaryArgs, TermIndexArgs
 class TestCliTermsRegistration:
     """Validates REQ-d00225-A+B: CLI registration for glossary/term-index."""
 
+    # Verifies: REQ-d00225-A
     def test_REQ_d00225_A_glossary_args_defaults(self) -> None:
         """GlossaryArgs has correct default field values."""
         args = GlossaryArgs()
         assert args.format == "markdown"
         assert args.output_dir is None
 
+    # Verifies: REQ-d00225-A
     def test_REQ_d00225_A_term_index_args_defaults(self) -> None:
         """TermIndexArgs has correct default field values."""
         args = TermIndexArgs()
         assert args.format == "markdown"
         assert args.output_dir is None
 
+    # Verifies: REQ-d00225-A
     def test_REQ_d00225_A_glossary_args_is_dataclass(self) -> None:
         """GlossaryArgs is a proper dataclass."""
         assert dataclasses.is_dataclass(GlossaryArgs)
 
+    # Verifies: REQ-d00225-A
     def test_REQ_d00225_A_term_index_args_is_dataclass(self) -> None:
         """TermIndexArgs is a proper dataclass."""
         assert dataclasses.is_dataclass(TermIndexArgs)
 
+    # Verifies: REQ-d00225-A
     def test_REQ_d00225_A_glossary_in_cmd_map(self) -> None:
         """GlossaryArgs is in the CLI _CMD_MAP."""
         # Verify the import works (GlossaryArgs is importable from cli)
         from elspais.cli import GlossaryArgs as _GA  # noqa: F401
 
+    # Verifies: REQ-d00225-A
     def test_REQ_d00225_A_term_index_in_cmd_map(self) -> None:
         """TermIndexArgs is in the CLI _CMD_MAP."""
         from elspais.cli import TermIndexArgs as _TIA  # noqa: F401
 
+    # Verifies: REQ-d00225-B
     def test_REQ_d00225_B_fix_terms_function_exists(self) -> None:
         """_fix_terms function exists in fix_cmd."""
         from elspais.commands.fix_cmd import _fix_terms
 
         assert callable(_fix_terms)
 
+    # Verifies: REQ-d00225-B
     def test_REQ_d00225_B_write_term_outputs_exists(self) -> None:
         """write_term_outputs function exists in glossary_cmd."""
         from elspais.commands.glossary_cmd import write_term_outputs
 
         assert callable(write_term_outputs)
 
+    # Verifies: REQ-d00225-B
     def test_REQ_d00225_B_write_term_outputs_creates_files(self, tmp_path) -> None:
         """write_term_outputs writes files to output directory."""
         from elspais.commands.glossary_cmd import write_term_outputs

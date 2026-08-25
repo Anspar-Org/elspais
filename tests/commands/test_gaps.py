@@ -708,6 +708,7 @@ class TestGapsIntegrates:
     """Validates REQ-d00252-F: an integrating requirement is not an uncovered
     gap and is listed under its owning associate."""
 
+    # Verifies: REQ-d00252-F
     def test_REQ_d00252_F_integrating_req_not_uncovered(self, tmp_path) -> None:
         """APP-d00001 integrates a library REQ, so it must NOT appear in the
         uncovered gap list."""
@@ -716,6 +717,7 @@ class TestGapsIntegrates:
         uncovered_ids = {e.req_id for e in data.uncovered}
         assert "APP-d00001" not in uncovered_ids
 
+    # Verifies: REQ-d00252-F
     def test_REQ_d00252_F_integrating_req_grouped_by_associate(self, tmp_path) -> None:
         """APP-d00001 is recorded under the owning associate 'library', and the
         rendered text shows a 'Covered via external associate' segment."""
@@ -731,6 +733,7 @@ class TestGapsIntegrates:
         assert "library" in text
         assert "APP-d00001" in text
 
+    # Verifies: REQ-d00252-F
     def test_REQ_d00252_F_gap_data_from_dict_integrated_field(self) -> None:
         """The daemon serialization round-trips a populated ``integrated`` map."""
         from elspais.commands.gaps import _gap_data_from_dict
@@ -746,6 +749,7 @@ class TestGapsIntegrates:
         gd = _gap_data_from_dict(d)
         assert gd.integrated == {"lib": ["APP-d00001", "APP-d00002"]}
 
+    # Verifies: REQ-d00252-F
     def test_REQ_d00252_F_gap_data_from_dict_missing_integrated_is_empty(self) -> None:
         """``integrated`` defaults to an empty map when absent from the dict."""
         from elspais.commands.gaps import _gap_data_from_dict

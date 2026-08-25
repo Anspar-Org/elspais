@@ -28,6 +28,7 @@ OutputConfig = _schema.OutputConfig
 class TestElspaisConfigRestructuring:
     """Validates REQ-d00212-F: ElspaisConfig restructuring."""
 
+    # Verifies: REQ-d00212-F
     def test_REQ_d00212_F_has_levels_field(self):
         """ElspaisConfig has a 'levels' field of type dict[str, LevelConfig]."""
         assert "levels" in ElspaisConfig.model_fields
@@ -38,6 +39,7 @@ class TestElspaisConfigRestructuring:
             assert key in cfg.levels
             assert isinstance(cfg.levels[key], LevelConfig)
 
+    # Verifies: REQ-d00212-F
     def test_REQ_d00212_F_levels_default_prd(self):
         """Default levels include prd with rank=1, letter='p'."""
         cfg = ElspaisConfig()
@@ -45,6 +47,7 @@ class TestElspaisConfigRestructuring:
         assert prd.rank == 1
         assert prd.letter == "p"
 
+    # Verifies: REQ-d00212-F
     def test_REQ_d00212_F_levels_default_ops(self):
         """Default levels include ops with rank=2, letter='o'."""
         cfg = ElspaisConfig()
@@ -52,6 +55,7 @@ class TestElspaisConfigRestructuring:
         assert ops.rank == 2
         assert ops.letter == "o"
 
+    # Verifies: REQ-d00212-F
     def test_REQ_d00212_F_levels_default_dev(self):
         """Default levels include dev with rank=3, letter='d'."""
         cfg = ElspaisConfig()
@@ -59,50 +63,61 @@ class TestElspaisConfigRestructuring:
         assert dev.rank == 3
         assert dev.letter == "d"
 
+    # Verifies: REQ-d00212-F
     def test_REQ_d00212_F_has_scanning_field(self):
         """ElspaisConfig has a 'scanning' field of type ScanningConfig."""
         assert "scanning" in ElspaisConfig.model_fields
         cfg = ElspaisConfig()
         assert isinstance(cfg.scanning, ScanningConfig)
 
+    # Verifies: REQ-d00212-F
     def test_REQ_d00212_F_has_output_field(self):
         """ElspaisConfig has an 'output' field of type OutputConfig."""
         assert "output" in ElspaisConfig.model_fields
         cfg = ElspaisConfig()
         assert isinstance(cfg.output, OutputConfig)
 
+    # Verifies: REQ-d00212-F
     def test_REQ_d00212_F_no_directories_field(self):
         """ElspaisConfig does NOT have a 'directories' field."""
         assert "directories" not in ElspaisConfig.model_fields
 
+    # Verifies: REQ-d00212-F
     def test_REQ_d00212_F_no_spec_field(self):
         """ElspaisConfig does NOT have a 'spec' field."""
         assert "spec" not in ElspaisConfig.model_fields
 
+    # Verifies: REQ-d00212-F
     def test_REQ_d00212_F_no_testing_field(self):
         """ElspaisConfig does NOT have a 'testing' field."""
         assert "testing" not in ElspaisConfig.model_fields
 
+    # Verifies: REQ-d00212-F
     def test_REQ_d00212_F_no_ignore_field(self):
         """ElspaisConfig does NOT have an 'ignore' field."""
         assert "ignore" not in ElspaisConfig.model_fields
 
+    # Verifies: REQ-d00212-F
     def test_REQ_d00212_F_no_graph_field(self):
         """ElspaisConfig does NOT have a 'graph' field."""
         assert "graph" not in ElspaisConfig.model_fields
 
+    # Verifies: REQ-d00212-F
     def test_REQ_d00212_F_no_traceability_field(self):
         """ElspaisConfig does NOT have a 'traceability' field."""
         assert "traceability" not in ElspaisConfig.model_fields
 
+    # Verifies: REQ-d00212-F
     def test_REQ_d00212_F_no_core_field(self):
         """ElspaisConfig does NOT have a 'core' field."""
         assert "core" not in ElspaisConfig.model_fields
 
+    # Verifies: REQ-d00212-F
     def test_REQ_d00212_F_no_associated_field(self):
         """ElspaisConfig does NOT have an 'associated' field."""
         assert "associated" not in ElspaisConfig.model_fields
 
+    # Verifies: REQ-d00212-F
     def test_REQ_d00212_F_version_defaults_to_the_current_schema_version(self):
         """A config built from the schema's own defaults is already current.
 
@@ -125,6 +140,7 @@ class TestElspaisConfigRestructuring:
 class TestIdPatternsConfigChanges:
     """Validates REQ-d00212-G: no configuration surface offers a second spelling."""
 
+    # Verifies: REQ-d00212-G
     def test_REQ_d00212_G_no_alternate_separator_fields(self):
         """The accepted-alternates list and the optional-prefix switch are gone.
 
@@ -134,22 +150,26 @@ class TestIdPatternsConfigChanges:
         assert "separators" not in IdPatternsConfig.model_fields
         assert "prefix_optional" not in IdPatternsConfig.model_fields
 
+    # Verifies: REQ-d00212-G
     def test_REQ_d00212_G_no_types_field(self):
         """IdPatternsConfig does NOT have a 'types' field."""
         assert "types" not in IdPatternsConfig.model_fields
 
+    # Verifies: REQ-d00212-G
     def test_REQ_d00212_G_has_associated_field(self):
         """IdPatternsConfig has an 'associated' field with defaults."""
         assert "associated" in IdPatternsConfig.model_fields
         cfg = IdPatternsConfig()
         assert cfg.associated.enabled is False
 
+    # Verifies: REQ-d00212-G
     def test_REQ_d00212_G_canonical_uses_level_letter(self):
         """canonical default uses {level.letter} not {type.letter}."""
         cfg = IdPatternsConfig()
         assert "{level.letter}" in cfg.canonical
         assert "{type.letter}" not in cfg.canonical
 
+    # Verifies: REQ-d00212-G
     def test_REQ_d00212_G_aliases_short_uses_level_letter(self):
         """aliases.short default uses {level.letter} not {type.letter}."""
         cfg = IdPatternsConfig()
@@ -157,6 +177,7 @@ class TestIdPatternsConfigChanges:
         assert "{level.letter}" in cfg.aliases["short"]
         assert "{type.letter}" not in cfg.aliases["short"]
 
+    # Verifies: REQ-d00212-G
     def test_REQ_d00212_G_level_letters_colliding_only_by_case_rejected(self):
         """A configuration naming two levels whose letter differs only in
         case is refused: matching an identifier's level code is
@@ -173,6 +194,7 @@ class TestIdPatternsConfigChanges:
         assert "prd" in message
         assert "product" in message
 
+    # Verifies: REQ-d00212-G
     def test_REQ_d00212_G_level_letters_distinct_case_accepted(self):
         """Two levels with genuinely distinct letters load without complaint,
         including a level letter that happens to repeat across a rebuilt
@@ -195,42 +217,50 @@ class TestIdPatternsConfigChanges:
 class TestHierarchyConfigBooleansOnly:
     """Validates REQ-d00212-H: HierarchyConfig is booleans only."""
 
+    # Verifies: REQ-d00212-H
     def test_REQ_d00212_H_has_allow_circular(self):
         """HierarchyConfig has allow_circular (bool, default False)."""
         assert "allow_circular" in HierarchyConfig.model_fields
         cfg = HierarchyConfig()
         assert cfg.allow_circular is False
 
+    # Verifies: REQ-d00212-H
     def test_REQ_d00212_H_has_allow_structural_orphans(self):
         """HierarchyConfig has allow_structural_orphans (bool, default False)."""
         assert "allow_structural_orphans" in HierarchyConfig.model_fields
         cfg = HierarchyConfig()
         assert cfg.allow_structural_orphans is False
 
+    # Verifies: REQ-d00212-H
     def test_REQ_d00212_H_has_allow_orphans(self):
         """HierarchyConfig has allow_orphans (bool, default False)."""
         assert "allow_orphans" in HierarchyConfig.model_fields
         cfg = HierarchyConfig()
         assert cfg.allow_orphans is False
 
+    # Verifies: REQ-d00212-H
     def test_REQ_d00212_H_has_cross_repo_implements(self):
         """HierarchyConfig has cross_repo_implements (bool, default False)."""
         assert "cross_repo_implements" in HierarchyConfig.model_fields
         cfg = HierarchyConfig()
         assert cfg.cross_repo_implements is False
 
+    # Verifies: REQ-d00212-H
     def test_REQ_d00212_H_no_dev_field(self):
         """HierarchyConfig does NOT have a 'dev' field."""
         assert "dev" not in HierarchyConfig.model_fields
 
+    # Verifies: REQ-d00212-H
     def test_REQ_d00212_H_no_ops_field(self):
         """HierarchyConfig does NOT have an 'ops' field."""
         assert "ops" not in HierarchyConfig.model_fields
 
+    # Verifies: REQ-d00212-H
     def test_REQ_d00212_H_no_prd_field(self):
         """HierarchyConfig does NOT have a 'prd' field."""
         assert "prd" not in HierarchyConfig.model_fields
 
+    # Verifies: REQ-d00212-H
     def test_REQ_d00212_H_strict_rejects_unknown(self):
         """HierarchyConfig rejects unknown fields (strict mode)."""
         with pytest.raises(ValidationError, match="extra"):
@@ -245,12 +275,14 @@ class TestHierarchyConfigBooleansOnly:
 class TestProjectConfigSimplified:
     """Validates REQ-d00212-J: ProjectConfig simplified."""
 
+    # Verifies: REQ-d00212-J
     def test_REQ_d00212_J_has_namespace(self):
         """ProjectConfig has 'namespace' field (str)."""
         assert "namespace" in ProjectConfig.model_fields
         cfg = ProjectConfig()
         assert isinstance(cfg.namespace, str)
 
+    # Verifies: REQ-d00212-J
     def test_REQ_d00212_J_has_name(self):
         """ProjectConfig has 'name' field (str, non-empty default).
 
@@ -264,10 +296,12 @@ class TestProjectConfigSimplified:
         assert isinstance(cfg.name, str)
         assert cfg.name.strip() != ""
 
+    # Verifies: REQ-d00212-J
     def test_REQ_d00212_J_no_version_field(self):
         """ProjectConfig does NOT have a 'version' field."""
         assert "version" not in ProjectConfig.model_fields
 
+    # Verifies: REQ-d00212-J
     def test_REQ_d00212_J_no_type_field(self):
         """ProjectConfig does NOT have a 'type' field."""
         assert "type" not in ProjectConfig.model_fields
@@ -281,6 +315,7 @@ class TestProjectConfigSimplified:
 class TestAssociateEntryConfigSimplified:
     """Validates REQ-d00212-K: AssociateEntryConfig simplified."""
 
+    # Verifies: REQ-d00212-K
     def test_REQ_d00212_K_has_path_required(self):
         """AssociateEntryConfig has 'path' field (str, required)."""
         assert "path" in AssociateEntryConfig.model_fields
@@ -288,6 +323,7 @@ class TestAssociateEntryConfigSimplified:
         with pytest.raises(ValidationError):
             AssociateEntryConfig(namespace="NS")  # type: ignore[call-arg]
 
+    # Verifies: REQ-d00212-K
     def test_REQ_d00212_K_has_namespace_required(self):
         """AssociateEntryConfig has 'namespace' field (str, required)."""
         assert "namespace" in AssociateEntryConfig.model_fields
@@ -295,12 +331,14 @@ class TestAssociateEntryConfigSimplified:
         with pytest.raises(ValidationError):
             AssociateEntryConfig(path="/some/path")  # type: ignore[call-arg]
 
+    # Verifies: REQ-d00212-K
     def test_REQ_d00212_K_valid_construction(self):
         """AssociateEntryConfig can be constructed with path and namespace."""
         cfg = AssociateEntryConfig(path="/some/path", namespace="NS")
         assert cfg.path == "/some/path"
         assert cfg.namespace == "NS"
 
+    # Verifies: REQ-d00212-K
     def test_REQ_d00212_K_git_field_is_optional(self):
         """AssociateEntryConfig carries an optional 'git' remote."""
         assert "git" in AssociateEntryConfig.model_fields
@@ -310,6 +348,7 @@ class TestAssociateEntryConfigSimplified:
         remote = "https://example.com/lib.git"
         assert AssociateEntryConfig(path="/p", namespace="NS", git=remote).git == remote
 
+    # Verifies: REQ-d00212-K
     def test_REQ_d00212_K_no_spec_field(self):
         """AssociateEntryConfig does NOT have a 'spec' field."""
         assert "spec" not in AssociateEntryConfig.model_fields

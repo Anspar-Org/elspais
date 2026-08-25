@@ -8,11 +8,12 @@ from elspais.graph.factory import build_graph
 from elspais.graph.GraphNode import NodeKind
 
 
+# Verifies: REQ-d00252-A
 def test_REQ_d00252_A_integrates_refs_stored(tmp_path):
     (tmp_path / ".elspais.toml").write_text(
         textwrap.dedent(
             """
-            version = 3
+            version = 5
             [project]
             name = "demo"
             namespace = "REQ"

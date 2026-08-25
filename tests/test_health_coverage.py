@@ -822,6 +822,7 @@ class TestCheckCoverageIntegrates:
     implementation via INTEGRATES counts as implemented in the coverage health
     check, so it is not a phantom coverage gap."""
 
+    # Verifies: REQ-d00252-D
     def test_REQ_d00252_D_integrating_req_counts_implemented(self, tmp_path):
         """The 'code.implemented' coverage check credits APP-d00001 (which has
         no local code refs but integrates a library REQ) as covered."""

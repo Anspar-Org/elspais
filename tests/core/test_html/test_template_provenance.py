@@ -69,7 +69,7 @@ def federation(tmp_path: Path):
         library,
         ".elspais.toml",
         """
-        version = 3
+        version = 5
         [project]
         name = "library"
         namespace = "LIB"
@@ -116,7 +116,7 @@ def federation(tmp_path: Path):
         app,
         ".elspais.toml",
         """
-        version = 3
+        version = 5
         [project]
         name = "app"
         namespace = "APP"
@@ -263,7 +263,7 @@ def _build_in_repo_satisfies(tmp_path: Path) -> tuple[Path, object]:
         repo,
         ".elspais.toml",
         """
-        version = 3
+        version = 5
         [project]
         name = "solo-repo"
         namespace = "URS"

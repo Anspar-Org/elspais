@@ -80,19 +80,14 @@ CREATE PROCEDURE archive_records ...
 ### TEST
 
 A test function that verifies a requirement. Created from test file
-scanning -- either by naming convention or by comment.
+scanning, and linked to a requirement by a comment above it.
 
 ID format: `test:tests/test_auth.py::TestAuth::test_login`
 
-By function name (underscores replace hyphens):
-
-```python
-def test_REQ_d00001_A_hashes_with_bcrypt():
-    assert hash_password("secret").startswith("$2b$")
-```
-
-By comment -- in test files, all three recognized keywords
-(`Implements`, `Verifies`, `Refines`) produce a VERIFIES edge:
+A TEST node is linked by a comment above it, and by nothing else -- a
+requirement ID in the function name creates no edge. In test files only
+`Verifies` is admitted; `Implements` and `Refines` are read there and
+refused:
 
 ```python
 # Verifies: REQ-d00001-A, REQ-d00001-B
@@ -290,14 +285,6 @@ def test_coordinator_submits_credentials(): ...
 
 Targeting a whole journey treats it as a single unit. Targeting a step
 enables per-step pass/fail for fine-grained UAT coverage.
-
-Also created from function names containing requirement IDs:
-
-```python
-def test_REQ_d00001_A_rejects_empty_password():
-    with pytest.raises(ValueError):
-        hash_password("")
-```
 
 Also valid in code files, for code that generates result output
 (e.g., a benchmark suite that writes a pass/fail report):

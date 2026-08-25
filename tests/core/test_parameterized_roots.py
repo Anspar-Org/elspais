@@ -69,6 +69,7 @@ def _factory_build(tmp_path: Path, extra_config: str = ""):
 class TestIterRootsDefault:
     """Validates REQ-d00130-A: default iter_roots() returns REQ + JOURNEY roots."""
 
+    # Verifies: REQ-d00130-A
     def test_REQ_d00130_A_default_returns_req_roots(self, tmp_path: Path) -> None:
         """iter_roots() with no argument returns REQ roots."""
         _write_spec(tmp_path)
@@ -78,6 +79,7 @@ class TestIterRootsDefault:
         assert NodeKind.REQUIREMENT in root_kinds
         assert NodeKind.FILE not in root_kinds
 
+    # Verifies: REQ-d00130-A
     def test_REQ_d00130_A_default_preserves_backward_compat(self, tmp_path: Path) -> None:
         """iter_roots() with no argument returns identical results to pre-parameterization."""
         _write_spec(tmp_path)
@@ -94,6 +96,7 @@ class TestIterRootsDefault:
 class TestIterRootsFile:
     """Validates REQ-d00130-B: iter_roots(NodeKind.FILE) returns FILE nodes."""
 
+    # Verifies: REQ-d00130-B
     def test_REQ_d00130_B_file_kind_returns_file_nodes(self, tmp_path: Path) -> None:
         """iter_roots(NodeKind.FILE) returns all FILE nodes from _index."""
         _write_spec(tmp_path)
@@ -103,6 +106,7 @@ class TestIterRootsFile:
         assert len(file_nodes) > 0
         assert all(n.kind == NodeKind.FILE for n in file_nodes)
 
+    # Verifies: REQ-d00130-B
     def test_REQ_d00130_B_file_kind_returns_all_files(self, tmp_path: Path) -> None:
         """iter_roots(NodeKind.FILE) returns every FILE node in the graph."""
         _write_spec(tmp_path)
@@ -117,6 +121,7 @@ class TestIterRootsFile:
 class TestIterRootsRequirement:
     """Validates REQ-d00130-C: iter_roots(NodeKind.REQUIREMENT) returns only REQ roots."""
 
+    # Verifies: REQ-d00130-C
     def test_REQ_d00130_C_requirement_kind_filters_to_reqs(self) -> None:
         """iter_roots(NodeKind.REQUIREMENT) returns only REQUIREMENT roots."""
         graph = build_graph(
@@ -136,6 +141,7 @@ class TestIterRootsRequirement:
         # Just verify kind filtering works
         assert all(n.kind == NodeKind.REQUIREMENT for n in req_roots)
 
+    # Verifies: REQ-d00130-C
     def test_REQ_d00130_C_requirement_excludes_journeys(self, tmp_path: Path) -> None:
         """iter_roots(NodeKind.REQUIREMENT) does not include journey nodes."""
         _write_spec(tmp_path)
@@ -157,6 +163,7 @@ class TestIterRootsJourney:
         graph._index = {"REQ-p00001": req_node, "JNY-Dev-01": jny_node}
         return graph
 
+    # Verifies: REQ-d00130-D
     def test_REQ_d00130_D_journey_kind_filters_to_journeys(self) -> None:
         """iter_roots(NodeKind.USER_JOURNEY) returns only USER_JOURNEY roots."""
         graph = self._graph_with_journey_root()
@@ -166,6 +173,7 @@ class TestIterRootsJourney:
         assert journey_roots[0].kind == NodeKind.USER_JOURNEY
         assert journey_roots[0].id == "JNY-Dev-01"
 
+    # Verifies: REQ-d00130-D
     def test_REQ_d00130_D_journey_excludes_reqs(self) -> None:
         """iter_roots(NodeKind.USER_JOURNEY) does not include requirement nodes."""
         graph = self._graph_with_journey_root()
@@ -177,6 +185,7 @@ class TestIterRootsJourney:
 class TestIterByKind:
     """Validates REQ-d00130-E: iter_by_kind() iterates all nodes of given kind."""
 
+    # Verifies: REQ-d00130-E
     def test_REQ_d00130_E_iter_by_kind_returns_all_of_kind(self, tmp_path: Path) -> None:
         """iter_by_kind(kind) returns same nodes as nodes_by_kind(kind)."""
         _write_spec(tmp_path)
@@ -187,6 +196,7 @@ class TestIterByKind:
             nodes_by = {n.id for n in graph.nodes_by_kind(kind)}
             assert by_kind == nodes_by, f"Mismatch for {kind}"
 
+    # Verifies: REQ-d00130-E
     def test_REQ_d00130_E_iter_by_kind_file(self, tmp_path: Path) -> None:
         """iter_by_kind(NodeKind.FILE) returns FILE nodes."""
         _write_spec(tmp_path)
@@ -196,6 +206,7 @@ class TestIterByKind:
         assert len(file_nodes) > 0
         assert all(n.kind == NodeKind.FILE for n in file_nodes)
 
+    # Verifies: REQ-d00130-E
     def test_REQ_d00130_E_iter_by_kind_requirement(self, tmp_path: Path) -> None:
         """iter_by_kind(NodeKind.REQUIREMENT) returns all requirements (not just roots)."""
         _write_spec(tmp_path)
@@ -209,6 +220,7 @@ class TestIterByKind:
 class TestFileNodesExcludedFromDefault:
     """Validates REQ-d00130-F: FILE nodes not in default iter_roots()."""
 
+    # Verifies: REQ-d00130-F
     def test_REQ_d00130_F_file_nodes_not_in_default_roots(self, tmp_path: Path) -> None:
         """Default iter_roots() does not yield FILE nodes."""
         _write_spec(tmp_path)
@@ -225,6 +237,7 @@ class TestFileNodesExcludedFromDefault:
             "FILE nodes should not appear in default iter_roots()"
         )
 
+    # Verifies: REQ-d00130-F
     def test_REQ_d00130_F_root_count_unchanged(self, tmp_path: Path) -> None:
         """root_count() continues to reflect only non-FILE roots."""
         _write_spec(tmp_path)

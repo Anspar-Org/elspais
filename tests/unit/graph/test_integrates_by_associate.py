@@ -61,6 +61,7 @@ def _build_with_verified_library(tmp_path):
     return fed
 
 
+# Verifies: REQ-d00252-F
 def test_REQ_d00252_F_groups_by_associate(tmp_path):
     fed = _build_with_verified_library(tmp_path)
     rows = integrates_by_associate(fed)
@@ -72,6 +73,7 @@ def test_REQ_d00252_F_groups_by_associate(tmp_path):
     assert lib.verified_covered >= 1 and lib.verified_total >= 1
 
 
+# Verifies: REQ-d00252-F
 def test_REQ_d00252_F_total_aggregates(tmp_path):
     fed = _build_with_verified_library(tmp_path)
     rows = integrates_by_associate(fed)
@@ -88,6 +90,7 @@ def test_REQ_d00252_F_total_aggregates(tmp_path):
 
 
 # Verifies: REQ-d00258-N
+# Verifies: REQ-d00252-F
 def test_REQ_d00252_F_lcov_only_credit_does_not_count_as_passing(tmp_path):
     """A library REQ with only lcov_tested (line-coverage) credit -- no
     Verifies:-based result -- contributes nothing to the associate's passing
@@ -117,6 +120,7 @@ def test_REQ_d00252_F_lcov_only_credit_does_not_count_as_passing(tmp_path):
 
 
 # Verifies: REQ-d00258-N
+# Verifies: REQ-d00252-F
 def test_REQ_d00252_F_library_failures_flag_associate_row(tmp_path):
     """A library with one passing and one failing declared test reads covered
     on the count alone, so the per-associate row (and the federation total)
@@ -148,6 +152,7 @@ def test_REQ_d00252_F_library_failures_flag_associate_row(tmp_path):
     assert total.has_failures is True  # OR'd across associates
 
 
+# Verifies: REQ-d00252-F
 def test_REQ_d00252_F_no_integrates_yields_empty(tmp_path):
     """A federation with no INTEGRATES edges produces no rows."""
     fed = _federate(tmp_path)

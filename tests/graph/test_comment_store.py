@@ -27,12 +27,15 @@ from elspais.graph.relations import EdgeKind
 class TestParseAnchor:
     """Validates REQ-d00228: Anchor string parsing."""
 
+    # Verifies: REQ-d00228-A
     def test_REQ_d00228_A_bare_requirement(self):
         assert parse_anchor("REQ-p00001") == ("REQ-p00001", None, None)
 
+    # Verifies: REQ-d00228-A
     def test_REQ_d00228_A_assertion_fragment(self):
         assert parse_anchor("REQ-p00001#A") == ("REQ-p00001", "assertion", "A")
 
+    # Verifies: REQ-d00228-A
     def test_REQ_d00228_A_section_fragment(self):
         assert parse_anchor("REQ-p00001#section:Rationale") == (
             "REQ-p00001",
@@ -40,6 +43,7 @@ class TestParseAnchor:
             "Rationale",
         )
 
+    # Verifies: REQ-d00228-A
     def test_REQ_d00228_A_edge_fragment(self):
         assert parse_anchor("REQ-p00001#edge:REQ-d00003") == (
             "REQ-p00001",
@@ -47,9 +51,11 @@ class TestParseAnchor:
             "REQ-d00003",
         )
 
+    # Verifies: REQ-d00228-A
     def test_REQ_d00228_A_journey_bare(self):
         assert parse_anchor("JNY-001") == ("JNY-001", None, None)
 
+    # Verifies: REQ-d00228-A
     def test_REQ_d00228_A_journey_section(self):
         assert parse_anchor("JNY-001#section:Setup") == (
             "JNY-001",
@@ -57,6 +63,7 @@ class TestParseAnchor:
             "Setup",
         )
 
+    # Verifies: REQ-d00228-A
     def test_REQ_d00228_A_journey_edge(self):
         assert parse_anchor("JNY-001#edge:REQ-p00001") == (
             "JNY-001",
@@ -68,16 +75,19 @@ class TestParseAnchor:
 class TestGenerateCommentId:
     """Validates REQ-d00228: Comment ID generation."""
 
+    # Verifies: REQ-d00228-B
     def test_REQ_d00228_B_format(self):
         cid = generate_comment_id("REQ-p00001#A", "alice@co.org", "2026-03-20", "Hello")
         assert cid.startswith("c-20260320-")
         assert len(cid) == len("c-20260320-") + 6
 
+    # Verifies: REQ-d00228-B
     def test_REQ_d00228_B_deterministic(self):
         a = generate_comment_id("REQ-p00001#A", "alice@co.org", "2026-03-20", "Hello")
         b = generate_comment_id("REQ-p00001#A", "alice@co.org", "2026-03-20", "Hello")
         assert a == b
 
+    # Verifies: REQ-d00228-B
     def test_REQ_d00228_B_different_content(self):
         a = generate_comment_id("REQ-p00001#A", "alice@co.org", "2026-03-20", "Hello")
         b = generate_comment_id("REQ-p00001#A", "alice@co.org", "2026-03-20", "World")
@@ -87,10 +97,12 @@ class TestGenerateCommentId:
 class TestCommentFileFor:
     """Validates REQ-d00228: JSONL file path resolution."""
 
+    # Verifies: REQ-d00228-E
     def test_REQ_d00228_E_spec_file(self):
         result = comment_file_for(Path("/repo"), "spec/prd-auth.md")
         assert result == Path("/repo/.elspais/comments/spec/prd-auth.md.json")
 
+    # Verifies: REQ-d00228-E
     def test_REQ_d00228_E_journey_file(self):
         result = comment_file_for(Path("/repo"), "journeys/onboarding.md")
         assert result == Path("/repo/.elspais/comments/journeys/onboarding.md.json")
@@ -99,10 +111,12 @@ class TestCommentFileFor:
 class TestJsonlIO:
     """Validates REQ-d00228: JSONL file reading and writing."""
 
+    # Verifies: REQ-d00228-C
     def test_REQ_d00228_C_load_missing(self, tmp_path):
         """Loading a non-existent file returns empty list."""
         assert load_events(tmp_path / "nope.json") == []
 
+    # Verifies: REQ-d00228-C
     def test_REQ_d00228_C_append_and_load(self, tmp_path):
         """Append events then load them back."""
         path = tmp_path / "comments" / "spec.md.json"
@@ -121,6 +135,7 @@ class TestJsonlIO:
         assert events[0].id == "c-20260320-a3f1b2"
         assert events[0].text == "Hello"
 
+    # Verifies: REQ-d00228-C
     def test_REQ_d00228_C_creates_dirs(self, tmp_path):
         """append_event creates directories if needed."""
         path = tmp_path / "deep" / "nested" / "file.json"
@@ -136,6 +151,7 @@ class TestJsonlIO:
         append_event(path, evt)
         assert path.exists()
 
+    # Verifies: REQ-d00228-C
     def test_REQ_d00228_C_multiple_appends(self, tmp_path):
         """Multiple appends produce multiple lines."""
         path = tmp_path / "test.json"
@@ -157,6 +173,7 @@ class TestJsonlIO:
 class TestAssembleThreads:
     """Validates REQ-d00228: Thread assembly from raw events."""
 
+    # Verifies: REQ-d00228-D
     def test_REQ_d00228_D_single_comment(self):
         """One comment event produces one thread."""
         events = [
@@ -175,6 +192,7 @@ class TestAssembleThreads:
         assert threads[0].root.id == "c1"
         assert threads[0].resolved is False
 
+    # Verifies: REQ-d00228-D
     def test_REQ_d00228_D_reply(self):
         """Reply attaches to parent thread."""
         events = [
@@ -203,6 +221,7 @@ class TestAssembleThreads:
         assert len(threads[0].replies) == 1
         assert threads[0].replies[0].text == "Answer"
 
+    # Verifies: REQ-d00228-D
     def test_REQ_d00228_D_resolved_excluded(self):
         """Resolved threads are filtered out."""
         events = [
@@ -228,6 +247,7 @@ class TestAssembleThreads:
         threads = assemble_threads(events)
         assert len(threads) == 0
 
+    # Verifies: REQ-d00228-D
     def test_REQ_d00228_D_promoted(self):
         """Promote event updates thread anchor and metadata."""
         events = [
@@ -259,6 +279,7 @@ class TestAssembleThreads:
         assert threads[0].promoted_from == "REQ-p00001#D"
         assert threads[0].promotion_reason == "Assertion D deleted"
 
+    # Verifies: REQ-d00228-D
     def test_REQ_d00228_D_multiple_threads(self):
         """Multiple top-level comments on same anchor produce separate threads."""
         events = [
@@ -288,11 +309,13 @@ class TestAssembleThreads:
 class TestLoadCommentIndex:
     """Validates REQ-d00228: Loading full CommentIndex from disk."""
 
+    # Verifies: REQ-d00228-C
     def test_REQ_d00228_C_empty_repo(self, tmp_path):
         """No .elspais/comments dir returns empty index."""
         idx = load_comment_index(tmp_path)
         assert len(idx) == 0
 
+    # Verifies: REQ-d00228-C
     def test_REQ_d00228_C_multiple_files(self, tmp_path):
         """Index aggregates threads from all JSONL files."""
         comments_dir = tmp_path / ".elspais" / "comments"
@@ -346,34 +369,42 @@ def _build_simple_graph():
 class TestValidateAnchor:
     """Validates REQ-d00229-A: Anchor validation against live graph."""
 
+    # Verifies: REQ-d00229-A
     def test_REQ_d00229_A_valid_bare_node(self):
         graph = _build_simple_graph()
         assert validate_anchor("REQ-p00001", graph) is True
 
+    # Verifies: REQ-d00229-A
     def test_REQ_d00229_A_valid_assertion(self):
         graph = _build_simple_graph()
         assert validate_anchor("REQ-p00001#A", graph) is True
 
+    # Verifies: REQ-d00229-A
     def test_REQ_d00229_A_invalid_node(self):
         graph = _build_simple_graph()
         assert validate_anchor("REQ-p99999", graph) is False
 
+    # Verifies: REQ-d00229-A
     def test_REQ_d00229_A_invalid_assertion(self):
         graph = _build_simple_graph()
         assert validate_anchor("REQ-p00001#Z", graph) is False
 
+    # Verifies: REQ-d00229-A
     def test_REQ_d00229_A_valid_section(self):
         graph = _build_simple_graph()
         assert validate_anchor("REQ-p00001#section:Rationale", graph) is True
 
+    # Verifies: REQ-d00229-A
     def test_REQ_d00229_A_invalid_section(self):
         graph = _build_simple_graph()
         assert validate_anchor("REQ-p00001#section:Nonexistent", graph) is False
 
+    # Verifies: REQ-d00229-A
     def test_REQ_d00229_A_valid_edge(self):
         graph = _build_simple_graph()
         assert validate_anchor("REQ-p00001#edge:REQ-d00003", graph) is True
 
+    # Verifies: REQ-d00229-A
     def test_REQ_d00229_A_invalid_edge(self):
         graph = _build_simple_graph()
         assert validate_anchor("REQ-p00001#edge:REQ-d99999", graph) is False
@@ -382,6 +413,7 @@ class TestValidateAnchor:
 class TestPromoteOrphanedComments:
     """Validates REQ-d00229-B: Orphaned comment promotion."""
 
+    # Verifies: REQ-d00229-B
     def test_REQ_d00229_B_valid_not_promoted(self, tmp_path):
         """Comments with valid anchors are left alone."""
         graph = _build_simple_graph()
@@ -403,6 +435,7 @@ class TestPromoteOrphanedComments:
         assert events == []
         assert idx.has_threads("REQ-p00001#A")
 
+    # Verifies: REQ-d00229-B
     def test_REQ_d00229_B_missing_assertion_promotes(self, tmp_path):
         """Comment on deleted assertion promotes to parent node."""
         graph = _build_simple_graph()
@@ -428,6 +461,7 @@ class TestPromoteOrphanedComments:
         # Thread should now be under the node anchor
         assert idx.has_threads("REQ-p00001")
 
+    # Verifies: REQ-d00229-B
     def test_REQ_d00229_B_missing_node_orphaned(self, tmp_path):
         """Comment on deleted node with no ancestors becomes orphaned."""
         graph = _build_simple_graph()
@@ -453,6 +487,7 @@ class TestPromoteOrphanedComments:
 class TestUpdateAnchorsOnRename:
     """Validates REQ-d00229-C: Rename-triggered anchor updates."""
 
+    # Verifies: REQ-d00229-C
     def test_REQ_d00229_C_rename_updates_anchors(self, tmp_path):
         """Renaming a node updates all comment anchors referencing it."""
         idx = CommentIndex()
@@ -489,6 +524,7 @@ class TestUpdateAnchorsOnRename:
 class TestCompactFile:
     """Validates REQ-d00235-A: compact_file strips resolved and collapses promotes."""
 
+    # Verifies: REQ-d00235-A
     def test_REQ_d00235_A_compact_removes_resolved(self, tmp_path):
         """Resolved thread (comment + resolve) is stripped; active comment survives."""
         path = tmp_path / "comments" / "spec.md.json"
@@ -529,6 +565,7 @@ class TestCompactFile:
         assert len(remaining) == 1
         assert remaining[0].id == "c2"
 
+    # Verifies: REQ-d00235-A
     def test_REQ_d00235_A_compact_collapses_promote_chains(self, tmp_path):
         """Multiple promotes for the same target collapse to keep only the final one."""
         path = tmp_path / "comments" / "spec.md.json"
@@ -578,6 +615,7 @@ class TestCompactFile:
         if promotes:
             assert promotes[0].id == "p2"
 
+    # Verifies: REQ-d00235-A
     def test_REQ_d00235_A_compact_empty_file(self, tmp_path):
         """compact_file on a non-existent path returns 0."""
         path = tmp_path / "nonexistent" / "comments.json"

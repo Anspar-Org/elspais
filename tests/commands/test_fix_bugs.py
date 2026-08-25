@@ -23,7 +23,7 @@ from pathlib import Path
 # ─────────────────────────────────────────────────────────────────────────────
 
 CONFIG_TOML = """\
-version = 3
+version = 5
 
 [project]
 name = "test"
@@ -120,6 +120,7 @@ class TestFixActiveChangelogAutoMessage:
     when no -m flag is provided, rather than failing.
     """
 
+    # Verifies: REQ-p00004-A
     def test_REQ_p00004_A_autofix_generates_changelog(self, tmp_path, capsys):
         """When an Active requirement needs a hash update and no -m message
         is provided, the fix should succeed with an auto-generated reason.
@@ -143,6 +144,7 @@ class TestFixActiveChangelogAutoMessage:
         assert "## Changelog" in content, "Changelog section should be added"
         assert "Auto-fix:" in content, "Auto-generated reason should be present"
 
+    # Verifies: REQ-p00004-A
     def test_REQ_p00004_A_explicit_message_overrides_autofix(self, tmp_path, capsys):
         """When -m is provided, it overrides the auto-generated reason."""
         project = _make_project(tmp_path, REQ_ACTIVE_WRONG_HASH)

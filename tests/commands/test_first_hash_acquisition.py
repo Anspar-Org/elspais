@@ -27,7 +27,7 @@ from pathlib import Path
 # OFF so the hash defect is isolated: a Draft/Active requirement without a
 # changelog must not be flagged for a changelog reason.
 CONFIG_TOML = """\
-version = 3
+version = 5
 
 [project]
 name = "test"
@@ -45,7 +45,7 @@ hash_current = false
 # that use this config also set GIT_AUTHOR_NAME/GIT_AUTHOR_EMAIL, which are
 # the highest-precedence lookup source in utilities/changelog_author.py).
 CONFIG_TOML_CHANGELOG = """\
-version = 3
+version = 5
 
 [project]
 name = "test"
@@ -61,7 +61,7 @@ id_source = "manual"
 
 # require_hash is stated explicitly so the format rule definitely fires.
 CONFIG_TOML_REQUIRE_HASH = """\
-version = 3
+version = 5
 
 [project]
 name = "test"

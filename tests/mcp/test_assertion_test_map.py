@@ -201,6 +201,7 @@ def assertion_map_graph():
 class TestGetAssertionTestMap:
     """Tests for _get_assertion_test_map() per-assertion coverage mapping."""
 
+    # Verifies: REQ-d00066-A
     def test_REQ_d00066_A_requirement_not_found_returns_error(self, assertion_map_graph):
         """REQ-d00066-A: SHALL return error when requirement is not found in the graph."""
         from elspais.mcp.server import _get_assertion_test_map
@@ -210,6 +211,7 @@ class TestGetAssertionTestMap:
         assert result["success"] is False
         assert "not found" in result["error"]
 
+    # Verifies: REQ-d00066-B
     def test_REQ_d00066_B_requirement_with_no_assertions(self, assertion_map_graph):
         """REQ-d00066-B: SHALL return empty assertion_tests for requirement with no assertions."""
         from elspais.mcp.server import _get_assertion_test_map
@@ -231,6 +233,7 @@ class TestGetAssertionTestMap:
         assert result["total_covered"] == 0.0
         assert result["total_pct"] == 0.0
 
+    # Verifies: REQ-d00066-C
     def test_REQ_d00066_C_assertions_with_no_tests(self, assertion_map_graph):
         """REQ-d00066-C: SHALL return empty test lists for assertions with no coverage."""
         from elspais.mcp.server import _get_assertion_test_map
@@ -245,6 +248,7 @@ class TestGetAssertionTestMap:
         assert result["total_covered"] == 0.0
         assert result["total_pct"] == 0.0
 
+    # Verifies: REQ-d00066-D
     def test_REQ_d00066_D_pattern1_targeted_assertion_coverage(self, assertion_map_graph):
         """REQ-d00066-D: Pattern 1 - REQ->TEST with assertion_targets."""
         from elspais.mcp.server import _get_assertion_test_map
@@ -257,6 +261,7 @@ class TestGetAssertionTestMap:
         b_ids = [t["id"] for t in b_tests]
         assert "test:test_tls.py::test_tls_version" in b_ids
 
+    # Verifies: REQ-d00066-E
     def test_REQ_d00066_E_pattern2_assertion_to_test_edge(self, assertion_map_graph):
         """REQ-d00066-E: Pattern 2 - ASSERTION->TEST edge links test to specific assertion."""
         from elspais.mcp.server import _get_assertion_test_map
@@ -268,6 +273,7 @@ class TestGetAssertionTestMap:
         a_ids = [t["id"] for t in a_tests]
         assert "test:test_encryption.py::test_data_encrypted" in a_ids
 
+    # Verifies: REQ-d00066-F
     def test_REQ_d00066_F_indirect_coverage_covers_all_assertions(self, assertion_map_graph):
         """REQ-d00066-F: Indirect - REQ->TEST without assertion_targets covers ALL assertions."""
         from elspais.mcp.server import _get_assertion_test_map
@@ -281,6 +287,7 @@ class TestGetAssertionTestMap:
             ids = [t["id"] for t in result["assertion_tests"][label]["tests"]]
             assert indirect_id in ids, f"Indirect test should appear under assertion {label}"
 
+    # Verifies: REQ-d00066-G
     def test_REQ_d00066_G_test_results_included(self, assertion_map_graph):
         """REQ-d00066-G: SHALL include test results in each test entry."""
         from elspais.mcp.server import _get_assertion_test_map
@@ -303,6 +310,7 @@ class TestGetAssertionTestMap:
         assert tls_test["results"][0]["status"] == "failed"
         assert tls_test["results"][0]["duration"] == 1.2
 
+    # Verifies: REQ-d00066-A
     def test_REQ_d00066_A_coverage_stats_correct(self, assertion_map_graph):
         """REQ-d00066-A: SHALL compute correct coverage statistics."""
         from elspais.mcp.server import _get_assertion_test_map
@@ -314,6 +322,7 @@ class TestGetAssertionTestMap:
         assert result["total_covered"] == 3.0
         assert result["total_pct"] == 100.0
 
+    # Verifies: REQ-d00066-B
     def test_REQ_d00066_B_coverage_stats_partial(self, assertion_map_graph):
         """REQ-d00066-B: SHALL compute correct partial coverage when some assertions lack tests."""
         from elspais.mcp.server import _get_assertion_test_map
@@ -324,6 +333,7 @@ class TestGetAssertionTestMap:
         assert result["total_covered"] == 0.0
         assert result["total_pct"] == 0.0
 
+    # Verifies: REQ-d00066-C
     def test_REQ_d00066_C_deduplication_same_test_via_both_patterns(self, assertion_map_graph):
         """REQ-d00066-C: SHALL deduplicate when same test reached via multiple patterns."""
         from elspais.mcp.server import _get_assertion_test_map
@@ -345,6 +355,7 @@ class TestGetAssertionTestMap:
             "Same test reached via both patterns should not be duplicated"
         )
 
+    # Verifies: REQ-d00066-D
     def test_REQ_d00066_D_test_entry_fields(self, assertion_map_graph):
         """REQ-d00066-D: SHALL include id, label, file, line, and results in test entries."""
         from elspais.mcp.server import _get_assertion_test_map
@@ -360,6 +371,7 @@ class TestGetAssertionTestMap:
         assert tls_test["line"] == 25
         assert isinstance(tls_test["results"], list)
 
+    # Verifies: REQ-d00066-E
     def test_REQ_d00066_E_response_structure(self, assertion_map_graph):
         """REQ-d00066-E: SHALL return correct top-level response structure."""
         from elspais.mcp.server import _get_assertion_test_map
@@ -383,6 +395,7 @@ class TestGetAssertionTestMap:
             "rolled_indirect",
         }
 
+    # Verifies: REQ-d00066-F
     def test_REQ_d00066_F_non_requirement_node_returns_error(self, assertion_map_graph):
         """REQ-d00066-F: SHALL return error when node exists but is not a requirement."""
         from elspais.mcp.server import _get_assertion_test_map
@@ -392,6 +405,7 @@ class TestGetAssertionTestMap:
         assert result["success"] is False
         assert "not a requirement" in result["error"]
 
+    # Verifies: REQ-d00066-G
     def test_REQ_d00066_G_assertion_labels_as_keys(self, assertion_map_graph):
         """REQ-d00066-G: SHALL use assertion labels (A, B, C) as keys in assertion_tests."""
         from elspais.mcp.server import _get_assertion_test_map

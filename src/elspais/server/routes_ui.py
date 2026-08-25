@@ -54,10 +54,10 @@ def _extract_viewer_config(config: dict[str, Any], federation: Any = None) -> di
     """Extract viewer-relevant values from the config dict.
 
     Returns a dict with keys suitable for unpacking into the Jinja2
-    template context. Includes legacy `config_types` / `config_statuses` for
-    backward compatibility, plus the dynamic `levels` / `namespaces` /
-    `statuses` lists (each item carrying resolved bg/text colors) that the
-    templates and API responses consume.
+    template context: `config_types` and `config_statuses` (REQ-d00211-A/C),
+    plus the dynamic `levels` / `namespaces` / `statuses` lists (each item
+    carrying resolved bg/text colors) that the templates and API responses
+    consume.
 
     ``federation`` is the FederatedGraph being viewed; it supplies the full
     set of repositories for the namespace catalog.

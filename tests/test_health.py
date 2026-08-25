@@ -283,7 +283,7 @@ The system SHALL do something.
         config_file = tmp_path / ".elspais.toml"
         config_file.write_text(
             """
-version = 3
+version = 5
 
 [project]
 name = "test"

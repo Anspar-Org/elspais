@@ -23,7 +23,7 @@ from typing import Any
 # ---------------------------------------------------------------------------
 
 CONFIG_REQUIRE_HASH = """\
-version = 3
+version = 5
 
 [project]
 name = "test"

@@ -93,51 +93,66 @@ class TestAdmittedSeverityValues:
     # Verifies: REQ-d00212-U
     def test_REQ_d00212_U_the_retired_word_is_no_longer_admitted(self, tmp_path: Path) -> None:
         """``ok`` named a fifth behaviour -- pass the check but list the
-        findings anyway -- that no longer exists. A v5 config writing it is
-        refused rather than quietly read as one of the four."""
-        with pytest.raises(ValidationError):
+        findings anyway -- that no longer exists. A config writing it is
+        refused rather than quietly read as one of the four, and the refusal
+        names ``off`` so the author is not left guessing which of the four the
+        retired word became."""
+        with pytest.raises(ValueError) as excinfo:
             load_config(_write_config(tmp_path, '[rules.references]\nmalformed = "ok"\n'))
 
+        message = str(excinfo.value)
+        assert '[rules.references] malformed = "ok"' in message
+        assert '[rules.references] malformed = "off"' in message
+
 
 # =============================================================================
-# The migration off the retired word
+# The refusal of the retired word
 # =============================================================================
 
 
-class TestMigrationOfTheRetiredWord:
-    """REQ-d00212-U: an existing configuration written `ok` still loads."""
+class TestRefusalOfTheRetiredWord:
+    """REQ-d00212-U/V: a configuration written ``ok`` is refused where it is
+    written, and the refusal reaches only the settings that are severities.
 
-    # Verifies: REQ-d00212-U
-    def test_REQ_d00212_U_ok_is_rewritten_to_off_and_the_version_moves(
+    There is no migration off the retired word. Rewriting the file's meaning
+    on the way in would leave the project's own configuration saying one thing
+    while the tool did another, with nothing on either side to show which.
+    """
+
+    # Verifies: REQ-d00212-V
+    def test_REQ_d00212_V_ok_is_refused_at_every_kind_of_severity_setting(
         self, tmp_path: Path
     ) -> None:
-        """A v4 configuration is carried forward: every severity setting
-        written ``ok`` reads ``off``, at a named setting and at a coverage
-        tier alike, and the file is left at the current version."""
-        config = load_config(
-            _write_config(
-                tmp_path,
-                '[rules.references]\nmalformed = "ok"\nunknown_requirement = "error"\n'
-                '[rules.coverage.tested]\nfull = "ok"\npartial = "warning"\n',
-                version=4,
+        """A named setting and a coverage tier read the same vocabulary, so a
+        file writing ``ok`` at either is refused, and both are named in one
+        refusal rather than one per attempt to load."""
+        with pytest.raises(ValueError) as excinfo:
+            load_config(
+                _write_config(
+                    tmp_path,
+                    '[rules.references]\nmalformed = "ok"\nunknown_requirement = "error"\n'
+                    '[rules.coverage.tested]\nfull = "ok"\npartial = "warning"\n',
+                )
             )
-        )
 
-        assert config["version"] == CURRENT_CONFIG_VERSION
-        assert config["rules"]["references"]["malformed"] == "off"
-        assert config["rules"]["coverage"]["tested"]["full"] == "off"
-        # Settings that never said "ok" are left exactly as written.
-        assert config["rules"]["references"]["unknown_requirement"] == "error"
-        assert config["rules"]["coverage"]["tested"]["partial"] == "warning"
+        listed = str(excinfo.value).split("Settings to change:", 1)[1]
+        assert '[rules.references] malformed = "ok"' in listed
+        assert '[rules.coverage.tested] full = "ok"' in listed
+        # Settings that never said "ok" are not named: they need no edit.
+        assert "unknown_requirement" not in listed
+        assert "partial" not in listed
 
-    # Verifies: REQ-d00212-U
-    def test_REQ_d00212_U_a_word_that_is_not_a_severity_is_left_alone(self, tmp_path: Path) -> None:
-        """The migration rewrites the enumerated severity settings and nothing
-        else. A blind walk would rewrite any string reading "ok" -- a project
-        name, a status word -- and corrupt settings it knows nothing about."""
+    # Verifies: REQ-d00212-V
+    def test_REQ_d00212_V_a_word_that_is_not_a_severity_is_not_named(self, tmp_path: Path) -> None:
+        """The refusal names the enumerated severity settings and nothing else.
+
+        A blind walk would find any string reading "ok" -- a project name, a
+        status word -- and demand the author change settings that are correct
+        as written and have nothing to do with severity.
+        """
         path = tmp_path / ".elspais.toml"
         path.write_text(
-            "version = 4\n\n"
+            f"version = {CURRENT_CONFIG_VERSION}\n\n"
             "[project]\n"
             'name = "ok"\n'
             'namespace = "REQ"\n'
@@ -150,12 +165,32 @@ class TestMigrationOfTheRetiredWord:
             encoding="utf-8",
         )
 
-        config = load_config(path)
+        with pytest.raises(ValueError) as excinfo:
+            load_config(path)
 
-        assert config["project"]["name"] == "ok"
-        assert config["rules"]["format"]["status_roles"]["active"] == ["ok"]
-        # ...while the setting that IS a severity did move.
+        listed = str(excinfo.value).split("Settings to change:", 1)[1]
+        assert '[rules.references] malformed = "ok"' in listed
+        assert "[project]" not in listed
+        assert "status_roles" not in listed
+        assert listed.count("write instead:") == 1
+
+    # Verifies: REQ-d00212-U
+    def test_REQ_d00212_U_a_configuration_writing_only_admitted_words_loads(
+        self, tmp_path: Path
+    ) -> None:
+        """The control: the refusal is about the retired word, not about the
+        settings that carry it. The same settings written in the admitted
+        vocabulary load and keep their values."""
+        config = load_config(
+            _write_config(
+                tmp_path,
+                '[rules.references]\nmalformed = "off"\nunknown_requirement = "error"\n'
+                '[rules.coverage.tested]\nfull = "info"\npartial = "warning"\n',
+            )
+        )
+
         assert config["rules"]["references"]["malformed"] == "off"
+        assert config["rules"]["coverage"]["tested"]["full"] == "info"
 
 
 # =============================================================================

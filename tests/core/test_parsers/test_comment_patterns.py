@@ -344,35 +344,40 @@ def test_no_link_is_written_into_a_file_that_could_not_carry_one(path):
     assert apply_link_to_file(Path(path), 0, "REQ-d00001-A", dry_run=True) is None
 
 
-# Verifies: REQ-d00269-K
+# Verifies: REQ-d00269-K, REQ-d00269-H
 @pytest.mark.parametrize(
-    ("path", "rule", "continues"),
+    ("path", "next_line", "continues"),
     [
-        # A rule drawn in the file's OWN marker characters is an empty
-        # comment, so it does not interrupt a block being read.
-        ("svc.py", "# ####", True),
-        ("schema.sql", "-- ----", True),
-        # A rule drawn in another language's characters is content here, so
-        # it ends the block rather than being skipped over.
-        ("svc.py", "# ------", False),
+        # Drawn in the file's OWN marker, the line is a comment here and
+        # carries the rest of the list.
+        ("svc.py", "#   REQ-d00002-B", True),
+        ("schema.sql", "--   REQ-d00002-B", True),
+        # Drawn in another language's marker, it opens no comment here, so
+        # it holds no reference content and the list ends above it.
+        ("svc.py", "--   REQ-d00002-B", False),
+        ("schema.sql", "#   REQ-d00002-B", False),
     ],
 )
-def test_a_decorative_rule_is_empty_only_in_its_own_marker_characters(
-    dispatcher, path, rule, continues
+def test_only_the_files_own_marker_opens_a_line_that_continues_a_list(
+    dispatcher, path, next_line, continues
 ):
-    """Which characters make a rule "decorative" is a fact about the language.
+    """Which characters open a comment is a fact about the language.
 
-    Dashes are a comment's own characters in SQL and an expression's in
-    Python, so the same rule reads differently in each -- pinned here because
-    nothing else would stop it being "corrected" back to one global charset.
+    A list ending with the separator continues onto the next line that may
+    hold reference content (REQ-d00269-H), and whether a line may hold any
+    is decided by the marker its own language uses (REQ-d00269-K). Dashes
+    open a comment in SQL and an expression in Python, so the same second
+    line carries the list in one file and ends it in the other -- pinned
+    here because nothing else would stop the fold being "corrected" back to
+    one global marker set, which would bind a reference a Python file has no
+    way to write.
     """
     marker = comment_markers_for_path(path)[0]
-    content = (
-        f"{marker} IMPLEMENTS REQUIREMENTS:\n"
-        f"{marker}   REQ-d00001-A\n"
-        f"{rule}\n"
-        f"{marker}   REQ-d00002-B\n"
-    )
+    content = f"{marker} Implements: REQ-d00001-A,\n{next_line}\n"
+
     bound = _bound(dispatcher, content, path)
-    assert "REQ-d00001-A" in bound
-    assert ("REQ-d00002-B" in bound) is continues
+
+    assert "REQ-d00001-A" in bound, f"the opener's own reference always binds; got {bound}"
+    assert ("REQ-d00002-B" in bound) is continues, (
+        f"{next_line!r} in a {path} file: expected continues={continues}; got {bound}"
+    )

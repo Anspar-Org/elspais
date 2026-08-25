@@ -13,7 +13,7 @@ def _build(tmp_path):
     (tmp_path / ".elspais.toml").write_text(
         textwrap.dedent(
             """
-            version = 3
+            version = 5
             [project]
             name = "demo"
             namespace = "REQ"
@@ -44,6 +44,7 @@ def _build(tmp_path):
     return build_graph(repo_root=Path(tmp_path), scan_code=False, scan_tests=False)
 
 
+# Verifies: REQ-d00252-A
 def test_REQ_d00252_A_integrates_line_rendered(tmp_path):
     graph = _build(tmp_path)
     node = next(n for n in graph.iter_by_kind(NodeKind.REQUIREMENT) if n.id == "REQ-d00001")
@@ -51,6 +52,7 @@ def test_REQ_d00252_A_integrates_line_rendered(tmp_path):
     assert "**Integrates**: REQ-evs-0007" in text
 
 
+# Verifies: REQ-d00252-A
 def test_REQ_d00252_A_integrates_round_trips(tmp_path):
     graph = _build(tmp_path)
     file_node = next(iter(graph.iter_roots(NodeKind.FILE)))

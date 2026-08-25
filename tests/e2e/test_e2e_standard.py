@@ -1892,6 +1892,7 @@ class TestMCPOptimisticConcurrency:
     NODE = "REQ-p00002"
     state: dict = {}
 
+    # Verifies: REQ-o00062-K
     def test_01_REQ_o00062_K_success_returns_new_version(self, project, mcp_server):
         """Validates REQ-o00062-K: a successful mutation returns the node's new token."""
         from .helpers import mcp_call
@@ -1922,6 +1923,7 @@ class TestMCPOptimisticConcurrency:
         )
         self.state["version_after_a"] = result["version"]
 
+    # Verifies: REQ-o00062-I
     def test_02_REQ_o00062_I_stale_token_is_refused(self, project, mcp_server):
         """Validates REQ-o00062-I: a mutation with a stale token is rejected, not applied."""
         from .helpers import mcp_call
@@ -1945,6 +1947,7 @@ class TestMCPOptimisticConcurrency:
         )
         self.state["conflict"] = conflict
 
+    # Verifies: REQ-o00062-J
     def test_03_REQ_o00062_J_conflict_carries_current_version_and_state(self, project, mcp_server):
         """Validates REQ-o00062-J: the rejection carries current_version and current_state."""
         conflict = self.state["conflict"]
@@ -1961,6 +1964,7 @@ class TestMCPOptimisticConcurrency:
         assert current_state.get("title") == "Title From Client A"
         assert current_state.get("version") == conflict["current_version"]
 
+    # Verifies: REQ-o00062-K
     def test_04_REQ_o00062_K_retry_with_current_version_succeeds(self, project, mcp_server):
         """Validates REQ-o00062-K: after reconciling, retrying with current_version succeeds."""
         from .helpers import mcp_call
@@ -1991,6 +1995,7 @@ class TestVersionTokensSurviveRefresh:
 
     NODE = "REQ-o00002"
 
+    # Verifies: REQ-d00131-L
     def test_01_REQ_d00131_L_refresh_on_unchanged_content_keeps_tokens_valid(
         self, project, mcp_server
     ):

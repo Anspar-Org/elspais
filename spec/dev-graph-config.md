@@ -167,7 +167,7 @@ L. A `TermsConfig` model SHALL define defined-terms configuration: `output_dir` 
 
 M. `FormatConfig` SHALL include a `no_traceability_severity` field (str | None, default None) to configure the severity of code/test files lacking *Traceability* markers.
 
-N. A `_migrate_v3_to_v4` migration SHALL move flat `duplicate_severity`, `undefined_severity`, `unmarked_severity` from `[terms]` into `[terms.severity]` as `duplicate`, `undefined`, `unmarked`. Configs without `[terms]` SHALL pass through unchanged. Configs already having `[terms.severity]` SHALL NOT be double-migrated. `CURRENT_CONFIG_VERSION` SHALL be bumped to 4.
+N. <RETIRED> Backwards compatibility is not a goal of this project, so a configuration is not upgraded in place. An out-of-date setting is refused and named, per X.
 
 O. The configuration schema SHALL locate each rule setting under the concern it governs, such that a setting's position in the schema identifies which checks it affects.
 
@@ -186,6 +186,8 @@ U. The values a severity setting admits SHALL be fixed by the schema.
 V. A severity value the schema does not admit SHALL be refused when the configuration is read.
 
 W. The patterns declared for a scanning kind SHALL select among the files within that kind's declared directories, with the same meaning for every kind.
+
+X. A configuration carrying a setting this version does not read SHALL be refused with a message naming each setting to change and what to write instead.
 
 ### Rationale
 
@@ -209,6 +211,8 @@ R is a condition on resolving, never on writing, which is what keeps a reference
 
 ### Changelog
 
+- 2026-08-24 | 22e31e30 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-24 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-66: N retired -- a configuration is refused and named rather than upgraded in place; X states the refusal
 - 2026-08-24 | 43f7602a | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-24 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-66: severity values are fixed by the schema and an unadmitted value is refused; scanning patterns select within declared directories with one meaning for every kind
 - 2026-08-16 | 468cf0e9 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -236,7 +240,7 @@ R is a condition on resolving, never on writing, which is what keeps a reference
 - 2026-03-30 | db4ad28c | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 - 2026-03-29 | c75b87f8 | - | Michael Lewis (<michael@anspar.org>) | Add assertion N for config migration v3 to v4
 
-*End* *Config Schema v3 Models* | **Hash**: 43f7602a
+*End* *Config Schema v3 Models* | **Hash**: 22e31e30
 ---
 
 ## REQ-d00251: A Repository's Identifier Grammar

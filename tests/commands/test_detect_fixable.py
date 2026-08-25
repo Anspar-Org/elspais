@@ -16,7 +16,7 @@ from pathlib import Path
 # ─────────────────────────────────────────────────────────────────────────────
 
 CONFIG_TOML = """\
-version = 3
+version = 5
 
 [project]
 name = "test"
@@ -30,7 +30,7 @@ hash_current = true
 """
 
 CONFIG_TOML_NO_CHANGELOG = """\
-version = 3
+version = 5
 
 [project]
 name = "test"

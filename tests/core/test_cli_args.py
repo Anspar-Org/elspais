@@ -67,6 +67,7 @@ from elspais.commands.args import (
 class TestCliArgsDataclasses:
     """Validates REQ-p00001-A: CLI arg dataclass definitions and Tyro parsing."""
 
+    # Verifies: REQ-p00001-A
     def test_REQ_p00001_A_global_args_has_all_subcommands(self) -> None:
         """All top-level subcommand types are present in the Command Union."""
         # Extract the types from the Union
@@ -121,6 +122,7 @@ class TestCliArgsDataclasses:
         assert base_types == expected
         assert len(args) == 36
 
+    # Verifies: REQ-p00001-A
     def test_REQ_p00001_A_health_args_defaults(self) -> None:
         """ChecksArgs defaults are correct."""
         h = ChecksArgs()
@@ -133,6 +135,7 @@ class TestCliArgsDataclasses:
         assert h.include_passing_details is False
         assert h.output is None
 
+    # Verifies: REQ-p00001-A
     def test_REQ_p00001_A_tyro_parses_health(self) -> None:
         """Tyro parses 'health --format json' into ChecksArgs."""
         result = tyro.cli(
@@ -142,6 +145,7 @@ class TestCliArgsDataclasses:
         assert isinstance(result.command, ChecksArgs)
         assert result.command.format == "json"
 
+    # Verifies: REQ-p00001-A
     def test_REQ_p00001_A_tyro_parses_config_show(self) -> None:
         """Tyro parses nested 'config show --format json'."""
         result = tyro.cli(
@@ -152,6 +156,7 @@ class TestCliArgsDataclasses:
         assert isinstance(result.command.action, ConfigShowArgs)
         assert result.command.action.format == "json"
 
+    # Verifies: REQ-p00001-A
     def test_REQ_p00001_A_tyro_parses_config_get(self) -> None:
         """Tyro parses nested 'config get patterns.prefix' (positional key)."""
         result = tyro.cli(
@@ -162,6 +167,7 @@ class TestCliArgsDataclasses:
         assert isinstance(result.command.action, ConfigGetArgs)
         assert result.command.action.key == "patterns.prefix"
 
+    # Verifies: REQ-p00001-A
     def test_REQ_p00001_A_tyro_parses_mcp_serve(self) -> None:
         """Tyro parses nested 'mcp serve'."""
         result = tyro.cli(
@@ -172,6 +178,7 @@ class TestCliArgsDataclasses:
         assert isinstance(result.command.action, McpServeArgs)
         assert result.command.action.transport == "stdio"
 
+    # Verifies: REQ-p00001-A
     def test_REQ_p00001_A_tyro_parses_mcp_install(self) -> None:
         """Tyro parses 'mcp install --global' (maps to global_scope field)."""
         result = tyro.cli(
@@ -182,6 +189,7 @@ class TestCliArgsDataclasses:
         assert isinstance(result.command.action, McpInstallArgs)
         assert result.command.action.global_scope is True
 
+    # Verifies: REQ-p00001-A
     def test_REQ_p00001_A_tyro_parses_link_suggest(self) -> None:
         """Tyro parses 'link --format json' (single subcommand union)."""
         result = tyro.cli(
@@ -192,6 +200,7 @@ class TestCliArgsDataclasses:
         assert isinstance(result.command.action, LinkSuggestArgs)
         assert result.command.action.format == "json"
 
+    # Verifies: REQ-p00001-A
     def test_REQ_p00001_A_tyro_parses_rules_show(self) -> None:
         """Tyro parses nested 'rules show AI-AGENT.md' (positional file)."""
         result = tyro.cli(
@@ -202,6 +211,7 @@ class TestCliArgsDataclasses:
         assert isinstance(result.command.action, RulesShowArgs)
         assert result.command.action.file == "AI-AGENT.md"
 
+    # Verifies: REQ-p00001-A
     def test_REQ_p00001_A_global_args_verbose(self) -> None:
         """Verbose flag passes through on GlobalArgs."""
         result = tyro.cli(
@@ -211,6 +221,7 @@ class TestCliArgsDataclasses:
         assert result.verbose is True
         assert isinstance(result.command, ChecksArgs)
 
+    # Verifies: REQ-p00001-A
     def test_REQ_p00001_A_tyro_parses_install_local(self) -> None:
         """Tyro parses 'install' subcommand."""
         result = tyro.cli(
@@ -220,6 +231,7 @@ class TestCliArgsDataclasses:
         assert isinstance(result.command, InstallArgs)
         assert isinstance(result.command.action, InstallLocalArgs)
 
+    # Verifies: REQ-p00001-A
     def test_REQ_p00001_A_tyro_parses_uninstall_local(self) -> None:
         """Tyro parses 'uninstall' subcommand."""
         result = tyro.cli(
@@ -229,6 +241,7 @@ class TestCliArgsDataclasses:
         assert isinstance(result.command, UninstallArgs)
         assert isinstance(result.command.action, UninstallLocalArgs)
 
+    # Verifies: REQ-p00001-A
     def test_REQ_p00001_A_all_args_classes_are_dataclasses(self) -> None:
         """Every *Args class exported from args.py is a proper dataclass."""
         args_classes = [
@@ -276,6 +289,7 @@ class TestCliArgsDataclasses:
         for cls in args_classes:
             assert dataclasses.is_dataclass(cls), f"{cls.__name__} is not a dataclass"
 
+    # Verifies: REQ-p00001-A
     def test_REQ_p00001_A_command_groups_covers_all_subcommands(self) -> None:
         """Every subcommand in the Command Union has a COMMAND_GROUPS entry."""
         args = typing.get_args(Command)
@@ -296,6 +310,7 @@ class TestCliArgsDataclasses:
         extra = set(COMMAND_GROUPS) - subcommand_names
         assert not extra, f"Stale entries in COMMAND_GROUPS (not in Command Union): {extra}"
 
+    # Verifies: REQ-p00001-A
     def test_REQ_p00001_A_command_entries_covers_the_command_union(self) -> None:
         """iter_command_entries() names every command the Command Union declares."""
         declared = set()
@@ -316,6 +331,7 @@ class TestCliArgsDataclasses:
             [g for i, g in enumerate(seen_groups) if i == 0 or seen_groups[i - 1] != g]
         )
 
+    # Verifies: REQ-p00001-A
     def test_REQ_p00001_A_help_renders_the_shared_command_entries(self) -> None:
         """generate_help() presents exactly what iter_command_entries() returns.
 
@@ -331,6 +347,7 @@ class TestCliArgsDataclasses:
             )
             assert entry.group in help_text
 
+    # Verifies: REQ-p00001-A
     def test_REQ_p00001_A_nested_subcommands_reach_the_summary(self) -> None:
         """A command with nested subcommands lists them in its summary, not its description."""
         entries = {e.name: e for e in iter_command_entries()}
@@ -342,6 +359,7 @@ class TestCliArgsDataclasses:
         assert summary_only.actions == ()
         assert summary_only.summary == summary_only.description
 
+    # Verifies: REQ-p00001-A
     def test_REQ_p00001_A_generate_help_includes_all_commands(self) -> None:
         """generate_help() output contains every subcommand name."""
         help_text = generate_help("0.0.0")

@@ -50,6 +50,7 @@ def _node(rollup, *, status="Active", level="DEV"):
     return n
 
 
+# Verifies: REQ-d00258-A
 def test_REQ_d00258_A_tip_names_all_four_measures():
     """Every measure is named on hover, including the ones reading zero.
 
@@ -68,6 +69,7 @@ def test_REQ_d00258_A_tip_names_all_four_measures():
         assert word in tip, tip
 
 
+# Verifies: REQ-d00069-L
 def test_REQ_d00069_L_tip_reports_each_measure_in_its_own_right():
     """Two measures crediting the same assertion are each reported whole.
 
@@ -81,6 +83,7 @@ def test_REQ_d00069_L_tip_reports_each_measure_in_its_own_right():
     assert "conducted direct: 0" in tip, tip
 
 
+# Verifies: REQ-d00069-N
 def test_REQ_d00069_N_headline_standing_is_the_total_measure():
     """The badge headlines total: the assertion covered twice is covered once.
 
@@ -92,6 +95,7 @@ def test_REQ_d00069_N_headline_standing_is_the_total_measure():
     assert compute_coverage_tiers(node)["impl_tier"] == "full"
 
 
+# Verifies: REQ-d00069-N
 def test_REQ_d00069_N_conducted_evidence_alone_reaches_full():
     """Coverage conducted up a `Refines:` chain counts toward the headline.
 
@@ -106,6 +110,7 @@ def test_REQ_d00069_N_conducted_evidence_alone_reaches_full():
     assert "cited by name here: 0" in tiers["impl_tip"], tiers["impl_tip"]
 
 
+# Verifies: REQ-d00258-J
 def test_REQ_d00258_J_no_caveat_marker_anywhere_in_the_payload():
     """No dimension carries a `~`, in its tip or as a key of its own.
 

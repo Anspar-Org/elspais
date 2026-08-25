@@ -851,9 +851,8 @@ afterwards — the daemon is detached from its parent as it starts, so
 there is nothing left to infer from. It is resolved in this order:
 
     ELSPAIS_CLIENT_PID      an explicit declaration by a session or IDE
-        |                   (or its former name ELSPAIS_SPAWNER_PID,
-        |                    still honoured; always decisive; an unusable
-        |                    value means "no identity", not "keep looking")
+        |                   (always decisive; an unusable value means
+        |                    "no identity", not "keep looking")
         v
     nearest ancestor named 'claude', when CLAUDECODE is set
         |

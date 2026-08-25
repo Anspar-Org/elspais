@@ -341,7 +341,7 @@ def base_config(
     code_dirs = [code_dir] if isinstance(code_dir, str) else code_dir
 
     cfg: dict[str, Any] = {
-        "version": 3,
+        "version": 5,
         "cli_ttl": 2,
         "project": {
             "name": name,
@@ -450,7 +450,7 @@ def associate_config(
                 levels[code] = {"rank": 1, "letter": code[0], "implements": [code]}
 
     return {
-        "version": 3,
+        "version": 5,
         "project": {
             "name": name,
             "namespace": namespace,

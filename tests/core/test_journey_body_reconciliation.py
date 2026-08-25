@@ -55,6 +55,7 @@ class TestJourneyTitleReconciliation:
 
     NEW_TITLE = "Revised Login Flow"
 
+    # Verifies: REQ-d00131-L
     def test_REQ_d00131_L_update_title_reflects_in_rendered_body(self, journey_graph_from_disk):
         """Validates REQ-d00131-L: render_node() shows the live title, not the
         parse-time cache."""
@@ -67,6 +68,7 @@ class TestJourneyTitleReconciliation:
         rendered = render_node(journey)
         assert f"{CANONICAL_JOURNEY_ID}: {self.NEW_TITLE}" in rendered
 
+    # Verifies: REQ-d00131-L
     def test_REQ_d00131_L_update_title_moves_the_version(self, journey_graph_from_disk):
         """Validates REQ-d00131-L: the on-disk representation changed, so the
         version token must change -- a frozen token masks the edit."""
@@ -77,6 +79,7 @@ class TestJourneyTitleReconciliation:
 
         assert node_version(journey) != before
 
+    # Verifies: REQ-d00131-L
     def test_REQ_d00131_L_undo_restores_rendered_body_and_version(self, journey_graph_from_disk):
         """Validates REQ-d00131-L: undo symmetry -- undoing the title change
         restores the old rendered body byte-for-byte and the old token."""
@@ -106,6 +109,7 @@ class TestJourneyValidatesEdgeReconciliation:
     At the mutation API the journey is the ``source_id`` (child) argument.
     """
 
+    # Verifies: REQ-d00131-L
     def test_REQ_d00131_L_add_validates_edge_reflects_in_rendered_body(
         self, journey_graph_from_disk
     ):
@@ -120,6 +124,7 @@ class TestJourneyValidatesEdgeReconciliation:
         assert "REQ-p00003" in render_node(journey)
         assert node_version(journey) != before_version
 
+    # Verifies: REQ-d00131-L
     def test_REQ_d00131_L_delete_validates_edge_updates_render_and_version(
         self, journey_graph_from_disk
     ):
@@ -135,6 +140,7 @@ class TestJourneyValidatesEdgeReconciliation:
         assert render_node(journey) != before_render
         assert node_version(journey) != before_version
 
+    # Verifies: REQ-d00131-L
     def test_REQ_d00131_L_change_edge_kind_updates_render_and_version(
         self, journey_graph_from_disk
     ):
@@ -151,6 +157,7 @@ class TestJourneyValidatesEdgeReconciliation:
         assert render_node(journey) != before_render
         assert node_version(journey) != before_version
 
+    # Verifies: REQ-d00131-L
     def test_REQ_d00131_L_undo_of_edge_mutation_restores_render_and_version(
         self, journey_graph_from_disk
     ):

@@ -142,8 +142,9 @@ def test_scheduling_window(): ...
 
 Each repository keeps its own identifier configuration; the scan simply
 applies every member's grammar and reads the reference under the grammar of
-the repository that owns it. Test function names work the same way in
-underscore notation (`def test_window_CAL_d00007_B()`).
+the repository that owns it. A comment is the only thing that names a
+requirement -- a test function's own name never does, in any repository of
+the federation.
 
 An unresolved reference is always reported, carrying the text as written
 rather than being dropped. Which report it lands in depends on whether any

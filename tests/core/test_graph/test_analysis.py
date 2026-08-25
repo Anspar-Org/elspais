@@ -1,4 +1,4 @@
-# Verifies: REQ-d00124-A, REQ-d00124-B, REQ-d00124-C, REQ-d00124-D, REQ-d00124-E, REQ-d00124-F
+# Verifies: REQ-d00124-A, REQ-d00124-B, REQ-d00124-D, REQ-d00124-E, REQ-d00124-F, REQ-d00124-G
 """Tests for graph analysis module (foundational requirement prioritization).
 
 These tests validate the analysis functions that rank requirements by
@@ -7,6 +7,8 @@ and composite scoring.
 """
 
 from __future__ import annotations
+
+import pytest
 
 from elspais.graph.analysis import (
     analyze_centrality,
@@ -73,6 +75,7 @@ def _add_node(
 class TestAnalyzeCentrality:
     """Validates REQ-d00124-A: PageRank centrality with damping factor and convergence."""
 
+    # Verifies: REQ-d00124-A
     def test_REQ_d00124_A_hub_node_ranks_higher(self):
         """A node referenced by 3 independent subtrees should have higher
         centrality than a node deep in a single chain."""
@@ -97,6 +100,7 @@ class TestAnalyzeCentrality:
         # Hub has 3 children pointing to it -> higher centrality
         assert scores["REQ-HUB"] > scores["REQ-DEEP"]
 
+    # Verifies: REQ-d00124-A
     def test_REQ_d00124_A_damping_factor_affects_scores(self):
         """Different damping factors should produce different score distributions."""
         graph = _make_graph()
@@ -111,6 +115,7 @@ class TestAnalyzeCentrality:
         # With higher damping, more score flows to parents; with lower, more uniform
         assert scores_high["REQ-R"] != scores_low["REQ-R"]
 
+    # Verifies: REQ-d00124-A
     def test_REQ_d00124_A_scores_sum_to_approximately_one(self):
         """PageRank scores across all included nodes should sum to ~1.0."""
         graph = _make_graph()
@@ -128,6 +133,7 @@ class TestAnalyzeCentrality:
         total = sum(scores.values())
         assert abs(total - 1.0) < 0.05, f"Scores sum to {total}, expected ~1.0"
 
+    # Verifies: REQ-d00124-A
     def test_REQ_d00124_A_single_node_centrality(self):
         """A single-node graph should assign score 1.0 to that node."""
         graph = _make_graph()
@@ -146,6 +152,7 @@ class TestAnalyzeCentrality:
 class TestAnalyzeFanIn:
     """Validates REQ-d00124-B: Fan-in as distinct direct parent count."""
 
+    # Verifies: REQ-d00124-B
     def test_REQ_d00124_B_shared_node_has_higher_fan_in(self):
         """A node reachable from all 3 roots should have fan-in=3,
         while a node under only 1 root should have fan-in=1."""
@@ -173,6 +180,7 @@ class TestAnalyzeFanIn:
         assert fan_in["REQ-SHARED"] == 3
         assert fan_in["REQ-ISO"] == 1
 
+    # Verifies: REQ-d00124-B
     def test_REQ_d00124_B_root_node_fan_in_is_one(self):
         """A root node is only in its own subtree, so fan-in should be 1."""
         graph = _make_graph()
@@ -186,14 +194,15 @@ class TestAnalyzeFanIn:
 
 
 # ---------------------------------------------------------------------------
-# TestUncoveredDependents  (REQ-d00124-C)
+# TestUncoveredDependents  (REQ-d00124-D)
 # ---------------------------------------------------------------------------
 
 
 class TestUncoveredDependents:
-    """Validates REQ-d00124-C: Uncovered dependent counts (leaf reqs with zero coverage)."""
+    """Validates REQ-d00124-D: Uncovered dependent counts (leaf reqs with zero coverage)."""
 
-    def test_REQ_d00124_C_counts_uncovered_leaves(self):
+    # Verifies: REQ-d00124-D
+    def test_REQ_d00124_D_counts_uncovered_leaves(self):
         """Parent's uncovered_dependents should count leaves with referenced_pct=0."""
         graph = _make_graph()
         parent = _add_node(graph, "REQ-P", level="PRD", is_root=True, referenced_pct=100)
@@ -214,7 +223,8 @@ class TestUncoveredDependents:
         parent_score = next(s for s in report.ranked_nodes if s.node_id == "REQ-P")
         assert parent_score.uncovered_dependents == 2
 
-    def test_REQ_d00124_C_no_uncovered_when_all_covered(self):
+    # Verifies: REQ-d00124-D
+    def test_REQ_d00124_D_no_uncovered_when_all_covered(self):
         """When all leaves have coverage, uncovered_dependents should be 0."""
         graph = _make_graph()
         parent = _add_node(graph, "REQ-P", level="PRD", is_root=True, referenced_pct=100)
@@ -291,14 +301,15 @@ class TestUncoveredDependentsMeasure:
 
 
 # ---------------------------------------------------------------------------
-# TestCompositeScore  (REQ-d00124-D)
+# TestCompositeScore  (REQ-d00124-E)
 # ---------------------------------------------------------------------------
 
 
 class TestCompositeScore:
-    """Validates REQ-d00124-D: Composite score with normalizable weights."""
+    """Validates REQ-d00124-E: Composite score with normalizable weights."""
 
-    def test_REQ_d00124_D_composite_is_weighted_combination(self):
+    # Verifies: REQ-d00124-E
+    def test_REQ_d00124_E_composite_is_weighted_combination(self):
         """Composite score should reflect weighted combination of normalized metrics."""
         graph = _make_graph()
         root = _add_node(graph, "REQ-R", level="PRD", is_root=True, referenced_pct=100)
@@ -318,7 +329,8 @@ class TestCompositeScore:
             assert isinstance(ns.composite_score, float)
             assert ns.composite_score >= 0.0
 
-    def test_REQ_d00124_D_custom_weights_change_ranking(self):
+    # Verifies: REQ-d00124-E
+    def test_REQ_d00124_E_custom_weights_change_ranking(self):
         """Different weight vectors should produce different composite scores."""
         graph = _make_graph()
         root = _add_node(graph, "REQ-R", level="PRD", is_root=True, referenced_pct=100)
@@ -338,17 +350,65 @@ class TestCompositeScore:
         # At least one node should have a different score under different weights
         assert scores_a != scores_b
 
+    # Verifies: REQ-d00124-E
+    def test_REQ_d00124_E_three_weights_leave_neighborhood_unweighted(self):
+        """Three weights name centrality, fan-in and uncovered; the metric that
+        goes unnamed is neighborhood, and it is left out of the composite
+        rather than silently taking one of the three.
+
+        Which metric the third value belongs to is not something a caller can
+        read off the count, so it is pinned here: a three-weight ranking is the
+        four-weight ranking with a neighborhood weight of zero, exactly.
+        """
+        graph = _make_graph()
+        root = _add_node(graph, "REQ-R", level="PRD", is_root=True, referenced_pct=100)
+        c1 = _add_node(graph, "REQ-C1", level="OPS", referenced_pct=0)
+        c2 = _add_node(graph, "REQ-C2", level="DEV", referenced_pct=0)
+        root.link(c1, EdgeKind.IMPLEMENTS)
+        root.link(c2, EdgeKind.IMPLEMENTS)
+        c1.link(c2, EdgeKind.IMPLEMENTS)
+
+        three = analyze_foundations(graph, weights=(0.5, 0.3, 0.2))
+        four = analyze_foundations(graph, weights=(0.5, 0.3, 0.0, 0.2))
+
+        assert {s.node_id: s.composite_score for s in three.ranked_nodes} == {
+            s.node_id: s.composite_score for s in four.ranked_nodes
+        }
+
+    # Verifies: REQ-d00124-E
+    @pytest.mark.parametrize(
+        "weights",
+        [(1.0,), (0.5, 0.5), (0.25, 0.25, 0.25, 0.15, 0.1), ()],
+        ids=["one", "two", "five", "none"],
+    )
+    def test_REQ_d00124_E_a_weight_vector_of_any_other_count_is_refused(self, weights):
+        """A weight vector that names neither three metrics nor four is refused.
+
+        The caller has said something about the ranking that cannot be carried
+        out. Filling the gap with a default, or dropping the extra, would
+        produce a ranking under weights nobody asked for and report it as the
+        caller's own.
+        """
+        graph = _make_graph()
+        root = _add_node(graph, "REQ-R", level="PRD", is_root=True, referenced_pct=100)
+        child = _add_node(graph, "REQ-C1", level="OPS", referenced_pct=0)
+        root.link(child, EdgeKind.IMPLEMENTS)
+
+        with pytest.raises(ValueError, match="three or four values"):
+            analyze_foundations(graph, weights=weights)
+
 
 # ---------------------------------------------------------------------------
-# TestNodeFiltering  (REQ-d00124-E)
+# TestNodeFiltering  (REQ-d00124-F)
 # ---------------------------------------------------------------------------
 
 
 class TestNodeFiltering:
-    """Validates REQ-d00124-E: Node filtering by NodeKind, assertions in
+    """Validates REQ-d00124-F: Node filtering by NodeKind, assertions in
     computation but not output."""
 
-    def test_REQ_d00124_E_default_filter_includes_req_and_assertion(self):
+    # Verifies: REQ-d00124-F
+    def test_REQ_d00124_F_default_filter_includes_req_and_assertion(self):
         """Default include_kinds should be REQUIREMENT and ASSERTION."""
         graph = _make_graph()
         req = _add_node(
@@ -377,7 +437,8 @@ class TestNodeFiltering:
         assert "REQ-R" in centrality
         assert "REQ-R-A" in centrality
 
-    def test_REQ_d00124_E_ranked_output_excludes_assertions(self):
+    # Verifies: REQ-d00124-F
+    def test_REQ_d00124_F_ranked_output_excludes_assertions(self):
         """Ranked output (top_foundations, ranked_nodes) should contain only
         REQUIREMENT nodes, not assertions."""
         graph = _make_graph()
@@ -399,7 +460,8 @@ class TestNodeFiltering:
                 f"Node {ns.node_id} is {node.kind}, expected REQUIREMENT"
             )
 
-    def test_REQ_d00124_E_assertions_count_toward_uncovered(self):
+    # Verifies: REQ-d00124-F
+    def test_REQ_d00124_F_assertions_count_toward_uncovered(self):
         """Uncovered assertions should feed into parent requirement's
         uncovered_dependents count."""
         graph = _make_graph()
@@ -422,14 +484,15 @@ class TestNodeFiltering:
 
 
 # ---------------------------------------------------------------------------
-# TestActionableLeaves  (REQ-d00124-F)
+# TestActionableLeaves  (REQ-d00124-G)
 # ---------------------------------------------------------------------------
 
 
 class TestActionableLeaves:
-    """Validates REQ-d00124-F: Actionable leaves ranked by ancestor composite scores."""
+    """Validates REQ-d00124-G: Actionable leaves ranked by ancestor composite scores."""
 
-    def test_REQ_d00124_F_leaf_under_important_parent_ranks_higher(self):
+    # Verifies: REQ-d00124-G
+    def test_REQ_d00124_G_leaf_under_important_parent_ranks_higher(self):
         """Uncovered leaves under more important (higher-scoring) parents
         should rank higher in actionable_leaves."""
         graph = _make_graph()
@@ -465,7 +528,8 @@ class TestActionableLeaves:
             f"Expected REQ-LEAF-IMP (idx {idx_imp}) to rank before REQ-LEAF-MIN (idx {idx_min})"
         )
 
-    def test_REQ_d00124_F_covered_leaves_included(self):
+    # Verifies: REQ-d00124-G
+    def test_REQ_d00124_G_covered_leaves_included(self):
         """All leaves appear in actionable_leaves regardless of coverage."""
         graph = _make_graph()
         root = _add_node(graph, "REQ-R", level="PRD", is_root=True, referenced_pct=100)
@@ -476,7 +540,8 @@ class TestActionableLeaves:
         leaf_ids = [s.node_id for s in report.actionable_leaves]
         assert "REQ-COV" in leaf_ids
 
-    def test_REQ_d00124_F_deprecated_excluded(self):
+    # Verifies: REQ-d00124-G
+    def test_REQ_d00124_G_deprecated_excluded(self):
         """Deprecated requirements should not appear in any output."""
         graph = _make_graph()
         root = _add_node(graph, "REQ-R", level="PRD", is_root=True, referenced_pct=100)
@@ -490,7 +555,8 @@ class TestActionableLeaves:
         assert "REQ-ACT" in all_ids
         assert "REQ-DEP" not in all_ids
 
-    def test_REQ_d00124_F_top_n_limits_results(self):
+    # Verifies: REQ-d00124-G
+    def test_REQ_d00124_G_top_n_limits_results(self):
         """The top_n parameter should limit the number of results in
         top_foundations and actionable_leaves."""
         graph = _make_graph()

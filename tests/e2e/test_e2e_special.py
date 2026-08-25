@@ -60,6 +60,7 @@ class TestInitCreatesToml:
 class TestInitThenHealth:
     """Validates REQ-d00085-A: init followed by health passes."""
 
+    # Verifies: REQ-d00085-A
     def test_REQ_d00085_A_init_then_health_passes(self, tmp_path):
         init_result = run_elspais("init", cwd=tmp_path)
         assert init_result.returncode == 0, f"init failed: {init_result.stderr}"
@@ -79,6 +80,7 @@ class TestInitThenHealth:
 class TestInitTemplate:
     """Validates REQ-d00085-A: init creates a valid config."""
 
+    # Verifies: REQ-d00085-A
     def test_REQ_d00085_A_init_creates_valid_config(self, tmp_path):
         init_result = run_elspais("init", cwd=tmp_path)
         assert init_result.returncode == 0, f"init failed: {init_result.stderr}"
@@ -98,11 +100,12 @@ class TestInitTemplate:
 class TestFixThenHealth:
     """Validates REQ-d00085-A: fix corrects hashes, then health passes."""
 
+    # Verifies: REQ-d00085-A
     def test_REQ_d00085_A_fix_then_health_on_fixture(self, tmp_path):
         # Create minimal config
         config = tmp_path / ".elspais.toml"
         config.write_text(
-            'version = 3\n[project]\nname = "test"\nnamespace = "REQ"\n\n'
+            'version = 5\n[project]\nname = "test"\nnamespace = "REQ"\n\n'
             '[scanning.spec]\ndirectories = ["spec"]\n'
         )
 
@@ -139,6 +142,7 @@ class TestFixThenHealth:
 class TestTraceFormatConsistency:
     """Validates REQ-d00085-A: trace JSON and CSV both produce valid output."""
 
+    # Verifies: REQ-d00085-A
     def test_REQ_d00085_A_trace_json_csv_same_count(self, tmp_path):
         json_out = tmp_path / "trace_json"
         result_json = run_elspais("trace", "--format", "json", "--output", str(json_out))
@@ -374,7 +378,7 @@ class TestH6SectionDepthUnfixable:
             "*End* *H6 Test* | **Hash**: -\n"
         )
         (tmp_path / ".elspais.toml").write_text(
-            'version = 3\n[project]\nname = "test"\nnamespace = "REQ"\n\n'
+            'version = 5\n[project]\nname = "test"\nnamespace = "REQ"\n\n'
             '[scanning.spec]\ndirectories = ["spec"]\n'
         )
         return tmp_path
@@ -420,7 +424,7 @@ def _make_active_project_no_author(tmp_path: Path) -> tuple[Path, dict[str, str]
     # Config: id_source = "git" so gh CLI is never consulted. hash_current
     # is on so an Active req with a stale hash triggers the changelog path.
     (tmp_path / ".elspais.toml").write_text(
-        "version = 3\n"
+        "version = 5\n"
         "\n"
         "[project]\n"
         'name = "no-author"\n'
@@ -660,6 +664,7 @@ class TestDaemonClientLiveness:
     starts at all.
     """
 
+    # Verifies: REQ-o00074-A
     def test_REQ_o00074_A_daemon_exits_after_client_dies(self, tmp_path):
         import os
         import sys
@@ -736,6 +741,7 @@ class TestDaemonClientLiveness:
                 except OSError:
                     pass
 
+    # Verifies: REQ-o00074-C
     def test_REQ_o00074_C_explicit_restart_records_no_client(self, tmp_path):
         """`elspais daemon restart` is an explicit start: the daemon keeps
         TTL-only lifetime and records no client identity, even when the
@@ -783,6 +789,7 @@ class TestDaemonClientLiveness:
                 except (OSError, ValueError, KeyError):
                     pass
 
+    # Verifies: REQ-o00074-F
     def test_REQ_o00074_F_daemon_exits_with_idle_timeout_disabled(self, tmp_path):
         """Validates REQ-o00074-F: the termination obligation holds under every
         idle-timeout configuration, including one in which the idle timeout
@@ -865,6 +872,7 @@ class TestDaemonClientLiveness:
                 except OSError:
                     pass
 
+    # Verifies: REQ-o00074-E
     def test_REQ_o00074_E_adopted_client_keeps_the_daemon_then_lets_it_go(self, tmp_path):
         """Validates REQ-o00074-E: a client that begins using a running daemon
         is recorded alongside its existing clients; the daemon keeps serving
@@ -965,6 +973,7 @@ class TestDaemonClientLiveness:
                 except OSError:
                     pass
 
+    # Verifies: REQ-o00074-I
     def test_REQ_o00074_I_daemon_saves_pending_work_before_terminating(self, tmp_path):
         """Validates REQ-o00074-I: a daemon terminating with no client present
         writes the changes it holds to disk rather than destroying them, and
@@ -1075,6 +1084,7 @@ class TestDaemonClientLiveness:
                 except OSError:
                     pass
 
+    # Verifies: REQ-o00074-E
     def test_REQ_o00074_E_cli_reusing_a_daemon_records_itself_as_a_client(self, tmp_path):
         """Validates REQ-o00074-E: a client that begins using an already-running
         daemon is recorded alongside the daemon's existing clients.
@@ -1225,6 +1235,7 @@ class TestStoppingALiveDaemonAccountsForItsWork:
     claim about itself, and discloses it.
     """
 
+    # Verifies: REQ-o00074-I
     def test_REQ_o00074_I_the_instructed_discard_keeps_the_work_off_disk(self, tmp_path):
         import os
         import sys
@@ -1265,6 +1276,7 @@ class TestStoppingALiveDaemonAccountsForItsWork:
                 except OSError:
                     pass
 
+    # Verifies: REQ-o00074-I
     def test_REQ_o00074_I_stop_request_carrying_no_instruction_saves(self, tmp_path):
         """The negative half, on the path an operator actually drives. A stop
         request that says nothing about the work is not an instruction to
@@ -1307,6 +1319,7 @@ class TestStoppingALiveDaemonAccountsForItsWork:
                 except OSError:
                     pass
 
+    # Verifies: REQ-o00074-I
     def test_REQ_o00074_I_an_external_signal_leaves_the_work_on_disk(self, tmp_path):
         """The negative half. Nothing instructed this daemon to discard, so the
         signal that stops it is not read as one: the work is written and the
@@ -1350,6 +1363,7 @@ class TestStoppingALiveDaemonAccountsForItsWork:
                 except OSError:
                     pass
 
+    # Verifies: REQ-o00074-L
     def test_REQ_o00074_L_work_lost_to_a_kill_is_reported_by_the_next_server(self, tmp_path):
         """The ending nothing inside the process can describe. A daemon killed
         outright writes nothing and says nothing; the record it left before the
@@ -1434,6 +1448,7 @@ class TestTheRestartSurfaceOffersTheTwoAnswers:
     opposite.
     """
 
+    # Verifies: REQ-o00074-I
     def test_REQ_o00074_I_the_help_text_offers_both_answers(self, tmp_path):
         result = run_elspais("daemon", "--help", cwd=tmp_path)
 
@@ -1443,6 +1458,7 @@ class TestTheRestartSurfaceOffersTheTwoAnswers:
         assert "--message" in result.stdout
         assert "--force" not in result.stdout, "the retired flag is still offered"
 
+    # Verifies: REQ-o00074-I
     def test_REQ_o00074_I_the_retired_flag_is_refused(self, tmp_path):
         _daemon_project(tmp_path, "retired-flag-project")
 

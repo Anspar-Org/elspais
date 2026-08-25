@@ -317,7 +317,7 @@ The system SHALL do something.
 def sample_config_dict() -> dict:
     """Return sample configuration dictionary."""
     return {
-        "version": 3,
+        "version": 5,
         "project": {
             "name": "test-project",
             "namespace": "REQ",

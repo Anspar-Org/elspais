@@ -244,6 +244,7 @@ class TestMultiAssertionPipelineExpansion:
 
         return builder.build()
 
+    # Verifies: REQ-d00081-D
     def test_REQ_d00081_D_spec_multi_assertion_expands_to_individual_edges(
         self, multi_assertion_spec_dir
     ):
@@ -282,6 +283,7 @@ class TestMultiAssertionPipelineExpansion:
             "C",
         ], f"Expected assertion_targets ['A', 'B', 'C'], got {sorted(all_targets)}"
 
+    # Verifies: REQ-d00081-E
     def test_REQ_d00081_E_code_refs_resolve_through_same_builder(self, multi_assertion_spec_dir):
         """Code references resolve through the same builder as spec references.
 
@@ -334,6 +336,7 @@ class TestMultiAssertionPipelineExpansion:
             "C",
         ], f"Spec multi-assertion should also expand, got {sorted(spec_targets)}"
 
+    # Verifies: REQ-d00081-G
     def test_REQ_d00081_G_empty_separator_disables_expansion(self, multi_assertion_spec_dir):
         """When multi_assertion_separator is empty, no expansion occurs.
 

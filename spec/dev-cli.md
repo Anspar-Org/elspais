@@ -57,10 +57,12 @@ G. A reference containing no multi-*Assertion* separator character SHALL pass th
 
 ### Rationale
 
-The previous implementation hardcoded expansion in RequirementParser only, using a regex that assumed uppercase letter labels and hyphen separators. This created silent failures when code comments (`# Implements: REQ-x-A-B-C`) and test names (`test_REQ_x_A_B_C`) were not expanded. A dedicated separator character eliminates ambiguity regardless of the configured *Assertion* label style (uppercase, numeric, alphanumeric).
+Expansion belongs to the identifier grammar rather than to any one parser: a compact reference means the same set of assertions in a requirement's metadata and in a code or test annotation, and a reader that expands in one place and not the other loses references silently. A dedicated separator character keeps the expansion unambiguous whatever *Assertion* label style is configured (uppercase, numeric, alphanumeric).
 
 ### Changelog
 
+- 2026-08-24 | b1812806 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: sync changelog hash
+- 2026-08-24 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-66: rationale states why expansion belongs to the grammar, not which parsers once missed it
 - 2026-08-12 | b1812806 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-10 | c40a462e | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-10 | 67ee3df9 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash

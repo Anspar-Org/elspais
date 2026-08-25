@@ -263,7 +263,7 @@ class TestRepositoryIdentity:
 
 
 _BROKEN_TOML = "this is not = = toml [[[\n"
-_INVALID_TOML = "version = 3\n\n[levels.prd]\nrank = 1\nimplements = []\n"
+_INVALID_TOML = "version = 5\n\n[levels.prd]\nrank = 1\nimplements = []\n"
 
 
 def _federation_with_bad_associate(tmp_path: Path, kind: str) -> tuple[Path, Path]:
@@ -336,7 +336,7 @@ class TestCrossRepoIdentifierCollision:
 
         def _fixed_prefix_config(name: str, namespace: str, associates: str = "") -> str:
             return (
-                f'version = 3\n\n[project]\nname = "{name}"\n'
+                f'version = 5\n\n[project]\nname = "{name}"\n'
                 f'namespace = "{namespace}"\n\n'
                 "[levels.prd]\nrank = 1\nimplements = []\n\n"
                 '[levels.dev]\nrank = 2\nimplements = ["prd", "dev"]\n\n'
@@ -532,7 +532,7 @@ class TestDeclarationRequiredFields:
             tmp_path,
             "app",
             config_text=(
-                'version = 3\n\n[project]\nname = "app"\nnamespace = "APP"\n\n'
+                'version = 5\n\n[project]\nname = "app"\nnamespace = "APP"\n\n'
                 "[levels.prd]\nrank = 1\nimplements = []\n\n"
                 '[levels.dev]\nrank = 2\nimplements = ["prd", "dev"]\n\n'
                 f'[associates.lib]\npath = "../lib"\nnamespace = "LIB"\ngit = "{remote}"\n'

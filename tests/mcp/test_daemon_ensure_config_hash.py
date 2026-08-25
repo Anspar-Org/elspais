@@ -135,6 +135,7 @@ def _agreeing_record(tmp_path: Path) -> dict:
     }
 
 
+# Verifies: REQ-o00076-I
 def test_REQ_o00076_I_agreement_is_not_a_difference(tmp_path: Path):
     """Validates REQ-o00076-I: a daemon like the client is left alone.
 
@@ -152,6 +153,7 @@ def test_REQ_o00076_I_agreement_is_not_a_difference(tmp_path: Path):
     assert difference.describe() == ""
 
 
+# Verifies: REQ-o00076-I
 def test_REQ_o00076_I_version_difference_reported_alone(tmp_path: Path):
     """Validates REQ-o00076-I: a moved version is reported on its own.
 
@@ -172,6 +174,7 @@ def test_REQ_o00076_I_version_difference_reported_alone(tmp_path: Path):
     assert difference
 
 
+# Verifies: REQ-o00076-I
 def test_REQ_o00076_I_executable_difference_reported_alone(tmp_path: Path):
     """Validates REQ-o00076-I: a reinstalled program is its own difference.
 
@@ -193,6 +196,7 @@ def test_REQ_o00076_I_executable_difference_reported_alone(tmp_path: Path):
     assert difference
 
 
+# Verifies: REQ-o00076-I
 def test_REQ_o00076_I_config_difference_reported_alone(tmp_path: Path):
     """Validates REQ-o00076-I: an edited configuration is its own difference.
 
@@ -211,6 +215,7 @@ def test_REQ_o00076_I_config_difference_reported_alone(tmp_path: Path):
     assert difference
 
 
+# Verifies: REQ-o00076-I
 def test_REQ_o00076_I_absent_executable_hash_is_not_a_difference(tmp_path: Path):
     """Validates REQ-o00076-I: an unrecorded program identity is not a mismatch.
 
@@ -228,6 +233,7 @@ def test_REQ_o00076_I_absent_executable_hash_is_not_a_difference(tmp_path: Path)
     assert not difference
 
 
+# Verifies: REQ-o00076-I
 def test_REQ_o00076_I_no_record_is_no_difference(tmp_path: Path):
     """Validates REQ-o00076-I: nothing serving means nothing to differ from.
 
@@ -241,6 +247,7 @@ def test_REQ_o00076_I_no_record_is_no_difference(tmp_path: Path):
     assert not serving_difference({}, tmp_path)
 
 
+# Verifies: REQ-o00076-J
 @pytest.mark.parametrize(
     "difference,expected",
     [
@@ -270,6 +277,7 @@ def test_REQ_o00076_J_describe_names_each_difference(difference, expected):
         assert absent not in described
 
 
+# Verifies: REQ-o00076-J
 def test_REQ_o00076_J_bool_is_true_only_when_something_differs():
     """Validates REQ-o00076-J: each field alone is enough to disclose.
 
@@ -283,6 +291,7 @@ def test_REQ_o00076_J_bool_is_true_only_when_something_differs():
     assert ServingDifference(None, False, True)
 
 
+# Verifies: REQ-o00076-J
 def test_REQ_o00076_J_notification_reaches_stderr(capsys):
     """Validates REQ-o00076-J: the disclosure goes where it cannot corrupt output.
 
@@ -300,6 +309,7 @@ def test_REQ_o00076_J_notification_reaches_stderr(capsys):
     assert "is holding unsaved changes" in captured.err
 
 
+# Verifies: REQ-o00076-J
 def test_REQ_o00076_J_nothing_is_said_when_nothing_differs(capsys):
     """Validates REQ-o00076-J: no difference, no disclosure.
 
@@ -314,6 +324,7 @@ def test_REQ_o00076_J_nothing_is_said_when_nothing_differs(capsys):
     assert captured.err == ""
 
 
+# Verifies: REQ-o00076-I
 def test_REQ_o00076_I_written_record_carries_the_program_identity(tmp_path: Path):
     """Validates REQ-o00076-I: a daemon records which program it is running.
 
@@ -347,6 +358,7 @@ class _FakeResponse:
         return self._payload
 
 
+# Verifies: REQ-o00076-J
 @pytest.mark.parametrize(
     "payload,expected",
     [
@@ -366,6 +378,7 @@ def test_REQ_o00076_J_unsaved_work_follows_the_reported_count(payload, expected)
         assert daemon_has_unsaved_work({"port": 12345}) is expected
 
 
+# Verifies: REQ-o00076-J
 def test_REQ_o00076_J_unreachable_daemon_holds_nothing():
     """Validates REQ-o00076-J: an unanswerable count is not treated as work.
 
@@ -380,6 +393,7 @@ def test_REQ_o00076_J_unreachable_daemon_holds_nothing():
         assert daemon_has_unsaved_work({"port": 12345}) is False
 
 
+# Verifies: REQ-o00076-J
 def test_REQ_o00076_J_ensure_daemon_keeps_a_differing_daemon_holding_work(tmp_path: Path, capsys):
     """Validates REQ-o00076-J: work outranks the program that holds it.
 

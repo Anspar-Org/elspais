@@ -30,6 +30,7 @@ def _fake_completed(returncode: int = 0, stderr: str = "") -> types.SimpleNamesp
 class TestResourcePathFlag:
     """Validates REQ-p00080-C: --resource-path forwarded to pandoc."""
 
+    # Verifies: REQ-p00080-C
     def test_REQ_p00080_C_no_resource_paths_omits_flag(self, tmp_path):
         """When resource_paths is None, the pandoc command must not include
         a --resource-path argument at all.
@@ -59,6 +60,7 @@ class TestResourcePathFlag:
         matches = [a for a in cmd if isinstance(a, str) and a.startswith("--resource-path")]
         assert matches == [], f"Expected no --resource-path arg, got: {matches}"
 
+    # Verifies: REQ-p00080-C
     def test_REQ_p00080_C_resource_paths_joined_with_os_pathsep(self, tmp_path):
         """When resource_paths is provided, pandoc receives exactly one
         --resource-path=<os.pathsep-joined> argument.
@@ -92,6 +94,7 @@ class TestResourcePathFlag:
             f"Expected exactly one --resource-path arg equal to {expected!r}, got: {matches}"
         )
 
+    # Verifies: REQ-p00080-C
     def test_REQ_p00080_C_empty_resource_paths_omits_flag(self, tmp_path):
         """An empty list (falsy) should be treated the same as None and
         omit the flag entirely -- pandoc rejects an empty --resource-path.

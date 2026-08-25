@@ -109,10 +109,10 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
 
 
 def _to_namespace(global_args: GlobalArgs) -> argparse.Namespace:
-    """Convert Tyro GlobalArgs to argparse.Namespace for backward compat.
+    """Convert Tyro GlobalArgs to the argparse.Namespace commands run on.
 
-    Merges global fields and command-specific fields into a flat namespace
-    so existing command run() functions work without signature changes.
+    Merges global fields and command-specific fields into one flat namespace,
+    which is the shape every command's run() reads its arguments from.
     """
     ns = argparse.Namespace()
 

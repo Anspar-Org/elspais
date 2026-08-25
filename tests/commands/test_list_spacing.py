@@ -10,7 +10,7 @@ from elspais.graph.factory import build_graph
 from elspais.graph.relations import EdgeKind
 
 CONFIG_TOML = """\
-version = 3
+version = 5
 
 [project]
 name = "test"
@@ -71,6 +71,7 @@ def _make_project(tmp_path: Path, spec_content: str) -> Path:
 class TestREQ_d00131_D_list_spacing_canonicalization:
     """Validates REQ-d00131-D: list spacing in REMAINDER is canonicalized at build time."""
 
+    # Verifies: REQ-d00131-D
     def test_REQ_d00131_D_missing_list_spacing_marked_dirty(self, tmp_path):
         """List items without preceding blank line should mark requirement dirty."""
         project = _make_project(tmp_path, SPEC_NO_LIST_SPACING)
@@ -84,6 +85,7 @@ class TestREQ_d00131_D_list_spacing_canonicalization:
         reasons = node.get_field("parse_dirty_reasons") or []
         assert "list_spacing" in reasons, f"Expected 'list_spacing' in {reasons}"
 
+    # Verifies: REQ-d00131-D
     def test_REQ_d00131_D_proper_list_spacing_not_dirty(self, tmp_path):
         """Lists with proper spacing should not trigger list_spacing dirty."""
         project = _make_project(tmp_path, SPEC_GOOD_LIST_SPACING)
@@ -97,6 +99,7 @@ class TestREQ_d00131_D_list_spacing_canonicalization:
         reasons = node.get_field("parse_dirty_reasons") or []
         assert "list_spacing" not in reasons
 
+    # Verifies: REQ-d00131-D
     def test_REQ_d00131_D_render_save_fixes_list_spacing(self, tmp_path):
         """render_save should produce canonical list spacing."""
         from elspais.graph.render import render_save
@@ -123,6 +126,7 @@ class TestREQ_d00131_D_list_spacing_canonicalization:
                     f"{lines[i - 1]!r} -> {lines[i]!r}"
                 )
 
+    # Verifies: REQ-d00131-D
     def test_REQ_d00131_D_remainder_text_canonicalized(self, tmp_path):
         """REMAINDER node text should have canonical list spacing after build."""
         project = _make_project(tmp_path, SPEC_NO_LIST_SPACING)

@@ -24,6 +24,7 @@ from typing import TYPE_CHECKING, Any
 from elspais.config.schema import ElspaisConfig
 from elspais.config.status_roles import StatusRole
 from elspais.graph.aggregation import EvidenceResult
+from elspais.graph.parsers.directives import counted_assertion_labels
 from elspais.graph.reference_faults import FaultClass, FaultCode
 from elspais.utilities.findings import (
     NO_KNOWN_REMEDY,
@@ -1340,6 +1341,60 @@ def check_spec_no_assertions(graph: FederatedGraph, config: dict[str, Any]) -> H
     )
 
 
+# Implements: REQ-p00002-F
+def check_spec_unknown_directive(graph: FederatedGraph, config: dict[str, Any]) -> HealthCheck:
+    """Report *Assertions* opening with a directive the tool does not recognize.
+
+    A directive is an instruction to the parser, not prose. Absorbing an
+    unrecognized one into the *Assertion*'s text would leave an author
+    believing they had said something to the tool that the tool never read --
+    so it is reported, with the name as written and where it was written, and
+    the *Assertion* otherwise reads as an ordinary one.
+    """
+    from elspais.graph import NodeKind
+    from elspais.graph.parsers.directives import read_directive
+
+    severity = severity_for("spec.unknown_directive", config)
+    if severity == Severity.OFF:
+        return skipped_check("spec.unknown_directive", "Unrecognized assertion directives")
+
+    findings: list[HealthFinding] = []
+    for node in graph.nodes_by_kind(NodeKind.ASSERTION):
+        directive = read_directive(node.get_label())
+        if directive is None or directive.recognized:
+            continue
+        fn = node.file_node()
+        findings.append(
+            HealthFinding(
+                message=(
+                    f"{node.id}: unrecognized parsing directive "
+                    f"{directive.opener}{directive.name}{directive.closer} -- "
+                    f"the assertion counts as an ordinary one"
+                ),
+                node_id=node.id,
+                file_path=fn.get_field("relative_path") if fn else None,
+                line=node.get_field("parse_line"),
+            )
+        )
+
+    if findings:
+        return HealthCheck(
+            name="spec.unknown_directive",
+            passed=False,
+            message=f"{len(findings)} assertion(s) carry an unrecognized parsing directive",
+            category="spec",
+            severity=severity,
+            findings=findings,
+        )
+    return HealthCheck(
+        name="spec.unknown_directive",
+        passed=True,
+        message="No unrecognized assertion parsing directives",
+        category="spec",
+        severity=severity,
+    )
+
+
 # Implements: REQ-p00004
 def check_spec_hash_integrity(
     graph: FederatedGraph, config: dict[str, Any] | None = None
@@ -1658,7 +1713,8 @@ def check_spec_index_current(
             category="spec",
         )
 
-    # Byte-level mismatch — still provide the legacy ID-diff breakdown for context.
+    # Byte-level mismatch — say which identifiers differ, so a reader sees what
+    # moved rather than only that the file is out of date.
     import re
 
     # Both grammars come from where they are defined: the repository's own
@@ -2599,6 +2655,12 @@ def run_spec_checks(
         checks.append(
             _annotate_findings(
                 check_spec_no_assertions(repo_graph, repo_config),
+                entry.name,
+            )
+        )
+        checks.append(
+            _annotate_findings(
+                check_spec_unknown_directive(repo_graph, repo_config),
                 entry.name,
             )
         )
@@ -3856,7 +3918,6 @@ def check_uat_coverage(
     from elspais.config import status_expects_implementation
     from elspais.graph import NodeKind
     from elspais.graph.aggregation import work_verdict
-    from elspais.graph.relations import EdgeKind
 
     # REQ-d00258-C: the uncovered-findings walk gates on the SAME coverage
     # inclusion resolver as ``aggregate_dimension`` above, so the sums and the
@@ -3872,11 +3933,8 @@ def check_uat_coverage(
         # reaches, so the two cannot disagree about a requirement: a blanket
         # journey used to satisfy this check while gaps listed the assertions
         # it named none of.
-        labels = [
-            child.get_field("label", "")
-            for child in node.iter_children(edge_kinds={EdgeKind.STRUCTURES})
-            if child.kind == NodeKind.ASSERTION
-        ]
+        # Implements: REQ-p00017-G
+        labels = counted_assertion_labels(node, structural=True)
         verdict = work_verdict(rollup, "uat_coverage", labels)
         if not verdict.attached:
             uncovered.append(
@@ -5379,7 +5437,7 @@ def _print_text_report(
     verbose: bool = False,
     include_passing_details: bool = False,
 ) -> None:
-    """Print human-readable health report (legacy wrapper)."""
+    """Print a health report as text, for a caller holding no _ReportData."""
     data = _build_report_data(report, verbose=verbose)
     print(_render_text(data))
 

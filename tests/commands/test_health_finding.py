@@ -25,6 +25,7 @@ from elspais.commands.health import (
 class TestHealthCheckFindings:
     """Validates REQ-d00085-I: HealthCheck carries a findings list."""
 
+    # Verifies: REQ-d00085-I
     def test_REQ_d00085_I_healthcheck_findings_accepts_finding_instances(self) -> None:
         """HealthCheck.findings accepts HealthFinding instances."""
         f1 = HealthFinding(message="ref broken", file_path="spec/a.md", line=10)
@@ -44,6 +45,7 @@ class TestHealthCheckFindings:
 class TestHealthFindingSerialization:
     """Validates REQ-d00085-I: to_dict() serialization includes findings."""
 
+    # Verifies: REQ-d00085-I
     def test_REQ_d00085_I_report_to_dict_includes_findings(self) -> None:
         """HealthReport.to_dict() includes findings in each check's serialization."""
         f1 = HealthFinding(message="bad ref", file_path="spec/a.md", line=3)
@@ -108,6 +110,7 @@ class TestHealthFindingRendererCompat:
         )
         return HealthReport(checks=[check_fail, check_pass])
 
+    # Verifies: REQ-d00085-I
     def test_REQ_d00085_I_text_rendering_unaffected(self, capsys: pytest.CaptureFixture) -> None:
         """Text rendering output is the same whether findings are present or not."""
         report_with = self._make_report_with_findings()
@@ -121,6 +124,7 @@ class TestHealthFindingRendererCompat:
 
         assert output_with == output_without
 
+    # Verifies: REQ-d00085-I
     def test_REQ_d00085_I_markdown_rendering_unaffected(self) -> None:
         """Markdown rendering is the same with or without findings."""
         report_with = self._make_report_with_findings()

@@ -10,7 +10,7 @@ import os
 import subprocess
 from pathlib import Path
 
-_MIN_TOML = """version = 3
+_MIN_TOML = """version = 5
 
 [project]
 name = "{name}"

@@ -125,7 +125,8 @@ class DetachedGuardMiddleware:
         await self.app(scope, receive, send)
 
 
-# Re-export for backward compatibility (used by tests/core/test_viewer_config.py)
+# `_extract_viewer_config` is imported above from routes_ui and re-exported
+# here, where callers of the app module reach it.
 __all__ = ["create_app", "_extract_viewer_config"]
 
 

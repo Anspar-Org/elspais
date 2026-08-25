@@ -11,7 +11,6 @@ OUTPUT FORMATS:
 - csv: The same values, comma-separated with proper escaping
 - html: Basic styled HTML table
 - json: Full requirement data including body, assertions, hash, file_path
-- both: Generates both markdown and csv (legacy mode)
 
 REPORT PRESETS (--report):
 - minimal: ID, Title, Status only (quick overview)

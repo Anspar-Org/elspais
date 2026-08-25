@@ -138,6 +138,7 @@ def page(viewer_url):
 class TestViewerPageLoad:
     """Validates REQ-d00010: viewer page loads correctly in a browser."""
 
+    # Verifies: REQ-d00010-A
     def test_REQ_d00010_A_page_loads_without_js_errors(self, page, viewer_url):
         js_errors = []
         page.on("pageerror", lambda err: js_errors.append(str(err)))
@@ -151,6 +152,7 @@ class TestViewerPageLoad:
             "Page has no title or body content"
         )
 
+    # Verifies: REQ-d00010-A
     def test_REQ_d00010_A_page_has_content(self, page, viewer_url):
         page.goto(viewer_url, wait_until="networkidle")
 
@@ -163,6 +165,7 @@ class TestViewerPageLoad:
 class TestViewerAPI:
     """Validates REQ-d00010: viewer API endpoints return correct data."""
 
+    # Verifies: REQ-d00010-A
     def test_REQ_d00010_A_api_status_returns_json(self, page, viewer_url):
         resp = page.request.get(f"{viewer_url}/api/status")
         assert resp.ok, f"GET /api/status returned {resp.status}"
@@ -172,6 +175,7 @@ class TestViewerAPI:
             f"Expected 'node_counts' in status response, got keys: {list(data.keys())}"
         )
 
+    # Verifies: REQ-d00010-A
     def test_REQ_d00010_A_api_search_returns_results(self, page, viewer_url):
         resp = page.request.get(f"{viewer_url}/api/search?q=REQ")
         assert resp.ok, f"GET /api/search returned {resp.status}"
@@ -184,6 +188,7 @@ class TestViewerAPI:
 class TestViewerInteraction:
     """Validates REQ-d00010: viewer UI interactions work correctly."""
 
+    # Verifies: REQ-d00010-A
     def test_REQ_d00010_A_search_filters_tree(self, page, viewer_url):
         page.goto(viewer_url, wait_until="networkidle")
 
@@ -201,6 +206,7 @@ class TestViewerInteraction:
         body_text = page.text_content("body") or ""
         assert "REQ" in body_text, "Tree did not update after search"
 
+    # Verifies: REQ-d00010-A
     def test_REQ_d00010_A_requirement_click_shows_detail(self, page, viewer_url):
         page.goto(viewer_url, wait_until="networkidle")
 
@@ -311,6 +317,7 @@ class TestTableRendering:
     """Validates REQ-d00010: pipe tables in spec body sections render as
     HTML tables with a full grid in the live viewer."""
 
+    # Verifies: REQ-d00010
     @pytest.mark.browser
     @pytest.mark.e2e
     def test_REQ_d00010_table_renders_with_full_grid(self, page_tables, viewer_url_tables):

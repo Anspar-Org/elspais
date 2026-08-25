@@ -29,7 +29,7 @@ class TestGetAssociateSpecDirectoriesCanonicalRoot:
         """
         repo_dir.mkdir(parents=True, exist_ok=True)
         toml_content = (
-            "version = 3\n"
+            "version = 5\n"
             "[project]\n"
             'name = "test-associate"\n'
             f'namespace = "{namespace}"\n'
@@ -40,6 +40,7 @@ class TestGetAssociateSpecDirectoriesCanonicalRoot:
         (repo_dir / ".elspais.toml").write_text(toml_content, encoding="utf-8")
         (repo_dir / "spec").mkdir(exist_ok=True)
 
+    # Verifies: REQ-p00005-F
     def test_REQ_p00005_F_relative_path_resolves_from_canonical_root(self, tmp_path: Path):
         """Relative associate path resolves from canonical_root."""
         canonical_root = tmp_path / "canonical"
@@ -65,6 +66,7 @@ class TestGetAssociateSpecDirectoriesCanonicalRoot:
         assert len(spec_dirs) == 1
         assert spec_dirs[0] == canonical_root / "associates" / "test-repo" / "spec"
 
+    # Verifies: REQ-p00005-F
     def test_REQ_p00005_F_absolute_path_ignores_canonical_root(self, tmp_path: Path):
         """Absolute associate path is used directly regardless of canonical_root."""
         canonical_root = tmp_path / "canonical"
@@ -89,6 +91,7 @@ class TestGetAssociateSpecDirectoriesCanonicalRoot:
         assert len(spec_dirs) == 1
         assert spec_dirs[0] == associate_repo / "spec"
 
+    # Verifies: REQ-p00005-F
     def test_REQ_p00005_F_none_canonical_root_uses_base_path_for_relative(self, tmp_path: Path):
         """When canonical_root is None, absolute paths still resolve correctly."""
         base = tmp_path / "base"

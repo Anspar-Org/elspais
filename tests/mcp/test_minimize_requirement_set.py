@@ -150,6 +150,7 @@ class TestMinimizeRequirementSetHelper:
     Validates REQ-d00077-A, REQ-d00077-B, REQ-d00077-C, REQ-d00077-D, REQ-d00077-E, REQ-d00077-F:
     """
 
+    # Verifies: REQ-o00069-A
     def test_REQ_o00069_A_empty_input_returns_empty_result(self, empty_graph):
         """REQ-o00069-A: Empty input returns empty result with zero stats."""
         from elspais.mcp.server import _minimize_requirement_set
@@ -163,6 +164,7 @@ class TestMinimizeRequirementSetHelper:
         assert result["stats"]["minimal_count"] == 0
         assert result["stats"]["pruned_count"] == 0
 
+    # Verifies: REQ-o00069-B
     def test_REQ_o00069_B_single_req_unchanged(self, linear_chain_graph):
         """REQ-o00069-B: Single requirement returns it unchanged in minimal_set."""
         from elspais.mcp.server import _minimize_requirement_set
@@ -181,6 +183,7 @@ class TestMinimizeRequirementSetHelper:
         assert result["stats"]["minimal_count"] == 1
         assert result["stats"]["pruned_count"] == 0
 
+    # Verifies: REQ-o00069-C
     def test_REQ_o00069_C_linear_chain_prunes_ancestor(self, linear_chain_graph):
         """REQ-o00069-C: Linear chain A->B->C with input {A, C} prunes C (the ancestor).
 
@@ -203,6 +206,7 @@ class TestMinimizeRequirementSetHelper:
         assert result["stats"]["minimal_count"] == 1
         assert result["stats"]["pruned_count"] == 1
 
+    # Verifies: REQ-o00069-D
     def test_REQ_o00069_D_diamond_yields_leaf(self, diamond_graph):
         """REQ-o00069-D: Diamond — C impl A+B, both impl P; {A,B,C,P} -> {C}.
 
@@ -225,6 +229,7 @@ class TestMinimizeRequirementSetHelper:
         assert result["stats"]["minimal_count"] == 1
         assert result["stats"]["pruned_count"] == 3
 
+    # Verifies: REQ-d00077-A
     def test_REQ_d00077_A_unknown_ids_in_not_found(self, linear_chain_graph):
         """REQ-d00077-A: Unknown IDs appear in not_found list."""
         from elspais.mcp.server import _minimize_requirement_set
@@ -242,6 +247,7 @@ class TestMinimizeRequirementSetHelper:
         assert len(result["minimal_set"]) == 1
         assert result["minimal_set"][0]["id"] == "REQ-d00001"
 
+    # Verifies: REQ-d00077-B
     def test_REQ_d00077_B_implements_only_excludes_refines(self, mixed_edges_graph):
         """REQ-d00077-B: edge_kinds={IMPLEMENTS} does not follow REFINES edges.
 
@@ -266,6 +272,7 @@ class TestMinimizeRequirementSetHelper:
         assert minimal_ids == {"REQ-o00001", "REQ-d00001"}
         assert result["pruned"] == []
 
+    # Verifies: REQ-d00077-C
     def test_REQ_d00077_C_default_edge_kinds_follows_both(self, mixed_edges_graph):
         """REQ-d00077-C: Default edge_kinds={IMPLEMENTS, REFINES} follows both edge types.
 
@@ -286,6 +293,7 @@ class TestMinimizeRequirementSetHelper:
         assert minimal_ids == {"REQ-d00001"}
         assert pruned_ids == {"REQ-o00001"}
 
+    # Verifies: REQ-d00077-D
     def test_REQ_d00077_D_pruned_has_superseded_by(self, linear_chain_graph):
         """REQ-d00077-D: Pruned entries include superseded_by list."""
         from elspais.mcp.server import _minimize_requirement_set
@@ -302,6 +310,7 @@ class TestMinimizeRequirementSetHelper:
         assert "superseded_by" in pruned_entry
         assert "REQ-d00001" in pruned_entry["superseded_by"]
 
+    # Verifies: REQ-d00077-E
     def test_REQ_d00077_E_stats_structure(self, diamond_graph):
         """REQ-d00077-E: Returns stats with input_count, minimal_count, pruned_count."""
         from elspais.mcp.server import _minimize_requirement_set
@@ -317,6 +326,7 @@ class TestMinimizeRequirementSetHelper:
         assert stats["minimal_count"] == 1  # REQ-d00001
         assert stats["pruned_count"] == 1  # REQ-o00001 pruned
 
+    # Verifies: REQ-o00069-E
     def test_REQ_o00069_E_no_edges_between_inputs_keeps_all(self, disjoint_graph):
         """REQ-o00069-E: If no edges exist between inputs, all are kept."""
         from elspais.mcp.server import _minimize_requirement_set
@@ -346,6 +356,7 @@ class TestMinimizeRequirementSetMCPTool:
     Validates REQ-d00077-F:
     """
 
+    # Verifies: REQ-d00077-F
     def test_REQ_d00077_F_tool_is_registered(self, linear_chain_graph):
         """REQ-d00077-F: minimize_requirement_set is registered as an MCP tool."""
         pytest.importorskip("mcp")
@@ -356,6 +367,7 @@ class TestMinimizeRequirementSetMCPTool:
         tool_names = [t.name for t in server._tool_manager._tools.values()]
         assert "minimize_requirement_set" in tool_names
 
+    # Verifies: REQ-d00077-F
     def test_REQ_d00077_F_wrapper_delegates_to_helper(self, linear_chain_graph):
         """REQ-d00077-F: MCP wrapper delegates to _minimize_requirement_set helper.
 
@@ -387,6 +399,7 @@ class TestMinimizeRequirementSetMCPTool:
             assert call_args[0][1] == ["REQ-d00001"]
             assert EdgeKind.IMPLEMENTS in call_args[0][2]
 
+    # Verifies: REQ-d00077-F
     def test_REQ_d00077_F_parses_implements_edge_kind(self, linear_chain_graph):
         """REQ-d00077-F: Parses 'implements' edge_kinds string to {EdgeKind.IMPLEMENTS}."""
         pytest.importorskip("mcp")
@@ -410,6 +423,7 @@ class TestMinimizeRequirementSetMCPTool:
             parsed_kinds = mock_helper.call_args[0][2]
             assert parsed_kinds == {EdgeKind.IMPLEMENTS}
 
+    # Verifies: REQ-d00077-F
     def test_REQ_d00077_F_parses_default_edge_kinds(self, linear_chain_graph):
         """REQ-d00077-F: Default edge_kinds='implements,refines' parses both."""
         pytest.importorskip("mcp")

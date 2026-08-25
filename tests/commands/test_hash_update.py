@@ -64,7 +64,7 @@ def git_repo_with_stale_hash(tmp_path):
     config_file = tmp_path / ".elspais.toml"
     config_file.write_text(
         """
-version = 3
+version = 5
 
 [project]
 name = "test-project"
@@ -137,9 +137,10 @@ class TestUpdateHashInFile:
     Validates REQ-p00004-A: compute and verify content hashes for change detection.
     """
 
+    # Verifies: REQ-p00004-A
     def test_REQ_p00004_A_updates_hash_in_file(self, git_repo_with_stale_hash):
         """Update a hash value in a spec file."""
-        from elspais.mcp.file_mutations import update_hash_in_file
+        from elspais.utilities.spec_writer import update_hash_in_file
 
         spec_file = git_repo_with_stale_hash / "spec" / "requirements.md"
 
@@ -157,9 +158,10 @@ class TestUpdateHashInFile:
         # Old hash should be gone
         assert "deadbeef" not in content
 
+    # Verifies: REQ-p00004-A
     def test_REQ_p00004_A_returns_error_when_req_not_found(self, git_repo_with_stale_hash):
         """Return descriptive error when requirement is not found in file."""
-        from elspais.mcp.file_mutations import update_hash_in_file
+        from elspais.utilities.spec_writer import update_hash_in_file
 
         spec_file = git_repo_with_stale_hash / "spec" / "requirements.md"
 
@@ -173,9 +175,10 @@ class TestUpdateHashInFile:
         assert "REQ-NONEXISTENT" in result
         assert "not found" in result
 
+    # Verifies: REQ-p00004-A
     def test_REQ_p00004_A_handles_different_title_formats(self, tmp_path):
         """Handle various title formats in the End marker."""
-        from elspais.mcp.file_mutations import update_hash_in_file
+        from elspais.utilities.spec_writer import update_hash_in_file
 
         spec_file = tmp_path / "test.md"
         spec_file.write_text(
@@ -205,9 +208,10 @@ A. The system SHALL do something.
         content = spec_file.read_text()
         assert "**Hash**: deadbeef" in content
 
+    # Verifies: REQ-p00004-A
     def test_REQ_p00004_A_returns_error_when_no_end_marker(self, tmp_path):
         """Return descriptive error when requirement has no End marker."""
-        from elspais.mcp.file_mutations import update_hash_in_file
+        from elspais.utilities.spec_writer import update_hash_in_file
 
         spec_file = tmp_path / "test.md"
         spec_file.write_text(
@@ -231,9 +235,10 @@ A. The system SHALL do something.
         assert "REQ-p00001" in result
         assert "End marker" in result or "Hash" in result
 
+    # Verifies: REQ-p00004-A
     def test_REQ_p00004_A_returns_error_when_end_marker_belongs_to_other_req(self, tmp_path):
         """Return error when End marker is past the next requirement header."""
-        from elspais.mcp.file_mutations import update_hash_in_file
+        from elspais.utilities.spec_writer import update_hash_in_file
 
         spec_file = tmp_path / "test.md"
         spec_file.write_text(
@@ -265,6 +270,7 @@ A. The system SHALL do something else.
         assert "REQ-p00001" in result
         assert "different requirement" in result
 
+    # Verifies: REQ-p00004-A
     @pytest.mark.parametrize(
         "placeholder",
         ["XXXXXXXX", "TODO", "________", "PLACEHOLDER", "TBD"],
@@ -272,7 +278,7 @@ A. The system SHALL do something else.
     )
     def test_REQ_p00004_A_updates_placeholder_hashes(self, tmp_path, placeholder):
         """Placeholder hash values (XXXXXXXX, TODO, ________) are matched and replaced."""
-        from elspais.mcp.file_mutations import update_hash_in_file
+        from elspais.utilities.spec_writer import update_hash_in_file
 
         spec_file = tmp_path / "test.md"
         spec_file.write_text(
@@ -311,6 +317,7 @@ class TestUpdateHashesCommand:
     Validates REQ-p00001-C: detect changes to requirements using content hashing.
     """
 
+    # Verifies: REQ-p00001-C
     def test_REQ_p00001_C_dry_run_shows_changes(self, git_repo_with_stale_hash, capsys):
         """--dry-run shows what would be changed but doesn't modify files."""
         import argparse
@@ -341,6 +348,7 @@ class TestUpdateHashesCommand:
         content = spec_file.read_text()
         assert "deadbeef" in content  # Original hash still there
 
+    # Verifies: REQ-p00001-C
     def test_REQ_p00001_C_updates_all_stale_hashes(self, git_repo_with_stale_hash, capsys):
         """Update all stale hashes in spec files."""
         import argparse
@@ -368,6 +376,7 @@ class TestUpdateHashesCommand:
         assert "deadbeef" not in content
         assert "00000000" not in content
 
+    # Verifies: REQ-p00001-C
     @patch("elspais.utilities.git.get_author_info", return_value=_MOCK_AUTHOR)
     def test_REQ_p00001_C_updates_specific_requirement(
         self, mock_author, git_repo_with_stale_hash, capsys
@@ -414,6 +423,7 @@ class TestHashComputedFromRawBody:
     content (metadata, intro text, assertions).
     """
 
+    # Verifies: REQ-p00004-A
     def test_REQ_p00004_A_hash_includes_intro_text(self, tmp_path):
         """In full-text mode, hash should change when intro text changes.
 
@@ -453,7 +463,7 @@ class TestHashComputedFromRawBody:
         config = tmp_path / ".elspais.toml"
         config.write_text(
             """
-version = 3
+version = 5
 
 [project]
 name = "test"
@@ -531,6 +541,7 @@ A. The system SHALL do something.
             f"but got different hash in content:\n{content}"
         )
 
+    # Verifies: REQ-p00004-A
     def test_REQ_p00004_A_hash_changes_when_intro_changes(self, tmp_path):
         """In full-text mode, changing intro text should change the hash.
 
@@ -570,7 +581,7 @@ A. The system SHALL do something.
         config = tmp_path / ".elspais.toml"
         config.write_text(
             """
-version = 3
+version = 5
 
 [project]
 name = "test"

@@ -49,7 +49,7 @@ from elspais.graph.render import render_file, render_save
 SEPARATOR_PAIRS = [("-", "+"), ("/", "&")]
 
 _CONFIG = """\
-version = 3
+version = 5
 
 [project]
 name = "journey-validates-placement"

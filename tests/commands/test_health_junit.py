@@ -53,6 +53,7 @@ def _parse_xml(xml_str: str) -> ET.Element:
 class TestRenderJunit:
     """Validates REQ-d00085-H: JUnit XML rendering."""
 
+    # Verifies: REQ-d00085-H
     def test_REQ_d00085_H_produces_valid_xml_with_testsuites_root(self) -> None:
         """_render_junit must return valid XML with a <testsuites> root element."""
         report = HealthReport()
@@ -67,6 +68,7 @@ class TestRenderJunit:
     # 2. Category -> <testsuite>
     # -------------------------------------------------------------------
 
+    # Verifies: REQ-d00085-H
     def test_REQ_d00085_H_category_maps_to_testsuite(self) -> None:
         """Each distinct category must produce a <testsuite> with matching name."""
         report = HealthReport()
@@ -83,6 +85,7 @@ class TestRenderJunit:
     # 3. Check -> <testcase> with name and classname
     # -------------------------------------------------------------------
 
+    # Verifies: REQ-d00085-H
     def test_REQ_d00085_H_check_maps_to_testcase(self) -> None:
         """Each check must become a <testcase> with correct name and classname."""
         report = HealthReport()
@@ -99,6 +102,7 @@ class TestRenderJunit:
     # 4. Passing check -> empty <testcase>
     # -------------------------------------------------------------------
 
+    # Verifies: REQ-d00085-H
     def test_REQ_d00085_H_passing_check_has_no_failure(self) -> None:
         """A passing check must produce a <testcase> with no child elements."""
         report = HealthReport()
@@ -116,6 +120,7 @@ class TestRenderJunit:
     # 5. Failed error -> <failure>
     # -------------------------------------------------------------------
 
+    # Verifies: REQ-d00085-H
     def test_REQ_d00085_H_failed_error_produces_failure_element(self) -> None:
         """A failed check with severity=error must produce a <failure> child."""
         report = HealthReport()
@@ -140,6 +145,7 @@ class TestRenderJunit:
     # 6. Failed warning -> <system-err> with WARNING prefix
     # -------------------------------------------------------------------
 
+    # Verifies: REQ-d00085-H
     def test_REQ_d00085_H_failed_warning_produces_system_err(self) -> None:
         """A failed check with severity=warning must produce <system-err>
         containing a WARNING prefix."""
@@ -165,6 +171,7 @@ class TestRenderJunit:
     # 7. Info -> <system-out>
     # -------------------------------------------------------------------
 
+    # Verifies: REQ-d00085-H
     def test_REQ_d00085_H_info_check_produces_system_out(self) -> None:
         """A check with severity=info must produce a <system-out> element."""
         report = HealthReport()
@@ -188,6 +195,7 @@ class TestRenderJunit:
     # 8. _format_report dispatches to junit
     # -------------------------------------------------------------------
 
+    # Verifies: REQ-d00085-H
     def test_REQ_d00085_H_format_report_dispatches_junit(self) -> None:
         """_format_report with format='junit' must produce JUnit XML."""
         report = HealthReport()
@@ -203,6 +211,7 @@ class TestRenderJunit:
     # 9. Testsuite counts are correct
     # -------------------------------------------------------------------
 
+    # Verifies: REQ-d00085-H
     def test_REQ_d00085_H_testsuite_counts(self) -> None:
         """Each <testsuite> must have correct tests/failures/errors counts."""
         report = HealthReport()
@@ -222,6 +231,7 @@ class TestRenderJunit:
     # 10. Empty report -> valid XML
     # -------------------------------------------------------------------
 
+    # Verifies: REQ-d00085-H
     def test_REQ_d00085_H_empty_report_produces_valid_xml(self) -> None:
         """An empty report must still produce valid XML with <testsuites>."""
         report = HealthReport()

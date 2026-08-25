@@ -23,7 +23,7 @@ def _build_repro(spec_body: str) -> Path:
     (repo / ".elspais.toml").write_text(
         textwrap.dedent(
             """
-        version = 3
+        version = 5
         [project]
         name = "repro"
         namespace = "URS"

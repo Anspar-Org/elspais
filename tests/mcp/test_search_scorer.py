@@ -94,18 +94,21 @@ class TestFieldWeightHierarchy:
     keyword substring (25) > body match (10).
     """
 
+    # Verifies: REQ-d00061-L
     def test_REQ_d00061_L_id_match_scores_100(self):
         """REQ-d00061-L: A match in the node ID field produces a score of 100."""
         node = _make_node(node_id="REQ-d00099", title="Unrelated Title")
         query = _simple_query("d00099")
         assert score_node(node, query) == 100.0
 
+    # Verifies: REQ-d00061-L
     def test_REQ_d00061_L_title_match_scores_50(self):
         """REQ-d00061-L: A match in the title field produces a score of 50."""
         node = _make_node(node_id="REQ-x00001", title="Platform Security")
         query = _simple_query("security")
         assert score_node(node, query) == 50.0
 
+    # Verifies: REQ-d00061-L
     def test_REQ_d00061_L_keyword_exact_match_scores_40(self):
         """REQ-d00061-L: An exact keyword match (=prefix) produces a score of 40."""
         node = _make_node(
@@ -116,6 +119,7 @@ class TestFieldWeightHierarchy:
         query = _exact_keyword_query("encryption")
         assert score_node(node, query) == 40.0
 
+    # Verifies: REQ-d00061-L
     def test_REQ_d00061_L_keyword_substring_match_scores_25(self):
         """REQ-d00061-L: A keyword substring match produces a score of 25."""
         node = _make_node(
@@ -126,6 +130,7 @@ class TestFieldWeightHierarchy:
         query = _simple_query("encrypt")
         assert score_node(node, query) == 25.0
 
+    # Verifies: REQ-d00061-L
     def test_REQ_d00061_L_body_match_scores_10(self):
         """REQ-d00061-L: A match in the body field produces a score of 10."""
         node = _make_node(
@@ -136,12 +141,14 @@ class TestFieldWeightHierarchy:
         query = _simple_query("aes-256")
         assert score_node(node, query) == 10.0
 
+    # Verifies: REQ-d00061-L
     def test_REQ_d00061_L_id_beats_title(self):
         """REQ-d00061-L: When term matches both ID and title, highest weight (ID=100) wins."""
         node = _make_node(node_id="REQ-security", title="security overview")
         query = _simple_query("security")
         assert score_node(node, query) == 100.0
 
+    # Verifies: REQ-d00061-L
     def test_REQ_d00061_L_title_beats_keyword(self):
         """REQ-d00061-L: When term matches both title and keyword, title weight (50) wins."""
         node = _make_node(
@@ -152,6 +159,7 @@ class TestFieldWeightHierarchy:
         query = _simple_query("security")
         assert score_node(node, query) == 50.0
 
+    # Verifies: REQ-d00061-L
     def test_REQ_d00061_L_keyword_beats_body(self):
         """REQ-d00061-L: When term matches both keyword and body, keyword weight (25) wins."""
         node = _make_node(
@@ -175,6 +183,7 @@ class TestExclusionReturnsZero:
     Validates REQ-d00061-L, REQ-d00061-M:
     """
 
+    # Verifies: REQ-d00061-L
     def test_REQ_d00061_L_exclusion_in_id_returns_zero(self):
         """REQ-d00061-L: Exclusion matching in ID returns score 0."""
         node = _make_node(node_id="REQ-d00099", title="Some Title")
@@ -185,6 +194,7 @@ class TestExclusionReturnsZero:
         )
         assert score_node(node, query) == 0.0
 
+    # Verifies: REQ-d00061-L
     def test_REQ_d00061_L_exclusion_in_body_returns_zero(self):
         """REQ-d00061-L: Exclusion matching in body returns score 0."""
         node = _make_node(
@@ -199,6 +209,7 @@ class TestExclusionReturnsZero:
         )
         assert score_node(node, query) == 0.0
 
+    # Verifies: REQ-d00061-L
     def test_REQ_d00061_L_exclusion_only_no_match_returns_zero(self):
         """REQ-d00061-L: Exclusion-only query with no match still returns 0 (no positive terms)."""
         node = _make_node(node_id="REQ-x00001", title="Good Title")
@@ -219,6 +230,7 @@ class TestPhraseMissingReturnsZero:
     Validates REQ-d00061-L, REQ-d00061-M:
     """
 
+    # Verifies: REQ-d00061-L
     def test_REQ_d00061_L_phrase_not_found_returns_zero(self):
         """REQ-d00061-L: When a required phrase is not in any field, score is 0."""
         node = _make_node(
@@ -229,6 +241,7 @@ class TestPhraseMissingReturnsZero:
         query = _phrase_query("missing phrase")
         assert score_node(node, query) == 0.0
 
+    # Verifies: REQ-d00061-L
     def test_REQ_d00061_L_phrase_found_returns_positive(self):
         """REQ-d00061-L: When a phrase is found, score is positive (1.0 for phrase-only)."""
         node = _make_node(
@@ -239,6 +252,7 @@ class TestPhraseMissingReturnsZero:
         query = _phrase_query("platform security")
         assert score_node(node, query) == 1.0
 
+    # Verifies: REQ-d00061-L
     def test_REQ_d00061_L_phrase_and_term_both_must_match(self):
         """REQ-d00061-L: When phrase is missing but term matches, score is still 0."""
         node = _make_node(
@@ -265,12 +279,14 @@ class TestAndGroupNotSatisfied:
     Validates REQ-d00061-L, REQ-d00061-M:
     """
 
+    # Verifies: REQ-d00061-L
     def test_REQ_d00061_L_single_and_group_no_match(self):
         """REQ-d00061-L: A single AND-group with no match returns 0."""
         node = _make_node(node_id="REQ-x00001", title="Platform Security")
         query = _simple_query("nonexistent")
         assert score_node(node, query) == 0.0
 
+    # Verifies: REQ-d00061-L
     def test_REQ_d00061_L_one_and_group_fails_returns_zero(self):
         """REQ-d00061-L: If any AND-group has no match, total score is 0."""
         node = _make_node(node_id="REQ-x00001", title="Platform Security")
@@ -289,6 +305,7 @@ class TestMultipleAndGroupsSum:
     Validates REQ-d00061-L, REQ-d00061-M:
     """
 
+    # Verifies: REQ-d00061-L
     def test_REQ_d00061_L_two_and_groups_sum(self):
         """REQ-d00061-L: Two AND-groups each matching in title sum to 100."""
         node = _make_node(
@@ -299,6 +316,7 @@ class TestMultipleAndGroupsSum:
         # Each term matches in title (50 each) -> 50 + 50 = 100
         assert score_node(node, query) == 100.0
 
+    # Verifies: REQ-d00061-L
     def test_REQ_d00061_L_and_groups_different_fields_sum(self):
         """REQ-d00061-L: AND-groups matching in different fields sum their weights."""
         node = _make_node(
@@ -310,6 +328,7 @@ class TestMultipleAndGroupsSum:
         query = _simple_query("d00099", "body")
         assert score_node(node, query) == 110.0
 
+    # Verifies: REQ-d00061-L
     def test_REQ_d00061_L_three_and_groups_sum(self):
         """REQ-d00061-L: Three matching AND-groups produce correct sum."""
         node = _make_node(
@@ -333,6 +352,7 @@ class TestOrGroupBestScore:
     Validates REQ-d00061-L, REQ-d00061-M:
     """
 
+    # Verifies: REQ-d00061-L
     def test_REQ_d00061_L_or_group_picks_best(self):
         """REQ-d00061-L: OR-group returns the highest score among matching terms."""
         node = _make_node(
@@ -345,6 +365,7 @@ class TestOrGroupBestScore:
         query = _or_query("platform", "encryption")
         assert score_node(node, query) == 50.0
 
+    # Verifies: REQ-d00061-L
     def test_REQ_d00061_L_or_group_one_matches(self):
         """REQ-d00061-L: OR-group with only one matching term uses that score."""
         node = _make_node(
@@ -355,12 +376,14 @@ class TestOrGroupBestScore:
         query = _or_query("platform", "nonexistent")
         assert score_node(node, query) == 50.0
 
+    # Verifies: REQ-d00061-L
     def test_REQ_d00061_L_or_group_none_match_returns_zero(self):
         """REQ-d00061-L: OR-group where no term matches returns 0."""
         node = _make_node(node_id="REQ-x00001", title="Platform")
         query = _or_query("nonexistent", "alsonot")
         assert score_node(node, query) == 0.0
 
+    # Verifies: REQ-d00061-L
     def test_REQ_d00061_L_or_group_prefers_id_over_body(self):
         """REQ-d00061-L: OR-group with ID match and body match picks ID (100)."""
         node = _make_node(
@@ -386,18 +409,21 @@ class TestMatchesNode:
     Validates REQ-d00061-L, REQ-d00061-M:
     """
 
+    # Verifies: REQ-d00061-M
     def test_REQ_d00061_M_matches_node_true_on_positive_score(self):
         """REQ-d00061-M: matches_node returns True when score > 0."""
         node = _make_node(node_id="REQ-d00099", title="Test")
         query = _simple_query("d00099")
         assert matches_node(node, query) is True
 
+    # Verifies: REQ-d00061-M
     def test_REQ_d00061_M_matches_node_false_on_zero_score(self):
         """REQ-d00061-M: matches_node returns False when score == 0."""
         node = _make_node(node_id="REQ-x00001", title="Test")
         query = _simple_query("nonexistent")
         assert matches_node(node, query) is False
 
+    # Verifies: REQ-d00061-M
     def test_REQ_d00061_M_matches_node_false_on_exclusion(self):
         """REQ-d00061-M: matches_node returns False when exclusion kills score."""
         node = _make_node(node_id="REQ-d00099", title="Test")
@@ -420,6 +446,7 @@ class TestFieldParameterRestriction:
     Validates REQ-d00061-L, REQ-d00061-M:
     """
 
+    # Verifies: REQ-d00061-L
     def test_REQ_d00061_L_field_id_only_scores_id(self):
         """REQ-d00061-L: field='id' only scores against the ID field."""
         node = _make_node(
@@ -432,6 +459,7 @@ class TestFieldParameterRestriction:
         score = score_node(node, query, field="id")
         assert score == 100.0
 
+    # Verifies: REQ-d00061-L
     def test_REQ_d00061_L_field_id_misses_title_match(self):
         """REQ-d00061-L: field='id' does not score title matches."""
         node = _make_node(
@@ -441,6 +469,7 @@ class TestFieldParameterRestriction:
         query = _simple_query("security")
         assert score_node(node, query, field="id") == 0.0
 
+    # Verifies: REQ-d00061-L
     def test_REQ_d00061_L_field_title_only_scores_title(self):
         """REQ-d00061-L: field='title' only scores against the title field."""
         node = _make_node(
@@ -452,12 +481,14 @@ class TestFieldParameterRestriction:
         score = score_node(node, query, field="title")
         assert score == 50.0
 
+    # Verifies: REQ-d00061-L
     def test_REQ_d00061_L_field_title_misses_id_match(self):
         """REQ-d00061-L: field='title' does not score ID matches."""
         node = _make_node(node_id="REQ-d00099", title="Unrelated")
         query = _simple_query("d00099")
         assert score_node(node, query, field="title") == 0.0
 
+    # Verifies: REQ-d00061-L
     def test_REQ_d00061_L_field_keywords_only_scores_keywords(self):
         """REQ-d00061-L: field='keywords' only scores against keywords."""
         node = _make_node(
@@ -469,6 +500,7 @@ class TestFieldParameterRestriction:
         score = score_node(node, query, field="keywords")
         assert score == 25.0
 
+    # Verifies: REQ-d00061-L
     def test_REQ_d00061_L_field_keywords_exact_only(self):
         """REQ-d00061-L: field='keywords' with exact term uses exact weight (40)."""
         node = _make_node(
@@ -480,6 +512,7 @@ class TestFieldParameterRestriction:
         score = score_node(node, query, field="keywords")
         assert score == 40.0
 
+    # Verifies: REQ-d00061-L
     def test_REQ_d00061_L_field_body_only_scores_body(self):
         """REQ-d00061-L: field='body' only scores against the body field."""
         node = _make_node(
@@ -491,6 +524,7 @@ class TestFieldParameterRestriction:
         score = score_node(node, query, field="body")
         assert score == 10.0
 
+    # Verifies: REQ-d00061-L
     def test_REQ_d00061_L_field_body_misses_title_match(self):
         """REQ-d00061-L: field='body' does not score title matches."""
         node = _make_node(
@@ -501,6 +535,7 @@ class TestFieldParameterRestriction:
         query = _simple_query("aes")
         assert score_node(node, query, field="body") == 0.0
 
+    # Verifies: REQ-d00061-L
     def test_REQ_d00061_L_field_all_searches_every_field(self):
         """REQ-d00061-L: field='all' searches across all fields and picks best weight."""
         node = _make_node(
@@ -525,6 +560,7 @@ class TestEmptyQuery:
     Validates REQ-d00061-L, REQ-d00061-M:
     """
 
+    # Verifies: REQ-d00061-L
     def test_REQ_d00061_L_empty_query_returns_zero(self):
         """REQ-d00061-L: An empty ParsedQuery returns score 0."""
         node = _make_node(node_id="REQ-d00099", title="Anything")
@@ -532,6 +568,7 @@ class TestEmptyQuery:
         assert query.is_empty is True
         assert score_node(node, query) == 0.0
 
+    # Verifies: REQ-d00061-M
     def test_REQ_d00061_M_empty_query_matches_node_false(self):
         """REQ-d00061-M: matches_node with empty query returns False."""
         node = _make_node(node_id="REQ-d00099", title="Anything")

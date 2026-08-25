@@ -36,6 +36,7 @@ def _make_entry(
 class TestTermDictionary:
     """Validates REQ-d00220-A+B+C+D: TermDictionary CRUD and iteration."""
 
+    # Verifies: REQ-d00220-A
     def test_REQ_d00220_A_add_stores_entry(self) -> None:
         """add() stores an entry that lookup() can retrieve."""
         td = TermDictionary()
@@ -47,6 +48,7 @@ class TestTermDictionary:
         assert result.term == "Electronic Record"
         assert result.definition == entry.definition
 
+    # Verifies: REQ-d00220-A
     def test_REQ_d00220_A_add_returns_none_first_time(self) -> None:
         """add() returns None when the term is new (no duplicate)."""
         td = TermDictionary()
@@ -54,6 +56,7 @@ class TestTermDictionary:
         result = td.add(entry)
         assert result is None
 
+    # Verifies: REQ-d00220-A
     def test_REQ_d00220_A_add_duplicate_returns_existing(self) -> None:
         """Adding a term that already exists returns the existing entry."""
         td = TermDictionary()
@@ -69,6 +72,7 @@ class TestTermDictionary:
         assert found is not None
         assert found.definition == "First definition."
 
+    # Verifies: REQ-d00220-B
     def test_REQ_d00220_B_lookup_case_insensitive(self) -> None:
         """lookup() performs case-insensitive matching."""
         td = TermDictionary()
@@ -79,11 +83,13 @@ class TestTermDictionary:
         assert td.lookup("ELECTRONIC RECORD") is entry
         assert td.lookup("Electronic record") is entry
 
+    # Verifies: REQ-d00220-B
     def test_REQ_d00220_B_lookup_missing_returns_none(self) -> None:
         """lookup() returns None for a term not in the dictionary."""
         td = TermDictionary()
         assert td.lookup("nonexistent term") is None
 
+    # Verifies: REQ-d00220-C
     def test_REQ_d00220_C_iter_indexed(self) -> None:
         """iter_indexed() yields only entries where indexed is True."""
         td = TermDictionary()
@@ -96,6 +102,7 @@ class TestTermDictionary:
         assert len(indexed_terms) == 1
         assert indexed_terms[0].term == "Audit Trail"
 
+    # Verifies: REQ-d00220-C
     def test_REQ_d00220_C_iter_collections(self) -> None:
         """iter_collections() yields only entries where collection is True."""
         td = TermDictionary()
@@ -108,6 +115,7 @@ class TestTermDictionary:
         assert len(collections) == 1
         assert collections[0].term == "Questionnaire"
 
+    # Verifies: REQ-d00220-D
     def test_REQ_d00220_D_merge_combines(self) -> None:
         """merge() combines entries from two dictionaries."""
         td1 = TermDictionary()
@@ -123,6 +131,7 @@ class TestTermDictionary:
         assert td1.lookup("audit trail") is entry_a
         assert td1.lookup("questionnaire") is entry_b
 
+    # Verifies: REQ-d00220-D
     def test_REQ_d00220_D_merge_detects_duplicates(self) -> None:
         """merge() returns duplicate pairs for same term across namespaces."""
         td1 = TermDictionary()

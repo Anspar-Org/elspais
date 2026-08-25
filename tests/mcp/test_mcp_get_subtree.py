@@ -159,6 +159,7 @@ def subtree_graph():
 class TestCollectSubtree:
     """Validates REQ-d00075-A: BFS traversal with depth tracking and dedup."""
 
+    # Verifies: REQ-d00075-A
     def test_REQ_d00075_A_bfs_traversal_from_root(self, subtree_graph):
         """REQ-d00075-A: BFS traversal collects all nodes in subtree."""
         from elspais.mcp.server import _collect_subtree
@@ -187,6 +188,7 @@ class TestCollectSubtree:
         # TEST node should NOT be included (default kind filter excludes it)
         assert "test:test_enc.py::test_encryption" not in ids
 
+    # Verifies: REQ-o00067-B
     def test_REQ_o00067_B_depth_limiting(self, subtree_graph):
         """REQ-o00067-B: depth=1 limits traversal to one level below root."""
         from elspais.mcp.server import _collect_subtree
@@ -206,6 +208,7 @@ class TestCollectSubtree:
         assert "REQ-d00020-D" not in ids
         assert "REQ-d00020-E" not in ids
 
+    # Verifies: REQ-o00067-E
     def test_REQ_o00067_E_dag_dedup(self, subtree_graph):
         """REQ-o00067-E: Diamond DAG paths produce each node only once."""
         from elspais.mcp.server import _collect_subtree
@@ -231,6 +234,7 @@ class TestCollectSubtree:
         # Shared node should appear exactly once despite two paths
         assert ids.count("REQ-shared") == 1
 
+    # Verifies: REQ-o00067-C
     def test_REQ_o00067_C_kind_filtering(self, subtree_graph):
         """REQ-o00067-C: Custom include_kinds filters out unwanted node types."""
         from elspais.mcp.server import _collect_subtree
@@ -254,6 +258,7 @@ class TestCollectSubtree:
         assert "REQ-p00001-B" not in ids
         assert "REQ-o00010-C" not in ids
 
+    # Verifies: REQ-d00075-F
     def test_REQ_d00075_F_conservative_defaults(self, subtree_graph):
         """REQ-d00075-F: Default kind filter includes REQUIREMENT+ASSERTION but not TEST/CODE."""
         from elspais.mcp.server import _collect_subtree
@@ -276,6 +281,7 @@ class TestCollectSubtree:
 class TestComputeCoverageSummary:
     """Validates REQ-d00075-B: Coverage summary reuses _iter_assertion_coverage()."""
 
+    # Verifies: REQ-d00075-B
     def test_REQ_d00075_B_coverage_with_tests(self, subtree_graph):
         """REQ-d00075-B: Requirement with one covered assertion returns correct summary."""
         from elspais.mcp.server import _compute_coverage_summary
@@ -293,6 +299,7 @@ class TestComputeCoverageSummary:
         # citation naming the assertion lands in the immediate direct measure.
         assert result["dimensions"]["tested"]["measures"]["immediate_direct"] == 1.0
 
+    # Verifies: REQ-d00075-B
     def test_REQ_d00075_B_coverage_no_tests(self, subtree_graph):
         """REQ-d00075-B: Requirement with no tests returns zero coverage."""
         from elspais.mcp.server import _compute_coverage_summary
@@ -305,6 +312,7 @@ class TestComputeCoverageSummary:
         assert result["dimensions"]["tested"]["covered"] == 0.0
         assert result["dimensions"]["tested"]["pct"] == 0.0
 
+    # Verifies: REQ-d00075-B
     def test_REQ_d00075_B_coverage_no_assertions(self):
         """REQ-d00075-B: Requirement with no assertions returns zero totals."""
         from elspais.mcp.server import _compute_coverage_summary
@@ -338,6 +346,7 @@ class TestComputeCoverageSummary:
 class TestSubtreeToMarkdown:
     """Validates REQ-d00075-C: Markdown format rendering."""
 
+    # Verifies: REQ-d00075-C
     def test_REQ_d00075_C_markdown_headings_and_assertions(self, subtree_graph):
         """REQ-d00075-C: Markdown output has headings with node IDs and assertion bullets."""
         from elspais.mcp.server import _collect_subtree, _subtree_to_markdown
@@ -359,6 +368,7 @@ class TestSubtreeToMarkdown:
         assert "REQ-o00010" in md
         assert "REQ-d00020" in md
 
+    # Verifies: REQ-d00075-C
     def test_REQ_d00075_C_markdown_empty_subtree(self, subtree_graph):
         """REQ-d00075-C: Empty collected list returns empty subtree marker."""
         from elspais.mcp.server import _subtree_to_markdown
@@ -367,6 +377,7 @@ class TestSubtreeToMarkdown:
 
         assert md == "*(empty subtree)*"
 
+    # Verifies: REQ-o00067-F
     def test_REQ_o00067_F_markdown_includes_coverage(self, subtree_graph):
         """REQ-o00067-F: Coverage stats appear in markdown output for requirements."""
         from elspais.mcp.server import _collect_subtree, _subtree_to_markdown
@@ -383,6 +394,7 @@ class TestSubtreeToMarkdown:
         # REQ-o00010 (1 assertion, cited by REQ-d00020's blanket Implements)
         assert "Implemented 1.0/1" in md
 
+    # Verifies: REQ-d00075-D
     def test_REQ_d00075_D_flat_structure(self, subtree_graph):
         """REQ-d00075-D: Flat output has root_id, nodes, edges, stats keys."""
         from elspais.mcp.server import _collect_subtree, _subtree_to_flat
@@ -396,6 +408,7 @@ class TestSubtreeToMarkdown:
         assert "edges" in result
         assert "stats" in result
 
+    # Verifies: REQ-d00075-D
     def test_REQ_d00075_D_flat_nodes_have_depth(self, subtree_graph):
         """REQ-d00075-D: Each node entry has a depth key."""
         from elspais.mcp.server import _collect_subtree, _subtree_to_flat
@@ -410,6 +423,7 @@ class TestSubtreeToMarkdown:
         root_entry = next(n for n in result["nodes"] if n["id"] == "REQ-p00001")
         assert root_entry["depth"] == 0
 
+    # Verifies: REQ-d00075-D
     def test_REQ_d00075_D_flat_stats_counts(self, subtree_graph):
         """REQ-d00075-D: Stats has correct requirement and assertion counts."""
         from elspais.mcp.server import _collect_subtree, _subtree_to_flat
@@ -437,6 +451,7 @@ class TestSubtreeToMarkdown:
 class TestSubtreeToNested:
     """Validates REQ-d00075-E: Nested JSON format."""
 
+    # Verifies: REQ-d00075-E
     def test_REQ_d00075_E_nested_children_arrays(self, subtree_graph):
         """REQ-d00075-E: Root has children, children have children recursively."""
         from elspais.mcp.server import _subtree_to_nested
@@ -461,6 +476,7 @@ class TestSubtreeToNested:
         assert "REQ-o00010-C" in ops_child_ids
         assert "REQ-d00020" in ops_child_ids
 
+    # Verifies: REQ-d00075-E
     def test_REQ_d00075_E_nested_depth_limit(self, subtree_graph):
         """REQ-d00075-E: depth_limit=1 means children of children are empty."""
         from elspais.mcp.server import _subtree_to_nested
@@ -489,6 +505,7 @@ class TestSubtreeToNested:
 class TestGetSubtree:
     """Validates REQ-o00067-A through REQ-o00067-F: Full dispatcher."""
 
+    # Verifies: REQ-o00067-A
     def test_REQ_o00067_A_subtree_markdown_format(self, subtree_graph):
         """REQ-o00067-A: format='markdown' returns markdown content."""
         from elspais.mcp.server import _get_subtree
@@ -501,6 +518,7 @@ class TestGetSubtree:
         assert isinstance(result["content"], str)
         assert "REQ-p00001" in result["content"]
 
+    # Verifies: REQ-o00067-D
     def test_REQ_o00067_D_subtree_flat_format(self, subtree_graph):
         """REQ-o00067-D: format='flat' returns flat structure with nodes, edges, stats."""
         from elspais.mcp.server import _get_subtree
@@ -515,6 +533,7 @@ class TestGetSubtree:
         assert isinstance(result["nodes"], list)
         assert isinstance(result["edges"], list)
 
+    # Verifies: REQ-o00067-D
     def test_REQ_o00067_D_subtree_nested_format(self, subtree_graph):
         """REQ-o00067-D: format='nested' returns nested tree structure."""
         from elspais.mcp.server import _get_subtree
@@ -527,6 +546,7 @@ class TestGetSubtree:
         assert result["tree"]["id"] == "REQ-p00001"
         assert "children" in result["tree"]
 
+    # Verifies: REQ-o00067-A
     def test_REQ_o00067_A_subtree_not_found(self, subtree_graph):
         """REQ-o00067-A: Non-existent root_id returns error."""
         from elspais.mcp.server import _get_subtree
@@ -536,6 +556,7 @@ class TestGetSubtree:
         assert "error" in result
         assert "not found" in result["error"].lower()
 
+    # Verifies: REQ-o00067-C
     def test_REQ_o00067_C_subtree_invalid_kind(self, subtree_graph):
         """REQ-o00067-C: Invalid kind string returns error."""
         from elspais.mcp.server import _get_subtree
@@ -549,6 +570,7 @@ class TestGetSubtree:
         assert "error" in result
         assert "unknown node kind" in result["error"].lower()
 
+    # Verifies: REQ-d00075-G
     def test_REQ_d00075_G_no_graph_modification(self, subtree_graph):
         """REQ-d00075-G: Graph is unchanged after subtree extraction."""
         from elspais.mcp.server import _get_subtree

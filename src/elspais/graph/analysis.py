@@ -391,12 +391,19 @@ def analyze_foundations(
     norm_neighborhood = _normalize({k: v for k, v in neighborhood.items() if k in req_nodes})
     norm_uncovered = _normalize({k: float(v) for k, v in uncovered.items()})
 
-    # Unpack weights (support both 3-tuple legacy and 4-tuple)
+    # One weight per normalized metric, in the order they are computed above.
+    # Three are accepted as well as four (REQ-d00125-B); the third of three is
+    # the uncovered weight, and the neighborhood metric goes unweighted.
     if len(weights) == 3:
         w_c, w_f, w_u = weights
         w_n = 0.0
+    elif len(weights) == 4:
+        w_c, w_f, w_n, w_u = weights
     else:
-        w_c, w_f, w_n, w_u = weights[0], weights[1], weights[2], weights[3]
+        raise ValueError(
+            f"weights must carry three or four values -- centrality, fan-in, "
+            f"[neighborhood,] uncovered -- but {len(weights)} were given."
+        )
 
     # Build NodeScore for each requirement node
     scored: list[NodeScore] = []

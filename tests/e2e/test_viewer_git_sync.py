@@ -70,6 +70,7 @@ class TestGitSyncWorkflowE2E:
     Validates REQ-p00004-C, REQ-p00004-D, REQ-p00004-E via CLI subprocess.
     """
 
+    # Verifies: REQ-p00004-C
     def test_REQ_p00004_C_changed_detects_modified_spec(self, tmp_path) -> None:
         """elspais changed detects modified spec files."""
         _init_fixture_repo(tmp_path)
@@ -99,6 +100,7 @@ class TestGitSyncWorkflowE2E:
             f"Expected prd.md in modified files, got: {modified_files}"
         )
 
+    # Verifies: REQ-p00004-D
     def test_REQ_p00004_D_changed_on_branch(self, tmp_path) -> None:
         """elspais changed works correctly on a feature branch."""
         _init_fixture_repo(tmp_path)
@@ -120,6 +122,7 @@ class TestGitSyncWorkflowE2E:
         result = run_elspais("changed", "--format", "json", cwd=tmp_path)
         assert result.returncode == 0
 
+    # Verifies: REQ-p00004-E
     def test_REQ_p00004_E_health_after_edit(self, tmp_path) -> None:
         """elspais health passes on the fixture repo after edits and commit."""
         _init_fixture_repo(tmp_path)

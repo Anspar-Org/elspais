@@ -4,8 +4,13 @@ Handles both code_ref and test_ref content types.  Pre-scan data (function/class
 context) is injected from external sources -- AST-based for Python, text-based
 for others, or external prescan command.
 
-The grammar pre-classifies lines as single_ref, block_header, block_ref,
-test_name_ref, or other_line.  This transformer:
+The grammar pre-classifies lines as single_ref, bare_ref, unresolved_ref or
+other_line.  A relationship is declared in exactly one form -- a
+*Traceability* keyword, its colon and a list of references, as the first
+content of a comment line (continued onto a following line where the list
+ends with the separator).  Nothing else declares one: a bare_ref line
+carries an identifier no keyword introduces and is reported rather than
+read, and a test function's NAME declares nothing at all.  This transformer:
 1. Extracts requirement IDs from classified lines
 2. Annotates with function/class context from pre-scan
 3. Produces ParsedContent matching the old CodeParser/TestParser contracts
@@ -190,7 +195,7 @@ class ReferenceTransformer:
         # and consulted by id(node) rather than threaded through every call
         # site.  ``_joined_text``/``_joined_end_line``/``_joined_raw`` are
         # keyed by id() of the opener node that ends with the separator;
-        # ``_consumed`` holds id() of the block_ref/other_line nodes folded
+        # ``_consumed`` holds id() of the bare_ref/other_line nodes folded
         # into an opener, so the dispatch loop skips them outright instead of
         # reporting them as orphans or remainder.
         self._joined_text: dict[int, str] = {}
@@ -210,8 +215,16 @@ class ReferenceTransformer:
         # relationship it names (REQ-d00272-N).
         self.identifier_form: list[tuple[int, str, tuple[str, ...]]] = []
 
+    # Implements: REQ-d00269-L
     def transform(self, tree: Tree) -> list[ParsedContent]:
-        """Transform parse tree into ParsedContent list."""
+        """Transform parse tree into ParsedContent list.
+
+        A keyword line is the only kind dispatched into a relationship.  A
+        bare_ref is reported and produces nothing, a quoted line and an
+        other_line are text, and a test function's declaration reaches the
+        third pass carrying only the file-level default -- its NAME is never
+        read for an identifier (REQ-d00269-L).
+        """
         results: list[ParsedContent] = []
         emitted_func_lines: set[int] = set()
 
@@ -253,10 +266,9 @@ class ReferenceTransformer:
             # invoking one, so the line stays ordinary text (REQ-d00269-E).
             # quoted_lines holds lines genuinely interior to a fenced block
             # or a Python string literal -- for a literal, the line that
-            # merely opens it (which may carry real code before the quote,
-            # e.g. `def test_REQ_p00001(x="a"):`) is deliberately not
-            # included, so no rule kind needs exempting here: every rule,
-            # including test_name_ref, is safe to skip on a quoted line.
+            # merely opens it is deliberately not included, so no rule kind
+            # needs exempting here: every rule is safe to skip on a quoted
+            # line.
             if self._token_line(child) in self.quoted_lines:
                 other_lines.append((self._token_line(child), self._token_text(child)))
                 i += 1
@@ -283,113 +295,6 @@ class ReferenceTransformer:
                         (self._token_line(child), self._joined_raw.get(key, str(token)))  # type: ignore[attr-defined]
                     )
 
-            elif child.data == "block_header":
-                # Collect subsequent block_ref lines
-                refs: list[str] = []
-                start_ln = self._token_line(child)
-                end_ln = start_ln
-                header_text = self._token_text(child)
-                raw_lines = [header_text]
-                keyword = self._detect_keyword(header_text)
-                i += 1
-                while i < len(children):
-                    next_child = children[i]
-                    if isinstance(next_child, Tree) and next_child.data == "block_ref":
-                        ref_text = self._token_text(next_child)
-                        extracted = self._extract_ids(ref_text)
-                        refs.extend(extracted)
-                        end_ln = self._token_line(next_child)
-                        raw_lines.append(ref_text)
-                        i += 1
-                    elif isinstance(next_child, Tree) and next_child.data == "other_line":
-                        # Could be empty comment line -- skip
-                        text = self._token_text(next_child)
-                        if self._is_empty_comment(text):
-                            i += 1
-                            continue
-                        break
-                    else:
-                        break
-
-                if refs:
-                    # Implements: REQ-d00272-J
-                    # A keyword this file's kind does not admit is read and
-                    # refused, not passed over as prose: no edge, but a
-                    # FORBIDDEN fault naming the keyword and the file kind.
-                    if self._keyword_invalid_for_content(keyword):
-                        func_name, class_name, func_line, func_end_line = (
-                            self._forbidden_line_context(start_ln)
-                        )
-                        parsed_data = {
-                            "implements": [],
-                            "verifies": [],
-                            "function_name": func_name,
-                            "class_name": class_name,
-                            "function_line": func_line,
-                            "function_end_line": func_end_line,
-                            "forbidden_keyword": keyword,
-                            "forbidden": refs,
-                        }
-                        if self.content_type == "test_ref":
-                            parsed_data["file_default_verifies"] = self.file_default_verifies
-                        if func_line:
-                            emitted_func_lines.add(func_line)
-                        results.append(
-                            ParsedContent(
-                                content_type=self.content_type,
-                                start_line=start_ln,
-                                end_line=end_ln,
-                                raw_text="\n".join(raw_lines),
-                                parsed_data=parsed_data,
-                            )
-                        )
-                        continue
-
-                    func_name, class_name, func_line, func_end_line = self.line_context.get(
-                        start_ln, (None, None, 0, 0)
-                    )
-
-                    if self.content_type == "code_ref":
-                        parsed_data = {
-                            "implements": refs if keyword == "implements" else [],
-                            "verifies": refs if keyword == "verifies" else [],
-                            "function_name": func_name,
-                            "class_name": class_name,
-                            "function_line": func_line,
-                            "function_end_line": func_end_line,
-                        }
-                    else:  # test_ref
-                        parsed_data = {
-                            "verifies": refs,
-                            "function_name": func_name,
-                            "class_name": class_name,
-                            "function_line": func_line,
-                            "function_end_line": func_end_line,
-                            "file_default_verifies": self.file_default_verifies,
-                            # Implements: REQ-d00274-G
-                            "binds_to_test": self._binds_to_test(func_line, start_ln),
-                        }
-
-                    if func_line:
-                        emitted_func_lines.add(func_line)
-                    results.append(
-                        ParsedContent(
-                            content_type=self.content_type,
-                            start_line=start_ln,
-                            end_line=end_ln,
-                            raw_text="\n".join(raw_lines),
-                            parsed_data=parsed_data,
-                        )
-                    )
-                continue
-
-            elif child.data == "test_name_ref":
-                pc = self._handle_test_name_ref(child)
-                if pc:
-                    if pc.parsed_data.get("function_line"):
-                        emitted_func_lines.add(pc.parsed_data["function_line"])
-                    results.append(pc)
-
             elif child.data == "unresolved_ref":
                 token = child.children[0]
                 key = id(child)
@@ -407,17 +312,14 @@ class ReferenceTransformer:
                         (token.line, self._joined_raw.get(key, str(token)))  # type: ignore[attr-defined]
                     )
 
-            elif child.data == "block_ref":
-                # A block_ref line reaching here was not consumed by a
-                # block_header's own collection loop and was not folded
-                # into a preceding opener's continuation -- there is no
-                # keyword above it at all, so it names an identifier
-                # without declaring anything.  Nothing about it is
-                # malformed -- it is a relationship its author appears to
-                # intend and has not spelled, reported as that and
-                # producing no relationship (REQ-d00272-O).  The line
-                # still falls through to the remainder gatherer so it
-                # round-trips.
+            elif child.data == "bare_ref":
+                # A bare_ref line was not folded into a preceding opener's
+                # continuation -- there is no keyword above it at all, so it
+                # names an identifier without declaring anything.  Nothing
+                # about it is malformed -- it is a relationship its author
+                # appears to intend and has not spelled, reported as that and
+                # producing no relationship (REQ-d00272-O).  The line still
+                # falls through to the remainder gatherer so it round-trips.
                 token = child.children[0]
                 body = str(token)  # type: ignore[attr-defined]
                 line_num = token.line  # type: ignore[attr-defined]
@@ -715,44 +617,6 @@ class ReferenceTransformer:
         return bool(self.first_def_line) and line_num < self.first_def_line
 
     # ------------------------------------------------------------------
-    # Test name reference handling
-    # ------------------------------------------------------------------
-
-    def _handle_test_name_ref(self, node: Tree) -> ParsedContent | None:
-        """Handle a test function name containing a REQ reference."""
-        token = node.children[0]
-        text = str(token)
-        line_num = token.line  # type: ignore[attr-defined]
-
-        # Extract REQ_xxx from function name (underscored form).
-        # Test names use underscores: def test_foo_REQ_p00001_A
-        # A test name is a test annotation, so it names an identifier any
-        # federation member owns (REQ-d00269-C).
-        ref = self.reader.extract_underscored_ref(text)
-        if ref is None:
-            return None
-
-        func_name, class_name, func_line, _func_end = self.line_context.get(
-            line_num, (None, None, 0, 0)
-        )
-
-        parsed_data: dict[str, Any] = {
-            "verifies": [ref],
-            "function_name": func_name,
-            "class_name": class_name,
-            "function_line": func_line,
-            "file_default_verifies": self.file_default_verifies,
-        }
-
-        return ParsedContent(
-            content_type="test_ref",
-            start_line=line_num,
-            end_line=line_num,
-            raw_text=text,
-            parsed_data=parsed_data,
-        )
-
-    # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
 
@@ -774,8 +638,8 @@ class ReferenceTransformer:
         routine, and one of them also holds structurally here:
 
         - A line whose own first content is a keyword lexes as
-          ``single_ref``/``unresolved_ref``/``block_header``, never as a
-          bare ``block_ref`` or content-bearing ``other_line`` -- so rule 1
+          ``single_ref``/``unresolved_ref``, never as a bare ``bare_ref``
+          or content-bearing ``other_line`` -- so rule 1
           holds structurally, with no extra check needed here.
         - A line holding no content -- a blank line (no node at all, so the
           next node's line number is not adjacent) or an empty comment (an
@@ -800,7 +664,7 @@ class ReferenceTransformer:
                 continue
 
             def _content_of(node: Any) -> str | None:
-                if not (isinstance(node, Tree) and node.data in ("block_ref", "other_line")):
+                if not (isinstance(node, Tree) and node.data in ("bare_ref", "other_line")):
                     return None
                 # A quoted line is displayed text, not a declaration
                 # (REQ-d00269-E), so it holds no reference content to continue
@@ -840,21 +704,6 @@ class ReferenceTransformer:
             return None
         content = stripped[marker.end() :].strip()
         return content or None
-
-    def _extract_ids(self, text: str) -> list[str]:
-        """Extract requirement IDs from a reference line (including multi-assertion syntax).
-
-        Collects both REQ-style ids (via the namespace pattern) and JNY-style
-        ids (whole journeys and addressable steps) so that ``Verifies:``
-        annotations may target either kind.  An identifier any federation
-        member owns is recognised here and normalized by the member that
-        claims it (REQ-d00269-C).
-        """
-        refs = self.reader.extract_refs(text)
-        for jny_id in _JOURNEY_REF_RE.findall(text):
-            if jny_id not in refs:
-                refs.append(jny_id)
-        return refs
 
     def _detect_keyword(self, text: str) -> str:
         """Detect which reference keyword is used in *text*.
@@ -934,26 +783,6 @@ class ReferenceTransformer:
         if self.content_type == "code_ref":
             return self.line_context.get(line_num, (None, None, 0, 0))
         return (None, None, 0, 0)
-
-    def _is_empty_comment(self, text: str) -> bool:
-        """Whether *text* is a comment with nothing in it.
-
-        Read in this file's own comment pattern (REQ-d00269-K), so a rule of
-        dashes decorating a SQL file is an empty comment there and an
-        expression in a Python one.  Only the marker's OWN characters are
-        stripped from the tail, so a decorative rule counts as empty just
-        where it is drawn in them: ``# ####`` is an empty comment in a
-        shell-like file and ``-- ----`` in a function-like one, while
-        ``# ------`` holds content, because dashes are not a Python comment's
-        characters.
-        """
-        stripped = text.strip()
-        for style in self.comment_markers:
-            if stripped.startswith(style):
-                remainder = stripped[len(style) :].strip().strip(style).strip()
-                if not remainder:
-                    return True
-        return False
 
     def _token_line(self, node: Tree) -> int:
         """Get line number from a tree node's first token."""

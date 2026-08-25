@@ -35,8 +35,8 @@ if TYPE_CHECKING:
 class FormatRulesConfig:
     """Configuration for format validation rules.
 
-    All rules default to False (disabled) for backwards compatibility.
-    Enable rules explicitly in [rules.format] config section.
+    A rule a project has not asked for is off: every rule defaults to False
+    and is enabled explicitly in the [rules.format] config section.
     """
 
     require_hash: bool = False

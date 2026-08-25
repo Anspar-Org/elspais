@@ -9,7 +9,7 @@ def _make_project(tmp_path: Path, index_content: str | None = None) -> Path:
     """Create a project with config, spec, and optional INDEX.md."""
     config_path = tmp_path / ".elspais.toml"
     config_path.write_text(
-        """version = 3
+        """version = 5
 
 [project]
 name = "test-fix-index"

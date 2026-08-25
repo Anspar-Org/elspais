@@ -71,6 +71,7 @@ def _parse(content: str, resolver: IdResolver) -> list:
 class TestDefinitionGrammar:
     """Validates REQ-d00221-A+B: definition block grammar and transformer."""
 
+    # Verifies: REQ-d00221-A
     def test_REQ_d00221_A_definition_between_requirements(self, resolver):
         """Definition block between two requirements produces definition_block content."""
         content = """\
@@ -99,6 +100,7 @@ A. Second assertion
             f"{[r.content_type for r in results]}"
         )
 
+    # Verifies: REQ-d00221-A
     def test_REQ_d00221_A_definition_in_requirement_preamble(self, resolver):
         """Definition block in requirement body (preamble) is recognized."""
         content = """\
@@ -142,6 +144,7 @@ A. First assertion
             f"content_types: {[r.content_type for r in results]}"
         )
 
+    # Verifies: REQ-d00221-A
     def test_REQ_d00221_A_definition_in_named_block(self, resolver):
         """Definition block inside a ## Rationale section is recognized."""
         content = """\
@@ -185,6 +188,7 @@ A. First assertion
             f"content_types: {[r.content_type for r in results]}"
         )
 
+    # Verifies: REQ-d00221-A
     def test_REQ_d00221_A_definition_not_in_assertions(self, resolver):
         """Colon-prefixed text inside assertions must NOT produce definition_block."""
         content = """\
@@ -213,6 +217,7 @@ B. Each level has a rank value.
         assertions = reqs[0].parsed_data.get("assertions", [])
         assert len(assertions) == 2, f"Expected 2 assertions, got {len(assertions)}"
 
+    # Verifies: REQ-d00221-B
     def test_REQ_d00221_B_extracts_term_and_definition(self, resolver):
         """Transformer extracts term name and definition text from definition_block."""
         content = """\
@@ -254,6 +259,7 @@ A. First assertion
             f"Expected definition containing 'combination', got {def_data.get('definition')!r}"
         )
 
+    # Verifies: REQ-d00221-B
     def test_REQ_d00221_B_collection_flag(self, resolver):
         """Definition with ': Collection: true' has collection=True in parsed_data."""
         content = """\
@@ -290,6 +296,7 @@ A. First assertion
             f"Expected collection=True, got {def_data.get('collection')!r}"
         )
 
+    # Verifies: REQ-d00221-B
     def test_REQ_d00221_B_indexed_flag(self, resolver):
         """Definition with ': Indexed: false' has indexed=False in parsed_data."""
         content = """\
@@ -326,6 +333,7 @@ A. First assertion
             f"Expected indexed=False, got {def_data.get('indexed')!r}"
         )
 
+    # Verifies: REQ-d00221-B
     def test_REQ_d00221_B_multiline_definition(self, resolver):
         """Definition with multiple ': ' lines has joined definition text."""
         content = """\
@@ -369,6 +377,7 @@ A. First assertion
 
     # -- REQ-d00221-A: hanging-indent continuation line support ----------------
 
+    # Verifies: REQ-d00221-A
     def test_REQ_d00221_A_indented_continuation(self, resolver):
         """Def block with 2-space continuation lines joins all 3 lines with \\n."""
         content = """\
@@ -413,6 +422,7 @@ A. First assertion
         for ln in lines[1:]:
             assert not ln.startswith("  "), f"Continuation line still has hanging indent: {ln!r}"
 
+    # Verifies: REQ-d00221-A
     def test_REQ_d00221_A_mixed_colon_and_continuation(self, resolver):
         """Continuation line attaches only to the preceding DEF_LINE, not the next."""
         content = """\
@@ -456,6 +466,7 @@ A. First assertion
             f"Expected reference_term='Registered Notification Address', got {ref_term!r}"
         )
 
+    # Verifies: REQ-d00221-A
     def test_REQ_d00221_A_reference_type_with_structured_fields(self, resolver):
         """Reference entry with Title/Version/URL metadata lines and no prose."""
         content = """\
@@ -508,6 +519,7 @@ A. First assertion
             f"Expected empty definition, got {def_data.get('definition')!r}"
         )
 
+    # Verifies: REQ-d00221-A
     def test_REQ_d00221_A_continuation_on_metadata_line(self, resolver):
         """Continuation line after a '<key>: <val>' metadata line joins into the value."""
         content = """\

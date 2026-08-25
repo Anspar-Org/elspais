@@ -22,6 +22,7 @@ SCHEMA_FILE = _REPO_ROOT / "src" / "elspais" / "config" / "elspais-schema.json"
 class TestJsonSchemaExport:
     """Validates REQ-d00208-A: cmd_schema outputs JSON Schema to stdout."""
 
+    # Verifies: REQ-d00208-A
     def test_REQ_d00208_A_cmd_schema_outputs_json(self, capsys: pytest.CaptureFixture[str]) -> None:
         """cmd_schema() must write valid JSON Schema to stdout."""
         # cmd_schema should exist and return 0
@@ -38,6 +39,7 @@ class TestJsonSchemaExport:
         assert isinstance(schema, dict)
         assert "properties" in schema
 
+    # Verifies: REQ-d00208-A
     def test_REQ_d00208_A_cmd_schema_always_writes_to_stdout(
         self, capsys: pytest.CaptureFixture[str]
     ) -> None:
@@ -99,6 +101,7 @@ class TestJsonSchemaExport:
 class TestCommittedSchemaFile:
     """Validates REQ-d00208-B: committed schema file matches model output."""
 
+    # Verifies: REQ-d00208-B
     def test_REQ_d00208_B_committed_schema_matches_model(self) -> None:
         """The committed elspais-schema.json must match ElspaisConfig.model_json_schema()."""
         assert SCHEMA_FILE.exists(), (
@@ -118,6 +121,7 @@ class TestCommittedSchemaFile:
 class TestSchemaContent:
     """Validates REQ-d00208-C: generated schema includes $schema and title keys."""
 
+    # Verifies: REQ-d00208-C
     def test_REQ_d00208_C_schema_has_required_keys(self) -> None:
         """model_json_schema() output must include $schema and title top-level keys."""
         schema = ElspaisConfig.model_json_schema()
@@ -128,11 +132,13 @@ class TestSchemaContent:
             "The implementation should inject this via schema_extra or post-processing."
         )
 
+    # Verifies: REQ-d00208-C
     def test_REQ_d00208_C_schema_title_is_elspais_config(self) -> None:
         """The schema title should be 'ElspaisConfig'."""
         schema = ElspaisConfig.model_json_schema()
         assert schema.get("title") == "ElspaisConfig"
 
+    # Verifies: REQ-d00208-C
     def test_REQ_d00208_C_schema_is_valid_json_schema(self) -> None:
         """The generated schema must be a valid JSON Schema document."""
         schema = ElspaisConfig.model_json_schema()

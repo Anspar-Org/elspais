@@ -152,6 +152,7 @@ def _build_scenario_project(tmp_path):
 class TestScenarioMutationsE2E:
     """REQ-d00134: Comprehensive mutation round-trip via MCP subprocess."""
 
+    # Verifies: REQ-d00134-A
     def test_REQ_d00134_A_full_mutation_scenario(self, tmp_path) -> None:
         """Full mutation round-trip: add, rename, update, delete, undo, save, reload."""
         _build_scenario_project(tmp_path)
@@ -385,7 +386,7 @@ class TestScenarioMutationsE2E:
             assert result.get("success") or result.get("files_written") is not None
 
             # --- Phase 6: Reload and verify (REQ-d00134-D) ---
-            result = mcp_call(proc, "refresh_graph", {"full": True})
+            result = mcp_call(proc, "refresh_graph", {})
             assert result.get("success") is True
 
             # Verify renamed requirement survived save/reload
@@ -418,7 +419,7 @@ class TestScenarioMutationsE2E:
             assert result.get("success") or result.get("files_written") is not None
 
             # Final reload and verify
-            result = mcp_call(proc, "refresh_graph", {"full": True})
+            result = mcp_call(proc, "refresh_graph", {})
             assert result.get("success") is True
 
             req = mcp_call(proc, "get_requirement", {"req_id": "REQ-d00003"})

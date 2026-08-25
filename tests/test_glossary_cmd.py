@@ -96,6 +96,7 @@ class TestGlossaryCmd:
 
     # -- REQ-d00224-A: glossary -----------------------------------------------
 
+    # Verifies: REQ-d00224-A
     def test_REQ_d00224_A_glossary_alphabetical_headings(self) -> None:
         """Glossary has letter headings in alphabetical order."""
         generate_glossary, _, _ = _import_generators()
@@ -106,6 +107,7 @@ class TestGlossaryCmd:
         q_pos = output.index("## Q")
         assert e_pos < l_pos < q_pos
 
+    # Verifies: REQ-d00224-A
     def test_REQ_d00224_A_glossary_has_definitions(self) -> None:
         """Glossary contains definition text for each term."""
         generate_glossary, _, _ = _import_generators()
@@ -115,6 +117,7 @@ class TestGlossaryCmd:
         assert "classification tier" in output
         assert "structured set of questions" in output
 
+    # Verifies: REQ-d00224-A
     def test_REQ_d00224_A_glossary_non_indexed_annotation(self) -> None:
         """Non-indexed terms are annotated with (not indexed)."""
         generate_glossary, _, _ = _import_generators()
@@ -124,6 +127,7 @@ class TestGlossaryCmd:
         level_section = output[output.index("**Level**") :]
         assert "(not indexed)" in level_section.split("\n## ")[0]
 
+    # Verifies: REQ-d00224-A
     def test_REQ_d00224_A_glossary_collection_annotation(self) -> None:
         """Collection terms are annotated with (collection)."""
         generate_glossary, _, _ = _import_generators()
@@ -132,6 +136,7 @@ class TestGlossaryCmd:
         q_section = output[output.index("**Questionnaire**") :]
         assert "(collection)" in q_section.split("\n## ")[0]
 
+    # Verifies: REQ-d00224-A
     def test_REQ_d00224_A_glossary_blank_line_between_terms(self) -> None:
         """Consecutive terms within a letter section are separated by a blank line.
 
@@ -152,6 +157,7 @@ class TestGlossaryCmd:
         bad = re.search(r"\*Defined in: [^\n]+\n\*\*", output)
         assert bad is None, f"Found adjacent term blocks with no blank line: {bad.group(0)!r}"
 
+    # Verifies: REQ-d00224-A
     def test_REQ_d00224_A_glossary_blank_line_before_term_index_bullets(self) -> None:
         """Term-index namespace headers are separated from their bullet list
         by a blank line so pandoc treats the bullets as a list rather than
@@ -168,6 +174,7 @@ class TestGlossaryCmd:
 
     # -- REQ-d00224-B: term index ---------------------------------------------
 
+    # Verifies: REQ-d00224-B
     def test_REQ_d00224_B_term_index_only_indexed(self) -> None:
         """Term index includes only indexed terms (not Level)."""
         _, generate_term_index, _ = _import_generators()
@@ -177,6 +184,7 @@ class TestGlossaryCmd:
         assert "Questionnaire" in output
         assert "Level" not in output
 
+    # Verifies: REQ-d00224-B
     def test_REQ_d00224_B_term_index_namespace_grouping(self) -> None:
         """Term index groups references by namespace."""
         _, generate_term_index, _ = _import_generators()
@@ -187,6 +195,7 @@ class TestGlossaryCmd:
 
     # -- REQ-d00224-C: collection manifests ------------------------------------
 
+    # Verifies: REQ-d00224-C
     def test_REQ_d00224_C_collection_manifest(self) -> None:
         """Collection manifest produces standalone listing for a collection term."""
         _, _, generate_collection_manifest = _import_generators()
@@ -199,6 +208,7 @@ class TestGlossaryCmd:
 
     # -- REQ-d00224-D: header and format support --------------------------------
 
+    # Verifies: REQ-d00224-D
     def test_REQ_d00224_D_auto_generated_header(self) -> None:
         """Glossary output starts with an auto-generated comment."""
         generate_glossary, _, _ = _import_generators()
@@ -207,6 +217,7 @@ class TestGlossaryCmd:
         first_line = output.lstrip().split("\n")[0]
         assert "auto" in first_line.lower() or "generated" in first_line.lower()
 
+    # Verifies: REQ-d00224-D
     def test_REQ_d00224_D_json_format(self) -> None:
         """generate_glossary with format='json' produces valid JSON."""
         generate_glossary, _, _ = _import_generators()

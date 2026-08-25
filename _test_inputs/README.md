@@ -13,7 +13,7 @@ one row of a `@pytest.mark.parametrize` table.
 | File | Layer | Contents |
 |---|---|---|
 | `01-item-cascade.md` | 2 | One section per fault code; the whole cascade, per grammar |
-| `02-keyword-form.md` | 1 | Keyword case, emphasis, syntax negatives, legacy block header, continuation |
+| `02-keyword-form.md` | 1 | Keyword case, emphasis, syntax negatives, the retired block header, continuation |
 | `03-lists-and-salvage.md` | 2 | Empty items, trailing separator, salvage, multi-assertion, aliases, dedup |
 | `04-over-malformed.md` | 1+2 | Inputs more malformed than the design anticipates |
 | `05-surfaces-and-roundtrip.md` | 1–3 | Keyword x surface matrix, `code.no_traceability`, `fix` round-trip |

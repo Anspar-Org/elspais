@@ -1,6 +1,6 @@
 # LINKING REQUIREMENTS TO CODE AND TESTS
 
-Linking connects your requirements to the code that implements them and the tests that validate them. elspais scans your source files for specific comment patterns and test naming conventions, then builds a traceability graph showing what is covered and what is not.
+Linking connects your requirements to the code that implements them and the tests that validate them. elspais scans your source files for one comment form -- a keyword, a colon and a list of references -- then builds a traceability graph showing what is covered and what is not.
 
 ## Code Linking
 
@@ -108,42 +108,20 @@ is a complete list and anything below it is a citation with no keyword of its
 own -- reported as an undeclared relationship (`references.undeclared`),
 never as part of the list above it and never as a broken reference.
 
-### Legacy: block header
+A list is continued this way and no other. Nothing outside a keyword's own
+list declares a relationship: an indented identifier written beneath a
+keyword line the separator did not continue is reported as an undeclared
+relationship (`references.undeclared`) and produces nothing.
 
-```python
-# IMPLEMENTS REQUIREMENTS:
-#   REQ-d00001-A
-#   REQ-d00002-B
-```
+## Test Linking
 
-This form still parses. The colon is required and the word is plural. Nothing
-emits it; prefer the continuation form above.
+A test is linked by a comment above it, in exactly the form code uses. A
+test function's NAME declares nothing, however it is spelled -- a test called
+`test_REQ_d00001_A_hashes_with_bcrypt` is linked to `REQ-d00001-A` only if a
+comment above it says so.
 
-## Test Linking -- Function Names
-
-Include requirement IDs in test function names using underscores:
-
-```python
-def test_REQ_d00001_A_hashes_with_bcrypt():
-    assert hash_password("secret").startswith("$2b$")
-```
-
-The parser extracts `REQ-d00001-A` from the function name. Any text before or after the ID is ignored.
-
-Test class methods work the same way:
-
-```python
-class TestPasswordHashing:
-    """Validates REQ-d00001-A: password hashing"""
-
-    def test_REQ_d00001_A_uses_bcrypt(self): ...
-```
-
-## Test Linking -- Comments
-
-The three recognized keywords (`Implements`, `Verifies`, `Refines`) all
-create a VERIFIES edge when used in test files. The recommended keyword
-is `Verifies:`:
+The recommended keyword in a test file is `Verifies:`, and it is the only one
+a test file admits; `Implements:` and `Refines:` are read there and refused.
 
 ```python
 # Verifies: REQ-d00001-A
@@ -155,14 +133,15 @@ def test_password_hashing(): ...
 def test_full_auth_flow(): ...
 ```
 
-The colon is optional for all keywords.
+The colon is required, and it must abut the keyword: `# Verifies : REQ-d00001-A`
+is prose.
 
 > **Note:** Indented reference comments are supported.  Both column-0 and
 > indented placements work:
 >
 > ```python
 > class TestAuth:
->     # Implements: REQ-d00001-A
+>     # Verifies: REQ-d00001-A
 >     def test_hashing(self):
 >         ...
 > ```
@@ -170,7 +149,7 @@ The colon is optional for all keywords.
 A comment placed before any function definition applies to the entire file:
 
 ```python
-# Tests: REQ-d00001
+# Verifies: REQ-d00001
 # All tests in this file validate password security
 
 
@@ -194,11 +173,12 @@ using the `+` separator:
 This expands to three separate references:
   `REQ-d00001-A`, `REQ-d00001-B`, `REQ-d00001-C`
 
-Works in all link comment contexts: `Implements:`, `Refines:`, `Tests:`.
+Works wherever a keyword introduces a reference list.
 
 > **Configuration:** The multi-assertion separator defaults to `+` and can be
-> changed via `references.defaults.multi_assertion_separator` in `.elspais.toml`.
-> Set to `""` to disable compact syntax.
+> changed via `multi_separator` under `[id-patterns.assertions]` in
+> `.elspais.toml`. It is exactly one character; there is no value of it that
+> turns the compact form off.
 
 ## Indirect Coverage
 
@@ -212,7 +192,7 @@ def hash_password(plain: str) -> str: ...
 
 ```python
 # tests/test_auth.py
-# Tests: REQ-d00001-A
+# Verifies: REQ-d00001-A
 def test_hashing():
     result = hash_password("secret")
     assert result.startswith("$2b$")
@@ -229,9 +209,9 @@ Indirect coverage is tracked separately from direct coverage. Use `elspais viewe
   that produces pass/fail result output (e.g., benchmarks). Do not
   use `Refines:` in code files.
 
-  **Test files**: Use `# Verifies: REQ-xxx` or embed the ID in the
-  function name (`test_REQ_xxx`). This is the only valid keyword in
-  test files.
+  **Test files**: Use `# Verifies: REQ-xxx`. It is the only valid
+  keyword in a test file, and a comment is the only thing that links a
+  test -- its name never does.
 
   **Spec files**: Use `Implements:` for child requirements that fully
   satisfy a parent. Use `Refines:` when a requirement adds detail to
@@ -254,8 +234,7 @@ When writing tests, use Verifies (not Implements):
   # Verifies: REQ-xxx-Y
   def test_description():
 
-Or include the requirement ID in the function name:
-  def test_REQ_xxx_Y_description():
+A test function's name links nothing. Only the comment does.
 
 Use multi-assertion syntax for compact references:
   # Implements: REQ-xxx-A+B+C  (in code files)

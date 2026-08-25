@@ -227,6 +227,7 @@ class TestGitSafetyBranch:
 class TestChangeReferenceType:
     """Tests for change_reference_type() MCP tool."""
 
+    # Verifies: REQ-o00063-A
     def test_REQ_o00063_A_changes_implements_to_refines(self, git_repo):
         """REQ-o00063-A: Modify Implements/Refines relationships in spec files."""
         pytest.importorskip("mcp")
@@ -246,6 +247,7 @@ class TestChangeReferenceType:
         content = req_file.read_text()
         assert "**Refines**: REQ-p00001" in content or "Refines: REQ-p00001" in content
 
+    # Verifies: REQ-o00063-D
     def test_REQ_o00063_D_creates_safety_branch_when_requested(self, git_repo):
         """REQ-o00063-D: Create git safety branches when save_branch=True."""
         pytest.importorskip("mcp")
@@ -292,6 +294,7 @@ class TestChangeReferenceType:
 class TestMoveRequirement:
     """Tests for move_requirement() MCP tool."""
 
+    # Verifies: REQ-o00063-B
     def test_REQ_o00063_B_moves_requirement_to_new_file(self, git_repo):
         """REQ-o00063-B: Relocate a requirement between spec files."""
         pytest.importorskip("mcp")
@@ -316,6 +319,7 @@ class TestMoveRequirement:
         assert "REQ-o00001" not in source_content
         assert "REQ-o00001" in target_content
 
+    # Verifies: REQ-o00063-D
     def test_REQ_o00063_D_creates_safety_branch_on_move(self, git_repo):
         """REQ-o00063-D: Create safety branch on move when requested."""
         pytest.importorskip("mcp")
@@ -347,6 +351,7 @@ class TestMoveRequirement:
 class TestRestoreFromSafetyBranch:
     """Tests for restore_from_safety_branch() MCP tool."""
 
+    # Verifies: REQ-o00063-E
     def test_REQ_o00063_E_restores_from_safety_branch(self, git_repo):
         """REQ-o00063-E: Revert file changes from a safety branch."""
         pytest.importorskip("mcp")
@@ -401,6 +406,7 @@ class TestRestoreFromSafetyBranch:
 class TestGraphRefreshIntegration:
     """Tests for graph refresh after file mutations."""
 
+    # Verifies: REQ-o00063-F
     def test_REQ_o00063_F_file_mutations_modify_files_for_graph_rebuild(self, git_repo):
         """REQ-o00063-F: After file mutations, refresh_graph() SHALL be called.
 

@@ -21,6 +21,7 @@ def _make_associate_repo(base: Path, name: str, namespace: str) -> Path:
     return repo
 
 
+# Verifies: REQ-p00005-C
 def test_REQ_p00005_C_loads_associates_from_paths_config(tmp_path):
     """Registers associates via v3 named [associates.<name>] sections."""
     repo = _make_associate_repo(tmp_path, "callisto", "CAL")
@@ -33,6 +34,7 @@ def test_REQ_p00005_C_loads_associates_from_paths_config(tmp_path):
     assert errors == []
 
 
+# Verifies: REQ-p00005-C
 def test_REQ_p00005_C_loads_multiple_associates(tmp_path):
     """Registers multiple associates from named sections."""
     repo1 = _make_associate_repo(tmp_path, "callisto", "CAL")
@@ -50,6 +52,7 @@ def test_REQ_p00005_C_loads_multiple_associates(tmp_path):
     assert errors == []
 
 
+# Verifies: REQ-p00005-E
 def test_REQ_p00005_E_skips_invalid_path_in_array(tmp_path):
     """Skips invalid paths and continues with valid ones."""
     repo = _make_associate_repo(tmp_path, "callisto", "CAL")
@@ -67,6 +70,7 @@ def test_REQ_p00005_E_skips_invalid_path_in_array(tmp_path):
     assert "does not exist" in errors[0]
 
 
+# Verifies: REQ-p00005-C
 def test_REQ_p00005_C_coexists_with_sponsors_config(tmp_path):
     """Named associates work alongside existing sponsors config."""
     repo = _make_associate_repo(tmp_path, "callisto", "CAL")
@@ -81,6 +85,7 @@ def test_REQ_p00005_C_coexists_with_sponsors_config(tmp_path):
     assert errors == []
 
 
+# Verifies: REQ-p00005-C
 def test_REQ_p00005_C_empty_paths_array(tmp_path):
     """Empty associates returns no directories."""
     config = {"associates": {}}
@@ -89,6 +94,7 @@ def test_REQ_p00005_C_empty_paths_array(tmp_path):
     assert errors == []
 
 
+# Verifies: REQ-p00005-E
 def test_REQ_p00005_E_skips_when_spec_dir_missing(tmp_path):
     """Reports error when associate repo exists but spec dir is missing."""
     repo = tmp_path / "no-spec"

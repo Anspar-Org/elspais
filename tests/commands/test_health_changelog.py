@@ -35,7 +35,7 @@ def _make_config(tmp_path: Path, changelog_overrides: dict | None = None) -> Pat
         return str(v)
 
     lines = [
-        'version = 3\n[project]\nname = "test"\nnamespace = "REQ"\n',
+        'version = 5\n[project]\nname = "test"\nnamespace = "REQ"\n',
         '[scanning.spec]\ndirectories = ["spec"]\n',
         "[changelog]",
     ]
@@ -69,6 +69,7 @@ def _load_config(config_path: Path) -> dict:
 class TestChangelogCurrent:
     """Tests for check_spec_changelog_current."""
 
+    # Verifies: REQ-p00004-A
     def test_REQ_p00004_A_changelog_current_passes_when_hash_matches(self, tmp_path: Path):
         """Active req with matching changelog hash passes."""
         config_path = _make_config(tmp_path)
@@ -104,6 +105,7 @@ class TestChangelogCurrent:
         assert result.passed is True
         assert result.name == "spec.changelog_current"
 
+    # Verifies: REQ-p00004-A
     def test_REQ_p00004_A_changelog_current_fails_when_hash_mismatch(self, tmp_path: Path):
         """Active req with mismatched changelog hash fails."""
         config_path = _make_config(tmp_path)
@@ -140,6 +142,7 @@ class TestChangelogCurrent:
         assert result.severity == "error"
         assert result.name == "spec.changelog_current"
 
+    # Verifies: REQ-p00004-A
     def test_REQ_p00004_A_changelog_current_skips_draft(self, tmp_path: Path):
         """Draft req with no changelog is ignored."""
         config_path = _make_config(tmp_path)
@@ -172,6 +175,7 @@ class TestChangelogCurrent:
 class TestChangelogFormat:
     """Tests for check_spec_changelog_format."""
 
+    # Verifies: REQ-p00004-A
     def test_REQ_p00004_A_changelog_format_passes_valid_entries(self, tmp_path: Path):
         """Valid changelog entries with all required fields pass."""
         config_path = _make_config(tmp_path)
@@ -207,6 +211,7 @@ class TestChangelogFormat:
         assert result.passed is True
         assert result.name == "spec.changelog_format"
 
+    # Verifies: REQ-p00004-A
     def test_REQ_p00004_A_changelog_format_fails_missing_reason(self, tmp_path: Path):
         """Entry with empty reason when require.reason=true fails."""
         config_path = _make_config(tmp_path)

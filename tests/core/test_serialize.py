@@ -326,6 +326,7 @@ class TestSerializeMetricsFiltering:
     but exclude complex objects like RollupMetrics that are not JSON-serializable.
     """
 
+    # Verifies: REQ-d00055-D
     def test_REQ_d00055_D_rollup_metrics_excluded_from_serialization(self):
         """RollupMetrics (non-serializable) should NOT appear in serialized output."""
         from elspais.graph.metrics import RollupMetrics
@@ -348,6 +349,7 @@ class TestSerializeMetricsFiltering:
             "RollupMetrics object should be filtered out of serialized metrics"
         )
 
+    # Verifies: REQ-d00055-D
     def test_REQ_d00055_D_referenced_pct_included_in_serialization(self):
         """referenced_pct (float scalar) SHOULD appear in serialized output."""
         from elspais.graph.metrics import RollupMetrics
@@ -377,6 +379,7 @@ class TestSerializeMetricsFiltering:
             "Integer metrics should be preserved in serialized output"
         )
 
+    # Verifies: REQ-d00055-D
     def test_REQ_d00055_D_serialized_metrics_are_json_safe(self):
         """All metrics in serialized output must be JSON-serializable scalar types."""
         import json

@@ -63,7 +63,7 @@ def _make_library(tmp_path: Path) -> Path:
         library,
         ".elspais.toml",
         """
-        version = 3
+        version = 5
         [project]
         name = "library"
         namespace = "LIB"
@@ -109,7 +109,7 @@ def _make_app(tmp_path: Path) -> Path:
         app,
         ".elspais.toml",
         """
-        version = 3
+        version = 5
         [project]
         name = "app"
         namespace = "APP"
@@ -288,7 +288,7 @@ class TestCrossRepoCloneShape:
             library,
             ".elspais.toml",
             """
-            version = 3
+            version = 5
             [project]
             name = "library"
             namespace = "LIB"
@@ -324,7 +324,7 @@ class TestCrossRepoCloneShape:
             app,
             ".elspais.toml",
             """
-            version = 3
+            version = 5
             [project]
             name = "app"
             namespace = "APP"
@@ -405,7 +405,7 @@ class TestCrossRepoCloneShape:
             tenant,
             ".elspais.toml",
             """
-            version = 3
+            version = 5
             [project]
             name = "tenant"
             namespace = "TEN"
@@ -664,7 +664,7 @@ class TestFederatedDiagnostics:
             app,
             ".elspais.toml",
             """
-            version = 3
+            version = 5
             [project]
             name = "app"
             namespace = "APP"
@@ -733,7 +733,7 @@ class TestFederatedDiagnostics:
             app,
             ".elspais.toml",
             """
-            version = 3
+            version = 5
             [project]
             name = "app"
             namespace = "APP"
@@ -809,7 +809,7 @@ class TestFederatedDiagnostics:
             a,
             ".elspais.toml",
             """
-            version = 3
+            version = 5
             [project]
             name = "repo_a"
             namespace = "AAA"
@@ -846,7 +846,7 @@ class TestFederatedDiagnostics:
             b,
             ".elspais.toml",
             """
-            version = 3
+            version = 5
             [project]
             name = "repo_b"
             namespace = "BBB"

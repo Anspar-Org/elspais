@@ -160,15 +160,32 @@ def test_a_code_file_binds_the_good_items_of_a_mixed_line(tmp_path, repo_root):
     assert "REQ-d00001-A" not in targets  # the good item bound
 
 
-# Verifies: REQ-d00269-G
-def test_an_underscore_notation_item_binds_in_a_reference_list(reader):
-    """A list item spelled in underscore notation -- the same grammar a
-    Python test function name renders (``IdResolver.grammar(separator="_")``)
-    -- is matched whole and resolves, not left as a string no member's
-    canonical, dash-separated form claims."""
+# Verifies: REQ-d00212-S
+def test_an_underscore_notation_item_resolves_to_nothing(reader):
+    """A list item spelled with punctuation the configuration does not admit
+    resolves to nothing and carries a fault class.
+
+    The configured separator is ``-``; substituting ``_`` for it is neither
+    a difference of case nor of padding, and reading tolerantly extends to
+    those two and no further (REQ-d00212-S). Repairing the item into
+    ``REQ-d00001-A`` would produce a relationship its author did not spell,
+    and produce it silently, since an item that resolved is an item that
+    looked fine.
+
+    The namespace boundary comes from the grammar's own separator, so an
+    item opening ``REQ_`` does not open with the declared namespace ``REQ-``
+    and is attributed to no repository -- rather than described as a local
+    identifier written badly.
+    """
     items = reader.parse_ref_list("REQ_d00001_A")
-    assert items[0].resolved == "REQ-d00001-A"
-    assert items[0].fault_class is None
+    assert items[0].raw == "REQ_d00001_A", "the item is reported as written"
+    assert items[0].resolved is None, (
+        f"the item was repaired into {items[0].resolved!r}, which resolves; a "
+        f"difference past case and padding must resolve to nothing"
+    )
+    assert items[0].fault_class is FaultClass.UNKNOWN_NAMESPACE, (
+        f"got {items[0].fault_class!r} with codes {items[0].codes!r}"
+    )
 
 
 # Verifies: REQ-d00272-B

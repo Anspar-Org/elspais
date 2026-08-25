@@ -35,6 +35,12 @@ from elspais.graph.GraphNode import (
 )
 from elspais.graph.mutations import MutationEntry, MutationLog
 from elspais.graph.parsers import ParsedContent
+from elspais.graph.parsers.directives import (
+    apply_directive,
+    assertion_is_retired,
+    canonical_assertion_text,
+    directive_fields,
+)
 from elspais.graph.reference_faults import (
     FaultClass,
     FaultCode,
@@ -1278,7 +1284,13 @@ class TraceGraph:
         node_id = entry.target_id
         old_text = entry.before_state.get("text")
         if node_id in self._index and old_text is not None:
-            self._index[node_id].set_label(old_text)
+            node = self._index[node_id]
+            # Implements: REQ-p00002-E
+            # Restoring the text has to restore what the text SAYS: an
+            # *Assertion* retired by a mutation and then un-retired by its
+            # undo would otherwise keep the flag and stay out of every
+            # denominator it had rejoined.
+            node.set_label(apply_directive(node, old_text))
             # Restore parent hash (even if None)
             parent_id = entry.before_state.get("parent_id")
             if parent_id and parent_id in self._index and "parent_hash" in entry.before_state:
@@ -2132,8 +2144,10 @@ class TraceGraph:
             affects_hash=True,
         )
 
-        # Update assertion text
-        node.set_label(new_text)
+        # Update assertion text. Reading the directive here is what lets an
+        # *Assertion* be retired -- or brought back -- through a mutation
+        # rather than only through a file (REQ-p00002-E).
+        node.set_label(apply_directive(node, new_text))
 
         # Recompute parent hash
         self._recompute_requirement_hash(parent)
@@ -2141,7 +2155,7 @@ class TraceGraph:
         self._mutation_log.append(entry)
         return entry
 
-    # Implements: REQ-o00062-S
+    # Implements: REQ-o00062-S, REQ-p00017-I
     def _next_assertion_label(self, parent: GraphNode) -> str:
         """The label following ``parent``'s last assertion in its series.
 
@@ -2247,13 +2261,16 @@ class TraceGraph:
 
         old_hash = parent.get_field("hash")
 
-        # Create assertion node
+        # Create assertion node. Text arriving through a mutation is read for
+        # a directive exactly as text arriving from a file is (REQ-p00002-E),
+        # so an *Assertion* added already retired never enters a denominator.
+        assertion_text = canonical_assertion_text(text)
         assertion_node = GraphNode(
             id=assertion_id,
             kind=NodeKind.ASSERTION,
-            label=text,
+            label=assertion_text,
         )
-        assertion_node._content = {"label": label}
+        assertion_node._content = {"label": label, **directive_fields(assertion_text)}
 
         # Add to index and link to parent
         self._index[assertion_id] = assertion_node
@@ -4292,15 +4309,24 @@ class GraphBuilder:
         for assertion in data.get("assertions", []):
             assertion_id = self._resolver.make_assertion_id(req_id, assertion["label"])
             assertion_line = assertion.get("line", content.start_line)
+            # Implements: REQ-p00002-E
+            # A directive at the head of the text is read here, once, and
+            # recorded on the node -- every later reader asks the node rather
+            # than re-reading the prose. The label carries the CANONICAL
+            # spelling, so a recognized directive written in any admitted case
+            # renders in the one form; text carrying no directive, or one the
+            # tool does not recognize, is stored exactly as authored.
+            assertion_text = canonical_assertion_text(assertion["text"])
             assertion_node = GraphNode(
                 id=assertion_id,
                 kind=NodeKind.ASSERTION,
-                label=assertion["text"],
+                label=assertion_text,
             )
             assertion_node._content = {
                 "label": assertion["label"],
                 "parse_line": assertion_line,
                 "parse_end_line": None,
+                **directive_fields(assertion_text),
             }
             self._nodes[assertion_id] = assertion_node
             children_with_lines.append((assertion_line, assertion_node))
@@ -5448,6 +5474,16 @@ class GraphBuilder:
             target = (
                 None if (edge_kind.value, target_id) in verdicts else self._nodes.get(target_id)
             )
+            # Implements: REQ-p00017-H
+            # A retired *Assertion* does not exist for *Traceability*
+            # purposes, so a reference naming it is treated exactly as a
+            # reference to an *Assertion* that was never written: it binds
+            # nothing and is reported. The node itself stays -- it renders,
+            # it hashes, and its label stays allocated -- but it is not a
+            # target. Dropping the target here rather than at lookup is what
+            # keeps those three true.
+            if target is not None and assertion_is_retired(target):
+                target = None
 
             if source and target:
                 # Implements: REQ-p00014-G

@@ -537,6 +537,14 @@ def direct_coverage_for(node: GraphNode) -> int:
     from elspais.graph.GraphNode import NodeKind
 
     if node.kind == NodeKind.ASSERTION:
+        # Implements: REQ-p00017-G
+        # A retired *Assertion* takes no credit from a blanket citation of its
+        # requirement: it is excluded from every coverage calculation, and a
+        # citation naming the requirement as a whole is one of them.
+        from elspais.graph.parsers.directives import assertion_is_retired
+
+        if assertion_is_retired(node):
+            return 0
         label = node.get_field("label")
         count = 0
         for parent in node.iter_parents():
@@ -633,13 +641,13 @@ def satisfier_rollup(node: GraphNode) -> SatisfierRollup:
         A :class:`SatisfierRollup` with combined counts and fraction.
     """
     from elspais.graph.GraphNode import NodeKind
+    from elspais.graph.parsers.directives import assertion_is_retired, counted_assertions
     from elspais.graph.relations import EdgeKind
 
-    own_assertions = [
-        c
-        for c in node.iter_children(edge_kinds={EdgeKind.STRUCTURES})
-        if c.kind == NodeKind.ASSERTION
-    ]
+    # Implements: REQ-p00017-G
+    # A retired *Assertion* leaves both halves of this footing: it is neither
+    # work the satisfier owes nor work the template asks of it.
+    own_assertions = counted_assertions(node, structural=True)
     own_covered = sum(1 for a in own_assertions if direct_coverage_for(a) > 0)
 
     satisfied_clones = [
@@ -648,7 +656,11 @@ def satisfier_rollup(node: GraphNode) -> SatisfierRollup:
     template_assertions: list[GraphNode] = []
     for clone in satisfied_clones:
         for ce in clone.iter_outgoing_edges():
-            if ce.kind == EdgeKind.STRUCTURES and ce.target.kind == NodeKind.ASSERTION:
+            if (
+                ce.kind == EdgeKind.STRUCTURES
+                and ce.target.kind == NodeKind.ASSERTION
+                and not assertion_is_retired(ce.target)
+            ):
                 template_assertions.append(ce.target)
     template_covered = sum(1 for a in template_assertions if inherited_coverage_for(a) > 0)
 

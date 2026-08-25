@@ -276,15 +276,11 @@ function hashPassword(plain) { ... }
 
 ## Marking Tests as Validating
 
-Reference requirement IDs in test function names:
+Write a comment above the test. This is the only form that links a test --
+a requirement ID in the function name references nothing:
 
 ```python
-def test_REQ_d00001_A_bcrypt_cost(): ...
-```
-
-Or with comments:
-```python
-# Tests: REQ-d00001-A
+# Verifies: REQ-d00001-A
 def test_password_uses_bcrypt(): ...
 ```
 

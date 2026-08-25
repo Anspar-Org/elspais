@@ -31,7 +31,7 @@ _JOURNEY_UAT_FIX = Path(__file__).parents[1] / "fixtures" / "journey-uat"
 # A project whose `prd` level expects validation, so the UAT branch of both
 # surfaces is live (REQ-d00258-F).
 _UAT_CONFIG = """
-version = 3
+version = 5
 
 [project]
 name = "work-list-verdict"
@@ -251,7 +251,7 @@ def test_partial_uat_verification_is_uncovered_and_keeps_its_fraction(
 # --- The relative denominator on the implemented/tested chain --------------
 
 _CHAIN_CONFIG = """
-version = 3
+version = 5
 
 [project]
 name = "work-list-chain"

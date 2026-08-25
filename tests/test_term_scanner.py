@@ -26,6 +26,7 @@ from elspais.graph.terms import TermDictionary, TermEntry, TermRef
 # -- REQ-d00236-A: returns list of (comment_text, line_number) pairs -----------
 
 
+# Verifies: REQ-d00236-A
 def test_REQ_d00236_A_returns_list_of_tuples():
     source = "# a comment\nx = 1\n"
     result = extract_comments(source, ".py")
@@ -38,6 +39,7 @@ def test_REQ_d00236_A_returns_list_of_tuples():
         assert isinstance(lineno, int)
 
 
+# Verifies: REQ-d00236-A
 def test_REQ_d00236_A_empty_source_returns_empty_list():
     result = extract_comments("", ".py")
     assert result == []
@@ -46,6 +48,7 @@ def test_REQ_d00236_A_empty_source_returns_empty_list():
 # -- REQ-d00236-B: Python files ------------------------------------------------
 
 
+# Verifies: REQ-d00236-B
 def test_REQ_d00236_B_python_hash_comments():
     source = "x = 1\n# first comment\ny = 2\n# second comment\n"
     result = extract_comments(source, ".py")
@@ -54,6 +57,7 @@ def test_REQ_d00236_B_python_hash_comments():
     assert ("second comment", 4) in texts
 
 
+# Verifies: REQ-d00236-B
 def test_REQ_d00236_B_python_docstring_not_extracted():
     """Docstrings are NOT extracted — only # comments are scanned for term refs."""
     source = 'def foo():\n    """This is a docstring."""\n    pass\n'
@@ -77,6 +81,7 @@ def test_REQ_d00236_B_python_docstring_not_extracted():
     assert not any("First line" in t for t in texts)
 
 
+# Verifies: REQ-d00236-B
 def test_REQ_d00236_B_python_string_literal_not_extracted():
     source = (
         "x = 'not a comment'\n"
@@ -92,12 +97,14 @@ def test_REQ_d00236_B_python_string_literal_not_extracted():
 # -- REQ-d00236-C: Slash-comment languages -------------------------------------
 
 
+# Verifies: REQ-d00236-C
 def test_REQ_d00236_C_js_line_comment():
     source = "const x = 1;\n// a line comment\nconst y = 2;\n"
     result = extract_comments(source, ".js")
     assert ("a line comment", 2) in result
 
 
+# Verifies: REQ-d00236-C
 def test_REQ_d00236_C_js_block_comment():
     source = "const x = 1;\n/* block comment */\nconst y = 2;\n"
     result = extract_comments(source, ".js")
@@ -105,6 +112,7 @@ def test_REQ_d00236_C_js_block_comment():
     assert any("block comment" in t for t in texts)
 
 
+# Verifies: REQ-d00236-C
 def test_REQ_d00236_C_js_multiline_block_comment():
     source = "const x = 1;\n/* first line\n   second line\n   third line */\nconst y = 2;\n"
     result = extract_comments(source, ".js")
@@ -112,12 +120,14 @@ def test_REQ_d00236_C_js_multiline_block_comment():
     assert any("first line" in t and "third line" in t for t in texts)
 
 
+# Verifies: REQ-d00236-C
 def test_REQ_d00236_C_go_line_comment():
     source = "package main\n// Go comment here\nfunc main() {}\n"
     result = extract_comments(source, ".go")
     assert ("Go comment here", 2) in result
 
 
+# Verifies: REQ-d00236-C
 def test_REQ_d00236_C_rust_line_comment():
     source = "fn main() {\n// Rust comment\n}\n"
     result = extract_comments(source, ".rs")
@@ -127,24 +137,28 @@ def test_REQ_d00236_C_rust_line_comment():
 # -- REQ-d00236-D: Hash-comment languages --------------------------------------
 
 
+# Verifies: REQ-d00236-D
 def test_REQ_d00236_D_ruby_hash_comment():
     source = "x = 1\n# Ruby comment\ny = 2\n"
     result = extract_comments(source, ".rb")
     assert ("Ruby comment", 2) in result
 
 
+# Verifies: REQ-d00236-D
 def test_REQ_d00236_D_yaml_hash_comment():
     source = "key: value\n# YAML comment\nother: thing\n"
     result = extract_comments(source, ".yaml")
     assert ("YAML comment", 2) in result
 
 
+# Verifies: REQ-d00236-D
 def test_REQ_d00236_D_yml_hash_comment():
     source = "# YML comment\nkey: value\n"
     result = extract_comments(source, ".yml")
     assert ("YML comment", 1) in result
 
 
+# Verifies: REQ-d00236-D
 @pytest.mark.parametrize("ext", [".tf", ".tfvars", ".hcl"])
 def test_REQ_d00236_D_terraform_hash_comments(ext):
     """Terraform/HCL sources are hash-comment languages.
@@ -170,12 +184,14 @@ def test_REQ_d00236_D_terraform_hash_comments(ext):
 # -- REQ-d00236-E: Dash-comment languages --------------------------------------
 
 
+# Verifies: REQ-d00236-E
 def test_REQ_d00236_E_sql_dash_comment():
     source = "SELECT 1;\n-- SQL comment\nSELECT 2;\n"
     result = extract_comments(source, ".sql")
     assert ("SQL comment", 2) in result
 
 
+# Verifies: REQ-d00236-E
 def test_REQ_d00236_E_lua_dash_comment():
     source = "local x = 1\n-- Lua comment\nlocal y = 2\n"
     result = extract_comments(source, ".lua")
@@ -185,6 +201,7 @@ def test_REQ_d00236_E_lua_dash_comment():
 # -- REQ-d00236-F: Markup languages --------------------------------------------
 
 
+# Verifies: REQ-d00236-F
 def test_REQ_d00236_F_html_comment():
     source = "<div>\n<!-- HTML comment -->\n</div>\n"
     result = extract_comments(source, ".html")
@@ -192,6 +209,7 @@ def test_REQ_d00236_F_html_comment():
     assert any("HTML comment" in t for t in texts)
 
 
+# Verifies: REQ-d00236-F
 def test_REQ_d00236_F_html_multiline_comment():
     source = "<div>\n<!-- first line\n     second line -->\n</div>\n"
     result = extract_comments(source, ".html")
@@ -199,6 +217,7 @@ def test_REQ_d00236_F_html_multiline_comment():
     assert any("first line" in t and "second line" in t for t in texts)
 
 
+# Verifies: REQ-d00236-F
 def test_REQ_d00236_F_xml_comment():
     source = '<?xml version="1.0"?>\n<!-- XML comment -->\n<root/>\n'
     result = extract_comments(source, ".xml")
@@ -209,12 +228,14 @@ def test_REQ_d00236_F_xml_comment():
 # -- REQ-d00236-G: Unknown extensions ------------------------------------------
 
 
+# Verifies: REQ-d00236-G
 def test_REQ_d00236_G_unknown_extension_returns_empty():
     source = "some content\n# looks like a comment\n"
     result = extract_comments(source, ".xyz")
     assert result == []
 
 
+# Verifies: REQ-d00236-G
 def test_REQ_d00236_G_empty_extension_returns_empty():
     source = "some content\n"
     result = extract_comments(source, "")
@@ -242,6 +263,7 @@ def _make_td(*terms: tuple[str, bool]) -> TermDictionary:
 # -- REQ-d00237-A: returns list[TermRef] --------------------------------------
 
 
+# Verifies: REQ-d00237-A
 def test_REQ_d00237_A_returns_list_of_termref():
     td = _make_td(("widget", True))
     result = scan_text_for_terms("A widget is here.", td, node_id="REQ-001", namespace="main")
@@ -253,6 +275,7 @@ def test_REQ_d00237_A_returns_list_of_termref():
 # -- REQ-d00237-B: marked detection -------------------------------------------
 
 
+# Verifies: REQ-d00237-B
 def test_REQ_d00237_B_single_star_marked():
     td = _make_td(("widget", True))
     result = scan_text_for_terms(
@@ -267,6 +290,7 @@ def test_REQ_d00237_B_single_star_marked():
     assert marked[0].wrong_marking == ""
 
 
+# Verifies: REQ-d00237-B
 def test_REQ_d00237_B_double_star_marked():
     td = _make_td(("widget", True))
     result = scan_text_for_terms(
@@ -281,6 +305,7 @@ def test_REQ_d00237_B_double_star_marked():
     assert marked[0].wrong_marking == ""
 
 
+# Verifies: REQ-d00237-B
 def test_REQ_d00237_B_case_insensitive_marked():
     td = _make_td(("widget", True))
     result = scan_text_for_terms(
@@ -298,6 +323,7 @@ def test_REQ_d00237_B_case_insensitive_marked():
 # -- REQ-d00237-C: wrong-marking detection ------------------------------------
 
 
+# Verifies: REQ-d00237-C
 def test_REQ_d00237_C_double_underscore_wrong_marking():
     td = _make_td(("widget", True))
     result = scan_text_for_terms(
@@ -313,6 +339,7 @@ def test_REQ_d00237_C_double_underscore_wrong_marking():
     assert wrong[0].marked is False
 
 
+# Verifies: REQ-d00237-C
 def test_REQ_d00237_C_single_underscore_wrong_marking():
     td = _make_td(("widget", True))
     result = scan_text_for_terms(
@@ -328,6 +355,7 @@ def test_REQ_d00237_C_single_underscore_wrong_marking():
     assert wrong[0].marked is False
 
 
+# Verifies: REQ-d00237-C
 def test_REQ_d00237_C_wrong_case_term_still_detected():
     # Guards the case-insensitive term pre-filter (CUR-1521)
     # Term defined lowercase "widget" but appears as "Widget" (capital W)
@@ -347,6 +375,7 @@ def test_REQ_d00237_C_wrong_case_term_still_detected():
     assert wrong[0].marked is False
 
 
+# Verifies: REQ-d00237-C
 def test_REQ_d00237_C_absent_term_yields_no_results():
     # Confirms the pre-filter skip path: a term genuinely absent from the
     # text (in any case) produces no references.
@@ -361,6 +390,7 @@ def test_REQ_d00237_C_absent_term_yields_no_results():
     assert result == []
 
 
+# Verifies: REQ-d00237-C
 def test_REQ_d00237_C_star_not_in_markup_styles_is_wrong():
     """When '*' is NOT in markup_styles, *term* is wrong-marking."""
     td = _make_td(("widget", True))
@@ -380,6 +410,7 @@ def test_REQ_d00237_C_star_not_in_markup_styles_is_wrong():
 # -- REQ-d00237-D: unmarked (plain text) scanning -----------------------------
 
 
+# Verifies: REQ-d00237-D
 def test_REQ_d00237_D_plain_text_unmarked():
     td = _make_td(("widget", True))
     result = scan_text_for_terms("A widget is here.", td, node_id="REQ-001", namespace="main")
@@ -387,6 +418,7 @@ def test_REQ_d00237_D_plain_text_unmarked():
     assert len(unmarked) == 1
 
 
+# Verifies: REQ-d00237-D
 def test_REQ_d00237_D_whole_word_no_partial_match():
     td = _make_td(("term", True))
     result = scan_text_for_terms(
@@ -395,6 +427,7 @@ def test_REQ_d00237_D_whole_word_no_partial_match():
     assert len(result) == 0
 
 
+# Verifies: REQ-d00237-D
 def test_REQ_d00237_D_case_insensitive_plain():
     td = _make_td(("term", True))
     result = scan_text_for_terms("The TERM is defined.", td, node_id="REQ-001", namespace="main")
@@ -402,6 +435,7 @@ def test_REQ_d00237_D_case_insensitive_plain():
     assert len(unmarked) == 1
 
 
+# Verifies: REQ-d00237-D
 def test_REQ_d00237_D_no_double_counting():
     """Marked position should not also produce an unmarked match."""
     td = _make_td(("widget", True))
@@ -421,12 +455,14 @@ def test_REQ_d00237_D_no_double_counting():
 # -- REQ-d00237-E: non-indexed terms ------------------------------------------
 
 
+# Verifies: REQ-d00237-E
 def test_REQ_d00237_E_non_indexed_skips_unmarked():
     td = _make_td(("widget", False))
     result = scan_text_for_terms("A widget is here.", td, node_id="REQ-001", namespace="main")
     assert len(result) == 0
 
 
+# Verifies: REQ-d00237-E
 def test_REQ_d00237_E_non_indexed_still_detects_marked():
     td = _make_td(("widget", False))
     result = scan_text_for_terms(
@@ -492,6 +528,7 @@ def _mock_graph(nodes_by_kind, file_roots=None):
 # -- REQ-d00238-A: scan_graph populates TermEntry.references ------------------
 
 
+# Verifies: REQ-d00238-A
 def test_REQ_d00238_A_populates_references():
     td = _make_td(("widget", True))
     req_node = _mock_node(NodeKind.REQUIREMENT, "REQ-001", label="The widget spec")
@@ -506,6 +543,7 @@ def test_REQ_d00238_A_populates_references():
     assert len(entry.references) > 0
 
 
+# Verifies: REQ-d00238-A
 def test_REQ_d00238_A_no_match_leaves_references_empty():
     td = _make_td(("gadget", True))
     req_node = _mock_node(NodeKind.REQUIREMENT, "REQ-001", label="The widget spec")
@@ -523,6 +561,7 @@ def test_REQ_d00238_A_no_match_leaves_references_empty():
 # -- REQ-d00238-B: full-text node kinds ---------------------------------------
 
 
+# Verifies: REQ-d00238-B
 def test_REQ_d00238_B_requirement_label_scanned():
     td = _make_td(("widget", True))
     req_node = _mock_node(NodeKind.REQUIREMENT, "REQ-001", label="A widget requirement")
@@ -536,6 +575,7 @@ def test_REQ_d00238_B_requirement_label_scanned():
     assert any(r.node_id == "REQ-001" for r in entry.references)
 
 
+# Verifies: REQ-d00238-B
 def test_REQ_d00238_B_assertion_label_scanned():
     td = _make_td(("widget", True))
     assertion_node = _mock_node(NodeKind.ASSERTION, "REQ-001-A", label="The widget shall work")
@@ -549,6 +589,7 @@ def test_REQ_d00238_B_assertion_label_scanned():
     assert any(r.node_id == "REQ-001-A" for r in entry.references)
 
 
+# Verifies: REQ-d00238-B
 def test_REQ_d00238_B_remainder_text_scanned():
     td = _make_td(("widget", True))
     remainder_node = _mock_node(
@@ -566,6 +607,7 @@ def test_REQ_d00238_B_remainder_text_scanned():
     assert any(r.node_id == "REQ-001:remainder:1" for r in entry.references)
 
 
+# Verifies: REQ-d00238-B
 def test_REQ_d00238_B_remainder_definition_block_skipped():
     td = _make_td(("widget", True))
     remainder_node = _mock_node(
@@ -583,6 +625,7 @@ def test_REQ_d00238_B_remainder_definition_block_skipped():
     assert len(entry.references) == 0
 
 
+# Verifies: REQ-d00238-B
 def test_REQ_d00238_B_user_journey_body_scanned():
     td = _make_td(("widget", True))
     journey_node = _mock_node(
@@ -603,6 +646,7 @@ def test_REQ_d00238_B_user_journey_body_scanned():
 # -- REQ-d00238-C: CODE and TEST nodes use comment extraction only ------------
 
 
+# Verifies: REQ-d00238-C
 def test_REQ_d00238_C_code_comment_found(tmp_path):
     td = _make_td(("widget", True))
     # Write a real Python file so extract_comments can tokenize/parse it
@@ -627,6 +671,7 @@ def test_REQ_d00238_C_code_comment_found(tmp_path):
     assert entry.references[0].line == 2
 
 
+# Verifies: REQ-d00238-C
 def test_REQ_d00238_C_code_non_comment_not_found(tmp_path):
     td = _make_td(("widget", True))
     py_file = tmp_path / "main.py"
@@ -651,6 +696,7 @@ def test_REQ_d00238_C_code_non_comment_not_found(tmp_path):
 # -- REQ-d00238-D: exclude_files glob patterns --------------------------------
 
 
+# Verifies: REQ-d00238-D
 def test_REQ_d00238_D_excluded_file_skipped():
     td = _make_td(("widget", True))
     file_node = _mock_file_node("docs/glossary.md")
@@ -664,6 +710,7 @@ def test_REQ_d00238_D_excluded_file_skipped():
     assert len(entry.references) == 0
 
 
+# Verifies: REQ-d00238-D
 def test_REQ_d00238_D_non_excluded_file_not_skipped():
     td = _make_td(("widget", True))
     file_node = _mock_file_node("spec/reqs.md")
@@ -690,6 +737,7 @@ def test_REQ_d00238_D_non_excluded_file_not_skipped():
 # -- REQ-d00239-A: Cross-repo resolution using merged TermDictionary ----------
 
 
+# Verifies: REQ-d00239-A
 def test_REQ_d00239_A_cross_repo_term_resolution():
     """Term defined in repo A is found in repo B's requirement text."""
     # Build a merged TermDictionary with "widget" (defined in repo A)
@@ -712,6 +760,7 @@ def test_REQ_d00239_A_cross_repo_term_resolution():
     assert refs[0].namespace == "repo-b"
 
 
+# Verifies: REQ-d00239-A
 def test_REQ_d00239_A_multiple_repos_accumulate_references():
     """References from multiple repos accumulate in the merged dictionary."""
     td = _make_td(("widget", True))
@@ -738,6 +787,7 @@ def test_REQ_d00239_A_multiple_repos_accumulate_references():
     assert namespaces == {"repo-a", "repo-b"}
 
 
+# Verifies: REQ-d00239-A
 def test_REQ_d00239_A_scan_terms_method_exists_and_calls_scan_graph():
     """FederatedGraph._scan_terms() exists and invokes scan_graph per repo."""
     from pathlib import Path
@@ -797,6 +847,7 @@ def test_REQ_d00239_A_scan_terms_method_exists_and_calls_scan_graph():
 # -- REQ-d00239-B: Per-repo config for markup_styles and exclude_files --------
 
 
+# Verifies: REQ-d00239-B
 def test_REQ_d00239_B_per_repo_markup_styles():
     """Each repo's scan uses its own markup_styles config."""
     td = _make_td(("widget", True))
@@ -833,6 +884,7 @@ def test_REQ_d00239_B_per_repo_markup_styles():
     assert refs_b[0].marked is False
 
 
+# Verifies: REQ-d00239-B
 def test_REQ_d00239_B_per_repo_exclude_files():
     """Each repo's scan uses its own exclude_files config."""
     td = _make_td(("widget", True))
@@ -862,6 +914,7 @@ def test_REQ_d00239_B_per_repo_exclude_files():
     assert len(refs_b) == 1
 
 
+# Verifies: REQ-d00239-B
 def test_REQ_d00239_B_scan_terms_passes_per_repo_config():
     """_scan_terms passes each repo's terms config to scan_graph."""
     from pathlib import Path
@@ -947,6 +1000,7 @@ def _td_with_term(term: str) -> TermDictionary:
     return td
 
 
+# Verifies: REQ-d00237-D
 def test_REQ_d00237_D_skip_term_inside_outer_bold_phrase():
     """A defined term that appears inside a longer **bold ...** phrase
     must NOT be re-wrapped — the outer emphasis already satisfies the
@@ -957,6 +1011,7 @@ def test_REQ_d00237_D_skip_term_inside_outer_bold_phrase():
     assert result == text, f"term inside outer bold should be left alone, got: {result!r}"
 
 
+# Verifies: REQ-d00237-D
 def test_REQ_d00237_D_skip_term_inside_outer_italic_phrase():
     """Same rule applies to single-asterisk italic spans."""
     td = _td_with_term("Diary")
@@ -965,6 +1020,7 @@ def test_REQ_d00237_D_skip_term_inside_outer_italic_phrase():
     assert result == text
 
 
+# Verifies: REQ-d00237-D
 def test_REQ_d00237_D_wrap_term_outside_emphasis_unchanged():
     """Verifies the guard doesn't over-correct — plain occurrences of
     the term in non-emphasis prose are still auto-marked."""
@@ -974,6 +1030,7 @@ def test_REQ_d00237_D_wrap_term_outside_emphasis_unchanged():
     assert result == "Open the **Diary**."
 
 
+# Verifies: REQ-d00237-D
 def test_REQ_d00237_D_canonical_bold_term_left_alone():
     """A term that IS the entire bold phrase (canonical form) must
     still be recognized as canonical and not double-wrapped."""
@@ -1003,6 +1060,7 @@ def _offsets(text: str, term: str) -> tuple[int, int]:
 # -- REQ-d00237-F: the _is_embedded_in_compound predicate ---------------------
 
 
+# Verifies: REQ-d00237-F
 def test_REQ_d00237_F_embedded_predicate_true_for_compound_ids():
     """A term that is one sub-token of a larger compound identifier is
     embedded — the surrounding non-whitespace token has other alnum chars."""
@@ -1017,6 +1075,7 @@ def test_REQ_d00237_F_embedded_predicate_true_for_compound_ids():
         )
 
 
+# Verifies: REQ-d00237-F
 def test_REQ_d00237_F_embedded_predicate_false_for_free_standing_prose():
     """Free-standing prose occurrences (with optional trailing punctuation
     or wrapping parens) are NOT embedded."""
@@ -1035,6 +1094,7 @@ def test_REQ_d00237_F_embedded_predicate_false_for_free_standing_prose():
 # -- REQ-d00237-F: scan_text_for_terms flags embedded refs but keeps them -----
 
 
+# Verifies: REQ-d00237-F
 def test_REQ_d00237_F_scan_flags_embedded_compound_id_but_records_it():
     """A term inside a hyphenated compound ID yields a TermRef with
     embedded=True that IS present in the result and in entry.references
@@ -1052,6 +1112,7 @@ def test_REQ_d00237_F_scan_flags_embedded_compound_id_but_records_it():
     assert entry.references[0].embedded is True
 
 
+# Verifies: REQ-d00237-F
 def test_REQ_d00237_F_scan_free_standing_prose_is_not_embedded():
     """A free-standing prose occurrence yields embedded=False — contrast
     with the compound-ID case so the flag is meaningfully set."""
@@ -1065,6 +1126,7 @@ def test_REQ_d00237_F_scan_free_standing_prose_is_not_embedded():
 # -- REQ-d00237-F: canonicalization skips embedded refs -----------------------
 
 
+# Verifies: REQ-d00237-F
 def test_REQ_d00237_F_canonicalize_skips_term_in_compound_id():
     """The auto-marker must NOT wrap a term that is a sub-token of a
     compound identifier — the ID is returned unchanged with no replacement."""
@@ -1076,6 +1138,7 @@ def test_REQ_d00237_F_canonicalize_skips_term_in_compound_id():
     assert repls == []
 
 
+# Verifies: REQ-d00237-F
 def test_REQ_d00237_F_canonicalize_still_marks_free_standing_term():
     """Sanity contrast: a free-standing occurrence of the SAME term IS
     still auto-marked — embedding didn't disable marking entirely."""
@@ -1130,6 +1193,7 @@ _NESTED_ORDERS = [
 # -- REQ-d00237-G: _terms_longest_first ordering ------------------------------
 
 
+# Verifies: REQ-d00237-G
 def test_REQ_d00237_G_terms_longest_first_descending_length():
     """_terms_longest_first orders entries by descending term length,
     breaking ties deterministically on the term string."""
@@ -1146,6 +1210,7 @@ def test_REQ_d00237_G_terms_longest_first_descending_length():
     ]
 
 
+# Verifies: REQ-d00237-G
 def test_REQ_d00237_G_terms_longest_first_order_independent():
     """The ordering is independent of insertion order — inserting the
     same terms reversed yields the same longest-first sequence."""
@@ -1158,6 +1223,7 @@ def test_REQ_d00237_G_terms_longest_first_order_independent():
 # -- REQ-d00237-G: scan plain compound — only the longer term matches ----------
 
 
+# Verifies: REQ-d00237-G
 @pytest.mark.parametrize("order", _NESTED_ORDERS)
 def test_REQ_d00237_G_scan_plain_compound_only_longest(order):
     """A plain "Sponsor Portal" yields exactly one unmarked "Sponsor Portal"
@@ -1175,6 +1241,7 @@ def test_REQ_d00237_G_scan_plain_compound_only_longest(order):
     assert "Sponsor" not in surfaces
 
 
+# Verifies: REQ-d00237-G
 @pytest.mark.parametrize("order", _NESTED_ORDERS)
 def test_REQ_d00237_G_scan_marked_compound_only_longest(order):
     """A marked "*Sponsor Portal*" yields exactly one marked "Sponsor Portal"
@@ -1194,6 +1261,7 @@ def test_REQ_d00237_G_scan_marked_compound_only_longest(order):
     assert result[0].wrong_marking == ""
 
 
+# Verifies: REQ-d00237-G
 @pytest.mark.parametrize("order", _NESTED_ORDERS)
 def test_REQ_d00237_G_scan_standalone_inner_still_matches(order):
     """The shorter nested term still matches where it appears on its own
@@ -1209,6 +1277,7 @@ def test_REQ_d00237_G_scan_standalone_inner_still_matches(order):
     assert result[0].wrong_marking == ""
 
 
+# Verifies: REQ-d00237-G
 @pytest.mark.parametrize("order", _NESTED_ORDERS)
 def test_REQ_d00237_G_scan_mixed_compound_and_standalone(order):
     """Text with BOTH a compound usage and a separate standalone inner usage
@@ -1232,6 +1301,7 @@ def test_REQ_d00237_G_scan_mixed_compound_and_standalone(order):
 # -- REQ-d00237-G: canonicalization wraps the compound as a whole --------------
 
 
+# Verifies: REQ-d00237-G
 @pytest.mark.parametrize("order", _NESTED_ORDERS)
 def test_REQ_d00237_G_canonicalize_wraps_compound_as_whole(order):
     """_canonicalize_text wraps the full compound "Sponsor Portal" rather
@@ -1248,6 +1318,7 @@ def test_REQ_d00237_G_canonicalize_wraps_compound_as_whole(order):
 # -- REQ-d00237-G: three-level nest — longest wins -----------------------------
 
 
+# Verifies: REQ-d00237-G
 @pytest.mark.parametrize(
     "order",
     [

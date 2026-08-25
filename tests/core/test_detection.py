@@ -56,6 +56,7 @@ class TestOrphanDetection:
         assert graph.orphan_count() == 0
         assert list(graph.orphaned_nodes()) == []
 
+    # Verifies: REQ-d00071-B
     def test_REQ_d00071_B_parentless_reqs_are_roots(self):
         """REQ-d00071-B: Parentless requirements are always roots, even without children."""
         builder = GraphBuilder(namespace="REQ", resolver=grammar_for("REQ"))
@@ -68,6 +69,7 @@ class TestOrphanDetection:
         assert graph.root_count() == 2
         assert graph.orphan_count() == 0
 
+    # Verifies: REQ-d00071-B
     def test_REQ_d00071_B_broken_ref_req_is_still_root(self):
         """REQ-d00071-B: Requirement with broken implements is still a root."""
         builder = GraphBuilder(namespace="REQ", resolver=grammar_for("REQ"))

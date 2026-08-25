@@ -34,6 +34,7 @@ class TestIndexRegenerateJNY:
     linking including validates.
     """
 
+    # Verifies: REQ-o00050-C
     def test_REQ_o00050_C_regenerate_includes_jny_section(self, tmp_path):
         """Regenerated INDEX.md includes User Journeys subsection."""
         spec_dir = tmp_path / "spec"
@@ -62,6 +63,7 @@ class TestIndexRegenerateJNY:
         index_content = (spec_dir / "INDEX.md").read_text()
         assert "## User Journeys" in index_content
 
+    # Verifies: REQ-o00050-C
     def test_REQ_o00050_C_regenerate_jny_has_expected_columns(self, tmp_path):
         """Regenerated INDEX.md JNY table includes ID, Title, Actor, File columns."""
         spec_dir = tmp_path / "spec"
@@ -97,6 +99,7 @@ class TestIndexRegenerateJNY:
         assert "Addresses" not in header
         assert "JNY-Dev-01" in index_content
 
+    # Verifies: REQ-o00050-C
     def test_REQ_o00050_C_regenerate_jny_row_has_actor_and_file(self, tmp_path):
         """Regenerated INDEX.md JNY row includes actor and file columns."""
         spec_dir = tmp_path / "spec"
@@ -128,6 +131,7 @@ class TestIndexRegenerateJNY:
         assert "Developer" in jny_row
         assert "journeys.md" in jny_row
 
+    # Verifies: REQ-o00050-C
     def test_REQ_o00050_C_regenerate_no_jny_skips_section(self, tmp_path):
         """Regenerated INDEX.md omits JNY section when no journeys exist."""
         spec_dir = tmp_path / "spec"
@@ -155,6 +159,7 @@ class TestIndexValidateJNY:
     linking including validates.
     """
 
+    # Verifies: REQ-o00050-C
     def test_REQ_o00050_C_validate_detects_missing_jny(self, tmp_path):
         """Validate detects JNY IDs in graph but missing from INDEX.md."""
         graph = build_graph(
@@ -182,6 +187,7 @@ class TestIndexValidateJNY:
 
         assert result == 1
 
+    # Verifies: REQ-o00050-C
     def test_REQ_o00050_C_validate_passes_with_all_jnys(self, tmp_path):
         """Validate passes when all JNY IDs are present in INDEX.md."""
         graph = build_graph(
@@ -213,6 +219,7 @@ class TestIndexValidateJNY:
 
         assert result == 0
 
+    # Verifies: REQ-o00050-C
     def test_REQ_o00050_C_validate_detects_extra_jny(self, tmp_path):
         """Validate detects JNY IDs in INDEX.md but not in graph."""
         graph = build_graph(

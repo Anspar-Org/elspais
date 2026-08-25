@@ -1,7 +1,7 @@
 # Jira-style configuration
 # Uses PROJ-123 format (no type distinction, variable length IDs)
 
-version = 3
+version = 5
 
 [project]
 name = "jira-style-fixture"

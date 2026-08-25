@@ -75,6 +75,7 @@ class TestTermHighlightJs:
     """Validates REQ-d00245-A and REQ-d00245-B: inline term highlighting JS
     is present in the rendered HTML."""
 
+    # Verifies: REQ-d00245-A
     def test_REQ_d00245_A_simpleMarkdown_accepts_annotateTerms(self, tmp_path: Path) -> None:
         """GET '/' HTML contains simpleMarkdown function with annotateTerms parameter."""
         client = _make_app(tmp_path)
@@ -86,6 +87,7 @@ class TestTermHighlightJs:
             or "function simpleMarkdown(text, annotateTerms)" in html
         ), "Expected simpleMarkdown function signature with annotateTerms parameter"
 
+    # Verifies: REQ-d00245-A
     def test_REQ_d00245_A_termsRegex_built_from_lookup(self, tmp_path: Path) -> None:
         """GET '/' HTML contains termsRegex — the cached regex for term matching."""
         client = _make_app(tmp_path)
@@ -96,6 +98,7 @@ class TestTermHighlightJs:
             "Expected 'termsRegex' in the rendered HTML (cached regex built from termsLookup)"
         )
 
+    # Verifies: REQ-d00245-A
     def test_REQ_d00245_A_defined_term_class_in_js(self, tmp_path: Path) -> None:
         """GET '/' HTML contains 'defined-term' class reference used for annotated spans."""
         client = _make_app(tmp_path)
@@ -106,6 +109,7 @@ class TestTermHighlightJs:
             "Expected 'defined-term' CSS class reference in the rendered HTML"
         )
 
+    # Verifies: REQ-d00245-B
     def test_REQ_d00245_B_delegated_click_handler(self, tmp_path: Path) -> None:
         """GET '/' HTML contains a delegated click handler for .defined-term
         on card-stack-body."""
@@ -124,6 +128,7 @@ class TestTermHighlightJs:
             or 'closest(".defined-term")' in html
         ), "Expected delegated click handler referencing '.defined-term'"
 
+    # Verifies: REQ-d00245-B
     def test_REQ_d00245_B_no_annotation_in_term_cards(self, tmp_path: Path) -> None:
         """GET '/' HTML shows buildTermCardHtml calls simpleMarkdown WITHOUT
         passing true for annotateTerms (term definitions should not annotate

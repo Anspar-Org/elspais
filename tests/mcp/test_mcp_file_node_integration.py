@@ -142,6 +142,7 @@ def file_node_graph():
 class TestSubtreeFromFileNode:
     """Validates REQ-d00133-A: get_subtree from FILE walks CONTAINS edges."""
 
+    # Verifies: REQ-d00133-A
     def test_REQ_d00133_A_subtree_from_file_walks_contains(self, file_node_graph):
         """Starting from a FILE node, _collect_subtree should walk CONTAINS edges."""
         from elspais.mcp.server import _collect_subtree
@@ -161,6 +162,7 @@ class TestSubtreeFromFileNode:
         # unless kind filter includes them
         assert "file:spec/dev.md" not in collected_ids
 
+    # Verifies: REQ-d00133-A
     def test_REQ_d00133_A_subtree_from_file_does_not_cross_to_domain(self, file_node_graph):
         """FILE subtree should not follow IMPLEMENTS edges to other requirements."""
         from elspais.mcp.server import _collect_subtree
@@ -172,6 +174,7 @@ class TestSubtreeFromFileNode:
         # FILE subtree should NOT follow IMPLEMENTS edges
         assert "REQ-d00020" not in collected_ids
 
+    # Verifies: REQ-d00133-A
     def test_REQ_d00133_A_get_subtree_markdown_from_file(self, file_node_graph):
         """get_subtree with markdown format from FILE root."""
         from elspais.mcp.server import _get_subtree
@@ -182,6 +185,7 @@ class TestSubtreeFromFileNode:
         assert "REQ-p00001" in result["content"]
         assert "REQ-o00010" in result["content"]
 
+    # Verifies: REQ-d00133-A
     def test_REQ_d00133_A_get_subtree_nested_from_file(self, file_node_graph):
         """get_subtree with nested format from FILE root."""
         from elspais.mcp.server import _get_subtree
@@ -204,6 +208,7 @@ class TestSubtreeFromFileNode:
 class TestSubtreeFromRequirementNode:
     """Validates REQ-d00133-B: get_subtree from REQUIREMENT walks domain edges."""
 
+    # Verifies: REQ-d00133-B
     def test_REQ_d00133_B_subtree_from_req_walks_domain_edges(self, file_node_graph):
         """Starting from a REQUIREMENT, _collect_subtree should walk domain edges."""
         from elspais.mcp.server import _collect_subtree
@@ -220,6 +225,7 @@ class TestSubtreeFromRequirementNode:
         assert "file:spec/requirements.md" not in collected_ids
         assert "file:spec/dev.md" not in collected_ids
 
+    # Verifies: REQ-d00133-B
     def test_REQ_d00133_B_subtree_from_req_excludes_file_nodes(self, file_node_graph):
         """REQUIREMENT subtree should not include FILE nodes."""
         from elspais.mcp.server import _collect_subtree
@@ -237,6 +243,7 @@ class TestSubtreeFromRequirementNode:
 class TestSubtreeKindDefaults:
     """Validates REQ-d00133-C: _SUBTREE_KIND_DEFAULTS includes FILE."""
 
+    # Verifies: REQ-d00133-C
     def test_REQ_d00133_C_file_entry_in_subtree_defaults(self):
         """_SUBTREE_KIND_DEFAULTS should have a NodeKind.FILE entry."""
         from elspais.mcp.server import _SUBTREE_KIND_DEFAULTS
@@ -256,6 +263,7 @@ class TestSubtreeKindDefaults:
 class TestSearchExcludesFileNodes:
     """Validates REQ-d00133-D: search does not return FILE nodes."""
 
+    # Verifies: REQ-d00133-D
     def test_REQ_d00133_D_search_excludes_file_nodes(self, file_node_graph):
         """_search should not return FILE nodes even if query matches."""
         from elspais.mcp.server import _search
@@ -268,6 +276,7 @@ class TestSearchExcludesFileNodes:
         for rid in result_ids:
             assert not rid.startswith("file:")
 
+    # Verifies: REQ-d00133-D
     def test_REQ_d00133_D_search_returns_requirements_only(self, file_node_graph):
         """_search should only return REQUIREMENT nodes."""
         from elspais.mcp.server import _search
@@ -289,6 +298,7 @@ class TestSearchExcludesFileNodes:
 class TestGraphStatusIncludesFileNodes:
     """Validates REQ-d00133-E: get_graph_status includes FILE node counts."""
 
+    # Verifies: REQ-d00133-E
     def test_REQ_d00133_E_graph_status_reports_file_count(self, file_node_graph):
         """_get_graph_status should include 'file' in node_counts."""
         from elspais.mcp.server import _get_graph_status
@@ -307,6 +317,7 @@ class TestGraphStatusIncludesFileNodes:
 class TestSerializationFileLineFields:
     """Validates REQ-d00133-F: MCP serialization produces correct file/line."""
 
+    # Verifies: REQ-d00133-F
     def test_REQ_d00133_F_serialize_test_info_file_line(self, file_node_graph):
         """_serialize_test_info should show correct file/line from FILE parent."""
         from elspais.mcp.server import _serialize_test_info
@@ -331,6 +342,7 @@ class TestSerializationFileLineFields:
         assert result["file"] == "tests/test_security.py"
         assert result["line"] == 42
 
+    # Verifies: REQ-d00133-F
     def test_REQ_d00133_F_serialize_code_info_file_line(self, file_node_graph):
         """_serialize_code_info should show correct file/line from FILE parent."""
         from elspais.mcp.server import _serialize_code_info
@@ -351,6 +363,7 @@ class TestSerializationFileLineFields:
         assert result["file"] == "src/encrypt.py"
         assert result["line"] == 99
 
+    # Verifies: REQ-d00133-F
     def test_REQ_d00133_F_relative_source_path_from_file_node(self, file_node_graph):
         """_relative_source_path should navigate to FILE parent correctly."""
         from elspais.mcp.server import _relative_source_path

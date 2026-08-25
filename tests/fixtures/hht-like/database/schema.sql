@@ -1,9 +1,9 @@
 -- Database Schema for HHT-Like Fixture
--- IMPLEMENTS REQUIREMENTS:
---   REQ-p00001: User Authentication
---   REQ-d00001: Authentication Module
---   REQ-p00003: Audit Logging
---   REQ-d00003: Audit Trail Implementation
+-- Implements: REQ-p00001,
+--             REQ-d00001,
+--             REQ-p00003,
+--             REQ-d00003
+--
 
 -- Users table
 -- Implements: REQ-p00001, REQ-d00001

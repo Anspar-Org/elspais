@@ -21,7 +21,7 @@ def _make_state(tmp_path):
         "*End* *A Title* | **Hash**: 11111111\n---\n"
     )
     (tmp_path / ".elspais.toml").write_text(
-        "version = 4\n"
+        "version = 5\n"
         '[project]\nname = "test"\nnamespace = "REQ"\n'
         '[levels.prd]\nrank = 1\nletter = "p"\nimplements = ["prd"]\n'
         '[id-patterns]\ncanonical = "{namespace}-{level.letter}{component}"\n'
@@ -101,7 +101,7 @@ def test_tree_data_survives_requirement_cycle(tmp_path):
         "*End* *Second* | **Hash**: 22222222\n---\n"
     )
     (tmp_path / ".elspais.toml").write_text(
-        "version = 4\n"
+        "version = 5\n"
         '[project]\nname = "test"\nnamespace = "REQ"\n'
         '[levels.prd]\nrank = 1\nletter = "p"\nimplements = ["prd"]\n'
         '[id-patterns]\ncanonical = "{namespace}-{level.letter}{component}"\n'
@@ -157,7 +157,7 @@ def test_journey_row_component_strips_jny_prefix(tmp_path):
         "*End* *JNY-Onboarding-01*\n"
     )
     (tmp_path / ".elspais.toml").write_text(
-        "version = 4\n"
+        "version = 5\n"
         '[project]\nname = "test"\nnamespace = "REQ"\n'
         '[levels.prd]\nrank = 1\nletter = "p"\nimplements = ["prd"]\n'
         '[scanning.spec]\ndirectories = ["spec"]\n'

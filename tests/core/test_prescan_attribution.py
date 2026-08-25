@@ -399,7 +399,7 @@ def _built_test_node_ids(project: Path, command: str) -> set[str]:
         encoding="utf-8",
     )
     (project / ".elspais.toml").write_text(
-        "version = 3\n\n"
+        "version = 5\n\n"
         '[project]\nname = "prescan-fixture"\nnamespace = "REQ"\n\n'
         '[scanning.spec]\ndirectories = ["spec"]\n\n'
         '[scanning.test]\nenabled = true\ndirectories = ["tests"]\n'

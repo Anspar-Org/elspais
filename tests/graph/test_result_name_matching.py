@@ -43,7 +43,7 @@ test('logs in', async () => {
 """
 
 _CONFIG = """\
-version = 3
+version = 5
 
 [project]
 name = "namer"

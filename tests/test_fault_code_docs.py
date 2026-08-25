@@ -51,7 +51,7 @@ LINKING_DOC = (
 # The repository the table's preamble promises: the default identifier
 # configuration, and REQ-d00001 carrying assertions A and B.
 _CONFIG = """\
-version = 3
+version = 5
 [project]
 name = "fault-code-examples"
 namespace = "REQ"

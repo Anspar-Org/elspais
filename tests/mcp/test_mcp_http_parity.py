@@ -211,6 +211,7 @@ class TestHttpMutationsAreReachableOverMcp:
     so adding a route without a tool breaks this suite.
     """
 
+    # Verifies: REQ-o00062-O
     def test_REQ_o00062_O_route_scan_finds_the_mutation_surface(self):
         """REQ-o00062-O: The scan reads real routes -- a silent empty set would
         make the parity assertion vacuous."""
@@ -220,6 +221,7 @@ class TestHttpMutationsAreReachableOverMcp:
         # A multi-line Route(...) registration must not be missed.
         assert "/api/mutate/requirement/delete" in routes
 
+    # Verifies: REQ-o00062-O
     def test_REQ_o00062_O_every_http_route_is_mapped_to_a_tool(self):
         """REQ-o00062-O: No HTTP mutation route is unaccounted for."""
         unmapped = _http_mutation_routes() - set(ROUTE_TO_TOOL)
@@ -229,6 +231,7 @@ class TestHttpMutationsAreReachableOverMcp:
             "Add the route to ROUTE_TO_TOOL and register the MCP tool."
         )
 
+    # Verifies: REQ-o00062-O
     def test_REQ_o00062_O_every_http_route_has_an_mcp_tool(self, tools):
         """REQ-o00062-O: Each mapped tool is actually registered on the server."""
         missing = {
@@ -241,6 +244,7 @@ class TestHttpMutationsAreReachableOverMcp:
             f"HTTP mutations unreachable over MCP (route -> missing tool): {missing}"
         )
 
+    # Verifies: REQ-o00062-O
     def test_REQ_o00062_O_mcp_may_exceed_http(self, tools):
         """REQ-o00062-O: The superset direction is intended, not a gap.
 
@@ -270,6 +274,7 @@ class TestEveryPostRouteIsClassified:
     joining one of those lists fails here.
     """
 
+    # Verifies: REQ-o00062-O
     def test_REQ_o00062_O_post_scan_finds_the_whole_surface(self):
         """REQ-o00062-O: The scan sees past the mutate prefix -- a silently
         narrow scan is exactly the hole being closed."""
@@ -281,6 +286,7 @@ class TestEveryPostRouteIsClassified:
         # And the routes the old prefix-scan could never see must be.
         assert HISTORY_ROUTES <= routes
 
+    # Verifies: REQ-o00062-O
     def test_REQ_o00062_O_every_post_route_joins_exactly_one_list(self):
         """REQ-o00062-O: mutate-guarded, history-guarded, or exempted-with-a-
         reason. There is no fourth category."""
@@ -296,6 +302,7 @@ class TestEveryPostRouteIsClassified:
             "or exempt the route here with a reason."
         )
 
+    # Verifies: REQ-o00062-O
     def test_REQ_o00062_O_classification_lists_name_real_routes(self):
         """REQ-o00062-O: A stale entry would mask the loss of a guarded route."""
         routes = _registered_post_routes()
@@ -305,6 +312,7 @@ class TestEveryPostRouteIsClassified:
         assert not stale, f"classified routes no longer registered: {sorted(stale)}"
         assert not (HISTORY_ROUTES & EXEMPT_POST_ROUTES)
 
+    # Verifies: REQ-o00062-O
     def test_REQ_o00062_O_history_routes_match_the_tip_guard_suite(self):
         """REQ-o00062-O: The list here and the list the tip-guard tests
         exercise are the same list, so a route cannot be declared history-
@@ -313,6 +321,7 @@ class TestEveryPostRouteIsClassified:
 
         assert HISTORY_ROUTES == set(GUARDED)
 
+    # Verifies: REQ-o00062-O
     def test_REQ_o00062_O_mutate_routes_match_the_version_guard_suite(self):
         """REQ-o00062-O: Every mutate route the scan finds is in the node-
         version guard inventory (its own suite asserts the converse)."""
@@ -345,6 +354,7 @@ class TestParityToolsGuardVersion:
     so an agent gets the same safety as the viewer.
     """
 
+    # Verifies: REQ-o00062-I
     def test_REQ_o00062_I_if_version_is_a_required_parameter(
         self, tools, tool_name, guarded_id, kwargs
     ):
@@ -354,6 +364,7 @@ class TestParityToolsGuardVersion:
         assert "if_version" in params, f"{tool_name} does not accept if_version"
         assert params["if_version"].default is inspect.Parameter.empty
 
+    # Verifies: REQ-o00062-I
     def test_REQ_o00062_I_omitting_if_version_is_a_type_error(
         self, tools, tool_name, guarded_id, kwargs
     ):
@@ -361,6 +372,7 @@ class TestParityToolsGuardVersion:
         with pytest.raises(TypeError):
             tools[tool_name](**kwargs)
 
+    # Verifies: REQ-o00062-I
     def test_REQ_o00062_I_stale_version_rejected_and_graph_untouched(
         self, canonical_graph, tools, tool_name, guarded_id, kwargs
     ):
@@ -374,6 +386,7 @@ class TestParityToolsGuardVersion:
         assert canonical_graph.find_by_id(guarded_id) is not None
         assert node_version(canonical_graph.find_by_id(guarded_id)) == before
 
+    # Verifies: REQ-o00062-J
     def test_REQ_o00062_J_conflict_shape_matches_the_established_tools(
         self, tools, tool_name, guarded_id, kwargs
     ):
@@ -387,6 +400,7 @@ class TestParityToolsGuardVersion:
         assert isinstance(result["current_state"], dict)
         assert "error" not in result["current_state"]
 
+    # Verifies: REQ-o00062-K
     def test_REQ_o00062_K_current_version_is_accepted_and_a_new_one_returned(
         self, rollback, tools, tool_name, guarded_id, kwargs
     ):
@@ -399,6 +413,7 @@ class TestParityToolsGuardVersion:
         assert result["success"] is True, result.get("error")
         assert result["version"] != current
 
+    # Verifies: REQ-o00062-L
     def test_REQ_o00062_L_missing_node_is_not_a_version_conflict(
         self, tools, tool_name, guarded_id, kwargs
     ):
@@ -431,6 +446,7 @@ class TestAddJourneyGuardsItsParentFile:
     NEW_ID = "JNY-reset-901"
     SECOND_ID = "JNY-reset-902"
 
+    # Verifies: REQ-o00062-I
     def test_REQ_o00062_I_file_version_admits_the_first_journey(self, mutable_graph, tools):
         """REQ-o00062-I: The parent FILE's version is the accepted token."""
         file_version = node_version(mutable_graph.find_by_id(JOURNEY_FILE))
@@ -447,11 +463,13 @@ class TestAddJourneyGuardsItsParentFile:
         assert mutable_graph.find_by_id(self.NEW_ID) is not None
         TestAddJourneyGuardsItsParentFile.threaded = result["version"]
 
+    # Verifies: REQ-o00062-I
     def test_REQ_o00062_I_the_files_version_moved_with_the_addition(self, mutable_graph):
         """REQ-o00062-I: Adding a journey changes the FILE's composition, so
         the token a concurrent writer holds is genuinely stale."""
         assert node_version(mutable_graph.find_by_id(JOURNEY_FILE)) != self.spent
 
+    # Verifies: REQ-o00062-I
     def test_REQ_o00062_I_second_writer_with_the_spent_token_is_rejected(
         self, mutable_graph, tools
     ):
@@ -468,6 +486,7 @@ class TestAddJourneyGuardsItsParentFile:
         assert result["node_id"] == JOURNEY_FILE, "guard must name the parent FILE"
         assert mutable_graph.find_by_id(self.SECOND_ID) is None
 
+    # Verifies: REQ-o00062-K
     def test_REQ_o00062_K_returned_token_threads_into_the_next_addition(self, mutable_graph, tools):
         """REQ-o00062-K: The token returned by the first add is directly usable."""
         result = tools["mutate_add_journey"](
@@ -494,6 +513,7 @@ class TestJourneyEditsThreadVersions:
     and successive edits thread the returned token with no intervening read.
     """
 
+    # Verifies: REQ-o00062-K
     def test_REQ_o00062_K_field_update_returns_the_new_version(self, mutable_graph, tools):
         """REQ-o00062-K: Success reports the journey's post-edit version."""
         before = node_version(mutable_graph.find_by_id(JOURNEY))
@@ -511,6 +531,7 @@ class TestJourneyEditsThreadVersions:
         assert result["version"] != before
         TestJourneyEditsThreadVersions.threaded = result["version"]
 
+    # Verifies: REQ-o00062-K
     def test_REQ_o00062_K_section_add_accepts_the_threaded_token(self, mutable_graph, tools):
         """REQ-o00062-K: The field edit's token admits the section edit."""
         result = tools["mutate_journey_section"](
@@ -524,6 +545,7 @@ class TestJourneyEditsThreadVersions:
         assert result["success"] is True, result.get("error")
         assert "Preconditions" in render.render_node(mutable_graph.find_by_id(JOURNEY))
 
+    # Verifies: REQ-o00062-I
     def test_REQ_o00062_I_stale_token_from_before_the_field_edit_is_rejected(
         self, mutable_graph, tools
     ):
@@ -536,6 +558,7 @@ class TestJourneyEditsThreadVersions:
         assert result["code"] == "version_conflict"
         assert mutable_graph.find_by_id(JOURNEY) is not None
 
+    # Verifies: REQ-o00062-I
     def test_REQ_o00062_I_delete_with_the_current_version_succeeds(self, mutable_graph, tools):
         """REQ-o00062-I: Reconciled against the live version, the delete lands."""
         current = node_version(mutable_graph.find_by_id(JOURNEY))
@@ -595,6 +618,7 @@ class TestSetStereotypeSafetyGuardSurvivesVersioning:
     applies, and the block is reported as a block rather than as a conflict.
     """
 
+    # Verifies: REQ-o00062-O
     def test_REQ_o00062_O_current_version_does_not_bypass_the_instance_block(self):
         """REQ-o00062-O: Same rejection as HTTP, even with a fresh token."""
         graph, tools = _template_with_instance_server()
@@ -610,6 +634,7 @@ class TestSetStereotypeSafetyGuardSurvivesVersioning:
         assert result.get("code") != "version_conflict"
         assert node_version(graph.find_by_id("REQ-p80001")) == current
 
+    # Verifies: REQ-o00062-I
     def test_REQ_o00062_I_stale_version_is_reported_before_the_instance_block(self):
         """REQ-o00062-I: A stale token is a conflict, not a soft block --
         the caller must re-read before it can even consider forcing."""
@@ -622,6 +647,7 @@ class TestSetStereotypeSafetyGuardSurvivesVersioning:
         assert result["code"] == "version_conflict"
         assert result.get("blocked") is None
 
+    # Verifies: REQ-o00062-O
     def test_REQ_o00062_O_force_with_a_current_version_succeeds(self):
         """REQ-o00062-O: force=True still works, and only with a live token."""
         graph, tools = _template_with_instance_server()
@@ -634,6 +660,7 @@ class TestSetStereotypeSafetyGuardSurvivesVersioning:
         assert result["success"] is True, result.get("error")
         assert result["version"] != current
 
+    # Verifies: REQ-o00062-O
     def test_REQ_o00062_O_force_does_not_bypass_the_version_guard(self):
         """REQ-o00062-O: force overrides the instance block, never the version
         precondition -- a blind forced write is still refused."""
@@ -646,6 +673,7 @@ class TestSetStereotypeSafetyGuardSurvivesVersioning:
         assert result["success"] is False
         assert result["code"] == "version_conflict"
 
+    # Verifies: REQ-o00062-O
     def test_REQ_o00062_O_toggle_on_is_never_blocked(self):
         """REQ-o00062-O: Toggle-ON is safe; only the version applies."""
         graph, tools = _template_with_instance_server()

@@ -11,7 +11,7 @@ from elspais.utilities.hasher import compute_normalized_hash
 def _make_config(tmp_path: Path) -> Path:
     config = tmp_path / ".elspais.toml"
     config.write_text(
-        """version = 3
+        """version = 5
 
 [project]
 name = "test-hash"

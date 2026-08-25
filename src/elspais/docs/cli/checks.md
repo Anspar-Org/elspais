@@ -141,6 +141,7 @@ documentation says about it.
 | `config.governed_rules` | Discloses each governed setting (coverage rules, reference severities, status roles) a federated member would judge by differently from the repository the run was invoked from — whether the member declared it or kept a default the invoking project overrode — naming the setting, both values and the member; never fails a run | info | `[rules.severity]` | no command resolves this; resolve it by hand |
 | `graph.build` | The traceability graph builds at all | error | `[rules.severity]` | no command resolves this; resolve it by hand |
 | `spec.parseable` | All spec files can be parsed | warning | `[rules.severity]` | `elspais errors` |
+| `spec.unknown_directive` | Assertions opening with a parsing directive the tool does not recognize | warning | `[rules.severity]` | no command resolves this; resolve it by hand |
 | `spec.no_duplicates` | No duplicate requirement IDs | error | `[rules.severity]` | `elspais -v checks --spec` |
 | `spec.implements_resolve` | All Implements: references resolve | warning | `[rules.severity]` | `elspais broken` |
 | `spec.refines_resolve` | All Refines: references resolve | warning | `[rules.severity]` | `elspais broken` |

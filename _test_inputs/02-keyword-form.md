@@ -79,49 +79,29 @@ complement and stops the rule being over-applied.
 
 ---
 
-## 4. The legacy block-header form
+## 4. The block-header form is gone
 
-Retained so existing files keep parsing, governed by the same rules: case-lax,
-plural `REQUIREMENTS`, colon mandatory. The renderer never emits it.
+`# IMPLEMENTS REQUIREMENTS:` followed by indented identifiers declares nothing.
+A keyword introducing a reference list is the only form that declares a
+relationship (REQ-d00269-L), so the header line reads as prose and each
+identifier beneath it is an identifier no keyword introduces.
 
 | ID | Input | Grammar | Surface | Expected |
 |---|---|---|---|---|
-| BLOCK-01 | see below, canonical | G-STD | spec | header recognised; indented identifiers bind |
-| BLOCK-02 | lowercase header | G-STD | spec | header recognised; `references.keyword_case` finding; identifiers bind |
-| BLOCK-03 | singular `REQUIREMENT` | G-STD | spec | header **not** recognised -> prose; indented identifiers become `E_ORPHAN_REFERENCE` |
-| BLOCK-04 | no colon | G-STD | spec | header not recognised -> prose; identifiers become `E_ORPHAN_REFERENCE` |
-| BLOCK-05 | `IMPLEMENTS requirement` | G-STD | spec | not recognised — today this opens a block, and that is the breaking change the design accepts |
+| BLOCK-01 | see below, canonical | G-STD | code, test | header binds nothing; each indented identifier is `references.undeclared` |
+| BLOCK-02 | lowercase header | G-STD | code, test | same as BLOCK-01; case changes nothing, because nothing is recognised |
+| BLOCK-03 | singular `REQUIREMENT` | G-STD | code, test | same as BLOCK-01 |
+| BLOCK-04 | no colon | G-STD | code, test | same as BLOCK-01 |
 
 BLOCK-01:
 
 ```text
-IMPLEMENTS REQUIREMENTS:
-    REQ-d00001
-    REQ-d00002
+# IMPLEMENTS REQUIREMENTS:
+#   REQ-d00001
+#   REQ-d00002
 ```
 
-BLOCK-03:
-
-```text
-IMPLEMENTS REQUIREMENT:
-    REQ-d00001
-    REQ-d00002
-```
-
-BLOCK-04:
-
-```text
-IMPLEMENTS REQUIREMENTS
-    REQ-d00001
-    REQ-d00002
-```
-
-BLOCK-05:
-
-```text
-IMPLEMENTS requirement
-    REQ-d00001
-```
+The continuation form (section 6) is what a multi-item list is written as.
 
 ---
 

@@ -1,7 +1,7 @@
 # HHT-Diary style configuration
 # This fixture matches the hht-diary repository structure
 
-version = 3
+version = 5
 
 [project]
 name = "hht-like-fixture"

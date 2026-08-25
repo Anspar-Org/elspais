@@ -30,6 +30,7 @@ from elspais.graph.comment_store import (
 )
 from elspais.graph.comments import CommentEvent, CommentThread
 from elspais.graph.GraphNode import make_file_id, parse_structural_id
+from elspais.graph.parsers.directives import counted_assertion_labels
 from elspais.graph.parsers.patterns import JNY_ID_PATTERN
 from elspais.mcp.server import (
     _attach_version,
@@ -140,13 +141,11 @@ def _compute_link_data(
     """
     from elspais.graph.relations import EdgeKind
 
-    # Collect assertion labels
-    assertion_labels: list[str] = []
-    for child in node.iter_children():
-        if child.kind == NodeKind.ASSERTION:
-            label = child.get_field("label", "")
-            if label:
-                assertion_labels.append(label)
+    # Collect assertion labels.
+    # Implements: REQ-p00017-G
+    # A retired *Assertion* carries no coverage flags, because it is excluded
+    # from the calculation that would produce them.
+    assertion_labels: list[str] = counted_assertion_labels(node)
 
     # Per-assertion: track which dimensions have direct assertion-level links
     # Initialize all to False

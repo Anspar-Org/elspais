@@ -109,6 +109,7 @@ def _make_discover_fn(assertions: list[dict[str, Any]]):
 class TestLinkSuggestionDataclass:
     """Tests for LinkSuggestion confidence bands and serialization."""
 
+    # Verifies: REQ-d00072-A
     @pytest.mark.parametrize(
         ("confidence", "expected_band"),
         [
@@ -124,6 +125,7 @@ class TestLinkSuggestionDataclass:
         s = LinkSuggestion("t1", "t1", "f.py", "REQ-1", "Title", confidence)
         assert s.confidence_band == expected_band
 
+    # Verifies: REQ-d00072-A
     def test_REQ_d00072_A_to_dict_serialization(self) -> None:
         s = LinkSuggestion("t1", "label", "f.py", "REQ-1", "Title", 0.85, ["reason1"])
         d = s.to_dict()
@@ -132,6 +134,7 @@ class TestLinkSuggestionDataclass:
         assert d["confidence_band"] == "high"
         assert d["reasons"] == ["reason1"]
 
+    # Verifies: REQ-d00072-A
     def test_REQ_d00072_A_to_dict_rounds_confidence(self) -> None:
         s = LinkSuggestion("t1", "t1", "f.py", "REQ-1", "Title", 0.123456789)
         d = s.to_dict()
@@ -146,6 +149,7 @@ class TestLinkSuggestionDataclass:
 class TestFindUnlinkedTests:
     """Tests for _find_unlinked_tests()."""
 
+    # Verifies: REQ-o00065-A
     def test_REQ_o00065_A_finds_tests_without_req_parents(self) -> None:
         graph = _make_graph()
         _add_test(graph, "test:1", file_path="tests/test_foo.py")
@@ -153,6 +157,7 @@ class TestFindUnlinkedTests:
         assert len(result) == 1
         assert result[0].id == "test:1"
 
+    # Verifies: REQ-o00065-A
     def test_REQ_o00065_A_skips_linked_tests(self) -> None:
         graph = _make_graph()
         req = _add_requirement(graph, "REQ-1")
@@ -161,6 +166,7 @@ class TestFindUnlinkedTests:
         result = _find_unlinked_tests(graph)
         assert len(result) == 0
 
+    # Verifies: REQ-o00065-A
     def test_REQ_o00065_A_skips_tests_linked_via_assertion(self) -> None:
         graph = _make_graph()
         req = _add_requirement(graph, "REQ-1")
@@ -172,6 +178,7 @@ class TestFindUnlinkedTests:
         result = _find_unlinked_tests(graph)
         assert len(result) == 0
 
+    # Verifies: REQ-o00065-A
     def test_REQ_o00065_A_skips_tests_linked_via_code(self) -> None:
         graph = _make_graph()
         req = _add_requirement(graph, "REQ-1")
@@ -183,6 +190,7 @@ class TestFindUnlinkedTests:
         result = _find_unlinked_tests(graph)
         assert len(result) == 0
 
+    # Verifies: REQ-o00065-A
     def test_REQ_o00065_A_filters_by_file_path(self) -> None:
         graph = _make_graph()
         _add_test(graph, "test:1", file_path="tests/test_foo.py")
@@ -191,18 +199,21 @@ class TestFindUnlinkedTests:
         assert len(result) == 1
         assert result[0].id == "test:1"
 
+    # Verifies: REQ-o00065-A
     def test_REQ_o00065_A_file_path_filter_no_match(self) -> None:
         graph = _make_graph()
         _add_test(graph, "test:1", file_path="tests/test_foo.py")
         result = _find_unlinked_tests(graph, file_path="tests/test_other.py")
         assert len(result) == 0
 
+    # Verifies: REQ-o00065-A
     def test_REQ_o00065_A_skips_tests_without_source_when_filtering(self) -> None:
         graph = _make_graph()
         _add_test(graph, "test:1")  # No file_path
         result = _find_unlinked_tests(graph, file_path="tests/test_foo.py")
         assert len(result) == 0
 
+    # Verifies: REQ-o00065-A
     def test_REQ_o00065_A_mixed_linked_and_unlinked(self) -> None:
         graph = _make_graph()
         req = _add_requirement(graph, "REQ-1")
@@ -222,6 +233,7 @@ class TestFindUnlinkedTests:
 class TestExtractSearchTerms:
     """Tests for search term extraction from test nodes."""
 
+    # Verifies: REQ-d00072-B
     def test_REQ_d00072_B_extracts_from_function_name(self) -> None:
         graph = _make_graph()
         test = _add_test(
@@ -234,6 +246,7 @@ class TestExtractSearchTerms:
         assert "validate" in terms
         assert "config" in terms
 
+    # Verifies: REQ-d00072-B
     def test_REQ_d00072_B_strips_test_prefix_from_function(self) -> None:
         graph = _make_graph()
         test = _add_test(
@@ -247,6 +260,7 @@ class TestExtractSearchTerms:
         assert "hash" in terms
         assert "integrity" in terms
 
+    # Verifies: REQ-d00072-B
     def test_REQ_d00072_B_extracts_from_class_name_camel_case(self) -> None:
         graph = _make_graph()
         test = _add_test(
@@ -262,6 +276,7 @@ class TestExtractSearchTerms:
         assert "install" in terms
         assert "local" in terms
 
+    # Verifies: REQ-d00072-B
     def test_REQ_d00072_B_extracts_from_file_name(self) -> None:
         graph = _make_graph()
         test = _add_test(
@@ -273,6 +288,7 @@ class TestExtractSearchTerms:
         assert "link" in terms
         assert "suggest" in terms
 
+    # Verifies: REQ-d00072-B
     def test_REQ_d00072_B_filters_stopwords(self) -> None:
         graph = _make_graph()
         test = _add_test(
@@ -286,6 +302,7 @@ class TestExtractSearchTerms:
         assert "should" not in terms
         assert "assert" not in terms
 
+    # Verifies: REQ-d00072-B
     def test_REQ_d00072_B_filters_short_words(self) -> None:
         graph = _make_graph()
         test = _add_test(
@@ -299,6 +316,7 @@ class TestExtractSearchTerms:
         for part in terms.split(" OR "):
             assert len(part.strip()) >= 3
 
+    # Verifies: REQ-d00072-B
     def test_REQ_d00072_B_deduplicates_words(self) -> None:
         graph = _make_graph()
         test = _add_test(
@@ -312,6 +330,7 @@ class TestExtractSearchTerms:
         parts = [p.strip() for p in terms.split(" OR ")]
         assert len(parts) == len(set(parts))
 
+    # Verifies: REQ-d00072-B
     def test_REQ_d00072_B_uses_or_joining(self) -> None:
         graph = _make_graph()
         test = _add_test(
@@ -323,6 +342,7 @@ class TestExtractSearchTerms:
         terms = _extract_search_terms(test)
         assert " OR " in terms
 
+    # Verifies: REQ-d00072-B
     def test_REQ_d00072_B_empty_for_generic_test(self) -> None:
         graph = _make_graph()
         test = _add_test(graph, "test:1")
@@ -339,6 +359,7 @@ class TestExtractSearchTerms:
 class TestSuggestLinks:
     """Tests for suggest_links with injected discover_fn."""
 
+    # Verifies: REQ-d00072-A
     def test_REQ_d00072_A_suggest_links_returns_sorted(self) -> None:
         graph = _make_graph()
         _add_test(
@@ -376,6 +397,7 @@ class TestSuggestLinks:
         assert len(result) == 2
         assert result[0].confidence >= result[1].confidence
 
+    # Verifies: REQ-d00072-A
     def test_REQ_d00072_A_suggest_links_respects_limit(self) -> None:
         graph = _make_graph()
         _add_test(
@@ -402,6 +424,7 @@ class TestSuggestLinks:
         result = suggest_links(graph, Path("/repo"), limit=3, discover_fn=discover_fn)
         assert len(result) <= 3
 
+    # Verifies: REQ-d00072-A
     def test_REQ_d00072_A_suggest_links_empty_for_all_linked(self) -> None:
         graph = _make_graph()
         req = _add_requirement(graph, "REQ-1")
@@ -411,12 +434,14 @@ class TestSuggestLinks:
         result = suggest_links(graph, Path("/repo"), discover_fn=discover_fn)
         assert result == []
 
+    # Verifies: REQ-d00072-A
     def test_REQ_d00072_A_suggest_links_empty_graph(self) -> None:
         graph = _make_graph()
         discover_fn = _make_discover_fn([])
         result = suggest_links(graph, Path("/repo"), discover_fn=discover_fn)
         assert result == []
 
+    # Verifies: REQ-d00072-A
     def test_REQ_d00072_A_suggest_links_no_test_nodes(self) -> None:
         graph = _make_graph()
         _add_requirement(graph, "REQ-1")
@@ -424,6 +449,7 @@ class TestSuggestLinks:
         result = suggest_links(graph, Path("/repo"), discover_fn=discover_fn)
         assert result == []
 
+    # Verifies: REQ-d00072-A
     def test_REQ_d00072_A_suggest_links_none_discover_fn(self) -> None:
         """Without discover_fn, returns empty list."""
         graph = _make_graph()
@@ -431,6 +457,7 @@ class TestSuggestLinks:
         result = suggest_links(graph, Path("/repo"), discover_fn=None)
         assert result == []
 
+    # Verifies: REQ-d00072-A
     def test_REQ_d00072_A_suggest_links_file_path_filter(self) -> None:
         graph = _make_graph()
         _add_test(graph, "test:1", function_name="test_foo", file_path="tests/test_foo.py")
@@ -468,6 +495,7 @@ class TestSuggestLinks:
 class TestDeduplicateSuggestions:
     """Tests for suggestion deduplication."""
 
+    # Verifies: REQ-d00072-C
     def test_REQ_d00072_C_dedup_keeps_highest_confidence(self) -> None:
         s1 = LinkSuggestion("t1", "t1", "f.py", "REQ-1", "Title", 0.5, ["r1"])
         s2 = LinkSuggestion("t1", "t1", "f.py", "REQ-1", "Title", 0.9, ["r2"])
@@ -475,6 +503,7 @@ class TestDeduplicateSuggestions:
         assert len(result) == 1
         assert result[0].confidence == 0.9
 
+    # Verifies: REQ-d00072-C
     def test_REQ_d00072_C_dedup_combines_reasons(self) -> None:
         s1 = LinkSuggestion("t1", "t1", "f.py", "REQ-1", "Title", 0.5, ["reason1"])
         s2 = LinkSuggestion("t1", "t1", "f.py", "REQ-1", "Title", 0.9, ["reason2"])
@@ -482,26 +511,31 @@ class TestDeduplicateSuggestions:
         assert "reason1" in result[0].reasons
         assert "reason2" in result[0].reasons
 
+    # Verifies: REQ-d00072-C
     def test_REQ_d00072_C_dedup_no_duplicate_reasons(self) -> None:
         s1 = LinkSuggestion("t1", "t1", "f.py", "REQ-1", "Title", 0.5, ["same"])
         s2 = LinkSuggestion("t1", "t1", "f.py", "REQ-1", "Title", 0.9, ["same"])
         result = _deduplicate_suggestions([s1, s2])
         assert result[0].reasons.count("same") == 1
 
+    # Verifies: REQ-d00072-C
     def test_REQ_d00072_C_dedup_different_pairs_preserved(self) -> None:
         s1 = LinkSuggestion("t1", "t1", "f.py", "REQ-1", "Title1", 0.5, ["r"])
         s2 = LinkSuggestion("t1", "t1", "f.py", "REQ-2", "Title2", 0.9, ["r"])
         result = _deduplicate_suggestions([s1, s2])
         assert len(result) == 2
 
+    # Verifies: REQ-d00072-C
     def test_REQ_d00072_C_dedup_empty_input(self) -> None:
         assert _deduplicate_suggestions([]) == []
 
+    # Verifies: REQ-d00072-C
     def test_REQ_d00072_C_dedup_single_item(self) -> None:
         s = LinkSuggestion("t1", "t1", "f.py", "REQ-1", "Title", 0.5, ["r"])
         result = _deduplicate_suggestions([s])
         assert len(result) == 1
 
+    # Verifies: REQ-d00072-C
     def test_REQ_d00072_C_dedup_does_not_mutate_originals(self) -> None:
         s1 = LinkSuggestion("t1", "t1", "f.py", "REQ-1", "Title", 0.5, ["r1"])
         s2 = LinkSuggestion("t1", "t1", "f.py", "REQ-1", "Title", 0.9, ["r2"])
@@ -518,6 +552,7 @@ class TestDeduplicateSuggestions:
 class TestApplyLinkToFile:
     """Tests for apply_link_to_file()."""
 
+    # Verifies: REQ-o00065-F
     def test_REQ_o00065_F_apply_link_inserts_comment(self, tmp_path: Path) -> None:
         f = tmp_path / "test.py"
         f.write_text("line1\nline2\n")
@@ -525,12 +560,14 @@ class TestApplyLinkToFile:
         assert result == "# Implements: REQ-001"
         assert "# Implements: REQ-001" in f.read_text()
 
+    # Verifies: REQ-o00065-F
     def test_REQ_o00065_F_apply_link_dry_run(self) -> None:
         # A dry run needs no file on disk, but it still needs a language:
         # the marker is the one that file's own comment pattern uses.
         result = apply_link_to_file(Path("/nonexistent.py"), 1, "REQ-001", dry_run=True)
         assert result == "# Implements: REQ-001"
 
+    # Verifies: REQ-o00065-F
     def test_REQ_o00065_F_apply_link_at_line_zero_top(self, tmp_path: Path) -> None:
         f = tmp_path / "test.py"
         f.write_text("existing\n")
@@ -538,6 +575,7 @@ class TestApplyLinkToFile:
         lines = f.read_text().splitlines()
         assert lines[0] == "# Implements: REQ-001"
 
+    # Verifies: REQ-o00065-F
     def test_REQ_o00065_F_apply_link_at_specific_line(self, tmp_path: Path) -> None:
         f = tmp_path / "test.py"
         f.write_text("line1\nline2\nline3\n")
@@ -545,14 +583,17 @@ class TestApplyLinkToFile:
         lines = f.read_text().splitlines()
         assert lines[1] == "# Implements: REQ-001"
 
+    # Verifies: REQ-o00065-F
     def test_REQ_o00065_F_apply_link_nonexistent_file(self) -> None:
         result = apply_link_to_file(Path("/nonexistent/file.py"), 1, "REQ-001")
         assert result is None
 
+    # Verifies: REQ-o00065-F
     def test_REQ_o00065_F_apply_link_dry_run_no_file_needed(self) -> None:
         result = apply_link_to_file(Path("/no/file.py"), 1, "REQ-001", dry_run=True)
         assert result is not None
 
+    # Verifies: REQ-o00065-F
     def test_REQ_o00065_F_apply_link_beyond_end_of_file(self, tmp_path: Path) -> None:
         f = tmp_path / "test.py"
         f.write_text("one line\n")
@@ -560,6 +601,7 @@ class TestApplyLinkToFile:
         lines = f.read_text().splitlines()
         assert lines[-1] == "# Implements: REQ-001"
 
+    # Verifies: REQ-o00065-F
     def test_REQ_o00065_F_apply_link_preserves_encoding_lines(self, tmp_path: Path) -> None:
         f = tmp_path / "test.py"
         f.write_text("#!/usr/bin/env python\n# -*- coding: utf-8 -*-\ncode\n")
@@ -569,6 +611,7 @@ class TestApplyLinkToFile:
         assert lines[1] == "# -*- coding: utf-8 -*-"
         assert lines[2] == "# Implements: REQ-001"
 
+    # Verifies: REQ-o00065-F
     def test_REQ_o00065_F_apply_link_with_keyword(self, tmp_path: Path) -> None:
         f = tmp_path / "test.py"
         f.write_text("code\n")

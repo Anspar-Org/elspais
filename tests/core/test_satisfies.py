@@ -70,13 +70,16 @@ class TestEdgeKindSatisfies:
     directly contribute to coverage counts.
     """
 
+    # Verifies: REQ-d00069-G
     def test_REQ_d00069_G_satisfies_does_not_contribute_to_coverage(self):
         assert EdgeKind.SATISFIES.contributes_to_coverage() is False
 
+    # Verifies: REQ-d00069-G
     def test_REQ_d00069_G_refines_does_not_contribute(self):
         """Ensure REFINES still doesn't contribute (regression guard)."""
         assert EdgeKind.REFINES.contributes_to_coverage() is False
 
+    # Verifies: REQ-p00014-C
     def test_REQ_p00014_C_instance_does_not_contribute_to_coverage(self):
         """INSTANCE edges do not contribute to coverage (like SATISFIES/REFINES)."""
         assert EdgeKind.INSTANCE.contributes_to_coverage() is False
@@ -88,6 +91,7 @@ class TestStereotypeEnum:
     Validates REQ-p00014-C: Stereotype enum classification.
     """
 
+    # Verifies: REQ-p00014-C
     def test_REQ_p00014_C_stereotype_default_is_concrete(self):
         """CONCRETE is the default (first member) of the Stereotype enum."""
         first_member = list(Stereotype)[0]
@@ -100,6 +104,7 @@ class TestParserSatisfies:
     Validates REQ-d00069-H: Satisfies parsing.
     """
 
+    # Verifies: REQ-d00069-H
     def test_REQ_d00069_H_single_satisfies(self):
         text = (
             "## REQ-p00044: Document Management\n"
@@ -114,6 +119,7 @@ class TestParserSatisfies:
         assert len(results) == 1
         assert results[0].parsed_data["satisfies"] == ["REQ-p80001"]
 
+    # Verifies: REQ-d00069-H
     def test_REQ_d00069_H_multiple_satisfies(self):
         text = (
             "## REQ-p00044: Document Management\n"
@@ -127,6 +133,7 @@ class TestParserSatisfies:
         results = _parse_text(text)
         assert results[0].parsed_data["satisfies"] == ["REQ-p80001", "REQ-p80010"]
 
+    # Verifies: REQ-d00069-H
     def test_REQ_d00069_H_assertion_level_satisfies(self):
         text = (
             "## REQ-p00044: Document Management\n"
@@ -171,6 +178,7 @@ class TestParserSatisfies:
         assert len(results) == 1
         assert results[0].parsed_data["satisfies"] == ["REQ-p80001"]
 
+    # Verifies: REQ-d00069-H
     def test_REQ_d00069_H_no_satisfies(self):
         text = (
             "## REQ-p00001: Basic\n"
@@ -189,6 +197,7 @@ class TestHelperSatisfies:
     Validates REQ-d00069-G: SATISFIES edge infrastructure.
     """
 
+    # Verifies: REQ-d00069-G
     def test_REQ_d00069_G_make_requirement_with_satisfies(self):
         req = make_requirement(
             "REQ-p00044",
@@ -197,6 +206,7 @@ class TestHelperSatisfies:
         )
         assert req.parsed_data["satisfies"] == ["REQ-p80001"]
 
+    # Verifies: REQ-d00069-G
     def test_REQ_d00069_G_make_requirement_without_satisfies(self):
         req = make_requirement("REQ-p00001", title="Basic")
         assert req.parsed_data["satisfies"] == []
@@ -208,6 +218,7 @@ class TestBuilderSatisfiesEdge:
     Validates REQ-d00069-G: SATISFIES edge resolution.
     """
 
+    # Verifies: REQ-d00069-G
     def test_REQ_d00069_G_satisfies_creates_edge(self):
         """A Satisfies: declaration creates a SATISFIES edge from declaring to clone."""
         from tests.core.graph_test_helpers import build_graph
@@ -235,6 +246,7 @@ class TestBuilderSatisfiesEdge:
         assert len(satisfies_edges) == 1
         assert satisfies_edges[0].target.id == "REQ-p00044::REQ-p80001"
 
+    # Verifies: REQ-d00069-G
     def test_REQ_d00069_G_satisfies_assertion_target(self):
         """Satisfies: REQ-p80001-A creates edge to cloned assertion subtree."""
         from tests.core.graph_test_helpers import build_graph
@@ -261,6 +273,7 @@ class TestBuilderSatisfiesEdge:
         # Assertion-level satisfies still clones the assertion's parent REQ
         assert satisfies_edges[0].target.id == "REQ-p00044::REQ-p80001-A"
 
+    # Verifies: REQ-d00069-G
     def test_REQ_d00069_G_multiple_satisfies(self):
         """Multiple Satisfies: targets create separate clone subtrees."""
         from tests.core.graph_test_helpers import build_graph
@@ -280,6 +293,7 @@ class TestBuilderSatisfiesEdge:
         clone_ids = sorted(e.target.id for e in satisfies_edges)
         assert clone_ids == ["REQ-p00044::REQ-p80001", "REQ-p00044::REQ-p80010"]
 
+    # Verifies: REQ-d00069-G
     def test_REQ_d00069_G_satisfies_broken_reference(self):
         """Satisfies: to nonexistent target records a broken reference."""
         from tests.core.graph_test_helpers import build_graph
@@ -301,6 +315,7 @@ class TestChangeDetection:
     Validates REQ-p00004-G: Change detection for SATISFIES edges.
     """
 
+    # Verifies: REQ-p00004-G
     def test_REQ_p00004_G_template_hash_change_flags_declaring_reqs(self):
         """When template hash changes, declaring reqs should be flagged."""
         from tests.core.graph_test_helpers import build_graph
@@ -339,23 +354,27 @@ class TestGraphNodeStereotype:
     CONCRETE (default), TEMPLATE, or INSTANCE.
     """
 
+    # Verifies: REQ-p00014-C
     def test_REQ_p00014_C_default_stereotype_is_concrete(self):
         """A newly created GraphNode should default to Stereotype.CONCRETE."""
         node = GraphNode(id="TEST-001", kind=NodeKind.REQUIREMENT)
         assert node.get_field("stereotype") == Stereotype.CONCRETE
 
+    # Verifies: REQ-p00014-C
     def test_REQ_p00014_C_set_stereotype_template(self):
         """Setting stereotype to TEMPLATE should persist via get_field."""
         node = GraphNode(id="TEST-001", kind=NodeKind.REQUIREMENT)
         node.set_field("stereotype", Stereotype.TEMPLATE)
         assert node.get_field("stereotype") == Stereotype.TEMPLATE
 
+    # Verifies: REQ-p00014-C
     def test_REQ_p00014_C_set_stereotype_instance(self):
         """Setting stereotype to INSTANCE should persist via get_field."""
         node = GraphNode(id="TEST-001", kind=NodeKind.REQUIREMENT)
         node.set_field("stereotype", Stereotype.INSTANCE)
         assert node.get_field("stereotype") == Stereotype.INSTANCE
 
+    # Verifies: REQ-p00014-C
     def test_REQ_p00014_C_builder_sets_default_stereotype(self):
         """GraphNodes built via GraphBuilder should have CONCRETE stereotype."""
         req = make_requirement("REQ-p00001", title="Basic Requirement")
@@ -376,6 +395,7 @@ class TestTemplateInstantiation:
     5. Preserve internal edges (REFINES) within the cloned subtree
     """
 
+    # Verifies: REQ-p00014-B
     def test_REQ_p00014_B_satisfies_clones_template_root(self):
         """Satisfies: REQ-p80001 should create a cloned instance node."""
         template = make_requirement(
@@ -398,6 +418,7 @@ class TestTemplateInstantiation:
         assert clone is not None, "Cloned template root should exist in graph"
         assert clone.get_field("stereotype") == Stereotype.INSTANCE
 
+    # Verifies: REQ-p00014-B
     def test_REQ_p00014_B_satisfies_edge_from_declaring_to_clone(self):
         """Declaring req should have outgoing SATISFIES edge to the cloned root."""
         template = make_requirement(
@@ -421,6 +442,7 @@ class TestTemplateInstantiation:
         assert len(satisfies_edges) == 1
         assert satisfies_edges[0].target.id == "REQ-p00044::REQ-p80001"
 
+    # Verifies: REQ-p00014-C
     def test_REQ_p00014_C_instance_edge_from_clone_to_original(self):
         """Cloned root should have outgoing INSTANCE edge to original template."""
         template = make_requirement(
@@ -444,6 +466,7 @@ class TestTemplateInstantiation:
         assert len(instance_edges) == 1
         assert instance_edges[0].target.id == "REQ-p80001"
 
+    # Verifies: REQ-p00014-B
     def test_REQ_p00014_B_cloned_assertions_exist(self):
         """Template assertions should be cloned with composite IDs."""
         template = make_requirement(
@@ -473,6 +496,7 @@ class TestTemplateInstantiation:
         assert "REQ-p00044::REQ-p80001-A" in child_ids
         assert "REQ-p00044::REQ-p80001-B" in child_ids
 
+    # Verifies: REQ-p00014-B
     def test_REQ_p00014_B_template_marked_as_template(self):
         """Original template and its assertions should be marked TEMPLATE."""
         template = make_requirement(
@@ -509,6 +533,7 @@ class TestTemplateInstantiation:
     # tests/unit/graph/test_template_validation.py for the replacement
     # coverage.
 
+    # Verifies: REQ-p00014-B
     def test_REQ_p00014_B_multiple_satisfies_creates_separate_clones(self):
         """Multiple Satisfies: targets create separate clone subtrees."""
         t1 = make_requirement(
@@ -535,6 +560,7 @@ class TestTemplateInstantiation:
         assert clone1 is not None, "Clone of template 1 should exist"
         assert clone2 is not None, "Clone of template 2 should exist"
 
+    # Verifies: REQ-d00069-H
     def test_REQ_d00069_H_cloned_source_location_preserved(self):
         """Cloned nodes should preserve the source location of the original."""
         template = make_requirement(
@@ -577,6 +603,7 @@ class TestMCPStereotypeSerialization:
     value in the properties dict for REQUIREMENT nodes.
     """
 
+    # Verifies: REQ-p00014-C
     def test_REQ_p00014_C_serialized_stereotype_concrete(self):
         """A simple requirement serializes with stereotype == 'concrete'."""
         req = make_requirement("REQ-p00001", title="Basic Requirement")
@@ -587,6 +614,7 @@ class TestMCPStereotypeSerialization:
         result = _serialize_node_generic(node, graph)
         assert result["properties"]["stereotype"] == "concrete"
 
+    # Verifies: REQ-p00014-C
     def test_REQ_p00014_C_serialized_stereotype_template(self):
         """A template requirement serializes with stereotype == 'template'."""
         template = make_requirement(
@@ -610,6 +638,7 @@ class TestMCPStereotypeSerialization:
         result = _serialize_node_generic(template_node, graph)
         assert result["properties"]["stereotype"] == "template"
 
+    # Verifies: REQ-p00014-C
     def test_REQ_p00014_C_serialized_stereotype_instance(self):
         """An instance clone serializes with stereotype == 'instance'."""
         template = make_requirement(
@@ -642,6 +671,7 @@ class TestSatisfiesFileNodeEdges:
     Validates REQ-d00128-L: file_node() returns None for INSTANCE nodes.
     """
 
+    # Verifies: REQ-d00128-J
     def test_REQ_d00128_J_defines_edge_from_file_to_instance_root(self):
         """Declaring FILE node has DEFINES edge to cloned root INSTANCE node."""
         template = make_requirement(
@@ -672,6 +702,7 @@ class TestSatisfiesFileNodeEdges:
             f"FILE should have DEFINES edge to instance root; got targets: {defines_targets}"
         )
 
+    # Verifies: REQ-d00128-J
     def test_REQ_d00128_J_defines_edge_from_file_to_instance_assertions(self):
         """Declaring FILE node has DEFINES edges to cloned assertion INSTANCE nodes."""
         template = make_requirement(
@@ -699,6 +730,7 @@ class TestSatisfiesFileNodeEdges:
         assert "REQ-p00044::REQ-p80001-A" in defines_targets
         assert "REQ-p00044::REQ-p80001-B" in defines_targets
 
+    # Verifies: REQ-d00128-J
     def test_REQ_d00128_J_defines_edge_multiple_satisfies(self):
         """Each declaring FILE gets DEFINES edges to its own INSTANCE nodes."""
         template = make_requirement(
@@ -735,6 +767,7 @@ class TestSatisfiesFileNodeEdges:
         assert "REQ-p00045::REQ-p80001" in defines2
         assert "REQ-p00045::REQ-p80001-A" in defines2
 
+    # Verifies: REQ-d00128-K
     def test_REQ_d00128_K_instance_nodes_no_contains_edges(self):
         """INSTANCE nodes have no incoming CONTAINS edges."""
         template = make_requirement(
@@ -761,6 +794,7 @@ class TestSatisfiesFileNodeEdges:
                 f"INSTANCE node {node.id} should have no CONTAINS edges, got {len(contains_edges)}"
             )
 
+    # Verifies: REQ-d00128-L
     def test_REQ_d00128_L_file_node_returns_none_for_instance(self):
         """file_node() returns None for INSTANCE nodes."""
         template = make_requirement(
@@ -784,6 +818,7 @@ class TestSatisfiesFileNodeEdges:
         assert clone_root.file_node() is None, "file_node() should return None for INSTANCE root"
         assert clone_a.file_node() is None, "file_node() should return None for INSTANCE assertion"
 
+    # Verifies: REQ-d00128-L
     def test_REQ_d00128_L_instance_original_has_file_node(self):
         """Original template node still has a FILE via file_node()."""
         template = make_requirement(

@@ -128,6 +128,7 @@ class TestTheLogAnnouncesOnlyTheTransitions:
     keystroke to say what it already said.
     """
 
+    # Verifies: REQ-o00074-L
     def test_REQ_o00074_L_first_entry_announces_that_work_is_held(self, driver):
         observer = _Observer()
         driver.log.set_dirty_observer(observer)
@@ -136,6 +137,7 @@ class TestTheLogAnnouncesOnlyTheTransitions:
 
         assert observer.calls == [True]
 
+    # Verifies: REQ-o00074-L
     def test_REQ_o00074_L_further_entries_announce_nothing_new(self, driver):
         observer = _Observer()
         driver.log.set_dirty_observer(observer)
@@ -149,6 +151,7 @@ class TestTheLogAnnouncesOnlyTheTransitions:
             f"per crossing: {observer.calls}"
         )
 
+    # Verifies: REQ-o00074-L
     def test_REQ_o00074_L_removing_the_last_entry_announces_the_release(self, driver):
         observer = _Observer()
         driver.log.set_dirty_observer(observer)
@@ -161,6 +164,7 @@ class TestTheLogAnnouncesOnlyTheTransitions:
         driver.remove_one()
         assert observer.calls == [True, False]
 
+    # Verifies: REQ-o00074-L
     def test_REQ_o00074_L_clearing_a_holding_log_announces_the_release_once(self, driver):
         observer = _Observer()
         driver.log.set_dirty_observer(observer)
@@ -171,6 +175,7 @@ class TestTheLogAnnouncesOnlyTheTransitions:
 
         assert observer.calls == [True, False]
 
+    # Verifies: REQ-o00074-L
     def test_REQ_o00074_L_clearing_an_empty_log_announces_nothing(self, driver):
         observer = _Observer()
         driver.log.set_dirty_observer(observer)
@@ -199,9 +204,11 @@ class TestTheSentinelTracksWhatTheServerHolds:
         attach_dirty_sentinel(app_state.shared)
         return app_state
 
+    # Verifies: REQ-o00074-L
     def test_REQ_o00074_L_nothing_is_recorded_before_the_first_change(self, state, project):
         assert not _sentinel(project).exists(), "a server holding nothing claimed to hold work"
 
+    # Verifies: REQ-o00074-L
     def test_REQ_o00074_L_the_first_change_puts_the_record_on_disk(self, state, project):
         state.graph.update_title(REQ, "User Authentication (held in memory)")
 
@@ -210,6 +217,7 @@ class TestTheSentinelTracksWhatTheServerHolds:
             "say so; killed here, the loss would be silent"
         )
 
+    # Verifies: REQ-o00074-L
     def test_REQ_o00074_L_further_changes_do_not_rewrite_the_record(self, state, project):
         state.graph.update_title(REQ, "User Authentication (one)")
         stamp = _sentinel(project).stat().st_mtime_ns
@@ -224,6 +232,7 @@ class TestTheSentinelTracksWhatTheServerHolds:
             "time and the writing is on the path a mutation waits for"
         )
 
+    # Verifies: REQ-o00074-L
     def test_REQ_o00074_L_client_requested_save_takes_the_record_away(self, state, project):
         from elspais.mcp.shared_state import persist_pending
 
@@ -236,6 +245,7 @@ class TestTheSentinelTracksWhatTheServerHolds:
             "the work is on disk and the record still says it is held only in memory"
         )
 
+    # Verifies: REQ-o00074-L
     def test_REQ_o00074_L_undoing_back_to_nothing_takes_the_record_away(self, state, project):
         state.graph.update_title(REQ, "User Authentication (held in memory)")
         assert _sentinel(project).exists()
@@ -247,6 +257,7 @@ class TestTheSentinelTracksWhatTheServerHolds:
             "nothing is held any more and the record still says something is"
         )
 
+    # Verifies: REQ-o00074-L
     def test_REQ_o00074_L_reverting_takes_the_record_away_and_keeps_watching(self, project):
         """A revert does not empty the log, it replaces the graph. The record
         has to go with the work it described, and the watch has to follow the
@@ -294,6 +305,7 @@ class TestTheSentinelTracksWhatTheServerHolds:
             "afterwards is recorded nowhere outside this process"
         )
 
+    # Verifies: REQ-o00074-L
     def test_REQ_o00074_L_an_instructed_discard_takes_the_record_away(self, state, project):
         """A discard is not a loss: somebody said the work was not wanted, so
         the record of work at risk goes with it rather than becoming a finding
@@ -322,6 +334,7 @@ class TestASentinelLeftBehindBecomesAFindingAboutItsWriter:
     retired once a client persists at its own request.
     """
 
+    # Verifies: REQ-o00074-L
     def test_REQ_o00074_L_adoption_converts_the_inherited_record(self, tmp_path):
         from elspais.mcp.daemon import (
             adopt_inherited_sentinel,
@@ -340,12 +353,14 @@ class TestASentinelLeftBehindBecomesAFindingAboutItsWriter:
             "process that holds nothing"
         )
 
+    # Verifies: REQ-o00074-L
     def test_REQ_o00074_L_nothing_inherited_reports_nothing(self, tmp_path):
         from elspais.mcp.daemon import adopt_inherited_sentinel, has_lost_changes
 
         assert adopt_inherited_sentinel(tmp_path) is False
         assert not has_lost_changes(tmp_path), "a clean start invented a loss"
 
+    # Verifies: REQ-o00074-L
     def test_REQ_o00074_L_presence_never_answers_both_questions_at_once(self, project):
         """The invariant the whole arrangement rests on: after a start that
         inherited a sentinel, the live sentinel is absent. A reader that finds
@@ -365,6 +380,7 @@ class TestASentinelLeftBehindBecomesAFindingAboutItsWriter:
             "now', and a reader cannot tell which question it answered"
         )
 
+    # Verifies: REQ-o00074-L
     def test_REQ_o00074_L_the_finding_is_disclosed_to_clients(self, project):
         from starlette.testclient import TestClient
 
@@ -383,6 +399,7 @@ class TestASentinelLeftBehindBecomesAFindingAboutItsWriter:
             assert notice, f"{route} disclosed nothing about a process that died holding work"
             assert notice["note"].strip(), f"{route} disclosed an empty notice"
 
+    # Verifies: REQ-o00074-L
     def test_REQ_o00074_L_clean_start_discloses_no_finding(self, project):
         from starlette.testclient import TestClient
 
@@ -397,6 +414,7 @@ class TestASentinelLeftBehindBecomesAFindingAboutItsWriter:
         assert "lost_changes" not in client.get("/api/dirty").json()
         assert client.get("/api/check-freshness").json().get("lost_changes") is None
 
+    # Verifies: REQ-o00074-L
     def test_REQ_o00074_L_the_mcp_surface_discloses_the_finding_too(self, project):
         from elspais.mcp.daemon import mark_unsaved_changes
         from elspais.mcp.server import _build_base_workspace_info, _get_graph_status
@@ -413,6 +431,7 @@ class TestASentinelLeftBehindBecomesAFindingAboutItsWriter:
         status = _get_graph_status(state.graph, project)
         assert status.get("lost_changes"), "get_graph_status hid the finding from an agent"
 
+    # Verifies: REQ-o00074-L
     def test_REQ_o00074_L_client_requested_save_retires_the_finding(self, project):
         """The finding describes the tree as the dead process left it. A client
         that writes the tree at its own request has replaced that tree, so the

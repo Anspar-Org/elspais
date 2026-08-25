@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import fnmatch
 import re
-from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -24,7 +23,7 @@ def config_defaults() -> dict[str, Any]:
 
     All defaults are defined as Pydantic field defaults in schema.py.
     This function validates an empty dict to produce the full defaults,
-    then dumps to a hyphenated-key dict for backward compatibility.
+    then dumps to a dict keyed as the TOML is written, hyphens and all.
 
     Returns:
         Default configuration dictionary with hyphenated keys.
@@ -208,44 +207,12 @@ def declared_values(config: dict[str, Any], name: str) -> Any:
 
 CURRENT_CONFIG_VERSION = 5
 
-
-# Implements: REQ-d00212-N
-def _migrate_v3_to_v4(config: dict) -> dict:
-    """Move flat terms severity fields into nested [terms.severity].
-
-    Flat fields are always popped when present, even if `[terms.severity]`
-    already exists — `load_config()` merges `config_defaults()` into the
-    user config before invoking migrations, so the nested `severity` dict
-    will typically already be populated from the v4 defaults. Flat values
-    the user explicitly set override the defaults inside that dict.
-    """
-    terms = config.get("terms")
-    if not isinstance(terms, dict):
-        config["version"] = 4
-        return config
-
-    severity = terms.get("severity")
-    if not isinstance(severity, dict):
-        severity = {}
-        terms["severity"] = severity
-
-    field_map = {
-        "duplicate_severity": "duplicate",
-        "undefined_severity": "undefined",
-        "unmarked_severity": "unmarked",
-    }
-    for old_key, new_key in field_map.items():
-        if old_key in terms:
-            severity[new_key] = terms.pop(old_key)
-
-    config["version"] = 4
-    return config
-
-
 # The severity settings, by the path each one lives at. Enumerated rather than
-# walked: a blind walk over the configuration would rewrite any string that
-# happened to read "ok" -- a status word, a level name -- and the migration
-# would corrupt settings it knows nothing about.
+# walked: a blind walk over the configuration would inspect any string that
+# happened to read "ok" -- a status word, a level name -- and the refusal would
+# name settings it knows nothing about.
+
+
 def _severity_paths() -> list[tuple[str, ...]]:
     paths: list[tuple[str, ...]] = [
         ("rules", "format", "no_assertions_severity"),
@@ -278,47 +245,160 @@ def _severity_paths() -> list[tuple[str, ...]]:
         "bad_definition",
         "collection_empty",
         "canonical_form",
-        "changed",
     ):
         paths.append(("terms", "severity", field))
     return paths
 
 
-# Implements: REQ-d00212-U, REQ-d00212-V
-def _migrate_v4_to_v5(config: dict) -> dict:
-    """Rewrite the retired `ok` severity to `off`, and drop a withdrawn setting.
-
-    The two words meant one thing between them and neither was honoured
-    everywhere: `ok` passed a check while still listing its findings, `off`
-    withheld them. One word now says it -- `off` means the condition is not
-    reported here -- so a setting written `ok` is rewritten rather than
-    refused, which is what keeps an existing configuration loadable.
-    """
-    for path in _severity_paths():
-        container: Any = config
-        for key in path[:-1]:
-            container = container.get(key) if isinstance(container, dict) else None
-            if container is None:
-                break
-        if not isinstance(container, dict):
-            continue
-        if container.get(path[-1]) == "ok":
-            container[path[-1]] = "off"
-    # `terms.severity.changed` was declared and documented and read by nothing,
-    # so a project could set it and change no outcome. It is dropped rather
-    # than refused, so a configuration carrying it still loads.
-    terms = config.get("terms")
-    severity = terms.get("severity") if isinstance(terms, dict) else None
-    if isinstance(severity, dict):
-        severity.pop("changed", None)
-    config["version"] = 5
-    return config
-
-
-MIGRATIONS: dict[int, Callable[[dict], dict]] = {
-    3: _migrate_v3_to_v4,  # flat terms severity -> nested [terms.severity]
-    4: _migrate_v4_to_v5,  # retired "ok" -> "off"; withdrew terms.severity.changed
+# The term severities were once written flat under `[terms]`, one field per
+# condition with a `_severity` suffix; they are written under `[terms.severity]`
+# now, keyed by the condition alone.
+_FLAT_TERM_SEVERITIES = {
+    "duplicate_severity": "duplicate",
+    "undefined_severity": "undefined",
+    "unmarked_severity": "unmarked",
 }
+
+# `ok` and `off` once meant one thing between them and neither was honoured
+# everywhere: `ok` passed a check while still listing its findings, `off`
+# withheld them. One word says it now.
+_RETIRED_SEVERITY = "ok"
+_REPLACEMENT_SEVERITY = "off"
+
+# Settings that were declared and documented and read by nothing, so a project
+# could set one and change no outcome.
+_WITHDRAWN_SETTINGS: tuple[tuple[str, ...], ...] = (("terms", "severity", "changed"),)
+
+
+def _container_at(config: dict[str, Any], path: tuple[str, ...]) -> dict | None:
+    """The table a setting lives in, or None where the file has no such table."""
+    container: Any = config
+    for key in path[:-1]:
+        container = container.get(key) if isinstance(container, dict) else None
+        if container is None:
+            return None
+    return container if isinstance(container, dict) else None
+
+
+# Implements: REQ-d00212-V, REQ-d00212-X
+def _setting_repairs(config: dict[str, Any]) -> list[tuple[str, str]]:
+    """Each setting the file carries that this version does not read, and what
+    to write in its place.
+
+    Read out of the file in front of the author rather than recited from a
+    fixed list, so a refusal names what this configuration actually has to
+    change and cannot go stale against it.
+    """
+    repairs: list[tuple[str, str]] = []
+
+    terms = config.get("terms")
+    if isinstance(terms, dict):
+        for flat, nested in _FLAT_TERM_SEVERITIES.items():
+            if flat in terms:
+                value = terms[flat]
+                repairs.append(
+                    (
+                        f'[terms] {flat} = "{value}"',
+                        f'[terms.severity] {nested} = "{value}"',
+                    )
+                )
+
+    for path in _severity_paths():
+        container = _container_at(config, path)
+        if container is not None and container.get(path[-1]) == _RETIRED_SEVERITY:
+            section = ".".join(path[:-1])
+            repairs.append(
+                (
+                    f'[{section}] {path[-1]} = "{_RETIRED_SEVERITY}"',
+                    f'[{section}] {path[-1]} = "{_REPLACEMENT_SEVERITY}"'
+                    f'   ("{_RETIRED_SEVERITY}" is no longer a severity word; the '
+                    f"admitted words are off, info, warning, error)",
+                )
+            )
+
+    for path in _WITHDRAWN_SETTINGS:
+        container = _container_at(config, path)
+        if container is not None and path[-1] in container:
+            section = ".".join(path[:-1])
+            repairs.append(
+                (
+                    f"[{section}] {path[-1]}",
+                    "delete the line -- nothing reads this setting",
+                )
+            )
+
+    return repairs
+
+
+def _declared_version_of(config: dict[str, Any], source: Path) -> int | None:
+    """The version a TOML file declares, or None where it declares none.
+
+    A file declaring nothing is making no claim about its shape, and the
+    settings it carries are inspected regardless -- that is what actually
+    catches a file written for an older elspais, whether or not it says so.
+    """
+    raw = config.get("version")
+    if raw is None:
+        return None
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        raise ValueError(
+            f"{source}: version = {raw!r} is not a version number. Write "
+            f"`version = {CURRENT_CONFIG_VERSION}`."
+        ) from None
+
+
+def _outdated_config_message(
+    config_path: Path,
+    declared_version: int | None,
+    repairs: list[tuple[str, str]],
+) -> str:
+    """Build the refusal for a configuration this version does not read."""
+    lines: list[str] = []
+    if declared_version is not None and declared_version != CURRENT_CONFIG_VERSION:
+        lines.append(
+            f"{config_path}: version = {declared_version}, but this elspais reads "
+            f"version {CURRENT_CONFIG_VERSION} configurations."
+        )
+    else:
+        lines.append(
+            f"{config_path}: this file carries settings that version "
+            f"{CURRENT_CONFIG_VERSION} does not read."
+        )
+    lines.append("")
+
+    if declared_version is not None and declared_version > CURRENT_CONFIG_VERSION:
+        lines.append(
+            "The file was written for a newer elspais than the one running. Upgrade "
+            f"elspais, or -- if this is in fact a version {CURRENT_CONFIG_VERSION} "
+            f"file -- write `version = {CURRENT_CONFIG_VERSION}`."
+        )
+        return "\n".join(lines)
+
+    lines.append(
+        "An out-of-date configuration is not upgraded in place: what a project "
+        "configured is what it gets, so the file says it rather than the tool "
+        "guessing it. Edit the file as below."
+    )
+    lines.append("")
+
+    if repairs:
+        lines.append("Settings to change:")
+        for found, instead in repairs:
+            lines.append(f"  {found}")
+            lines.append(f"    write instead:  {instead}")
+    else:
+        lines.append("No setting in this file has to change.")
+
+    if declared_version != CURRENT_CONFIG_VERSION:
+        lines.append("")
+        lines.append("Then set:")
+        lines.append(f"  version = {CURRENT_CONFIG_VERSION}")
+
+    lines.append("")
+    lines.append("`elspais docs config` lists every setting this version reads.")
+    return "\n".join(lines)
 
 
 # Implements: REQ-d00207-B
@@ -347,6 +427,7 @@ def load_config(config_path: Path) -> dict[str, Any]:
     _user_project = user_config.get("project") or {}
     _user_project_name = _user_project.get("name")
     _user_project_namespace = _user_project.get("namespace")
+    _user_declared_version = _declared_version_of(user_config, config_path)
     merged = _merge_configs(config_defaults(), user_config)
     # `[levels]` is a hierarchy declaration. When the user supplies their own
     # levels, take only the user's keys (so a custom uppercase `[levels.PRD]`
@@ -360,6 +441,7 @@ def load_config(config_path: Path) -> dict[str, Any]:
     local_path = config_path.parent / ".elspais.local.toml"
     _local_project_name: Any = None
     _local_project_namespace: Any = None
+    _local_declared_version: int | None = None
     if local_path.is_file():
         local_config = _parse_toml(local_path.read_text(encoding="utf-8"))
         # Same rule as the main TOML: capture pre-merge so we can tell whether
@@ -368,14 +450,21 @@ def load_config(config_path: Path) -> dict[str, Any]:
         _local_project = local_config.get("project") or {}
         _local_project_name = _local_project.get("name")
         _local_project_namespace = _local_project.get("namespace")
+        _local_declared_version = _declared_version_of(local_config, local_path)
         merged = _merge_configs(merged, local_config)
         _override_levels(merged, local_config)
 
-    # Version-gated sequential migration
-    version = int(merged.get("version", 1))
-    for v in range(version, CURRENT_CONFIG_VERSION):
-        if v in MIGRATIONS:
-            merged = MIGRATIONS[v](merged)
+    # Implements: REQ-d00212-V
+    # A configuration this version does not read is refused, naming each
+    # setting that has to change and what to write in its place. The version
+    # is read from the file rather than from `merged`, whose defaults supply
+    # the current one and would mask what the author actually declared.
+    _declared_version = _local_declared_version
+    if _declared_version is None:
+        _declared_version = _user_declared_version
+    _repairs = _setting_repairs(merged)
+    if (_declared_version is not None and _declared_version != CURRENT_CONFIG_VERSION) or _repairs:
+        raise ValueError(_outdated_config_message(config_path, _declared_version, _repairs))
 
     # A pre-v2 configuration declared its identifiers in a `[patterns]`
     # section. Nothing reads that section now, so accepting one would mean
@@ -387,6 +476,15 @@ def load_config(config_path: Path) -> dict[str, Any]:
             f"{config_path}: [patterns] is the pre-v2 way of declaring identifiers "
             f"and is no longer read. Declare levels in [levels] and the identifier "
             f"form in [id-patterns]; see `elspais docs config`."
+        )
+
+    # Identifier settings are written under `[id-patterns]`. The underscore
+    # spelling was once accepted alongside it, which let one file say the same
+    # thing two ways and left a reader to work out which the tool had read.
+    if "id_patterns" in merged:
+        raise ValueError(
+            f"{config_path}: [id_patterns] is not read. Identifier settings are "
+            f"declared under [id-patterns], written with a hyphen."
         )
 
     # The set of statuses a requirement may declare is the union of the
@@ -423,7 +521,7 @@ def load_config(config_path: Path) -> dict[str, Any]:
     if not supplied_namespace or not str(supplied_namespace).strip():
         raise ValueError(f"{config_path}: [project].namespace is required and must be non-empty")
 
-    # Produce hyphenated dict for backward-compatible access
+    # Keyed as the TOML is written, hyphens and all
     result = validated.model_dump(by_alias=True)
 
     return result

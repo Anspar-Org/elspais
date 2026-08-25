@@ -147,7 +147,7 @@ def create_template_requirement(args: argparse.Namespace) -> int:
 # 1 line max.  For enums, list valid values.  Refer to docs for detail.
 _FIELD_COMMENTS: dict[str, str] = {
     # --- top-level scalars ---
-    "version": "Config schema version (do not change)",
+    "version": "Config schema version; any other version is refused, naming what to change",
     "cli_ttl": "Idle timeout in minutes for a daemon nobody is using "
     "(>0 = auto-start, 0 = disabled, <0 = no idle timeout); a daemon with a "
     "live client keeps running, and exits when its clients are gone",

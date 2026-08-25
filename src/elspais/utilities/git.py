@@ -349,7 +349,6 @@ def detect_moved_requirements(
 # Implements: REQ-p00004-B
 def get_git_changes(
     repo_root: Path | None = None,
-    spec_dir: str = "spec",
     base_branch: str = "main",
     base_ref: str = "HEAD",
 ) -> GitChangeInfo:
@@ -366,7 +365,6 @@ def get_git_changes(
 
     Args:
         repo_root: Path to repository root (auto-detected if None)
-        spec_dir: Spec directory relative to repo root (deprecated, ignored)
         base_branch: Base branch for comparison (default: 'main')
         base_ref: Git ref for committed state comparison (default: 'HEAD')
 

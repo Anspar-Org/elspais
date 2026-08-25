@@ -10,22 +10,19 @@ strings, and the reported severity of a broken reference depends on which
 one was asked.
 
 These tests hold the surfaces to the single derivation: that the fragments
-are reachable publicly, that the consumers take them from there, that the
-underscore spelling of an identifier is the same grammar in another
-notation, and that recognition and claiming agree.
+are reachable publicly, that the consumers take them from there, and that
+recognition and claiming agree. There is one notation, and a spelling
+differing from it in anything but case and padding is a reference spelled
+wrongly rather than a second rendering of the grammar (REQ-d00212-S).
 """
 
 from __future__ import annotations
-
-import re
-from types import SimpleNamespace
 
 import pytest
 
 from elspais.config.schema import ElspaisConfig
 from elspais.graph.federated import FederatedGraph
 from elspais.graph.parsers.lark import GrammarFactory
-from elspais.graph.parsers.lark.transformers.reference import ReferenceTransformer
 from elspais.utilities.patterns import (
     FederatedIdReader,
     IdGrammar,
@@ -166,94 +163,47 @@ def test_lark_grammar_builder_takes_its_tokens_from_the_authority(
     assert tokens["__ASSERTION_LABEL__"] == _SENTINEL.assertion_label
 
 
-class _Token:
-    """The one shape ``_handle_test_name_ref`` reads off a parse tree."""
-
-    def __init__(self, text: str) -> None:
-        self._text = text
-        self.line = 1
-
-    def __str__(self) -> str:
-        return self._text
-
-
-def test_test_function_matcher_takes_its_pattern_from_the_authority(
+def test_the_namespace_claim_probe_takes_its_pattern_from_the_authority(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     # Verifies: REQ-p00014-T
+    """Which repository a broken item is attributed to reads one grammar.
+
+    The probe deciding whether an item opens with this repository's
+    namespace takes the namespace and the separator that ends it from the
+    authority rather than assuming a ``-``. Composing them here instead
+    would attribute every identifier of a repository configured otherwise
+    to nobody at all, and the severity of a broken reference would depend
+    on which surface was asked.
+    """
     resolver = build_resolver(_config())
-    transformer = ReferenceTransformer(resolver, "test_ref")
     _stub_grammar(monkeypatch)
 
-    # The sentinel grammar is the only thing that can recognise this name.
-    node = SimpleNamespace(children=[_Token("def test_thing_ZQX_q0007_B")])
-    parsed = transformer._handle_test_name_ref(node)
-
-    assert parsed is not None, "the matcher did not use the derived grammar"
-    assert parsed.parsed_data["verifies"] == ["ZQX-q0007-B"]
+    # The sentinel grammar is the only thing that claims this namespace, and
+    # the only thing that stops the configured one being claimed.
+    assert resolver.declares_namespace("ZQX-q0007"), "the probe did not use the derived grammar"
+    assert not resolver.declares_namespace("REQ-d00001")
 
 
 def test_reference_expansion_takes_its_pattern_from_the_authority(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     # Verifies: REQ-d00081-D
+    """A multi-*Assertion* reference is recognised through the one grammar.
+
+    What expands to a set of individual references is settled by the
+    authority's fragments -- the identifier, the assertion separator, the
+    label alphabet and the multi-separator -- so the same reference expands
+    the same way wherever it is written.
+    """
     resolver = build_resolver(_config())
-    transformer = ReferenceTransformer(resolver, "code_ref")
-    sentinel_re = re.compile(r"ZQX-q[0-9]{4}")
-    monkeypatch.setattr(IdResolver, "multi_assertion_reference_regex", lambda self: sentinel_re)
+    _stub_grammar(monkeypatch)
 
-    assert transformer._extract_ids("Implements: ZQX-q0007, REQ-d00001") == ["ZQX-q0007"]
+    pattern = resolver.multi_assertion_reference_regex()
 
-
-# ---------------------------------------------------------------------------
-# The underscore spelling is the same grammar in another notation.
-# ---------------------------------------------------------------------------
-
-
-def _reference_regex(grammar: IdGrammar) -> re.Pattern[str]:
-    """Identifier plus an optional single assertion label, in one notation."""
-    return re.compile(
-        rf"{grammar.identifier}(?:{grammar.assertion_separator}{grammar.assertion_label})?"
-    )
-
-
-@pytest.mark.parametrize(
-    "hyphen_spelling",
-    [
-        "REQ-d00001",
-        "REQ-p1",
-        "REQ-d00001-A",
-        "REQ-p00042-Z",
-        "REQ-x00001",  # unknown level
-        "REQ-d000001",  # component too long
-        "REQ-d00001-a",  # lowercase label
-        "PRD-d00001",  # foreign namespace
-        "REQd00001",  # missing punctuation
-    ],
-)
-def test_underscore_notation_matches_the_same_identifiers(hyphen_spelling: str) -> None:
-    # Verifies: REQ-p00014-T
-    resolver = build_resolver(_config())
-    hyphen = _reference_regex(resolver.grammar())
-    underscore = _reference_regex(resolver.grammar(separator="_"))
-
-    underscore_spelling = hyphen_spelling.replace("-", "_")
-    assert (hyphen.fullmatch(hyphen_spelling) is not None) == (
-        underscore.fullmatch(underscore_spelling) is not None
-    ), (
-        f"{hyphen_spelling!r} and {underscore_spelling!r} are one identifier in "
-        f"two notations and must be recognised alike"
-    )
-
-
-def test_underscore_notation_rejects_the_hyphen_spelling() -> None:
-    # Verifies: REQ-p00014-T
-    """The notation is rendered, not merely tolerated alongside the default."""
-    resolver = build_resolver(_config())
-    underscore = _reference_regex(resolver.grammar(separator="_"))
-
-    assert underscore.fullmatch("REQ_d00001_A") is not None
-    assert underscore.fullmatch("REQ-d00001-A") is None
+    assert pattern.fullmatch("ZQX-q0007-B"), "the expansion pattern did not use the authority"
+    assert pattern.fullmatch("ZQX-q0007-A+B"), "and it must span every label of the reference"
+    assert not pattern.fullmatch("REQ-d00001")
 
 
 # ---------------------------------------------------------------------------
@@ -313,20 +263,27 @@ def test_claim_probe_refuses_what_the_resolver_rejects(
 
 
 # ---------------------------------------------------------------------------
-# Normalization settles the case the matcher reads tolerantly.
+# Normalization settles the case and padding the matcher reads tolerantly.
 # ---------------------------------------------------------------------------
 #
-# The reference matcher recognises an identifier without regard to case, so a
-# mis-cased reference reaches normalization. Whatever normalization hands on is
-# then parsed case-sensitively. Every part whose case the grammar does not
-# treat as significant -- the namespace, the level code, the assertion labels
-# -- is therefore settled here, or the reference arrives at the resolver as a
-# string no repository claims and a local typo is reported as belonging to
-# another repository.
+# The reference matcher recognises an identifier without regard to case or to
+# a numeric component's leading zeros, so a reference differing in either
+# reaches normalization. Whatever normalization hands on is then parsed
+# strictly. Every part whose case the grammar does not treat as significant --
+# the namespace, the level code, the assertion labels -- and the width of a
+# numeric component are therefore settled here, or the reference arrives at
+# the resolver as a string no repository claims and a local typo is reported
+# as belonging to another repository (REQ-d00212-R).
 #
-# The component is the exception. Under a case-style its case is its identity,
-# so a mis-cased component names a different component and must stay
-# unresolved.
+# Case and padding are settled on different paths -- one runs while an
+# identifier parses, the other repairs a spelling that did not -- so a
+# reference differing in BOTH travels only one of them. That is the quadrant
+# a fix to either path alone leaves behind, and the table below covers all
+# four rather than the two that are easy to reach.
+#
+# The component is the exception in the other direction. Under a case-style
+# its case is its identity, so a mis-cased component names a different
+# component and must stay unresolved.
 
 NUMERIC = _config()
 
@@ -334,39 +291,69 @@ NUMERIC = _config()
 def _matcher_recognises(resolver: IdResolver, text: str) -> bool:
     """Whether a reference matcher would pick ``text`` out of a source file.
 
-    Two notations are rendered from the one grammar, and text is read
-    tolerantly of case in both, so a reference the matcher hands to
-    normalization may be spelled either way.
+    One grammar, compiled case-insensitively, so a reference the matcher
+    hands to normalization may be mis-cased but is otherwise spelled as the
+    configuration admits.
     """
-    if resolver.multi_assertion_reference_regex().fullmatch(text) is not None:
-        return True
-    underscore = _reference_regex(resolver.grammar(separator="_"))
-    return re.fullmatch(underscore.pattern, text, re.IGNORECASE) is not None
+    return resolver.multi_assertion_reference_regex().fullmatch(text) is not None
 
 
 @pytest.mark.parametrize(
     "config, raw, expected, local",
     [
-        # Numeric component, "letter" level alias, uppercase labels.
-        (NUMERIC, "REQ-d00001-a", "REQ-d00001-A", True),  # label case
+        # -- Settled: case, padding, and the two together (REQ-d00212-R) --
+        # Neither differs: the control the rows below are read against.
+        (NUMERIC, "REQ-p00001-A", "REQ-p00001-A", True),
+        # Case only.
+        (NUMERIC, "REQ-p00001-a", "REQ-p00001-A", True),  # label case
         (NUMERIC, "req-D00001-A", "REQ-d00001-A", True),  # namespace and level case
-        (NUMERIC, "REQ_d00001_a", "REQ-d00001-A", True),  # underscore notation
-        (NUMERIC, "REQ-d00001-a+b", "REQ-d00001-A+B", True),  # multi-assertion
+        # Padding only.
+        (NUMERIC, "REQ-p1-A", "REQ-p00001-A", True),
+        # Both at once -- the quadrant reachable on neither path alone.
+        (NUMERIC, "REQ-p1-a", "REQ-p00001-A", True),
+        (NUMERIC, "req-p1-a", "REQ-p00001-A", True),
+        # Both, carrying a multi-assertion suffix.
+        (NUMERIC, "REQ-p1-a+b", "REQ-p00001-A+B", True),
+        # Both, over-padded rather than under-padded: the value is the
+        # identity, so it is re-padded to the configured width rather than
+        # having zeros prepended to what was written.
+        (NUMERIC, "REQ-p0001-a", "REQ-p00001-A", True),
+        # -- Not settled: every other difference (REQ-d00212-S) ------------
+        # Punctuation is neither case nor padding, so an underscore spelling
+        # is left exactly as written and stays unresolved.
+        (NUMERIC, "REQ_d00001_a", "REQ_d00001_a", False),
         (NUMERIC, "XXX-d00001-a", "XXX-d00001-a", False),  # foreign namespace
         # kebab-case component: the component's own case is load-bearing.
         (KEBAB_SLASH, "REQ-p-widget/A", "REQ-p-widget/A", True),
         (KEBAB_SLASH, "REQ-p-Widget/A", "REQ-p-Widget/A", False),
     ],
 )
-def test_normalize_ref_settles_case_the_grammar_does_not_own(
+def test_normalize_ref_settles_case_and_padding_and_nothing_further(
     config: dict, raw: str, expected: str, local: bool
 ) -> None:
-    # Verifies: REQ-p00014-T
+    # Verifies: REQ-d00212-R, REQ-d00212-S, REQ-p00014-T
+    """One rule read from both ends: what normalization settles, and what it
+    must leave alone.
+
+    Case and padding decide nothing about whether a reference resolves
+    (REQ-d00212-R), and every other difference decides it absolutely
+    (REQ-d00212-S). Both halves fail silently and in opposite directions: a
+    tolerance that stops working turns a valid citation into a broken
+    reference attributed to another repository, and a tolerance that reaches
+    too far builds an edge its author never spelled.
+
+    The rendered spelling is asserted too, not merely that the reference
+    resolves. A reference may resolve while rendering in a form the
+    configuration does not name, and `fix` writes what the renderer returns.
+    """
     resolver = build_resolver(config)
 
     normalized = resolver.normalize_ref(raw)
 
-    assert normalized == expected
+    assert normalized == expected, (
+        f"{raw!r} normalized to {normalized!r}; the one spelling the "
+        f"configuration names is {expected!r}"
+    )
     assert resolver.is_local_id(normalized) is local
 
 
@@ -378,8 +365,6 @@ def test_normalize_ref_settles_case_the_grammar_does_not_own(
         "req-d00001-a",
         "REQ-D00001-A",
         "rEq-D00001-a",
-        "REQ_d00001_a",  # underscore notation, as a test function name spells it
-        "req_D00001_A",
     ],
 )
 def test_matcher_and_resolver_agree_after_normalization(variant: str) -> None:
@@ -453,187 +438,99 @@ NUMERIC_LABELS = _config(assertions={"label_style": "numeric"})
 
 
 @pytest.mark.parametrize(
-    "config, function_name, expected",
-    [
-        # A single lowercase word after a genuine label: the following word
-        # of a function name, not a second label.
-        (UPPERCASE_LABELS, "test_REQ_p00001_A_b_and_more", "REQ-p00001-A"),
-        (UPPERCASE_LABELS, "test_REQ_p00001_A_and_then_some", "REQ-p00001-A"),
-        (UPPERCASE_LABELS, "test_REQ_p00001_validates_something", "REQ-p00001"),
-        # The shape that mints a broken reference out of a test's own name:
-        # a real label followed by a single-letter word.
-        (UPPERCASE_LABELS, "test_REQ_d00269_E_a_demoted_line_survives", "REQ-d00269-E"),
-        # A lowercase *first* label is still a mis-cased label, not a word.
-        (UPPERCASE_LABELS, "test_REQ_p00001_a_lower", "REQ-p00001-A"),
-        # An alphabet that admits digits still names a case for its letters.
-        (ALPHANUMERIC_LABELS, "test_REQ_p00001_A_b_and_more", "REQ-p00001-A"),
-        (ALPHANUMERIC_LABELS, "test_REQ_p00001_3_more", "REQ-p00001-3"),
-        # A lowercase *first* label is a mis-cased label the separator still
-        # marks out, so it is read and canonicalized rather than dropped.
-        (ALPHANUMERIC_LABELS, "test_REQ_p00001_a_lower", "REQ-p00001-A"),
-        # Digits have no case to preserve, so a digit label reads unchanged.
-        (NUMERIC_LABELS, "test_REQ_p00001_2_b_more", "REQ-p00001-2"),
-        (NUMERIC_LABELS, "test_REQ_p00001_a_lower", "REQ-p00001"),
-    ],
-)
-def test_a_test_function_name_yields_an_identifier_the_resolver_accepts(
-    config: dict, function_name: str, expected: str
-) -> None:
-    # Verifies: REQ-p00014-T
-    """What the reader picks out of a name must be one the resolver parses.
-
-    A test function name spells every boundary as an underscore, so the
-    trailing words of the name sit exactly where a label would. Reading one
-    of them as a label produces a string the resolver rejects -- the two
-    surfaces then disagree about what an identifier is, and the disagreement
-    surfaces as a broken reference minted out of a test's own name.
-    """
-    resolver = build_resolver(config)
-    reader = FederatedIdReader(resolver)
-
-    extracted = reader.extract_underscored_ref(function_name)
-
-    assert extracted == expected
-    assert resolver.is_local_id(extracted), (
-        f"the reader picked {extracted!r} out of {function_name!r} but the "
-        f"resolver refuses it, so a test name mints a broken reference to a "
-        f"requirement nothing declares"
-    )
-
-
-def test_case_tolerance_of_a_label_ends_where_the_notation_runs_out() -> None:
-    # Verifies: REQ-p00014-T
-    """Only a second label needs its case to be told from a following word.
-
-    Both notations separate the component from the first label with a
-    character of their own, so a lowercase first label is a mis-cased label
-    and normalization settles it -- in either notation. It is the *second*
-    label that the underscore notation cannot punctuate distinctly, because
-    the separator between two labels is the same ``_``; there case is the
-    only thing left, and reading a following word as a label yields a string
-    the resolver refuses.
-    """
-    resolver = build_resolver(NUMERIC)
-    reader = FederatedIdReader(resolver)
-
-    assert _matcher_recognises(resolver, "req-d00001-a")
-    assert resolver.is_local_id(resolver.normalize_ref("req-d00001-a"))
-
-    assert _matcher_recognises(resolver, "REQ_d00001_a")
-    assert reader.extract_underscored_ref("test_REQ_d00001_a") == "REQ-d00001-A"
-
-    assert reader.extract_underscored_ref("test_REQ_d00001_A_note") == "REQ-d00001-A"
-
-
-# ---------------------------------------------------------------------------
-# The underscore notation folds back onto the template's own literals.
-# ---------------------------------------------------------------------------
-#
-# A component style has punctuation of its own, and it is not always the
-# punctuation the canonical template spells its boundaries with. Under a
-# snake_case component the two are `_` and `-`; a fold that rewrites every
-# underscore into the component's character therefore rewrites nothing, and
-# the name the matcher recognised arrives at the resolver unchanged and
-# unclaimed. Folding has to restore each character where it belongs: the
-# template's literals between the parts, the component's own inside it.
-
-
-@pytest.mark.parametrize(
-    "config, function_name, expected",
-    [
-        # snake_case component: the component keeps its `_`, the template's
-        # boundaries go back to `-`.
-        (SNAKE_DASH, "test_REQ_p_data_export_A", "REQ-p-data_export-A"),
-        (SNAKE_DASH, "test_REQ_d_my_long_widget_B", "REQ-d-my_long_widget-B"),
-        (SNAKE_DASH, "test_REQ_p_widget", "REQ-p-widget"),
-        # kebab-case control: here the component's own character happens to
-        # equal the template's, and the component must still be spelled with
-        # it rather than left in the notation it was read in.
-        (KEBAB_SLASH, "test_REQ_p_data_export_A", "REQ-p-data-export/A"),
-        (KEBAB_SLASH, "test_REQ_p_widget", "REQ-p-widget"),
-    ],
-)
-def test_a_component_style_folds_onto_the_templates_own_separators(
-    config: dict, function_name: str, expected: str
-) -> None:
-    # Verifies: REQ-p00014-T
-    """A test name under a case-style component yields an identifier that parses.
-
-    The reader recognises the name through the grammar re-rendered in
-    underscore notation. If normalization cannot spell the result back in the
-    configured punctuation the resolver refuses it, and the test's own name
-    mints a broken reference to a requirement nothing declares.
-    """
-    resolver = build_resolver(config)
-    reader = FederatedIdReader(resolver)
-
-    extracted = reader.extract_underscored_ref(function_name)
-
-    assert extracted == expected
-    assert resolver.is_local_id(extracted), (
-        f"the reader picked {extracted!r} out of {function_name!r} but the resolver refuses it"
-    )
-
-
-@pytest.mark.parametrize(
     "config, raw, expected",
     [
-        (SNAKE_DASH, "REQ_p_data_export_A", "REQ-p-data_export-A"),
-        (SNAKE_DASH, "REQ-p-data_export-A", "REQ-p-data_export-A"),
-        (KEBAB_SLASH, "REQ_p_data_export_A", "REQ-p-data-export/A"),
+        # A label alphabet that names a case settles that case, so a
+        # mis-cased label is a mis-cased label rather than a second answer
+        # about what an identifier is.
+        (UPPERCASE_LABELS, "REQ-p00001-A", "REQ-p00001-A"),
+        (UPPERCASE_LABELS, "REQ-p00001-a", "REQ-p00001-A"),
+        (UPPERCASE_LABELS, "REQ-p00001", "REQ-p00001"),
+        # An alphabet that admits digits still names a case for its letters.
+        (ALPHANUMERIC_LABELS, "REQ-p00001-a", "REQ-p00001-A"),
+        # Digits have no case to preserve, so a digit label reads unchanged.
+        (ALPHANUMERIC_LABELS, "REQ-p00001-3", "REQ-p00001-3"),
+        (NUMERIC_LABELS, "REQ-p00001-2", "REQ-p00001-2"),
+        (NUMERIC_LABELS, "REQ-p00001", "REQ-p00001"),
     ],
 )
-def test_normalize_ref_folds_a_case_style_component(config: dict, raw: str, expected: str) -> None:
+def test_a_label_alphabet_settles_the_case_it_names(config: dict, raw: str, expected: str) -> None:
     # Verifies: REQ-p00014-T
+    """What the matcher reads tolerantly, the resolver must still accept.
+
+    The reference matcher recognises a label without regard to case, and the
+    resolver parses case-sensitively; normalization is the only place the
+    two can be reconciled. Where a label alphabet names a case, an alphabet
+    that failed to settle it would hand the resolver a string no repository
+    claims, and a local typo would be reported as a reference belonging to
+    another repository.
+    """
     resolver = build_resolver(config)
 
     normalized = resolver.normalize_ref(raw)
 
     assert normalized == expected
-    assert resolver.is_local_id(normalized)
+    assert resolver.is_local_id(normalized), (
+        f"normalization produced {normalized!r} from {raw!r} and the resolver "
+        f"refuses it, so the two surfaces answer for different sets of strings"
+    )
 
 
-def test_underscore_notation_still_reads_two_labels() -> None:
-    # Verifies: REQ-p00014-T
-    """The notation spells both boundaries as `_`, so the split is searched for.
-
-    A head that already carries a label is not the boundary; the longest head
-    that parses without one is, and the remainder are labels joined by the
-    configured multi-separator.
-    """
-    resolver = build_resolver(NUMERIC)
-
-    assert resolver.normalize_ref("REQ_d00001_A_B") == "REQ-d00001-A+B"
-    assert resolver.is_local_id(resolver.normalize_ref("REQ_d00001_A_B"))
+# ---------------------------------------------------------------------------
+# A component style's own punctuation is not the template's.
+# ---------------------------------------------------------------------------
+#
+# A component style has punctuation of its own, and it is not always the
+# punctuation the canonical template spells its boundaries with. Under a
+# snake_case component the two are `_` and `-`, and each has to be read where
+# it belongs: the template's literals between the parts, the component's own
+# inside it. Reading tolerantly settles case and padding and extends to no
+# further difference (REQ-d00212-S), so swapping one of those characters for
+# the other names a component this repository does not have -- and is left as
+# written rather than repaired into one it does.
 
 
 @pytest.mark.parametrize(
-    "style, expected_spelling",
+    "config, raw, local",
     [
-        ("snake_case", "data_export"),
-        ("kebab-case", "data_export"),
+        # snake_case component: its own `_` stays inside the component while
+        # the template's boundaries stay `-`.
+        (SNAKE_DASH, "REQ-p-data_export-A", True),
+        (SNAKE_DASH, "REQ-p-widget", True),
+        # The template's character written inside the component: a component
+        # that does not exist, not "data_export" spelled differently.
+        (SNAKE_DASH, "REQ-p-data-export-A", False),
+        # kebab-case control: here the component's own character equals the
+        # template's, and the assertion separator is what parts them.
+        (KEBAB_SLASH, "REQ-p-data-export/A", True),
+        (KEBAB_SLASH, "REQ-p-widget", True),
+        (KEBAB_SLASH, "REQ-p-data_export/A", False),
+        # Every boundary spelled `_`: a difference of punctuation, so it is
+        # neither claimed nor repaired, under either style.
+        (SNAKE_DASH, "REQ_p_data_export_A", False),
+        (KEBAB_SLASH, "REQ_p_data_export_A", False),
     ],
 )
-def test_component_regex_honours_an_alternate_internal_separator(
-    style: str, expected_spelling: str
+def test_a_case_style_components_punctuation_is_read_where_it_belongs(
+    config: dict, raw: str, local: bool
 ) -> None:
-    # Verifies: REQ-p00014-T
-    """A case-style's internal punctuation is a parameter of the one authority.
+    # Verifies: REQ-p00014-T, REQ-d00212-S
+    """Which character belongs to the component and which to the template is
+    one question the authority answers, and normalization may not blur it.
 
-    A notation that cannot spell the style's own character substitutes its
-    own, and the pattern has to follow it there rather than being composed a
-    second time by the caller.
+    A repository whose component and whose template use different characters
+    is where the two can be told apart at all. Rewriting one into the other
+    would claim an identifier under a spelling its author did not write --
+    silently, since the rewritten string resolves.
     """
-    from elspais.utilities.patterns import ComponentFormat, component_regex
+    resolver = build_resolver(config)
 
-    comp = ComponentFormat(style=style, digits=0, leading_zeros=False, pattern=None)
+    normalized = resolver.normalize_ref(raw)
 
-    assert re.fullmatch(component_regex(comp, internal_separator="_"), expected_spelling)
-    assert re.fullmatch(component_regex(comp, internal_separator="/"), "data/export")
-    if style == "kebab-case":
-        # Without the parameter the style's own character is what is demanded.
-        assert re.fullmatch(component_regex(comp), "data-export")
-        assert not re.fullmatch(component_regex(comp), "data_export")
+    assert normalized == raw, (
+        f"{raw!r} came back as {normalized!r}; nothing past case and padding may be rewritten"
+    )
+    assert resolver.is_local_id(normalized) is local
 
 
 # ---------------------------------------------------------------------------

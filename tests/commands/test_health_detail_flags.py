@@ -63,6 +63,7 @@ def _make_args(**kwargs) -> argparse.Namespace:
 class TestPassingDetailFlagsCLI:
     """Validates REQ-d00085-E: CLI accepts --include-passing-details and --skip-passing-details."""
 
+    # Verifies: REQ-d00085-E
     def test_REQ_d00085_E_include_passing_details_flag_accepted(self) -> None:
         """The --include-passing-details flag is accepted by the health subcommand parser."""
         from elspais.cli import parse_args
@@ -70,6 +71,7 @@ class TestPassingDetailFlagsCLI:
         args = parse_args(["checks", "--include-passing-details"])
         assert args.include_passing_details is True
 
+    # Verifies: REQ-d00085-E
     def test_REQ_d00085_E_no_include_passing_details_flag_accepted(self) -> None:
         """The --no-include-passing-details flag is accepted (this is the default)."""
         from elspais.cli import parse_args
@@ -77,6 +79,7 @@ class TestPassingDetailFlagsCLI:
         args = parse_args(["checks", "--no-include-passing-details"])
         assert args.include_passing_details is False
 
+    # Verifies: REQ-d00085-E
     def test_REQ_d00085_E_default_skips_passing_details(self) -> None:
         """Without either flag, passing details are skipped by default."""
         from elspais.cli import parse_args
@@ -89,6 +92,7 @@ class TestPassingDetailFlagsCLI:
 class TestTextFormatPassingDetails:
     """Validates REQ-d00085-E: text format respects passing-detail flags."""
 
+    # Verifies: REQ-d00085-E
     def test_REQ_d00085_E_text_include_passing_details_no_details(self) -> None:
         """Text format checklist does not render details (intentionally dropped)."""
         report = _make_passing_report()
@@ -100,6 +104,7 @@ class TestTextFormatPassingDetails:
         assert "valid_references" in output
         assert "All 12 references resolved" in output
 
+    # Verifies: REQ-d00085-E
     def test_REQ_d00085_E_text_skip_passing_details_hides_details(self) -> None:
         """Text format with default --skip-passing-details hides details for passing checks."""
         report = _make_passing_report()
@@ -117,6 +122,7 @@ class TestTextFormatPassingDetails:
 class TestMarkdownFormatPassingDetails:
     """Validates REQ-d00085-F: markdown format respects passing-detail flags."""
 
+    # Verifies: REQ-d00085-F
     def test_REQ_d00085_F_markdown_include_passing_details_shows_findings(self) -> None:
         """Markdown is a checklist -- no findings even with flag."""
         report = _make_passing_report()
@@ -126,6 +132,7 @@ class TestMarkdownFormatPassingDetails:
         assert "- [x]" in output
         assert "<details>" not in output
 
+    # Verifies: REQ-d00085-F
     def test_REQ_d00085_F_markdown_skip_passing_details_hides_findings(self) -> None:
         """Markdown checklist shows check name/message, never findings."""
         report = _make_passing_report()
@@ -139,6 +146,7 @@ class TestMarkdownFormatPassingDetails:
 class TestJUnitFormatPassingDetails:
     """Validates REQ-d00085-E: JUnit format respects passing-detail flags."""
 
+    # Verifies: REQ-d00085-E
     def test_REQ_d00085_E_junit_include_passing_details_shows_system_out(self) -> None:
         """JUnit with --include-passing-details adds system-out for passing checks."""
         report = _make_passing_report()
@@ -153,6 +161,7 @@ class TestJUnitFormatPassingDetails:
         assert sys_out is not None
         assert "REQ-p00001-A" in (sys_out.text or "")
 
+    # Verifies: REQ-d00085-E
     def test_REQ_d00085_E_junit_skip_passing_details_no_system_out(self) -> None:
         """JUnit with --skip-passing-details omits <system-out> for passing checks."""
         report = _make_passing_report()
@@ -170,6 +179,7 @@ class TestJUnitFormatPassingDetails:
 class TestJSONFormatPassingDetails:
     """Validates REQ-d00085-E: JSON format always includes full details."""
 
+    # Verifies: REQ-d00085-E
     def test_REQ_d00085_E_json_always_includes_details(self) -> None:
         """JSON format includes full details regardless of passing-detail flags."""
         report = _make_passing_report()
@@ -188,6 +198,7 @@ class TestJSONFormatPassingDetails:
 class TestSARIFFormatPassingDetails:
     """Validates REQ-d00085-E: SARIF format always omits passing checks."""
 
+    # Verifies: REQ-d00085-E
     def test_REQ_d00085_E_sarif_omits_passing_regardless_of_flag(self) -> None:
         """SARIF format omits passing checks entirely regardless of flags."""
         report = _make_passing_report()

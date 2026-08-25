@@ -14,7 +14,7 @@ def _make_project(tmp_path: Path, index_content: str | None = None) -> tuple:
     """
     config_path = tmp_path / ".elspais.toml"
     config_path.write_text(
-        """version = 3
+        """version = 5
 
 [project]
 name = "test-index"

@@ -58,7 +58,7 @@ C. The system SHALL blort.
 """
 
 _CONFIG_TEMPLATE = """\
-version = 3
+version = 5
 
 [project]
 name = "septest"
@@ -321,7 +321,7 @@ def test_journey_dash_style_ref_under_slash_config_is_hard_broken(tmp_path):
 # --------------------------------------------------------------------------- #
 
 _RESIDUE_CONFIG_TEMPLATE = """\
-version = 4
+version = 5
 
 [project]
 name = "residuetest"
@@ -643,7 +643,7 @@ def test_bare_requirement_reference_stays_a_blanket_edge(tmp_path):
 # --------------------------------------------------------------------------- #
 
 _ROUNDTRIP_CONFIG = """\
-version = 3
+version = 5
 
 [project]
 name = "roundtrip"

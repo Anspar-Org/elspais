@@ -279,7 +279,7 @@ class TestInitTemplate:
         config_path = tmp_path / ".elspais.toml"
         config_path.write_text(
             """
-version = 3
+version = 5
 [project]
 name = "test"
 namespace = "REQ"

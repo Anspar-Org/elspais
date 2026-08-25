@@ -21,7 +21,10 @@ resolve from the main repo, not the worktree location.
 ```toml
 # .elspais.toml - Full configuration reference (v5)
 
-# Config schema version (defaults to 5)
+# Config schema version. A file declaring any other version is refused,
+# naming each setting that has to change and what to write instead — an
+# out-of-date configuration is never upgraded in place. Omitting the line
+# is accepted; the settings themselves are checked either way.
 version = 5
 
 # MCP tool usage statistics file path (optional, or set ELSPAIS_STATS env var)
@@ -696,8 +699,9 @@ it could never end the daemon's watch on that client. A set
 `ELSPAIS_CLIENT_PID` is decisive: a value that is not a usable PID (not an
 integer, or a PID that is already dead) means "no session identity", not "fall
 back to the other checks" — and the daemon reports that once on stderr rather
-than silently falling through. The former name, `ELSPAIS_SPAWNER_PID`, is
-still honoured for callers that set it.
+than silently falling through. The name this override was once written under,
+`ELSPAIS_SPAWNER_PID`, is not read; a session that sets only that one is told
+so once on stderr and named the variable that is read.
 
 ## Minimal Configuration Examples
 

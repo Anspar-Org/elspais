@@ -17,6 +17,7 @@ from __future__ import annotations
 class TestCheckAssociatePathsV3:
     """Validates REQ-d00202-A: check_associate_paths uses get_associates_config()."""
 
+    # Verifies: REQ-d00202-A
     def test_REQ_d00202_A_no_associates_returns_passed(self):
         """Empty config (no associates section) should pass."""
         from elspais.commands.doctor import check_associate_paths
@@ -25,6 +26,7 @@ class TestCheckAssociatePathsV3:
         result = check_associate_paths(config, None)
         assert result.passed is True
 
+    # Verifies: REQ-d00212-K
     def test_REQ_d00212_K_named_associates_resolved(self, tmp_path):
         """v3 named [associates.myrepo] sections should be resolved by check_associate_paths."""
         from elspais.commands.doctor import check_associate_paths
@@ -34,7 +36,7 @@ class TestCheckAssociatePathsV3:
         # The declaration below names namespace MYR; a repository declaring
         # anything else there is a federation error, not a resolution one.
         (assoc_dir / ".elspais.toml").write_text(
-            'version = 3\n[project]\nname = "myrepo"\nnamespace = "MYR"\n'
+            'version = 5\n[project]\nname = "myrepo"\nnamespace = "MYR"\n'
         )
 
         # v3 config: named associate entries (not paths array)
@@ -52,6 +54,7 @@ class TestCheckAssociatePathsV3:
         assert result.details is not None
         assert str(assoc_dir) in str(result.details.get("found", []))
 
+    # Verifies: REQ-d00212-K
     def test_REQ_d00212_K_named_associate_missing_path(self, tmp_path):
         """v3 named associate with nonexistent path should fail."""
         from elspais.commands.doctor import check_associate_paths
@@ -68,6 +71,7 @@ class TestCheckAssociatePathsV3:
         assert result.passed is False
         assert "not found" in result.message.lower()
 
+    # Verifies: REQ-d00202-A
     def test_REQ_d00202_A_does_not_use_paths_array(self):
         """A bare paths array is not a declaration and is reported as such."""
         from elspais.commands.doctor import check_associate_paths
@@ -91,6 +95,7 @@ class TestCheckAssociatePathsV3:
 class TestCheckAssociateConfigsV3:
     """Validates REQ-d00202-A: check_associate_configs uses get_associates_config()."""
 
+    # Verifies: REQ-d00202-A
     def test_REQ_d00202_A_no_associates_returns_passed(self):
         """Empty config should pass."""
         from elspais.commands.doctor import check_associate_configs
@@ -99,6 +104,7 @@ class TestCheckAssociateConfigsV3:
         result = check_associate_configs(config, None)
         assert result.passed is True
 
+    # Verifies: REQ-d00212-K
     def test_REQ_d00212_K_named_associates_validated(self, tmp_path):
         """v3 named associates should be validated by check_associate_configs."""
         from elspais.commands.doctor import check_associate_configs
@@ -107,7 +113,7 @@ class TestCheckAssociateConfigsV3:
         assoc_dir.mkdir()
         # Create a valid .elspais.toml in the associate dir
         (assoc_dir / ".elspais.toml").write_text(
-            'version = 3\n[project]\nname = "myrepo"\nnamespace = "MYR"\n'
+            'version = 5\n[project]\nname = "myrepo"\nnamespace = "MYR"\n'
         )
 
         config = {
@@ -132,7 +138,7 @@ class TestCrossRepoInCommittedConfigV3:
 
         config_path = tmp_path / ".elspais.toml"
         config_path.write_text(
-            'version = 3\n[scanning.spec]\ndirectories = ["spec", "../other-repo/spec"]\n'
+            'version = 5\n[scanning.spec]\ndirectories = ["spec", "../other-repo/spec"]\n'
         )
         result = check_cross_repo_in_committed_config(config_path)
         assert result.passed is False
@@ -144,7 +150,7 @@ class TestCrossRepoInCommittedConfigV3:
 
         config_path = tmp_path / ".elspais.toml"
         config_path.write_text(
-            'version = 3\n[associates.other]\npath = "../other-repo"\nnamespace = "OTH"\n'
+            'version = 5\n[associates.other]\npath = "../other-repo"\nnamespace = "OTH"\n'
         )
         result = check_cross_repo_in_committed_config(config_path)
         assert result.passed is False
@@ -155,7 +161,7 @@ class TestCrossRepoInCommittedConfigV3:
         from elspais.commands.doctor import check_cross_repo_in_committed_config
 
         config_path = tmp_path / ".elspais.toml"
-        config_path.write_text('version = 3\n[scanning.spec]\ndirectories = ["spec"]\n')
+        config_path.write_text('version = 5\n[scanning.spec]\ndirectories = ["spec"]\n')
         result = check_cross_repo_in_committed_config(config_path)
         assert result.passed is True
 
@@ -169,7 +175,7 @@ class TestCrossRepoInCommittedConfigV3:
         # If a config has ONLY the v2 path with cross-repo, and the function
         # checks v3 paths, it should NOT detect it (pass).
         config_path.write_text(
-            'version = 3\n[spec]\ndirectories = ["spec", "../other-repo/spec"]\n'
+            'version = 5\n[spec]\ndirectories = ["spec", "../other-repo/spec"]\n'
         )
         result = check_cross_repo_in_committed_config(config_path)
         # v3 code should NOT look at [spec].directories — that's v2
@@ -183,6 +189,7 @@ class TestCrossRepoInCommittedConfigV3:
 class TestResolveSpecDirInfoV3:
     """Validates REQ-d00207-C: _resolve_spec_dir_info uses typed config."""
 
+    # Verifies: REQ-d00207-C
     def test_REQ_d00207_C_resolves_label_from_v3_config(self, tmp_path):
         """Should read project name and level ordering from v3 .elspais.toml."""
         from elspais.commands.index import _resolve_spec_dir_info
@@ -190,7 +197,7 @@ class TestResolveSpecDirInfoV3:
         # Create a v3 config file
         config_path = tmp_path / ".elspais.toml"
         config_path.write_text(
-            "version = 3\n"
+            "version = 5\n"
             "[project]\n"
             'name = "testproject"\n'
             'namespace = "REQ"\n'
@@ -224,7 +231,7 @@ class TestResolveSpecDirInfoV3:
 
         config_path = tmp_path / ".elspais.toml"
         config_path.write_text(
-            "version = 3\n"
+            "version = 5\n"
             "[project]\n"
             'name = "testproject"\n'
             'namespace = "REQ"\n'
@@ -260,6 +267,7 @@ class TestResolveSpecDirInfoV3:
         assert info.level_order["ops"] == 2
         assert info.level_order["dev"] == 3
 
+    # Verifies: REQ-d00207-C
     def test_REQ_d00207_C_no_config_falls_back_gracefully(self, tmp_path):
         """Without a config file, should fall back to directory-based label."""
         from elspais.commands.index import _resolve_spec_dir_info

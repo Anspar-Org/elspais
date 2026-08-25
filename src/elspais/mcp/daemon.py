@@ -30,9 +30,11 @@ _CLIENT_ENV = "_ELSPAIS_CLIENT_PID"
 # implicitly started daemons are reaped when it exits.
 CLIENT_OVERRIDE_ENV = "ELSPAIS_CLIENT_PID"
 
-# Former name of the public override, still honoured so existing callers
-# keep working.
-_LEGACY_OVERRIDE_ENV = "ELSPAIS_SPAWNER_PID"
+# The name the public override was once written under. It is not read; a
+# session that still sets it is told so, once, rather than being bound to a
+# lifetime it thinks it declared.
+_RETIRED_OVERRIDE_ENV = "ELSPAIS_SPAWNER_PID"
+_retired_override_reported = False
 
 # Sentinel returned by ``_declared_client_pid`` for a declaration that is
 # present but not a usable handle (unparsable, non-positive, or already
@@ -92,13 +94,10 @@ def _declared_client_pid() -> int | str | None:
     daemon would reap itself at its next check — an outcome the caller
     would read as the daemon failing rather than as its declaration being
     stale.
-
-    The former variable name is read so callers that set it keep working.
     """
-    for name in (CLIENT_OVERRIDE_ENV, _LEGACY_OVERRIDE_ENV):
-        raw = os.environ.get(name)
-        if not raw:
-            continue
+    _report_retired_override_env()
+    raw = os.environ.get(CLIENT_OVERRIDE_ENV)
+    if raw:
         try:
             pid = int(raw)
         except ValueError:
@@ -113,14 +112,36 @@ def _declared_client_pid() -> int | str | None:
     return None
 
 
+def _report_retired_override_env() -> None:
+    """Say once that the retired variable name is not read, and name the one
+    that is.
+
+    A session setting only the retired name has declared nothing: its
+    declaration is neither honoured nor refused, and without this it would
+    learn that only by outliving a daemon it believed was bound to it.
+    """
+    global _retired_override_reported
+    if _retired_override_reported:
+        return
+    if not os.environ.get(_RETIRED_OVERRIDE_ENV):
+        return
+    _retired_override_reported = True
+    if os.environ.get(CLIENT_OVERRIDE_ENV):
+        return
+    print(
+        f"note: {_RETIRED_OVERRIDE_ENV} is not read. To bind a daemon's "
+        f"lifetime to this session, set {CLIENT_OVERRIDE_ENV} instead.",
+        file=sys.stderr,
+    )
+
+
 # Implements: REQ-o00074-A, REQ-o00074-D
 def resolve_client_pid() -> int | None:
     """Identify the session on whose behalf a daemon is being auto-started.
 
     Resolution order:
-      1. ``ELSPAIS_CLIENT_PID`` env var (or its former name, still
-         honoured) — explicit declaration by the session/IDE (also the
-         deterministic hook for tests).
+      1. ``ELSPAIS_CLIENT_PID`` env var — explicit declaration by the
+         session/IDE (also the deterministic hook for tests).
       2. Inside a Claude Code session (``CLAUDECODE`` env set): the
          nearest ancestor process named ``claude`` (the session process;
          intermediate tool shells are ephemeral).

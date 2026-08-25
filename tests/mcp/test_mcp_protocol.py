@@ -92,6 +92,7 @@ def mcp_server():
 class TestMCPProtocol:
     """Test MCP server via stdio transport."""
 
+    # Verifies: REQ-p00060-A
     def test_REQ_p00060_A_initialize_handshake(self, mcp_server):
         """Server responds to initialize with capabilities."""
         response = _initialize(mcp_server)
@@ -99,6 +100,7 @@ class TestMCPProtocol:
         assert "capabilities" in response["result"]
         assert "serverInfo" in response["result"]
 
+    # Verifies: REQ-p00060-C
     def test_REQ_p00060_C_tools_list(self, mcp_server):
         """Server exposes tools list after initialization."""
         _initialize(mcp_server)
@@ -114,6 +116,7 @@ class TestMCPProtocol:
         assert "get_graph_status" in tool_names
         assert "get_requirement" in tool_names
 
+    # Verifies: REQ-p00060-C
     def test_REQ_p00060_C_call_graph_status(self, mcp_server):
         """Server returns graph status via tool call."""
         _initialize(mcp_server)

@@ -80,7 +80,7 @@ def test_REQ_p00001_A_and_C():
         # Config file
         config_file = tmp_path / ".elspais.toml"
         config_file.write_text(
-            """version = 3
+            """version = 5
 
 [project]
 name = "test-grouped-refs"
@@ -191,7 +191,7 @@ A. The system SHALL be alone.
 
         config_file = tmp_path / ".elspais.toml"
         config_file.write_text(
-            """version = 3
+            """version = 5
 
 [project]
 name = "test-no-tests"
@@ -300,7 +300,7 @@ def test_REQ_p00001_A_extra_check():
 
         config_file = tmp_path / ".elspais.toml"
         config_file.write_text(
-            """version = 3
+            """version = 5
 
 [project]
 name = "test-md-grouped-refs"
@@ -357,17 +357,31 @@ file_patterns = ["test_*.py"]
         assert whole_pos < a_pos, "Whole-requirement should appear before A"
         assert whole_pos < b_pos, "Whole-requirement should appear before B"
 
-    def test_markdown_counts_in_headers(self, project_dir: Path):
-        """Group headers include correct counts."""
+    # Verifies: REQ-p00003-A, REQ-d00269-L
+    @pytest.mark.parametrize(
+        ("label", "count"),
+        [
+            # Each test function carries its own `# Verifies:` comment, and
+            # that comment is the only thing that declares a relationship
+            # (REQ-d00269-L), so a group holds exactly one ref per test
+            # function that names it.
+            ("Whole-requirement", 1),  # test_whole_req
+            ("A", 3),  # test_input_validation, test_multi_target, test_input_extra
+            ("B", 1),  # test_output
+            ("C", 1),  # test_multi_target
+        ],
+    )
+    def test_markdown_counts_in_headers(self, project_dir: Path, label: str, count: int):
+        """Group headers include correct counts.
+
+        The counts are what separates the groups from one another: three
+        test functions name A, one names B, and the multi-target function is
+        counted once under each of the two labels it names.
+        """
         output = self._build_and_format(project_dir)
-        # Each test file produces both file-level and function-level refs
-        # A has: test_input_validation (2), test_multi_target (2), test_input_extra (2) = 6
-        assert "**A** (6):" in output
-        # B has: test_output (2) = 2
-        assert "**B** (2):" in output
-        # C has: test_multi_target file-level ref only = 1
-        # (multi-target file ref counts once for C)
-        assert "**C** (" in output
+        assert f"**{label}** ({count}):" in output, (
+            f"expected group **{label}** to hold {count} refs; output was:\n{output}"
+        )
 
 
 class TestHtmlGroupedRefs:
@@ -434,7 +448,7 @@ def test_REQ_p00001_A_and_C():
 
         config_file = tmp_path / ".elspais.toml"
         config_file.write_text(
-            """version = 3
+            """version = 5
 
 [project]
 name = "test-html-grouped-refs"
@@ -553,7 +567,7 @@ def test_REQ_p00001_general():
 
         config_file = tmp_path / ".elspais.toml"
         config_file.write_text(
-            """version = 3
+            """version = 5
 
 [project]
 name = "test-json-grouped-refs"
@@ -685,7 +699,7 @@ def test_REQ_p00001_A_and_C():
 
         config_file = tmp_path / ".elspais.toml"
         config_file.write_text(
-            """version = 3
+            """version = 5
 
 [project]
 name = "test-csv-grouped-refs"

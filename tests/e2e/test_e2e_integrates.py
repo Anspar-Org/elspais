@@ -46,6 +46,7 @@ def _git_init(root: Path) -> None:
 class TestIntegratesEndToEnd:
     """Validates REQ-d00252-D: consumer + associate checks pass end-to-end."""
 
+    # Verifies: REQ-d00252-D
     def test_REQ_d00252_D_app_checks_pass_with_associate(self, tmp_path):
         # Copy the fixture pair into a tmp dir; git init each repo so each is
         # its own git root (the CLI auto-detects the git root).

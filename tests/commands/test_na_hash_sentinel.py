@@ -22,7 +22,7 @@ from pathlib import Path
 # Config uses normalized-text hash mode (default) so a requirement
 # without assertions produces computed_hash=None.
 CONFIG_TOML = """\
-version = 3
+version = 5
 
 [project]
 name = "test"
@@ -147,6 +147,7 @@ class TestFixSingleNAHash:
     Validates REQ-p00004-A: fix single-requirement mode handles N/A.
     """
 
+    # Verifies: REQ-p00002-C
     def test_REQ_p00002_C_fix_single_updates_to_na(self, tmp_path, capsys):
         """When a requirement has a stored hash but no hashable content,
         fix should update the stored hash to "N/A".
@@ -171,6 +172,7 @@ class TestFixSingleNAHash:
         assert "deadbeef" not in content, "Old hash should be replaced"
         assert "N/A" in content, "Hash should be updated to N/A"
 
+    # Verifies: REQ-p00002-C
     def test_REQ_p00002_C_fix_single_na_already_current(self, tmp_path, capsys):
         """When stored hash is already "N/A" and there's no hashable content,
         fix should report "already up to date" and not modify the file.
@@ -208,6 +210,7 @@ class TestFixSingleNAHash:
 class TestREQ_d00131_J_compute_hash_in_render:
     """Validates REQ-d00131-J: compute_hash_for_node lives in graph.render."""
 
+    # Verifies: REQ-d00131-J
     def test_REQ_d00131_J_importable_from_render(self):
         """compute_hash_for_node should be importable from elspais.graph.render."""
         from elspais.graph.render import compute_hash_for_node

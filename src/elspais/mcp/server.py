@@ -82,6 +82,7 @@ from elspais.graph.factory import build_graph
 from elspais.graph.federated import FederatedGraph
 from elspais.graph.GraphNode import GraphNode
 from elspais.graph.mutations import MutationEntry
+from elspais.graph.parsers.directives import counted_assertions
 from elspais.graph.parsers.patterns import JNY_ID_PATTERN
 from elspais.graph.relations import EdgeKind
 from elspais.graph.render import node_version
@@ -2482,7 +2483,7 @@ _FAQ_ENTRIES: list[dict[str, str]] = [
             "Common causes:\n"
             "1. The comment is indented (must start at column 0)\n"
             "2. The requirement ID doesn't exist in any spec file\n"
-            "3. The graph hasn't been refreshed (run refresh_graph(full=True))\n"
+            "3. The graph hasn't been refreshed (run refresh_graph())\n"
             "4. The file isn't in a configured test directory (check scanning.test.directories)"
         ),
     },
@@ -4294,10 +4295,10 @@ def _get_test_coverage(graph: FederatedGraph, req_id: str) -> dict[str, Any]:
         return {"success": False, "error": f"{req_id} is not a requirement"}
 
     # Collect assertions
-    assertions: list[tuple[str, str]] = []
-    for child in node.iter_children():
-        if child.kind == NodeKind.ASSERTION:
-            assertions.append((child.id, child.get_field("label", "")))
+    # Implements: REQ-p00017-G
+    assertions: list[tuple[str, str]] = [
+        (child.id, child.get_field("label", "")) for child in counted_assertions(node)
+    ]
 
     assertion_ids = [a[0] for a in assertions]
     label_to_id = {label: aid for aid, label in assertions}
@@ -4484,7 +4485,8 @@ def _dimension_figures(node: Any, dimension: str) -> dict[str, Any]:
     published beside it, so a reader can see what evidence produced it
     (REQ-d00258-A) rather than being handed one number to trust.
     """
-    total = sum(1 for child in node.iter_children() if child.kind == NodeKind.ASSERTION)
+    # Implements: REQ-p00017-G
+    total = len(counted_assertions(node))
     rollup = node.get_metric("rollup_metrics")
     dim = getattr(rollup, dimension, None) if rollup is not None else None
     if dim is None:
@@ -4537,10 +4539,10 @@ def _get_assertion_test_map(graph: FederatedGraph, req_id: str) -> dict[str, Any
         return {"success": False, "error": f"{req_id} is not a requirement"}
 
     # Collect assertions
-    assertions: list[tuple[str, str]] = []
-    for child in node.iter_children():
-        if child.kind == NodeKind.ASSERTION:
-            assertions.append((child.id, child.get_field("label", "")))
+    # Implements: REQ-p00017-G
+    assertions: list[tuple[str, str]] = [
+        (child.id, child.get_field("label", "")) for child in counted_assertions(node)
+    ]
 
     # Per-assertion buckets
     assertion_tests: dict[str, dict[str, Any]] = {}
@@ -4592,10 +4594,10 @@ def _get_assertion_uat_map(graph: FederatedGraph, req_id: str) -> dict[str, Any]
         return {"success": False, "error": f"{req_id} is not a requirement"}
 
     # Collect assertions
-    assertions: list[tuple[str, str]] = []
-    for child in node.iter_children():
-        if child.kind == NodeKind.ASSERTION:
-            assertions.append((child.id, child.get_field("label", "")))
+    # Implements: REQ-p00017-G
+    assertions: list[tuple[str, str]] = [
+        (child.id, child.get_field("label", "")) for child in counted_assertions(node)
+    ]
 
     # Per-assertion buckets
     assertion_journeys: dict[str, dict[str, Any]] = {}
@@ -4653,10 +4655,10 @@ def _get_assertion_code_map(
         return {"success": False, "error": f"{req_id} is not a requirement"}
 
     # Collect assertions
-    assertions: list[tuple[str, str]] = []
-    for child in node.iter_children():
-        if child.kind == NodeKind.ASSERTION:
-            assertions.append((child.id, child.get_field("label", "")))
+    # Implements: REQ-p00017-G
+    assertions: list[tuple[str, str]] = [
+        (child.id, child.get_field("label", "")) for child in counted_assertions(node)
+    ]
 
     # Per-assertion buckets
     assertion_code: dict[str, dict[str, Any]] = {}
@@ -4754,10 +4756,10 @@ def _get_assertion_refines_map(graph: FederatedGraph, req_id: str) -> dict[str, 
     if node.kind != NodeKind.REQUIREMENT:
         return {"success": False, "error": f"{req_id} is not a requirement"}
 
-    assertions: list[tuple[str, str]] = []
-    for child in node.iter_children():
-        if child.kind == NodeKind.ASSERTION:
-            assertions.append((child.id, child.get_field("label", "")))
+    # Implements: REQ-p00017-G
+    assertions: list[tuple[str, str]] = [
+        (child.id, child.get_field("label", "")) for child in counted_assertions(node)
+    ]
 
     assertion_refines: dict[str, dict[str, Any]] = {}
     for aid, label in assertions:
@@ -4947,7 +4949,8 @@ def _get_uncovered_assertions(
         if node.kind != NodeKind.REQUIREMENT:
             return {"success": False, "error": f"{req_id} is not a requirement"}
 
-        assertion_children = [c for c in node.iter_children() if c.kind == NodeKind.ASSERTION]
+        # Implements: REQ-p00017-G
+        assertion_children = counted_assertions(node)
         all_labels = [c.get_field("label", "") for c in assertion_children]
         id_by_label = {c.get_field("label", ""): c.id for c in assertion_children}
         uncovered_set = _uncovered_labels_for_req(node, all_labels)
@@ -4970,7 +4973,8 @@ def _get_uncovered_assertions(
     gaps: list[dict[str, Any]] = []
 
     for req_node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
-        assertions = [c for c in req_node.iter_children() if c.kind == NodeKind.ASSERTION]
+        # Implements: REQ-p00017-G
+        assertions = counted_assertions(req_node)
         all_labels = [c.get_field("label", "") for c in assertions]
         uncovered_set = _uncovered_labels_for_req(req_node, all_labels)
         uncovered_labels = [lbl for lbl in all_labels if lbl in uncovered_set]
@@ -5332,7 +5336,8 @@ def _compute_coverage_summary(req_node: Any) -> dict[str, Any]:
     Each dimension is reported in its own right, headlined on the
     per-*Assertion* total with its four measures beside it (REQ-d00258-A).
     """
-    total = sum(1 for child in req_node.iter_children() if child.kind == NodeKind.ASSERTION)
+    # Implements: REQ-p00017-G
+    total = len(counted_assertions(req_node))
     rollup = req_node.get_metric("rollup_metrics")
 
     dimensions: dict[str, Any] = {}
@@ -6007,7 +6012,7 @@ The graph is the single source of truth - all tools read directly from it.
 
 ### Graph Status & Control
 - `get_graph_status()` - Node counts, orphan/broken reference flags
-- `refresh_graph(full=False, path="", force=False, if_tip_mutation_id="")` -
+- `refresh_graph(path="", force=False, if_tip_mutation_id="")` -
   Rebuild after spec file changes
   - path: switch to a different project directory before rebuilding
   - force=True discards pending mutations and requires if_tip_mutation_id (the mutation-log tip)
@@ -6383,7 +6388,6 @@ def create_server(
     @mcp.tool()
     @_locked
     def refresh_graph(
-        full: bool = False,
         path: str = "",
         force: bool = False,
         if_tip_mutation_id: str = "",
@@ -6398,8 +6402,6 @@ def create_server(
         and the graph already being served stays live.
 
         Args:
-            full: Accepted for compatibility; every rebuild is full, since no
-                cache is retained between builds.
             path: Switch to a different project directory before rebuilding.
             force: If True, discard unsaved mutations and refresh anyway.
             if_tip_mutation_id: The mutation-log tip as you last saw it.
@@ -6434,7 +6436,7 @@ def create_server(
         # The one rebuild routine: it re-reads config, publishes config and
         # graph together, and brings the change-detection state forward
         # (REQ-p00004-J/O, REQ-d00205-B).
-        result = rebuild_shared_graph(_state, full=full)
+        result = rebuild_shared_graph(_state)
         if not result.get("success"):
             # The rebuild published nothing, so the graph and config still
             # describe the previous directory. Leaving working_dir pointing at

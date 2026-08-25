@@ -84,6 +84,7 @@ class TestFederatedGraphReadOnly:
     Validates REQ-d00200-H: iter_repos yields all entries including errors
     """
 
+    # Verifies: REQ-d00200-A
     def test_REQ_d00200_A_repo_entry_dataclass(self) -> None:
         """RepoEntry has all required fields with correct defaults."""
         entry = RepoEntry(
@@ -99,6 +100,7 @@ class TestFederatedGraphReadOnly:
         assert entry.git_origin is None
         assert entry.error is None
 
+    # Verifies: REQ-d00200-A
     def test_REQ_d00200_A_repo_entry_with_optional_fields(self) -> None:
         """RepoEntry accepts git_origin and error fields."""
         entry = RepoEntry(
@@ -112,6 +114,7 @@ class TestFederatedGraphReadOnly:
         assert entry.git_origin == "git@github.com:org/assoc.git"
         assert entry.error == "Config file not found"
 
+    # Verifies: REQ-d00200-B
     def test_REQ_d00200_B_from_single_creates_federation_of_one(
         self, simple_graph: TraceGraph, config: dict
     ) -> None:
@@ -124,6 +127,7 @@ class TestFederatedGraphReadOnly:
         assert repos[0].config is config
         assert repos[0].repo_root == Path("/repo/core")
 
+    # Verifies: REQ-d00200-B
     def test_REQ_d00200_B_from_single_raises_on_missing_project_name(self) -> None:
         """KeyError signals a caller bug: from_single requires config['project']['name'].
 
@@ -153,6 +157,7 @@ class TestFederatedGraphReadOnly:
         assert repos[0].name == "<unconfigured>"
         assert g.root_repo_name == "<unconfigured>"
 
+    # Verifies: REQ-d00200-D
     def test_REQ_d00200_D_find_by_id_delegates(
         self, simple_graph: TraceGraph, config: dict
     ) -> None:
@@ -166,6 +171,7 @@ class TestFederatedGraphReadOnly:
         # Missing
         assert fed.find_by_id("REQ-NONEXISTENT") is None
 
+    # Verifies: REQ-d00200-D
     def test_REQ_d00200_D_has_root_delegates(self, simple_graph: TraceGraph, config: dict) -> None:
         """has_root checks root status correctly."""
         fed = FederatedGraph.from_single(simple_graph, config, repo_root=Path("/repo/core"))
@@ -176,6 +182,7 @@ class TestFederatedGraphReadOnly:
         # Non-existent
         assert fed.has_root("REQ-MISSING") is False
 
+    # Verifies: REQ-d00200-E
     def test_REQ_d00200_E_iter_roots_aggregates(
         self, simple_graph: TraceGraph, config: dict
     ) -> None:
@@ -185,6 +192,7 @@ class TestFederatedGraphReadOnly:
         # simple_graph has REQ-p00001 as root (DEV implements it, so not root)
         assert "REQ-p00001" in root_ids
 
+    # Verifies: REQ-d00200-E
     def test_REQ_d00200_E_all_nodes_aggregates(
         self, simple_graph: TraceGraph, config: dict
     ) -> None:
@@ -194,6 +202,7 @@ class TestFederatedGraphReadOnly:
         graph_ids = {n.id for n in simple_graph.all_nodes()}
         assert fed_ids == graph_ids
 
+    # Verifies: REQ-d00200-E
     def test_REQ_d00200_E_node_count_aggregates(
         self, simple_graph: TraceGraph, config: dict
     ) -> None:
@@ -201,6 +210,7 @@ class TestFederatedGraphReadOnly:
         fed = FederatedGraph.from_single(simple_graph, config, repo_root=Path("/repo/core"))
         assert fed.node_count() == simple_graph.node_count()
 
+    # Verifies: REQ-d00200-E
     def test_REQ_d00200_E_root_count_aggregates(
         self, simple_graph: TraceGraph, config: dict
     ) -> None:
@@ -208,6 +218,7 @@ class TestFederatedGraphReadOnly:
         fed = FederatedGraph.from_single(simple_graph, config, repo_root=Path("/repo/core"))
         assert fed.root_count() == simple_graph.root_count()
 
+    # Verifies: REQ-d00200-E
     def test_REQ_d00200_E_iter_by_kind_aggregates(
         self, graph_with_code: TraceGraph, config: dict
     ) -> None:
@@ -223,6 +234,7 @@ class TestFederatedGraphReadOnly:
         graph_code = list(graph_with_code.iter_by_kind(NodeKind.CODE))
         assert len(code_nodes) == len(graph_code)
 
+    # Verifies: REQ-d00200-E
     def test_REQ_d00200_E_orphaned_nodes_aggregates(
         self, simple_graph: TraceGraph, config: dict
     ) -> None:
@@ -235,6 +247,7 @@ class TestFederatedGraphReadOnly:
         assert fed.has_orphans() == simple_graph.has_orphans()
         assert fed.orphan_count() == simple_graph.orphan_count()
 
+    # Verifies: REQ-d00200-E
     def test_REQ_d00200_E_broken_references_aggregates(self, config: dict) -> None:
         """broken_references combines lists from all repos."""
         # Build graph with a broken reference (implements non-existent ID)
@@ -253,6 +266,7 @@ class TestFederatedGraphReadOnly:
         assert len(fed_broken) == len(graph_broken)
         assert fed.has_broken_references() == graph.has_broken_references()
 
+    # Verifies: REQ-d00200-E
     def test_REQ_d00200_E_deleted_nodes_aggregates(
         self, simple_graph: TraceGraph, config: dict
     ) -> None:
@@ -261,6 +275,7 @@ class TestFederatedGraphReadOnly:
         assert fed.deleted_nodes() == simple_graph.deleted_nodes()
         assert fed.has_deletions() == simple_graph.has_deletions()
 
+    # Verifies: REQ-d00200-F
     def test_REQ_d00200_F_skips_error_state_repos(self) -> None:
         """Aggregate methods skip repos where graph is None (error state)."""
         # Build one working graph
@@ -292,6 +307,7 @@ class TestFederatedGraphReadOnly:
         # find_by_id should still work for good graph nodes
         assert fed.find_by_id("REQ-p00001") is not None
 
+    # Verifies: REQ-d00200-G
     def test_REQ_d00200_G_repo_for_returns_entry(
         self, simple_graph: TraceGraph, config: dict
     ) -> None:
@@ -302,6 +318,7 @@ class TestFederatedGraphReadOnly:
         assert entry.graph is simple_graph
         assert entry.repo_root == Path("/repo/core")
 
+    # Verifies: REQ-d00200-G
     def test_REQ_d00200_G_config_for_returns_config(
         self, simple_graph: TraceGraph, config: dict
     ) -> None:
@@ -310,6 +327,7 @@ class TestFederatedGraphReadOnly:
         result = fed.config_for("REQ-p00001")
         assert result is config
 
+    # Verifies: REQ-d00200-H
     def test_REQ_d00200_H_iter_repos_yields_all(self) -> None:
         """iter_repos yields all entries, including error-state repos."""
         good_graph = build_graph(
@@ -338,6 +356,7 @@ class TestFederatedGraphReadOnly:
         names = {r.name for r in repos}
         assert names == {"good", "broken"}
 
+    # Verifies: REQ-d00200-C
     def test_REQ_d00200_C_is_reachable_to_requirement_works(
         self, graph_with_code: TraceGraph, config: dict
     ) -> None:
@@ -406,6 +425,7 @@ class TestFederatedGraphMutations:
         config.setdefault("project", {})["name"] = "root"
         return FederatedGraph.from_single(graph, config, repo_root=Path("/repo/core"))
 
+    # Verifies: REQ-d00201-A
     def test_REQ_d00201_A_rename_node_delegates_and_updates_ownership(
         self, fed_with_graph: FederatedGraph
     ) -> None:
@@ -424,6 +444,7 @@ class TestFederatedGraphMutations:
         entry = fed.repo_for("REQ-d00099")
         assert entry.name == "root"
 
+    # Verifies: REQ-d00201-A
     def test_REQ_d00201_A_update_title_delegates(self, fed_with_graph: FederatedGraph) -> None:
         """update_title delegates to sub-graph, node label changes."""
         fed = fed_with_graph
@@ -433,6 +454,7 @@ class TestFederatedGraphMutations:
         assert node is not None
         assert node.get_label() == "Updated Title"
 
+    # Verifies: REQ-d00201-A
     def test_REQ_d00201_A_change_status_delegates(self, fed_with_graph: FederatedGraph) -> None:
         """change_status delegates to sub-graph, status field changes."""
         fed = fed_with_graph
@@ -442,6 +464,7 @@ class TestFederatedGraphMutations:
         assert node is not None
         assert node.get_field("status") == "Deprecated"
 
+    # Verifies: REQ-d00201-A
     def test_REQ_d00201_A_delete_requirement_removes_ownership(
         self, fed_with_graph: FederatedGraph
     ) -> None:
@@ -451,6 +474,7 @@ class TestFederatedGraphMutations:
 
         assert fed.find_by_id("REQ-d00001") is None
 
+    # Verifies: REQ-d00201-B
     def test_REQ_d00201_B_mutation_log_records_entries(
         self, fed_with_graph: FederatedGraph
     ) -> None:
@@ -465,6 +489,7 @@ class TestFederatedGraphMutations:
         assert last.operation == "update_title"
         assert last.target_id == "REQ-p00001"
 
+    # Verifies: REQ-d00201-C
     def test_REQ_d00201_C_undo_last_delegates_to_subgraph(
         self, fed_with_graph: FederatedGraph
     ) -> None:
@@ -477,6 +502,7 @@ class TestFederatedGraphMutations:
         fed.undo_last()
         assert fed.find_by_id("REQ-p00001").get_label() == original_title
 
+    # Verifies: REQ-d00201-C
     def test_REQ_d00201_C_undo_to_reverts_multiple(self, fed_with_graph: FederatedGraph) -> None:
         """undo_to reverts all mutations back to (and including) the specified one."""
         fed = fed_with_graph
@@ -495,6 +521,7 @@ class TestFederatedGraphMutations:
         fed.undo_to(first_mutation_id)
         assert fed.find_by_id("REQ-p00001").get_label() == original_title
 
+    # Verifies: REQ-d00201-D
     def test_REQ_d00201_D_add_requirement_to_root_repo(
         self, fed_with_graph: FederatedGraph
     ) -> None:
@@ -509,6 +536,7 @@ class TestFederatedGraphMutations:
         entry = fed.repo_for("REQ-d00050")
         assert entry.name == "root"
 
+    # Verifies: REQ-d00201-E
     def test_REQ_d00201_E_add_edge_within_same_repo(
         self, fed_with_unlinked: FederatedGraph
     ) -> None:
@@ -523,6 +551,7 @@ class TestFederatedGraphMutations:
         parent_ids = {p.id for p in node.iter_parents(edge_kinds={EdgeKind.IMPLEMENTS})}
         assert "REQ-p00010" in parent_ids
 
+    # Verifies: REQ-d00201-E
     def test_REQ_d00201_E_delete_edge_delegates(self, fed_with_graph: FederatedGraph) -> None:
         """delete_edge removes an existing edge via delegation."""
         fed = fed_with_graph
@@ -534,6 +563,7 @@ class TestFederatedGraphMutations:
         parent_ids = {p.id for p in node.iter_parents(edge_kinds={EdgeKind.IMPLEMENTS})}
         assert "REQ-p00001" not in parent_ids
 
+    # Verifies: REQ-d00201-F
     def test_REQ_d00201_F_mutation_log_iter_entries_compatible(
         self, fed_with_graph: FederatedGraph
     ) -> None:
@@ -550,6 +580,7 @@ class TestFederatedGraphMutations:
             assert hasattr(entry, "target_id")
             assert hasattr(entry, "timestamp")
 
+    # Verifies: REQ-d00201-G
     def test_REQ_d00201_G_clone_creates_independent_copy(
         self, fed_with_graph: FederatedGraph
     ) -> None:

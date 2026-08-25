@@ -21,7 +21,7 @@ The vocabulary is four words:
 ``error``
     A defect.
 
-A check name that carries no legacy setting of its own is configured under
+A check name that carries no setting of its own is configured under
 ``[rules.severity]``, keyed by the check name -- which is what keeps every
 finding inside the settings a project can reach.
 
@@ -231,6 +231,9 @@ _DESCRIPTIONS: dict[str, str] = {
     ),
     "graph.build": "The traceability graph builds at all",
     "spec.parseable": "All spec files can be parsed",
+    "spec.unknown_directive": (
+        "Assertions opening with a parsing directive the tool does not recognize"
+    ),
     "spec.no_duplicates": "No duplicate requirement IDs",
     "spec.implements_resolve": "All Implements: references resolve",
     "spec.refines_resolve": "All Refines: references resolve",
@@ -418,6 +421,7 @@ def _registry() -> dict[str, CheckRule]:
         # -- spec --------------------------------------------------------
         _general("graph.build", "spec", Severity.ERROR),
         _general("spec.parseable", "spec", Severity.WARNING),
+        _general("spec.unknown_directive", "spec", Severity.WARNING),
         _general("spec.no_duplicates", "spec", Severity.ERROR),
         _general("spec.implements_resolve", "spec", Severity.WARNING),
         _general("spec.refines_resolve", "spec", Severity.WARNING),

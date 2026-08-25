@@ -96,6 +96,7 @@ class TestTermsIntegration:
 
     # --- REQ-d00222-A tests ---
 
+    # Verifies: REQ-d00222-A
     def test_REQ_d00222_A_tracegraph_has_terms(self):
         """TraceGraph() has _terms attribute of type TermDictionary."""
         graph = TraceGraph(repo_root=Path("."))
@@ -104,6 +105,7 @@ class TestTermsIntegration:
             f"_terms must be TermDictionary, got {type(graph._terms)}"
         )
 
+    # Verifies: REQ-d00222-A
     def test_REQ_d00222_A_builder_creates_remainder_for_definition(self):
         """GraphBuilder.add_parsed_content with content_type='definition_block'
         creates a REMAINDER node with content_type='definition_block' field."""
@@ -132,6 +134,7 @@ class TestTermsIntegration:
             f"found {len(def_nodes)}"
         )
 
+    # Verifies: REQ-d00222-A
     def test_REQ_d00222_A_builder_populates_terms(self):
         """After building, the graph's _terms contains the defined term."""
         builder = GraphBuilder(
@@ -149,6 +152,7 @@ class TestTermsIntegration:
         assert entry.term == "Electronic Record"
         assert entry.definition == "Any combination of text"
 
+    # Verifies: REQ-d00222-A
     def test_REQ_d00222_A_collection_flag_preserved(self):
         """A definition_block with collection=True has that flag in _terms."""
         builder = GraphBuilder(
@@ -171,6 +175,7 @@ class TestTermsIntegration:
 
     # --- REQ-d00222-B tests ---
 
+    # Verifies: REQ-d00222-B
     def test_REQ_d00222_B_defined_in_points_to_file(self):
         """For file-level definitions, defined_in is the FILE node ID."""
         builder = GraphBuilder(
@@ -192,6 +197,7 @@ class TestTermsIntegration:
             f"defined_in should be FILE node ID, got '{entry.defined_in}'"
         )
 
+    # Verifies: REQ-d00222-B
     def test_REQ_d00222_B_defined_in_points_to_requirement(self):
         """For requirement-level definitions, defined_in is the requirement ID."""
         builder = GraphBuilder(
@@ -239,11 +245,13 @@ class TestTermsIntegration:
 class TestTermRefWrongMarking:
     """Validates REQ-d00220-E: TermRef.wrong_marking field."""
 
+    # Verifies: REQ-d00220-E
     def test_REQ_d00220_E_wrong_marking_defaults_empty(self) -> None:
         """TermRef.wrong_marking defaults to empty string."""
         ref = TermRef(node_id="REQ-p00001", namespace="CORE", marked=True, line=10)
         assert ref.wrong_marking == ""
 
+    # Verifies: REQ-d00220-E
     def test_REQ_d00220_E_wrong_marking_records_delimiter(self) -> None:
         """TermRef.wrong_marking records the incorrect delimiter used."""
         ref = TermRef(
@@ -256,6 +264,7 @@ class TestTermRefWrongMarking:
         assert ref.wrong_marking == "__"
         assert ref.marked is False
 
+    # Verifies: REQ-d00220-E
     def test_REQ_d00220_E_wrong_marking_with_marked_false(self) -> None:
         """When wrong_marking is set, marked should be False."""
         ref = TermRef(
@@ -276,6 +285,7 @@ class TestBuilderNamespaceOnTermEntry:
     `TermEntry.namespace` from it during term creation.
     """
 
+    # Verifies: REQ-d00222-D
     def test_REQ_d00222_D_builder_accepts_namespace_param(self) -> None:
         """GraphBuilder.__init__ accepts a namespace keyword argument."""
         builder = GraphBuilder(
@@ -286,6 +296,7 @@ class TestBuilderNamespaceOnTermEntry:
         # If we get here without TypeError, the parameter is accepted.
         assert builder is not None
 
+    # Verifies: REQ-d00128-A
     def test_REQ_d00128_A_definition_without_a_namespace_is_refused(self) -> None:
         """A builder that cannot name its repository cannot identify a definition.
 
@@ -297,6 +308,7 @@ class TestBuilderNamespaceOnTermEntry:
         with pytest.raises(ValueError, match="namespace"):
             GraphBuilder(repo_root=Path("/test/repo"), namespace="", resolver=grammar_for("MYREPO"))
 
+    # Verifies: REQ-d00222-D
     def test_REQ_d00222_D_namespace_set_on_file_level_definition(self) -> None:
         """File-level definition_block gets namespace from GraphBuilder."""
         builder = GraphBuilder(
@@ -317,6 +329,7 @@ class TestBuilderNamespaceOnTermEntry:
             f"TermEntry.namespace should be 'MYREPO', got '{entry.namespace}'"
         )
 
+    # Verifies: REQ-d00222-D
     def test_REQ_d00222_D_namespace_set_on_requirement_level_definition(self) -> None:
         """Requirement-level definitions also get namespace from GraphBuilder."""
         builder = GraphBuilder(

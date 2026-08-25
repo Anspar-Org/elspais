@@ -20,6 +20,7 @@ from elspais.graph.GraphNode import (
     NodeKind,
 )
 from elspais.graph.mutations import MutationEntry
+from elspais.graph.parsers.directives import assertion_is_retired
 from elspais.graph.reference_faults import (
     FaultClass,
     IdentifierFormFinding,
@@ -1515,6 +1516,21 @@ class FederatedGraph:
         """
         return self._ownership.get(node.id)
 
+    # Implements: REQ-p00017-H
+    @staticmethod
+    def _holds_live_target(target_graph: TraceGraph, target_id: str) -> bool:
+        """Whether *target_graph* holds *target_id* as something a reference
+        may bind to.
+
+        A retired *Assertion* is held -- it renders, it hashes, its label
+        stays allocated -- but it does not exist for *Traceability* purposes,
+        so a reference naming one reads exactly as a reference to an
+        *Assertion* that was never written. Asked here so a federated
+        reference and a same-repository one reach the same answer.
+        """
+        node = target_graph._index.get(target_id)
+        return node is not None and not assertion_is_retired(node)
+
     @staticmethod
     def _edge_anchor(target_graph: TraceGraph, target_id: str) -> tuple[str, list[str] | None]:
         """Resolve the node a traceability edge attaches to, plus its labels.
@@ -1610,6 +1626,14 @@ class FederatedGraph:
                         continue
                 if target_repo_name and target_repo_name != source_entry.name:
                     target_entry = self._repos[target_repo_name]
+                    # Implements: REQ-p00017-H
+                    # The owning repository holds this id, but a retired
+                    # *Assertion* is not a target: the reference keeps the
+                    # classification it arrived with and stays reported.
+                    if target_entry.graph is not None and not self._holds_live_target(
+                        target_entry.graph, br.target_id
+                    ):
+                        continue
                     if target_entry.graph is not None:
                         # Wire the cross-graph edge in the same shape the
                         # same-repository builder produces (REQ-d00269-B):
@@ -1674,10 +1698,10 @@ class FederatedGraph:
             if parsed is None or len(parsed.assertions) <= 1:
                 continue
             canonical = [resolver.render_canonical(p) for p in resolver.expand(parsed)]
-            present = [c for c in canonical if c in entry.graph._index]
+            present = [c for c in canonical if self._holds_live_target(entry.graph, c)]
             if not present:
                 continue
-            missing = [c for c in canonical if c not in entry.graph._index]
+            missing = [c for c in canonical if not self._holds_live_target(entry.graph, c)]
             return entry.name, present, missing
         return None
 

@@ -247,6 +247,7 @@ skip_dirs = ["vendor"]
             f"Non-ignored src/app.py should produce CODE node, got: {code_ids}"
         )
 
+    # Verifies: REQ-d00054-A
     def test_REQ_d00054_A_code_directories_explicit_src_scanned(self, tmp_path: Path) -> None:
         """When scanning.code.directories is explicitly set to ["src"],
         the src directory is scanned."""
@@ -281,6 +282,7 @@ directories = ["src"]
         has_default = any("default.py" in cid for cid in code_ids)
         assert has_default, f"Explicit src/ directory should be scanned, got: {code_ids}"
 
+    # Verifies: REQ-d00054-A
     def test_REQ_d00054_A_nonexistent_code_directory_is_skipped(self, tmp_path: Path) -> None:
         """When [directories].code lists a non-existent directory, build_graph
         does not crash — the directory is silently skipped."""
@@ -354,6 +356,7 @@ class TestDefaultCodePatternFileTypes:
     the parametrized cases is a Terraform-specific regression.
     """
 
+    # Verifies: REQ-d00128-A
     @pytest.mark.parametrize("ext", ["sh", "tf", "tfvars", "hcl"])
     def test_REQ_d00128_A_annotated_hash_comment_file_yields_same_shape(
         self, tmp_path: Path, ext: str
@@ -427,6 +430,7 @@ class TestDefaultCodePatternFileTypes:
         }
         assert implementing_parents == {"REQ-p00001"}
 
+    # Verifies: REQ-d00128-A
     def test_REQ_d00128_A_extension_outside_default_patterns_is_not_scanned(
         self, tmp_path: Path
     ) -> None:
@@ -447,6 +451,7 @@ class TestBuildGraphCoverageAnnotation:
     requirements have implementing code, because build_graph() now runs annotate_coverage().
     """
 
+    # Verifies: REQ-d00055-D
     def test_REQ_d00055_D_build_graph_sets_referenced_pct_metric(self, tmp_path: Path) -> None:
         """After build_graph(), requirement nodes have referenced_pct metric set.
 
@@ -518,6 +523,7 @@ A. The system SHALL perform action X.
             f"Expected 100% coverage (1/1 assertion covered), got {referenced_pct}"
         )
 
+    # Verifies: REQ-d00055-D
     def test_REQ_d00055_D_build_graph_sets_rollup_metrics(self, tmp_path: Path) -> None:
         """After build_graph(), requirement nodes have rollup_metrics metric set.
 
@@ -590,6 +596,7 @@ B. The system SHALL do B.
         assert rollup.implemented.covered == 1
         assert rollup.implemented.covered_pct == 50.0
 
+    # Verifies: REQ-o00061-B
     def test_REQ_o00061_B_project_summary_nonzero_coverage_after_build_graph(
         self, tmp_path: Path
     ) -> None:

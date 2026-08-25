@@ -37,6 +37,7 @@ def _prd_like():
     return graph.find_by_id("REQ-P")
 
 
+# Verifies: REQ-d00258-G
 def test_REQ_d00258_G_header_and_pills_agree_on_blanket_coverage():
     node = _prd_like()
     tiers = compute_coverage_tiers(node)
@@ -51,6 +52,7 @@ def test_REQ_d00258_G_header_and_pills_agree_on_blanket_coverage():
         assert states[lbl]["tested"] == "full"
 
 
+# Verifies: REQ-d00069-B
 def test_REQ_d00069_B_blanket_credit_is_named_as_whole_requirement():
     """The credit that produced the standing is SHOWN, not flagged.
 

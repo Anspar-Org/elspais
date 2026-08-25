@@ -46,7 +46,7 @@ def spec_repo(tmp_path):
     config_file = tmp_path / ".elspais.toml"
     config_file.write_text(
         """
-version = 3
+version = 5
 
 [project]
 name = "test-project"
@@ -98,6 +98,7 @@ A. The system SHALL do something.
 class TestTraceGraphJsonGitMetrics:
     """Tests for trace --graph-json including git metrics."""
 
+    # Verifies: REQ-d00084-A
     def test_REQ_d00084_A_graph_json_includes_git_metrics(self, spec_repo, capsys):
         """REQ-d00084-A: graph command includes git change annotations in output."""
         from elspais.commands.trace import run_graph

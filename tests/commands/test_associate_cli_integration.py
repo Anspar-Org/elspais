@@ -14,7 +14,7 @@ def _make_core_repo(tmp_path):
     """Create a minimal core repo with .elspais.toml."""
     tmp_path.mkdir(exist_ok=True)
     (tmp_path / ".elspais.toml").write_text(
-        'version = 3\n[project]\nname = "core"\nnamespace = "REQ"\n\n'
+        'version = 5\n[project]\nname = "core"\nnamespace = "REQ"\n\n'
         '[scanning.spec]\ndirectories = ["spec"]\n'
     )
     (tmp_path / "spec").mkdir()
@@ -26,13 +26,14 @@ def _make_associate_repo(base, name, prefix):
     repo = base / name
     repo.mkdir()
     (repo / ".elspais.toml").write_text(
-        f'version = 3\n[project]\nname = "{name}"\nnamespace = "{prefix}"\n\n'
+        f'version = 5\n[project]\nname = "{name}"\nnamespace = "{prefix}"\n\n'
         f'[scanning.spec]\ndirectories = ["spec"]\n'
     )
     (repo / "spec").mkdir()
     return repo
 
 
+# Verifies: REQ-p00005-C
 def test_REQ_p00005_C_config_add_registers_associate(tmp_path, monkeypatch):
     """Full workflow: add named associate to config → get_associate_spec_directories finds it."""
     core = _make_core_repo(tmp_path / "core")
@@ -58,6 +59,7 @@ def test_REQ_p00005_C_config_add_registers_associate(tmp_path, monkeypatch):
     assert errors == []
 
 
+# Verifies: REQ-p00005-D
 def test_REQ_p00005_D_config_add_discovers_identity(tmp_path, monkeypatch):
     """Named associate + discovery reads associate's name and prefix."""
     core = _make_core_repo(tmp_path / "core")
@@ -86,6 +88,7 @@ def test_REQ_p00005_D_config_add_discovers_identity(tmp_path, monkeypatch):
     assert result.code == "EUR"
 
 
+# Verifies: REQ-p00005-E
 def test_REQ_p00005_E_config_add_invalid_path_produces_error(tmp_path, monkeypatch):
     """Adding an invalid path errors on discovery."""
     core = _make_core_repo(tmp_path / "core")

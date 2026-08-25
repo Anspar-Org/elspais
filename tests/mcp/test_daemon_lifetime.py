@@ -1,4 +1,4 @@
-# Verifies: REQ-o00074-A+B+C+D+E+G+H+I+J+K+M+O, REQ-o00075-B, REQ-o00076-E, REQ-p00083-A+C+D+H
+# Verifies: REQ-o00074-A+B+C+D+E+G+H+I+J+K+M+N+O, REQ-o00075-B, REQ-o00076-E, REQ-p00083-A+C+D+H
 """Daemon lifetime tests, verifying REQ-o00074 (Background Daemon Lifetime).
 
 A daemon started on behalf of a client is bound to that client at the
@@ -185,6 +185,7 @@ class TestAbsentClientsTerminateDaemon:
     serving indefinitely.
     """
 
+    # Verifies: REQ-o00074-E
     @pytest.mark.parametrize(
         ("has_clients", "any_alive", "count", "grace_expired", "expected"),
         [
@@ -220,18 +221,22 @@ class TestAbsentClientsTerminateDaemon:
             is expected
         )
 
+    # Verifies: REQ-o00074-E
     def test_REQ_o00074_E_pid_alive_own_process(self):
         assert pid_alive(os.getpid()) is True
 
+    # Verifies: REQ-o00074-E
     def test_REQ_o00074_E_pid_alive_exited_process(self):
         proc = subprocess.Popen([sys.executable, "-c", "pass"])
         proc.wait()
         assert pid_alive(proc.pid) is False
 
+    # Verifies: REQ-o00074-E
     def test_REQ_o00074_E_pid_alive_invalid_pids(self):
         assert pid_alive(0) is False
         assert pid_alive(-1) is False
 
+    # Verifies: REQ-o00074-E
     def test_REQ_o00074_E_live_client_keeps_daemon(self):
         """The negative case: a present client is never terminated."""
         clock = _Clock()
@@ -239,6 +244,7 @@ class TestAbsentClientsTerminateDaemon:
         assert wd.check_once() is Decision.KEEP
         assert exits == []
 
+    # Verifies: REQ-o00074-E
     def test_REQ_o00074_E_absent_client_with_no_pending_work_exits(self, capsys):
         clock = _Clock()
         wd, exits = _watchdog([False], [(0, None)], clock)
@@ -246,6 +252,7 @@ class TestAbsentClientsTerminateDaemon:
         assert exits == ["exit"]
         assert "shutting down" in capsys.readouterr().err
 
+    # Verifies: REQ-o00074-E
     def test_REQ_o00074_E_client_seen_present_again_resets_grace(self):
         """A client seen alive again resets the dirty-grace clock."""
         clock = _Clock()
@@ -271,6 +278,7 @@ class TestAdoptingClientsJoinTheRecordedSet:
     still terminates once every recorded client, adopted ones included, is gone.
     """
 
+    # Verifies: REQ-o00074-E
     def test_REQ_o00074_E_attach_records_a_live_client(self):
         clock = _Clock()
         wd, _ = _map_watchdog({4321: True, 999: True}, clock)
@@ -278,6 +286,7 @@ class TestAdoptingClientsJoinTheRecordedSet:
         assert wd.attach_client(999) is True
         assert wd.clients() == [999, 4321]
 
+    # Verifies: REQ-o00074-E
     @pytest.mark.parametrize("pid", [0, 1, -3])
     def test_REQ_o00074_E_attach_refuses_pids_that_name_no_client(self, pid):
         """0 and negatives are not process identities; 1 is init, whose death
@@ -288,6 +297,7 @@ class TestAdoptingClientsJoinTheRecordedSet:
         assert wd.attach_client(pid) is False
         assert wd.clients() == [4321]
 
+    # Verifies: REQ-o00074-E
     def test_REQ_o00074_E_attach_refuses_a_dead_client(self):
         clock = _Clock()
         alive = {4321: True, 777: False}
@@ -296,6 +306,7 @@ class TestAdoptingClientsJoinTheRecordedSet:
         assert wd.attach_client(777) is False
         assert wd.clients() == [4321]
 
+    # Verifies: REQ-o00074-E
     def test_REQ_o00074_E_live_adopted_client_keeps_a_daemon_whose_client_died(self):
         """The daemon outlives the client that started it, by design."""
         clock = _Clock()
@@ -314,6 +325,7 @@ class TestAdoptingClientsJoinTheRecordedSet:
         assert exits == []
         assert wd.clients() == [999], "dead client was not pruned from the client set"
 
+    # Verifies: REQ-o00074-E
     def test_REQ_o00074_E_daemon_with_dead_client_and_dead_adopted_clients_terminates(self, capsys):
         """The negative case the positive one above cannot prove.
 
@@ -345,6 +357,7 @@ class TestAdoptingClientsJoinTheRecordedSet:
         assert exits == ["exit"]
         assert "shutting down" in capsys.readouterr().err
 
+    # Verifies: REQ-o00074-E
     def test_REQ_o00074_E_dead_clients_are_pruned_while_a_live_one_remains(self):
         """The published set stays an honest answer to 'who is using this'."""
         clock = _Clock()
@@ -368,6 +381,7 @@ class TestHeldSessionIsAClient:
     daemon while it lasts, and lets it go once it is gone.
     """
 
+    # Verifies: REQ-o00074-E
     def test_REQ_o00074_E_held_session_keeps_the_daemon(self):
         """Validates REQ-o00074-E: a client present only as a held stream is
         a client, so the daemon keeps serving while it is held even though
@@ -393,6 +407,7 @@ class TestHeldSessionIsAClient:
         assert wd.check_once() is Decision.EXIT_CLEAN
         assert exits == ["exit"]
 
+    # Verifies: REQ-o00074-B
     def test_REQ_o00074_B_stream_only_client_reaches_the_state_record(self, tmp_path):
         """Validates REQ-o00074-B: a client present only as a held stream
         registers nothing, so a record written on registration alone never
@@ -418,6 +433,7 @@ class TestHeldSessionIsAClient:
         info = json.loads((tmp_path / ".elspais" / "daemon.json").read_text())
         assert info["clients"] == [{"kind": "session", "count": 1}]
 
+    # Verifies: REQ-o00074-B
     def test_REQ_o00074_B_dead_pids_are_pruned_from_the_published_set_while_held(self):
         """Validates REQ-o00074-B: a held stream keeps the daemon alive but
         says nothing about a pid that has died, so the published set must
@@ -441,6 +457,7 @@ class TestHeldSessionIsAClient:
         assert wd.check_once() is Decision.KEEP
         assert published[-1] == ([], 1), "a dead client survived in the published set"
 
+    # Verifies: REQ-o00074-B
     def test_REQ_o00074_B_unchanged_composition_is_not_republished(self):
         """Validates REQ-o00074-B: the record is written when it has something
         new to say. Rewriting it every interval is churn under whoever is
@@ -459,6 +476,7 @@ class TestHeldSessionIsAClient:
             assert wd.check_once() is Decision.KEEP
         assert published == [([333], 0)]
 
+    # Verifies: REQ-o00074-E
     def test_REQ_o00074_E_broken_liveness_source_does_not_read_as_no_clients(self, capsys):
         """Validates REQ-o00074-E: a liveness source that cannot answer has
         said nothing about whether a client is there. Reading its failure as
@@ -487,6 +505,7 @@ class TestWatchdogSurvivesAFailedCheck:
     daemon it stopped watching outlives its clients forever.
     """
 
+    # Verifies: REQ-o00074-E
     def test_REQ_o00074_E_failed_check_costs_one_interval_not_the_watchdog(self, request):
         calls: list[str] = []
         exits: list[str] = []
@@ -538,6 +557,7 @@ class TestPendingWorkIsDisclosed:
     deadline at which it will persist them and stop.
     """
 
+    # Verifies: REQ-o00074-G
     def test_REQ_o00074_G_dirty_daemon_waits_then_saves(self, capsys):
         clock = _Clock()
         wd, exits = _watchdog(
@@ -568,6 +588,7 @@ class TestPendingWorkIsDisclosed:
         assert "Saved" in err
         assert "2" in err
 
+    # Verifies: REQ-o00074-G
     def test_REQ_o00074_G_unknown_pending_count_treated_as_dirty(self):
         clock = _Clock()
 
@@ -586,6 +607,7 @@ class TestPendingWorkIsDisclosed:
         assert wd.check_once() is Decision.WAIT_GRACE
         assert exits == []
 
+    # Verifies: REQ-o00074-G
     def test_REQ_o00074_G_warning_states_pending_count_and_deadline(self, capsys):
         """The disclosure names both quantities the requirement asks for."""
         clock = _Clock()
@@ -597,6 +619,7 @@ class TestPendingWorkIsDisclosed:
         assert "7" in err, f"pending count not disclosed: {err!r}"
         assert "180" in err, f"deadline not disclosed: {err!r}"
 
+    # Verifies: REQ-o00074-G
     def test_REQ_o00074_G_default_grace_is_sized_for_a_thinking_client(self):
         """The deadline a daemon discloses is its own default, and that default
         has to outlast the quiet stretches a reasoning client routinely takes
@@ -618,6 +641,7 @@ class TestTerminationDecidesUnderTheWritersLock:
     acted on from the stale read.
     """
 
+    # Verifies: REQ-o00074-G
     def test_REQ_o00074_G_write_landing_after_the_clean_read_is_not_lost(self, capsys):
         """A clean read then a write, before the exit: the daemon keeps serving."""
         clock = _Clock()
@@ -629,6 +653,7 @@ class TestTerminationDecidesUnderTheWritersLock:
         assert exits == [], "daemon terminated holding a mutation it had just acknowledged"
         assert "shutting down" not in capsys.readouterr().err
 
+    # Verifies: REQ-o00074-G
     def test_REQ_o00074_G_write_landing_in_the_gap_outranks_an_expired_grace(self, capsys):
         """An expired countdown does not license acting on the stale read."""
         clock = _Clock()
@@ -646,6 +671,7 @@ class TestTerminationDecidesUnderTheWritersLock:
         assert wd.check_once() is Decision.KEEP
         assert exits == [], "expired grace acted on a read a later mutation had overtaken"
 
+    # Verifies: REQ-o00074-G
     def test_REQ_o00074_G_decision_is_taken_while_holding_the_writers_lock(self):
         """The terminate decision is bracketed by the lock the writers take."""
         events: list[str] = []
@@ -688,6 +714,7 @@ class TestPendingCountIsHonest:
     pending, not a figure capped by how the daemon happens to query its log.
     """
 
+    # Verifies: REQ-o00074-G
     def test_REQ_o00074_G_snapshot_counts_every_pending_mutation(
         self, mutable_graph, canonical_federated_graph
     ):
@@ -721,6 +748,7 @@ class TestAppliedChangeProvesWriterPresent:
     changes nothing does not.
     """
 
+    # Verifies: REQ-o00074-H
     def test_REQ_o00074_H_applied_change_restarts_the_interval(self, capsys):
         clock = _Clock()
         wd, exits = _watchdog(
@@ -751,6 +779,7 @@ class TestAppliedChangeProvesWriterPresent:
         assert wd.check_once() is Decision.EXIT_SAVE
         assert exits == ["exit"]
 
+    # Verifies: REQ-o00074-H
     def test_REQ_o00074_H_unchanged_token_does_not_restart_the_interval(self):
         """A pure reader polling the daemon moves nothing and saves nothing."""
         clock = _Clock()
@@ -775,6 +804,7 @@ class TestUndoneWorkStillCountsAsActivity:
     absent and terminates a daemon somebody is actively using.
     """
 
+    # Verifies: REQ-o00074-H
     def test_REQ_o00074_H_apply_then_undo_moves_the_activity_token(
         self, mutable_graph, canonical_federated_graph
     ):
@@ -801,6 +831,7 @@ class TestUndoneWorkStillCountsAsActivity:
         fg.undo_last()  # leave the log as the fixture handed it over
         assert fg.mutation_log.tail(0) == []
 
+    # Verifies: REQ-o00074-H
     def test_REQ_o00074_H_writer_undoing_between_checks_is_judged_active(
         self, mutable_graph, canonical_federated_graph
     ):
@@ -852,6 +883,7 @@ class TestTerminationPersistsPendingWork:
     accounted for the work.
     """
 
+    # Verifies: REQ-o00074-I
     def test_REQ_o00074_I_expired_grace_stops_through_the_shutdown_routine(self, capsys):
         clock = _Clock()
         events: list[str] = []
@@ -875,6 +907,7 @@ class TestTerminationPersistsPendingWork:
         # unaccounted work.
         assert events == ["stop"], f"the shutdown routine did not run: {events}"
 
+    # Verifies: REQ-o00074-I
     def test_REQ_o00074_I_clean_exit_stops_through_the_routine_before_signalling(self):
         """Even with nothing pending the exit goes through the same routine:
         the count the watchdog saw is not the authority on what is held."""
@@ -893,6 +926,7 @@ class TestTerminationPersistsPendingWork:
         assert wd.check_once() is Decision.EXIT_CLEAN
         assert events == ["stop", "exit"], f"the routine did not precede the signal: {events}"
 
+    # Verifies: REQ-o00074-I
     @pytest.mark.parametrize(
         "pending",
         [(4, "m1"), (0, "m0")],
@@ -929,6 +963,7 @@ class TestAutomaticSaveRecordStatesFactsOnly:
     for an observation.
     """
 
+    # Verifies: REQ-o00074-I
     def test_REQ_o00074_I_record_carries_exactly_the_facts(self, tmp_path):
         from elspais.mcp.daemon import read_automatic_save, record_automatic_save
 
@@ -951,6 +986,7 @@ class TestAutomaticSaveRecordStatesFactsOnly:
         assert record["files_written"] == 2
         assert record["trigger"] == "no recorded client was running"
 
+    # Verifies: REQ-o00074-I
     def test_REQ_o00074_I_record_characterises_nothing(self, tmp_path):
         """No field name and no field value passes a judgement on the work."""
         from elspais.mcp.daemon import read_automatic_save, record_automatic_save
@@ -968,11 +1004,13 @@ class TestAutomaticSaveRecordStatesFactsOnly:
             "who saved, when, how much, and what triggered it, and let the reader conclude"
         )
 
+    # Verifies: REQ-o00074-I
     def test_REQ_o00074_I_absent_record_reads_as_none(self, tmp_path):
         from elspais.mcp.daemon import read_automatic_save
 
         assert read_automatic_save(tmp_path) is None
 
+    # Verifies: REQ-o00074-I
     @pytest.mark.parametrize(
         "surface",
         ["graph_status", "workspace_info"],
@@ -1006,6 +1044,7 @@ class TestClientRequestedSaveRetiresTheRecord:
     is one nobody reads.
     """
 
+    # Verifies: REQ-o00074-J
     def test_REQ_o00074_J_clear_retires_the_record(self, tmp_path):
         from elspais.mcp.daemon import (
             clear_automatic_save,
@@ -1019,6 +1058,7 @@ class TestClientRequestedSaveRetiresTheRecord:
         clear_automatic_save(tmp_path)
         assert read_automatic_save(tmp_path) is None
 
+    # Verifies: REQ-o00074-J
     def test_REQ_o00074_J_clearing_an_absent_record_is_not_an_error(self, tmp_path):
         from elspais.mcp.daemon import clear_automatic_save
 
@@ -1048,6 +1088,7 @@ class TestPersistPendingRecordsAndRetires:
     def project(self, hht_project):
         return hht_project
 
+    # Verifies: REQ-o00074-I
     def test_REQ_o00074_I_automatic_save_writes_the_record_beside_the_files(self, project):
         from elspais.mcp.daemon import read_automatic_save
         from elspais.mcp.shared_state import persist_pending
@@ -1070,6 +1111,7 @@ class TestPersistPendingRecordsAndRetires:
             "the daemon's save did not reach disk"
         )
 
+    # Verifies: REQ-o00074-J
     def test_REQ_o00074_J_client_requested_save_retires_the_record(self, project):
         from elspais.mcp.daemon import read_automatic_save
         from elspais.mcp.shared_state import persist_pending
@@ -1112,6 +1154,7 @@ class TestViewerSaveRetiresTheRecord:
         state = AppState.from_config(repo_root=hht_project)
         return TestClient(create_app(state=state, mount_mcp=False)), state, hht_project
 
+    # Verifies: REQ-o00074-J
     def test_REQ_o00074_J_viewer_save_retires_the_daemons_record(self, client_and_project):
         from elspais.graph import render
         from elspais.mcp.daemon import record_automatic_save
@@ -1163,6 +1206,7 @@ class TestViewerSaveRetiresTheRecord:
             "/api/check-freshness still discloses a retired record"
         )
 
+    # Verifies: REQ-o00074-J
     def test_REQ_o00074_J_refused_viewer_save_retires_nothing(self, client_and_project):
         """The retirement follows a save that happened. A rejected one leaves
         the record standing, because the state it describes still stands."""
@@ -1186,6 +1230,7 @@ class TestFailedSaveRetainsTheWork:
     its termination as complete -- it stays up and tries again.
     """
 
+    # Verifies: REQ-o00074-K
     @pytest.mark.parametrize(
         ("stop_fn", "how"),
         [
@@ -1214,6 +1259,7 @@ class TestFailedSaveRetainsTheWork:
         assert "FAILED" in err
         assert "retained" in err
 
+    # Verifies: REQ-o00074-K
     def test_REQ_o00074_K_daemon_retries_at_the_next_interval_and_then_exits(self, capsys):
         clock = _Clock()
         outcomes = [{"success": False, "error": "disk full"}, _ok_stop()]
@@ -1248,12 +1294,14 @@ class TestClientIdentityResolution:
     established the daemon starts with none rather than with an inferred one.
     """
 
+    # Verifies: REQ-o00074-D
     def test_REQ_o00074_D_env_override(self, monkeypatch):
         from elspais.mcp import daemon
 
         monkeypatch.setenv("ELSPAIS_CLIENT_PID", str(os.getpid()))
         assert daemon.resolve_client_pid() == os.getpid()
 
+    # Verifies: REQ-o00074-D
     @pytest.mark.parametrize("value", ["not-a-pid", "0", "1", "-3"])
     def test_REQ_o00074_D_env_override_invalid(self, monkeypatch, value):
         from elspais.mcp import daemon
@@ -1261,16 +1309,67 @@ class TestClientIdentityResolution:
         monkeypatch.setenv("ELSPAIS_CLIENT_PID", value)
         assert daemon.resolve_client_pid() is None
 
-    def test_REQ_o00074_D_legacy_env_override(self, monkeypatch):
-        """Validates REQ-o00074-D: the former variable name, ``ELSPAIS_SPAWNER_PID``,
-        still resolves a client handle when set on its own -- callers that set it
-        before the rename to ``ELSPAIS_CLIENT_PID`` keep working."""
+    # Verifies: REQ-o00074-D
+    def test_REQ_o00074_D_the_retired_variable_name_yields_no_handle(self, monkeypatch):
+        """The former variable name, ``ELSPAIS_SPAWNER_PID``, is not read.
+
+        A handle is derived only from evidence the daemon can act on, and the
+        retired name is no longer part of that evidence: a session that sets
+        only it has declared nothing, and the resolver falls through to the
+        remaining rungs rather than honouring it. Reading it would leave two
+        spellings of one declaration, and a session that set both differently
+        would have no way to tell which one bound the daemon.
+        """
         from elspais.mcp import daemon
 
         monkeypatch.delenv("ELSPAIS_CLIENT_PID", raising=False)
+        monkeypatch.delenv("CLAUDECODE", raising=False)
         monkeypatch.setenv("ELSPAIS_SPAWNER_PID", str(os.getpid()))
-        assert daemon.resolve_client_pid() == os.getpid()
+        with patch("elspais.mcp.daemon._session_leader_has_tty", return_value=False):
+            assert daemon.resolve_client_pid() is None
 
+    # Verifies: REQ-o00074-N
+    def test_REQ_o00074_N_the_retired_variable_name_is_disclosed_once(self, monkeypatch, capsys):
+        """A session that set only the retired name is told so, and told which
+        variable to set instead.
+
+        Its declaration is neither honoured nor refused, so without the note it
+        would learn only by outliving a daemon it believed was bound to it. The
+        disclosure names ``ELSPAIS_CLIENT_PID`` -- what the client can supply to
+        bind the lifetime -- and is made once, not on every use.
+        """
+        from elspais.mcp import daemon
+
+        monkeypatch.setattr(daemon, "_retired_override_reported", False)
+        monkeypatch.delenv("ELSPAIS_CLIENT_PID", raising=False)
+        monkeypatch.delenv("CLAUDECODE", raising=False)
+        monkeypatch.setenv("ELSPAIS_SPAWNER_PID", str(os.getpid()))
+
+        with patch("elspais.mcp.daemon._session_leader_has_tty", return_value=False):
+            assert daemon.resolve_client_pid() is None
+            first = capsys.readouterr().err
+            assert "ELSPAIS_SPAWNER_PID" in first
+            assert "ELSPAIS_CLIENT_PID" in first
+
+            # ...and not again, however often the resolver is asked.
+            assert daemon.resolve_client_pid() is None
+            assert capsys.readouterr().err == ""
+
+    # Verifies: REQ-o00074-N
+    def test_REQ_o00074_N_no_note_where_the_live_variable_is_also_set(self, monkeypatch, capsys):
+        """A session setting both names has declared what the tool reads, so
+        there is nothing to disclose: the note reports a declaration that did
+        not take effect, not the mere presence of the retired spelling."""
+        from elspais.mcp import daemon
+
+        monkeypatch.setattr(daemon, "_retired_override_reported", False)
+        monkeypatch.setenv("ELSPAIS_CLIENT_PID", str(os.getpid()))
+        monkeypatch.setenv("ELSPAIS_SPAWNER_PID", "4242")
+
+        assert daemon.resolve_client_pid() == os.getpid()
+        assert capsys.readouterr().err == ""
+
+    # Verifies: REQ-o00074-D
     def test_REQ_o00074_D_claude_ancestor(self, monkeypatch):
         from elspais.mcp import daemon
 
@@ -1282,6 +1381,7 @@ class TestClientIdentityResolution:
         ):
             assert daemon.resolve_client_pid() == 300
 
+    # Verifies: REQ-o00074-D
     def test_REQ_o00074_D_no_session_identity(self, monkeypatch):
         """No env override, no Claude session, no tty -> None (TTL-only)."""
         from elspais.mcp import daemon
@@ -1291,6 +1391,7 @@ class TestClientIdentityResolution:
         with patch("elspais.mcp.daemon._session_leader_has_tty", return_value=False):
             assert daemon.resolve_client_pid() is None
 
+    # Verifies: REQ-o00074-D
     def test_REQ_o00074_D_interactive_session_leader(self, monkeypatch):
         from elspais.mcp import daemon
 
@@ -1338,6 +1439,7 @@ class TestUnusableClientIdentityIsRefused:
             mcp_server.run_server(working_dir=tmp_path, transport="streamable-http", port=59999)
         return watched
 
+    # Verifies: REQ-o00074-D
     @pytest.mark.parametrize("value", ["1", "0", "-3", "not-a-pid"])
     def test_REQ_o00074_D_unusable_client_pid_starts_no_watchdog(
         self, monkeypatch, tmp_path, value
@@ -1346,10 +1448,12 @@ class TestUnusableClientIdentityIsRefused:
             f"daemon watched a pid it cannot learn anything from: {value!r}"
         )
 
+    # Verifies: REQ-o00074-D
     def test_REQ_o00074_D_real_client_pid_is_watched(self, monkeypatch, tmp_path):
         """The control: a usable identity does produce a watch on that pid."""
         assert self._client_pids_watched(monkeypatch, tmp_path, "5555") == [5555]
 
+    # Verifies: REQ-o00074-D
     def test_REQ_o00074_D_already_dead_declared_pid_is_unusable(self, monkeypatch):
         """A well-formed but already-dead declared pid is unusable, decisively:
         ``_declared_client_pid`` reports ``_UNUSABLE`` rather than falling through
@@ -1365,8 +1469,7 @@ class TestUnusableClientIdentityIsRefused:
         proc.wait()
         dead_pid = proc.pid
 
-        monkeypatch.delenv("ELSPAIS_CLIENT_PID", raising=False)
-        monkeypatch.setenv("ELSPAIS_SPAWNER_PID", str(dead_pid))
+        monkeypatch.setenv("ELSPAIS_CLIENT_PID", str(dead_pid))
 
         assert daemon._declared_client_pid() == daemon._UNUSABLE
         with patch(
@@ -1383,6 +1486,7 @@ class TestImplicitStartRecordsClient:
     afterwards determine whether the client still exists.
     """
 
+    # Verifies: REQ-o00074-A
     def test_REQ_o00074_A_start_daemon_passes_client_env(self, tmp_path):
         from elspais.mcp.daemon import start_daemon
 
@@ -1401,6 +1505,7 @@ class TestImplicitStartRecordsClient:
 
         assert popen_calls[0]["env"]["_ELSPAIS_CLIENT_PID"] == "9876"
 
+    # Verifies: REQ-o00074-A
     def test_REQ_o00074_A_ensure_daemon_resolves_client(self, tmp_path):
         """The implicit CLI spawn path ties the daemon to the resolved client."""
         from elspais.mcp.daemon import ensure_daemon
@@ -1428,6 +1533,7 @@ class TestReusingClientAnnouncesItself:
     client that started it and stopping underneath this one.
     """
 
+    # Verifies: REQ-o00074-E
     def test_REQ_o00074_E_ensure_daemon_attaches_on_the_reuse_path(self, tmp_path):
         from elspais.mcp.daemon import ensure_daemon
 
@@ -1447,6 +1553,7 @@ class TestReusingClientAnnouncesItself:
 
         assert attached == [(info, 4242)], "reusing a running daemon did not register the client"
 
+    # Verifies: REQ-o00074-E
     def test_REQ_o00074_E_attach_client_posts_the_pid_to_the_daemon(self):
         """The wire call names the client and reports what the daemon answered."""
         from elspais.mcp import daemon
@@ -1474,6 +1581,7 @@ class TestReusingClientAnnouncesItself:
         assert captured["url"].endswith("/api/session/attach")
         assert captured["body"] == {"pid": 111}
 
+    # Verifies: REQ-o00074-E
     def test_REQ_o00074_E_attach_client_without_an_identity_is_a_no_op(self):
         """No identity to record leaves the daemon's lifetime exactly as it was."""
         from elspais.mcp import daemon
@@ -1489,6 +1597,7 @@ class TestClientSetIsObservable:
     (``.elspais/daemon.json``).
     """
 
+    # Verifies: REQ-o00074-B
     def test_REQ_o00074_B_write_daemon_json_records_client_pid(self, tmp_path):
         from elspais.mcp.daemon import write_daemon_json
 
@@ -1501,6 +1610,7 @@ class TestClientSetIsObservable:
             "the initial client set is not published, or not by kind of handle"
         )
 
+    # Verifies: REQ-o00074-B
     def test_REQ_o00074_B_record_daemon_clients_republishes_the_whole_set(self, tmp_path):
         from elspais.mcp.daemon import record_daemon_clients, write_daemon_json
 
@@ -1515,6 +1625,7 @@ class TestClientSetIsObservable:
             {"kind": "pid", "id": 777},
         ], "an adopted client is not observable"
 
+    # Verifies: REQ-o00074-B
     def test_REQ_o00074_B_held_sessions_are_published_as_their_own_kind(self, tmp_path):
         """A client present only as a held stream is watched, and a record
         that could only hold process ids would leave it invisible."""
@@ -1531,6 +1642,7 @@ class TestClientSetIsObservable:
             {"kind": "session", "count": 2},
         ]
 
+    # Verifies: REQ-o00074-B
     def test_REQ_o00074_B_record_daemon_clients_without_a_record_is_a_no_op(self, tmp_path):
         from elspais.mcp.daemon import record_daemon_clients
 
@@ -1544,6 +1656,7 @@ class TestExplicitStartRecordsNoClient:
     solely by its idle timeout.
     """
 
+    # Verifies: REQ-o00074-C
     def test_REQ_o00074_C_write_daemon_json_omits_client_identity_when_absent(self, tmp_path):
         """Explicit starts (viewer, manual serve) record no client identity."""
         from elspais.mcp.daemon import write_daemon_json
@@ -1553,6 +1666,7 @@ class TestExplicitStartRecordsNoClient:
         assert "client_pid" not in info
         assert "clients" not in info
 
+    # Verifies: REQ-o00074-C
     def test_REQ_o00074_C_start_daemon_without_client_scrubs_env(self, tmp_path, monkeypatch):
         """Explicit starts must not inherit a stale client PID from the env."""
         from elspais.mcp.daemon import start_daemon
@@ -1573,6 +1687,7 @@ class TestExplicitStartRecordsNoClient:
 
         assert "_ELSPAIS_CLIENT_PID" not in popen_calls[0]["env"]
 
+    # Verifies: REQ-o00074-C
     def test_REQ_o00074_C_restart_daemon_spawns_without_client(self, tmp_path):
         """`elspais daemon restart` is an explicit start: no client tie."""
         from elspais.mcp.daemon import restart_daemon
@@ -1605,6 +1720,7 @@ class TestRestartSaysWhatBecomesOfTheWork:
     asked for.
     """
 
+    # Verifies: REQ-o00074-I
     def test_REQ_o00074_I_the_two_answers_are_mutually_exclusive(self, tmp_path):
         from elspais.mcp.daemon import restart_daemon
 
@@ -1613,6 +1729,7 @@ class TestRestartSaysWhatBecomesOfTheWork:
         assert result["success"] is False
         assert "discard-changes" in result["error"] and "persist" in result["error"], result
 
+    # Verifies: REQ-o00074-I
     def test_REQ_o00074_I_neither_answer_refuses_and_offers_both(self, tmp_path):
         from elspais.mcp.daemon import restart_daemon
 
@@ -1630,6 +1747,7 @@ class TestRestartSaysWhatBecomesOfTheWork:
         assert "--force" not in result["error"], "the retired flag is still being offered"
         assert stop.call_count == 0, "the daemon was stopped despite the refusal"
 
+    # Verifies: REQ-o00074-I
     def test_REQ_o00074_I_the_discard_goes_to_the_daemon_however_the_count_reads(self, tmp_path):
         """The pending count is a read that can go stale between the read and
         the instruction. A discard that trusted a zero would stop the daemon
@@ -1659,6 +1777,7 @@ class TestRestartSaysWhatBecomesOfTheWork:
         assert result["success"] is True, result
         assert stops == [True], "the discard instruction never reached the daemon"
 
+    # Verifies: REQ-o00074-I
     def test_REQ_o00074_I_refused_discard_abandons_the_restart(self, tmp_path):
         """The daemon refused because another writer's change arrived. Killing
         it now would destroy that change, which is exactly what the refusal was
@@ -1686,6 +1805,7 @@ class TestRestartSaysWhatBecomesOfTheWork:
         assert stop.call_count == 0, "the refused restart killed the daemon anyway"
         assert start.call_count == 0
 
+    # Verifies: REQ-o00074-I
     def test_REQ_o00074_I_the_changelog_reason_reaches_the_persisting_save(self, tmp_path):
         """``--persist`` saves here rather than in the daemon's own shutdown
         precisely so a reason can be given for it; a reason the caller typed and
@@ -1725,6 +1845,7 @@ class TestStoppingDaemonIsReplacedNotReused:
     its replacement. It never starts one alongside.
     """
 
+    # Verifies: REQ-o00076-E
     def test_REQ_o00076_E_committed_stop_is_recorded_in_the_state_record(self, tmp_path):
         from elspais.mcp.daemon import daemon_is_stopping, get_daemon_info, write_daemon_json
         from elspais.mcp.shared_state import SharedServerState
@@ -1740,6 +1861,7 @@ class TestStoppingDaemonIsReplacedNotReused:
         assert daemon_is_stopping(info) is True, "the record still describes a serving daemon"
         assert info["port"] == 4321, "marking the record destroyed what it said"
 
+    # Verifies: REQ-o00075-B
     def test_REQ_o00075_B_record_owned_by_another_process_is_left_alone(self, tmp_path):
         """A stdio server holds a private graph and owns no record. Marking the
         one it finds would report a daemon as stopping that is serving fine."""
@@ -1756,6 +1878,7 @@ class TestStoppingDaemonIsReplacedNotReused:
             assert daemon_is_stopping(json.load(fh)) is False
         assert get_daemon_info(tmp_path) is not None or True  # record survives either way
 
+    # Verifies: REQ-o00075-B
     def test_REQ_o00075_B_marking_a_record_that_cannot_be_written_is_not_an_error(self, tmp_path):
         """A stop that raises on the way out is a stop that does not happen."""
         from elspais.mcp.shared_state import SharedServerState
@@ -1767,6 +1890,7 @@ class TestStoppingDaemonIsReplacedNotReused:
 
         assert state.is_shutting_down is True
 
+    # Verifies: REQ-o00075-B
     def test_REQ_o00075_B_stopping_daemon_is_replaced_rather_than_reused(self, tmp_path):
         from elspais.mcp import daemon as dm
 
@@ -1794,6 +1918,7 @@ class TestStoppingDaemonIsReplacedNotReused:
         assert port == 5555, "the stopping daemon was handed to the caller"
         assert order == ["waited", "started"], "a replacement started before the daemon was gone"
 
+    # Verifies: REQ-o00075-B
     def test_REQ_o00075_B_daemon_that_will_not_go_is_neither_reused_nor_duplicated(self, tmp_path):
         from elspais.mcp import daemon as dm
 
@@ -1810,6 +1935,7 @@ class TestStoppingDaemonIsReplacedNotReused:
 
         assert start.call_count == 0, "a second process was started for one working tree"
 
+    # Verifies: REQ-o00075-B
     def test_REQ_o00075_B_successors_record_is_not_unlinked(self, tmp_path):
         """The predecessor is gone and something has already taken its place.
         Clearing the record now would hide a daemon that is serving."""
@@ -1828,6 +1954,7 @@ class TestStoppingDaemonIsReplacedNotReused:
             "the successor's record was removed"
         )
 
+    # Verifies: REQ-o00075-B
     def test_REQ_o00075_B_command_does_not_reach_a_stopping_daemon(self, tmp_path):
         from elspais.commands import _engine
 
@@ -1879,6 +2006,7 @@ class TestIdleTimeoutSparesADaemonInUse:
         mw._timer.cancel()
         return shared, mw
 
+    # Verifies: REQ-o00074-O
     def test_REQ_o00074_O_live_client_survives_an_expired_idle_timeout(self, monkeypatch):
         endings: list[object] = []
         shared, mw = self._middleware(monkeypatch, endings, clients_alive=lambda: True)
@@ -1889,6 +2017,7 @@ class TestIdleTimeoutSparesADaemonInUse:
         assert endings == [], "the idle timeout stopped a daemon a client is using"
         assert shared.is_shutting_down is False, "a daemon in use was committed to stopping"
 
+    # Verifies: REQ-o00074-O
     def test_REQ_o00074_O_spared_daemon_waits_out_another_idle_period(self, monkeypatch):
         endings: list[object] = []
         _shared, mw = self._middleware(monkeypatch, endings, clients_alive=lambda: True)
@@ -1899,6 +2028,7 @@ class TestIdleTimeoutSparesADaemonInUse:
         assert mw._timer is not first, "the timer was not restarted; the check will never rerun"
         mw._timer.cancel()
 
+    # Verifies: REQ-o00074-O
     def test_REQ_o00074_O_daemon_with_no_recorded_client_still_times_out(self, monkeypatch):
         endings: list[object] = []
         shared, mw = self._middleware(monkeypatch, endings, clients_alive=lambda: False)
@@ -1908,6 +2038,7 @@ class TestIdleTimeoutSparesADaemonInUse:
         assert endings == [0], "a daemon nobody is using was not stopped by its idle timeout"
         assert shared.is_shutting_down is True
 
+    # Verifies: REQ-o00074-O
     def test_REQ_o00074_O_an_absent_liveness_source_reads_as_no_clients(self, monkeypatch):
         """An explicitly started daemon has no client watchdog to ask, and its
         lifetime is governed solely by its idle timeout (REQ-o00074-C)."""
@@ -1919,6 +2050,7 @@ class TestIdleTimeoutSparesADaemonInUse:
         assert endings == [0], "an explicitly started daemon stopped answering to its timeout"
         assert shared.is_shutting_down is True
 
+    # Verifies: REQ-o00074-O
     def test_REQ_o00074_O_unreadable_liveness_source_does_not_read_as_no_clients(
         self, monkeypatch, capsys
     ):
@@ -1936,6 +2068,7 @@ class TestIdleTimeoutSparesADaemonInUse:
         assert shared.is_shutting_down is False
         assert "could not be read" in capsys.readouterr().err
 
+    # Verifies: REQ-o00074-O
     def test_REQ_o00074_O_the_watchdogs_client_set_is_what_the_timeout_consults(self):
         """The daemon's clients are the watchdog's business; the timeout asks it
         rather than keeping a second answer that can disagree with the first."""
@@ -1952,6 +2085,7 @@ class TestIdleTimeoutSparesADaemonInUse:
         alive[4242] = False
         assert wd.has_live_client() is False
 
+    # Verifies: REQ-o00074-O
     def test_REQ_o00074_O_an_inconclusive_held_source_keeps_the_daemon(self, capsys):
         from elspais.server.client_watch import ClientWatchdog
 
@@ -1968,6 +2102,7 @@ class TestIdleTimeoutSparesADaemonInUse:
         assert wd.has_live_client() is True
         assert "could not be read" in capsys.readouterr().err
 
+    # Verifies: REQ-o00074-O
     def test_REQ_o00074_O_reading_the_client_set_publishes_nothing(self):
         """The timeout's question is a read. A check that pruned or republished
         would make the record depend on how often the timeout happened to ask."""
@@ -1988,6 +2123,7 @@ class TestIdleTimeoutSparesADaemonInUse:
 
 
 class TestStoppingDaemonStopsAdvertising:
+    # Verifies: REQ-o00074-B
     def test_REQ_o00074_B_publishing_preserves_a_stopping_mark(self, tmp_path):
         """Validates REQ-o00074-B: the record a client reads to find a daemon
         must describe the process it would reach, so a mark saying it is

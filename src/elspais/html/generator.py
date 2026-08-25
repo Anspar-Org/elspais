@@ -22,6 +22,7 @@ from elspais.graph.aggregation import (
     measure_phrase,
     relative_tier_for,
 )
+from elspais.graph.parsers.directives import counted_assertion_labels
 from elspais.graph.parsers.patterns import JNY_ID_PATTERN
 from elspais.html.theme import get_catalog
 from elspais.utilities.patterns import INSTANCE_SEPARATOR
@@ -457,7 +458,6 @@ def compute_assertion_coverage_states(
     (same gate as ``compute_coverage_tiers``); standings compute for EVERY
     status (REQ-d00258, Phase 3).
     """
-    from elspais.graph.GraphNode import NodeKind
     from elspais.graph.metrics import tested_and_passing
 
     # Per-assertion standings ALWAYS compute, regardless of status (REQ-d00258,
@@ -467,12 +467,8 @@ def compute_assertion_coverage_states(
     if not rollup or rollup.total_assertions == 0:
         return {}
 
-    labels: list[str] = []
-    for child in node.iter_children():
-        if child.kind == NodeKind.ASSERTION:
-            label = child.get_field("label", "")
-            if label:
-                labels.append(label)
+    # Implements: REQ-p00017-G
+    labels: list[str] = counted_assertion_labels(node)
 
     from elspais.graph.aggregation import measure_by_label
 
@@ -556,17 +552,13 @@ def compute_assertion_coverage_measures(node: GraphNode) -> dict[str, dict[str, 
     scored, so the measures shown can never belong to a different figure than
     the standing beside them.
     """
-    from elspais.graph.GraphNode import NodeKind
     from elspais.graph.metrics import tested_and_passing
 
     rollup = node.get_metric("rollup_metrics")
     if not rollup or rollup.total_assertions == 0:
         return {}
-    labels = [
-        c.get_field("label", "")
-        for c in node.iter_children()
-        if c.kind == NodeKind.ASSERTION and c.get_field("label", "")
-    ]
+    # Implements: REQ-p00017-G
+    labels = counted_assertion_labels(node)
     dims = {
         "implemented": rollup.implemented,
         "tested": rollup.tested,
@@ -589,8 +581,8 @@ def compute_validation_color(
 ) -> tuple[str, str]:
     """Compute a validation quality color for a requirement's Active status badge.
 
-    Backward-compatible wrapper around compute_coverage_tiers().
-    Returns the combined (worst-of-all) color and tooltip.
+    Returns compute_coverage_tiers()'s combined (worst-of-all) color and
+    tooltip.
 
     Args:
         node: A GraphNode with pre-computed rollup_metrics.

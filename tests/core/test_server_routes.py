@@ -10,7 +10,7 @@ import pytest
 from starlette.testclient import TestClient
 
 _MINIMAL_CONFIG = """\
-version = 3
+version = 5
 
 [project]
 name = "test-routes"
@@ -703,7 +703,7 @@ class TestFileContent:
     )
 
     _CORE_CONFIG_WITH_ASSOC = """\
-version = 3
+version = 5
 
 [project]
 name = "core"
@@ -730,7 +730,7 @@ namespace = "ASSOC"
 """
 
     _ASSOC_CONFIG = """\
-version = 3
+version = 5
 
 [project]
 name = "assoc"

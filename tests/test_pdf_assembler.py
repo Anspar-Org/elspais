@@ -261,6 +261,7 @@ def _make_three_level_graph(base_dir: Path | None = None) -> TraceGraph:
 class TestFileGrouping:
     """Validates REQ-p00080-B: File grouping."""
 
+    # Verifies: REQ-p00080-B
     def test_REQ_p00080_B_groups_by_source_path(self):
         """Requirements from different files appear in different groups."""
         graph = _make_graph()
@@ -270,6 +271,7 @@ class TestFileGrouping:
         assert "spec/dev-login.md" in groups
         assert "spec/dev-session.md" in groups
 
+    # Verifies: REQ-p00080-B
     def test_REQ_p00080_B_document_order_within_file(self):
         """Requirements within a file are ordered by source line."""
         graph = _make_graph()
@@ -299,6 +301,7 @@ class TestFileGrouping:
 class TestLevelPartitioning:
     """Validates REQ-p00080-B: Level partitioning."""
 
+    # Verifies: REQ-p00080-B
     def test_REQ_p00080_B_partitions_by_level(self):
         """Files are partitioned into PRD, OPS, DEV buckets."""
         graph = _make_graph()
@@ -309,6 +312,7 @@ class TestLevelPartitioning:
         assert "spec/dev-login.md" in buckets.get("DEV", [])
         assert "spec/dev-session.md" in buckets.get("DEV", [])
 
+    # Verifies: REQ-p00080-B
     def test_REQ_p00080_B_level_headings_in_output(self, tmp_path):
         """Every level the project declares gets a heading, in its rank order.
 
@@ -333,18 +337,21 @@ class TestLevelPartitioning:
 class TestGraphDepthOrdering:
     """Validates REQ-p00080-B: Graph-depth ordering."""
 
+    # Verifies: REQ-p00080-B
     def test_REQ_p00080_B_root_depth_is_zero(self):
         """Root nodes have depth 0."""
         graph = _make_graph()
         prd = graph.find_by_id("REQ-p00001")
         assert MarkdownAssembler._node_depth(prd) == 0
 
+    # Verifies: REQ-p00080-B
     def test_REQ_p00080_B_child_depth_is_one(self):
         """Direct children of root have depth 1."""
         graph = _make_graph()
         dev = graph.find_by_id("REQ-d00001")
         assert MarkdownAssembler._node_depth(dev) == 1
 
+    # Verifies: REQ-p00080-B
     def test_REQ_p00080_B_files_sorted_by_depth(self):
         """Files within a level group are sorted by min graph depth."""
         graph = _make_graph()
@@ -359,6 +366,7 @@ class TestGraphDepthOrdering:
 class TestRequirementRendering:
     """Validates REQ-p00080-E: Page breaks and heading structure."""
 
+    # Verifies: REQ-p00080-E
     def test_REQ_p00080_E_page_break_before_requirement(self, tmp_path):
         """Each requirement is preceded by \\newpage."""
         graph = _make_graph(base_dir=tmp_path)
@@ -366,6 +374,7 @@ class TestRequirementRendering:
         output = asm.assemble()
         assert output.count("\\newpage") >= 3  # At least PRD, DEV1, DEV2
 
+    # Verifies: REQ-p00080-E
     def test_REQ_p00080_E_requirement_heading_with_anchor(self, tmp_path):
         """Requirement headings include the ID as an anchor."""
         graph = _make_graph(base_dir=tmp_path)
@@ -373,6 +382,7 @@ class TestRequirementRendering:
         output = asm.assemble()
         assert "### REQ-p00001: Authentication {#REQ-p00001}" in output
 
+    # Verifies: REQ-p00080-E
     def test_REQ_p00080_E_assertions_rendered(self, tmp_path):
         """Assertions appear under their parent requirement."""
         graph = _make_graph(base_dir=tmp_path)
@@ -380,6 +390,7 @@ class TestRequirementRendering:
         output = asm.assemble()
         assert "A. The tool SHALL authenticate users." in output
 
+    # Verifies: REQ-p00080-E
     def test_REQ_p00080_E_sections_rendered(self, tmp_path):
         """Sub-sections within requirements render at #### level."""
         graph = _make_graph(base_dir=tmp_path)
@@ -388,6 +399,7 @@ class TestRequirementRendering:
         assert "#### Rationale" in output
         assert "Users need authentication." in output
 
+    # Verifies: REQ-p00080-E
     def test_REQ_p00080_E_file_heading_at_level_two(self, tmp_path):
         """File-level headings (before first requirement) render at ## level."""
         graph = _make_graph(base_dir=tmp_path)
@@ -395,6 +407,7 @@ class TestRequirementRendering:
         output = asm.assemble()
         assert "## PRD Authentication" in output
 
+    # Verifies: REQ-p00080-E
     def test_REQ_p00080_E_footer_lines_present(self, tmp_path):
         """*End* footer lines are preserved in output."""
         graph = _make_graph(base_dir=tmp_path)
@@ -406,6 +419,7 @@ class TestRequirementRendering:
 class TestYAMLMetadata:
     """Validates REQ-p00080-C: YAML metadata for TOC."""
 
+    # Verifies: REQ-p00080-C
     def test_REQ_p00080_C_yaml_header_present(self, tmp_path):
         """Output starts with YAML metadata block."""
         graph = _make_graph(base_dir=tmp_path)
@@ -415,6 +429,7 @@ class TestYAMLMetadata:
         assert 'title: "Test Doc"' in output
         assert "toc: true" in output
 
+    # Verifies: REQ-p00080-C
     def test_REQ_p00080_C_toc_depth(self, tmp_path):
         """YAML metadata includes toc-depth."""
         graph = _make_graph(base_dir=tmp_path)
@@ -426,18 +441,21 @@ class TestYAMLMetadata:
 class TestTopicIndex:
     """Validates REQ-p00080-D: Topic index generation."""
 
+    # Verifies: REQ-p00080-D
     def test_REQ_p00080_D_topics_from_filename(self):
         """Topics are extracted from filenames stripping level prefix."""
         asm = MarkdownAssembler(_wrap(_make_graph()))
         topics = asm._topics_from_filename("spec/prd-pdf-generation.md")
         assert topics == ["pdf", "generation"]
 
+    # Verifies: REQ-p00080-D
     def test_REQ_p00080_D_topics_from_filename_numeric(self):
         """Numeric prefixes are stripped."""
         asm = MarkdownAssembler(_wrap(_make_graph()))
         topics = asm._topics_from_filename("spec/07-graph-architecture.md")
         assert topics == ["graph", "architecture"]
 
+    # Verifies: REQ-p00080-D
     def test_REQ_p00080_D_topics_from_remainder(self):
         """Topics are extracted from REMAINDER nodes with Topics: line."""
         graph = _make_graph()
@@ -447,6 +465,7 @@ class TestTopicIndex:
         assert "auth" in topics
         assert "security" in topics
 
+    # Verifies: REQ-p00080-D
     def test_REQ_p00080_D_topics_from_file(self, tmp_path):
         """Topics are extracted from pre-requirement Topics: lines in files."""
         graph = _make_graph(base_dir=tmp_path)
@@ -455,6 +474,7 @@ class TestTopicIndex:
         assert "auth" in topics
         assert "security" in topics
 
+    # Verifies: REQ-p00080-D
     def test_REQ_p00080_D_index_rendered_with_links(self, tmp_path):
         """Topic index entries contain hyperlinks to requirements."""
         graph = _make_graph(base_dir=tmp_path)
@@ -463,6 +483,7 @@ class TestTopicIndex:
         assert "# Topic Index" in output
         assert "[REQ-p00001](#REQ-p00001)" in output
 
+    # Verifies: REQ-p00080-D
     def test_REQ_p00080_D_index_alphabetized(self, tmp_path):
         """Topic index is alphabetized."""
         graph = _make_graph(base_dir=tmp_path)

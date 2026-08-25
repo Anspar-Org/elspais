@@ -8,12 +8,14 @@ from elspais.html.theme import LegendCatalog, get_catalog
 class TestGetCatalog:
     """Test catalog loading and caching."""
 
+    # Verifies: REQ-p00006-A
     def test_REQ_p00006_A_returns_legend_catalog(self):
         catalog = get_catalog()
         assert isinstance(catalog, LegendCatalog)
         assert len(catalog.themes) > 0
         assert len(catalog.grouped_entries()) > 0
 
+    # Verifies: REQ-p00006-A
     def test_REQ_p00006_A_caches_result(self):
         a = get_catalog()
         b = get_catalog()
@@ -23,16 +25,19 @@ class TestGetCatalog:
 class TestThemes:
     """Test theme enumeration."""
 
+    # Verifies: REQ-p00006-A
     def test_REQ_p00006_A_has_light_and_dark(self):
         catalog = get_catalog()
         names = catalog.theme_names()
         assert "light" in names
         assert "dark" in names
 
+    # Verifies: REQ-p00006-A
     def test_REQ_p00006_A_first_theme_is_default(self):
         catalog = get_catalog()
         assert catalog.themes[0].name == "light"
 
+    # Verifies: REQ-p00006-A
     def test_REQ_p00006_A_themes_have_labels_and_icons(self):
         catalog = get_catalog()
         for t in catalog.themes:
@@ -43,17 +48,20 @@ class TestThemes:
 class TestCatalogEntries:
     """Test catalog entry lookup and joining."""
 
+    # Verifies: REQ-p00006-A
     def test_REQ_p00006_A_by_key_finds_entry(self):
         catalog = get_catalog()
         entry = catalog.by_key("icons.change.unsaved")
         assert entry.label == "Unsaved"
         assert entry.css_class == "change-indicator unsaved"
 
+    # Verifies: REQ-p00006-A
     def test_REQ_p00006_A_by_key_raises_for_missing(self):
         catalog = get_catalog()
         with pytest.raises(KeyError):
             catalog.by_key("nonexistent.key")
 
+    # Verifies: REQ-p00006-A
     def test_REQ_p00006_A_by_category_returns_entries(self):
         catalog = get_catalog()
         entries = catalog.by_category("badges.status")
@@ -61,6 +69,7 @@ class TestCatalogEntries:
         assert "badges.status.draft" in keys
         assert "badges.status.active" in keys
 
+    # Verifies: REQ-p00006-A
     def test_REQ_p00006_A_entries_have_descriptions(self):
         catalog = get_catalog()
         entry = catalog.by_key("severity.neutral")
@@ -77,6 +86,7 @@ class TestCatalogEntries:
         assert not catalog.by_category("coverage_caveat")
         assert all(not e.key.startswith("coverage_caveat") for e in catalog.entries)
 
+    # Verifies: REQ-p00006-A
     def test_REQ_p00006_A_coverage_standing_have_color_key(self):
         catalog = get_catalog()
         entry = catalog.by_key("coverage_standing.full")
@@ -86,17 +96,20 @@ class TestCatalogEntries:
 class TestCSSVariableGeneration:
     """Test CSS custom property output."""
 
+    # Verifies: REQ-p00006-A
     def test_REQ_p00006_A_generates_root_block(self):
         catalog = get_catalog()
         css = catalog.css_variables()
         assert ":root" in css
         assert "--body-bg:" in css
 
+    # Verifies: REQ-p00006-A
     def test_REQ_p00006_A_generates_dark_theme_block(self):
         catalog = get_catalog()
         css = catalog.css_variables()
         assert ".theme-dark" in css
 
+    # Verifies: REQ-p00006-A
     def test_REQ_p00006_A_all_tokens_present(self):
         catalog = get_catalog()
         css = catalog.css_variables()
@@ -109,6 +122,7 @@ class TestCSSVariableGeneration:
 class TestGroupedEntries:
     """Test legend modal grouping."""
 
+    # Verifies: REQ-p00006-A
     def test_REQ_p00006_A_returns_category_groups(self):
         catalog = get_catalog()
         groups = catalog.grouped_entries()
@@ -131,6 +145,7 @@ class TestComputeValidationColorCatalog:
         node.set_metric("rollup_metrics", rollup)
         return node
 
+    # Verifies: REQ-p00006-A
     def test_REQ_p00006_A_green_description_from_catalog(self):
         """Green tier: full direct coverage on implemented dimension."""
         from elspais.graph.metrics import CoverageDimension, RollupMetrics
@@ -153,6 +168,7 @@ class TestComputeValidationColorCatalog:
 
         assert tiers["impl_color"] == expected_entry.color_key
 
+    # Verifies: REQ-p00006-A
     def test_REQ_p00006_A_red_description_from_catalog(self):
         """Red tier: has test failures on verified dimension."""
         from elspais.graph.metrics import CoverageDimension, RollupMetrics
@@ -192,6 +208,7 @@ class TestComputeValidationColorCatalog:
         assert tiers["verified_color"] == expected_entry.color_key
         assert tiers["combined_color"] == expected_entry.color_key
 
+    # Verifies: REQ-p00006-A
     def test_REQ_p00006_A_yellow_description_from_catalog(self):
         """Yellow tier: partial coverage on implemented dimension."""
         from elspais.graph.metrics import CoverageDimension, RollupMetrics
@@ -215,6 +232,7 @@ class TestComputeValidationColorCatalog:
         assert tiers["impl_color"] == expected_entry.color_key
         assert tiers["combined_color"] == expected_entry.color_key
 
+    # Verifies: REQ-d00258
     def test_REQ_d00258_full_indirect_collapses_to_green(self):
         """Under the unified vocabulary (REQ-d00258) a fully-but-indirectly
         covered dimension collapses to the ``full`` tier -> severity ``ok`` ->
@@ -254,6 +272,7 @@ class TestComputeValidationColorCatalog:
             assert tiers[f"{prefix}_tier"] == "full"
             assert tiers[f"{prefix}_color"] == green
 
+    # Verifies: REQ-p00006-A
     def test_REQ_p00006_A_orange_description_from_catalog(self):
         """Orange/anomalous tier: zero coverage maps to error/red on implemented dimension."""
         from elspais.graph.metrics import CoverageDimension, RollupMetrics

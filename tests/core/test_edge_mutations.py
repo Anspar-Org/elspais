@@ -96,6 +96,7 @@ def build_graph_with_broken_reference() -> TraceGraph:
 class TestAddEdge:
     """Tests for TraceGraph.add_edge()."""
 
+    # Verifies: REQ-o00062-C
     def test_REQ_o00062_C_add_edge_creates_relationship(self):
         """REQ-o00062-C: Basic add edge creates relationship."""
         graph = build_disconnected_graph()
@@ -290,6 +291,7 @@ class TestAddEdge:
 class TestChangeEdgeKind:
     """Tests for TraceGraph.change_edge_kind()."""
 
+    # Verifies: REQ-o00062-C
     def test_REQ_o00062_C_change_edge_kind_switches_relationship(self):
         """REQ-o00062-C: Basic change edge kind works."""
         graph = build_hierarchy_graph()
@@ -412,6 +414,7 @@ class TestChangeEdgeTargets:
     Validates REQ-o00062-G: undo support
     """
 
+    # Verifies: REQ-o00062-C
     def test_REQ_o00062_C_change_edge_targets_req_to_assertion(self):
         """REQ-o00062-C: Change a REQ->REQ edge to target specific assertions."""
         graph = build_graph_with_assertions()
@@ -432,6 +435,7 @@ class TestChangeEdgeTargets:
         assert len(edges) == 1
         assert edges[0].assertion_targets == ["A", "B"]
 
+    # Verifies: REQ-o00062-C
     def test_REQ_o00062_C_change_edge_targets_assertion_to_req(self):
         """REQ-o00062-C: Change assertion-targeted edge back to whole-req."""
         graph = build_graph_with_assertions()
@@ -452,6 +456,7 @@ class TestChangeEdgeTargets:
         assert len(edges) == 1
         assert edges[0].assertion_targets == []
 
+    # Verifies: REQ-o00062-E
     def test_REQ_o00062_E_change_edge_targets_returns_mutation_entry(self):
         """REQ-o00062-E: Returned MutationEntry has correct structure."""
         graph = build_graph_with_assertions()
@@ -463,6 +468,7 @@ class TestChangeEdgeTargets:
         assert entry.before_state["assertion_targets"] == ["A"]
         assert entry.after_state["assertion_targets"] == ["A", "B"]
 
+    # Verifies: REQ-o00062-G
     def test_REQ_o00062_G_change_edge_targets_undo(self):
         """REQ-o00062-G: Undo restores original assertion targets."""
         graph = build_graph_with_assertions()
@@ -529,6 +535,7 @@ class TestChangeEdgeTargets:
 class TestDeleteEdge:
     """Tests for TraceGraph.delete_edge()."""
 
+    # Verifies: REQ-o00062-C
     def test_REQ_o00062_C_delete_edge_removes_relationship(self):
         """REQ-o00062-C: Basic delete edge removes relationship."""
         graph = build_hierarchy_graph()
@@ -755,6 +762,7 @@ class TestDeleteEdge:
 class TestFixBrokenReference:
     """Tests for TraceGraph.fix_broken_reference()."""
 
+    # Verifies: REQ-o00062-C
     def test_REQ_o00062_C_fix_broken_reference_creates_valid_edge(self):
         """REQ-o00062-C: Basic fix creates valid edge."""
         graph = build_graph_with_broken_reference()

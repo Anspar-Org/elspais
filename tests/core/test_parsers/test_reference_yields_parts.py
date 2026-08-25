@@ -13,11 +13,13 @@ pattern is ``\\d{1,5}``), but its canonical spelling of that identifier is
 read that goes through the parsed parts and re-renders them yields
 ``REQ-p00042-A`` and wires the edge.
 
-A Python test function name is the same obligation under a second notation:
-the name can spell every boundary only as ``_``, so ``test_REQ_p42_A``
-matches on a text a canonical identifier never contains.  Its parts are
-identical to those of ``REQ-p00042-A``, and that is what the read must
-yield.
+Re-rendering from parts is not licence to repair.  There is one notation,
+and a reference spelled with any other punctuation -- ``REQ_p42_A`` -- is a
+reference spelled wrongly, not the same identifier in a second notation.
+Reading without regard to case and padding does not extend to any further
+difference (REQ-d00212-S), so such a spelling resolves to nothing and is
+reported.  The two obligations bound each other: padding is settled from
+the parts, and everything past case and padding is left as written.
 
 These are file-level reads through ``build_graph``, not resolver calls: the
 obligation is on what a consumer of a scanned annotation receives, and an
@@ -30,6 +32,7 @@ from pathlib import Path
 
 import pytest
 
+from elspais.graph.reference_faults import FaultClass
 from elspais.graph.relations import EdgeKind
 
 _SPEC = """\
@@ -49,7 +52,7 @@ C. The system SHALL blort.
 """
 
 _CONFIG = """\
-version = 3
+version = 5
 
 [project]
 name = "partstest"
@@ -176,25 +179,41 @@ def test_multi_assertion_reference_yields_each_label_as_its_own_part(tmp_path):
     assert "REQ-p42-A+C" not in _broken(graph)
 
 
-def test_test_function_name_reference_is_read_as_parts(tmp_path):
-    """A reference spelled in a Python test function's name is yielded as
-    its parts, so the underscore notation and the unpadded component both
-    disappear from what the consumer receives.
+# Verifies: REQ-d00212-S
+def test_an_underscore_spelling_is_not_repaired_into_one_that_resolves(tmp_path):
+    """An underscore-spelled reference resolves to nothing and is reported.
 
-    The matched text is ``REQ_p42_A``; the parts render as
-    ``REQ-p00042-A``, which is the only spelling that names a node.
+    ``REQ_p42_A`` differs from what the configuration admits in its
+    punctuation, which is neither case nor padding, so nothing may repair it
+    into ``REQ-p00042-A`` (REQ-d00212-S). This is the counterpart of the
+    padding test above and its exact boundary: an unpadded component IS
+    settled from the parts and binds, and a substituted separator is NOT and
+    does not. Repairing it would build an edge whose author wrote no such
+    reference -- silently, since a reference that resolved is a reference
+    that looked fine.
     """
     project = _make_project(
         tmp_path,
-        test="def test_widget_REQ_p42_A():\n    assert True\n",
+        test="# Verifies: REQ_p42_A\ndef test_widget():\n    assert True\n",
     )
     graph = _build(project)
 
-    assert _targets(graph, EdgeKind.VERIFIES) == ["A"], (
-        "Expected a VERIFIES edge from REQ-p00042 naming A for the test function "
-        "'test_widget_REQ_p42_A'; the reference read out of the name was handed back "
-        "as matched text rather than as the parts its grammar defines."
+    assert _targets(graph, EdgeKind.VERIFIES) == [], (
+        "'REQ_p42_A' was repaired into a spelling that resolves and wired an "
+        "edge from REQ-p00042; a difference past case and padding must resolve "
+        "to nothing."
     )
-    assert not any("_" in target or "p42" in target for target in _broken(graph)), (
-        f"Underscore-notation text leaked through as a reference: {_broken(graph)}"
+    # Resolving to nothing is only honest because the item is still reported:
+    # it is carried through verbatim, never quietly dropped.
+    broken = graph.broken_references()
+    assert [br.target_id for br in broken] == ["REQ_p42_A"], (
+        f"the unresolvable spelling must be reported as written; got {_broken(graph)}"
+    )
+    assert broken[0].edge_kind == "verifies"
+    # No repository declares a namespace ending where this item's does, since
+    # the boundary comes from the grammar's own separator and `REQ_` is not
+    # `REQ-`; so it is attributed to no repository rather than described as a
+    # local identifier written badly.
+    assert broken[0].fault_class is FaultClass.UNKNOWN_NAMESPACE, (
+        f"got {broken[0].fault_class!r} with codes {broken[0].codes!r}"
     )

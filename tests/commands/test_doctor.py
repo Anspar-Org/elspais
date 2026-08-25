@@ -13,15 +13,17 @@ import argparse
 class TestDoctorConfigChecks:
     """Validates REQ-p00001-A: config checks produce lay-person messages."""
 
+    # Verifies: REQ-p00001-A
     def test_REQ_p00001_A_config_exists_found(self, tmp_path):
         from elspais.commands.doctor import check_config_exists
 
         config_path = tmp_path / ".elspais.toml"
-        config_path.write_text('version = 3\n[project]\nnamespace = "REQ"\n')
+        config_path.write_text('version = 5\n[project]\nnamespace = "REQ"\n')
         result = check_config_exists(config_path, tmp_path)
         assert result.passed is True
         assert result.category == "config"
 
+    # Verifies: REQ-p00001-A
     def test_REQ_p00001_A_config_exists_not_found(self, tmp_path):
         from elspais.commands.doctor import check_config_exists
 
@@ -29,14 +31,16 @@ class TestDoctorConfigChecks:
         assert result.passed is True
         assert "defaults" in result.message.lower() or "no config" in result.message.lower()
 
+    # Verifies: REQ-p00001-A
     def test_REQ_p00001_A_config_syntax_valid(self, tmp_path):
         from elspais.commands.doctor import check_config_syntax
 
         config_path = tmp_path / ".elspais.toml"
-        config_path.write_text('version = 3\n[project]\nnamespace = "REQ"\n')
+        config_path.write_text('version = 5\n[project]\nnamespace = "REQ"\n')
         result = check_config_syntax(config_path, tmp_path)
         assert result.passed is True
 
+    # Verifies: REQ-p00001-A
     def test_REQ_p00001_A_config_syntax_invalid(self, tmp_path):
         from elspais.commands.doctor import check_config_syntax
 
@@ -46,6 +50,7 @@ class TestDoctorConfigChecks:
         assert result.passed is False
         assert "formatting error" in result.message.lower()
 
+    # Verifies: REQ-p00001-A
     def test_REQ_p00001_A_run_config_checks_returns_list(self, tmp_path):
         from elspais.commands.doctor import run_config_checks
         from elspais.config import _merge_configs, config_defaults
@@ -112,7 +117,7 @@ class TestDoctorAssociateChecks:
         assoc_dir = tmp_path / "callisto"
         assoc_dir.mkdir()
         (assoc_dir / ".elspais.toml").write_text(
-            'version = 3\n[project]\nname = "callisto"\nnamespace = "CAL"\n'
+            'version = 5\n[project]\nname = "callisto"\nnamespace = "CAL"\n'
         )
         config = {"associates": {"callisto": {"path": str(assoc_dir), "namespace": "CAL"}}}
         result = check_associate_paths(config, None)
@@ -143,6 +148,7 @@ class TestDoctorAssociateChecks:
 class TestDoctorLocalConfigCheck:
     """Validates REQ-p00001-A: local config file presence check."""
 
+    # Verifies: REQ-p00001-A
     def test_REQ_p00001_A_local_toml_exists(self, tmp_path):
         from elspais.commands.doctor import check_local_toml_exists
 
@@ -150,6 +156,7 @@ class TestDoctorLocalConfigCheck:
         result = check_local_toml_exists(tmp_path)
         assert result.passed is True
 
+    # Verifies: REQ-p00001-A
     def test_REQ_p00001_A_local_toml_missing(self, tmp_path):
         from elspais.commands.doctor import check_local_toml_exists
 
@@ -183,13 +190,14 @@ class TestDoctorCrossRepoCheck:
 class TestDoctorRun:
     """Validates REQ-p00001-A: doctor command end-to-end."""
 
+    # Verifies: REQ-p00001-A
     def test_REQ_p00001_A_run_returns_zero_healthy(self, tmp_path, monkeypatch):
         from elspais.commands.doctor import run
 
         monkeypatch.chdir(tmp_path)
         config_path = tmp_path / ".elspais.toml"
         config_path.write_text(
-            'version = 3\n[project]\nname = "test"\nnamespace = "REQ"\n\n'
+            'version = 5\n[project]\nname = "test"\nnamespace = "REQ"\n\n'
             '[levels.prd]\nrank = 1\nletter = "p"\nimplements = ["prd"]\n\n'
             "[id-patterns]\n"
             'canonical = "{namespace}-{level.letter}{component}"\n\n'
@@ -207,6 +215,7 @@ class TestDoctorRun:
         result = run(args)
         assert result == 0
 
+    # Verifies: REQ-p00001-A
     def test_REQ_p00001_A_run_json_output(self, tmp_path, monkeypatch, capsys):
         import json as json_mod
 
@@ -223,6 +232,7 @@ class TestDoctorRun:
         data = json_mod.loads(output)
         assert "checks" in data
 
+    # Verifies: REQ-p00001-A
     def test_REQ_p00001_A_run_nonzero_on_errors(self, tmp_path, monkeypatch):
         from elspais.commands.doctor import run
 

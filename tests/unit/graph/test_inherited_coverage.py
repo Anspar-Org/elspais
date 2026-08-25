@@ -76,7 +76,7 @@ def _build(tmp_path: Path):
         library,
         ".elspais.toml",
         """
-        version = 3
+        version = 5
         [project]
         name = "library"
         namespace = "LIB"
@@ -123,7 +123,7 @@ def _build(tmp_path: Path):
         app,
         ".elspais.toml",
         """
-        version = 3
+        version = 5
         [project]
         name = "app"
         namespace = "APP"
@@ -227,7 +227,7 @@ def _build_multi(tmp_path: Path):
         library,
         ".elspais.toml",
         """
-        version = 3
+        version = 5
         [project]
         name = "library"
         namespace = "LIB"
@@ -294,7 +294,7 @@ def _build_multi(tmp_path: Path):
         app,
         ".elspais.toml",
         """
-        version = 3
+        version = 5
         [project]
         name = "app"
         namespace = "APP"

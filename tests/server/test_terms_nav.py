@@ -88,6 +88,7 @@ class TestTermsTabRendering:
     """Validates REQ-d00243-A: Terms tab button appears in nav-tabs with
     data-kind='terms' and switchNavTab('terms') onclick."""
 
+    # Verifies: REQ-d00243-A
     def test_REQ_d00243_A_terms_tab_button_rendered(self, tmp_path: Path) -> None:
         """GET '/' HTML contains a button with data-kind='terms' and text 'Terms'."""
         client = _make_app(tmp_path)
@@ -101,6 +102,7 @@ class TestTermsTabRendering:
         # Look for the pattern: data-kind="terms" ... >Terms<
         assert ">Terms<" in html, "Expected button text 'Terms' in the nav-tab button"
 
+    # Verifies: REQ-d00243-A
     def test_REQ_d00243_A_switchNavTab_terms_in_js(self, tmp_path: Path) -> None:
         """GET '/' HTML contains switchNavTab('terms') in onclick handler."""
         client = _make_app(tmp_path)
@@ -121,6 +123,7 @@ class TestTermsNavEmpty:
     """Validates REQ-d00243-B: Empty terms dictionary produces empty list,
     validating the data flow for the 'No defined terms found' empty state."""
 
+    # Verifies: REQ-d00243-B
     def test_REQ_d00243_B_empty_terms_message(self, tmp_path: Path) -> None:
         """GET /api/terms returns [] for empty dictionary (empty state data flow)."""
         client = _make_app(tmp_path, with_terms=False)
@@ -140,6 +143,7 @@ class TestTermsNavControls:
     """Validates REQ-d00243-C: JS logic hides expand/collapse, tree/flat toggle,
     and filter groups when Terms tab is active. Text filter filters terms by name."""
 
+    # Verifies: REQ-d00243-C
     def test_REQ_d00243_C_terms_hides_controls_js(self, tmp_path: Path) -> None:
         """GET '/' HTML contains JS that hides expand/collapse and view-mode-toggle
         when the active tab is 'terms'."""

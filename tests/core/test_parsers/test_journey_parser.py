@@ -77,6 +77,7 @@ class TestJourneyParserValidates:
     linking including validates.
     """
 
+    # Verifies: REQ-o00050-C
     def test_REQ_o00050_C_validates_multiple_refs(self):
         """Journey with Validates: REQ-p00012, REQ-d00042 parses both refs."""
         parser = _parser()
@@ -103,6 +104,7 @@ class TestJourneyParserValidates:
         assert "REQ-p00012" in validates
         assert "REQ-d00042" in validates
 
+    # Verifies: REQ-o00050-C
     def test_REQ_o00050_C_no_validates_line_empty_list(self):
         """Journey without Validates: line has empty validates list."""
         parser = _parser()
@@ -125,6 +127,7 @@ class TestJourneyParserValidates:
         validates = results[0].parsed_data["validates"]
         assert validates == []
 
+    # Verifies: REQ-o00050-C
     def test_REQ_o00050_C_single_validates(self):
         """Journey with single Validates: REQ-p00012 parses one ref."""
         parser = _parser()
@@ -149,6 +152,7 @@ class TestJourneyParserValidates:
         assert len(validates) == 1
         assert validates[0] == "REQ-p00012"
 
+    # Verifies: REQ-o00050-C
     def test_REQ_o00050_C_validates_whitespace_padded(self):
         """Journey with whitespace-padded refs in Validates: line."""
         parser = _parser()

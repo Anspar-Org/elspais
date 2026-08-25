@@ -36,7 +36,7 @@ import pytest
 # every requirement in the fixture (none of them carry a hash). Changelog
 # enforcement is off so the hash defect is the only violation in play.
 CONFIG_TOML = """\
-version = 3
+version = 5
 
 [project]
 name = "test"

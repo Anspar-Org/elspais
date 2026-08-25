@@ -729,7 +729,8 @@ def _resolve_spec_dir_config(
     # Build Lark-based FileDispatcher for spec files
     dispatcher = FileDispatcher(resolver)
 
-    # Legacy registry kept for backwards compatibility during transition
+    # Spec files reach the Lark dispatcher; the registry carries the parsers
+    # that read the rest of a spec directory.
     registry = ParserRegistry()
     # RequirementParser removed — Lark dispatcher handles spec files
     registry.register(JourneyParser(FederatedIdReader(resolver)))

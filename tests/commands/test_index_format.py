@@ -38,6 +38,7 @@ class TestFormatTable:
     tables with aligned columns.
     """
 
+    # Verifies: REQ-d00052-G
     def test_REQ_d00052_G_header_cells_are_padded_to_column_width(self):
         """Header cells are left-padded to the widest value in each column."""
         headers = ["ID", "Title"]
@@ -49,6 +50,7 @@ class TestFormatTable:
         assert "| ID         |" in header_line
         assert "| Title |" in header_line
 
+    # Verifies: REQ-d00052-G
     def test_REQ_d00052_G_separator_dashes_match_column_widths(self):
         """Separator row uses dashes matching each column's computed width."""
         headers = ["ID", "Name"]
@@ -60,6 +62,7 @@ class TestFormatTable:
         assert "| " + "-" * 10 + " |" in separator or "----------" in separator
         assert "-" * 14 in separator
 
+    # Verifies: REQ-d00052-G
     def test_REQ_d00052_G_row_cells_are_padded_to_column_width(self):
         """Data row cells are left-padded to the widest value in each column."""
         headers = ["ID", "Title"]
@@ -73,6 +76,7 @@ class TestFormatTable:
         row_line = result[2]
         assert "| Short                    |" in row_line
 
+    # Verifies: REQ-d00052-G
     def test_REQ_d00052_G_single_row_table(self):
         """A single-row table produces 3 lines: header, separator, data."""
         headers = ["A", "B"]
@@ -82,6 +86,7 @@ class TestFormatTable:
 
         assert len(result) == 3
 
+    # Verifies: REQ-d00052-G
     def test_REQ_d00052_G_multiple_rows_produce_correct_line_count(self):
         """Table with N rows produces N+2 lines (header + separator + N rows)."""
         headers = ["Col1", "Col2"]
@@ -91,6 +96,7 @@ class TestFormatTable:
 
         assert len(result) == 5
 
+    # Verifies: REQ-d00052-G
     def test_REQ_d00052_G_pipes_aligned_across_all_lines(self):
         """All pipe characters are vertically aligned across header, separator, and rows."""
         headers = ["ID", "Title", "Hash"]
@@ -104,6 +110,7 @@ class TestFormatTable:
         lengths = [len(line) for line in result]
         assert len(set(lengths)) == 1, f"Lines have different lengths: {lengths}"
 
+    # Verifies: REQ-d00052-G
     def test_REQ_d00052_G_empty_cell_values_padded(self):
         """Empty cell values are padded with spaces to column width."""
         headers = ["ID", "Hash"]
@@ -114,6 +121,7 @@ class TestFormatTable:
         first_data = result[2]
         assert "|          |" in first_data or "| " + " " * 8 + " |" in first_data
 
+    # Verifies: REQ-d00052-G
     def test_REQ_d00052_G_header_wider_than_data(self):
         """When header is wider than all data cells, column uses header width."""
         headers = ["Very Long Header", "X"]
@@ -124,6 +132,7 @@ class TestFormatTable:
         data_line = result[2]
         assert "| short            |" in data_line
 
+    # Verifies: REQ-d00052-G
     def test_REQ_d00052_G_exact_format_matches_spec(self):
         """Output matches the exact format from the specification example."""
         headers = ["ID", "Title", "File", "Hash"]
@@ -146,7 +155,7 @@ class TestResolveSpecDirInfo:
     def test_with_config(self, tmp_path):
         """Info uses project name and level config from .elspais.toml."""
         (tmp_path / ".elspais.toml").write_text(
-            'version = 3\n[project]\nname = "my-project"\nnamespace = "REQ"\n\n'
+            'version = 5\n[project]\nname = "my-project"\nnamespace = "REQ"\n\n'
             '[levels.prd]\nrank = 1\nletter = "p"\nimplements = ["prd"]\n\n'
             '[levels.dev]\nrank = 3\nletter = "d"\nimplements = ["dev", "prd"]\n'
         )
@@ -204,6 +213,7 @@ class TestRegenerateIndexAlignment:
                 table_lines.append(line)
         return table_lines
 
+    # Verifies: REQ-d00052-G
     def test_REQ_d00052_G_regenerated_tables_have_aligned_columns(self, tmp_path):
         """Regenerated INDEX.md tables have aligned columns (all pipes line up)."""
         spec_dir = tmp_path / "spec"
@@ -233,6 +243,7 @@ class TestRegenerateIndexAlignment:
         lengths = {len(line) for line in table_lines}
         assert len(lengths) == 1, f"Table lines have unequal lengths: {lengths}"
 
+    # Verifies: REQ-d00052-G
     def test_REQ_d00052_G_regenerated_separator_uses_dashes(self, tmp_path):
         """Regenerated INDEX.md separator row uses dashes matching column widths."""
         spec_dir = tmp_path / "spec"
@@ -259,6 +270,7 @@ class TestRegenerateIndexAlignment:
         assert separator is not None
         assert "---|---" not in separator
 
+    # Verifies: REQ-d00052-G
     def test_REQ_d00052_G_jny_table_also_aligned(self, tmp_path):
         """JNY section table is also properly aligned with padded columns."""
         spec_dir = tmp_path / "spec"
@@ -290,6 +302,7 @@ class TestRegenerateIndexAlignment:
         lengths = {len(line) for line in jny_table}
         assert len(lengths) == 1, f"JNY table lines have unequal lengths: {lengths}"
 
+    # Verifies: REQ-d00052-G
     def test_REQ_d00052_G_regenerated_content_still_has_correct_data(self, tmp_path):
         """Aligned tables still contain the correct requirement data."""
         spec_dir = tmp_path / "spec"
@@ -312,12 +325,13 @@ class TestRegenerateIndexAlignment:
         assert "Requirements Management Tool" in content
         assert "bf63eda5" in content
 
+    # Verifies: REQ-d00052-G
     def test_REQ_d00052_G_levels_sorted_by_dependency_order(self, tmp_path):
         """Level sections appear in dependency order (PRD before DEV)."""
         spec_dir = tmp_path / "spec"
         spec_dir.mkdir()
         (tmp_path / ".elspais.toml").write_text(
-            'version = 3\n[project]\nname = "test"\nnamespace = "REQ"\n\n'
+            'version = 5\n[project]\nname = "test"\nnamespace = "REQ"\n\n'
             '[levels.PRD]\nrank = 1\nletter = "p"\nimplements = ["PRD"]\n\n'
             '[levels.DEV]\nrank = 3\nletter = "d"\nimplements = ["DEV", "PRD"]\n'
         )
@@ -347,6 +361,7 @@ class TestRegenerateIndexAlignment:
         dev_idx = next(i for i, ln in enumerate(h2_lines) if "DEV" in ln)
         assert prd_idx < dev_idx
 
+    # Verifies: REQ-d00052-G
     def test_REQ_d00052_G_multi_dir_shows_subsections(self, tmp_path):
         """Multiple spec dirs within a repo get ### subsections within a level.
 
@@ -391,6 +406,7 @@ class TestRegenerateIndexAlignment:
         h3_lines = [line for line in content.split("\n") if line.startswith("### ")]
         assert len(h3_lines) == 2
 
+    # Verifies: REQ-d00052-G
     def test_REQ_d00052_G_jny_table_has_no_addresses_column(self, tmp_path):
         """JNY table does not include an Addresses column."""
         spec_dir = tmp_path / "spec"

@@ -36,6 +36,7 @@ class TestTomlParserBugFixes:
         comma-containing strings, and failed on inline comments.
     """
 
+    # Verifies: REQ-p00002-A
     def test_REQ_p00002_A_multiline_array_parsing(self):
         """Multi-line arrays must parse to a proper list, not the string '['."""
         toml_content = """\
@@ -53,6 +54,7 @@ allowed_implements = [
         )
         assert allowed == ["dev -> ops, prd", "ops -> prd"]
 
+    # Verifies: REQ-p00002-A
     def test_REQ_p00002_A_comma_in_string_array(self):
         """Arrays with comma-containing strings must not be split on commas."""
         toml_content = """\
@@ -63,6 +65,7 @@ values = ["hello, world", "foo, bar"]
         assert result["values"] == ["hello, world", "foo, bar"]
         assert len(result["values"]) == 2
 
+    # Verifies: REQ-p00002-A
     def test_REQ_p00002_A_inline_comment_numeric(self):
         """Numeric values with inline comments must parse correctly."""
         toml_content = """\
@@ -85,6 +88,7 @@ class TestTomlRoundTrip:
         losing comments or corrupting structure.
     """
 
+    # Verifies: REQ-p00002-A
     def test_REQ_p00002_A_roundtrip_preserves_comments(self):
         """Loading and dumping a TOML document must preserve comments."""
         toml_content = """\
@@ -116,6 +120,7 @@ allowed_implements = [
         assert doc["project"]["name"] == "test-project"
         assert doc["patterns"]["prefix"] == "REQ"
 
+    # Verifies: REQ-p00002-A
     def test_REQ_p00002_A_config_add_roundtrip(self, tmp_path):
         """Simulate the config-add flow: load, modify, save, reload."""
         toml_file = tmp_path / ".elspais.toml"
@@ -176,6 +181,7 @@ class TestTomlParserEdgeCases:
         standard TOML constructs used by elspais configuration files.
     """
 
+    # Verifies: REQ-p00002-A
     def test_REQ_p00002_A_empty_config(self):
         """Parsing an empty string must return an empty dict."""
         result = parse_toml("")
@@ -183,6 +189,7 @@ class TestTomlParserEdgeCases:
         assert isinstance(result, dict)
         assert len(result) == 0
 
+    # Verifies: REQ-p00002-A
     def test_REQ_p00002_A_inline_table_parsing(self):
         """Inline tables used for type definitions must parse correctly."""
         toml_content = """\
@@ -213,6 +220,7 @@ class TestFixtureTomlFiles:
         a non-empty dictionary.
     """
 
+    # Verifies: REQ-p00002-A
     @pytest.mark.parametrize(
         "fixture_dir",
         FIXTURE_DIRS_WITH_TOML,

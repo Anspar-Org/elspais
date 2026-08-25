@@ -4,7 +4,7 @@
 import pytest
 
 _MINIMAL_TOML = """\
-version = 4
+version = 5
 [project]
 name = "test"
 namespace = "REQ"

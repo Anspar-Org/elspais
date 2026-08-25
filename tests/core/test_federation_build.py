@@ -246,6 +246,7 @@ class TestFederationBuild:
     Validates REQ-d00203-E: Root repo identity
     """
 
+    # Verifies: REQ-d00203-A
     def test_REQ_d00203_A_builds_separate_graphs_per_repo(self, two_repos: dict[str, Path]) -> None:
         """Two repos produce a FederatedGraph with 2 RepoEntries,
         each having a non-None graph."""
@@ -269,6 +270,7 @@ class TestFederationBuild:
                 "each repo should have a built TraceGraph"
             )
 
+    # Verifies: REQ-d00203-C
     def test_REQ_d00203_C_missing_associate_soft_fail(self, missing_assoc_repo: Path) -> None:
         """Root declares associate at non-existent path.
         Default (non-strict) mode: FederatedGraph has an error-state
@@ -294,6 +296,7 @@ class TestFederationBuild:
             "Error-state RepoEntry should have a human-readable error message"
         )
 
+    # Verifies: REQ-d00203-D
     def test_REQ_d00203_D_strict_raises_on_missing_associate(
         self, missing_assoc_repo: Path
     ) -> None:
@@ -307,6 +310,7 @@ class TestFederationBuild:
                 strict=True,  # type: ignore[call-arg]
             )
 
+    # Verifies: REQ-d00203-E
     def test_REQ_d00203_E_root_is_root_repo(self, two_repos: dict[str, Path]) -> None:
         """The FederatedGraph's root repo should be the invoking repo,
         not the associate."""
@@ -573,7 +577,7 @@ class TestCrossGraphWiring:
 
 def _coverage_toml(name: str, namespace: str, associates: str = "") -> str:
     """Config for a repo whose own `src/` carries the coverage evidence."""
-    return f"""version = 3
+    return f"""version = 5
 
 [project]
 name = "{name}"

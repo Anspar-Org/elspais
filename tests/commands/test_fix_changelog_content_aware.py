@@ -30,7 +30,7 @@ def _fake_author(monkeypatch):
 
 
 CONFIG_TOML = """\
-version = 3
+version = 5
 
 [project]
 name = "test-content-aware"

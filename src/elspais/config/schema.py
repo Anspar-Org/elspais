@@ -44,7 +44,10 @@ _DEFAULT_STATUS_ROLES: dict[str, list[str]] = {
 
 
 class _StrictModel(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True, populate_by_name=True)
+    # A field carrying an alias is written under that alias and no other: one
+    # setting has one spelling, so a file cannot say the same thing two ways
+    # and leave a reader to work out which one the tool read.
+    model_config = ConfigDict(extra="forbid", frozen=True)
 
 
 # Implements: REQ-d00212-J
@@ -999,6 +1002,5 @@ class ElspaisConfig(_StrictModel):
     model_config = ConfigDict(
         extra="forbid",
         frozen=True,
-        populate_by_name=True,
         json_schema_extra={"$schema": "https://json-schema.org/draft/2020-12/schema"},
     )

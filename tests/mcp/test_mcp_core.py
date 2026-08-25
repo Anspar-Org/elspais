@@ -131,6 +131,7 @@ def mcp_server(sample_graph):
 class TestGetGraphStatus:
     """Tests for get_graph_status() tool."""
 
+    # Verifies: REQ-d00060-A
     def test_REQ_d00060_A_returns_node_counts_by_kind(self, sample_graph):
         """REQ-d00060-A: Returns node_counts using graph.nodes_by_kind()."""
         pytest.importorskip("mcp")
@@ -143,6 +144,7 @@ class TestGetGraphStatus:
         assert counts.get("requirement") == 3
         assert counts.get("assertion") == 2
 
+    # Verifies: REQ-d00060-D
     def test_REQ_d00060_D_returns_root_count(self, sample_graph):
         """REQ-d00060-D: Returns root_count using graph.root_count()."""
         pytest.importorskip("mcp")
@@ -153,6 +155,7 @@ class TestGetGraphStatus:
         assert "root_count" in result
         assert result["root_count"] == 1
 
+    # Verifies: REQ-d00060-E
     def test_REQ_d00060_E_no_full_graph_iteration(self, sample_graph):
         """REQ-d00060-E: Does not iterate full graph for counts."""
         pytest.importorskip("mcp")
@@ -182,6 +185,7 @@ class TestGetGraphStatus:
 class TestSearch:
     """Tests for search() tool."""
 
+    # Verifies: REQ-d00061-A
     def test_REQ_d00061_A_iterates_nodes_by_kind(self, sample_graph):
         """REQ-d00061-A: Iterates graph.nodes_by_kind(REQUIREMENT)."""
         pytest.importorskip("mcp")
@@ -193,6 +197,7 @@ class TestSearch:
         assert len(results) >= 1
         assert any(r["id"] == "REQ-p00001" for r in results)
 
+    # Verifies: REQ-d00061-B
     def test_REQ_d00061_B_field_parameter_id(self, sample_graph):
         """REQ-d00061-B: Supports field='id' for ID search."""
         pytest.importorskip("mcp")
@@ -203,6 +208,7 @@ class TestSearch:
         assert len(results) == 1
         assert results[0]["id"] == "REQ-p00001"
 
+    # Verifies: REQ-d00061-B
     def test_REQ_d00061_B_field_parameter_title(self, sample_graph):
         """REQ-d00061-B: Supports field='title' for title search."""
         pytest.importorskip("mcp")
@@ -213,6 +219,7 @@ class TestSearch:
         assert len(results) == 1
         assert results[0]["id"] == "REQ-o00001"
 
+    # Verifies: REQ-d00061-C
     def test_REQ_d00061_C_regex_search(self, sample_graph):
         """REQ-d00061-C: Supports regex=True for regex matching."""
         pytest.importorskip("mcp")
@@ -226,6 +233,7 @@ class TestSearch:
         assert "REQ-p00001" in ids
         assert "REQ-d00001" in ids
 
+    # Verifies: REQ-d00061-D
     def test_REQ_d00061_D_returns_summaries(self, sample_graph):
         """REQ-d00061-D: Returns requirement summaries, not full objects."""
         pytest.importorskip("mcp")
@@ -253,6 +261,7 @@ class TestSearch:
 class TestGetRequirement:
     """Tests for get_requirement() tool."""
 
+    # Verifies: REQ-d00062-A
     def test_REQ_d00062_A_uses_find_by_id(self, sample_graph):
         """REQ-d00062-A: Uses graph.find_by_id() for O(1) lookup."""
         pytest.importorskip("mcp")
@@ -272,6 +281,7 @@ class TestGetRequirement:
 
         assert "REQ-p00001" in find_calls
 
+    # Verifies: REQ-d00062-B
     def test_REQ_d00062_B_returns_node_fields(self, sample_graph):
         """REQ-d00062-B: Returns id, title, level, status, hash as top-level fields."""
         pytest.importorskip("mcp")
@@ -285,6 +295,7 @@ class TestGetRequirement:
         assert result["status"] == "Active"
         assert result["hash"] == "abc12345"
 
+    # Verifies: REQ-d00062-C
     def test_REQ_d00062_C_returns_assertions(self, sample_graph):
         """REQ-d00062-C: Returns assertions from iter_children()."""
         pytest.importorskip("mcp")
@@ -300,6 +311,7 @@ class TestGetRequirement:
         assert "A" in labels
         assert "B" in labels
 
+    # Verifies: REQ-d00062-D
     def test_REQ_d00062_D_returns_relationships(self, sample_graph):
         """REQ-d00062-D: Returns requirement children in children list."""
         pytest.importorskip("mcp")
@@ -310,6 +322,7 @@ class TestGetRequirement:
         assert "children" in result
         assert any(c["id"] == "REQ-o00001" for c in result["children"])
 
+    # Verifies: REQ-d00062-F
     def test_REQ_d00062_F_returns_error_for_missing(self, sample_graph):
         """REQ-d00062-F: Returns error for non-existent requirements."""
         pytest.importorskip("mcp")
@@ -329,6 +342,7 @@ class TestGetRequirement:
 class TestGetHierarchy:
     """Tests for get_hierarchy() tool."""
 
+    # Verifies: REQ-d00063-A
     def test_REQ_d00063_A_returns_ancestors(self, sample_graph):
         """REQ-d00063-A: Returns ancestors by walking iter_parents()."""
         pytest.importorskip("mcp")
@@ -343,6 +357,7 @@ class TestGetHierarchy:
         assert "REQ-o00001" in ancestor_ids
         assert "REQ-p00001" in ancestor_ids
 
+    # Verifies: REQ-d00063-B
     def test_REQ_d00063_B_returns_children(self, sample_graph):
         """REQ-d00063-B: Returns children from iter_children()."""
         pytest.importorskip("mcp")
@@ -356,6 +371,7 @@ class TestGetHierarchy:
         child_ids = [c["id"] for c in children]
         assert "REQ-o00001" in child_ids
 
+    # Verifies: REQ-d00063-D
     def test_REQ_d00063_D_returns_summaries(self, sample_graph):
         """REQ-d00063-D: Returns node summaries (id, title, level)."""
         pytest.importorskip("mcp")
@@ -371,6 +387,7 @@ class TestGetHierarchy:
             # Should NOT have full details
             assert "assertions" not in ancestor
 
+    # Verifies: REQ-d00063-E
     def test_REQ_d00063_E_handles_multiple_parents(self, sample_graph):
         """REQ-d00063-E: Handles DAG structure with multiple parents."""
         pytest.importorskip("mcp")
@@ -429,26 +446,6 @@ class TestRefreshGraph:
             result = rebuild_shared_graph(state)
 
             mock_build.assert_called_once()
-            assert result["success"] is True
-            assert state["graph"] is sample_graph
-
-    # Verifies: REQ-o00060-B
-    def test_refresh_full_clears_caches(self, sample_graph, tmp_path):
-        """Refresh with full=True should rebuild everything from disk."""
-        pytest.importorskip("mcp")
-        from elspais.mcp.shared_state import SharedServerState, rebuild_shared_graph
-
-        state = SharedServerState({"working_dir": tmp_path})
-
-        with (
-            patch("elspais.config.get_config") as mock_config,
-            patch("elspais.graph.factory.build_graph") as mock_build,
-        ):
-            mock_config.return_value = {}
-            mock_build.return_value = sample_graph
-
-            result = rebuild_shared_graph(state, full=True)
-
             assert result["success"] is True
             assert state["graph"] is sample_graph
 
@@ -525,7 +522,7 @@ class TestRefreshGraph:
                 'implements = ["prd"]\n'
             )
 
-        result2 = rebuild_shared_graph(state, full=True)
+        result2 = rebuild_shared_graph(state)
         assert result2["success"] is True
         graph2 = state["graph"]
         assert graph2.find_by_id("REQ-d00001") is not None
@@ -605,7 +602,7 @@ class TestRefreshGraphConfigError:
         assert live_graph.find_by_id("REQ-p00001") is not None
 
         config_path.write_text(_BROKEN_CONFIG)
-        result = rebuild_shared_graph(state, full=True)
+        result = rebuild_shared_graph(state)
 
         # REQ-p00015-B: the unapplied refresh is reported, with its cause.
         assert result["success"] is False
@@ -736,6 +733,7 @@ class TestRefreshGraphFailedDirectorySwitch:
 class TestGetWorkspaceInfo:
     """Tests for get_workspace_info() tool."""
 
+    # Verifies: REQ-o00061-A
     def test_REQ_o00061_A_returns_repo_path(self, tmp_path):
         """REQ-o00061-A: Returns repository path."""
         pytest.importorskip("mcp")
@@ -746,6 +744,7 @@ class TestGetWorkspaceInfo:
         assert "repo_path" in result
         assert result["repo_path"] == str(tmp_path)
 
+    # Verifies: REQ-o00061-A
     def test_REQ_o00061_A_returns_project_name(self, tmp_path):
         """REQ-o00061-A: Returns a non-empty project name when no config present.
 
@@ -764,6 +763,7 @@ class TestGetWorkspaceInfo:
         assert isinstance(result["project_name"], str)
         assert result["project_name"].strip() != ""
 
+    # Verifies: REQ-o00061-A
     def test_REQ_o00061_A_returns_config_summary(self, tmp_path):
         """REQ-o00061-A: Returns configuration summary."""
         pytest.importorskip("mcp")
@@ -777,6 +777,7 @@ class TestGetWorkspaceInfo:
         assert "spec_directories" in summary
         assert "testing_enabled" in summary
 
+    # Verifies: REQ-o00061-D
     def test_REQ_o00061_D_reads_from_config_file(self, tmp_path):
         """REQ-o00061-D: Reads configuration from unified config system."""
         pytest.importorskip("mcp")
@@ -784,7 +785,7 @@ class TestGetWorkspaceInfo:
 
         # Create a config file
         config_content = """
-version = 3
+version = 5
 [project]
 name = "TestProject"
 namespace = "TST"
@@ -800,6 +801,7 @@ namespace = "TST"
 
     # ── Detail profile tests ────────────────────────────────────────────────
 
+    # Verifies: REQ-o00061-A
     def test_REQ_o00061_A_default_includes_version(self, tmp_path):
         """REQ-o00061-A: Default response includes elspais_version."""
         pytest.importorskip("mcp")
@@ -811,6 +813,7 @@ namespace = "TST"
         assert isinstance(result["elspais_version"], str)
         assert result["elspais_version"] != ""
 
+    # Verifies: REQ-o00061-A
     def test_REQ_o00061_A_default_includes_available_details(self, tmp_path):
         """REQ-o00061-A: Default response has available_details with all 8 profiles."""
         pytest.importorskip("mcp")
@@ -836,6 +839,7 @@ namespace = "TST"
             assert isinstance(desc, str), f"Profile '{name}' description should be a string"
             assert len(desc) > 0, f"Profile '{name}' description should not be empty"
 
+    # Verifies: REQ-o00061-A
     def test_REQ_o00061_A_default_includes_local_config(self, tmp_path):
         """REQ-o00061-A: config_summary has local_config key (False when no local file)."""
         pytest.importorskip("mcp")
@@ -847,6 +851,7 @@ namespace = "TST"
         assert "local_config" in result["config_summary"]
         assert result["config_summary"]["local_config"] is False
 
+    # Verifies: REQ-o00061-A
     def test_REQ_o00061_A_detail_echoed_in_response(self, tmp_path):
         """REQ-o00061-A: Calling with detail='testing' echoes detail in response."""
         pytest.importorskip("mcp")
@@ -854,7 +859,7 @@ namespace = "TST"
         from elspais.mcp.server import _get_workspace_info
 
         config_content = """
-version = 3
+version = 5
 
 [project]
 name = "TestProject"
@@ -889,7 +894,7 @@ directories = ["src"]
 enabled = true
 directories = ["tests"]
 file_patterns = ["test_*.py"]
-reference_keyword = "Validates"
+reference_keyword = "Verifies"
 """
         config_file = tmp_path / ".elspais.toml"
         config_file.write_text(config_content)
@@ -899,6 +904,7 @@ reference_keyword = "Validates"
 
         assert result["detail"] == "testing"
 
+    # Verifies: REQ-o00061-A
     def test_REQ_o00061_A_unknown_detail_returns_warning(self, tmp_path):
         """REQ-o00061-A: Unknown detail returns base response plus warning key."""
         pytest.importorskip("mcp")
@@ -914,6 +920,7 @@ reference_keyword = "Validates"
         assert "config_summary" in result
         assert "available_details" in result
 
+    # Verifies: REQ-o00061-A
     def test_REQ_o00061_A_testing_profile_includes_sections(self, tmp_path):
         """REQ-o00061-A: Testing profile includes id_patterns, assertion_format, testing."""
         pytest.importorskip("mcp")
@@ -921,7 +928,7 @@ reference_keyword = "Validates"
         from elspais.mcp.server import _get_workspace_info
 
         config_content = """
-version = 3
+version = 5
 
 [project]
 name = "TestProject"
@@ -956,7 +963,7 @@ directories = ["src"]
 enabled = true
 directories = ["tests"]
 file_patterns = ["test_*.py"]
-reference_keyword = "Validates"
+reference_keyword = "Verifies"
 """
         config_file = tmp_path / ".elspais.toml"
         config_file.write_text(config_content)
@@ -968,6 +975,7 @@ reference_keyword = "Validates"
         assert "assertion_format" in result
         assert "testing" in result
 
+    # Verifies: REQ-o00061-A
     def test_REQ_o00061_A_testing_profile_id_patterns_content(self, tmp_path):
         """REQ-o00061-A: id_patterns has prefix, template, types, examples."""
         pytest.importorskip("mcp")
@@ -975,7 +983,7 @@ reference_keyword = "Validates"
         from elspais.mcp.server import _get_workspace_info
 
         config_content = """
-version = 3
+version = 5
 
 [project]
 name = "TestProject"
@@ -1010,7 +1018,7 @@ directories = ["src"]
 enabled = true
 directories = ["tests"]
 file_patterns = ["test_*.py"]
-reference_keyword = "Validates"
+reference_keyword = "Verifies"
 """
         config_file = tmp_path / ".elspais.toml"
         config_file.write_text(config_content)
@@ -1026,6 +1034,7 @@ reference_keyword = "Validates"
         assert "product" in id_patterns["examples"]
         assert id_patterns["examples"]["product"] == "TST-p00001"
 
+    # Verifies: REQ-o00061-A
     def test_REQ_o00061_A_code_refs_profile_includes_sections(self, tmp_path):
         """REQ-o00061-A: code-refs profile has id_patterns, code_references."""
         pytest.importorskip("mcp")
@@ -1033,7 +1042,7 @@ reference_keyword = "Validates"
         from elspais.mcp.server import _get_workspace_info
 
         config_content = """
-version = 3
+version = 5
 
 [project]
 name = "TestProject"
@@ -1068,7 +1077,7 @@ directories = ["src"]
 enabled = true
 directories = ["tests"]
 file_patterns = ["test_*.py"]
-reference_keyword = "Validates"
+reference_keyword = "Verifies"
 """
         config_file = tmp_path / ".elspais.toml"
         config_file.write_text(config_content)
@@ -1080,6 +1089,7 @@ reference_keyword = "Validates"
         assert "code_references" in result
         assert "assertion_format" in result
 
+    # Verifies: REQ-o00061-A
     def test_REQ_o00061_A_code_refs_profile_content(self, tmp_path):
         """REQ-o00061-A: code_references has expected keys."""
         pytest.importorskip("mcp")
@@ -1087,7 +1097,7 @@ reference_keyword = "Validates"
         from elspais.mcp.server import _get_workspace_info
 
         config_content = """
-version = 3
+version = 5
 
 [project]
 name = "TestProject"
@@ -1122,7 +1132,7 @@ directories = ["src"]
 enabled = true
 directories = ["tests"]
 file_patterns = ["test_*.py"]
-reference_keyword = "Validates"
+reference_keyword = "Verifies"
 """
         config_file = tmp_path / ".elspais.toml"
         config_file.write_text(config_content)
@@ -1137,6 +1147,7 @@ reference_keyword = "Validates"
         assert "separators" not in code_refs
         assert code_refs["code_directories"] == ["src"]
 
+    # Verifies: REQ-o00061-A
     def test_REQ_o00061_A_coverage_profile_includes_sections(self, sample_graph, tmp_path):
         """REQ-o00061-A: Coverage profile has coverage_stats and associates."""
         pytest.importorskip("mcp")
@@ -1151,6 +1162,7 @@ reference_keyword = "Validates"
         assert "associates" in result
         assert result["detail"] == "coverage"
 
+    # Verifies: REQ-o00061-A
     def test_REQ_o00061_A_manager_profile_includes_sections(self, sample_graph, tmp_path):
         """REQ-o00061-A: Manager profile has coverage_stats, health, change_metrics."""
         pytest.importorskip("mcp")
@@ -1172,6 +1184,7 @@ reference_keyword = "Validates"
         assert "orphan_count" in health
         assert "broken_reference_count" in health
 
+    # Verifies: REQ-o00061-A
     def test_REQ_o00061_A_retrofit_profile_includes_all_config(self, tmp_path):
         """REQ-o00061-A: Retrofit profile has all config sections."""
         pytest.importorskip("mcp")
@@ -1179,7 +1192,7 @@ reference_keyword = "Validates"
         from elspais.mcp.server import _get_workspace_info
 
         config_content = """
-version = 3
+version = 5
 
 [project]
 name = "TestProject"
@@ -1214,7 +1227,7 @@ directories = ["src"]
 enabled = true
 directories = ["tests"]
 file_patterns = ["test_*.py"]
-reference_keyword = "Validates"
+reference_keyword = "Verifies"
 """
         config_file = tmp_path / ".elspais.toml"
         config_file.write_text(config_content)
@@ -1230,6 +1243,7 @@ reference_keyword = "Validates"
         assert "associates" in result
         assert result["detail"] == "retrofit"
 
+    # Verifies: REQ-o00061-A
     def test_REQ_o00061_A_worktree_profile_includes_associates_paths(self, tmp_path):
         """REQ-o00061-A: Worktree profile has associates section."""
         pytest.importorskip("mcp")
@@ -1237,7 +1251,7 @@ reference_keyword = "Validates"
         from elspais.mcp.server import _get_workspace_info
 
         config_content = """
-version = 3
+version = 5
 
 [project]
 name = "TestProject"
@@ -1272,7 +1286,7 @@ directories = ["src"]
 enabled = true
 directories = ["tests"]
 file_patterns = ["test_*.py"]
-reference_keyword = "Validates"
+reference_keyword = "Verifies"
 """
         config_file = tmp_path / ".elspais.toml"
         config_file.write_text(config_content)
@@ -1285,6 +1299,7 @@ reference_keyword = "Validates"
         assert "associates" in result
         assert result["detail"] == "worktree"
 
+    # Verifies: REQ-o00061-A
     def test_REQ_o00061_A_all_profile_includes_everything(self, sample_graph, tmp_path):
         """REQ-o00061-A: All profile has every section from every profile."""
         pytest.importorskip("mcp")
@@ -1292,7 +1307,7 @@ reference_keyword = "Validates"
         from elspais.mcp.server import _get_workspace_info
 
         config_content = """
-version = 3
+version = 5
 
 [project]
 name = "TestProject"
@@ -1327,7 +1342,7 @@ directories = ["src"]
 enabled = true
 directories = ["tests"]
 file_patterns = ["test_*.py"]
-reference_keyword = "Validates"
+reference_keyword = "Verifies"
 """
         config_file = tmp_path / ".elspais.toml"
         config_file.write_text(config_content)
@@ -1347,6 +1362,7 @@ reference_keyword = "Validates"
         assert "associates" in result
         assert result["detail"] == "all"
 
+    # Verifies: REQ-o00061-A
     def test_REQ_o00061_A_backward_compat_no_args(self, tmp_path):
         """REQ-o00061-A: Calling _get_workspace_info(tmp_path) with no other args works."""
         pytest.importorskip("mcp")
@@ -1373,6 +1389,7 @@ reference_keyword = "Validates"
 class TestGetProjectSummary:
     """Tests for get_project_summary() tool."""
 
+    # Verifies: REQ-o00061-B
     def test_REQ_o00061_B_returns_requirements_by_level(self, sample_graph):
         """REQ-o00061-B: Returns requirement counts by level."""
         pytest.importorskip("mcp")
@@ -1392,6 +1409,7 @@ class TestGetProjectSummary:
         assert level_counts["all"]["OPS"] == 1
         assert level_counts["all"]["DEV"] == 1
 
+    # Verifies: REQ-o00061-B
     def test_REQ_o00061_B_returns_coverage_stats(self, sample_graph):
         """REQ-o00061-B: Returns coverage statistics."""
         pytest.importorskip("mcp")
@@ -1406,6 +1424,7 @@ class TestGetProjectSummary:
         assert "partial_coverage" in coverage
         assert "no_coverage" in coverage
 
+    # Verifies: REQ-o00061-B
     def test_REQ_o00061_B_returns_change_metrics(self, sample_graph):
         """REQ-o00061-B: Returns change metrics."""
         pytest.importorskip("mcp")
@@ -1418,6 +1437,7 @@ class TestGetProjectSummary:
         assert "uncommitted" in changes
         assert "branch_changed" in changes
 
+    # Verifies: REQ-o00061-C
     def test_REQ_o00061_C_uses_aggregate_functions(self, sample_graph):
         """REQ-o00061-C: Derives statistics from shared aggregate functions
         (graph/aggregation.py tier_buckets + annotators count_by_* helpers)."""

@@ -89,13 +89,11 @@ Get current graph health and statistics.
       "has_broken_references": false
     }
 
-**refresh_graph(full, path, force, if_tip_mutation_id)**
+**refresh_graph(path, force, if_tip_mutation_id)**
 
 Force rebuild the graph from spec files.
 
   Parameters:
-    full (bool)              Accepted for compatibility; every rebuild is
-                             full, as no cache is retained between builds
     path (str)               Switch to a different project directory first
     force (bool)             If true, discard unsaved mutations and refresh
     if_tip_mutation_id (str) The mutation-log tip; required when force=true

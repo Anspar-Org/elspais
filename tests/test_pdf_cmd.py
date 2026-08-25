@@ -126,6 +126,7 @@ class TestResourcePathsCallSite:
     spec/ directory to render_pdf via resource_paths, de-duplicated.
     """
 
+    # Verifies: REQ-p00080-C
     def test_REQ_p00080_C_single_repo_forwards_root_and_spec(self, tmp_path):
         """A federation-of-one yields exactly two resource paths: the repo
         root and <repo_root>/spec, both fully resolved.
@@ -172,6 +173,7 @@ class TestResourcePathsCallSite:
         # Exactly the two expected entries for a single-repo federation.
         assert set(rp) == {expected_root, expected_spec}
 
+    # Verifies: REQ-p00080-C
     def test_REQ_p00080_C_multi_repo_forwards_all_repos_dedup(self, tmp_path):
         """Each repo in a multi-repo federation contributes its repo_root
         and <repo_root>/spec. Duplicates (across or within repos) are

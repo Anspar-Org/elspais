@@ -1,7 +1,7 @@
 # Named requirements configuration
 # Uses REQ-UserAuth, REQ-DataExport format
 
-version = 3
+version = 5
 
 [project]
 name = "named-reqs-fixture"

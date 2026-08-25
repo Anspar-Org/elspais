@@ -203,6 +203,7 @@ def test_REQ_d00258_I_all_zero_implemented_makes_tested_na_neutral():
     assert result["tested_color"] != _severity_color("off")
 
 
+# Verifies: REQ-d00258-F
 def test_REQ_d00258_F_expects_validation_still_reds_empty_uat_coverage():
     """expects_validation level: empty UAT-Covered is a real red gap, not neutral.
 

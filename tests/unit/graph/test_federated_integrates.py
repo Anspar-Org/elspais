@@ -81,6 +81,7 @@ def _outgoing_integrates(node):
 class TestIntegratesWiresEdge:
     """Validates REQ-d00252-D: wire an INTEGRATES edge from consumer to library."""
 
+    # Verifies: REQ-d00252-D
     def test_REQ_d00252_D_integrates_wires_cross_graph_edge(self, tmp_path):
         app_root = _copy_full(tmp_path)
         fed = _federate(app_root)
@@ -89,18 +90,21 @@ class TestIntegratesWiresEdge:
         assert len(edges) == 1
         assert edges[0].target.id == "LIB-d00007"
 
+    # Verifies: REQ-d00252-D
     def test_REQ_d00252_D_consumer_requirement_is_implemented(self, tmp_path):
         app_root = _copy_full(tmp_path)
         fed = _federate(app_root)
         app_req = fed._repos["app"].graph._index["APP-d00001"]
         assert direct_coverage_for(app_req) >= 1
 
+    # Verifies: REQ-d00252-D
     def test_REQ_d00252_D_library_node_unmodified(self, tmp_path):
         app_root = _copy_full(tmp_path)
         fed = _federate(app_root)
         lib_req = fed._repos["library"].graph._index["LIB-d00007"]
         assert "APP-d00001" not in render_node(lib_req)
 
+    # Verifies: REQ-d00252-D
     def test_REQ_d00252_D_assertion_suffix_target_wires_whole_req(self, tmp_path):
         """Validates REQ-d00252-D: an Integrates target with a library assertion
         suffix (LIB-d00007-A) resolves to the base REQ and wires one whole-REQ edge."""
@@ -119,6 +123,7 @@ class TestIntegratesWiresEdge:
 class TestIntegratesUnresolved:
     """Validates REQ-d00252-E: unresolved targets are soft or hard per claim."""
 
+    # Verifies: REQ-d00252-E
     def test_REQ_d00252_E_absent_associate_is_soft(self, tmp_path):
         # Copy only app/ so ../library does not exist: associate soft-fails.
         app_root = _copy_app_only(tmp_path)
@@ -128,6 +133,7 @@ class TestIntegratesUnresolved:
         assert len(matches) == 1
         assert matches[0].presumed_foreign is True
 
+    # Verifies: REQ-d00252-E
     def test_REQ_d00252_E_configured_but_missing_is_hard(self, tmp_path):
         app_root = _copy_full(tmp_path)
         spec = app_root / "spec" / "dev-app.md"
@@ -205,6 +211,7 @@ class TestIntegratesRefusedByReader:
 class TestIntegratesSameRepo:
     """Validates REQ-d00252-C: a same-repo target is an external-only violation."""
 
+    # Verifies: REQ-d00252-C
     def test_REQ_d00252_C_same_repo_target_is_error(self, tmp_path):
         # Add a second app REQ and point Integrates at it (same repo).
         app_root = _copy_full(tmp_path)
@@ -243,7 +250,7 @@ class TestIntegratesHierarchyLevels:
 
         _write(
             library / ".elspais.toml",
-            'version = 3\n[project]\nname = "library"\nnamespace = "LIB"\n' + _LEVELS_TOML,
+            'version = 5\n[project]\nname = "library"\nnamespace = "LIB"\n' + _LEVELS_TOML,
         )
         _write(
             library / "spec" / "prd.md",
@@ -255,7 +262,7 @@ class TestIntegratesHierarchyLevels:
 
         _write(
             app / ".elspais.toml",
-            'version = 3\n[project]\nname = "app"\nnamespace = "APP"\n'
+            'version = 5\n[project]\nname = "app"\nnamespace = "APP"\n'
             + _LEVELS_TOML
             + '[associates.library]\npath = "../library"\nnamespace = "LIB"\n',
         )
@@ -275,6 +282,7 @@ class TestIntegratesHierarchyLevels:
             scan_tests=False,
         )
 
+    # Verifies: REQ-d00252-D
     def test_REQ_d00252_D_integrates_edge_excluded_from_hierarchy_levels(self, tmp_path):
         """The INTEGRATES edge (consumer DEV -> library PRD) must NOT be
         counted as a hierarchy parent. Fails on the unfixed code because the
@@ -319,7 +327,7 @@ class TestIntegratesHierarchyLevels:
         # Associate A holds the CONSUMER requirement that Integrates: B's REQ.
         _write(
             assoc_a / ".elspais.toml",
-            'version = 3\n[project]\nname = "assoc_a"\nnamespace = "AAA"\n' + _LEVELS_TOML,
+            'version = 5\n[project]\nname = "assoc_a"\nnamespace = "AAA"\n' + _LEVELS_TOML,
         )
         _write(
             assoc_a / "spec" / "dev.md",
@@ -333,7 +341,7 @@ class TestIntegratesHierarchyLevels:
         # Associate B holds the LIBRARY requirement that A integrates.
         _write(
             assoc_b / ".elspais.toml",
-            'version = 3\n[project]\nname = "assoc_b"\nnamespace = "BBB"\n' + _LEVELS_TOML,
+            'version = 5\n[project]\nname = "assoc_b"\nnamespace = "BBB"\n' + _LEVELS_TOML,
         )
         _write(
             assoc_b / "spec" / "prd.md",
@@ -346,7 +354,7 @@ class TestIntegratesHierarchyLevels:
         # Only the ROOT may declare associates (FederationError otherwise).
         _write(
             root / ".elspais.toml",
-            'version = 3\n[project]\nname = "root"\nnamespace = "ROOT"\n'
+            'version = 5\n[project]\nname = "root"\nnamespace = "ROOT"\n'
             + _LEVELS_TOML
             + '[associates.assoc_a]\npath = "../assoc_a"\nnamespace = "AAA"\n'
             + '[associates.assoc_b]\npath = "../assoc_b"\nnamespace = "BBB"\n',
@@ -367,6 +375,7 @@ class TestIntegratesHierarchyLevels:
             scan_tests=False,
         )
 
+    # Verifies: REQ-d00252-C
     def test_REQ_d00252_C_integrates_wires_single_edge_no_cycle(self, tmp_path):
         """CUR-1521 regression: a consumer in an ASSOCIATE repo that
         ``Integrates:`` a requirement in another associate must produce exactly
@@ -400,6 +409,7 @@ class TestIntegratesHierarchyLevels:
         ]
         assert leftover == [], f"resolved Integrates target left a broken ref: {leftover}"
 
+    # Verifies: REQ-d00252-D
     def test_REQ_d00252_D_genuine_level_violation_still_detected(self, tmp_path):
         """CONTROL: a real same-repo level violation (a PRD requirement that
         ``Implements:`` a DEV requirement) must STILL be reported. Proves the
@@ -407,7 +417,7 @@ class TestIntegratesHierarchyLevels:
         repo = tmp_path / "repo"
         _write(
             repo / ".elspais.toml",
-            'version = 3\n[project]\nname = "repo"\nnamespace = "REPO"\n' + _LEVELS_TOML,
+            'version = 5\n[project]\nname = "repo"\nnamespace = "REPO"\n' + _LEVELS_TOML,
         )
         _write(
             repo / "spec" / "reqs.md",
@@ -478,7 +488,7 @@ class TestMultiAssertionCrossRepoReference:
 
         _write(
             library / ".elspais.toml",
-            'version = 3\n[project]\nname = "library"\nnamespace = "LIB"\n' + levels,
+            'version = 5\n[project]\nname = "library"\nnamespace = "LIB"\n' + levels,
         )
         _write(
             library / "spec" / "prd.md",
@@ -492,7 +502,7 @@ class TestMultiAssertionCrossRepoReference:
 
         _write(
             app / ".elspais.toml",
-            'version = 3\n[project]\nname = "app"\nnamespace = "APP"\n'
+            'version = 5\n[project]\nname = "app"\nnamespace = "APP"\n'
             + levels
             + '[associates.library]\npath = "../library"\nnamespace = "LIB"\n',
         )

@@ -303,6 +303,7 @@ class TestGuardTableCoversEveryRoute:
     someone remembered to list. The surface is read from ``app.py``.
     """
 
+    # Verifies: REQ-o00062-O
     def test_REQ_o00062_O_route_scan_finds_the_mutation_surface(self):
         """REQ-o00062-O: A silently empty scan would make coverage vacuous."""
         routes = _registered_mutation_routes()
@@ -311,6 +312,7 @@ class TestGuardTableCoversEveryRoute:
         # The multi-line Route(...) registration must not be missed.
         assert "/api/mutate/requirement/delete" in routes
 
+    # Verifies: REQ-o00062-O
     def test_REQ_o00062_O_every_registered_route_has_a_guard_case(self):
         """REQ-o00062-O: A new mutation route with no guard case fails loudly."""
         covered = {case.path for case in ROUTE_CASES} | {UNDO_ROUTE}
@@ -322,6 +324,7 @@ class TestGuardTableCoversEveryRoute:
             "Add a RouteCase (and the guard in routes_api.py) before shipping."
         )
 
+    # Verifies: REQ-o00062-O
     def test_REQ_o00062_O_guard_cases_name_real_routes(self):
         """REQ-o00062-O: A case for a route that no longer exists is dead weight
         that would otherwise mask the loss of a guarded route."""
@@ -346,6 +349,7 @@ class TestHttpMutationRoutesRequireAVersion:
     blind write, which is the failure being prevented.
     """
 
+    # Verifies: REQ-o00062-I
     def test_REQ_o00062_I_stale_token_is_rejected_with_409(self, client, case: RouteCase):
         """REQ-o00062-I: A stale token blocks the mutation on every route."""
         body = case.with_tokens(lambda _node_id: BOGUS_VERSION)
@@ -355,6 +359,7 @@ class TestHttpMutationRoutesRequireAVersion:
         assert resp.status_code == 409, f"{case.path} -> {resp.status_code}: {resp.text}"
         assert resp.json()["success"] is False
 
+    # Verifies: REQ-o00062-I
     def test_REQ_o00062_I_missing_token_is_rejected_with_409(self, client, case: RouteCase):
         """REQ-o00062-I: Omitting the precondition is not a way around it."""
         resp = client.post(case.path, json=dict(case.payload))
@@ -362,6 +367,7 @@ class TestHttpMutationRoutesRequireAVersion:
         assert resp.status_code == 409, f"{case.path} -> {resp.status_code}: {resp.text}"
         assert resp.json()["success"] is False
 
+    # Verifies: REQ-o00062-J
     def test_REQ_o00062_J_conflict_body_carries_the_reconciliation_payload(
         self, client, case: RouteCase
     ):
@@ -379,6 +385,7 @@ class TestHttpMutationRoutesRequireAVersion:
         assert isinstance(payload["current_state"], dict)
         assert "error" not in payload["current_state"]
 
+    # Verifies: REQ-o00062-I
     def test_REQ_o00062_I_rejected_route_changed_nothing(
         self, client, app_state, version_of, case: RouteCase
     ):
@@ -392,6 +399,7 @@ class TestHttpMutationRoutesRequireAVersion:
         assert _graph_fingerprint(app_state) == before_fingerprint
         assert {node_id: version_of(node_id) for node_id in before_versions} == before_versions
 
+    # Verifies: REQ-o00062-L
     def test_REQ_o00062_L_absent_node_is_reported_distinctly(self, client, case: RouteCase):
         """REQ-o00062-L: Naming a node that does not exist is not a version
         conflict -- retrying with a fresh token cannot fix it."""
@@ -423,6 +431,7 @@ class TestHttpMutationRoutesReturnTheNewVersion:
     them; the current token is accepted and the resulting one comes back.
     """
 
+    # Verifies: REQ-o00062-K
     def test_REQ_o00062_K_current_token_is_accepted(self, client, version_of, case: RouteCase):
         """REQ-o00062-K: The live token is the one that works."""
         body = case.with_tokens(version_of)
@@ -432,6 +441,7 @@ class TestHttpMutationRoutesReturnTheNewVersion:
         assert resp.status_code == 200, f"{case.path} -> {resp.status_code}: {resp.text}"
         assert resp.json()["success"] is True
 
+    # Verifies: REQ-o00062-K
     def test_REQ_o00062_K_success_reports_the_resulting_version(
         self, client, version_of, case: RouteCase
     ):
@@ -468,6 +478,7 @@ class TestHttpConflictIsTheMcpConflict:
     detectable -- a hand-rolled body will not match ``_guard_version`` output.
     """
 
+    # Verifies: REQ-o00062-O
     def test_REQ_o00062_O_conflict_body_is_identical_to_the_mcp_tool(
         self, client, mcp_tools, version_of
     ):
@@ -483,6 +494,7 @@ class TestHttpConflictIsTheMcpConflict:
 
         assert http_body == mcp_body
 
+    # Verifies: REQ-o00062-O
     def test_REQ_o00062_O_edge_conflict_body_is_identical_to_the_mcp_tool(self, client, mcp_tools):
         """REQ-o00062-O: Holds for a relationship mutation too, where the
         guarded node is the referring source rather than the payload's only id."""
@@ -531,6 +543,7 @@ class TestUndoRouteGuardsTheMutationLogTip:
         )
         assert resp.status_code == 200, resp.text
 
+    # Verifies: REQ-o00062-N
     def test_REQ_o00062_N_stale_tip_is_rejected_with_a_log_conflict(self, client):
         """REQ-o00062-N: A tip the log never held is refused -- and refused as a
         history conflict, not a node version conflict."""
@@ -539,6 +552,7 @@ class TestUndoRouteGuardsTheMutationLogTip:
         assert resp.status_code == 409, f"{resp.status_code}: {resp.text}"
         assert resp.json()["code"] == "mutation_log_conflict"
 
+    # Verifies: REQ-o00062-N
     def test_REQ_o00062_N_conflict_body_carries_the_unseen_entries(self, client, version_of):
         """REQ-o00062-N: The caller is told which pending work it had not seen,
         because that is what it was about to discard."""
@@ -551,6 +565,7 @@ class TestUndoRouteGuardsTheMutationLogTip:
         assert payload["current_tip"] not in (None, BOGUS_MUTATION_ID)
         assert len(payload["unseen"]) == 1
 
+    # Verifies: REQ-o00062-N
     def test_REQ_o00062_N_missing_tip_is_rejected(self, client, version_of):
         """REQ-o00062-N: An omitted tip while work is pending is a conflict --
         the wire spelling of "I believe nothing is pending" is wrong here."""
@@ -561,6 +576,7 @@ class TestUndoRouteGuardsTheMutationLogTip:
         assert resp.status_code == 409, f"{resp.status_code}: {resp.text}"
         assert resp.json()["code"] == "mutation_log_conflict"
 
+    # Verifies: REQ-o00062-N
     def test_REQ_o00062_N_rejected_undo_leaves_the_log_intact(self, client, app_state, version_of):
         """REQ-o00062-N: The refused undo unwound nothing."""
         self._apply_one_mutation(client, version_of)
@@ -570,6 +586,7 @@ class TestUndoRouteGuardsTheMutationLogTip:
 
         assert len(app_state.graph.mutation_log) == before
 
+    # Verifies: REQ-o00062-N
     def test_REQ_o00062_N_current_tip_is_accepted(self, client, app_state, version_of):
         """REQ-o00062-N: Naming the real tip unwinds exactly that mutation."""
         self._apply_one_mutation(client, version_of)
@@ -594,6 +611,7 @@ class TestTokenFromTheReadSurfaceIsAccepted:
     one the mutation route demands, the loop does not close for the GUI.
     """
 
+    # Verifies: REQ-o00062-K
     def test_REQ_o00062_K_token_from_api_node_drives_a_mutation(self, client):
         """REQ-o00062-K: Read a node over HTTP, mutate it with what you read."""
         read = client.get(f"/api/node/{REQ}").json()
@@ -607,6 +625,7 @@ class TestTokenFromTheReadSurfaceIsAccepted:
         assert resp.status_code == 200, resp.text
         assert resp.json()["version"] != read["version"]
 
+    # Verifies: REQ-o00062-K
     def test_REQ_o00062_K_second_mutation_can_use_the_returned_token(self, client):
         """REQ-o00062-K: A sequence of edits needs no re-read between them."""
         first = client.post(
@@ -670,6 +689,7 @@ class TestHistoryRoutesRequireTheMutationLogTip:
     same ``mutation_log_conflict`` body MCP produces.
     """
 
+    # Verifies: REQ-o00062-N
     def test_REQ_o00062_N_stale_tip_is_rejected_with_409(self, client, version_of, route: str):
         """REQ-o00062-N: A tip the log never held blocks the operation."""
         _seed_pending_mutation(client, version_of)
@@ -679,6 +699,7 @@ class TestHistoryRoutesRequireTheMutationLogTip:
         assert resp.status_code == 409, f"{route} -> {resp.status_code}: {resp.text}"
         assert resp.json()["code"] == "mutation_log_conflict"
 
+    # Verifies: REQ-o00062-N
     def test_REQ_o00062_N_absent_tip_while_work_is_pending_is_rejected(
         self, client, version_of, route: str
     ):
@@ -691,6 +712,7 @@ class TestHistoryRoutesRequireTheMutationLogTip:
         assert resp.status_code == 409, f"{route} -> {resp.status_code}: {resp.text}"
         assert resp.json()["code"] == "mutation_log_conflict"
 
+    # Verifies: REQ-o00062-N
     def test_REQ_o00062_N_conflict_body_matches_the_mcp_rejection(
         self, client, app_state, version_of, route: str
     ):
@@ -707,6 +729,7 @@ class TestHistoryRoutesRequireTheMutationLogTip:
         assert [entry["id"] for entry in payload["unseen"]] == [tip]
         assert isinstance(payload["hint"], str) and payload["hint"].strip()
 
+    # Verifies: REQ-o00062-N
     def test_REQ_o00062_N_rejection_leaves_the_pending_work_intact(
         self, client, app_state, version_of, route: str
     ):
@@ -721,6 +744,7 @@ class TestHistoryRoutesRequireTheMutationLogTip:
         assert len(app_state.graph.mutation_log) == 1
         assert app_state.graph.find_by_id(REQ).get_label() == PENDING_TITLE
 
+    # Verifies: REQ-o00062-N
     def test_REQ_o00062_N_current_tip_is_accepted(self, client, app_state, version_of, route: str):
         """REQ-o00062-N: A caller that has seen the log may proceed."""
         _seed_pending_mutation(client, version_of)
@@ -731,6 +755,7 @@ class TestHistoryRoutesRequireTheMutationLogTip:
         assert resp.status_code == 200, f"{route} -> {resp.status_code}: {resp.text}"
         assert resp.json()["success"] is True
 
+    # Verifies: REQ-o00062-N
     def test_REQ_o00062_N_empty_tip_with_nothing_pending_proceeds(self, client, route: str):
         """REQ-o00062-N: The no-op case must not require a read -- "" matches
         an empty log and the operation runs."""
@@ -747,6 +772,7 @@ class TestHistoryRouteRejectionEffects:
     damage: save in bytes on disk, revert and reload in discarded log entries.
     """
 
+    # Verifies: REQ-o00062-N
     def test_REQ_o00062_N_rejected_save_leaves_the_spec_files_byte_identical(
         self, client, viewer_project, version_of
     ):
@@ -761,6 +787,7 @@ class TestHistoryRouteRejectionEffects:
         # No safety branch either: a rejected save must leave no git artifact.
         assert not (viewer_project / ".git").exists()
 
+    # Verifies: REQ-o00062-N
     def test_REQ_o00062_N_rejected_revert_keeps_the_pending_log(
         self, client, app_state, version_of
     ):
@@ -772,6 +799,7 @@ class TestHistoryRouteRejectionEffects:
         assert len(app_state.graph.mutation_log) == 1
         assert app_state.graph.find_by_id(REQ).get_label() == PENDING_TITLE
 
+    # Verifies: REQ-o00062-N
     def test_REQ_o00062_N_rejected_reload_keeps_the_pending_log(
         self, client, app_state, version_of
     ):
@@ -783,6 +811,7 @@ class TestHistoryRouteRejectionEffects:
         assert len(app_state.graph.mutation_log) == 1
         assert app_state.graph.find_by_id(REQ).get_label() == PENDING_TITLE
 
+    # Verifies: REQ-o00062-N
     def test_REQ_o00062_N_accepted_save_persists_the_pending_edit(
         self, client, app_state, viewer_project, version_of
     ):
@@ -797,6 +826,7 @@ class TestHistoryRouteRejectionEffects:
         assert resp.status_code == 200, resp.text
         assert PENDING_TITLE in (viewer_project / "spec" / "dev-impl.md").read_text()
 
+    # Verifies: REQ-o00062-N
     def test_REQ_o00062_N_accepted_revert_discards_the_pending_edit(
         self, client, app_state, version_of
     ):
@@ -809,6 +839,7 @@ class TestHistoryRouteRejectionEffects:
         assert len(app_state.graph.mutation_log) == 0
         assert app_state.graph.find_by_id(REQ).get_label() != PENDING_TITLE
 
+    # Verifies: REQ-o00062-N
     def test_REQ_o00062_N_accepted_reload_discards_the_pending_edit(
         self, client, app_state, version_of
     ):
@@ -821,6 +852,7 @@ class TestHistoryRouteRejectionEffects:
         assert len(app_state.graph.mutation_log) == 0
         assert app_state.graph.find_by_id(REQ).get_label() != PENDING_TITLE
 
+    # Verifies: REQ-o00062-N
     def test_REQ_o00062_N_second_writer_blind_save_sees_the_first_writers_entry(
         self, client, app_state, version_of
     ):
@@ -863,6 +895,7 @@ class TestAutoRefreshDoesNotDiscardPendingMutations:
         stat = target.stat()
         os.utime(target, (stat.st_atime, stat.st_mtime + 5.0))
 
+    # Verifies: REQ-o00062-N
     def test_REQ_o00062_N_pending_mutations_block_the_auto_rebuild(self, app_state, viewer_project):
         """REQ-o00062-N: The graph object and the pending entry both survive
         an mtime change while work is pending."""
@@ -880,6 +913,7 @@ class TestAutoRefreshDoesNotDiscardPendingMutations:
         assert len(app_state.graph.mutation_log) == 1
         assert app_state.graph.find_by_id(REQ).get_label() == PENDING_TITLE
 
+    # Verifies: REQ-o00062-N
     def test_REQ_o00062_N_clean_log_still_admits_the_auto_rebuild(self, app_state, viewer_project):
         """REQ-o00062-N: With nothing pending there is nothing to protect --
         the same mtime change does trigger the rebuild."""
@@ -915,6 +949,7 @@ class TestNotEveryRefusedSaveIsAConflict:
     save tool enforces is the rule enforced here.
     """
 
+    # Verifies: REQ-o00062-O
     def test_REQ_o00062_O_stale_tip_is_still_the_conflict_it_was(
         self, client, app_state, version_of
     ):
@@ -935,6 +970,7 @@ class TestNotEveryRefusedSaveIsAConflict:
         assert payload["current_tip"] == tip
         assert len(app_state.graph.mutation_log) == 1
 
+    # Verifies: REQ-o00062-O
     def test_REQ_o00062_O_missing_changelog_reason_is_not_a_conflict(
         self, client, app_state, version_of
     ):
@@ -952,6 +988,7 @@ class TestNotEveryRefusedSaveIsAConflict:
         assert "message" in payload["error"], payload
         assert len(app_state.graph.mutation_log) == 1, "the refused save discarded the work"
 
+    # Verifies: REQ-o00062-O
     def test_REQ_o00062_O_write_failure_is_not_a_conflict(
         self, client, app_state, viewer_project, version_of, monkeypatch
     ):
@@ -980,6 +1017,7 @@ class TestNotEveryRefusedSaveIsAConflict:
             "a save that could not write also destroyed the work it was holding"
         )
 
+    # Verifies: REQ-o00062-O
     def test_REQ_o00062_O_the_save_that_answered_the_rule_succeeds(
         self, client, app_state, viewer_project, version_of
     ):

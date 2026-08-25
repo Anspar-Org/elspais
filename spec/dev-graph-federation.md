@@ -414,6 +414,8 @@ J. Where a reference is spelled in a way the grammar does not accept, the report
 
 K. A *Traceability* keyword SHALL be read only in a comment introduced by the pattern associated with the language of the file it appears in.
 
+L. A *Traceability* keyword introducing a reference list, as E and G require, SHALL be the only form that declares a relationship. Nothing else about a source file SHALL declare one — in particular neither the name of the declaration an annotation sits above, nor a line beneath a keyword line that H does not continue.
+
 ### Rationale
 
 Cross-repository credit is what multi-repository *Traceability* is for: a sponsor repository's tests verifying a platform requirement is the ordinary case, not an exotic one. The obligations here are separated because each fails independently and each fails silently. Computing coverage before the federation is wired starves the computation of the very edges that cross repositories (A). Wiring those edges in a shape the coverage computation does not read starves it a second time, so ordering alone is not sufficient (B). Refusing to recognise a foreign identifier in a code or test comment drops the evidence before any edge exists at all (C), which bites hardest because annotating code and tests is where cross-repository evidence is most naturally authored.
@@ -434,6 +436,8 @@ H exists because a list long enough to need a second line is ordinary, and a for
 
 Two lines are excluded from continuing a list, and both exclusions keep continuation from overriding something that was already decided. A line whose first content is a keyword is a declaration, and E makes that the whole of what opens a reference list; letting a separator on the line above capture it would take a plainly intended declaration, read it as one item holding spaces, and lose every reference in it. A line holding no content cannot be where the list resumes either, because reading past it would mean looking further than the line that follows — and a lookahead that skips is a lookahead with no bound, which is how a list reaches content written far below it and never meant for it.
 
+L closes the set E opens. E settles where a keyword counts and G settles what it introduces, but neither excludes a mechanism that reads a reference with no keyword at all. Two such mechanisms had accumulated: a citation read out of a test function's name, and a list gathered from the indented lines beneath a header. Each is a second grammar with its own rules about case, punctuation and adjacency, and an author who spells a citation the way one of them accepts learns nothing about the other — while every surface that reports on annotations has to know all of them or be quietly wrong. One form is also the only arrangement a reader can check by eye: a relationship is present exactly where a keyword is written, so a file's declarations can be counted without knowing which convention its author had in mind. Nothing a retired form could carry is beyond the surviving one, so what L removes is choice rather than reach.
+
 The complementary negative rule — that federation membership alone credits nothing — belongs to the federation role model and is not restated here. Together the two bound the behaviour from both sides: coverage crosses a boundary exactly where a *Traceability* edge crosses it, and nowhere else.
 
 Coverage computed over a wired federation is idempotent, so a surface may recompute without double-counting.
@@ -442,7 +446,9 @@ A concurrency version is derived from a node's content and its outgoing *Traceab
 
 ### Changelog
 
+- 2026-08-24 | a7f382b1 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-24 | 8f0b55df | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-24 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-66: a keyword introducing a reference list is the only form that declares a relationship (L)
 - 2026-08-24 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-66: a keyword is read only in the comment pattern its file's language uses
 - 2026-08-19 | 4a7dd275 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-15 | af36a1b3 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -457,7 +463,7 @@ A concurrency version is derived from a node's content and its outgoing *Traceab
 - 2026-08-08 | bd05142f | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 - 2026-08-09 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: cross-repository coverage credit
 
-*End* *Cross-Repository Coverage Credit* | **Hash**: 8f0b55df
+*End* *Cross-Repository Coverage Credit* | **Hash**: a7f382b1
 ---
 
 ## REQ-d00275: Whose Configuration Governs a Federated Answer

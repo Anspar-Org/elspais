@@ -90,6 +90,7 @@ def build_graph_with_child_implementing_assertion() -> TraceGraph:
 class TestRenameAssertion:
     """Tests for TraceGraph.rename_assertion()."""
 
+    # Verifies: REQ-o00062-B
     def test_REQ_o00062_B_rename_updates_assertion_id_and_label(self):
         """REQ-o00062-B: Basic rename updates assertion ID and label."""
         graph = build_graph_with_assertions()
@@ -212,6 +213,7 @@ class TestRenameAssertion:
 class TestUpdateAssertion:
     """Tests for TraceGraph.update_assertion()."""
 
+    # Verifies: REQ-o00062-B
     def test_REQ_o00062_B_update_assertion_text(self):
         """REQ-o00062-B: Basic text update works."""
         graph = build_graph_with_assertions()
@@ -328,6 +330,7 @@ class TestUpdateAssertion:
 class TestAddAssertion:
     """Tests for TraceGraph.add_assertion()."""
 
+    # Verifies: REQ-o00062-B
     def test_REQ_o00062_B_add_creates_new_assertion(self):
         """REQ-o00062-B: Basic add creates a new assertion."""
         graph = build_graph_with_assertions()
@@ -397,6 +400,7 @@ class TestAddAssertion:
         assert graph.find_by_id("REQ-p00001-D") is None
         assert len(graph.mutation_log) == 0
 
+    # Verifies: REQ-o00062-S
     def test_REQ_o00062_S_exhausted_series_refuses_the_add(self):
         """REQ-o00062-S: a requirement filled to the end of its label series
         refuses the next add and creates no out-of-series label."""
@@ -479,6 +483,7 @@ class TestAddAssertion:
 class TestDeleteAssertion:
     """Tests for TraceGraph.delete_assertion()."""
 
+    # Verifies: REQ-o00062-B
     def test_REQ_o00062_B_delete_removes_and_preserves(self):
         """REQ-o00062-B: Basic delete removes assertion from index (with default compact)."""
         graph = build_graph_with_assertions()

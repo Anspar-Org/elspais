@@ -101,6 +101,7 @@ def _build_graph_with_spec(tmp_path: Path) -> tuple[FederatedGraph, Path, GraphN
 class TestRenderSaveDirtyFiles:
     """Validates REQ-d00132-A: save identifies dirty files and renders to disk."""
 
+    # Verifies: REQ-d00132-A
     def test_REQ_d00132_A_change_status_saves(self, tmp_path: Path):
         """change_status mutation triggers render-save of the file."""
         from elspais.graph.render import render_save
@@ -117,6 +118,7 @@ class TestRenderSaveDirtyFiles:
         assert "**Status**: Draft" in content
         assert "## REQ-t00001: Test Requirement" in content
 
+    # Verifies: REQ-d00132-A
     def test_REQ_d00132_A_update_title_saves(self, tmp_path: Path):
         """update_title mutation triggers render-save of the file."""
         from elspais.graph.render import render_save
@@ -130,6 +132,7 @@ class TestRenderSaveDirtyFiles:
         content = spec_file.read_text(encoding="utf-8")
         assert "## REQ-t00001: New Title" in content
 
+    # Verifies: REQ-d00132-A
     def test_REQ_d00132_A_update_assertion_saves(self, tmp_path: Path):
         """update_assertion mutation saves updated text."""
         from elspais.graph.render import render_save
@@ -144,6 +147,7 @@ class TestRenderSaveDirtyFiles:
         assert "B. The system SHALL do NEW thing." in content
         assert "A. The system SHALL do something." in content
 
+    # Verifies: REQ-d00132-A
     def test_REQ_d00132_A_delete_assertion_saves(self, tmp_path: Path):
         """delete_assertion mutation removes assertion from rendered file."""
         from elspais.graph.render import render_save
@@ -158,6 +162,7 @@ class TestRenderSaveDirtyFiles:
         assert "A. The system SHALL do something." in content
         assert "do another thing" not in content
 
+    # Verifies: REQ-d00132-A
     def test_REQ_d00132_A_add_assertion_saves(self, tmp_path: Path):
         """add_assertion mutation adds new assertion to rendered file."""
         from elspais.graph.render import render_save
@@ -171,6 +176,7 @@ class TestRenderSaveDirtyFiles:
         content = spec_file.read_text(encoding="utf-8")
         assert "C. The system SHALL do a third thing." in content
 
+    # Verifies: REQ-d00132-A
     def test_REQ_d00132_A_no_mutations_noop(self, tmp_path: Path):
         """No mutations means no files are written."""
         from elspais.graph.render import render_save
@@ -182,6 +188,7 @@ class TestRenderSaveDirtyFiles:
         assert result["success"] is True
         assert result["saved_count"] == 0
 
+    # Verifies: REQ-d00132-A
     def test_REQ_d00132_A_add_requirement_saves(self, tmp_path: Path):
         """add_requirement mutation creates new requirement in rendered file."""
         from elspais.graph.render import render_save
@@ -204,6 +211,7 @@ class TestRenderSaveDirtyFiles:
 class TestRenderSaveMutationLog:
     """Validates REQ-d00132-E: Mutation log cleared after save."""
 
+    # Verifies: REQ-d00132-E
     def test_REQ_d00132_E_log_cleared_after_save(self, tmp_path: Path):
         """Mutation log is cleared after successful save."""
         from elspais.graph.render import render_save
@@ -217,6 +225,7 @@ class TestRenderSaveMutationLog:
         assert result["success"] is True
         assert len(graph.mutation_log) == 0
 
+    # Verifies: REQ-d00132-E
     def test_REQ_d00132_E_log_not_cleared_on_error(self, tmp_path: Path):
         """Mutation log is NOT cleared if there are errors."""
         from elspais.graph.render import render_save
@@ -237,6 +246,7 @@ class TestRenderSaveMutationLog:
 class TestRenderSaveEdgeDerivation:
     """Validates REQ-d00132-F: Derives implements/refines from live graph edges."""
 
+    # Verifies: REQ-d00132-F
     def test_REQ_d00132_F_implements_from_edges(self, tmp_path: Path):
         """Rendered file shows implements derived from graph edges."""
         from elspais.graph.render import render_save
@@ -250,6 +260,7 @@ class TestRenderSaveEdgeDerivation:
         content = spec_file.read_text(encoding="utf-8")
         assert "**Implements**: REQ-p00001" in content
 
+    # Verifies: REQ-d00132-F
     def test_REQ_d00132_F_add_edge_reflected(self, tmp_path: Path):
         """Adding an edge is reflected in rendered output."""
         from elspais.graph.render import render_save
@@ -272,6 +283,7 @@ class TestRenderSaveEdgeDerivation:
         assert "REQ-p00001" in content
         assert "REQ-p00002" in content
 
+    # Verifies: REQ-d00132-F
     def test_REQ_d00132_F_delete_edge_reflected(self, tmp_path: Path):
         """Deleting an edge is reflected in rendered output."""
         from elspais.graph.render import render_save
@@ -289,6 +301,7 @@ class TestRenderSaveEdgeDerivation:
 class TestConsistencyCheck:
     """Validates REQ-d00132-C: Consistency check (rebuild + compare)."""
 
+    # Verifies: REQ-d00132-C
     def test_REQ_d00132_C_consistency_check_passes(self, tmp_path: Path):
         """Consistency check succeeds when rebuild matches in-memory graph."""
         from elspais.graph.render import render_save
@@ -309,6 +322,7 @@ class TestConsistencyCheck:
         assert result["consistency"]["consistent"] is True
         assert result["consistency"]["checked"] > 0
 
+    # Verifies: REQ-d00132-C
     def test_REQ_d00132_C_consistency_check_detects_mismatch(self, tmp_path: Path):
         """Consistency check detects mismatches between original and rebuilt graph."""
         from elspais.graph.render import render_save
@@ -335,6 +349,7 @@ class TestConsistencyCheck:
         assert result["consistency"]["consistent"] is False
         assert "title" in result["consistency"]["details"]
 
+    # Verifies: REQ-d00132-C
     def test_REQ_d00132_C_consistency_check_skipped_by_default(self, tmp_path: Path):
         """Consistency check is not run when consistency_check=False (default)."""
         from elspais.graph.render import render_save
@@ -347,6 +362,7 @@ class TestConsistencyCheck:
         assert result["success"] is True
         assert "consistency" not in result
 
+    # Verifies: REQ-d00132-C
     def test_REQ_d00132_C_consistency_check_handles_rebuild_failure(self, tmp_path: Path):
         """Consistency check handles rebuild failures gracefully."""
         from elspais.graph.render import render_save
@@ -415,6 +431,7 @@ class TestParseDirtyFileDetection:
 class TestPersistenceDeleted:
     """Validates REQ-d00132-D: persistence.py is deleted."""
 
+    # Verifies: REQ-d00132-D
     def test_REQ_d00132_D_persistence_deleted(self):
         """persistence.py should not exist (replaced by render-based save)."""
         persistence_path = (

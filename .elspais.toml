@@ -4,7 +4,7 @@
 # overrides (e.g. associate paths). It is deep-merged and gitignored.
 
 # Config schema version (do not change)
-version = 4
+version = 5
 # Daemon TTL in minutes (>0 = auto-start, 0 = disabled, <0 = no timeout)
 cli_ttl = 30
 # File path for MCP tool-usage statistics (empty = disabled)
@@ -129,8 +129,6 @@ skip_files = []
 skip_dirs = ["fixtures"]
 # External command for function detection (receives paths on stdin, outputs JSON)
 prescan_command = ""
-# Keyword for test->requirement refs (e.g. "Verifies")
-reference_keyword = "Validates"
 # Additional regex patterns for reference detection
 reference_patterns = []
 # Test targets drive result + coverage ingestion ([[scanning.test.targets]]).
@@ -223,7 +221,7 @@ retired = ["Deprecated", "Superseded"]
 # Code implements assertions
 [rules.coverage.implemented]
 # All assertions covered
-full = "ok"
+full = "off"
 # Some assertions covered, some not
 partial = "warning"
 # Has coverage but test results show failures
@@ -233,28 +231,28 @@ missing = "error"
 
 # Tests reference assertions
 [rules.coverage.tested]
-full = "ok"
+full = "off"
 partial = "warning"
 failing = "error"
 missing = "error"
 
 # Test results exist for assertions
 [rules.coverage.verified]
-full = "ok"
+full = "off"
 partial = "warning"
 failing = "error"
 missing = "warning"
 
 # User journeys validate assertions
 [rules.coverage.uat_coverage]
-full = "ok"
+full = "off"
 partial = "info"
 failing = "error"
 missing = "info"
 
 # User journey results exist
 [rules.coverage.uat_verified]
-full = "ok"
+full = "off"
 partial = "info"
 failing = "error"
 missing = "info"

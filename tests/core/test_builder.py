@@ -274,6 +274,7 @@ class TestBuilderContentTypes:
         assert "REQ-p00002" in children_string(parent)
         assert "REQ-p00001->REQ-p00002:refines" in outgoing_edges_string(parent)
 
+    # Verifies: REQ-d00071-B
     def test_REQ_d00071_B_build_ignores_missing_targets(self):
         """REQ-d00071-B: Builder handles references to non-existent targets gracefully.
 
@@ -661,6 +662,7 @@ class TestGeneralizedOrphanDetection:
         assert any(n.kind == NodeKind.CODE for n in orphans)
         assert "code:src/module.py:1" in orphan_ids
 
+    # Verifies: REQ-d00071-B
     def test_REQ_d00071_B_requirement_without_children_is_root(self):
         """REQ-d00071-B: Parentless REQUIREMENT nodes are always roots.
 
@@ -703,6 +705,7 @@ class TestGeneralizedOrphanDetection:
         orphan_ids = {n.id for n in graph.orphaned_nodes()}
         assert "result-linked" not in orphan_ids
 
+    # Verifies: REQ-d00071-C
     def test_REQ_d00071_C_req_with_only_assertions_is_root(self):
         """REQ-d00071-C: Requirement with only ASSERTION children is a root.
 
@@ -737,6 +740,7 @@ class TestGeneralizedOrphanDetection:
         orphan_ids = {n.id for n in graph.orphaned_nodes()}
         assert "REQ-p00001" not in orphan_ids
 
+    # Verifies: REQ-d00071-A
     def test_REQ_d00071_A_req_with_child_req_is_root(self):
         """REQ-d00071-A: Requirement with a child requirement is a root.
 
@@ -757,6 +761,7 @@ class TestGeneralizedOrphanDetection:
         orphan_ids = {n.id for n in graph.orphaned_nodes()}
         assert "REQ-p00001" not in orphan_ids
 
+    # Verifies: REQ-d00071-C
     def test_REQ_d00071_C_test_with_only_results_is_orphan(self):
         """REQ-d00071-C: TEST node with only TEST_RESULT children is an orphan.
 
@@ -797,6 +802,7 @@ class TestGeneralizedOrphanDetection:
         root_ids = {n.id for n in graph.iter_roots()}
         assert "test:tests/test_standalone.py::test_standalone_func" not in root_ids
 
+    # Verifies: REQ-d00071-D
     def test_REQ_d00071_D_journey_with_no_children_is_orphan(self):
         """REQ-d00071-D: Standalone USER_JOURNEY with no children is an orphan.
 
@@ -822,6 +828,7 @@ class TestGeneralizedOrphanDetection:
         root_ids = {n.id for n in graph.iter_roots()}
         assert "UJ-001" not in root_ids
 
+    # Verifies: REQ-d00071-D
     def test_REQ_d00071_D_journey_with_test_children_is_root(self):
         """REQ-d00071-D: Journey with a test child (via Verifies:) is a root.
 
@@ -857,6 +864,7 @@ class TestGeneralizedOrphanDetection:
         orphan_ids = {n.id for n in graph.orphaned_nodes()}
         assert "UJ-001" not in orphan_ids
 
+    # Verifies: REQ-d00071-C
     def test_REQ_d00071_C_custom_satellite_kinds_override(self):
         """REQ-d00071-C: Custom satellite_kinds adds CODE as satellite.
 
@@ -893,6 +901,7 @@ class TestGeneralizedOrphanDetection:
         orphan_ids = {n.id for n in graph.orphaned_nodes()}
         assert "REQ-p00001" not in orphan_ids
 
+    # Verifies: REQ-d00071-C
     def test_REQ_d00071_C_default_satellite_kinds_unchanged(self):
         """REQ-d00071-C: Default satellite_kinds still classifies assertions as satellite.
 
@@ -926,6 +935,7 @@ class TestGeneralizedOrphanDetection:
         orphan_ids = {n.id for n in graph.orphaned_nodes()}
         assert "REQ-p00001" not in orphan_ids
 
+    # Verifies: REQ-d00071-C
     def test_REQ_d00071_C_invalid_satellite_kind_raises_error(self):
         """REQ-d00071-C: Invalid satellite kind string raises ValueError.
 
@@ -939,6 +949,7 @@ class TestGeneralizedOrphanDetection:
 class TestCanonicalTestIds:
     """Tests for canonical TEST node ID generation from test_ref content."""
 
+    # Verifies: REQ-d00054-A
     def test_REQ_d00054_A_canonical_id_with_function_name(self):
         """Canonical ID uses :: separator with function name, no class."""
         graph = build_graph(
@@ -959,6 +970,7 @@ class TestCanonicalTestIds:
         req = graph.find_by_id("REQ-d00001")
         assert "test:tests/test_auth.py::test_REQ_d00001_validates" in children_string(req)
 
+    # Verifies: REQ-d00054-A
     def test_REQ_d00054_A_canonical_id_with_class_and_function(self):
         """Canonical ID includes ClassName when class_name is provided."""
         graph = build_graph(
@@ -980,6 +992,7 @@ class TestCanonicalTestIds:
         req = graph.find_by_id("REQ-d00001")
         assert "test:tests/test_auth.py::TestAuth::test_REQ_d00001_login" in children_string(req)
 
+    # Verifies: REQ-d00054-A
     def test_REQ_d00054_A_fallback_to_line_based_id(self):
         """Without function_name, falls back to line-based ID."""
         graph = build_graph(
@@ -999,6 +1012,7 @@ class TestCanonicalTestIds:
         req = graph.find_by_id("REQ-d00001")
         assert "test:tests/test_auth.py:5" in children_string(req)
 
+    # Verifies: REQ-d00054-A
     def test_REQ_d00054_A_canonical_id_deduplicates(self):
         """Two test_refs with same function/path but different validates create one TEST node."""
         graph = build_graph(
@@ -1037,6 +1051,7 @@ class TestCanonicalTestIds:
             req2
         )
 
+    # Verifies: REQ-d00054-A
     def test_REQ_d00054_A_canonical_id_relative_to_repo_root(self):
         """Absolute source_path is converted to relative using repo_root."""
         graph = build_graph(
@@ -1066,6 +1081,7 @@ class TestValidatesEdges:
     linking including validates.
     """
 
+    # Verifies: REQ-o00050-C
     def test_REQ_o00050_C_journey_validates_creates_edge(self):
         """JNY with Validates: REQ-p00012 creates VALIDATES edge to REQ node."""
         graph = build_graph(
@@ -1098,6 +1114,7 @@ class TestValidatesEdges:
                 break
         assert found_validates_edge, "Expected VALIDATES edge from REQ-p00012 to JNY-Dev-01"
 
+    # Verifies: REQ-o00050-C
     def test_REQ_o00050_C_journey_validates_missing_target_broken_ref(self):
         """JNY with Validates: REQ-NONEXIST records broken reference."""
         graph = build_graph(
@@ -1130,6 +1147,7 @@ class TestValidatesEdges:
         assert len(broken) == 1
         assert broken[0].edge_kind == "validates"
 
+    # Verifies: REQ-o00050-C
     def test_REQ_o00050_C_journey_validates_multiple_targets(self):
         """JNY with multiple Validates creates edges to all targets."""
         graph = build_graph(
@@ -1151,6 +1169,7 @@ class TestValidatesEdges:
         assert "REQ-d00042->JNY-Dev-03:validates" in edges
         assert "REQ-p00012->JNY-Dev-03:validates" in edges
 
+    # Verifies: REQ-o00050-C
     def test_REQ_o00050_C_journey_is_orphan_without_children(self):
         """JNY nodes without meaningful children are orphans (REQ-d00071)."""
         graph = build_graph(
@@ -1176,6 +1195,7 @@ class TestMultiAssertionExpansion:
     into individual assertion references during link resolution.
     """
 
+    # Verifies: REQ-d00081-D
     def test_REQ_d00081_D_code_ref_multi_assertion_expands(self):
         """REQ-d00081-D: Code ref with REQ-p00001-A+B+C expands and links to all assertions."""
         builder = GraphBuilder(namespace="REQ", resolver=grammar_for("REQ"))
@@ -1215,6 +1235,7 @@ class TestMultiAssertionExpansion:
                         assertion_targets_found.add(at)
         assert {"A", "B", "C"} == assertion_targets_found
 
+    # Verifies: REQ-d00081-G
     def test_REQ_d00081_G_single_assertion_passes_through(self):
         """REQ-d00081-G: Single assertion ref REQ-p00001-A passes through unchanged."""
         builder = GraphBuilder(namespace="REQ", resolver=grammar_for("REQ"))
@@ -1248,6 +1269,7 @@ class TestMultiAssertionExpansion:
         else:
             pytest.fail("Expected edge from REQ-p00001 to code:src/auth.py:10 not found")
 
+    # Verifies: REQ-d00081-E
     def test_REQ_d00081_E_custom_separator_works(self):
         """REQ-d00081-D: Custom separator '&' expands REQ-p00001-A&B&C correctly."""
         config = config_defaults()
@@ -1285,6 +1307,7 @@ class TestMultiAssertionExpansion:
                         assertion_targets_found.add(at)
         assert {"A", "B", "C"} == assertion_targets_found
 
+    # Verifies: REQ-d00081-D
     def test_REQ_d00081_D_test_ref_multi_assertion_expands(self):
         """REQ-d00081-D: Test ref with multi-assertion also expands, uniform across parser types."""
         builder = GraphBuilder(namespace="REQ", resolver=grammar_for("REQ"))

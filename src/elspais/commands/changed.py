@@ -34,8 +34,7 @@ def _validate_config(config: dict[str, Any]) -> ElspaisConfig:
 def load_configuration(args: argparse.Namespace) -> dict | None:
     """Load configuration from file or use defaults.
 
-    Note: This is a wrapper for get_config() that returns Optional[Dict]
-    for backward compatibility. New code should use get_config() directly.
+    Returns None where no configuration is discoverable.
     """
     from elspais.config import get_config
 
@@ -67,7 +66,7 @@ def run(args: argparse.Namespace) -> int:
     quiet = getattr(args, "quiet", False)
 
     # Get git change information
-    changes = get_git_changes(repo_root, spec_dir, base_branch)
+    changes = get_git_changes(repo_root, base_branch)
 
     # Filter to spec files only
     spec_modified = filter_spec_files(changes.modified_files, spec_dir)

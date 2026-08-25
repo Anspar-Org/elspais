@@ -198,6 +198,7 @@ def _assert_readiness(port: int) -> None:
 # ---------------------------------------------------------------------------
 
 
+# Verifies: REQ-o00062-Q
 def test_REQ_o00062_Q_initialize_succeeds_at_documented_endpoint(daemon):
     """Validates REQ-o00062-Q: MCP sessions are accepted at the documented /mcp.
 
@@ -224,6 +225,7 @@ def test_REQ_o00062_Q_initialize_succeeds_at_documented_endpoint(daemon):
     assert mutate_tools, f"no mutate_* tools listed: {tool_names}"
 
 
+# Verifies: REQ-o00062-Q
 def test_REQ_o00062_Q_http_mcp_and_viewer_share_one_graph(daemon):
     """Validates REQ-o00062-Q: MCP-over-HTTP mutates the viewer's own graph.
 
@@ -285,6 +287,7 @@ def test_REQ_o00062_Q_http_mcp_and_viewer_share_one_graph(daemon):
     )
 
 
+# Verifies: REQ-o00062-Q
 def test_REQ_o00062_Q_two_http_sessions_conflict_detected(daemon):
     """Validates REQ-o00062-Q: two MCP HTTP clients are guarded against each other.
 
@@ -361,6 +364,7 @@ def test_REQ_o00062_Q_two_http_sessions_conflict_detected(daemon):
     _run(scenario())
 
 
+# Verifies: REQ-o00062-Q
 def test_REQ_o00062_Q_writes_after_a_save_survive_across_surfaces_to_disk(daemon):
     """Validates REQ-o00062-Q: both surfaces operate on the same in-memory
     graph ACROSS a save's rebuild-and-swap, so an accepted write on either

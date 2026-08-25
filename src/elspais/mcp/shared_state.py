@@ -444,7 +444,7 @@ def persist_pending(
 
 
 # Implements: REQ-p00004-J, REQ-p00004-O, REQ-p00015-F, REQ-d00205-B
-def rebuild_shared_graph(state: SharedServerState, full: bool = False) -> dict[str, Any]:
+def rebuild_shared_graph(state: SharedServerState) -> dict[str, Any]:
     """Rebuild the live graph from disk and publish it. The only rebuild path.
 
     Every surface that reloads the graph reaches this function: the viewer's
@@ -468,8 +468,6 @@ def rebuild_shared_graph(state: SharedServerState, full: bool = False) -> dict[s
 
     Args:
         state: The process-wide holder. ``working_dir`` names the repo root.
-        full: Accepted for caller compatibility; no cache is retained between
-            builds, so a full rebuild is what every call already performs.
 
     Returns:
         ``{"success", "message", "node_count", "config"}``. ``config`` is the

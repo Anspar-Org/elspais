@@ -92,7 +92,7 @@ def test_a_repeated_unmatched_item_reaches_the_caller_at_each_position():
 
 
 _SPEC_CONFIG = """\
-version = 3
+version = 5
 
 [project]
 name = "keeptypo"

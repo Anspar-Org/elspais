@@ -33,6 +33,7 @@ class TestIndirectCoverageSource:
     Validates REQ-d00069-A: INDIRECT enum exists in CoverageSource.
     """
 
+    # Verifies: REQ-d00069-A
     def test_REQ_d00069_A_indirect_is_distinct(self):
         """INDIRECT is distinct from other coverage sources."""
         values = {s.value for s in CoverageSource}
@@ -50,6 +51,7 @@ class TestCodeIndirectFinalize:
     assertions on the generous footing only.
     """
 
+    # Verifies: REQ-d00069-B
     def test_REQ_d00069_B_code_indirect_credits_indirect_only(self):
         metrics = RollupMetrics(total_assertions=2)
         for label in ("A", "B"):
@@ -76,6 +78,7 @@ class TestIndirectCoverageContributions:
     Validates REQ-d00069-B: Whole-req tests emit INDIRECT for all assertions.
     """
 
+    # Verifies: REQ-d00069-B
     def test_REQ_d00069_B_whole_req_test_adds_indirect(self):
         """Whole-req test (no assertion suffix) adds TEST_INDIRECT for all assertions."""
         graph = build_graph(
@@ -109,6 +112,7 @@ class TestIndirectCoverageContributions:
             sources = [c.source_type for c in rollup.assertion_coverage[label]]
             assert CoverageSource.TEST_INDIRECT in sources
 
+    # Verifies: REQ-d00069-B
     def test_REQ_d00069_B_whole_req_test_zero_strict_coverage(self):
         """Whole-req test gives 0% strict coverage (INDIRECT excluded)."""
         graph = build_graph(
@@ -145,6 +149,7 @@ class TestDualCoverageMetrics:
     Validates REQ-d00069-C: implemented excludes INDIRECT, tested includes it.
     """
 
+    # Verifies: REQ-d00069-C
     def test_REQ_d00069_C_strict_excludes_indirect(self):
         """implemented (strict) does NOT include INDIRECT test contributions."""
         graph = build_graph(
@@ -167,6 +172,7 @@ class TestDualCoverageMetrics:
         assert rollup.implemented.covered_pct == 0.0
         assert rollup.tested.covered_pct == 100.0
 
+    # Verifies: REQ-d00069-C
     def test_REQ_d00069_C_both_equal_without_indirect(self):
         """When no whole-req tests, both metrics are equal."""
         graph = build_graph(
@@ -196,6 +202,7 @@ class TestValidatedWithIndirect:
     Validates REQ-d00069-D: verified.covered includes whole-req passing tests.
     """
 
+    # Verifies: REQ-d00069-D
     def test_REQ_d00069_D_passing_whole_req_validates_all(self):
         """Passing whole-req test validates all assertions indirectly."""
         graph = build_graph(
@@ -225,6 +232,7 @@ class TestValidatedWithIndirect:
         assert rollup.verified.immediate_direct == 0  # Strict: no assertion-targeted passing tests
         assert rollup.verified.covered == 3  # All 3 assertions
 
+    # Verifies: REQ-d00069-D
     def test_REQ_d00069_D_mixed_targeted_and_whole(self):
         """verified.covered unions targeted and whole-req validations."""
         graph = build_graph(
@@ -267,6 +275,7 @@ class TestEdgeCase1MixedDirectIndirect:
     Validates REQ-d00069-E: Mixed direct + indirect edge case.
     """
 
+    # Verifies: REQ-d00069-E
     def test_REQ_d00069_E_mixed_direct_indirect(self):
         """3 assertion-targeted + 1 whole-req test: strict 27% vs indirect 100%."""
         assertions = [{"label": chr(65 + i), "text": f"Assertion {chr(65 + i)}"} for i in range(11)]
@@ -310,6 +319,7 @@ class TestEdgeCase2MultipleTestsOneFailing:
     Validates REQ-d00069-F: has_failures same in both modes.
     """
 
+    # Verifies: REQ-d00069-F
     def test_REQ_d00069_F_multiple_tests_mixed_results(self):
         """Assertion validated if at least one test passes; has_failures true."""
         graph = build_graph(
@@ -351,6 +361,7 @@ class TestEdgeCase3WholeReqMixedResults:
     Validates REQ-d00070-A: Whole-req mixed results.
     """
 
+    # Verifies: REQ-d00070-A
     def test_REQ_d00070_A_whole_req_mixed_results(self):
         """Whole-req tests: one pass + one fail. Indirect 100%, strict 0%."""
         assertions = [{"label": chr(65 + i), "text": f"Assertion {chr(65 + i)}"} for i in range(5)]
@@ -387,6 +398,7 @@ class TestEdgeCase4NoWholeReqTest:
     Validates REQ-d00070-B: No whole-req test = both modes identical.
     """
 
+    # Verifies: REQ-d00070-B
     def test_REQ_d00070_B_no_whole_req_test(self):
         """Without whole-req tests, strict and indirect coverage are equal."""
         assertions = [{"label": chr(65 + i), "text": f"Assertion {chr(65 + i)}"} for i in range(5)]
@@ -414,6 +426,7 @@ class TestRollupMetricsIndirectDefaults:
     Validates REQ-d00070-C: Default values for new indirect fields.
     """
 
+    # Verifies: REQ-d00070-C
     def test_REQ_d00070_C_default_dimension_fields(self):
         """Coverage dimension fields default to zero."""
         metrics = RollupMetrics()
@@ -421,6 +434,7 @@ class TestRollupMetricsIndirectDefaults:
         assert metrics.verified.covered == 0
         assert metrics.implemented.covered_pct == 0.0
 
+    # Verifies: REQ-d00070-C
     def test_REQ_d00070_C_finalize_with_indirect_contributions(self):
         """Finalize correctly computes implemented dimension from contribution data."""
         metrics = RollupMetrics(total_assertions=4)
@@ -447,6 +461,7 @@ class TestIntegrationWholeReqTest:
     Validates REQ-d00070-D: End-to-end integration of indirect coverage.
     """
 
+    # Verifies: REQ-d00070-D
     def test_REQ_d00070_D_integration_whole_req(self):
         """End-to-end: whole-req test produces 0% implemented, 100% tested indirect."""
         graph = build_graph(
@@ -492,6 +507,7 @@ class TestIndirectWithExistingSources:
     Validates REQ-d00070-E: INDIRECT doesn't interfere with existing sources.
     """
 
+    # Verifies: REQ-d00070-E
     def test_REQ_d00070_E_indirect_with_inferred(self):
         """INDIRECT from tests and INFERRED from reqs work independently."""
         graph = build_graph(
@@ -992,6 +1008,7 @@ class TestBlanketCodeImplements:
     asymmetry that credited it nothing (annotators.py:1381 had no else branch).
     """
 
+    # Verifies: REQ-d00069-B
     def test_REQ_d00069_B_blanket_code_implements_credits_all(self):
         graph = build_graph(
             make_requirement(
@@ -1037,6 +1054,7 @@ class TestFullCreditConduction:
             ],
         )
 
+    # Verifies: REQ-d00069-J
     def test_REQ_d00069_J_blanket_refine_full_credit(self):
         # Child fully implemented -> blanket refine credits parent A,B at 1.0
         # (was 1/2 = 0.5 under the retired 1/N rule).
@@ -1046,6 +1064,7 @@ class TestFullCreditConduction:
         assert parent.implemented.total_by_label["A"] == 1.0
         assert parent.implemented.total_by_label["B"] == 1.0
 
+    # Verifies: REQ-d00069-J
     def test_REQ_d00069_J_each_conducting_edge_carries_equal_weight(self):
         # Parent A is refined twice: by a fully-covered blanket child and by a
         # 50%-covered targeted one. Both conduct into the same measure at equal

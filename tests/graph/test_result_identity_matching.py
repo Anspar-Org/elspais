@@ -1,12 +1,11 @@
 # Verifies: REQ-d00254-G
 """A result binds to its test by recorded identity, never by reading its name.
 
-The discriminating case: the runner reports a test whose name embeds one
-requirement identifier while the test's `Verifies:` comment names another,
-and reports it under a parametrized variant name. The result attaches to the
-test node the reported identity denotes, and contributes no requirement
-reference of its own -- every reference the test carries comes from its own
-source file.
+The discriminating case: the runner reports a test whose name embeds a
+requirement identifier, under a parametrized variant name. The result
+attaches to the test node the reported identity denotes, and contributes no
+requirement reference of its own -- every reference the test carries is
+declared in its own source file, by the `Verifies:` comment above it.
 """
 
 from pathlib import Path
@@ -42,9 +41,11 @@ B. The system SHALL clear the session cookie.
 *End* *Logout* | **Hash**: ________
 """
 
-# The function name embeds REQ-p00001-A; the comment names REQ-p00002-B.
+# Both references are declared in the comment; the function name embeds
+# REQ-p00001-A and declares nothing by doing so (REQ-d00269-L), which is
+# what makes the name available as a decoy for the result-matching below.
 _TEST_FILE = """\
-# Verifies: REQ-p00002-B
+# Verifies: REQ-p00001-A, REQ-p00002-B
 def test_REQ_p00001_A_login():
     assert True
 """
@@ -59,7 +60,7 @@ _JUNIT = """\
 """
 
 _CONFIG = """\
-version = 3
+version = 5
 
 [project]
 name = "identity-match"
@@ -139,11 +140,12 @@ def test_result_contributes_no_requirement_reference(tmp_path):
 
 # Verifies: REQ-d00254-G
 def test_references_come_from_the_test_source_file(tmp_path):
-    """Both of this test's references are written in its own source file.
+    """Both of this test's references are declared in its own source file.
 
-    REQ-p00002 from the `Verifies:` comment, REQ-p00001 from the function
-    name the scanner reads in that same file. The results artifact adds
-    nothing to either.
+    REQ-p00001 and REQ-p00002 are both named by the `Verifies:` comment
+    above the function. The results artifact adds nothing to either -- and
+    neither does the function name, which embeds REQ-p00001-A and declares
+    nothing by doing so, so the set below is the comment's list exactly.
     """
     graph = _build(tmp_path)
 

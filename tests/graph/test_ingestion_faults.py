@@ -45,7 +45,7 @@ _TRUNCATED_JUNIT = """\
 """
 
 _CONFIG_HEAD = """\
-version = 3
+version = 5
 
 [project]
 name = "ingest"
@@ -222,7 +222,7 @@ def test_flutter_machine_does_not_report_the_runners_own_chatter():
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-# Verifies: REQ-d00285-A, REQ-d00285-G, REQ-p00019-H
+# Verifies: REQ-d00285-A, REQ-d00285-G
 def test_an_unreadable_results_file_is_recorded_on_the_graph(tmp_path):
     """No results and an unreadable report are told apart on the graph."""
     from elspais.graph.GraphNode import NodeKind
@@ -358,7 +358,7 @@ coverage = "coverage/lcov.info"
     assert fault.target == "unit"
 
 
-# Verifies: REQ-d00285-G, REQ-p00019-H
+# Verifies: REQ-d00285-G
 def test_a_target_reaching_outside_the_repository_is_recorded(tmp_path):
     """The guard already refused it; what was missing was saying so."""
     project = _project(
@@ -403,7 +403,7 @@ def test_a_content_rule_that_is_not_there_is_recorded(tmp_path):
     assert "no file there" in fault.cause
 
 
-# Verifies: REQ-d00285-G, REQ-p00019-H
+# Verifies: REQ-d00285-G
 def test_a_content_rule_not_loaded_is_disclosed_without_a_collector(tmp_path, caplog):
     """A caller that asked for no records still does not get silence."""
     import logging

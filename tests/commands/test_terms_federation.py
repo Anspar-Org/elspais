@@ -66,7 +66,7 @@ def test_select_terms_primary_only_returns_root_not_merged(canonical_federated_g
 # while carrying a foreign namespace section.
 # ─────────────────────────────────────────────────────────────────────────────
 
-_MIN_TOML = """version = 3
+_MIN_TOML = """version = 5
 
 [project]
 name = "{name}"
