@@ -92,12 +92,18 @@ class TestParse:
 
         assert str(mod_path) in results
         data = results[str(mod_path)]
-        assert set(data.keys()) == {
+        # Every key a coverage_json consumer reads must be present, so the
+        # two are interchangeable downstream. This parser carries one more:
+        # only it re-analyses source, so only it can find that a file's total
+        # is unknown (REQ-d00254-Q). An extra key no consumer reads costs
+        # them nothing; a missing one would break them.
+        assert set(data.keys()) >= {
             "line_coverage",
             "executable_lines",
             "covered_lines",
             "contexts",
         }
+        assert data["source_analysed"] is True
         assert isinstance(data["line_coverage"], dict)
         assert isinstance(data["executable_lines"], int)
         assert isinstance(data["covered_lines"], int)

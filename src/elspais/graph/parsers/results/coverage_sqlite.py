@@ -123,42 +123,56 @@ class CoverageSqliteParser(DiagnosticRecorder):
             try:
                 _, statements, _excluded, missing, _ = cov.analysis2(file_path)
             except (CoverageException, OSError, sqlite3.Error) as exc:
-                # Implements: REQ-d00285-G
-                # Source no longer available/parseable (moved, deleted, etc.)
-                # -- fall back to executed-lines-only (no missing-line data).
-                # The fallback is a degraded measurement, not the one asked
-                # for: every line the run never executed is now invisible, so
-                # the file reads as fully covered. Say so.
+                # Implements: REQ-d00254-P+Q, REQ-d00285-G
+                # Re-analysing the source is what produces the statement set;
+                # without it there is no denominator and no second source for
+                # one. The lines the run executed are still known, so they are
+                # kept -- that is P. What must not happen is calling their
+                # count the total: every line that never ran would leave the
+                # denominator and the file would read as fully covered, which
+                # no reader could tell from a real result. So the file is
+                # marked unanalysed and contributes no ratio -- that is Q.
                 self._record_diagnostic(
                     file_path,
-                    f"source could not be re-analysed, so only executed lines "
-                    f"are counted for it: {exc}",
+                    f"source could not be re-analysed as Python, so its total "
+                    f"line count is unknown: {exc}",
+                    partial=True,
                 )
                 executed = cov_data.lines(file_path) or []
-                statements = list(executed)
-                missing = []
+                results[file_path] = {
+                    "line_coverage": dict.fromkeys(executed, 1),
+                    "executable_lines": 0,
+                    "covered_lines": len(executed),
+                    "contexts": self._contexts_for(cov_data, file_path, wanted_files),
+                    "source_analysed": False,
+                }
+                continue
 
             missing_set = set(missing)
             line_coverage = {ln: (0 if ln in missing_set else 1) for ln in statements}
             executable_lines = len(statements)
             covered_lines = executable_lines - len(missing_set)
 
-            contexts: dict[int, list[str]] | None = None
-            if wanted_files is None or wanted_files(file_path):
-                raw_contexts = cov_data.contexts_by_lineno(file_path)
-                if raw_contexts:
-                    contexts = {ln: ctxs for ln, ctxs in raw_contexts.items() if ctxs}
-                    if not contexts:
-                        contexts = None
-
             results[file_path] = {
                 "line_coverage": line_coverage,
                 "executable_lines": executable_lines,
                 "covered_lines": covered_lines,
-                "contexts": contexts,
+                "contexts": self._contexts_for(cov_data, file_path, wanted_files),
+                "source_analysed": True,
             }
 
         return results
+
+    @staticmethod
+    def _contexts_for(cov_data, file_path: str, wanted_files) -> dict[int, list[str]] | None:
+        """Per-test contexts for one file, or None where there are none."""
+        if wanted_files is not None and not wanted_files(file_path):
+            return None
+        raw = cov_data.contexts_by_lineno(file_path)
+        if not raw:
+            return None
+        contexts = {ln: ctxs for ln, ctxs in raw.items() if ctxs}
+        return contexts or None
 
     def can_parse(self, file_path: Path) -> bool:
         """Check if this parser can handle the given file.

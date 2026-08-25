@@ -147,6 +147,7 @@ def _record_parser_diagnostics(
             cause=diagnostic.cause,
             line=diagnostic.line,
             target=target_name,
+            partial=getattr(diagnostic, "partial", False),
         )
 
 
@@ -1275,6 +1276,13 @@ def build_graph(
                     continue
                 cov_node.set_field("line_coverage", data["line_coverage"])
                 cov_node.set_field("executable_lines", data["executable_lines"])
+                # Implements: REQ-d00254-Q
+                # A file whose source could not be re-analysed has executed
+                # lines but no known total. Carry that, so a figure computed
+                # over this file can leave it out rather than treat its
+                # executed count as its size.
+                if not data.get("source_analysed", True):
+                    cov_node.set_field("source_analysed", False)
                 if data.get("contexts"):
                     cov_node.set_field("line_contexts", data["contexts"])
 

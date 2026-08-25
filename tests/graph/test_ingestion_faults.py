@@ -581,3 +581,118 @@ def test_the_check_runs_with_the_other_test_checks(tmp_path):
     project = _project(tmp_path, _UNPARSEABLE_TARGET, {"results/TEST-a.xml": _TRUNCATED_JUNIT})
     names = {c.name for c in run_test_checks(_build(project), config={})}
     assert "tests.ingestion_fault" in names
+
+
+class TestPartialReads:
+    """A file read in part yields what it could, and says the total is unknown.
+
+    Re-analysing the source is what produces the statement set. Without it
+    the executed lines are still known and the total is not, so the pair
+    must be reported as what they are rather than as a complete measurement.
+    """
+
+    @staticmethod
+    def _coverage_db(tmp_path, source: Path, executed: list[int]):
+        """A coverage data file recording lines against ``source``."""
+        import coverage
+
+        cov = coverage.Coverage(data_file=str(tmp_path / ".coverage"))
+        cov.start()
+        cov.stop()
+        data = cov.get_data()
+        data.add_lines({str(source): executed})
+        cov.save()
+        return tmp_path / ".coverage"
+
+    # Verifies: REQ-d00254-P
+    def test_REQ_d00254_P_lines_that_ran_survive_a_source_that_will_not_parse(self, tmp_path):
+        """The lines a run executed are known whatever the source does at
+        report time. Discarding them because the file will not parse would
+        lose evidence over a defect in a different part of the pipeline.
+        """
+        from elspais.graph.parsers.results.coverage_sqlite import CoverageSqliteParser
+
+        template = tmp_path / "page.html.j2"
+        template.write_text("{# not python #}\n<div>{{ x }}</div>\n")
+        db = self._coverage_db(tmp_path, template, [1, 2, 3])
+
+        result = CoverageSqliteParser().parse("", str(db))[str(template)]
+
+        assert result["covered_lines"] == 3
+        assert set(result["line_coverage"]) == {1, 2, 3}
+
+    # Verifies: REQ-d00254-Q
+    def test_REQ_d00254_Q_a_partial_read_declares_no_total(self, tmp_path):
+        """Setting the total to the number of lines that ran would make the
+        file read as fully covered -- indistinguishable from a real complete
+        measurement, and the most reassuring value available.
+        """
+        from elspais.graph.parsers.results.coverage_sqlite import CoverageSqliteParser
+
+        template = tmp_path / "page.html.j2"
+        template.write_text("{# not python #}\n<div>{{ x }}</div>\n")
+        db = self._coverage_db(tmp_path, template, [1, 2, 3])
+
+        result = CoverageSqliteParser().parse("", str(db))[str(template)]
+
+        assert result["source_analysed"] is False
+        assert result["executable_lines"] != result["covered_lines"]
+
+    # Verifies: REQ-d00254-Q
+    def test_REQ_d00254_Q_the_condition_is_recorded_as_partial(self, tmp_path):
+        """Which of the two conditions occurred is known only where the
+        decision was made. A caller counting records afterwards cannot tell
+        an artifact that yielded little from one that yielded nothing.
+        """
+        from elspais.graph.parsers.results.coverage_sqlite import CoverageSqliteParser
+
+        template = tmp_path / "page.html.j2"
+        template.write_text("{# not python #}\n")
+        db = self._coverage_db(tmp_path, template, [1])
+
+        parser = CoverageSqliteParser()
+        parser.parse("", str(db))
+
+        (diagnostic,) = [d for d in parser.iter_diagnostics() if d.path == str(template)]
+        assert diagnostic.partial is True
+
+    # Verifies: REQ-d00254-Q
+    def test_REQ_d00254_Q_an_unanalysed_file_leaves_the_line_coverage_figure(self):
+        """Both sums must skip it. Excluding the total but keeping the lines
+        that ran would raise the figure by exactly the lines whose size is
+        unknown -- worse than counting it whole.
+        """
+        from elspais.graph.annotators import count_code_coverage
+
+        class _Node:
+            def __init__(self, fields):
+                self._fields = fields
+
+            def get_field(self, name):
+                return self._fields.get(name)
+
+        class _Graph:
+            def iter_by_kind(self, kind):
+                return iter(
+                    [
+                        _Node(
+                            {"executable_lines": 10, "line_coverage": dict.fromkeys(range(5), 1)}
+                        ),
+                        _Node(
+                            {
+                                "source_analysed": False,
+                                "executable_lines": 0,
+                                "line_coverage": dict.fromkeys(range(90), 1),
+                            }
+                        ),
+                    ]
+                )
+
+            def nodes_by_kind(self, kind):
+                return iter([])
+
+        result = count_code_coverage(_Graph())
+
+        assert result["total_executable_lines"] == 10
+        assert result["total_covered_lines"] == 5
+        assert result["unmeasured_files"] == 1

@@ -585,13 +585,24 @@ def count_code_coverage(graph: FederatedGraph) -> dict[str, int]:
     - total_covered_lines: sum of lines where hit_count > 0 across FILE nodes
     - total_attributed_lines: sum of code_tested.total_lines across all REQUIREMENT nodes
       (lines shared across REQs may be counted multiple times)
+    - unmeasured_files: FILE nodes left out because their source could not be
+      re-analysed, so the figure states what it is over (REQ-d00254-Q)
     """
     from elspais.graph import NodeKind
 
     total_executable = 0
     total_covered = 0
+    unmeasured_files = 0
 
     for node in graph.iter_by_kind(NodeKind.FILE):
+        # Implements: REQ-d00254-Q
+        # A file whose source could not be re-analysed has no known total.
+        # Both sums are skipped, not just the denominator: counting its
+        # executed lines against everyone else's total would raise the
+        # figure by exactly the lines whose size is unknown.
+        if node.get_field("source_analysed") is False:
+            unmeasured_files += 1
+            continue
         executable = node.get_field("executable_lines")
         if executable:
             total_executable += executable
@@ -609,6 +620,7 @@ def count_code_coverage(graph: FederatedGraph) -> dict[str, int]:
         "total_executable_lines": total_executable,
         "total_covered_lines": total_covered,
         "total_attributed_lines": total_attributed,
+        "unmeasured_files": unmeasured_files,
     }
 
 

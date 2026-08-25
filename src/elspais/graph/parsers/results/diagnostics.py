@@ -31,11 +31,18 @@ class ResultsDiagnostic:
             admit.
         line: The 1-based line the condition sits on, where the format or the
             underlying error reports one; None where it does not.
+        partial: Whether the artifact was read in part -- some of it produced
+            records and some did not -- rather than producing nothing at all.
+            Recorded here because only the point that made the decision knows
+            which happened; a caller counting records afterwards cannot tell
+            an artifact that yielded little from one that yielded nothing
+            (REQ-d00254-Q).
     """
 
     path: str
     cause: str
     line: int | None = None
+    partial: bool = False
 
 
 class DiagnosticRecorder:
@@ -51,11 +58,20 @@ class DiagnosticRecorder:
         """Begin a fresh parse, discarding any previous parse's records."""
         self._diagnostics: list[ResultsDiagnostic] = []
 
-    def _record_diagnostic(self, path: str, cause: str, line: int | None = None) -> None:
-        """Record content this parse produced no record for."""
+    def _record_diagnostic(
+        self, path: str, cause: str, line: int | None = None, partial: bool = False
+    ) -> None:
+        """Record content this parse produced no record for.
+
+        ``partial`` says the artifact was read in part rather than not at
+        all. It is passed at the point that decided, because nothing
+        downstream can recover it.
+        """
         if not hasattr(self, "_diagnostics"):
             self._diagnostics = []
-        self._diagnostics.append(ResultsDiagnostic(path=path, cause=cause, line=line))
+        self._diagnostics.append(
+            ResultsDiagnostic(path=path, cause=cause, line=line, partial=partial)
+        )
 
     # Implements: REQ-d00285-G
     def iter_diagnostics(self) -> Iterator[ResultsDiagnostic]:

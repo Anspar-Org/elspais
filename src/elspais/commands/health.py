@@ -4314,17 +4314,16 @@ def check_unbound_citations(
 def check_ingestion_faults(
     graph: FederatedGraph, config: dict[str, Any] | None = None
 ) -> HealthCheck:
-    """Report every artifact ingestion could not read, or not read in full.
+    """Report every artifact ingestion could not read at all.
 
     A results file that will not parse, a coverage report in a format no
     reporter reads, a reporter name that matches none, a target whose working
     directory leaves the repository, a results pattern that matched nothing, a
     coverage file that is not there: each ends with a measurement the project
-    asked for absent from the graph. A reader that got through the artifact
-    and declined PART of it records the same way -- a coverage report whose
-    per-file re-analysis failed was read, and what it says about that file was
-    not -- so the count here is of artifacts read short, not only of artifacts
-    read not at all. Each finding carries the cause, which says which it is.
+    asked for absent from the graph. An artifact read only in PART is a
+    different condition with a different remedy, and is reported by
+    ``tests.partial_read`` (REQ-d00254-Q): this one is for artifacts that
+    yielded nothing, where somebody must fix something.
 
     Absence is the thing a reader cannot see. A requirement whose results
     never parsed reads exactly as one whose tests never ran, and the two call
@@ -4352,7 +4351,7 @@ def check_ingestion_faults(
         if entry.graph is None:
             continue
         for fault in sorted(
-            entry.graph.ingestion_faults(),
+            (f for f in entry.graph.ingestion_faults() if not f.partial),
             key=lambda f: (f.stage, f.path, f.target or "", f.cause),
         ):
             # The artifact is named first, because it is what the reader
@@ -4375,17 +4374,85 @@ def check_ingestion_faults(
         return HealthCheck(
             name="tests.ingestion_fault",
             passed=True,
-            message="Every artifact ingestion reached was read in full",
+            message="Every artifact ingestion reached produced records",
             category="tests",
             severity=severity,
         )
     return HealthCheck(
         name="tests.ingestion_fault",
         passed=False,
-        message=f"{len(findings)} artifact(s) ingestion could not read, or not read in full",
+        message=f"{len(findings)} artifact(s) ingestion could not read",
         category="tests",
         severity=severity,
         details={"count": len(findings)},
+        findings=findings,
+    )
+
+
+# Implements: REQ-d00254-Q
+def check_partial_reads(graph: FederatedGraph, config: dict[str, Any] | None = None) -> HealthCheck:
+    """Report artifacts read in part, once per condition rather than per file.
+
+    A coverage report whose per-file re-analysis failed WAS read; what it
+    says about the size of those files was not. The lines it recorded as
+    executed are kept, so nothing is thrown away, but the total is unknown
+    and those files are left out of any line-coverage figure. Without this
+    the figure would simply be over fewer files than the reader assumes.
+
+    One condition, not one finding per file. Thirty-nine templates a coverage
+    tool cannot parse are one fact about the project, and REQ-p00019-K asks
+    that a count of findings be a count of distinct facts. The stage is the
+    condition: it says which ingestion step read short.
+
+    Not a defect somebody introduced, so `info` by default -- it is a
+    disclosure about the basis of a figure. A project that would rather be
+    stopped by it can configure that.
+    """
+    severity = severity_for("tests.partial_read", config)
+    if severity == Severity.OFF:
+        return skipped_check("tests.partial_read", "Artifacts ingestion read only in part")
+
+    findings: list[HealthFinding] = []
+    total_files = 0
+    for entry in graph.iter_repos():
+        if entry.graph is None:
+            continue
+        by_stage: dict[str, list] = {}
+        for fault in entry.graph.ingestion_faults():
+            if fault.partial:
+                by_stage.setdefault(fault.stage, []).append(fault)
+        for stage, faults in sorted(by_stage.items()):
+            paths = sorted({f.path for f in faults if f.path})
+            total_files += len(paths)
+            findings.append(
+                HealthFinding(
+                    message=(
+                        f"{stage}: {len(paths)} file(s) read in part, so their totals "
+                        f"are unknown and they are left out of line-coverage figures. "
+                        f"Affected: {', '.join(paths[:5])}"
+                        + (f", and {len(paths) - 5} more" if len(paths) > 5 else "")
+                    ),
+                    repo=entry.name,
+                )
+            )
+
+    if not findings:
+        return HealthCheck(
+            name="tests.partial_read",
+            passed=True,
+            message="Every artifact ingestion reached was read in full",
+            category="tests",
+        )
+    return HealthCheck(
+        name="tests.partial_read",
+        passed=False,
+        message=(
+            f"{len(findings)} ingestion step(s) read part of what they reached, "
+            f"covering {total_files} file(s) whose totals are unknown"
+        ),
+        category="tests",
+        severity=severity,
+        details={"conditions": len(findings), "files": total_files},
         findings=findings,
     )
 
@@ -4510,6 +4577,7 @@ def run_test_checks(
         check_test_results_stale(graph, config),
         check_unmatched_results(graph, config),
         check_ingestion_faults(graph, config),
+        check_partial_reads(graph, config),
         _check_status_references(
             graph, NodeKind.TEST, StatusRole.RETIRED, exclude_status=exclude_status, config=config
         ),

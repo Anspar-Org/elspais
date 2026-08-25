@@ -148,7 +148,7 @@ _PLACEMENT_EDGE_KINDS = frozenset(
 # Implements: REQ-d00285-A, REQ-d00285-G
 @dataclass(frozen=True)
 class IngestionFault:
-    """An artifact the tool reached, declined to read, and produced nothing from.
+    """An artifact the tool reached and could not read, in whole or in part.
 
     A results file that will not parse, a coverage report naming a format no
     reporter reads, a configured target whose working directory leaves the
@@ -173,6 +173,12 @@ class IngestionFault:
         line: The 1-based line the condition sits on, where it has one.
         target: The ``[[scanning.test.targets]]`` entry being read, where the
             condition arose under one.
+        partial: Whether the artifact was read in part rather than not at
+            all. The two call for different actions -- an artifact that
+            produced nothing is a defect somebody must fix, while one read in
+            part has yielded what it could and left a figure whose basis
+            differs from its appearance -- so they are reported apart and
+            carry their own severities (REQ-d00254-Q).
     """
 
     path: str
@@ -180,6 +186,7 @@ class IngestionFault:
     cause: str
     line: int | None = None
     target: str | None = None
+    partial: bool = False
 
 
 # Implements: REQ-d00285-G, REQ-p00019-K
@@ -190,8 +197,9 @@ def _record_ingestion_fault(
     cause: str,
     line: int | None = None,
     target: str | None = None,
+    partial: bool = False,
 ) -> None:
-    """Record, once, an artifact ingestion produced nothing from.
+    """Record, once, an artifact ingestion could not read in full.
 
     The same artifact declined for the same cause at the same stage is one
     fact about the build. Recording it twice would make a count of findings
@@ -201,7 +209,9 @@ def _record_ingestion_fault(
     does, so the two holders of these records share this one rule rather than
     each deciding when a condition is the same one again.
     """
-    fault = IngestionFault(path=path, stage=stage, cause=cause, line=line, target=target)
+    fault = IngestionFault(
+        path=path, stage=stage, cause=cause, line=line, target=target, partial=partial
+    )
     if fault in store:
         return
     store.append(fault)
@@ -650,9 +660,10 @@ class TraceGraph:
         cause: str,
         line: int | None = None,
         target: str | None = None,
+        partial: bool = False,
     ) -> None:
-        """Record an artifact an ingestion pass over this graph read nothing from."""
-        _record_ingestion_fault(self._ingestion_faults, path, stage, cause, line, target)
+        """Record an artifact an ingestion pass over this graph could not read in full."""
+        _record_ingestion_fault(self._ingestion_faults, path, stage, cause, line, target, partial)
 
     # Implements: REQ-d00285-G
     def ingestion_faults(self) -> list[IngestionFault]:
@@ -4010,9 +4021,10 @@ class GraphBuilder:
         cause: str,
         line: int | None = None,
         target: str | None = None,
+        partial: bool = False,
     ) -> None:
-        """Record an artifact ingestion reached and produced nothing from."""
-        _record_ingestion_fault(self._ingestion_faults, path, stage, cause, line, target)
+        """Record an artifact ingestion reached and could not read in full."""
+        _record_ingestion_fault(self._ingestion_faults, path, stage, cause, line, target, partial)
 
     # Implements: REQ-d00241-F
     def record_unscanned_keyword_file(self, path: str, kind: str, keyword: str, line: int) -> None:

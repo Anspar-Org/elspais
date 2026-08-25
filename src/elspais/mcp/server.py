@@ -2331,7 +2331,11 @@ def _get_project_summary(
     result["coverage_by_level"] = collect_coverage(graph, config)["levels"]
 
     code_cov = count_code_coverage(graph)
-    if code_cov["total_executable_lines"] > 0:
+    # Implements: REQ-d00254-Q
+    # Reported when anything was measured, and also when nothing was because
+    # every file's source defeated analysis -- omitting it there would be the
+    # same silence as reporting no coverage at all.
+    if code_cov["total_executable_lines"] > 0 or code_cov["unmeasured_files"]:
         result["code_coverage"] = code_cov
 
     return result

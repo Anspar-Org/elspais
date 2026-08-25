@@ -374,12 +374,17 @@ _DESCRIPTIONS: dict[str, str] = {
         "coverage and is reported here instead"
     ),
     "tests.ingestion_fault": (
-        "An artifact ingestion could not read, or could not read in full -- a results or coverage "
-        "report that would not parse, one in a format no reporter reads, a reporter name that "
-        "matches none, a results pattern that matched nothing, a coverage file that is not "
-        "there, a target whose working directory leaves the repository, or a report that was "
-        "read while part of what it says was declined. What went unread is absent from every "
+        "An artifact ingestion could not read at all -- a results or coverage report that would "
+        "not parse, one in a format no reporter reads, a reporter name that matches none, a "
+        "results pattern that matched nothing, a coverage file that is not there, or a target "
+        "whose working directory leaves the repository. What went unread is absent from every "
         "figure, and absence reads as a zero"
+    ),
+    "tests.partial_read": (
+        "An artifact ingestion read only in part -- a coverage report whose per-file re-analysis "
+        "failed, so the lines it recorded as executed are known but the totals are not. Those "
+        "files are left out of any line-coverage figure rather than counted at their executed "
+        "size, and this says how many"
     ),
     "tests.unrunnable_file": (
         "A scanned test file that no configured test target can execute, so what it verifies can "
@@ -577,6 +582,7 @@ def _registry() -> dict[str, CheckRule]:
         # whose results are always present by the time the graph is built --
         # raises it to `error` under `[rules.severity]`.
         _general("tests.ingestion_fault", "tests", Severity.WARNING),
+        _general("tests.partial_read", "tests", Severity.INFO),
         # A target may legitimately carry no command -- the schema says so
         # ("omitted in CI", where the tests already ran) -- so a project whose
         # every target is ingest-only would be told at warning, on every file
