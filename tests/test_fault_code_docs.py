@@ -192,37 +192,14 @@ CASES: dict[str, Expected] = {
             ("malformed", "REQ-d00001-AB", (_E.SYNTAX_ERROR, _E.IDENTIFIER_WITH_TRAILING_TEXT)),
         ),
     ),
-    # The row's prose: trailing text on the first item, and a second item
-    # that reads as a name no repository claims -- which is what
-    # ``unknown_namespace`` says.
-    "# Implements: REQ-d00001 (A, C)": Expected(
-        faults=(
-            (
-                "malformed",
-                "REQ-d00001 (A",
-                (_E.SYNTAX_ERROR, _E.IDENTIFIER_WITH_TRAILING_TEXT),
-            ),
-            ("unknown_namespace", "C)", (_E.SYNTAX_ERROR,)),
-        ),
-    ),
+    # The row's prose: the list ends at ``(A``, so the bare requirement is
+    # what the author wrote and ``(A, C)`` is left over. It names no
+    # requirement, so nothing is reported for it either.
+    "# Implements: REQ-d00001 (A, C)": Expected(binds=(("REQ-d00001", ()),)),
     "# Implements: REQ-d00001-A - one environment": Expected(
-        faults=(
-            (
-                "malformed",
-                "REQ-d00001-A - one environment",
-                (_E.SYNTAX_ERROR, _E.IDENTIFIER_WITH_TRAILING_TEXT),
-            ),
-        ),
+        binds=(("REQ-d00001", ("A",)),),
     ),
-    "# Implements: REQ-d00001-A + B": Expected(
-        faults=(
-            (
-                "malformed",
-                "REQ-d00001-A + B",
-                (_E.SYNTAX_ERROR, _E.IDENTIFIER_WITH_TRAILING_TEXT),
-            ),
-        ),
-    ),
+    "# Implements: REQ-d00001-A + B": Expected(binds=(("REQ-d00001", ("A",)),)),
     "# Implements: REQ-d00001-A # why": Expected(binds=(("REQ-d00001", ("A",)),)),
     # The doc's own fixture holds no REQ-d00002, so the second named item
     # is an unknown requirement in its own right. Stated here rather than

@@ -5031,7 +5031,7 @@ class GraphBuilder:
             return verdicts[(keyword, target_id)]
         return self._resolution_class(target_id), ()
 
-    # Implements: REQ-d00272-E, REQ-d00269-F
+    # Implements: REQ-d00272-O, REQ-d00269-F
     def _fault_diagnostic(self, target_id: str, codes: tuple[str, ...]) -> str:
         """What to tell the author about a reference that produced nothing.
 
@@ -5040,7 +5040,7 @@ class GraphBuilder:
         off the failing line; content the grammar could not account for is
         answered by naming both halves of the item, since the codes and the
         verbatim text never say where one ends and the other begins
-        (REQ-d00272-E). Everything else gets nothing rather than a guess.
+        (REQ-d00272-O). Everything else gets nothing rather than a guess.
         """
         assertions = getattr(getattr(self._resolver, "config", None), "assertions", None)
         if assertions is None:

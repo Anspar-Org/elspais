@@ -259,13 +259,13 @@ missing = "info"
 
 # Severity for code/test references to non-active requirements
 [rules.references]
-# "ok" | "info" | "warning" | "error" -- refs to Deprecated/Superseded/Rejected
+# "off" | "info" | "warning" | "error" -- refs to Deprecated/Superseded/Rejected
 retired = "warning"
-# "ok" | "info" | "warning" | "error" -- refs to Draft/Proposed
+# "off" | "info" | "warning" | "error" -- refs to Draft/Proposed
 provisional = "info"
-# "ok" | "info" | "warning" | "error" -- refs to Roadmap/Future/Idea
+# "off" | "info" | "warning" | "error" -- refs to Roadmap/Future/Idea
 aspirational = "info"
-# "ok" | "info" | "warning" | "error" -- a comment citing a requirement in
+# "off" | "info" | "warning" | "error" -- a comment citing a requirement in
 # prose without a keyword. This estate writes those deliberately, so the
 # findings are listed without failing the run.
 undeclared = "info"

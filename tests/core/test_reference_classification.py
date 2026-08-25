@@ -767,7 +767,7 @@ def test_an_item_no_relaxation_explains_is_named_no_further(reader):
     assert reader.own.diagnose_item("WIDGET-42") == ()
 
 
-# Verifies: REQ-d00272-E
+# Verifies: REQ-d00272-O
 def test_an_identifier_followed_by_other_text_names_both(reader):
     codes = reader.own.diagnose_item("REQ-d00001 (A")
     assert FaultCode.IDENTIFIER_WITH_TRAILING_TEXT in codes
@@ -979,7 +979,7 @@ def test_repeated_colons_after_a_keyword_bind_nothing(tmp_path, repo_root):
 # --------------------------------------------------------------------------- #
 
 
-# Verifies: REQ-d00272-E
+# Verifies: REQ-d00272-O
 @pytest.mark.parametrize(
     "item",
     [
@@ -1004,7 +1004,7 @@ def test_a_reference_followed_by_prose_names_the_reference_and_the_remainder(rea
     assert trailing.strip(), "the remainder is what the report has to name alongside it"
 
 
-# Verifies: REQ-d00287-A, REQ-d00287-E
+# Verifies: REQ-d00287-B, REQ-d00287-E
 @pytest.mark.parametrize(
     "item",
     [
@@ -1013,14 +1013,18 @@ def test_a_reference_followed_by_prose_names_the_reference_and_the_remainder(rea
         "REQ-d00001-A + B",
     ],
 )
-def test_a_reference_followed_by_prose_still_binds_nothing(reader, item):
-    """Reading within an item informs the report and contributes no
-    relationship. A better diagnosis must not become a licence to resolve: a
-    space is still what no identifier contains."""
+def test_a_reference_followed_by_prose_binds_and_the_rest_is_residue(reader, item):
+    """The reference the author wrote binds, and the content the list ended at
+    is carried as residue rather than read as a second reference or as a
+    failure of the first."""
     items = reader.parse_ref_list(item)
-    assert len(items) == 1
-    assert items[0].resolved is None
-    assert items[0].fault_class is FaultClass.MALFORMED
+    assert len(items) == 2
+    assert items[0].resolved == "REQ-d00001-A"
+    assert items[0].fault_class is None
+    assert items[1].residue is True
+    assert items[1].raw == item.split(" ", 1)[1].strip()
+    assert items[1].resolved is None
+    assert items[1].fault_class is None, "residue is not an item that failed to read"
 
 
 # Verifies: REQ-d00272-L
@@ -1070,62 +1074,56 @@ def test_a_trailing_separator_followed_by_prose_reports_only_the_prose(reader):
 
 
 # Verifies: REQ-d00287-B
-@pytest.mark.parametrize("marker", ["#", "//", "--"])
-def test_a_comment_after_a_reference_ends_it_rather_than_breaking_it(reader, marker):
+@pytest.mark.parametrize("marker", ["#", "//", "--", "and"])
+def test_a_comment_after_a_reference_ends_the_list_rather_than_breaking_it(reader, marker):
     """Citing a requirement and then explaining, on the same line, why the
-    code answers to it is a natural way to write. The comment is comment; the
-    reference before it is read."""
+    code answers to it is a natural way to write. The reference before the
+    explanation is read, and no language is consulted to find where the list
+    ended -- a comment marker ends it exactly as an ordinary word does."""
     items = reader.parse_ref_list(f"REQ-d00001-A {marker} explains why this one")
-    assert len(items) == 1
+    assert len(items) == 2
     assert items[0].resolved == "REQ-d00001-A"
     assert items[0].fault_class is None
     assert items[0].raw == "REQ-d00001-A", (
-        "the comment is not part of what the author wrote as a target"
+        "the explanation is not part of what the author wrote as a target"
     )
+    assert items[1].residue is True
+    assert items[1].raw == f"{marker} explains why this one"
 
 
 # Verifies: REQ-d00287-B
-def test_a_comment_may_hold_the_character_that_divides_a_list(reader):
-    """The comment comes off before the list is divided. Dividing first would
-    shred a sentence into items and report each fragment as a reference its
-    author never wrote."""
+def test_residue_holding_the_dividing_character_is_carried_whole(reader):
+    """Everything from where the list ended is one piece of residue. Dividing
+    it further would shred a sentence into items and report each fragment as a
+    reference its author never wrote."""
     items = reader.parse_ref_list("REQ-d00001-A, REQ-d00002 # first, second and third")
-    assert [i.resolved for i in items] == ["REQ-d00001-A", "REQ-d00002"]
+    assert [i.resolved for i in items] == ["REQ-d00001-A", "REQ-d00002", None]
     assert all(i.fault_class is None for i in items)
+    assert items[2].residue is True
+    assert items[2].raw == "# first, second and third"
 
 
-# Verifies: REQ-d00287-B
-def test_a_marker_needs_whitespace_before_it_to_open_a_comment(reader):
-    """Without the space a marker's characters are just characters an
-    identifier may abut, and `REQ-d00001--A` is a separator defect rather than
-    a requirement with a comment after it."""
+# Verifies: REQ-d00287-A, REQ-d00287-E
+def test_a_token_that_runs_on_is_malformed_rather_than_a_reference_plus_residue(reader):
+    """`REQ-d00001--A` is one whitespace-delimited token, so the identifier
+    never ended: it is a separator defect rather than a reference with content
+    after it, and reading a shorter reference out of it would resolve a
+    citation the author did not manage to spell."""
     items = reader.parse_ref_list("REQ-d00001--A")
     assert len(items) == 1
-    assert items[0].resolved is None, (
-        "reading this as a reference plus a comment would resolve a citation "
-        "whose assertion label the author did not manage to spell"
-    )
+    assert items[0].resolved is None
+    assert items[0].residue is False
     assert items[0].fault_class is FaultClass.MALFORMED
 
 
 # Verifies: REQ-d00287-B
-def test_a_marker_opens_no_comment_where_no_reference_precedes_it(reader):
-    """A marker ends a reference. With none before it there is nothing for it
-    to end, so the item is judged whole."""
+def test_an_item_opening_with_no_reference_is_judged_whole(reader):
+    """A list ends after the reference it was holding. With no reference at
+    the start of the item there is nothing to end, so the whole item is judged
+    rather than split at the first thing that resembles a comment."""
     fault_class, codes = reader.classify_unmatched("not a reference -- at all")
     assert fault_class is FaultClass.MALFORMED
     assert codes == (FaultCode.NOT_AN_IDENTIFIER,)
-
-
-# Verifies: REQ-d00287-B
-def test_a_caller_naming_its_language_decides_which_markers_end_a_reference(reader):
-    """Which markers open a comment is a property of a language. A caller that
-    knows the file's kind says so, and a language with no such marker reads the
-    whole item."""
-    items = reader.parse_ref_list("REQ-d00001-A # not a comment here", comment_markers=())
-    assert len(items) == 1
-    assert items[0].resolved is None
-    assert items[0].codes == (FaultCode.IDENTIFIER_WITH_TRAILING_TEXT,)
 
 
 # --------------------------------------------------------------------------- #
@@ -1156,23 +1154,41 @@ def test_space_around_the_dividing_character_is_not_part_of_an_item(reader, text
 # --------------------------------------------------------------------------- #
 
 
-# Verifies: REQ-d00272-E
-def test_an_annotation_glossing_its_reference_is_reported_naming_both_halves(tmp_path, repo_root):
-    """The reader's account has to survive to the surface that reports it. An
-    author who cited a requirement and then explained it in prose is told which
-    reference was read and what was left over, on the line they wrote."""
+# Verifies: REQ-d00272-O
+def test_residue_naming_a_requirement_is_reported_as_an_undeclared_relationship(
+    tmp_path, repo_root
+):
+    """An author who named a second requirement after the list had ended
+    declared no relationship to it. It is catalogued as undeclared so the
+    omission is visible, and the reference they did cite still binds."""
+    graph = _project(
+        tmp_path,
+        repo_root,
+        "# Implements: REQ-d00001-A and also REQ-d00001-B\ndef f():\n    return 1\n",
+    )
+    assert not [f for f in graph.unresolved_references() if f.source_id.startswith("code:")]
+    undeclared = [f.text for f in graph.undeclared_relationships()]
+    assert undeclared == ["and also REQ-d00001-B"]
+    node = graph.find_by_id("REQ-d00001")
+    assert node is not None
+    edges = list(node.iter_edges_by_kind(EdgeKind.IMPLEMENTS))
+    assert [e.assertion_targets for e in edges] == [["A"]], (
+        "only the assertion the author cited is implemented"
+    )
+
+
+# Verifies: REQ-d00272-O
+def test_residue_naming_no_requirement_is_reported_as_nothing(tmp_path, repo_root):
+    """Prose that names no requirement declares nothing and intends nothing,
+    so there is no relationship for it to be missing -- cataloguing it would
+    report every explanatory comment in the estate."""
     graph = _project(
         tmp_path,
         repo_root,
         "# Implements: REQ-d00001-A - one environment\ndef f():\n    return 1\n",
     )
-    faults = [f for f in graph.unresolved_references() if f.source_id.startswith("code:")]
-    assert len(faults) == 1, f"expected one fault, got {faults}"
-    fault = faults[0]
-    assert fault.fault_class is FaultClass.MALFORMED
-    assert FaultCode.IDENTIFIER_WITH_TRAILING_TEXT in fault.codes
-    assert "REQ-d00001-A" in fault.diagnostic
-    assert "one environment" in fault.diagnostic
+    assert not [f for f in graph.unresolved_references() if f.source_id.startswith("code:")]
+    assert not list(graph.undeclared_relationships())
 
 
 # Verifies: REQ-d00287-B, REQ-d00287-E

@@ -25,7 +25,6 @@ from elspais.graph.parsers.patterns import (
     comment_pattern_for_path,
     comment_style_fragment,
 )
-from elspais.graph.reference_faults import FaultClass, FaultCode
 from elspais.utilities.patterns import IdPatternConfig, IdResolver
 
 _CONFIG = {
@@ -128,33 +127,18 @@ def test_a_reference_followed_by_its_own_comment_resolves_with_the_remainder_ign
     assert _bound(dispatcher, content, path) == {"REQ-d00001-A"}
 
 
-# Verifies: REQ-d00272-E
-def test_another_languages_marker_does_not_end_a_reference(dispatcher):
-    """``--`` closes nothing in a c-like file, so it cannot silently truncate.
-
-    The reference is followed by content that opens neither a further
-    reference nor a comment this language admits. It is therefore reported
-    rather than repaired: the clean identifier is NOT bound, and the item is
-    carried through verbatim under a fault of its own. Truncating at a marker
-    the language does not admit would create an edge the author never wrote
-    and report nothing.
+# Verifies: REQ-d00287-B
+def test_where_a_reference_list_ends_does_not_depend_on_the_language(dispatcher):
+    """A list is identifiers, separators and whitespace, so it ends at the
+    first content that is none of those -- and ``--`` is such content in a
+    c-like file exactly as it is in SQL. Reading it one way in one language
+    and another way in another would make the same citation bind in one file
+    and fault in the other.
     """
-    content = "// Implements: REQ-d00001-A -- because the hash must be salted\n"
-    assert "REQ-d00001-A" not in _bound(dispatcher, content, "svc.js")
-
-    verdicts = _verdicts(dispatcher, content, "svc.js")
-    assert len(verdicts) == 1
-    ((target, (fault_class, codes)),) = verdicts.items()
-    assert target == ("implements", "REQ-d00001-A -- because the hash must be salted")
-    assert fault_class is FaultClass.MALFORMED
-    assert codes == (FaultCode.IDENTIFIER_WITH_TRAILING_TEXT,)
-
-    # The same line in the language that DOES admit that marker resolves
-    # cleanly and reports nothing -- the difference is the language, and only
-    # the language.
-    sql = "-- Implements: REQ-d00001-A -- because the hash must be salted\n"
-    assert _bound(dispatcher, sql, "schema.sql") == {"REQ-d00001-A"}
-    assert _verdicts(dispatcher, sql, "schema.sql") == {}
+    for path, opener in (("svc.js", "//"), ("schema.sql", "--")):
+        content = f"{opener} Implements: REQ-d00001-A -- because the hash must be salted\n"
+        assert _bound(dispatcher, content, path) == {"REQ-d00001-A"}
+        assert _verdicts(dispatcher, content, path) == {}
 
 
 # --- An extension the set does not name ------------------------------------ #
@@ -225,14 +209,13 @@ def test_every_associated_extension_names_exactly_one_pattern_from_the_set():
 
 # Verifies: REQ-d00236-H
 def test_the_marker_a_file_type_uses_has_one_spelling_across_the_tool():
-    """Grammar, term scanner and metadata convention all read the one map.
+    """Grammar and term scanner both read the one map.
 
-    Each of these three surfaces previously spelled the marker set itself.
+    Each of these surfaces previously spelled the marker set itself.
     Comparing them against the map rather than against a literal is what
     makes a future divergence fail here.
     """
     from elspais.graph import term_scanner
-    from elspais.utilities.patterns import default_comment_markers
 
     for pattern, langs in (
         (CommentPattern.SHELL_LIKE, term_scanner._HASH_LANGS),
@@ -241,10 +224,8 @@ def test_the_marker_a_file_type_uses_has_one_spelling_across_the_tool():
     ):
         assert langs == {ext for ext, p in COMMENT_PATTERN_BY_EXTENSION.items() if p is pattern}
 
-    # The spec/journey metadata convention is drawn from the same set rather
-    # than respelled. It is not a per-file reference override: a metadata line
-    # is markdown, not a comment in any language.
-    assert default_comment_markers() == METADATA_COMMENT_MARKERS
+    # The markers that stand in for a language the tool has no pattern for
+    # are drawn from the same set rather than respelled.
     assert set(METADATA_COMMENT_MARKERS) <= {p.marker for p in CommentPattern}
 
 

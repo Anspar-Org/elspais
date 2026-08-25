@@ -142,26 +142,31 @@ once:
 **Implements**: REQ-p00001-A+B, REQ-p00002
 ```
 
-A target holding anything else -- prose around the reference, trailing
-words the grammar cannot account for, an identifier from another estate that
-merely contains one of yours -- resolves to nothing and is reported,
-carrying the line as written. No identifier is picked out of it: an edge to
-a requirement you never named would be evidence filed against the wrong
-requirement, and nothing would report it.
+The list ends at the first thing that is not a reference, a comma or
+whitespace. What the author wrote before that is read; what follows is left
+over and binds nothing. So a note needs no marker to be a note -- though a
+marker reads the same way:
 
 ```text
-# Implements: REQ-p00001 the flag path           (trailing words are not a reference)
+# Implements: REQ-p00001 the flag path           (binds REQ-p00001; the words are left over)
+# Implements: REQ-p00001  # the flag path        (the same reading, with a marker)
+```
+
+A target that does not START with a reference resolves to nothing and is
+reported, carrying the line as written. No identifier is picked out of the
+middle of it: an edge to a requirement you never named would be evidence
+filed against the wrong requirement, and nothing would report it. Nor is a
+reference read out of a word that runs on past it.
+
+```text
 # Verifies: exit code is worst-of-all (REQ-p00001-C)   (prose is not a list)
 # Implements: XREQ-d00001                        (not your REQ-d00001)
+# Implements: REQ-p00001--A                      (one word; the identifier never ended)
 ```
 
-A note is the exception, because a note says it is one. Open it with a
-comment marker -- `#`, `//` or `--` after a space -- and the reference before
-it is read while the rest is comment:
-
-```text
-# Implements: REQ-p00001  # the flag path
-```
+Left-over content that names a requirement is reported as an undeclared
+relationship, so a second requirement written after the list has ended is
+visible rather than silently dropped.
 
 ## JSON Output
 

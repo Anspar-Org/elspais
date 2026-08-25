@@ -305,12 +305,17 @@ def comment_markers_for_path(path: str) -> tuple[str, ...]:
 
 
 # Implements: REQ-p00014-T
-# Spec and journey metadata lines are not comments in any language -- they are
-# markdown fields, and the trailing prose an author may write after a reference
-# there is conventionally opened by one of these three. Named from the set
-# above rather than respelled, and deliberately NOT an exception to
-# REQ-d00269-K: that assertion governs where a keyword may be READ, which for
-# a metadata line is decided by the field itself, not by a marker.
+# The markers to assume where a file's language names none: a spec or journey
+# metadata line is a markdown field rather than source, and a file type the
+# map does not name has no marker at all.
+#
+# These say where a keyword may BEGIN. Where a reference list ENDS needs no
+# marker -- a list is identifiers, separators and whitespace, so it ends at
+# the first content that is none of those (REQ-d00287-B).
+#
+# Named from the set above rather than respelled, and deliberately not an
+# exception to REQ-d00269-K, which governs where a keyword may be read: for a
+# metadata line that is decided by the field itself.
 METADATA_COMMENT_MARKERS: tuple[str, ...] = (
     CommentPattern.SHELL_LIKE.marker,
     CommentPattern.C_LIKE.marker,

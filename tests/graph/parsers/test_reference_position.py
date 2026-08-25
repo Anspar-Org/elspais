@@ -415,32 +415,32 @@ class TestATargetHoldingMoreThanReferencesIsUnresolved:
 
         assert _verifies(dispatcher, source) == ["some prose (REQ-p00001-A)"]
 
-    # Verifies: REQ-d00269-G
-    def test_REQ_d00269_G_one_unreadable_item_leaves_the_whole_line_unresolved(
+    # Verifies: REQ-d00287-B, REQ-d00287-E
+    def test_REQ_d00287_B_a_second_identifier_after_the_list_ended_is_not_a_target(
         self, dispatcher: FileDispatcher
     ) -> None:
-        """The line is the unit: a target part-read is a target misread."""
+        """The list ends at the word after the reference, so the name written
+        beyond it is not read as a second target."""
         source = "# Implements: REQ-p00001 and see XREQ-d00002\ndef impl():\n    pass\n"
 
-        assert _implements(dispatcher, source) == ["REQ-p00001 and see XREQ-d00002"]
+        assert _implements(dispatcher, source) == ["REQ-p00001"]
 
-    # Verifies: REQ-d00269-G, REQ-d00272-E
-    def test_REQ_d00269_G_trailing_prose_after_a_readable_reference_is_not_read(
+    # Verifies: REQ-d00287-B, REQ-d00287-E
+    def test_REQ_d00287_B_prose_after_a_readable_reference_is_not_part_of_the_target(
         self, dispatcher: FileDispatcher
     ) -> None:
-        """Prose that opens neither a further reference nor a comment leaves
-        the target holding the whole line: the reference is described in the
-        report, never resolved out of it."""
+        """The reference the author wrote binds, and the prose after it stays
+        out of the target rather than being absorbed into it."""
         source = "# Implements: REQ-p00001 the flag path\ndef impl():\n    pass\n"
 
-        assert _implements(dispatcher, source) == ["REQ-p00001 the flag path"]
+        assert _implements(dispatcher, source) == ["REQ-p00001"]
 
     # Verifies: REQ-d00287-B
-    def test_REQ_d00272_Q_a_comment_after_a_readable_reference_ends_it(
+    def test_REQ_d00287_B_a_comment_after_a_readable_reference_ends_the_list(
         self, dispatcher: FileDispatcher
     ) -> None:
-        """A marker that opens a comment closes the reference before it, so
-        what follows is prose rather than part of the target."""
+        """A comment marker is content like any other word: it ends the list,
+        and the reference before it is read."""
         source = "# Implements: REQ-p00001 # the flag path\ndef impl():\n    pass\n"
 
         assert _implements(dispatcher, source) == ["REQ-p00001"]

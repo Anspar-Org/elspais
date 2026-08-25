@@ -372,11 +372,12 @@ def _targets(reader, line):
     """Every target ``read_reference_list`` resolves out of an annotation line.
 
     ONE reading of a reference list, so what a journey id may be written
-    beside is what any other reference may be written beside. A shell-like
-    comment marker is named because a comment ends a reference (REQ-d00287-B)
-    and which characters open one is a fact about the file's language.
+    beside is what any other reference may be written beside. Reading needs
+    nothing about the file's language: a list is identifiers, separators and
+    whitespace, so it ends at the first content that is none of those
+    (REQ-d00287-B).
     """
-    return [item.resolved for item in read_reference_list(reader, line, ("#",)) if item.resolved]
+    return [item.resolved for item in read_reference_list(reader, line) if item.resolved]
 
 
 # ---------------------------------------------------------------------------

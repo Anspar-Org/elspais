@@ -268,18 +268,22 @@ The keyword that introduces a reference in a test file is
 configurable: each file type is associated with exactly one, from the named set
 above, and a keyword inside a block comment is not read.
 
-That file's own marker also *ends* a reference. A marker written after
-whitespace closes the reference before it, and everything from there is comment,
-so in a Python file `# Implements: REQ-d00001-A  # the only place this happens`
-binds `REQ-d00001-A` and reads the rest as prose. Only that language's own
-marker does this: in a `.js` file, `// Implements: REQ-d00001-A -- why` does NOT
-end at the double dash, because `--` opens no comment there -- the trailing text
-stays part of the item and is reported as malformed rather than silently
-dropped.
+Where the list *ends* needs no knowledge of the language. A reference list is
+identifiers, separators and whitespace, so it ends at the first content that is
+none of those. `# Implements: REQ-d00001-A  # the only place this happens` binds
+`REQ-d00001-A` and leaves the rest out of the list, and so does
+`// Implements: REQ-d00001-A -- why` in a `.js` file: the double dash is
+content the list is not made of, whatever it means in that language.
 
-The whitespace is required: without it the marker's characters are just
-characters an identifier may abut, so `REQ-d00001--A` is read as a reference
-written wrongly rather than as one with a comment after it.
+Everything from where the list ended is left over. It binds nothing. Where it
+names a requirement, it is reported as an undeclared relationship, since a
+requirement named without a keyword declares nothing; where it names none, it
+is prose and nothing is reported.
+
+The reference is read only where the first whitespace-delimited word IS that
+reference. `REQ-d00001--A` is one word, so the identifier never ended: it is
+reported as a reference written wrongly rather than read as `REQ-d00001`
+followed by something else.
 
 See `elspais docs config` for the full configuration reference.
 
@@ -305,10 +309,10 @@ before an *Assertion* label, `+` between labels), and the repository holds
 | `# Implements: REQ-d00001-1` | malformed | `E_LABEL_OUT_OF_SERIES` |
 | `# Implements: REQ-d123456` | malformed | `E_COMPONENT_OUT_OF_RANGE` |
 | `# Implements: REQ-d00001-AB` | malformed | `E_IDENTIFIER_WITH_TRAILING_TEXT` |
-| `# Implements: REQ-d00001 (A, C)` | malformed | `E_IDENTIFIER_WITH_TRAILING_TEXT` on the first item; the second reads as a name no repository claims |
-| `# Implements: REQ-d00001-A - one environment` | malformed | `E_IDENTIFIER_WITH_TRAILING_TEXT` |
-| `# Implements: REQ-d00001-A + B` | malformed | `E_IDENTIFIER_WITH_TRAILING_TEXT` |
-| `# Implements: REQ-d00001-A # why` | — | binds `REQ-d00001-A`; the rest is comment |
+| `# Implements: REQ-d00001 (A, C)` | — | binds `REQ-d00001`; the list ends at `(A`, and `(A, C)` names no requirement |
+| `# Implements: REQ-d00001-A - one environment` | — | binds `REQ-d00001-A`; the rest names no requirement |
+| `# Implements: REQ-d00001-A + B` | — | binds `REQ-d00001-A`; the spaced `+ B` is not part of the list |
+| `# Implements: REQ-d00001-A # why` | — | binds `REQ-d00001-A`; the rest is left over |
 | `# Implements: REQ-d00001,,REQ-d00002` | malformed | `E_EMPTY_ITEM` |
 | `# Implements: REQ-d00001,` (nothing follows) | malformed | `E_TRAILING_SEPARATOR` |
 | `# Implements:` | malformed | `E_EMPTY_REFERENCE_LIST` |

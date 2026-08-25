@@ -187,7 +187,7 @@
 | REQ-d00269 | Cross-Repository Coverage Credit                              | dev-graph-federation.md | 8c9eb97a |
 | REQ-d00270 | Single-Authority Identifier Grammar Derivation                | dev-graph-config.md     | fe29efc0 |
 | REQ-d00271 | Diagnostic Code Vocabulary                                    | dev-cli.md              | 6f4019d1 |
-| REQ-d00272 | Reference Fault Diagnosis                                     | dev-graph-core.md       | e46b563e |
+| REQ-d00272 | Reference Fault Diagnosis                                     | dev-graph-core.md       | 9f1a7a6a |
 | REQ-d00273 | Requirement Metadata Block                                    | dev-graph-file-nodes.md | 2d7e25e8 |
 | REQ-d00274 | Uncredited Coverage Evidence                                  | dev-graph-core.md       | 01a8f7d7 |
 | REQ-d00275 | Whose Configuration Governs a Federated Answer                | dev-graph-federation.md | 9ab2ef7c |

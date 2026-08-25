@@ -454,7 +454,7 @@ C. An item no grammar of the federation accepts SHALL be attributed to the repos
 
 D. Where relaxations of the grammar make an item acceptable, the report SHALL name the smallest set of relaxations that does so.
 
-E. An item that opens with an acceptable reference and continues into content no grammar accounts for SHALL be reported naming both the reference found and the content unaccounted for.
+E. <RETIRED> reported a reference followed by content the grammar did not account for. An identifier that declares no relationship is one condition wherever it sits, and O reports it.
 
 F. <RETIRED> held that reading within an item never contributes a relationship. What produces one is REQ-d00287-E.
 
@@ -472,7 +472,7 @@ M. <RETIRED> named the characters an identifier cannot hold. What an identifier 
 
 N. A reference written in an admitted spelling other than its canonical one SHALL be reported.
 
-O. Where an identifier is the first content of a comment that no *Traceability* keyword introduces and that continues no reference list, the tool SHALL report that a relationship appears intended and is undeclared.
+O. An identifier that declares no relationship SHALL be reported as undeclared, whether it opens a comment no *Traceability* keyword introduces or follows a reference list that has ended.
 
 P. The report SHALL name a reference that did not read as an identifier malformed, and one that read as an identifier and named nothing the federation holds unresolved.
 
@@ -492,12 +492,17 @@ Trailing content ranks beneath every named relaxation because an item opening wi
 
 A non-canonical form is a fact about the file rather than a defect in the reference. One canonical spelling exists for a keyword and for an identifier alike, and admitting more than one form is not writing more than one, so the report names the form that was written.
 
-A keyword its file may not use is unmistakably a declaration, and reading it as prose leaves its author never told why the annotation did nothing. An identifier opening a comment no keyword introduces is the opposite case: nothing about it is malformed, the author means the relationship, and the message worth giving is that spelling it with a keyword would make it count. A list naming a target twice is a list its author has lost track of, and reporting every instance rather than the first is what makes that visible.
+A keyword its file may not use is unmistakably a declaration, and reading it as prose leaves its author never told why the annotation did nothing. An identifier that declares nothing is the opposite case: nothing about it is malformed, and the message worth giving is that spelling it with a keyword would make it count.
+
+Where such an identifier sits does not change what it is. One opening a comment and one left after a reference list has ended are the same fact -- a requirement named where naming it does nothing -- and they carry the same remedy. Reported apart they would need two severities for one decision, and a project that had reviewed its estate would have to silence both.
+
+No test distinguishes a mention worth reporting from one worth ignoring. Any rule narrow enough to catch a missing separator also catches every deliberate mention of a requirement in prose, and a tool cannot read intent. So every instance is reported and the severity is the project's: listed while an estate is being reviewed, and withheld once it has been. A list naming a target twice is a list its author has lost track of, and reporting every instance rather than the first is what makes that visible.
 
 This requirement concretizes the REQ-p00019 anti-pattern template for reference reading. Misattribution and double-counting are the classes this subsystem is most exposed to, and they are answered by one class per item, by attribution that follows what a repository declares, and by reporting every instance of a repeated target. A defect the tool could not determine is carried as the generic code rather than passed off as no defect at all.
 
 ### Changelog
 
+- 2026-08-25 | 9f1a7a6a | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-25 | e46b563e | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-25 | 27a0182e | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-24 | 3a1ca059 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -511,7 +516,7 @@ This requirement concretizes the REQ-p00019 anti-pattern template for reference 
 - 2026-08-15 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: record how each REQ-p00019 class is answered for this subsystem — concretized, bound through the instance, or left visibly uncovered with its reason
 - 2026-08-15 | - | - | Michael Lewis (<michael@anspar.org>) | Initial authoring: the rule assigning reference failure classes — the space and namespace tests, minimal relaxation, and reading within an item without binding from it
 
-*End* *Reference Fault Diagnosis* | **Hash**: e46b563e
+*End* *Reference Fault Diagnosis* | **Hash**: 9f1a7a6a
 ---
 
 ## REQ-d00287: Reading a Reference

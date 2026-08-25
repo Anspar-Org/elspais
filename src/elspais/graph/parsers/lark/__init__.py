@@ -475,7 +475,7 @@ class FileDispatcher:
                     # each item is judged on its own, so one item the
                     # grammar cannot account for does not cost the items
                     # that did resolve (REQ-d00269-G).
-                    items = read_reference_list(self._reader, text, comment_markers)
+                    items = read_reference_list(self._reader, text)
                     for ref in (i.resolved for i in items if i.resolved):
                         if ref not in file_default_verifies:
                             file_default_verifies.append(ref)

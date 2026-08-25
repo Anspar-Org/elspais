@@ -57,6 +57,7 @@ from elspais.graph.reference_faults import (
     RefItem,
     identifier_form_defects,
     refs_and_verdicts,
+    residue_of,
 )
 from elspais.utilities.patterns import REF_LIST_SEPARATOR
 
@@ -108,7 +109,6 @@ def reference_target(text: str) -> str:
 def read_reference_list(
     reader: FederatedIdReader,
     text: str,
-    comment_markers: Sequence[str],
 ) -> list[RefItem]:
     """The items a reference line names, each with its verdict.
 
@@ -117,19 +117,18 @@ def read_reference_list(
     same targets.  A journey step belongs to its own grammar rather than to
     any repository's identifiers, so it is offered alongside them.
 
+    Where a list ends needs no knowledge of the file's language: a list is
+    identifiers, separators and whitespace, so it ends at the first content
+    that is none of those (REQ-d00287-B).  ``REQ-d00001-A -- why`` therefore
+    reads the same wherever it is written.
+
     Args:
         reader: The federation's identifier reader.
         text: The whole annotation line, keyword included.
-        comment_markers: The markers opening a comment in the language of the
-            file *text* was read from.  A second comment after a reference
-            ends it (REQ-d00287-B), and only this language's own marker may
-            do so -- ``REQ-d00001-A -- why`` ends at the dash in SQL and is a
-            malformed item in Python.  Empty says the language has none.
     """
     return reader.parse_ref_list(
         reference_target(text),
         extra_items=(_JOURNEY_REF_RE.pattern,),
-        comment_markers=comment_markers,
     )
 
 
@@ -491,7 +490,7 @@ class ReferenceTransformer:
             # earlier, so its own verdict rides along here exactly as it does
             # on the admitted path -- reporting the refusal for it would name
             # a later stage than reading actually reached.
-            items = read_reference_list(self.reader, text, self.comment_markers)
+            items = read_reference_list(self.reader, text)
             targets, verdicts = refs_and_verdicts(items, keyword)
             if not targets:
                 return None
@@ -517,7 +516,14 @@ class ReferenceTransformer:
                 parsed_data=parsed_data,
             )
 
-        items = read_reference_list(self.reader, text, self.comment_markers)
+        items = read_reference_list(self.reader, text)
+        # Implements: REQ-d00272-O
+        # Where the list ended at content, that content named no target and
+        # declared nothing. Reported so it is catalogued rather than dropped;
+        # what it was meant to be is the reader's judgement, not the tool's.
+        trailing = residue_of(items)
+        if trailing and self.reader.names_an_identifier(trailing):
+            self.undeclared.append((line_num, trailing))
         # Implements: REQ-d00272-H
         if not items:
             self.faults.append(

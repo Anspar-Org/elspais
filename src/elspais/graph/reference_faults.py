@@ -127,9 +127,10 @@ class ReferenceFault:
 class RefItem:
     """One item of a reference list, and what became of it.
 
-    Exactly one of ``resolved`` and ``fault_class`` is set.  A list is judged
-    item by item, so an item that read produces its relationship whatever its
-    neighbours did (REQ-d00269-G).
+    Exactly one of ``resolved`` and ``fault_class`` is set, unless the item
+    is residue, which sets neither.  A list is judged item by item, so an
+    item that read produces its relationship whatever its neighbours did
+    (REQ-d00269-G).
 
     Attributes:
         raw: The item as the author wrote it, stripped of surrounding space.
@@ -137,6 +138,14 @@ class RefItem:
         index: Position in the list, 0-based.
         fault_class: How far reading this item got, or None if it read.
         codes: What is wrong with it, where the input determines that.
+        residue: Whether this is the content the list ended at rather than an
+            item of it.  A list is identifiers, separators and whitespace, so
+            what follows is not a reference that failed -- it was never part
+            of the list (REQ-d00287-B).  Nothing binds it; the reporting side
+            reads it and names any relationship it appears to intend
+            (REQ-d00272-O).  Said outright rather than left to be inferred
+            from an item that resolved nothing, which is what a failure looks
+            like.
     """
 
     raw: str
@@ -144,6 +153,7 @@ class RefItem:
     resolved: str | None = None
     fault_class: FaultClass | None = None
     codes: tuple[str, ...] = ()
+    residue: bool = False
 
 
 # Implements: REQ-d00269-G, REQ-d00272-K
@@ -188,11 +198,35 @@ def refs_and_verdicts(
     that one: a repeated target under ``Refines:`` says nothing about a
     clean ``Implements:`` to the same target (REQ-d00272-K).
     """
-    refs = [i.resolved or i.raw for i in items if i.raw]
+    # Implements: REQ-d00287-B
+    # Residue is what the list ended at rather than an item of it, so it is
+    # neither a reference nor a reference that failed. Passing it through as
+    # either would have the builder try to bind a sentence, or report one as
+    # a citation nobody wrote.
+    listed = [i for i in items if not i.residue]
+    # An item with no raw text names no target, so it contributes no
+    # reference -- but it still carries a verdict. A dangling separator and
+    # a gap between two items are both reported that way, and filtering
+    # them out of the verdicts as well would leave them reported nowhere.
+    refs = [i.resolved or i.raw for i in listed if i.raw]
     verdicts = {
-        (keyword, i.raw): (i.fault_class, i.codes) for i in items if i.fault_class is not None
+        (keyword, i.raw): (i.fault_class, i.codes) for i in listed if i.fault_class is not None
     }
     return refs, verdicts
+
+
+# Implements: REQ-d00272-O
+def residue_of(items: list[RefItem]) -> str | None:
+    """The content a reference list ended at, where it ended at any.
+
+    Named where the reporting side reads it, so a caller routing it to the
+    undeclared catalogue asks one question rather than knowing how residue
+    is carried.
+    """
+    for item in items:
+        if item.residue:
+            return item.raw
+    return None
 
 
 # Implements: REQ-d00272-G
