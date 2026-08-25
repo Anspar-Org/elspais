@@ -139,6 +139,68 @@ _PLACEMENT_EDGE_KINDS = frozenset(
 )
 
 
+# Implements: REQ-d00285-A, REQ-d00285-G
+@dataclass(frozen=True)
+class IngestionFault:
+    """An artifact the tool reached, declined to read, and produced nothing from.
+
+    A results file that will not parse, a coverage report naming a format no
+    reporter reads, a configured target whose working directory leaves the
+    repository: each ends with content absent from the graph. Absent content
+    is not a fact a reader can see -- a requirement with no results reads as
+    untested whether the tests never ran or their report was unreadable, and
+    the two call for opposite actions.
+
+    This is not a reference fault: no reference was read, so none failed to
+    bind. It sits beside the other parse-time findings for the same reason
+    they do -- the point that decided to drop something records what it
+    dropped and why, rather than leaving a reader to infer it from a number
+    that came out lower than expected.
+
+    Attributes:
+        path: The artifact, repo-relative where the tool could place it, as
+            the configuration named it otherwise. Empty where the condition
+            is about a target rather than a file.
+        stage: What the tool was doing when it withheld the content --
+            ``"results"``, ``"coverage"`` or ``"target"``.
+        cause: Why nothing was produced, in terms a reader can act on.
+        line: The 1-based line the condition sits on, where it has one.
+        target: The ``[[scanning.test.targets]]`` entry being read, where the
+            condition arose under one.
+    """
+
+    path: str
+    stage: str
+    cause: str
+    line: int | None = None
+    target: str | None = None
+
+
+# Implements: REQ-d00285-G, REQ-p00019-K
+def _record_ingestion_fault(
+    store: list[IngestionFault],
+    path: str,
+    stage: str,
+    cause: str,
+    line: int | None = None,
+    target: str | None = None,
+) -> None:
+    """Record, once, an artifact ingestion produced nothing from.
+
+    The same artifact declined for the same cause at the same stage is one
+    fact about the build. Recording it twice would make a count of findings
+    read as a count of two distinct conditions.
+
+    Ingestion reaches an artifact both before the graph exists and after it
+    does, so the two holders of these records share this one rule rather than
+    each deciding when a condition is the same one again.
+    """
+    fault = IngestionFault(path=path, stage=stage, cause=cause, line=line, target=target)
+    if fault in store:
+        return
+    store.append(fault)
+
+
 # Implements: REQ-d00241-F
 @dataclass(frozen=True)
 class UnscannedKeywordFile:
@@ -328,6 +390,11 @@ class TraceGraph:
     # Detection: duplicate REQ IDs across files (populated at build time).
     # Maps canonical REQ ID -> ordered list of source paths defining it.
     _duplicate_req_ids: dict[str, list[str]] = field(default_factory=dict, init=False, repr=False)
+    # Implements: REQ-d00285-G
+    # Artifacts ingestion reached and produced nothing from. Recorded rather
+    # than dropped: an unreadable report and a suite that never ran are the
+    # same absence downstream, and only this record tells them apart.
+    _ingestion_faults: list[IngestionFault] = field(default_factory=list, init=False, repr=False)
 
     # Implements: REQ-d00222-A
     _terms: TermDictionary = field(default_factory=TermDictionary, init=False)
@@ -567,6 +634,30 @@ class TraceGraph:
     def has_duplicate_req_ids(self) -> bool:
         """Check if the graph has any cross-file duplicate REQ IDs."""
         return len(self._duplicate_req_ids) > 0
+
+    # Implements: REQ-d00285-G
+    def record_ingestion_fault(
+        self,
+        path: str,
+        stage: str,
+        cause: str,
+        line: int | None = None,
+        target: str | None = None,
+    ) -> None:
+        """Record an artifact an ingestion pass over this graph read nothing from."""
+        _record_ingestion_fault(self._ingestion_faults, path, stage, cause, line, target)
+
+    # Implements: REQ-d00285-G
+    def ingestion_faults(self) -> list[IngestionFault]:
+        """Every artifact ingestion reached and produced no content from.
+
+        A results or coverage artifact that would not parse, that no reporter
+        reads, or that a configured target pointed outside the repository.
+        Nothing here says a test failed -- it says a report of the run never
+        became part of the graph, so any figure computed without it is
+        computed over less than was measured.
+        """
+        return list(self._ingestion_faults)
 
     # ─────────────────────────────────────────────────────────────────────────
     # Reachability API
@@ -3890,6 +3981,20 @@ class GraphBuilder:
         # occurrence keeps the real ID; subsequent occurrences get a synthetic
         # ID (see _add_requirement) but their source paths are recorded here.
         self._duplicate_req_ids: dict[str, list[str]] = {}
+        # Implements: REQ-d00285-G
+        self._ingestion_faults: list[IngestionFault] = []
+
+    # Implements: REQ-d00285-G
+    def record_ingestion_fault(
+        self,
+        path: str,
+        stage: str,
+        cause: str,
+        line: int | None = None,
+        target: str | None = None,
+    ) -> None:
+        """Record an artifact ingestion reached and produced nothing from."""
+        _record_ingestion_fault(self._ingestion_faults, path, stage, cause, line, target)
 
     # Implements: REQ-d00241-F
     def record_unscanned_keyword_file(self, path: str, kind: str, keyword: str, line: int) -> None:
@@ -5649,6 +5754,7 @@ class GraphBuilder:
         graph._unscanned_keyword_files = list(self._unscanned_keyword_files)
         graph._unbound_citations = list(self._unbound_citations)
         graph._duplicate_req_ids = {k: list(v) for k, v in self._duplicate_req_ids.items()}
+        graph._ingestion_faults = list(self._ingestion_faults)
 
         # Implements: REQ-d00222-A, REQ-d00222-B
         # Populate _terms from pending definition data, resolving defined_in

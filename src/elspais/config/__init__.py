@@ -286,7 +286,7 @@ def _severity_paths() -> list[tuple[str, ...]]:
 
 # Implements: REQ-d00212-U, REQ-d00212-V
 def _migrate_v4_to_v5(config: dict) -> dict:
-    """Rewrite the retired `ok` severity to `off`.
+    """Rewrite the retired `ok` severity to `off`, and drop a withdrawn setting.
 
     The two words meant one thing between them and neither was honoured
     everywhere: `ok` passed a check while still listing its findings, `off`
@@ -304,13 +304,20 @@ def _migrate_v4_to_v5(config: dict) -> dict:
             continue
         if container.get(path[-1]) == "ok":
             container[path[-1]] = "off"
+    # `terms.severity.changed` was declared and documented and read by nothing,
+    # so a project could set it and change no outcome. It is dropped rather
+    # than refused, so a configuration carrying it still loads.
+    terms = config.get("terms")
+    severity = terms.get("severity") if isinstance(terms, dict) else None
+    if isinstance(severity, dict):
+        severity.pop("changed", None)
     config["version"] = 5
     return config
 
 
 MIGRATIONS: dict[int, Callable[[dict], dict]] = {
     3: _migrate_v3_to_v4,  # flat terms severity -> nested [terms.severity]
-    4: _migrate_v4_to_v5,  # retired "ok" severity -> "off"
+    4: _migrate_v4_to_v5,  # retired "ok" -> "off"; withdrew terms.severity.changed
 }
 
 

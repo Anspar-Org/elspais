@@ -92,6 +92,64 @@ def _tests_named(name: str, scanned: frozenset[str]) -> list[str]:
     return sorted(p for p in scanned if p == needle or p.endswith("/" + needle))
 
 
+# Implements: REQ-d00285-A
+def _repo_relative(path: str | Path, repo_root: Path) -> str:
+    """*path* as the repository sees it, or unchanged where it is elsewhere.
+
+    A finding names a file the way the reader will look for it. Everything
+    else the graph records about a file is repo-relative, and a finding that
+    alone spelled it absolutely would not line up with any of it.
+    """
+    try:
+        return str(Path(path).resolve().relative_to(Path(repo_root).resolve()))
+    except ValueError:
+        return str(path)
+
+
+# Implements: REQ-d00285-F, REQ-d00285-G
+def _unknown_reporter_cause(reporter: str) -> str:
+    """The one wording for a target naming a reporter nothing reads.
+
+    Two places detect it -- the ingestion loop, and the ingestion function
+    called from anywhere else -- and one condition reported under two
+    descriptions reads as two conditions.
+    """
+    from elspais.graph.parsers.results.registry import REPORTER_REGISTRY
+
+    return (
+        f"no reporter named {reporter!r}; nothing reads this target's results. "
+        f"Known reporters: {', '.join(sorted(REPORTER_REGISTRY))}"
+    )
+
+
+# Implements: REQ-d00285-G
+def _record_parser_diagnostics(
+    recorder: Any,
+    parser: Any,
+    stage: str,
+    target_name: str | None,
+    fallback_path: str,
+    repo_root: Path,
+) -> None:
+    """Lift what a results parser declined to read onto the graph.
+
+    ``recorder`` is whatever holds the records -- the builder while the graph
+    is being built, the graph itself once it is. A parser that records
+    nothing contributes nothing.
+    """
+    iter_diagnostics = getattr(parser, "iter_diagnostics", None)
+    if iter_diagnostics is None:
+        return
+    for diagnostic in iter_diagnostics():
+        recorder.record_ingestion_fault(
+            path=_repo_relative(diagnostic.path or fallback_path, repo_root),
+            stage=stage,
+            cause=diagnostic.cause,
+            line=diagnostic.line,
+            target=target_name,
+        )
+
+
 def _ingest_target_results(
     builder,
     target,
@@ -116,10 +174,24 @@ def _ingest_target_results(
     try:
         spec = get_reporter(target.reporter)
     except KeyError:
+        # Implements: REQ-d00285-G
+        # A misspelled reporter name produces no results anywhere, and a
+        # target that ingested nothing looks exactly like a suite that
+        # reported nothing. Record the name that matched no reporter.
         _log.debug("_ingest_target_results: unknown reporter %r, skipping", target.reporter)
+        builder.record_ingestion_fault(
+            path=_repo_relative(source_path, repo_root) if source_path else "",
+            stage="target",
+            cause=_unknown_reporter_cause(target.reporter),
+            target=target.name,
+        )
         return 0
 
     if spec.kind != "results":
+        # Suppressed deliberately: this is routing, not a condition. A
+        # coverage-kind reporter has its own ingestion pass, which reads this
+        # same target and annotates FILE nodes from it; recording a fault
+        # here would report a target that was read as one that was not.
         _log.debug(
             "_ingest_target_results: reporter %r is kind=%r, not 'results', skipping",
             target.reporter,
@@ -129,6 +201,8 @@ def _ingest_target_results(
 
     parser = spec.parser_factory()
     records = parser.parse(results_text, source_path)
+    # Implements: REQ-d00285-G
+    _record_parser_diagnostics(builder, parser, "results", target.name, source_path, repo_root)
 
     # Implements: REQ-d00254-O
     # Normalise the producer's line origin to the tool's own numbering, once,
@@ -978,8 +1052,25 @@ def build_graph(
             # RemainderParser is NOT registered for RESULT file types.
             # When targets is empty (the default) this loop is a no-op.
             _captured = captured_results or {}
+            from elspais.graph.parsers.results.registry import get_reporter as _get_reporter
+
             for target in typed_config.scanning.test.targets:
                 if not target.reporter:
+                    continue
+                # Implements: REQ-d00285-G
+                # Resolve the reporter before anything is read, so a name
+                # nothing reads is reported as that, and so the conditions
+                # below can tell a target that owes results from one whose
+                # results are a coverage report read further down.
+                try:
+                    target_spec = _get_reporter(target.reporter)
+                except KeyError:
+                    builder.record_ingestion_fault(
+                        path="",
+                        stage="target",
+                        cause=_unknown_reporter_cause(target.reporter),
+                        target=target.name,
+                    )
                     continue
                 # Implements: REQ-d00254-I
                 carried = fresh_targets is not None and target.name not in fresh_targets
@@ -988,10 +1079,20 @@ def build_graph(
                 try:
                     cwd_path.resolve().relative_to(resolved_root)
                 except ValueError:
+                    # Implements: REQ-d00285-G
                     _log.warning(
                         "target %r: cwd %r escapes repo root -- skipping",
                         target.name,
                         target.cwd,
+                    )
+                    builder.record_ingestion_fault(
+                        path=str(target.cwd or ""),
+                        stage="target",
+                        cause=(
+                            f"working directory {target.cwd!r} resolves outside the "
+                            f"repository, so no results were read for this target"
+                        ),
+                        target=target.name,
                     )
                     continue
                 # Implements: REQ-d00284-B
@@ -1033,13 +1134,44 @@ def build_graph(
                                     scanned_tests=target_tests,
                                 )
                     else:
+                        # Implements: REQ-d00285-G
+                        # A results pattern matching nothing is a run that
+                        # left no report where the target says one is written
+                        # -- not a run whose report said nothing.
                         _log.debug("target %r: no files matched %r", target.name, target.results)
-                else:
+                        if target_spec.kind == "results":
+                            builder.record_ingestion_fault(
+                                path=_repo_relative(cwd_path / target.results, repo_root),
+                                stage="results",
+                                cause=(
+                                    "no file matched this target's results pattern, so "
+                                    "no test results were read for it"
+                                ),
+                                target=target.name,
+                            )
+                elif target_spec.kind == "results":
                     _log.debug(
                         "target %r: stdout reporter with no captured output and no results"
                         " glob -- skipping",
                         target.name,
                     )
+                    # Implements: REQ-d00285-G
+                    # Only where this build actually ran the targets: with no
+                    # run in this invocation, a target whose reporter reads a
+                    # runner's stdout has nothing to have produced, and
+                    # recording that would report the tool's own mode of
+                    # invocation as a defect in the project.
+                    if captured_results is not None:
+                        builder.record_ingestion_fault(
+                            path="",
+                            stage="results",
+                            cause=(
+                                f"reporter {target.reporter!r} reads a runner's output, "
+                                f"the run produced none, and the target names no "
+                                f"results file"
+                            ),
+                            target=target.name,
+                        )
 
     graph = builder.build()
 
@@ -1062,15 +1194,34 @@ def build_graph(
             try:
                 cwd_path.resolve().relative_to(_resolved_root)
             except ValueError:
+                # Implements: REQ-d00285-G
                 _log.warning(
                     "target %r: cwd %r escapes repo root -- skipping",
                     target.name,
                     target.cwd,
                 )
+                graph.record_ingestion_fault(
+                    path=str(target.cwd or ""),
+                    stage="target",
+                    cause=(
+                        f"working directory {target.cwd!r} resolves outside the "
+                        f"repository, so no coverage was read for this target"
+                    ),
+                    target=target.name,
+                )
                 continue
             cov_path = (cwd_path / target.coverage).resolve()
             if not cov_path.is_file():
+                # Implements: REQ-d00285-G
+                # No coverage file and coverage measuring nothing are the same
+                # zero once the numbers are aggregated.
                 _log.debug("target %r: coverage file not found: %s", target.name, cov_path)
+                graph.record_ingestion_fault(
+                    path=_repo_relative(cov_path, repo_root),
+                    stage="coverage",
+                    cause="the coverage file this target names is not there",
+                    target=target.name,
+                )
                 continue
             if lcov_parser.can_parse(cov_path):
                 cov_parser = lcov_parser
@@ -1079,7 +1230,17 @@ def build_graph(
             elif cov_sqlite_parser.can_parse(cov_path):
                 cov_parser = cov_sqlite_parser
             else:
+                # Implements: REQ-d00285-G
                 _log.debug("target %r: unrecognised coverage format: %s", target.name, cov_path)
+                graph.record_ingestion_fault(
+                    path=_repo_relative(cov_path, repo_root),
+                    stage="coverage",
+                    cause=(
+                        "no coverage reader recognises this file's format, so the "
+                        "measurement it holds was not read"
+                    ),
+                    target=target.name,
+                )
                 continue
             # Binary formats (e.g. the .coverage SQLite DB) can't be
             # text-decoded -- their parser ignores `content` and reopens
@@ -1103,6 +1264,10 @@ def build_graph(
                 parsed_cov = cov_parser.parse(cov_content, str(cov_path), wanted_files=_wanted)
             else:
                 parsed_cov = cov_parser.parse(cov_content, str(cov_path))
+            # Implements: REQ-d00285-G
+            _record_parser_diagnostics(
+                graph, cov_parser, "coverage", target.name, str(cov_path), repo_root
+            )
             for source_file, data in parsed_cov.items():
                 cov_node = _resolve_coverage_file_node(graph, source_file, cov_path, repo_root)
                 if cov_node is None:

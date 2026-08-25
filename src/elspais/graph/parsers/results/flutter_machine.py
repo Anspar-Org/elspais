@@ -26,13 +26,17 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from elspais.graph.parsers.results.diagnostics import DiagnosticRecorder
+
 
 # Implements: REQ-d00254-E
-class FlutterMachineParser:
+class FlutterMachineParser(DiagnosticRecorder):
     def parse(self, content: str, source_path: str = "") -> list[dict[str, Any]]:
         suites: dict[int, str] = {}  # suiteID -> path
         tests: dict[int, dict[str, Any]] = {}  # testID -> {name, suiteID, line}
         results: list[dict[str, Any]] = []
+        self._start_diagnostics()
+        events = 0
 
         for line in content.splitlines():
             line = line.strip()
@@ -41,9 +45,16 @@ class FlutterMachineParser:
             try:
                 ev = json.loads(line)
             except (ValueError, json.JSONDecodeError):
+                # Suppressed deliberately: this reporter reads a runner's live
+                # stdout, where a build banner, a warning, or a plugin's own
+                # print sits between events. A line that is not JSON is
+                # expected traffic, not a record that failed to read. What
+                # would be a real condition -- a stream carrying no events at
+                # all -- is recorded once, after the loop.
                 continue
             if not isinstance(ev, dict):
                 continue
+            events += 1
             etype = ev.get("type")
             if etype == "suite":
                 s = ev.get("suite", {})
@@ -95,4 +106,15 @@ class FlutterMachineParser:
                         "result_line": None,
                     }
                 )
+
+        # Implements: REQ-d00285-G
+        # Output that carried no machine events at all was not a test run this
+        # parser read and found empty -- it was output in some other form, and
+        # saying so is the difference between "nothing ran" and "the runner
+        # was not reporting in the format this target declares".
+        if content.strip() and not events:
+            self._record_diagnostic(
+                source_path,
+                "flutter --machine output carried no JSON events",
+            )
         return results

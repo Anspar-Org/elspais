@@ -31,7 +31,12 @@ from elspais.graph.reference_faults import (
 from elspais.graph.relations import EdgeKind
 
 if TYPE_CHECKING:
-    from elspais.graph.builder import TraceGraph, UnboundCitation, UnscannedKeywordFile
+    from elspais.graph.builder import (
+        IngestionFault,
+        TraceGraph,
+        UnboundCitation,
+        UnscannedKeywordFile,
+    )
     from elspais.graph.comments import CommentThread
     from elspais.graph.terms import TermDictionary
     from elspais.utilities.patterns import IdResolver
@@ -850,6 +855,17 @@ class FederatedGraph:
         result: list[UndeclaredRelationship] = []
         for _name, graph in self._live_graphs():
             result.extend(graph.undeclared_relationships())
+        return result
+
+    # Implements: REQ-d00285-G
+    def ingestion_faults(self) -> list[IngestionFault]:
+        """Every artifact ingestion produced no content from, across all repos.
+
+        # Strategy: aggregate
+        """
+        result: list[IngestionFault] = []
+        for _name, graph in self._live_graphs():
+            result.extend(graph.ingestion_faults())
         return result
 
     def duplicate_req_ids(self) -> dict[str, list[str]]:

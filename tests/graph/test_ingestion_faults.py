@@ -1,0 +1,452 @@
+# Verifies: REQ-d00285-G
+"""An artifact ingestion produced nothing from is recorded, not dropped.
+
+A results file that will not parse, a coverage report that is not there, a
+target naming a reporter nothing reads: each leaves the graph short of
+content, and a graph short of content reads exactly like a project where the
+work was never done. These tests hold the tool to recording which of the two
+happened, at the point that decided to drop it, with the file and the cause.
+"""
+
+from pathlib import Path
+
+import pytest
+
+from elspais.graph.parsers.results.coverage_json import CoverageJsonParser
+from elspais.graph.parsers.results.flutter_machine import FlutterMachineParser
+from elspais.graph.parsers.results.junit_xml import JUnitXMLParser
+from elspais.graph.parsers.results.lcov import LcovParser
+from elspais.graph.parsers.results.pytest_json import PytestJSONParser
+
+_SPEC = """\
+### REQ-p00001: Test Req
+
+**Level**: PRD | **Status**: Active
+
+The system SHALL do something testable.
+
+*End* *Test Req* | **Hash**: ________
+"""
+
+_GOOD_JUNIT = """\
+<?xml version="1.0" encoding="utf-8"?>
+<testsuites>
+  <testsuite name="tests" tests="1" failures="0">
+    <testcase classname="tests.test_thing" name="test_a" time="0.01"/>
+  </testsuite>
+</testsuites>
+"""
+
+_TRUNCATED_JUNIT = """\
+<?xml version="1.0" encoding="utf-8"?>
+<testsuites>
+  <testsuite name="tests" tests="1" failures="0">
+    <testcase classname="tests.test_thing" name="test_a" time="0.01"/>
+"""
+
+_CONFIG_HEAD = """\
+version = 3
+
+[project]
+name = "ingest"
+namespace = "REQ"
+
+[scanning.spec]
+directories = ["spec"]
+
+[scanning.test]
+enabled = true
+"""
+
+
+def _project(tmp_path: Path, targets: str, results: dict[str, str] | None = None) -> Path:
+    """An on-disk project with one requirement and the given target table."""
+    project = tmp_path / "project"
+    (project / "spec").mkdir(parents=True)
+    (project / "spec" / "reqs.md").write_text(_SPEC, encoding="utf-8")
+    for rel, text in (results or {}).items():
+        path = project / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+    (project / ".elspais.toml").write_text(_CONFIG_HEAD + targets, encoding="utf-8")
+    return project
+
+
+def _build(project: Path):
+    from elspais.graph.factory import build_graph
+
+    return build_graph(
+        config_path=project / ".elspais.toml",
+        repo_root=project,
+        scan_code=False,
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# What each parser declines to read
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+# Verifies: REQ-d00285-A, REQ-d00285-G
+def test_junit_records_the_file_and_line_it_could_not_parse():
+    parser = JUnitXMLParser()
+    results = parser.parse(_TRUNCATED_JUNIT, "results/TEST-a.xml")
+
+    assert results == []
+    (diagnostic,) = list(parser.iter_diagnostics())
+    assert diagnostic.path == "results/TEST-a.xml"
+    assert diagnostic.line is not None
+    assert "did not parse" in diagnostic.cause
+
+
+# Verifies: REQ-d00285-G
+def test_junit_records_a_document_holding_no_test_suite():
+    parser = JUnitXMLParser()
+    results = parser.parse("<report><item/></report>", "results/TEST-a.xml")
+
+    assert results == []
+    (diagnostic,) = list(parser.iter_diagnostics())
+    assert "report" in diagnostic.cause
+
+
+# Verifies: REQ-d00285-G
+def test_a_parse_that_read_everything_records_nothing():
+    parser = JUnitXMLParser()
+    results = parser.parse(_GOOD_JUNIT, "results/TEST-a.xml")
+
+    assert len(results) == 1
+    assert list(parser.iter_diagnostics()) == []
+
+
+# Verifies: REQ-d00285-G
+def test_a_reused_parser_does_not_report_the_previous_artifacts_condition():
+    """One parser instance reads several artifacts; the records follow the read."""
+    parser = JUnitXMLParser()
+    parser.parse(_TRUNCATED_JUNIT, "results/TEST-broken.xml")
+    parser.parse(_GOOD_JUNIT, "results/TEST-good.xml")
+
+    assert list(parser.iter_diagnostics()) == []
+
+
+# Verifies: REQ-d00285-A, REQ-d00285-G
+def test_pytest_json_records_the_line_the_decoder_stopped_at():
+    parser = PytestJSONParser()
+    results = parser.parse('{\n  "tests": [\n', "results/report.json")
+
+    assert results == []
+    (diagnostic,) = list(parser.iter_diagnostics())
+    assert diagnostic.path == "results/report.json"
+    assert diagnostic.line is not None
+
+
+# Verifies: REQ-d00285-G
+def test_pytest_json_records_a_document_in_a_shape_it_does_not_read():
+    parser = PytestJSONParser()
+    results = parser.parse('{"summary": {"passed": 3}}', "results/report.json")
+
+    assert results == []
+    (diagnostic,) = list(parser.iter_diagnostics())
+    assert "tests" in diagnostic.cause
+
+
+# Verifies: REQ-d00285-G
+def test_coverage_json_records_what_it_could_not_parse():
+    parser = CoverageJsonParser()
+
+    assert parser.parse("{not json", "coverage/coverage.json") == {}
+    (diagnostic,) = list(parser.iter_diagnostics())
+    assert diagnostic.path == "coverage/coverage.json"
+    assert "did not parse" in diagnostic.cause
+
+
+# Verifies: REQ-d00285-G
+def test_coverage_json_records_a_report_holding_no_files_mapping():
+    parser = CoverageJsonParser()
+
+    assert parser.parse('{"meta": {}}', "coverage/coverage.json") == {}
+    (diagnostic,) = list(parser.iter_diagnostics())
+    assert "files" in diagnostic.cause
+
+
+# Verifies: REQ-d00285-A, REQ-d00285-G
+def test_lcov_records_the_line_of_a_record_it_could_not_read():
+    parser = LcovParser()
+    content = "SF:lib/a.dart\nDA:1,1\nDA:two,1\nLF:2\nLH:1\nend_of_record\n"
+
+    measured = parser.parse(content, "coverage/lcov.info")
+
+    # The readable line is still measured; the unreadable one is reported.
+    assert measured["lib/a.dart"]["line_coverage"] == {1: 1}
+    (diagnostic,) = list(parser.iter_diagnostics())
+    assert diagnostic.line == 3
+    assert "DA" in diagnostic.cause
+
+
+# Verifies: REQ-d00285-G
+def test_lcov_records_a_report_naming_no_source_file():
+    parser = LcovParser()
+
+    assert parser.parse("TN:suite\nend_of_record\n", "coverage/lcov.info") == {}
+    (diagnostic,) = list(parser.iter_diagnostics())
+    assert "SF" in diagnostic.cause
+
+
+# Verifies: REQ-d00285-G
+def test_flutter_machine_records_output_that_carried_no_events():
+    parser = FlutterMachineParser()
+
+    assert parser.parse("Running tests...\nBuild failed.\n", "target:app") == []
+    (diagnostic,) = list(parser.iter_diagnostics())
+    assert "no JSON events" in diagnostic.cause
+
+
+# Verifies: REQ-d00285-G
+def test_flutter_machine_does_not_report_the_runners_own_chatter():
+    """Non-JSON lines between events are that stream's normal traffic."""
+    parser = FlutterMachineParser()
+    content = (
+        "Building application...\n"
+        '{"type":"suite","suite":{"id":1,"path":"test/a_test.dart"}}\n'
+        '{"type":"testStart","test":{"id":2,"suiteID":1,"name":"works","line":7}}\n'
+        '{"type":"testDone","testID":2,"result":"success"}\n'
+    )
+
+    results = parser.parse(content, "target:app")
+
+    assert len(results) == 1
+    assert list(parser.iter_diagnostics()) == []
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# What reaches the graph
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+# Verifies: REQ-d00285-A, REQ-d00285-G, REQ-p00019-H
+def test_an_unreadable_results_file_is_recorded_on_the_graph(tmp_path):
+    """No results and an unreadable report are told apart on the graph."""
+    from elspais.graph.GraphNode import NodeKind
+
+    project = _project(
+        tmp_path,
+        """
+[[scanning.test.targets]]
+name = "unit"
+reporter = "junit"
+results = "results/TEST-*.xml"
+""",
+        {"results/TEST-a.xml": _TRUNCATED_JUNIT},
+    )
+    graph = _build(project)
+
+    assert list(graph.iter_by_kind(NodeKind.RESULT)) == []
+    (fault,) = graph.ingestion_faults()
+    assert fault.stage == "results"
+    assert fault.target == "unit"
+    assert fault.path == "results/TEST-a.xml"
+    assert fault.line is not None
+    assert "did not parse" in fault.cause
+
+
+# Verifies: REQ-d00285-G
+def test_a_readable_results_file_leaves_the_graph_with_no_faults(tmp_path):
+    project = _project(
+        tmp_path,
+        """
+[[scanning.test.targets]]
+name = "unit"
+reporter = "junit"
+results = "results/TEST-*.xml"
+""",
+        {"results/TEST-a.xml": _GOOD_JUNIT},
+    )
+
+    assert _build(project).ingestion_faults() == []
+
+
+# Verifies: REQ-d00285-G, REQ-p00019-K
+def test_a_reporter_nothing_reads_is_recorded_once(tmp_path):
+    """A typo'd reporter name produces no results anywhere; say so, once."""
+    project = _project(
+        tmp_path,
+        """
+[[scanning.test.targets]]
+name = "unit"
+reporter = "junitt"
+results = "results/TEST-*.xml"
+""",
+        {"results/TEST-a.xml": _GOOD_JUNIT},
+    )
+
+    (fault,) = _build(project).ingestion_faults()
+    assert fault.target == "unit"
+    assert "junitt" in fault.cause
+    assert "junit" in fault.cause  # the reader is told what it could have said
+
+
+# Verifies: REQ-d00285-G
+def test_a_results_pattern_matching_nothing_is_recorded(tmp_path):
+    project = _project(
+        tmp_path,
+        """
+[[scanning.test.targets]]
+name = "unit"
+reporter = "junit"
+results = "results/TEST-*.xml"
+""",
+    )
+
+    (fault,) = _build(project).ingestion_faults()
+    assert fault.stage == "results"
+    assert fault.path == "results/TEST-*.xml"
+    assert "no file matched" in fault.cause
+
+
+# Verifies: REQ-d00285-G
+def test_a_coverage_file_that_is_not_there_is_recorded(tmp_path):
+    project = _project(
+        tmp_path,
+        """
+[[scanning.test.targets]]
+name = "unit"
+reporter = "lcov"
+coverage = "coverage/lcov.info"
+""",
+    )
+
+    (fault,) = _build(project).ingestion_faults()
+    assert fault.stage == "coverage"
+    assert fault.path == "coverage/lcov.info"
+    assert fault.target == "unit"
+
+
+# Verifies: REQ-d00285-G
+def test_a_coverage_file_no_reader_recognises_is_recorded(tmp_path):
+    project = _project(
+        tmp_path,
+        """
+[[scanning.test.targets]]
+name = "unit"
+reporter = "lcov"
+coverage = "coverage/report.txt"
+""",
+        {"coverage/report.txt": "some other format\n"},
+    )
+
+    (fault,) = _build(project).ingestion_faults()
+    assert fault.stage == "coverage"
+    assert "format" in fault.cause
+
+
+# Verifies: REQ-d00285-G
+def test_a_coverage_report_the_reader_declined_reaches_the_graph(tmp_path):
+    """A parser's own record of what it declined is lifted onto the graph."""
+    project = _project(
+        tmp_path,
+        """
+[[scanning.test.targets]]
+name = "unit"
+reporter = "lcov"
+coverage = "coverage/lcov.info"
+""",
+        {"coverage/lcov.info": "SF:lib/a.dart\nDA:two,1\nend_of_record\n"},
+    )
+
+    (fault,) = _build(project).ingestion_faults()
+    assert fault.stage == "coverage"
+    assert fault.line == 2
+    assert fault.target == "unit"
+
+
+# Verifies: REQ-d00285-G, REQ-p00019-H
+def test_a_target_reaching_outside_the_repository_is_recorded(tmp_path):
+    """The guard already refused it; what was missing was saying so."""
+    project = _project(
+        tmp_path,
+        """
+[[scanning.test.targets]]
+name = "unit"
+cwd = "../elsewhere"
+reporter = "junit"
+results = "TEST-*.xml"
+""",
+    )
+
+    (fault,) = _build(project).ingestion_faults()
+    assert fault.stage == "target"
+    assert fault.target == "unit"
+    assert "outside the repository" in fault.cause
+
+
+# Verifies: REQ-d00285-G
+def test_a_project_declaring_no_targets_records_nothing(tmp_path):
+    assert _build(_project(tmp_path, "")).ingestion_faults() == []
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Content rules
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+# Verifies: REQ-d00285-A, REQ-d00285-G
+def test_a_content_rule_that_is_not_there_is_recorded(tmp_path):
+    from elspais.content_rules import ContentRuleFault, load_content_rules
+
+    faults: list[ContentRuleFault] = []
+    rules = load_content_rules(
+        {"rules": {"content_rules": ["spec/AUTHORING.md"]}}, tmp_path, faults
+    )
+
+    assert rules == []
+    (fault,) = faults
+    assert fault.path.endswith("AUTHORING.md")
+    assert "no file there" in fault.cause
+
+
+# Verifies: REQ-d00285-G, REQ-p00019-H
+def test_a_content_rule_not_loaded_is_disclosed_without_a_collector(tmp_path, caplog):
+    """A caller that asked for no records still does not get silence."""
+    import logging
+
+    from elspais.content_rules import load_content_rules
+
+    with caplog.at_level(logging.WARNING):
+        rules = load_content_rules({"rules": {"content_rules": ["spec/AUTHORING.md"]}}, tmp_path)
+
+    assert rules == []
+    assert any("AUTHORING.md" in record.getMessage() for record in caplog.records)
+
+
+# Verifies: REQ-d00285-G
+def test_a_readable_content_rule_records_nothing(tmp_path):
+    from elspais.content_rules import ContentRuleFault, load_content_rules
+
+    (tmp_path / "spec").mkdir()
+    (tmp_path / "spec" / "AUTHORING.md").write_text("# Rule\n\nWrite well.\n", encoding="utf-8")
+
+    faults: list[ContentRuleFault] = []
+    rules = load_content_rules(
+        {"rules": {"content_rules": ["spec/AUTHORING.md"]}}, tmp_path, faults
+    )
+
+    assert len(rules) == 1
+    assert faults == []
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Reading a scanned file
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+# Verifies: REQ-d00285-A, REQ-p00019-E
+def test_a_file_that_cannot_be_decoded_is_named_in_the_failure(tmp_path):
+    """A scan of thousands of files must not fail without saying which one."""
+    from elspais.graph.deserializer import DomainFile, SourceReadError
+
+    (tmp_path / "notes.md").write_bytes(b"# heading\n\xff\xfe not utf-8\n")
+
+    with pytest.raises(SourceReadError) as caught:
+        list(DomainFile(tmp_path, patterns=["*.md"]).iterate_sources())
+
+    assert "notes.md" in str(caught.value)
+    assert caught.value.path.name == "notes.md"

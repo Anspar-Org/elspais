@@ -2548,13 +2548,12 @@ _FAQ_ENTRIES: list[dict[str, str]] = [
         "topic": "coverage",
         "question": "How do I find coverage gaps?",
         "answer": (
-            "CLI: Use gap flags on the health command:\n"
-            "  elspais health --untested    (requirements without test coverage)\n"
-            "  elspais health --uncovered   (requirements without code coverage)\n"
-            "  elspais health --unvalidated (requirements without UAT coverage)\n"
-            "  elspais health --untraced    (all gaps: uncovered + untested"
-            " + unvalidated + failing)\n"
-            "  elspais health --failing     (requirements with failing results)\n"
+            "CLI: Each kind of gap is its own command:\n"
+            "  elspais gaps        (every traceability gap)\n"
+            "  elspais uncovered   (requirements without code coverage)\n"
+            "  elspais untested    (requirements without test coverage)\n"
+            "  elspais unvalidated (requirements without UAT coverage)\n"
+            "  elspais failing     (requirements with failing test or UAT results)\n"
             "\n"
             "MCP: Use these tools:\n"
             "  get_uncovered_assertions()          (all assertions without test coverage)\n"

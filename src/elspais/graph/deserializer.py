@@ -71,6 +71,22 @@ class DomainDeserializer(Protocol):
         ...
 
 
+# Implements: REQ-d00285-A, REQ-p00019-E
+class SourceReadError(OSError):
+    """A scanned file could not be read, named together with the cause.
+
+    The underlying errors say what went wrong and, for a decoding failure,
+    say nothing about where. A build scans thousands of files, so a message
+    without the path leaves the reader to find it themselves -- a search the
+    tool has already done.
+    """
+
+    def __init__(self, path: Path, cause: BaseException) -> None:
+        self.path = path
+        self.cause = cause
+        super().__init__(f"cannot read {path}: {cause}")
+
+
 class DomainFile:
     """Deserializer for files and directories.
 
@@ -255,16 +271,29 @@ class DomainFile:
             if selected:
                 yield self._read_file(file_path)
 
+    # Implements: REQ-d00285-A, REQ-p00019-E
     def _read_file(self, file_path: Path) -> tuple[DomainContext, str]:
         """Read a file and create context.
+
+        A file that cannot be read is not passed over: the requirements,
+        annotations or results in it would go missing from a build that
+        otherwise reports success, and a requirement missing from the graph
+        is a requirement no report can mention. The read fails, naming the
+        file and what went wrong with it.
 
         Args:
             file_path: Path to file.
 
         Returns:
             Tuple of (DomainContext, content).
+
+        Raises:
+            SourceReadError: The file could not be read or decoded.
         """
-        content = file_path.read_text(encoding="utf-8")
+        try:
+            content = file_path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as exc:
+            raise SourceReadError(file_path, exc) from exc
         ctx = DomainContext(
             source_type="file",
             source_id=str(file_path),

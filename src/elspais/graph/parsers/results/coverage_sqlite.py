@@ -24,6 +24,8 @@ import sqlite3
 from collections.abc import Callable
 from pathlib import Path
 
+from elspais.graph.parsers.results.diagnostics import DiagnosticRecorder
+
 _log = logging.getLogger(__name__)
 
 # SQLite database file header (first 16 bytes of every valid SQLite file).
@@ -36,7 +38,7 @@ _INSTALL_HINT = (
 )
 
 
-class CoverageSqliteParser:
+class CoverageSqliteParser(DiagnosticRecorder):
     """Parser for coverage.py's native `.coverage` SQLite data file.
 
     Unlike the other reporter-kind parsers, this parser does not consume
@@ -86,11 +88,15 @@ class CoverageSqliteParser:
             Returns an empty dict if the ``coverage`` package is not
             importable, or if the data file cannot be read.
         """
+        self._start_diagnostics()
+
         try:
             import coverage
             from coverage.exceptions import CoverageException
         except ImportError:
+            # Implements: REQ-d00285-G
             _log.warning(_INSTALL_HINT)
+            self._record_diagnostic(source_path, _INSTALL_HINT)
             return {}
 
         # config_file=False: don't pick up ambient [tool.coverage.*] config
@@ -98,11 +104,16 @@ class CoverageSqliteParser:
         cov = coverage.Coverage(data_file=source_path, config_file=False)
         try:
             cov.load()
-        except (CoverageException, OSError, sqlite3.Error):
+        except (CoverageException, OSError, sqlite3.Error) as exc:
+            # Implements: REQ-d00285-G
             # sqlite3.Error is defensive: coverage.py currently wraps sqlite
             # errors in DataError (a CoverageException), but a future version
             # letting a bare sqlite3 error escape must not crash the build.
+            # A data file that will not load measured nothing as far as the
+            # rest of the build can see, which is indistinguishable from a
+            # suite run without coverage; record which of the two it was.
             _log.debug("coverage-sqlite: failed to load %s", source_path, exc_info=True)
+            self._record_diagnostic(source_path, f"coverage data file did not load: {exc}")
             return {}
 
         cov_data = cov.get_data()
@@ -111,9 +122,18 @@ class CoverageSqliteParser:
         for file_path in cov_data.measured_files():
             try:
                 _, statements, _excluded, missing, _ = cov.analysis2(file_path)
-            except (CoverageException, OSError, sqlite3.Error):
+            except (CoverageException, OSError, sqlite3.Error) as exc:
+                # Implements: REQ-d00285-G
                 # Source no longer available/parseable (moved, deleted, etc.)
                 # -- fall back to executed-lines-only (no missing-line data).
+                # The fallback is a degraded measurement, not the one asked
+                # for: every line the run never executed is now invisible, so
+                # the file reads as fully covered. Say so.
+                self._record_diagnostic(
+                    file_path,
+                    f"source could not be re-analysed, so only executed lines "
+                    f"are counted for it: {exc}",
+                )
                 executed = cov_data.lines(file_path) or []
                 statements = list(executed)
                 missing = []

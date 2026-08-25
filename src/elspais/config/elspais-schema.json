@@ -1142,17 +1142,6 @@
           ],
           "title": "Canonical Form",
           "type": "string"
-        },
-        "changed": {
-          "default": "warning",
-          "enum": [
-            "off",
-            "info",
-            "warning",
-            "error"
-          ],
-          "title": "Changed",
-          "type": "string"
         }
       },
       "title": "TermsSeverityConfig",

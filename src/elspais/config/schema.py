@@ -878,7 +878,6 @@ class TermsSeverityConfig(_StrictModel):
     bad_definition: SeverityValue = "error"
     collection_empty: SeverityValue = "warning"
     canonical_form: SeverityValue = "warning"
-    changed: SeverityValue = "warning"  # definitions changed with unresolved review
 
 
 # Implements: REQ-d00212-L

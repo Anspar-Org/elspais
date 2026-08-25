@@ -1162,75 +1162,112 @@ COMMAND_GROUPS: dict[str, str] = {
 _GROUP_ORDER: list[str] = list(dict.fromkeys(COMMAND_GROUPS.values()))
 
 
-def generate_help(version: str) -> str:
-    """Generate grouped CLI help text from Command Union metadata.
+@dataclasses.dataclass(frozen=True)
+class CommandEntry:
+    """One command the CLI exposes, read from the definitions it dispatches on."""
 
-    Reads subcommand names and descriptions directly from the dataclass
-    definitions so the help output cannot drift from reality.
+    name: str
+    group: str
+    description: str
+    #: Names of the command's own nested subcommands, where it has any.
+    actions: tuple[str, ...] = ()
+
+    @property
+    def summary(self) -> str:
+        """The description with the nested subcommand names appended."""
+        if not self.actions:
+            return self.description
+        return f"{self.description} ({', '.join(self.actions)})"
+
+
+def _action_names(base_type: type) -> tuple[str, ...]:
+    """The nested subcommand names a command's `action` field offers."""
+    import typing
+
+    if not dataclasses.is_dataclass(base_type):
+        return ()
+    hints = typing.get_type_hints(base_type, include_extras=True)
+    if "action" not in hints:
+        return ()
+    action_t = hints["action"]
+    # Unwrap tyro wrapper types to reach the inner Union
+    while (
+        typing.get_origin(action_t) is not None and typing.get_origin(action_t) is not typing.Union
+    ):
+        inner = typing.get_args(action_t)
+        if not inner:
+            break
+        action_t = inner[0]
+    names: list[str] = []
+    for aa in typing.get_args(action_t):
+        if typing.get_origin(aa) is typing.Annotated:
+            _, *ameta = typing.get_args(aa)
+            for am in ameta:
+                if hasattr(am, "name"):
+                    names.append(am.name)
+    return tuple(names)
+
+
+def iter_command_entries() -> list[CommandEntry]:
+    """Every command the CLI exposes, in group order.
+
+    Read from the `Command` union and `COMMAND_GROUPS`, which are what the CLI
+    itself dispatches on, so no presentation of the command set can name a
+    command the tool does not have or miss one it does. This is the one place
+    that reflection happens; the grouped `--help` text and the documentation's
+    command index are both rendered from what it returns.
     """
     import typing
 
-    # --- Extract subcommand info from the Command Union ---
-    commands: list[tuple[str, str]] = []  # (name, description)
+    described: dict[str, CommandEntry] = {}
     for arg in typing.get_args(Command):
         if typing.get_origin(arg) is not typing.Annotated:
             continue
         base_type, *metadata = typing.get_args(arg)
-        # Find the subcommand name from tyro metadata
         name = None
         for m in metadata:
             if hasattr(m, "name"):
                 name = m.name
         if name is None:
             continue
-
-        # Description from docstring (first line only)
-        doc = (base_type.__doc__ or "").strip().split("\n")[0]
-        # Strip trailing period for cleaner display
+        # Description from the docstring's first line, without its full stop.
+        doc = (base_type.__doc__ or "").strip().split("\n")[0].strip()
         if doc.endswith("."):
             doc = doc[:-1]
-
-        # Auto-detect nested subcommand hints from 'action' field
-        if dataclasses.is_dataclass(base_type):
-            hints = typing.get_type_hints(base_type, include_extras=True)
-            if "action" in hints:
-                action_t = hints["action"]
-                # Unwrap tyro wrapper types to reach the inner Union
-                while (
-                    typing.get_origin(action_t) is not None
-                    and typing.get_origin(action_t) is not typing.Union
-                ):
-                    inner = typing.get_args(action_t)
-                    if inner:
-                        action_t = inner[0]
-                    else:
-                        break
-                # Extract subcommand names from the Union
-                sub_names = []
-                for aa in typing.get_args(action_t):
-                    if typing.get_origin(aa) is typing.Annotated:
-                        _, *ameta = typing.get_args(aa)
-                        for am in ameta:
-                            if hasattr(am, "name"):
-                                sub_names.append(am.name)
-                if sub_names:
-                    doc += f" ({', '.join(sub_names)})"
-
-        assert name in COMMAND_GROUPS, (
-            f"Subcommand {name!r} missing from COMMAND_GROUPS — add it to elspais/commands/args.py"
+        group = COMMAND_GROUPS.get(name)
+        if group is None:
+            raise ValueError(
+                f"Subcommand {name!r} missing from COMMAND_GROUPS — "
+                f"add it to elspais/commands/args.py"
+            )
+        described[name] = CommandEntry(
+            name=name, group=group, description=doc, actions=_action_names(base_type)
         )
-        commands.append((name, doc))
+
+    entries: list[CommandEntry] = []
+    for group in _GROUP_ORDER:
+        for name, command_group in COMMAND_GROUPS.items():
+            if command_group == group and name in described:
+                entries.append(described[name])
+    return entries
+
+
+def generate_help(version: str) -> str:
+    """Generate grouped CLI help text from the CLI's own command definitions.
+
+    Reads subcommand names and descriptions through `iter_command_entries()`,
+    so the help output cannot drift from what the CLI dispatches on.
+    """
+    entries = iter_command_entries()
 
     # --- Build grouped output ---
-    # Bucket commands by group, ordered by COMMAND_GROUPS dict order
-    cmd_lookup: dict[str, str] = dict(commands)
+    cmd_lookup: dict[str, str] = {e.name: e.summary for e in entries}
     groups: dict[str, list[str]] = {g: [] for g in _GROUP_ORDER}
-    for name in COMMAND_GROUPS:
-        if name in cmd_lookup:
-            groups[COMMAND_GROUPS[name]].append(name)
+    for entry in entries:
+        groups[entry.group].append(entry.name)
 
     # Compute column width for subcommands
-    max_name = max((len(n) for n, _ in commands), default=0)
+    max_name = max((len(e.name) for e in entries), default=0)
     cmd_col = max_name + 2
 
     # Fixed column width for global options (widest entry is --directory, -C DIR)

@@ -332,9 +332,31 @@ require_rationale = false  # Not required during development
 ## Relaxing Rules
 
 Rule categories are sub-tables, not on/off switches — there is no boolean that
-disables a whole category. Relax individual settings instead (for example
-`allow_structural_orphans = true`, or `require_rationale = false`), or suppress
-expected issues with inline comments in spec files.
+disables a whole category. Two mechanisms relax a rule, and only these two.
+
+Relax an individual setting (for example `allow_structural_orphans = true`, or
+`require_rationale = false`). Where a check reads a severity, `"off"` is one of
+the values that severity accepts, and it withholds the check's findings as well
+as its verdict; `"info"` keeps the findings visible without failing the run:
+
+```toml
+[rules.format]
+no_assertions_severity = "info"
+
+[rules.references]
+retired = "off"
+
+[terms.severity]
+unused = "off"
+```text
+
+Or keep the files out of scanning altogether, so nothing in them is examined:
+`[scanning] skip` applies to every kind of scan, and each kind's own
+`skip_files` / `skip_dirs` narrow one of them.
+
+There is no per-finding waiver: no inline pragma or comment in a spec file
+suppresses an issue, and no baseline file records issues as expected. A rule
+is relaxed for the whole project, or the file is not scanned.
 
 An individual check is turned off by setting its severity to `off`, through
 whichever of the two routes above it reads. That is the sanctioned per-check

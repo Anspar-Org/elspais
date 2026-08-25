@@ -103,7 +103,7 @@
 | REQ-d00081 | Multi-Assertion Reference Expansion                           | dev-cli.md              | b1812806 |
 | REQ-d00082 | Unified Reference Configuration                               | dev-cli.md              | f0808bb9 |
 | REQ-d00084 | Trace Command                                                 | dev-cli.md              | 5728e809 |
-| REQ-d00085 | Unified Report Composition                                    | dev-cli.md              | 587285b0 |
+| REQ-d00085 | Unified Report Composition                                    | dev-cli.md              | ee68f8ee |
 | REQ-d00086 | Coverage Report Section                                       | dev-cli.md              | 8e02f52d |
 | REQ-d00124 | Graph Analysis Engine                                         | dev-cli.md              | b153d5f6 |
 | REQ-d00125 | Analysis CLI Command                                          | dev-cli.md              | 474fa8af |
@@ -200,7 +200,7 @@
 | REQ-d00282 | Report Value Selection                                        | dev-cli.md              | 70ab39ac |
 | REQ-d00283 | Test Target Groups                                            | dev-graph-core.md       | bc95d36b |
 | REQ-d00284 | How a Result Names Its Test                                   | dev-graph-core.md       | 7baae0b0 |
-| REQ-d00285 | The Shape of a Finding                                        | dev-cli.md              | f7488e72 |
+| REQ-d00285 | The Shape of a Finding                                        | dev-cli.md              | bedec247 |
 | REQ-d00286 | Built-In User Documentation                                   | dev-cli.md              | d246f21a |
 
 ## User Journeys

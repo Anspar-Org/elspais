@@ -179,7 +179,7 @@ G. The `--lenient` flag SHALL allow warnings to pass without affecting the exit 
 
 H. The `--format junit` option SHALL render health checks as JUnit XML, mapping categories to `<testsuite>` elements, checks to `<testcase>` elements, failures to `<failure>` elements, warnings to `<system-err>`, and info to `<system-out>`.
 
-I. Each `HealthCheck` SHALL carry a `findings` list of `HealthFinding` dataclass instances, each with `message`, `file_path`, `line`, `node_id`, and `related` fields. The `to_dict()` serialization SHALL include findings. Existing renderers (text, markdown, JUnit) SHALL remain unchanged.
+I. Each check SHALL carry the findings it raised.
 
 J. The `--format sarif` option SHALL render health findings as SARIF v2.1.0 JSON, with one `reportingDescriptor` per unique check name, one `result` per `HealthFinding` with physical locations, passing checks omitted, and coverage stats in `run.properties`.
 
@@ -197,10 +197,14 @@ Report-producing commands (`health`, `trace`, `coverage`, `changed`) currently e
 
 Quietness and verbosity are separate obligations (F, K), as are leniency and the default it departs from (G, L). Each pair was carried under one label until evidence for one half was found standing in for both: coverage is reported per assertion, so a label holding two obligations cannot distinguish an implementation from half of one.
 
+A check is where a report groups what it found, so I attaches each finding to the check that raised it; that grouping is what a report counts against a check, renders beneath it, and suppresses or expands under M. What an individual finding carries, and its agreement across the formats a report is rendered in, is REQ-d00285's subject rather than this requirement's.
+
 A failing check's findings are what the reader came for; a passing check's are noise until asked for, which is why M suppresses them by default and makes the request explicit rather than the reverse. The request is about passing checks only and is orthogonal to overall verbosity — a format carries a passing check's detail because it was asked for, not because the report as a whole is verbose. N is separate from M because a format can be wrong about invariance while the request itself works: complete findings and omitted passing checks are properties of those formats, not outcomes of the request.
 
 ### Changelog
 
+- 2026-08-24 | ee68f8ee | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-24 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-66: restate I as the attachment of a finding to the check that raised it; what a finding carries and its agreement across formats is REQ-d00285's
 - 2026-08-11 | 587285b0 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-11 | 650b3641 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-11 | 0d1e518a | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: specify passing-check detail (M) and its format invariance (N)
@@ -209,7 +213,7 @@ A failing check's findings are what the reader came for; a passing check's are n
 - 2026-05-11 | 82d76f1a | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 82d76f1a | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Unified Report Composition* | **Hash**: 587285b0
+*End* *Unified Report Composition* | **Hash**: ee68f8ee
 ---
 
 ## REQ-d00271: Diagnostic Code Vocabulary
@@ -267,6 +271,10 @@ F. A name under which findings are reported SHALL identify one condition.
 
 G. Where a condition the tool detected is not reported, the point at which it is withheld SHALL record what was withheld and why.
 
+H. A narrowing of which findings a report presents SHALL NOT change the verdict that report reaches.
+
+I. A report that narrows which findings it presents SHALL disclose the narrowing and the extent of what it withheld.
+
 ### Rationale
 
 A finding a reader cannot locate costs them the search the tool already performed, and a finding that names no remedy leaves them to infer one from the defect — which is exactly the inference the tool is better placed to make. A and B put both on the finding itself rather than in a table consulted at render time, because a table keyed by name covers only the names someone remembered to add, and it cannot travel to a surface that renders differently.
@@ -279,13 +287,16 @@ F concretizes REQ-p00019-J and -K in the direction those assertions do not reach
 
 G concretizes REQ-p00019-H. Suppression is legitimate; silent suppression is not, and the difference is a record at the point the decision is made. Without it, a condition detected and dropped is indistinguishable from a condition never detected, and the code that drops it reads as if nothing were being decided.
 
-Classes of REQ-p00019 not concretized here are bound through the instance rather than left uncovered: A, C, D, E and F are properties of what a report says overall, which REQ-p00015 governs for this tool; B is governed for content staleness by the hash and index checks. This requirement concretizes G through B, H through G, and J and K through F.
+H and I govern a report narrowed to the findings a reader asked for, by severity, by category, by the code a finding carries or by where it is located. A verdict is what the run found, not what the reader chose to look at; taken over the surviving findings instead, a narrowing would become a way to pass a run that failed, and the narrower the question the healthier the answer. I is the disclosure REQ-p00084-D asks of a scoped report, reached by another route: a report holding fewer findings than the run produced is indistinguishable, from the output alone, from a run that found fewer. Naming the narrowing and the extent of what it withheld separates the two without listing the withheld findings, which would undo the narrowing the reader asked for. G is the same principle where the tool rather than the reader decides.
+
+Classes of REQ-p00019 not concretized here are bound through the instance rather than left uncovered: D, E and F are properties of what a report says overall, which REQ-p00015 governs for this tool; B is governed for content staleness by the hash and index checks. This requirement concretizes A and C through I, a report narrowed to the findings a reader asked for being one that omits the rest and hands back a part of what the run found; G through B, H through G, and J and K through F.
 
 ### Changelog
 
+- 2026-08-24 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-66: govern narrowing a report to selected findings — the verdict stays the run's, and the narrowing and the extent of what it withheld are disclosed
 - 2026-08-24 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-66: Initial authoring — a finding carries its location, its remedy and one severity decided in one place, and reads the same in every format
 
-*End* *The Shape of a Finding* | **Hash**: f7488e72
+*End* *The Shape of a Finding* | **Hash**: bedec247
 
 ## REQ-d00286: Built-In User Documentation
 

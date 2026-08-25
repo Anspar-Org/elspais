@@ -13,13 +13,14 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from elspais.graph.parsers import ParseContext, ParsedContent
+from elspais.graph.parsers.results.diagnostics import DiagnosticRecorder
 from elspais.utilities.test_identity import build_test_id_from_nodeid, build_test_id_from_result
 
 if TYPE_CHECKING:
     from elspais.utilities.patterns import IdResolver
 
 
-class PytestJSONParser:
+class PytestJSONParser(DiagnosticRecorder):
     """Parser for Pytest JSON test result files.
 
     Parses JSON output from pytest-json-report or similar pytest plugins.
@@ -81,14 +82,24 @@ class PytestJSONParser:
             - message: Error/failure message (if any)
         """
         results: list[dict[str, Any]] = []
+        self._start_diagnostics()
 
         try:
             data = json.loads(content)
-        except json.JSONDecodeError:
+        except json.JSONDecodeError as exc:
+            # Implements: REQ-d00285-G
+            # An unreadable report and a suite that never ran both arrive here
+            # as no results. Record which one this was, and the line the
+            # decoder stopped at, before returning the empty list.
+            self._record_diagnostic(
+                source_path,
+                f"pytest JSON did not parse: {exc.msg}",
+                line=exc.lineno,
+            )
             return results
 
         # Handle pytest-json-report format
-        if "tests" in data:
+        if isinstance(data, dict) and "tests" in data:
             for test in data["tests"]:
                 result = self._parse_pytest_json_report_test(test, source_path)
                 if result:
@@ -99,6 +110,15 @@ class PytestJSONParser:
                 result = self._parse_simple_test(test, source_path)
                 if result:
                     results.append(result)
+        else:
+            # Implements: REQ-d00285-G
+            # Valid JSON in a shape this reporter does not read. The document
+            # was there and was declined; that is not the same as a run that
+            # reported nothing.
+            self._record_diagnostic(
+                source_path,
+                "pytest JSON parsed but holds neither a 'tests' mapping nor a list of tests",
+            )
 
         return results
 

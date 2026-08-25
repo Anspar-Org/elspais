@@ -60,6 +60,7 @@ from elspais.commands.args import (
     VersionArgs,
     ViewerArgs,
     generate_help,
+    iter_command_entries,
 )
 
 
@@ -294,6 +295,52 @@ class TestCliArgsDataclasses:
         # Also check no stale entries in COMMAND_GROUPS
         extra = set(COMMAND_GROUPS) - subcommand_names
         assert not extra, f"Stale entries in COMMAND_GROUPS (not in Command Union): {extra}"
+
+    def test_REQ_p00001_A_command_entries_covers_the_command_union(self) -> None:
+        """iter_command_entries() names every command the Command Union declares."""
+        declared = set()
+        for arg in typing.get_args(Command):
+            if typing.get_origin(arg) is typing.Annotated:
+                _, *metadata = typing.get_args(arg)
+                for m in metadata:
+                    if hasattr(m, "name"):
+                        declared.add(m.name)
+
+        entries = iter_command_entries()
+        assert {e.name for e in entries} == declared
+        # Every entry carries the group the CLI groups it under.
+        assert all(e.group == COMMAND_GROUPS[e.name] for e in entries)
+        # Entries arrive grouped: a group's commands are contiguous.
+        seen_groups = [e.group for e in entries]
+        assert len(set(seen_groups)) == len(
+            [g for i, g in enumerate(seen_groups) if i == 0 or seen_groups[i - 1] != g]
+        )
+
+    def test_REQ_p00001_A_help_renders_the_shared_command_entries(self) -> None:
+        """generate_help() presents exactly what iter_command_entries() returns.
+
+        The help text and the documentation's command index read the same
+        routine, so a command cannot appear in one and be missing from the
+        other, and neither can describe a command differently.
+        """
+        help_text = generate_help("0.0.0")
+        for entry in iter_command_entries():
+            assert entry.summary in help_text, (
+                f"{entry.name!r} is described as {entry.summary!r} by "
+                f"iter_command_entries(), which the help text does not show"
+            )
+            assert entry.group in help_text
+
+    def test_REQ_p00001_A_nested_subcommands_reach_the_summary(self) -> None:
+        """A command with nested subcommands lists them in its summary, not its description."""
+        entries = {e.name: e for e in iter_command_entries()}
+        config = entries["config"]
+        assert config.actions, "the `config` command declares nested subcommands"
+        assert config.summary == f"{config.description} ({', '.join(config.actions)})"
+        # A command without nested subcommands is summarised by its description alone.
+        summary_only = entries["version"]
+        assert summary_only.actions == ()
+        assert summary_only.summary == summary_only.description
 
     def test_REQ_p00001_A_generate_help_includes_all_commands(self) -> None:
         """generate_help() output contains every subcommand name."""
