@@ -37,6 +37,18 @@ sessions in different worktrees do not collide, and the address is held
 for that tree even while nothing is serving it: restart the daemon, or
 stop and start it, and the same address answers.
 
+That address is held in `.elspais/daemon-port.json`, which is working
+state rather than tracked content. A tree that loses the file keeps the
+registration naming the old port and reserves a new one on next install,
+so a registration that must outlive a clean checkout should name a
+variable instead.
+
+A registration COMMITTED to a repository -- a `.mcp.json` every
+contributor checks out -- is that case, and cannot name a port for the
+same reason a global one cannot: the address differs by tree and by
+machine. It takes the variable form below, and every contributor's shell
+supplies the address.
+
 Installed with `--global`, one registration serves every project, so it
 cannot name any single tree's address. It names a variable instead, and
 the shell that launches the client supplies it:
