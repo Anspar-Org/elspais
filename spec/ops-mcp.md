@@ -480,6 +480,8 @@ N. Where a client's use of a daemon does not result in a recorded handle — bec
 
 O. While a daemon has a recorded client that still exists, its idle timeout SHALL NOT be the cause of its termination; the idle timeout governs a daemon with no recorded client.
 
+P. Whether a daemon serves this working tree, what it has recorded about itself, and whether it holds changes not yet written, SHALL be answerable to an operator without a client or a browser.
+
 ### Rationale
 
 A daemon is started implicitly to serve one client and is then detached from it, so nothing in the running process can afterwards say whose disappearance should end it. The handle has to be handed over at start or it is unrecoverable, which is why assertion A fixes the moment rather than the means. What makes a handle a handle is that its disappearance can be observed without the client's cooperation: a client that crashes revokes no token and sends no goodbye, so anything that depends on the client acting at the end fails the case the requirement exists for. A process identifier tested by signalling it, and a connection the client holds open, both satisfy that property; a declared name or label does not, because it never disappears.
@@ -510,8 +512,11 @@ Assertion N exists because a lifetime that is not bound to the client is invisib
 
 Assertion O settles which of a daemon's bounds answers when two of them disagree. Going quiet is not going away: a client that applies a change and then reasons about the next one sends nothing for long stretches, and an idle timeout counts that silence exactly as it counts an empty room. A timeout that cannot tell the two apart takes the daemon from the client least able to notice — one that is mid-task, holding work it has not written, and about to find its server gone. So which regime governs is decided by whether anyone is recorded as using the daemon, not by how recently they last spoke. The cost is real and is stated rather than hidden: a daemon with a live client outlives the idle timeout configured for it, for as long as that client exists. The client-liveness rule is what still bounds it, and assertion E is what makes that bound sufficient — a daemon whose recorded clients are all gone is ended by the same rule that spared it while one remained.
 
+P names an audience rather than a surface. A daemon's client handles, its pending count and its record of a save it performed alone are all obliged to be accurate and observable, but every way of asking for them runs through an agent or a browser. An operator deciding whether to restart a daemon, change branch or close a terminal is exactly the reader who needs to know whether anything would be lost, and is the one reader who has no way to ask.
+
 ### Changelog
 
+- 2026-08-25 | fb36047e | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-10 | dace8fb0 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-08 | 870802ca | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-08 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-12: state the lifetime bound one-directionally, scope the deadline and failure clauses, and refine against the new parents
@@ -520,7 +525,7 @@ Assertion O settles which of a daemon's bounds answers when two of them disagree
 - 2026-08-08 | 81945155 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-07 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-12: author background daemon lifetime, client-liveness, and unattended-persistence invariants
 
-*End* *Background Daemon Lifetime* | **Hash**: dace8fb0
+*End* *Background Daemon Lifetime* | **Hash**: fb36047e
 ---
 
 ## REQ-o00075: Shared Graph Daemon
@@ -601,7 +606,7 @@ K. When the process serving a working tree is replaced, a client SHALL reach the
 
 L. An address the tool records in a client's configuration SHALL resolve to the working tree that client is operating in.
 
-M. Where the address a client is configured to use does not reach the process serving that client's working tree, the tool SHALL report it.
+M. Where a client's registration names a fixed address, the tool SHALL report it.
 
 ### Rationale
 
@@ -623,16 +628,19 @@ K is therefore what decides which side of REQ-o00077-D a client falls on. A proc
 
 An address that survives replacement must also survive there being nothing to replace. The record naming the process currently serving a tree is removed when none is, which is what E requires of it; the address a tree is reached at is a different fact with a different lifetime, and holding the two separately is what lets a tree be reached in the same place after serving has stopped and begun again.
 
-Assertions C through K govern the addresses the tool itself keeps. L governs the ones it writes into somebody else's configuration, which is a different obligation because such a record is read in circumstances the writing never saw. A client's configuration is read wherever that client is launched, and a tool that writes down the address it settled while installing has recorded one tree's answer as though it were every tree's. Where several working trees of a repository share a configuration, that is not a stale entry but a wrong one from the moment it is written: it names a tree the reader may not be in. An address that resolves when it is read cannot make that mistake, which is why L constrains what the recorded address must do rather than what it may say.
+Assertions C through K govern the addresses the tool keeps for itself. L governs one it writes into somebody else's configuration, which is a different obligation because such a record is read where the writing never was. Every working tree of a repository reads the same client configuration, so an address settled while installing is one tree's answer offered to all of them -- wrong when written, not stale later. An address resolved as it is read cannot make that mistake, which is why L constrains what the recorded address must do rather than what it may say.
 
-L does not weaken C. A client that can ask which process serves its tree still needs no arrangement; L binds the tool where it has already answered on such a client's behalf, into a record the client will read later without asking again.
+L does not weaken C. A client that can ask which process serves its tree still needs no arrangement; L binds the tool where it has already answered on such a client's behalf, into a record read later without asking again.
 
-M covers two conditions that carry different weight, and reporting them apart is what lets each be judged on its own. A shell holding an address for another tree is ordinary and transient -- moving between working trees produces it, and re-deriving the address ends it -- so it is a disclosure about the environment a command was run in. A registration that names an address rather than resolving one is a defect in what was written, wrong from the moment of writing under L and outliving any shell. Reported under one name they would have to share one severity, and the severity truthful for either is wrong for the other.
+M exists because the failure is silent. A hardcoded address fails exactly as an address nobody is serving fails -- a refused connection -- so the client cannot tell them apart. Only the tool can read the registration and see which it is, and a condition nothing reports persists until somebody happens to investigate it.
 
-M exists because the failure L describes is silent. A configured address that names the wrong tree is indistinguishable, to the client holding it, from one that names the right tree with nothing yet serving — both simply fail to connect, and both invite the reader to look at the daemon. Only the tool can compare the address a client would use against the tree that client is in, so only the tool can tell the two apart, and a condition that nothing reports is one that persists for as long as nobody happens to investigate it. M is a disclosure about a client's configuration and not about the graph: it says nothing about which repositories a working tree federates, since a tree may properly name any other tree as an associate without that bearing on where its own clients connect.
+M is about a registration, not about which repositories a tree federates. A tree may name any other tree as an associate without that bearing on where its clients connect.
+
+M does not cover a shell holding another tree's address. That ends when the address is re-derived, and by the time it could be reported the client has already connected, so nothing useful follows from saying it.
 
 ### Changelog
 
+- 2026-08-25 | 7505310d | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-25 | 0bdae779 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-18 | 32c4639b | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-18 | cd6333aa | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: sync changelog hash
@@ -640,7 +648,7 @@ M exists because the failure L describes is silent. A configured address that na
 - 2026-08-18 | cd6333aa | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-18 | d2a0addf | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash, add missing changelog section
 
-*End* *Reaching the Serving Process* | **Hash**: 0bdae779
+*End* *Reaching the Serving Process* | **Hash**: 7505310d
 
 ## REQ-o00077: Serving From the Installed Program
 

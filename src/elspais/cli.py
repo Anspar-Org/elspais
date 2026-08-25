@@ -625,23 +625,16 @@ def _claude_env() -> dict[str, str]:
 
 # Implements: REQ-o00076-L
 def _http_registration_url() -> str:
-    """The address to register: always the variable, never a literal.
+    """The variable to register, never a literal address.
 
-    A registration is read wherever the client is launched, which is not
-    where it was written. Several working trees of one repository share a
-    client configuration, so an address settled while installing names one
-    tree's answer as every tree's -- wrong from the moment it is written
-    rather than stale later (REQ-o00076-L).
+    All worktrees of a repo share one client config. Hardcode a port and
+    they all reach one tree's daemon -- or nothing, once that tree stops
+    reserving it. `elspais mcp env` sets this variable per shell, so each
+    tree resolves its own address.
 
-    The variable is resolved when the registration is read, by a shell
-    that knows which tree it is in, so one registration serves every tree
-    and each reaches its own process. `elspais mcp env` is what supplies
-    it.
-
-    It carries no default, which is deliberate and belongs here rather
-    than at the point of use: an unset variable is reported by the client
-    as a missing variable, naming the cause, where a default address would
-    fail as a refused connection and name a symptom.
+    No default on purpose: an unset variable is reported by name, where a
+    default would fail as a refused connection and send you looking at
+    the daemon.
     """
     return _ADDRESS_VARIABLE
 
@@ -651,10 +644,9 @@ def _mcp_install(global_scope: bool = False, transport: str = "http") -> int:
     """Register elspais MCP server with Claude Code.
 
     Over http the registration names a variable whatever its scope, and
-    the shell supplies the address with ``eval "$(elspais mcp env)"``.
-    Scope decides which projects the registration covers; it never
-    decides whether an address can be written down, because no scope
-    reaches only one working tree (REQ-o00076-L).
+    ``eval "$(elspais mcp env)"`` supplies the address. Scope decides
+    which projects are covered, never whether an address can be written
+    down -- no scope reaches only one working tree.
 
     http is the better connection and is the default. The client then
     shares one graph with the CLI and the viewer, and a daemon that is
@@ -742,10 +734,9 @@ def _mcp_install(global_scope: bool = False, transport: str = "http") -> int:
     )
     print(f"elspais MCP server registered for {scope_label}.")
     if transport == "http":
-        # The registration names a variable, so a shell that never set it
-        # launches a client that cannot connect. Say what supplies it here,
-        # where the registration was just written, rather than leaving it to
-        # be discovered from a failure.
+        # A shell that never sets the variable launches a client that
+        # cannot connect. Say what sets it, here, rather than leaving it
+        # to be discovered from a failure.
         print("The registration names ELSPAIS_MCP_URL, which each shell supplies:")
         print('  eval "$(elspais mcp env)"')
         print("Run that before launching the client, in whichever tree you are in.")

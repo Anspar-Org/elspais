@@ -249,85 +249,6 @@ class TestDoctorRun:
         assert result == 1
 
 
-class TestMcpAddressCheck:
-    """Whether a client launched here would reach this working tree.
-
-    A client that resolves an address once cannot tell an address naming
-    another tree from one naming its own with nothing serving it yet:
-    both simply fail to connect. Only the tool holds both facts.
-    """
-
-    # Verifies: REQ-o00076-M
-    def test_REQ_o00076_M_an_address_naming_another_tree_is_reported(self, tmp_path, monkeypatch):
-        """Validates REQ-o00076-M: an address carried over from a
-        different working tree connects to that tree's process or to
-        nothing, and either way the client is not reading the graph it
-        is working in. The tool can see the disagreement, so it says so.
-        """
-        from elspais.commands.doctor import check_mcp_address
-
-        monkeypatch.setenv("ELSPAIS_MCP_URL", "http://127.0.0.1:40689/mcp")
-        monkeypatch.setattr("elspais.mcp.daemon.reserved_port", lambda root: 39709)
-        monkeypatch.setattr("elspais.mcp.daemon.get_daemon_info", lambda root: None)
-
-        check = check_mcp_address(tmp_path, {})
-
-        assert not check.passed
-        assert "40689" in check.message and "39709" in check.message
-
-    # Verifies: REQ-o00076-M
-    def test_REQ_o00076_M_an_address_reaching_this_tree_is_not_reported(
-        self, tmp_path, monkeypatch
-    ):
-        """Validates REQ-o00076-M: the report is about disagreement. A
-        client pointed at the tree it is working in is the arrangement
-        the tool is asking for, and reporting it would train the reader
-        to ignore the check.
-        """
-        from elspais.commands.doctor import check_mcp_address
-
-        monkeypatch.setenv("ELSPAIS_MCP_URL", "http://127.0.0.1:39709/mcp")
-        monkeypatch.setattr("elspais.mcp.daemon.reserved_port", lambda root: 39709)
-        monkeypatch.setattr("elspais.mcp.daemon.get_daemon_info", lambda root: None)
-
-        assert check_mcp_address(tmp_path, {}).passed
-
-    # Verifies: REQ-o00076-M
-    def test_REQ_o00076_M_a_shell_with_no_address_is_not_a_fault(self, tmp_path, monkeypatch):
-        """Validates REQ-o00076-M: the assertion is about an address a
-        client is configured to use. A shell that runs only the CLI sets
-        none and needs none, so there is no disagreement to report.
-        """
-        from elspais.commands.doctor import check_mcp_address
-
-        monkeypatch.delenv("ELSPAIS_MCP_URL", raising=False)
-        monkeypatch.setattr("elspais.mcp.daemon.reserved_port", lambda root: 39709)
-
-        assert check_mcp_address(tmp_path, {}).passed
-
-    # Verifies: REQ-o00076-M
-    def test_REQ_o00076_M_an_associate_in_another_tree_is_not_a_disagreement(
-        self, tmp_path, monkeypatch
-    ):
-        """Validates REQ-o00076-M: the report is about where a client
-        connects, not about which repositories a tree federates. A tree
-        may properly declare an associate living in any other working
-        tree, and doing so says nothing about its own clients -- a check
-        that conflated the two would fire on a correct configuration.
-        """
-        from elspais.commands.doctor import check_mcp_address
-
-        monkeypatch.setenv("ELSPAIS_MCP_URL", "http://127.0.0.1:39709/mcp")
-        monkeypatch.setattr("elspais.mcp.daemon.reserved_port", lambda root: 39709)
-        monkeypatch.setattr("elspais.mcp.daemon.get_daemon_info", lambda root: None)
-
-        elsewhere = tmp_path / "other-repo-worktree"
-        elsewhere.mkdir()
-        config = {"associates": {"Other": {"path": str(elsewhere), "namespace": "OTHER"}}}
-
-        assert check_mcp_address(tmp_path, config).passed
-
-
 class TestMcpRegistrationCheck:
     """Whether a registration a client here reads names a fixed address.
 
@@ -455,3 +376,123 @@ class TestMcpRegistrationCheck:
         check = check_mcp_registration(tmp_path, {}, claude_config=tmp_path / "does-not-exist.json")
 
         assert check.passed
+
+    # Verifies: REQ-o00076-M
+    def test_REQ_o00076_M_a_hardcoded_address_is_found_whatever_the_key_is_called(
+        self, tmp_path, monkeypatch
+    ):
+        """We do not know the client's schema and cannot track it. Looking
+        at values rather than key names means a renamed url field still
+        cannot hide a hardcoded port from us.
+        """
+        from elspais.commands.doctor import check_mcp_registration
+
+        monkeypatch.setattr("elspais.commands.doctor._main_repo_root", lambda root: None)
+        cfg = self._claude_config(
+            tmp_path,
+            servers={"elspais": {"type": "http", "endpoint": "http://127.0.0.1:40689/mcp"}},
+        )
+
+        check = check_mcp_registration(tmp_path, {}, claude_config=cfg)
+
+        assert not check.passed
+        assert "40689" in check.message
+
+    # Verifies: REQ-o00076-M
+    def test_REQ_o00076_M_a_config_that_will_not_parse_is_named_not_counted_as_clean(
+        self, tmp_path, monkeypatch
+    ):
+        """A file we could not open is not a file with nothing in it.
+        Reporting "none hardcodes a port" would claim something we never
+        checked.
+        """
+        from elspais.commands.doctor import check_mcp_registration
+
+        monkeypatch.setattr("elspais.commands.doctor._main_repo_root", lambda root: None)
+        broken = tmp_path / "claude.json"
+        broken.write_text("{ not json")
+
+        check = check_mcp_registration(tmp_path, {}, claude_config=broken)
+
+        assert "Could not read" in check.message
+        assert "claude.json" in check.message
+
+
+class TestDaemonStatusCheck:
+    """What is serving this tree, and whether it holds unsaved work."""
+
+    # Verifies: REQ-o00074-P
+    def test_REQ_o00074_P_unsaved_changes_are_reported(self, tmp_path, monkeypatch):
+        """Mutations an agent made live only in the daemon's memory. Anyone
+        about to restart it or close the terminal needs to be told, because
+        no other surface tells a person at a shell.
+        """
+        from elspais.commands import doctor
+
+        monkeypatch.setattr(
+            doctor, "get_daemon_info", lambda root: {"pid": 1, "port": 39709}, raising=False
+        )
+        monkeypatch.setattr(
+            "elspais.mcp.daemon.get_daemon_info", lambda root: {"pid": 1, "port": 39709}
+        )
+        monkeypatch.setattr(doctor, "_daemon_pending_count", lambda info: 3)
+
+        check = doctor.check_daemon_status(tmp_path, {})
+
+        assert "3 unsaved change(s)" in check.message
+
+    # Verifies: REQ-o00074-P
+    def test_REQ_o00074_P_a_daemon_holding_nothing_is_reported_as_such(self, tmp_path, monkeypatch):
+        """Reporting the daemon only when something is wrong would leave a
+        reader unable to tell "nothing pending" from "nothing asked".
+        """
+        from elspais.commands import doctor
+
+        monkeypatch.setattr(
+            "elspais.mcp.daemon.get_daemon_info",
+            lambda root: {"pid": 7, "port": 40000, "version": "1.2.3"},
+        )
+        monkeypatch.setattr(doctor, "_daemon_pending_count", lambda info: 0)
+
+        check = doctor.check_daemon_status(tmp_path, {})
+
+        assert check.passed
+        assert "holding no unsaved changes" in check.message
+        assert "40000" in check.message
+
+    # Verifies: REQ-o00074-P
+    def test_REQ_o00074_P_no_daemon_is_not_a_fault(self, tmp_path, monkeypatch):
+        """Most trees are not being served at any given moment. Saying so
+        is a fact, not a finding.
+        """
+        from elspais.commands import doctor
+
+        monkeypatch.setattr("elspais.mcp.daemon.get_daemon_info", lambda root: None)
+
+        check = doctor.check_daemon_status(tmp_path, {})
+
+        assert check.passed
+        assert "No daemon" in check.message
+
+    # Verifies: REQ-o00074-P
+    def test_REQ_o00074_P_a_save_nobody_asked_for_is_surfaced(self, tmp_path, monkeypatch):
+        """A daemon that expires holding work writes it and records that it
+        did. That record is the only sign the work was written without
+        anyone deciding to write it.
+        """
+        import json
+
+        from elspais.commands import doctor
+
+        monkeypatch.setattr(
+            "elspais.mcp.daemon.get_daemon_info", lambda root: {"pid": 7, "port": 40000}
+        )
+        monkeypatch.setattr(doctor, "_daemon_pending_count", lambda info: 0)
+        (tmp_path / ".elspais").mkdir()
+        (tmp_path / ".elspais" / "automatic-save.json").write_text(
+            json.dumps({"mutation_count": 4, "saved_at": "2026-08-25T12:00:00", "trigger": "ttl"})
+        )
+
+        check = doctor.check_daemon_status(tmp_path, {})
+
+        assert "saved 4 change(s) on its own" in check.message

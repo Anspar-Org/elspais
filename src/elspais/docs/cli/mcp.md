@@ -53,9 +53,9 @@ reservation settles a new address rather than keeping a dead one.
 That variable carries no default on purpose. A shell that never set it
 gets a missing-variable error naming `ELSPAIS_MCP_URL`; a default would
 fail as a refused connection and send the reader to look at the daemon.
-`elspais doctor` reports an address that does not reach the tree it is
-read in, which is otherwise indistinguishable from one nothing is
-serving yet.
+`elspais doctor` reports a registration that hardcodes a port, and what
+is serving this tree -- including any changes a daemon is holding that
+are not yet on disk.
 
 Within a session the address is stable. A tree's reserved address is held
 in `.elspais/daemon-port.json` and survives the process using it, so a

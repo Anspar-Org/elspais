@@ -129,8 +129,8 @@ _REMEDIES: dict[str, str] = {
     "config.project_type": "elspais doctor",
     "config.associated_section": "elspais doctor",
     "config.associate_paths": "elspais associate list",
-    "mcp.address": "elspais mcp env",
     "mcp.registration": "elspais mcp install",
+    "daemon.status": "elspais daemon restart --persist",
     "config.no_requirements": "elspais example",
     "associate.paths_resolvable": "elspais associate list",
     "associate.configs_valid": "elspais associate list",
@@ -225,8 +225,8 @@ _DESCRIPTIONS: dict[str, str] = {
     "config.paths_exist": "Verifies spec directories exist",
     "config.project_type": "The declared project type is one the tool knows",
     "config.associated_section": "Every associate declaration reads (both a path and a namespace)",
-    "mcp.address": "The address a client here would use reaches this working tree",
     "mcp.registration": "No client registration reaching this tree names a fixed address",
+    "daemon.status": "What serves this working tree, and whether it holds unsaved changes",
     # -- spec --------------------------------------------------------------
     "config.associate_paths": (
         "Validates that every federated repository — those declared here and those reached through "
@@ -445,8 +445,8 @@ def _registry() -> dict[str, CheckRule]:
         _general("docs.config_drift", "docs", Severity.WARNING),
         _general("worktree.status", "environment", Severity.INFO),
         _general("associate.paths_resolvable", "environment", Severity.ERROR),
-        _general("mcp.address", "environment", Severity.INFO),
         _general("mcp.registration", "environment", Severity.WARNING),
+        _general("daemon.status", "environment", Severity.INFO),
         _general("associate.configs_valid", "environment", Severity.ERROR),
         # -- spec --------------------------------------------------------
         _general("graph.build", "spec", Severity.ERROR),

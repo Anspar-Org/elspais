@@ -64,9 +64,9 @@
 | REQ-o00071 | MCP Discover Requirements Tool      | ops-mcp.md          | 128366d2 |
 | REQ-o00072 | Domain Deserialization Layer        | ops-architecture.md | 53789928 |
 | REQ-o00073 | MCP Org-Wide Context                | ops-mcp.md          | 346f3031 |
-| REQ-o00074 | Background Daemon Lifetime          | ops-mcp.md          | dace8fb0 |
+| REQ-o00074 | Background Daemon Lifetime          | ops-mcp.md          | fb36047e |
 | REQ-o00075 | Shared Graph Daemon                 | ops-mcp.md          | 2598192d |
-| REQ-o00076 | Reaching the Serving Process        | ops-mcp.md          | 0bdae779 |
+| REQ-o00076 | Reaching the Serving Process        | ops-mcp.md          | 7505310d |
 | REQ-o00077 | Serving From the Installed Program  | ops-mcp.md          | 3488ba9c |
 
 ## DEVELOPMENT
