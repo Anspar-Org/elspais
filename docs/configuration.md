@@ -237,9 +237,14 @@ index_file = "INDEX.md"
 # Code scanning (for REQ references in source code)
 [scanning.code]
 directories = ["src", "apps", "packages"]
-# Defaults cover every language with a comment pattern, container image files
-# included (`Dockerfile`, `*.Dockerfile`, `Containerfile`). `elspais init`
-# writes the list out in full; an empty list means those same defaults.
+# The defaults are a common subset, not every language the tool can read a
+# keyword in: a comment pattern exists for many extensions these patterns do
+# not name (`.cs`, `.php`, `.toml`, `.clj`, `.tex`, `.hs` and more), and
+# `.css` is scanned though its only comment form is a block, which carries no
+# keyword. Name the extensions your project actually uses. Container image
+# files are covered (`Dockerfile`, `*.Dockerfile`, `Containerfile`).
+# `elspais init` writes the list out in full; an empty list means those same
+# defaults. The full set of comment patterns is `elspais docs linking`.
 file_patterns = []
 source_roots = []          # Optional: root directories for import resolution
 
@@ -898,6 +903,33 @@ in test files, independent of this target. See `elspais docs test-targets`
 (*Python/pytest Recipe*, *Coverage-only target with per-test direct
 attribution*) for the full recipe, including the JSON `show_contexts`
 alternative for suites too small to worry about the JSON-report size cost.
+
+### Test Result Reporters (`reporter`)
+
+A `[[scanning.test.targets]]` entry names the format its results arrive in
+through `reporter`. A results-kind reporter produces pass/fail records; a
+coverage-kind one annotates files with line coverage and is chosen by sniffing
+the file at `coverage`, so a coverage-only target need not name one.
+
+<!-- generated: reporters -->
+<!-- Rendered from the program's own definitions; edits here are overwritten. Regenerate: python -m elspais.utilities.doc_tables -->
+
+| Reporter | Channel | Kind | Description |
+| --- | --- | --- | --- |
+| `coverage-json` | file | coverage | Parses the JSON report `coverage json` (coverage.py) writes, in either its aggregate or its per-context form, into per-file line coverage. |
+| `coverage-sqlite` | file | coverage | Reads coverage.py's own `.coverage` SQLite data file through coverage.py's public API, so per-test contexts are read compactly rather than through a JSON expansion of them. Needs the `coverage` package (`elspais[coverage]`) importable, and degrades to unattributed coverage where it is not. |
+| `flutter-machine` | stdout | results | Parses the `flutter test --machine` JSON-line protocol from the command's stdout. Carries the real `suite.path` and test line, so `match = "source"` binds each result to the test that produced it. |
+| `junit` | file | results | Parses JUnit XML result files matched by the `results` glob. Honours an optional per-`<testcase>` `file` attribute (a real source path) and `line` attribute, so `match = "source"` can bind to a scanned test node. |
+| `lcov` | file | coverage | Parses an LCOV report -- the `lcov.info` that `flutter test --coverage` and most language toolchains write -- into per-file line coverage. |
+| `pytest-json` | file | results | Parses the report pytest's `--json-report` writes, matched by the `results` glob. |
+
+These are the reporters the tool is built with. `register_reporter()` admits
+further formats at run time, so a project that registers one has a reporter
+this table does not name.
+<!-- /generated: reporters -->
+
+See `elspais docs test-targets` for every field of a target and the recipes
+that use them.
 
 ### Check Severity (`[rules.severity]`)
 

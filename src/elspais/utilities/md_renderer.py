@@ -14,6 +14,15 @@ if TYPE_CHECKING:
     pass
 
 
+# A line that is nothing but one HTML comment. Markdown renders such a line as
+# nothing at all, and the terminal is a renderer like any other: a reader asking
+# `elspais docs` for a topic should see what a reader on the web sees. This is
+# how the markers bounding a generated table stay invisible to a person while
+# staying legible to the generator (REQ-d00286-E). Only a whole line counts --
+# a comment opening mid-line, or spanning several, is left exactly as written.
+_HTML_COMMENT_LINE = re.compile(r"^\s*<!--.*-->\s*$")
+
+
 class MarkdownRenderer:
     """Renders markdown content to ANSI-colored terminal output."""
 
@@ -66,6 +75,11 @@ class MarkdownRenderer:
 
             if in_code_block:
                 code_lines.append(line)
+                continue
+
+            # A comment-only line renders as nothing, exactly as it does on the
+            # web. Inside a fenced block it is content, and was kept above.
+            if _HTML_COMMENT_LINE.match(line):
                 continue
 
             # Process regular lines

@@ -14,6 +14,8 @@ from pathlib import Path
 import pytest
 
 from elspais.utilities.docs_loader import (
+    DOCS_TOPICS,
+    PSEUDO_TOPICS,
     TOPIC_ORDER,
     find_docs_dir,
     get_available_topics,
@@ -52,6 +54,92 @@ class TestDocsExistence:
         assert docs_dir is not None
         topic_file = docs_dir / f"{topic}.md"
         assert topic_file.is_file(), f"Missing documentation file: {topic}.md"
+
+    # Verifies: REQ-d00286-A
+    def test_REQ_d00286_A_declared_topics_match_files_on_disk(self):
+        """`DOCS_TOPICS` and the shipped `.md` files must name the same set.
+
+        `DOCS_TOPICS` is the one declaration of what the tool documents, and
+        the files under `src/elspais/docs/cli/` are what it can actually
+        serve. Nothing at runtime reconciles the two: a declared topic with
+        no file is dropped silently by `get_available_topics()`, and a file
+        with no declaration cannot be asked for at all. This test is what
+        keeps them one set.
+        """
+        docs_dir = find_docs_dir()
+        assert docs_dir is not None, "docs/cli directory not found"
+
+        declared = set(TOPIC_ORDER)
+        on_disk = {path.stem for path in docs_dir.glob("*.md")}
+
+        undeclared = sorted(on_disk - declared)
+        missing_file = sorted(declared - on_disk)
+
+        problems: list[str] = []
+        for topic in undeclared:
+            problems.append(
+                f"  {topic}.md ships in src/elspais/docs/cli/ but no topic declares it. "
+                f'Add "{topic}" to DOCS_TOPICS in src/elspais/utilities/docs_loader.py '
+                "(in reading order), or delete the file."
+            )
+        for topic in missing_file:
+            problems.append(
+                f'  "{topic}" is declared in DOCS_TOPICS in '
+                "src/elspais/utilities/docs_loader.py but src/elspais/docs/cli/"
+                f"{topic}.md does not exist. Write that file, or remove the entry."
+            )
+
+        assert not problems, (
+            "Documentation topics have drifted from the files that serve them:\n"
+            + "\n".join(problems)
+        )
+
+    # Verifies: REQ-d00286-A
+    def test_REQ_d00286_A_cli_positional_offers_every_topic(self):
+        """The CLI's `docs <topic>` positional must accept exactly the topics.
+
+        `DocsArgs.topic` is what tyro validates a user's argument against, so
+        a topic it does not carry is unreachable from the command line however
+        well the file ships. Its type resolves through the one declaration, so
+        this test guards the wiring rather than a second copy of the list.
+        """
+        import typing
+
+        from elspais.commands.args import DocsArgs
+
+        annotation = typing.get_type_hints(DocsArgs, include_extras=True)["topic"]
+        literal = next(
+            arg for arg in typing.get_args(annotation) if typing.get_origin(arg) is typing.Literal
+        )
+        accepted = set(typing.get_args(literal))
+
+        expected = set(TOPIC_ORDER) | set(PSEUDO_TOPICS)
+        assert accepted == expected, (
+            "`elspais docs <topic>` accepts a different set from the declared topics. "
+            "DocsArgs.topic in src/elspais/commands/args.py must be typed "
+            "`tyro.conf.Positional[DOCS_TOPICS]`, importing DOCS_TOPICS from "
+            "src/elspais/utilities/docs_loader.py rather than restating it. "
+            f"Only in the CLI: {sorted(accepted - expected)}; "
+            f"only in DOCS_TOPICS: {sorted(expected - accepted)}."
+        )
+
+    # Verifies: REQ-d00286-A
+    def test_REQ_d00286_A_topic_order_is_the_declaration_order(self):
+        """`TOPIC_ORDER` must be `DOCS_TOPICS` minus the pseudo-topics, in order.
+
+        Order is load-bearing — it is the reading order of `docs topics` and
+        the concatenation order of `docs all` — so this compares sequences,
+        which also catches a duplicated entry that a set comparison would hide.
+        """
+        import typing
+
+        expected = [t for t in typing.get_args(DOCS_TOPICS) if t not in PSEUDO_TOPICS]
+        assert TOPIC_ORDER == expected, (
+            "TOPIC_ORDER is no longer derived from DOCS_TOPICS. In "
+            "src/elspais/utilities/docs_loader.py it must read "
+            "`[t for t in get_args(DOCS_TOPICS) if t not in PSEUDO_TOPICS]`; "
+            "edit DOCS_TOPICS to change the topic set or the reading order."
+        )
 
     # Verifies: REQ-d00286-C
     def test_all_topics_available(self):

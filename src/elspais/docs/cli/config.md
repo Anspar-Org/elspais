@@ -218,9 +218,13 @@ skip_dirs = []
 
 [scanning.code]
 directories = ["src"]
-# The default list covers every language with a comment pattern, container
-# image files included. Written out in full by `elspais init`; an empty list
-# means these same defaults.
+# The default list is a common subset, not every language the tool can read a
+# keyword in: a comment pattern exists for many extensions this list does not
+# name (`.cs`, `.php`, `.toml`, `.clj`, `.tex`, `.hs` and more), and `.css` is
+# scanned though its only comment form is a block, which carries no keyword.
+# Name the extensions your project actually uses. Written out in full by
+# `elspais init`; an empty list means these same defaults. The full set of
+# patterns is `elspais docs linking`.
 file_patterns = ["*.py", "*.js", "*.ts", "*.jsx", "*.tsx", "*.java", "*.c",
                  "*.cpp", "*.h", "*.hpp", "*.go", "*.rs", "*.rb", "*.sh",
                  "*.bash", "*.sql", "*.lua", "*.yml", "*.yaml", "*.dart",

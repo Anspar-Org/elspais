@@ -8,15 +8,18 @@ files whether elspais is installed from a wheel or checked out.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import Literal, get_args
 
-if TYPE_CHECKING:
-    pass
-
-
-# Implements: REQ-d00286-C
-# Ordered list of documentation topics
-TOPIC_ORDER = [
+# Implements: REQ-d00286-A+C
+# The one declaration of what the tool documents. It is a Literal because the
+# CLI positional it types has to be checked statically; every runtime list of
+# topics is derived from it, so there is nothing to keep in step by hand. The
+# declaration order is the reading order used by `docs topics` and `docs all`.
+#
+# `topics` and `all` are not subjects — they are the two ways of asking for
+# the index and for everything, and they carry no file. PSEUDO_TOPICS names
+# them so the derivation below can subtract them.
+DOCS_TOPICS = Literal[
     "quickstart",
     "format",
     "hierarchy",
@@ -41,7 +44,16 @@ TOPIC_ORDER = [
     "graph-model",
     "mcp",
     "concurrency",
+    "comments",
+    "topics",
+    "all",
 ]
+
+PSEUDO_TOPICS = ("topics", "all")
+
+# Implements: REQ-d00286-C
+# Ordered list of documentation topics, each backed by `<topic>.md`.
+TOPIC_ORDER = [t for t in get_args(DOCS_TOPICS) if t not in PSEUDO_TOPICS]
 
 
 # Implements: REQ-d00286-A+D

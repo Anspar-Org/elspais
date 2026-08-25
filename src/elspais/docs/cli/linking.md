@@ -29,14 +29,21 @@ opened by that file's own pattern. A double dash introduces a reference in SQL
 and is arithmetic in Python; a hash introduces one in Python and is nothing in
 JavaScript.
 
-| Name            | Marker | Languages (extensions)                                                                                                          |
-|-----------------|--------|---------------------------------------------------------------------------------------------------------------------------------|
-| `c-like`        | `//`   | `.c` `.cc` `.cjs` `.cpp` `.cs` `.cxx` `.dart` `.go` `.h` `.hpp` `.java` `.js` `.jsx` `.kt` `.kts` `.less` `.mjs` `.php` `.proto` `.rs` `.scala` `.scss` `.swift` `.ts` `.tsx` `.zig` |
-| `shell-like`    | `#`    | `.bash` `.cmake` `.ex` `.exs` `.hcl` `.jl` `.ksh` `.mk` `.nix` `.pl` `.pm` `.ps1` `.py` `.r` `.rb` `.sh` `.tf` `.tfvars` `.toml` `.yaml` `.yml` `.zsh` |
-| `function-like` | `--`   | `.ada` `.adb` `.ads` `.elm` `.hs` `.lua` `.sql` `.vhd` `.vhdl`                                                                    |
-| `lisp-like`     | `;`    | `.clj` `.cljc` `.cljs` `.edn` `.el` `.lisp` `.lsp` `.rkt` `.scm` `.ss`                                                            |
-| `math-like`     | `%`    | `.cls` `.erl` `.hrl` `.sty` `.tex`                                                                                               |
-| `basic-like`    | `'`    | `.bas` `.frm` `.vb` `.vbs`                                                                                                       |
+<!-- generated: comment-patterns -->
+<!-- Rendered from the program's own definitions; edits here are overwritten. Regenerate: python -m elspais.utilities.doc_tables -->
+
+| Name | Marker | Extensions | Whole file names |
+| --- | --- | --- | --- |
+| `c-like` | `//` | `.c` `.cc` `.cjs` `.cpp` `.cs` `.cxx` `.dart` `.go` `.h` `.hpp` `.j2` `.java` `.js` `.jsx` `.kt` `.kts` `.less` `.mjs` `.php` `.proto` `.rs` `.scala` `.scss` `.swift` `.ts` `.tsx` `.zig` | -- |
+| `shell-like` | `#` | `.bash` `.cmake` `.dockerfile` `.ex` `.exs` `.hcl` `.jl` `.ksh` `.mk` `.nix` `.pl` `.pm` `.ps1` `.py` `.r` `.rb` `.sh` `.tf` `.tfvars` `.toml` `.yaml` `.yml` `.zsh` | `containerfile` `dockerfile` |
+| `function-like` | `--` | `.ada` `.adb` `.ads` `.elm` `.hs` `.lua` `.sql` `.vhd` `.vhdl` | -- |
+| `lisp-like` | `;` | `.clj` `.cljc` `.cljs` `.edn` `.el` `.lisp` `.lsp` `.rkt` `.scm` `.ss` | -- |
+| `math-like` | `%` | `.cls` `.erl` `.hrl` `.sty` `.tex` | -- |
+| `basic-like` | `'` | `.bas` `.frm` `.vb` `.vbs` | -- |
+
+A whole file name is matched without regard to case: `Dockerfile`,
+`dockerfile` and `DOCKERFILE` are one file type.
+<!-- /generated: comment-patterns -->
 
 This decides WHERE a reference may be written, never WHAT it may say. The
 identifier grammar is one set of rules in every context that accepts a
@@ -317,6 +324,7 @@ before an *Assertion* label, `+` between labels), and the repository holds
 | `# Implements: REQ-d00001+A` | malformed | `E_WRONG_ASSERTION_SEPARATOR` |
 | `# Implements: REQ-d00001-A-B` | malformed | `E_WRONG_MULTI_SEPARATOR` |
 | `# Implements: REQ-d00001-1` | malformed | `E_LABEL_OUT_OF_SERIES` |
+| `# Implements: REQ-d123456` | malformed | `E_COMPONENT_OUT_OF_RANGE` |
 | `# Implements: REQ-d00001-AB` | malformed | `E_IDENTIFIER_WITH_TRAILING_TEXT` |
 | `# Implements: REQ-d00001 (A, C)` | malformed | `E_IDENTIFIER_WITH_TRAILING_TEXT` on the first item; the second reads as a name no repository claims |
 | `# Implements: REQ-d00001-A - one environment` | malformed | `E_IDENTIFIER_WITH_TRAILING_TEXT` |
@@ -347,6 +355,12 @@ this repository configures, and — for content the grammar could not account
 for — where the reference ended and the leftover began. A reference that was
 spelled correctly and simply names nothing this graph holds carries no such
 sentence, because there is nothing about its spelling to describe.
+
+`E_COMPONENT_OUT_OF_RANGE` is the value being wrong rather than the spelling:
+five configured digits bound the component at 99999, and no amount of
+repadding makes 123456 fit. It is reported instead of a padding or
+trailing-text code precisely because those would name a defect the author does
+not have.
 
 `E_SYNTAX_ERROR` accompanies every reported fault. Carried *alone* it is the
 report that nothing more specific is known — the tool declining to guess, not

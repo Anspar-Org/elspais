@@ -1,6 +1,6 @@
 # COMMENTS
 
-The comment system provides a review annotation layer for requirements, assertions, edges, and body sections. Comments are stored as append-only JSONL files alongside spec files and are displayed in the interactive viewer.
+The comment system provides a review annotation layer for requirements, assertions, edges, and body sections. Comments are stored as append-only JSONL files under `.elspais/comments/`, mirroring the spec file layout, and are displayed in the interactive viewer.
 
 ## Storage
 

@@ -2,6 +2,54 @@
 
 Complete reference for all elspais commands.
 
+## Command Index
+
+<!-- generated: command-index -->
+<!-- Rendered from the program's own definitions; edits here are overwritten. Regenerate: python -m elspais.utilities.doc_tables -->
+
+| Command | Group | What it does |
+| --- | --- | --- |
+| `checks` | Reports | Verify requirements traceability and configuration |
+| `summary` | Reports | Coverage summary by level (Implemented, Tested, Passing, UAT Covered, UAT Passed) |
+| `trace` | Reports | Generate traceability matrix |
+| `changed` | Reports | Detect git changes to spec files |
+| `pdf` | Reports | Compile spec files into a PDF document |
+| `search` | Reports | Search requirements by keyword |
+| `gaps` | Gaps & Issues | List all traceability gaps |
+| `uncovered` | Gaps & Issues | List requirements without code coverage |
+| `untested` | Gaps & Issues | List requirements without test coverage |
+| `unvalidated` | Gaps & Issues | List requirements without UAT (journey) coverage |
+| `failing` | Gaps & Issues | List requirements with failing test or UAT results |
+| `errors` | Gaps & Issues | List spec format violations and requirements with no assertions |
+| `broken` | Gaps & Issues | List broken references (edges targeting non-existent nodes) |
+| `unlinked` | Gaps & Issues | List test and code nodes not linked to any requirement |
+| `analysis` | Authoring | Analyze foundational requirement importance |
+| `fix` | Authoring | Auto-fix spec file issues (hashes, formatting) |
+| `edit` | Authoring | Edit requirements in-place (implements, status, move) |
+| `example` | Authoring | Display requirement format examples and templates |
+| `link` | Authoring | Link suggestion tools |
+| `glossary` | Authoring | Generate glossary from defined terms |
+| `term-index` | Authoring | Generate term index and collection manifests from defined terms |
+| `comments` | Authoring | Comment management commands |
+| `viewer` | Viewing | Interactive traceability viewer (live server or static HTML) |
+| `graph` | Viewing | Export the traceability graph structure as JSON |
+| `init` | Configuration | Create .elspais.toml configuration |
+| `config` | Configuration | View and modify configuration |
+| `rules` | Configuration | View and manage content rules |
+| `associate` | Configuration | Manage associate repository links (link, list, unlink) |
+| `doctor` | Install | Diagnose environment and installation health |
+| `mcp` | Install | MCP server commands |
+| `daemon` | Install | Manage the background daemon (MCP + CLI share one daemon per repo) |
+| `install` | Install | Install elspais variants |
+| `uninstall` | Install | Revert elspais installation |
+| `completion` | Install | Generate and install shell tab-completion scripts (bash, zsh, tcsh) |
+| `docs` | Info | Read the user guide |
+| `version` | Info | Show version and check for updates |
+
+Each command's own section below says how to use it. `elspais <command>
+--help` says the same from the installed program.
+<!-- /generated: command-index -->
+
 ## Global Options
 
 These options work with all commands:
@@ -55,6 +103,195 @@ nothing worth narrowing.
   `-o, --output PATH`              Write output to file instead of stdout
 
 Follow-up from `elspais checks` when `spec.format_rules` or `spec.no_assertions` fails.
+
+## gaps
+
+List all traceability gaps -- every requirement that misses a dimension of
+coverage, in one listing, with the gap type against each.
+
+  $ elspais gaps                       # Every gap, by type
+  $ elspais gaps --level dev           # Only the dev level
+  $ elspais gaps --format json         # JSON output
+
+Where a requirement declares `Integrates:`, the coverage inherited from the
+associate that provides it is credited, and the requirement is listed under
+"Covered via external associate" rather than as uncovered.
+
+**Options:**
+
+  `--format {text,markdown,json}`  Output format (default: text)
+  `-o, --output PATH`              Write output to file instead of stdout
+
+**Scoping the listing** (see `elspais docs scoping`):
+
+  `--level LVL ...`        List only requirements at these levels
+  `--not-level LVL ...`    List no requirement at these levels
+  `--status ST ...`        List only requirements carrying these statuses
+  `--not-status ST ...`    List no requirement carrying these statuses
+  `--match-status-roles`   Read each named status as every status sharing its role
+  `--scope NAME`           List under a scope declared in `[scopes.NAME]`
+  `--treat-active ST ...`  Weigh these statuses as active ones
+
+Follow-up from `elspais checks` when a coverage check fails. The single-
+dimension commands below list one kind of gap each.
+
+## uncovered
+
+List requirements no code implements -- the `implemented` dimension.
+
+  $ elspais uncovered                  # Requirements with no implementation
+  $ elspais uncovered --level dev      # Only the dev level
+  $ elspais uncovered --format json    # JSON output
+
+An assertion counts as covered only where a citation names it and the evidence
+is complete; whole-requirement evidence elsewhere does not settle it. See
+`elspais docs checks` (*Coverage Dimensions*).
+
+**Options:**
+
+  `--format {text,markdown,json}`  Output format (default: text)
+  `-o, --output PATH`              Write output to file instead of stdout
+
+**Scoping the listing** (see `elspais docs scoping`):
+
+  `--level LVL ...`        List only requirements at these levels
+  `--not-level LVL ...`    List no requirement at these levels
+  `--status ST ...`        List only requirements carrying these statuses
+  `--not-status ST ...`    List no requirement carrying these statuses
+  `--match-status-roles`   Read each named status as every status sharing its role
+  `--scope NAME`           List under a scope declared in `[scopes.NAME]`
+  `--treat-active ST ...`  Weigh these statuses as active ones
+
+Follow-up from `elspais checks` when `code.implemented` fails.
+
+## untested
+
+List requirements no test exercises -- the `tested` dimension.
+
+  $ elspais untested                   # Requirements with no test
+  $ elspais untested --status Active   # Only Active requirements
+  $ elspais untested --format markdown # Markdown table
+
+**Options:**
+
+  `--format {text,markdown,json}`  Output format (default: text)
+  `-o, --output PATH`              Write output to file instead of stdout
+
+**Scoping the listing** (see `elspais docs scoping`):
+
+  `--level LVL ...`        List only requirements at these levels
+  `--not-level LVL ...`    List no requirement at these levels
+  `--status ST ...`        List only requirements carrying these statuses
+  `--not-status ST ...`    List no requirement carrying these statuses
+  `--match-status-roles`   Read each named status as every status sharing its role
+  `--scope NAME`           List under a scope declared in `[scopes.NAME]`
+  `--treat-active ST ...`  Weigh these statuses as active ones
+
+Follow-up from `elspais checks` when `tests.tested` fails.
+
+## unvalidated
+
+List requirements no user journey validates -- the `uat_coverage` dimension.
+
+  $ elspais unvalidated                # Requirements with no validating journey
+  $ elspais unvalidated --format json  # JSON output
+
+Only levels declaring `expects_validation = true` are weighed; where no level
+declares it, the listing is empty and nothing is wrong.
+
+**Options:**
+
+  `--format {text,markdown,json}`  Output format (default: text)
+  `-o, --output PATH`              Write output to file instead of stdout
+
+**Scoping the listing** (see `elspais docs scoping`):
+
+  `--level LVL ...`        List only requirements at these levels
+  `--not-level LVL ...`    List no requirement at these levels
+  `--status ST ...`        List only requirements carrying these statuses
+  `--not-status ST ...`    List no requirement carrying these statuses
+  `--match-status-roles`   Read each named status as every status sharing its role
+  `--scope NAME`           List under a scope declared in `[scopes.NAME]`
+  `--treat-active ST ...`  Weigh these statuses as active ones
+
+Follow-up from `elspais checks` when `uat.uat_coverage` fails.
+
+## failing
+
+List requirements whose test or UAT results failed.
+
+  $ elspais failing                    # Requirements with a failing result
+  $ elspais failing --level dev        # Only the dev level
+  $ elspais failing --format json      # JSON output
+
+A requirement is listed where a result naming it returned a failure, so the
+listing is empty until results have been ingested (see `elspais docs
+test-targets`).
+
+**Options:**
+
+  `--format {text,markdown,json}`  Output format (default: text)
+  `-o, --output PATH`              Write output to file instead of stdout
+
+**Scoping the listing** (see `elspais docs scoping`):
+
+  `--level LVL ...`        List only requirements at these levels
+  `--not-level LVL ...`    List no requirement at these levels
+  `--status ST ...`        List only requirements carrying these statuses
+  `--not-status ST ...`    List no requirement carrying these statuses
+  `--match-status-roles`   Read each named status as every status sharing its role
+  `--scope NAME`           List under a scope declared in `[scopes.NAME]`
+  `--treat-active ST ...`  Weigh these statuses as active ones
+
+Follow-up from `elspais checks` when `tests.verified`, `tests.results` or
+`uat.uat_verified` fails.
+
+## broken
+
+List references that name a target the graph does not hold.
+
+  $ elspais broken                     # Every broken reference
+  $ elspais broken --format json       # JSON output
+  $ elspais broken -o broken.txt       # Write to file
+
+Each is listed as source, target and the relationship its keyword declared,
+with the diagnostic sentence saying what reading it found. A target no
+configured repository claims is marked `[foreign]`, so a reference into a repo
+you have not checked out is told apart from one that is simply wrong. See
+`elspais docs linking` (*What a reference report says*).
+
+There is no scoping here: a broken reference is broken whatever the status of
+the requirement holding it.
+
+**Options:**
+
+  `--format {text,markdown,json}`  Output format (default: text)
+  `-o, --output PATH`              Write output to file instead of stdout
+
+Follow-up from `elspais checks` when a `references.*` check fails.
+
+## unlinked
+
+List code and test nodes that reach no requirement.
+
+  $ elspais unlinked                   # Every unlinked code and test node
+  $ elspais unlinked --format json     # JSON output, carrying each node's id
+  $ elspais unlinked -o unlinked.txt   # Write to file
+
+A test file is listed where no test in it links to any requirement; one linked
+test is enough to keep the file out of the listing. The text and markdown
+listings name each file; `--format json` carries each node's id beside its
+path, because the id names the repository holding the file and a bare path
+does not.
+
+**Options:**
+
+  `--format {text,markdown,json}`  Output format (default: text)
+  `-v, --verbose`                  Accepted, and adds nothing to the listing
+  `-o, --output PATH`              Write output to file instead of stdout
+
+Follow-up from `elspais checks` when `code.unlinked` or `tests.unlinked`
+reports.
 
 ## fix
 
@@ -471,6 +708,53 @@ Link suggestion tools for connecting tests to requirements.
   `--apply`              Auto-apply suggested links
   `--dry-run`            Show what would be applied without changes
 
+## glossary
+
+Generate a glossary from the defined terms found in the spec, and write it to
+standard output.
+
+  $ elspais glossary                       # The glossary, on stdout
+  $ elspais glossary --format json         # JSON instead of markdown
+  $ elspais glossary > spec/glossary.md    # Redirect it yourself
+
+This command PRINTS; it writes no file. The generated glossary and index files
+under `[terms] output_dir` are written by `elspais fix`. See `elspais docs
+terms` for how a term is defined, marked up and indexed.
+
+**Options:**
+
+  `--format {markdown,json}`  Output format (default: markdown)
+  `--output-dir DIR`          Accepted, and does nothing here -- the output
+  goes to stdout whatever it says
+
+## term-index
+
+Generate the term index and the collection manifests from the defined terms,
+and write them to standard output.
+
+  $ elspais term-index                     # The term index, on stdout
+  $ elspais term-index --format json       # JSON instead of markdown
+
+Companion to `glossary`: the glossary defines each term, the index says where
+every term is used. This command prints too -- `elspais fix` is what writes the
+files. See `elspais docs terms`.
+
+**Options:**
+
+  `--format {markdown,json}`  Output format (default: markdown)
+  `--output-dir DIR`          Accepted, and does nothing here -- the output
+  goes to stdout whatever it says
+
+## comments
+
+Manage the review comments stored alongside the spec.
+
+  $ elspais comments compact               # Strip resolved threads, collapse promotes
+
+Comments live as append-only JSONL under `.elspais/comments/`; compacting
+rewrites those files, dropping resolved threads and collapsing promote chains.
+See `elspais docs comments`.
+
 ## mcp
 
 MCP (Model Context Protocol) server commands.
@@ -756,3 +1040,19 @@ Manage local development installations.
   `--path PATH`    Source path for local install
   `--extras EXTRAS` Extra dependencies to include
   `--tool {pipx,uv}` Installation tool to use
+
+## completion
+
+Generate and install a shell tab-completion script.
+
+  $ elspais completion install             # Install for the current shell
+  $ elspais completion install --shell zsh # Install for a named shell
+  $ elspais completion uninstall           # Remove a previously installed script
+
+Supported shells are bash, zsh and tcsh. With no `--shell`, the shell named by
+`$SHELL` is used; where that names nothing recognised, the command says so and
+asks for `--shell` rather than guessing.
+
+**Options:**
+
+  `--shell {bash,zsh,tcsh}`  The shell to install for (default: the current one)

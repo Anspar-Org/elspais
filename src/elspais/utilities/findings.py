@@ -32,6 +32,11 @@ consults it, and a finding that names its remedy in one format and not another
 is two different findings to two readers (REQ-d00285-B+C). A check for which no
 action is known carries `NO_KNOWN_REMEDY`, which says so rather than saying
 nothing.
+
+It is where a check's DESCRIPTION lives for the same reason. The published
+catalog of checks is rendered from this registry rather than written beside it,
+so the catalog cannot name a check the tool does not run, or miss one it does
+(REQ-d00286-E).
 """
 
 from __future__ import annotations
@@ -83,6 +88,10 @@ class CheckRule:
             under two, and splitting a dotted string would shear it.
         remedy: The action that resolves what the check reports, carried by
             every finding the check produces in every format it renders in.
+        description: What the check answers, in one sentence. The published
+            catalog of checks is rendered from this field, so the catalog and
+            the registry cannot name different sets or say different things
+            about the same check (REQ-d00286-E).
     """
 
     name: str
@@ -90,6 +99,7 @@ class CheckRule:
     default: str
     path: tuple[str, ...]
     remedy: str = NO_KNOWN_REMEDY
+    description: str = ""
 
 
 def _named(name: str, category: str, default: str, *path: str) -> CheckRule:
@@ -179,6 +189,182 @@ _REMEDIES: dict[str, str] = {
     "terms.bad_definition": "elspais -v checks --terms",
     "terms.collection_empty": "elspais -v checks --terms",
     "terms.canonical_form": "elspais fix",
+}
+
+
+# Implements: REQ-d00286-E
+# What each check answers, in the one sentence the published catalog prints.
+# It lives beside the registration rather than in the documentation because a
+# hand-written catalog is correct on the day it is written and wrong on the day
+# the tool gains one more check. Every registered check must have one, and a
+# name here that no rule declares is refused when the registry is built -- the
+# same guard `_REMEDIES` carries, in both directions.
+_DESCRIPTIONS: dict[str, str] = {
+    # -- config ------------------------------------------------------------
+    "config.load": "The configuration file loads at all",
+    "config.exists": "Verifies config file exists or using defaults",
+    "config.syntax": "Validates TOML syntax is correct",
+    "config.required_fields": "Ensures required sections present",
+    "config.pattern_tokens": "Validates pattern template tokens",
+    "config.hierarchy_rules": "Checks hierarchy rules consistency",
+    "config.paths_exist": "Verifies spec directories exist",
+    "config.project_type": "The declared project type is one the tool knows",
+    "config.associated_section": "Every associate declaration reads (both a path and a namespace)",
+    # -- spec --------------------------------------------------------------
+    "config.associate_paths": (
+        "Validates that every federated repository — those declared here and those reached through "
+        "an associate's own `[associates]` declarations — loads and contains spec files, reporting "
+        "each failure with its path and reason"
+    ),
+    "config.no_requirements": "Flags when no requirements are found (likely config issue)",
+    "config.governed_rules": (
+        "Discloses each governed setting (coverage rules, reference severities, status roles) a "
+        "federated member would judge by differently from the repository the run was invoked from "
+        "— whether the member declared it or kept a default the invoking project overrode — naming "
+        "the setting, both values and the member; never fails a run"
+    ),
+    "graph.build": "The traceability graph builds at all",
+    "spec.parseable": "All spec files can be parsed",
+    "spec.no_duplicates": "No duplicate requirement IDs",
+    "spec.implements_resolve": "All Implements: references resolve",
+    "spec.refines_resolve": "All Refines: references resolve",
+    "spec.satisfies_resolve": "All Satisfies: references resolve",
+    "spec.needs_rewrite": (
+        "Flags requirements that will be rewritten on next save (duplicate refs, stale hash)"
+    ),
+    "spec.unfixable_issues": "Issues `elspais fix` cannot repair, so a person has to",
+    "spec.undefined_levels": (
+        "No requirement carries a level the configuration does not define (such a requirement is "
+        "still counted and grouped, so this discloses it rather than dropping it)"
+    ),
+    "spec.hierarchy_levels": "Requirements follow hierarchy rules",
+    "spec.structural_orphans": "No nodes without a FILE ancestor (build bugs)",
+    "spec.format_rules": "Requirements satisfy the enabled `[rules.format]` rules",
+    "spec.hash_integrity": (
+        "Flags Satisfies-linked requirements for review when their template hash is stale"
+    ),
+    "spec.changelog_present": (
+        "Active requirements must have at least one changelog entry (when `changelog.present = "
+        "true`)"
+    ),
+    "spec.changelog_current": (
+        "Active requirements' latest changelog hash must match content hash (when "
+        "`changelog.hash_current = true`)"
+    ),
+    "spec.changelog_format": (
+        "Changelog entries must include required fields (reason, author, etc.)"
+    ),
+    "spec.index_current": "INDEX.md must be up to date with current requirements and journeys",
+    "spec.no_cycles": "No cycle in the requirement hierarchy",
+    "spec.no_assertions": "Requirements with no assertions (not testable)",
+    # -- environment -------------------------------------------------------
+    "local_toml.exists": "Reports whether a `.elspais.local.toml` developer override is present",
+    "cross_repo.in_committed": (
+        "Cross-project paths written into the shared, committed configuration (they belong in the "
+        "local override)"
+    ),
+    "worktree.status": "The state of the git worktree the run was invoked from",
+    "associate.paths_resolvable": "Every configured associate path resolves to a directory",
+    "associate.configs_valid": "Every configured associate's own configuration loads",
+    # -- docs --------------------------------------------------------------
+    "docs.config_drift": (
+        "Compares config schema sections against `docs/configuration.md`; reports undocumented and "
+        "stale sections (runs in `elspais doctor`)"
+    ),
+    # -- references --------------------------------------------------------
+    "references.malformed": "No reference fails to read as a reference at all",
+    "references.unknown_namespace": "No reference names a target no configured repository claims",
+    "references.unknown_requirement": (
+        "No claimed reference names a requirement that repository does not hold"
+    ),
+    "references.unknown_assertion": (
+        "No claimed reference names an assertion label its requirement lacks"
+    ),
+    "references.forbidden": (
+        "No reference that reads and resolves has its relationship refused — a keyword the file "
+        "kind may not use, or a target the list names twice"
+    ),
+    "references.keyword_form": (
+        "No keyword is written in a non-canonical case, spacing, or markdown-emphasis form (never "
+        "costs the edge its keyword introduces)"
+    ),
+    "references.identifier_form": (
+        "No reference is spelled in a non-canonical form the configuration admits (never costs the "
+        "relationship it names)"
+    ),
+    "references.undeclared": (
+        "No comment opens with an identifier that no keyword introduces (produces no relationship)"
+    ),
+    # -- code --------------------------------------------------------------
+    "code.unlinked": (
+        "Code nodes reaching no requirement (no `# Implements:` or `# Verifies:` comment)"
+    ),
+    "code.code_tested": "Line coverage over the implementation lines attributed to requirements",
+    "code.whole_req_only_coverage": (
+        "Coverage resting entirely on whole-requirement evidence, with no citation naming an "
+        "assertion"
+    ),
+    "code.implemented": (
+        "The `implemented` coverage dimension (CODE or child REQ covers assertions)"
+    ),
+    "code.no_traceability": (
+        "Code files carrying no traceability marker at all (test files are covered separately by "
+        "`tests.unlinked`)"
+    ),
+    "code.retired_references": (
+        "Code referencing requirements with retired status (Deprecated, Superseded, Rejected)"
+    ),
+    "code.provisional_references": (
+        "Code referencing requirements with provisional status (Draft, Proposed)"
+    ),
+    "code.aspirational_references": (
+        "Code referencing requirements with aspirational status (Roadmap, Future, Idea)"
+    ),
+    # -- tests -------------------------------------------------------------
+    "tests.unlinked": (
+        "Test nodes reaching no requirement -- either no test functions found, or no test in the "
+        "file links to any requirement (a file with at least one linked test is not flagged)"
+    ),
+    "tests.results": "Test pass/fail status from JUnit XML or pytest JSON results",
+    "tests.results_stale": "Test results older than the code they cover",
+    "tests.unmatched_results": "Results matching no known test",
+    "tests.tested": "The `tested` coverage dimension (TEST nodes linked to assertions)",
+    "tests.verified": "The `verified` (Passing) coverage dimension",
+    "tests.lcov_tested": "Line-coverage-derived credit keyed by assertion label",
+    "tests.uncredited_evidence": (
+        "Evidence naming an assertion its dimension does not count -- a test on an assertion "
+        "nothing implements -- so it reaches no coverage figure"
+    ),
+    "tests.external": (
+        "A test that failed and reaches no requirement, so nobody will find the failure through "
+        "the spec"
+    ),
+    "tests.retired_references": (
+        "Tests referencing requirements with retired status (Deprecated, Superseded, Rejected)"
+    ),
+    "tests.provisional_references": (
+        "Tests referencing requirements with provisional status (Draft, Proposed)"
+    ),
+    "tests.aspirational_references": (
+        "Tests referencing requirements with aspirational status (Roadmap, Future, Idea)"
+    ),
+    # -- uat ---------------------------------------------------------------
+    "uat.results": "Journey pass/fail status from a CSV results file",
+    "uat.uat_coverage": (
+        "UAT coverage for requirements at levels that set `expects_validation = true`. Such a "
+        "requirement with no validating USER_JOURNEY is flagged as a gap. Levels without "
+        "`expects_validation` are not counted; when no level expects validation the check passes "
+        "trivially."
+    ),
+    "uat.uat_verified": "The `uat_verified` (UAT Passed) coverage dimension",
+    # -- terms -------------------------------------------------------------
+    "terms.duplicates": "Same term defined in two locations",
+    "terms.undefined": "Bold/italic token with no matching definition",
+    "terms.unmarked": "Indexed term used without markup or with wrong markup",
+    "terms.unused": "Defined term with zero references",
+    "terms.bad_definition": "Term with blank or trivial definition text",
+    "terms.collection_empty": "Collection term with no references",
+    "terms.canonical_form": "Term references must use canonical casing and markup",
 }
 
 
@@ -348,6 +534,24 @@ def _registry() -> dict[str, CheckRule]:
             f"_REMEDIES names checks that are not registered: {', '.join(stray)}. "
             f"Every remedy must belong to a registered check."
         )
+    # Implements: REQ-d00286-E
+    # A description is refused in BOTH directions: one for a check that is not
+    # registered would appear in no catalog, and a registered check without one
+    # would print an empty cell in the catalog rendered from this registry.
+    stray_descriptions = sorted(set(_DESCRIPTIONS) - declared)
+    if stray_descriptions:
+        raise ValueError(
+            f"_DESCRIPTIONS names checks that are not registered: "
+            f"{', '.join(stray_descriptions)}. Every description must belong to a "
+            f"registered check."
+        )
+    undescribed = sorted(declared - set(_DESCRIPTIONS))
+    if undescribed:
+        raise ValueError(
+            f"These registered checks have no description: {', '.join(undescribed)}. "
+            f"The published catalog of checks is rendered from _DESCRIPTIONS, so a "
+            f"check without one would appear there with an empty cell."
+        )
     # Defaults are stored as the plain strings a configuration writes -- a
     # `Severity` member stringifies to its member name, not its value.
     return {
@@ -357,6 +561,7 @@ def _registry() -> dict[str, CheckRule]:
             Severity(r.default).value,
             r.path,
             _REMEDIES.get(r.name, NO_KNOWN_REMEDY),
+            _DESCRIPTIONS[r.name],
         )
         for r in rules
     }

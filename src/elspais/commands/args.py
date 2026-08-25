@@ -18,6 +18,8 @@ from typing import Annotated, Literal
 
 import tyro
 
+from elspais.utilities.docs_loader import DOCS_TOPICS
+
 
 # Implements: REQ-d00278-A+B+C, REQ-p00084-A
 @dataclasses.dataclass
@@ -740,34 +742,9 @@ class RulesArgs:
 # ---------------------------------------------------------------------------
 # Docs command
 # ---------------------------------------------------------------------------
-DOCS_TOPICS = Literal[
-    "quickstart",
-    "format",
-    "hierarchy",
-    "assertions",
-    "authoring",
-    "traceability",
-    "scoping",
-    "linking",
-    "satisfies",
-    "validation",
-    "git",
-    "config",
-    "commands",
-    "checks",
-    "pdf",
-    "test-targets",
-    "doctor",
-    "analysis",
-    "terms",
-    "associate",
-    "ignore",
-    "graph-model",
-    "mcp",
-    "concurrency",
-    "topics",
-    "all",
-]
+# The topic set is declared once, in the loader that serves it, so the CLI
+# cannot admit a topic the docs do not carry or refuse one they do.
+# Implements: REQ-d00286-A
 
 
 @dataclasses.dataclass

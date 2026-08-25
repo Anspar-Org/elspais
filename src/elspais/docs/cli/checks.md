@@ -82,67 +82,83 @@ four words.
 
 Configuration checks always run as part of traceability verification. For focused configuration and environment diagnostics, use `elspais doctor`.
 
-| Check | Description | Default severity | Configured by |
-|-------|-------------|------------------|---------------|
-| `config.load` | The configuration file loads at all | error | `[rules.severity]` |
-| `config.exists` | Verifies config file exists or using defaults | error | `[rules.severity]` |
-| `config.syntax` | Validates TOML syntax is correct | error | `[rules.severity]` |
-| `config.required_fields` | Ensures required sections present | error | `[rules.severity]` |
-| `config.pattern_tokens` | Validates pattern template tokens | error | `[rules.severity]` |
-| `config.hierarchy_rules` | Checks hierarchy rules consistency | error | `[rules.severity]` |
-| `config.paths_exist` | Verifies spec directories exist | error | `[rules.severity]` |
-| `config.project_type` | The declared project type is one the tool knows | error | `[rules.severity]` |
-| `config.associated_section` | Every associate declaration reads (both a path and a namespace) | error | `[rules.severity]` |
-| `config.associate_paths` | Validates that every federated repository — those declared here and those reached through an associate's own `[associates]` declarations — loads and contains spec files, reporting each failure with its path and reason | error | `[rules.severity]` |
-| `config.no_requirements` | Flags when no requirements are found (likely config issue) | warning | `[rules.severity]` |
-| `config.governed_rules` | Discloses each governed setting (coverage rules, reference severities, status roles) a federated member would judge by differently from the repository the run was invoked from — whether the member declared it or kept a default the invoking project overrode — naming the setting, both values and the member; never fails a run | info | `[rules.severity]` |
-| `docs.config_drift` | Compares config schema sections against `docs/configuration.md`; reports undocumented and stale sections (runs in `elspais doctor`) | warning | `[rules.severity]` |
+<!-- generated: check-catalog:config -->
+<!-- Rendered from the program's own definitions; edits here are overwritten. Regenerate: python -m elspais.utilities.doc_tables -->
 
-`config.associate_paths`, `config.no_requirements` and `config.governed_rules`
-report under the **spec** category, because they need a built graph;
-`docs.config_drift` reports under **docs**. The rest report under **config**.
+| Check | Description | Default severity | Configured by | Remedy |
+| --- | --- | --- | --- | --- |
+| `config.load` | The configuration file loads at all | error | `[rules.severity]` | `elspais doctor` |
+| `config.exists` | Verifies config file exists or using defaults | error | `[rules.severity]` | `elspais init` |
+| `config.syntax` | Validates TOML syntax is correct | error | `[rules.severity]` | `elspais doctor` |
+| `config.required_fields` | Ensures required sections present | error | `[rules.severity]` | `elspais doctor` |
+| `config.pattern_tokens` | Validates pattern template tokens | error | `[rules.severity]` | `elspais doctor` |
+| `config.hierarchy_rules` | Checks hierarchy rules consistency | error | `[rules.severity]` | `elspais doctor` |
+| `config.paths_exist` | Verifies spec directories exist | error | `[rules.severity]` | `elspais doctor` |
+| `config.project_type` | The declared project type is one the tool knows | error | `[rules.severity]` | `elspais doctor` |
+| `config.associated_section` | Every associate declaration reads (both a path and a namespace) | error | `[rules.severity]` | `elspais doctor` |
+<!-- /generated: check-catalog:config -->
+
+Each table in this catalog holds the checks reporting under one category, so
+a check appears exactly where its findings do. A `config.` check that needs a
+built graph reports under **spec** and is listed there, not here.
 
 ### Environment Checks (`elspais doctor`)
 
-| Check | Description | Default severity | Configured by |
-|-------|-------------|------------------|---------------|
-| `local_toml.exists` | Reports whether a `.elspais.local.toml` developer override is present | error | `[rules.severity]` |
-| `cross_repo.in_committed` | Cross-project paths written into the shared, committed configuration (they belong in the local override) | warning | `[rules.severity]` |
-| `worktree.status` | The state of the git worktree the run was invoked from | info | `[rules.severity]` |
-| `associate.paths_resolvable` | Every configured associate path resolves to a directory | error | `[rules.severity]` |
-| `associate.configs_valid` | Every configured associate's own configuration loads | error | `[rules.severity]` |
+<!-- generated: check-catalog:environment -->
+<!-- Rendered from the program's own definitions; edits here are overwritten. Regenerate: python -m elspais.utilities.doc_tables -->
+
+| Check | Description | Default severity | Configured by | Remedy |
+| --- | --- | --- | --- | --- |
+| `local_toml.exists` | Reports whether a `.elspais.local.toml` developer override is present | error | `[rules.severity]` | no command resolves this; resolve it by hand |
+| `cross_repo.in_committed` | Cross-project paths written into the shared, committed configuration (they belong in the local override) | warning | `[rules.severity]` | no command resolves this; resolve it by hand |
+| `worktree.status` | The state of the git worktree the run was invoked from | info | `[rules.severity]` | no command resolves this; resolve it by hand |
+| `associate.paths_resolvable` | Every configured associate path resolves to a directory | error | `[rules.severity]` | `elspais associate list` |
+| `associate.configs_valid` | Every configured associate's own configuration loads | error | `[rules.severity]` | `elspais associate list` |
+<!-- /generated: check-catalog:environment -->
+
+### Documentation Checks (`elspais doctor`)
+
+Documentation checks compare what the tool offers against what its
+documentation says about it.
+
+<!-- generated: check-catalog:docs -->
+<!-- Rendered from the program's own definitions; edits here are overwritten. Regenerate: python -m elspais.utilities.doc_tables -->
+
+| Check | Description | Default severity | Configured by | Remedy |
+| --- | --- | --- | --- | --- |
+| `docs.config_drift` | Compares config schema sections against `docs/configuration.md`; reports undocumented and stale sections (runs in `elspais doctor`) | warning | `[rules.severity]` | no command resolves this; resolve it by hand |
+<!-- /generated: check-catalog:docs -->
 
 ### Spec File Checks (`--spec`)
 
-| Check | Description | Default severity | Configured by |
-|-------|-------------|------------------|---------------|
-| `graph.build` | The traceability graph builds at all | error | `[rules.severity]` |
-| `spec.parseable` | All spec files can be parsed | warning | `[rules.severity]` |
-| `spec.no_duplicates` | No duplicate requirement IDs | error | `[rules.severity]` |
-| `spec.implements_resolve` | All Implements: references resolve | warning | `[rules.severity]` |
-| `spec.refines_resolve` | All Refines: references resolve | warning | `[rules.severity]` |
-| `spec.satisfies_resolve` | All Satisfies: references resolve | warning | `[rules.severity]` |
-| `spec.hierarchy_levels` | Requirements follow hierarchy rules | warning | `[rules.severity]` |
-| `spec.no_cycles` | No cycle in the requirement hierarchy | error | `[rules.severity]` |
-| `spec.undefined_levels` | No requirement carries a level the configuration does not define (such a requirement is still counted and grouped, so this discloses it rather than dropping it) | info | `[rules.severity]` |
-| `spec.structural_orphans` | No nodes without a FILE ancestor (build bugs) | error | `[rules.severity]` |
-| `spec.format_rules` | Requirements satisfy the enabled `[rules.format]` rules | error | `[rules.severity]` |
-| `spec.unfixable_issues` | Issues `elspais fix` cannot repair, so a person has to | error | `[rules.severity]` |
-| `spec.needs_rewrite` | Flags requirements that will be rewritten on next save (duplicate refs, stale hash) | warning | `[rules.severity]` |
-| `spec.hash_integrity` | Flags Satisfies-linked requirements for review when their template hash is stale | warning | `[rules.severity]` |
-| `spec.changelog_present` | Active requirements must have at least one changelog entry (when `changelog.present = true`) | error | `[rules.severity]` |
-| `spec.changelog_current` | Active requirements' latest changelog hash must match content hash (when `changelog.hash_current = true`) | error | `[rules.severity]` |
-| `spec.changelog_format` | Changelog entries must include required fields (reason, author, etc.) | error | `[rules.severity]` |
-| `spec.index_current` | INDEX.md must be up to date with current requirements and journeys | warning | `[rules.severity]` |
-| `spec.no_assertions` | Requirements with no assertions (not testable) | warning | `[rules.format] no_assertions_severity` |
-| `references.malformed` | No reference fails to read as a reference at all | warning | `[rules.references] malformed` |
-| `references.unknown_namespace` | No reference names a target no configured repository claims | info | `[rules.references] unknown_namespace` |
-| `references.unknown_requirement` | No claimed reference names a requirement that repository does not hold | error | `[rules.references] unknown_requirement` |
-| `references.unknown_assertion` | No claimed reference names an assertion label its requirement lacks | error | `[rules.references] unknown_assertion` |
-| `references.forbidden` | No reference that reads and resolves has its relationship refused — a keyword the file kind may not use, or a target the list names twice | error | `[rules.references] forbidden` |
-| `references.keyword_form` | No keyword is written in a non-canonical case, spacing, or markdown-emphasis form (never costs the edge its keyword introduces) | warning | `[rules.references] keyword_form` |
-| `references.identifier_form` | No reference is spelled in a non-canonical form the configuration admits (never costs the relationship it names) | warning | `[rules.references] identifier_form` |
-| `references.undeclared` | No comment opens with an identifier that no keyword introduces (produces no relationship) | warning | `[rules.references] undeclared` |
+<!-- generated: check-catalog:spec -->
+<!-- Rendered from the program's own definitions; edits here are overwritten. Regenerate: python -m elspais.utilities.doc_tables -->
+
+| Check | Description | Default severity | Configured by | Remedy |
+| --- | --- | --- | --- | --- |
+| `config.associate_paths` | Validates that every federated repository — those declared here and those reached through an associate's own `[associates]` declarations — loads and contains spec files, reporting each failure with its path and reason | error | `[rules.severity]` | `elspais associate list` |
+| `config.no_requirements` | Flags when no requirements are found (likely config issue) | warning | `[rules.severity]` | `elspais example` |
+| `config.governed_rules` | Discloses each governed setting (coverage rules, reference severities, status roles) a federated member would judge by differently from the repository the run was invoked from — whether the member declared it or kept a default the invoking project overrode — naming the setting, both values and the member; never fails a run | info | `[rules.severity]` | no command resolves this; resolve it by hand |
+| `graph.build` | The traceability graph builds at all | error | `[rules.severity]` | no command resolves this; resolve it by hand |
+| `spec.parseable` | All spec files can be parsed | warning | `[rules.severity]` | `elspais errors` |
+| `spec.no_duplicates` | No duplicate requirement IDs | error | `[rules.severity]` | `elspais -v checks --spec` |
+| `spec.implements_resolve` | All Implements: references resolve | warning | `[rules.severity]` | `elspais broken` |
+| `spec.refines_resolve` | All Refines: references resolve | warning | `[rules.severity]` | `elspais broken` |
+| `spec.satisfies_resolve` | All Satisfies: references resolve | warning | `[rules.severity]` | `elspais broken` |
+| `spec.needs_rewrite` | Flags requirements that will be rewritten on next save (duplicate refs, stale hash) | warning | `[rules.severity]` | `elspais fix` |
+| `spec.unfixable_issues` | Issues `elspais fix` cannot repair, so a person has to | error | `[rules.severity]` | `elspais errors` |
+| `spec.undefined_levels` | No requirement carries a level the configuration does not define (such a requirement is still counted and grouped, so this discloses it rather than dropping it) | info | `[rules.severity]` | no command resolves this; resolve it by hand |
+| `spec.hierarchy_levels` | Requirements follow hierarchy rules | warning | `[rules.severity]` | `elspais -v checks --spec` |
+| `spec.structural_orphans` | No nodes without a FILE ancestor (build bugs) | error | `[rules.severity]` | `elspais -v checks --spec` |
+| `spec.format_rules` | Requirements satisfy the enabled `[rules.format]` rules | error | `[rules.severity]` | `elspais errors` |
+| `spec.hash_integrity` | Flags Satisfies-linked requirements for review when their template hash is stale | warning | `[rules.severity]` | `elspais fix` |
+| `spec.changelog_present` | Active requirements must have at least one changelog entry (when `changelog.present = true`) | error | `[rules.severity]` | `elspais fix` |
+| `spec.changelog_current` | Active requirements' latest changelog hash must match content hash (when `changelog.hash_current = true`) | error | `[rules.severity]` | `elspais fix -m 'Update changelog'` |
+| `spec.changelog_format` | Changelog entries must include required fields (reason, author, etc.) | error | `[rules.severity]` | `elspais -v checks --spec` |
+| `spec.index_current` | INDEX.md must be up to date with current requirements and journeys | warning | `[rules.severity]` | `elspais fix` |
+| `spec.no_cycles` | No cycle in the requirement hierarchy | error | `[rules.severity]` | `elspais -v checks --spec` |
+| `spec.no_assertions` | Requirements with no assertions (not testable) | warning | `[rules.format] no_assertions_severity` | `elspais errors` |
+<!-- /generated: check-catalog:spec -->
 
 #### `spec.no_assertions` — Not Testable Requirements
 
@@ -226,33 +242,41 @@ that changes to cross-cutting requirements are propagated to their consumers.
 
 ### Code Reference Checks (`--code-checks`)
 
-| Check | Description | Default severity | Configured by |
-|-------|-------------|------------------|---------------|
-| `code.implemented` | The `implemented` coverage dimension (CODE or child REQ covers assertions) | error | `[rules.severity]` |
-| `code.code_tested` | Line coverage over the implementation lines attributed to requirements | info | `[rules.severity]` |
-| `code.whole_req_only_coverage` | Coverage resting entirely on whole-requirement evidence, with no citation naming an assertion | info | `[rules.severity]` |
-| `code.unlinked` | Code nodes reaching no requirement (no `# Implements:` or `# Verifies:` comment) | info | `[rules.severity]` |
-| `code.no_traceability` | Code files carrying no traceability marker at all (test files are covered separately by `tests.unlinked`) | warning | `[rules.format] no_traceability_severity` |
-| `code.retired_references` | Code referencing requirements with retired status (Deprecated, Superseded, Rejected) | warning | `[rules.references] retired` |
-| `code.provisional_references` | Code referencing requirements with provisional status (Draft, Proposed) | info | `[rules.references] provisional` |
-| `code.aspirational_references` | Code referencing requirements with aspirational status (Roadmap, Future, Idea) | info | `[rules.references] aspirational` |
+<!-- generated: check-catalog:code -->
+<!-- Rendered from the program's own definitions; edits here are overwritten. Regenerate: python -m elspais.utilities.doc_tables -->
+
+| Check | Description | Default severity | Configured by | Remedy |
+| --- | --- | --- | --- | --- |
+| `code.unlinked` | Code nodes reaching no requirement (no `# Implements:` or `# Verifies:` comment) | info | `[rules.severity]` | `elspais unlinked` |
+| `code.code_tested` | Line coverage over the implementation lines attributed to requirements | info | `[rules.severity]` | no command resolves this; resolve it by hand |
+| `code.whole_req_only_coverage` | Coverage resting entirely on whole-requirement evidence, with no citation naming an assertion | info | `[rules.severity]` | no command resolves this; resolve it by hand |
+| `code.implemented` | The `implemented` coverage dimension (CODE or child REQ covers assertions) | error | `[rules.severity]` | `elspais uncovered` |
+| `code.no_traceability` | Code files carrying no traceability marker at all (test files are covered separately by `tests.unlinked`) | warning | `[rules.format] no_traceability_severity` | `elspais unlinked` |
+| `code.retired_references` | Code referencing requirements with retired status (Deprecated, Superseded, Rejected) | warning | `[rules.references] retired` | no command resolves this; resolve it by hand |
+| `code.provisional_references` | Code referencing requirements with provisional status (Draft, Proposed) | info | `[rules.references] provisional` | no command resolves this; resolve it by hand |
+| `code.aspirational_references` | Code referencing requirements with aspirational status (Roadmap, Future, Idea) | info | `[rules.references] aspirational` | no command resolves this; resolve it by hand |
+<!-- /generated: check-catalog:code -->
 
 ### Test Mapping Checks (`--tests`)
 
-| Check | Description | Default severity | Configured by |
-|-------|-------------|------------------|---------------|
-| `tests.tested` | The `tested` coverage dimension (TEST nodes linked to assertions) | error | `[rules.severity]` |
-| `tests.verified` | The `verified` (Passing) coverage dimension | error | `[rules.severity]` |
-| `tests.lcov_tested` | Line-coverage-derived credit keyed by assertion label | error | `[rules.severity]` |
-| `tests.unlinked` | Test nodes reaching no requirement -- either no test functions found, or no test in the file links to any requirement (a file with at least one linked test is not flagged) | info | `[rules.severity]` |
-| `tests.results` | Test pass/fail status from JUnit XML or pytest JSON results | warning | `[rules.severity]` |
-| `tests.results_stale` | Test results older than the code they cover | warning | `[rules.severity]` |
-| `tests.unmatched_results` | Results matching no known test | warning | `[rules.severity]` |
-| `tests.uncredited_evidence` | Evidence naming an assertion its dimension does not count -- a test on an assertion nothing implements -- so it reaches no coverage figure | error | `[rules.coverage] uncredited_evidence` |
-| `tests.external` | A test that failed and reaches no requirement, so nobody will find the failure through the spec | warning | `[rules.coverage] external_test_failure` |
-| `tests.retired_references` | Tests referencing requirements with retired status (Deprecated, Superseded, Rejected) | warning | `[rules.references] retired` |
-| `tests.provisional_references` | Tests referencing requirements with provisional status (Draft, Proposed) | info | `[rules.references] provisional` |
-| `tests.aspirational_references` | Tests referencing requirements with aspirational status (Roadmap, Future, Idea) | info | `[rules.references] aspirational` |
+<!-- generated: check-catalog:tests -->
+<!-- Rendered from the program's own definitions; edits here are overwritten. Regenerate: python -m elspais.utilities.doc_tables -->
+
+| Check | Description | Default severity | Configured by | Remedy |
+| --- | --- | --- | --- | --- |
+| `tests.unlinked` | Test nodes reaching no requirement -- either no test functions found, or no test in the file links to any requirement (a file with at least one linked test is not flagged) | info | `[rules.severity]` | `elspais unlinked` |
+| `tests.results` | Test pass/fail status from JUnit XML or pytest JSON results | warning | `[rules.severity]` | `elspais failing` |
+| `tests.results_stale` | Test results older than the code they cover | warning | `[rules.severity]` | `elspais checks --run-tests` |
+| `tests.unmatched_results` | Results matching no known test | warning | `[rules.severity]` | `elspais -v checks --tests` |
+| `tests.tested` | The `tested` coverage dimension (TEST nodes linked to assertions) | error | `[rules.severity]` | `elspais untested` |
+| `tests.verified` | The `verified` (Passing) coverage dimension | error | `[rules.severity]` | `elspais failing` |
+| `tests.lcov_tested` | Line-coverage-derived credit keyed by assertion label | error | `[rules.severity]` | no command resolves this; resolve it by hand |
+| `tests.uncredited_evidence` | Evidence naming an assertion its dimension does not count -- a test on an assertion nothing implements -- so it reaches no coverage figure | error | `[rules.coverage] uncredited_evidence` | `elspais -v checks --tests` |
+| `tests.external` | A test that failed and reaches no requirement, so nobody will find the failure through the spec | warning | `[rules.coverage] external_test_failure` | `elspais failing` |
+| `tests.retired_references` | Tests referencing requirements with retired status (Deprecated, Superseded, Rejected) | warning | `[rules.references] retired` | no command resolves this; resolve it by hand |
+| `tests.provisional_references` | Tests referencing requirements with provisional status (Draft, Proposed) | info | `[rules.references] provisional` | no command resolves this; resolve it by hand |
+| `tests.aspirational_references` | Tests referencing requirements with aspirational status (Roadmap, Future, Idea) | info | `[rules.references] aspirational` | no command resolves this; resolve it by hand |
+<!-- /generated: check-catalog:tests -->
 
 #### Reference Status Checks — Retired, Provisional, Aspirational
 
@@ -291,6 +315,28 @@ keyword_form = "warning"       # off | info | warning | error
 identifier_form = "warning"    # off | info | warning | error
 undeclared = "warning"         # off | info | warning | error
 ```
+
+### Reference Checks (`--spec`)
+
+A reference check reports on what a citation SAYS, wherever it is written — a
+spec metadata line, a code comment, a test comment. The five below are ordered
+by how far reading the reference got; the two after them are style findings
+that never cost the relationship they name.
+
+<!-- generated: check-catalog:references -->
+<!-- Rendered from the program's own definitions; edits here are overwritten. Regenerate: python -m elspais.utilities.doc_tables -->
+
+| Check | Description | Default severity | Configured by | Remedy |
+| --- | --- | --- | --- | --- |
+| `references.malformed` | No reference fails to read as a reference at all | warning | `[rules.references] malformed` | `elspais broken` |
+| `references.unknown_namespace` | No reference names a target no configured repository claims | info | `[rules.references] unknown_namespace` | `elspais broken` |
+| `references.unknown_requirement` | No claimed reference names a requirement that repository does not hold | error | `[rules.references] unknown_requirement` | `elspais broken` |
+| `references.unknown_assertion` | No claimed reference names an assertion label its requirement lacks | error | `[rules.references] unknown_assertion` | `elspais broken` |
+| `references.forbidden` | No reference that reads and resolves has its relationship refused — a keyword the file kind may not use, or a target the list names twice | error | `[rules.references] forbidden` | `elspais broken` |
+| `references.keyword_form` | No keyword is written in a non-canonical case, spacing, or markdown-emphasis form (never costs the edge its keyword introduces) | warning | `[rules.references] keyword_form` | `elspais -v checks --spec` |
+| `references.identifier_form` | No reference is spelled in a non-canonical form the configuration admits (never costs the relationship it names) | warning | `[rules.references] identifier_form` | `elspais -v checks --spec` |
+| `references.undeclared` | No comment opens with an identifier that no keyword introduces (produces no relationship) | warning | `[rules.references] undeclared` | `elspais -v checks --spec` |
+<!-- /generated: check-catalog:references -->
 
 #### The Five Reference Checks — How Far Reading Got
 
@@ -364,23 +410,31 @@ across every class.
 UAT (User Acceptance Testing) checks run automatically with `--tests` and report
 coverage and results from user journey validation.
 
-| Check | Description | Default severity | Configured by |
-|-------|-------------|------------------|---------------|
-| `uat.uat_coverage` | UAT coverage for requirements at levels that set `expects_validation = true`. Such a requirement with no validating USER_JOURNEY is flagged as a gap. Levels without `expects_validation` are not counted; when no level expects validation the check passes trivially. | error | `[rules.severity]` |
-| `uat.uat_verified` | The `uat_verified` (UAT Passed) coverage dimension | error | `[rules.severity]` |
-| `uat.results` | Journey pass/fail status from a CSV results file | warning | `[rules.severity]` |
+<!-- generated: check-catalog:uat -->
+<!-- Rendered from the program's own definitions; edits here are overwritten. Regenerate: python -m elspais.utilities.doc_tables -->
+
+| Check | Description | Default severity | Configured by | Remedy |
+| --- | --- | --- | --- | --- |
+| `uat.results` | Journey pass/fail status from a CSV results file | warning | `[rules.severity]` | `elspais failing` |
+| `uat.uat_coverage` | UAT coverage for requirements at levels that set `expects_validation = true`. Such a requirement with no validating USER_JOURNEY is flagged as a gap. Levels without `expects_validation` are not counted; when no level expects validation the check passes trivially. | error | `[rules.severity]` | `elspais unvalidated` |
+| `uat.uat_verified` | The `uat_verified` (UAT Passed) coverage dimension | error | `[rules.severity]` | `elspais failing` |
+<!-- /generated: check-catalog:uat -->
 
 ### Terms Checks (`--terms`)
 
-| Check | Description | Default severity | Configured by |
-|-------|-------------|------------------|---------------|
-| `terms.duplicates` | Same term defined in two locations | error | `[terms.severity] duplicate` |
-| `terms.undefined` | Bold/italic token with no matching definition | warning | `[terms.severity] undefined` |
-| `terms.unmarked` | Indexed term used without markup or with wrong markup | warning | `[terms.severity] unmarked` |
-| `terms.unused` | Defined term with zero references | warning | `[terms.severity] unused` |
-| `terms.bad_definition` | Term with blank or trivial definition text | error | `[terms.severity] bad_definition` |
-| `terms.collection_empty` | Collection term with no references | warning | `[terms.severity] collection_empty` |
-| `terms.canonical_form` | Term references must use canonical casing and markup | warning | `[terms.severity] canonical_form` |
+<!-- generated: check-catalog:terms -->
+<!-- Rendered from the program's own definitions; edits here are overwritten. Regenerate: python -m elspais.utilities.doc_tables -->
+
+| Check | Description | Default severity | Configured by | Remedy |
+| --- | --- | --- | --- | --- |
+| `terms.duplicates` | Same term defined in two locations | error | `[terms.severity] duplicate` | `elspais -v checks --terms` |
+| `terms.undefined` | Bold/italic token with no matching definition | warning | `[terms.severity] undefined` | `elspais glossary` |
+| `terms.unmarked` | Indexed term used without markup or with wrong markup | warning | `[terms.severity] unmarked` | `elspais -v checks --terms` |
+| `terms.unused` | Defined term with zero references | warning | `[terms.severity] unused` | `elspais -v checks --terms` |
+| `terms.bad_definition` | Term with blank or trivial definition text | error | `[terms.severity] bad_definition` | `elspais -v checks --terms` |
+| `terms.collection_empty` | Collection term with no references | warning | `[terms.severity] collection_empty` | `elspais -v checks --terms` |
+| `terms.canonical_form` | Term references must use canonical casing and markup | warning | `[terms.severity] canonical_form` | `elspais fix` |
+<!-- /generated: check-catalog:terms -->
 
 Each value is one of the four severities. See `elspais docs terms` for full configuration details.
 
