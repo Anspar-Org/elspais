@@ -804,10 +804,13 @@ class TestImagePathResolution:
         assert "![gone](missing/nope.png)" in joined
         assert "![web](https://example.com/pic.png)" in joined
 
-        # The unresolvable ref is reported; the URL is not a failure.
+        # The unresolvable ref is reported; the URL is not a failure. The
+        # assembler never attempts a URL, so recording one would report a
+        # resolution that was never tried -- pandoc fetches it and reports
+        # its own failure if there is one.
         refs = [d.reference for d in asm.iter_diagnostics()]
         assert "missing/nope.png" in refs
-        assert not any("example.com" in r for r in refs)
+        assert "https://example.com/pic.png" not in refs
 
     # Verifies: REQ-p00080-H
     def test_REQ_p00080_H_associate_image_resolves_through_owning_repo(self, tmp_path):
