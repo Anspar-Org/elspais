@@ -13,9 +13,12 @@ This document intentionally avoids workflow, tooling, or process guidance. Those
 ## Normative Model
 
 - Requirements define **obligations**, not descriptions.
-- Obligations are stated using **SHALL** or **SHALL NOT**.
+- Obligations are stated using **SHALL**.
+- **Anything not permitted is forbidden.** The system does what the requirements oblige and admit, and nothing else. An assertion forbidding what nothing permits forbids nothing, and does not belong in the spec.
+- **SHALL NOT** is reserved for what that default cannot settle: where two obligations each permit an outcome, and the spec must say which governs when both apply. Everywhere else, state the positive form.
 - Each obligation appears **exactly once** in the repository.
 - Traceability is **one-way only**: more specific requirements reference more generic requirements via `Implements:` metadata.
+- A rule for reading the requirements is stated here, not as a requirement. Such a rule governs the authors of the spec rather than the system it describes, and nothing decides it true or false.
 
 ---
 
@@ -160,7 +163,7 @@ B. The system SHALL ...
 ### Assertion Rules
 
 - Each assertion MUST:
-  - use SHALL,
+  - use SHALL, or SHALL NOT in the case the Normative Model reserves for it,
   - express exactly one obligation,
   - be independently decidable as true or false.
 - Assertion labels:
