@@ -861,7 +861,7 @@ C. Severity SHALL be read from `[rules.format] no_traceability_severity` (defaul
 
 D. A test file SHALL be reported where no test it holds reaches a requirement, whether it holds no tests at all or only tests that reach none.
 
-E. A file carrying a *Traceability* marker that produced no relationship SHALL NOT be reported as carrying no marker. Carrying none and carrying only markers that bound nothing are distinct findings, and each SHALL be reported under a description true of it.
+E. A file carrying no *Traceability* marker and a file carrying only markers that bound nothing are distinct findings, and each SHALL be reported under a description true of it.
 
 F. A file within a scanned directory that is not ignored and does not match the patterns declared for its kind SHALL be reported where it carries a *Traceability* keyword.
 
@@ -877,6 +877,7 @@ H is why the code description and the test description are stated separately rat
 
 ### Changelog
 
+- 2026-08-25 | ba5c7326 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-25 | 0a2e48b7 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-24 | bdfbd910 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-24 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-66: A and D restated as properties rather than as routines and signatures; B retired as mechanism; H added so one file is not reported twice
@@ -891,7 +892,7 @@ H is why the code description and the test description are stated separately rat
 - 2026-03-30 | e1272219 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: sync changelog hash
 - 2026-03-29 | 6e481d63 | - | Michael Lewis (<michael@anspar.org>) | Initial creation
 
-*End* *Code No-Traceability Health Check* | **Hash**: 0a2e48b7
+*End* *Code No-Traceability Health Check* | **Hash**: ba5c7326
 
 ## REQ-d00246: Markdown Emphasis Normalization Utility
 
@@ -978,13 +979,14 @@ E. That applied work exists only in a running process's memory SHALL be recorded
 
 F. When work is lost to an ending the tool does not execute, the tool SHALL disclose that a loss occurred at the earliest point it can, and SHALL NOT present that disclosure as an account of what was lost.
 
-G. The tool SHALL NOT accept work into a process that has already decided to end, and SHALL report the refusal to whoever offered it.
+G. The tool SHALL refuse work offered to a process that has already decided to end, and SHALL report the refusal to whoever offered it.
 
 H. A record disclosed under assertion C SHALL be retired once the affected content has been persisted at a party's own request, so that what the tool discloses describes a state that still stands.
 
 ## Changelog
 
+- 2026-08-25 | 5b33b676 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-08 | 80cf3ca1 | - | Michael Lewis (<michael@anspar.org>) | TOOL-12: author uncommitted-work durability invariants
 - 2026-08-08 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-12: author uncommitted-work durability invariants
 
-*End* *Durability of Uncommitted Work* | **Hash**: 80cf3ca1
+*End* *Durability of Uncommitted Work* | **Hash**: 5b33b676

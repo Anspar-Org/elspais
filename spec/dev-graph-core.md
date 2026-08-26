@@ -49,7 +49,7 @@ D. The system SHALL provide a sorted list of unique topics derived from file nam
 
 E. The system SHALL provide per-requirement coverage status (Full/Partial/Unimplemented) from node.metrics.
 
-F. Aggregate functions SHALL NOT duplicate iteration - they SHALL use graph.all_nodes().
+F. Aggregate functions SHALL use `graph.all_nodes()` for iteration.
 
 ### Rationale
 
@@ -57,11 +57,12 @@ Aggregate functions provide reusable statistics computation that any output form
 
 ### Changelog
 
+- 2026-08-25 | fa761a97 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | ca876d95 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 97c0f6fc | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 97c0f6fc | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Graph Aggregate Functions* | **Hash**: ca876d95
+*End* *Graph Aggregate Functions* | **Hash**: fa761a97
 ---
 
 ## REQ-d00052: Output Generators Consume Graph Directly
@@ -78,7 +79,7 @@ B. Markdown generator SHALL use graph.roots and node.children for hierarchy trav
 
 C. CSV generator SHALL iterate graph.all_nodes() for flat output.
 
-D. Generators SHALL NOT create Dict[str, TraceViewRequirement] or similar intermediate structures.
+D. <RETIRED> forbade generators from building an intermediate structure named by a completed migration. What a generator consumes is REQ-d00052-A, REQ-d00052-C, REQ-d00052-E and REQ-d00052-F.
 
 E. Generators SHALL read node.metrics for display information, not recompute it.
 
@@ -92,12 +93,13 @@ Direct graph consumption eliminates data structure conversion overhead and ensur
 
 ### Changelog
 
+- 2026-08-25 | b0df3bb9 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | abb3f6b8 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-03 | c5dd0546 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | a3575fcc | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | a3575fcc | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Output Generators Consume Graph Directly* | **Hash**: abb3f6b8
+*End* *Output Generators Consume Graph Directly* | **Hash**: b0df3bb9
 ---
 
 ## REQ-d00054: Annotation Pipeline Pattern
@@ -133,7 +135,7 @@ TraceNode.metrics SHALL be the single extension point for adding data to nodes.
 
 A. All annotation data SHALL be stored in node.metrics dict.
 
-B. Annotators SHALL NOT modify node.children, node.parents, or other structural fields.
+B. <RETIRED> forbade annotators from writing structural fields named before the edge-based graph model. Where an annotator writes is REQ-d00055-A.
 
 C. Metrics keys SHALL use consistent naming (snake_case, descriptive names).
 
@@ -147,12 +149,13 @@ Using metrics dict as the extension point enables adding new annotations without
 
 ### Changelog
 
+- 2026-08-25 | 4e458b34 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-19 | 83148e40 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | 1c90d8fa | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 0073a9c3 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 0073a9c3 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Node Metrics as Extension Point* | **Hash**: 83148e40
+*End* *Node Metrics as Extension Point* | **Hash**: 4e458b34
 ---
 
 ## REQ-d00069: Indirect Coverage Source
@@ -181,7 +184,7 @@ H. When a requirement declares `Satisfies: X`, the graph builder SHALL clone the
 
 I. 100% coverage of a template instance SHALL be achieved when every leaf *Assertion* in the cloned template subtree (excluding N/A assertions) has at least one inbound coverage edge (`Implements:`, `Verifies:`, or `Validates:`) on its template original, consistent with the inherited-coverage rule (REQ-p00014-K).
 
-J. A `Refines:` relationship SHALL NOT contribute coverage by itself; it SHALL conduct the coverage of the refining requirement to the assertions its own citation names -- the *Assertion* it names, or every *Assertion* of the requirement where it names only the requirement. Each measure SHALL conduct into the same measure, direct into direct and indirect into indirect, so that no measure is ever composed of another. The value conducted SHALL be the mean, in that measure, of the contributing requirements' own coverage, a requirement's coverage being the mean over its assertions, computed independently per dimension.
+J. A `Refines:` relationship SHALL conduct the coverage of the refining requirement to the assertions its own citation names -- the *Assertion* it names, or every *Assertion* of the requirement where it names only the requirement. Each measure SHALL conduct into the same measure, direct into direct and indirect into indirect, so that no measure is ever composed of another. The value conducted SHALL be the mean, in that measure, of the contributing requirements' own coverage, a requirement's coverage being the mean over its assertions, computed independently per dimension.
 
 K. The system SHALL report coverage gaps on template instance nodes through the standard coverage mechanisms. Instance nodes are normal graph nodes and participate in existing health checks.
 
@@ -205,6 +208,7 @@ Whole-requirement tests (e.g., `test_implements_req_d00087` with no *Assertion* 
 
 ### Changelog
 
+- 2026-08-25 | f05c853c | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-19 | 665b798a | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-18 | a8b306bc | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: sync changelog hash
 - 2026-08-18 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: superseded — four published measures answer what the toggle asked; A was the only assertion ever built, and it fed a list nothing renders
@@ -224,7 +228,7 @@ Whole-requirement tests (e.g., `test_implements_req_d00087` with no *Assertion* 
 - 2026-05-11 | e9b5c3f1 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | e9b5c3f1 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *Indirect Coverage Source* | **Hash**: 665b798a
+*End* *Indirect Coverage Source* | **Hash**: f05c853c
 ---
 
 ## REQ-d00070: Indirect Coverage Toggle Display
@@ -810,7 +814,7 @@ C. The severity of the report SHALL be what the project configures for it, and S
 
 D. The report SHALL name the file and the line the evidence was written on, and SHALL distinguish evidence that only names the *Assertion* from evidence that also carries a result.
 
-E. Reporting SHALL NOT alter what the evidence credits: the *Assertion* SHALL remain uncounted by that dimension, and the reported evidence SHALL NOT enter any coverage figure on any measure.
+E. <RETIRED> forbade reporting uncredited evidence from altering what that evidence credits. Evidence credits what the coverage measures of REQ-d00069-L take from it; nothing permits reporting to add to that.
 
 F. Where a dimension counts no *Assertion* of a requirement at all, the tool SHALL report that once for the requirement rather than once for each *Assertion* the evidence names.
 
@@ -830,13 +834,14 @@ This is not the question REQ-d00258-M answers. That assertion governs surfaces l
 
 ### Changelog
 
+- 2026-08-25 | 61f1f235 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-25 | 01a8f7d7 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-24 | b29be09f | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-24 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-66: a citation binding to no test is reported and credits nothing
 - 2026-08-18 | 2f1e6599 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-17 | b7624174 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: add missing changelog section
 
-*End* *Uncredited Coverage Evidence* | **Hash**: 01a8f7d7
+*End* *Uncredited Coverage Evidence* | **Hash**: 61f1f235
 
 ## REQ-d00276: Tests Outside the Requirement Estate
 
@@ -995,7 +1000,7 @@ A. Every level carried by a requirement a report includes SHALL form a group in 
 
 B. Every requirement a report includes SHALL fall in exactly one of that report's groups.
 
-C. Whether the configuration a report is produced under defines a requirement's level SHALL NOT decide whether that requirement is counted in a figure the report aggregates.
+C. <RETIRED> forbade whether a report's configuration defines a requirement's level from deciding whether that requirement is counted. Every requirement falls in exactly one group, per REQ-d00281-A and REQ-d00281-B, and an undefined level is reported per REQ-d00281-D.
 
 D. Where a requirement carries a level the configuration a report is produced under does not define, the tool SHALL report that requirement together with the level it carries.
 
@@ -1013,4 +1018,4 @@ D is REQ-p00015-A reached by a second route. Content excluded from an answer is 
 
 E settles an ordering that would otherwise be decided independently by each surface, and decided differently. The levels a project defines are ordered by the ranks it gave them; a level it did not define has no rank to be ordered by, and inventing one would put it somewhere a reader has no way to predict. Placing such groups after the ranked ones keeps the familiar shape of a report intact and gathers what the configuration does not account for in one place, where D's report is about the same requirements.
 
-*End* *Level Vocabulary of a Reported Graph* | **Hash**: 4bde246d
+*End* *Level Vocabulary of a Reported Graph* | **Hash**: 9a35aab8

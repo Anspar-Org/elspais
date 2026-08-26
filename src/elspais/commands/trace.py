@@ -420,7 +420,7 @@ def _get_node_data(node, graph: FederatedGraph, *, assertion_labels: bool = Fals
         },
     )
 
-    # Implements: REQ-d00282-H, REQ-d00282-L
+    # Implements: REQ-p00084-B, REQ-d00282-L
     # Read for every requirement whatever the selection names: the journeys
     # value states a fact ABOUT a row, and a value switch that decided
     # whether the row existed would be a second row-selection.
@@ -1198,7 +1198,7 @@ def run(args: argparse.Namespace) -> int:
     skip_daemon = bool(spec_dir) or fresh_targets is not None
 
     if dimension == "uat":
-        # Implements: REQ-d00257-A+C, REQ-d00282-H
+        # Implements: REQ-d00257-A+C, REQ-p00084-B
         # `--dimension uat` is a named default value set and nothing else: it
         # states the UAT dimensions and the journeys validating each row, and
         # leaves the code dimensions out. Which requirements the report is

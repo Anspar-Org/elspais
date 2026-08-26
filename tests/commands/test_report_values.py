@@ -376,7 +376,7 @@ class TestSelectingValuesChangesNothingElse:
         figure = rows[0]["tested"]
         assert (figure["count"], figure["total"], figure["ratio"]) == (1.0, 2.0, 0.5)
 
-    # Verifies: REQ-d00282-H
+    # Verifies: REQ-p00084-B
     def test_selecting_values_does_not_change_which_requirements_are_reported(
         self, canonical_federated_graph
     ):
@@ -690,7 +690,7 @@ class TestScalarsStateOneValueSetInEveryFormat:
 
 
 class TestOfferingAValueMovesNothing:
-    # Verifies: REQ-d00282-G
+    # Verifies: REQ-d00282-A
     def test_the_composite_states_what_it_always_stated(self):
         """`--values implemented` is the selection projects committed before
         the scalars existed, and it still states the one composite cell it did
@@ -714,7 +714,7 @@ class TestOfferingAValueMovesNothing:
             "implemented": {"count": 1.0, "total": 3.0, "ratio": 1 / 3},
         }
 
-    # Verifies: REQ-d00282-G
+    # Verifies: REQ-d00282-A
     def test_a_report_asked_for_nothing_is_not_handed_the_new_values(self):
         """A default set may grow; one that swept in every value offered would
         move what an unselected report states each time one was added."""
@@ -722,7 +722,7 @@ class TestOfferingAValueMovesNothing:
         assert not [k for k in summary_cmd.DEFAULT_VALUES if k.endswith((".count", ".ratio"))]
         assert "implemented.count" in summary_cmd.OFFERED_VALUES
 
-    # Verifies: REQ-d00282-G
+    # Verifies: REQ-d00282-A
     def test_the_named_default_sets_state_composites(self):
         for preset in trace_cmd.REPORT_PRESETS.values():
             assert not [c for c in preset.values if "." in c], preset.name

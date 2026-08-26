@@ -14,7 +14,7 @@ B. A `FileType` enum SHALL exist alongside `NodeKind` with values: `SPEC`, `JOUR
 
 C. `EdgeKind` enum SHALL include `STRUCTURES`, `DEFINES`, and `YIELDS` values for file-aware structural edges.
 
-D. `STRUCTURES`, `DEFINES`, and `YIELDS` edge kinds SHALL NOT contribute to coverage (i.e., `contributes_to_coverage()` returns `False`).
+D. <RETIRED> forbade the STRUCTURES, DEFINES and YIELDS edge kinds from contributing coverage. Coverage is contributed by the relationships the coverage dimensions of REQ-d00277 are measured from; nothing permits a structural edge to contribute, so nothing had to forbid it.
 
 E. `Edge` dataclass SHALL have a `metadata: dict[str, Any]` field defaulting to an empty dict, excluded from `__eq__` and `__hash__` comparisons.
 
@@ -24,11 +24,12 @@ FILE nodes are the foundation for representing source files as first-class graph
 
 ### Changelog
 
+- 2026-08-25 | ce244267 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | 070e173b | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 664d3990 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | 664d3990 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *FILE Node Data Model* | **Hash**: 070e173b
+*End* *FILE Node Data Model* | **Hash**: ce244267
 ---
 
 ## REQ-d00127: GraphNode API: Filtered Traversal and Edge-Only Relationships
@@ -39,7 +40,7 @@ GraphNode SHALL use edge-only relationships (via `link()`) and support filtered 
 
 ### Assertions
 
-A. `GraphNode` SHALL NOT have an `add_child()` method. All parent-child relationships SHALL be created via `link()` with a typed `EdgeKind`.
+A. All parent-child relationships in GraphNode SHALL be established via `link()` with a typed `EdgeKind`.
 
 B. `GraphNode.remove_child()` SHALL be renamed to `unlink()`, retaining identical behavior: severs all edges between two nodes and removes cache entries.
 
@@ -55,11 +56,12 @@ Eliminating `add_child()` ensures every relationship in the graph has a typed ed
 
 ### Changelog
 
+- 2026-08-25 | bd8a5b3c | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | 20632d4a | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 12964863 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 12964863 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *GraphNode API: Filtered Traversal and Edge-Only Relationships* | **Hash**: 20632d4a
+*End* *GraphNode API: Filtered Traversal and Edge-Only Relationships* | **Hash**: bd8a5b3c
 ---
 
 ## REQ-d00128: FILE Node Creation in Build Pipeline
@@ -80,17 +82,17 @@ D. `GraphBuilder.add_parsed_content()` SHALL accept an optional `file_node` para
 
 E. CONTAINS edge metadata SHALL include `start_line` (int), `end_line` (int or None), and `render_order` (float, sequential from 0.0).
 
-F. *Assertion* and requirement-level REMAINDER nodes SHALL NOT receive CONTAINS edges from FILE; they are reached via STRUCTURES edges from their parent REQUIREMENT.
+F. *Assertion* and requirement-level REMAINDER nodes SHALL be reached via STRUCTURES edges from their parent REQUIREMENT.
 
 G. RemainderParser SHALL be mandatory for SPEC, JOURNEY, CODE, and TEST file types, ensuring every line is claimed by some parser.
 
-H. RemainderParser SHALL NOT be registered for RESULT file types.
+H. <RETIRED> forbade registering the remainder parser for result files. Which file types require it is stated by REQ-d00128-G.
 
 I. FILE nodes SHALL be additive: existing graph behavior (*Traceability*, coverage, root/orphan detection) SHALL remain unaffected.
 
 J. Template instantiation (`_instantiate_satisfies_templates()`) SHALL create DEFINES edges from the declaring requirement's FILE node to each INSTANCE node in the cloned subtree.
 
-K. INSTANCE nodes SHALL NOT have CONTAINS edges. They are virtual nodes not physically present in any file.
+K. <RETIRED> forbade INSTANCE nodes from carrying CONTAINS edges. How an INSTANCE node's originating file is reached is REQ-d00128-J and REQ-d00128-L.
 
 L. `file_node()` SHALL return None for INSTANCE nodes. To find the originating file, navigate via the INSTANCE edge to the original node and call `file_node()` on it.
 
@@ -100,13 +102,14 @@ FILE nodes make source files first-class graph participants. Creating them in fa
 
 ### Changelog
 
+- 2026-08-25 | b32e7973 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-13 | 926ddd2b | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-13 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: amend A — a FILE node is identified by its repository together with its path, so federated members sharing a path yield distinct nodes
 - 2026-07-31 | 02374cc2 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 7742f15f | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | 7742f15f | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *FILE Node Creation in Build Pipeline* | **Hash**: 926ddd2b
+*End* *FILE Node Creation in Build Pipeline* | **Hash**: b32e7973
 ---
 
 ## REQ-d00129: SourceLocation Removal and Consumer Migration
@@ -117,9 +120,9 @@ The `SourceLocation` class and `GraphNode.source` field SHALL be removed. All co
 
 ### Assertions
 
-A. `SourceLocation` class SHALL NOT exist in the codebase. Importing it SHALL raise `ImportError`.
+A. <RETIRED> stated that a class removed by a completed migration does not exist. What a content node stores is REQ-d00129-C, and how a consumer reaches a path, line and repository is REQ-d00129-D through REQ-d00129-F.
 
-B. `GraphNode` SHALL NOT have a `source` field. Accessing `node.source` on any `GraphNode` instance SHALL raise `AttributeError`.
+B. <RETIRED> stated that a field removed by a completed migration is absent. Where a content node's line is stored is REQ-d00129-C, and how a consumer reaches its path and repository is REQ-d00129-D and REQ-d00129-F.
 
 C. Content nodes SHALL store `parse_line` (int) and `parse_end_line` (int or None) as fields accessible via `get_field()`.
 
@@ -137,11 +140,12 @@ SourceLocation duplicates information now available through the graph structure 
 
 ### Changelog
 
+- 2026-08-25 | dcea9fda | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | 6d11df36 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 8bd81196 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 8bd81196 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *SourceLocation Removal and Consumer Migration* | **Hash**: 6d11df36
+*End* *SourceLocation Removal and Consumer Migration* | **Hash**: dcea9fda
 ---
 
 ## REQ-d00130: Parameterized Root Iteration and Kind-Based Index Query
@@ -162,7 +166,7 @@ D. `iter_roots(NodeKind.USER_JOURNEY)` SHALL return only USER_JOURNEY roots from
 
 E. `iter_by_kind(kind)` SHALL iterate all nodes of the given `NodeKind` from `_index`, equivalent to the existing `nodes_by_kind()` method.
 
-F. FILE nodes SHALL NOT appear in the default `iter_roots()` results (no argument).
+F. <RETIRED> forbade FILE nodes from appearing in the default results of the root iterator. What that iterator returns unfiltered is stated by REQ-d00130-A.
 
 ### Rationale
 
@@ -170,11 +174,12 @@ Parameterized roots enable view-specific entry points into the graph: domain con
 
 ### Changelog
 
+- 2026-08-25 | 9103249d | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | 5733741e | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | f56f8527 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | f56f8527 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Parameterized Root Iteration and Kind-Based Index Query* | **Hash**: 5733741e
+*End* *Parameterized Root Iteration and Kind-Based Index Query* | **Hash**: 9103249d
 ---
 
 ## REQ-d00131: Render Protocol for Graph Nodes

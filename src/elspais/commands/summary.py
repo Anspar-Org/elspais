@@ -52,7 +52,7 @@ from elspais.graph.values import (
 )
 
 
-# Implements: REQ-d00084-B, REQ-d00282-G
+# Implements: REQ-d00084-B, REQ-d00282-A
 # name: DEFAULT_VALUES
 # use:  what a reader who names no values is answered with. This report
 #       declares no named default sets, so it has the one.

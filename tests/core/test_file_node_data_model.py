@@ -71,32 +71,26 @@ class TestEdgeKindFileAware:
 class TestEdgeKindCoverage:
     """Validates REQ-d00126-D: STRUCTURES, DEFINES, YIELDS do not contribute to coverage."""
 
-    # Verifies: REQ-d00126-D
     def test_REQ_d00126_D_structures_no_coverage(self):
         """STRUCTURES edges do not contribute to coverage."""
         assert EdgeKind.STRUCTURES.contributes_to_coverage() is False
 
-    # Verifies: REQ-d00126-D
     def test_REQ_d00126_D_defines_no_coverage(self):
         """DEFINES edges do not contribute to coverage."""
         assert EdgeKind.DEFINES.contributes_to_coverage() is False
 
-    # Verifies: REQ-d00126-D
     def test_REQ_d00126_D_yields_no_coverage(self):
         """YIELDS edges do not contribute to coverage."""
         assert EdgeKind.YIELDS.contributes_to_coverage() is False
 
-    # Verifies: REQ-d00126-D
     def test_REQ_d00126_D_contains_still_no_coverage(self):
         """CONTAINS edges still do not contribute to coverage (regression check)."""
         assert EdgeKind.CONTAINS.contributes_to_coverage() is False
 
-    # Verifies: REQ-d00126-D
     def test_REQ_d00126_D_implements_still_coverage(self):
         """IMPLEMENTS edges still contribute to coverage (regression check)."""
         assert EdgeKind.IMPLEMENTS.contributes_to_coverage() is True
 
-    # Verifies: REQ-d00126-D
     def test_REQ_d00126_D_validates_still_coverage(self):
         """VERIFIES edges still contribute to coverage (regression check)."""
         assert EdgeKind.VERIFIES.contributes_to_coverage() is True

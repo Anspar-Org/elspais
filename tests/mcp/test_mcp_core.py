@@ -155,7 +155,7 @@ class TestGetGraphStatus:
         assert "root_count" in result
         assert result["root_count"] == 1
 
-    # Verifies: REQ-d00060-E
+    # Verifies: REQ-d00060-B
     def test_REQ_d00060_E_no_full_graph_iteration(self, sample_graph):
         """REQ-d00060-E: Does not iterate full graph for counts."""
         pytest.importorskip("mcp")

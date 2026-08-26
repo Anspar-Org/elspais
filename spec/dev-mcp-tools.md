@@ -16,7 +16,7 @@ C. SHALL return `last_refresh` timestamp from graph metadata.
 
 D. SHALL return `root_count` using `graph.root_count()`.
 
-E. SHALL NOT iterate the full graph to count nodes when kind-specific counts suffice.
+E. <RETIRED> forbade counting nodes by iterating the whole graph. How a count is taken is stated by REQ-d00060-B.
 
 ### Rationale
 
@@ -24,11 +24,12 @@ Graph status provides a quick health check without expensive traversal operation
 
 ### Changelog
 
+- 2026-08-25 | 20b43899 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | 8c173481 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 4e2277cc | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 4e2277cc | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Graph Status Tool Implementation* | **Hash**: 8c173481
+*End* *Graph Status Tool Implementation* | **Hash**: 20b43899
 ---
 
 ## REQ-d00061: Requirement Search Tool Implementation
@@ -158,7 +159,7 @@ C. Serializers SHALL read from `node.get_field()` and `node.metrics`, not access
 
 D. Serializers SHALL handle missing fields gracefully with sensible defaults.
 
-E. Serializers SHALL NOT trigger graph traversal beyond the single node being serialized.
+E. <RETIRED> forbade a serializer from traversing beyond the node it serializes. What a serializer reads is stated by REQ-d00064-C.
 
 ### Rationale
 
@@ -166,11 +167,12 @@ Serializers provide the boundary between graph internals and MCP responses. They
 
 ### Changelog
 
+- 2026-08-25 | 8952e26c | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | 9d76735a | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 8d56d937 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 8d56d937 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Serializer Functions* | **Hash**: 9d76735a
+*End* *Serializer Functions* | **Hash**: 8952e26c
 ---
 
 ## REQ-d00065: Mutation Tool Delegation
@@ -514,7 +516,7 @@ B. Subtree extraction starting from a REQUIREMENT node SHALL walk domain edges (
 
 C. `_SUBTREE_KIND_DEFAULTS` SHALL include a `NodeKind.FILE` entry that maps to `{NodeKind.REQUIREMENT, NodeKind.ASSERTION, NodeKind.REMAINDER}` for FILE root traversal.
 
-D. `_search()` SHALL NOT return FILE nodes in search results for requirement queries.
+D. <RETIRED> forbade a search over requirements from returning FILE nodes. What a search of each kind walks is REQ-d00133-A through REQ-d00133-C; nothing permits a requirement query to return a file.
 
 E. `_get_graph_status()` SHALL include FILE node counts in its `node_counts` dict (already satisfied by iterating all NodeKind values).
 
@@ -526,11 +528,12 @@ FILE nodes are structural infrastructure. They enhance the graph's completeness 
 
 ### Changelog
 
+- 2026-08-25 | b593514b | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | 08e2973f | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | ae564dae | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | ae564dae | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *MCP FILE Node Integration* | **Hash**: 08e2973f
+*End* *MCP FILE Node Integration* | **Hash**: b593514b
 ---
 
 ## REQ-d00205: MCP Federation Support

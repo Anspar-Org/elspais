@@ -291,7 +291,7 @@ class TestLevelGroupKeys:
         )
         assert level_group_keys(graph, self.CONFIG, node_ids=node_ids) == expected
 
-    # Verifies: REQ-d00281-A, REQ-d00281-C, REQ-d00281-E
+    # Verifies: REQ-d00281-A, REQ-d00281-B, REQ-d00281-E
     def test_aggregate_by_level_forms_a_group_for_an_unconfigured_level(self):
         arch = _make_req("REQ-x00001", level="arch")
         arch.set_metric(
@@ -323,7 +323,7 @@ class TestLevelGroupKeys:
         assert group.implemented.total_covered == pytest.approx(1.5)
         assert {r.level: r.total_requirements for r in rows}["DEV"] == 1
 
-    # Verifies: REQ-d00281-C, REQ-d00281-D
+    # Verifies: REQ-d00281-A, REQ-d00281-D
     def test_collect_coverage_reports_exclusions_at_an_unconfigured_level(self):
         # The excluded gate reads the groups over EVERY requirement, so a level
         # whose only requirements carry a coverage-excluded status still has its

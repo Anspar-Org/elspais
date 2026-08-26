@@ -613,7 +613,7 @@ def _evidence_result(graph: Any, source_ids: tuple[str, ...]) -> tuple[EvidenceR
     return EvidenceResult.NONE, None
 
 
-# Implements: REQ-d00274-A, REQ-d00274-B, REQ-d00274-E, REQ-d00274-F
+# Implements: REQ-d00274-A, REQ-d00274-B, REQ-d00274-F
 def iter_uncredited_evidence(
     graph: Any, config: dict[str, Any] | None = None
 ) -> list[UncreditedEvidence]:
@@ -816,7 +816,7 @@ def _accumulate(sums: DimensionSums, dim: CoverageDimension) -> None:
     sums.total_covered += dim.covered
 
 
-# Implements: REQ-d00281-A+B+C+E
+# Implements: REQ-d00281-A+B+E
 def level_group_keys(
     graph: Any,
     config: dict[str, Any] | None = None,

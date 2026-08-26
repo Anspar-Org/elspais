@@ -277,9 +277,9 @@ A. The system SHALL support explicit N/A declarations for template assertions us
 
 B. N/A assertions SHALL be treated the same as deprecated status: they SHALL NOT count toward the coverage target for the relevant template instance.
 
-C. Any `Implements:` references to a N/A *Assertion* SHALL NOT count toward coverage and SHALL produce errors.
+C. Any `Implements:` reference to a N/A *Assertion* SHALL produce an error.
 
-*End* *NOT APPLICABLE Status* | **Hash**: 2211802a
+*End* *NOT APPLICABLE Status* | **Hash**: e852e628
 ---
 
 ## REQ-p00050: Unified Graph Architecture

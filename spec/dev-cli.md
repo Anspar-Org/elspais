@@ -236,7 +236,7 @@ C. There SHALL be a code meaning that the defect could not be determined beyond 
 
 D. A code SHALL be issued only where the input determines the defect it names. Where the input admits two accounts of equal extent, neither SHALL be issued.
 
-E. Introducing a code SHALL NOT change which category a finding falls in, the severity configured for that category, or the meaning of a code already in use.
+E. <RETIRED> forbade introducing a code from changing a category, a configured severity, or the meaning of a code in use. Nothing permits introducing a code to do any of those, so nothing had to forbid it.
 
 ### Rationale
 
@@ -246,11 +246,12 @@ D is what keeps B from becoming guesswork. Reporting several respects in which a
 
 ### Changelog
 
+- 2026-08-25 | fb458e96 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-16 | 6f4019d1 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: sync changelog hash
 - 2026-08-16 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: Active — every reported fault carries codes, the codes are documented with a producing input in `elspais docs linking`, and two codes no input could produce are retired from the vocabulary
 - 2026-08-15 | - | - | Michael Lewis (<michael@anspar.org>) | Initial authoring: closed categories over open codes, multiple codes per finding, a generic code, and issuance only where determined
 
-*End* *Diagnostic Code Vocabulary* | **Hash**: 6f4019d1
+*End* *Diagnostic Code Vocabulary* | **Hash**: fb458e96
 
 ## REQ-d00285: The Shape of a Finding
 
@@ -275,7 +276,7 @@ F. A name under which findings are reported SHALL identify one condition.
 
 G. Where a condition the tool detected is not reported, the point at which it is withheld SHALL record what was withheld and why.
 
-H. A narrowing of which findings a report presents SHALL NOT change the verdict that report reaches.
+H. <RETIRED> forbade a narrowing of which findings a report presents from changing the verdict that report reaches. Nothing permits which findings are shown to bear on the verdict, so nothing had to forbid it.
 
 I. A report that narrows which findings it presents SHALL disclose the narrowing and the extent of what it withheld.
 
@@ -302,7 +303,7 @@ D and E are where a finding's severity is settled, for every finding the tool pr
 - 2026-08-24 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-66: govern narrowing a report to selected findings — the verdict stays the run's, and the narrowing and the extent of what it withheld are disclosed
 - 2026-08-24 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-66: Initial authoring — a finding carries its location, its remedy and one severity decided in one place, and reads the same in every format
 
-*End* *The Shape of a Finding* | **Hash**: bedec247
+*End* *The Shape of a Finding* | **Hash**: b0ffe9ce
 
 ## REQ-d00286: Built-In User Documentation
 
@@ -700,7 +701,7 @@ K. A name the vocabulary does not admit SHALL select no requirement in that voca
 
 L. Where a scope selects no requirement from an estate that holds requirements, the tool SHALL report the empty selection as the scope's answer rather than as an absence of requirements.
 
-M. Admitting a further property a scope can select on SHALL NOT change which requirements an already expressible scope selects.
+M. <RETIRED> forbade admitting a further property a scope can select on from changing which requirements an already expressible scope selects. Nothing permits a scope's meaning to turn on properties it does not name.
 
 ### Rationale
 
@@ -714,7 +715,7 @@ J, K and L are the honesty group, separate because opposite situations produce t
 
 M is what allows the vocabulary to grow, and growth is owed. Selection axes beyond level and status are foreseeable: a compiled document offering its stakeholder audience the product-level requirements of every member of a federation, or a ranking narrowed to one level (REQ-d00125-E), are selections of this kind and are expressed in this vocabulary. The cost of admitting a property must fall on the scopes that use it and on nothing else — a project whose committed scopes shifted meaning because the tool learned a new property would have to re-audit every report it ever committed.
 
-*End* *Report Scope Selection Vocabulary* | **Hash**: ef2221cc
+*End* *Report Scope Selection Vocabulary* | **Hash**: 622363f0
 
 ---
 
@@ -762,11 +763,11 @@ E. The values a report states SHALL NOT depend on the format it is rendered in.
 
 F. A report SHALL NOT be produced under a selection the tool did not honour in full.
 
-G. Offering a further value SHALL NOT change which values an already expressible selection states.
+G. <RETIRED> forbade offering a further value from changing which values an already expressible selection states. A selection states the values it names, per REQ-d00282-A and REQ-d00282-K; nothing permits an unnamed value to enter it.
 
-H. Selecting which values a report states SHALL NOT change which requirements the report is about.
+H. <RETIRED> forbade selecting which values a report states from changing which requirements the report is about. Which requirements a report is about is its scope, per REQ-p00084-B; nothing permits a value selection to bear on it.
 
-I. Selecting which requirements a report is about SHALL NOT change which values it states.
+I. <RETIRED> forbade selecting which requirements a report is about from changing which values it states. A report states the values its selection names, per REQ-d00282-A; nothing permits its scope to bear on them.
 
 J. The names a selection uses SHALL be independent of the words a project configures its values to be displayed under.
 
@@ -800,7 +801,7 @@ N reaches the one figure B cannot. Line coverage is measured in lines and confer
 
 M is the distinction between having nothing to say and saying nothing. Not every value a report offers exists for every row -- a coverage figure has none for a group whose requirements confer none. Where those two look alike a reader reads absence as zero and concludes work is undone that was never owed, which is the same defect REQ-d00258-E keeps out of line coverage by recording whether a measurement was taken rather than letting an absent one read as none.
 
-*End* *Report Value Selection* | **Hash**: 70ab39ac
+*End* *Report Value Selection* | **Hash**: 01c6bf8a
 
 ---
 

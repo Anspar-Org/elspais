@@ -19,7 +19,7 @@
 | REQ-p00013 | End-to-End Tests Exercise the Installed Command  | prd-core.md     | 1b5c65b2 |
 | REQ-p00014 | Satisfies Relationship                           | prd-features.md | ca4892c1 |
 | REQ-p00015 | Complete and Current Reporting                   | prd-core.md     | 9aa9a8aa |
-| REQ-p00016 | NOT APPLICABLE Status                            | prd-features.md | 2211802a |
+| REQ-p00016 | NOT APPLICABLE Status                            | prd-features.md | e852e628 |
 | REQ-p00017 | Reference Integrity Under Mutation               | prd-core.md     | 3e4c9ddb |
 | REQ-p00018 | Compiled Risk Register                           | prd-core.md     | 0f0438e9 |
 | REQ-p00019 | Truthful Reporting and Error Discipline          | prd-core.md     | 946a0e4c |
@@ -29,7 +29,7 @@
 | REQ-p00080 | Spec-to-PDF Compilation                          | prd-core.md     | 3296bc86 |
 | REQ-p00081 | Org-Wide Requirement Visibility                  | prd-features.md | 17fa4417 |
 | REQ-p00082 | Federated Authority and Verdict Scoping          | prd-features.md | b511fcfd |
-| REQ-p00083 | Durability of Uncommitted Work                   | prd-core.md     | 80cf3ca1 |
+| REQ-p00083 | Durability of Uncommitted Work                   | prd-core.md     | 5b33b676 |
 | REQ-p00084 | Audience-Scoped Reporting                        | prd-core.md     | 199562bd |
 
 ### elspais
@@ -75,20 +75,20 @@
 | ---------- | ------------------------------------------------------------- | ----------------------- | -------- |
 | REQ-d00010 | Traceability API Server                                       | dev-traceview-review.md | cd30d3da |
 | REQ-d00050 | Node Annotator Functions                                      | dev-graph-core.md       | c9217201 |
-| REQ-d00051 | Graph Aggregate Functions                                     | dev-graph-core.md       | ca876d95 |
-| REQ-d00052 | Output Generators Consume Graph Directly                      | dev-graph-core.md       | abb3f6b8 |
+| REQ-d00051 | Graph Aggregate Functions                                     | dev-graph-core.md       | fa761a97 |
+| REQ-d00052 | Output Generators Consume Graph Directly                      | dev-graph-core.md       | b0df3bb9 |
 | REQ-d00054 | Annotation Pipeline Pattern                                   | dev-graph-core.md       | 374f7365 |
-| REQ-d00055 | Node Metrics as Extension Point                               | dev-graph-core.md       | 83148e40 |
-| REQ-d00060 | Graph Status Tool Implementation                              | dev-mcp-tools.md        | 8c173481 |
+| REQ-d00055 | Node Metrics as Extension Point                               | dev-graph-core.md       | 4e458b34 |
+| REQ-d00060 | Graph Status Tool Implementation                              | dev-mcp-tools.md        | 20b43899 |
 | REQ-d00061 | Requirement Search Tool Implementation                        | dev-mcp-tools.md        | 51c28611 |
 | REQ-d00062 | Requirement Detail Tool Implementation                        | dev-mcp-tools.md        | 1e2097db |
 | REQ-d00063 | Hierarchy Navigation Tool Implementation                      | dev-mcp-tools.md        | 5e2b8f03 |
-| REQ-d00064 | Serializer Functions                                          | dev-mcp-tools.md        | 9d76735a |
+| REQ-d00064 | Serializer Functions                                          | dev-mcp-tools.md        | 8952e26c |
 | REQ-d00065 | Mutation Tool Delegation                                      | dev-mcp-tools.md        | 1544d997 |
 | REQ-d00066 | Test Coverage Tool Implementation                             | dev-mcp-tools.md        | 8a9b0217 |
 | REQ-d00067 | Uncovered Assertions Tool Implementation                      | dev-mcp-tools.md        | c838e24d |
 | REQ-d00068 | Assertion Keyword Search Tool Implementation                  | dev-mcp-tools.md        | d552fda6 |
-| REQ-d00069 | Indirect Coverage Source                                      | dev-graph-core.md       | 665b798a |
+| REQ-d00069 | Indirect Coverage Source                                      | dev-graph-core.md       | f05c853c |
 | REQ-d00070 | Indirect Coverage Toggle Display                              | dev-graph-core.md       | eda3f31c |
 | REQ-d00071 | Unified Root vs Orphan Classification                         | dev-graph-core.md       | f2cb5f45 |
 | REQ-d00072 | Link Suggestion Core Engine                                   | dev-graph-core.md       | 9d57c2ad |
@@ -107,14 +107,14 @@
 | REQ-d00086 | Coverage Report Section                                       | dev-cli.md              | 8e02f52d |
 | REQ-d00124 | Graph Analysis Engine                                         | dev-cli.md              | b153d5f6 |
 | REQ-d00125 | Analysis CLI Command                                          | dev-cli.md              | 474fa8af |
-| REQ-d00126 | FILE Node Data Model                                          | dev-graph-file-nodes.md | 070e173b |
-| REQ-d00127 | GraphNode API: Filtered Traversal and Edge-Only Relationships | dev-graph-file-nodes.md | 20632d4a |
-| REQ-d00128 | FILE Node Creation in Build Pipeline                          | dev-graph-file-nodes.md | 926ddd2b |
-| REQ-d00129 | SourceLocation Removal and Consumer Migration                 | dev-graph-file-nodes.md | 6d11df36 |
-| REQ-d00130 | Parameterized Root Iteration and Kind-Based Index Query       | dev-graph-file-nodes.md | 5733741e |
+| REQ-d00126 | FILE Node Data Model                                          | dev-graph-file-nodes.md | ce244267 |
+| REQ-d00127 | GraphNode API: Filtered Traversal and Edge-Only Relationships | dev-graph-file-nodes.md | bd8a5b3c |
+| REQ-d00128 | FILE Node Creation in Build Pipeline                          | dev-graph-file-nodes.md | b32e7973 |
+| REQ-d00129 | SourceLocation Removal and Consumer Migration                 | dev-graph-file-nodes.md | dcea9fda |
+| REQ-d00130 | Parameterized Root Iteration and Kind-Based Index Query       | dev-graph-file-nodes.md | 9103249d |
 | REQ-d00131 | Render Protocol for Graph Nodes                               | dev-graph-file-nodes.md | 4bd2b48b |
 | REQ-d00132 | Render-Based Save Operation                                   | dev-graph-file-nodes.md | f5a4193c |
-| REQ-d00133 | MCP FILE Node Integration                                     | dev-mcp-tools.md        | 08e2973f |
+| REQ-d00133 | MCP FILE Node Integration                                     | dev-mcp-tools.md        | b593514b |
 | REQ-d00134 | Mutation Round-Trip Fidelity                                  | dev-graph-file-nodes.md | 19cb065b |
 | REQ-d00200 | FederatedGraph Read-Only Delegation                           | dev-graph-federation.md | ed077a7c |
 | REQ-d00201 | FederatedGraph Mutation Delegation                            | dev-graph-federation.md | c51794b3 |
@@ -157,7 +157,7 @@
 | REQ-d00238 | Graph-Wide Term Scan                                          | prd-core.md             | b14edde9 |
 | REQ-d00239 | Federated Graph Term Scanner Pass                             | prd-core.md             | e27abfeb |
 | REQ-d00240 | New Term Health Checks                                        | prd-core.md             | b4e70076 |
-| REQ-d00241 | Code No-Traceability Health Check                             | prd-core.md             | 0a2e48b7 |
+| REQ-d00241 | Code No-Traceability Health Check                             | prd-core.md             | ba5c7326 |
 | REQ-d00242 | Terms API Endpoints                                           | prd-features.md         | a4522e0f |
 | REQ-d00243 | Terms Tab in Viewer Nav Tree                                  | prd-features.md         | 2873ed03 |
 | REQ-d00244 | Term Cards in Viewer Card Stack                               | prd-features.md         | 0a48035f |
@@ -186,21 +186,21 @@
 | REQ-d00268 | Report Malformed Assertion Labels                             | dev-graph-core.md       | cb7e96dd |
 | REQ-d00269 | Cross-Repository Coverage Credit                              | dev-graph-federation.md | 8c9eb97a |
 | REQ-d00270 | Single-Authority Identifier Grammar Derivation                | dev-graph-config.md     | fe29efc0 |
-| REQ-d00271 | Diagnostic Code Vocabulary                                    | dev-cli.md              | 6f4019d1 |
+| REQ-d00271 | Diagnostic Code Vocabulary                                    | dev-cli.md              | fb458e96 |
 | REQ-d00272 | Reference Fault Diagnosis                                     | dev-graph-core.md       | 9f1a7a6a |
 | REQ-d00273 | Requirement Metadata Block                                    | dev-graph-file-nodes.md | 2d7e25e8 |
-| REQ-d00274 | Uncredited Coverage Evidence                                  | dev-graph-core.md       | 01a8f7d7 |
+| REQ-d00274 | Uncredited Coverage Evidence                                  | dev-graph-core.md       | 61f1f235 |
 | REQ-d00275 | Whose Configuration Governs a Federated Answer                | dev-graph-federation.md | 9ab2ef7c |
 | REQ-d00276 | Tests Outside the Requirement Estate                          | dev-graph-core.md       | ca4cd1fc |
 | REQ-d00277 | Coverage Dimensions                                           | dev-graph-core.md       | b097dcd7 |
-| REQ-d00278 | Report Scope Selection Vocabulary                             | dev-cli.md              | ef2221cc |
+| REQ-d00278 | Report Scope Selection Vocabulary                             | dev-cli.md              | 622363f0 |
 | REQ-d00279 | One Authority for Report Scope Membership                     | dev-cli.md              | 2b755b50 |
 | REQ-d00280 | Named Report Declarations                                     | dev-cli.md              | ab0a70bb |
-| REQ-d00281 | Level Vocabulary of a Reported Graph                          | dev-graph-core.md       | 4bde246d |
-| REQ-d00282 | Report Value Selection                                        | dev-cli.md              | 70ab39ac |
+| REQ-d00281 | Level Vocabulary of a Reported Graph                          | dev-graph-core.md       | 9a35aab8 |
+| REQ-d00282 | Report Value Selection                                        | dev-cli.md              | 01c6bf8a |
 | REQ-d00283 | Test Target Groups                                            | dev-graph-core.md       | bc95d36b |
 | REQ-d00284 | How a Result Names Its Test                                   | dev-graph-core.md       | 7baae0b0 |
-| REQ-d00285 | The Shape of a Finding                                        | dev-cli.md              | bedec247 |
+| REQ-d00285 | The Shape of a Finding                                        | dev-cli.md              | b0ffe9ce |
 | REQ-d00286 | Built-In User Documentation                                   | dev-cli.md              | d246f21a |
 | REQ-d00287 | Reading a Reference                                           | dev-graph-core.md       | 0803d023 |
 

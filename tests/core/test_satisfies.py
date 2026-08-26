@@ -767,7 +767,7 @@ class TestSatisfiesFileNodeEdges:
         assert "REQ-p00045::REQ-p80001" in defines2
         assert "REQ-p00045::REQ-p80001-A" in defines2
 
-    # Verifies: REQ-d00128-K
+    # Verifies: REQ-d00128-L
     def test_REQ_d00128_K_instance_nodes_no_contains_edges(self):
         """INSTANCE nodes have no incoming CONTAINS edges."""
         template = make_requirement(

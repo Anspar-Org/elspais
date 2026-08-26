@@ -4909,7 +4909,7 @@ def run(args: argparse.Namespace) -> int:
     return 1 if (runner_failed or checks_exit != 0) else 0
 
 
-# Implements: REQ-d00285-C+F+H+I
+# Implements: REQ-d00285-C+F+I
 def run_preset(args: argparse.Namespace, preset: str) -> int:
     """Run one of the preset listings -- `unresolved`, `errors`, `uncited`.
 
