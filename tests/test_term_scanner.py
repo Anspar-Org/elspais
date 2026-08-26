@@ -981,6 +981,123 @@ def test_REQ_d00239_B_scan_terms_passes_per_repo_config():
         assert call_b.kwargs.get("exclude_files") == []
 
 
+# -- REQ-d00222-C: the federated dictionary is the federation's own -----------
+
+
+def _repo_with_term(
+    *,
+    node_id: str,
+    label: str,
+    relative_path: str,
+    defines: bool,
+):
+    """A mock TraceGraph holding one requirement, optionally defining "widget"."""
+    from elspais.graph.terms import TermDictionary
+
+    req_node = _mock_node(NodeKind.REQUIREMENT, node_id, label=label)
+    req_node.file_node.return_value = _mock_file_node(relative_path)
+    graph = _mock_graph({NodeKind.REQUIREMENT: [req_node]})
+    graph._index = {}
+    graph._terms = TermDictionary()
+    if defines:
+        graph._terms.add(TermEntry(term="widget", definition="A widget.", indexed=True))
+    return graph
+
+
+# Verifies: REQ-d00222-C
+def test_REQ_d00222_C_rewrapping_a_live_graph_does_not_inflate_references():
+    """Wrapping a live graph again leaves the first federation's counts alone.
+
+    ``elspais checks`` wraps each live member graph in a further
+    ``FederatedGraph`` to obtain a per-repo config view. Each wrap runs its
+    own term scan, so a federated entry sharing the repo's own ``TermEntry``
+    would collect a fresh copy of every reference on each pass, and a
+    retained graph's term counts would climb with every invocation.
+    """
+    from pathlib import Path
+
+    from elspais.graph.federated import FederatedGraph
+
+    graph = _repo_with_term(
+        node_id="REQ-A01",
+        label="The *widget* design",
+        relative_path="spec/design.md",
+        defines=True,
+    )
+    config = {
+        "project": {"name": "repo-a", "namespace": "REPOA"},
+        "terms": {"markup_styles": ["*"]},
+    }
+
+    federated = FederatedGraph.from_single(graph, config, Path("/tmp/repo-a"))
+    assert len(federated._terms.lookup("widget").references) == 1
+
+    # The per-repo config view `checks` takes, three invocations' worth.
+    for _ in range(3):
+        FederatedGraph.from_single(graph, config, Path("/tmp/repo-a"))
+
+    assert len(federated._terms.lookup("widget").references) == 1
+
+
+# Verifies: REQ-d00239-A
+def test_REQ_d00239_A_rewrapping_keeps_the_cross_repo_reference():
+    """Re-wrapping each member leaves the whole cross-repo reference set intact.
+
+    A term defined in one repo collects the references made to it in
+    another, and that set is only whole once every repo has been walked. A
+    later single-repo wrap walks one repo, so it must establish its own
+    entries rather than rewrite the ones the federation holds -- otherwise
+    the reference made from the other repo disappears.
+    """
+    from pathlib import Path
+
+    from elspais.graph.federated import FederatedGraph, RepoEntry
+
+    graph_a = _repo_with_term(
+        node_id="REQ-A01",
+        label="The *widget* design",
+        relative_path="spec/design.md",
+        defines=True,
+    )
+    graph_b = _repo_with_term(
+        node_id="REQ-B01",
+        label="The *widget* controller",
+        relative_path="spec/controllers.md",
+        defines=False,
+    )
+    entry_a = RepoEntry(
+        name="repo-a",
+        graph=graph_a,
+        config={
+            "project": {"name": "repo-a", "namespace": "REPOA"},
+            "terms": {"markup_styles": ["*"]},
+        },
+        repo_root=Path("/tmp/repo-a"),
+    )
+    entry_b = RepoEntry(
+        name="repo-b",
+        graph=graph_b,
+        config={
+            "project": {"name": "repo-b", "namespace": "REPOB"},
+            "terms": {"markup_styles": ["*"]},
+        },
+        repo_root=Path("/tmp/repo-b"),
+    )
+
+    federated = FederatedGraph(repos=[entry_a, entry_b], root_repo="repo-a")
+    found = {(r.namespace, r.node_id) for r in federated._terms.lookup("widget").references}
+    assert found == {("REPOA", "REQ-A01"), ("REPOB", "REQ-B01")}
+
+    # The per-repo config view `checks` takes, one wrap per live member.
+    for entry in (entry_a, entry_b):
+        FederatedGraph.from_single(entry.graph, entry.config, entry.repo_root)
+
+    references = federated._terms.lookup("widget").references
+    # The set says nothing was dropped; the count says nothing was added.
+    assert {(r.namespace, r.node_id) for r in references} == found
+    assert len(references) == 2
+
+
 # -- REQ-d00237-D: auto-marker skips terms inside outer emphasis spans -------
 # Without this guard, a term occurrence inside a longer **bold phrase**
 # gets wrapped again, producing `****term**...**` which pandoc renders

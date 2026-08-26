@@ -312,33 +312,53 @@ class FederatedGraph:
 
     # Implements: REQ-d00222-C
     def _merge_terms(self) -> None:
-        """Merge per-repo _terms into a single federated TermDictionary.
+        """Merge per-repo _terms into a federated TermDictionary this graph owns.
 
-        Each TermEntry is (re-)stamped with this federation's view of the
-        owning repo's name. An associate's TraceGraph reaches us already
-        carrying a ``repo_name`` from its inner ``FederatedGraph.from_single``
-        build (stamped from ``[project].name``); the host calls that same
-        repo something else in ``[associates]`` (e.g. the dict key
-        ``hht_diary``), and only the host-side name resolves via
-        ``iter_repos()`` for ``/api/file-content``. We overwrite
-        unconditionally so the term card's ``repo_name`` always matches
+        Every entry is COPIED. A repo's own dictionary holds the terms that
+        repo defines; the federated dictionary holds what this federation
+        makes of them, and ``_scan_terms`` then writes each entry's
+        references. Sharing the entry objects would put a federation's
+        findings inside state its members keep, so wrapping a live graph in
+        a second ``FederatedGraph`` -- which ``elspais checks`` does per repo
+        to obtain a per-repo config view -- would leave its scan behind in
+        the first federation's numbers.
+
+        The copy is stamped with this federation's name for the owning repo.
+        An associate's TraceGraph reaches us carrying a ``repo_name`` from
+        its inner ``FederatedGraph.from_single`` build (stamped from
+        ``[project].name``); the host calls that same repo something else in
+        ``[associates]`` (e.g. the dict key ``hht_diary``), and only the
+        host-side name resolves via ``iter_repos()`` for
+        ``/api/file-content``, so the term card's ``repo_name`` must match
         ``RepoEntry.name``.
         """
+        from dataclasses import replace
+
         from elspais.graph.terms import TermDictionary
 
         merged = TermDictionary()
         self._term_duplicates: list[tuple] = []
         for entry in self._repos.values():
-            if entry.graph is not None:
-                for term_entry in entry.graph._terms.iter_all():
-                    term_entry.repo_name = entry.name
-                dupes = merged.merge(entry.graph._terms)
-                self._term_duplicates.extend(dupes)
+            if entry.graph is None:
+                continue
+            owned = TermDictionary()
+            for term_entry in entry.graph._terms.iter_all():
+                owned.add(replace(term_entry, repo_name=entry.name, references=[]))
+            self._term_duplicates.extend(merged.merge(owned))
         self._terms = merged
 
     # Implements: REQ-d00239-A, REQ-d00239-B
     def _scan_terms(self) -> None:
         """Run term scanner across all repos using the merged dictionary.
+
+        A scan ESTABLISHES the reference set rather than adding to one.
+        ``scan_graph`` appends, and every repo is scanned against the one
+        merged dictionary so that a term defined in one repo collects the
+        references made to it in another, so the set is only whole once
+        every repo has been walked. What makes appending safe is that
+        ``_merge_terms`` supplies entries whose reference lists start empty
+        and belong to this graph alone, so a second federation built over
+        the same repo writes its findings somewhere else.
 
         Uses per-repo config for markup_styles and exclude_files so that
         cross-repo term references resolve correctly.  Always canonicalizes
