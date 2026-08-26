@@ -468,6 +468,76 @@ def _client_notice_path(repo_root: Path) -> Path:
     return _daemon_dir(repo_root) / "daemon.client-notice"
 
 
+def _registration_notice_path(repo_root: Path) -> Path:
+    """Marker that the registration notice has been given.
+
+    NOT scoped to a daemon: what it describes is a client's configuration,
+    which outlives every process serving this tree. Named under the
+    daemon.* prefix so the existing ignore rule covers it.
+    """
+    return _daemon_dir(repo_root) / "daemon.registration-notice"
+
+
+# Implements: REQ-o00076-M
+def notify_registration(repo_root: Path) -> bool:
+    """Say once that a client here would not reach this tree.
+
+    A client that cannot connect reports a refused connection or a missing
+    variable, neither of which names what to do. Nothing else tells the
+    reader: a check they have to run first is a check they run after
+    losing an afternoon, and by then they have already blamed the daemon.
+    So this is said where any command reaches, once, and never again.
+
+    Two conditions, one notice, because they have one remedy each and a
+    reader meets whichever their configuration has.
+
+    Returns True when it printed.
+    """
+    import os
+
+    marker = _registration_notice_path(repo_root)
+    if marker.exists():
+        return False
+
+    from elspais.commands.doctor import _hardcoded_address, _registration_sources
+
+    try:
+        found, _unread = _registration_sources(repo_root, None)
+    except OSError:
+        return False
+
+    message = ""
+    for where, entry in found:
+        address = _hardcoded_address(entry)
+        if address is not None:
+            message = (
+                f"a client registration for this tree names a fixed address "
+                f"({where}: {address}). Every working tree sharing that "
+                f"registration reaches one tree's daemon, or nothing once it "
+                f"stops reserving the address. Run `elspais mcp install` to "
+                f"register the variable instead."
+            )
+            break
+    else:
+        names_variable = any("${" in str(e.get("url", "")) for _w, e in found)
+        if names_variable and not os.environ.get("ELSPAIS_MCP_URL"):
+            message = (
+                "a client registration for this tree names ELSPAIS_MCP_URL, "
+                "which this shell does not set, so a client launched from it "
+                'cannot connect. Run: eval "$(elspais mcp env)"'
+            )
+
+    if not message:
+        return False
+    print(f"note: {message}", file=sys.stderr)
+    try:
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.touch()
+    except OSError:
+        pass  # printing once more beats failing the command
+    return True
+
+
 # Implements: REQ-o00074-N
 def notify_unbound_lifetime(repo_root: Path, reason: str) -> bool:
     """Say once that this daemon's lifetime is not bound to this client.
@@ -1519,6 +1589,13 @@ def ensure_daemon(repo_root: Path, ttl_minutes: int | None = None) -> int:
     Reads ``cli_ttl`` from config if ttl_minutes is not provided.
     Raises RuntimeError if cli_ttl=0 (daemon disabled) and no daemon running.
     """
+    # Implements: REQ-o00076-M
+    # Said here because every command that needs a daemon comes through,
+    # so a reader learns their client cannot reach this tree while running
+    # something else -- rather than after their client has already failed
+    # to connect and told them nothing they can act on.
+    notify_registration(repo_root)
+
     info = get_daemon_info(repo_root)
     # Implements: REQ-o00075-B, REQ-o00076-E
     # A daemon that has committed to stopping passes every liveness check

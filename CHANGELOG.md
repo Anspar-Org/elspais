@@ -6,6 +6,20 @@ All notable changes to elspais will be documented in this file.
 
 ### Changed
 
+- **Breaking: an MCP registration names `ELSPAIS_MCP_URL` rather than a port (REQ-o00076-L)** — `elspais mcp install` no longer writes an address into a client's configuration. A registration is read wherever the client is launched, and every working tree of a repository reads the same one, so an address settled while installing was one tree's answer offered to all of them: they reached that tree's daemon, or nothing once it stopped reserving the address.
+
+  **To upgrade:** run `elspais mcp install` once per registration, then `eval "$(elspais mcp env)"` in each shell before launching a client. Put it in whatever launches yours -- a shell wrapper, or a `direnv` `.envrc` -- and it is arranged once. An existing literal registration keeps working until re-installed; nothing is rewritten for you.
+
+  You will be told rather than left to find out. Any command that starts a daemon says once, per tree, that a registration names a fixed address or that this shell does not set the variable, and names the command that fixes it. `elspais doctor` reports both conditions on demand (`mcp.registration`), alongside what serves the tree and whether it holds unsaved work (`daemon.status`).
+
+  The variable carries no default on purpose: an unset one is reported by name, where a default address would fail as a refused connection and send you looking at the daemon.
+
+- **Breaking: a reference is read from the start of its item, and what follows is residue (REQ-d00287)** — where a reference list ends no longer depends on the file's language. A list is identifiers, separators and whitespace, so it ends at the first content that is none of those; `REQ-d00001-A -- why` now reads the same in SQL and in Python, where before it bound in one and was malformed in the other.
+
+  The reference before that content binds. `REQ-d00001-A and REQ-d00002` resolves the first and carries `and REQ-d00002` as residue rather than failing whole. Residue binds nothing; where it names a requirement it is reported as undeclared (`references.undeclared`), so projects with annotated citations will see that count rise at whatever severity they configure for it. An item whose token runs on -- `REQ-d00001--A` -- is still malformed and still resolves nothing.
+
+- **`tests.partial_read` reports an artifact read only in part, apart from one read not at all (REQ-d00254-P+Q)** — a coverage report whose per-file re-analysis fails yields the lines that ran and declares no total. Such a file leaves the line-coverage figure rather than counting at its executed size, and the count left out is reported beside the figure. `tests.ingestion_fault` now means read nothing, and keeps its warning; the new check is `info`, aggregated by condition, so one unparseable file type is one finding rather than one per file.
+
 - **Breaking: `elspais broken` is now `elspais unresolved`, and the per-class listings are preset filters over the one findings report (REQ-d00285-C+F)** — `broken` is retired as a reporting word. A reference that did not read as an identifier at all is *malformed*; one that read as an identifier and named nothing the federation holds is *unresolved*. The listing's own heading already said `UNRESOLVED REFERENCES`, so the word was wrong only in the place users typed it.
 
   The CLI command `broken` is gone, with no alias and no deprecation shim. The `/api/run/broken` route is gone. `graph.broken_references()` is `graph.unresolved_references()`, `has_broken_references` is `has_unresolved_references`, and the `broken_reference_count` key in `get_graph_status`/`get_workspace_info`/`get_project_summary` is `unresolved_reference_count`. `mutate_fix_broken_reference` and `graph.fix_broken_reference` KEEP their names: they repair one reference, and repair is not reporting.
