@@ -400,7 +400,11 @@ def apply_link_to_file(
         # Refusing is the honest answer: writing one anyway would leave a line
         # that looks like a declaration and declares nothing.
         return None
-    comment = f"{pattern.marker} {keyword}: {req_id}"
+    # A comment this tool writes must be one the file can carry: a
+    # pattern whose comment closes is closed here, or the rest of the
+    # file becomes part of it.
+    closing = f" {pattern.terminator}" if pattern.terminator else ""
+    comment = f"{pattern.marker} {keyword}: {req_id}{closing}"
 
     if dry_run:
         return comment

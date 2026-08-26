@@ -91,18 +91,19 @@ Full specifications are contained in spec/ and docs/. Don't read more than is ne
 
 | Name | Marker | Languages |
 |------|--------|-----------|
-| `c-like` | `//` | JS/TS/JSX/TSX, Java, C/C++, C#, Go, Rust, Swift, Kotlin, Dart, Scala, PHP, SCSS/LESS, proto, zig, Jinja templates (`.j2`) |
+| `c-like` | `//` | JS/TS/JSX/TSX, Java, C/C++, C#, Go, Rust, Swift, Kotlin, Dart, Scala, PHP, SCSS/LESS, proto, zig |
 | `shell-like` | `#` | Python, Shell, Ruby, Perl, R, Julia, Elixir, Nix, YAML, TOML, Terraform/HCL, CMake, Make, PowerShell |
 | `function-like` | `--` | SQL, Lua, Haskell, Ada, Elm, VHDL |
 | `lisp-like` | `;` | Lisp, Emacs Lisp, Clojure, Scheme, Racket, EDN |
 | `math-like` | `%` | TeX/LaTeX, Erlang |
 | `basic-like` | `'` | Visual Basic, VBScript, BASIC |
+| `jinja-like` | `{#` | Jinja templates (`.j2`), whatever they render to |
 
 A _Traceability_ keyword is read ONLY behind the marker of the file's own language (REQ-d00269-K): `--` introduces a reference in SQL and is arithmetic in Python. This narrows WHERE a reference may be written and NEVER what it may say — the identifier grammar is one set of rules in every context that accepts a reference (REQ-p00014-T), spec metadata lines included. There are no per-file reference overrides.
 
 Block comment forms (`/* */`, `<!-- -->`) are deliberately absent from the set and carry NO citation (REQ-d00082-H) — do not add an assertion or doc claiming otherwise. A language whose only comment form is a block therefore has no reference form: `.css`, `.html`, `.xml`, `.svg` are associated with no pattern. Term scanning legitimately reads block comments for a DIFFERENT purpose (finding a _Defined Term_) and is unaffected.
 
-An extension the map does not name has NO pattern, so a keyword in it is read nowhere — deliberately the restrictive answer, never a permissive default. `.m` (MATLAB `%` vs Objective-C `//`) and `.s` are excluded precisely because they cannot name one pattern. `.j2` is `c-like` whatever it renders to (`viewer.js.j2`, `page.css.j2`, `conf.yml.j2` all annotate with `//`) — a template is ONE scannable file type, so it carries ONE pattern, and reading the suffix beneath it would both give it several and silence the annotations in every template rendering to a block-comment language.
+An extension the map does not name has NO pattern, so a keyword in it is read nowhere — deliberately the restrictive answer, never a permissive default. `.m` (MATLAB `%` vs Objective-C `//`) and `.s` are excluded precisely because they cannot name one pattern. `.j2` is `jinja-like` whatever it renders to (`viewer.js.j2`, `page.css.j2`, `page.html.j2` all annotate with `{# ... #}`) — a template is ONE scannable file type, so it carries ONE pattern. It is associated with its OWN comment rather than its output's: `{# #}` is a comment in every Jinja template and is removed before the output exists, so a citation is readable in a template rendering to HTML or CSS — neither of which has a line comment — and no citation reaches the rendered page. Reading the suffix beneath `.j2` would instead give those templates no reference form at all.
 
 `prescan._COMMENT_PREFIXES` is DELIBERATELY separate and wider. It answers "does this line keep the downward walk to the next declaration alive?" — a question about file layout — not "may a keyword bind here?". Narrowing it to the file's one pattern would stop the walk at a block comment and cost the citation below it its declaration.
 

@@ -171,21 +171,22 @@ def test_a_bare_keyword_outside_any_comment_never_binds_in_an_unassociated_file(
 
 
 # Verifies: REQ-d00236-H
-def test_a_template_is_c_like_whatever_it_renders_to(dispatcher):
-    """A scanned file type carries ONE pattern, so `.j2` cannot carry several.
+def test_a_template_is_jinja_like_whatever_it_renders_to(dispatcher):
+    """A template is associated with its OWN comment, not its output's.
 
-    Reading the suffix beneath the template suffix would make `page.css.j2`
-    and `viewer.js.j2` different file types, and would silence the annotations
-    in every template rendering to a block-comment language -- real code
-    implementing real requirements.
+    `{# #}` is a comment in every Jinja template whatever it renders to, and
+    Jinja removes it before the output exists -- so a citation is readable in
+    a template rendering to HTML or CSS, neither of which has a line comment,
+    and no citation reaches the rendered page.
     """
-    for path in ("viewer.js.j2", "page.css.j2", "conf.yml.j2", "report.j2"):
-        assert comment_pattern_for_path(path) is CommentPattern.C_LIKE
-        assert _bound(dispatcher, "// Implements: REQ-d00001-A\n", path) == {"REQ-d00001-A"}
+    for path in ("viewer.js.j2", "page.css.j2", "page.html.j2", "report.j2"):
+        assert comment_pattern_for_path(path) is CommentPattern.JINJA_LIKE
+        assert _bound(dispatcher, "{# Implements: REQ-d00001-A #}\n", path) == {"REQ-d00001-A"}
 
-    # And only that one pattern: the language beneath the template suffix does
-    # not get a second say.
+    # And only that one pattern: neither the language beneath the template
+    # suffix nor the one the template is written alongside gets a second say.
     assert _bound(dispatcher, "# Implements: REQ-d00001-A\n", "conf.yml.j2") == set()
+    assert _bound(dispatcher, "// Implements: REQ-d00001-A\n", "viewer.js.j2") == set()
 
 
 # --- One named set, defined once ------------------------------------------- #
@@ -297,7 +298,8 @@ def test_the_named_set_appears_in_the_help_documentation():
         ("svc.py", "# Implements: REQ-d00001-A"),
         ("svc.js", "// Implements: REQ-d00001-A"),
         ("schema.sql", "-- Implements: REQ-d00001-A"),
-        ("viewer.js.j2", "// Implements: REQ-d00001-A"),
+        ("viewer.js.j2", "{# Implements: REQ-d00001-A #}"),
+        ("page.html.j2", "{# Implements: REQ-d00001-A #}"),
     ],
 )
 def test_an_applied_link_is_written_in_the_files_own_comment_pattern(path, expected):
@@ -305,7 +307,8 @@ def test_an_applied_link_is_written_in_the_files_own_comment_pattern(path, expec
 
     Spelling `#` into a JavaScript file would leave a line that is neither
     valid there nor ever read back -- a relationship the author was told
-    existed and that nothing records.
+    existed and that nothing records. A pattern whose comment closes is
+    closed: an unterminated `{#` would swallow the rest of the template.
     """
     from pathlib import Path
 

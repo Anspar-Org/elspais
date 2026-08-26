@@ -93,6 +93,14 @@ CHANGELOG_HEADER_PATTERN = re.compile(r"^## Changelog\s*$", re.MULTILINE)
 # Block comments (`/* */`, `<!-- -->`) are deliberately absent: a
 # *Traceability* keyword inside one is never read, so a language whose only
 # comment form is a block has no reference form at all (REQ-d00082-H).
+#
+# A template is associated with its OWN comment, not with the one its output
+# uses. `{# #}` is a comment in every Jinja template whatever it renders to,
+# and it is removed before the output exists -- so a citation is readable in a
+# template rendering to HTML or CSS, neither of which has a line comment, and
+# no citation reaches the rendered page. The alternative, reading the suffix
+# beneath `.j2`, gives a template rendering to a block-comment language no
+# reference form at all.
 
 
 class CommentPattern(Enum):
@@ -104,11 +112,23 @@ class CommentPattern(Enum):
     LISP_LIKE = ";"
     MATH_LIKE = "%"
     BASIC_LIKE = "'"
+    JINJA_LIKE = "{#"
 
     @property
     def marker(self) -> str:
         """The characters that open a comment in this pattern."""
         return self.value
+
+    @property
+    def terminator(self) -> str:
+        """The characters that close a comment in this pattern, where it has
+        one. Empty for a pattern whose comment ends at the line.
+
+        A citation is written as well as read. One opened with `{#` and never
+        closed swallows the rest of the template, which is a worse outcome
+        than the citation not being read at all.
+        """
+        return "#}" if self is CommentPattern.JINJA_LIKE else ""
 
     # Implements: REQ-d00236-J
     @property
@@ -141,7 +161,6 @@ COMMENT_PATTERN_BY_EXTENSION: dict[str, CommentPattern] = {
             ".go",
             ".h",
             ".hpp",
-            ".j2",
             ".java",
             ".js",
             ".jsx",
@@ -241,6 +260,11 @@ COMMENT_PATTERN_BY_EXTENSION: dict[str, CommentPattern] = {
             ".vbs",
         ),
         CommentPattern.BASIC_LIKE,
+    ),
+    # --- jinja-like: {# --- a template's own comment, whatever it renders to
+    **dict.fromkeys(
+        (".j2",),
+        CommentPattern.JINJA_LIKE,
     ),
 }
 

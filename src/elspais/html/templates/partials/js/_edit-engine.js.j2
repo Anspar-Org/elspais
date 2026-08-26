@@ -136,7 +136,7 @@ async function mutate(endpoint, payload) {
         // keep presenting it -- and re-probe rather than assume the server is
         // gone, since apiFetch also yields null for a server that answered
         // with an error. Only /api/dirty decides what the count is.
-        // Implements: REQ-d00267-A
+        {# Implements: REQ-d00267-A #}
         await refreshDirtyCount();
     }
     return data;
@@ -713,7 +713,7 @@ function showBranchPickerModal(targetRepo) {
     // permissive because closing a tab destroys nothing. Refusing rather
     // than prompting: saving needs the same server whose silence caused the
     // uncertainty.
-    // Implements: REQ-d00267-E
+    {# Implements: REQ-d00267-E #}
     if (editState.mutationCount === null) {
         showErrorModal('Unsaved changes unknown',
             'The number of unsaved changes is unknown - the server could not ' +
@@ -1849,7 +1849,7 @@ function showCheckpointModal() {
     // changes that may be pending, producing a commit that silently omits
     // them. Refuse rather than prompt -- the prompt's only remedy is a save,
     // which needs the server that just went quiet.
-    // Implements: REQ-d00267-E
+    {# Implements: REQ-d00267-E #}
     if (editState.mutationCount === null) {
         showErrorModal('Unsaved changes unknown',
             'The number of unsaved changes is unknown - the server could not ' +
@@ -2186,7 +2186,7 @@ function initShareSlider() {
 // The condition is read from editState, not from the badge's text: the badge
 // now renders '?' when the count is unknown, and parsing that would disarm by
 // accident rather than by decision.
-// Implements: REQ-d00267-C
+{# Implements: REQ-d00267-C #}
 // =====================================================================
 
 // A tab that will not close looks the same whether this handler armed and its
@@ -2194,7 +2194,7 @@ function initShareSlider() {
 // the decision reads, and the decision itself, are what tell those apart, so
 // both are recoverable from the browser's own console rather than inferred
 // from what the page happens to be showing. This reports; it does not decide.
-// Implements: REQ-d00267-D
+{# Implements: REQ-d00267-D #}
 function unloadWarningState() {
     var count = editState.mutationCount;
     var known = typeof count === 'number';

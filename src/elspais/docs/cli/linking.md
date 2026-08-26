@@ -34,12 +34,13 @@ JavaScript.
 
 | Name | Marker | Extensions | Whole file names |
 | --- | --- | --- | --- |
-| `c-like` | `//` | `.c` `.cc` `.cjs` `.cpp` `.cs` `.cxx` `.dart` `.go` `.h` `.hpp` `.j2` `.java` `.js` `.jsx` `.kt` `.kts` `.less` `.mjs` `.php` `.proto` `.rs` `.scala` `.scss` `.swift` `.ts` `.tsx` `.zig` | -- |
+| `c-like` | `//` | `.c` `.cc` `.cjs` `.cpp` `.cs` `.cxx` `.dart` `.go` `.h` `.hpp` `.java` `.js` `.jsx` `.kt` `.kts` `.less` `.mjs` `.php` `.proto` `.rs` `.scala` `.scss` `.swift` `.ts` `.tsx` `.zig` | -- |
 | `shell-like` | `#` | `.bash` `.cmake` `.dockerfile` `.ex` `.exs` `.hcl` `.jl` `.ksh` `.mk` `.nix` `.pl` `.pm` `.ps1` `.py` `.r` `.rb` `.sh` `.tf` `.tfvars` `.toml` `.yaml` `.yml` `.zsh` | `containerfile` `dockerfile` |
 | `function-like` | `--` | `.ada` `.adb` `.ads` `.elm` `.hs` `.lua` `.sql` `.vhd` `.vhdl` | -- |
 | `lisp-like` | `;` | `.clj` `.cljc` `.cljs` `.edn` `.el` `.lisp` `.lsp` `.rkt` `.scm` `.ss` | -- |
 | `math-like` | `%` | `.cls` `.erl` `.hrl` `.sty` `.tex` | -- |
 | `basic-like` | `'` | `.bas` `.frm` `.vb` `.vbs` | -- |
+| `jinja-like` | `{#` | `.j2` | -- |
 
 A whole file name is matched without regard to case: `Dockerfile`,
 `dockerfile` and `DOCKERFILE` are one file type.
