@@ -480,7 +480,7 @@ A. A surface that reports over a set of requirements SHALL accept a scope naming
 
 B. A scoped report SHALL emit as its answer the requirements its scope selects and no others.
 
-C. The requirements a scoped report presents SHALL NOT depend on the format the report is rendered in.
+C. When a value is reported it SHALL be the same in all formats.
 
 D. A scoped report SHALL disclose the scope under which it was produced.
 
@@ -504,7 +504,7 @@ F is what makes a selection survive contact with a project. A selection that exi
 
 G is the second axis, and it is separate from A because the two are separate questions a reader answers independently. Which requirements a report is about and which facts it states about them are decided for different reasons and by different readers -- a compliance pack wants few requirements described fully, a status review wants many described briefly -- so a reader answering one says nothing about the other. What is common to them is everything else this requirement asks: an answer is honoured, disclosed where its absence would otherwise be invisible, and does not vary by the format it is rendered in. REQ-d00282 fixes the vocabulary the second answer is written in, as REQ-d00278 does for the first.
 
-*End* *Audience-Scoped Reporting* | **Hash**: 199562bd
+*End* *Audience-Scoped Reporting* | **Hash**: c9cc3173
 
 ---
 

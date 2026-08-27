@@ -30,7 +30,7 @@
 | REQ-p00081 | Org-Wide Requirement Visibility                  | prd-features.md | 17fa4417 |
 | REQ-p00082 | Federated Authority and Verdict Scoping          | prd-features.md | b511fcfd |
 | REQ-p00083 | Durability of Uncommitted Work                   | prd-core.md     | 5b33b676 |
-| REQ-p00084 | Audience-Scoped Reporting                        | prd-core.md     | 199562bd |
+| REQ-p00084 | Audience-Scoped Reporting                        | prd-core.md     | c9cc3173 |
 
 ### elspais
 
@@ -197,7 +197,7 @@
 | REQ-d00279 | One Authority for Report Scope Membership                     | dev-cli.md              | 2b755b50 |
 | REQ-d00280 | Named Report Declarations                                     | dev-cli.md              | ab0a70bb |
 | REQ-d00281 | Level Vocabulary of a Reported Graph                          | dev-graph-core.md       | 9a35aab8 |
-| REQ-d00282 | Report Value Selection                                        | dev-cli.md              | 01c6bf8a |
+| REQ-d00282 | Report Value Selection                                        | dev-cli.md              | b0d3912d |
 | REQ-d00283 | Test Target Groups                                            | dev-graph-core.md       | bc95d36b |
 | REQ-d00284 | How a Result Names Its Test                                   | dev-graph-core.md       | 7baae0b0 |
 | REQ-d00285 | The Shape of a Finding                                        | dev-cli.md              | b0ffe9ce |

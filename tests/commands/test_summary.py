@@ -433,7 +433,7 @@ class TestMarkdownFormat:
 
         assert "# Coverage Summary" in output
 
-    # Verifies: REQ-d00086-C, REQ-d00282-E+K
+    # Verifies: REQ-d00086-C, REQ-d00282-K, REQ-p00084-C
     def test_REQ_d00086_C_markdown_level_summary_table(self):
         """Markdown states one header per column of the default set, in order.
 
@@ -1574,7 +1574,7 @@ class TestTestedBreakdown:
 
         assert "[1 passed, 1 failed, 1 awaiting a result]" in output
 
-    # Verifies: REQ-d00258-O, REQ-d00282-E
+    # Verifies: REQ-d00258-O, REQ-p00084-C
     def test_csv_states_the_breakdown_inside_the_tested_cell(self):
         """The breakdown qualifies the Tested figure and so rides in its cell
         here exactly as it does in markdown and in text.

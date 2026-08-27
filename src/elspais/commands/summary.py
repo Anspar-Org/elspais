@@ -305,7 +305,7 @@ def compute_summary(graph: FederatedGraph, config: dict, params: dict[str, str])
     ids = None if len(result.ids) == result.population else result.ids
     data = collect_coverage(graph, config=config, node_ids=ids)
     data["scope"] = scope_disclosure(result)
-    # Implements: REQ-d00282-E
+    # Implements: REQ-p00084-C
     # The selection travels in ``params`` for the same reason the scope does: a
     # report answered by a serving process states the values the reader asked
     # for, or a daemon-served report and a locally computed one disagree about
@@ -388,7 +388,7 @@ def _pct(num: int, denom: int) -> float:
     return round(num / denom * 100, 1) if denom > 0 else 0.0
 
 
-# Implements: REQ-d00282-E
+# Implements: REQ-p00084-C
 # Every format renders from one resolved value list carried on the payload, so
 # a selection means the same thing in the artifact a reader checks and in the
 # one they file.
@@ -415,7 +415,7 @@ def _render(data: dict, fmt: str, config: dict | None = None) -> str:
 ABSENT_FIGURE = "-"
 
 
-# Implements: REQ-d00282-E+M
+# Implements: REQ-d00282-M, REQ-p00084-C
 def _cell(level_row: dict, key: str, carry: str = "") -> str:
     """The text one level states for ONE value.
 
@@ -523,7 +523,7 @@ def _tested_breakdown(lv: dict) -> str:
     )
 
 
-# Implements: REQ-d00282-E+K+L
+# Implements: REQ-d00282-K+L, REQ-p00084-C
 def _level_heading(lv: dict, keys: tuple[str, ...]) -> str:
     """The line naming what a group of rows is about, and what else it counts.
 
@@ -549,7 +549,7 @@ def _level_lines(lv: dict, keys: tuple[str, ...], config: dict | None, carry: st
     A group conferring no *Assertion* is owed no assertion coverage, and says so
     once rather than printing a row of zeros (REQ-d00282-M).
     """
-    # Implements: REQ-d00282-E+M+N
+    # Implements: REQ-d00282-M+N, REQ-p00084-C
     # A group conferring no *Assertion* is owed no assertion coverage and says
     # so once. It may still have LINES -- a whole-requirement `Implements:`
     # citation attributes code to a requirement with no assertions of its own
@@ -688,7 +688,7 @@ def _render_text(data: dict, config: dict | None = None) -> str:
     return "\n".join(lines) + "\n"
 
 
-# Implements: REQ-d00282-E+K+L
+# Implements: REQ-d00282-K+L, REQ-p00084-C
 def _tabular_headers(keys: tuple[str, ...], config: dict | None) -> list[str]:
     """The header cells a tabular rendering states, in the stated order.
 
@@ -726,7 +726,7 @@ def _render_markdown(data: dict, config: dict | None = None) -> str:
         " measures; the measures overlap and do not sum.*"
     )
     lines.append("")
-    # Implements: REQ-d00069-N, REQ-d00258-A, REQ-d00258-J, REQ-d00282-E
+    # Implements: REQ-d00069-N, REQ-d00258-A, REQ-d00258-J, REQ-p00084-C
     # One column per stated key, the same set and the same order the CSV
     # states: which values a report states does not depend on the format it is
     # rendered in. The headline is the per-*Assertion* TOTAL; each measure
@@ -795,7 +795,7 @@ def _render_markdown(data: dict, config: dict | None = None) -> str:
     return "\n".join(lines) + "\n"
 
 
-# Implements: REQ-d00282-B+E+K+M
+# Implements: REQ-d00282-B+K+M, REQ-p00084-C
 def _project_level(lv: dict, keys: tuple[str, ...]) -> dict:
     """One level's row, reduced to the values the report states.
 
@@ -871,7 +871,7 @@ def _absent_figures_as_null(lv: dict) -> dict:
     return {k: (None if k in fields else v) for k, v in lv.items()}
 
 
-# Implements: REQ-d00069-L, REQ-d00069-N, REQ-d00258-A, REQ-d00282-A+E+K
+# Implements: REQ-d00069-L, REQ-d00069-N, REQ-d00258-A, REQ-d00282-A+K, REQ-p00084-C
 # One column per stated key, headers and cells built from the same walk over
 # the same list so the two cannot drift apart. The headline is the
 # per-*Assertion* TOTAL; the measure columns are what a reader reads instead of
@@ -880,7 +880,7 @@ def _render_csv(data: dict, config: dict | None = None) -> str:
     buf = io.StringIO()
     writer = csv.writer(buf)
     keys = _stated_values(data)
-    # Implements: REQ-p00084-C+D
+    # Implements: REQ-p00084-B+D
     # A leading comment row per disclosure line, ahead of the header, the same
     # convention the trace CSV uses. One field, so the file stays CSV; the
     # scope a text or markdown rendering states is stated here too.

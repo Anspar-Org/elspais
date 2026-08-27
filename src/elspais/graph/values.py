@@ -384,7 +384,7 @@ def _build_specs() -> dict[str, ValueSpec]:
 VALUE_SPECS: dict[str, ValueSpec] = _build_specs()
 
 
-# Implements: REQ-d00282-E
+# Implements: REQ-p00084-C
 # name: figure_cell
 # use:  the ONE shape a coverage figure is stated in, wherever it is stated.
 # def:  the credit, the assertions it was taken over, and the proportion --
@@ -404,7 +404,7 @@ def figure_cell(covered: float, total: float, *, decimals: int = 0) -> str:
     return f"{fmt_assertion_count(covered)}/{fmt_assertion_count(total)} ({pct:.{decimals}f}%)"
 
 
-# Implements: REQ-d00282-B+E
+# Implements: REQ-d00282-B, REQ-p00084-C
 # name: scalar_value
 # use:  the ONE number a scalar part of a coverage figure states, wherever it
 #       is stated.
@@ -430,7 +430,7 @@ def scalar_value(covered: float, total: float, part: str) -> float:
     raise ValueError(f"{part} is not a part of a coverage figure")
 
 
-# Implements: REQ-d00282-E
+# Implements: REQ-p00084-C
 def scalar_cell(value: float, part: str) -> str:
     """A scalar part as a table renders it.
 
@@ -446,7 +446,7 @@ def scalar_cell(value: float, part: str) -> str:
     return fmt_assertion_count(value)
 
 
-# Implements: REQ-d00254-I, REQ-d00282-E
+# Implements: REQ-d00254-I, REQ-p00084-C
 def flag_cell(value: bool) -> str:
     """A disclosed bit as a table renders it.
 
@@ -457,7 +457,7 @@ def flag_cell(value: bool) -> str:
     return CARRIED_CELL[bool(value)]
 
 
-# Implements: REQ-d00282-B+D+E
+# Implements: REQ-d00282-B+D, REQ-p00084-C
 # name: figure_object
 # use:  the ONE shape a coverage figure takes in a format that has numbers.
 # def:  the credit, the assertions it was counted over and their proportion --
@@ -488,7 +488,7 @@ def figure_object(
     return stated
 
 
-# Implements: REQ-d00282-B+E+K+M
+# Implements: REQ-d00282-B+K+M, REQ-p00084-C
 # name: nest_values
 # use:  the ONE place a report's values become the object a structured format
 #       states them in.
@@ -533,7 +533,7 @@ def nest_values(items: Iterable[tuple[str, Any]]) -> dict[str, Any]:
     return out
 
 
-# Implements: REQ-d00282-B+E+K+M
+# Implements: REQ-d00282-B+K+M, REQ-p00084-C
 # name: structured_row
 # use:  the ONE place a report's row becomes the object a format with numbers
 #       states it as. Every command that emits one builds it here.

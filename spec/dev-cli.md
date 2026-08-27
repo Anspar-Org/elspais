@@ -759,7 +759,7 @@ C. A value taken on one measure SHALL be named for both the coverage dimension i
 
 D. A value a report states SHALL equal the value a report stating every value it offers states for the same row.
 
-E. The values a report states SHALL NOT depend on the format it is rendered in.
+E. <RETIRED> forbade the values a report states from depending on the format it is rendered in. A format may offer values another does not, so what carries across formats is agreement rather than presence: a value that IS reported is the same in all of them, per REQ-p00084-C.
 
 F. A report SHALL NOT be produced under a selection the tool did not honour in full.
 
@@ -801,7 +801,7 @@ N reaches the one figure B cannot. Line coverage is measured in lines and confer
 
 M is the distinction between having nothing to say and saying nothing. Not every value a report offers exists for every row -- a coverage figure has none for a group whose requirements confer none. Where those two look alike a reader reads absence as zero and concludes work is undone that was never owed, which is the same defect REQ-d00258-E keeps out of line coverage by recording whether a measurement was taken rather than letting an absent one read as none.
 
-*End* *Report Value Selection* | **Hash**: 01c6bf8a
+*End* *Report Value Selection* | **Hash**: b0d3912d
 
 ---
 
