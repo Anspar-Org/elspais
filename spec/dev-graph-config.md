@@ -4,8 +4,6 @@
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-p00002
 
-All configuration defaults and validation SHALL be provided by the Pydantic `ElspaisConfig` schema. Legacy `DEFAULT_CONFIG` dict and `ConfigLoader` wrapper class SHALL be removed; all consumer code SHALL access configuration via plain dicts produced by `ElspaisConfig.model_dump()`.
-
 ### Assertions
 
 A. `DEFAULT_CONFIG` dict SHALL be removed from `config/__init__.py`; all default values SHALL be defined as Pydantic field defaults in `config/schema.py`.
@@ -27,8 +25,6 @@ C. All consumer code that references `ConfigLoader` (type annotations, imports, 
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-p00002
 
-The `ElspaisConfig` Pydantic model SHALL be exportable as a JSON Schema file for IDE autocomplete (e.g., Taplo). A CLI subcommand SHALL generate the schema on demand, and a committed schema file SHALL stay in sync with the model.
-
 ### Assertions
 
 A. `elspais config schema` SHALL output the JSON Schema to stdout (or to a file with `--output`), generated from `ElspaisConfig.model_json_schema()`.
@@ -49,8 +45,6 @@ C. The generated JSON Schema SHALL include `$schema` and `title` top-level keys.
 ## REQ-d00209: Schema-Driven Init Template Generation
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-p00002
-
-The `elspais init` command SHALL generate `.elspais.toml` configuration files by walking the `ElspaisConfig` Pydantic model, ensuring generated templates are always in sync with the schema. Hardcoded template strings SHALL be replaced by a schema walker that produces valid TOML from field metadata and defaults. Beyond configuration, initialization gives a new project a working starting point rather than a blank tree.
 
 ### Assertions
 
@@ -86,8 +80,6 @@ The example is intended to do triple duty: user-facing scaffold, canonical test 
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-p00002
 
-The `elspais doctor` command SHALL detect drift between `ElspaisConfig` Pydantic schema fields and `docs/configuration.md`. Undocumented schema fields and stale documentation sections SHALL be reported as health check findings.
-
 ### Assertions
 
 A. `elspais doctor` SHALL include a `docs.config_drift` health check that compares schema top-level sections against documented sections.
@@ -108,8 +100,6 @@ C. The drift check SHALL pass when all schema sections are documented and no sta
 ## REQ-d00211: Config-Driven Viewer UI Values
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-p00002
-
-The values the viewer offers a reader — the levels it groups by, the statuses it filters on, the relationships a reader may create — SHALL come from the project's configuration rather than from the viewer, so that a project sees its own vocabulary and not this one's.
 
 ### Assertions
 
@@ -136,8 +126,6 @@ D. Statuses presented in order SHALL run active first, then provisional, then as
 ## REQ-d00212: Config Schema v3 Models
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-p00002
-
-The `ElspaisConfig` Pydantic schema SHALL be restructured to v3 shape with first-class level definitions, unified scanning configuration, simplified references, and cleaner changelog sub-models. New models SHALL be strict (`extra="forbid"`) and frozen by default.
 
 ### Assertions
 
@@ -189,6 +177,10 @@ W. The patterns declared for a scanning kind SHALL select among the files within
 
 X. A configuration carrying a setting this version does not read SHALL be refused with a message naming each setting to change and what to write instead.
 
+Y. A configuration model SHALL admit only the fields it defines.
+
+Z. A configuration model SHALL be immutable once constructed.
+
 ### Rationale
 
 Most lettered entries inventory the v3/v4 model shapes; G and O–R state the organising invariants those shapes must converge on.
@@ -211,6 +203,7 @@ R is a condition on resolving, never on writing, which is what keeps a reference
 
 ### Changelog
 
+- 2026-08-30 | 1b32ca06 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-24 | 277219e9 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-24 | 22e31e30 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-24 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-66: N retired -- a configuration is refused and named rather than upgraded in place; X states the refusal
@@ -241,14 +234,12 @@ R is a condition on resolving, never on writing, which is what keeps a reference
 - 2026-03-30 | db4ad28c | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 - 2026-03-29 | c75b87f8 | - | Michael Lewis (<michael@anspar.org>) | Add assertion N for config migration v3 to v4
 
-*End* *Config Schema v3 Models* | **Hash**: 277219e9
+*End* *Config Schema v3 Models* | **Hash**: 1b32ca06
 ---
 
 ## REQ-d00251: A Repository's Identifier Grammar
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-p00002
-
-The `[id-patterns.component].style` configuration SHALL use an explicit case-convention vocabulary rather than a small set of "custom pattern with hidden default" modes. The `[id-patterns.assertions]` section SHALL gain a configurable separator that decouples the component-to-*Assertion* boundary from any character used inside component names, enabling kebab-case and snake_case component styles to work cleanly with numeric *Assertion* labels. The grammar these settings describe is one repository's own, and applies to that repository's identifiers alone.
 
 ### Assertions
 

@@ -4,8 +4,6 @@
 
 **Level**: ops | **Status**: Active | **Implements**: REQ-p00060
 
-The MCP server SHALL provide core query tools for graph inspection and requirement lookup.
-
 ### Assertions
 
 A. `get_graph_status()` SHALL return graph staleness state, node counts by kind, and last refresh timestamp.
@@ -42,8 +40,6 @@ Mutations require the caller to supply the version of the state it intends to ch
 
 **Level**: ops | **Status**: Active | **Implements**: REQ-p00060
 
-The MCP server SHALL provide workspace context tools that describe the current repository and project.
-
 ### Assertions
 
 A. `get_workspace_info()` SHALL return repository path, project name, and configuration summary.
@@ -71,8 +67,6 @@ AI agents need context about the workspace they're operating in to provide relev
 ## REQ-o00062: MCP Graph Mutation Tools
 
 **Level**: ops | **Status**: Active | **Implements**: REQ-p00060
-
-The MCP server SHALL provide mutation tools for in-memory graph modifications with full undo support.
 
 ### Assertions
 
@@ -151,8 +145,6 @@ A single daemon serves multiple concurrent writers — MCP agents and the viewer
 
 **Level**: ops | **Status**: Active | **Implements**: REQ-p00060
 
-The MCP server SHALL provide file mutation tools that persist changes to spec files on disk.
-
 ### Assertions
 
 A. `change_reference_type(req_id, target_id, new_type)` SHALL modify Implements/Refines relationships in spec files.
@@ -190,8 +182,6 @@ File mutations persist changes to the authoritative spec files. Git safety branc
 
 **Level**: ops | **Status**: Active | **Implements**: REQ-p00060
 
-The MCP server SHALL provide test coverage analysis tools for identifying test-requirement relationships and coverage gaps.
-
 ### Assertions
 
 A. `get_test_coverage(req_id)` SHALL return TEST nodes that reference the requirement and their TEST_RESULT nodes.
@@ -220,8 +210,6 @@ AI agents performing requirement analysis need to understand test coverage and i
 ## REQ-o00065: Agent-Assisted Link Suggestion
 
 **Level**: ops | **Status**: Active | **Implements**: REQ-p00050
-
-The system SHALL provide an agent-assisted link suggestion engine that analyzes unlinked graph nodes and proposes requirement associations using scoring heuristics.
 
 ### Assertions
 
@@ -254,8 +242,6 @@ Teams need to not just see what's unlinked but act on it efficiently. Combining 
 
 **Level**: ops | **Status**: Active | **Implements**: REQ-p00060
 
-The MCP server SHALL provide a subtree extraction tool for scoped subgraph retrieval.
-
 ### Assertions
 
 A. `get_subtree(root_id, depth, include_kinds, format)` SHALL extract a subgraph rooted at a given node using BFS traversal.
@@ -286,8 +272,6 @@ LLM agents need scoped requirement subsets for sub-agent consumption. Extracting
 ## REQ-o00068: MCP Cursor Protocol
 
 **Level**: ops | **Status**: Active | **Implements**: REQ-p00060
-
-The MCP server SHALL provide a general-purpose cursor protocol for incremental iteration over read query results.
 
 ### Assertions
 
@@ -320,8 +304,6 @@ LLMs benefit from incremental exploration of results, deciding when to stop rath
 
 **Level**: ops | **Status**: Active | **Implements**: REQ-p00060
 
-The MCP server SHALL provide a `minimize_requirement_set` tool that prunes a set of requirement IDs to their most-specific members by removing ancestors already covered by more-specific descendants.
-
 ### Assertions
 
 A. `minimize_requirement_set(req_ids, edge_kinds)` SHALL accept a list of requirement IDs and an optional edge kinds filter defaulting to "implements,refines".
@@ -351,8 +333,6 @@ Agents listing requirements for a ticket often include both specific leaf requir
 
 **Level**: ops | **Status**: Active | **Implements**: REQ-p00060
 
-The MCP server SHALL provide a `scoped_search` tool that restricts keyword search to descendants or ancestors of a scope node.
-
 ### Assertions
 
 A. `scoped_search(query, scope_id, direction, field, regex, include_assertions, limit)` SHALL accept a query string, scope node ID, and direction ("descendants" or "ancestors").
@@ -381,8 +361,6 @@ Agents exploring requirements for a ticket need to search within a relevant subg
 ## REQ-o00071: MCP Discover Requirements Tool
 
 **Level**: ops | **Status**: Active | **Implements**: REQ-p00060
-
-The MCP server SHALL provide a `discover_requirements` tool that chains scoped search with ancestor pruning to return only the most-specific matches within a subgraph.
 
 ### Assertions
 
@@ -417,8 +395,6 @@ A mandatory scope demands the answer to the question being asked: a caller who d
 
 **Level**: ops | **Status**: Draft | **Implements**: REQ-p00060, REQ-p00081, REQ-p00082
 
-The MCP server SHALL serve the caller's full workspace context — including repositories outside the primary — with provenance on every cross-repository result and authority limits enforced at the tool surface.
-
 ### Assertions
 
 A. The MCP server SHALL start and serve read tools when invoked outside any repository, provided the invocation path resolves to a declared workspace.
@@ -445,8 +421,6 @@ A tool that requires a judgement call before use loses to the tool that needs no
 ## REQ-o00074: Background Daemon Lifetime
 
 **Level**: ops | **Status**: Active | **Implements**: REQ-o00075, REQ-p00083
-
-A background daemon's lifetime SHALL be bounded by the clients using it, and it SHALL preserve and account for the work it holds when it stops.
 
 ### Assertions
 
@@ -532,8 +506,6 @@ P names an audience rather than a surface. A daemon's client handles, its pendin
 
 **Level**: ops | **Status**: Active | **Implements**: REQ-p00050
 
-The tool SHALL be able to serve a working tree's graph from a process shared by the clients working in that tree.
-
 ### Assertions
 
 A. The tool SHALL be able to serve a working tree's graph from a process that outlives the individual commands and sessions that use it.
@@ -577,8 +549,6 @@ REQ-p00005-F obliges associate paths to resolve from the canonical, non-worktree
 ## REQ-o00076: Reaching the Serving Process
 
 **Level**: ops | **Status**: Active | **Implements**: REQ-o00075
-
-The tool SHALL make the process serving a working tree reachable by the clients working in that tree, on terms those clients can rely on.
 
 ### Assertions
 
@@ -653,8 +623,6 @@ M does not cover a shell holding another tree's address. That ends when the addr
 ## REQ-o00077: Serving From the Installed Program
 
 **Level**: ops | **Status**: Active | **Implements**: REQ-o00075
-
-Where the tool is installed such that its program can change while a process is running, the tool SHALL keep what a serving process answers from in step with the program now installed, for as long as it serves.
 
 ### Assertions
 

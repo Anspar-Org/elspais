@@ -286,15 +286,13 @@ C. Any `Implements:` reference to a N/A *Assertion* SHALL produce an error.
 
 **Level**: prd | **Status**: Active | **Implements**: REQ-p00001
 
-The elspais system SHALL use a unified graph-based architecture where TraceGraph is the single source of truth for all requirement data, hierarchy, and metrics.
-
 ### Assertions
 
-A. The system SHALL use TraceGraph as the ONE and ONLY data structure for representing requirement hierarchies and relationships.
+A. The graph SHALL be the single source of truth for requirement data, hierarchy and metrics.
 
 B. ALL outputs (HTML, Markdown, CSV, JSON, MCP resources) SHALL consume TraceGraph directly without creating intermediate data structures.
 
-C. The system SHALL NOT create parallel data structures that duplicate information already in the graph.
+C. <RETIRED> forbade a second structure duplicating what the graph holds. The graph is the single source of truth for requirement data, hierarchy and metrics, per REQ-p00050-A; nothing permits a second one.
 
 D. The system SHALL NOT have multiple code paths that independently compute hierarchy, coverage, or relationships.
 
@@ -313,20 +311,19 @@ An identifier that denotes two nodes makes the graph two sources of truth wearin
 
 ### Changelog
 
+- 2026-08-30 | 58b6080b | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-10 | 3a0fb899 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-10 | 46ac5f6a | - | Michael Lewis (<michael@anspar.org>) | Oblige an identifier to denote one node
 - 2026-07-31 | 46ac5f6a | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 4a1e5d0b | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 4a1e5d0b | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Unified Graph Architecture* | **Hash**: 3a0fb899
+*End* *Unified Graph Architecture* | **Hash**: 58b6080b
 ---
 
 ## REQ-p00060: MCP Server for AI-Driven Requirements Management
 
 **Level**: prd | **Status**: Active | **Implements**: REQ-p00050
-
-The elspais system SHALL provide an MCP server that enables AI agents to query, navigate, and mutate requirements through the unified TraceGraph.
 
 ### Assertions
 

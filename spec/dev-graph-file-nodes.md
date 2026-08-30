@@ -4,8 +4,6 @@
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-p00050
 
-The graph data model SHALL support FILE nodes and file-aware edge kinds for representing source file structure in the *Traceability* graph.
-
 ### Assertions
 
 A. `NodeKind` enum SHALL include a `FILE` value with string representation `"file"`.
@@ -36,8 +34,6 @@ FILE nodes are the foundation for representing source files as first-class graph
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-p00050
 
-GraphNode SHALL use edge-only relationships (via `link()`) and support filtered traversal by edge kind, eliminating the edge-less `add_child()` mechanism.
-
 ### Assertions
 
 A. All parent-child relationships in GraphNode SHALL be established via `link()` with a typed `EdgeKind`.
@@ -67,8 +63,6 @@ Eliminating `add_child()` ensures every relationship in the graph has a typed ed
 ## REQ-d00128: FILE Node Creation in Build Pipeline
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-p00050
-
-The build pipeline SHALL create FILE nodes for every scanned file and wire CONTAINS edges from FILE to top-level content nodes, with RemainderParser mandatory for text-based file types.
 
 ### Assertions
 
@@ -116,8 +110,6 @@ FILE nodes make source files first-class graph participants. Creating them in fa
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-p00050
 
-The `SourceLocation` class and `GraphNode.source` field SHALL be removed. All consumers SHALL migrate to use `file_node()` for file paths and `get_field("parse_line")` / `get_field("parse_end_line")` for line numbers.
-
 ### Assertions
 
 A. <RETIRED> stated that a class removed by a completed migration does not exist. What a content node stores is REQ-d00129-C, and how a consumer reaches a path, line and repository is REQ-d00129-D through REQ-d00129-F.
@@ -152,8 +144,6 @@ SourceLocation duplicates information now available through the graph structure 
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-p00050
 
-`TraceGraph.iter_roots()` SHALL accept an optional `NodeKind` filter, and `TraceGraph` SHALL provide `iter_by_kind()` for general kind-based index queries.
-
 ### Assertions
 
 A. `iter_roots()` with no argument SHALL return the same nodes as current behavior (REQ and JOURNEY roots), excluding FILE nodes.
@@ -185,8 +175,6 @@ Parameterized roots enable view-specific entry points into the graph: domain con
 ## REQ-d00131: Render Protocol for Graph Nodes
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-p00050
-
-Each domain NodeKind SHALL have a render function that produces its text representation. Walking a FILE node's CONTAINS children in render_order and concatenating their rendered output SHALL produce the file's content.
 
 ### Assertions
 
@@ -290,8 +278,6 @@ E divides at the outermost structure first and only then within a field, so that
 ## REQ-d00132: Render-Based Save Operation
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-p00050
-
-`save_mutations()` SHALL write dirty FILE nodes to disk by rendering their CONTAINS children. `persistence.py` is replaced entirely by render-based serialization.
 
 ### Assertions
 

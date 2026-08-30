@@ -4,8 +4,6 @@
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-o00051
 
-The `core/annotators.py` module SHALL provide standalone annotator functions for enriching graph nodes.
-
 ### Assertions
 
 A. Graph nodes SHALL carry git state annotations (is_uncommitted, is_moved, is_new) in node.metrics.
@@ -34,8 +32,6 @@ Per-node annotators enable fine-grained control over which annotations are appli
 ## REQ-d00051: Graph Aggregate Functions
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-o00051, REQ-p00050
-
-The `core/annotators.py` module SHALL provide aggregate functions that compute statistics from annotated graphs.
 
 ### Assertions
 
@@ -68,8 +64,6 @@ Aggregate functions provide reusable statistics computation that any output form
 ## REQ-d00052: Output Generators Consume Graph Directly
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-p00050
-
-All output generators SHALL consume TraceGraph directly without creating intermediate data structures.
 
 ### Assertions
 
@@ -106,8 +100,6 @@ Direct graph consumption eliminates data structure conversion overhead and ensur
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-o00051
 
-Output generators SHALL follow a standard annotation pipeline pattern.
-
 ### Assertions
 
 A. The pipeline SHALL be: parse -> build graph -> annotate nodes -> generate output.
@@ -128,8 +120,6 @@ A standard pipeline ensures consistent annotation across all output formats and 
 ## REQ-d00055: Node Metrics as Extension Point
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-o00051
-
-TraceNode.metrics SHALL be the single extension point for adding data to nodes.
 
 ### Assertions
 
@@ -161,8 +151,6 @@ Using metrics dict as the extension point enables adding new annotations without
 ## REQ-d00069: Indirect Coverage Source
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-o00051
-
-The coverage annotation system SHALL support an INDIRECT coverage source for whole-requirement tests that do not target specific assertions.
 
 ### Assertions
 
@@ -268,8 +256,6 @@ Retiring this cost no working behaviour. A alone was built -- a `TreeRow.coverag
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-o00050, REQ-p00002
 
-The graph builder SHALL distinguish between root nodes and orphan nodes using a unified classification based on meaningful children.
-
 ### Assertions
 
 A. The graph builder SHALL classify a parentless node as a root only when it has at least one child whose kind is not a satellite kind.
@@ -297,7 +283,7 @@ Currently, all parentless REQUIREMENTs and all USER_JOURNEYs are unconditionally
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-o00065
 
-The `graph/link_suggest.py` module SHALL implement the link suggestion scoring pipeline using existing graph analysis building blocks.
+The link suggestion engine's scoring pipeline is built from the graph's existing analysis capabilities rather than separate mechanisms.
 
 ### Assertions
 
@@ -565,8 +551,6 @@ Case and padding are admitted rather than tolerated. A configuration that accept
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-o00051
 
-Test verification evidence SHALL be attributed per test as it is scanned and ingested from configured test targets. Line coverage of implementation code is measured alongside it as its own dimension, answering a different question from *Traceability* and never standing in for it.
-
 ### Assertions
 
 A. Where no result record binds to a test, that test SHALL contribute no verdict, and the assertions it declares SHALL be reported as awaiting a result. No verdict SHALL be inferred for a test from the results of other tests -- neither from the file it is written in nor from the application it belongs to.
@@ -714,8 +698,6 @@ The set states no implementation or test figure because those answer the other q
 ## REQ-d00258: Reporting Surface Consistency
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-d00069
-
-Reporting surfaces (trace, summary, MCP project summary, HTML viewer) SHALL present coverage using a single consistent vocabulary, aggregation, and tier-derived color scheme so that identical underlying data yields identical answers across surfaces.
 
 ### Assertions
 

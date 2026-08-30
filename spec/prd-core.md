@@ -799,8 +799,6 @@ D. `run_term_checks()` SHALL call all six term checks (`duplicates`, `undefined`
 
 **Level**: dev | **Status**: Draft | **Implements**: REQ-p00002, REQ-p00081
 
-A marked term whose definition varies by context SHALL resolve through an explicit, position-independent binding declaration, so that requirement text stays terse at the point of use while its meaning stays deterministic.
-
 ### Assertions
 
 A. A file or an individual requirement SHALL be able to declare a binding that maps a base term to a specific bound term for its own scope.
@@ -826,8 +824,6 @@ Cross-cutting policy text wants to say `*system*` once and mean `portal system` 
 ## REQ-d00264: Usage-Driven Glossary Selection
 
 **Level**: dev | **Status**: Draft | **Implements**: REQ-p00002, REQ-p00081
-
-A generated glossary SHALL be selected by usage: definitions may live anywhere in the federated view, and a generation context emits exactly the terms referenced within it.
 
 ### Assertions
 

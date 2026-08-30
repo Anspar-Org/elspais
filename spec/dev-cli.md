@@ -4,8 +4,6 @@
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-p00002, REQ-p00005-E
 
-Diagnostic commands (`doctor`, `health`) SHALL exit non-zero when they detect configuration or validation failures, ensuring CI pipelines and callers can rely on exit codes to gate merges.
-
 ### Assertions
 
 A. Diagnostic commands (`doctor`, `health`) SHALL exit non-zero when any check produces a warning-level or error-level finding. The `--lenient` flag SHALL relax this so that only error-level findings cause non-zero exit.
@@ -81,7 +79,7 @@ Expansion belongs to the identifier grammar rather than to any one parser: a com
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-p00001-A
 
-The system SHALL provide a unified, configurable reference pattern system used by all parsers (CodeParser, TestParser, JUnitXMLParser, PytestJSONParser) to locate requirement references in source files.
+A single, configurable reference pattern is used to locate requirement references across every kind of source file.
 
 ### Assertions
 
@@ -127,8 +125,6 @@ Different projects use different ID conventions, comment styles, and directory s
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-p00003
 
-The `trace` command SHALL generate *Traceability* output from the requirement graph, supporting multiple output formats with configurable column presets and detail levels.
-
 ### Assertions
 
 A. The command SHALL support structured JSON graph output via `--graph-json`, including git change annotations when available.
@@ -162,8 +158,6 @@ A JSON graph output mode enables programmatic consumption of the full *Traceabil
 ## REQ-d00085: Unified Report Composition
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-p00002, REQ-p00003
-
-The CLI SHALL support composable report output by accepting multiple section names as positional arguments. Sections are rendered in the order specified and concatenated into a single output stream.
 
 ### Assertions
 
@@ -347,8 +341,6 @@ F exists because documentation is read by programs as well as people, and displa
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-p00003
 
-The `coverage` section SHALL produce a coverage report showing implemented, tested, and passing status at the requirement and *Assertion* level.
-
 ### Assertions
 
 A. The report SHALL group requirements by level as REQ-d00281 determines those groups, and show counts and percentages of requirements with code references, test references, and passing tests.
@@ -383,7 +375,7 @@ Coverage data is already computed during graph construction but is only surfaced
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-o00065
 
-The `commands/link_suggest.py` module SHALL provide the `elspais link suggest` CLI command.
+`elspais link suggest` is a CLI command.
 
 ### Assertions
 
@@ -414,8 +406,6 @@ CLI exposure enables both interactive use and CI pipeline integration. JSON outp
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-p00003
 
-The `analysis` module SHALL provide read-only analytical functions that operate on a `TraceGraph` to rank requirements by foundational importance. The module SHALL NOT modify the graph or create parallel data structures.
-
 ### Assertions
 
 A. The module SHALL compute PageRank-style centrality scores for requirement nodes by iterating on reversed edges (children distribute score to parents) with a configurable damping factor, converging within a tolerance threshold.
@@ -432,24 +422,25 @@ F. The module SHALL filter nodes by `NodeKind`, defaulting to REQUIREMENT and *A
 
 G. The module SHALL rank actionable leaf nodes by summing the composite scores of their ancestors, surfacing the most impactful uncovered work items.
 
+H. Ranking SHALL read the graph without modifying it.
+
 ### Rationale
 
 In a large requirements DAG, naive metrics like descendant count always favor the root node. PageRank centrality naturally handles DAGs and rewards cross-cutting dependencies. Combined with fan-in (how many independent areas depend on a node) and coverage gaps, this enables evidence-based prioritization of foundational work.
 
 ### Changelog
 
+- 2026-08-30 | 87bc52f2 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | b153d5f6 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 86bb619b | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | 86bb619b | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *Graph Analysis Engine* | **Hash**: b153d5f6
+*End* *Graph Analysis Engine* | **Hash**: 87bc52f2
 ---
 
 ## REQ-d00125: Analysis CLI Command
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-p00003
-
-The `elspais analysis` command SHALL invoke the graph analysis engine and render ranked results in table or JSON format.
 
 ### Assertions
 
@@ -610,8 +601,6 @@ running tests.
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-p00002
 
-The `example` command SHALL display requirement format reference material to help authors discover and follow the correct structure, without requiring a spec directory or a built graph.
-
 ### Assertions
 
 A. Invoking `elspais example` with no subcommand SHALL print a quick-reference summary covering the basic requirement structure and the available `example` subcommands.
@@ -626,16 +615,19 @@ E. `elspais example ids` SHALL print the ID pattern configuration for the curren
 
 F. `elspais example --full` SHALL display the full contents of the project's `requirements-spec.md` (or `requirements-format.md`) file when found, and SHALL return a non-zero exit code with the searched paths listed when neither file exists.
 
+G. The `example` command SHALL run without a spec directory or a built graph.
+
 ### Rationale
 
 Authors writing their first requirement, or reviewers checking format conventions, need a fast, offline reference without opening the full *Specification*. `example` fills this role independently of `elspais init` (which scaffolds a new project's configuration) by surfacing format templates and rules on demand.
 
 ### Changelog
 
+- 2026-08-30 | 99ce6269 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | c3b67490 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-03 | 8e05d02e | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms, update hash, add missing changelog section
 
-*End* *Requirement Format Reference Command* | **Hash**: c3b67490
+*End* *Requirement Format Reference Command* | **Hash**: 99ce6269
 
 ## REQ-d00266: Mechanical Style Checks
 

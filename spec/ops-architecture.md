@@ -4,8 +4,6 @@
 
 **Level**: ops | **Status**: Active | **Implements**: REQ-p00050
 
-TraceGraphBuilder SHALL be the single entry point for constructing requirement graphs from parsed data.
-
 ### Assertions
 
 A. The system SHALL use TraceGraphBuilder to construct all TraceGraph instances.
@@ -34,8 +32,6 @@ Centralizing graph construction ensures consistent hierarchy building, cycle det
 ## REQ-o00051: Composable Annotation Design
 
 **Level**: ops | **Status**: Active | **Implements**: REQ-p00050
-
-The system SHALL use a composable annotation pattern where the graph provides iteration and separate annotator functions enrich nodes.
 
 ### Assertions
 
@@ -72,8 +68,6 @@ Separating iteration from annotation enables:
 ## REQ-o00072: Domain Deserialization Layer
 
 **Level**: ops | **Status**: Active | **Implements**: REQ-p00050
-
-Domain deserializers SHALL convert a source domain (file, stdin, or CLI input) into a stream of parsed content that carries accurate provenance and line location, through one uniform contract regardless of source domain.
 
 ### Assertions
 
