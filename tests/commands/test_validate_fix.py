@@ -63,7 +63,7 @@ def git_repo_with_issues(tmp_path):
     config_file = tmp_path / ".elspais.toml"
     config_file.write_text(
         """
-version = 3
+version = 5
 
 [project]
 name = "test-project"
@@ -138,6 +138,7 @@ class TestValidateFixDryRun:
     Validates REQ-p00002-C: verify content hashes match requirement body text.
     """
 
+    # Verifies: REQ-p00002-C
     def test_REQ_p00002_C_dry_run_shows_fixable_issues(self, git_repo_with_issues, capsys):
         """--dry-run shows what would be fixed without modifying files."""
         import argparse
@@ -180,6 +181,7 @@ class TestValidateFix:
     Validates REQ-p00002-C: verify content hashes match requirement body text.
     """
 
+    # Verifies: REQ-p00002-C
     def test_REQ_p00002_C_fix_updates_stale_hashes(self, git_repo_with_issues, capsys):
         """Validates REQ-p00002-C: fix updates stale hashes in spec files."""
         import argparse
@@ -217,9 +219,10 @@ class TestAddStatusToFile:
     Validates REQ-p00002-A: validate requirement format against configurable patterns.
     """
 
+    # Verifies: REQ-p00002-A
     def test_REQ_p00002_A_adds_status_when_missing(self, tmp_path):
         """Add Status field to requirement that's missing it."""
-        from elspais.mcp.file_mutations import add_status_to_file
+        from elspais.utilities.spec_writer import add_status_to_file
 
         spec_file = tmp_path / "test.md"
         spec_file.write_text(
@@ -247,9 +250,10 @@ A. The system SHALL do something.
         content = spec_file.read_text()
         assert "**Status**: Active" in content
 
+    # Verifies: REQ-p00002-A
     def test_REQ_p00002_A_returns_error_when_status_exists(self, tmp_path):
         """Return error string when Status already exists."""
-        from elspais.mcp.file_mutations import add_status_to_file
+        from elspais.utilities.spec_writer import add_status_to_file
 
         spec_file = tmp_path / "test.md"
         spec_file.write_text(

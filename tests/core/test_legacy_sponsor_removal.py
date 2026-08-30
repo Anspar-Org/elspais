@@ -10,6 +10,7 @@ import elspais.associates as associates_mod
 class TestLegacySymbolsRemoved:
     """Verify that legacy YAML-based sponsor/associate symbols are no longer present."""
 
+    # Verifies: REQ-p00005
     @pytest.mark.parametrize(
         "symbol",
         [
@@ -37,6 +38,7 @@ class TestLegacySymbolsRemoved:
 class TestBuildGraphLegacyParamRemoved:
     """Verify that build_graph no longer accepts the scan_sponsors parameter."""
 
+    # Verifies: REQ-p00005
     def test_REQ_p00005_build_graph_rejects_scan_sponsors(self):
         from elspais.graph.factory import build_graph
 
@@ -47,16 +49,19 @@ class TestBuildGraphLegacyParamRemoved:
 class TestKeptFunctionalityIntact:
     """Verify that the new associate system remains importable and functional."""
 
+    # Verifies: REQ-p00005-C
     def test_REQ_p00005_C_associate_dataclass_importable(self):
         from elspais.associates import Associate
 
         assert Associate is not None
 
+    # Verifies: REQ-p00005-D
     def test_REQ_p00005_D_discover_associate_from_path_importable(self):
         from elspais.associates import discover_associate_from_path
 
         assert callable(discover_associate_from_path)
 
+    # Verifies: REQ-p00005-F
     def test_REQ_p00005_F_get_associate_spec_directories_importable(self):
         from elspais.associates import get_associate_spec_directories
 

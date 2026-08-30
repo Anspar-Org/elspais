@@ -109,6 +109,7 @@ class TestCollectScopeIds:
     Validates REQ-o00070-A, REQ-o00070-D, REQ-d00078-A, REQ-d00078-B:
     """
 
+    # Verifies: REQ-d00078-A
     def test_REQ_d00078_A_descendants_via_iter_children(self, scoped_graph):
         """REQ-d00078-A: BFS via iter_children() collects all descendants."""
         from elspais.mcp.server import _collect_scope_ids
@@ -128,6 +129,7 @@ class TestCollectScopeIds:
         assert "PRD-root" not in result
         assert "DEV-pipeline" not in result
 
+    # Verifies: REQ-d00078-A
     def test_REQ_d00078_A_ancestors_via_iter_parents(self, scoped_graph):
         """REQ-d00078-A: Walk via iter_parents() collects all ancestors."""
         from elspais.mcp.server import _collect_scope_ids
@@ -143,6 +145,7 @@ class TestCollectScopeIds:
         assert "OPS-data" not in result
         assert "DEV-pipeline" not in result
 
+    # Verifies: REQ-d00078-B
     def test_REQ_d00078_B_scope_id_included(self, scoped_graph):
         """REQ-d00078-B: The scope_id itself is always included in the result set."""
         from elspais.mcp.server import _collect_scope_ids
@@ -155,6 +158,7 @@ class TestCollectScopeIds:
         assert ancestors is not None
         assert "OPS-auth" in ancestors
 
+    # Verifies: REQ-d00078-B
     def test_REQ_d00078_B_dag_dedup(self, scoped_graph):
         """REQ-d00078-B: Uses visited set so nodes are not duplicated in DAG."""
         from elspais.mcp.server import _collect_scope_ids
@@ -165,6 +169,7 @@ class TestCollectScopeIds:
         # Each ID appears exactly once (it's a set)
         assert isinstance(result, set)
 
+    # Verifies: REQ-o00070-D
     def test_REQ_o00070_D_scope_id_not_found_returns_none(self, scoped_graph):
         """REQ-o00070-D: Returns None when scope_id does not exist in graph."""
         from elspais.mcp.server import _collect_scope_ids
@@ -173,6 +178,7 @@ class TestCollectScopeIds:
 
         assert result is None
 
+    # Verifies: REQ-d00078-A
     def test_REQ_d00078_A_leaf_node_descendants_empty(self, scoped_graph):
         """REQ-d00078-A: Leaf node with no children returns only itself for descendants."""
         from elspais.mcp.server import _collect_scope_ids
@@ -182,6 +188,7 @@ class TestCollectScopeIds:
         assert result is not None
         assert result == {"DEV-login"}
 
+    # Verifies: REQ-d00078-A
     def test_REQ_d00078_A_root_node_ancestors_empty(self, scoped_graph):
         """REQ-d00078-A: Root node with no parents returns only itself for ancestors."""
         from elspais.mcp.server import _collect_scope_ids
@@ -204,6 +211,7 @@ class TestScopedSearch:
     Validates REQ-d00078-C, REQ-d00078-D, REQ-d00078-E:
     """
 
+    # Verifies: REQ-o00070-B
     def test_REQ_o00070_B_descendants_excludes_siblings(self, scoped_graph):
         """REQ-o00070-B: Descendants-only search excludes sibling and ancestor matches."""
         from elspais.mcp.server import _scoped_search
@@ -219,6 +227,7 @@ class TestScopedSearch:
         # PRD-root is ancestor, must be excluded
         assert "PRD-root" not in result_ids
 
+    # Verifies: REQ-o00070-B
     def test_REQ_o00070_B_descendants_excludes_ancestor_matches(self, scoped_graph):
         """REQ-o00070-B: Descendants search from OPS-auth does not include PRD-root."""
         from elspais.mcp.server import _scoped_search
@@ -231,6 +240,7 @@ class TestScopedSearch:
         assert "PRD-root" not in result_ids
         assert len(result["results"]) == 0
 
+    # Verifies: REQ-o00070-B
     def test_REQ_o00070_B_ancestors_excludes_descendant_siblings(self, scoped_graph):
         """REQ-o00070-B: Ancestors-only search excludes descendant and sibling matches."""
         from elspais.mcp.server import _scoped_search
@@ -246,6 +256,7 @@ class TestScopedSearch:
         # DEV-pipeline is in another branch, must be excluded
         assert "DEV-pipeline" not in result_ids
 
+    # Verifies: REQ-o00070-A
     def test_REQ_o00070_A_scope_id_included_when_matching(self, scoped_graph):
         """REQ-o00070-A: The scope_id itself is included in results when it matches the query."""
         from elspais.mcp.server import _scoped_search
@@ -257,6 +268,7 @@ class TestScopedSearch:
         result_ids = {r["id"] for r in result["results"]}
         assert "OPS-auth" in result_ids
 
+    # Verifies: REQ-o00070-D
     def test_REQ_o00070_D_scope_id_not_found_returns_error(self, scoped_graph):
         """REQ-o00070-D: Returns error dict when scope_id does not exist."""
         from elspais.mcp.server import _scoped_search
@@ -266,6 +278,7 @@ class TestScopedSearch:
         assert "error" in result
         assert "not found" in result["error"]
 
+    # Verifies: REQ-d00078-C
     def test_REQ_d00078_C_empty_scope_returns_empty_results(self, scoped_graph):
         """REQ-d00078-C: Empty scope set returns empty results (scope node exists but
         has no children/parents in that direction)."""
@@ -278,6 +291,7 @@ class TestScopedSearch:
         assert "error" not in result
         assert result["results"] == []
 
+    # Verifies: REQ-d00078-D
     def test_REQ_d00078_D_assertion_matching_adds_matched_assertions(self, scoped_graph):
         """REQ-d00078-D: When include_assertions=True and an assertion matches,
         the parent requirement gets matched_assertions field."""
@@ -301,6 +315,7 @@ class TestScopedSearch:
         assert len(entry["matched_assertions"]) == 1
         assert entry["matched_assertions"][0]["id"] == "OPS-auth-A"
 
+    # Verifies: REQ-d00078-D
     def test_REQ_d00078_D_assertion_matching_multiple(self, scoped_graph):
         """REQ-d00078-D: Multiple matching assertions are all returned."""
         from elspais.mcp.server import _scoped_search
@@ -322,6 +337,7 @@ class TestScopedSearch:
         assertion_ids = {a["id"] for a in entry["matched_assertions"]}
         assert assertion_ids == {"OPS-auth-A", "OPS-auth-B"}
 
+    # Verifies: REQ-d00078-D
     def test_REQ_d00078_D_no_matched_assertions_field_when_none_match(self, scoped_graph):
         """REQ-d00078-D: No matched_assertions field when assertions don't match."""
         from elspais.mcp.server import _scoped_search
@@ -340,6 +356,7 @@ class TestScopedSearch:
         assert len(login_results) == 1
         assert "matched_assertions" not in login_results[0]
 
+    # Verifies: REQ-o00070-E
     def test_REQ_o00070_E_field_parameter_title(self, scoped_graph):
         """REQ-o00070-E: field='title' restricts search to title only."""
         from elspais.mcp.server import _scoped_search
@@ -354,6 +371,7 @@ class TestScopedSearch:
         # Should NOT match because "OPS-auth" is in the ID, not the title
         assert "OPS-auth" not in result_ids
 
+    # Verifies: REQ-o00070-E
     def test_REQ_o00070_E_field_parameter_id(self, scoped_graph):
         """REQ-o00070-E: field='id' restricts search to ID only."""
         from elspais.mcp.server import _scoped_search
@@ -368,6 +386,7 @@ class TestScopedSearch:
         # Should NOT match because "Authentication" is in the title, not the ID
         assert "OPS-auth" not in result_ids
 
+    # Verifies: REQ-o00070-E
     def test_REQ_o00070_E_regex_parameter(self, scoped_graph):
         """REQ-o00070-E: regex=True uses regex matching."""
         from elspais.mcp.server import _scoped_search
@@ -387,6 +406,7 @@ class TestScopedSearch:
         assert "OPS-data" not in result_ids
         assert "PRD-root" not in result_ids
 
+    # Verifies: REQ-o00070-E
     def test_REQ_o00070_E_regex_with_field(self, scoped_graph):
         """REQ-o00070-E: regex + field parameters work together."""
         from elspais.mcp.server import _scoped_search
@@ -405,6 +425,7 @@ class TestScopedSearch:
         result_ids = {r["id"] for r in result["results"]}
         assert result_ids == {"OPS-auth"}
 
+    # Verifies: REQ-d00078-E
     def test_REQ_d00078_E_limit_respected(self, scoped_graph):
         """REQ-d00078-E: The limit parameter caps the number of results returned."""
         from elspais.mcp.server import _scoped_search
@@ -425,6 +446,7 @@ class TestScopedSearch:
         assert "error" not in result_all
         assert len(result_all["results"]) >= 2  # OPS-auth and OPS-data at minimum
 
+    # Verifies: REQ-d00078-E
     def test_REQ_d00078_E_result_includes_metadata(self, scoped_graph):
         """REQ-d00078-E: Results dict includes scope_id and direction metadata."""
         from elspais.mcp.server import _scoped_search
@@ -435,6 +457,7 @@ class TestScopedSearch:
         assert result["scope_id"] == "OPS-auth"
         assert result["direction"] == "descendants"
 
+    # Verifies: REQ-d00078-C
     def test_REQ_d00078_C_requirement_summary_format(self, scoped_graph):
         """REQ-d00078-C: Results contain requirement summaries (id, title, level, status)."""
         from elspais.mcp.server import _scoped_search
@@ -449,6 +472,7 @@ class TestScopedSearch:
         assert entry["level"] == "DEV"
         assert entry["status"] == "Active"
 
+    # Verifies: REQ-o00070-A
     def test_REQ_o00070_A_descendants_full_subtree(self, scoped_graph):
         """REQ-o00070-A: Searching from PRD-root with broad query finds all descendants."""
         from elspais.mcp.server import _scoped_search
@@ -482,6 +506,7 @@ class TestScopedSearchMCPTool:
     Validates REQ-d00078-F:
     """
 
+    # Verifies: REQ-d00078-F
     def test_REQ_d00078_F_tool_is_registered(self, scoped_graph):
         """REQ-d00078-F: scoped_search is registered as an MCP tool."""
         pytest.importorskip("mcp")
@@ -492,6 +517,7 @@ class TestScopedSearchMCPTool:
         tool_names = [t.name for t in server._tool_manager._tools.values()]
         assert "scoped_search" in tool_names
 
+    # Verifies: REQ-d00078-F
     def test_REQ_d00078_F_wrapper_delegates_to_helper(self, scoped_graph):
         """REQ-d00078-F: MCP wrapper delegates to _scoped_search helper."""
         pytest.importorskip("mcp")
@@ -519,6 +545,7 @@ class TestScopedSearchMCPTool:
             assert call_args[0][1] == "test query"
             assert call_args[0][2] == "OPS-auth"
 
+    # Verifies: REQ-d00078-F
     def test_REQ_d00078_F_wrapper_passes_all_parameters(self, scoped_graph):
         """REQ-d00078-F: MCP wrapper passes all parameters through to helper."""
         pytest.importorskip("mcp")
@@ -567,6 +594,7 @@ class TestScopedSearchMultiTerm:
       Phase 2 multi-term scoring integration for scoped search.
     """
 
+    # Verifies: REQ-d00061-F
     def test_REQ_d00061_F_multi_term_and_scoped(self, scoped_graph):
         """REQ-d00061-F: Multi-term query 'Login Endpoint' matches DEV-login
         because both terms appear in its title."""
@@ -583,6 +611,7 @@ class TestScopedSearchMultiTerm:
         result_ids = {r["id"] for r in result["results"]}
         assert "DEV-login" in result_ids
 
+    # Verifies: REQ-d00061-F
     def test_REQ_d00061_F_multi_term_no_match(self, scoped_graph):
         """REQ-d00061-F: Multi-term AND query where one term doesn't match any
         field returns no results (AND semantics require all terms to match)."""
@@ -598,6 +627,7 @@ class TestScopedSearchMultiTerm:
         assert "error" not in result
         assert len(result["results"]) == 0
 
+    # Verifies: REQ-d00061-M
     def test_REQ_d00061_M_score_included_in_results(self, scoped_graph):
         """REQ-d00061-M: When a multi-term query matches, results include a 'score'
         key with a positive numeric value."""
@@ -618,6 +648,7 @@ class TestScopedSearchMultiTerm:
         assert isinstance(entry["score"], (int, float))
         assert entry["score"] > 0
 
+    # Verifies: REQ-d00061-L
     def test_REQ_d00061_L_results_sorted_by_score(self, scoped_graph):
         """REQ-d00061-L: Results come sorted by score descending. A node matching
         the query term in its ID scores higher (_WEIGHT_ID=100) than a node
@@ -704,6 +735,7 @@ class TestScopedSearchMultiTerm:
         # All scores must be positive
         assert all(s > 0 for s in scores)
 
+    # Verifies: REQ-d00061-L
     def test_REQ_d00061_L_regex_path_unchanged(self, scoped_graph):
         """REQ-d00061-L: regex=True still works without score field (backward compat).
         Regex search path is unchanged and returns results without scoring."""
@@ -722,6 +754,7 @@ class TestScopedSearchMultiTerm:
         assert "DEV-login" in result_ids
         assert "DEV-token" in result_ids
 
+    # Verifies: REQ-d00061-M
     def test_REQ_d00061_M_score_not_in_regex_results(self, scoped_graph):
         """REQ-d00061-M: Regex results don't have 'score' key — scoring is only
         applied to the multi-term (non-regex) code path."""

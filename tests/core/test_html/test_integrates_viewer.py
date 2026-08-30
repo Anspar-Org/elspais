@@ -79,7 +79,7 @@ def federation(tmp_path: Path):
         library,
         ".elspais.toml",
         """
-        version = 3
+        version = 5
         [project]
         name = "library"
         namespace = "LIB"
@@ -126,7 +126,7 @@ def federation(tmp_path: Path):
         app,
         ".elspais.toml",
         """
-        version = 3
+        version = 5
         [project]
         name = "app"
         namespace = "APP"
@@ -171,6 +171,7 @@ class TestIntegratesRollupSerialized:
     """Validates REQ-d00252-D: the consumer's integrates_rollup is serialized
     into the embedded node-index JSON, and non-consumers carry no rollup."""
 
+    # Verifies: REQ-d00252-D
     def test_REQ_d00252_D_consumer_node_index_has_integrates_rollup(self, federation):
         """Consumer APP-p00001 exposes integrates_rollup with inherited numerics."""
         html = HTMLGenerator(federation).generate(embed_content=True)
@@ -193,8 +194,8 @@ class TestIntegratesRollupSerialized:
             f"implemented by code, not verified); got {props['integrates_rollup']!r}"
         )
 
-    # Verifies: REQ-d00252-D, REQ-d00258-N
-    def test_REQ_d00258_N_library_failure_flag_serialized(self, federation):
+    # Verifies: REQ-d00252-D, REQ-d00277-C
+    def test_REQ_d00277_C_library_failure_flag_serialized(self, federation):
         """A library with one passing and one failing declared test reads as
         covered on the count alone, so the serialized rollup must carry
         has_failures=True for the viewer to flag the partly-red suite."""
@@ -224,6 +225,7 @@ class TestIntegratesRollupSerialized:
         assert rollup["verified_covered"] == 1  # B's pass reads covered
         assert rollup["has_failures"] is True
 
+    # Verifies: REQ-d00252-D
     def test_REQ_d00252_D_non_integrating_req_has_no_integrates_rollup(self, federation):
         """Library LIB-p00001 (no outbound INTEGRATES) carries no rollup field."""
         html = HTMLGenerator(federation).generate(embed_content=True)
@@ -241,6 +243,7 @@ class TestIntegratesRollupRendered:
     """Validates REQ-d00252-D: the rendered HTML wires the integrated-coverage
     card row (label + CSS hook) for consumer requirements."""
 
+    # Verifies: REQ-d00252-D
     def test_REQ_d00252_D_integrated_coverage_label_in_html(self, federation):
         """The 'Integrated coverage:' label and 'integrates-rollup' CSS class are wired in."""
         html = HTMLGenerator(federation).generate(embed_content=True)
@@ -257,6 +260,7 @@ class TestIntegratesRelationshipRendered:
     """Validates REQ-d00252-D: the INTEGRATES relationship is wired into the
     card (CSS hook) and carried as a link on both consumer and library nodes."""
 
+    # Verifies: REQ-d00252-D
     def test_REQ_d00252_D_integrates_relationship_section_in_html(self, federation):
         """The 'integrates-refs' CSS class (relationship section) is wired in."""
         html = HTMLGenerator(federation).generate(embed_content=True)
@@ -265,6 +269,7 @@ class TestIntegratesRelationshipRendered:
             "(integrates relationship card section not wired in)"
         )
 
+    # Verifies: REQ-d00252-D
     def test_REQ_d00252_D_consumer_links_carry_integrates_edge(self, federation):
         """Consumer APP-p00001's links include an INTEGRATES edge to LIB-p00001."""
         html = HTMLGenerator(federation).generate(embed_content=True)
@@ -281,6 +286,7 @@ class TestIntegratesRelationshipRendered:
             f"got links: {links!r}"
         )
 
+    # Verifies: REQ-d00252-D
     def test_REQ_d00252_D_library_links_carry_integrates_edge(self, federation):
         """Library LIB-p00001's links include an INTEGRATES edge to APP-p00001."""
         html = HTMLGenerator(federation).generate(embed_content=True)
@@ -302,6 +308,7 @@ class TestIntegratesEdgeBadge:
     """Validates REQ-d00252-D: the legend catalog defines an INTEGRATES edge
     badge with label and descriptions so the viewer can render its legend."""
 
+    # Verifies: REQ-d00252-D
     def test_REQ_d00252_D_legend_catalog_has_integrates_edge(self):
         """The badges.edge category includes a fully described integrates badge."""
         from elspais.html.theme import get_catalog

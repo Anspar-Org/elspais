@@ -64,13 +64,10 @@ from elspais.server.routes_api import (
     api_requirement,
     api_revert,
     api_run_analysis,
-    api_run_broken,
     api_run_checks,
-    api_run_errors,
     api_run_gaps,
     api_run_summary,
     api_run_trace,
-    api_run_unlinked,
     api_save,
     api_scope,
     api_search,
@@ -125,7 +122,8 @@ class DetachedGuardMiddleware:
         await self.app(scope, receive, send)
 
 
-# Re-export for backward compatibility (used by tests/core/test_viewer_config.py)
+# `_extract_viewer_config` is imported above from routes_ui and re-exported
+# here, where callers of the app module reach it.
 __all__ = ["create_app", "_extract_viewer_config"]
 
 
@@ -170,11 +168,8 @@ def create_app(state: AppState, mount_mcp: bool = True) -> Starlette:
         Route("/api/term/{term_key:path}", api_term),
         # CLI command endpoints
         Route("/api/run/checks", api_run_checks),
-        Route("/api/run/broken", api_run_broken),
         Route("/api/run/summary", api_run_summary),
         Route("/api/run/gaps", api_run_gaps),
-        Route("/api/run/errors", api_run_errors),
-        Route("/api/run/unlinked", api_run_unlinked),
         Route("/api/run/analysis", api_run_analysis),
         Route("/api/run/trace", api_run_trace),
         # Mutation POST endpoints

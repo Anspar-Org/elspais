@@ -43,15 +43,18 @@ def _step_runs(job: dict) -> str:
 
 
 class TestCITestSuite:
+    # Verifies: REQ-o00066-A
     def test_REQ_o00066_A_test_job_exists(self, ci_config):
         assert "test" in ci_config["jobs"]
 
+    # Verifies: REQ-o00066-A
     def test_REQ_o00066_A_test_job_has_python_matrix(self, ci_config):
         matrix = ci_config["jobs"]["test"]["strategy"]["matrix"]
         versions = matrix["python-version"]
         assert len(versions) >= 2, "Should test multiple Python versions"
         assert "3.10" in versions
 
+    # Verifies: REQ-o00066-A
     def test_REQ_o00066_A_triggers_on_push_and_pr(self, ci_config):
         # PyYAML converts the YAML key `on` to boolean True
         triggers = ci_config[True]
@@ -60,6 +63,7 @@ class TestCITestSuite:
         assert "main" in triggers["push"]["branches"]
         assert "main" in triggers["pull_request"]["branches"]
 
+    # Verifies: REQ-o00066-A
     def test_REQ_o00066_A_test_job_runs_pytest(self, ci_config):
         run_text = _step_runs(ci_config["jobs"]["test"])
         assert "pytest" in run_text
@@ -69,9 +73,11 @@ class TestCITestSuite:
 
 
 class TestCILinting:
+    # Verifies: REQ-o00066-B
     def test_REQ_o00066_B_lint_job_exists(self, ci_config):
         assert "lint" in ci_config["jobs"]
 
+    # Verifies: REQ-o00066-B
     def test_REQ_o00066_B_lint_runs_ruff(self, ci_config):
         run_text = _step_runs(ci_config["jobs"]["lint"])
         assert "ruff" in run_text
@@ -81,13 +87,16 @@ class TestCILinting:
 
 
 class TestCISelfValidate:
+    # Verifies: REQ-o00066-C
     def test_REQ_o00066_C_self_validate_job_exists(self, ci_config):
         assert "self-validate" in ci_config["jobs"]
 
+    # Verifies: REQ-o00066-C
     def test_REQ_o00066_C_runs_elspais_health(self, ci_config):
         run_text = _step_runs(ci_config["jobs"]["self-validate"])
         assert "elspais checks" in run_text
 
+    # Verifies: REQ-o00066-C
     def test_REQ_o00066_C_generates_traceability(self, ci_config):
         run_text = _step_runs(ci_config["jobs"]["self-validate"])
         assert "elspais trace" in run_text
@@ -97,9 +106,11 @@ class TestCISelfValidate:
 
 
 class TestCISecretScanning:
+    # Verifies: REQ-o00066-D
     def test_REQ_o00066_D_security_job_exists(self, ci_config):
         assert "security" in ci_config["jobs"]
 
+    # Verifies: REQ-o00066-D
     def test_REQ_o00066_D_scans_for_secrets(self, ci_config):
         steps = ci_config["jobs"]["security"]["steps"]
         secret_steps = [
@@ -116,6 +127,7 @@ class TestCISecretScanning:
 
 
 class TestCIDependencyAudit:
+    # Verifies: REQ-o00066-E
     def test_REQ_o00066_E_audits_dependencies(self, ci_config):
         run_text = _step_runs(ci_config["jobs"]["security"])
         assert "pip-audit" in run_text or "safety" in run_text
@@ -125,9 +137,11 @@ class TestCIDependencyAudit:
 
 
 class TestPRTitleValidation:
+    # Verifies: REQ-o00066-F
     def test_REQ_o00066_F_validate_pr_title_job_exists(self, pr_config):
         assert "validate-pr-title" in pr_config["jobs"]
 
+    # Verifies: REQ-o00066-F
     def test_REQ_o00066_F_checks_for_ticket_reference(self, pr_config):
         run_text = _step_runs(pr_config["jobs"]["validate-pr-title"])
         assert "[A-Z]{2,10}-[0-9]+" in run_text
@@ -137,9 +151,11 @@ class TestPRTitleValidation:
 
 
 class TestCommitMessageValidation:
+    # Verifies: REQ-o00066-G
     def test_REQ_o00066_G_validate_commits_job_exists(self, pr_config):
         assert "validate-commit-messages" in pr_config["jobs"]
 
+    # Verifies: REQ-o00066-G
     def test_REQ_o00066_G_checks_for_ticket_and_req(self, pr_config):
         run_text = _step_runs(pr_config["jobs"]["validate-commit-messages"])
         assert "[A-Z]{2,10}-[0-9]+" in run_text
@@ -155,6 +171,7 @@ class TestCommitMessageValidation:
     reason="act not installed",
 )
 class TestActValidation:
+    # Verifies: REQ-o00066-A
     def test_REQ_o00066_A_ci_workflow_valid(self):
         """Verify ci.yml is syntactically valid via act -l."""
         result = subprocess.run(
@@ -166,6 +183,7 @@ class TestActValidation:
         assert result.returncode == 0
         assert "test" in result.stdout
 
+    # Verifies: REQ-o00066-F
     def test_REQ_o00066_F_pr_workflow_valid(self):
         """Verify pr-validation.yml is syntactically valid via act -l."""
         result = subprocess.run(

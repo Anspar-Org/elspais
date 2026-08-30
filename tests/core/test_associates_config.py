@@ -14,6 +14,7 @@ from elspais.config import get_associates_config
 class TestGetAssociatesConfig:
     """Validates REQ-d00202-A, REQ-d00202-B, REQ-d00202-C."""
 
+    # Verifies: REQ-d00202-A
     def test_REQ_d00202_A_reads_associates_config(self):
         """Config with two associates returns both with paths and namespace fields."""
         config = {
@@ -31,6 +32,7 @@ class TestGetAssociatesConfig:
         assert result["module-a"]["path"] == "../module-a"
         assert result["module-a"]["namespace"] == "MODA"
 
+    # Verifies: REQ-d00202-B
     def test_REQ_d00202_B_path_and_namespace_required(self):
         """Path and namespace are required fields."""
         config = {
@@ -44,6 +46,7 @@ class TestGetAssociatesConfig:
         assert result["module-a"]["path"] == "../module-a"
         assert result["module-a"]["namespace"] == "MODA"
 
+    # Verifies: REQ-d00202-C
     def test_REQ_d00202_C_no_associates_returns_empty(self):
         """Config with no associates section returns empty dict."""
         config = {"project": {"namespace": "REQ"}}
@@ -52,6 +55,7 @@ class TestGetAssociatesConfig:
 
         assert result == {}
 
+    # Verifies: REQ-d00202-C
     def test_REQ_d00202_C_empty_associates_returns_empty(self):
         """Config with empty associates section returns empty dict."""
         config = {"associates": {}}

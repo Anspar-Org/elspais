@@ -1,6 +1,6 @@
 # Configuration for circular dependency test
 
-version = 3
+version = 5
 
 [project]
 name = "circular-deps-test"

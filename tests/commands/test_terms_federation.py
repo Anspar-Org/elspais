@@ -17,20 +17,25 @@ def test_select_terms_federated_returns_merged(canonical_federated_graph):
     assert federated is g.terms
 
 
-def test_select_terms_primary_only_returns_root_not_merged(canonical_federated_graph):
-    """False branch must return the root repo's own TraceGraph._terms, not the merged dict.
+def test_select_terms_primary_only_returns_root_terms_with_federated_references(
+    canonical_federated_graph,
+):
+    """False branch must offer the root repo's own terms, carrying scanned references.
 
-    Identity semantics (both properties return a stable cached object):
-      - FederatedGraph.terms   -> self._terms  (merged TermDictionary, a distinct object)
-      - TraceGraph.terms       -> self._terms  (the per-repo TermDictionary)
-      - FederatedGraph._merge_terms() always constructs a NEW TermDictionary, so
-        g.terms is never the same object as any single repo's entry.graph._terms.
+    Which terms appear is the root repo's question: its own ``TraceGraph``
+    dictionary records what that repo defines, and a term only an associate
+    defines has no place in a primary-only index. What is KNOWN about each of
+    those terms is the federation's question: the scan runs across every repo
+    and establishes its findings on the federated dictionary's own entries, so
+    that is where a term's references live. A primary-only index therefore
+    reads the term list from one and each entry from the other.
 
     Assertions:
       1. primary is NOT the merged federated dict     -- fails if False branch returns g.terms
-      2. primary IS the root repo's own TraceGraph._terms -- fails if False branch returns
-         anything other than the root repo's terms
-      3. len(primary) <= len(federated)               -- sanity: subset relationship
+      2. primary's terms are exactly the root's terms -- fails if an associate-only term
+         leaks in, or a root-defined term is dropped
+      3. each entry carries the references the federated scan established -- fails if the
+         index is built from a dictionary no scan ever wrote to
     """
     g = canonical_federated_graph
     primary = _select_terms_dictionary(g, include_associates=False)
@@ -42,18 +47,35 @@ def test_select_terms_primary_only_returns_root_not_merged(canonical_federated_g
 
     # 1. Must NOT be the merged dict (would fail if False branch returns g.terms).
     assert primary is not g.terms, (
-        "_select_terms_dictionary(False) must return the root repo's own terms, "
+        "_select_terms_dictionary(False) must offer the root repo's own terms, "
         "not the federated merged TermDictionary"
     )
 
-    # 2. Must be exactly the root repo's own stable _terms object.
-    assert primary is root_terms, (
-        "_select_terms_dictionary(False) must return root_entry.graph.terms "
-        f"(id={id(root_terms):#x}), got id={id(primary):#x}"
+    # 2. Exactly the terms the root repo defines -- no associate-only term.
+    primary_names = {e.term for e in primary.iter_all()}
+    root_names = {e.term for e in root_terms.iter_all()}
+    assert primary_names == root_names
+
+    associate_only = {
+        e.term
+        for entry in g.iter_repos()
+        if entry.name != g.root_repo_name and entry.graph is not None
+        for e in entry.graph.terms.iter_all()
+    } - root_names
+    assert primary_names.isdisjoint(associate_only), (
+        f"primary-only index carries terms only an associate defines: "
+        f"{sorted(primary_names & associate_only)}"
     )
 
-    # 3. Sanity: primary is a subset of the federated merged dict.
-    assert len(primary) <= len(federated)
+    # 3. Each entry carries what the federated scan found for it. The root's
+    #    own dictionary records definitions and is never scanned into, so an
+    #    index built from it alone would list every term with no reference.
+    for name in primary_names:
+        assert len(primary.lookup(name).references) == len(federated.lookup(name).references)
+    assert any(primary.lookup(name).references for name in primary_names), (
+        "no term in the primary-only index carries a reference; the scan's "
+        "findings did not reach the entries the index renders"
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -66,7 +88,7 @@ def test_select_terms_primary_only_returns_root_not_merged(canonical_federated_g
 # while carrying a foreign namespace section.
 # ─────────────────────────────────────────────────────────────────────────────
 
-_MIN_TOML = """version = 3
+_MIN_TOML = """version = 5
 
 [project]
 name = "{name}"

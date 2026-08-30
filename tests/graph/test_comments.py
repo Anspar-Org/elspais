@@ -11,6 +11,7 @@ from elspais.graph.comments import CommentEvent, CommentIndex, CommentThread
 class TestCommentEvent:
     """Validates REQ-d00226: CommentEvent frozen dataclass fields and immutability."""
 
+    # Verifies: REQ-d00226-A
     def test_REQ_d00226_A_create_comment_event(self):
         """A comment event stores all required fields."""
         evt = CommentEvent(
@@ -27,6 +28,7 @@ class TestCommentEvent:
         assert evt.anchor == "REQ-p00001#A"
         assert evt.text == "Should we support SAML?"
 
+    # Verifies: REQ-d00226-A
     def test_REQ_d00226_A_frozen_immutability(self):
         """CommentEvent is immutable."""
         evt = CommentEvent(
@@ -41,6 +43,7 @@ class TestCommentEvent:
         with pytest.raises(AttributeError):
             evt.text = "Modified"
 
+    # Verifies: REQ-d00226-A
     def test_REQ_d00226_A_reply_event_fields(self):
         """Reply events have parent field."""
         evt = CommentEvent(
@@ -55,6 +58,7 @@ class TestCommentEvent:
         )
         assert evt.parent == "c-20260320-a3f1b2"
 
+    # Verifies: REQ-d00226-A
     def test_REQ_d00226_A_resolve_event_fields(self):
         """Resolve events have target and anchor, no text."""
         evt = CommentEvent(
@@ -69,6 +73,7 @@ class TestCommentEvent:
         assert evt.target == "c-20260320-a3f1b2"
         assert evt.text == ""
 
+    # Verifies: REQ-d00226-A
     def test_REQ_d00226_A_promote_event_fields(self):
         """Promote events have old/new anchor and reason."""
         evt = CommentEvent(
@@ -87,6 +92,7 @@ class TestCommentEvent:
         assert evt.old_anchor == "REQ-p00001#D"
         assert evt.new_anchor == "REQ-p00001"
 
+    # Verifies: REQ-d00226-B
     def test_REQ_d00226_B_default_optional_fields(self):
         """Optional fields default to empty string."""
         evt = CommentEvent(
@@ -109,6 +115,7 @@ class TestCommentEvent:
 class TestCommentThread:
     """Validates REQ-d00226: CommentThread assembly and defaults."""
 
+    # Verifies: REQ-d00226-D
     def test_REQ_d00226_D_thread_defaults_anchor(self):
         """Thread anchor defaults to root event's anchor."""
         root = CommentEvent(
@@ -126,6 +133,7 @@ class TestCommentThread:
         assert thread.promoted_from is None
         assert thread.replies == []
 
+    # Verifies: REQ-d00226-C
     def test_REQ_d00226_C_thread_with_replies(self):
         """Thread holds flat chronological replies."""
         root = CommentEvent(
@@ -151,6 +159,7 @@ class TestCommentThread:
         assert len(thread.replies) == 1
         assert thread.replies[0].author == "Bob"
 
+    # Verifies: REQ-d00226-C
     def test_REQ_d00226_C_promoted_thread(self):
         """Thread tracks promotion metadata."""
         root = CommentEvent(
@@ -187,6 +196,7 @@ class TestCommentIndex:
         )
         return CommentThread(root=root)
 
+    # Verifies: REQ-d00227-A
     def test_REQ_d00227_A_empty_index(self):
         """Empty index returns zero counts and empty iterators."""
         idx = CommentIndex()
@@ -194,6 +204,7 @@ class TestCommentIndex:
         assert not idx.has_threads("REQ-p00001")
         assert list(idx.iter_threads("REQ-p00001")) == []
 
+    # Verifies: REQ-d00227-A
     def test_REQ_d00227_A_add_and_retrieve(self):
         """Add a thread and retrieve it by anchor."""
         idx = CommentIndex()
@@ -203,6 +214,7 @@ class TestCommentIndex:
         assert idx.has_threads("REQ-p00001#A")
         assert list(idx.iter_threads("REQ-p00001#A"))[0].root.text == "A comment"
 
+    # Verifies: REQ-d00227-A
     def test_REQ_d00227_A_len(self):
         """__len__ returns total thread count across all anchors."""
         idx = CommentIndex()
@@ -214,6 +226,7 @@ class TestCommentIndex:
         idx.add_thread(self._make_thread("REQ-p00001#A", "c3"), "f.json")
         assert len(idx) == 3
 
+    # Verifies: REQ-d00227-B
     def test_REQ_d00227_B_iter_all_anchors_for_node(self):
         """iter_all_anchors_for_node matches exact node_id and node_id#fragment patterns."""
         idx = CommentIndex()
@@ -228,6 +241,7 @@ class TestCommentIndex:
             "REQ-p00001#section:Rationale",
         ]
 
+    # Verifies: REQ-d00227-A
     def test_REQ_d00227_A_orphaned_threads(self):
         """Orphaned threads are stored and retrievable."""
         idx = CommentIndex()
@@ -235,6 +249,7 @@ class TestCommentIndex:
         idx.add_orphaned(thread)
         assert list(idx.iter_orphaned()) == [thread]
 
+    # Verifies: REQ-d00227-A
     def test_REQ_d00227_A_source_file_tracking(self):
         """source_file_for returns the file a thread's anchor was loaded from."""
         idx = CommentIndex()
@@ -242,6 +257,7 @@ class TestCommentIndex:
         idx.add_thread(thread, source_file="spec/prd.md.json")
         assert idx.source_file_for("REQ-p00001#A") == "spec/prd.md.json"
 
+    # Verifies: REQ-d00227-C
     def test_REQ_d00227_C_merge_indexes(self):
         """Merging indexes combines threads from both, following TermDictionary pattern."""
         idx1 = CommentIndex()

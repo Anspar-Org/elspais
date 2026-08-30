@@ -137,9 +137,11 @@ class TestProtectedBranches:
         rules = RulesConfig(protected_branches=["main", "release/*"])
         assert rules.protected_branches == ["main", "release/*"]
 
-    def test_config_version_is_4(self):
-        """ElspaisConfig version bumped to 4."""
+    def test_config_version_defaults_to_the_current_schema_version(self):
+        """The schema's default version is the one the loader considers
+        current, so a config written from defaults needs no migration."""
+        from elspais.config import CURRENT_CONFIG_VERSION
         from elspais.config.schema import ElspaisConfig
 
         cfg = ElspaisConfig()
-        assert cfg.version == 4
+        assert cfg.version == CURRENT_CONFIG_VERSION

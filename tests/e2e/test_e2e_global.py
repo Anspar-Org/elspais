@@ -1,4 +1,4 @@
-# Verifies: REQ-p00002, REQ-p00003, REQ-p00004, REQ-p00013-C, REQ-p00080
+# Verifies: REQ-p00002, REQ-p00003, REQ-p00004, REQ-p00080
 #            REQ-d00010, REQ-d00080, REQ-d00085-A,
 #            REQ-d00125-A, REQ-d00125-B, REQ-d00125-C, REQ-d00125-D,
 #            REQ-d00125-E, REQ-d00125-F, REQ-d00125-G, REQ-d00125-H
@@ -48,10 +48,12 @@ class TestVersion:
 class TestDoctor:
     """Validates REQ-d00080: doctor command diagnostics."""
 
+    # Verifies: REQ-d00080-A
     def test_REQ_d00080_A_doctor_returns_zero(self):
         result = run_elspais("doctor")
         assert result.returncode == 0
 
+    # Verifies: REQ-d00080-A
     def test_REQ_d00080_A_doctor_json_valid(self):
         result = run_elspais("doctor", "--format", "json")
         assert result.returncode == 0
@@ -62,17 +64,20 @@ class TestDoctor:
 class TestSummary:
     """Validates REQ-p00003: summary command output formats."""
 
+    # Verifies: REQ-p00003-A
     def test_REQ_p00003_A_summary_text_returns_zero(self):
         result = run_elspais("summary")
         assert result.returncode == 0
         assert len(result.stdout.strip()) > 0
 
+    # Verifies: REQ-p00003-A
     def test_REQ_p00003_A_summary_json_valid(self):
         result = run_elspais("summary", "--format", "json")
         assert result.returncode == 0
         data = json.loads(result.stdout)
         assert isinstance(data, dict)
 
+    # Verifies: REQ-p00003-A
     def test_REQ_p00003_A_summary_csv_returns_zero(self):
         result = run_elspais("summary", "--format", "csv")
         assert result.returncode == 0
@@ -81,6 +86,7 @@ class TestSummary:
 class TestGraph:
     """Validates REQ-p00003: graph command output."""
 
+    # Verifies: REQ-p00003-A
     def test_REQ_p00003_A_graph_returns_zero(self):
         result = run_elspais("graph")
         assert result.returncode == 0
@@ -90,15 +96,18 @@ class TestGraph:
 class TestConfig:
     """Validates REQ-p00002: config subcommands."""
 
+    # Verifies: REQ-p00002-A
     def test_REQ_p00002_A_config_show_returns_zero(self):
         result = run_elspais("config", "show")
         assert result.returncode == 0
 
+    # Verifies: REQ-p00002-A
     def test_REQ_p00002_A_config_path_returns_toml(self):
         result = run_elspais("config", "path")
         assert result.returncode == 0
         assert ".toml" in result.stdout
 
+    # Verifies: REQ-p00002-A
     def test_REQ_p00002_A_config_get_namespace(self):
         result = run_elspais("config", "get", "project.namespace")
         assert result.returncode == 0
@@ -135,6 +144,7 @@ class TestDocs:
 class TestChanged:
     """Validates REQ-p00004: changed command."""
 
+    # Verifies: REQ-p00004-A
     def test_REQ_p00004_A_changed_returns_zero(self):
         result = run_elspais("changed")
         assert result.returncode == 0
@@ -143,6 +153,7 @@ class TestChanged:
 class TestRules:
     """Validates REQ-p00002: rules command output."""
 
+    # Verifies: REQ-p00002-A
     def test_REQ_p00002_A_rules_list_returns_zero(self):
         result = run_elspais("rules", "list")
         assert result.returncode == 0
@@ -155,30 +166,36 @@ class TestRules:
 class TestHealth:
     """Validates REQ-p00002: health command output formats."""
 
+    # Verifies: REQ-p00002-A
     def test_REQ_p00002_A_health_lenient_returns_zero(self):
         result = run_elspais("checks", "--lenient")
         assert result.returncode == 0
 
+    # Verifies: REQ-p00002-A
     def test_REQ_p00002_A_health_json_valid(self):
         result = run_elspais("checks", "--format", "json", "--lenient")
         assert result.returncode == 0
         data = json.loads(result.stdout)
         assert isinstance(data, (dict, list))
 
+    # Verifies: REQ-p00002-A
     def test_REQ_p00002_A_health_markdown_returns_zero(self):
         result = run_elspais("checks", "--format", "markdown", "--lenient")
         assert result.returncode == 0
 
+    # Verifies: REQ-p00002-A
     def test_REQ_p00002_A_health_spec_only_returns_zero(self):
         result = run_elspais("checks", "--spec", "--lenient")
         assert result.returncode == 0
 
+    # Verifies: REQ-p00002-A
     def test_REQ_p00002_A_health_junit_produces_valid_xml(self):
         result = run_elspais("checks", "--format", "junit", "--lenient")
         assert result.returncode == 0
         root = ET.fromstring(result.stdout)
         assert root.tag == "testsuites"
 
+    # Verifies: REQ-p00002-A
     def test_REQ_p00002_A_health_junit_has_testsuites(self):
         result = run_elspais("checks", "--format", "junit", "--lenient")
         assert result.returncode == 0
@@ -186,6 +203,7 @@ class TestHealth:
         suites = root.findall("testsuite")
         assert len(suites) >= 1, "Expected at least one <testsuite> element"
 
+    # Verifies: REQ-p00002-A
     def test_REQ_p00002_A_health_sarif_produces_valid_json(self):
         result = run_elspais("checks", "--format", "sarif", "--lenient")
         assert result.returncode == 0
@@ -193,6 +211,7 @@ class TestHealth:
         assert data["version"] == "2.1.0"
         assert "$schema" in data
 
+    # Verifies: REQ-p00002-A
     def test_REQ_p00002_A_health_sarif_has_runs(self):
         result = run_elspais("checks", "--format", "sarif", "--lenient")
         assert result.returncode == 0
@@ -200,6 +219,7 @@ class TestHealth:
         assert len(data["runs"]) == 1
         assert data["runs"][0]["tool"]["driver"]["name"] == "elspais"
 
+    # Verifies: REQ-p00002-A
     def test_REQ_p00002_A_health_junit_output_to_file(self, tmp_path):
         out = tmp_path / "health.xml"
         result = run_elspais("checks", "--format", "junit", "--lenient", "-o", str(out))
@@ -208,6 +228,7 @@ class TestHealth:
         root = ET.parse(str(out)).getroot()
         assert root.tag == "testsuites"
 
+    # Verifies: REQ-p00002-A
     def test_REQ_p00002_A_health_sarif_output_to_file(self, tmp_path):
         out = tmp_path / "health.sarif"
         result = run_elspais("checks", "--format", "sarif", "--lenient", "-o", str(out))
@@ -216,6 +237,7 @@ class TestHealth:
         data = json.loads(out.read_text())
         assert data["version"] == "2.1.0"
 
+    # Verifies: REQ-p00002-A
     def test_REQ_p00002_A_health_include_passing_details(self):
         result = run_elspais("checks", "--include-passing-details", "--lenient")
         assert result.returncode == 0
@@ -224,6 +246,7 @@ class TestHealth:
 class TestFix:
     """Validates REQ-p00004: fix command dry-run."""
 
+    # Verifies: REQ-p00004-A
     def test_REQ_p00004_A_fix_dry_run_no_crash(self):
         result = run_elspais("fix", "--dry-run")
         # fix may return 0 (nothing to fix) or 1 (issues found); just shouldn't crash
@@ -236,6 +259,7 @@ class TestFix:
 class TestPdf:
     """Validates REQ-p00080-A: PDF generation end-to-end."""
 
+    # Verifies: REQ-p00080-A
     @requires_pandoc
     @requires_xelatex
     def test_REQ_p00080_A_generates_pdf(self, tmp_path):
@@ -260,10 +284,12 @@ class TestAnalysisTableOutput:
     Fan-In, Uncovered, Score).
     """
 
+    # Verifies: REQ-d00125-C
     def test_REQ_d00125_C_table_output_returns_zero(self):
         result = run_elspais("analysis")
         assert result.returncode == 0
 
+    # Verifies: REQ-d00125-G
     def test_REQ_d00125_G_table_contains_column_headers(self):
         result = run_elspais("analysis")
         assert result.returncode == 0
@@ -275,11 +301,13 @@ class TestAnalysisTableOutput:
         assert "Uncovered" in output
         assert "Score" in output
 
+    # Verifies: REQ-d00125-G
     def test_REQ_d00125_G_table_contains_foundations_header(self):
         result = run_elspais("analysis")
         assert result.returncode == 0
         assert "Top Foundations:" in result.stdout
 
+    # Verifies: REQ-d00125-C
     def test_REQ_d00125_C_table_is_default_format(self):
         """Verify table is the default when --format is not specified."""
         result = run_elspais("analysis")
@@ -295,16 +323,19 @@ class TestAnalysisJsonOutput:
     Validates REQ-d00125-H: JSON serializes FoundationReport.
     """
 
+    # Verifies: REQ-d00125-C
     def test_REQ_d00125_C_json_output_returns_zero(self):
         result = run_elspais("analysis", "--format", "json")
         assert result.returncode == 0
 
+    # Verifies: REQ-d00125-H
     def test_REQ_d00125_H_json_output_valid(self):
         result = run_elspais("analysis", "--format", "json")
         assert result.returncode == 0
         data = json.loads(result.stdout)
         assert isinstance(data, dict)
 
+    # Verifies: REQ-d00125-H
     def test_REQ_d00125_H_json_contains_report_fields(self):
         result = run_elspais("analysis", "--format", "json")
         assert result.returncode == 0
@@ -314,6 +345,7 @@ class TestAnalysisJsonOutput:
         assert "actionable_leaves" in data
         assert "graph_stats" in data
 
+    # Verifies: REQ-d00125-H
     def test_REQ_d00125_H_json_ranked_nodes_is_list(self):
         result = run_elspais("analysis", "--format", "json")
         assert result.returncode == 0
@@ -332,18 +364,21 @@ class TestAnalysisOptions:
     Validates REQ-d00125-F: --include-code flag.
     """
 
+    # Verifies: REQ-d00125-A
     def test_REQ_d00125_A_top_limits_results(self):
         result = run_elspais("analysis", "--top", "3", "--format", "json")
         assert result.returncode == 0
         data = json.loads(result.stdout)
         assert len(data["top_foundations"]) <= 3
 
+    # Verifies: REQ-d00125-A
     def test_REQ_d00125_A_top_default_is_10(self):
         result = run_elspais("analysis", "--format", "json")
         assert result.returncode == 0
         data = json.loads(result.stdout)
         assert len(data["top_foundations"]) <= 10
 
+    # Verifies: REQ-d00125-D
     def test_REQ_d00125_D_show_foundations_only(self):
         result = run_elspais("analysis", "--show", "foundations")
         assert result.returncode == 0
@@ -351,12 +386,14 @@ class TestAnalysisOptions:
         assert "Top Foundations:" in output or "No requirements found" in output
         assert "Most Impactful Work Items:" not in output
 
+    # Verifies: REQ-d00125-D
     def test_REQ_d00125_D_show_leaves_only(self):
         result = run_elspais("analysis", "--show", "leaves")
         assert result.returncode == 0
         output = result.stdout
         assert "Top Foundations:" not in output
 
+    # Verifies: REQ-d00125-D
     def test_REQ_d00125_D_show_all_default(self):
         result = run_elspais("analysis")
         assert result.returncode == 0
@@ -364,6 +401,7 @@ class TestAnalysisOptions:
         # "all" is default; should show foundations section
         assert "Top Foundations:" in output or "No requirements found" in output
 
+    # Verifies: REQ-d00125-E
     def test_REQ_d00125_E_level_filter_dev(self):
         result = run_elspais("analysis", "--level", "dev", "--format", "json")
         assert result.returncode == 0
@@ -375,6 +413,7 @@ class TestAnalysisOptions:
             # The level is the config level key, which is lowercase.
             assert node["level"] == "dev"
 
+    # Verifies: REQ-d00125-E
     def test_REQ_d00125_E_level_filter_prd(self):
         result = run_elspais("analysis", "--level", "prd", "--format", "json")
         assert result.returncode == 0
@@ -383,31 +422,46 @@ class TestAnalysisOptions:
         for node in data["ranked_nodes"]:
             assert node["level"] == "prd"
 
+    # Verifies: REQ-d00125-F
     def test_REQ_d00125_F_include_code_smoke(self):
         result = run_elspais("analysis", "--include-code")
         assert result.returncode == 0
 
+    # Verifies: REQ-d00125-F
     def test_REQ_d00125_F_include_code_with_json(self):
         result = run_elspais("analysis", "--include-code", "--format", "json")
         assert result.returncode == 0
         data = json.loads(result.stdout)
         assert isinstance(data, dict)
 
-    def test_REQ_d00125_B_custom_weights(self):
-        result = run_elspais("analysis", "--weights", "1.0,0.0,0.0", "--format", "json")
+    # Verifies: REQ-d00125-B
+    @pytest.mark.parametrize("weights", ["1.0,0.0,0.0", "1.0,0.0,0.0,0.0"])
+    def test_REQ_d00125_B_custom_weights(self, weights):
+        """Both counts the option admits are accepted -- three weights leave
+        the neighborhood metric unweighted, four name it explicitly."""
+        result = run_elspais("analysis", "--weights", weights, "--format", "json")
         assert result.returncode == 0
         data = json.loads(result.stdout)
         assert isinstance(data["ranked_nodes"], list)
 
-    def test_REQ_d00125_B_weights_invalid_count_errors(self):
-        result = run_elspais("analysis", "--weights", "1.0,0.0")
+    # Verifies: REQ-d00125-B
+    @pytest.mark.parametrize("weights", ["1.0,0.0", "0.25,0.25,0.25,0.15,0.1"])
+    def test_REQ_d00125_B_weights_invalid_count_errors(self, weights):
+        """A count the option does not admit is reported rather than falling
+        back to the default, which would rank the estate under weights the
+        caller did not ask for and present the result as theirs. The refusal
+        names the count given and the metrics in order, so the caller can write
+        the line rather than guess at it."""
+        result = run_elspais("analysis", "--weights", weights)
         assert result.returncode == 1
-        assert "3 or 4" in result.stdout
+        assert f"carries {len(weights.split(','))} values" in result.stdout
+        assert "write three or four" in result.stdout
 
+    # Verifies: REQ-d00125-B
     def test_REQ_d00125_B_weights_non_numeric_errors(self):
         result = run_elspais("analysis", "--weights", "a,b,c")
         assert result.returncode == 1
-        assert "numeric" in result.stdout
+        assert "three or four comma-separated numbers" in result.stdout
 
 
 # ===================================================================
@@ -416,13 +470,15 @@ class TestAnalysisOptions:
 
 
 class TestHealthSelfValidation:
-    """Validates REQ-p00013-C: health command passes on own repo."""
+    """Validates REQ-d00080-A: `checks --lenient` exits zero on this repository."""
 
-    def test_REQ_p00013_C_health_passes(self):
+    # Verifies: REQ-d00080-A
+    def test_REQ_d00080_A_health_passes(self):
         result = run_elspais("checks", "--lenient")
         assert result.returncode == 0, f"health --lenient failed: {result.stderr}"
 
-    def test_REQ_p00013_C_health_json_zero_errors(self):
+    # Verifies: REQ-d00080-A
+    def test_REQ_d00080_A_health_json_zero_errors(self):
         result = run_elspais("checks", "--format", "json", "--lenient")
         assert result.returncode == 0
         data = json.loads(result.stdout)
@@ -430,7 +486,8 @@ class TestHealthSelfValidation:
             f"Expected 0 failures, got {data['summary']['failed']}"
         )
 
-    def test_REQ_p00013_C_health_is_healthy(self):
+    # Verifies: REQ-d00080-A
+    def test_REQ_d00080_A_health_is_healthy(self):
         result = run_elspais("checks", "--format", "json", "--lenient")
         assert result.returncode == 0
         data = json.loads(result.stdout)
@@ -438,15 +495,17 @@ class TestHealthSelfValidation:
 
 
 class TestDoctorSelfValidation:
-    """Validates REQ-p00013-C: doctor command passes on own repo."""
+    """Validates REQ-d00080-A: `doctor` exits zero on this repository."""
 
-    def test_REQ_p00013_C_doctor_passes(self):
+    # Verifies: REQ-d00080-A
+    def test_REQ_d00080_A_doctor_passes(self):
         result = run_elspais("doctor")
         assert result.returncode == 0, f"doctor failed: {result.stderr}"
 
 
 class TestSummarySelfValidation:
-    """Validates REQ-p00013-C: summary reflects real repo content."""
+    """Validates REQ-d00281-A, REQ-d00086-A: summary groups every level this
+    repository's requirements carry and counts them."""
 
     @pytest.fixture()
     def summary_data(self):
@@ -454,24 +513,27 @@ class TestSummarySelfValidation:
         assert result.returncode == 0
         return json.loads(result.stdout)
 
-    def test_REQ_p00013_C_summary_has_all_levels(self, summary_data):
+    # Verifies: REQ-d00281-A
+    def test_REQ_d00281_A_summary_has_all_levels(self, summary_data):
         level_names = {entry["level"] for entry in summary_data["levels"]}
         for expected in ("PRD", "OPS", "DEV"):
             assert expected in level_names, (
                 f"Missing level {expected} in summary; found {level_names}"
             )
 
-    def test_REQ_p00013_C_summary_nonzero_counts(self, summary_data):
+    # Verifies: REQ-d00086-A
+    def test_REQ_d00086_A_summary_nonzero_counts(self, summary_data):
         for entry in summary_data["levels"]:
             assert entry["total"] > 0, f"Level {entry['level']} has total=0"
 
-    def test_REQ_p00013_C_summary_has_assertions(self, summary_data):
+    # Verifies: REQ-d00086-A
+    def test_REQ_d00086_A_summary_has_assertions(self, summary_data):
         for entry in summary_data["levels"]:
             assert entry["total_assertions"] > 0, f"Level {entry['level']} has total_assertions=0"
 
 
 class TestTraceSelfValidation:
-    """Validates REQ-p00013-C: trace output contains requirements and tests."""
+    """Validates REQ-p00003-B: trace derives requirement-to-test links from the graph."""
 
     @pytest.fixture()
     def trace_data(self, tmp_path):
@@ -483,19 +545,22 @@ class TestTraceSelfValidation:
         assert found, f"No trace output file found among {candidates}"
         return json.loads(found[0].read_text())
 
-    def test_REQ_p00013_C_trace_json_has_requirements(self, trace_data):
+    # Verifies: REQ-p00003-B
+    def test_REQ_p00003_B_trace_json_has_requirements(self, trace_data):
         text = json.dumps(trace_data).lower()
         assert "req" in text, "Trace JSON contains no requirement references"
 
-    def test_REQ_p00013_C_trace_json_has_tests(self, trace_data):
+    # Verifies: REQ-p00003-B
+    def test_REQ_p00003_B_trace_json_has_tests(self, trace_data):
         text = json.dumps(trace_data).lower()
         assert "test" in text, "Trace JSON contains no test references"
 
 
 class TestGraphSelfValidation:
-    """Validates REQ-p00013-C: graph command produces meaningful output."""
+    """Validates REQ-d00084-A: `graph` exports the structured graph of this repository."""
 
-    def test_REQ_p00013_C_graph_has_node_kinds(self):
+    # Verifies: REQ-d00084-A
+    def test_REQ_d00084_A_graph_has_node_kinds(self):
         result = run_elspais("graph")
         assert result.returncode == 0, f"graph failed: {result.stderr}"
         output = result.stdout.lower()
@@ -504,9 +569,10 @@ class TestGraphSelfValidation:
 
 
 class TestSubdirDetection:
-    """Validates REQ-p00013-C: git root auto-detection from subdirectory."""
+    """Validates REQ-d00080-A: `checks --lenient` exits zero when invoked from a subdirectory."""
 
-    def test_REQ_p00013_C_works_from_subdirectory(self):
+    # Verifies: REQ-d00080-A
+    def test_REQ_d00080_A_works_from_subdirectory(self):
         subdir = REPO_ROOT / "tests"
         result = run_elspais("checks", "--lenient", cwd=subdir)
         assert result.returncode == 0, f"health --lenient failed from subdirectory: {result.stderr}"
@@ -520,6 +586,7 @@ class TestSubdirDetection:
 class TestHealthSummaryConsistency:
     """Validates REQ-d00085-A: summary is consistent across runs."""
 
+    # Verifies: REQ-d00085-A
     def test_REQ_d00085_A_health_summary_same_total(self):
         health_result = run_elspais("checks", "--format", "json", "--lenient")
         assert health_result.returncode == 0, f"health failed: {health_result.stderr}"
@@ -550,6 +617,7 @@ class TestHealthSummaryConsistency:
 class TestSummaryIdempotent:
     """Validates REQ-d00085-A: summary produces consistent results across runs."""
 
+    # Verifies: REQ-d00085-A
     def test_REQ_d00085_A_summary_consistent_across_runs(self):
         result1 = run_elspais("summary", "--format", "json")
         assert result1.returncode == 0, f"summary run 1 failed: {result1.stderr}"

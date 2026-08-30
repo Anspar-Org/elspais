@@ -141,6 +141,7 @@ def _make_test_node(
 class TestRenderDispatch:
     """Validates REQ-d00131-A: Each NodeKind has a render() function dispatched by kind."""
 
+    # Verifies: REQ-d00131-A
     def test_REQ_d00131_A_render_dispatches_by_kind(self):
         """render_node() dispatches correctly for each NodeKind."""
         from elspais.graph.render import render_node
@@ -164,6 +165,7 @@ class TestRenderDispatch:
 class TestRequirementRender:
     """Validates REQ-d00131-B: REQUIREMENT renders full block."""
 
+    # Verifies: REQ-d00131-B
     def test_REQ_d00131_B_requirement_header(self):
         """Rendered requirement starts with ## REQ-xxx: Title header."""
         from elspais.graph.render import render_node
@@ -177,6 +179,7 @@ class TestRequirementRender:
         result = render_node(node)
         assert result.startswith("## REQ-t00001: Test Requirement\n")
 
+    # Verifies: REQ-d00131-B
     def test_REQ_d00131_B_requirement_metadata_line(self):
         """Rendered requirement contains metadata line with level, status."""
         from elspais.graph.render import render_node
@@ -191,6 +194,7 @@ class TestRequirementRender:
         assert "**Level**: Dev" in result
         assert "**Status**: Draft" in result
 
+    # Verifies: REQ-d00131-B
     def test_REQ_d00131_B_requirement_metadata_with_implements(self):
         """Rendered requirement metadata includes Implements when present."""
         from elspais.graph.render import render_node
@@ -205,6 +209,7 @@ class TestRequirementRender:
         result = render_node(node)
         assert "**Implements**: REQ-t00001" in result
 
+    # Verifies: REQ-d00131-B
     def test_REQ_d00131_B_requirement_end_marker(self):
         """Rendered requirement ends with *End* marker."""
         from elspais.graph.render import render_node
@@ -217,6 +222,7 @@ class TestRequirementRender:
         assert "*End* *Test Requirement*" in result
         assert "**Hash**:" in result
 
+    # Verifies: REQ-d00131-B
     def test_REQ_d00131_B_requirement_with_assertions(self):
         """Rendered requirement includes assertions section."""
         from elspais.graph.render import render_node
@@ -263,6 +269,7 @@ class TestRequirementRender:
         assert assertion_lines[0].startswith("A."), f"Expected A first, got: {assertion_lines}"
         assert assertion_lines[1].startswith("B."), f"Expected B second, got: {assertion_lines}"
 
+    # Verifies: REQ-d00131-B
     def test_REQ_d00131_B_requirement_with_sections(self):
         """Rendered requirement includes non-normative sections."""
         from elspais.graph.render import render_node
@@ -276,6 +283,7 @@ class TestRequirementRender:
         assert "## Rationale" in result
         assert "Because reasons." in result
 
+    # Verifies: REQ-d00131-B
     def test_REQ_d00131_B_requirement_with_body_text(self):
         """Rendered requirement includes preamble body text."""
         from elspais.graph.render import render_node
@@ -288,6 +296,7 @@ class TestRequirementRender:
         result = render_node(node)
         assert "This requirement describes something." in result
 
+    # Verifies: REQ-d00131-B
     def test_REQ_d00131_B_requirement_ends_with_end_marker(self):
         """Rendered requirement ends with *End* marker (separator is REMAINDER)."""
         from elspais.graph.render import render_node
@@ -300,6 +309,7 @@ class TestRequirementRender:
         lines = result.rstrip().split("\n")
         assert lines[-1].startswith("*End*")
 
+    # Verifies: REQ-d00131-B
     def test_REQ_d00131_B_requirement_full_round_trip_structure(self):
         """Rendered requirement has correct overall structure."""
         from elspais.graph.render import render_node
@@ -334,6 +344,7 @@ class TestRequirementRender:
 class TestAssertionRender:
     """Validates REQ-d00131-C: ASSERTION render raises ValueError."""
 
+    # Verifies: REQ-d00131-C
     def test_REQ_d00131_C_assertion_render_raises(self):
         """Calling render on an ASSERTION node raises ValueError."""
         from elspais.graph.render import render_node
@@ -347,6 +358,7 @@ class TestAssertionRender:
 class TestRemainderRender:
     """Validates REQ-d00131-D: REMAINDER renders raw text verbatim."""
 
+    # Verifies: REQ-d00131-D
     def test_REQ_d00131_D_remainder_verbatim(self):
         """REMAINDER render returns raw text exactly as stored."""
         from elspais.graph.render import render_node
@@ -356,6 +368,7 @@ class TestRemainderRender:
         result = render_node(node)
         assert result == text
 
+    # Verifies: REQ-d00131-D
     def test_REQ_d00131_D_remainder_preserves_whitespace(self):
         """REMAINDER preserves all whitespace including blank lines."""
         from elspais.graph.render import render_node
@@ -365,6 +378,7 @@ class TestRemainderRender:
         result = render_node(node)
         assert result == text
 
+    # Verifies: REQ-d00131-D
     def test_REQ_d00131_D_remainder_empty(self):
         """REMAINDER with empty text returns empty string."""
         from elspais.graph.render import render_node
@@ -377,6 +391,7 @@ class TestRemainderRender:
 class TestJourneyRender:
     """Validates REQ-d00131-E: USER_JOURNEY renders full block."""
 
+    # Verifies: REQ-d00131-E
     def test_REQ_d00131_E_journey_renders_body(self):
         """USER_JOURNEY render returns the stored body text."""
         from elspais.graph.render import render_node
@@ -386,6 +401,7 @@ class TestJourneyRender:
         assert "## JNY-Login-01: Login Flow" in result
         assert "*End* *JNY-Login-01*" in result
 
+    # Verifies: REQ-d00131-E
     def test_REQ_d00131_E_journey_includes_actor_goal(self):
         """USER_JOURNEY render includes actor and goal fields."""
         from elspais.graph.render import render_node
@@ -399,6 +415,7 @@ class TestJourneyRender:
 class TestCodeRender:
     """Validates REQ-d00131-F: CODE renders # Implements: comment line(s)."""
 
+    # Verifies: REQ-d00131-F
     def test_REQ_d00131_F_code_single_line(self):
         """CODE render returns single comment line."""
         from elspais.graph.render import render_node
@@ -407,6 +424,7 @@ class TestCodeRender:
         result = render_node(node)
         assert result == fake_reqs.CODE_RAW_TEXT
 
+    # Verifies: REQ-d00131-F
     def test_REQ_d00131_F_code_multi_line(self):
         """CODE render returns multiple comment lines."""
         from elspais.graph.render import render_node
@@ -420,6 +438,7 @@ class TestCodeRender:
 class TestTestRender:
     """Validates REQ-d00131-G: TEST renders comment line(s)."""
 
+    # Verifies: REQ-d00131-G
     def test_REQ_d00131_G_test_single_line(self):
         """TEST render returns single comment line."""
         from elspais.graph.render import render_node
@@ -428,6 +447,7 @@ class TestTestRender:
         result = render_node(node)
         assert result == fake_reqs.TEST_RAW_TEXT
 
+    # Verifies: REQ-d00131-G
     def test_REQ_d00131_G_test_validates_line(self):
         """TEST render returns Validates comment line."""
         from elspais.graph.render import render_node
@@ -440,6 +460,7 @@ class TestTestRender:
 class TestTestResultRender:
     """Validates REQ-d00131-H: TEST_RESULT render raises ValueError."""
 
+    # Verifies: REQ-d00131-H
     def test_REQ_d00131_H_test_result_raises(self):
         """Calling render on a TEST_RESULT node raises ValueError."""
         from elspais.graph.render import render_node
@@ -452,6 +473,7 @@ class TestTestResultRender:
 class TestFileRender:
     """Validates REQ-d00131-I: FILE node renders by walking CONTAINS children."""
 
+    # Verifies: REQ-d00131-I
     def test_REQ_d00131_I_file_renders_children_in_order(self):
         """FILE render concatenates CONTAINS children sorted by render_order."""
         from elspais.graph.render import render_file
@@ -474,6 +496,7 @@ class TestFileRender:
         # First block should appear before second block
         assert result.index("First block") < result.index("Second block")
 
+    # Verifies: REQ-d00131-I
     def test_REQ_d00131_I_file_respects_render_order(self):
         """FILE render uses render_order, not insertion order."""
         from elspais.graph.render import render_file
@@ -493,6 +516,7 @@ class TestFileRender:
         result = render_file(file_node)
         assert result.index("First") < result.index("Second")
 
+    # Verifies: REQ-d00131-I
     def test_REQ_d00131_I_file_empty_children(self):
         """FILE with no CONTAINS children renders empty string."""
         from elspais.graph.render import render_file
@@ -501,6 +525,7 @@ class TestFileRender:
         result = render_file(file_node)
         assert result == ""
 
+    # Verifies: REQ-d00131-I
     def test_REQ_d00131_I_file_mixed_node_kinds(self):
         """FILE renders children of different NodeKinds correctly."""
         from elspais.graph.render import render_file
@@ -529,6 +554,7 @@ class TestFileRender:
 class TestNormalizedHashing:
     """Validates REQ-d00131-J: Renderer uses canonical compute_normalized_hash."""
 
+    # Verifies: REQ-d00131-J
     def test_REQ_d00131_J_hash_changes_on_text_edit(self):
         """Editing assertion text changes the hash."""
         from elspais.utilities.hasher import compute_normalized_hash
@@ -541,6 +567,7 @@ class TestNormalizedHashing:
 
         assert hash_orig != hash_mod
 
+    # Verifies: REQ-d00131-J
     def test_REQ_d00131_J_hash_is_8_chars(self):
         """Computed hash is 8 characters long."""
         from elspais.utilities.hasher import compute_normalized_hash
@@ -550,6 +577,7 @@ class TestNormalizedHashing:
         assert len(result) == 8
         assert all(c in "0123456789abcdef" for c in result)
 
+    # Verifies: REQ-d00131-J
     def test_REQ_d00131_J_whitespace_normalization(self):
         """Whitespace differences do not change the hash."""
         from elspais.utilities.hasher import compute_normalized_hash
@@ -573,7 +601,7 @@ class TestRenderRoundTrip:
         spec_dir = tmp_path / "spec"
         spec_dir.mkdir()
         (tmp_path / ".elspais.toml").write_text(
-            "version = 3\n"
+            "version = 5\n"
             '[project]\nname = "test"\nnamespace = "REQ"\n'
             '[levels.prd]\nrank = 1\nletter = "p"\n'
             '[levels.dev]\nrank = 2\nletter = "d"\nimplements = ["prd"]\n'
@@ -674,7 +702,7 @@ class TestRenderRoundTrip:
         spec_dir = tmp_path / "spec"
         spec_dir.mkdir()
         (tmp_path / ".elspais.toml").write_text(
-            "version = 4\n"
+            "version = 5\n"
             '[project]\nname = "test"\nnamespace = "REQ"\n'
             '[levels.prd]\nrank = 1\nletter = "p"\n'
             '[id-patterns]\ncanonical = "{namespace}-{level.letter}{component}"\n'
@@ -750,7 +778,7 @@ class TestRenderRoundTrip:
         spec_dir = tmp_path / "spec"
         spec_dir.mkdir()
         (tmp_path / ".elspais.toml").write_text(
-            "version = 4\n"
+            "version = 5\n"
             '[project]\nname = "test"\nnamespace = "REQ"\n'
             '[levels.prd]\nrank = 1\nletter = "p"\n'
             '[id-patterns]\ncanonical = "{namespace}-{level.letter}{component}"\n'
@@ -820,7 +848,7 @@ class TestRenderRoundTrip:
         spec_dir = tmp_path / "spec"
         spec_dir.mkdir()
         (tmp_path / ".elspais.toml").write_text(
-            "version = 4\n"
+            "version = 5\n"
             '[project]\nname = "test"\nnamespace = "REQ"\n'
             '[levels.prd]\nrank = 1\nletter = "p"\n'
             '[id-patterns]\ncanonical = "{namespace}-{level.letter}{component}"\n'
@@ -912,7 +940,7 @@ class TestRenderRoundTrip:
         spec_dir = tmp_path / "spec"
         spec_dir.mkdir()
         (tmp_path / ".elspais.toml").write_text(
-            "version = 4\n"
+            "version = 5\n"
             '[project]\nname = "test"\nnamespace = "REQ"\n'
             '[levels.prd]\nrank = 1\nletter = "p"\n'
             '[id-patterns]\ncanonical = "{namespace}-{level.letter}{component}"\n'

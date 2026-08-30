@@ -30,6 +30,7 @@ from elspais.graph.comment_store import (
 )
 from elspais.graph.comments import CommentEvent, CommentThread
 from elspais.graph.GraphNode import make_file_id, parse_structural_id
+from elspais.graph.parsers.directives import counted_assertion_labels
 from elspais.graph.parsers.patterns import JNY_ID_PATTERN
 from elspais.mcp.server import (
     _attach_version,
@@ -140,13 +141,11 @@ def _compute_link_data(
     """
     from elspais.graph.relations import EdgeKind
 
-    # Collect assertion labels
-    assertion_labels: list[str] = []
-    for child in node.iter_children():
-        if child.kind == NodeKind.ASSERTION:
-            label = child.get_field("label", "")
-            if label:
-                assertion_labels.append(label)
+    # Collect assertion labels.
+    # Implements: REQ-p00017-G
+    # A retired *Assertion* carries no coverage flags, because it is excluded
+    # from the calculation that would produce them.
+    assertion_labels: list[str] = counted_assertion_labels(node)
 
     # Per-assertion: track which dimensions have direct assertion-level links
     # Initialize all to False
@@ -1288,15 +1287,6 @@ async def api_run_checks(request: Request) -> JSONResponse:
     return JSONResponse(result)
 
 
-async def api_run_broken(request: Request) -> JSONResponse:
-    """GET /api/run/broken - Broken references report."""
-    from elspais.commands.broken import compute_broken
-
-    state = _st(request)
-    params = dict(request.query_params)
-    return JSONResponse(compute_broken(state.graph, state.config, params))
-
-
 async def api_run_summary(request: Request) -> JSONResponse:
     """GET /api/run/summary - Coverage summary data."""
     from elspais.commands._values import UnofferedValues
@@ -1322,24 +1312,6 @@ async def api_run_gaps(request: Request) -> JSONResponse:
     state = _st(request)
     params = dict(request.query_params)
     return JSONResponse(compute_gaps(state.graph, state.config, params))
-
-
-async def api_run_errors(request: Request) -> JSONResponse:
-    """GET /api/run/errors - Spec format violations and missing assertions."""
-    from elspais.commands.errors import compute_errors
-
-    state = _st(request)
-    params = dict(request.query_params)
-    return JSONResponse(compute_errors(state.graph, state.config, params))
-
-
-async def api_run_unlinked(request: Request) -> JSONResponse:
-    """GET /api/run/unlinked - Unlinked test and code nodes."""
-    from elspais.commands.unlinked import compute_unlinked
-
-    state = _st(request)
-    params = dict(request.query_params)
-    return JSONResponse(compute_unlinked(state.graph, state.config, params))
 
 
 async def api_run_analysis(request: Request) -> JSONResponse:

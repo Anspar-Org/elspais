@@ -480,6 +480,8 @@ N. Where a client's use of a daemon does not result in a recorded handle — bec
 
 O. While a daemon has a recorded client that still exists, its idle timeout SHALL NOT be the cause of its termination; the idle timeout governs a daemon with no recorded client.
 
+P. Whether a daemon serves this working tree, what it has recorded about itself, and whether it holds changes not yet written, SHALL be answerable to an operator without a client or a browser.
+
 ### Rationale
 
 A daemon is started implicitly to serve one client and is then detached from it, so nothing in the running process can afterwards say whose disappearance should end it. The handle has to be handed over at start or it is unrecoverable, which is why assertion A fixes the moment rather than the means. What makes a handle a handle is that its disappearance can be observed without the client's cooperation: a client that crashes revokes no token and sends no goodbye, so anything that depends on the client acting at the end fails the case the requirement exists for. A process identifier tested by signalling it, and a connection the client holds open, both satisfy that property; a declared name or label does not, because it never disappears.
@@ -510,8 +512,11 @@ Assertion N exists because a lifetime that is not bound to the client is invisib
 
 Assertion O settles which of a daemon's bounds answers when two of them disagree. Going quiet is not going away: a client that applies a change and then reasons about the next one sends nothing for long stretches, and an idle timeout counts that silence exactly as it counts an empty room. A timeout that cannot tell the two apart takes the daemon from the client least able to notice — one that is mid-task, holding work it has not written, and about to find its server gone. So which regime governs is decided by whether anyone is recorded as using the daemon, not by how recently they last spoke. The cost is real and is stated rather than hidden: a daemon with a live client outlives the idle timeout configured for it, for as long as that client exists. The client-liveness rule is what still bounds it, and assertion E is what makes that bound sufficient — a daemon whose recorded clients are all gone is ended by the same rule that spared it while one remained.
 
+P names an audience rather than a surface. A daemon's client handles, its pending count and its record of a save it performed alone are all obliged to be accurate and observable, but every way of asking for them runs through an agent or a browser. An operator deciding whether to restart a daemon, change branch or close a terminal is exactly the reader who needs to know whether anything would be lost, and is the one reader who has no way to ask.
+
 ### Changelog
 
+- 2026-08-25 | fb36047e | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-10 | dace8fb0 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-08 | 870802ca | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-08 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-12: state the lifetime bound one-directionally, scope the deadline and failure clauses, and refine against the new parents
@@ -520,7 +525,7 @@ Assertion O settles which of a daemon's bounds answers when two of them disagree
 - 2026-08-08 | 81945155 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-07 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-12: author background daemon lifetime, client-liveness, and unattended-persistence invariants
 
-*End* *Background Daemon Lifetime* | **Hash**: dace8fb0
+*End* *Background Daemon Lifetime* | **Hash**: fb36047e
 ---
 
 ## REQ-o00075: Shared Graph Daemon
@@ -537,11 +542,11 @@ B. At most one such process SHALL serve a given working tree at a time.
 
 C. Separate working trees SHALL be served independently, each by its own process holding its own graph, whether or not they belong to the same repository.
 
-D. [Removed - stated two obligations in one assertion. Serving several clients at once is REQ-o00076-A; a client joining a process another started is REQ-o00076-B.]
+D. <RETIRED> stated two obligations in one assertion. Serving several clients at once is REQ-o00076-A; a client joining a process another started is REQ-o00076-B.
 
-E. [Removed - stated three obligations in one assertion. Locating without prior arrangement is REQ-o00076-C; remaining locatable while serving is REQ-o00076-D; the record describing the process a client would reach is REQ-o00076-E.]
+E. <RETIRED> stated three obligations in one assertion. Locating without prior arrangement is REQ-o00076-C; remaining locatable while serving is REQ-o00076-D; the record describing the process a client would reach is REQ-o00076-E.
 
-F. [Removed - stated three obligations in one assertion. Starting on behalf of a client is REQ-o00076-F; starting at an operator's request is REQ-o00076-G; the origin remaining determinable is REQ-o00076-H.]
+F. <RETIRED> stated three obligations in one assertion. Starting on behalf of a client is REQ-o00076-F; starting at an operator's request is REQ-o00076-G; the origin remaining determinable is REQ-o00076-H.
 
 G. Every operation the tool offers SHALL remain available when no such process is running or its use is declined.
 
@@ -559,6 +564,7 @@ REQ-p00005-F obliges associate paths to resolve from the canonical, non-worktree
 
 ### Changelog
 
+- 2026-08-24 | 2598192d | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-18 | b44d9887 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: sync changelog hash
 - 2026-08-18 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: move reaching the serving process out to REQ-o00076 and state exclusivity on its own
 - 2026-08-18 | b44d9887 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -566,7 +572,7 @@ REQ-p00005-F obliges associate paths to resolve from the canonical, non-worktree
 - 2026-08-08 | 1fd622fe | - | Michael Lewis (<michael@anspar.org>) | TOOL-12: introduce the shared per-working-tree graph daemon
 - 2026-08-08 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-12: introduce the shared per-working-tree graph daemon
 
-*End* *Shared Graph Daemon* | **Hash**: b44d9887
+*End* *Shared Graph Daemon* | **Hash**: 2598192d
 
 ## REQ-o00076: Reaching the Serving Process
 
@@ -598,6 +604,10 @@ J. If the process serving a working tree cannot be made to serve from the same p
 
 K. When the process serving a working tree is replaced, a client SHALL reach the replacement at the address it reached the previous process at.
 
+L. An address the tool records in a client's configuration SHALL resolve to the working tree that client is operating in.
+
+M. Where a client's registration names a fixed address, the tool SHALL report it.
+
 ### Rationale
 
 A client and the process serving it meet at one point — the client asks which process serves its working tree, and acts on the answer. Everything here is a property of that meeting: that it can happen at all, that the answer is true, and that what answers is what the client would have run. That a process exists and that exactly one of them serves a tree is REQ-o00075's subject and is not restated.
@@ -618,15 +628,27 @@ K is therefore what decides which side of REQ-o00077-D a client falls on. A proc
 
 An address that survives replacement must also survive there being nothing to replace. The record naming the process currently serving a tree is removed when none is, which is what E requires of it; the address a tree is reached at is a different fact with a different lifetime, and holding the two separately is what lets a tree be reached in the same place after serving has stopped and begun again.
 
+Assertions C through K govern the addresses the tool keeps for itself. L governs one it writes into somebody else's configuration, which is a different obligation because such a record is read where the writing never was. Every working tree of a repository reads the same client configuration, so an address settled while installing is one tree's answer offered to all of them -- wrong when written, not stale later. An address resolved as it is read cannot make that mistake, which is why L constrains what the recorded address must do rather than what it may say.
+
+L does not weaken C. A client that can ask which process serves its tree still needs no arrangement; L binds the tool where it has already answered on such a client's behalf, into a record read later without asking again.
+
+M exists because the failure is silent. A hardcoded address fails exactly as an address nobody is serving fails -- a refused connection -- so the client cannot tell them apart. Only the tool can read the registration and see which it is, and a condition nothing reports persists until somebody happens to investigate it.
+
+M is about a registration, not about which repositories a tree federates. A tree may name any other tree as an associate without that bearing on where its clients connect.
+
+M does not cover a shell holding another tree's address. That ends when the address is re-derived, and by the time it could be reported the client has already connected, so nothing useful follows from saying it.
+
 ### Changelog
 
+- 2026-08-25 | 7505310d | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-25 | 0bdae779 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-18 | 32c4639b | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-18 | cd6333aa | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: sync changelog hash
 - 2026-08-18 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: state each obligation a client relies on when it reaches the serving process as its own assertion
 - 2026-08-18 | cd6333aa | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-18 | d2a0addf | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash, add missing changelog section
 
-*End* *Reaching the Serving Process* | **Hash**: 32c4639b
+*End* *Reaching the Serving Process* | **Hash**: 7505310d
 
 ## REQ-o00077: Serving From the Installed Program
 
@@ -638,9 +660,9 @@ Where the tool is installed such that its program can change while a process is 
 
 A. While a serving process answers from a program that differs from the one the tool is now installed from, the tool SHALL disclose that difference to the clients it is serving.
 
-B. [Removed - protected the request to persist from assertion C, which is itself removed. A process that carries held changes across a renewal never traps them, so there is nothing left to protect.]
+B. <RETIRED> protected the request to persist from assertion C, which is itself removed. A process that carries held changes across a renewal never traps them, so there is nothing left to protect.
 
-C. [Removed - treated held changes as a reason to stop answering. They are a reason to take care over a renewal, not to refuse one, and D now says so.]
+C. <RETIRED> treated held changes as a reason to stop answering. They are a reason to take care over a renewal, not to refuse one, and D now says so.
 
 D. When the program such a process is running is superseded, its working tree SHALL go on being served, from the program now installed, without a client having to ask and without discarding changes the process holds that exist nowhere else.
 
@@ -670,6 +692,7 @@ Assertion E exists because a change is rarely one file. An editor writing out a 
 
 ### Changelog
 
+- 2026-08-24 | 3488ba9c | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-18 | 2dfa09e9 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-18 | b6acd5d0 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-18 | 8ef6d965 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -678,4 +701,4 @@ Assertion E exists because a change is rarely one file. An editor writing out a 
 - 2026-08-18 | bfd8a2aa | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-18 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: state what a serving process owes its clients when its program code changes beneath it
 
-*End* *Serving From the Installed Program* | **Hash**: 2dfa09e9
+*End* *Serving From the Installed Program* | **Hash**: 3488ba9c

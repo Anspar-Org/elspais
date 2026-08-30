@@ -35,7 +35,7 @@ def _make_config(tmp_path: Path) -> Path:
     """Create a minimal .elspais.toml config and return its path."""
     config_path = tmp_path / ".elspais.toml"
     config_path.write_text(
-        """version = 3
+        """version = 5
 
 [project]
 name = "test"
@@ -64,6 +64,7 @@ def _build(tmp_path: Path, config_path: Path, **kwargs):
 class TestCheckSpecNoDuplicatesFindings:
     """Findings should identify each duplicate requirement with node_id and file_path."""
 
+    # Verifies: REQ-d00085-I
     def test_REQ_d00085_I_duplicates_have_findings(self, tmp_path: Path) -> None:
         # check_spec_no_duplicates now reads the build-time collision record
         # at graph._duplicate_req_ids (subsequent occurrences are stored under
@@ -104,6 +105,7 @@ class TestCheckSpecNoDuplicatesFindings:
 class TestCheckSpecImplementsResolveFindings:
     """Findings should identify each unresolved implements reference."""
 
+    # Verifies: REQ-d00085-I
     def test_REQ_d00085_I_unresolved_implements_have_findings(self, tmp_path: Path) -> None:
         # The builder stores implements as pending edge links, not as a node
         # field. The check function reads node.get_field("implements", []),
@@ -133,6 +135,7 @@ class TestCheckSpecImplementsResolveFindings:
 class TestCheckSpecRefinesResolveFindings:
     """Findings should identify each unresolved refines reference."""
 
+    # Verifies: REQ-d00085-I
     def test_REQ_d00085_I_unresolved_refines_have_findings(self, tmp_path: Path) -> None:
         # Same issue as implements: the builder stores refines as pending
         # edge links, not as a node field. Construct manually.
@@ -161,10 +164,11 @@ class TestCheckSpecRefinesResolveFindings:
 class TestCheckSpecHierarchyLevelsFindings:
     """Findings should identify each hierarchy level violation."""
 
+    # Verifies: REQ-d00085-I
     def test_REQ_d00085_I_hierarchy_violations_have_findings(self, tmp_path: Path) -> None:
         config_path = tmp_path / ".elspais.toml"
         config_path.write_text(
-            """version = 3
+            """version = 5
 
 [project]
 name = "test"
@@ -325,10 +329,11 @@ A. The system SHALL also exist.
 class TestCheckBrokenReferencesFindings:
     """Findings should identify each broken reference."""
 
+    # Verifies: REQ-d00085-I
     def test_REQ_d00085_I_broken_refs_have_findings(self, tmp_path: Path) -> None:
         config_path = tmp_path / ".elspais.toml"
         config_path.write_text(
-            """version = 3
+            """version = 5
 
 [project]
 name = "test"
@@ -388,10 +393,11 @@ def orphan_func():
 class TestCheckSpecFormatRulesFindings:
     """Findings should identify each format violation."""
 
+    # Verifies: REQ-d00085-I
     def test_REQ_d00085_I_format_violations_have_findings(self, tmp_path: Path) -> None:
         config_path = tmp_path / ".elspais.toml"
         config_path.write_text(
-            """version = 3
+            """version = 5
 
 [project]
 name = "test"
@@ -436,10 +442,11 @@ This requirement has no assertions section and no hash.
 class TestCheckTestResultsFindings:
     """Findings should identify test failures."""
 
+    # Verifies: REQ-d00085-I
     def test_REQ_d00085_I_test_failures_have_findings(self, tmp_path: Path) -> None:
         config_path = tmp_path / ".elspais.toml"
         config_path.write_text(
-            """version = 3
+            """version = 5
 
 [project]
 name = "test"

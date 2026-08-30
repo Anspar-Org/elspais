@@ -44,7 +44,7 @@ from elspais.server.state import AppState
 # ---------------------------------------------------------------------------
 
 CONFIG = """\
-version = 3
+version = 5
 
 [project]
 name = "scope-fixture"

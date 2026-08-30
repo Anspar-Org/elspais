@@ -118,6 +118,7 @@ class TestShutdownFlagIsRaisedByEveryStopPath:
     flag before the signal that starts the drain, whichever path takes it.
     """
 
+    # Verifies: REQ-o00074-I
     def test_REQ_o00074_I_flag_starts_down_and_is_irreversible(self):
         from elspais.mcp.shared_state import SharedServerState
 
@@ -129,6 +130,7 @@ class TestShutdownFlagIsRaisedByEveryStopPath:
         state.begin_shutdown()  # idempotent, and there is no way back
         assert state.is_shutting_down is True
 
+    # Verifies: REQ-o00074-I
     def test_REQ_o00074_I_idle_timeout_raises_the_flag_before_it_ends(self, monkeypatch):
         """The TTL path stops the process too, and a write arriving after it
         has decided to stop is refused rather than taken down with it."""
@@ -158,6 +160,7 @@ class TestBothSurfacesRefuseWritesAfterTheDecision:
     discard it -- and the two surfaces refuse it identically.
     """
 
+    # Verifies: REQ-o00074-I
     def test_REQ_o00074_I_mcp_refuses_a_write_and_changes_nothing(self, app_state, tools):
         version = _version(app_state, REQ)
         before = len(app_state.graph.mutation_log)
@@ -175,6 +178,7 @@ class TestBothSurfacesRefuseWritesAfterTheDecision:
             "a refused write reached the node"
         )
 
+    # Verifies: REQ-o00074-I
     def test_REQ_o00074_I_http_refuses_a_write_with_409(self, app_state, client):
         version = _version(app_state, REQ)
         before = len(app_state.graph.mutation_log)
@@ -189,6 +193,7 @@ class TestBothSurfacesRefuseWritesAfterTheDecision:
         assert resp.json()["code"] == "server_shutting_down"
         assert len(app_state.graph.mutation_log) == before, "a refused write reached the log"
 
+    # Verifies: REQ-o00062-O
     def test_REQ_o00062_O_the_two_refusals_are_the_same_body(self, app_state, client, tools):
         """Byte-identical, not merely both-4xx: a caller handling one surface's
         rejection must handle the other's with the same code path."""
@@ -209,6 +214,7 @@ class TestBothSurfacesRefuseWritesAfterTheDecision:
             f"{resp.json()} vs {mcp_body}"
         )
 
+    # Verifies: REQ-o00074-I
     def test_REQ_o00074_I_refusal_precedes_the_version_check(self, app_state, client, tools):
         """A caller holding a stale token still learns the real reason nothing
         happened -- the shutdown, not a conflict it could retry out of."""
@@ -226,6 +232,7 @@ class TestBothSurfacesRefuseWritesAfterTheDecision:
         assert mcp_body["code"] == "server_shutting_down"
         assert resp.json()["code"] == "server_shutting_down"
 
+    # Verifies: REQ-o00074-I
     @pytest.mark.parametrize(
         "route",
         ["/api/save", "/api/revert", "/api/reload"],
@@ -239,6 +246,7 @@ class TestBothSurfacesRefuseWritesAfterTheDecision:
         assert resp.status_code == 409
         assert resp.json()["code"] == "server_shutting_down"
 
+    # Verifies: REQ-o00074-I
     def test_REQ_o00074_I_reads_still_answer_during_the_drain(self, app_state, client, tools):
         """The refusal is scoped to writes: a client still gets an answer about
         what it is losing, which is what the disclosure is for."""
@@ -251,6 +259,7 @@ class TestBothSurfacesRefuseWritesAfterTheDecision:
         assert "code" not in status
         assert status["total_nodes"] > 0
 
+    # Verifies: REQ-o00074-I
     def test_REQ_o00074_I_writes_are_accepted_before_the_decision(self, app_state, client, tools):
         """The control: without the flag, the same two calls succeed. Otherwise
         every assertion above would pass against a surface that refuses always.
@@ -281,6 +290,7 @@ class TestEveryWriteSurfaceTakesTheGuard:
     that joins the lock joins the refusal with it.
     """
 
+    # Verifies: REQ-o00062-O
     def test_REQ_o00062_O_the_locked_wrapper_checks_the_flag(self, app_state, tools):
         """A sample across unrelated MCP write tools, not one lucky tool."""
         app_state.shared.begin_shutdown()
@@ -297,6 +307,7 @@ class TestEveryWriteSurfaceTakesTheGuard:
                 f"{name} did not refuse a write after the shutdown decision: {result}"
             )
 
+    # Verifies: REQ-o00062-O
     def test_REQ_o00062_O_guard_reports_nothing_when_the_server_is_serving(self, app_state):
         from elspais.mcp.server import _guard_shutdown
 
@@ -333,6 +344,7 @@ class TestOneRoutineAccountsForTheWorkOnEveryStopPath:
     """
 
     # Verifies: REQ-p00083-A, REQ-p00083-C
+    # Verifies: REQ-o00074-I
     def test_REQ_o00074_I_pending_work_reaches_disk_and_is_recorded(
         self, app_state, client, project
     ):
@@ -359,6 +371,7 @@ class TestOneRoutineAccountsForTheWorkOnEveryStopPath:
         assert record["mutation_count"] == outcome["pending"]
 
     # Verifies: REQ-p00083-A, REQ-p00083-G
+    # Verifies: REQ-o00074-I
     def test_REQ_o00074_I_the_refusal_flag_is_raised_only_once_the_work_is_safe(
         self, app_state, client, monkeypatch
     ):
@@ -384,6 +397,7 @@ class TestOneRoutineAccountsForTheWorkOnEveryStopPath:
         assert app_state.shared.is_shutting_down is True, "the stop never refused later writes"
 
     # Verifies: REQ-p00083-A, REQ-p00083-C
+    # Verifies: REQ-o00074-I
     def test_REQ_o00074_I_repeat_stop_does_not_save_a_second_time(
         self, app_state, client, monkeypatch
     ):
@@ -415,6 +429,7 @@ class TestOneRoutineAccountsForTheWorkOnEveryStopPath:
         ), "the repeat stop rewrote the record of the save that actually happened"
 
     # Verifies: REQ-p00083-A, REQ-p00083-G
+    # Verifies: REQ-o00074-I
     def test_REQ_o00074_I_an_external_signal_saves_even_though_the_flag_is_up(
         self, app_state, client, project
     ):
@@ -441,6 +456,7 @@ class TestOneRoutineAccountsForTheWorkOnEveryStopPath:
         assert title in spec.read_text(), "a signalled daemon discarded the work it held"
 
     # Verifies: REQ-p00083-A, REQ-p00083-C
+    # Verifies: REQ-o00074-I
     def test_REQ_o00074_I_stopping_with_nothing_pending_writes_no_record(self, app_state, project):
         """A stop is not itself a save. With nothing pending there is nothing to
         write and nothing to disclose, so the next client is told about no save
@@ -460,6 +476,7 @@ class TestOneRoutineAccountsForTheWorkOnEveryStopPath:
         )
 
     # Verifies: REQ-p00083-H
+    # Verifies: REQ-o00074-J
     def test_REQ_o00074_J_stopping_with_nothing_pending_retires_no_record(self, app_state, project):
         """A record from an earlier automatic save survives a stop that saved
         nothing. Only a save a client asked for retires one, because that is the
@@ -486,6 +503,7 @@ class TestAFailedStopKeepsTheWorkAndTheProcess:
     """
 
     # Verifies: REQ-p00083-D
+    # Verifies: REQ-o00074-K
     def test_REQ_o00074_K_failed_save_leaves_the_work_reachable_and_retries(
         self, app_state, client, project, monkeypatch
     ):
@@ -566,6 +584,7 @@ class TestIdleTimeoutStopsThroughTheSameRoutine:
             mw._timer.cancel()
 
     # Verifies: REQ-p00083-A
+    # Verifies: REQ-o00074-I
     def test_REQ_o00074_I_idle_timeout_persists_before_it_ends_the_process(
         self, app_state, client, project, middleware, exits
     ):
@@ -587,6 +606,7 @@ class TestIdleTimeoutStopsThroughTheSameRoutine:
         assert exits == [0], f"the idle timeout did not end the process directly: {exits}"
 
     # Verifies: REQ-p00083-D
+    # Verifies: REQ-o00074-K
     def test_REQ_o00074_K_idle_timeout_that_cannot_save_waits_instead_of_stopping(
         self, app_state, client, project, middleware, exits, monkeypatch
     ):
@@ -662,6 +682,7 @@ class TestAnInstructedDiscardIsHonoured:
     than swept into a discard nobody asked for it to cover.
     """
 
+    # Verifies: REQ-o00074-I
     def test_REQ_o00074_I_the_instructed_discard_keeps_the_work_off_disk(
         self, app_state, client, project, stop_is_not_carried_out
     ):
@@ -689,6 +710,7 @@ class TestAnInstructedDiscardIsHonoured:
         )
         assert stop_is_not_carried_out.scheduled, "the process was not actually going to stop"
 
+    # Verifies: REQ-o00074-I
     def test_REQ_o00074_I_stopping_without_the_instruction_still_saves(
         self, app_state, client, project, stop_is_not_carried_out
     ):
@@ -716,6 +738,7 @@ class TestAnInstructedDiscardIsHonoured:
         assert record["saved_by"] == "daemon"
         assert record["mutation_count"] == payload["pending"]
 
+    # Verifies: REQ-o00074-I
     def test_REQ_o00074_I_the_discard_covers_only_the_changes_it_named(
         self, app_state, client, project, stop_is_not_carried_out
     ):
@@ -750,6 +773,7 @@ class TestAnInstructedDiscardIsHonoured:
         assert app_state.graph.find_by_id(REQ).get_label() == title
         assert spec.read_bytes() == before, "the refused request wrote to disk"
 
+    # Verifies: REQ-o00074-I
     def test_REQ_o00074_I_refused_discard_can_be_retried_once_the_tip_is_read(
         self, app_state, client, project, stop_is_not_carried_out
     ):

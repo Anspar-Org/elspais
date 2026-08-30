@@ -11,8 +11,10 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from elspais.graph.parsers.results.diagnostics import DiagnosticRecorder
 
-class CoverageJsonParser:
+
+class CoverageJsonParser(DiagnosticRecorder):
     """Parser for Python coverage.json format coverage reports.
 
     Handles both aggregate reports (no contexts) and per-context reports
@@ -24,7 +26,8 @@ class CoverageJsonParser:
 
         Args:
             content: Raw JSON file content.
-            source_path: Path to the coverage file (for diagnostics; unused).
+            source_path: Path to the coverage file; names the artifact in any
+                diagnostic this parse records.
 
         Returns:
             Dict keyed by source file path, each value containing:
@@ -34,13 +37,29 @@ class CoverageJsonParser:
             - ``covered_lines``: ``int`` — from summary.covered_lines, or computed
             - ``contexts``: ``dict[int, list[str]] | None`` — per-line test contexts, if available
         """
+        self._start_diagnostics()
+
         try:
             data = json.loads(content)
-        except (json.JSONDecodeError, ValueError):
+        except (json.JSONDecodeError, ValueError) as exc:
+            # Implements: REQ-d00285-G
+            # A coverage report that will not parse leaves every file it
+            # measured unmeasured, which reads downstream exactly like a run
+            # with no coverage at all. Record which one happened.
+            self._record_diagnostic(
+                source_path,
+                f"coverage JSON did not parse: {exc}",
+                line=getattr(exc, "lineno", None),
+            )
             return {}
 
-        files = data.get("files")
+        files = data.get("files") if isinstance(data, dict) else None
         if not isinstance(files, dict):
+            # Implements: REQ-d00285-G
+            self._record_diagnostic(
+                source_path,
+                "coverage JSON parsed but holds no 'files' mapping",
+            )
             return {}
 
         results: dict[str, dict] = {}

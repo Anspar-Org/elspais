@@ -179,43 +179,83 @@ class TestAStringLiteralIsNotAComment:
         assert _verifies(dispatcher, source) == []
 
     # Verifies: REQ-d00269-E
-    def test_a_default_argument_string_literal_does_not_silence_a_test_name_reference(
-        self, dispatcher: FileDispatcher
-    ) -> None:
-        """``test_name_ref`` reads the function name, not a comment.
+    def test_a_line_that_merely_opens_a_literal_is_not_interior_to_it(self) -> None:
+        """The exclusion covers a literal's content, not the line it starts on.
 
-        A line that merely opens a literal -- the opening quote reached
-        after real code, as in a default argument -- is not interior to
-        it. A `def test_REQ_...` line carrying a default string argument
-        must not be excluded on that account, or a same-type, in-position
-        reference (the underscored test name itself) is silently dropped.
+        A line may reach its opening quote after real code -- a default
+        argument spanning two lines is the ordinary case -- so a line
+        *containing* a string constant is not, by itself, evidence that the
+        line is quoted text. Only the lines strictly after the opening one
+        hold the literal's content and are excluded from binding.
         """
-        source = 'def test_REQ_p00001_widget(label="x"):\n    assert widget(label)\n'
+        from elspais.graph.parsers.prescan import ast_string_literal_lines
 
-        assert _verifies(dispatcher, source) == ["REQ-p00001"]
+        source = 'def widget(label="""x\ny"""):\n    return label\n'
+
+        assert ast_string_literal_lines(source) == {2}, (
+            "line 1 opens the literal and holds real code; line 2 is its content"
+        )
 
     # Verifies: REQ-d00269-E
-    def test_a_test_name_line_interior_to_a_docstring_binds_nothing(
+    def test_a_verifies_comment_below_a_literal_still_binds(
         self, dispatcher: FileDispatcher
     ) -> None:
-        """The mirror of the case above: genuinely interior still excludes.
+        """The exclusion is bounded at both ends of the literal it quotes.
 
-        A `def test_REQ_...` line written as an example inside a docstring
-        is interior to that literal, not merely sharing a line with one --
-        it must not bind, the same as any other keyword-shaped line
-        written as documentation rather than code.
+        The annotation-shaped line inside the literal names a keyword rather
+        than invoking one, so it binds nothing; the identical line written
+        below the closing quote is an ordinary comment and must still bind.
+        An exclusion that over-reached past the literal would silence a
+        real annotation, which reads in every report exactly like a line
+        nobody wrote.
         """
         source = "\n".join(
             [
-                "def helper():",
-                '    """Example naming convention:',
-                "    def test_REQ_p00001_widget():",
-                "        pass",
-                '    """',
-                "    return 1",
+                'PREAMBLE = """',
+                "# Verifies: REQ-p00001",
+                '"""',
+                "# Verifies: REQ-p00002",
+                "def test_widget():",
+                "    assert True",
             ]
         )
 
+        assert _verifies(dispatcher, source) == ["REQ-p00002"]
+
+    # Verifies: REQ-d00269-L
+    @pytest.mark.parametrize(
+        "source",
+        [
+            pytest.param(
+                'def test_REQ_p00001_widget(label="x"):\n    assert widget(label)\n',
+                id="ordinary-code",
+            ),
+            pytest.param(
+                "\n".join(
+                    [
+                        "def helper():",
+                        '    """Example naming convention:',
+                        "    def test_REQ_p00001_widget():",
+                        "        pass",
+                        '    """',
+                        "    return 1",
+                    ]
+                ),
+                id="inside-a-docstring",
+            ),
+        ],
+    )
+    def test_a_test_functions_name_is_never_a_reference(
+        self, dispatcher: FileDispatcher, source: str
+    ) -> None:
+        """A name is not a comment, so no position makes it a declaration.
+
+        A keyword introduces a reference only where it is the first content
+        of a comment; a function name is neither, wherever it is written.
+        Reading an identifier out of one would build a relationship its
+        author never spelled -- indistinguishable downstream from one they
+        did.
+        """
         assert _verifies(dispatcher, source) == []
 
     # Verifies: REQ-d00269-E
@@ -375,22 +415,35 @@ class TestATargetHoldingMoreThanReferencesIsUnresolved:
 
         assert _verifies(dispatcher, source) == ["some prose (REQ-p00001-A)"]
 
-    # Verifies: REQ-d00269-G
-    def test_REQ_d00269_G_one_unreadable_item_leaves_the_whole_line_unresolved(
+    # Verifies: REQ-d00287-B, REQ-d00287-E
+    def test_REQ_d00287_B_a_second_identifier_after_the_list_ended_is_not_a_target(
         self, dispatcher: FileDispatcher
     ) -> None:
-        """The line is the unit: a target part-read is a target misread."""
+        """The list ends at the word after the reference, so the name written
+        beyond it is not read as a second target."""
         source = "# Implements: REQ-p00001 and see XREQ-d00002\ndef impl():\n    pass\n"
 
-        assert _implements(dispatcher, source) == ["REQ-p00001 and see XREQ-d00002"]
+        assert _implements(dispatcher, source) == ["REQ-p00001"]
 
-    # Verifies: REQ-d00269-G
-    def test_REQ_d00269_G_trailing_prose_after_a_readable_reference_is_not_read(
+    # Verifies: REQ-d00287-B, REQ-d00287-E
+    def test_REQ_d00287_B_prose_after_a_readable_reference_is_not_part_of_the_target(
         self, dispatcher: FileDispatcher
     ) -> None:
-        source = "# Implements: REQ-p00001 -- the flag path\ndef impl():\n    pass\n"
+        """The reference the author wrote binds, and the prose after it stays
+        out of the target rather than being absorbed into it."""
+        source = "# Implements: REQ-p00001 the flag path\ndef impl():\n    pass\n"
 
-        assert _implements(dispatcher, source) == ["REQ-p00001 -- the flag path"]
+        assert _implements(dispatcher, source) == ["REQ-p00001"]
+
+    # Verifies: REQ-d00287-B
+    def test_REQ_d00287_B_a_comment_after_a_readable_reference_ends_the_list(
+        self, dispatcher: FileDispatcher
+    ) -> None:
+        """A comment marker is content like any other word: it ends the list,
+        and the reference before it is read."""
+        source = "# Implements: REQ-p00001 # the flag path\ndef impl():\n    pass\n"
+
+        assert _implements(dispatcher, source) == ["REQ-p00001"]
 
     # Verifies: REQ-d00269-D
     @pytest.mark.parametrize(

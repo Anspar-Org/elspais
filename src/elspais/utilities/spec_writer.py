@@ -102,7 +102,7 @@ def _find_next_req_header(content: str, start_pos: int, prefix: str) -> re.Match
 
 
 # ---------------------------------------------------------------------------
-# Hash / Status helpers (originally in mcp/file_mutations.py)
+# Hash / Status helpers
 # ---------------------------------------------------------------------------
 
 

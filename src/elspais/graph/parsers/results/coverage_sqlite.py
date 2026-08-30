@@ -24,6 +24,8 @@ import sqlite3
 from collections.abc import Callable
 from pathlib import Path
 
+from elspais.graph.parsers.results.diagnostics import DiagnosticRecorder
+
 _log = logging.getLogger(__name__)
 
 # SQLite database file header (first 16 bytes of every valid SQLite file).
@@ -36,7 +38,7 @@ _INSTALL_HINT = (
 )
 
 
-class CoverageSqliteParser:
+class CoverageSqliteParser(DiagnosticRecorder):
     """Parser for coverage.py's native `.coverage` SQLite data file.
 
     Unlike the other reporter-kind parsers, this parser does not consume
@@ -86,11 +88,15 @@ class CoverageSqliteParser:
             Returns an empty dict if the ``coverage`` package is not
             importable, or if the data file cannot be read.
         """
+        self._start_diagnostics()
+
         try:
             import coverage
             from coverage.exceptions import CoverageException
         except ImportError:
+            # Implements: REQ-d00285-G
             _log.warning(_INSTALL_HINT)
+            self._record_diagnostic(source_path, _INSTALL_HINT)
             return {}
 
         # config_file=False: don't pick up ambient [tool.coverage.*] config
@@ -98,11 +104,16 @@ class CoverageSqliteParser:
         cov = coverage.Coverage(data_file=source_path, config_file=False)
         try:
             cov.load()
-        except (CoverageException, OSError, sqlite3.Error):
+        except (CoverageException, OSError, sqlite3.Error) as exc:
+            # Implements: REQ-d00285-G
             # sqlite3.Error is defensive: coverage.py currently wraps sqlite
             # errors in DataError (a CoverageException), but a future version
             # letting a bare sqlite3 error escape must not crash the build.
+            # A data file that will not load measured nothing as far as the
+            # rest of the build can see, which is indistinguishable from a
+            # suite run without coverage; record which of the two it was.
             _log.debug("coverage-sqlite: failed to load %s", source_path, exc_info=True)
+            self._record_diagnostic(source_path, f"coverage data file did not load: {exc}")
             return {}
 
         cov_data = cov.get_data()
@@ -111,34 +122,57 @@ class CoverageSqliteParser:
         for file_path in cov_data.measured_files():
             try:
                 _, statements, _excluded, missing, _ = cov.analysis2(file_path)
-            except (CoverageException, OSError, sqlite3.Error):
-                # Source no longer available/parseable (moved, deleted, etc.)
-                # -- fall back to executed-lines-only (no missing-line data).
+            except (CoverageException, OSError, sqlite3.Error) as exc:
+                # Implements: REQ-d00254-P+Q, REQ-d00285-G
+                # Re-analysing the source is what produces the statement set;
+                # without it there is no denominator and no second source for
+                # one. The lines the run executed are still known, so they are
+                # kept -- that is P. What must not happen is calling their
+                # count the total: every line that never ran would leave the
+                # denominator and the file would read as fully covered, which
+                # no reader could tell from a real result. So the file is
+                # marked unanalysed and contributes no ratio -- that is Q.
+                self._record_diagnostic(
+                    file_path,
+                    f"source could not be re-analysed as Python, so its total "
+                    f"line count is unknown: {exc}",
+                    partial=True,
+                )
                 executed = cov_data.lines(file_path) or []
-                statements = list(executed)
-                missing = []
+                results[file_path] = {
+                    "line_coverage": dict.fromkeys(executed, 1),
+                    "executable_lines": 0,
+                    "covered_lines": len(executed),
+                    "contexts": self._contexts_for(cov_data, file_path, wanted_files),
+                    "source_analysed": False,
+                }
+                continue
 
             missing_set = set(missing)
             line_coverage = {ln: (0 if ln in missing_set else 1) for ln in statements}
             executable_lines = len(statements)
             covered_lines = executable_lines - len(missing_set)
 
-            contexts: dict[int, list[str]] | None = None
-            if wanted_files is None or wanted_files(file_path):
-                raw_contexts = cov_data.contexts_by_lineno(file_path)
-                if raw_contexts:
-                    contexts = {ln: ctxs for ln, ctxs in raw_contexts.items() if ctxs}
-                    if not contexts:
-                        contexts = None
-
             results[file_path] = {
                 "line_coverage": line_coverage,
                 "executable_lines": executable_lines,
                 "covered_lines": covered_lines,
-                "contexts": contexts,
+                "contexts": self._contexts_for(cov_data, file_path, wanted_files),
+                "source_analysed": True,
             }
 
         return results
+
+    @staticmethod
+    def _contexts_for(cov_data, file_path: str, wanted_files) -> dict[int, list[str]] | None:
+        """Per-test contexts for one file, or None where there are none."""
+        if wanted_files is not None and not wanted_files(file_path):
+            return None
+        raw = cov_data.contexts_by_lineno(file_path)
+        if not raw:
+            return None
+        contexts = {ln: ctxs for ln, ctxs in raw.items() if ctxs}
+        return contexts or None
 
     def can_parse(self, file_path: Path) -> bool:
         """Check if this parser can handle the given file.

@@ -68,6 +68,7 @@ def _conducted_rollup():
     )
 
 
+# Verifies: REQ-d00258-A
 @pytest.mark.parametrize("rollup_fn", [_whole_requirement_rollup, _conducted_rollup])
 def test_REQ_d00258_A_badge_tier_reads_the_total(rollup_fn):
     """Whole-requirement and conducted evidence both reach the headline total.
@@ -80,6 +81,7 @@ def test_REQ_d00258_A_badge_tier_reads_the_total(rollup_fn):
     assert result["tested_tier"] == "full"
 
 
+# Verifies: REQ-d00258-G
 def test_REQ_d00258_G_pill_and_badge_agree():
     """The pill and the badge beside it answer on the same measure."""
     from tests.core.graph_test_helpers import build_graph, make_requirement
@@ -100,6 +102,7 @@ def test_REQ_d00258_G_pill_and_badge_agree():
         assert states[label]["implemented"] == "full", label
 
 
+# Verifies: REQ-d00069-L
 def test_REQ_d00069_L_measures_are_named_in_the_hover():
     """The hover names the measure that produced the figure.
 

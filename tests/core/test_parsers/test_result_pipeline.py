@@ -16,6 +16,7 @@ from elspais.graph.parsers.results.pytest_json import PytestJSONParser
 class TestJUnitXMLParserPriority:
     """Tests for JUnitXMLParser priority."""
 
+    # Verifies: REQ-d00054
     def test_REQ_d00054_priority_is_90(self):
         """JUnitXMLParser has priority 90."""
         parser = JUnitXMLParser()
@@ -25,6 +26,7 @@ class TestJUnitXMLParserPriority:
 class TestPytestJSONParserPriority:
     """Tests for PytestJSONParser priority."""
 
+    # Verifies: REQ-d00054
     def test_REQ_d00054_priority_is_90(self):
         """PytestJSONParser has priority 90."""
         parser = PytestJSONParser()
@@ -34,6 +36,7 @@ class TestPytestJSONParserPriority:
 class TestJUnitXMLClaimAndParse:
     """Tests for JUnitXMLParser.claim_and_parse()."""
 
+    # Verifies: REQ-d00054
     def test_REQ_d00054_returns_parsed_content_with_test_result_type(self):
         """claim_and_parse yields ParsedContent with content_type='test_result'."""
         xml = (
@@ -52,6 +55,7 @@ class TestJUnitXMLClaimAndParse:
         assert len(results) == 1
         assert results[0].content_type == "test_result"
 
+    # Verifies: REQ-d00054
     def test_REQ_d00054_parsed_data_contains_expected_keys(self):
         """Parsed data dict carries exactly the standard test result keys."""
         xml = (
@@ -86,6 +90,7 @@ class TestJUnitXMLClaimAndParse:
         assert data["status"] == "passed"
         assert data["duration"] == 0.05
 
+    # Verifies: REQ-d00054
     def test_REQ_d00054_multiple_testcases_yield_multiple_results(self):
         """Multiple testcases in XML produce multiple ParsedContent objects."""
         xml = (
@@ -104,6 +109,7 @@ class TestJUnitXMLClaimAndParse:
         assert len(results) == 2
         assert all(r.content_type == "test_result" for r in results)
 
+    # Verifies: REQ-d00054
     def test_REQ_d00054_failed_testcase_reports_failure_status(self):
         """A failed testcase has status='failed' in parsed data."""
         xml = (
@@ -124,6 +130,7 @@ class TestJUnitXMLClaimAndParse:
         assert results[0].parsed_data["status"] == "failed"
         assert results[0].parsed_data["message"] == "assert False"
 
+    # Verifies: REQ-d00054
     def test_REQ_d00054_empty_xml_yields_no_results(self):
         """Invalid/empty XML content produces no ParsedContent."""
         lines = [(1, "not xml at all")]
@@ -138,6 +145,7 @@ class TestJUnitXMLClaimAndParse:
 class TestPytestJSONClaimAndParse:
     """Tests for PytestJSONParser.claim_and_parse()."""
 
+    # Verifies: REQ-d00054
     def test_REQ_d00054_returns_parsed_content_with_test_result_type(self):
         """claim_and_parse yields ParsedContent with content_type='test_result'."""
         json_content = (
@@ -153,6 +161,7 @@ class TestPytestJSONClaimAndParse:
         assert len(results) == 1
         assert results[0].content_type == "test_result"
 
+    # Verifies: REQ-d00054
     def test_REQ_d00054_parsed_data_contains_expected_keys(self):
         """Parsed data dict carries exactly the standard test result keys."""
         json_content = (
@@ -181,6 +190,7 @@ class TestPytestJSONClaimAndParse:
         assert data["status"] == "passed"
         assert data["duration"] == 0.05
 
+    # Verifies: REQ-d00054
     def test_REQ_d00054_multiple_tests_yield_multiple_results(self):
         """Multiple tests in JSON produce multiple ParsedContent objects."""
         json_content = (
@@ -198,6 +208,7 @@ class TestPytestJSONClaimAndParse:
         assert len(results) == 2
         assert all(r.content_type == "test_result" for r in results)
 
+    # Verifies: REQ-d00054
     def test_REQ_d00054_failed_test_reports_failure_status(self):
         """A failed test has status='failed' in parsed data."""
         json_content = (
@@ -215,6 +226,7 @@ class TestPytestJSONClaimAndParse:
         assert results[0].parsed_data["status"] == "failed"
         assert "AssertionError" in results[0].parsed_data["message"]
 
+    # Verifies: REQ-d00054
     def test_REQ_d00054_invalid_json_yields_no_results(self):
         """Invalid JSON content produces no ParsedContent."""
         lines = [(1, "not json {{{")]
@@ -225,6 +237,7 @@ class TestPytestJSONClaimAndParse:
 
         assert results == []
 
+    # Verifies: REQ-d00054
     def test_REQ_d00054_simple_list_format(self):
         """Simple list format with classname/name produces results."""
         json_content = (

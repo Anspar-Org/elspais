@@ -255,6 +255,7 @@ def _build_two_req_graph(tmp_path: Path) -> tuple[FederatedGraph, Path]:
 class TestSaveChangeStatus:
     """Tests for saving change_status mutations to disk via render_save."""
 
+    # Verifies: REQ-o00063-A
     def test_REQ_o00063_A_save_change_status(self, tmp_path: Path):
         """change_status mutation is saved via render_save."""
         graph, spec_file = _build_graph_with_spec(tmp_path, "placeholder")
@@ -280,6 +281,7 @@ class TestSaveChangeStatus:
                 assert "Deprecated" in meta_line
                 break
 
+    # Verifies: REQ-o00063-A
     def test_REQ_o00063_A_save_clears_mutation_log(self, tmp_path: Path):
         """After successful save, mutation log is cleared."""
         graph, spec_file = _build_graph_with_spec(tmp_path, "placeholder")
@@ -300,6 +302,7 @@ class TestSaveChangeStatus:
 class TestSaveUpdateTitle:
     """Tests for saving update_title mutations to disk via render_save."""
 
+    # Verifies: REQ-o00063-G
     def test_REQ_o00063_G_save_update_title(self, tmp_path: Path):
         """update_title mutation is saved via render_save."""
         graph, spec_file = _build_graph_with_spec(tmp_path, "placeholder")
@@ -323,6 +326,7 @@ class TestSaveUpdateTitle:
 class TestSaveUpdateAssertion:
     """Tests for saving update_assertion mutations to disk via render_save."""
 
+    # Verifies: REQ-o00063-H
     def test_REQ_o00063_H_save_update_assertion(self, tmp_path: Path):
         """update_assertion mutation is saved via render_save."""
         graph, spec_file = _build_graph_with_spec(tmp_path, "placeholder")
@@ -348,6 +352,7 @@ class TestSaveUpdateAssertion:
 class TestSaveAddAssertion:
     """Tests for saving add_assertion mutations to disk via render_save."""
 
+    # Verifies: REQ-o00063-I
     def test_REQ_o00063_I_save_add_assertion(self, tmp_path: Path):
         """add_assertion mutation is saved via render_save."""
         graph, spec_file = _build_graph_with_spec(tmp_path, "placeholder")
@@ -373,6 +378,7 @@ class TestSaveAddAssertion:
 class TestSaveEdgeMutations:
     """Tests for saving edge mutations via render_save."""
 
+    # Verifies: REQ-o00063-A
     def test_REQ_o00063_A_save_add_edge(self, tmp_path: Path):
         """add_edge mutations are reflected in rendered output."""
         graph, spec_file = _build_graph_with_spec(tmp_path, "placeholder")
@@ -398,6 +404,7 @@ class TestSaveEdgeMutations:
         assert "REQ-p00001" in content
         assert "REQ-p00002" in content
 
+    # Verifies: REQ-o00063-A
     def test_REQ_o00063_A_save_delete_edge(self, tmp_path: Path):
         """delete_edge mutations are reflected in rendered output."""
         graph, spec_file = _build_graph_with_spec(tmp_path, "placeholder")
@@ -413,6 +420,7 @@ class TestSaveEdgeMutations:
         # Implements should now be "-" (no parents)
         assert "**Implements**: -" in content
 
+    # Verifies: REQ-o00063-A
     def test_REQ_o00063_A_save_change_edge_kind(self, tmp_path: Path):
         """change_edge_kind mutation is reflected in rendered output."""
         graph, spec_file = _build_graph_with_spec(tmp_path, "placeholder")
@@ -438,6 +446,7 @@ class TestSaveEdgeMutations:
 class TestMultipleMutationsSameReq:
     """Tests for multiple mutations targeting the same requirement."""
 
+    # Verifies: REQ-o00063-A
     def test_REQ_o00063_A_multiple_mutations_same_req(self, tmp_path: Path):
         """Multiple mutations to the same requirement all apply correctly."""
         graph, spec_file = _build_graph_with_spec(tmp_path, "placeholder")
@@ -458,6 +467,7 @@ class TestMultipleMutationsSameReq:
         # Assertion B should still be intact
         assert "B. The system SHALL do another thing." in content
 
+    # Verifies: REQ-o00063-A
     def test_REQ_o00063_A_multiple_mutations_different_reqs(self, tmp_path: Path):
         """Mutations to different requirements all apply correctly."""
         graph, spec_file = _build_two_req_graph(tmp_path)
@@ -484,6 +494,7 @@ class TestMultipleMutationsSameReq:
 class TestNoSourceFile:
     """Tests for mutations on nodes without FILE ancestors."""
 
+    # Verifies: REQ-o00063-A
     def test_REQ_o00063_A_skips_node_without_source(self, tmp_path: Path):
         """Mutations on nodes without FILE ancestry have no dirty files."""
         graph = TraceGraph(repo_root=tmp_path, _resolver=grammar_for("REQ"))
@@ -516,6 +527,7 @@ class TestNoSourceFile:
 class TestEmptyMutationLog:
     """Tests for saving with no mutations."""
 
+    # Verifies: REQ-o00063-F
     def test_REQ_o00063_F_empty_log_is_noop(self, tmp_path: Path):
         """Saving with an empty mutation log is a no-op success."""
         graph, spec_file = _build_graph_with_spec(tmp_path, "placeholder")
@@ -534,6 +546,7 @@ class TestEmptyMutationLog:
 class TestEdgeCoalescing:
     """Tests for edge mutation coalescing behavior."""
 
+    # Verifies: REQ-o00063-A
     def test_REQ_o00063_A_add_then_delete_edge_coalesces(self, tmp_path: Path):
         """Adding then deleting an edge results in no net change."""
         graph, spec_file = _build_graph_with_spec(tmp_path, "placeholder")
@@ -560,6 +573,7 @@ class TestEdgeCoalescing:
         assert "REQ-p00001" in content
         assert "REQ-p00002" not in content
 
+    # Verifies: REQ-o00063-A
     def test_REQ_o00063_A_multiple_edge_adds_coalesce(self, tmp_path: Path):
         """Multiple add_edge mutations to the same req coalesce into one write."""
         graph, spec_file = _build_graph_with_spec(tmp_path, "placeholder")

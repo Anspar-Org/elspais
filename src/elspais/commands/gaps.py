@@ -19,6 +19,7 @@ from elspais.graph.aggregation import (
     work_verdict,
 )
 from elspais.graph.metrics import tested_and_passing
+from elspais.graph.parsers.directives import counted_assertions
 from elspais.graph.relations import EdgeKind
 
 
@@ -144,11 +145,10 @@ def collect_gaps(
 
         # Collect assertion nodes for this REQ (kept as nodes so coverage
         # lookups can key by assertion *label* while gap entries report IDs).
-        assertion_nodes = [
-            child
-            for child in node.iter_children(edge_kinds={EdgeKind.STRUCTURES})
-            if child.kind == NodeKind.ASSERTION
-        ]
+        # Implements: REQ-p00017-G
+        # A retired *Assertion* is not a gap: it states no obligation, so
+        # nothing is missing when nothing verifies it.
+        assertion_nodes = counted_assertions(node, structural=True)
         labels = [a.get_field("label", "") for a in assertion_nodes]
 
         # REQ-d00252-F: a requirement that delegates implementation to a library
@@ -219,7 +219,7 @@ def collect_gaps(
             data.no_assertions.append(GapEntry(req_id, title))
 
         # Failing: test or UAT failures. Read through the Passing dimension,
-        # so a failure line coverage carries is seen too (REQ-d00258-N).
+        # so a failure line coverage carries is seen too (REQ-d00277-C).
         if metrics is not None:
             if tested_and_passing(metrics).has_failures:
                 data.failing.append((req_id, title, "test"))

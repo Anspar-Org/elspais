@@ -22,9 +22,9 @@
 
 ## Testing
 
-- ALWAYS include assertion references in test names.
-- Test names MUST reference a specific assertion (e.g., `test_REQ_xxx_A_description`).
-- Tests without assertion references will not link to requirements in the traceability graph.
+- ALWAYS put a `# Verifies: REQ-xxx-A` comment above each test, naming a specific assertion.
+- A comment is the only thing that links a test. A requirement ID in the function name links nothing.
+- A test carrying no such comment will not link to any requirement in the traceability graph.
 - ALWAYS use a sub-agent to write tests.
 - Run `pytest tests/test_doc_sync.py` before committing doc changes.
 

@@ -880,6 +880,12 @@ def _render_csv(data: dict, config: dict | None = None) -> str:
     buf = io.StringIO()
     writer = csv.writer(buf)
     keys = _stated_values(data)
+    # Implements: REQ-p00084-C+D
+    # A leading comment row per disclosure line, ahead of the header, the same
+    # convention the trace CSV uses. One field, so the file stays CSV; the
+    # scope a text or markdown rendering states is stated here too.
+    for line in data.get("scope") or []:
+        writer.writerow([f"# {line}"])
     writer.writerow(_tabular_headers(keys, config))
     for lv in data["levels"]:
         # The machine format states the same cells the read ones do: a

@@ -35,8 +35,15 @@ from elspais.graph.GraphNode import (
 )
 from elspais.graph.mutations import MutationEntry, MutationLog
 from elspais.graph.parsers import ParsedContent
+from elspais.graph.parsers.directives import (
+    apply_directive,
+    assertion_is_retired,
+    canonical_assertion_text,
+    directive_fields,
+)
 from elspais.graph.reference_faults import (
     FaultClass,
+    FaultCode,
     IdentifierFormFinding,
     ReferenceFault,
     StyleFinding,
@@ -138,6 +145,155 @@ _PLACEMENT_EDGE_KINDS = frozenset(
 )
 
 
+# Implements: REQ-d00285-A, REQ-d00285-G
+@dataclass(frozen=True)
+class IngestionFault:
+    """An artifact the tool reached and could not read, in whole or in part.
+
+    A results file that will not parse, a coverage report naming a format no
+    reporter reads, a configured target whose working directory leaves the
+    repository: each ends with content absent from the graph. Absent content
+    is not a fact a reader can see -- a requirement with no results reads as
+    untested whether the tests never ran or their report was unreadable, and
+    the two call for opposite actions.
+
+    This is not a reference fault: no reference was read, so none failed to
+    bind. It sits beside the other parse-time findings for the same reason
+    they do -- the point that decided to drop something records what it
+    dropped and why, rather than leaving a reader to infer it from a number
+    that came out lower than expected.
+
+    Attributes:
+        path: The artifact, repo-relative where the tool could place it, as
+            the configuration named it otherwise. Empty where the condition
+            is about a target rather than a file.
+        stage: What the tool was doing when it withheld the content --
+            ``"results"``, ``"coverage"`` or ``"target"``.
+        cause: Why nothing was produced, in terms a reader can act on.
+        line: The 1-based line the condition sits on, where it has one.
+        target: The ``[[scanning.test.targets]]`` entry being read, where the
+            condition arose under one.
+        partial: Whether the artifact was read in part rather than not at
+            all. The two call for different actions -- an artifact that
+            produced nothing is a defect somebody must fix, while one read in
+            part has yielded what it could and left a figure whose basis
+            differs from its appearance -- so they are reported apart and
+            carry their own severities (REQ-d00254-Q).
+    """
+
+    path: str
+    stage: str
+    cause: str
+    line: int | None = None
+    target: str | None = None
+    partial: bool = False
+
+
+# Implements: REQ-d00285-G, REQ-p00019-K
+def _record_ingestion_fault(
+    store: list[IngestionFault],
+    path: str,
+    stage: str,
+    cause: str,
+    line: int | None = None,
+    target: str | None = None,
+    partial: bool = False,
+) -> None:
+    """Record, once, an artifact ingestion could not read in full.
+
+    The same artifact declined for the same cause at the same stage is one
+    fact about the build. Recording it twice would make a count of findings
+    read as a count of two distinct conditions.
+
+    Ingestion reaches an artifact both before the graph exists and after it
+    does, so the two holders of these records share this one rule rather than
+    each deciding when a condition is the same one again.
+    """
+    fault = IngestionFault(
+        path=path, stage=stage, cause=cause, line=line, target=target, partial=partial
+    )
+    if fault in store:
+        return
+    store.append(fault)
+
+
+# Implements: REQ-d00241-F
+@dataclass(frozen=True)
+class UnscannedKeywordFile:
+    """A file the scan reached, declined to read, and that cites anyway.
+
+    It sits inside a directory the project declared for one of its scanning
+    kinds, the ignore configuration does not exclude it, and the patterns
+    that kind declares do not select it -- yet it carries a *Traceability*
+    keyword. An honest zero and a dropped citation are the same number, so
+    the fact that the tool passed the file over is recorded here rather than
+    left to be inferred from a requirement reading as uncovered.
+
+    This record belongs beside the other parse-time findings in
+    ``reference_faults``; it is here because it is not a reference fault --
+    nothing was read, so nothing failed to bind.
+
+    Attributes:
+        path: The file, relative to the repository root.
+        kind: The scanning kind whose directories contain it ("spec",
+            "code", "test").
+        keyword: The *Traceability* keyword as the author spelled it.
+        line: The 1-based line that keyword was written on.
+    """
+
+    path: str
+    kind: str
+    keyword: str
+    line: int
+
+
+# Implements: REQ-d00274-G
+@dataclass(frozen=True)
+class UnboundCitation:
+    """A citation in a scanned test file that found no test to attach to.
+
+    The keyword read, the reference resolved, and then the pre-scan found no
+    test declaration for it -- the comment sits above a class, below the last
+    test, or past whatever window its language's pre-scan looks through. What
+    it names is therefore evidence attached to nothing a test run can produce
+    a result for, so it credits no coverage (REQ-d00274-H) and is recorded
+    here instead.
+
+    Silence is the whole cost of the condition: an assertion credited by such
+    a citation reads as tested and never as passing, which is exactly how a
+    stale result reads, and re-running the suite cannot move it.
+
+    Attributes:
+        path: The test file, as the citation's source was named.
+        line: The 1-based line the citation was written on.
+        keyword: The *Traceability* keyword the citation used.
+        targets: The references the citation named, in the order written.
+    """
+
+    path: str
+    line: int
+    keyword: str
+    targets: tuple[str, ...]
+
+
+def _keyword_as_written(raw_text: str) -> str:
+    """The *Traceability* keyword a citation used, as its author spelled it.
+
+    A test file admits only ``Verifies``, but reporting the canonical
+    spelling for a comment that wrote something else would name a line the
+    reader cannot find. Where the text holds no keyword at all -- a citation
+    carried by a test function's name -- the canonical word is the honest
+    answer, because that is the relationship the name declared.
+    """
+    from elspais.graph.parsers.patterns import KEYWORD_PATTERN
+
+    match = KEYWORD_PATTERN.search(raw_text or "")
+    return match.group(0) if match else "Verifies"
+
+
+# A mutation is applied in place to this live graph, whatever level or kind of node
+# it touches, and the graph stays readable between one mutation and the next.
+# Implements: REQ-d00134-A, REQ-d00134-B, REQ-d00134-C
 @dataclass
 class TraceGraph:
     """Container for the complete traceability graph.
@@ -213,13 +369,13 @@ class TraceGraph:
     _roots: list[GraphNode] = field(default_factory=list, init=False)
     _index: dict[str, GraphNode] = field(default_factory=dict, init=False, repr=False)
 
-    # Detection: orphans and broken references (populated at build time)
+    # Detection: orphans and unresolved references (populated at build time)
     _orphaned_ids: set[str] = field(default_factory=set, init=False)
-    _broken_references: list[ReferenceFault] = field(default_factory=list, init=False)
+    _unresolved_references: list[ReferenceFault] = field(default_factory=list, init=False)
     # Implements: REQ-d00272-G
     # Keyword-form findings (non-canonical case/spacing/emphasis) -- never
     # cost the edge their keyword introduces, so kept apart from
-    # _broken_references rather than joining a bucket that counts
+    # _unresolved_references rather than joining a bucket that counts
     # references that failed to bind.
     _style_findings: list[StyleFinding] = field(default_factory=list, init=False, repr=False)
     # Implements: REQ-d00272-O
@@ -230,13 +386,31 @@ class TraceGraph:
     )
     # Implements: REQ-d00272-N
     # References the configuration admits but did not spell canonically --
-    # each produced its relationship, so kept apart from _broken_references.
+    # each produced its relationship, so kept apart from _unresolved_references.
     _identifier_form_findings: list[IdentifierFormFinding] = field(
         default_factory=list, init=False, repr=False
     )
+    # Implements: REQ-d00241-F
+    # Files a scan reached, declined to read, and that carry a *Traceability*
+    # keyword regardless. Not a reference fault: no reference was read, so
+    # none failed -- what is recorded is that the tool passed the file over.
+    _unscanned_keyword_files: list[UnscannedKeywordFile] = field(
+        default_factory=list, init=False, repr=False
+    )
+    # Implements: REQ-d00274-G
+    # Citations in scanned test files that found no test to attach to. Kept
+    # apart from _unresolved_references because nothing failed to resolve: the
+    # reference read and named a real assertion, and it is the binding to a
+    # test that was never made.
+    _unbound_citations: list[UnboundCitation] = field(default_factory=list, init=False, repr=False)
     # Detection: duplicate REQ IDs across files (populated at build time).
     # Maps canonical REQ ID -> ordered list of source paths defining it.
     _duplicate_req_ids: dict[str, list[str]] = field(default_factory=dict, init=False, repr=False)
+    # Implements: REQ-d00285-G
+    # Artifacts ingestion reached and produced nothing from. Recorded rather
+    # than dropped: an unreadable report and a suite that never ran are the
+    # same absence downstream, and only this record tells them apart.
+    _ingestion_faults: list[IngestionFault] = field(default_factory=list, init=False, repr=False)
 
     # Implements: REQ-d00222-A
     _terms: TermDictionary = field(default_factory=TermDictionary, init=False)
@@ -384,7 +558,7 @@ class TraceGraph:
         return copy.deepcopy(self)
 
     # ─────────────────────────────────────────────────────────────────────────
-    # Detection API: Orphans and Broken References
+    # Detection API: Orphans and Unresolved References
     # ─────────────────────────────────────────────────────────────────────────
 
     def orphaned_nodes(self) -> Iterator[GraphNode]:
@@ -410,20 +584,21 @@ class TraceGraph:
         """Return the number of orphaned nodes."""
         return len(self._orphaned_ids)
 
-    def broken_references(self) -> list[ReferenceFault]:
-        """Get all broken references detected during build.
+    def unresolved_references(self) -> list[ReferenceFault]:
+        """Every reference that resolved to nothing, detected during build.
 
-        Broken references occur when a node references a target ID
-        that doesn't exist in the graph.
+        A reference is unresolved when it named a target the graph does not
+        hold -- including one that never read as an identifier at all, which
+        `FaultClass.MALFORMED` distinguishes.
 
         Returns:
             List of ReferenceFault instances.
         """
-        return list(self._broken_references)
+        return list(self._unresolved_references)
 
-    def has_broken_references(self) -> bool:
-        """Check if the graph has broken references."""
-        return len(self._broken_references) > 0
+    def has_unresolved_references(self) -> bool:
+        """Whether the graph holds a reference that resolved to nothing."""
+        return len(self._unresolved_references) > 0
 
     # Implements: REQ-d00272-G
     def style_findings(self) -> list[StyleFinding]:
@@ -440,6 +615,28 @@ class TraceGraph:
         """Get every reference spelled in a non-canonical admitted form."""
         return list(self._identifier_form_findings)
 
+    # Implements: REQ-d00241-F
+    def unscanned_keyword_files(self) -> list[UnscannedKeywordFile]:
+        """Every file the scan declined to read that cites a requirement.
+
+        A file inside a scanned directory that the ignore configuration does
+        not exclude, that the patterns declared for its kind do not select,
+        and that carries a *Traceability* keyword anyway. The keyword was
+        never read, so nothing here says whether it would have bound -- only
+        that a citation was written where the tool was not looking.
+        """
+        return list(self._unscanned_keyword_files)
+
+    # Implements: REQ-d00274-G
+    def unbound_citations(self) -> list[UnboundCitation]:
+        """Every citation in a test file that attached to no test.
+
+        The reference resolved; no test declaration was found beneath it. It
+        contributes no coverage (REQ-d00274-H), so what it names would read as
+        untested rather than as wrongly tested were this list not consulted.
+        """
+        return list(self._unbound_citations)
+
     def duplicate_req_ids(self) -> dict[str, list[str]]:
         """Return cross-file duplicate REQ IDs detected at build time.
 
@@ -454,6 +651,31 @@ class TraceGraph:
     def has_duplicate_req_ids(self) -> bool:
         """Check if the graph has any cross-file duplicate REQ IDs."""
         return len(self._duplicate_req_ids) > 0
+
+    # Implements: REQ-d00285-G
+    def record_ingestion_fault(
+        self,
+        path: str,
+        stage: str,
+        cause: str,
+        line: int | None = None,
+        target: str | None = None,
+        partial: bool = False,
+    ) -> None:
+        """Record an artifact an ingestion pass over this graph could not read in full."""
+        _record_ingestion_fault(self._ingestion_faults, path, stage, cause, line, target, partial)
+
+    # Implements: REQ-d00285-G
+    def ingestion_faults(self) -> list[IngestionFault]:
+        """Every artifact ingestion reached and produced no content from.
+
+        A results or coverage artifact that would not parse, that no reporter
+        reads, or that a configured target pointed outside the repository.
+        Nothing here says a test failed -- it says a report of the run never
+        became part of the graph, so any figure computed without it is
+        computed over less than was measured.
+        """
+        return list(self._ingestion_faults)
 
     # ─────────────────────────────────────────────────────────────────────────
     # Reachability API
@@ -540,6 +762,7 @@ class TraceGraph:
         """Check if any nodes have been deleted."""
         return len(self._deleted_nodes) > 0
 
+    # Implements: REQ-d00134-F
     def undo_last(self) -> MutationEntry | None:
         """Undo the most recent mutation.
 
@@ -658,7 +881,7 @@ class TraceGraph:
         the render agrees with the broken-reference report (REQ-d00132-G).
         """
         suffix_prefix = old_id + "-"
-        for i, br in enumerate(self._broken_references):
+        for i, br in enumerate(self._unresolved_references):
             new_source = new_id if br.source_id == old_id else br.source_id
             if br.target_id == old_id:
                 new_target = new_id
@@ -668,7 +891,7 @@ class TraceGraph:
                 new_target = br.target_id
             if (new_source, new_target) == (br.source_id, br.target_id):
                 continue
-            self._broken_references[i] = replace(br, source_id=new_source, target_id=new_target)
+            self._unresolved_references[i] = replace(br, source_id=new_source, target_id=new_target)
             if new_target != br.target_id:
                 source_node = self._index.get(new_source)
                 ref_kind = EdgeKind(br.edge_kind)
@@ -795,7 +1018,7 @@ class TraceGraph:
 
         # Restore broken references retired with the node (REQ-d00132-G)
         for br_dict in entry.before_state.get("purged_broken_refs", []):
-            self._broken_references.append(ReferenceFault(**br_dict))
+            self._unresolved_references.append(ReferenceFault(**br_dict))
 
     # Stored ref fields hold UNRESOLVED leftovers only (REQ-d00132-F/G):
     # build() strips refs that became edges, and the mutation paths below
@@ -844,9 +1067,9 @@ class TraceGraph:
             # Check if this was a broken reference (never created actual edge)
             if entry.after_state.get("broken"):
                 # Remove from broken references
-                self._broken_references = [
+                self._unresolved_references = [
                     br
-                    for br in self._broken_references
+                    for br in self._unresolved_references
                     if not (br.source_id == source_id and br.target_id == target_id)
                 ]
                 kind_val = entry.after_state.get("edge_kind", "")
@@ -989,15 +1212,15 @@ class TraceGraph:
                     self._restore_journey_bodies(entry)
             else:
                 # Remove from broken references (with new target)
-                self._broken_references = [
+                self._unresolved_references = [
                     br
-                    for br in self._broken_references
+                    for br in self._unresolved_references
                     if not (br.source_id == source_id and br.target_id == new_target_id)
                 ]
                 self._remove_leftover_ref(source, EdgeKind(edge_kind_str), new_target_id)
 
             # Restore the original broken reference and its leftover (REQ-d00132-G)
-            self._broken_references.append(
+            self._unresolved_references.append(
                 ReferenceFault(
                     source_id=source_id,
                     target_id=old_target_id,
@@ -1073,7 +1296,13 @@ class TraceGraph:
         node_id = entry.target_id
         old_text = entry.before_state.get("text")
         if node_id in self._index and old_text is not None:
-            self._index[node_id].set_label(old_text)
+            node = self._index[node_id]
+            # Implements: REQ-p00002-E
+            # Restoring the text has to restore what the text SAYS: an
+            # *Assertion* retired by a mutation and then un-retired by its
+            # undo would otherwise keep the flag and stay out of every
+            # denominator it had rejoined.
+            node.set_label(apply_directive(node, old_text))
             # Restore parent hash (even if None)
             parent_id = entry.before_state.get("parent_id")
             if parent_id and parent_id in self._index and "parent_hash" in entry.before_state:
@@ -1730,10 +1959,10 @@ class TraceGraph:
         # Retire broken references sourced from the deleted node — a node
         # that no longer exists has no references to report as broken.
         # Recorded for undo restoration. Implements: REQ-d00132-G
-        purged_broken = [br for br in self._broken_references if br.source_id == node_id]
+        purged_broken = [br for br in self._unresolved_references if br.source_id == node_id]
         if purged_broken:
-            self._broken_references = [
-                br for br in self._broken_references if br.source_id != node_id
+            self._unresolved_references = [
+                br for br in self._unresolved_references if br.source_id != node_id
             ]
             entry.before_state["purged_broken_refs"] = [asdict(br) for br in purged_broken]
 
@@ -1927,8 +2156,10 @@ class TraceGraph:
             affects_hash=True,
         )
 
-        # Update assertion text
-        node.set_label(new_text)
+        # Update assertion text. Reading the directive here is what lets an
+        # *Assertion* be retired -- or brought back -- through a mutation
+        # rather than only through a file (REQ-p00002-E).
+        node.set_label(apply_directive(node, new_text))
 
         # Recompute parent hash
         self._recompute_requirement_hash(parent)
@@ -1936,7 +2167,7 @@ class TraceGraph:
         self._mutation_log.append(entry)
         return entry
 
-    # Implements: REQ-o00062-S
+    # Implements: REQ-o00062-S, REQ-p00017-I
     def _next_assertion_label(self, parent: GraphNode) -> str:
         """The label following ``parent``'s last assertion in its series.
 
@@ -2042,13 +2273,16 @@ class TraceGraph:
 
         old_hash = parent.get_field("hash")
 
-        # Create assertion node
+        # Create assertion node. Text arriving through a mutation is read for
+        # a directive exactly as text arriving from a file is (REQ-p00002-E),
+        # so an *Assertion* added already retired never enters a denominator.
+        assertion_text = canonical_assertion_text(text)
         assertion_node = GraphNode(
             id=assertion_id,
             kind=NodeKind.ASSERTION,
-            label=text,
+            label=assertion_text,
         )
-        assertion_node._content = {"label": label}
+        assertion_node._content = {"label": label, **directive_fields(assertion_text)}
 
         # Add to index and link to parent
         self._index[assertion_id] = assertion_node
@@ -2228,7 +2462,7 @@ class TraceGraph:
         """Add a new edge (reference).
 
         Creates a relationship from source to target. If target doesn't exist,
-        adds to _broken_references instead of creating an edge.
+        adds to _unresolved_references instead of creating an edge.
 
         Args:
             source_id: The child/source node ID.
@@ -2292,7 +2526,7 @@ class TraceGraph:
             self._reconcile_journey_bodies(source, target)
         else:
             # Target doesn't exist - record as broken reference
-            self._broken_references.append(
+            self._unresolved_references.append(
                 ReferenceFault(
                     source_id=source_id,
                     target_id=target_id,
@@ -2789,7 +3023,7 @@ class TraceGraph:
         # Find the broken reference
         broken_ref = None
         broken_ref_index = None
-        for i, br in enumerate(self._broken_references):
+        for i, br in enumerate(self._unresolved_references):
             if br.source_id == source_id and br.target_id == old_target_id:
                 broken_ref = br
                 broken_ref_index = i
@@ -2823,7 +3057,7 @@ class TraceGraph:
         )
 
         # Remove the old broken reference and its rendered leftover (REQ-d00132-G)
-        self._broken_references.pop(broken_ref_index)
+        self._unresolved_references.pop(broken_ref_index)
         self._remove_leftover_ref(source, edge_kind, old_target_id)
 
         if new_target:
@@ -2836,7 +3070,7 @@ class TraceGraph:
             entry.after_state["fixed"] = True
         else:
             # New target also doesn't exist - remains broken
-            self._broken_references.append(
+            self._unresolved_references.append(
                 ReferenceFault(
                     source_id=source_id,
                     target_id=new_target_id,
@@ -3760,18 +3994,51 @@ class GraphBuilder:
             tuple[str, str, dict[tuple[str, str], tuple[FaultClass, tuple[str, ...]]]]
         ] = []
         # Detection: broken references
-        self._broken_references: list[ReferenceFault] = []
+        self._unresolved_references: list[ReferenceFault] = []
         # Implements: REQ-d00272-G
         self._style_findings: list[StyleFinding] = []
         # Implements: REQ-d00272-O
         self._undeclared_relationships: list[UndeclaredRelationship] = []
         # Implements: REQ-d00272-N
         self._identifier_form_findings: list[IdentifierFormFinding] = []
+        # Implements: REQ-d00241-F
+        self._unscanned_keyword_files: list[UnscannedKeywordFile] = []
+        # Implements: REQ-d00274-G
+        self._unbound_citations: list[UnboundCitation] = []
         # Detection: duplicate REQ IDs across files. Maps the canonical (real)
         # requirement ID -> ordered list of source paths that defined it. First
         # occurrence keeps the real ID; subsequent occurrences get a synthetic
         # ID (see _add_requirement) but their source paths are recorded here.
         self._duplicate_req_ids: dict[str, list[str]] = {}
+        # Implements: REQ-d00285-G
+        self._ingestion_faults: list[IngestionFault] = []
+
+    # Implements: REQ-d00285-G
+    def record_ingestion_fault(
+        self,
+        path: str,
+        stage: str,
+        cause: str,
+        line: int | None = None,
+        target: str | None = None,
+        partial: bool = False,
+    ) -> None:
+        """Record an artifact ingestion reached and could not read in full."""
+        _record_ingestion_fault(self._ingestion_faults, path, stage, cause, line, target, partial)
+
+    # Implements: REQ-d00241-F
+    def record_unscanned_keyword_file(self, path: str, kind: str, keyword: str, line: int) -> None:
+        """Record a file the scan declined to read that cites a requirement.
+
+        One file is recorded once. Two scanning kinds may both reach a file
+        and both decline it; that is one file the tool passed over, not two,
+        and reporting it twice would say the opposite.
+        """
+        if any(existing.path == path for existing in self._unscanned_keyword_files):
+            return
+        self._unscanned_keyword_files.append(
+            UnscannedKeywordFile(path=path, kind=kind, keyword=keyword, line=line)
+        )
 
     # Implements: REQ-d00128-D
     def register_file_node(self, file_node: GraphNode) -> None:
@@ -3896,7 +4163,7 @@ class GraphBuilder:
             # node of its own (an empty reference list, a trailing separator).
             data = content.parsed_data
             source_id = file_node.id if file_node is not None else data.get("source_id", "")
-            self._broken_references.append(
+            self._unresolved_references.append(
                 ReferenceFault(
                     source_id=source_id,
                     target_id=data["raw"],
@@ -4055,15 +4322,24 @@ class GraphBuilder:
         for assertion in data.get("assertions", []):
             assertion_id = self._resolver.make_assertion_id(req_id, assertion["label"])
             assertion_line = assertion.get("line", content.start_line)
+            # Implements: REQ-p00002-E
+            # A directive at the head of the text is read here, once, and
+            # recorded on the node -- every later reader asks the node rather
+            # than re-reading the prose. The label carries the CANONICAL
+            # spelling, so a recognized directive written in any admitted case
+            # renders in the one form; text carrying no directive, or one the
+            # tool does not recognize, is stored exactly as authored.
+            assertion_text = canonical_assertion_text(assertion["text"])
             assertion_node = GraphNode(
                 id=assertion_id,
                 kind=NodeKind.ASSERTION,
-                label=assertion["text"],
+                label=assertion_text,
             )
             assertion_node._content = {
                 "label": assertion["label"],
                 "parse_line": assertion_line,
                 "parse_end_line": None,
+                **directive_fields(assertion_text),
             }
             self._nodes[assertion_id] = assertion_node
             children_with_lines.append((assertion_line, assertion_node))
@@ -4248,7 +4524,7 @@ class GraphBuilder:
             if kw != EdgeKind.INTEGRATES.value or not reader_refused(verdict):
                 continue
             fault_class, codes = verdict
-            self._broken_references.append(
+            self._unresolved_references.append(
                 ReferenceFault(
                     source_id=req_id,
                     target_id=raw,
@@ -4333,7 +4609,7 @@ class GraphBuilder:
         # that validated everything.
         for section_name, declared in data.get("misplaced_validates", []):
             where = f'section "{section_name}"' if section_name else "a section"
-            self._broken_references.append(
+            self._unresolved_references.append(
                 ReferenceFault(
                     source_id=journey_id,
                     target_id=declared,
@@ -4413,7 +4689,7 @@ class GraphBuilder:
         # anchored to the same CODE node an admitted keyword would use.
         if forbidden:
             code_id = _ensure_code_node()
-            self._broken_references.extend(
+            self._unresolved_references.extend(
                 self._forbidden_keyword_faults(
                     code_id,
                     data.get("forbidden_keyword", ""),
@@ -4456,6 +4732,13 @@ class GraphBuilder:
             label = f"Test at {source_id}:{anchor_line}"
             source_line = anchor_line
 
+        # Implements: REQ-d00274-G, REQ-d00274-H
+        # The parser says whether this citation found a test. False is its
+        # answer and nothing else's: a citation the parser never judged (a
+        # test function emitted by the unlinked-test pass, a name-carried
+        # reference) leaves the key absent and is bound by construction.
+        binds_to_test = data.get("binds_to_test") is not False
+
         if test_id not in self._nodes:
             node = GraphNode(
                 id=test_id,
@@ -4468,11 +4751,36 @@ class GraphBuilder:
             # Implements: REQ-d00131-G
             # Store raw comment text for render protocol
             node.set_field("raw_text", content.raw_text)
+            # Implements: REQ-d00274-G
+            # The node is still built, because the comment is still a line of
+            # the file and has to render back out where it was written. What
+            # it does not get is the relationship below.
+            if not binds_to_test:
+                node.set_field("binds_to_test", False)
             self._nodes[test_id] = node
 
         verdicts = data.get("reference_verdicts") or {}
-        for val_ref in data.get("verifies", []):
-            self._pending_links.append((test_id, val_ref, EdgeKind.VERIFIES, verdicts))
+        refs = data.get("verifies", [])
+        if not binds_to_test:
+            # Implements: REQ-d00274-H
+            # No result can ever reach a node standing where no test was
+            # declared, so an edge from here would credit the assertions as
+            # tested and leave them permanently short of passing. The
+            # citation is recorded instead of counted -- unconditionally,
+            # because what a citation credits is not a matter of how loudly
+            # the project asked to hear about it.
+            if refs:
+                self._unbound_citations.append(
+                    UnboundCitation(
+                        path=self._to_relative_path(source_id),
+                        line=content.start_line,
+                        keyword=_keyword_as_written(content.raw_text),
+                        targets=tuple(refs),
+                    )
+                )
+        else:
+            for val_ref in refs:
+                self._pending_links.append((test_id, val_ref, EdgeKind.VERIFIES, verdicts))
 
         # Implements: REQ-d00272-J
         # A keyword a test file may not use (anything but Verifies) is read,
@@ -4483,7 +4791,7 @@ class GraphBuilder:
         # gives the actual test function its file-default Verifies.
         forbidden = data.get("forbidden") or []
         if forbidden:
-            self._broken_references.extend(
+            self._unresolved_references.extend(
                 self._forbidden_keyword_faults(
                     test_id,
                     data.get("forbidden_keyword", ""),
@@ -4661,7 +4969,7 @@ class GraphBuilder:
             "render_order": float(content.start_line),
         }
 
-    # Implements: REQ-d00081-D+E+G
+    # Implements: REQ-d00081-D+G
     def _expand_multi_assertion(self, target_id: str) -> list[str]:
         """Expand a multi-assertion reference into its individual references.
 
@@ -4710,17 +5018,50 @@ class GraphBuilder:
         individually, and only the whole item's raw text is ever a verdict
         key).
 
-        No prose accompanies either answer. A cause is named by the code, the
-        file and the line the reference was written on, and that code's
-        documented meaning (REQ-d00252-K); all three reach every surface, so
-        a sentence guessing at a separator mismatch would only add a fourth
-        naming that the input does not determine -- and, on the fallback
-        path, would name a defect an item that parsed perfectly and is simply
-        absent does not have.
+        Prose accompanies an answer only where the input determines it.  A
+        cause is already named by the code, the file and the line the
+        reference was written on, and that code's documented meaning
+        (REQ-d00252-K), and all three reach every surface; a sentence
+        guessing at a defect would add a fourth naming that the input does
+        not support.  ``_fault_diagnostic`` is therefore keyed on the codes
+        and stays silent for the fallback path, where an item that parsed
+        perfectly and is simply absent has no defect to describe.
         """
         if (keyword, target_id) in verdicts:
             return verdicts[(keyword, target_id)]
         return self._resolution_class(target_id), ()
+
+    # Implements: REQ-d00272-O, REQ-d00269-F
+    def _fault_diagnostic(self, target_id: str, codes: tuple[str, ...]) -> str:
+        """What to tell the author about a reference that produced nothing.
+
+        Only what the codes determine. A separator defect is answered by the
+        separators this repository configures, which the author cannot read
+        off the failing line; content the grammar could not account for is
+        answered by naming both halves of the item, since the codes and the
+        verbatim text never say where one ends and the other begins
+        (REQ-d00272-O). Everything else gets nothing rather than a guess.
+        """
+        assertions = getattr(getattr(self._resolver, "config", None), "assertions", None)
+        if assertions is None:
+            return ""
+        configured = (
+            f"This repository writes an *Assertion* label after "
+            f"{assertions.separator!r} and joins two labels with "
+            f"{assertions.multi_separator!r}."
+        )
+        if FaultCode.WRONG_ASSERTION_SEPARATOR in codes or FaultCode.WRONG_MULTI_SEPARATOR in codes:
+            return configured
+        if FaultCode.IDENTIFIER_WITH_TRAILING_TEXT in codes:
+            split = self._resolver.opening_reference(target_id)
+            if split is None or not split[1]:
+                return ""
+            found, trailing = split
+            return (
+                f"Read {found!r} and then {trailing.strip()!r}, which no "
+                f"identifier accounts for. {configured}"
+            )
+        return ""
 
     # Implements: REQ-d00272-A, REQ-d00272-J
     def _forbidden_keyword_faults(
@@ -4810,7 +5151,7 @@ class GraphBuilder:
             template_roots.setdefault(template_id, []).append(declaring_id)
 
         for declaring_id, template_id, fault_class, codes in refused_items:
-            self._broken_references.append(
+            self._unresolved_references.append(
                 ReferenceFault(
                     source_id=declaring_id,
                     target_id=template_id,
@@ -4838,7 +5179,7 @@ class GraphBuilder:
                     continue
                 # Genuinely missing — record a plain broken-ref and skip clone.
                 for declaring_id in template_roots[template_id]:
-                    self._broken_references.append(
+                    self._unresolved_references.append(
                         ReferenceFault(
                             source_id=declaring_id,
                             target_id=template_id,
@@ -4855,7 +5196,7 @@ class GraphBuilder:
                 # we don't manufacture an INSTANCE subtree against a concrete
                 # node.
                 for declaring_id in template_roots[template_id]:
-                    self._broken_references.append(
+                    self._unresolved_references.append(
                         ReferenceFault(
                             source_id=declaring_id,
                             target_id=template_id,
@@ -4880,7 +5221,7 @@ class GraphBuilder:
                 # Composite that still doesn't resolve after cloning passes —
                 # genuinely broken.
                 if not template_node and INSTANCE_SEPARATOR in template_id:
-                    self._broken_references.append(
+                    self._unresolved_references.append(
                         ReferenceFault(
                             source_id=declaring_id,
                             target_id=template_id,
@@ -4893,7 +5234,7 @@ class GraphBuilder:
             # resolved to an INSTANCE node (typically cloned earlier in this
             # very loop by a sibling satisfier). Refuse to clone again.
             if template_node.get_field("stereotype") == Stereotype.INSTANCE:
-                self._broken_references.append(
+                self._unresolved_references.append(
                     ReferenceFault(
                         source_id=declaring_id,
                         target_id=template_id,
@@ -4911,7 +5252,7 @@ class GraphBuilder:
             # non-composite case. For composites this is still possible —
             # emit rule-1 diagnostic.
             if template_node.get_field("stereotype") != Stereotype.TEMPLATE:
-                self._broken_references.append(
+                self._unresolved_references.append(
                     ReferenceFault(
                         source_id=declaring_id,
                         target_id=template_id,
@@ -5046,7 +5387,7 @@ class GraphBuilder:
         """
         # Expand multi-assertion refs (e.g. REQ-X-A+B+C) to base targets.
         for expanded in self._expand_multi_assertion(ref_id):
-            self._broken_references.append(
+            self._unresolved_references.append(
                 ReferenceFault(
                     source_id=template_id,
                     target_id=expanded,
@@ -5146,6 +5487,16 @@ class GraphBuilder:
             target = (
                 None if (edge_kind.value, target_id) in verdicts else self._nodes.get(target_id)
             )
+            # Implements: REQ-p00017-H
+            # A retired *Assertion* does not exist for *Traceability*
+            # purposes, so a reference naming it is treated exactly as a
+            # reference to an *Assertion* that was never written: it binds
+            # nothing and is reported. The node itself stays -- it renders,
+            # it hashes, and its label stays allocated -- but it is not a
+            # target. Dropping the target here rather than at lookup is what
+            # keeps those three true.
+            if target is not None and assertion_is_retired(target):
+                target = None
 
             if source and target:
                 # Implements: REQ-p00014-G
@@ -5160,7 +5511,7 @@ class GraphBuilder:
                     # so one mistake reads as one error — and name the remedy
                     # (Satisfies:) plainly, since the bare "(refines)" line plus a
                     # passing refines_resolve check is what misleads authors.
-                    self._broken_references.append(
+                    self._unresolved_references.append(
                         ReferenceFault(
                             source_id=source_id,
                             target_id=target_id,
@@ -5177,7 +5528,7 @@ class GraphBuilder:
                     continue
                 if edge_kind == EdgeKind.REFINES and target_stereotype == Stereotype.INSTANCE:
                     # Rule 4: refining instance content is not supported.
-                    self._broken_references.append(
+                    self._unresolved_references.append(
                         ReferenceFault(
                             source_id=source_id,
                             target_id=target_id,
@@ -5195,7 +5546,7 @@ class GraphBuilder:
                     continue
                 if edge_kind == EdgeKind.IMPLEMENTS and target_stereotype == Stereotype.INSTANCE:
                     # Rule 5: composite IDs are not authoring syntax.
-                    self._broken_references.append(
+                    self._unresolved_references.append(
                         ReferenceFault(
                             source_id=source_id,
                             target_id=target_id,
@@ -5212,7 +5563,7 @@ class GraphBuilder:
                     continue
                 if edge_kind == EdgeKind.VERIFIES and target_stereotype == Stereotype.INSTANCE:
                     # Rule 6: same reasoning as rule 5, TEST source.
-                    self._broken_references.append(
+                    self._unresolved_references.append(
                         ReferenceFault(
                             source_id=source_id,
                             target_id=target_id,
@@ -5233,7 +5584,7 @@ class GraphBuilder:
                 ):
                     # Journeys and steps are verification targets only; rejecting
                     # Implements/Refines here prevents invalid traceability edges.
-                    self._broken_references.append(
+                    self._unresolved_references.append(
                         ReferenceFault(
                             source_id=source_id,
                             target_id=target_id,
@@ -5291,13 +5642,14 @@ class GraphBuilder:
                 # matched but names no node here falls back to the
                 # resolution-stage decision (REQ-p00014-R).
                 fault_class, codes = self._fault_verdict(target_id, edge_kind.value, verdicts)
-                self._broken_references.append(
+                self._unresolved_references.append(
                     ReferenceFault(
                         source_id=source_id,
                         target_id=target_id,
                         edge_kind=edge_kind.value,
                         fault_class=fault_class,
                         codes=codes,
+                        diagnostic=self._fault_diagnostic(target_id, codes),
                     )
                 )
 
@@ -5444,11 +5796,14 @@ class GraphBuilder:
         graph._roots = roots
         graph._index = dict(self._nodes)
         graph._orphaned_ids = orphaned_ids
-        graph._broken_references = list(self._broken_references)
+        graph._unresolved_references = list(self._unresolved_references)
         graph._style_findings = list(self._style_findings)
         graph._undeclared_relationships = list(self._undeclared_relationships)
         graph._identifier_form_findings = list(self._identifier_form_findings)
+        graph._unscanned_keyword_files = list(self._unscanned_keyword_files)
+        graph._unbound_citations = list(self._unbound_citations)
         graph._duplicate_req_ids = {k: list(v) for k, v in self._duplicate_req_ids.items()}
+        graph._ingestion_faults = list(self._ingestion_faults)
 
         # Implements: REQ-d00222-A, REQ-d00222-B
         # Populate _terms from pending definition data, resolving defined_in

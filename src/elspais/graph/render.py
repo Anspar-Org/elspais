@@ -466,9 +466,6 @@ def _render_requirement(node: GraphNode, resolver: Any | None = None) -> str:
                     sub_stored = child.get_field("heading_level")
                     sub_depth = _effective_depth(sub_stored, assertions_depth + 1)
                     lines.append(f"{'#' * sub_depth} {heading}")
-                elif s.startswith("#"):
-                    # Legacy: heading_style was the literal hash string (e.g. "###")
-                    lines.append(f"{s} {heading}")
                 else:
                     lines.append(f"{s}{heading}{s}")
                 lines.append("")
@@ -904,7 +901,7 @@ def _find_dirty_files(graph: FederatedGraph) -> list[Any]:
     return list(dirty_files.values())
 
 
-# Implements: REQ-d00132-A, REQ-d00132-C
+# Implements: REQ-d00132-A, REQ-d00132-C, REQ-d00134-D, REQ-d00134-E
 def render_save(
     graph: FederatedGraph,
     repo_root: Path | None = None,

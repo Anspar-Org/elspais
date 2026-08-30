@@ -390,6 +390,7 @@ class TestGetAuthorInfo:
     identity from git config or gh CLI.
     """
 
+    # Verifies: REQ-p00004-A
     @patch("elspais.utilities.git.subprocess.run")
     def test_REQ_p00004_A_get_author_info_git_fallback(self, mock_run):
         """Git config returns name and email as id."""
@@ -403,6 +404,7 @@ class TestGetAuthorInfo:
         assert result["name"] == "Jane Doe"
         assert result["id"] == "jane@example.org"
 
+    # Verifies: REQ-p00004-A
     @patch("elspais.utilities.git.subprocess.run")
     def test_REQ_p00004_A_get_author_info_raises_on_empty(self, mock_run):
         """Raises ValueError when git config returns empty values."""
@@ -423,6 +425,7 @@ class TestGitStatusSummary:
     and remote divergence state.
     """
 
+    # Verifies: REQ-p00004-C
     def test_REQ_p00004_C_clean_feature_branch(self, tmp_path):
         """On a clean feature branch with no remote divergence."""
         _git_run(["git", "init", "-b", "main"], cwd=tmp_path, capture_output=True, check=True)
@@ -459,6 +462,7 @@ class TestGitStatusSummary:
         assert result["fast_forward_possible"] is False
         assert result["main_diverged"] is False
 
+    # Verifies: REQ-p00004-C
     def test_REQ_p00004_C_main_branch_dirty_spec(self, tmp_path):
         """On main with modified spec files."""
         _git_run(["git", "init", "-b", "main"], cwd=tmp_path, capture_output=True, check=True)
@@ -487,6 +491,7 @@ class TestGitStatusSummary:
         assert result["is_main"] is True
         assert "spec/test.md" in result["dirty_spec_files"]
 
+    # Verifies: REQ-p00004-C
     def test_REQ_p00004_C_non_spec_dirty_excluded(self, tmp_path):
         """Dirty files outside spec/ are excluded from dirty_spec_files."""
         _git_run(["git", "init", "-b", "main"], cwd=tmp_path, capture_output=True, check=True)
@@ -543,6 +548,7 @@ class TestCreateAndSwitchBranch:
     switch.
     """
 
+    # Verifies: REQ-p00004-D
     def test_REQ_p00004_D_clean_switch(self, tmp_path):
         """Creates branch and switches on a clean working tree."""
         _init_git_repo(tmp_path)
@@ -561,6 +567,7 @@ class TestCreateAndSwitchBranch:
         )
         assert branch_result.stdout.strip() == "__test_feature/test"
 
+    # Verifies: REQ-p00004-D
     def test_REQ_p00004_D_dirty_stash_preserves_changes(self, tmp_path):
         """Dirty working tree changes are preserved across branch switch."""
         _init_git_repo(tmp_path)
@@ -578,6 +585,7 @@ class TestCreateAndSwitchBranch:
         assert (tmp_path / "README.md").read_text() == "modified\n"
         assert (tmp_path / "new_file.txt").read_text() == "untracked\n"
 
+    # Verifies: REQ-p00004-D
     def test_REQ_p00004_D_invalid_branch_name(self, tmp_path):
         """Rejects invalid branch names."""
         _init_git_repo(tmp_path)
@@ -587,6 +595,7 @@ class TestCreateAndSwitchBranch:
         assert result["success"] is False
         assert "invalid" in result["error"].lower() or "Invalid" in result["error"]
 
+    # Verifies: REQ-p00004-D
     def test_REQ_p00004_D_duplicate_branch_name(self, tmp_path):
         """Rejects a branch name that already exists."""
         _init_git_repo(tmp_path)
@@ -611,6 +620,7 @@ class TestCommitAndPushSpecFiles:
     optionally push, refusing to operate on main/master branches.
     """
 
+    # Verifies: REQ-p00004-E
     def test_REQ_p00004_E_commit_dirty_spec_files(self, tmp_path):
         """Commits modified spec files on a feature branch."""
         _init_git_repo(tmp_path)
@@ -643,6 +653,7 @@ class TestCommitAndPushSpecFiles:
         )
         assert "test commit" in log.stdout
 
+    # Verifies: REQ-p00004-E
     def test_REQ_p00004_E_refuse_on_main(self, tmp_path):
         """Refuses to commit when on main branch."""
         _init_git_repo(tmp_path)
@@ -659,6 +670,7 @@ class TestCommitAndPushSpecFiles:
         assert result["success"] is False
         assert "main" in result["error"].lower() or "protected" in result["error"].lower()
 
+    # Verifies: REQ-p00004-E
     def test_REQ_p00004_E_nothing_to_commit(self, tmp_path):
         """Returns error when no dirty spec files exist."""
         _init_git_repo(tmp_path)
@@ -679,6 +691,7 @@ class TestCommitAndPushSpecFiles:
         assert result["success"] is False
         assert "nothing" in result["error"].lower()
 
+    # Verifies: REQ-p00004-E
     def test_REQ_p00004_E_includes_untracked_spec_files(self, tmp_path):
         """Stages and commits untracked (new) spec files."""
         _init_git_repo(tmp_path)
@@ -766,6 +779,7 @@ class TestPullFfOnly:
     and rebase on main — aborting on conflict.
     """
 
+    # Verifies: REQ-p00004-F
     def test_REQ_p00004_F_no_remote_already_up_to_date(self, tmp_path):
         """No remote configured returns success (nothing to sync)."""
         _init_git_repo(tmp_path)
@@ -775,6 +789,7 @@ class TestPullFfOnly:
         assert result["success"] is True
         assert result["actions"] == []
 
+    # Verifies: REQ-p00004-F
     def test_REQ_p00004_F_ff_pull_succeeds(self, tmp_path):
         """Fast-forward pull succeeds when remote has new commits."""
         _bare, clone_a, clone_b = _init_bare_and_clones(tmp_path)
@@ -798,6 +813,7 @@ class TestPullFfOnly:
         # Verify the file arrived
         assert (clone_b / "new_file.txt").read_text() == "hello\n"
 
+    # Verifies: REQ-p00004-F
     def test_REQ_p00004_F_diverged_no_conflict_merges(self, tmp_path):
         """Diverged with no conflict succeeds via merge."""
         _bare, clone_a, clone_b = _init_bare_and_clones(tmp_path)
@@ -831,6 +847,7 @@ class TestPullFfOnly:
         assert (clone_b / "file_a.txt").read_text() == "from a\n"
         assert (clone_b / "file_b.txt").read_text() == "from b\n"
 
+    # Verifies: REQ-p00004-F
     def test_REQ_p00004_F_diverged_with_conflict_aborts(self, tmp_path):
         """Diverged with conflict aborts merge cleanly."""
         _bare, clone_a, clone_b = _init_bare_and_clones(tmp_path)
@@ -901,6 +918,7 @@ class TestCommitAndPushWithRemote:
     Validates REQ-p00004-E push behaviour with bare+clone repos.
     """
 
+    # Verifies: REQ-p00004-E
     def test_REQ_p00004_E_commit_and_push_succeeds(self, tmp_path):
         """Commit and push spec changes to remote."""
         _bare, clone_a, clone_b = _init_bare_with_spec(tmp_path)
@@ -932,6 +950,7 @@ class TestCommitAndPushWithRemote:
         )
         assert "update prd" in log.stdout
 
+    # Verifies: REQ-p00004-E
     def test_REQ_p00004_E_push_failure_still_commits(self, tmp_path):
         """When push fails, commit still succeeds with push_error."""
         _bare, clone_a, _clone_b = _init_bare_with_spec(tmp_path)
@@ -972,6 +991,7 @@ class TestCommitAndPushWithRemote:
         )
         assert "update prd" in log.stdout
 
+    # Verifies: REQ-p00004-E
     def test_REQ_p00004_E_push_arrives_at_remote(self, tmp_path):
         """Verify pushed spec changes are fetched by another clone."""
         _bare, clone_a, clone_b = _init_bare_with_spec(tmp_path)
@@ -1052,6 +1072,7 @@ class TestGitStatusSummaryWithRemote:
     Validates REQ-p00004-C remote divergence and ahead/behind detection.
     """
 
+    # Verifies: REQ-p00004-C
     def test_REQ_p00004_C_local_ahead_count(self, tmp_path):
         """local_ahead reflects unpushed commits."""
         _bare, clone_a, _clone_b = _init_bare_with_spec(tmp_path)
@@ -1087,6 +1108,7 @@ class TestGitStatusSummaryWithRemote:
         assert result["local_ahead"] == 2
         assert result["remote_diverged"] is False
 
+    # Verifies: REQ-p00004-C
     def test_REQ_p00004_C_remote_diverged_flag(self, tmp_path):
         """remote_diverged is True when remote has commits we don't have."""
         _bare, clone_a, clone_b = _init_bare_with_spec(tmp_path)
@@ -1123,6 +1145,7 @@ class TestGitStatusSummaryWithRemote:
         assert result["remote_diverged"] is True
         assert result["fast_forward_possible"] is True
 
+    # Verifies: REQ-p00004-C
     def test_REQ_p00004_C_no_remote_no_divergence(self, tmp_path):
         """No remote tracking → no divergence flags."""
         _init_git_repo(tmp_path)
@@ -1281,6 +1304,7 @@ class TestListBranches:
         """Return the real repository root for live git queries."""
         return get_repo_root(Path(__file__).parent)
 
+    # Verifies: REQ-p00004-H
     def test_REQ_p00004_H_list_branches_returns_expected_structure(self, repo_root: Path):
         """list_branches returns dict with local, remote, current keys."""
         result = list_branches(repo_root)
@@ -1297,6 +1321,7 @@ class TestListBranches:
         # current branch must appear in the local list
         assert result["current"] in result["local"]
 
+    # Verifies: REQ-p00004-H
     def test_REQ_p00004_H_list_branches_deduplicates_remotes(self, repo_root: Path):
         """No branch name appears in both local and remote lists."""
         result = list_branches(repo_root)
@@ -1305,6 +1330,7 @@ class TestListBranches:
         overlap = local_set & remote_set
         assert overlap == set(), f"Branches in both local and remote: {overlap}"
 
+    # Verifies: REQ-p00004-H
     def test_REQ_p00004_H_list_branches_strips_origin_prefix(self, repo_root: Path):
         """No remote branch name starts with 'origin/'."""
         result = list_branches(repo_root)
@@ -1323,6 +1349,7 @@ class TestCheckoutBranch:
     when the local branch already exists.
     """
 
+    # Verifies: REQ-p00004-I
     def test_REQ_p00004_I_checkout_local_branch(self, tmp_path):
         """Can switch between two local branches using git checkout."""
         _init_git_repo(tmp_path)
@@ -1379,6 +1406,7 @@ class TestCheckoutBranch:
         )
         assert result.stdout.strip() == "__test_feature"
 
+    # Verifies: REQ-p00004-I
     def test_REQ_p00004_I_checkout_remote_fallback(self, tmp_path):
         """When ``git checkout -b <name> origin/<name>`` fails because the
         local branch already exists, falls back to ``git checkout <name>``.

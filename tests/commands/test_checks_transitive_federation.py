@@ -26,6 +26,7 @@ def _chain(tmp_path: Path, *, leaf_config: str | None = None, leaf_path: str = "
 
 
 class TestTransitiveMembersAreReported:
+    # Verifies: REQ-d00202-D
     def test_REQ_d00202_D_doctor_paths_count_the_whole_federation(self, tmp_path):
         root = _chain(tmp_path)
         result = check_associate_paths(load_config(root / ".elspais.toml"), root)
@@ -35,6 +36,7 @@ class TestTransitiveMembersAreReported:
         assert len(found) == 2
         assert str((tmp_path / "leaf").resolve()) in found
 
+    # Verifies: REQ-d00203-B
     def test_REQ_d00203_B_doctor_configs_validate_the_whole_federation(self, tmp_path):
         root = _chain(tmp_path)
         result = check_associate_configs(load_config(root / ".elspais.toml"), root)
@@ -42,6 +44,7 @@ class TestTransitiveMembersAreReported:
         assert result.passed is True
         assert any(entry.startswith("leaf ") for entry in result.details["valid"])
 
+    # Verifies: REQ-d00202-D
     def test_REQ_d00202_D_health_paths_count_the_whole_federation(self, tmp_path):
         root = _chain(tmp_path)
         result = health_check_associate_paths(load_config(root / ".elspais.toml"), root)
@@ -53,8 +56,9 @@ class TestTransitiveMembersAreReported:
 class TestUnloadableTransitiveMemberIsNamed:
     """A repository the root never names still has to be visible when broken."""
 
-    BROKEN = 'version = 3\n[project\nname = "leaf"\n'
+    BROKEN = 'version = 5\n[project\nname = "leaf"\n'
 
+    # Verifies: REQ-d00202-I
     def test_REQ_d00202_I_doctor_reports_path_and_reason(self, tmp_path):
         root = _chain(tmp_path, leaf_config=self.BROKEN)
         result = check_associate_configs(load_config(root / ".elspais.toml"), root)
@@ -64,6 +68,7 @@ class TestUnloadableTransitiveMemberIsNamed:
         assert "leaf" in result.message
         assert "could not be loaded" in result.message
 
+    # Verifies: REQ-d00202-I
     def test_REQ_d00202_I_health_reports_path_and_reason(self, tmp_path):
         root = _chain(tmp_path, leaf_config=self.BROKEN)
         result = health_check_associate_paths(load_config(root / ".elspais.toml"), root)
@@ -74,6 +79,7 @@ class TestUnloadableTransitiveMemberIsNamed:
             str((tmp_path / "leaf").resolve()) in m and "could not be loaded" in m for m in messages
         )
 
+    # Verifies: REQ-d00203-C
     def test_REQ_d00203_C_missing_transitive_path_soft_fails(self, tmp_path):
         root = _chain(tmp_path, leaf_path="../nowhere")
         doctor_result = check_associate_paths(load_config(root / ".elspais.toml"), root)
@@ -90,6 +96,7 @@ class TestUnloadableTransitiveMemberIsNamed:
 class TestUnresolvableFederationIsReported:
     """A cycle stops the walk; it must not stop the diagnostic."""
 
+    # Verifies: REQ-d00202-E
     def test_REQ_d00202_E_cycle_becomes_a_finding(self, tmp_path):
         make_repo(tmp_path, "beta", associates={"alpha": "../alpha"})
         root = make_repo(tmp_path, "alpha", associates={"beta": "../beta"})

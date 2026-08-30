@@ -74,6 +74,7 @@ def _make_client(fed: FederatedGraph) -> TestClient:
 class TestApiRepos:
     """Validates REQ-d00206-A: GET /api/repos returns federated repo list."""
 
+    # Verifies: REQ-d00206-A
     def test_REQ_d00206_A_api_repos_returns_federation_info(self):
         """GET /api/repos returns repos list with name, path, status fields."""
         fed = _make_federated_multi()
@@ -99,6 +100,7 @@ class TestApiRepos:
             assert repo["status"] == "ok"
             assert "git_origin" in repo
 
+    # Verifies: REQ-d00206-A
     def test_REQ_d00206_A_api_repos_includes_error_state(self):
         """GET /api/repos shows error for repos with graph=None."""
         root_graph = _make_graph(Path("/test/root"), "REQ-p00001", "Root Req")
@@ -136,6 +138,7 @@ class TestApiRepos:
 class TestApiReposStaleness:
     """Validates REQ-d00206-B: GET /api/repos includes staleness info."""
 
+    # Verifies: REQ-d00206-B
     def test_REQ_d00206_B_api_repos_includes_staleness(self):
         """GET /api/repos includes staleness field for repos with git_origin."""
         fed = _make_federated_multi()
@@ -160,6 +163,7 @@ class TestApiReposStaleness:
             assert staleness["remote_diverged"] is True
             assert staleness["fast_forward_possible"] is True
 
+    # Verifies: REQ-d00206-B
     def test_REQ_d00206_B_api_repos_no_staleness_without_git_origin(self):
         """Repos without git_origin should not have staleness field."""
         root_graph = _make_graph(Path("/test/root"), "REQ-p00001", "Root Req")
@@ -225,6 +229,7 @@ class TestApiReposStaleness:
 class TestApiStatusRepos:
     """Validates REQ-d00206-C: GET /api/status includes repos field."""
 
+    # Verifies: REQ-d00206-C
     def test_REQ_d00206_C_api_status_includes_repos(self):
         """GET /api/status response contains repos array with federation info."""
         fed = _make_federated_multi()
@@ -247,6 +252,7 @@ class TestApiStatusRepos:
             assert "path" in repo
             assert "status" in repo
 
+    # Verifies: REQ-d00206-C
     def test_REQ_d00206_C_api_status_single_repo(self):
         """GET /api/status with single-repo federation has one repos entry."""
         graph = _make_graph(Path("/test/repo"), "REQ-p00001", "Test Req")

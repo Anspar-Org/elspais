@@ -92,6 +92,7 @@ class TestHealthFindingRepoField:
     Validates REQ-d00204-D: HealthFinding supports optional repo field.
     """
 
+    # Verifies: REQ-d00204-D
     def test_REQ_d00204_D_health_finding_has_repo_field(self) -> None:
         """HealthFinding dataclass has a `repo` field that defaults to None."""
         finding = HealthFinding(message="test finding")
@@ -101,11 +102,13 @@ class TestHealthFindingRepoField:
         )
         assert finding.repo is None
 
+    # Verifies: REQ-d00204-D
     def test_REQ_d00204_D_health_finding_repo_field_settable(self) -> None:
         """HealthFinding repo field can be set to a repo name."""
         finding = HealthFinding(message="test finding", repo="alpha")
         assert finding.repo == "alpha"
 
+    # Verifies: REQ-d00204-D
     def test_REQ_d00204_D_health_finding_to_dict_includes_repo(self) -> None:
         """HealthFinding.to_dict() includes the repo field."""
         finding = HealthFinding(message="test", repo="beta")
@@ -121,6 +124,7 @@ class TestPerRepoHierarchyCheck:
     repo's own ConfigLoader.
     """
 
+    # Verifies: REQ-d00204-A
     def test_REQ_d00204_A_hierarchy_check_uses_per_repo_config(self) -> None:
         """Hierarchy check uses each repo's own config, not a single global config.
 
@@ -190,6 +194,7 @@ class TestPerRepoFormatRules:
     Validates REQ-d00204-A: Config-sensitive checks run per-repo.
     """
 
+    # Verifies: REQ-d00204-A
     def test_REQ_d00204_A_format_rules_uses_per_repo_config(self) -> None:
         """Format rules use each repo's own config.
 
@@ -246,6 +251,7 @@ class TestNonConfigChecksRunOnFullFederation:
     FederatedGraph.
     """
 
+    # Verifies: REQ-d00204-B
     def test_REQ_d00204_B_non_config_checks_run_on_full_federation(self) -> None:
         """Non-config checks (duplicates, hash integrity) aggregate across all repos.
 
@@ -297,6 +303,7 @@ class TestPerRepoFindingsAttribution:
     Validates REQ-d00204-C: Per-repo results merged with repo attribution.
     """
 
+    # Verifies: REQ-d00204-C
     def test_REQ_d00204_C_per_repo_findings_have_repo_attribution(self) -> None:
         """Findings from per-repo checks include the repo name."""
         # Create a federation where alpha has a hierarchy violation
@@ -370,6 +377,7 @@ class TestBrokenReferenceSeverity:
     information a reader needs to obtain it.
     """
 
+    # Verifies: REQ-d00204-E
     def test_REQ_d00204_E_broken_refs_within_repo_is_error(self) -> None:
         """Broken reference within a single repo should be severity=error."""
         # Create a graph with a broken reference (target doesn't exist)
@@ -401,6 +409,7 @@ class TestBrokenReferenceSeverity:
             f"got '{check.severity}'."
         )
 
+    # Verifies: REQ-d00204-E
     def test_REQ_d00204_E_broken_refs_to_error_state_repo_still_reported(self) -> None:
         """A reference that would target a repo now in error state is still
         reported, at the same fixed severity as any other claimed-but-missing
@@ -456,6 +465,7 @@ class TestBrokenReferenceSeverity:
         assert unavailable[0]["error"] == "Failed to build graph"
         assert "beta" in check.message and str(Path("/repo/beta")) in check.message
 
+    # Verifies: REQ-d00204-E
     def test_REQ_d00204_E_a_federation_that_loaded_names_no_repository_to_obtain(self) -> None:
         """The obtaining information is present because a repository is
         missing, not as boilerplate on every report."""
@@ -482,6 +492,7 @@ class TestBrokenReferenceSeverity:
         assert check.details["unavailable_repos"] == []
         assert "could not be read" not in check.message
 
+    # Verifies: REQ-d00204-E
     def test_REQ_d00204_E_only_the_classes_a_missing_repo_explains_name_one(self) -> None:
         """A missing repository is named beside the classes it can account
         for, and beside no others -- even while one is genuinely missing.
@@ -499,7 +510,7 @@ class TestBrokenReferenceSeverity:
             repo_root=Path("/repo/alpha"),
         )
         # One fault of every class, so each check has a finding to describe.
-        alpha_graph._broken_references = [
+        alpha_graph._unresolved_references = [
             ReferenceFault(
                 source_id="REQ-d00093",
                 target_id=f"target-{fc.label}",
@@ -551,6 +562,7 @@ class TestRunSpecChecksIteratesRepos:
     using FederatedGraph.from_single() per repo.
     """
 
+    # Verifies: REQ-d00204-F
     def test_REQ_d00204_F_run_spec_checks_iterates_repos(self) -> None:
         """run_spec_checks produces per-repo results for config-sensitive checks.
 
@@ -650,6 +662,7 @@ class TestGovernedRuleDivergenceDisclosure:
     -- without failing the run. REQ-d00275-A scopes what "governed" covers.
     """
 
+    # Verifies: REQ-d00275-D
     def test_REQ_d00275_D_divergent_severity_names_setting_values_and_member(self) -> None:
         """The disclosure carries all three facts D requires."""
         host = _governed_member("host", {"references": {"retired": "warning"}})
@@ -666,6 +679,7 @@ class TestGovernedRuleDivergenceDisclosure:
         assert "warning" in finding.message, "must carry the governing value"
         assert "lib" in finding.message
 
+    # Verifies: REQ-d00275-D
     def test_REQ_d00275_D_disclosure_never_fails_the_run(self) -> None:
         """A difference is disclosed, never judged: passed stays True, severity info."""
         host = _governed_member("host", {"coverage": {"uncredited_evidence": "error"}})
@@ -677,6 +691,7 @@ class TestGovernedRuleDivergenceDisclosure:
         assert check.passed is True, "the disclosure must not fail the run"
         assert check.severity == "info"
 
+    # Verifies: REQ-d00275-D
     def test_REQ_d00275_D_agreeing_member_is_not_disclosed(self) -> None:
         """A member that declared the same governed value has nothing to disclose."""
         host = _governed_member("host", {"references": {"retired": "error"}})
@@ -689,6 +704,7 @@ class TestGovernedRuleDivergenceDisclosure:
         assert check.findings == []
         assert check.passed is True
 
+    # Verifies: REQ-d00275-A
     def test_REQ_d00275_A_authoring_rules_are_the_members_own(self) -> None:
         """Hierarchy and format rules are not governed, so differing is not disclosed.
 
@@ -716,6 +732,7 @@ class TestGovernedRuleDivergenceDisclosure:
 
         assert check.findings == [], [f.message for f in check.findings]
 
+    # Verifies: REQ-d00275-A
     def test_REQ_d00275_A_status_roles_are_governed_despite_living_under_format(self) -> None:
         """How a status is read when reporting is governed, so it is disclosed."""
         host = _governed_member("host", {"format": {"status_roles": {"active": ["Active"]}}})
@@ -727,6 +744,7 @@ class TestGovernedRuleDivergenceDisclosure:
         assert "rules.format.status_roles.active" in check.findings[0].message
         assert check.findings[0].repo == "lib"
 
+    # Verifies: REQ-d00275-D
     def test_REQ_d00275_D_setting_a_member_never_declared_is_not_a_difference(self) -> None:
         """Settings are read as written: an undeclared one was not decided otherwise."""
         host = _governed_member(
@@ -743,6 +761,7 @@ class TestGovernedRuleDivergenceDisclosure:
             f"got {[f.message for f in check.findings]}"
         )
 
+    # Verifies: REQ-d00275-D
     def test_REQ_d00275_D_disclosure_runs_as_part_of_the_spec_checks(self) -> None:
         """The disclosure reaches the health report, not just its own entry point."""
         host = _governed_member("host", {"references": {"retired": "warning"}})

@@ -84,12 +84,14 @@ _NAMED_CONFIG = {
 class TestTypeDef:
     """Validates REQ-p00002-A: TypeDef dataclass."""
 
+    # Verifies: REQ-p00002-A
     def test_REQ_p00002_A_basic_creation(self):
         td = TypeDef(code="prd", level=1, aliases={"letter": "p"})
         assert td.code == "prd"
         assert td.level == 1
         assert td.aliases["letter"] == "p"
 
+    # Verifies: REQ-p00002-A
     def test_REQ_p00002_A_empty_aliases(self):
         td = TypeDef(code="req", level=1, aliases={})
         assert td.aliases == {}
@@ -98,17 +100,20 @@ class TestTypeDef:
 class TestComponentFormat:
     """Validates REQ-p00002-A: ComponentFormat dataclass."""
 
+    # Verifies: REQ-p00002-A
     def test_REQ_p00002_A_numeric_defaults(self):
         cf = ComponentFormat(style="numeric", digits=5, leading_zeros=True, pattern=None)
         assert cf.style == "numeric"
         assert cf.digits == 5
 
+    # Verifies: REQ-p00002-A
     def test_REQ_p00002_A_regex_with_pattern(self):
         cf = ComponentFormat(
             style="regex", digits=0, leading_zeros=False, pattern="[A-Z][a-zA-Z0-9]+"
         )
         assert cf.pattern == "[A-Z][a-zA-Z0-9]+"
 
+    # Verifies: REQ-p00002-A
     def test_REQ_p00002_A_unlimited_digits(self):
         cf = ComponentFormat(style="numeric", digits=0, leading_zeros=False, pattern=None)
         assert cf.digits == 0
@@ -117,6 +122,7 @@ class TestComponentFormat:
 class TestAssertionFormat:
     """Validates REQ-p00002-A: AssertionFormat dataclass."""
 
+    # Verifies: REQ-p00002-A
     def test_REQ_p00002_A_defaults(self):
         af = AssertionFormat(
             label_style="uppercase",
@@ -132,6 +138,7 @@ class TestAssertionFormat:
 class TestIdPatternConfig:
     """Validates REQ-p00002-A: IdPatternConfig.from_dict()."""
 
+    # Verifies: REQ-p00002-A
     def test_REQ_p00002_A_from_dict_hht(self):
         config = IdPatternConfig.from_dict(
             _validated(
@@ -160,6 +167,7 @@ class TestIdPatternConfig:
         assert config.component.digits == 5
         assert config.assertions.label_style == "uppercase"
 
+    # Verifies: REQ-p00002-A
     def test_REQ_p00002_A_from_dict_fda(self):
         config = IdPatternConfig.from_dict(_validated(_FDA_CONFIG))
         assert config.namespace == "FDA"
@@ -167,17 +175,20 @@ class TestIdPatternConfig:
         assert config.types["PRD"].level == 1
         assert config.types["PRD"].aliases["letter"] == "P"
 
+    # Verifies: REQ-p00002-A
     def test_REQ_p00002_A_from_dict_jira(self):
         config = IdPatternConfig.from_dict(_validated(_JIRA_CONFIG))
         assert config.namespace == "PROJ"
         assert config.component.digits == 0
         assert config.component.leading_zeros is False
 
+    # Verifies: REQ-p00002-A
     def test_REQ_p00002_A_from_dict_regex(self):
         config = IdPatternConfig.from_dict(_validated(_NAMED_CONFIG))
         assert config.component.style == "regex"
         assert config.component.pattern == "[A-Z][a-zA-Z0-9]+"
 
+    # Verifies: REQ-p00002-A
     def test_REQ_p00002_A_from_dict_defaults(self):
         config = IdPatternConfig.from_dict({})
         assert config.namespace == "REQ"
@@ -186,6 +197,7 @@ class TestIdPatternConfig:
         assert config.canonical_template == "{namespace}-{level.letter}{component}"
         assert config.component.style == "numeric"
 
+    # Verifies: REQ-p00002-A
     def test_REQ_p00002_A_from_dict_output_forms(self):
         # Deliberately not passed through `_validated`: `from_dict` reads output
         # forms from an `[output.id-patterns]` table the v3 schema forbids, so
@@ -212,6 +224,7 @@ class TestIdPatternConfig:
 class TestParsedId:
     """Validates REQ-p00002-A: ParsedId dataclass."""
 
+    # Verifies: REQ-p00002-A
     def test_REQ_p00002_A_basic_creation(self):
         pid = ParsedId(
             namespace="REQ",
@@ -225,6 +238,7 @@ class TestParsedId:
         assert pid.component == "00044"
         assert pid.fqn == "REQ-prd00044"
 
+    # Verifies: REQ-p00002-A
     def test_REQ_p00002_A_kind_requirement(self):
         pid = ParsedId(
             namespace="REQ",
@@ -235,6 +249,7 @@ class TestParsedId:
         )
         assert pid.kind == "requirement"
 
+    # Verifies: REQ-p00002-A
     def test_REQ_p00002_A_kind_assertion(self):
         pid = ParsedId(
             namespace="REQ",
@@ -245,6 +260,7 @@ class TestParsedId:
         )
         assert pid.kind == "assertion"
 
+    # Verifies: REQ-p00002-A
     def test_REQ_p00002_A_composite_id_not_parsed(self):
         """Composite IDs (with ::) must NOT be parsed by IdResolver."""
         r = _make_hht_resolver()
@@ -312,6 +328,7 @@ def _make_named_resolver():
 class TestIdResolverParse:
     """Validates REQ-p00002-A: IdResolver.parse()."""
 
+    # Verifies: REQ-p00002-A
     def test_REQ_p00002_A_parse_canonical_hht(self):
         r = _make_hht_resolver()
         pid = r.parse("REQ-prd00044")
@@ -322,6 +339,7 @@ class TestIdResolverParse:
         assert pid.assertions == []
         assert pid.fqn == "REQ-prd00044"
 
+    # Verifies: REQ-p00002-A
     def test_REQ_p00002_A_parse_short_form_hht(self):
         r = _make_hht_resolver()
         pid = r.parse("p00044")
@@ -330,6 +348,7 @@ class TestIdResolverParse:
         assert pid.component == "00044"
         assert pid.fqn == "REQ-prd00044"
 
+    # Verifies: REQ-p00002-A
     def test_REQ_p00002_A_parse_with_assertion(self):
         r = _make_hht_resolver()
         pid = r.parse("REQ-prd00044-A")
@@ -337,6 +356,7 @@ class TestIdResolverParse:
         assert pid.assertions == ["A"]
         assert pid.fqn == "REQ-prd00044"
 
+    # Verifies: REQ-p00002-A
     def test_REQ_p00002_A_parse_multi_assertion(self):
         r = _make_hht_resolver()
         pid = r.parse("REQ-prd00044-A+B+C")
@@ -344,6 +364,7 @@ class TestIdResolverParse:
         assert pid.assertions == ["A", "B", "C"]
         assert pid.fqn == "REQ-prd00044"
 
+    # Verifies: REQ-p00002-A
     def test_REQ_p00002_A_parse_short_with_assertion(self):
         r = _make_hht_resolver()
         pid = r.parse("p00044-A")
@@ -352,11 +373,13 @@ class TestIdResolverParse:
         assert pid.assertions == ["A"]
         assert pid.fqn == "REQ-prd00044"
 
+    # Verifies: REQ-p00002-A
     def test_REQ_p00002_A_parse_invalid_returns_none(self):
         r = _make_hht_resolver()
         assert r.parse("INVALID") is None
         assert r.parse("REQ-x00001") is None
 
+    # Verifies: REQ-p00002-A
     def test_REQ_p00002_A_parse_fda_style(self):
         r = _make_fda_resolver()
         pid = r.parse("FDA-PRD-00001")
@@ -365,23 +388,27 @@ class TestIdResolverParse:
         assert pid.type_code == "PRD"
         assert pid.component == "00001"
 
+    # Verifies: REQ-p00002-A
     def test_REQ_p00002_A_parse_jira_style(self):
         r = _make_jira_resolver()
         pid = r.parse("PROJ-123")
         assert pid is not None
         assert pid.component == "123"
 
+    # Verifies: REQ-p00002-A
     def test_REQ_p00002_A_parse_jira_variable_length(self):
         r = _make_jira_resolver()
         assert r.parse("PROJ-1") is not None
         assert r.parse("PROJ-12345") is not None
 
+    # Verifies: REQ-p00002-A
     def test_REQ_p00002_A_parse_named_style(self):
         r = _make_named_resolver()
         pid = r.parse("REQ-UserAuth")
         assert pid is not None
         assert pid.component == "UserAuth"
 
+    # Verifies: REQ-p00002-A
     def test_REQ_p00002_A_component_normalization_short_input(self):
         """Unpadded component should be zero-padded during parse."""
         r = _make_hht_resolver()
@@ -389,6 +416,7 @@ class TestIdResolverParse:
         assert pid is not None
         assert pid.component == "00044"
 
+    # Verifies: REQ-p00002-A
     def test_REQ_p00002_A_composite_id_not_parsed(self):
         r = _make_hht_resolver()
         assert r.parse("REQ-prd00043::REQ-prd80001") is None
@@ -397,22 +425,27 @@ class TestIdResolverParse:
 class TestIdResolverToCanonical:
     """Validates REQ-p00002-A: to_canonical()."""
 
+    # Verifies: REQ-p00002-A
     def test_REQ_p00002_A_canonical_passthrough(self):
         r = _make_hht_resolver()
         assert r.to_canonical("REQ-prd00044") == "REQ-prd00044"
 
+    # Verifies: REQ-p00002-A
     def test_REQ_p00002_A_short_to_canonical(self):
         r = _make_hht_resolver()
         assert r.to_canonical("p00044") == "REQ-prd00044"
 
+    # Verifies: REQ-p00002-A
     def test_REQ_p00002_A_with_assertion(self):
         r = _make_hht_resolver()
         assert r.to_canonical("p00044-A") == "REQ-prd00044-A"
 
+    # Verifies: REQ-p00002-A
     def test_REQ_p00002_A_multi_assertion(self):
         r = _make_hht_resolver()
         assert r.to_canonical("p00044-A+B") == "REQ-prd00044-A+B"
 
+    # Verifies: REQ-p00002-A
     def test_REQ_p00002_A_invalid_returns_none(self):
         r = _make_hht_resolver()
         assert r.to_canonical("INVALID") is None
@@ -424,38 +457,45 @@ class TestIdResolverToCanonical:
 class TestIdResolverRender:
     """Validates REQ-p00002-A: render methods."""
 
+    # Verifies: REQ-p00002-A
     def test_REQ_p00002_A_render_canonical(self):
         r = _make_hht_resolver()
         pid = r.parse("REQ-prd00044")
         assert r.render(pid, "canonical") == "REQ-prd00044"
 
+    # Verifies: REQ-p00002-A
     def test_REQ_p00002_A_render_short(self):
         r = _make_hht_resolver()
         pid = r.parse("REQ-prd00044")
         assert r.render(pid, "short") == "p00044"
 
+    # Verifies: REQ-p00002-A
     def test_REQ_p00002_A_render_canonical_shorthand(self):
         r = _make_hht_resolver()
         pid = r.parse("REQ-prd00044")
         assert r.render_canonical(pid) == "REQ-prd00044"
 
+    # Verifies: REQ-p00002-A
     def test_REQ_p00002_A_render_with_assertion(self):
         r = _make_hht_resolver()
         pid = r.parse("REQ-prd00044-A")
         assert r.render(pid, "canonical") == "REQ-prd00044-A"
         assert r.render(pid, "short") == "p00044-A"
 
+    # Verifies: REQ-p00002-A
     def test_REQ_p00002_A_render_multi_assertion(self):
         r = _make_hht_resolver()
         pid = r.parse("REQ-prd00044-A+B+C")
         assert r.render(pid, "canonical") == "REQ-prd00044-A+B+C"
 
+    # Verifies: REQ-p00002-A
     def test_REQ_p00002_A_render_unknown_form_raises(self):
         r = _make_hht_resolver()
         pid = r.parse("REQ-prd00044")
         with pytest.raises(KeyError):
             r.render(pid, "nonexistent")
 
+    # Verifies: REQ-p00002-A
     def test_REQ_p00002_A_render_fda(self):
         r = _make_fda_resolver()
         pid = r.parse("FDA-PRD-00001")
@@ -465,6 +505,7 @@ class TestIdResolverRender:
 class TestIdResolverExpand:
     """Validates REQ-p00002-A: expand method."""
 
+    # Verifies: REQ-p00002-A
     def test_REQ_p00002_A_expand_single(self):
         r = _make_hht_resolver()
         pid = r.parse("REQ-prd00044-A")
@@ -472,6 +513,7 @@ class TestIdResolverExpand:
         assert len(expanded) == 1
         assert expanded[0].assertions == ["A"]
 
+    # Verifies: REQ-p00002-A
     def test_REQ_p00002_A_expand_multi(self):
         r = _make_hht_resolver()
         pid = r.parse("REQ-prd00044-A+B+C")
@@ -482,6 +524,7 @@ class TestIdResolverExpand:
         assert expanded[2].assertions == ["C"]
         assert all(e.fqn == "REQ-prd00044" for e in expanded)
 
+    # Verifies: REQ-p00002-A
     def test_REQ_p00002_A_expand_no_assertion(self):
         r = _make_hht_resolver()
         pid = r.parse("REQ-prd00044")
@@ -493,12 +536,14 @@ class TestIdResolverExpand:
 class TestIdResolverValidation:
     """Validates REQ-p00002-A: validation methods."""
 
+    # Verifies: REQ-p00002-A
     def test_REQ_p00002_A_is_valid(self):
         r = _make_hht_resolver()
         assert r.is_valid("REQ-prd00044") is True
         assert r.is_valid("p00044") is True
         assert r.is_valid("INVALID") is False
 
+    # Verifies: REQ-p00002-A
     def test_REQ_p00002_A_is_valid_assertion_label(self):
         r = _make_hht_resolver()
         assert r.is_valid_assertion_label("A") is True
@@ -510,17 +555,20 @@ class TestIdResolverValidation:
 class TestIdResolverAssertionLabels:
     """Validates REQ-p00002-A: assertion label methods."""
 
+    # Verifies: REQ-p00002-A
     def test_REQ_p00002_A_format_assertion_label_uppercase(self):
         r = _make_hht_resolver()
         assert r.format_assertion_label(0) == "A"
         assert r.format_assertion_label(1) == "B"
         assert r.format_assertion_label(25) == "Z"
 
+    # Verifies: REQ-p00002-A
     def test_REQ_p00002_A_format_assertion_label_out_of_range(self):
         r = _make_hht_resolver()
         with pytest.raises(ValueError):
             r.format_assertion_label(26)
 
+    # Verifies: REQ-p00002-A
     def test_REQ_p00002_A_parse_assertion_label_index(self):
         r = _make_hht_resolver()
         assert r.parse_assertion_label_index("A") == 0
@@ -531,19 +579,23 @@ class TestIdResolverAssertionLabels:
 class TestIdResolverResolveLevel:
     """Validates REQ-p00002-A: resolve_level method."""
 
+    # Verifies: REQ-p00002-A
     def test_REQ_p00002_A_resolve_by_type_code(self):
         r = _make_hht_resolver()
         assert r.resolve_level("prd") == "prd"
         assert r.resolve_level("PRD") == "prd"
 
+    # Verifies: REQ-p00002-A
     def test_REQ_p00002_A_resolve_by_alias(self):
         r = _make_hht_resolver()
         assert r.resolve_level("p") == "prd"
 
+    # Verifies: REQ-p00002-A
     def test_REQ_p00002_A_resolve_unknown(self):
         r = _make_hht_resolver()
         assert r.resolve_level("unknown") is None
 
+    # Verifies: REQ-p00002-A
     def test_REQ_p00002_A_resolve_fda_style_uppercase_codes(self):
         r = _make_fda_resolver()
         assert r.resolve_level("PRD") == "PRD"
@@ -553,10 +605,12 @@ class TestIdResolverResolveLevel:
 class TestIdResolverOutputForm:
     """Validates REQ-p00002-A: output_form and render_for methods."""
 
+    # Verifies: REQ-p00002-A
     def test_REQ_p00002_A_output_form_default(self):
         r = _make_hht_resolver()
         assert r.output_form("anything") == "canonical"
 
+    # Verifies: REQ-p00002-A
     def test_REQ_p00002_A_output_form_configured(self):
         # Output forms are set on the parsed structure rather than read from a
         # configuration dictionary: `[output.id-patterns]` is a table the v3
@@ -569,6 +623,7 @@ class TestIdResolverOutputForm:
         assert r.output_form("writer-requirement-edge") == "short"
         assert r.output_form("unlisted-context") == "canonical"
 
+    # Verifies: REQ-p00002-A
     def test_REQ_p00002_A_render_for(self):
         # Output forms are set on the parsed structure rather than read from a
         # configuration dictionary: `[output.id-patterns]` is a table the v3
@@ -586,11 +641,13 @@ class TestIdResolverOutputForm:
 class TestIdResolverCanonicalRegex:
     """Validates REQ-p00002-A: regex methods."""
 
+    # Verifies: REQ-p00002-A
     def test_REQ_p00002_A_canonical_regex_matches(self):
         r = _make_hht_resolver()
         pat = r.canonical_regex()
         assert pat.search("REQ-prd00044") is not None
 
+    # Verifies: REQ-p00002-A
     def test_REQ_p00002_A_all_type_codes(self):
         r = _make_hht_resolver()
         codes = r.all_type_codes()
@@ -661,20 +718,65 @@ class TestNormalizeRef:
         assert resolver.normalize_ref("req-p00001") == "REQ-p00001"
 
     # Verifies: REQ-p00014-U
-    def test_underscore_to_dash(self, resolver):
-        assert resolver.normalize_ref("REQ_p00001") == "REQ-p00001"
-
-    # Verifies: REQ-p00014-U
-    def test_mixed_case_underscore(self, resolver):
-        assert resolver.normalize_ref("req_p00001") == "REQ-p00001"
-
-    # Verifies: REQ-p00014-U
     def test_already_canonical(self, resolver):
         assert resolver.normalize_ref("REQ-p00001") == "REQ-p00001"
 
-    # Verifies: REQ-p00014-U
-    def test_with_assertion(self, resolver):
-        assert resolver.normalize_ref("req_p00001_A") == "REQ-p00001-A"
+    # Verifies: REQ-d00212-R
+    @pytest.mark.parametrize(
+        ("raw", "canonical"),
+        [
+            # Case, in every part whose case the grammar does not own: the
+            # namespace, the level letter and the *Assertion* label.
+            ("req-P00001-a", "REQ-p00001-A"),
+            # And, for a numeric component, the number of leading zeros.
+            ("REQ-p1", "REQ-p00001"),
+        ],
+    )
+    def test_case_and_padding_are_settled_on_a_spelling_that_parses(self, resolver, raw, canonical):
+        """The tolerance that must survive, stated beside what is refused.
+
+        A class asserting only what normalization declines stops pinning
+        what it must still accept, and the two are one rule read from its
+        two ends: case and padding are settled (REQ-d00212-R), and nothing
+        else is (REQ-d00212-S).
+        """
+        normalized = resolver.normalize_ref(raw)
+
+        assert normalized == canonical
+        assert resolver.is_local_id(normalized), (
+            f"{raw!r} normalized to {normalized!r}, which the resolver refuses; "
+            f"neither case nor padding may decide whether a reference resolves"
+        )
+
+    # Verifies: REQ-d00212-S
+    @pytest.mark.parametrize(
+        "raw",
+        [
+            "REQ_p00001",  # the separator substituted throughout
+            "req_p00001",  # ... and mis-cased as well
+            "req_p00001_A",  # ... and carrying an *Assertion* label
+        ],
+    )
+    def test_an_underscore_spelling_is_returned_exactly_as_written(self, resolver, raw):
+        """Substituting the separator is neither case nor padding, so it is
+        refused outright rather than repaired.
+
+        The whole string comes back as written -- not partly settled. A
+        spelling the grammar never parses is one normalization has no parts
+        for, so its case is not settled either: ``req_p00001`` stays
+        ``req_p00001`` and does not become ``REQ_p00001``. Reporting a
+        half-normalized string would describe a repair that did not happen
+        and send its author looking for the wrong defect.
+        """
+        normalized = resolver.normalize_ref(raw)
+
+        assert normalized == raw, (
+            f"{raw!r} came back as {normalized!r}; a spelling differing in "
+            f"anything but case and padding is left exactly as written"
+        )
+        assert not resolver.is_local_id(normalized), (
+            f"{normalized!r} resolves; it must not be repaired into a spelling that does"
+        )
 
     # Verifies: REQ-p00002-A
     def test_invalid_ref_returns_as_is(self, resolver):

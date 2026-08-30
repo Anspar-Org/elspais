@@ -41,7 +41,7 @@ This is the correct pattern for CI.
 | `name` | string | (required) | Unique label for this target; appears in output |
 | `cwd` | string | `""` (repo root) | Directory relative to repo root where the command runs |
 | `command` | string | (omit in CI) | Shell command to execute when `--run-tests` is passed |
-| `reporter` | string | (required) | Parser format: `flutter-machine`, `junit`, `pytest-json` |
+| `reporter` | string | (required) | Parser format -- one of the names in the reporters table below |
 | `results` | string | `""` | Glob pattern for result files (file-channel reporters) |
 | `coverage` | string | `""` | Path to an lcov.info or coverage.py JSON file (format auto-detected), relative to `cwd` |
 | `match` | string | `"source"` | `"source"` or `"aggregate"` -- matching strategy |
@@ -54,17 +54,31 @@ This is the correct pattern for CI.
 
 ### Reporters
 
-| Reporter | Channel | Description |
-|----------|---------|-------------|
-| `flutter-machine` | stdout | Parses `flutter test --machine` JSON-line protocol; includes real `suite.path` and test line for per-test matching |
-| `junit` | file | Parses JUnit XML test result files matched by `results` glob. Honors an optional per-`<testcase>` `file` attribute (real source path) and `line` attribute so `match = "source"` can bind to a scanned test node -- see below |
-| `pytest-json` | file | Parses pytest `--json-report` output matched by `results` glob |
+<!-- generated: reporters -->
+<!-- Rendered from the program's own definitions; edits here are overwritten. Regenerate: python -m elspais.utilities.doc_tables -->
 
-**Stdout-channel reporters** (`flutter-machine`) capture output directly from
-the running `command`.  The `results` field is not used.
+| Reporter | Channel | Kind | Description |
+| --- | --- | --- | --- |
+| `coverage-json` | file | coverage | Parses the JSON report `coverage json` (coverage.py) writes, in either its aggregate or its per-context form, into per-file line coverage. |
+| `coverage-sqlite` | file | coverage | Reads coverage.py's own `.coverage` SQLite data file through coverage.py's public API, so per-test contexts are read compactly rather than through a JSON expansion of them. Needs the `coverage` package (`elspais[coverage]`) importable, and degrades to unattributed coverage where it is not. |
+| `flutter-machine` | stdout | results | Parses the `flutter test --machine` JSON-line protocol from the command's stdout. Carries the real `suite.path` and test line, so `match = "source"` binds each result to the test that produced it. |
+| `junit` | file | results | Parses JUnit XML result files matched by the `results` glob. Honours an optional per-`<testcase>` `file` attribute (a real source path) and `line` attribute, so `match = "source"` can bind to a scanned test node. |
+| `lcov` | file | coverage | Parses an LCOV report -- the `lcov.info` that `flutter test --coverage` and most language toolchains write -- into per-file line coverage. |
+| `pytest-json` | file | results | Parses the report pytest's `--json-report` writes, matched by the `results` glob. |
 
-**File-channel reporters** (`junit`, `pytest-json`) read files from disk
-matched by the `results` glob.  These files can be pre-produced by CI.
+These are the reporters the tool is built with. `register_reporter()` admits
+further formats at run time, so a project that registers one has a reporter
+this table does not name.
+<!-- /generated: reporters -->
+
+A **stdout-channel** reporter captures output directly from the running
+`command`; the `results` field is not used.
+
+A **file-channel** reporter reads files from disk -- those matched by the
+`results` glob for a results-kind reporter, and the `coverage` path for a
+coverage-kind one.  Those files can be pre-produced by CI.  A coverage-kind
+reporter is chosen by sniffing the file at `coverage`, so a coverage-only
+target need not name one.
 
 ### match
 

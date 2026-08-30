@@ -67,6 +67,7 @@ def _parse_sarif(report: HealthReport) -> dict:
 class TestREQd00085JSarifEnvelope:
     """Validates REQ-d00085-J: SARIF envelope structure."""
 
+    # Verifies: REQ-d00085-J
     def test_REQ_d00085_J_schema_and_version(self) -> None:
         report = HealthReport()
         report.add(_make_check(passed=False, message="bad"))
@@ -77,6 +78,7 @@ class TestREQd00085JSarifEnvelope:
         assert "runs" in sarif
         assert len(sarif["runs"]) == 1
 
+    # Verifies: REQ-d00085-J
     def test_REQ_d00085_J_tool_driver_name(self) -> None:
         report = HealthReport()
         report.add(_make_check(passed=False, message="bad"))
@@ -94,6 +96,7 @@ class TestREQd00085JSarifEnvelope:
 class TestREQd00085JReportingDescriptors:
     """Validates REQ-d00085-J: rule mapping from failing checks."""
 
+    # Verifies: REQ-d00085-J
     def test_REQ_d00085_J_unique_check_maps_to_rule(self) -> None:
         report = HealthReport()
         report.add(
@@ -110,6 +113,7 @@ class TestREQd00085JReportingDescriptors:
         assert len(rules) == 1
         assert rules[0]["id"] == "duplicate_ids"
 
+    # Verifies: REQ-d00085-J
     def test_REQ_d00085_J_multiple_failing_checks_produce_multiple_rules(self) -> None:
         report = HealthReport()
         report.add(
@@ -144,6 +148,7 @@ class TestREQd00085JReportingDescriptors:
 class TestREQd00085JResults:
     """Validates REQ-d00085-J: result mapping from findings."""
 
+    # Verifies: REQ-d00085-J
     def test_REQ_d00085_J_each_finding_maps_to_result(self) -> None:
         report = HealthReport()
         report.add(
@@ -165,6 +170,7 @@ class TestREQd00085JResults:
         assert "ref A broken" in messages
         assert "ref B broken" in messages
 
+    # Verifies: REQ-d00085-J
     def test_REQ_d00085_J_finding_without_findings_uses_check_message(self) -> None:
         """A failing check with no findings still produces a result."""
         report = HealthReport()
@@ -191,6 +197,7 @@ class TestREQd00085JResults:
 class TestREQd00085JSeverityMapping:
     """Validates REQ-d00085-J: severity to SARIF level mapping."""
 
+    # Verifies: REQ-d00085-J
     def test_REQ_d00085_J_error_maps_to_error(self) -> None:
         report = HealthReport()
         report.add(
@@ -205,6 +212,7 @@ class TestREQd00085JSeverityMapping:
         sarif = _parse_sarif(report)
         assert sarif["runs"][0]["results"][0]["level"] == "error"
 
+    # Verifies: REQ-d00085-J
     def test_REQ_d00085_J_warning_maps_to_warning(self) -> None:
         report = HealthReport()
         report.add(
@@ -219,6 +227,7 @@ class TestREQd00085JSeverityMapping:
         sarif = _parse_sarif(report)
         assert sarif["runs"][0]["results"][0]["level"] == "warning"
 
+    # Verifies: REQ-d00085-J
     def test_REQ_d00085_J_info_maps_to_note(self) -> None:
         report = HealthReport()
         report.add(
@@ -242,6 +251,7 @@ class TestREQd00085JSeverityMapping:
 class TestREQd00085JPhysicalLocation:
     """Validates REQ-d00085-J: physical location mapping."""
 
+    # Verifies: REQ-d00085-J
     def test_REQ_d00085_J_file_path_produces_artifact_location(self) -> None:
         report = HealthReport()
         report.add(
@@ -260,6 +270,7 @@ class TestREQd00085JPhysicalLocation:
         loc = result["locations"][0]["physicalLocation"]
         assert loc["artifactLocation"]["uri"] == "spec/reqs.md"
 
+    # Verifies: REQ-d00085-J
     def test_REQ_d00085_J_no_file_path_omits_locations(self) -> None:
         report = HealthReport()
         report.add(
@@ -284,6 +295,7 @@ class TestREQd00085JPhysicalLocation:
 class TestREQd00085JRegion:
     """Validates REQ-d00085-J: region with startLine."""
 
+    # Verifies: REQ-d00085-J
     def test_REQ_d00085_J_line_produces_start_line(self) -> None:
         report = HealthReport()
         report.add(
@@ -301,6 +313,7 @@ class TestREQd00085JRegion:
         loc = sarif["runs"][0]["results"][0]["locations"][0]["physicalLocation"]
         assert loc["region"]["startLine"] == 42
 
+    # Verifies: REQ-d00085-J
     def test_REQ_d00085_J_no_line_omits_region(self) -> None:
         report = HealthReport()
         report.add(
@@ -327,6 +340,7 @@ class TestREQd00085JRegion:
 class TestREQd00085JPassingChecksOmitted:
     """Validates REQ-d00085-J: passing checks excluded from output."""
 
+    # Verifies: REQ-d00085-J
     def test_REQ_d00085_J_passing_check_not_in_rules(self) -> None:
         report = HealthReport()
         report.add(_make_check(name="good_check", passed=True, message="ok"))
@@ -345,6 +359,7 @@ class TestREQd00085JPassingChecksOmitted:
         assert "good_check" not in rule_ids
         assert "bad_check" in rule_ids
 
+    # Verifies: REQ-d00085-J
     def test_REQ_d00085_J_passing_check_not_in_results(self) -> None:
         report = HealthReport()
         report.add(_make_check(name="good_check", passed=True, message="ok"))
@@ -371,6 +386,7 @@ class TestREQd00085JPassingChecksOmitted:
 class TestREQd00085JFormatDispatch:
     """Validates REQ-d00085-J: format dispatch integration."""
 
+    # Verifies: REQ-d00085-J
     def test_REQ_d00085_J_format_report_sarif_dispatch(self) -> None:
         report = HealthReport()
         report.add(
@@ -397,6 +413,7 @@ class TestREQd00085JFormatDispatch:
 class TestREQd00085JAllPassing:
     """Validates REQ-d00085-J: all-passing report."""
 
+    # Verifies: REQ-d00085-J
     def test_REQ_d00085_J_all_passing_empty_results(self) -> None:
         report = HealthReport()
         report.add(_make_check(name="ok1", passed=True, message="fine"))
@@ -415,6 +432,7 @@ class TestREQd00085JAllPassing:
 class TestREQd00085JRunProperties:
     """Validates REQ-d00085-J: coverage stats in run.properties."""
 
+    # Verifies: REQ-d00085-J
     def test_REQ_d00085_J_run_properties_has_coverage_stats(self) -> None:
         report = HealthReport()
         report.add(_make_check(name="ok", passed=True, message="ok"))
@@ -451,6 +469,7 @@ class TestREQd00085JRunProperties:
 class TestREQd00085JRuleIndex:
     """Validates REQ-d00085-J: ruleIndex correspondence."""
 
+    # Verifies: REQ-d00085-J
     def test_REQ_d00085_J_rule_index_matches_rules_array(self) -> None:
         report = HealthReport()
         report.add(

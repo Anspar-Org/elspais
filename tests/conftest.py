@@ -1,4 +1,4 @@
-# Verifies: REQ-p00013-A+B+C+D+E+F
+# Verifies: REQ-p00013-F
 """
 pytest configuration and shared fixtures for elspais tests.
 """
@@ -317,7 +317,7 @@ The system SHALL do something.
 def sample_config_dict() -> dict:
     """Return sample configuration dictionary."""
     return {
-        "version": 3,
+        "version": 5,
         "project": {
             "name": "test-project",
             "namespace": "REQ",

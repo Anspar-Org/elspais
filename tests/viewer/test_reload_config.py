@@ -25,7 +25,7 @@ from elspais.server.app import create_app
 from elspais.server.state import AppState
 
 _REAL_CONFIG = """\
-version = 3
+version = 5
 
 [project]
 name = "test"
@@ -88,6 +88,7 @@ def _minimal_graph():
 class TestReloadRefreshesConfig:
     """Validates REQ-p00004-J: /api/reload re-reads config from disk."""
 
+    # Verifies: REQ-p00004-J
     def test_REQ_p00004_J_reload_refreshes_config(self, tmp_path, _minimal_graph):
         """After modifying .elspais.toml on disk, POST /api/reload picks up
         the new config values.
@@ -95,7 +96,7 @@ class TestReloadRefreshesConfig:
         # Write initial config
         config_path = tmp_path / ".elspais.toml"
         config_path.write_text(
-            'version = 3\n[project]\nname = "test"\nnamespace = "REQ"\n'
+            'version = 5\n[project]\nname = "test"\nnamespace = "REQ"\n'
             '[scanning.spec]\ndirectories = ["spec"]\n'
         )
 
@@ -111,7 +112,7 @@ class TestReloadRefreshesConfig:
 
         # Modify config on disk -- add extra-specs directory
         config_path.write_text(
-            'version = 3\n[project]\nname = "test"\nnamespace = "REQ"\n'
+            'version = 5\n[project]\nname = "test"\nnamespace = "REQ"\n'
             '[scanning.spec]\ndirectories = ["spec", "extra-specs"]\n'
         )
 
@@ -148,7 +149,7 @@ class TestReloadRefreshesConfig:
         """
         config_path = tmp_path / ".elspais.toml"
         config_path.write_text(
-            'version = 3\n[project]\nname = "test"\nnamespace = "REQ"\n'
+            'version = 5\n[project]\nname = "test"\nnamespace = "REQ"\n'
             '[scanning.spec]\ndirectories = ["spec"]\n'
         )
 
@@ -199,6 +200,7 @@ class TestReloadAbsorbsChangeDetectionState:
     a graph nobody changed.
     """
 
+    # Verifies: REQ-p00004-O
     def test_REQ_p00004_O_reload_leaves_no_redundant_rebuild(self, tmp_path):
         """After POST /api/reload absorbs a disk change, the next freshness
         check must not find that same change still outstanding."""
@@ -232,6 +234,7 @@ class TestReloadAbsorbsChangeDetectionState:
             "build_time moved after the reload with nothing changed on disk"
         )
 
+    # Verifies: REQ-p00004-O
     def test_REQ_p00004_O_reload_syncs_daemon_config_hash(self, tmp_path):
         """A reload that re-read an edited config must leave daemon.json's
         config_hash agreeing with that config, without waiting for a later
@@ -285,6 +288,7 @@ class TestRevertRereadsConfig:
     against the configuration of the branch that was left.
     """
 
+    # Verifies: REQ-p00004-J
     def test_REQ_p00004_J_revert_records_the_on_disk_config(self, tmp_path):
         """After a revert, the config the server holds is the one on disk."""
         _real_repo(tmp_path)
@@ -306,6 +310,7 @@ class TestRevertRereadsConfig:
             "revert rebuilt from the held config instead of re-reading disk"
         )
 
+    # Verifies: REQ-p00004-J
     def test_REQ_p00004_J_revert_builds_from_the_on_disk_config(self, tmp_path):
         """The graph the revert installs is built from the on-disk config,
         not from the config the server was holding."""
@@ -343,6 +348,7 @@ class TestRevertAbsorbsChangeDetectionState:
     absorb the change detection state for what it read, like every other
     reload surface."""
 
+    # Verifies: REQ-p00004-O
     def test_REQ_p00004_O_revert_leaves_no_redundant_rebuild(self, tmp_path):
         spec_file = _real_repo(tmp_path)
         state = AppState.from_config(repo_root=tmp_path)

@@ -33,7 +33,7 @@ import pytest
 from elspais.graph.GraphNode import NodeKind
 
 _CONFIG_TEMPLATE = """\
-version = 3
+version = 5
 
 [project]
 name = "grammartest"

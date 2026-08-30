@@ -130,8 +130,8 @@ class TestHealthCheckNames:
         for name in (
             "spec.structural_orphans",
             "references.unknown_requirement",
-            "tests.unlinked",
-            "code.unlinked",
+            "tests.uncited_file",
+            "code.uncited_file",
         ):
             assert name in check_names, f"Expected check '{name}' not found in {check_names}"
 
@@ -144,7 +144,7 @@ class TestHealthCheckNames:
             "spec.orphans",
             "tests.references_resolve",
             "code.references_resolve",
-            "spec.broken_references",
+            "spec.unresolved_references",
             "spec.unclaimed_references",
         ):
             assert name not in check_names, f"Old check name '{name}' should not be present"
@@ -172,19 +172,48 @@ class TestHealthFormats:
 
 
 class TestHealthScopeFlags:
-    """Health command with --spec, --code, --tests scope flags."""
+    """Health command with --spec, --code-checks, --tests scope flags."""
 
     def test_health_spec_only(self, project):
         result = run_elspais("checks", "--spec", "--lenient", cwd=project)
         assert result.returncode == 0
 
+    # Verifies: REQ-d00285-G
     def test_health_code_only(self, project):
-        result = run_elspais("checks", "--code", "--lenient", cwd=project)
+        """The code-check scope flag is `--code-checks`; `--code` names a code."""
+        result = run_elspais("checks", "--code-checks", "--lenient", cwd=project)
         assert result.returncode == 0
 
     def test_health_tests_only(self, project):
         result = run_elspais("checks", "--tests", "--lenient", cwd=project)
         assert result.returncode == 0
+
+    # Verifies: REQ-d00285-A+B
+    def test_verbose_checks_names_the_findings_and_their_remedies(self, project):
+        """`-v checks` renders each failing check's findings, not just a count."""
+        terse = run_elspais("checks", "--lenient", cwd=project)
+        verbose = run_elspais("-v", "checks", "--lenient", cwd=project)
+
+        assert verbose.returncode == 0
+        assert len(verbose.stdout) > len(terse.stdout), (
+            "the report promises detail under -v; it must render more than the terse one"
+        )
+        assert "remedy:" in verbose.stdout
+
+    # Verifies: REQ-d00285-G
+    def test_a_narrowed_report_says_what_it_withheld(self, project):
+        result = run_elspais("checks", "--category", "spec", "--lenient", cwd=project)
+        assert result.returncode == 0
+        assert "Filtered by --category spec" in result.stdout
+        shown, total = re.search(r"showing (\d+) of (\d+) checks", result.stdout).groups()
+        assert int(shown) < int(total), "a narrowing that withheld nothing would not be one"
+        assert "CODE" not in result.stdout, "only the named category is rendered"
+
+    # Verifies: REQ-d00285-G
+    def test_a_category_outside_the_vocabulary_is_refused(self, project):
+        result = run_elspais("checks", "--category", "nonsuch", "--lenient", cwd=project)
+        assert result.returncode == 2
+        assert "--category nonsuch" in result.stderr
 
     def test_health_terms_only(self, project):
         result = run_elspais("checks", "--terms", "--lenient", "--format", "json", cwd=project)
@@ -970,7 +999,7 @@ class TestMCPQueryNodes:
 
 
 class TestMCPGraphHealth:
-    """MCP get_orphaned_nodes and get_broken_references."""
+    """MCP get_orphaned_nodes and get_unresolved_references."""
 
     def test_orphaned_nodes(self, project, mcp_server):
         from .helpers import mcp_call
@@ -978,10 +1007,10 @@ class TestMCPGraphHealth:
         result = mcp_call(mcp_server, "get_orphaned_nodes", {})
         assert isinstance(result, (list, dict))
 
-    def test_broken_references(self, project, mcp_server):
+    def test_unresolved_references(self, project, mcp_server):
         from .helpers import mcp_call
 
-        result = mcp_call(mcp_server, "get_broken_references", {})
+        result = mcp_call(mcp_server, "get_unresolved_references", {})
         assert isinstance(result, (list, dict))
 
 
@@ -1819,7 +1848,7 @@ class TestStandardMCPMutations:
 
             proc = start_mcp(dst)
             try:
-                broken = mcp_call(proc, "get_broken_references", {})
+                broken = mcp_call(proc, "get_unresolved_references", {})
                 assert isinstance(broken, (list, dict))
 
                 versions = mcp_call(proc, "get_versions", {"node_ids": ["REQ-d00001"]})
@@ -1863,6 +1892,7 @@ class TestMCPOptimisticConcurrency:
     NODE = "REQ-p00002"
     state: dict = {}
 
+    # Verifies: REQ-o00062-K
     def test_01_REQ_o00062_K_success_returns_new_version(self, project, mcp_server):
         """Validates REQ-o00062-K: a successful mutation returns the node's new token."""
         from .helpers import mcp_call
@@ -1893,6 +1923,7 @@ class TestMCPOptimisticConcurrency:
         )
         self.state["version_after_a"] = result["version"]
 
+    # Verifies: REQ-o00062-I
     def test_02_REQ_o00062_I_stale_token_is_refused(self, project, mcp_server):
         """Validates REQ-o00062-I: a mutation with a stale token is rejected, not applied."""
         from .helpers import mcp_call
@@ -1916,6 +1947,7 @@ class TestMCPOptimisticConcurrency:
         )
         self.state["conflict"] = conflict
 
+    # Verifies: REQ-o00062-J
     def test_03_REQ_o00062_J_conflict_carries_current_version_and_state(self, project, mcp_server):
         """Validates REQ-o00062-J: the rejection carries current_version and current_state."""
         conflict = self.state["conflict"]
@@ -1932,6 +1964,7 @@ class TestMCPOptimisticConcurrency:
         assert current_state.get("title") == "Title From Client A"
         assert current_state.get("version") == conflict["current_version"]
 
+    # Verifies: REQ-o00062-K
     def test_04_REQ_o00062_K_retry_with_current_version_succeeds(self, project, mcp_server):
         """Validates REQ-o00062-K: after reconciling, retrying with current_version succeeds."""
         from .helpers import mcp_call
@@ -1962,6 +1995,7 @@ class TestVersionTokensSurviveRefresh:
 
     NODE = "REQ-o00002"
 
+    # Verifies: REQ-d00131-L
     def test_01_REQ_d00131_L_refresh_on_unchanged_content_keeps_tokens_valid(
         self, project, mcp_server
     ):

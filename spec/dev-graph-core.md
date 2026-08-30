@@ -237,15 +237,15 @@ The need its rationale named is met and not withdrawn: a strict *Traceability* v
 
 ### Assertions
 
-A. [Removed - a per-row field derived from one of two nested footings. The measures a row reports are REQ-d00258-A, and what a work list answers on is REQ-d00258-M.]
+A. <RETIRED> a per-row field derived from one of two nested footings. The measures a row reports are REQ-d00258-A, and what a work list answers on is REQ-d00258-M.
 
-B. [Removed - an attribute carrying the toggle's second mode. There is no second mode.]
+B. <RETIRED> an attribute carrying the toggle's second mode. There is no second mode.
 
-C. [Removed - the toggle itself. With every measure published there is nothing to switch between.]
+C. <RETIRED> the toggle itself. With every measure published there is nothing to switch between.
 
-D. [Removed - the toggle's default. There is no toggle.]
+D. <RETIRED> the toggle's default. There is no toggle.
 
-E. [Removed - failures showing regardless of toggle state. That a failing *Assertion* reads failing whatever else credits it is REQ-d00258-G, which does not depend on a display mode.]
+E. <RETIRED> failures showing regardless of toggle state. That a failing *Assertion* reads failing whatever else credits it is REQ-d00258-G, which does not depend on a display mode.
 
 ### Rationale
 
@@ -257,7 +257,7 @@ Retiring this cost no working behaviour. A alone was built -- a `TreeRow.coverag
 - 2026-05-11 | 3e5b1766 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | 3e5b1766 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *Indirect Coverage Toggle Display* | **Hash**: 27a15cb2
+*End* *Indirect Coverage Toggle Display* | **Hash**: eda3f31c
 ---
 
 ## REQ-d00071: Unified Root vs Orphan Classification
@@ -437,77 +437,76 @@ A label is a permanent name: references point at it, coverage accrues to it, and
 
 *End* *Report Malformed Assertion Labels* | **Hash**: cb7e96dd
 
-## REQ-d00272: Reference Fault Classification
+## REQ-d00272: Reference Fault Diagnosis
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-p00014-R
 **Satisfies**: REQ-p00019
 
-A reference that fails is described by how far reading it got, and the classes are only as useful as the rule that assigns them. This states that rule: what decides that an item was written as an identifier at all, which repository's grammar it should be read against, and how much of a defect may be named without guessing.
+What a reference is composed of and what it produces are REQ-d00287's subject. This governs what the tool says about a reference afterwards: which class an item carries, which repository a name is attributed to, and how much of a defect may be named without guessing.
 
 ### Assertions
 
-A. An item SHALL be assigned the class of the furthest stage of reading it completed, and no later stage SHALL be reported for it.
+A. An item SHALL be reported under the class of the furthest stage of reading it reached.
 
-B. An item containing a space SHALL NOT be read as an identifier. A report SHALL NOT describe such an item as naming a repository, an unconfigured repository included.
+B. <RETIRED> tested an item for a space. What an identifier is composed of is REQ-d00287-A, and what a name that no grammar accepts is attributed to is C.
 
-C. An item no grammar of the federation accepts SHALL be attributed to a repository where the namespace it opens with is one that repository declares, and to no repository otherwise. What separates an identifier of this estate written wrongly from a name belonging outside it SHALL be that declaration, not the item's resemblance to any pattern.
+C. An item no grammar of the federation accepts SHALL be attributed to the repository that declares the namespace it opens with, and to no repository where none declares it. That declaration SHALL decide the attribution, rather than the item's resemblance to any identifier pattern.
 
-D. Where re-reading an item under relaxations of the grammar that accepts its namespace makes it acceptable, the report SHALL name the smallest set of relaxations that does so.
+D. Where relaxations of the grammar make an item acceptable, the report SHALL name the smallest set of relaxations that does so.
 
-E. An item that opens with an acceptable reference and continues into content no grammar accounts for SHALL be reported naming both the reference found and the content unaccounted for.
+E. <RETIRED> reported a reference followed by content the grammar did not account for. An identifier that declares no relationship is one condition wherever it sits, and O reports it.
 
-F. Reading within an item SHALL inform what is reported about it and SHALL NOT contribute a relationship, so that no relationship exists that its author did not spell.
+F. <RETIRED> held that reading within an item never contributes a relationship. What produces one is REQ-d00287-E.
 
-G. A *Traceability* keyword SHALL have one canonical spelling. A keyword recognised in any other SHALL be reported at a severity the project configures, and SHALL produce the relationships it introduced regardless.
+G. A *Traceability* keyword written in other than its canonical case SHALL be reported.
 
-H. A keyword introducing no content SHALL be reported as having introduced none.
+H. A *Traceability* keyword introducing no content SHALL be reported as having introduced none.
 
-J. A *Traceability* keyword a file's kind does not admit SHALL be read, and the relationship it declares SHALL be refused as one the keyword may not take. It SHALL NOT be passed over as though it were prose.
+J. A *Traceability* keyword its file's kind does not admit SHALL be read and reported as a declaration that file may not make.
 
-K. Where a reference list names the same target more than once, every instance SHALL be reported and none SHALL produce a relationship.
+K. Where a reference list names the same target more than once, every instance SHALL be reported.
 
-L. Where an item both opens with an acceptable reference and can be read as differing from one by a relaxation, the relaxation SHALL be reported. Trailing content SHALL be reported only where no relaxation accounts for the item.
+L. An item that both opens with an acceptable reference and reads as one differing by a relaxation SHALL be reported under the relaxation. Trailing content SHALL be reported only where no relaxation accounts for the item.
 
-M. An item holding any character no identifier configuration can admit SHALL be treated under B. A character the writing system counts as a space is such a character, whichever one it is, as is any character reserved out of every identifier pattern.
+M. <RETIRED> named the characters an identifier cannot hold. What an identifier is composed of is REQ-d00287-A.
 
-N. An identifier SHALL have one canonical spelling. A reference written in another spelling the configuration admits SHALL be reported at a severity the project configures, and SHALL produce the relationship it names regardless.
+N. A reference written in an admitted spelling other than its canonical one SHALL be reported.
 
-O. Where an identifier is the first content of a comment that no *Traceability* keyword introduces, and the comment does not continue a list, the tool SHALL report that a relationship appears to be intended and is not declared, at a severity the project configures. It SHALL produce no relationship.
+O. An identifier that declares no relationship SHALL be reported as undeclared, whether it opens a comment no *Traceability* keyword introduces or follows a reference list that has ended.
+
+P. The report SHALL name a reference that did not read as an identifier malformed, and one that read as an identifier and named nothing the federation holds unresolved.
+
+Q. <RETIRED> admitted trailing content that opened a comment. A reference list is composed of identifiers, separators and whitespace (REQ-d00287-B), so what follows one needs no admitting.
+
+R. <RETIRED> reported trailing content that opened neither a reference nor a comment. Content that is not part of the list is reported under E.
 
 ### Rationale
 
-B and C are the whole of the decidability claim, and they are stated as tests on the item rather than as descriptions of what an identifier looks like because a shape can always be argued with. A space is what no identifier of any configuration contains, and a declared namespace is a fact the federation holds rather than an inference about the text; between them they separate three populations that a project acts on differently — text that was never a reference, an estate identifier spelled wrongly, and a name belonging to a repository nobody configured. Collapsing any two of those sends an author to work that will not fix anything.
+Classes are only as useful as the rule that assigns them. Reading either reaches a stage or it does not, so a class is a fact about the item rather than a judgement of it, and the report says what was reached and stops there.
 
-D bounds diagnosis by minimality rather than by a list of defects worth naming. The smallest set is the one the input determines; a larger set that also succeeds contains a relaxation the input never asked for, and naming it describes a defect the author does not have.
+Attribution decided by a declared namespace separates three populations a project acts on differently: text that was never a reference, an estate identifier spelled wrongly, and a name belonging to a repository nobody configured. Resemblance cannot separate them, because a shape can always be argued with, while a declaration is a fact the federation holds. Collapsing any two sends an author to work that will not fix anything.
 
-E and F are a pair, and F is what makes E safe. Looking inside an item is exactly the move that, allowed to produce a relationship, credits a requirement its author never named — and credits it silently, since a reference that resolved is a reference that looked fine. The distinction that keeps E is not how far the tool may look but what it may do with what it finds: describing costs nothing, because a description cannot be mistaken downstream for a declaration.
+Minimality bounds diagnosis without a list of defects worth naming. The smallest set of relaxations is the one the input determines; a larger set that also succeeds contains a relaxation the input never asked for, and naming it describes a defect the author does not have.
 
-G separates recognition from form. What a keyword is cannot depend on its case without making a report's absence depend on it too, so a differently-cased keyword is read; that its form is non-canonical is a fact about the file worth reporting, but withholding the relationships it introduced would punish the reference for the keyword's spelling.
+Trailing content ranks beneath every named relaxation because an item opening with a valid reference can always be read as that reference plus whatever follows. Unranked, that reading accounts for every malformed item and leaves every diagnosis generic. The ranking governs what is reported and settles nothing about what binds.
 
-J settles what a keyword does where the file's kind does not admit it. Passing it over reads as prose a line that is unmistakably a declaration, and the author of an annotation that did nothing is never told why — the failure a journey's misplaced validation declaration is already reported to prevent. Reading it and refusing the relationship says both true things at once: this is a declaration, and it is not one this file may make.
+A non-canonical form is a fact about the file rather than a defect in the reference. One canonical spelling exists for a keyword and for an identifier alike, and admitting more than one form is not writing more than one, so the report names the form that was written.
 
-K makes a repeated target an error rather than a convenience. Silently keeping the first instance leaves the others producing neither a relationship nor a report, which is the silence this requirement exists to remove; and the silence is not even uniform, since two spellings of one identifier that differ in case are not recognised as repeats and so do report. Refusing all instances rather than keeping one is what makes the report actionable: a list that names a target twice is a list its author has lost track of, and resolving it for them would hide that.
+A keyword its file may not use is unmistakably a declaration, and reading it as prose leaves its author never told why the annotation did nothing. An identifier that declares nothing is the opposite case: nothing about it is malformed, and the message worth giving is that spelling it with a keyword would make it count.
 
-L ranks trailing content beneath every named relaxation. An item that opens with a valid reference can always be read as that reference plus whatever follows, so an unranked trailing-content reading accounts for every malformed item and would either win every time or tie every time — leaving the named relaxations unreachable and every diagnosis generic. Ranking it last makes it what it should be: the account that applies when nothing more specific does.
+Where such an identifier sits does not change what it is. One opening a comment and one left after a reference list has ended are the same fact -- a requirement named where naming it does nothing -- and they carry the same remedy. Reported apart they would need two severities for one decision, and a project that had reviewed its estate would have to silence both.
 
-M keeps the space test from turning on which space was typed, and generalises past spaces for the same reason. A character that reads as a space to an author but not to the test would take an item that is plainly not an identifier and report it as a name from a repository nobody configured — the precise misattribution B exists to prevent, reintroduced by an invisible character. The same holds for a character reserved out of every identifier pattern: no configuration can produce one, so an item carrying it was not written as an identifier, and saying so needs no judgement about what it resembles. Stating the test as a property of the character rather than listing the characters means a newly reserved one is covered when it is reserved rather than when someone remembers to add it here.
+No test distinguishes a mention worth reporting from one worth ignoring. Any rule narrow enough to catch a missing separator also catches every deliberate mention of a requirement in prose, and a tool cannot read intent. So every instance is reported and the severity is the project's: listed while an estate is being reviewed, and withheld once it has been. A list naming a target twice is a list its author has lost track of, and reporting every instance rather than the first is what makes that visible.
 
-O names a habit rather than a defect. Opening a comment with an identifier and then explaining, in prose, why the code below answers to it is a natural way to write, and an author doing it means the relationship — they have simply not spelled it in the form the tool reads. Reporting it as a malformed reference would be wrong twice: nothing about it is malformed, and the useful message is not that something is broken but that saying it with a keyword would make it count.
-
-What makes the report safe is that it produces nothing. An informal citation is evidence of intent, not a declaration, and inferring a relationship from intent is the failure every other assertion here exists to prevent — an edge nobody wrote, indistinguishable downstream from one they did. So the tool says what it sees and leaves the declaring to the author.
-
-The exclusions are what keep it from firing on text that means something else. A comment a keyword introduces is already a declaration and is judged as one. A comment continuing a list is part of that list, and its identifier is an item rather than a citation. Everything else that opens a comment with an identifier is an author pointing at a requirement without linking to it, which is worth one line of report and no more.
-
-N pairs with G, one for the referent and one for the keyword. Both say the same thing: a spelling the configuration admits produces its relationship, and that it is not the canonical spelling is a fact about the file worth reporting rather than a reason to withhold an edge. Which spellings a configuration admits is settled elsewhere; what N adds is that admitting more than one form does not mean writing more than one.
-
-This requirement declares `Satisfies:` against the REQ-p00019 anti-pattern template and concretizes its classes for reference reading. Misattribution and double-counting are the classes this subsystem exists to answer, and assertions A, B and C pin them: one class per item and never a later one, no describing an item holding a space as though it named a repository, and attribution decided by what a repository declares rather than by what the text resembles. Silent omission and unreported non-performance are pinned by the obligation to report every recognised reference that produces no relationship (REQ-d00269-F, REQ-d00269-G), and phantom success by the rule that reading within an item informs a report and never contributes an edge (assertion F, REQ-d00269-J). Undisclosed substitution is pinned twice over: a list of which some items bound and others did not is a partial result, disclosed by reporting each item that failed, and a defect the tool could not determine is carried as the generic code rather than passed off as no defect at all (REQ-d00271-C).
-
-The template's remaining classes bind to this subsystem through the instance without a tool-specific strengthening. That a failure report names the operation, the cause, and a remedy or the absence of one is one of them, and it does not compete with the rule that a code names a defect rather than a repair: the code says what is wrong, the report may also say what would answer it, and the two are different layers of the same finding.
-
-One class has no purchase here and is left visibly uncovered rather than answered. A classification is computed from file content at every build and no verdict is cached, so this subsystem serves no value that can diverge from the sources it came from. Divergence between a served answer and changed sources is real elsewhere in the tool and is covered where it lives (REQ-p00015-E, REQ-p00015-G).
+This requirement concretizes the REQ-p00019 anti-pattern template for reference reading. Misattribution and double-counting are the classes this subsystem is most exposed to, and they are answered by one class per item, by attribution that follows what a repository declares, and by reporting every instance of a repeated target. A defect the tool could not determine is carried as the generic code rather than passed off as no defect at all.
 
 ### Changelog
 
+- 2026-08-25 | 9f1a7a6a | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-25 | e46b563e | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-25 | 27a0182e | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-24 | 3a1ca059 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-24 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-66: malformed and unresolved named against the failure classes; a comment ends a reference, and content that opens neither a reference nor a comment is reported
 - 2026-08-16 | d01290ac | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-16 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: an identifier opening a comment with no keyword is reported as an undeclared relationship and produces none (O)
 - 2026-08-16 | fadb924e | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: sync changelog hash
@@ -517,7 +516,46 @@ One class has no purchase here and is left visibly uncovered rather than answere
 - 2026-08-15 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: record how each REQ-p00019 class is answered for this subsystem — concretized, bound through the instance, or left visibly uncovered with its reason
 - 2026-08-15 | - | - | Michael Lewis (<michael@anspar.org>) | Initial authoring: the rule assigning reference failure classes — the space and namespace tests, minimal relaxation, and reading within an item without binding from it
 
-*End* *Reference Fault Classification* | **Hash**: d01290ac
+*End* *Reference Fault Diagnosis* | **Hash**: 9f1a7a6a
+---
+
+## REQ-d00287: Reading a Reference
+
+**Level**: dev | **Status**: Draft | **Implements**: REQ-p00014-R
+
+A *Traceability* reference is read from the characters its author wrote, and the reading produces the relationship those characters name. This states what an identifier and a reference list are composed of, and which readings produce a relationship.
+
+### Assertions
+
+A. An identifier SHALL be composed of characters drawn from a set its grammar defines.
+
+B. A reference list SHALL be composed of identifiers, separators, and whitespace.
+
+C. A reference the grammar admits SHALL produce the relationship it names, in the canonical spelling and in every other spelling the configuration admits.
+
+D. A *Traceability* keyword SHALL produce the relationships it introduces, in whatever case it is written.
+
+E. A relationship SHALL exist only where its author spelled it. What is read to describe an item SHALL describe it and nothing more.
+
+F. A reference list SHALL produce a relationship only for a target it names exactly once.
+
+G. A *Traceability* keyword SHALL produce relationships only in a file whose kind admits it.
+
+### Rationale
+
+Reading a reference asks two questions: where the writing ends, and what the reading produces. Each is settled by stating what something is composed of, rather than by listing the cases that end it.
+
+The character set and the list composition answer the first question completely. An identifier is made of the characters its set allows, so it ends at the first character that is not one of them; a list is made of identifiers, separators and whitespace, so it ends at the first content that is none of those. Every question about what may follow a reference is answered at once, for a space, a bracket, a word, and a character nobody has thought of yet. Enumerating terminators would state one property once per case and leave the estate a single unlisted character away from a reference with no end.
+
+The remaining assertions answer the second question, and answer it narrowly. A file is read for two reasons -- to build the graph, and to describe what was found -- and the moment those readings share a result, a requirement is credited by evidence its author never cited. Description is therefore given no power to produce: an item examined closely enough to say what is wrong with it produces nothing by having been examined. Getting this backwards costs nothing visible, because a relationship that exists reads in every report exactly like one somebody wrote.
+
+Case and padding are admitted rather than tolerated. A configuration that accepts an unpadded number or a lower-case keyword has said those forms are the same reference, and honouring one while dropping the other makes coverage depend on typing rather than on meaning. The two remaining assertions cover readings that look successful and are not: a list naming one target twice has lost track of itself, and choosing an instance resolves its author's confusion invisibly; a keyword outside its file's kind is unmistakably a declaration, and unmistakably one that file may not make.
+
+### Changelog
+
+- 2026-08-25 | - | - | Michael Lewis (<michael@anspar.org>) | Initial authoring: what a reference is composed of, and what a reading produces
+
+*End* *Reading a Reference* | **Hash**: 0803d023
 
 ## REQ-d00254: Test Evidence: Attribution, Ingestion, and Coverage Crediting
 
@@ -557,6 +595,10 @@ N. Where an external test-prescan command returns attribution records for a scan
 
 O. A line number a reporter records SHALL be read in the origin that reporter counts from. That origin SHALL be declared with the reporter and SHALL be overridable per target, and a recorded line SHALL be normalised to the numbering the tool uses for source lines before it is matched against a test or shown to a reader.
 
+P. A file the tool cannot read in full SHALL still yield the results it could read.
+
+Q. A result derived from a partial read SHALL be distinguishable from one derived from a complete read.
+
 ### Rationale
 
 A line number means nothing without its origin, and producers disagree: the `line` attribute pytest writes into JUnit XML counts from zero, while the tool numbers source lines from one. Read as though they agreed, every such result missed the test it named by exactly one line and bound at file granularity instead -- which the file-granular inference then papered over, so the disagreement never surfaced as an error. Declaring the origin with the reporter puts the knowledge where the format is known rather than in each project's config, and the per-target override is for a producer that departs from its format's convention. Normalising once, at ingestion, is what keeps the rest of the system able to treat a line as a line -- to match on it, and to point a reader at it.
@@ -571,8 +613,15 @@ M binds each record to a starting line only. Extent on the external route is der
 
 N resolves per file, not per configuration, because both routes are routinely live in a single run: a project may configure a command that returns records for one file type while every other scanned test file falls to built-in attribution.
 
+P and Q are about what a partial read produces, not about how it is announced. A file that will not parse in full is common and usually benign -- a coverage tool that cannot re-analyse a template still knows which of its lines ran -- and discarding what was read would lose evidence over a defect in a part of it.
+
+Q is the half that bites. Evidence read in part yields a figure whose basis is not the one a reader assumes: lines that never ran are absent from the denominator, so a file reads as fully covered on the strength of a failure. Stating the distinction against a COMPLETE read rather than against no read at all is deliberate -- nobody acts differently on "could not read" versus "read in part", but a reader comparing a partial figure with a whole one acts on it constantly.
+
 ### Changelog
 
+- 2026-08-25 | 8264ac9a | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-24 | e16eaff7 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-24 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-66: an artifact ingestion could not read is reported, and a partial read is told apart from a total one
 - 2026-08-22 | 00518ba3 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-22 | cbc2e2cd | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-22 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-74: a run with no selection executes a named set a project can narrow rather than every configured target; whether a run counts as selective follows from the targets it executed rather than from how it was asked; the target model carries the two settings that make that set and a recorded identity's form declarable (C, H, I, J)
@@ -594,7 +643,7 @@ N resolves per file, not per configuration, because both routes are routinely li
 - 2026-06-20 | 98120740 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-06-20 | 00000000 | - | Michael Lewis (<michael@anspar.org>) | CUR-1533: initial
 
-*End* *Test Evidence: Attribution, Ingestion, and Coverage Crediting* | **Hash**: 00518ba3
+*End* *Test Evidence: Attribution, Ingestion, and Coverage Crediting* | **Hash**: 8264ac9a
 
 ---
 
@@ -668,7 +717,7 @@ Reporting surfaces (trace, summary, MCP project summary, HTML viewer) SHALL pres
 
 A. A surface reporting a coverage figure SHALL name the evidence the figure counts, so that a reader is never shown a figure without being told what produced it.
 
-B. [Removed - a fixed set of display words, which REQ-d00258-K had already made configurable per project. Each dimension is now stated on its own in REQ-d00277, so one can be added, redefined or withdrawn without rewriting a list.]
+B. <RETIRED> a fixed set of display words, which REQ-d00258-K had already made configurable per project. Each dimension is now stated on its own in REQ-d00277, so one can be added, redefined or withdrawn without rewriting a list.
 
 C. A surface reporting a coverage figure or reaching a coverage verdict SHALL derive it from the one shared aggregation, so that two surfaces asked the same question give the same answer.
 
@@ -692,7 +741,7 @@ L. A per-status `expects_implementation` flag SHALL declare whether a requiremen
 
 M. A surface reporting which assertions need work SHALL read the immediate direct measure, so that an *Assertion* no citation names is reported however much whole-requirement evidence its requirement carries and however finished the requirements refining it are.
 
-N. [Removed - moved to REQ-d00277-C, where every coverage dimension is defined. Two authorities for what Passing counts is the duplication that split exists to remove.]
+N. <RETIRED> moved to REQ-d00277-C, where every coverage dimension is defined. Two authorities for what Passing counts is the duplication that split exists to remove.
 
 O. Tested SHALL be reported with a breakdown of the assertions it counts into those that passed, those that failed, and those awaiting a result, and the three counts SHALL together account for every tested *Assertion*. The breakdown qualifies the Tested figure and SHALL NOT introduce a coverage dimension of its own.
 
@@ -716,6 +765,7 @@ A reports how the estate is doing and M reports what is left to do; the two ques
 
 ### Changelog
 
+- 2026-08-24 | 15129897 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-21 | 6c978321 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-21 | 24015cbc | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-19 | 879012b7 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -740,7 +790,7 @@ A reports how the estate is doing and M reports what is left to do; the two ques
 - 2026-07-03 | c843c727 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-02 | be97c170 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: add missing changelog section
 
-*End* *Reporting Surface Consistency* | **Hash**: 6c978321
+*End* *Reporting Surface Consistency* | **Hash**: 15129897
 
 ---
 
@@ -764,6 +814,10 @@ E. Reporting SHALL NOT alter what the evidence credits: the *Assertion* SHALL re
 
 F. Where a dimension counts no *Assertion* of a requirement at all, the tool SHALL report that once for the requirement rather than once for each *Assertion* the evidence names.
 
+G. A citation in a scanned test file that binds to no test SHALL be reported.
+
+H. A citation that binds to no test SHALL contribute no coverage to the assertions it names.
+
 ### Rationale
 
 An error default is the honest reading of what the condition means. A test that names an *Assertion* nothing implements is one of two defects: the implementation exists and its `Implements:` reference was never written, or the test is aimed at an *Assertion* it does not exercise. Neither is a matter of style, and both cost the estate the same thing — a requirement that reads as untested when it is tested, or as tested when it is not. A warning would leave the author to decide which of those two they are looking at without telling them there is a decision to make.
@@ -776,10 +830,13 @@ This is not the question REQ-d00258-M answers. That assertion governs surfaces l
 
 ### Changelog
 
+- 2026-08-25 | 01a8f7d7 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-24 | b29be09f | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-24 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-66: a citation binding to no test is reported and credits nothing
 - 2026-08-18 | 2f1e6599 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-17 | b7624174 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: add missing changelog section
 
-*End* *Uncredited Coverage Evidence* | **Hash**: 2f1e6599
+*End* *Uncredited Coverage Evidence* | **Hash**: 01a8f7d7
 
 ## REQ-d00276: Tests Outside the Requirement Estate
 
@@ -793,9 +850,11 @@ A. Tests that reach no requirement SHALL be reported together as their own set, 
 
 B. The report SHALL say what each such test returned, distinguishing one that passed, one that failed, and one awaiting a result.
 
-C. A failing test that reaches no requirement SHALL be reported at the severity the project configures for it, and SHALL be a warning where the project configures nothing.
+C. A failing test that reaches no requirement SHALL be reported, and SHALL be a warning where the project configures nothing.
 
 D. The report SHALL name the file and the line each reported test was written at.
+
+E. A scanned test file that no configured target can execute SHALL be reported.
 
 ### Rationale
 
@@ -805,7 +864,11 @@ Neither belongs in a coverage figure, and putting them there is what the figures
 
 C defaults to warning rather than error because the condition is not always a defect. A repository legitimately carries tests for things it has not written requirements for. What is not legitimate is not knowing.
 
-*End* *Tests Outside the Requirement Estate* | **Hash**: 922d1382
+### Changelog
+
+- 2026-08-24 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-66: a scanned test file nothing configured can run is reported
+
+*End* *Tests Outside the Requirement Estate* | **Hash**: ca4cd1fc
 
 ---
 

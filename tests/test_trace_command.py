@@ -412,7 +412,7 @@ The system SHALL do something testable.
         config_path = tmp_path / ".elspais.toml"
         config_path.write_text(
             """\
-version = 3
+version = 5
 
 [project]
 name = "fresh-targets"
@@ -516,7 +516,7 @@ The system SHALL do something testable.
         config_path = tmp_path / ".elspais.toml"
         config_path.write_text(
             """\
-version = 3
+version = 5
 
 [project]
 name = "grouped-targets"
@@ -692,7 +692,7 @@ def _verified_cell(markdown_text, req_id):
 
 
 _TWO_TARGET_CONFIG = """\
-version = 3
+version = 5
 
 [project]
 name = "two-target-trace"
@@ -957,7 +957,7 @@ class TestTraceLegendGating:
 
 
 _MARKER_VERIFIED_CONFIG = """\
-version = 3
+version = 5
 
 [project]
 name = "marker-verified-trace"
@@ -1049,7 +1049,7 @@ def marker_verified_project(tmp_path):
 
 
 _CODE_TESTED_CONFIG = """\
-version = 3
+version = 5
 
 [project]
 name = "code-tested-no-attribution"
@@ -1383,7 +1383,7 @@ class TestTraceFooting:
 
 
 _BREAKDOWN_CONFIG = """\
-version = 3
+version = 5
 
 [project]
 name = "tested-breakdown-trace"

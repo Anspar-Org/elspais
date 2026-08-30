@@ -34,8 +34,11 @@
 - REQ-d00212-F
 - REQ-d00212-M
 - REQ-d00272-G
+- REQ-d00272-H
 - REQ-d00272-J
 - REQ-d00272-O
+- REQ-d00287-D
+- REQ-d00287-G
 - REQ-d00254-B
 - REQ-d00255-D
 - REQ-d00257-A
@@ -49,6 +52,8 @@
 - REQ-d00269-E
 - REQ-d00269-G
 - REQ-d00269-H
+- REQ-d00269-K
+- REQ-d00269-L
 - REQ-d00128-I
 - REQ-d00131-L
 - REQ-d00133-B
@@ -60,14 +65,15 @@
 - REQ-p00017-G
 - REQ-d00241-A
 - REQ-d00241-C
-- REQ-d00241-D
 - REQ-d00241-E
+- REQ-d00241-F
 - REQ-p00005-B
 - rem:REQ:spec/AI-AGENT.md:20
 - REQ-d00084:section:0
 - REQ-d00084:section:1
 - REQ-d00069:section:1
 - REQ-d00070:section:0
+- REQ-d00287:section:0
 - REQ-d00254:section:0
 - REQ-d00254:section:1
 - REQ-d00258:section:1

@@ -24,7 +24,18 @@ from typing import TYPE_CHECKING, Any
 from elspais.config.schema import ElspaisConfig
 from elspais.config.status_roles import StatusRole
 from elspais.graph.aggregation import EvidenceResult
+from elspais.graph.parsers.directives import counted_assertion_labels
 from elspais.graph.reference_faults import FaultClass, FaultCode
+from elspais.utilities.findings import (
+    NO_KNOWN_REMEDY,
+    REGISTRY,
+    REPORTED_SEVERITIES,
+    Severity,
+    is_registered,
+    preset_checks,
+    remedy_for,
+    severity_for,
+)
 
 if TYPE_CHECKING:
     from elspais.graph.federated import FederatedGraph
@@ -51,6 +62,10 @@ class HealthFinding:
     related: list[str] = field(default_factory=list)
     repo: str | None = None
     retired: bool = False
+    # The diagnostic codes the finding reached, as a field rather than only as
+    # text inside `message`, so a reader can select on one (`checks --code`)
+    # and a structured format can carry it as a value.
+    codes: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         d: dict[str, Any] = {
@@ -63,7 +78,15 @@ class HealthFinding:
         }
         if self.retired:
             d["retired"] = True
+        if self.codes:
+            d["codes"] = list(self.codes)
         return d
+
+    def location(self) -> str | None:
+        """Where the finding is about, as `path:line` -- or None where it has none."""
+        if not self.file_path:
+            return None
+        return f"{self.file_path}:{self.line}" if self.line is not None else self.file_path
 
 
 @dataclass
@@ -74,9 +97,52 @@ class HealthCheck:
     passed: bool
     message: str
     category: str  # config, spec, code, tests
-    severity: str = "error"  # error, warning, info
+    severity: str = "error"  # one of REPORTED_SEVERITIES
     details: dict[str, Any] = field(default_factory=dict)
     findings: list[HealthFinding] = field(default_factory=list)
+    # The action that resolves what this check reports. Left empty by every
+    # caller: it is resolved from the one registry below, so a finding carries
+    # its remedy into every format rather than into the one whose renderer
+    # remembered to consult a table (REQ-d00285-B+C).
+    remedy: str = ""
+
+    # Implements: REQ-d00212-U, REQ-d00285-D, REQ-d00285-B
+    def __post_init__(self) -> None:
+        # A severity outside the vocabulary matched none of the branches that
+        # count a check, so the check was neither failed, warned nor skipped
+        # and the run reported healthy. Refusing it here is what makes that
+        # fall-through impossible rather than merely unlikely. `off` is a
+        # configuration value, not a reported one: a check resolving to it is
+        # emitted as a skipped `info` check (see `skipped_check`).
+        if self.severity not in REPORTED_SEVERITIES:
+            raise ValueError(
+                f"{self.name}: {self.severity!r} is not a severity a check can be "
+                f"reported at. Reported severities: {', '.join(REPORTED_SEVERITIES)}."
+            )
+        if not self.remedy:
+            # A name outside the registry has no remedy anyone recorded, and
+            # saying so is the obligation. Every name the tool itself reports
+            # under is registered -- that is what `severity_for` enforces at
+            # the point each check is built.
+            self.remedy = remedy_for(self.name) if is_registered(self.name) else NO_KNOWN_REMEDY
+
+
+# Implements: REQ-d00285-G
+def skipped_check(name: str, condition: str) -> HealthCheck:
+    """The check a project has turned off: what was withheld, and why.
+
+    A condition detected and dropped in silence is indistinguishable from one
+    never detected, so the skip is reported as a check of its own rather than
+    an absence.
+    """
+    return HealthCheck(
+        name=name,
+        passed=True,
+        message=f"{condition} not reported (severity=off)",
+        category=REGISTRY[name].category,
+        severity="info",
+        details={"skipped": True, "reason": "severity=off"},
+    )
 
 
 @dataclass
@@ -84,6 +150,12 @@ class HealthReport:
     """Aggregated health check results."""
 
     checks: list[HealthCheck] = field(default_factory=list)
+
+    # The four counts below PARTITION the checks: every check carries one of
+    # `REPORTED_SEVERITIES` (a `HealthCheck` cannot be built carrying anything
+    # else), and each severity lands in exactly one count -- info in `skipped`,
+    # warning and error in `passed` or in `warnings`/`failed` by outcome. A
+    # value counted nowhere is what let a mistyped severity report healthy.
 
     @property
     def skipped(self) -> int:
@@ -134,6 +206,7 @@ class HealthReport:
                     "message": c.message,
                     "category": c.category,
                     "severity": c.severity,
+                    "remedy": c.remedy,
                     "details": c.details,
                     "findings": [f.to_dict() for f in c.findings],
                 }
@@ -172,8 +245,14 @@ def __getattr__(name: str):  # noqa: N807
 # =============================================================================
 
 
-def check_spec_files_parseable(graph: FederatedGraph) -> HealthCheck:
+def check_spec_files_parseable(
+    graph: FederatedGraph, config: dict[str, Any] | None = None
+) -> HealthCheck:
     """Check that all spec files were parsed without errors."""
+    severity = severity_for("spec.parseable", config)
+    if severity == Severity.OFF:
+        return skipped_check("spec.parseable", "Spec files that produced no requirements")
+
     from elspais.graph import NodeKind
 
     # Count requirements found
@@ -186,7 +265,7 @@ def check_spec_files_parseable(graph: FederatedGraph) -> HealthCheck:
             passed=False,
             message="No requirements found in spec files",
             category="spec",
-            severity="warning",
+            severity=severity,
         )
 
     return HealthCheck(
@@ -198,7 +277,9 @@ def check_spec_files_parseable(graph: FederatedGraph) -> HealthCheck:
     )
 
 
-def check_spec_no_duplicates(graph: FederatedGraph) -> HealthCheck:
+def check_spec_no_duplicates(
+    graph: FederatedGraph, config: dict[str, Any] | None = None
+) -> HealthCheck:
     """Check for cross-file duplicate requirement IDs.
 
     Reads the build-time collision record from the graph, since by the time
@@ -206,6 +287,10 @@ def check_spec_no_duplicates(graph: FederatedGraph) -> HealthCheck:
     subsequent occurrences with synthetic IDs. The collision record preserves
     every source file that defined each canonical ID.
     """
+    severity = severity_for("spec.no_duplicates", config)
+    if severity == Severity.OFF:
+        return skipped_check("spec.no_duplicates", "Duplicate requirement identifiers")
+
     duplicates = graph.duplicate_req_ids()
 
     if duplicates:
@@ -222,6 +307,7 @@ def check_spec_no_duplicates(graph: FederatedGraph) -> HealthCheck:
             passed=False,
             message=f"Found {len(duplicates)} duplicate requirement IDs",
             category="spec",
+            severity=severity,
             details={"duplicates": duplicates},
             findings=findings,
         )
@@ -235,9 +321,15 @@ def check_spec_no_duplicates(graph: FederatedGraph) -> HealthCheck:
 
 
 def check_spec_implements_resolve(
-    graph: FederatedGraph, resolver: IdResolver | None = None
+    graph: FederatedGraph,
+    resolver: IdResolver | None = None,
+    config: dict[str, Any] | None = None,
 ) -> HealthCheck:
     """Check that all Implements references resolve to valid requirements."""
+    severity = severity_for("spec.implements_resolve", config)
+    if severity == Severity.OFF:
+        return skipped_check("spec.implements_resolve", "Implements references that do not resolve")
+
     from elspais.graph import NodeKind
 
     unresolved = []
@@ -274,7 +366,7 @@ def check_spec_implements_resolve(
             passed=False,
             message=f"{len(unresolved)} unresolved Implements references",
             category="spec",
-            severity="warning",
+            severity=severity,
             details={"unresolved": unresolved[:10]},
             findings=findings,
         )
@@ -288,9 +380,15 @@ def check_spec_implements_resolve(
 
 
 def check_spec_refines_resolve(
-    graph: FederatedGraph, resolver: IdResolver | None = None
+    graph: FederatedGraph,
+    resolver: IdResolver | None = None,
+    config: dict[str, Any] | None = None,
 ) -> HealthCheck:
     """Check that all Refines references resolve to valid requirements."""
+    severity = severity_for("spec.refines_resolve", config)
+    if severity == Severity.OFF:
+        return skipped_check("spec.refines_resolve", "Refines references that do not resolve")
+
     from elspais.graph import NodeKind
 
     unresolved = []
@@ -325,7 +423,7 @@ def check_spec_refines_resolve(
             passed=False,
             message=f"{len(unresolved)} unresolved Refines references",
             category="spec",
-            severity="warning",
+            severity=severity,
             details={"unresolved": unresolved[:10]},
             findings=findings,
         )
@@ -340,9 +438,15 @@ def check_spec_refines_resolve(
 
 # Implements: REQ-p00014-E
 def check_spec_satisfies_resolve(
-    graph: FederatedGraph, resolver: IdResolver | None = None
+    graph: FederatedGraph,
+    resolver: IdResolver | None = None,
+    config: dict[str, Any] | None = None,
 ) -> HealthCheck:
     """Check that all Satisfies references resolve to valid requirements or assertions."""
+    severity = severity_for("spec.satisfies_resolve", config)
+    if severity == Severity.OFF:
+        return skipped_check("spec.satisfies_resolve", "Satisfies references that do not resolve")
+
     from elspais.graph import NodeKind
 
     unresolved = []
@@ -377,7 +481,7 @@ def check_spec_satisfies_resolve(
             passed=False,
             message=f"{len(unresolved)} unresolved Satisfies references",
             category="spec",
-            severity="warning",
+            severity=severity,
             details={"unresolved": unresolved[:10]},
             findings=findings,
         )
@@ -391,7 +495,9 @@ def check_spec_satisfies_resolve(
 
 
 # Implements: REQ-d00085-I
-def check_spec_needs_rewrite(graph: FederatedGraph) -> HealthCheck:
+def check_spec_needs_rewrite(
+    graph: FederatedGraph, config: dict[str, Any] | None = None
+) -> HealthCheck:
     """Check for requirements that would change the file on next save.
 
     A requirement is marked parse_dirty at build time when any condition is
@@ -399,6 +505,10 @@ def check_spec_needs_rewrite(graph: FederatedGraph) -> HealthCheck:
     - duplicate_refs: same REQ ID appears more than once in Implements/Refines
     - stale_hash: stored hash does not match the computed hash
     """
+    severity = severity_for("spec.needs_rewrite", config)
+    if severity == Severity.OFF:
+        return skipped_check("spec.needs_rewrite", "Requirements whose stored text is out of date")
+
     from elspais.graph import NodeKind
 
     findings: list[HealthFinding] = []
@@ -423,7 +533,7 @@ def check_spec_needs_rewrite(graph: FederatedGraph) -> HealthCheck:
             passed=False,
             message=f"{len(findings)} requirement(s) will be rewritten on next save",
             category="spec",
-            severity="warning",
+            severity=severity,
             details={"count": len(findings)},
             findings=findings,
         )
@@ -437,7 +547,9 @@ def check_spec_needs_rewrite(graph: FederatedGraph) -> HealthCheck:
 
 
 # Implements: REQ-d00250-F
-def check_unfixable_issues(graph: FederatedGraph) -> HealthCheck:
+def check_unfixable_issues(
+    graph: FederatedGraph, config: dict[str, Any] | None = None
+) -> HealthCheck:
     """Check for requirements with issues that ``--fix`` cannot resolve.
 
     Currently reports:
@@ -445,6 +557,10 @@ def check_unfixable_issues(graph: FederatedGraph) -> HealthCheck:
       blocks (Assertions/Changelog/named) that would need to live at H7
       to be canonical, which markdown does not support.
     """
+    severity = severity_for("spec.unfixable_issues", config)
+    if severity == Severity.OFF:
+        return skipped_check("spec.unfixable_issues", "Issues fix cannot repair")
+
     from elspais.graph import NodeKind
 
     findings: list[HealthFinding] = []
@@ -469,7 +585,7 @@ def check_unfixable_issues(graph: FederatedGraph) -> HealthCheck:
             passed=False,
             message=f"{len(findings)} requirement(s) have unfixable issues",
             category="spec",
-            severity="error",
+            severity=severity,
             details={"count": len(findings)},
             findings=findings,
         )
@@ -519,6 +635,12 @@ def check_spec_undefined_levels(graph: FederatedGraph, config: dict[str, Any]) -
     while its requirements remained, as it is a deliberate federated difference,
     and the report is the only place an author would find out.
     """
+    severity = severity_for("spec.undefined_levels", config)
+    if severity == Severity.OFF:
+        return skipped_check(
+            "spec.undefined_levels", "Requirements at a level the configuration does not define"
+        )
+
     from elspais.graph import NodeKind
 
     typed_config = _validate_config(config)
@@ -546,7 +668,7 @@ def check_spec_undefined_levels(graph: FederatedGraph, config: dict[str, Any]) -
                 f"{len(findings)} requirement(s) carry a level this configuration does not define"
             ),
             category="spec",
-            severity="info",
+            severity=severity,
             findings=findings,
         )
     return HealthCheck(
@@ -560,6 +682,12 @@ def check_spec_undefined_levels(graph: FederatedGraph, config: dict[str, Any]) -
 
 def check_spec_hierarchy_levels(graph: FederatedGraph, config: dict[str, Any]) -> HealthCheck:
     """Check that hierarchy levels follow configured rules."""
+    severity = severity_for("spec.hierarchy_levels", config)
+    if severity == Severity.OFF:
+        return skipped_check(
+            "spec.hierarchy_levels", "Implements references that cross the level hierarchy"
+        )
+
     from elspais.graph import NodeKind
     from elspais.graph.relations import EdgeKind
 
@@ -626,7 +754,7 @@ def check_spec_hierarchy_levels(graph: FederatedGraph, config: dict[str, Any]) -
                 passed=False,
                 message=f"{len(violations)} hierarchy level violations",
                 category="spec",
-                severity="warning",
+                severity=severity,
                 details={"violations": violations[:10]},
                 findings=findings,
             )
@@ -653,9 +781,15 @@ def check_spec_hierarchy_levels(graph: FederatedGraph, config: dict[str, Any]) -
 
 
 def check_structural_orphans(
-    graph: FederatedGraph, allow_structural_orphans: bool = False
+    graph: FederatedGraph,
+    allow_structural_orphans: bool = False,
+    config: dict[str, Any] | None = None,
 ) -> HealthCheck:
     """Check for nodes without a FILE ancestor (build pipeline bugs)."""
+    severity = severity_for("spec.structural_orphans", config)
+    if severity == Severity.OFF:
+        return skipped_check("spec.structural_orphans", "Nodes with no file to belong to")
+
     if allow_structural_orphans:
         return HealthCheck(
             name="spec.structural_orphans",
@@ -690,7 +824,7 @@ def check_structural_orphans(
             passed=False,
             message=f"{total} structural orphans ({', '.join(summary_parts)})",
             category="spec",
-            severity="error",
+            severity=severity,
             details={"by_kind": {k: v[:10] for k, v in orphans_by_kind.items()}, "total": total},
             findings=findings,
         )
@@ -814,9 +948,11 @@ def check_reference_class(
     reached -- so a finding appears under one check and a count of findings
     is a count of distinct facts (REQ-p00019-K).
     """
-    typed = _validate_config(config or {})
-    severity = getattr(typed.rules.references, fault_class.label)
-    faults = [f for f in graph.broken_references() if f.fault_class is fault_class]
+    severity = severity_for(name, config)
+    if severity == Severity.OFF:
+        return skipped_check(name, f"References that {description}")
+
+    faults = [f for f in graph.unresolved_references() if f.fault_class is fault_class]
     unavailable = (
         _unavailable_repos(graph) if fault_class in _CLASSES_A_MISSING_REPO_EXPLAINS else []
     )
@@ -847,6 +983,7 @@ def check_reference_class(
                 repo=repo_name,
                 file_path=file_path,
                 line=line,
+                codes=list(f.codes),
             )
         )
     # Implements: REQ-d00204-E
@@ -859,7 +996,7 @@ def check_reference_class(
         message += f" -- a target may belong to a repository that could not be read: {obtain}"
     return HealthCheck(
         name=name,
-        passed=severity == "ok",
+        passed=False,
         message=message,
         category="references",
         severity=severity,
@@ -890,8 +1027,10 @@ def check_reference_keyword_form(
     reported under its own rule, at its own severity, so it can never join a
     bucket that counts references that failed to bind.
     """
-    typed = _validate_config(config or {})
-    severity = typed.rules.references.keyword_form
+    severity = severity_for("references.keyword_form", config)
+    if severity == Severity.OFF:
+        return skipped_check("references.keyword_form", "Keywords written in a non-canonical form")
+
     findings_raw = graph.style_findings()
     if not findings_raw:
         return HealthCheck(
@@ -919,7 +1058,7 @@ def check_reference_keyword_form(
         )
     return HealthCheck(
         name="references.keyword_form",
-        passed=severity == "ok",
+        passed=False,
         message=f"{len(findings_raw)} keyword(s) written in a non-canonical form",
         category="references",
         severity=severity,
@@ -941,8 +1080,12 @@ def check_reference_identifier_form(
     reported under its own rule and can never join a check that counts
     references that failed to bind.
     """
-    typed = _validate_config(config or {})
-    severity = typed.rules.references.identifier_form
+    severity = severity_for("references.identifier_form", config)
+    if severity == Severity.OFF:
+        return skipped_check(
+            "references.identifier_form", "References spelled in a non-canonical form"
+        )
+
     findings_raw = graph.identifier_form_findings()
     if not findings_raw:
         return HealthCheck(
@@ -972,11 +1115,12 @@ def check_reference_identifier_form(
                 repo=repo_name,
                 file_path=file_path,
                 line=line,
+                codes=list(f.codes),
             )
         )
     return HealthCheck(
         name="references.identifier_form",
-        passed=severity == "ok",
+        passed=False,
         message=f"{len(findings_raw)} reference(s) spelled in a non-canonical form",
         category="references",
         severity=severity,
@@ -997,8 +1141,10 @@ def check_reference_undeclared(graph: FederatedGraph, config: dict[str, Any] | N
     intent, and inferring an edge from intent is the failure the whole
     vocabulary exists to prevent.
     """
-    typed = _validate_config(config or {})
-    severity = typed.rules.references.undeclared
+    severity = severity_for("references.undeclared", config)
+    if severity == Severity.OFF:
+        return skipped_check("references.undeclared", "References naming no configured repository")
+
     cites = graph.undeclared_relationships()
     if not cites:
         return HealthCheck(
@@ -1030,7 +1176,7 @@ def check_reference_undeclared(graph: FederatedGraph, config: dict[str, Any] | N
         )
     return HealthCheck(
         name="references.undeclared",
-        passed=severity == "ok",
+        passed=False,
         message=(f"{len(cites)} comment(s) cite a requirement without declaring a relationship"),
         category="references",
         severity=severity,
@@ -1043,6 +1189,10 @@ def check_spec_format_rules(
     graph: FederatedGraph, config: dict[str, Any], resolver: IdResolver | None = None
 ) -> HealthCheck:
     """Check that requirements comply with configured format rules."""
+    severity = severity_for("spec.format_rules", config)
+    if severity == Severity.OFF:
+        return skipped_check("spec.format_rules", "Requirements that break a format rule")
+
     from elspais.graph import NodeKind
     from elspais.validation.format import get_format_rules_config, validate_requirement_format
 
@@ -1112,6 +1262,7 @@ def check_spec_format_rules(
             passed=False,
             message=f"{len(errors)} format error(s) in {req_count} requirements",
             category="spec",
+            severity=severity,
             details={
                 "errors": [
                     {"rule": v.rule, "message": v.message, "node": v.node_id} for v in errors
@@ -1152,8 +1303,9 @@ def check_spec_no_assertions(graph: FederatedGraph, config: dict[str, Any]) -> H
     from elspais.graph import NodeKind
     from elspais.graph.relations import EdgeKind
 
-    typed = _validate_config(config)
-    severity = typed.rules.format.no_assertions_severity
+    severity = severity_for("spec.no_assertions", config)
+    if severity == Severity.OFF:
+        return skipped_check("spec.no_assertions", "Requirements with no assertions")
 
     findings: list[HealthFinding] = []
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
@@ -1190,14 +1342,74 @@ def check_spec_no_assertions(graph: FederatedGraph, config: dict[str, Any]) -> H
     )
 
 
+# Implements: REQ-p00002-F
+def check_spec_unknown_directive(graph: FederatedGraph, config: dict[str, Any]) -> HealthCheck:
+    """Report *Assertions* opening with a directive the tool does not recognize.
+
+    A directive is an instruction to the parser, not prose. Absorbing an
+    unrecognized one into the *Assertion*'s text would leave an author
+    believing they had said something to the tool that the tool never read --
+    so it is reported, with the name as written and where it was written, and
+    the *Assertion* otherwise reads as an ordinary one.
+    """
+    from elspais.graph import NodeKind
+    from elspais.graph.parsers.directives import read_directive
+
+    severity = severity_for("spec.unknown_directive", config)
+    if severity == Severity.OFF:
+        return skipped_check("spec.unknown_directive", "Unrecognized assertion directives")
+
+    findings: list[HealthFinding] = []
+    for node in graph.nodes_by_kind(NodeKind.ASSERTION):
+        directive = read_directive(node.get_label())
+        if directive is None or directive.recognized:
+            continue
+        fn = node.file_node()
+        findings.append(
+            HealthFinding(
+                message=(
+                    f"{node.id}: unrecognized parsing directive "
+                    f"{directive.opener}{directive.name}{directive.closer} -- "
+                    f"the assertion counts as an ordinary one"
+                ),
+                node_id=node.id,
+                file_path=fn.get_field("relative_path") if fn else None,
+                line=node.get_field("parse_line"),
+            )
+        )
+
+    if findings:
+        return HealthCheck(
+            name="spec.unknown_directive",
+            passed=False,
+            message=f"{len(findings)} assertion(s) carry an unrecognized parsing directive",
+            category="spec",
+            severity=severity,
+            findings=findings,
+        )
+    return HealthCheck(
+        name="spec.unknown_directive",
+        passed=True,
+        message="No unrecognized assertion parsing directives",
+        category="spec",
+        severity=severity,
+    )
+
+
 # Implements: REQ-p00004
-def check_spec_hash_integrity(graph: FederatedGraph) -> HealthCheck:
+def check_spec_hash_integrity(
+    graph: FederatedGraph, config: dict[str, Any] | None = None
+) -> HealthCheck:
     """Flag Satisfies-linked requirements for review when their template has a stale hash.
 
     Stale hash detection happens at build time (parse_dirty_reasons contains
     "stale_hash"). This check adds the Satisfies annotation: when a template
     requirement is stale, any requirement that Satisfies it needs review.
     """
+    severity = severity_for("spec.hash_integrity", config)
+    if severity == Severity.OFF:
+        return skipped_check("spec.hash_integrity", "Requirements whose stored hash does not match")
+
     from elspais.graph import NodeKind
     from elspais.graph.relations import EdgeKind
 
@@ -1238,7 +1450,7 @@ def check_spec_hash_integrity(graph: FederatedGraph) -> HealthCheck:
                 f"{', '.join(ids[:5])}" + (f" (+{len(ids) - 5} more)" if len(ids) > 5 else "")
             ),
             category="spec",
-            severity="warning",
+            severity=severity,
             details={"mismatches": mismatches},
             findings=findings,
         )
@@ -1267,6 +1479,10 @@ def check_spec_changelog_present(graph: FederatedGraph, config: dict[str, Any]) 
     The latter matches `elspais fix`, which adds missing entries when hash
     tracking is enabled — keeping the check aligned with fix behavior.
     """
+    severity = severity_for("spec.changelog_present", config)
+    if severity == Severity.OFF:
+        return skipped_check("spec.changelog_present", "Requirements with no changelog")
+
     from elspais.graph import NodeKind
 
     typed_config = _validate_config(config)
@@ -1305,6 +1521,7 @@ def check_spec_changelog_present(graph: FederatedGraph, config: dict[str, Any]) 
                 + (f" ... and {len(missing) - 5} more" if len(missing) > 5 else "")
             ),
             category="spec",
+            severity=severity,
             details={"missing": missing},
             findings=findings,
         )
@@ -1319,6 +1536,12 @@ def check_spec_changelog_present(graph: FederatedGraph, config: dict[str, Any]) 
 
 def check_spec_changelog_current(graph: FederatedGraph, config: dict[str, Any]) -> HealthCheck:
     """Check that Active requirements' changelog hashes match stored hashes."""
+    severity = severity_for("spec.changelog_current", config)
+    if severity == Severity.OFF:
+        return skipped_check(
+            "spec.changelog_current", "Changelogs that do not record the current hash"
+        )
+
     from elspais.graph import NodeKind
 
     typed_config = _validate_config(config)
@@ -1362,7 +1585,7 @@ def check_spec_changelog_current(graph: FederatedGraph, config: dict[str, Any]) 
                 f" changelog entries: {', '.join(ids[:5])}"
             ),
             category="spec",
-            severity="error",
+            severity=severity,
             details={"mismatches": mismatches},
         )
 
@@ -1376,6 +1599,10 @@ def check_spec_changelog_current(graph: FederatedGraph, config: dict[str, Any]) 
 
 def check_spec_changelog_format(graph: FederatedGraph, config: dict[str, Any]) -> HealthCheck:
     """Validate changelog entry fields per config requirements."""
+    severity = severity_for("spec.changelog_format", config)
+    if severity == Severity.OFF:
+        return skipped_check("spec.changelog_format", "Changelog entries that do not read")
+
     from elspais.graph import NodeKind
 
     typed_config = _validate_config(config)
@@ -1429,7 +1656,7 @@ def check_spec_changelog_format(graph: FederatedGraph, config: dict[str, Any]) -
             passed=False,
             message=(f"{len(violations)} changelog entry/entries missing required fields"),
             category="spec",
-            severity="error",
+            severity=severity,
             details={"violations": violations[:10]},
         )
 
@@ -1447,6 +1674,10 @@ def check_spec_index_current(
     config: dict[str, Any] | None = None,
 ) -> HealthCheck:
     """Check that INDEX.md is byte-identical to what 'elspais fix' would produce."""
+    severity = severity_for("spec.index_current", config)
+    if severity == Severity.OFF:
+        return skipped_check("spec.index_current", "A generated index that is out of date")
+
     from elspais.commands.index import _build_index_content, _indexed_node_ids
     from elspais.graph import NodeKind
 
@@ -1483,7 +1714,8 @@ def check_spec_index_current(
             category="spec",
         )
 
-    # Byte-level mismatch — still provide the legacy ID-diff breakdown for context.
+    # Byte-level mismatch — say which identifiers differ, so a reader sees what
+    # moved rather than only that the file is out of date.
     import re
 
     # Both grammars come from where they are defined: the repository's own
@@ -1526,7 +1758,7 @@ def check_spec_index_current(
         passed=False,
         message=f"INDEX.md is stale: {', '.join(issues)}",
         category="spec",
-        severity="warning",
+        severity=severity,
         details={
             "missing_reqs": sorted(missing_reqs),
             "extra_reqs": sorted(extra_reqs),
@@ -1583,17 +1815,13 @@ def _downgrade_retired_findings(
 # Implements: REQ-d00223-A, REQ-d00223-D
 def check_term_duplicates(
     duplicates: list[tuple],
-    severity: str = "error",
+    severity: str | None = None,
+    config: dict[str, Any] | None = None,
 ) -> HealthCheck:
     """Check for duplicate term definitions."""
-    if severity == "off":
-        return HealthCheck(
-            name="terms.duplicates",
-            passed=True,
-            message="Duplicate term check skipped (severity=off)",
-            category="terms",
-            severity="info",
-        )
+    severity = severity or severity_for("terms.duplicates", config)
+    if severity == Severity.OFF:
+        return skipped_check("terms.duplicates", "Terms defined more than once")
 
     if not duplicates:
         return HealthCheck(
@@ -1631,17 +1859,13 @@ def check_term_duplicates(
 # Implements: REQ-d00223-B, REQ-d00223-D
 def check_undefined_terms(
     undefined: list[dict],
-    severity: str = "warning",
+    severity: str | None = None,
+    config: dict[str, Any] | None = None,
 ) -> HealthCheck:
     """Check for *token*/**token** references without a matching definition."""
-    if severity == "off":
-        return HealthCheck(
-            name="terms.undefined",
-            passed=True,
-            message="Undefined term check skipped (severity=off)",
-            category="terms",
-            severity="info",
-        )
+    severity = severity or severity_for("terms.undefined", config)
+    if severity == Severity.OFF:
+        return skipped_check("terms.undefined", "Marked terms with no definition")
 
     if not undefined:
         return HealthCheck(
@@ -1675,17 +1899,13 @@ def check_undefined_terms(
 # Implements: REQ-d00223-C, REQ-d00223-D
 def check_unmarked_usage(
     unmarked: list[dict],
-    severity: str = "warning",
+    severity: str | None = None,
+    config: dict[str, Any] | None = None,
 ) -> HealthCheck:
     """Check for indexed terms used in prose without *...* or **...** markup."""
-    if severity == "off":
-        return HealthCheck(
-            name="terms.unmarked",
-            passed=True,
-            message="Unmarked usage check skipped (severity=off)",
-            category="terms",
-            severity="info",
-        )
+    severity = severity or severity_for("terms.unmarked", config)
+    if severity == Severity.OFF:
+        return skipped_check("terms.unmarked", "Defined terms used without markup")
 
     if not unmarked:
         return HealthCheck(
@@ -1725,17 +1945,13 @@ def check_unmarked_usage(
 # Implements: REQ-d00240-A
 def check_term_unused(
     entries: list,
-    severity: str = "warning",
+    severity: str | None = None,
+    config: dict[str, Any] | None = None,
 ) -> HealthCheck:
     """Check for defined terms with zero references."""
-    if severity == "off":
-        return HealthCheck(
-            name="terms.unused",
-            passed=True,
-            message="Unused term check skipped (severity=off)",
-            category="terms",
-            severity="info",
-        )
+    severity = severity or severity_for("terms.unused", config)
+    if severity == Severity.OFF:
+        return skipped_check("terms.unused", "Defined terms nothing uses")
 
     findings = []
     for entry in entries:
@@ -1776,17 +1992,13 @@ _MIN_DEFINITION_LENGTH = 10
 # Implements: REQ-d00240-B
 def check_term_bad_definition(
     entries: list,
-    severity: str = "error",
+    severity: str | None = None,
+    config: dict[str, Any] | None = None,
 ) -> HealthCheck:
     """Check for terms with blank or trivially short definitions."""
-    if severity == "off":
-        return HealthCheck(
-            name="terms.bad_definition",
-            passed=True,
-            message="Bad definition check skipped (severity=off)",
-            category="terms",
-            severity="info",
-        )
+    severity = severity or severity_for("terms.bad_definition", config)
+    if severity == Severity.OFF:
+        return skipped_check("terms.bad_definition", "Definitions that do not read")
 
     findings = []
     for entry in entries:
@@ -1829,17 +2041,13 @@ def check_term_bad_definition(
 # Implements: REQ-d00240-C
 def check_term_collection_empty(
     entries: list,
-    severity: str = "warning",
+    severity: str | None = None,
+    config: dict[str, Any] | None = None,
 ) -> HealthCheck:
     """Check for collection terms with zero references."""
-    if severity == "off":
-        return HealthCheck(
-            name="terms.collection_empty",
-            passed=True,
-            message="Collection empty check skipped (severity=off)",
-            category="terms",
-            severity="info",
-        )
+    severity = severity or severity_for("terms.collection_empty", config)
+    if severity == Severity.OFF:
+        return skipped_check("terms.collection_empty", "Term collections with nothing in them")
 
     findings = []
     for entry in entries:
@@ -1876,17 +2084,13 @@ def check_term_collection_empty(
 
 def check_term_canonical_form(
     entries: list,
-    severity: str = "warning",
+    severity: str | None = None,
+    config: dict[str, Any] | None = None,
 ) -> HealthCheck:
     """Check that term references use canonical form (correct markup + casing)."""
-    if severity == "off":
-        return HealthCheck(
-            name="terms.canonical_form",
-            passed=True,
-            message="Canonical form check skipped (severity=off)",
-            category="terms",
-            severity="info",
-        )
+    severity = severity or severity_for("terms.canonical_form", config)
+    if severity == Severity.OFF:
+        return skipped_check("terms.canonical_form", "Terms written in a non-canonical form")
 
     findings = []
     for entry in entries:
@@ -1943,9 +2147,6 @@ def run_term_checks(
     graph: FederatedGraph, config: dict[str, Any] | None = None
 ) -> list[HealthCheck]:
     """Run all term health checks."""
-    typed_config = _validate_config(config or {})
-    sev = typed_config.terms.severity
-
     # Extract data from graph
     duplicates = getattr(graph, "term_duplicates", [])
     terms = getattr(graph, "terms", None)
@@ -1974,13 +2175,13 @@ def run_term_checks(
                 )
 
     return [
-        check_term_duplicates(duplicates, severity=sev.duplicate),
-        check_undefined_terms(undefined, severity=sev.undefined),
-        check_unmarked_usage(unmarked, severity=sev.unmarked),
-        check_term_unused(entries, severity=sev.unused),
-        check_term_bad_definition(entries, severity=sev.bad_definition),
-        check_term_collection_empty(entries, severity=sev.collection_empty),
-        check_term_canonical_form(entries, severity=sev.canonical_form),
+        check_term_duplicates(duplicates, config=config),
+        check_undefined_terms(undefined, config=config),
+        check_unmarked_usage(unmarked, config=config),
+        check_term_unused(entries, config=config),
+        check_term_bad_definition(entries, config=config),
+        check_term_collection_empty(entries, config=config),
+        check_term_canonical_form(entries, config=config),
     ]
 
 
@@ -1996,6 +2197,10 @@ def check_associate_paths(
     declarations contributes to the same graph, so its problems are this
     project's problems and have to be visible from here.
     """
+    severity = severity_for("config.associate_paths", config)
+    if severity == Severity.OFF:
+        return skipped_check("config.associate_paths", "Associate repositories that cannot be read")
+
     from elspais.associates import discover_associate_from_path
     from elspais.graph.federation_plan import plan_federation_or_error
 
@@ -2006,6 +2211,7 @@ def check_associate_paths(
             passed=False,
             message="Federation membership could not be resolved",
             category="spec",
+            severity=severity,
             findings=[HealthFinding(message=plan_error)],
         )
 
@@ -2065,6 +2271,7 @@ def check_associate_paths(
             passed=False,
             message=f"{len(findings)} associate path issue(s)",
             category="spec",
+            severity=severity,
             findings=findings,
         )
     return HealthCheck(
@@ -2076,7 +2283,7 @@ def check_associate_paths(
 
 
 # Implements: REQ-d00204-G
-def check_no_cycles(graph: FederatedGraph) -> HealthCheck:
+def check_no_cycles(graph: FederatedGraph, config: dict[str, Any] | None = None) -> HealthCheck:
     """Detect cycles in the requirement traceability graph.
 
     A cycle (a requirement reachable as its own descendant through the
@@ -2085,6 +2292,10 @@ def check_no_cycles(graph: FederatedGraph) -> HealthCheck:
     a clear diagnostic instead. Uses an iterative colored DFS so cycle
     detection itself can never blow the stack.
     """
+    severity = severity_for("spec.no_cycles", config)
+    if severity == Severity.OFF:
+        return skipped_check("spec.no_cycles", "Cycles in the requirement hierarchy")
+
     from elspais.graph import NodeKind
 
     def req_children(node: GraphNode) -> list[GraphNode]:
@@ -2142,7 +2353,7 @@ def check_no_cycles(graph: FederatedGraph) -> HealthCheck:
             passed=False,
             message=f"Found {len(findings)} requirement cycle(s)",
             category="spec",
-            severity="error",
+            severity=severity,
             details={"cycle_count": len(findings)},
             findings=findings,
         )
@@ -2154,8 +2365,14 @@ def check_no_cycles(graph: FederatedGraph) -> HealthCheck:
     )
 
 
-def check_no_requirements(graph: FederatedGraph) -> HealthCheck:
+def check_no_requirements(
+    graph: FederatedGraph, config: dict[str, Any] | None = None
+) -> HealthCheck:
     """Flag when no requirements are found — likely a config issue."""
+    severity = severity_for("config.no_requirements", config)
+    if severity == Severity.OFF:
+        return skipped_check("config.no_requirements", "A project with no requirements")
+
     from elspais.graph import NodeKind
 
     req_count = sum(1 for _ in graph.nodes_by_kind(NodeKind.REQUIREMENT))
@@ -2168,7 +2385,7 @@ def check_no_requirements(graph: FederatedGraph) -> HealthCheck:
                 " contain valid requirement files."
             ),
             category="spec",
-            severity="warning",
+            severity=severity,
         )
     return HealthCheck(
         name="config.no_requirements",
@@ -2187,6 +2404,10 @@ def check_no_requirements(graph: FederatedGraph) -> HealthCheck:
 _GOVERNED_SETTING_ROOTS: tuple[str, ...] = (
     "rules.coverage",
     "rules.references",
+    # The severity of every check that carries no named setting of its own.
+    # It decides how loudly a finding is reported, which is the same question
+    # the two roots above answer for the checks that do have one.
+    "rules.severity",
     "rules.format.status_roles",
 )
 
@@ -2249,6 +2470,12 @@ def check_governed_rule_divergence(
     Never a failure: differing configurations are what federated repositories
     legitimately do, so this reports and does not judge (REQ-d00275-D).
     """
+    severity = severity_for("config.governed_rules", config)
+    if severity == Severity.OFF:
+        return skipped_check(
+            "config.governed_rules", "Associate rules that diverge from this project's"
+        )
+
     invoking = _governed_settings(config)
     findings: list[HealthFinding] = []
     for entry in graph.iter_repos():
@@ -2295,7 +2522,7 @@ def check_governed_rule_divergence(
             "from the configuration this run judges by"
         ),
         category="spec",
-        severity="info",
+        severity=severity,
         findings=findings,
     )
 
@@ -2336,11 +2563,11 @@ def run_spec_checks(
             break
 
     checks: list[HealthCheck] = [
-        check_no_requirements(graph),
+        check_no_requirements(graph, config),
         check_governed_rule_divergence(graph, config),
         check_associate_paths(config, _repo_root),
-        check_spec_files_parseable(graph),
-        check_spec_no_duplicates(graph),
+        check_spec_files_parseable(graph, config),
+        check_spec_no_duplicates(graph, config),
         *[
             check_reference_class(graph, config, fault_class, name, description)
             for fault_class, name, description in _REFERENCE_CHECKS
@@ -2348,8 +2575,8 @@ def run_spec_checks(
         check_reference_keyword_form(graph, config),
         check_reference_identifier_form(graph, config),
         check_reference_undeclared(graph, config),
-        check_spec_hash_integrity(graph),
-        check_no_cycles(graph),
+        check_spec_hash_integrity(graph, config),
+        check_no_cycles(graph, config),
     ]
 
     # --- Config-sensitive checks: run per-repo ---
@@ -2364,31 +2591,35 @@ def run_spec_checks(
 
         checks.append(
             _annotate_findings(
-                check_spec_implements_resolve(repo_graph, resolver=repo_resolver),
+                check_spec_implements_resolve(
+                    repo_graph, resolver=repo_resolver, config=repo_config
+                ),
                 entry.name,
             )
         )
         checks.append(
             _annotate_findings(
-                check_spec_refines_resolve(repo_graph, resolver=repo_resolver),
+                check_spec_refines_resolve(repo_graph, resolver=repo_resolver, config=repo_config),
                 entry.name,
             )
         )
         checks.append(
             _annotate_findings(
-                check_spec_satisfies_resolve(repo_graph, resolver=repo_resolver),
+                check_spec_satisfies_resolve(
+                    repo_graph, resolver=repo_resolver, config=repo_config
+                ),
                 entry.name,
             )
         )
         checks.append(
             _annotate_findings(
-                check_spec_needs_rewrite(repo_graph),
+                check_spec_needs_rewrite(repo_graph, repo_config),
                 entry.name,
             )
         )
         checks.append(
             _annotate_findings(
-                check_unfixable_issues(repo_graph),
+                check_unfixable_issues(repo_graph, repo_config),
                 entry.name,
             )
         )
@@ -2411,6 +2642,7 @@ def run_spec_checks(
                 check_structural_orphans(
                     repo_graph,
                     allow_structural_orphans=_allow_so,
+                    config=repo_config,
                 ),
                 entry.name,
             )
@@ -2424,6 +2656,12 @@ def run_spec_checks(
         checks.append(
             _annotate_findings(
                 check_spec_no_assertions(repo_graph, repo_config),
+                entry.name,
+            )
+        )
+        checks.append(
+            _annotate_findings(
+                check_spec_unknown_directive(repo_graph, repo_config),
                 entry.name,
             )
         )
@@ -2604,6 +2842,10 @@ def check_dimension_coverage(
         "lcov_tested": ("Coverage-Verified (lcov)", "tests"),
     }
     label, category = dim_labels.get(dimension, (dimension, "code"))
+    check_name = f"{category}.{dimension}"
+    severity = severity_for(check_name, config)
+    if severity == Severity.OFF:
+        return skipped_check(check_name, f"{label} coverage failures")
 
     # REQ-d00258-C: whole-graph per-dimension sums + per-REQ counts (incl. the
     # REQ-d00252-F INTEGRATES exception) come from the single shared
@@ -2682,11 +2924,13 @@ def check_dimension_coverage(
     message = ", ".join(msg_parts) + note + message_suffix
 
     return HealthCheck(
-        name=f"{category}.{dimension}",
+        name=check_name,
         passed=not has_any_failures,
         message=message,
         category=category,
-        severity="error" if has_any_failures else "info",
+        # A dimension with failures is what the configured severity is about;
+        # with none there is nothing to report at that severity.
+        severity=severity if has_any_failures else "info",
         details={
             "dimension": dimension,
             "reqs_with_any_coverage": req_with_any,
@@ -2724,6 +2968,10 @@ def check_line_coverage(graph, config=None, level_filter=None) -> HealthCheck:
     and a zero would read as "no test exercises this" rather than "the question
     was not asked" (REQ-d00258-E).
     """
+    severity = severity_for("code.code_tested", config)
+    if severity == Severity.OFF:
+        return skipped_check("code.code_tested", "Line coverage")
+
     from elspais.graph.aggregation import aggregate_line_coverage
 
     agg = aggregate_line_coverage(graph, config=config, level_filter=level_filter)
@@ -2796,6 +3044,12 @@ def check_whole_req_only_coverage(graph, config=None) -> HealthCheck:
     how much green rests on whole-requirement evidence. INFO severity -- never
     fails the build. (REQ-d00258.)
     """
+    severity = severity_for("code.whole_req_only_coverage", config)
+    if severity == Severity.OFF:
+        return skipped_check(
+            "code.whole_req_only_coverage", "Coverage resting on whole-requirement evidence"
+        )
+
     from elspais.graph import NodeKind
     from elspais.graph.aggregation import WORK_LIST_MEASURE, measure_by_label
 
@@ -2836,7 +3090,7 @@ def check_whole_req_only_coverage(graph, config=None) -> HealthCheck:
             f"on whole-requirement evidence for Implemented coverage"
         ),
         category="code",
-        severity="info",
+        severity=severity,
         findings=findings,
     )
 
@@ -2903,8 +3157,10 @@ def check_uncredited_evidence(
     """
     from elspais.graph.aggregation import iter_uncredited_evidence
 
-    typed = _validate_config(config or {})
-    severity = typed.rules.coverage.uncredited_evidence
+    severity = severity_for("tests.uncredited_evidence", config)
+    if severity == Severity.OFF:
+        return skipped_check("tests.uncredited_evidence", "Evidence that credits no coverage")
+
     items = iter_uncredited_evidence(graph, config)
     if not items:
         return HealthCheck(
@@ -2949,7 +3205,7 @@ def check_uncredited_evidence(
         )
     return HealthCheck(
         name="tests.uncredited_evidence",
-        passed=severity == "ok",
+        passed=False,
         message=(f"{len(items)} piece(s) of coverage evidence reach no coverage figure"),
         category="tests",
         severity=severity,
@@ -2976,8 +3232,9 @@ def check_external_tests(
     from elspais.graph import NodeKind as NK
     from elspais.graph.aggregation import EvidenceResult, _evidence_result
 
-    typed = _validate_config(config or {})
-    severity = typed.rules.coverage.external_test_failure
+    severity = severity_for("tests.external", config)
+    if severity == Severity.OFF:
+        return skipped_check("tests.external", "Tests that reach no requirement")
 
     passed: list[GraphNode] = []
     failed: list[GraphNode] = []
@@ -3023,7 +3280,7 @@ def check_external_tests(
             )
     return HealthCheck(
         name="tests.external",
-        passed=not failed or severity == "ok",
+        passed=not failed,
         message=(
             f"{total} test(s) reach no requirement: "
             f"{len(passed)} passed, {len(failed)} failed, {len(awaiting)} awaiting a result"
@@ -3050,47 +3307,48 @@ def check_code_coverage(
     )
 
 
-def check_unlinked_code(graph: FederatedGraph) -> HealthCheck:
-    """Check for code files with no traceability markers.
+# Implements: REQ-d00241-A, REQ-d00285-F
+def check_uncited_code(graph: FederatedGraph, config: dict[str, Any] | None = None) -> HealthCheck:
+    """Report scanned code files that cite nothing.
 
-    Finds FILE nodes of type CODE that were scanned but contain no
-    CODE child nodes (i.e. no Implements: or Verifies: comments found).
+    A CODE node is what a citation comment becomes, so a scanned code file
+    with none was read and said nothing about the estate.
+
+    The population is `collect_uncited`, the same predicate `elspais uncited`
+    lists, so the command and the check cannot answer differently. It is NOT
+    the *unlinked* population: an unlinked node is one that exists and reaches
+    no requirement, which the graph API and the MCP `get_unlinked_nodes` tool
+    answer about. One name over both populations puts two surfaces in
+    contradiction about the same repository, which REQ-d00285-F forbids.
     """
-    from elspais.graph import NodeKind
-    from elspais.graph.GraphNode import FileType
-    from elspais.graph.relations import EdgeKind
+    severity = severity_for("code.uncited_file", config)
+    if severity == Severity.OFF:
+        return skipped_check("code.uncited_file", "Code files citing nothing")
 
-    unlinked_files = []
-    for file_node in graph.iter_roots(NodeKind.FILE):
-        if file_node.get_field("file_type") != FileType.CODE:
-            continue
-        has_code_child = any(
-            child.kind == NodeKind.CODE
-            for child in file_node.iter_children(edge_kinds={EdgeKind.CONTAINS})
-        )
-        if not has_code_child:
-            unlinked_files.append(file_node.get_field("relative_path") or file_node.id)
+    from elspais.commands.uncited import collect_uncited
 
-    if unlinked_files:
+    uncited_files = sorted(e.file for e in collect_uncited(graph).code)
+
+    if uncited_files:
         findings = [
             HealthFinding(
                 message=f"No traceability markers: {f}",
                 file_path=f,
             )
-            for f in sorted(unlinked_files)
+            for f in uncited_files
         ]
         return HealthCheck(
-            name="code.unlinked",
+            name="code.uncited_file",
             passed=False,
-            message=f"{len(unlinked_files)} code file(s) with no traceability markers",
+            message=f"{len(uncited_files)} code file(s) with no traceability markers",
             category="code",
-            severity="info",
-            details={"count": len(unlinked_files), "files": sorted(unlinked_files)[:20]},
+            severity=severity,
+            details={"count": len(uncited_files), "files": uncited_files[:20]},
             findings=findings,
         )
 
     return HealthCheck(
-        name="code.unlinked",
+        name="code.uncited_file",
         passed=True,
         message="All code files have traceability markers",
         category="code",
@@ -3101,8 +3359,9 @@ def _check_status_references(
     graph: FederatedGraph,
     source_kind: Any,  # NodeKind enum value
     role: StatusRole,
-    severity: str,
+    severity: str | None = None,
     exclude_status: set[str] | None = None,
+    config: dict[str, Any] | None = None,
 ) -> HealthCheck:
     """Check for source nodes referencing requirements of a given status role.
 
@@ -3114,8 +3373,9 @@ def _check_status_references(
         graph: The federated traceability graph.
         source_kind: NodeKind.CODE or NodeKind.TEST.
         role: The StatusRole to flag (RETIRED, PROVISIONAL, ASPIRATIONAL).
-        severity: Check severity level (info/warning/error).
+        severity: An explicit severity, overriding the configured one.
         exclude_status: Statuses currently excluded from coverage.
+        config: The project configuration, which decides the severity.
     """
     from elspais.config import get_status_roles
     from elspais.graph import NodeKind
@@ -3124,6 +3384,9 @@ def _check_status_references(
     roles_cfg = get_status_roles({})
     category = "code" if source_kind == NodeKind.CODE else "tests"
     check_name = f"{category}.{role.value}_references"
+    severity = severity or severity_for(check_name, config)
+    if severity == Severity.OFF:
+        return skipped_check(check_name, f"{category} references to {role.value} requirements")
 
     _TRACEABILITY_EDGES = REACHABILITY_TRACEABILITY_EDGES
 
@@ -3181,14 +3444,20 @@ def _check_status_references(
 # Implements: REQ-d00241-A, REQ-d00241-E
 def check_no_traceability(
     unlinked_files: list[str],
-    severity: str = "warning",
+    severity: str | None = None,
     faulted_files: frozenset[str] | set[str] = frozenset(),
+    config: dict[str, Any] | None = None,
 ) -> HealthCheck:
-    """Check for code files with no traceability markers.
+    """Check for code files holding a citation that reaches no requirement.
 
-    Test files are deliberately excluded -- ``tests.unlinked``
-    (``check_unlinked_tests``) already reports marker-less test files;
-    including them here too would double-report the same file.
+    The population is the files of the UNLINKED CODE nodes -- nodes that
+    exist and reach no requirement through a traceability edge. It is not the
+    uncited population (`code.uncited_file`), which is about files that cite
+    nothing at all.
+
+    Test files are deliberately excluded -- ``tests.uncited_file``
+    (``check_uncited_tests``) already reports test files whose tests cite
+    nothing; including them here too would double-report the same file.
 
     A file whose markers produced no relationship carries markers, and
     saying it carries none sends its author to add what is already there.
@@ -3198,14 +3467,9 @@ def check_no_traceability(
     ``ReferenceFault``).
     """
     unlinked_files = [f for f in unlinked_files if f not in faulted_files]
-    if severity == "off":
-        return HealthCheck(
-            name="code.no_traceability",
-            passed=True,
-            message="No traceability check skipped (severity=off)",
-            category="code",
-            severity="info",
-        )
+    severity = severity or severity_for("code.no_traceability", config)
+    if severity == Severity.OFF:
+        return skipped_check("code.no_traceability", "Code files carrying no traceability marker")
 
     if not unlinked_files:
         return HealthCheck(
@@ -3233,6 +3497,64 @@ def check_no_traceability(
     )
 
 
+# Implements: REQ-d00241-F, REQ-d00241-G
+def check_unscanned_keyword_files(
+    graph: FederatedGraph, config: dict[str, Any] | None = None
+) -> HealthCheck:
+    """Report files the scan reached, declined to read, and that cite anyway.
+
+    The file sits inside a directory the project declared for one of its
+    scanning kinds, the ignore configuration does not exclude it, and the
+    patterns that kind declares do not select it -- and it carries a
+    *Traceability* keyword regardless. Nothing in it was read, so nothing
+    here says the citation would have bound: only that one was written where
+    the tool was not looking, and that an honest zero and a dropped citation
+    are the same number.
+
+    A file the ignore configuration excludes never reaches this check
+    (REQ-d00241-G): declining to read it is what the project asked for, and
+    reporting it would answer a question nobody asked.
+    """
+    severity = severity_for("code.unscanned_keyword_file", config)
+    if severity == Severity.OFF:
+        return skipped_check(
+            "code.unscanned_keyword_file", "Unscanned files carrying a Traceability keyword"
+        )
+
+    records = graph.unscanned_keyword_files()
+    if not records:
+        return HealthCheck(
+            name="code.unscanned_keyword_file",
+            passed=True,
+            message="No file the scan declined to read carries a Traceability keyword",
+            category="code",
+            severity=severity,
+        )
+
+    findings = [
+        HealthFinding(
+            message=(
+                f"{r.path} carries `{r.keyword}` but matches none of the patterns declared "
+                f"for the {r.kind} scan, so the citation was never read"
+            ),
+            file_path=r.path,
+            line=r.line,
+        )
+        for r in sorted(records, key=lambda r: (r.path, r.line))
+    ]
+    return HealthCheck(
+        name="code.unscanned_keyword_file",
+        passed=False,
+        message=(
+            f"{len(records)} file(s) carrying a Traceability keyword were not read by any scan"
+        ),
+        category="code",
+        severity=severity,
+        details={"count": len(records)},
+        findings=findings,
+    )
+
+
 def run_code_checks(
     graph: FederatedGraph,
     exclude_status: set[str] | None = None,
@@ -3241,30 +3563,28 @@ def run_code_checks(
     """Run all code reference health checks."""
     from elspais.graph import NodeKind
 
-    typed_config = _validate_config(config or {})
-    ref_sev = typed_config.rules.references
-
     checks = [
         check_code_coverage(graph, exclude_status=exclude_status, config=config),
-        check_unlinked_code(graph),
+        check_uncited_code(graph, config),
         _check_status_references(
-            graph, NodeKind.CODE, StatusRole.RETIRED, ref_sev.retired, exclude_status
+            graph, NodeKind.CODE, StatusRole.RETIRED, exclude_status=exclude_status, config=config
         ),
         _check_status_references(
             graph,
             NodeKind.CODE,
             StatusRole.PROVISIONAL,
-            ref_sev.provisional,
-            exclude_status,
+            exclude_status=exclude_status,
+            config=config,
         ),
         _check_status_references(
             graph,
             NodeKind.CODE,
             StatusRole.ASPIRATIONAL,
-            ref_sev.aspirational,
-            exclude_status,
+            exclude_status=exclude_status,
+            config=config,
         ),
         check_whole_req_only_coverage(graph, config),
+        check_unscanned_keyword_files(graph, config),
     ]
 
     # Add line coverage only when line coverage data is present
@@ -3275,8 +3595,7 @@ def run_code_checks(
     if has_coverage:
         checks.append(check_line_coverage(graph, config=config))
 
-    # Implements: REQ-d00241-B, REQ-d00241-C
-    no_trace_sev = typed_config.rules.format.no_traceability_severity
+    # Implements: REQ-d00241-A, REQ-d00241-C
     unlinked_files = []
     for node in graph.iter_unlinked(NodeKind.CODE):
         file_n = node.file_node()
@@ -3287,12 +3606,10 @@ def run_code_checks(
     # Implements: REQ-d00241-E
     faulted_files = {
         path
-        for f in graph.broken_references()
+        for f in graph.unresolved_references()
         if (path := _fault_location(graph, f.source_id, f.line)[0]) is not None
     }
-    checks.append(
-        check_no_traceability(unlinked_files, severity=no_trace_sev, faulted_files=faulted_files)
-    )
+    checks.append(check_no_traceability(unlinked_files, faulted_files=faulted_files, config=config))
 
     return checks
 
@@ -3389,6 +3706,10 @@ def check_test_results(graph: FederatedGraph, config: dict | None = None) -> Hea
     Staleness is reported as a separate :func:`check_test_results_stale` check
     so consumers can key off the ``tests.results_stale`` name.
     """
+    severity = severity_for("tests.results", config)
+    if severity == Severity.OFF:
+        return skipped_check("tests.results", "Test results that failed or are absent")
+
     from elspais.graph import NodeKind
 
     result_nodes = list(graph.nodes_by_kind(NodeKind.RESULT))
@@ -3415,7 +3736,7 @@ def check_test_results(graph: FederatedGraph, config: dict | None = None) -> Hea
                 "Run `elspais checks --run-tests` or refresh manually."
             ),
             category="tests",
-            severity="warning",
+            severity=severity,
         )
 
     # Tally
@@ -3454,7 +3775,7 @@ def check_test_results(graph: FederatedGraph, config: dict | None = None) -> Hea
                 f"{skipped} skipped{deselected_suffix} ({pass_rate:.1f}% pass rate)"
             ),
             category="tests",
-            severity="warning",
+            severity=severity,
             details={
                 "passed": passed,
                 "failed": failed,
@@ -3481,7 +3802,9 @@ def check_test_results(graph: FederatedGraph, config: dict | None = None) -> Hea
     )
 
 
-def check_test_results_stale(graph: FederatedGraph) -> HealthCheck:
+def check_test_results_stale(
+    graph: FederatedGraph, config: dict[str, Any] | None = None
+) -> HealthCheck:
     """Emit ``tests.results_stale`` warning when result mtimes lag source mtimes.
 
     Returns:
@@ -3493,6 +3816,10 @@ def check_test_results_stale(graph: FederatedGraph) -> HealthCheck:
         result file mtime is earlier than the newest scanned spec/code/test
         file mtime. Flips exit code unless ``--lenient``.
     """
+    severity = severity_for("tests.results_stale", config)
+    if severity == Severity.OFF:
+        return skipped_check("tests.results_stale", "Test results older than the code they cover")
+
     from datetime import datetime
 
     from elspais.graph.GraphNode import FileType
@@ -3529,7 +3856,7 @@ def check_test_results_stale(graph: FederatedGraph) -> HealthCheck:
             f"Re-run with `elspais checks --run-tests` to refresh."
         ),
         category="tests",
-        severity="warning",
+        severity=severity,
     )
 
 
@@ -3554,15 +3881,17 @@ def check_uat_coverage(
     non-expecting levels (the default) contribute to neither numerator nor
     denominator. When no level expects validation the check passes trivially
     (nothing to validate).
+
+    This reports the dimension and nothing else. Which requirements a journey
+    left unvalidated is a different condition with a different answer and a
+    different severity, and it is reported under its own name by
+    ``check_unvalidated_requirements`` (REQ-d00285-F).
     """
-    from elspais.config import level_expects_validation
+    if severity_for("uat.uat_coverage", config) == Severity.OFF:
+        return skipped_check("uat.uat_coverage", "UAT Covered coverage failures")
 
     cfg = config or {}
-    levels = cfg.get("levels") if isinstance(cfg, dict) else None
-    any_expects = isinstance(levels, dict) and any(
-        level_expects_validation(cfg, key) for key in levels
-    )
-    if not any_expects:
+    if not _any_level_expects_validation(cfg):
         return HealthCheck(
             name="uat.uat_coverage",
             passed=True,
@@ -3572,46 +3901,83 @@ def check_uat_coverage(
             details={"dimension": "uat_coverage", "expects_validation_levels": 0},
         )
 
-    def level_filter(level: str | None) -> bool:
-        return level_expects_validation(cfg, level)
-
-    check = check_dimension_coverage(
+    return check_dimension_coverage(
         graph,
         "uat_coverage",
         exclude_status=exclude_status,
         config=config,
-        level_filter=level_filter,
+        level_filter=_validation_level_filter(cfg),
         message_suffix=" (expects_validation levels only)",
     )
 
-    # An expects_validation requirement lacking UAT coverage is a real gap:
-    # collect those reqs as findings and fail the check (REQ-d00258-F). The
-    # dimension sums come from check_dimension_coverage; this only identifies
-    # WHICH reqs are uncovered (no re-implementation of the sum walk).
+
+def _any_level_expects_validation(cfg: dict[str, Any] | Any) -> bool:
+    """Whether any configured level sets ``expects_validation``."""
+    from elspais.config import level_expects_validation
+
+    levels = cfg.get("levels") if isinstance(cfg, dict) else None
+    return isinstance(levels, dict) and any(level_expects_validation(cfg, key) for key in levels)
+
+
+def _validation_level_filter(cfg: dict[str, Any] | Any) -> Any:
+    """A predicate selecting the levels that expect validation."""
+    from elspais.config import level_expects_validation
+
+    def level_filter(level: str | None) -> bool:
+        return level_expects_validation(cfg, level)
+
+    return level_filter
+
+
+# Implements: REQ-d00258-F, REQ-d00285-F
+def check_unvalidated_requirements(
+    graph: FederatedGraph, config: dict[str, Any] | None = None
+) -> HealthCheck:
+    """Report requirements whose level expects validation and that have none.
+
+    This is a different condition from the UAT coverage dimension, and carries
+    a name and a severity of its own (REQ-d00285-F). The dimension is about
+    the figures over every counted assertion; this names the particular
+    requirements a reader must go and write a journey for. One name could
+    carry only one default, and a project moving it would move one of the two
+    questions without knowing which.
+
+    A requirement is reported here on the same verdict ``gaps unvalidated``
+    reaches (``work_verdict``), so the two surfaces cannot disagree about a
+    requirement: a blanket journey naming the requirement but none of its
+    assertions is listed here exactly as it is listed there.
+    """
+    severity = severity_for("uat.unvalidated", config)
+    if severity == Severity.OFF:
+        return skipped_check("uat.unvalidated", "Requirements no journey validates")
+
     from elspais.config import status_expects_implementation
     from elspais.graph import NodeKind
     from elspais.graph.aggregation import work_verdict
-    from elspais.graph.relations import EdgeKind
 
-    # REQ-d00258-C: the uncovered-findings walk gates on the SAME coverage
-    # inclusion resolver as ``aggregate_dimension`` above, so the sums and the
-    # findings list stay consistent (both count a status iff it expects
-    # implementation). Behavior-preserving for default config.
+    cfg = config or {}
+    if not _any_level_expects_validation(cfg):
+        return HealthCheck(
+            name="uat.unvalidated",
+            passed=True,
+            message="No levels expect validation (expects_validation)",
+            category="uat",
+            severity=severity,
+            details={"expects_validation_levels": 0},
+        )
+    level_filter = _validation_level_filter(cfg)
+
+    # REQ-d00258-C: this walk gates on the SAME coverage inclusion resolver as
+    # ``aggregate_dimension`` does for the dimension check, so the sums there
+    # and the names here stay consistent -- both count a status iff it expects
+    # implementation.
     uncovered: list[HealthFinding] = []
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
         if not status_expects_implementation(cfg, node.status) or not level_filter(node.level):
             continue
         rollup = node.get_metric("rollup_metrics")
-        # Implements: REQ-d00258-C, REQ-d00258-M
-        # The verdict is ``work_verdict``, the same one ``gaps unvalidated``
-        # reaches, so the two cannot disagree about a requirement: a blanket
-        # journey used to satisfy this check while gaps listed the assertions
-        # it named none of.
-        labels = [
-            child.get_field("label", "")
-            for child in node.iter_children(edge_kinds={EdgeKind.STRUCTURES})
-            if child.kind == NodeKind.ASSERTION
-        ]
+        # Implements: REQ-d00258-C, REQ-d00258-M, REQ-p00017-G
+        labels = counted_assertion_labels(node, structural=True)
         verdict = work_verdict(rollup, "uat_coverage", labels)
         if not verdict.attached:
             uncovered.append(
@@ -3637,62 +4003,70 @@ def check_uat_coverage(
                 )
             )
 
-    if uncovered:
-        check.passed = False
-        check.severity = "warning"
-        check.findings = uncovered
-        check.details["uncovered_expects_validation"] = [f.node_id for f in uncovered]
-    return check
-
-
-# Implements: REQ-d00241-D
-def check_unlinked_tests(graph: FederatedGraph) -> HealthCheck:
-    """Check for test files with no traceability markers.
-
-    Flags FILE nodes of type TEST that either contain no TEST child
-    nodes at all, or contain TEST children none of which link to any
-    requirement. The second condition is essential: the parser emits a
-    TEST node for every discovered test function whether or not it
-    carries a Verifies: marker, so a fully marker-less test file still
-    has TEST children. Files with at least one linked test are not
-    flagged (partial marking is not "unlinked").
-    """
-    from elspais.graph import NodeKind
-    from elspais.graph.GraphNode import FileType
-    from elspais.graph.relations import EdgeKind
-
-    unlinked_files = []
-    for file_node in graph.iter_roots(NodeKind.FILE):
-        if file_node.get_field("file_type") != FileType.TEST:
-            continue
-        has_linked_test = any(
-            graph.is_reachable_to_requirement(child)
-            for child in file_node.iter_children(edge_kinds={EdgeKind.CONTAINS})
-            if child.kind == NodeKind.TEST
+    if not uncovered:
+        return HealthCheck(
+            name="uat.unvalidated",
+            passed=True,
+            message="Every requirement at an expects_validation level is validated",
+            category="uat",
+            severity=severity,
         )
-        if not has_linked_test:
-            unlinked_files.append(file_node.get_field("relative_path") or file_node.id)
+    uncovered.sort(key=lambda f: f.node_id or "")
+    return HealthCheck(
+        name="uat.unvalidated",
+        passed=False,
+        message=f"{len(uncovered)} requirement(s) at an expects_validation level are unvalidated",
+        category="uat",
+        severity=severity,
+        details={
+            "count": len(uncovered),
+            "uncovered_expects_validation": [f.node_id for f in uncovered],
+        },
+        findings=uncovered,
+    )
 
-    if unlinked_files:
+
+# Implements: REQ-d00241-D, REQ-d00285-F
+def check_uncited_tests(graph: FederatedGraph, config: dict[str, Any] | None = None) -> HealthCheck:
+    """Report scanned test files in which no test cites anything.
+
+    The population is `collect_uncited`, the same predicate `elspais uncited`
+    lists -- including its exclusion of a file whose only citation attached to
+    no test, which `tests.unbound_citation` reports with what is actually
+    wrong with it (REQ-d00241-E).
+
+    It is NOT the *unlinked* population: a file holding one linked test and
+    nine unlinked ones is full of unlinked nodes and is not uncited
+    (REQ-d00285-F).
+    """
+    severity = severity_for("tests.uncited_file", config)
+    if severity == Severity.OFF:
+        return skipped_check("tests.uncited_file", "Test files citing nothing")
+
+    from elspais.commands.uncited import collect_uncited
+
+    uncited_files = sorted(e.file for e in collect_uncited(graph).tests)
+
+    if uncited_files:
         findings = [
             HealthFinding(
                 message=f"No traceability markers: {f}",
                 file_path=f,
             )
-            for f in sorted(unlinked_files)
+            for f in uncited_files
         ]
         return HealthCheck(
-            name="tests.unlinked",
+            name="tests.uncited_file",
             passed=False,
-            message=f"{len(unlinked_files)} test file(s) with no traceability markers",
+            message=f"{len(uncited_files)} test file(s) with no traceability markers",
             category="tests",
-            severity="info",
-            details={"count": len(unlinked_files), "files": sorted(unlinked_files)[:20]},
+            severity=severity,
+            details={"count": len(uncited_files), "files": uncited_files[:20]},
             findings=findings,
         )
 
     return HealthCheck(
-        name="tests.unlinked",
+        name="tests.uncited_file",
         passed=True,
         message="All test files have traceability markers",
         category="tests",
@@ -3706,6 +4080,10 @@ def check_uat_results(graph: FederatedGraph, config: dict[str, Any] | None = Non
     The file path is configured via scanning.journey.results_file in .elspais.toml,
     defaulting to 'uat-results.csv' in the repository root.
     """
+    severity = severity_for("uat.results", config)
+    if severity == Severity.OFF:
+        return skipped_check("uat.results", "Journey results that failed or are absent")
+
     cfg = config or {}
     journey_cfg = cfg.get("scanning", {}).get("journey", {})
     results_file = journey_cfg.get("results_file", "uat-results.csv")
@@ -3758,7 +4136,7 @@ def check_uat_results(graph: FederatedGraph, config: dict[str, Any] | None = Non
             passed=False,
             message=f"Error reading UAT results: {e}",
             category="uat",
-            severity="warning",
+            severity=severity,
         )
 
     total = passed + failed + skipped
@@ -3783,7 +4161,7 @@ def check_uat_results(graph: FederatedGraph, config: dict[str, Any] | None = Non
                 f"{skipped} skipped ({pass_rate:.1f}% pass rate)"
             ),
             category="uat",
-            severity="warning",
+            severity=severity,
             details={
                 "passed": passed,
                 "failed": failed,
@@ -3808,7 +4186,9 @@ def check_uat_results(graph: FederatedGraph, config: dict[str, Any] | None = Non
 
 
 # Implements: REQ-d00284-C
-def check_unmatched_results(graph: FederatedGraph) -> HealthCheck:
+def check_unmatched_results(
+    graph: FederatedGraph, config: dict[str, Any] | None = None
+) -> HealthCheck:
     """Report results that matched no test.
 
     A result matching nothing is not an error where it happens: the parse
@@ -3817,6 +4197,10 @@ def check_unmatched_results(graph: FederatedGraph) -> HealthCheck:
     or more than one tells an author which problem they have -- a name pointing
     at a file that is not there, or two files sharing one name.
     """
+    severity = severity_for("tests.unmatched_results", config)
+    if severity == Severity.OFF:
+        return skipped_check("tests.unmatched_results", "Results matching no known test")
+
     from elspais.graph import EdgeKind, NodeKind
 
     findings = []
@@ -3840,6 +4224,7 @@ def check_unmatched_results(graph: FederatedGraph) -> HealthCheck:
                 node_id=result.id,
                 file_path=result.get_field("result_file"),
                 line=result.get_field("result_line"),
+                related=list(candidates),
             )
         )
 
@@ -3849,14 +4234,324 @@ def check_unmatched_results(graph: FederatedGraph) -> HealthCheck:
             passed=True,
             message="Every ingested result matched a test",
             category="tests",
-            severity="warning",
+            severity=severity,
         )
     return HealthCheck(
         name="tests.unmatched_results",
         passed=False,
         message=f"{len(findings)} ingested result(s) matched no test",
         category="tests",
-        severity="warning",
+        severity=severity,
+        details={"count": len(findings)},
+        findings=findings,
+    )
+
+
+# Implements: REQ-d00274-G
+def check_unbound_citations(
+    graph: FederatedGraph, config: dict[str, Any] | None = None
+) -> HealthCheck:
+    """Report citations in test files that found no test to attach to.
+
+    Nothing about such a citation is malformed: the keyword read, the
+    reference resolved, and it names an assertion that exists. What is
+    missing is the other end -- the pre-scan found no test declaration
+    beneath it, because it sits above a class rather than a function, below
+    the last test in the file, or past whatever window its language's
+    pre-scan looks through.
+
+    The condition is invisible without this check, and expensively so. The
+    assertions such a citation names would otherwise read as tested and never
+    as passing, which is exactly how a stale result reads -- so the reflex is
+    to re-run the suite, which cannot move it. The coverage is withheld
+    whatever severity this carries (REQ-d00274-H); this is where the citation
+    is named.
+    """
+    severity = severity_for("tests.unbound_citation", config)
+    if severity == Severity.OFF:
+        return skipped_check("tests.unbound_citation", "Citations attaching to no test")
+
+    # A record names a file relative to the repository holding it, and two
+    # members of a federation may hold the same relative path, so the member
+    # is read from the graph the record came out of rather than looked up
+    # afterwards from a path that answers for both.
+    findings = [
+        HealthFinding(
+            message=(
+                f"{c.keyword}: {', '.join(c.targets)} -- no test was declared for this "
+                "citation, so it credits nothing; move it onto the test it describes"
+            ),
+            file_path=c.path,
+            line=c.line,
+            related=list(c.targets),
+            repo=entry.name,
+        )
+        for entry in graph.iter_repos()
+        if entry.graph is not None
+        for c in sorted(entry.graph.unbound_citations(), key=lambda c: (c.path, c.line))
+    ]
+    if not findings:
+        return HealthCheck(
+            name="tests.unbound_citation",
+            passed=True,
+            message="Every citation in a scanned test file attached to a test",
+            category="tests",
+            severity=severity,
+        )
+
+    return HealthCheck(
+        name="tests.unbound_citation",
+        passed=False,
+        message=f"{len(findings)} citation(s) in test files attached to no test",
+        category="tests",
+        severity=severity,
+        details={"count": len(findings)},
+        findings=findings,
+    )
+
+
+# Implements: REQ-p00019-H, REQ-d00285-A, REQ-d00285-B
+def check_ingestion_faults(
+    graph: FederatedGraph, config: dict[str, Any] | None = None
+) -> HealthCheck:
+    """Report every artifact ingestion could not read at all.
+
+    A results file that will not parse, a coverage report in a format no
+    reporter reads, a reporter name that matches none, a target whose working
+    directory leaves the repository, a results pattern that matched nothing, a
+    coverage file that is not there: each ends with a measurement the project
+    asked for absent from the graph. An artifact read only in PART is a
+    different condition with a different remedy, and is reported by
+    ``tests.partial_read`` (REQ-d00254-Q): this one is for artifacts that
+    yielded nothing, where somebody must fix something.
+
+    Absence is the thing a reader cannot see. A requirement whose results
+    never parsed reads exactly as one whose tests never ran, and the two call
+    for opposite actions -- which is why the point that dropped the artifact
+    recorded what it dropped (REQ-d00285-G). Recording it and never saying it
+    is only marginally better than dropping it silently, so this is where the
+    record is spoken (REQ-p00019-H).
+
+    Each finding NAMES its artifact: the path the configuration reached, the
+    line where the condition has one, the target it arose under, and the cause
+    in the words the recording site chose (REQ-d00285-A). A count without the
+    names would leave the reader the search the tool already performed.
+
+    A record names its artifact relative to the repository holding it, and two
+    members of a federation may hold the same relative path, so the member is
+    read from the graph the record came out of rather than looked up
+    afterwards from a path that answers for both.
+    """
+    severity = severity_for("tests.ingestion_fault", config)
+    if severity == Severity.OFF:
+        return skipped_check("tests.ingestion_fault", "Artifacts ingestion produced nothing from")
+
+    findings: list[HealthFinding] = []
+    for entry in graph.iter_repos():
+        if entry.graph is None:
+            continue
+        for fault in sorted(
+            (f for f in entry.graph.ingestion_faults() if not f.partial),
+            key=lambda f: (f.stage, f.path, f.target or "", f.cause),
+        ):
+            # The artifact is named first, because it is what the reader
+            # goes to. Where the configuration named no file -- a reporter
+            # nothing matches, a target whose directory left the repository
+            # -- the target is the location there is, and saying so beats
+            # saying nothing.
+            where = fault.path or (f"target {fault.target}" if fault.target else "configuration")
+            under = f" (target {fault.target})" if fault.path and fault.target else ""
+            findings.append(
+                HealthFinding(
+                    message=f"{where}{under}: {fault.cause}",
+                    file_path=fault.path or None,
+                    line=fault.line,
+                    repo=entry.name,
+                )
+            )
+
+    if not findings:
+        return HealthCheck(
+            name="tests.ingestion_fault",
+            passed=True,
+            message="Every artifact ingestion reached produced records",
+            category="tests",
+            severity=severity,
+        )
+    return HealthCheck(
+        name="tests.ingestion_fault",
+        passed=False,
+        message=f"{len(findings)} artifact(s) ingestion could not read",
+        category="tests",
+        severity=severity,
+        details={"count": len(findings)},
+        findings=findings,
+    )
+
+
+# Implements: REQ-d00254-Q
+def check_partial_reads(graph: FederatedGraph, config: dict[str, Any] | None = None) -> HealthCheck:
+    """Report artifacts read in part, once per condition rather than per file.
+
+    A coverage report whose per-file re-analysis failed WAS read; what it
+    says about the size of those files was not. The lines it recorded as
+    executed are kept, so nothing is thrown away, but the total is unknown
+    and those files are left out of any line-coverage figure. Without this
+    the figure would simply be over fewer files than the reader assumes.
+
+    One condition, not one finding per file. Thirty-nine templates a coverage
+    tool cannot parse are one fact about the project, and REQ-p00019-K asks
+    that a count of findings be a count of distinct facts. The stage is the
+    condition: it says which ingestion step read short.
+
+    Not a defect somebody introduced, so `info` by default -- it is a
+    disclosure about the basis of a figure. A project that would rather be
+    stopped by it can configure that.
+    """
+    severity = severity_for("tests.partial_read", config)
+    if severity == Severity.OFF:
+        return skipped_check("tests.partial_read", "Artifacts ingestion read only in part")
+
+    findings: list[HealthFinding] = []
+    total_files = 0
+    for entry in graph.iter_repos():
+        if entry.graph is None:
+            continue
+        by_stage: dict[str, list] = {}
+        for fault in entry.graph.ingestion_faults():
+            if fault.partial:
+                by_stage.setdefault(fault.stage, []).append(fault)
+        for stage, faults in sorted(by_stage.items()):
+            paths = sorted({f.path for f in faults if f.path})
+            total_files += len(paths)
+            findings.append(
+                HealthFinding(
+                    message=(
+                        f"{stage}: {len(paths)} file(s) read in part, so their totals "
+                        f"are unknown and they are left out of line-coverage figures. "
+                        f"Affected: {', '.join(paths[:5])}"
+                        + (f", and {len(paths) - 5} more" if len(paths) > 5 else "")
+                    ),
+                    repo=entry.name,
+                )
+            )
+
+    if not findings:
+        return HealthCheck(
+            name="tests.partial_read",
+            passed=True,
+            message="Every artifact ingestion reached was read in full",
+            category="tests",
+        )
+    return HealthCheck(
+        name="tests.partial_read",
+        passed=False,
+        message=(
+            f"{len(findings)} ingestion step(s) read part of what they reached, "
+            f"covering {total_files} file(s) whose totals are unknown"
+        ),
+        category="tests",
+        severity=severity,
+        details={"conditions": len(findings), "files": total_files},
+        findings=findings,
+    )
+
+
+# Implements: REQ-d00276-E
+def _target_reach(config: dict[str, Any] | None) -> list[str] | None:
+    """The repo-relative directories this project's runnable targets reach.
+
+    A target says where it runs and nothing about which files it selects, so
+    its ``cwd`` is the whole of what the configuration knows: a target runs
+    from there and can execute what lies beneath it. ``""`` is the repository
+    root, which reaches everything.
+
+    Returns:
+        One entry per target carrying a command, each a repo-relative
+        directory prefix (``""`` meaning the whole repository). ``None``
+        where the configuration could not be read at all -- which is not the
+        same answer as "no target reaches anything".
+    """
+    if not config:
+        return None
+    try:
+        cfg = _validate_config(config)
+    except Exception:
+        return None
+    return [t.cwd.strip("/") for t in cfg.scanning.test.targets if t.command]
+
+
+def _reached_by(relative_path: str, reach: list[str]) -> bool:
+    """Whether any runnable target's directory contains *relative_path*."""
+    normalized = relative_path.replace("\\", "/").removeprefix("./")
+    return any(cwd == "" or normalized.startswith(f"{cwd}/") for cwd in reach)
+
+
+# Implements: REQ-d00276-E
+def check_unrunnable_test_files(
+    graph: FederatedGraph, config: dict[str, Any] | None = None
+) -> HealthCheck:
+    """Report scanned test files no configured target can execute.
+
+    "This file is scanned as a test, and nothing in your configuration can
+    ever run it" is a statement the tool can make and the author cannot.
+    Adding a directory to the scanned set raises the Tested figure on the
+    strength of citations in files nothing runs, while Passing has no way to
+    follow -- so the configuration change makes the report less truthful, and
+    every signal points at the results rather than at the cause.
+
+    Each member of a federation is judged by its own targets: they are its
+    configuration, and reading the invoking repository's would report every
+    associate's tests as unrunnable on the strength of a setting the
+    associate never made.
+    """
+    severity = severity_for("tests.unrunnable_file", config)
+    if severity == Severity.OFF:
+        return skipped_check("tests.unrunnable_file", "Test files no target can execute")
+
+    from elspais.graph import NodeKind
+    from elspais.graph.GraphNode import FileType
+
+    findings: list[HealthFinding] = []
+    for entry in graph.iter_repos():
+        if entry.graph is None:
+            continue
+        reach = _target_reach(entry.config)
+        if reach is None:
+            continue
+        for file_node in entry.graph.iter_roots(NodeKind.FILE):
+            if file_node.get_field("file_type") != FileType.TEST:
+                continue
+            relative_path = file_node.get_field("relative_path") or ""
+            if not relative_path or _reached_by(relative_path, reach):
+                continue
+            findings.append(
+                HealthFinding(
+                    message=(
+                        f"{relative_path} is scanned as a test file, and no configured "
+                        "test target with a command runs from a directory containing it"
+                    ),
+                    file_path=relative_path,
+                    node_id=file_node.id,
+                    repo=entry.name,
+                )
+            )
+
+    if not findings:
+        return HealthCheck(
+            name="tests.unrunnable_file",
+            passed=True,
+            message="Every scanned test file lies within a configured target's reach",
+            category="tests",
+            severity=severity,
+        )
+    findings.sort(key=lambda f: (f.repo or "", f.file_path or ""))
+    return HealthCheck(
+        name="tests.unrunnable_file",
+        passed=False,
+        message=f"{len(findings)} scanned test file(s) no configured target can execute",
+        category="tests",
+        severity=severity,
         details={"count": len(findings)},
         findings=findings,
     )
@@ -3870,34 +4565,35 @@ def run_test_checks(
     """Run all test file health checks."""
     from elspais.graph import NodeKind
 
-    typed_config = _validate_config(config or {})
-    ref_sev = typed_config.rules.references
-
     return [
         check_test_coverage(graph, exclude_status=exclude_status, config=config),
         check_dimension_coverage(graph, "verified", exclude_status=exclude_status, config=config),
         check_uncredited_evidence(graph, config),
-        check_unlinked_tests(graph),
+        check_uncited_tests(graph, config),
+        check_unbound_citations(graph, config),
+        check_unrunnable_test_files(graph, config),
         check_external_tests(graph, config),
         check_test_results(graph, config=config),
-        check_test_results_stale(graph),
-        check_unmatched_results(graph),
+        check_test_results_stale(graph, config),
+        check_unmatched_results(graph, config),
+        check_ingestion_faults(graph, config),
+        check_partial_reads(graph, config),
         _check_status_references(
-            graph, NodeKind.TEST, StatusRole.RETIRED, ref_sev.retired, exclude_status
+            graph, NodeKind.TEST, StatusRole.RETIRED, exclude_status=exclude_status, config=config
         ),
         _check_status_references(
             graph,
             NodeKind.TEST,
             StatusRole.PROVISIONAL,
-            ref_sev.provisional,
-            exclude_status,
+            exclude_status=exclude_status,
+            config=config,
         ),
         _check_status_references(
             graph,
             NodeKind.TEST,
             StatusRole.ASPIRATIONAL,
-            ref_sev.aspirational,
-            exclude_status,
+            exclude_status=exclude_status,
+            config=config,
         ),
     ]
 
@@ -3908,6 +4604,7 @@ def run_uat_checks(
     """Run all UAT (User Acceptance Test) health checks."""
     return [
         check_uat_coverage(graph, exclude_status=exclude_status, config=config),
+        check_unvalidated_requirements(graph, config=config),
         check_dimension_coverage(
             graph, "uat_verified", exclude_status=exclude_status, config=config
         ),
@@ -3925,8 +4622,14 @@ def render_section(
     graph: FederatedGraph | None,
     config: dict[str, Any] | None,
     args: argparse.Namespace,
+    preset: str | None = None,
 ) -> tuple[str, int]:
     """Render health as a composed report section.
+
+    With *preset*, the section is this report narrowed to the checks that
+    preset names -- the composed form of `elspais unresolved` and its
+    siblings. It is the same narrowing the standalone command applies, so a
+    section composed with others says exactly what the command alone says.
 
     Returns (formatted_output, exit_code).
     """
@@ -3961,9 +4664,11 @@ def render_section(
         for check in run_term_checks(graph, config=raw_config):
             report.add(check)
 
-    output = _format_report(report, args)
+    filt = FindingFilter.for_preset(preset) if preset else None
+    output = _format_report(report, args, filt=filt, verdict_over_filtered=preset is not None)
     lenient = getattr(args, "lenient", False)
-    healthy = report.is_healthy_lenient if lenient else report.is_healthy
+    verdict = apply_finding_filter(report, filt).report if filt else report
+    healthy = verdict.is_healthy_lenient if lenient else verdict.is_healthy
     return output, 0 if healthy else 1
 
 
@@ -4058,6 +4763,7 @@ def _report_from_dict(data: dict[str, Any]) -> HealthReport:
                 related=f.get("related", []),
                 repo=f.get("repo"),
                 retired=f.get("retired", False),
+                codes=f.get("codes", []),
             )
             for f in c.get("findings", [])
         ]
@@ -4070,6 +4776,7 @@ def _report_from_dict(data: dict[str, Any]) -> HealthReport:
                 severity=c.get("severity", "error"),
                 details=c.get("details", {}),
                 findings=findings,
+                remedy=c.get("remedy", ""),
             )
         )
     return report
@@ -4086,6 +4793,15 @@ def run(args: argparse.Namespace) -> int:
     from elspais.commands import _engine
     from elspais.commands.test_runner import run_configured_targets
     from elspais.config import find_git_root, get_config
+
+    # A narrowing naming something the vocabulary does not admit selects
+    # nothing while looking like it selected something, so it is refused
+    # before the run rather than reported as a clean report (REQ-d00282-F).
+    unadmitted = FindingFilter.from_args(args).unadmitted()
+    if unadmitted:
+        for problem in unadmitted:
+            print(f"error: {problem}", file=sys.stderr)
+        return 2
 
     run_tests = getattr(args, "run_tests", False)
     fail_fast = getattr(args, "fail_fast", False)
@@ -4193,6 +4909,61 @@ def run(args: argparse.Namespace) -> int:
     return 1 if (runner_failed or checks_exit != 0) else 0
 
 
+# Implements: REQ-d00285-C+F+H+I
+def run_preset(args: argparse.Namespace, preset: str) -> int:
+    """Run one of the preset listings -- `unresolved`, `errors`, `uncited`.
+
+    A preset listing is this report narrowed to the checks that answer one
+    question. It is deliberately NOT a second renderer over the same facts:
+    every listing rendered separately from the report has to be given each
+    field a finding carries a second time, and the field nobody remembered is
+    the one that goes missing in exactly one place (REQ-d00285-C). Narrowing
+    the one stream makes that class of loss unrepeatable rather than fixed
+    once.
+
+    Unlike a reader's own `--severity`/`--code` narrowing of `elspais checks`,
+    the verdict here is the narrowed report's: the command names the
+    population it answers about, so an unrelated failing check must not decide
+    its exit code.
+    """
+    from elspais.commands import _engine
+
+    filt = FindingFilter.for_preset(preset)
+    params: dict[str, str] = {}
+    spec_dir = getattr(args, "spec_dir", None)
+
+    if spec_dir:
+        data = _run_local_checks(args, params)
+    else:
+        data = _engine.call(
+            "/api/run/checks",
+            params,
+            compute_checks,
+            config_path=getattr(args, "config", None),
+        )
+
+    report = _report_from_dict(data)
+    graph_source = _format_graph_source(data.get("graph_source"))
+    output = _format_report(
+        report,
+        args,
+        graph_source=graph_source,
+        filt=filt,
+        verdict_over_filtered=True,
+    )
+
+    output_file = getattr(args, "output", None)
+    if output_file:
+        Path(output_file).write_text(output + "\n")
+    else:
+        print(output)
+
+    narrowed = apply_finding_filter(report, filt).report
+    lenient = getattr(args, "lenient", False)
+    healthy = narrowed.is_healthy_lenient if lenient else narrowed.is_healthy
+    return 0 if healthy else 1
+
+
 def _run_local_checks(args: argparse.Namespace, params: dict[str, str]) -> dict[str, Any]:
     """Build graph from args and run checks locally.
 
@@ -4283,17 +5054,277 @@ def _format_graph_source(source: dict | None) -> str | None:
     return source_type
 
 
+# Implements: REQ-d00285-C+G
+@dataclass(frozen=True)
+class FindingFilter:
+    """A narrowing of a report over the fields every finding carries.
+
+    Values named for one field are alternatives and values named for
+    different fields are conditions met at once -- the same reading a scope
+    over requirements takes (REQ-d00278-E+D), so a reader who has narrowed one
+    report knows how to narrow the other.
+
+    `severities`, `categories` and `names` select CHECKS: each is a property of
+    the check a finding belongs to, and a check they exclude is withheld whole.
+    `codes` and `paths` select FINDINGS within the checks that survive, and a
+    check left holding none of them is withheld with them. The flag spelling
+    `paths` is read from is `--file`: `--path` already names the repository
+    root a run works from.
+
+    `names` is what a preset listing is made of: `elspais unresolved` is this
+    report narrowed to the five reference checks, and nothing else
+    (`PRESETS` in `utilities.findings`).
+    """
+
+    severities: tuple[str, ...] = ()
+    categories: tuple[str, ...] = ()
+    names: tuple[str, ...] = ()
+    codes: tuple[str, ...] = ()
+    paths: tuple[str, ...] = ()
+    # The preset this narrowing IS, where it came from one. A reader who typed
+    # `elspais unresolved` did not type five check names, and echoing five back
+    # at them describes the mechanism rather than what they asked for. The
+    # flags are still published beside it, so the listing stays reproducible.
+    label: str = ""
+
+    @classmethod
+    def from_args(cls, args: argparse.Namespace) -> FindingFilter:
+        def _get(name: str) -> tuple[str, ...]:
+            value = getattr(args, name, None)
+            return tuple(value) if value else ()
+
+        return cls(
+            severities=_get("severity"),
+            categories=_get("category"),
+            names=_get("check"),
+            codes=_get("code"),
+            paths=_get("file"),
+        )
+
+    @classmethod
+    def for_preset(cls, preset: str) -> FindingFilter:
+        """The narrowing one shortcut command is."""
+        return cls(names=preset_checks(preset), label=preset)
+
+    @property
+    def active(self) -> bool:
+        return bool(self.severities or self.categories or self.names or self.codes or self.paths)
+
+    @property
+    def narrows_findings(self) -> bool:
+        """Whether the filter selects among findings rather than among checks.
+
+        A reader who named a code or a path asked for those findings by name,
+        so a check left holding none of them is withheld with them.
+        """
+        return bool(self.codes or self.paths)
+
+    @property
+    def shows_findings(self) -> bool:
+        """Whether the findings themselves are rendered rather than counted.
+
+        A reader who named a check, a code or a path asked for its findings by
+        name -- that is the whole of what a preset listing is -- so they are
+        rendered whether or not the report as a whole is verbose.
+        """
+        return bool(self.names or self.codes or self.paths)
+
+    def unadmitted(self) -> list[str]:
+        """The names this filter uses that the report's vocabulary does not admit.
+
+        Severities and categories are the tool's own vocabulary, identical in
+        every project, so a name among them that does not resolve is a mistake
+        rather than a difference -- and a report narrowed by a name that
+        selects nothing looks exactly like a report with nothing to say
+        (REQ-d00282-F). Codes and paths are values the estate carries rather
+        than a fixed list, so they are not judged here.
+        """
+        problems = []
+        for value in self.severities:
+            if value not in REPORTED_SEVERITIES:
+                problems.append(
+                    f"--severity {value}: not a severity. "
+                    f"Severities: {', '.join(REPORTED_SEVERITIES)}."
+                )
+        for value in self.categories:
+            if value not in REPORT_CATEGORIES:
+                problems.append(
+                    f"--category {value}: not a category. "
+                    f"Categories: {', '.join(REPORT_CATEGORIES)}."
+                )
+        for value in self.names:
+            if not is_registered(value):
+                problems.append(f"--check {value}: not a check the tool runs.")
+        return problems
+
+    def matches_check(self, check: HealthCheck) -> bool:
+        if self.severities and check.severity not in self.severities:
+            return False
+        if self.categories and check.category not in self.categories:
+            return False
+        if self.names and check.name not in self.names:
+            return False
+        return True
+
+    def matches_finding(self, finding: HealthFinding) -> bool:
+        from fnmatch import fnmatch
+
+        if self.codes and not any(c in self.codes for c in finding.codes):
+            return False
+        if self.paths:
+            path = finding.file_path or ""
+            if not any(fnmatch(path, pattern) for pattern in self.paths):
+                return False
+        return True
+
+    def describe(self) -> str:
+        """The filter as the flags that produced it, for echoing back."""
+        parts: list[str] = []
+        for flag, values in (
+            ("--severity", self.severities),
+            ("--category", self.categories),
+            ("--check", self.names),
+            ("--code", self.codes),
+            ("--file", self.paths),
+        ):
+            if values:
+                parts.append(f"{flag} {' '.join(values)}")
+        return " ".join(parts)
+
+
+@dataclass(frozen=True)
+class _FilterOutcome:
+    """A narrowed report, and what the narrowing withheld."""
+
+    report: HealthReport
+    checks_shown: int
+    checks_total: int
+    findings_shown: int
+    findings_total: int
+    filter: FindingFilter
+
+    def disclosure(self) -> str | None:
+        if not self.filter.active:
+            return None
+        extent = (
+            f"showing {self.checks_shown} of {self.checks_total} checks, "
+            f"{self.findings_shown} of {self.findings_total} findings."
+        )
+        if self.filter.label:
+            # A preset says which listing this is and how to ask for it again
+            # by hand: the narrowing has to be reproducible to be checkable.
+            return (
+                f"Listing `{self.filter.label}` -- {extent} "
+                f"The same report: elspais checks {self.filter.describe()}"
+            )
+        return f"Filtered by {self.filter.describe()}: {extent}"
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "preset": self.filter.label,
+            "severity": list(self.filter.severities),
+            "category": list(self.filter.categories),
+            "check": list(self.filter.names),
+            "code": list(self.filter.codes),
+            "file": list(self.filter.paths),
+            "checks_shown": self.checks_shown,
+            "checks_total": self.checks_total,
+            "findings_shown": self.findings_shown,
+            "findings_total": self.findings_total,
+        }
+
+
+# Implements: REQ-d00285-G
+def apply_finding_filter(report: HealthReport, filt: FindingFilter) -> _FilterOutcome:
+    """Narrow a report to the checks and findings a filter admits.
+
+    The verdict is NOT recomputed from what survives: a reader narrowing a
+    report is choosing what to look at, never what the run found, and an exit
+    code that moved with the filter would let a narrowing pass a run that
+    failed.
+    """
+    checks_total = len(report.checks)
+    findings_total = sum(len(c.findings) for c in report.checks)
+    if not filt.active:
+        return _FilterOutcome(
+            report=report,
+            checks_shown=checks_total,
+            checks_total=checks_total,
+            findings_shown=findings_total,
+            findings_total=findings_total,
+            filter=filt,
+        )
+
+    narrowed = HealthReport()
+    findings_shown = 0
+    for check in report.checks:
+        if not filt.matches_check(check):
+            continue
+        kept = [f for f in check.findings if filt.matches_finding(f)]
+        if filt.narrows_findings and not kept:
+            continue
+        findings_shown += len(kept)
+        narrowed.add(
+            HealthCheck(
+                name=check.name,
+                passed=check.passed,
+                message=check.message,
+                category=check.category,
+                severity=check.severity,
+                details=check.details,
+                findings=kept,
+                remedy=check.remedy,
+            )
+        )
+    return _FilterOutcome(
+        report=narrowed,
+        checks_shown=len(narrowed.checks),
+        checks_total=checks_total,
+        findings_shown=findings_shown,
+        findings_total=findings_total,
+        filter=filt,
+    )
+
+
 def _format_report(
     report: HealthReport,
     args: argparse.Namespace,
     graph_source: str | None = None,
+    filt: FindingFilter | None = None,
+    verdict_over_filtered: bool = False,
 ) -> str:
-    """Format the health report as a string."""
+    """Format the health report as a string.
+
+    Args:
+        report: The whole run.
+        args: The command's arguments; the narrowing is read from them unless
+            *filt* names one.
+        graph_source: Where the graph came from, where that is worth saying.
+        filt: The narrowing to apply, for a caller that carries one of its own
+            rather than reading it off the arguments -- a preset listing.
+        verdict_over_filtered: Whether the verdict is the narrowed report's.
+            False for a reader narrowing `checks`, whose verdict stays the
+            whole run's (REQ-d00285-H). True for a preset listing, which is a
+            report over a declared population rather than a view of a wider
+            one: `elspais unresolved` answers about unresolved references, and
+            a verdict borrowed from an unrelated failing check would answer
+            about something else.
+    """
     fmt = getattr(args, "format", "text") or "text"
     lenient = getattr(args, "lenient", False)
     quiet = getattr(args, "quiet", False)
     verbose = getattr(args, "verbose", False)
     include_passing = getattr(args, "include_passing_details", False)
+
+    # The narrowing is applied once, here, so every format renders the same
+    # narrowed report (REQ-d00285-C) and no renderer has to know a filter
+    # exists.
+    outcome = apply_finding_filter(report, filt or FindingFilter.from_args(args))
+    whole_run = outcome.report if verdict_over_filtered else report
+    report = outcome.report
+    disclosure = outcome.disclosure()
+    # A reader who named a check, a code or a path asked for those findings.
+    show_findings = verbose or outcome.filter.shows_findings
 
     # Build active flags summary from args
     flag_parts: list[str] = []
@@ -4305,11 +5336,15 @@ def _format_report(
     if getattr(args, "spec_only", False):
         flag_parts.append("--spec")
     if getattr(args, "code_only", False):
-        flag_parts.append("--code")
+        flag_parts.append("--code-checks")
     if getattr(args, "tests_only", False):
         flag_parts.append("--tests")
     if getattr(args, "terms_only", False):
         flag_parts.append("--terms")
+    if outcome.filter.label:
+        flag_parts.append(outcome.filter.label)
+    elif outcome.filter.active:
+        flag_parts.append(outcome.filter.describe())
     active_flags = ", ".join(flag_parts) if flag_parts else None
 
     from elspais.utilities.report_meta import report_metadata
@@ -4319,9 +5354,22 @@ def _format_report(
     if fmt == "json":
         d = report.to_dict(lenient=lenient)
         d["meta"] = meta
+        if outcome.filter.active:
+            # The verdict and its counts are the whole run's; only the checks
+            # listed are narrowed, and the filter block says by how much.
+            verdict = whole_run.to_dict(lenient=lenient)
+            d["healthy"] = verdict["healthy"]
+            d["summary"] = verdict["summary"]
+            d["filter"] = outcome.to_dict()
         return json.dumps(d, indent=2)
     elif fmt == "markdown":
-        data = _build_report_data(report)
+        data = _build_report_data(
+            report,
+            verbose=show_findings,
+            include_passing_details=include_passing,
+            disclosure=disclosure,
+            verdict_report=whole_run,
+        )
         data.graph_source = graph_source
         data.active_flags = active_flags
         data.meta = meta
@@ -4329,11 +5377,17 @@ def _format_report(
     elif fmt == "junit":
         return _render_junit(report, include_passing_details=include_passing)
     elif fmt == "sarif":
-        return _render_sarif(report)
+        return _render_sarif(report, verdict=whole_run)
     else:
         if quiet:
-            return _build_report_data(report, verbose=verbose).summary_line
-        data = _build_report_data(report, verbose=verbose)
+            return _build_summary_line(whole_run)
+        data = _build_report_data(
+            report,
+            verbose=show_findings,
+            include_passing_details=include_passing,
+            disclosure=disclosure,
+            verdict_report=whole_run,
+        )
         data.graph_source = graph_source
         data.active_flags = active_flags
         data.meta = meta
@@ -4345,45 +5399,6 @@ def _format_report(
 # =============================================================================
 
 
-# Maps check names to the follow-up command a user should run.
-_FOLLOWUP_COMMANDS: dict[str, str] = {
-    "spec.hash_integrity": "elspais fix",
-    "spec.needs_rewrite": "elspais fix",
-    "spec.format_rules": "elspais errors",
-    "spec.no_assertions": "elspais errors",
-    "spec.index_current": "elspais fix",
-    "spec.no_duplicates": "elspais checks --spec --format json",
-    "spec.implements_resolve": "elspais broken",
-    "spec.refines_resolve": "elspais broken",
-    "spec.satisfies_resolve": "elspais broken",
-    "references.malformed": "elspais broken",
-    "references.unknown_namespace": "elspais broken",
-    "references.unknown_requirement": "elspais broken",
-    "references.unknown_assertion": "elspais broken",
-    "references.forbidden": "elspais broken",
-    "references.keyword_form": "elspais checks --spec --format json",
-    "references.identifier_form": "elspais checks --spec --format json",
-    "references.undeclared": "elspais checks --spec --format json",
-    "spec.structural_orphans": "elspais checks --spec --format json",
-    "spec.hierarchy_levels": "elspais checks --spec --format json",
-    "spec.changelog_present": "elspais fix",
-    "spec.changelog_current": "elspais fix -m 'Update changelog'",
-    "spec.changelog_format": "elspais checks --spec --format json",
-    "code.unlinked": "elspais unlinked",
-    "tests.unlinked": "elspais unlinked",
-    "tests.uncredited_evidence": "elspais checks --tests --format json",
-    "tests.results": "elspais failing",
-    "uat.results": "elspais failing",
-    "terms.duplicates": "elspais checks --terms --format json",
-    "terms.undefined": "elspais checks --terms --format json",
-    "terms.unmarked": "elspais checks --terms --format json",
-    "terms.unused": "elspais checks --terms --format json",
-    "terms.bad_definition": "elspais checks --terms --format json",
-    "terms.collection_empty": "elspais checks --terms --format json",
-    "terms.canonical_form": "elspais fix",
-}
-
-
 @dataclass
 class _CheckLine:
     """Pre-computed display data for a single health check."""
@@ -4391,7 +5406,15 @@ class _CheckLine:
     icon: str  # "\u2713", "\u2717", "\u26a0", "~"
     name: str
     message: str
-    followup: str | None = None
+    severity: str = "error"
+    remedy: str = NO_KNOWN_REMEDY
+    # The check's own findings, carried into the line so text and markdown
+    # render what json and sarif have always carried (REQ-d00285-C). Empty
+    # where the report is not being asked for detail.
+    findings: list[HealthFinding] = field(default_factory=list)
+    # Whether this line stands for a check a reader should act on -- which is
+    # what decides whether its remedy is worth stating.
+    actionable: bool = False
 
 
 @dataclass
@@ -4415,6 +5438,11 @@ class _ReportData:
     graph_source: str | None = None
     active_flags: str | None = None
     meta: dict[str, str] | None = None
+    verbose: bool = False
+    # What a narrowing withheld, where the report was narrowed. A report that
+    # showed a reader some of what it found and did not say so is one they
+    # cannot tell from a clean run (REQ-d00285-G).
+    disclosure: str | None = None
 
 
 def _build_hint(report: HealthReport, already_verbose: bool) -> str | None:
@@ -4434,7 +5462,7 @@ def _build_hint(report: HealthReport, already_verbose: bool) -> str | None:
     category_flags = {
         "spec": "--spec",
         "references": "--spec",
-        "code": "--code",
+        "code": "--code-checks",
         "tests": "--tests",
         "config": "",
         "terms": "--terms",
@@ -4458,6 +5486,36 @@ def _build_hint(report: HealthReport, already_verbose: bool) -> str | None:
         )
 
 
+# The categories a check can report under, in the order the report renders
+# them. One list, so a `--category` a reader types is judged against the same
+# vocabulary the sections are built from.
+REPORT_CATEGORIES: tuple[str, ...] = (
+    "config",
+    "spec",
+    "references",
+    "code",
+    "tests",
+    "uat",
+    "terms",
+    "docs",
+    "environment",
+)
+
+
+def _ordered_categories(report: HealthReport) -> list[str]:
+    """The categories to render, in report order, with none left out.
+
+    A renderer walking a literal list drops every check reporting under a
+    category nobody added to it -- and drops it in silence, since the summary
+    counts it either way. Categories the report holds but the list does not
+    are rendered after the ones it does.
+    """
+    seen = {c.category for c in report.checks}
+    ordered = [c for c in REPORT_CATEGORIES if c in seen]
+    ordered.extend(sorted(seen - set(REPORT_CATEGORIES)))
+    return ordered
+
+
 def _build_summary_line(report: HealthReport) -> str:
     """Build the summary line string (matches _print_summary_line logic)."""
     counted = len(report.checks) - report.skipped
@@ -4475,14 +5533,37 @@ def _build_summary_line(report: HealthReport) -> str:
         return f"UNHEALTHY: {report.failed} errors, {report.warnings} warnings{skip_suffix}"
 
 
-def _build_report_data(report: HealthReport, verbose: bool = False) -> _ReportData:
+# Implements: REQ-d00085-K+M, REQ-d00285-A+B+C
+def _build_report_data(
+    report: HealthReport,
+    verbose: bool = False,
+    include_passing_details: bool = False,
+    disclosure: str | None = None,
+    verdict_report: HealthReport | None = None,
+) -> _ReportData:
     """Build the intermediate representation for rendering a health report.
 
     Extracts all stat computation logic: category icon selection, pass/fail/skip
     counting (excluding info-severity from pass/total), check icon selection,
     summary line, and hint string.
+
+    Args:
+        report: The checks to render.
+        verbose: Expand all available detail -- which means each failing
+            check's findings, with the location and the remedy each carries.
+            The default stays as terse as it was: one line per check.
+        include_passing_details: Also render the findings of checks that
+            passed. Separate from `verbose` because they are separate requests
+            (REQ-d00085-K against REQ-d00085-M): a reader asking for the
+            detail of what is wrong is not asking for the detail of what is
+            right.
+        disclosure: What a narrowing withheld, where the report was narrowed.
+        verdict_report: The report the summary line and the hint speak for.
+            Defaults to `report`, and differs from it only where the report
+            was narrowed: the verdict is the whole run's, so a reader who
+            filtered down to one category is still told what the run found.
     """
-    categories = ["config", "spec", "references", "code", "tests", "uat", "terms"]
+    categories = _ordered_categories(report)
     sections: list[_SectionData] = []
 
     for category in categories:
@@ -4517,11 +5598,28 @@ def _build_report_data(report: HealthReport, verbose: bool = False) -> _ReportDa
                 c_icon = "\u26a0"
             else:
                 c_icon = "\u2717"
-            followup = None
-            if not check.passed and check.severity in ("error", "warning"):
-                followup = _FOLLOWUP_COMMANDS.get(check.name)
+            # What decides whether a check's findings need a request of their
+            # own is whether the check PASSED, not how loud it is: an
+            # info-severity check that reported a condition has findings a
+            # reader came for, while a passing check's are noise until asked
+            # for (REQ-d00085-M). `actionable` is a narrower question again --
+            # whether the reader is being asked to do something about it --
+            # and it decides only the follow-up table.
+            if check.passed:
+                shown = check.findings if include_passing_details else []
+            else:
+                shown = check.findings if verbose else []
+            actionable = not check.passed and check.severity in ("error", "warning")
             check_lines.append(
-                _CheckLine(icon=c_icon, name=check.name, message=check.message, followup=followup)
+                _CheckLine(
+                    icon=c_icon,
+                    name=check.name,
+                    message=check.message,
+                    severity=check.severity,
+                    remedy=check.remedy,
+                    findings=list(shown),
+                    actionable=actionable,
+                )
             )
 
         sections.append(
@@ -4533,16 +5631,49 @@ def _build_report_data(report: HealthReport, verbose: bool = False) -> _ReportDa
             )
         )
 
-    summary_line = _build_summary_line(report)
-    is_healthy = report.is_healthy
-    hint = _build_hint(report, verbose) if not is_healthy else None
+    verdict = verdict_report if verdict_report is not None else report
+    summary_line = _build_summary_line(verdict)
+    is_healthy = verdict.is_healthy
+    hint = _build_hint(verdict, verbose) if not is_healthy else None
 
     return _ReportData(
         sections=sections,
         summary_line=summary_line,
         is_healthy=is_healthy,
         hint=hint,
+        verbose=verbose,
+        disclosure=disclosure,
     )
+
+
+# Implements: REQ-d00285-A+B+C
+def _finding_text_lines(finding: HealthFinding, indent: str) -> list[str]:
+    """One finding, as the lines that carry what it is about and where it is.
+
+    The location leads because it is what a reader acts on: a finding they
+    cannot place costs them the search the tool already performed
+    (REQ-d00285-A). What the finding names -- the node, the repository that
+    owns it, the things it relates to -- follows on a line of its own, and is
+    omitted entirely where the finding names none of them.
+    """
+    location = finding.location()
+    if location:
+        head = f"{indent}- {location}: {finding.message}"
+    else:
+        head = f"{indent}- {finding.message}"
+    lines = [head]
+    attrs: list[str] = []
+    if finding.node_id:
+        attrs.append(f"node={finding.node_id}")
+    if finding.repo:
+        attrs.append(f"repo={finding.repo}")
+    if finding.codes:
+        attrs.append(f"codes={' '.join(finding.codes)}")
+    if finding.related:
+        attrs.append(f"related={', '.join(finding.related)}")
+    if attrs:
+        lines.append(f"{indent}  {' '.join(attrs)}")
+    return lines
 
 
 def _render_text(data: _ReportData) -> str:
@@ -4553,18 +5684,30 @@ def _render_text(data: _ReportData) -> str:
         lines.append("-" * 40)
         for check in section.checks:
             lines.append(f"  {check.icon} {check.name}: {check.message}")
+            if check.findings:
+                lines.append(f"      remedy: {check.remedy}")
+            for finding in check.findings:
+                lines.extend(_finding_text_lines(finding, "      "))
 
-    # Collect follow-up commands for failing/warning checks
-    followups = [
-        (check.name, check.followup)
-        for section in data.sections
-        for check in section.checks
-        if check.followup
-    ]
+    # The follow-up table is what carries each failing check's remedy when the
+    # report is terse. Where the findings are rendered, each check has already
+    # named its own remedy above and the table would only repeat it.
+    followups = (
+        []
+        if data.verbose
+        else [
+            (check.name, check.remedy)
+            for section in data.sections
+            for check in section.checks
+            if check.actionable
+        ]
+    )
 
     lines.append("")
     lines.append("=" * 40)
     lines.append(data.summary_line)
+    if data.disclosure:
+        lines.append(data.disclosure)
     if data.active_flags:
         lines.append(f"Flags: {data.active_flags}")
     if data.meta:
@@ -4593,7 +5736,7 @@ def _print_text_report(
     verbose: bool = False,
     include_passing_details: bool = False,
 ) -> None:
-    """Print human-readable health report (legacy wrapper)."""
+    """Print a health report as text, for a caller holding no _ReportData."""
     data = _build_report_data(report, verbose=verbose)
     print(_render_text(data))
 
@@ -4616,11 +5759,34 @@ def _render_markdown(data: _ReportData) -> str:
                 lines.append(f"- [x] {check.name}: {check.message}")
             else:
                 lines.append(f"- [ ] {check.name}: {check.message}")
+            if check.findings:
+                # A command is code and reads as code; "no command resolves
+                # this" is a sentence and would read as one if it were not.
+                spelled = check.remedy if check.remedy == NO_KNOWN_REMEDY else f"`{check.remedy}`"
+                lines.append(f"  - remedy: {spelled}")
+            for finding in check.findings:
+                location = finding.location()
+                head = f"`{location}`: {finding.message}" if location else finding.message
+                lines.append(f"  - {head}")
+                attrs: list[str] = []
+                if finding.node_id:
+                    attrs.append(f"node={finding.node_id}")
+                if finding.repo:
+                    attrs.append(f"repo={finding.repo}")
+                if finding.codes:
+                    attrs.append(f"codes={' '.join(finding.codes)}")
+                if finding.related:
+                    attrs.append(f"related={', '.join(finding.related)}")
+                if attrs:
+                    lines.append(f"    - {' '.join(attrs)}")
         lines.append("")
 
     lines.append("---")
     lines.append("")
     lines.append(data.summary_line)
+    if data.disclosure:
+        lines.append("")
+        lines.append(data.disclosure)
     if data.hint:
         lines.append("")
         lines.append(data.hint)
@@ -4642,7 +5808,7 @@ def _render_junit(
     import xml.etree.ElementTree as ET
 
     testsuites = ET.Element("testsuites")
-    categories = ["config", "spec", "references", "code", "tests", "uat", "terms"]
+    categories = _ordered_categories(report)
 
     for category in categories:
         checks = list(report.iter_by_category(category))
@@ -4671,19 +5837,32 @@ def _render_junit(
                 sys_out = ET.SubElement(tc, "system-out")
                 sys_out.text = check.message
             elif not check.passed:
+                # The remedy and the findings travel here too, so a report
+                # filed to CI names what a report read on a terminal names.
+                # Implements: REQ-d00285-A+B+C
+                body = _failure_body(check)
                 if check.severity == "error":
                     failure = ET.SubElement(tc, "failure", message=check.message)
-                    if check.details:
-                        failure.text = _format_details(check.details)
+                    failure.text = body
                 elif check.severity == "warning":
                     sys_err = ET.SubElement(tc, "system-err")
-                    sys_err.text = f"WARNING: {check.message}"
+                    sys_err.text = f"WARNING: {check.message}\n{body}"
             elif check.passed and include_passing_details and check.findings:
                 sys_out = ET.SubElement(tc, "system-out")
                 finding_lines = [f.message for f in check.findings]
                 sys_out.text = "\n".join(finding_lines)
 
     return ET.tostring(testsuites, encoding="unicode", xml_declaration=True)
+
+
+def _failure_body(check: HealthCheck) -> str:
+    """The body of a failing check: its remedy, its findings, then its details."""
+    parts: list[str] = [f"remedy: {check.remedy}"]
+    for finding in check.findings:
+        parts.extend(_finding_text_lines(finding, ""))
+    if check.details:
+        parts.append(_format_details(check.details))
+    return "\n".join(parts)
 
 
 def _format_details(details: dict[str, Any]) -> str:
@@ -4697,8 +5876,22 @@ def _format_details(details: dict[str, Any]) -> str:
     return "\n".join(parts)
 
 
+def _finding_properties(check: HealthCheck, finding: HealthFinding) -> dict[str, Any]:
+    """The values a finding carries beyond its message and its location."""
+    props: dict[str, Any] = {"remedy": check.remedy}
+    if finding.node_id:
+        props["nodeId"] = finding.node_id
+    if finding.repo:
+        props["repo"] = finding.repo
+    if finding.codes:
+        props["codes"] = list(finding.codes)
+    if finding.related:
+        props["related"] = list(finding.related)
+    return props
+
+
 # Implements: REQ-d00085-J
-def _render_sarif(report: HealthReport) -> str:
+def _render_sarif(report: HealthReport, verdict: HealthReport | None = None) -> str:
     """Render health report as SARIF v2.1.0 JSON.
 
     One reportingDescriptor per unique failing check name, one result per
@@ -4722,6 +5915,10 @@ def _render_sarif(report: HealthReport) -> str:
                 {
                     "id": check.name,
                     "shortDescription": {"text": check.message},
+                    # The action that resolves the condition, stated where a
+                    # SARIF consumer looks for it.
+                    # Implements: REQ-d00285-B
+                    "help": {"text": check.remedy},
                 }
             )
 
@@ -4735,6 +5932,7 @@ def _render_sarif(report: HealthReport) -> str:
                     "ruleIndex": idx,
                     "level": level,
                     "message": {"text": finding.message},
+                    "properties": _finding_properties(check, finding),
                 }
                 if finding.file_path:
                     loc: dict[str, Any] = {
@@ -4752,6 +5950,7 @@ def _render_sarif(report: HealthReport) -> str:
                     "ruleIndex": idx,
                     "level": level,
                     "message": {"text": check.message},
+                    "properties": {"remedy": check.remedy},
                 }
             )
 
@@ -4771,9 +5970,11 @@ def _render_sarif(report: HealthReport) -> str:
                 },
                 "results": results,
                 "properties": {
-                    "passed": report.passed,
-                    "failed": report.failed,
-                    "warnings": report.warnings,
+                    # The run's counts, not the narrowed view's -- a filtered
+                    # report states what the run found and lists a subset.
+                    "passed": (verdict or report).passed,
+                    "failed": (verdict or report).failed,
+                    "warnings": (verdict or report).warnings,
                 },
             }
         ],

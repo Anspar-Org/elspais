@@ -1,7 +1,7 @@
 # Minimal fixture for viewer table-rendering tests.
 # A single PRD spec file under spec/ exercises the simpleMarkdown table path.
 
-version = 3
+version = 5
 
 [project]
 name = "viewer-tables-fixture"

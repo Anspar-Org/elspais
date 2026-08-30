@@ -70,6 +70,7 @@ class TestHTMLGeneratorBasic:
 
         assert "Requirements Traceability" in result
 
+    # Verifies: REQ-p00006-A
     def test_REQ_p00006_A_generate_includes_requirements_in_embedded_json(self, sample_graph):
         """Includes requirement IDs in embedded JSON node-index."""
         generator = HTMLGenerator(sample_graph)
@@ -254,6 +255,7 @@ class TestHTMLGeneratorTreeStructure:
 
         assert "tree-toggle" in result
 
+    # Verifies: REQ-p00006-A
     def test_REQ_p00006_A_includes_depth_data_in_embedded_json(self, sample_graph):
         """Includes depth/hierarchy data in embedded tree-data JSON."""
         generator = HTMLGenerator(sample_graph)
@@ -279,6 +281,7 @@ class TestHTMLGeneratorTreeStructure:
 class TestHTMLGeneratorCoverage:
     """Tests for coverage indicators."""
 
+    # Verifies: REQ-p00006-A
     def test_REQ_p00006_A_includes_coverage_data_in_embedded_json(self, sample_graph):
         """Includes coverage data in embedded coverage-index JSON."""
         generator = HTMLGenerator(sample_graph)
@@ -305,6 +308,7 @@ class TestHTMLGeneratorCoverage:
 class TestHTMLGeneratorFiltering:
     """Tests for filtering features."""
 
+    # Verifies: REQ-d00052-A
     def test_REQ_d00052_A_includes_toolbar_filter_controls(self, sample_graph):
         """Includes toolbar filter group buttons for status and coverage."""
         generator = HTMLGenerator(sample_graph)
@@ -315,6 +319,7 @@ class TestHTMLGeneratorFiltering:
         assert "status-filter-buttons" in result
         assert 'data-group="coverage"' in result
 
+    # Verifies: REQ-d00052-D
     def test_REQ_d00052_D_includes_toolbar_git_filter_buttons(self, sample_graph):
         """Includes toolbar git filter buttons."""
         generator = HTMLGenerator(sample_graph)
@@ -326,6 +331,7 @@ class TestHTMLGeneratorFiltering:
         # Verifies: REQ-p00006-B
         assert 'data-group="git" data-key="changed"' in result
 
+    # Verifies: REQ-d00052-E
     def test_REQ_d00052_E_includes_hierarchy_filter_buttons(self, sample_graph):
         """Includes hierarchy filter buttons in toolbar (replaced leaf toggle)."""
         generator = HTMLGenerator(sample_graph)
@@ -340,6 +346,7 @@ class TestHTMLGeneratorFiltering:
 class TestHTMLGeneratorTopics:
     """Tests for topic extraction."""
 
+    # Verifies: REQ-p00006-A
     def test_REQ_p00006_A_topic_data_in_embedded_node_index(self, sample_graph):
         """Topic data is available in embedded node-index JSON."""
         generator = HTMLGenerator(sample_graph)
@@ -355,6 +362,7 @@ class TestHTMLGeneratorTopics:
 class TestHTMLGeneratorNavPanel:
     """Tests for nav panel tab support (replaces flat/hierarchical view modes)."""
 
+    # Verifies: REQ-d00052-F
     def test_REQ_d00052_F_includes_nav_panel_tabs(self, sample_graph):
         """Includes Req and Journeys nav panel tabs."""
         generator = HTMLGenerator(sample_graph)
@@ -367,6 +375,7 @@ class TestHTMLGeneratorNavPanel:
         assert 'data-kind="req"' in result
         assert 'data-kind="journey"' in result
 
+    # Verifies: REQ-p00006-A
     def test_REQ_p00006_A_includes_three_panel_layout(self, sample_graph):
         """Includes 3-panel layout containers."""
         generator = HTMLGenerator(sample_graph)
@@ -418,6 +427,7 @@ class TestHTMLGeneratorAssertions:
 class TestHTMLGeneratorGitIntegration:
     """Tests for git change detection integration."""
 
+    # Verifies: REQ-d00052-D
     def test_REQ_d00052_D_git_state_in_embedded_json(self, sample_graph):
         """Git state data is in embedded node-index JSON with requirement properties."""
         generator = HTMLGenerator(sample_graph)
@@ -431,6 +441,7 @@ class TestHTMLGeneratorGitIntegration:
         assert '"status": "Active"' in result
         assert '"hash": "abc12345"' in result
 
+    # Verifies: REQ-d00052-D
     def test_REQ_d00052_D_includes_git_filter_buttons(self, sample_graph):
         # Verifies: REQ-p00006-A
         """Includes git filter buttons in toolbar."""
@@ -449,6 +460,7 @@ class TestHTMLGeneratorJourneyBadges:
     linking including validates.
     """
 
+    # Verifies: REQ-o00050-C
     def test_REQ_o00050_C_journey_with_validates_shows_badges(self):
         """Journey with VALIDATES edges renders ref badges in HTML."""
         graph = build_graph(
@@ -469,6 +481,7 @@ class TestHTMLGeneratorJourneyBadges:
         assert "REQ-p00001" in result
         assert "switchToReqTab" in result
 
+    # Verifies: REQ-o00050-C
     def test_REQ_o00050_C_journey_without_validates_no_refs_section(self):
         """Journey without VALIDATES edges omits refs section in HTML."""
         # Verifies: REQ-p00006-A

@@ -27,7 +27,7 @@ from pathlib import Path
 # OFF so the hash defect is isolated: a Draft/Active requirement without a
 # changelog must not be flagged for a changelog reason.
 CONFIG_TOML = """\
-version = 3
+version = 5
 
 [project]
 name = "test"
@@ -45,7 +45,7 @@ hash_current = false
 # that use this config also set GIT_AUTHOR_NAME/GIT_AUTHOR_EMAIL, which are
 # the highest-precedence lookup source in utilities/changelog_author.py).
 CONFIG_TOML_CHANGELOG = """\
-version = 3
+version = 5
 
 [project]
 name = "test"
@@ -61,7 +61,7 @@ id_source = "manual"
 
 # require_hash is stated explicitly so the format rule definitely fires.
 CONFIG_TOML_REQUIRE_HASH = """\
-version = 3
+version = 5
 
 [project]
 name = "test"
@@ -395,12 +395,18 @@ class TestFirstHashAcquisition:
 class TestErrorsStatusParity:
     """Pins REQ-p00002-A: `errors` must not hide what `checks` counts."""
 
+    # Verifies: REQ-p00002-A, REQ-d00285-C
     def test_errors_reports_format_errors_for_draft_requirements(self, tmp_path):
-        """compute_errors' default status handling must not drop format
-        violations on Draft requirements — the health checks it drills
-        into apply no status filter.
+        """The `errors` listing must not drop format violations on Draft
+        requirements — it IS the checks report narrowed to the spec-file
+        checks, and those apply no status filter.
         """
-        from elspais.commands.errors import collect_errors, compute_errors
+        from elspais.commands.health import (
+            FindingFilter,
+            HealthReport,
+            apply_finding_filter,
+            run_checks,
+        )
         from elspais.config import get_config
 
         project = _make_project(
@@ -414,19 +420,17 @@ class TestErrorsStatusParity:
         try:
             config = get_config(project / ".elspais.toml")
             graph = _build_graph(project)
-
-            unfiltered = collect_errors(graph, config, exclude_status=set())
-            defaulted = compute_errors(graph, config, {})
+            whole = HealthReport()
+            for check in run_checks(graph, config):
+                whole.add(check)
         finally:
             os.chdir(old_cwd)
 
-        # Control: the violation genuinely exists on this Draft requirement.
-        assert any(e.rule == "require_hash" for e in unfiltered.format_errors), (
-            "Fixture must produce a require_hash violation; got "
-            f"{[(e.req_id, e.rule) for e in unfiltered.format_errors]}"
-        )
+        listed = apply_finding_filter(whole, FindingFilter.for_preset("errors")).report
+        messages = [f.message for c in listed.checks for f in c.findings]
 
-        assert defaulted["format_errors"], (
-            "compute_errors must report the Draft requirement's format error; "
-            "the default status handling is hiding what the health checks count"
+        # Control: the violation genuinely exists on this Draft requirement.
+        assert any("require_hash" in m for m in messages), (
+            f"the errors listing must report the Draft requirement's missing "
+            f"hash; it listed {messages}"
         )

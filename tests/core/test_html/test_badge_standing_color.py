@@ -74,6 +74,7 @@ def _all_full_rollup():
 # ── Scenario (a): uat_verified partial with partial="info" ────────────────────
 
 
+# Verifies: REQ-d00258-D
 def test_REQ_d00258_D_uat_partial_info_badge_is_yellow_not_yellow_green():
     """A partial uat_verified dimension configured ``partial="info"`` (purely to
     keep CI non-failing) must STILL badge YELLOW (the honest partial standing),
@@ -95,6 +96,7 @@ def test_REQ_d00258_D_uat_partial_info_badge_is_yellow_not_yellow_green():
     assert tiers["uat_ver_color"] != YELLOW_GREEN
 
 
+# Verifies: REQ-d00258-H
 def test_REQ_d00258_H_uat_partial_info_bucket_still_non_dragging():
     """The SAME info-partial dimension must keep its two real severity jobs:
     ``info`` does not drag the combined bucket below ``full`` (job 2). Color is
@@ -110,6 +112,7 @@ def test_REQ_d00258_H_uat_partial_info_bucket_still_non_dragging():
     assert tiers["combined_bucket"] == "full"
 
 
+# Verifies: REQ-d00258-H
 def test_REQ_d00258_H_requirement_partial_matches_assertion_partial_color():
     """The requirement uat_verified partial badge and the per-*Assertion* partial
     standing resolve to the SAME color (a standing is one color everywhere)."""
@@ -130,6 +133,7 @@ def test_REQ_d00258_H_requirement_partial_matches_assertion_partial_color():
 # ── Scenario (b): implemented missing on an expecting status -> RED ───────────
 
 
+# Verifies: REQ-d00258-D
 def test_REQ_d00258_D_implemented_missing_expecting_status_is_red():
     r = RollupMetrics(total_assertions=2)
     r.implemented = _dim({}, total=2)  # nothing implemented
@@ -146,6 +150,7 @@ def test_REQ_d00258_D_implemented_missing_expecting_status_is_red():
 # ── Scenario (c): implemented missing on a non-expecting status -> GREY ───────
 
 
+# Verifies: REQ-d00258-D
 def test_REQ_d00258_D_implemented_missing_draft_status_is_grey():
     r = RollupMetrics(total_assertions=2)
     r.implemented = _dim({}, total=2)
@@ -163,6 +168,7 @@ def test_REQ_d00258_D_implemented_missing_draft_status_is_grey():
 # ── Scenario (d): empty relative denominator -> GREY ─────────────────────────
 
 
+# Verifies: REQ-d00258-H
 def test_REQ_d00258_H_empty_denominator_tested_is_grey():
     """0 implemented -> Tested relative denominator empty -> N/A missing -> grey
     (neutral), never yellow-green."""
@@ -182,6 +188,7 @@ def test_REQ_d00258_H_empty_denominator_tested_is_grey():
 # ── Scenario (e): no badge is ever yellow-green ──────────────────────────────
 
 
+# Verifies: REQ-d00258-D
 def test_REQ_d00258_D_no_badge_is_ever_yellow_green():
     """Across a representative matrix of dimension states and severity configs,
     NO requirement badge color is yellow-green. Badge colors are drawn from the

@@ -82,6 +82,7 @@ from elspais.graph.factory import build_graph
 from elspais.graph.federated import FederatedGraph
 from elspais.graph.GraphNode import GraphNode
 from elspais.graph.mutations import MutationEntry
+from elspais.graph.parsers.directives import counted_assertions
 from elspais.graph.parsers.patterns import JNY_ID_PATTERN
 from elspais.graph.relations import EdgeKind
 from elspais.graph.render import node_version
@@ -536,7 +537,7 @@ def _serialize_node_generic(node: Any, graph: FederatedGraph | None = None) -> d
                     "covered_fraction": rollup.covered_fraction,
                 }
         # CUR-1419: consumer REQs declaring `Integrates:` inherit the
-        # library node's implemented/passing coverage (REQ-d00258-N: what the
+        # library node's implemented/passing coverage (REQ-d00277-C: what the
         # library's declared tests returned) across INTEGRATES
         # edges. Surface the live overlay so viewers can show inherited
         # status. Skip when there are no integrations to avoid noise.
@@ -692,15 +693,6 @@ def _serialize_mutation_entry(entry: MutationEntry) -> dict[str, Any]:
     }
 
 
-def _serialize_broken_reference(ref: Any) -> dict[str, Any]:
-    """Serialize a ReferenceFault to dict format."""
-    return {
-        "source_id": ref.source_id,
-        "target_id": ref.target_id,
-        "edge_kind": str(ref.edge_kind) if hasattr(ref.edge_kind, "value") else ref.edge_kind,
-    }
-
-
 # ─────────────────────────────────────────────────────────────────────────────
 # Core Tool Functions (REQ-o00060)
 # ─────────────────────────────────────────────────────────────────────────────
@@ -841,7 +833,7 @@ def _get_graph_status(
         "node_counts": node_counts,
         "total_nodes": graph.node_count(),
         "has_orphans": graph.has_orphans(),
-        "has_broken_references": graph.has_broken_references(),
+        "has_unresolved_references": graph.has_unresolved_references(),
         "terms_dirty": _has_dirty_terms(graph),
     }
     record = _automatic_save_record(working_dir)
@@ -1890,7 +1882,7 @@ def _build_assertion_format(config: dict[str, Any]) -> dict[str, Any]:
     # Read the assertion separators from id-patterns assertions. Both examples
     # are rendered with the configured characters: an agent handed a hardcoded
     # "-A" in a repo configured for "/A" writes references this repo does not
-    # accept, and an off-separator reference is a broken reference, not an
+    # accept, and an off-separator reference is an unresolved reference, not an
     # alternate spelling.
     sep = assertions.separator
     ma_sep = assertions.multi_separator
@@ -2118,9 +2110,9 @@ def _workspace_profile_manager(
     result["coverage_stats"] = _build_coverage_stats(graph, config)
     result["health"] = {
         "has_orphans": graph.has_orphans() if graph else None,
-        "has_broken_references": graph.has_broken_references() if graph else None,
+        "has_unresolved_references": graph.has_unresolved_references() if graph else None,
         "orphan_count": graph.orphan_count() if graph else None,
-        "broken_reference_count": (len(graph.broken_references()) if graph else None),
+        "unresolved_reference_count": (len(graph.unresolved_references()) if graph else None),
     }
     result["change_metrics"] = _build_change_metrics(graph)
 
@@ -2182,9 +2174,9 @@ def _workspace_profile_all(
     result["coverage_stats"] = _build_coverage_stats(graph, config)
     result["health"] = {
         "has_orphans": graph.has_orphans() if graph else None,
-        "has_broken_references": graph.has_broken_references() if graph else None,
+        "has_unresolved_references": graph.has_unresolved_references() if graph else None,
         "orphan_count": graph.orphan_count() if graph else None,
-        "broken_reference_count": (len(graph.broken_references()) if graph else None),
+        "unresolved_reference_count": (len(graph.unresolved_references()) if graph else None),
     }
     result["change_metrics"] = _build_change_metrics(graph)
 
@@ -2328,7 +2320,7 @@ def _get_project_summary(
         "changes": change_metrics,
         "total_nodes": graph.node_count(),
         "orphan_count": graph.orphan_count(),
-        "broken_reference_count": len(graph.broken_references()),
+        "unresolved_reference_count": len(graph.unresolved_references()),
     }
 
     # REQ-d00258-C: per-level coverage stats reuse the CLI summary's collector
@@ -2339,7 +2331,11 @@ def _get_project_summary(
     result["coverage_by_level"] = collect_coverage(graph, config)["levels"]
 
     code_cov = count_code_coverage(graph)
-    if code_cov["total_executable_lines"] > 0:
+    # Implements: REQ-d00254-Q
+    # Reported when anything was measured, and also when nothing was because
+    # every file's source defeated analysis -- omitting it there would be the
+    # same silence as reporting no coverage at all.
+    if code_cov["total_executable_lines"] > 0 or code_cov["unmeasured_files"]:
         result["code_coverage"] = code_cov
 
     return result
@@ -2482,7 +2478,7 @@ _FAQ_ENTRIES: list[dict[str, str]] = [
             "Common causes:\n"
             "1. The comment is indented (must start at column 0)\n"
             "2. The requirement ID doesn't exist in any spec file\n"
-            "3. The graph hasn't been refreshed (run refresh_graph(full=True))\n"
+            "3. The graph hasn't been refreshed (run refresh_graph())\n"
             "4. The file isn't in a configured test directory (check scanning.test.directories)"
         ),
     },
@@ -2548,13 +2544,12 @@ _FAQ_ENTRIES: list[dict[str, str]] = [
         "topic": "coverage",
         "question": "How do I find coverage gaps?",
         "answer": (
-            "CLI: Use gap flags on the health command:\n"
-            "  elspais health --untested    (requirements without test coverage)\n"
-            "  elspais health --uncovered   (requirements without code coverage)\n"
-            "  elspais health --unvalidated (requirements without UAT coverage)\n"
-            "  elspais health --untraced    (all gaps: uncovered + untested"
-            " + unvalidated + failing)\n"
-            "  elspais health --failing     (requirements with failing results)\n"
+            "CLI: Each kind of gap is its own command:\n"
+            "  elspais gaps        (every traceability gap)\n"
+            "  elspais uncovered   (requirements without code coverage)\n"
+            "  elspais untested    (requirements without test coverage)\n"
+            "  elspais unvalidated (requirements without UAT coverage)\n"
+            "  elspais failing     (requirements with failing test or UAT results)\n"
             "\n"
             "MCP: Use these tools:\n"
             "  get_uncovered_assertions()          (all assertions without test coverage)\n"
@@ -2664,7 +2659,11 @@ _FAQ_ENTRIES: list[dict[str, str]] = [
             "Structural orphan: a node with no FILE parent (not contained in any file).\n"
             "This usually indicates a graph build error.\n"
             "Unlinked: a CODE or TEST node that exists in a file but has no traceability\n"
-            "edge to any requirement. This is normal for utility code/tests."
+            "edge to any requirement. This is normal for utility code/tests.\n"
+            "Uncited file: a scanned file that cites nothing at all. A file full of\n"
+            "unlinked nodes is not uncited if one node in it links, so the two answer\n"
+            "different questions -- `get_unlinked_nodes` for the nodes, `elspais uncited`\n"
+            "for the files."
         ),
     },
     {
@@ -2704,6 +2703,7 @@ def _get_faq(topic: str) -> dict[str, Any]:
     }
 
 
+# Implements: REQ-d00286-B
 def _get_docs(topic: str) -> dict[str, Any]:
     """Return documentation content for a topic, or search all help surfaces.
 
@@ -3840,7 +3840,7 @@ def _mutate_fix_broken_reference(
     old_target_id: str,
     new_target_id: str,
 ) -> dict[str, Any]:
-    """Fix a broken reference by redirecting to a valid target.
+    """Repair an unresolved reference by redirecting it to a valid target.
 
     REQ-d00065-D: Only parameter validation and delegation.
     REQ-o00062-E: Returns MutationEntry for audit.
@@ -3854,7 +3854,7 @@ def _mutate_fix_broken_reference(
         # since a variant spelling owns no index entry. FederatedIdReader is
         # the one authority for reading an identifier across members; a
         # reference no member claims stays as given, so the reference remains
-        # broken and is reported, not silently respelled.
+        # unresolved and is reported, not silently respelled.
         resolvers = [
             build_resolver(entry.config)
             for entry in getattr(graph, "iter_repos", lambda: [])()
@@ -4084,16 +4084,53 @@ def _get_unlinked_nodes(graph: FederatedGraph, kind: str | None = None) -> dict[
     }
 
 
-def _get_broken_references(graph: FederatedGraph) -> dict[str, Any]:
-    """Get all broken references.
+# Implements: REQ-d00285-C+F, REQ-d00275-A
+def _get_unresolved_references(
+    graph: FederatedGraph, config: dict[str, Any] | None = None
+) -> dict[str, Any]:
+    """Every reference that names nothing the federation holds.
 
-    Returns edges that point to non-existent nodes.
+    This is the SAME stream `elspais unresolved` and `elspais checks` report:
+    the five reference checks, each finding carrying the check that raised it,
+    the severity that check resolved to, the diagnostic codes the fault
+    reached, its location and its remedy. Reading them here rather than
+    serializing `ReferenceFault` again is what keeps this surface from saying
+    less about a reference than the CLI does about the same one
+    (REQ-d00285-C).
     """
-    refs = [_serialize_broken_reference(ref) for ref in graph.broken_references()]
+    from elspais.commands.health import _REFERENCE_CHECKS, check_reference_class
+
+    checks = [
+        check_reference_class(graph, config, fault_class, name, description)
+        for fault_class, name, description in _REFERENCE_CHECKS
+    ]
+
+    findings: list[dict[str, Any]] = []
+    for check in checks:
+        for finding in check.findings:
+            entry = finding.to_dict()
+            entry["check"] = check.name
+            entry["severity"] = check.severity
+            entry["remedy"] = check.remedy
+            findings.append(entry)
 
     return {
-        "broken_references": refs,
-        "count": len(refs),
+        "unresolved_references": findings,
+        "count": len(findings),
+        # A class a project turned off produced no findings, and saying which
+        # is the difference between "none" and "not reported" (REQ-d00285-G).
+        "checks": [
+            {
+                "name": check.name,
+                "passed": check.passed,
+                "message": check.message,
+                "severity": check.severity,
+                "remedy": check.remedy,
+                "skipped": bool(check.details.get("skipped")),
+                "count": len(check.findings),
+            }
+            for check in checks
+        ],
     }
 
 
@@ -4294,10 +4331,10 @@ def _get_test_coverage(graph: FederatedGraph, req_id: str) -> dict[str, Any]:
         return {"success": False, "error": f"{req_id} is not a requirement"}
 
     # Collect assertions
-    assertions: list[tuple[str, str]] = []
-    for child in node.iter_children():
-        if child.kind == NodeKind.ASSERTION:
-            assertions.append((child.id, child.get_field("label", "")))
+    # Implements: REQ-p00017-G
+    assertions: list[tuple[str, str]] = [
+        (child.id, child.get_field("label", "")) for child in counted_assertions(node)
+    ]
 
     assertion_ids = [a[0] for a in assertions]
     label_to_id = {label: aid for aid, label in assertions}
@@ -4484,7 +4521,8 @@ def _dimension_figures(node: Any, dimension: str) -> dict[str, Any]:
     published beside it, so a reader can see what evidence produced it
     (REQ-d00258-A) rather than being handed one number to trust.
     """
-    total = sum(1 for child in node.iter_children() if child.kind == NodeKind.ASSERTION)
+    # Implements: REQ-p00017-G
+    total = len(counted_assertions(node))
     rollup = node.get_metric("rollup_metrics")
     dim = getattr(rollup, dimension, None) if rollup is not None else None
     if dim is None:
@@ -4537,10 +4575,10 @@ def _get_assertion_test_map(graph: FederatedGraph, req_id: str) -> dict[str, Any
         return {"success": False, "error": f"{req_id} is not a requirement"}
 
     # Collect assertions
-    assertions: list[tuple[str, str]] = []
-    for child in node.iter_children():
-        if child.kind == NodeKind.ASSERTION:
-            assertions.append((child.id, child.get_field("label", "")))
+    # Implements: REQ-p00017-G
+    assertions: list[tuple[str, str]] = [
+        (child.id, child.get_field("label", "")) for child in counted_assertions(node)
+    ]
 
     # Per-assertion buckets
     assertion_tests: dict[str, dict[str, Any]] = {}
@@ -4592,10 +4630,10 @@ def _get_assertion_uat_map(graph: FederatedGraph, req_id: str) -> dict[str, Any]
         return {"success": False, "error": f"{req_id} is not a requirement"}
 
     # Collect assertions
-    assertions: list[tuple[str, str]] = []
-    for child in node.iter_children():
-        if child.kind == NodeKind.ASSERTION:
-            assertions.append((child.id, child.get_field("label", "")))
+    # Implements: REQ-p00017-G
+    assertions: list[tuple[str, str]] = [
+        (child.id, child.get_field("label", "")) for child in counted_assertions(node)
+    ]
 
     # Per-assertion buckets
     assertion_journeys: dict[str, dict[str, Any]] = {}
@@ -4653,10 +4691,10 @@ def _get_assertion_code_map(
         return {"success": False, "error": f"{req_id} is not a requirement"}
 
     # Collect assertions
-    assertions: list[tuple[str, str]] = []
-    for child in node.iter_children():
-        if child.kind == NodeKind.ASSERTION:
-            assertions.append((child.id, child.get_field("label", "")))
+    # Implements: REQ-p00017-G
+    assertions: list[tuple[str, str]] = [
+        (child.id, child.get_field("label", "")) for child in counted_assertions(node)
+    ]
 
     # Per-assertion buckets
     assertion_code: dict[str, dict[str, Any]] = {}
@@ -4754,10 +4792,10 @@ def _get_assertion_refines_map(graph: FederatedGraph, req_id: str) -> dict[str, 
     if node.kind != NodeKind.REQUIREMENT:
         return {"success": False, "error": f"{req_id} is not a requirement"}
 
-    assertions: list[tuple[str, str]] = []
-    for child in node.iter_children():
-        if child.kind == NodeKind.ASSERTION:
-            assertions.append((child.id, child.get_field("label", "")))
+    # Implements: REQ-p00017-G
+    assertions: list[tuple[str, str]] = [
+        (child.id, child.get_field("label", "")) for child in counted_assertions(node)
+    ]
 
     assertion_refines: dict[str, dict[str, Any]] = {}
     for aid, label in assertions:
@@ -4947,7 +4985,8 @@ def _get_uncovered_assertions(
         if node.kind != NodeKind.REQUIREMENT:
             return {"success": False, "error": f"{req_id} is not a requirement"}
 
-        assertion_children = [c for c in node.iter_children() if c.kind == NodeKind.ASSERTION]
+        # Implements: REQ-p00017-G
+        assertion_children = counted_assertions(node)
         all_labels = [c.get_field("label", "") for c in assertion_children]
         id_by_label = {c.get_field("label", ""): c.id for c in assertion_children}
         uncovered_set = _uncovered_labels_for_req(node, all_labels)
@@ -4970,7 +5009,8 @@ def _get_uncovered_assertions(
     gaps: list[dict[str, Any]] = []
 
     for req_node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
-        assertions = [c for c in req_node.iter_children() if c.kind == NodeKind.ASSERTION]
+        # Implements: REQ-p00017-G
+        assertions = counted_assertions(req_node)
         all_labels = [c.get_field("label", "") for c in assertions]
         uncovered_set = _uncovered_labels_for_req(req_node, all_labels)
         uncovered_labels = [lbl for lbl in all_labels if lbl in uncovered_set]
@@ -5332,7 +5372,8 @@ def _compute_coverage_summary(req_node: Any) -> dict[str, Any]:
     Each dimension is reported in its own right, headlined on the
     per-*Assertion* total with its four measures beside it (REQ-d00258-A).
     """
-    total = sum(1 for child in req_node.iter_children() if child.kind == NodeKind.ASSERTION)
+    # Implements: REQ-p00017-G
+    total = len(counted_assertions(req_node))
     rollup = req_node.get_metric("rollup_metrics")
 
     dimensions: dict[str, Any] = {}
@@ -6006,8 +6047,8 @@ The graph is the single source of truth - all tools read directly from it.
 - `agent_instructions()` - Project-specific authoring rules and conventions
 
 ### Graph Status & Control
-- `get_graph_status()` - Node counts, orphan/broken reference flags
-- `refresh_graph(full=False, path="", force=False, if_tip_mutation_id="")` -
+- `get_graph_status()` - Node counts, orphan/unresolved reference flags
+- `refresh_graph(path="", force=False, if_tip_mutation_id="")` -
   Rebuild after spec file changes
   - path: switch to a different project directory before rebuilding
   - force=True discards pending mutations and requires if_tip_mutation_id (the mutation-log tip)
@@ -6091,7 +6132,8 @@ Implements:/Refines: line changes.
 - `mutate_change_edge_targets(source_id, target_id, assertion_targets,
   if_version)` - Change assertion targets
 - `mutate_delete_edge(source_id, target_id, if_version, confirm=True)` - Delete (requires confirm)
-- `mutate_fix_broken_reference(source_id, old_target, new_target, if_version)` - Fix broken ref
+- `mutate_fix_broken_reference(source_id, old_target, new_target, if_version)`
+  - Redirect an unresolved ref to a valid target
 
 ### File Mutations (in-memory)
 - `mutate_move_node_to_file(node_id, target_file_id, if_version,
@@ -6110,7 +6152,7 @@ tip: current_tip from get_mutation_log() ("" = nothing pending).
 - `get_mutation_log(limit=50)` - Mutation history, newest first; includes current_tip
 - `get_versions(node_ids)` - Refresh version tokens in bulk (unknown IDs omitted)
 - `get_orphaned_nodes()` - List orphaned nodes
-- `get_broken_references()` - List broken references
+- `get_unresolved_references()` - List references that resolve to nothing
 
 ### Test Coverage Analysis
 - `get_test_coverage(req_id)` - Get TEST nodes and coverage stats for a requirement
@@ -6231,7 +6273,7 @@ identical body. Full details: docs("concurrency").
 2. get_hierarchy() on results to navigate relationships
 
 **Checking project health:**
-1. get_graph_status() for orphans/broken refs
+1. get_graph_status() for orphans/unresolved refs
 2. get_project_summary() for coverage statistics
 
 **Finding coverage gaps:**
@@ -6316,7 +6358,7 @@ def create_server(
             print(f"CONFIG ERROR: {e}", file=sys.stderr)
             graph = FederatedGraph.empty(name="<unconfigured>")
 
-    # Implements: REQ-o00077-A, REQ-o00077-B, REQ-o00077-C
+    # Implements: REQ-o00077-A, REQ-o00077-F
     # Every tool call reaches the transport through ``call_tool``, so the
     # rule lands there rather than on each tool: a per-tool opt-in is one
     # a later tool forgets, and REQ-o00077-C is stated over all of them at
@@ -6374,7 +6416,8 @@ def create_server(
 
     @mcp.tool()
     def get_graph_status() -> dict[str, Any]:
-        """Quick health snapshot: requirement/assertion/test counts, orphan and broken-ref flags.
+        """Quick health snapshot: requirement/assertion/test counts, plus the
+        orphan and unresolved-reference flags.
 
         Use when: you need a fast overview of project health without running full checks.
         """
@@ -6383,7 +6426,6 @@ def create_server(
     @mcp.tool()
     @_locked
     def refresh_graph(
-        full: bool = False,
         path: str = "",
         force: bool = False,
         if_tip_mutation_id: str = "",
@@ -6398,8 +6440,6 @@ def create_server(
         and the graph already being served stays live.
 
         Args:
-            full: Accepted for compatibility; every rebuild is full, since no
-                cache is retained between builds.
             path: Switch to a different project directory before rebuilding.
             force: If True, discard unsaved mutations and refresh anyway.
             if_tip_mutation_id: The mutation-log tip as you last saw it.
@@ -6434,7 +6474,7 @@ def create_server(
         # The one rebuild routine: it re-reads config, publishes config and
         # graph together, and brings the change-detection state forward
         # (REQ-p00004-J/O, REQ-d00205-B).
-        result = rebuild_shared_graph(_state, full=full)
+        result = rebuild_shared_graph(_state)
         if not result.get("success"):
             # The rebuild published nothing, so the graph and config still
             # describe the previous directory. Leaving working_dir pointing at
@@ -7323,7 +7363,7 @@ def create_server(
     def mutate_fix_broken_reference(
         source_id: str, old_target_id: str, new_target_id: str, if_version: str
     ) -> dict[str, Any]:
-        """Repair a broken reference by redirecting it to a valid target node.
+        """Repair an unresolved reference by redirecting it to a valid target node.
         Args:
             if_version: The version of source_id from your last read. Only the
                 source's rendered reference line changes, so only the source is
@@ -7556,6 +7596,10 @@ def create_server(
         These are TEST or CODE nodes that exist in the file structure but
         are not connected to any requirement through traceability edges.
 
+        This is NOT the population `elspais uncited` lists: that names whole
+        files that cite nothing at all, and a file holding one linked test
+        and nine unlinked ones appears here and not there.
+
         Args:
             kind: Optional filter — "test" or "code". If omitted, returns both.
         """
@@ -7566,12 +7610,18 @@ def create_server(
         return _get_unlinked_nodes(_state["graph"], kind)
 
     @mcp.tool()
-    def get_broken_references() -> dict[str, Any]:
-        """Find Implements/Refines references that point to non-existent requirement IDs.
+    def get_unresolved_references() -> dict[str, Any]:
+        """List every reference that names nothing the federation holds.
 
-        Use when: checking for broken links after renaming or deleting requirements.
+        The same findings `elspais unresolved` prints: each carries the check
+        that raised it (one of the five reference classes), its severity, its
+        diagnostic codes, its location and its remedy. `checks` says what each
+        class found, including a class this project turned off.
+
+        Use when: checking for unresolved links after renaming or deleting
+        requirements.
         """
-        return _get_broken_references(_state["graph"])
+        return _get_unresolved_references(_state["graph"], _state["config"])
 
     # ─────────────────────────────────────────────────────────────────────
     # Keyword Search Tools (Phase 4)

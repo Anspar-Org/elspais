@@ -212,7 +212,7 @@ class TestBuilderReferenceTerms:
             ": URL: <https://www.iso.org>\n"
         )
         (tmp_path / ".elspais.toml").write_text(
-            "version = 4\n"
+            "version = 5\n"
             '[project]\nname = "test"\nnamespace = "REQ"\n'
             "[levels.prd]\n"
             "rank = 1\n"
@@ -248,7 +248,7 @@ class TestBuilderReferenceTerms:
             ": Reference Source: **ISO/IEC 24760-1**\n"
         )
         (tmp_path / ".elspais.toml").write_text(
-            "version = 4\n"
+            "version = 5\n"
             '[project]\nname = "test"\nnamespace = "REQ"\n'
             "[levels.prd]\n"
             "rank = 1\n"
@@ -854,7 +854,7 @@ class TestMcpTermDirtyFlag:
         graph.root_count.return_value = 0
         graph.node_count.return_value = 0
         graph.has_orphans.return_value = False
-        graph.has_broken_references.return_value = False
+        graph.has_unresolved_references.return_value = False
         graph.nodes_by_kind.return_value = iter([])
 
         status = _get_graph_status(graph)

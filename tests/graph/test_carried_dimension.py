@@ -56,7 +56,7 @@ A. The system SHALL do C.
 """
 
 _CONFIG = """\
-version = 3
+version = 5
 
 [project]
 name = "carried-dim"

@@ -20,7 +20,7 @@ def _make_core_repo(tmp_path: Path) -> Path:
     """Create a minimal core repo with .elspais.toml."""
     tmp_path.mkdir(exist_ok=True)
     (tmp_path / ".elspais.toml").write_text(
-        'version = 3\n[project]\nname = "core"\nnamespace = "REQ"\n\n'
+        'version = 5\n[project]\nname = "core"\nnamespace = "REQ"\n\n'
         '[scanning.spec]\ndirectories = ["spec"]\n'
     )
     (tmp_path / "spec").mkdir(exist_ok=True)
@@ -32,7 +32,7 @@ def _make_associate_repo(base: Path, name: str, prefix: str) -> Path:
     repo = base / name
     repo.mkdir(exist_ok=True)
     (repo / ".elspais.toml").write_text(
-        f'version = 3\n[project]\nname = "{name}"\nnamespace = "{prefix}"\n\n'
+        f'version = 5\n[project]\nname = "{name}"\nnamespace = "{prefix}"\n\n'
         f'[scanning.spec]\ndirectories = ["spec"]\n'
     )
     (repo / "spec").mkdir(exist_ok=True)
@@ -42,6 +42,7 @@ def _make_associate_repo(base: Path, name: str, prefix: str) -> Path:
 class TestAssociateLinkByPath:
     """Validates REQ-p00005-C: linking an associate by directory path."""
 
+    # Verifies: REQ-p00005-C
     def test_REQ_p00005_C_link_valid_associate_by_path(self, tmp_path, monkeypatch, capsys):
         """Link a valid associate repo by absolute path."""
         from elspais.commands.associate_cmd import run
@@ -73,6 +74,7 @@ class TestAssociateLinkByPath:
         assert "callisto" in doc["associates"]
         assert doc["associates"]["callisto"]["path"] == str(assoc)
 
+    # Verifies: REQ-p00005-C
     def test_REQ_p00005_C_link_creates_local_toml_if_missing(self, tmp_path, monkeypatch):
         """Creates .elspais.local.toml if it doesn't exist."""
         from elspais.commands.associate_cmd import run
@@ -96,6 +98,7 @@ class TestAssociateLinkByPath:
         run(args)
         assert local_config.exists()
 
+    # Verifies: REQ-p00005-C
     def test_REQ_p00005_C_link_appends_to_existing_paths(self, tmp_path, monkeypatch):
         """Adding second associate doesn't replace the first."""
         from elspais.commands.associate_cmd import run
@@ -130,6 +133,7 @@ class TestAssociateLinkByPath:
         assert doc["associates"]["callisto"]["path"] == str(assoc1)
         assert doc["associates"]["europa"]["path"] == str(assoc2)
 
+    # Verifies: REQ-p00005-C
     def test_REQ_p00005_C_link_duplicate_path_is_noop(self, tmp_path, monkeypatch, capsys):
         """Linking the same path twice doesn't duplicate."""
         from elspais.commands.associate_cmd import run
@@ -163,6 +167,7 @@ class TestAssociateLinkByPath:
 class TestAssociateLinkByName:
     """Validates REQ-p00005-C: linking by name scans sibling directories."""
 
+    # Verifies: REQ-p00005-C
     def test_REQ_p00005_C_link_by_name_finds_sibling(self, tmp_path, monkeypatch, capsys):
         """Search for associate by directory name in parent directory."""
         from elspais.commands.associate_cmd import run
@@ -192,6 +197,7 @@ class TestAssociateLinkByName:
 class TestAssociateErrors:
     """Validates REQ-p00005-E: clear errors for invalid paths/configs."""
 
+    # Verifies: REQ-p00005-E
     def test_REQ_p00005_E_link_nonexistent_path_errors(self, tmp_path, monkeypatch, capsys):
         """Non-existent path produces a clear error."""
         from elspais.commands.associate_cmd import run
@@ -214,6 +220,7 @@ class TestAssociateErrors:
         output = capsys.readouterr().err
         assert "does not exist" in output or "not found" in output.lower()
 
+    # Verifies: REQ-p00005-E
     def test_REQ_p00005_E_link_directory_without_config_errors(self, tmp_path, monkeypatch, capsys):
         """Directory without .elspais.toml produces a clear error."""
         from elspais.commands.associate_cmd import run
@@ -238,6 +245,7 @@ class TestAssociateErrors:
         output = capsys.readouterr().err
         assert ".elspais.toml" in output
 
+    # Verifies: REQ-p00005-E
     def test_REQ_p00005_E_link_any_valid_repo_succeeds(self, tmp_path, monkeypatch, capsys):
         """In v3, any repo with a valid .elspais.toml can be linked as an associate."""
         from elspais.commands.associate_cmd import run
@@ -246,7 +254,7 @@ class TestAssociateErrors:
         other = tmp_path / "other"
         other.mkdir()
         (other / ".elspais.toml").write_text(
-            'version = 3\n[project]\nname = "other"\nnamespace = "REQ"\n'
+            'version = 5\n[project]\nname = "other"\nnamespace = "REQ"\n'
         )
 
         monkeypatch.chdir(core)
@@ -262,6 +270,7 @@ class TestAssociateErrors:
         rc = run(args)
         assert rc == 0
 
+    # Verifies: REQ-p00005-E
     def test_REQ_p00005_E_unlink_unknown_name_errors(self, tmp_path, monkeypatch, capsys):
         """Unlinking a name that doesn't exist produces a clear error."""
         from elspais.commands.associate_cmd import run
@@ -288,6 +297,7 @@ class TestAssociateErrors:
 class TestAssociateAll:
     """Validates REQ-p00005-C: auto-discovery of associates."""
 
+    # Verifies: REQ-p00005-C
     def test_REQ_p00005_C_all_discovers_siblings(self, tmp_path, monkeypatch, capsys):
         """--all scans parent directory for associate repos."""
         from elspais.commands.associate_cmd import run
@@ -324,6 +334,7 @@ class TestAssociateAll:
         assert "callisto" in assoc_entries
         assert "europa" in assoc_entries
 
+    # Verifies: REQ-p00005-C
     def test_REQ_p00005_C_all_no_associates_found(self, tmp_path, monkeypatch, capsys):
         """--all with no associates reports none found."""
         from elspais.commands.associate_cmd import run
@@ -348,6 +359,7 @@ class TestAssociateAll:
         output = capsys.readouterr().out
         assert "0" in output or "no" in output.lower() or "none" in output.lower()
 
+    # Verifies: REQ-p00005-F
     def test_REQ_p00005_F_all_deduplicates_relative_and_absolute(
         self, tmp_path, monkeypatch, capsys
     ):
@@ -399,17 +411,17 @@ class TestAssociateAll:
 #   missing-namespace  -> ValueError ([project].namespace is required)
 _BROKEN_CONFIG_CASES = [
     pytest.param(
-        'version = 3\n[project\nname = "stale"\n',
+        'version = 5\n[project\nname = "stale"\n',
         ("unexpected", "parse", "invalid", "toml", "char"),
         id="toml-syntax-error",
     ),
     pytest.param(
-        'version = 3\n[project]\nname = "stale"\nnamespace = "STL"\ntype = "associated"\n',
+        'version = 5\n[project]\nname = "stale"\nnamespace = "STL"\ntype = "associated"\n',
         ("type",),
         id="schema-unknown-key",
     ),
     pytest.param(
-        'version = 3\n[project]\nname = "stale"\n',
+        'version = 5\n[project]\nname = "stale"\n',
         ("namespace",),
         id="missing-namespace",
     ),
@@ -429,6 +441,7 @@ class TestAssociateBrokenSiblingConfig:
     to parse or validate is skipped with the path and reason reported, without
     aborting the scan; dirs without a config stay silently ignored."""
 
+    # Verifies: REQ-d00202-I
     @pytest.mark.parametrize("config_text, reason_fragments", _BROKEN_CONFIG_CASES)
     def test_REQ_d00202_I_discover_returns_error_string_for_unloadable_config(
         self, tmp_path, config_text, reason_fragments
@@ -452,6 +465,7 @@ class TestAssociateBrokenSiblingConfig:
             f"(expected one of {reason_fragments}): {result!r}"
         )
 
+    # Verifies: REQ-d00202-I
     @pytest.mark.parametrize("config_text, reason_fragments", _BROKEN_CONFIG_CASES)
     def test_REQ_d00202_I_broken_sibling_config_is_skipped_with_reason(
         self, tmp_path, monkeypatch, capsys, config_text, reason_fragments
@@ -520,6 +534,7 @@ class TestAssociateBrokenSiblingConfig:
 class TestAssociateList:
     """Validates REQ-p00005-C: listing associate links and status."""
 
+    # Verifies: REQ-p00005-C
     def test_REQ_p00005_C_list_shows_linked_associates(self, tmp_path, monkeypatch, capsys):
         """--list shows linked associates with status."""
         from elspais.commands.associate_cmd import run
@@ -548,6 +563,7 @@ class TestAssociateList:
         assert "callisto" in output
         assert "CAL" in output
 
+    # Verifies: REQ-p00005-C
     def test_REQ_p00005_C_list_no_associates(self, tmp_path, monkeypatch, capsys):
         """--list with no associates shows informational message."""
         from elspais.commands.associate_cmd import run
@@ -570,6 +586,7 @@ class TestAssociateList:
         output = capsys.readouterr().out
         assert "no" in output.lower() or "none" in output.lower() or "0" in output
 
+    # Verifies: REQ-p00005-E
     def test_REQ_p00005_E_list_shows_broken_path(self, tmp_path, monkeypatch, capsys):
         """--list shows broken status for non-existent paths."""
         from elspais.commands.associate_cmd import run
@@ -605,6 +622,7 @@ class TestAssociateList:
 class TestAssociateUnlink:
     """Validates REQ-p00005-C: unlinking associates."""
 
+    # Verifies: REQ-p00005-C
     def test_REQ_p00005_C_unlink_by_name(self, tmp_path, monkeypatch, capsys):
         """Unlink an associate by name."""
         from elspais.commands.associate_cmd import run
@@ -636,6 +654,7 @@ class TestAssociateUnlink:
         doc = tomlkit.parse(local_config.read_text())
         assert "callisto" not in doc.get("associates", {})
 
+    # Verifies: REQ-p00005-C
     def test_REQ_p00005_C_unlink_preserves_other_paths(self, tmp_path, monkeypatch):
         """Unlinking one associate preserves others."""
         from elspais.commands.associate_cmd import run
@@ -667,6 +686,7 @@ class TestAssociateUnlink:
         assert "europa" in doc["associates"]
         assert doc["associates"]["europa"]["path"] == str(assoc2)
 
+    # Verifies: REQ-p00005-F
     def test_REQ_p00005_F_unlink_by_path_component_substring(self, tmp_path, monkeypatch, capsys):
         """Unlink matches when name is a substring of a path component."""
         from elspais.commands.associate_cmd import run
@@ -677,7 +697,7 @@ class TestAssociateUnlink:
         wt = tmp_path / "callisto-worktrees" / "linking-code"
         wt.mkdir(parents=True)
         (wt / ".elspais.toml").write_text(
-            'version = 3\n[project]\nname = "callisto"\nnamespace = "CAL"\n\n'
+            'version = 5\n[project]\nname = "callisto"\nnamespace = "CAL"\n\n'
             '[scanning.spec]\ndirectories = ["spec"]\n'
         )
         (wt / "spec").mkdir()
@@ -701,6 +721,7 @@ class TestAssociateUnlink:
         doc = tomlkit.parse(local_config.read_text())
         assert "callisto" not in doc.get("associates", {})
 
+    # Verifies: REQ-p00005-C
     def test_REQ_p00005_C_unlink_by_prefix_code(self, tmp_path, monkeypatch, capsys):
         """Unlink an associate by its prefix code (e.g., CAL)."""
         from elspais.commands.associate_cmd import run
@@ -727,6 +748,7 @@ class TestAssociateUnlink:
         doc = tomlkit.parse(local_config.read_text())
         assert "callisto" not in doc.get("associates", {})
 
+    # Verifies: REQ-p00005-F
     def test_REQ_p00005_F_unlink_by_project_name_worktree_path(self, tmp_path, monkeypatch, capsys):
         """Unlink works when stored path is a worktree (basename != project name)."""
         from elspais.commands.associate_cmd import run
@@ -740,7 +762,7 @@ class TestAssociateUnlink:
         worktree_dir.mkdir(parents=True)
         # But it has callisto's config
         (worktree_dir / ".elspais.toml").write_text(
-            'version = 3\n[project]\nname = "callisto"\nnamespace = "CAL"\n\n'
+            'version = 5\n[project]\nname = "callisto"\nnamespace = "CAL"\n\n'
             '[scanning.spec]\ndirectories = ["spec"]\n'
         )
         (worktree_dir / "spec").mkdir()

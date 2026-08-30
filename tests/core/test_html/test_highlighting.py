@@ -19,6 +19,7 @@ from elspais.html.highlighting import (
 class TestHighlightFileContent:
     """Validates REQ-p00006-A: highlight_file_content() core behavior."""
 
+    # Verifies: REQ-p00006-A
     def test_REQ_p00006_A_returns_highlighted_html_spans(self):
         """Python content returns lines with Pygments HTML spans."""
         result = highlight_file_content("test.py", "def foo():\n    pass\n")
@@ -28,32 +29,38 @@ class TestHighlightFileContent:
         # Pygments wraps keywords in <span> tags
         assert any("<span" in line for line in result["lines"])
 
+    # Verifies: REQ-p00006-A
     def test_REQ_p00006_A_detects_python_language(self):
         """Python files are detected as 'python'."""
         result = highlight_file_content("test.py", "x = 1\n")
         assert result["language"] == "python"
 
+    # Verifies: REQ-p00006-A
     def test_REQ_p00006_A_detects_markdown_language(self):
         """Markdown files are detected as 'markdown'."""
         result = highlight_file_content("README.md", "# Hello\n")
         assert result["language"] == "markdown"
 
+    # Verifies: REQ-p00006-A
     def test_REQ_p00006_A_detects_javascript_language(self):
         """JavaScript files are detected correctly."""
         result = highlight_file_content("app.js", "const x = 1;\n")
         assert "javascript" in result["language"].lower() or "js" in result["language"].lower()
 
+    # Verifies: REQ-p00006-A
     def test_REQ_p00006_A_unknown_extension_falls_back_to_text(self):
         """Unknown file extensions fall back to text lexer."""
         result = highlight_file_content("data.xyz123", "some content\n")
         assert result["language"] == "text"
 
+    # Verifies: REQ-p00006-A
     def test_REQ_p00006_A_preserves_raw_content(self):
         """Raw content is preserved unchanged in the result."""
         raw = "def foo():\n    return 42\n"
         result = highlight_file_content("test.py", raw)
         assert result["raw"] == raw
 
+    # Verifies: REQ-p00006-A
     def test_REQ_p00006_A_line_count_matches(self):
         """Number of highlighted lines matches raw line count."""
         raw = "line1\nline2\nline3\n"
@@ -62,12 +69,14 @@ class TestHighlightFileContent:
         # trailing empty removed, so 3 lines
         assert len(result["lines"]) == 3
 
+    # Verifies: REQ-p00006-A
     def test_REQ_p00006_A_empty_content(self):
         """Empty content returns empty lines list."""
         result = highlight_file_content("test.py", "")
         assert result["lines"] == [] or result["lines"] == [""]
         assert result["raw"] == ""
 
+    # Verifies: REQ-p00006-A
     def test_REQ_p00006_A_multiline_tokens_preserved(self):
         """Multi-line tokens like docstrings are highlighted correctly."""
         raw = '"""\nA docstring\n"""\nx = 1\n'
@@ -78,6 +87,7 @@ class TestHighlightFileContent:
 class TestHighlightFileContentFallback:
     """Validates REQ-p00006-A: graceful degradation without Pygments."""
 
+    # Verifies: REQ-p00006-A
     def test_REQ_p00006_A_fallback_without_pygments(self):
         """When Pygments is unavailable, falls back to HTML-escaped text."""
         with patch.dict("sys.modules", {"pygments": None}):
@@ -95,6 +105,7 @@ class TestHighlightFileContentFallback:
             # Restore module
             importlib.reload(mod)
 
+    # Verifies: REQ-p00006-A
     def test_REQ_p00006_A_fallback_escapes_html_entities(self):
         """Fallback properly escapes HTML special characters."""
         with (
@@ -124,28 +135,33 @@ class TestHighlightFileContentFallback:
 class TestGetPygmentsCss:
     """Validates REQ-p00006-A: get_pygments_css() CSS generation."""
 
+    # Verifies: REQ-p00006-A
     def test_REQ_p00006_A_returns_scoped_css(self):
         """Default call returns CSS scoped under .highlight."""
         css = get_pygments_css()
         assert ".highlight" in css
         assert "color" in css.lower() or "background" in css.lower()
 
+    # Verifies: REQ-p00006-A
     def test_REQ_p00006_A_custom_scope(self):
         """Custom scope parameter is applied to CSS."""
         css = get_pygments_css(scope=".my-scope")
         assert ".my-scope" in css
 
+    # Verifies: REQ-p00006-A
     def test_REQ_p00006_A_monokai_style(self):
         """Monokai style generates valid CSS."""
         css = get_pygments_css(style="monokai")
         assert ".highlight" in css
         assert len(css) > 0
 
+    # Verifies: REQ-p00006-A
     def test_REQ_p00006_A_dark_theme_scope(self):
         """Dark theme CSS scoped under .dark-theme .highlight."""
         css = get_pygments_css(style="monokai", scope=".dark-theme .highlight")
         assert ".dark-theme .highlight" in css
 
+    # Verifies: REQ-p00006-A
     def test_REQ_p00006_A_returns_empty_without_pygments(self):
         """Returns empty string when Pygments is unavailable."""
         with patch.dict(
@@ -167,6 +183,7 @@ class TestGetPygmentsCss:
 class TestMaxFileSize:
     """Validates REQ-p00006-A: MAX_FILE_SIZE constant."""
 
+    # Verifies: REQ-p00006-A
     def test_REQ_p00006_A_max_file_size_is_512k(self):
         """MAX_FILE_SIZE is set to 512,000 bytes."""
         assert MAX_FILE_SIZE == 512_000

@@ -98,23 +98,28 @@ class TestFieldIdMatch:
     Validates REQ-d00061-B, REQ-d00061-C, REQ-p00050-D:
     """
 
+    # Verifies: REQ-d00061-B
     def test_REQ_d00061_B_field_id_match_substring(self, _matches_query, match_node):
         """REQ-d00061-B: field='id' matches substring in node.id."""
         assert _mq(_matches_query, match_node, "id", "d00099")
 
+    # Verifies: REQ-d00061-B
     def test_REQ_d00061_B_field_id_no_match(self, _matches_query, match_node):
         """REQ-d00061-B: field='id' returns False when no substring match."""
         assert not _mq(_matches_query, match_node, "id", "zzz")
 
+    # Verifies: REQ-d00061-B
     def test_REQ_d00061_B_field_id_case_insensitive(self, _matches_query, match_node):
         """REQ-d00061-B: field='id' matching is case-insensitive."""
         assert _mq(_matches_query, match_node, "id", "req-d00099")
 
+    # Verifies: REQ-d00061-C
     def test_REQ_d00061_C_field_id_regex_match(self, _matches_query, match_node):
         """REQ-d00061-C: field='id' with regex=True uses compiled_pattern."""
         pattern = re.compile(r"REQ-d000\d+")
         assert _mq_regex(_matches_query, match_node, "id", pattern)
 
+    # Verifies: REQ-d00061-C
     def test_REQ_d00061_C_field_id_regex_no_match(self, _matches_query, match_node):
         """REQ-d00061-C: field='id' with regex returns False on no match."""
         pattern = re.compile(r"REQ-p\d+")
@@ -132,29 +137,35 @@ class TestFieldTitleMatch:
     Validates REQ-d00061-B, REQ-d00061-C, REQ-p00050-D:
     """
 
+    # Verifies: REQ-d00061-B
     def test_REQ_d00061_B_field_title_match_substring(self, _matches_query, match_node):
         """REQ-d00061-B: field='title' matches substring."""
         assert _mq(_matches_query, match_node, "title", "security")
 
+    # Verifies: REQ-d00061-B
     def test_REQ_d00061_B_field_title_no_match(self, _matches_query, match_node):
         """REQ-d00061-B: field='title' returns False when no match."""
         assert not _mq(_matches_query, match_node, "title", "database")
 
+    # Verifies: REQ-d00061-B
     def test_REQ_d00061_B_field_title_case_insensitive(self, _matches_query, match_node):
         """REQ-d00061-B: field='title' matching is case-insensitive."""
         # "platform security" as two AND terms both present in title
         assert _mq(_matches_query, match_node, "title", "platform security")
 
+    # Verifies: REQ-d00061-C
     def test_REQ_d00061_C_field_title_regex_match(self, _matches_query, match_node):
         """REQ-d00061-C: field='title' with regex uses compiled_pattern."""
         pattern = re.compile(r"Platform\s+Security")
         assert _mq_regex(_matches_query, match_node, "title", pattern)
 
+    # Verifies: REQ-d00061-C
     def test_REQ_d00061_C_field_title_regex_no_match(self, _matches_query, match_node):
         """REQ-d00061-C: field='title' regex returns False on no match."""
         pattern = re.compile(r"^Database")
         assert not _mq_regex(_matches_query, match_node, "title", pattern)
 
+    # Verifies: REQ-d00061-B
     def test_REQ_d00061_B_field_title_empty_label(self, _matches_query, empty_node):
         """REQ-d00061-B: field='title' handles empty label gracefully."""
         empty_node.set_label("")
@@ -172,32 +183,39 @@ class TestFieldBodyMatch:
     Validates REQ-d00061-B, REQ-d00061-C, REQ-p00050-D:
     """
 
+    # Verifies: REQ-d00061-B
     def test_REQ_d00061_B_field_body_match_substring(self, _matches_query, match_node):
         """REQ-d00061-B: field='body' matches substring in body_text."""
         assert _mq(_matches_query, match_node, "body", "encrypted")
 
+    # Verifies: REQ-d00061-B
     def test_REQ_d00061_B_field_body_no_match(self, _matches_query, match_node):
         """REQ-d00061-B: field='body' returns False when no match."""
         assert not _mq(_matches_query, match_node, "body", "database")
 
+    # Verifies: REQ-d00061-B
     def test_REQ_d00061_B_field_body_case_insensitive(self, _matches_query, match_node):
         """REQ-d00061-B: field='body' matching is case-insensitive."""
         assert _mq(_matches_query, match_node, "body", "aes-256")
 
+    # Verifies: REQ-d00061-C
     def test_REQ_d00061_C_field_body_regex_match(self, _matches_query, match_node):
         """REQ-d00061-C: field='body' with regex uses compiled_pattern."""
         pattern = re.compile(r"AES-\d+")
         assert _mq_regex(_matches_query, match_node, "body", pattern)
 
+    # Verifies: REQ-d00061-C
     def test_REQ_d00061_C_field_body_regex_no_match(self, _matches_query, match_node):
         """REQ-d00061-C: field='body' regex returns False on no match."""
         pattern = re.compile(r"RSA-\d+")
         assert not _mq_regex(_matches_query, match_node, "body", pattern)
 
+    # Verifies: REQ-d00061-B
     def test_REQ_d00061_B_field_body_empty(self, _matches_query, empty_node):
         """REQ-d00061-B: field='body' returns False when body_text absent."""
         assert not _mq(_matches_query, empty_node, "body", "anything")
 
+    # Verifies: REQ-d00061-C
     def test_REQ_d00061_C_field_body_regex_empty(self, _matches_query, empty_node):
         """REQ-d00061-C: field='body' regex returns False when body absent."""
         pattern = re.compile(r".*")
@@ -215,32 +233,39 @@ class TestFieldKeywordsMatch:
     Validates REQ-d00061-B, REQ-d00061-C, REQ-p00050-D:
     """
 
+    # Verifies: REQ-d00061-B
     def test_REQ_d00061_B_field_keywords_match_substring(self, _matches_query, match_node):
         """REQ-d00061-B: field='keywords' matches substring."""
         assert _mq(_matches_query, match_node, "keywords", "encrypt")
 
+    # Verifies: REQ-d00061-B
     def test_REQ_d00061_B_field_keywords_exact_match(self, _matches_query, match_node):
         """REQ-d00061-B: field='keywords' matches exact keyword."""
         assert _mq(_matches_query, match_node, "keywords", "security")
 
+    # Verifies: REQ-d00061-B
     def test_REQ_d00061_B_field_keywords_no_match(self, _matches_query, match_node):
         """REQ-d00061-B: field='keywords' returns False when no match."""
         assert not _mq(_matches_query, match_node, "keywords", "database")
 
+    # Verifies: REQ-d00061-B
     def test_REQ_d00061_B_field_keywords_case_insensitive(self, _matches_query, match_node):
         """REQ-d00061-B: field='keywords' matching is case-insensitive."""
         assert _mq(_matches_query, match_node, "keywords", "aes")
 
+    # Verifies: REQ-d00061-C
     def test_REQ_d00061_C_field_keywords_regex_match(self, _matches_query, match_node):
         """REQ-d00061-C: field='keywords' regex uses compiled_pattern."""
         pattern = re.compile(r"^secur")
         assert _mq_regex(_matches_query, match_node, "keywords", pattern)
 
+    # Verifies: REQ-d00061-C
     def test_REQ_d00061_C_field_keywords_regex_no_match(self, _matches_query, match_node):
         """REQ-d00061-C: field='keywords' regex returns False on no match."""
         pattern = re.compile(r"^zzz")
         assert not _mq_regex(_matches_query, match_node, "keywords", pattern)
 
+    # Verifies: REQ-d00061-B
     def test_REQ_d00061_B_field_keywords_empty(self, _matches_query, empty_node):
         """REQ-d00061-B: field='keywords' returns False when absent."""
         assert not _mq(_matches_query, empty_node, "keywords", "anything")
@@ -257,46 +282,56 @@ class TestFieldAllMatch:
     Validates REQ-d00061-B, REQ-d00061-C, REQ-p00050-D:
     """
 
+    # Verifies: REQ-d00061-B
     def test_REQ_d00061_B_field_all_matches_id(self, _matches_query, match_node):
         """REQ-d00061-B: field='all' matches against node.id."""
         assert _mq(_matches_query, match_node, "all", "d00099")
 
+    # Verifies: REQ-d00061-B
     def test_REQ_d00061_B_field_all_matches_title(self, _matches_query, match_node):
         """REQ-d00061-B: field='all' matches against title."""
         assert _mq(_matches_query, match_node, "all", "overview")
 
+    # Verifies: REQ-d00061-B
     def test_REQ_d00061_B_field_all_matches_body(self, _matches_query, match_node):
         """REQ-d00061-B: field='all' matches against body_text."""
         assert _mq(_matches_query, match_node, "all", "encrypted")
 
+    # Verifies: REQ-d00061-B
     def test_REQ_d00061_B_field_all_matches_keywords(self, _matches_query, match_node):
         """REQ-d00061-B: field='all' matches against keywords."""
         assert _mq(_matches_query, match_node, "all", "encryption")
 
+    # Verifies: REQ-d00061-B
     def test_REQ_d00061_B_field_all_no_match(self, _matches_query, match_node):
         """REQ-d00061-B: field='all' returns False when nothing matches."""
         assert not _mq(_matches_query, match_node, "all", "zzzznotfound")
 
+    # Verifies: REQ-d00061-C
     def test_REQ_d00061_C_field_all_regex_matches_id(self, _matches_query, match_node):
         """REQ-d00061-C: field='all' with regex matches node.id."""
         pattern = re.compile(r"REQ-d\d{5}")
         assert _mq_regex(_matches_query, match_node, "all", pattern)
 
+    # Verifies: REQ-d00061-C
     def test_REQ_d00061_C_field_all_regex_matches_title(self, _matches_query, match_node):
         """REQ-d00061-C: field='all' with regex matches title."""
         pattern = re.compile(r"Platform\s+\w+")
         assert _mq_regex(_matches_query, match_node, "all", pattern)
 
+    # Verifies: REQ-d00061-C
     def test_REQ_d00061_C_field_all_regex_matches_body(self, _matches_query, match_node):
         """REQ-d00061-C: field='all' with regex matches body_text."""
         pattern = re.compile(r"AES-\d+")
         assert _mq_regex(_matches_query, match_node, "all", pattern)
 
+    # Verifies: REQ-d00061-C
     def test_REQ_d00061_C_field_all_regex_matches_keywords(self, _matches_query, match_node):
         """REQ-d00061-C: field='all' with regex matches keywords."""
         pattern = re.compile(r"^encrypt")
         assert _mq_regex(_matches_query, match_node, "all", pattern)
 
+    # Verifies: REQ-d00061-C
     def test_REQ_d00061_C_field_all_regex_no_match(self, _matches_query, match_node):
         """REQ-d00061-C: field='all' regex returns False on no match."""
         pattern = re.compile(r"^NONEXISTENT$")
@@ -314,23 +349,28 @@ class TestSingleCodePath:
     Validates REQ-d00061-B, REQ-d00061-C, REQ-p00050-D:
     """
 
+    # Verifies: REQ-p00050-D
     def test_REQ_p00050_D_false_for_unrecognized_field(self, _matches_query, match_node):
         """REQ-p00050-D: unrecognized field returns False (no crash)."""
         result = _mq(_matches_query, match_node, "unknown_field", "d00099")
         assert result is False
 
+    # Verifies: REQ-p00050-D
     def test_REQ_p00050_D_field_id_does_not_match_title(self, _matches_query, match_node):
         """REQ-p00050-D: field='id' only checks id, not title."""
         assert not _mq(_matches_query, match_node, "id", "security overview")
 
+    # Verifies: REQ-p00050-D
     def test_REQ_p00050_D_field_title_does_not_match_body(self, _matches_query, match_node):
         """REQ-p00050-D: field='title' only checks title, not body."""
         assert not _mq(_matches_query, match_node, "title", "encrypted")
 
+    # Verifies: REQ-p00050-D
     def test_REQ_p00050_D_field_body_does_not_match_keywords(self, _matches_query, match_node):
         """REQ-p00050-D: field='body' only checks body, not keywords."""
         assert not _mq(_matches_query, match_node, "body", "encryption")
 
+    # Verifies: REQ-p00050-D
     def test_REQ_p00050_D_field_keywords_does_not_match_id(self, _matches_query, match_node):
         """REQ-p00050-D: field='keywords' only checks keywords, not id."""
         assert not _mq(_matches_query, match_node, "keywords", "req-d00099")
@@ -347,22 +387,27 @@ class TestMultiTermDelegation:
     Validates REQ-d00061-F, REQ-p00050-D:
     """
 
+    # Verifies: REQ-d00061-F
     def test_REQ_d00061_F_delegates_to_parsed_query(self, _matches_query, match_node):
         """REQ-d00061-F: two AND terms both present matches."""
         assert _mq(_matches_query, match_node, "all", "Platform security")
 
+    # Verifies: REQ-d00061-F
     def test_REQ_d00061_F_parsed_query_or_group(self, _matches_query, match_node):
         """REQ-d00061-F: OR group matches when one alternative matches."""
         assert _mq(_matches_query, match_node, "all", "database OR security")
 
+    # Verifies: REQ-d00061-F
     def test_REQ_d00061_F_parsed_query_exclusion(self, _matches_query, match_node):
         """REQ-d00061-F: exclusion term causes False."""
         assert not _mq(_matches_query, match_node, "all", "-security")
 
+    # Verifies: REQ-d00061-F
     def test_REQ_d00061_F_parsed_query_no_match(self, _matches_query, match_node):
         """REQ-d00061-F: multi-term AND fails when one term absent."""
         assert not _mq(_matches_query, match_node, "all", "security database")
 
+    # Verifies: REQ-p00050-D
     def test_REQ_p00050_D_regex_ignores_parsed(self, _matches_query, match_node):
         """REQ-p00050-D: regex=True uses compiled_pattern, ignoring parsed."""
         pattern = re.compile(r"REQ-d000\d+")
@@ -378,6 +423,7 @@ class TestMultiTermDelegation:
         )
         assert result is True
 
+    # Verifies: REQ-p00050-D
     def test_REQ_p00050_D_no_parsed_returns_false(self, _matches_query, match_node):
         """REQ-p00050-D: parsed=None returns False (no legacy fallback)."""
         result = _matches_query(

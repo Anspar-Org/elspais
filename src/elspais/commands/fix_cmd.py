@@ -798,19 +798,34 @@ def _fix_index(args: argparse.Namespace, dry_run: bool) -> None:
 def _select_terms_dictionary(graph, include_associates: bool):
     """Return the TermDictionary to render for glossary/term-index.
 
-    Primary-only (default) returns the root repo's own terms; federated
-    returns the merged dictionary across all repos. Implements: REQ-d00253-C
+    Federated returns the merged dictionary across all repos. Primary-only
+    (default) returns the root repo's own terms, selected BY the root's own
+    dictionary but taken FROM the merged one: a repo's dictionary records
+    what that repo defines, while the references to a term are established
+    by the federated scan and live on the federation's own entries. Reading
+    the definitions from one and the entry from the other is what lets a
+    primary-only artifact list the root's terms with the references made to
+    them. Implements: REQ-d00253-C
     """
-    if include_associates:
-        return graph.terms if hasattr(graph, "terms") else None
-    # Primary-only: the root repo's own TraceGraph terms.
+    from elspais.graph.terms import TermDictionary
+
+    federated = graph.terms if hasattr(graph, "terms") else None
+    if include_associates or federated is None:
+        return federated
     root = getattr(graph, "root_repo_name", None)
-    if root is not None and hasattr(graph, "iter_repos"):
-        for entry in graph.iter_repos():
-            if entry.name == root and entry.graph is not None:
-                return getattr(entry.graph, "terms", None)
-    # Non-federated graph fallback.
-    return getattr(graph, "terms", None)
+    if root is None or not hasattr(graph, "iter_repos"):
+        return federated
+    for entry in graph.iter_repos():
+        if entry.name != root or entry.graph is None:
+            continue
+        own = getattr(entry.graph, "terms", None)
+        if own is None:
+            return federated
+        selected = TermDictionary()
+        for defined in own.iter_all():
+            selected.add(federated.lookup(defined.term) or defined)
+        return selected
+    return federated
 
 
 def _foreign_namespaces(graph) -> set[str]:

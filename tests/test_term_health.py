@@ -676,12 +676,13 @@ class TestCheckNoTraceability:
     check_no_traceability() itself is a generic path-list formatter (it
     doesn't know or care what kind of file each path came from) -- the
     code-only scoping lives in the *caller* (run_code_checks() now feeds
-    it only CODE-node paths; test files are reported by tests.unlinked
+    it only CODE-node paths; test files are reported by tests.uncited_file
     instead, see test_health_checks_traceability.py). These tests exercise
     the formatter with illustrative code-file paths.
     """
 
     # Verifies: REQ-d00241
+    # Verifies: REQ-d00241-A
     def test_REQ_d00241_A_unlinked_files_fails(self):
         """Files with no traceability markers produce a failing check."""
         unlinked = ["src/utils/helper.py", "src/utils/other.py"]
@@ -696,6 +697,7 @@ class TestCheckNoTraceability:
         assert any("other.py" in f.message for f in result.findings)
 
     # Verifies: REQ-d00241
+    # Verifies: REQ-d00241-A
     def test_REQ_d00241_A_empty_list_passes(self):
         """Empty unlinked list produces a passing check."""
         result = check_no_traceability([])
@@ -705,6 +707,7 @@ class TestCheckNoTraceability:
         assert len(result.findings) == 0
 
     # Verifies: REQ-d00241
+    # Verifies: REQ-d00241-A
     def test_REQ_d00241_A_severity_off_skips(self):
         """severity='off' returns passed/info even with unlinked files."""
         unlinked = ["src/utils/helper.py"]

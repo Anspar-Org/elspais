@@ -37,6 +37,7 @@ def generator(graph):
 class TestBuildNodeIndex:
     """Validates REQ-p00006-A: Node index matches /api/node/ response shape."""
 
+    # Verifies: REQ-p00006-A
     def test_REQ_p00006_A_node_index_has_all_nodes(self, generator, graph):
         """Node index should contain an entry for every node in the graph."""
         index = generator._build_node_index()
@@ -45,6 +46,7 @@ class TestBuildNodeIndex:
         for node in graph.all_nodes():
             assert node.id in index, f"Missing node {node.id} from index"
 
+    # Verifies: REQ-p00006-A
     def test_REQ_p00006_A_node_index_matches_api_shape(self, generator, graph):
         """Each node entry should have the standard API envelope fields."""
         index = generator._build_node_index()
@@ -57,6 +59,7 @@ class TestBuildNodeIndex:
             assert "parents" in data, f"Node {node_id} missing 'parents'"
             assert "properties" in data, f"Node {node_id} missing 'properties'"
 
+    # Verifies: REQ-p00006-A
     def test_REQ_p00006_A_requirement_node_has_correct_properties(self, generator, graph):
         """Requirement nodes should have level, status, hash in properties."""
         from elspais.graph import NodeKind
@@ -74,6 +77,7 @@ class TestBuildNodeIndex:
 class TestBuildCoverageIndex:
     """Validates REQ-p00006-B: Coverage index matches API response shapes."""
 
+    # Verifies: REQ-p00006-B
     def test_REQ_p00006_B_coverage_index_has_all_requirements(self, generator, graph):
         """Coverage index should have an entry for every requirement."""
         from elspais.graph import NodeKind
@@ -82,6 +86,7 @@ class TestBuildCoverageIndex:
         req_count = sum(1 for _ in graph.nodes_by_kind(NodeKind.REQUIREMENT))
         assert len(index) == req_count
 
+    # Verifies: REQ-p00006-B
     def test_REQ_p00006_B_coverage_entry_has_test_and_code(self, generator):
         """Each coverage entry should have 'test' and 'code' sub-dicts."""
         index = generator._build_coverage_index()
@@ -89,6 +94,7 @@ class TestBuildCoverageIndex:
             assert "test" in entry, f"Missing 'test' in coverage for {req_id}"
             assert "code" in entry, f"Missing 'code' in coverage for {req_id}"
 
+    # Verifies: REQ-p00006-B
     def test_REQ_p00006_B_test_coverage_matches_api_shape(self, generator):
         """Test coverage data should have success, assertion_tests, total_pct fields."""
         index = generator._build_coverage_index()
@@ -98,6 +104,7 @@ class TestBuildCoverageIndex:
             assert "assertion_tests" in test_data
             assert "total_pct" in test_data
 
+    # Verifies: REQ-p00006-B
     def test_REQ_p00006_B_code_coverage_matches_api_shape(self, generator):
         """Code coverage data should have success, assertion_code, total_pct fields."""
         index = generator._build_coverage_index()
@@ -111,6 +118,7 @@ class TestBuildCoverageIndex:
 class TestBuildStatusData:
     """Validates REQ-p00006-C: Status data matches /api/status response shape."""
 
+    # Verifies: REQ-p00006-C
     def test_REQ_p00006_C_status_data_has_required_fields(self, generator):
         """Status data should have node_counts, root_count, total_nodes."""
         data = generator._build_status_data()
@@ -118,8 +126,9 @@ class TestBuildStatusData:
         assert "root_count" in data
         assert "total_nodes" in data
         assert "has_orphans" in data
-        assert "has_broken_references" in data
+        assert "has_unresolved_references" in data
 
+    # Verifies: REQ-p00006-C
     def test_REQ_p00006_C_status_node_counts_are_positive(self, generator):
         """Node counts should contain at least requirement entries."""
         data = generator._build_status_data()
@@ -130,6 +139,7 @@ class TestBuildStatusData:
 class TestEmbeddedDataInHTML:
     """Validates REQ-p00006-A: Embedded JSON appears in generated HTML output."""
 
+    # Verifies: REQ-p00006-A
     def test_REQ_p00006_A_html_contains_embedded_json_blocks(self, graph):
         """Generated HTML with embed_content=True should have all JSON script tags."""
         from elspais.html.generator import HTMLGenerator
@@ -144,6 +154,7 @@ class TestEmbeddedDataInHTML:
         assert 'id="coverage-index"' in html
         assert 'id="status-data"' in html
 
+    # Verifies: REQ-p00006-A
     def test_REQ_p00006_A_html_without_embed_has_no_node_index(self, graph):
         """Generated HTML without embed_content should not have node-index."""
         from elspais.html.generator import HTMLGenerator

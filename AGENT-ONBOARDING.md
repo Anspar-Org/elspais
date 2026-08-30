@@ -65,18 +65,34 @@ elspais mcp install             # registers with Claude Code
 elspais mcp install --desktop   # also registers with Claude Desktop
 ```
 
-Or add manually to `.mcp.json`:
+Or add manually to `.mcp.json`. A registration checked into a repository
+cannot name a port, because the address differs per working tree and a
+literal one outlives the daemon that answered on it. It names a variable,
+and the shell that launches the client supplies it:
 
 ```json
 {
   "mcpServers": {
     "elspais": {
-      "command": "elspais",
-      "args": ["mcp", "serve"]
+      "type": "http",
+      "url": "${ELSPAIS_MCP_URL}"
     }
   }
 }
 ```
+
+```shell
+eval "$(elspais mcp env)"   # starts the daemon for this tree, exports its address
+claude
+```
+
+The variable carries no default on purpose. A shell that skipped that step
+gets a missing-variable error naming `ELSPAIS_MCP_URL`, rather than a
+refused connection to an address nothing was ever going to serve.
+
+Use `elspais mcp install --transport stdio` for a client that cannot speak
+http, or one launched by a shell you do not control. See `elspais docs mcp`
+for what a stdio server gives up.
 
 ### Essential MCP Tools
 

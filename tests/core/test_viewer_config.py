@@ -50,6 +50,7 @@ def custom_statuses_config(default_config):
 class TestExtractViewerConfigTypes:
     """Validates REQ-d00211-A: config_types from id_patterns.types."""
 
+    # Verifies: REQ-d00211-A
     def test_REQ_d00211_A_default_types_present(self, default_config):
         """Default config produces prd, ops, dev types."""
         from elspais.server.app import _extract_viewer_config
@@ -60,6 +61,7 @@ class TestExtractViewerConfigTypes:
         assert "ops" in names
         assert "dev" in names
 
+    # Verifies: REQ-d00211-A
     def test_REQ_d00211_A_type_entry_has_name_letter_level(self, default_config):
         """Each type entry must have name, letter, and level keys."""
         from elspais.server.app import _extract_viewer_config
@@ -70,6 +72,7 @@ class TestExtractViewerConfigTypes:
             assert "letter" in entry, f"Missing 'letter' in {entry}"
             assert "level" in entry, f"Missing 'level' in {entry}"
 
+    # Verifies: REQ-d00211-A
     def test_REQ_d00211_A_default_prd_letter_and_level(self, default_config):
         """prd type should have letter='p' and level=1."""
         from elspais.server.app import _extract_viewer_config
@@ -79,6 +82,7 @@ class TestExtractViewerConfigTypes:
         assert prd["letter"] == "p"
         assert prd["level"] == 1
 
+    # Verifies: REQ-d00211-A
     def test_REQ_d00211_A_custom_types_override(self, custom_types_config):
         """Custom types in config override defaults."""
         from elspais.server.app import _extract_viewer_config
@@ -94,6 +98,7 @@ class TestExtractViewerConfigTypes:
 class TestExtractViewerConfigRelationshipKinds:
     """Validates REQ-d00211-B: config_relationship_kinds."""
 
+    # Verifies: REQ-d00211-B
     def test_REQ_d00211_B_default_relationship_kinds(self, default_config):
         """Default config includes implements, refines, satisfies."""
         from elspais.server.app import _extract_viewer_config
@@ -104,6 +109,7 @@ class TestExtractViewerConfigRelationshipKinds:
         assert "refines" in kinds
         assert "satisfies" in kinds
 
+    # Verifies: REQ-d00211-B
     def test_REQ_d00211_B_relationship_kinds_are_strings(self, default_config):
         """All relationship kinds must be strings."""
         from elspais.server.app import _extract_viewer_config
@@ -112,6 +118,7 @@ class TestExtractViewerConfigRelationshipKinds:
         for kind in result["config_relationship_kinds"]:
             assert isinstance(kind, str)
 
+    # Verifies: REQ-d00211-B
     def test_REQ_d00211_B_relationship_kinds_is_list(self, default_config):
         """config_relationship_kinds must be a list."""
         from elspais.server.app import _extract_viewer_config
@@ -123,6 +130,7 @@ class TestExtractViewerConfigRelationshipKinds:
 class TestExtractViewerConfigStatuses:
     """Validates REQ-d00211-C: config_statuses from the declared status roles."""
 
+    # Verifies: REQ-d00211-C
     def test_REQ_d00211_C_empty_config_returns_default_statuses(self):
         """Empty config should return sensible default statuses."""
         from elspais.server.app import _extract_viewer_config
@@ -133,6 +141,7 @@ class TestExtractViewerConfigStatuses:
         # With empty config, should still return a list (possibly empty or defaults)
         assert len(statuses) >= 0
 
+    # Verifies: REQ-d00211-C
     def test_REQ_d00211_C_custom_statuses(self, custom_statuses_config):
         """The statuses a project declares in its roles are returned."""
         from elspais.server.app import _extract_viewer_config
@@ -143,6 +152,7 @@ class TestExtractViewerConfigStatuses:
         assert "Closed" in statuses
         assert "Review" in statuses
 
+    # Verifies: REQ-d00211-C
     def test_REQ_d00211_C_result_has_all_keys(self, default_config):
         """Return dict must have all three expected keys."""
         from elspais.server.app import _extract_viewer_config
@@ -183,13 +193,14 @@ class TestIndexRouteStatusOrdering:
         from elspais.server.state import AppState
 
         (tmp_path / ".elspais.toml").write_text(
-            'version = 3\n[project]\nname = "test"\nnamespace = "REQ"\n'
+            'version = 5\n[project]\nname = "test"\nnamespace = "REQ"\n'
             '[levels.prd]\nrank = 1\nletter = "p"\nimplements = ["prd"]\n'
         )
         state = AppState.from_config(repo_root=tmp_path)
         state.config = config
         return state
 
+    # Verifies: REQ-d00211-D
     def test_REQ_d00211_D_statuses_sorted_by_role_not_alphabetically(
         self, role_ordered_config, tmp_path
     ):
@@ -240,6 +251,7 @@ class TestIndexRouteStatusOrdering:
             "Alphabetical sort would yield ['Aretired', 'Zactive']."
         )
 
+    # Verifies: REQ-d00211-D
     def test_REQ_d00211_D_default_roles_active_before_retired(self, default_config, tmp_path):
         """With default roles, Active appears before Deprecated in template statuses."""
         from elspais.server.routes_ui import index

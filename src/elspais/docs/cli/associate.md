@@ -119,7 +119,7 @@ the `Integrates:` keyword:
 ```
 
 `Integrates:` is external-only -- the target must resolve to an associate
-repo (a same-repo target is a broken reference), the library is never
+repo (a same-repo target is an unresolved reference), the library is never
 modified and contains no reference back, and the consumer inherits the
 library requirement's implemented/verified coverage. See
 `elspais docs graph-model` (INTEGRATES edge) and `elspais docs format`.
@@ -142,8 +142,9 @@ def test_scheduling_window(): ...
 
 Each repository keeps its own identifier configuration; the scan simply
 applies every member's grammar and reads the reference under the grammar of
-the repository that owns it. Test function names work the same way in
-underscore notation (`def test_window_CAL_d00007_B()`).
+the repository that owns it. A comment is the only thing that names a
+requirement -- a test function's own name never does, in any repository of
+the federation.
 
 An unresolved reference is always reported, carrying the text as written
 rather than being dropped. Which report it lands in depends on whether any
@@ -165,10 +166,11 @@ federation and does not have it.
 would own it. That is `references.unknown_namespace`, reported at the
 severity the project configures in `[rules.references].unknown_namespace`
 (`info` by default) — a sibling repository that has not been written yet is
-advisory to one project and a build failure to another. Set it to `"ok"` to
-silence expected cross-repository references entirely.
+advisory to one project and a build failure to another. Set it to `"off"` to
+silence expected cross-repository references entirely — the check then reports
+as skipped and lists nothing.
 
-List both with `elspais broken`. A requirement with no evidence and a
+List both with `elspais unresolved`. A requirement with no evidence and a
 requirement whose evidence could not be resolved otherwise read identically in
 every report.
 

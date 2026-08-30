@@ -37,7 +37,7 @@ The `fix` command automatically corrects:
 
 **Not fixable (report only):**
 
-- Broken references to non-existent requirements
+- Unresolved references to non-existent requirements
 - Orphaned requirements (no parent)
 - Hierarchy violations
 
@@ -86,7 +86,7 @@ See `elspais docs config` for the full `[federation]` reference.
   **Stale hash** (content changed)
     Fix: $ elspais fix (after reviewing changes)
 
-  **Broken link** (implements non-existent requirement)
+  **Unresolved link** (implements non-existent requirement)
     Fix: Correct the ID or create the missing requirement
 
   **Hierarchy violation** (PRD implements DEV)
@@ -142,20 +142,31 @@ once:
 **Implements**: REQ-p00001-A+B, REQ-p00002
 ```
 
-A target holding anything else -- a note after the reference, prose around
-it, an identifier from another estate that merely contains one of yours --
-resolves to nothing and is reported as an unresolved reference carrying the
-line as written. No identifier is picked out of it: an edge to a
-requirement you never named would be evidence filed against the wrong
-requirement, and nothing would report it.
+The list ends at the first thing that is not a reference, a comma or
+whitespace. What the author wrote before that is read; what follows is left
+over and binds nothing. So a note needs no marker to be a note -- though a
+marker reads the same way:
 
 ```text
-# Implements: REQ-p00001 -- the flag path        (a note is not a reference)
-# Verifies: exit code is worst-of-all (REQ-p00001-C)   (prose is not a list)
-# Implements: XREQ-d00001                        (not your REQ-d00001)
+# Implements: REQ-p00001 the flag path           (binds REQ-p00001; the words are left over)
+# Implements: REQ-p00001  # the flag path        (the same reading, with a marker)
 ```
 
-Put the note on the line below, and the line above stays a reference.
+A target that does not START with a reference resolves to nothing and is
+reported, carrying the line as written. No identifier is picked out of the
+middle of it: an edge to a requirement you never named would be evidence
+filed against the wrong requirement, and nothing would report it. Nor is a
+reference read out of a word that runs on past it.
+
+```text
+# Verifies: exit code is worst-of-all (REQ-p00001-C)   (prose is not a list)
+# Implements: XREQ-d00001                        (not your REQ-d00001)
+# Implements: REQ-p00001--A                      (one word; the identifier never ended)
+```
+
+Left-over content that names a requirement is reported as an undeclared
+relationship, so a second requirement written after the list has ended is
+visible rather than silently dropped.
 
 ## JSON Output
 

@@ -65,6 +65,7 @@ class TestCommentAdd:
     persists it, updates the index, and returns the event. Missing text -> 400.
     """
 
+    # Verifies: REQ-d00231-A
     def test_REQ_d00231_A_add_comment(self, tmp_path: Path) -> None:
         """POST with anchor + text returns 200 with success=True and comment fields."""
         client, _ = _make_app(tmp_path)
@@ -83,6 +84,7 @@ class TestCommentAdd:
         assert comment["event"] == "comment"
         assert "id" in comment
 
+    # Verifies: REQ-d00231-A
     def test_REQ_d00231_A_add_comment_missing_text(self, tmp_path: Path) -> None:
         """POST with anchor but no text returns 400."""
         client, _ = _make_app(tmp_path)
@@ -94,6 +96,7 @@ class TestCommentAdd:
             )
         assert resp.status_code == 400
 
+    # Verifies: REQ-d00231-A
     def test_REQ_d00231_A_add_comment_missing_anchor(self, tmp_path: Path) -> None:
         """POST with text but no anchor returns 400."""
         client, _ = _make_app(tmp_path)
@@ -116,6 +119,7 @@ class TestCommentReply:
     existing thread and returns the reply event. Missing parent -> 404.
     """
 
+    # Verifies: REQ-d00231-B
     def test_REQ_d00231_B_reply_to_comment(self, tmp_path: Path) -> None:
         """Add a comment then reply with parent_id; reply returns 200 with parent set."""
         client, _ = _make_app(tmp_path)
@@ -142,6 +146,7 @@ class TestCommentReply:
         assert reply["text"] == "I agree"
         assert reply["event"] == "reply"
 
+    # Verifies: REQ-d00231-B
     def test_REQ_d00231_B_reply_missing_parent(self, tmp_path: Path) -> None:
         """Reply with nonexistent parent_id returns 404."""
         client, _ = _make_app(tmp_path)
@@ -164,6 +169,7 @@ class TestCommentResolve:
     the index, persists a resolve event, and returns success. Missing comment -> 404.
     """
 
+    # Verifies: REQ-d00231-C
     def test_REQ_d00231_C_resolve_comment(self, tmp_path: Path) -> None:
         """Add a comment then resolve it; returns 200."""
         client, _ = _make_app(tmp_path)
@@ -186,6 +192,7 @@ class TestCommentResolve:
         data = resolve_resp.json()
         assert data["success"] is True
 
+    # Verifies: REQ-d00231-C
     def test_REQ_d00231_C_resolve_missing_comment(self, tmp_path: Path) -> None:
         """Resolve with nonexistent comment_id returns 404."""
         client, _ = _make_app(tmp_path)
@@ -208,6 +215,7 @@ class TestCommentRead:
     GET /api/comments/orphaned query endpoints.
     """
 
+    # Verifies: REQ-d00231-D
     def test_REQ_d00231_D_get_comments_by_anchor(self, tmp_path: Path) -> None:
         """Add a comment then GET /api/comments?anchor=REQ-p00001%23A returns threads."""
         client, _ = _make_app(tmp_path)
@@ -226,6 +234,7 @@ class TestCommentRead:
         assert len(data["threads"]) >= 1
         assert data["threads"][0]["root"]["anchor"] == "REQ-p00001#A"
 
+    # Verifies: REQ-d00231-D
     def test_REQ_d00231_D_get_comments_for_card(self, tmp_path: Path) -> None:
         """Add comments then GET /api/comments/card?node_id=REQ-p00001 returns grouped."""
         client, _ = _make_app(tmp_path)
@@ -250,6 +259,7 @@ class TestCommentRead:
         assert "REQ-p00001" in threads
         assert "REQ-p00001#A" in threads
 
+    # Verifies: REQ-d00231-D
     def test_REQ_d00231_D_get_orphaned_comments(self, tmp_path: Path) -> None:
         """GET /api/comments/orphaned returns empty list on fresh setup."""
         client, _ = _make_app(tmp_path)
@@ -270,6 +280,7 @@ class TestAuthorServerSide:
     never from client-submitted data.
     """
 
+    # Verifies: REQ-d00231-E
     def test_REQ_d00231_E_author_resolved_server_side(self, tmp_path: Path) -> None:
         """Add comment with client-supplied author; verify stored author matches mock."""
         client, _ = _make_app(tmp_path)

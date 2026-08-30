@@ -91,6 +91,7 @@ class TestMoveNodeToFile:
     Validates REQ-o00063: move_node_to_file mutation with undo support.
     """
 
+    # Verifies: REQ-o00063-A
     def test_REQ_o00063_A_move_requirement_to_different_file(self):
         """REQ-o00063-A: Move requirement changes its FILE parent."""
         graph = build_two_file_graph()
@@ -102,6 +103,7 @@ class TestMoveNodeToFile:
 
         assert req.file_node().id == make_file_id(NAMESPACE, "spec/other.md")
 
+    # Verifies: REQ-o00063-A
     def test_REQ_o00063_A_move_requirement_undo(self):
         """REQ-o00063-A: Undo restores requirement to original file with render_order."""
         graph = build_two_file_graph()
@@ -214,6 +216,7 @@ class TestRenameFile:
     Validates REQ-o00063: rename_file mutation with undo support.
     """
 
+    # Verifies: REQ-o00063-A
     def test_REQ_o00063_A_rename_file(self):
         """REQ-o00063-A: Rename updates FILE node ID, index, and path fields."""
         graph = build_two_file_graph()
@@ -228,6 +231,7 @@ class TestRenameFile:
         # Path field updated
         assert node.get_field("relative_path") == "spec/renamed.md"
 
+    # Verifies: REQ-o00063-A
     def test_REQ_o00063_A_rename_file_undo(self):
         """REQ-o00063-A: Undo restores original file ID and paths."""
         graph = build_two_file_graph()

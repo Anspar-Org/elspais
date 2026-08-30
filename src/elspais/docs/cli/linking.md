@@ -1,6 +1,6 @@
 # LINKING REQUIREMENTS TO CODE AND TESTS
 
-Linking connects your requirements to the code that implements them and the tests that validate them. elspais scans your source files for specific comment patterns and test naming conventions, then builds a traceability graph showing what is covered and what is not.
+Linking connects your requirements to the code that implements them and the tests that validate them. elspais scans your source files for one comment form -- a keyword, a colon and a list of references -- then builds a traceability graph showing what is covered and what is not.
 
 ## Code Linking
 
@@ -21,15 +21,67 @@ function hashPassword(plain) { ... }
 CREATE PROCEDURE hash_password ...
 ```
 
-HTML and CSS use block comments:
+## Comment Patterns
 
-```html
-<!-- Implements: REQ-d00001-A -->
-```
+Every scannable file type is associated with exactly ONE comment pattern,
+drawn from this named set. A *Traceability* keyword is read only in a comment
+opened by that file's own pattern. A double dash introduces a reference in SQL
+and is arithmetic in Python; a hash introduces one in Python and is nothing in
+JavaScript.
+
+<!-- generated: comment-patterns -->
+<!-- Rendered from the program's own definitions; edits here are overwritten. Regenerate: python -m elspais.utilities.doc_tables -->
+
+| Name | Marker | Extensions | Whole file names |
+| --- | --- | --- | --- |
+| `c-like` | `//` | `.c` `.cc` `.cjs` `.cpp` `.cs` `.cxx` `.dart` `.go` `.h` `.hpp` `.java` `.js` `.jsx` `.kt` `.kts` `.less` `.mjs` `.php` `.proto` `.rs` `.scala` `.scss` `.swift` `.ts` `.tsx` `.zig` | -- |
+| `shell-like` | `#` | `.bash` `.cmake` `.dockerfile` `.ex` `.exs` `.hcl` `.jl` `.ksh` `.mk` `.nix` `.pl` `.pm` `.ps1` `.py` `.r` `.rb` `.sh` `.tf` `.tfvars` `.toml` `.yaml` `.yml` `.zsh` | `containerfile` `dockerfile` |
+| `function-like` | `--` | `.ada` `.adb` `.ads` `.elm` `.hs` `.lua` `.sql` `.vhd` `.vhdl` | -- |
+| `lisp-like` | `;` | `.clj` `.cljc` `.cljs` `.edn` `.el` `.lisp` `.lsp` `.rkt` `.scm` `.ss` | -- |
+| `math-like` | `%` | `.cls` `.erl` `.hrl` `.sty` `.tex` | -- |
+| `basic-like` | `'` | `.bas` `.frm` `.vb` `.vbs` | -- |
+| `jinja-like` | `{#` | `.j2` | -- |
+
+A whole file name is matched without regard to case: `Dockerfile`,
+`dockerfile` and `DOCKERFILE` are one file type.
+<!-- /generated: comment-patterns -->
+
+This decides WHERE a reference may be written, never WHAT it may say. The
+identifier grammar is one set of rules in every context that accepts a
+reference -- a Python comment, a SQL comment and a spec metadata line all
+admit exactly the same targets. There are no per-file reference overrides.
+
+### Block comments carry no reference
+
+Block comment forms -- `/* ... */` and `<!-- ... -->` -- are NOT supported for
+linking. A *Traceability* keyword written inside one is never read:
 
 ```css
-/* Implements: REQ-d00001-A */
+/* Implements: REQ-d00001-A */   <-- NOT read. CSS has no line comment.
 ```
+
+```html
+<!-- Implements: REQ-d00001-A -->   <-- NOT read.
+```
+
+A language whose only comment form is a block therefore has no reference form
+at all. `.css`, `.html`, `.xml` and `.svg` are in that position, and are
+associated with no pattern above. A Jinja template that RENDERS to one of them
+is a different matter -- see below.
+
+### Extensions outside the set
+
+An extension the set does not name has no comment pattern, so no keyword in
+that file is read anywhere. This is deliberately the restrictive answer:
+guessing a marker would bind references off the strength of a shape. `.m`
+(MATLAB `%` vs Objective-C `//`) and `.s` (assembler dialects disagree) are
+left out for exactly that reason -- they cannot name ONE pattern.
+
+A template (`.j2`) is `c-like` whatever it renders to -- `viewer.js.j2`,
+`page.css.j2` and `conf.yml.j2` all annotate with `//`. A template is one
+scannable file type, so it carries one pattern; reading the suffix beneath it
+would give it several, and would silence the annotations in every template
+rendering to a block-comment language.
 
 Multiple requirements on one line:
 
@@ -55,44 +107,22 @@ separator and continue on the next comment line:
 The separator is what says the list has not ended. Without it, the first line
 is a complete list and anything below it is a citation with no keyword of its
 own -- reported as an undeclared relationship (`references.undeclared`),
-never as part of the list above it and never as a broken reference.
+never as part of the list above it and never as an unresolved reference.
 
-### Legacy: block header
+A list is continued this way and no other. Nothing outside a keyword's own
+list declares a relationship: an indented identifier written beneath a
+keyword line the separator did not continue is reported as an undeclared
+relationship (`references.undeclared`) and produces nothing.
 
-```python
-# IMPLEMENTS REQUIREMENTS:
-#   REQ-d00001-A
-#   REQ-d00002-B
-```
+## Test Linking
 
-This form still parses. The colon is required and the word is plural. Nothing
-emits it; prefer the continuation form above.
+A test is linked by a comment above it, in exactly the form code uses. A
+test function's NAME declares nothing, however it is spelled -- a test called
+`test_REQ_d00001_A_hashes_with_bcrypt` is linked to `REQ-d00001-A` only if a
+comment above it says so.
 
-## Test Linking -- Function Names
-
-Include requirement IDs in test function names using underscores:
-
-```python
-def test_REQ_d00001_A_hashes_with_bcrypt():
-    assert hash_password("secret").startswith("$2b$")
-```
-
-The parser extracts `REQ-d00001-A` from the function name. Any text before or after the ID is ignored.
-
-Test class methods work the same way:
-
-```python
-class TestPasswordHashing:
-    """Validates REQ-d00001-A: password hashing"""
-
-    def test_REQ_d00001_A_uses_bcrypt(self): ...
-```
-
-## Test Linking -- Comments
-
-The three recognized keywords (`Implements`, `Verifies`, `Refines`) all
-create a VERIFIES edge when used in test files. The recommended keyword
-is `Verifies:`:
+The recommended keyword in a test file is `Verifies:`, and it is the only one
+a test file admits; `Implements:` and `Refines:` are read there and refused.
 
 ```python
 # Verifies: REQ-d00001-A
@@ -104,14 +134,15 @@ def test_password_hashing(): ...
 def test_full_auth_flow(): ...
 ```
 
-The colon is optional for all keywords.
+The colon is required, and it must abut the keyword: `# Verifies : REQ-d00001-A`
+is prose.
 
 > **Note:** Indented reference comments are supported.  Both column-0 and
 > indented placements work:
 >
 > ```python
 > class TestAuth:
->     # Implements: REQ-d00001-A
+>     # Verifies: REQ-d00001-A
 >     def test_hashing(self):
 >         ...
 > ```
@@ -119,7 +150,7 @@ The colon is optional for all keywords.
 A comment placed before any function definition applies to the entire file:
 
 ```python
-# Tests: REQ-d00001
+# Verifies: REQ-d00001
 # All tests in this file validate password security
 
 
@@ -143,11 +174,12 @@ using the `+` separator:
 This expands to three separate references:
   `REQ-d00001-A`, `REQ-d00001-B`, `REQ-d00001-C`
 
-Works in all link comment contexts: `Implements:`, `Refines:`, `Tests:`.
+Works wherever a keyword introduces a reference list.
 
 > **Configuration:** The multi-assertion separator defaults to `+` and can be
-> changed via `references.defaults.multi_assertion_separator` in `.elspais.toml`.
-> Set to `""` to disable compact syntax.
+> changed via `multi_separator` under `[id-patterns.assertions]` in
+> `.elspais.toml`. It is exactly one character; there is no value of it that
+> turns the compact form off.
 
 ## Indirect Coverage
 
@@ -161,7 +193,7 @@ def hash_password(plain: str) -> str: ...
 
 ```python
 # tests/test_auth.py
-# Tests: REQ-d00001-A
+# Verifies: REQ-d00001-A
 def test_hashing():
     result = hash_password("secret")
     assert result.startswith("$2b$")
@@ -178,9 +210,9 @@ Indirect coverage is tracked separately from direct coverage. Use `elspais viewe
   that produces pass/fail result output (e.g., benchmarks). Do not
   use `Refines:` in code files.
 
-  **Test files**: Use `# Verifies: REQ-xxx` or embed the ID in the
-  function name (`test_REQ_xxx`). This is the only valid keyword in
-  test files.
+  **Test files**: Use `# Verifies: REQ-xxx`. It is the only valid
+  keyword in a test file, and a comment is the only thing that links a
+  test -- its name never does.
 
   **Spec files**: Use `Implements:` for child requirements that fully
   satisfy a parent. Use `Refines:` when a requirement adds detail to
@@ -203,8 +235,7 @@ When writing tests, use Verifies (not Implements):
   # Verifies: REQ-xxx-Y
   def test_description():
 
-Or include the requirement ID in the function name:
-  def test_REQ_xxx_Y_description():
+A test function's name links nothing. Only the comment does.
 
 Use multi-assertion syntax for compact references:
   # Implements: REQ-xxx-A+B+C  (in code files)
@@ -234,9 +265,26 @@ configured, so a reference written some other way is reported rather than
 quietly resolved.
 
 The keyword that introduces a reference in a test file is
-`scanning.test.reference_keyword` (default `Verifies`). Comment styles are not
-configurable: `#`, `//` and `--` introduce a reference, and a keyword inside a
-block comment is not read.
+`scanning.test.reference_keyword` (default `Verifies`). Comment patterns are NOT
+configurable: each file type is associated with exactly one, from the named set
+above, and a keyword inside a block comment is not read.
+
+Where the list *ends* needs no knowledge of the language. A reference list is
+identifiers, separators and whitespace, so it ends at the first content that is
+none of those. `# Implements: REQ-d00001-A  # the only place this happens` binds
+`REQ-d00001-A` and leaves the rest out of the list, and so does
+`// Implements: REQ-d00001-A -- why` in a `.js` file: the double dash is
+content the list is not made of, whatever it means in that language.
+
+Everything from where the list ended is left over. It binds nothing. Where it
+names a requirement, it is reported as an undeclared relationship, since a
+requirement named without a keyword declares nothing; where it names none, it
+is prose and nothing is reported.
+
+The reference is read only where the first whitespace-delimited word IS that
+reference. `REQ-d00001--A` is one word, so the identifier never ended: it is
+reported as a reference written wrongly rather than read as `REQ-d00001`
+followed by something else.
 
 See `elspais docs config` for the full configuration reference.
 
@@ -260,8 +308,12 @@ before an *Assertion* label, `+` between labels), and the repository holds
 | `# Implements: REQ-d00001+A` | malformed | `E_WRONG_ASSERTION_SEPARATOR` |
 | `# Implements: REQ-d00001-A-B` | malformed | `E_WRONG_MULTI_SEPARATOR` |
 | `# Implements: REQ-d00001-1` | malformed | `E_LABEL_OUT_OF_SERIES` |
+| `# Implements: REQ-d123456` | malformed | `E_COMPONENT_OUT_OF_RANGE` |
 | `# Implements: REQ-d00001-AB` | malformed | `E_IDENTIFIER_WITH_TRAILING_TEXT` |
-| `# Implements: REQ-d00001 (A, C)` | malformed | `E_NOT_AN_IDENTIFIER` on the first item; the second reads as a name no repository claims |
+| `# Implements: REQ-d00001 (A, C)` | — | binds `REQ-d00001`; the list ends at `(A`, and `(A, C)` names no requirement |
+| `# Implements: REQ-d00001-A - one environment` | — | binds `REQ-d00001-A`; the rest names no requirement |
+| `# Implements: REQ-d00001-A + B` | — | binds `REQ-d00001-A`; the spaced `+ B` is not part of the list |
+| `# Implements: REQ-d00001-A # why` | — | binds `REQ-d00001-A`; the rest is left over |
 | `# Implements: REQ-d00001,,REQ-d00002` | malformed | `E_EMPTY_ITEM` |
 | `# Implements: REQ-d00001,` (nothing follows) | malformed | `E_TRAILING_SEPARATOR` |
 | `# Implements:` | malformed | `E_EMPTY_REFERENCE_LIST` |
@@ -280,6 +332,19 @@ before an *Assertion* label, `+` between labels), and the repository holds
 The `forbidden` class covers every reference that reads and resolves and whose
 relationship is refused anyway. Its description says only what is true of all
 of them; which refusal it was is the finding's code.
+
+Where the code names a defect in how the reference was spelled, the report
+also carries a sentence naming what the code alone cannot: which separators
+this repository configures, and — for content the grammar could not account
+for — where the reference ended and the leftover began. A reference that was
+spelled correctly and simply names nothing this graph holds carries no such
+sentence, because there is nothing about its spelling to describe.
+
+`E_COMPONENT_OUT_OF_RANGE` is the value being wrong rather than the spelling:
+five configured digits bound the component at 99999, and no amount of
+repadding makes 123456 fit. It is reported instead of a padding or
+trailing-text code precisely because those would name a defect the author does
+not have.
 
 `E_SYNTAX_ERROR` accompanies every reported fault. Carried *alone* it is the
 report that nothing more specific is known — the tool declining to guess, not

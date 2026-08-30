@@ -124,6 +124,7 @@ def _annotators_of(graph, req_id: str, label: str) -> set[str]:
 class TestSiblingIdentifiersAreRecognised:
     """REQ-d00269-C -- any member's identifier, in any member's annotations."""
 
+    # Verifies: REQ-d00269-C
     def test_REQ_d00269_C_code_annotation_wires_to_a_sibling_requirement(self, tmp_path):
         consumer = _federation(
             tmp_path,
@@ -136,8 +137,9 @@ class TestSiblingIdentifiersAreRecognised:
         annotators = _annotators_of(library, "BBB-d00002", "A")
         assert len(annotators) == 1
         assert next(iter(annotators)).startswith("code:")
-        assert federated.broken_references() == []
+        assert federated.unresolved_references() == []
 
+    # Verifies: REQ-d00269-C
     def test_REQ_d00269_C_test_annotation_wires_to_a_sibling_requirement(self, tmp_path):
         consumer = _federation(
             tmp_path,
@@ -148,8 +150,9 @@ class TestSiblingIdentifiersAreRecognised:
         library = federated._repos["b"].graph
 
         assert _annotators_of(library, "BBB-d00002", "B") == {"test:tests/test_x.py::test_foreign"}
-        assert federated.broken_references() == []
+        assert federated.unresolved_references() == []
 
+    # Verifies: REQ-d00269-C
     def test_REQ_d00269_C_sibling_and_local_references_coexist(self, tmp_path):
         """One annotation naming both a sibling's identifier and a local one.
 
@@ -166,18 +169,41 @@ class TestSiblingIdentifiersAreRecognised:
         assert len(_annotators_of(federated._repos["b"].graph, "BBB-d00002", "A")) == 1
         assert len(_annotators_of(federated._repos["d"].graph, "DDD-d00005", "A")) == 1
 
-    def test_REQ_d00269_C_test_name_names_a_sibling_identifier(self, tmp_path):
-        """A test function name is an annotation, spelled in underscores."""
+    # Verifies: REQ-d00269-C, REQ-d00269-B
+    def test_REQ_d00269_C_a_whole_requirement_sibling_reference_carries_no_labels(self, tmp_path):
+        """A sibling reference naming no *Assertion* wires an edge naming none.
+
+        The two tests above name an *Assertion* of the sibling, so the edge
+        they produce carries a label. This one names the requirement itself,
+        which is the other shape a reference can take -- and a
+        cross-repository edge must carry the same shape as the equivalent
+        same-repository one, labels included (REQ-d00269-B). Inventing a
+        label here would credit *Assertions* nobody cited; dropping the edge
+        would lose evidence the author did write.
+        """
         consumer = _federation(
             tmp_path,
-            tests="def test_logging_BBB_d00002_B():\n    assert True\n",
+            tests="# Verifies: BBB-d00002\ndef test_logging():\n    assert True\n",
         )
 
         federated = build_graph(repo_root=consumer)
+        library = federated._repos["b"].graph
+        requirement = library.find_by_id("BBB-d00002")
+        assert requirement is not None
 
-        assert len(_annotators_of(federated._repos["b"].graph, "BBB-d00002", "B")) == 1
-        assert federated.broken_references() == []
+        verifiers = [
+            edge for edge in requirement.iter_outgoing_edges() if edge.kind is EdgeKind.VERIFIES
+        ]
+        assert [edge.target.id for edge in verifiers] == ["test:tests/test_x.py::test_logging"]
+        assert list(verifiers[0].assertion_targets) == [], (
+            f"a whole-requirement reference names no label; got {verifiers[0].assertion_targets!r}"
+        )
+        # The label-scoped view stays empty: no *Assertion* was cited, so
+        # none is credited as though one had been.
+        assert _annotators_of(library, "BBB-d00002", "B") == set()
+        assert federated.unresolved_references() == []
 
+    # Verifies: REQ-d00269-C
     def test_REQ_d00269_C_sibling_reference_is_normalized_by_its_owner(self, tmp_path):
         """The claiming repository's grammar decides what the reference means.
 
@@ -195,12 +221,13 @@ class TestSiblingIdentifiersAreRecognised:
         federated = build_graph(repo_root=consumer)
 
         assert len(_annotators_of(federated._repos["b"].graph, "BBB-d00002", "A")) == 1
-        assert federated.broken_references() == []
+        assert federated.unresolved_references() == []
 
 
 class TestALoneRepositoryIsUnchanged:
     """Widening the grammar is scoped to the federation that asked for it."""
 
+    # Verifies: REQ-d00269-C
     def test_REQ_d00269_C_lone_repository_does_not_claim_foreign_identifier(self, tmp_path):
         consumer = _federation(
             tmp_path,
@@ -212,8 +239,9 @@ class TestALoneRepositoryIsUnchanged:
 
         assert [entry.name for entry in federated.iter_repos()] == ["d"]
         # Per REQ-d00269-D, the reference is reported rather than resolved.
-        assert [br.target_id for br in federated.broken_references()] == ["BBB-d00002-A"]
+        assert [br.target_id for br in federated.unresolved_references()] == ["BBB-d00002-A"]
 
+    # Verifies: REQ-d00269-C
     def test_REQ_d00269_C_lone_repository_scans_its_own_annotations_unchanged(self, tmp_path):
         consumer = _federation(
             tmp_path,
@@ -231,6 +259,7 @@ class TestALoneRepositoryIsUnchanged:
 class TestUnresolvableReferencesAreReported:
     """REQ-d00269-D -- the diagnostic floor beneath cross-repository credit."""
 
+    # Verifies: REQ-d00269-D
     def test_REQ_d00269_D_unclaimed_reference_carries_its_raw_text(self, tmp_path):
         consumer = _federation(
             tmp_path,
@@ -239,11 +268,12 @@ class TestUnresolvableReferencesAreReported:
 
         federated = build_graph(repo_root=consumer)
 
-        broken = federated.broken_references()
+        broken = federated.unresolved_references()
         assert [br.target_id for br in broken] == ["ZZZ-d09999-A"]
         assert broken[0].edge_kind == "implements"
         assert broken[0].source_id.startswith("code:")
 
+    # Verifies: REQ-d00269-D
     def test_REQ_d00269_D_an_unresolvable_test_reference_is_reported(self, tmp_path):
         consumer = _federation(
             tmp_path,
@@ -252,10 +282,11 @@ class TestUnresolvableReferencesAreReported:
 
         federated = build_graph(repo_root=consumer)
 
-        broken = federated.broken_references()
+        broken = federated.unresolved_references()
         assert [br.target_id for br in broken] == ["ZZZ-d09999-B"]
         assert broken[0].edge_kind == "verifies"
 
+    # Verifies: REQ-d00269-D
     def test_REQ_d00269_D_malformed_local_reference_is_reported(self, tmp_path):
         """The namespace is the repository's own; the rest of it is not an ID."""
         consumer = _federation(
@@ -265,9 +296,10 @@ class TestUnresolvableReferencesAreReported:
 
         federated = build_graph(repo_root=consumer)
 
-        assert [br.target_id for br in federated.broken_references()] == ["DDD-nonsense"]
+        assert [br.target_id for br in federated.unresolved_references()] == ["DDD-nonsense"]
 
     # Verifies: REQ-d00269-E
+    # Verifies: REQ-d00269-D
     def test_REQ_d00269_D_prose_in_the_reference_position_is_still_a_reference(self, tmp_path):
         """Position decides, so prose written where a reference belongs is one.
 
@@ -282,7 +314,7 @@ class TestUnresolvableReferencesAreReported:
 
         federated = build_graph(repo_root=consumer)
 
-        assert [br.target_id for br in federated.broken_references()] == [
+        assert [br.target_id for br in federated.unresolved_references()] == [
             "the caching strategy described above"
         ]
         assert [node.id for node in federated._repos["d"].graph.iter_by_kind(NodeKind.CODE)] != []
@@ -301,5 +333,5 @@ def _census(federated, repo_name: str) -> tuple:
         for node in graph._index.values()
         for edge in node.iter_outgoing_edges()
     )
-    broken = sorted(str(br) for br in graph.broken_references())
+    broken = sorted(str(br) for br in graph.unresolved_references())
     return (nodes, edges, broken)

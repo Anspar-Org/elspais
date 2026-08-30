@@ -158,6 +158,7 @@ def cursor_state(cursor_graph):
 class TestCursorState:
     """Validates REQ-d00076-A: CursorState stores query, params, batch_size, items, position."""
 
+    # Verifies: REQ-d00076-A
     def test_REQ_d00076_A_cursor_state_fields(self):
         """REQ-d00076-A: CursorState fields with position default 0."""
         from elspais.mcp.server import CursorState
@@ -184,6 +185,7 @@ class TestCursorState:
 class TestOpenCursor:
     """Validates REQ-o00068-A, REQ-o00068-D, REQ-d00076-C, REQ-d00076-D: Opening cursors."""
 
+    # Verifies: REQ-o00068-A
     def test_REQ_o00068_A_open_cursor_returns_first_item(self, cursor_state):
         """REQ-o00068-A: Open cursor returns non-None current with id."""
         from elspais.mcp.server import _open_cursor
@@ -199,6 +201,7 @@ class TestOpenCursor:
         assert result["current"] is not None
         assert "id" in result["current"]
 
+    # Verifies: REQ-d00076-D
     def test_REQ_d00076_D_open_cursor_returns_metadata(self, cursor_state):
         """REQ-d00076-D: Response has all required metadata fields."""
         from elspais.mcp.server import _open_cursor
@@ -222,6 +225,7 @@ class TestOpenCursor:
         assert result["position"] == 1
         assert result["remaining"] == result["total"] - 1
 
+    # Verifies: REQ-o00068-D
     def test_REQ_o00068_D_new_cursor_replaces_previous(self, cursor_state):
         """REQ-o00068-D: Open two cursors sequentially, verify second replaces first."""
         from elspais.mcp.server import _open_cursor
@@ -242,6 +246,7 @@ class TestOpenCursor:
 
         assert cursor_state["cursor"].query == "search"
 
+    # Verifies: REQ-d00076-C
     def test_REQ_d00076_C_cursor_stored_in_state(self, cursor_state):
         """REQ-d00076-C: After open_cursor, state['cursor'] is a CursorState instance."""
         from elspais.mcp.server import CursorState, _open_cursor
@@ -256,6 +261,7 @@ class TestOpenCursor:
         assert "cursor" in cursor_state
         assert isinstance(cursor_state["cursor"], CursorState)
 
+    # Verifies: REQ-o00068-A
     def test_REQ_o00068_A_open_cursor_empty_results(self, cursor_state):
         """REQ-o00068-A: Open cursor with non-existent root_id, verify current is None, total=0."""
         from elspais.mcp.server import _open_cursor
@@ -280,6 +286,7 @@ class TestOpenCursor:
 class TestCursorNext:
     """Validates REQ-o00068-B, REQ-d00076-E: Advancing cursor."""
 
+    # Verifies: REQ-o00068-B
     def test_REQ_o00068_B_cursor_next_returns_items(self, cursor_state):
         """REQ-o00068-B: Open cursor, call next(count=1), verify returns 1 item."""
         from elspais.mcp.server import _cursor_next, _open_cursor
@@ -297,6 +304,7 @@ class TestCursorNext:
         assert result["count"] == 1
         assert len(result["items"]) == 1
 
+    # Verifies: REQ-d00076-E
     def test_REQ_d00076_E_cursor_next_advances_position(self, cursor_state):
         """REQ-d00076-E: After next(count=2), position advances by 2."""
         from elspais.mcp.server import _cursor_next, _open_cursor
@@ -315,6 +323,7 @@ class TestCursorNext:
 
         assert cursor_state["cursor"].position == pos_before + 2
 
+    # Verifies: REQ-d00076-E
     def test_REQ_d00076_E_cursor_next_at_end_returns_empty(self, cursor_state):
         """REQ-d00076-E: Advance past all items, verify empty items list."""
         from elspais.mcp.server import _cursor_next, _open_cursor
@@ -337,6 +346,7 @@ class TestCursorNext:
         assert result["count"] == 0
         assert result["remaining"] == 0
 
+    # Verifies: REQ-o00068-B
     def test_REQ_o00068_B_cursor_next_no_active_cursor(self, cursor_state):
         """REQ-o00068-B: Call next without opening, verify error message."""
         from elspais.mcp.server import _cursor_next
@@ -356,6 +366,7 @@ class TestCursorNext:
 class TestCursorInfo:
     """Validates REQ-o00068-C, REQ-d00076-F: Cursor info without advancing."""
 
+    # Verifies: REQ-o00068-C
     def test_REQ_o00068_C_cursor_info_returns_position(self, cursor_state):
         """REQ-o00068-C: Open cursor, call info, verify position/total/remaining match."""
         from elspais.mcp.server import _cursor_info, _open_cursor
@@ -374,6 +385,7 @@ class TestCursorInfo:
         assert info_result["total"] == open_result["total"]
         assert info_result["remaining"] == open_result["remaining"]
 
+    # Verifies: REQ-d00076-F
     def test_REQ_d00076_F_cursor_info_does_not_advance(self, cursor_state):
         """REQ-d00076-F: Call info twice, position unchanged."""
         from elspais.mcp.server import _cursor_info, _open_cursor
@@ -392,6 +404,7 @@ class TestCursorInfo:
         assert info1["total"] == info2["total"]
         assert info1["remaining"] == info2["remaining"]
 
+    # Verifies: REQ-d00076-F
     def test_REQ_d00076_F_cursor_info_includes_query_metadata(self, cursor_state):
         """REQ-d00076-F: Verify response has 'query' and 'batch_size' fields."""
         from elspais.mcp.server import _cursor_info, _open_cursor
@@ -408,6 +421,7 @@ class TestCursorInfo:
         assert info["query"] == "subtree"
         assert info["batch_size"] == 5
 
+    # Verifies: REQ-o00068-C
     def test_REQ_o00068_C_cursor_info_no_active_cursor(self, cursor_state):
         """REQ-o00068-C: Call info without opening, verify error."""
         from elspais.mcp.server import _cursor_info
@@ -430,6 +444,7 @@ class TestMaterializeCursorItems:
     Query dispatch and batch_size reshaping.
     """
 
+    # Verifies: REQ-o00068-F
     def test_REQ_o00068_F_materialize_subtree_query(self, cursor_graph):
         """REQ-o00068-F: query='subtree' with root_id, verify returns non-empty list."""
         from elspais.mcp.server import _materialize_cursor_items
@@ -446,6 +461,7 @@ class TestMaterializeCursorItems:
         # First item should be the root requirement
         assert items[0]["id"] == "REQ-p00001"
 
+    # Verifies: REQ-o00068-F
     def test_REQ_o00068_F_materialize_search_query(self, cursor_graph):
         """REQ-o00068-F: query='search' with query='Security', verify returns matching items."""
         from elspais.mcp.server import _materialize_cursor_items
@@ -463,6 +479,7 @@ class TestMaterializeCursorItems:
         for item in items:
             assert "security" in item["title"].lower()
 
+    # Verifies: REQ-o00068-F
     def test_REQ_o00068_F_materialize_hierarchy_query(self, cursor_graph):
         """REQ-o00068-F: query='hierarchy' with req_id, verify returns items with _section keys."""
         from elspais.mcp.server import _materialize_cursor_items
@@ -481,6 +498,7 @@ class TestMaterializeCursorItems:
             assert "_section" in item
             assert item["_section"] in ("ancestor", "child")
 
+    # Verifies: REQ-o00068-F
     def test_REQ_o00068_F_materialize_unknown_query(self, cursor_graph):
         """REQ-o00068-F: query='unknown', verify returns empty list."""
         from elspais.mcp.server import _materialize_cursor_items
@@ -494,6 +512,7 @@ class TestMaterializeCursorItems:
 
         assert items == []
 
+    # Verifies: REQ-o00068-E
     def test_REQ_o00068_E_batch_size_minus_one_assertions_first_class(self, cursor_graph):
         """REQ-o00068-E: batch_size=-1 emits assertions as items."""
         from elspais.mcp.server import _materialize_cursor_items
@@ -514,6 +533,7 @@ class TestMaterializeCursorItems:
         for req_item in req_items:
             assert "assertions" not in req_item
 
+    # Verifies: REQ-o00068-E
     def test_REQ_o00068_E_batch_size_zero_assertions_inline(self, cursor_graph):
         """REQ-o00068-E: batch_size=0 inlines assertions and coverage."""
         from elspais.mcp.server import _materialize_cursor_items
@@ -535,6 +555,7 @@ class TestMaterializeCursorItems:
             assert "coverage" in req_item
             assert isinstance(req_item["coverage"], dict)
 
+    # Verifies: REQ-o00068-E
     def test_REQ_o00068_E_batch_size_one_with_children(self, cursor_graph):
         """REQ-o00068-E: batch_size=1, subtree query: requirement items have 'children' list."""
         from elspais.mcp.server import _materialize_cursor_items
@@ -551,6 +572,7 @@ class TestMaterializeCursorItems:
         assert "children" in root_item
         assert isinstance(root_item["children"], list)
 
+    # Verifies: REQ-d00076-G
     def test_REQ_d00076_G_reuses_existing_serializers(self, cursor_graph):
         """REQ-d00076-G: Items match existing serializer output."""
         from elspais.mcp.server import _materialize_cursor_items
@@ -582,6 +604,7 @@ class TestMaterializeCursorItems:
 class TestCursorFullWorkflow:
     """Validates REQ-o00068-A through REQ-o00068-C: Complete cursor lifecycle."""
 
+    # Verifies: REQ-o00068-A
     def test_REQ_o00068_A_full_iteration_lifecycle(self, cursor_state):
         """REQ-o00068-A: Full open->info->iterate->end lifecycle."""
         from elspais.mcp.server import _cursor_info, _cursor_next, _open_cursor

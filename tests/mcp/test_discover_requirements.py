@@ -129,6 +129,7 @@ class TestDiscoverRequirementsChaining:
     Validates REQ-d00079-A, REQ-d00079-B, REQ-d00079-C, REQ-d00079-D:
     """
 
+    # Verifies: REQ-o00071-B
     def test_REQ_o00071_B_chaining_prunes_ancestor(self, discover_graph):
         """REQ-o00071-B: Chaining scoped_search -> minimize prunes OPS-auth
         because DEV-login and DEV-token are more specific descendants."""
@@ -144,6 +145,7 @@ class TestDiscoverRequirementsChaining:
         # OPS-auth is pruned (ancestor of both DEV nodes)
         assert "OPS-auth" not in result_ids
 
+    # Verifies: REQ-d00079-A
     def test_REQ_d00079_A_scoped_search_then_minimize(self, discover_graph):
         """REQ-d00079-A: Calls _scoped_search(), extracts IDs, passes to
         _minimize_requirement_set()."""
@@ -157,6 +159,7 @@ class TestDiscoverRequirementsChaining:
         assert result["stats"]["minimal_count"] == 2
         assert result["stats"]["pruned_count"] == 1
 
+    # Verifies: REQ-d00079-B
     def test_REQ_d00079_B_result_structure(self, discover_graph):
         """REQ-d00079-B: Returns {results, pruned, scope_id, direction, stats}."""
         from elspais.mcp.server import _discover_requirements
@@ -172,6 +175,7 @@ class TestDiscoverRequirementsChaining:
         assert result["scope_id"] == "PRD-root"
         assert result["direction"] == "descendants"
 
+    # Verifies: REQ-o00071-A
     def test_REQ_o00071_A_minimal_set_items_have_summary_format(self, discover_graph):
         """REQ-o00071-A: Minimal set items use scoped_search summary format
         (id, title, level, status)."""
@@ -199,6 +203,7 @@ class TestDiscoverRequirementsPruning:
     Validates REQ-d00079-A, REQ-d00079-B, REQ-d00079-C, REQ-d00079-D:
     """
 
+    # Verifies: REQ-o00071-C
     def test_REQ_o00071_C_pruned_ancestors_have_superseded_by(self, discover_graph):
         """REQ-o00071-C: Pruned ancestors include superseded_by list of
         more-specific descendants that replaced them."""
@@ -214,6 +219,7 @@ class TestDiscoverRequirementsPruning:
         superseding = set(pruned_entry["superseded_by"])
         assert superseding == {"DEV-login", "DEV-token"}
 
+    # Verifies: REQ-d00079-B
     def test_REQ_d00079_B_pruned_count_in_stats(self, discover_graph):
         """REQ-d00079-B: Stats include accurate pruned_count."""
         from elspais.mcp.server import _discover_requirements
@@ -223,6 +229,7 @@ class TestDiscoverRequirementsPruning:
         assert "error" not in result
         assert result["stats"]["pruned_count"] == 1
 
+    # Verifies: REQ-o00071-B
     def test_REQ_o00071_B_pruned_entry_has_summary_fields(self, discover_graph):
         """REQ-o00071-B: Pruned entries contain requirement summary fields
         (id, title, level, status) plus superseded_by."""
@@ -251,6 +258,7 @@ class TestDiscoverRequirementsPassThrough:
     Validates REQ-d00079-A, REQ-d00079-B, REQ-d00079-C, REQ-d00079-D:
     """
 
+    # Verifies: REQ-o00071-A
     def test_REQ_o00071_A_disjoint_results_pass_through(self, discover_graph):
         """REQ-o00071-A: When search results have no ancestor relationships,
         all pass through to the minimal set unchanged."""
@@ -270,6 +278,7 @@ class TestDiscoverRequirementsPassThrough:
         assert result["stats"]["minimal_count"] == 3
         assert result["stats"]["pruned_count"] == 0
 
+    # Verifies: REQ-d00079-A
     def test_REQ_d00079_A_empty_scoped_search_returns_empty(self, discover_graph):
         """REQ-d00079-A: Empty results from scoped_search propagate as empty."""
         from elspais.mcp.server import _discover_requirements
@@ -285,6 +294,7 @@ class TestDiscoverRequirementsPassThrough:
         assert result["stats"]["minimal_count"] == 0
         assert result["stats"]["pruned_count"] == 0
 
+    # Verifies: REQ-o00071-D
     def test_REQ_o00071_D_scope_not_found_returns_error(self, discover_graph):
         """REQ-o00071-D: Returns error dict when scope_id does not exist."""
         from elspais.mcp.server import _discover_requirements
@@ -294,6 +304,7 @@ class TestDiscoverRequirementsPassThrough:
         assert "error" in result
         assert "not found" in result["error"]
 
+    # Verifies: REQ-d00079-C
     def test_REQ_d00079_C_matched_assertions_preserved_on_minimal_set(self, discover_graph):
         """REQ-d00079-C: matched_assertions from scoped_search are preserved
         on items that survive minimization."""
@@ -321,6 +332,7 @@ class TestDiscoverRequirementsPassThrough:
         assert len(entry["matched_assertions"]) == 1
         assert entry["matched_assertions"][0]["id"] == "OPS-auth-A"
 
+    # Verifies: REQ-d00079-C
     def test_REQ_d00079_C_matched_assertions_survive_pruning(self, discover_graph):
         """REQ-d00079-C: When a result with matched_assertions survives pruning,
         the matched_assertions metadata is fully preserved."""
@@ -343,6 +355,7 @@ class TestDiscoverRequirementsPassThrough:
         assertion_ids = {a["id"] for a in entry["matched_assertions"]}
         assert assertion_ids == {"OPS-auth-A", "OPS-auth-B"}
 
+    # Verifies: REQ-o00071-A
     def test_REQ_o00071_A_single_result_passes_through(self, discover_graph):
         """REQ-o00071-A: Single result always passes through unchanged."""
         from elspais.mcp.server import _discover_requirements
@@ -372,6 +385,7 @@ class TestDiscoverRequirementsMCPTool:
     Validates REQ-d00079-D:
     """
 
+    # Verifies: REQ-d00079-D
     def test_REQ_d00079_D_tool_is_registered(self, discover_graph):
         """REQ-d00079-D: discover_requirements is registered as an MCP tool."""
         pytest.importorskip("mcp")
@@ -382,6 +396,7 @@ class TestDiscoverRequirementsMCPTool:
         tool_names = [t.name for t in server._tool_manager._tools.values()]
         assert "discover_requirements" in tool_names
 
+    # Verifies: REQ-d00079-D
     def test_REQ_d00079_D_wrapper_delegates_to_helper(self, discover_graph):
         """REQ-d00079-D: MCP wrapper delegates to _discover_requirements helper."""
         pytest.importorskip("mcp")
@@ -411,6 +426,7 @@ class TestDiscoverRequirementsMCPTool:
             assert call_args[0][1] == "test query"
             assert call_args[0][2] == "OPS-auth"
 
+    # Verifies: REQ-d00079-D
     def test_REQ_d00079_D_wrapper_parses_edge_kinds(self, discover_graph):
         """REQ-d00079-D: MCP wrapper parses edge_kinds string before delegating."""
         pytest.importorskip("mcp")
@@ -435,6 +451,7 @@ class TestDiscoverRequirementsMCPTool:
             parsed_kinds = mock_helper.call_args[0][8]  # edge_kinds is 9th positional arg
             assert parsed_kinds == {EdgeKind.IMPLEMENTS}
 
+    # Verifies: REQ-d00079-D
     def test_REQ_d00079_D_wrapper_passes_all_parameters(self, discover_graph):
         """REQ-d00079-D: MCP wrapper passes all parameters through to helper."""
         pytest.importorskip("mcp")

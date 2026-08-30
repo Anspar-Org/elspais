@@ -117,6 +117,7 @@ class TestModifyTitle:
     title in the spec file header line.
     """
 
+    # Verifies: REQ-o00063-G
     def test_REQ_o00063_G_modify_title_happy_path(self, spec_file: Path):
         """Title is replaced in the header line."""
         result = modify_title(spec_file, "REQ-t00001", "Updated Title")
@@ -129,6 +130,7 @@ class TestModifyTitle:
         assert "## REQ-t00001: Updated Title" in content
         assert "## REQ-t00001: Test Requirement" not in content
 
+    # Verifies: REQ-o00063-G
     def test_REQ_o00063_G_modify_title_dry_run(self, spec_file: Path):
         """dry_run=True returns result without modifying the file."""
         result = modify_title(spec_file, "REQ-t00001", "New Title", dry_run=True)
@@ -141,18 +143,21 @@ class TestModifyTitle:
         assert "## REQ-t00001: Test Requirement" in content
         assert "New Title" not in content
 
+    # Verifies: REQ-o00063-G
     def test_REQ_o00063_G_modify_title_req_not_found(self, spec_file: Path):
         """Non-existent requirement returns error."""
         result = modify_title(spec_file, "REQ-z99999", "New Title")
         assert result["success"] is False
         assert "not found" in result["error"]
 
+    # Verifies: REQ-o00063-G
     def test_REQ_o00063_G_modify_title_no_change(self, spec_file: Path):
         """Same title returns no_change=True without rewriting."""
         result = modify_title(spec_file, "REQ-t00001", "Test Requirement")
         assert result["success"] is True
         assert result.get("no_change") is True
 
+    # Verifies: REQ-o00063-G
     def test_REQ_o00063_G_modify_title_preserves_surrounding(self, two_req_file: Path):
         """Modifying title of one requirement does not affect another."""
         result = modify_title(two_req_file, "REQ-t00001", "Changed First")
@@ -164,6 +169,7 @@ class TestModifyTitle:
         # Ensure the second requirement's body is intact
         assert "**Hash**: bbbb2222" in content
 
+    # Verifies: REQ-o00063-G
     def test_REQ_o00063_G_modify_title_unicode(self, tmp_path: Path):
         """Non-ASCII characters are preserved in the new title."""
         spec = tmp_path / "unicode.md"
@@ -191,6 +197,7 @@ class TestModifyAssertionText:
     assertions.
     """
 
+    # Verifies: REQ-o00063-H
     def test_REQ_o00063_H_modify_assertion_happy_path(self, spec_file: Path):
         """Assertion text is replaced within the requirement block."""
         result = modify_assertion_text(
@@ -205,6 +212,7 @@ class TestModifyAssertionText:
         assert "A. The system SHALL do something new." in content
         assert "A. The system SHALL do something." not in content
 
+    # Verifies: REQ-o00063-H
     def test_REQ_o00063_H_modify_assertion_dry_run(self, spec_file: Path):
         """dry_run=True returns result without modifying the file."""
         result = modify_assertion_text(spec_file, "REQ-t00001", "A", "New text.", dry_run=True)
@@ -215,18 +223,21 @@ class TestModifyAssertionText:
         assert "A. The system SHALL do something." in content
         assert "New text." not in content
 
+    # Verifies: REQ-o00063-H
     def test_REQ_o00063_H_modify_assertion_req_not_found(self, spec_file: Path):
         """Non-existent requirement returns error."""
         result = modify_assertion_text(spec_file, "REQ-z99999", "A", "New text.")
         assert result["success"] is False
         assert "not found" in result["error"]
 
+    # Verifies: REQ-o00063-H
     def test_REQ_o00063_H_modify_assertion_label_not_found(self, spec_file: Path):
         """Non-existent assertion label returns error."""
         result = modify_assertion_text(spec_file, "REQ-t00001", "Z", "New text.")
         assert result["success"] is False
         assert "Assertion Z not found" in result["error"]
 
+    # Verifies: REQ-o00063-H
     def test_REQ_o00063_H_modify_assertion_no_change(self, spec_file: Path):
         """Same text returns no_change=True."""
         result = modify_assertion_text(
@@ -235,6 +246,7 @@ class TestModifyAssertionText:
         assert result["success"] is True
         assert result.get("no_change") is True
 
+    # Verifies: REQ-o00063-H
     def test_REQ_o00063_H_modify_second_assertion(self, spec_file: Path):
         """Modifying assertion B leaves assertion A intact."""
         result = modify_assertion_text(
@@ -247,6 +259,7 @@ class TestModifyAssertionText:
         assert "A. The system SHALL do something." in content
         assert "B. The system SHALL do a new thing." in content
 
+    # Verifies: REQ-o00063-H
     def test_REQ_o00063_H_modify_multiline_assertion(self, multiline_file: Path):
         """Multi-line assertion text (with continuation lines) is fully replaced."""
         result = modify_assertion_text(
@@ -264,6 +277,7 @@ class TestModifyAssertionText:
         # Assertion B should be intact
         assert "B. The system SHALL do a simple thing." in content
 
+    # Verifies: REQ-o00063-H
     def test_REQ_o00063_H_modify_assertion_preserves_other_req(self, two_req_file: Path):
         """Modifying assertion in one requirement does not affect another."""
         result = modify_assertion_text(two_req_file, "REQ-t00001", "A", "Changed first assertion.")
@@ -287,6 +301,7 @@ class TestAddAssertionToFile:
     assertion after the last existing assertion in the Assertions section.
     """
 
+    # Verifies: REQ-o00063-I
     def test_REQ_o00063_I_add_assertion_happy_path(self, spec_file: Path):
         """New assertion is inserted after the last existing assertion."""
         result = add_assertion_to_file(
@@ -303,6 +318,7 @@ class TestAddAssertionToFile:
         c_pos = content.index("C. The system SHALL do a third thing.")
         assert c_pos > b_pos
 
+    # Verifies: REQ-o00063-I
     def test_REQ_o00063_I_add_assertion_dry_run(self, spec_file: Path):
         """dry_run=True returns result without modifying the file."""
         result = add_assertion_to_file(spec_file, "REQ-t00001", "C", "New assertion.", dry_run=True)
@@ -312,12 +328,14 @@ class TestAddAssertionToFile:
         content = spec_file.read_text(encoding="utf-8")
         assert "C. New assertion." not in content
 
+    # Verifies: REQ-o00063-I
     def test_REQ_o00063_I_add_assertion_req_not_found(self, spec_file: Path):
         """Non-existent requirement returns error."""
         result = add_assertion_to_file(spec_file, "REQ-z99999", "A", "Text.")
         assert result["success"] is False
         assert "not found" in result["error"]
 
+    # Verifies: REQ-o00063-I
     def test_REQ_o00063_I_add_assertion_no_assertions_section(self, tmp_path: Path):
         """Requirement with no ## Assertions section returns error."""
         spec = tmp_path / "no_assertions.md"
@@ -332,6 +350,7 @@ class TestAddAssertionToFile:
         assert result["success"] is False
         assert "No ## Assertions section" in result["error"]
 
+    # Verifies: REQ-o00063-I
     def test_REQ_o00063_I_add_assertion_preserves_surrounding(self, two_req_file: Path):
         """Adding assertion to first requirement does not affect second."""
         result = add_assertion_to_file(two_req_file, "REQ-t00001", "C", "A third assertion.")
@@ -343,6 +362,7 @@ class TestAddAssertionToFile:
         assert "## REQ-t00002: Second Requirement" in content
         assert "**Hash**: bbbb2222" in content
 
+    # Verifies: REQ-o00063-I
     def test_REQ_o00063_I_add_assertion_after_multiline(self, multiline_file: Path):
         """New assertion is inserted after multi-line assertion properly."""
         result = add_assertion_to_file(
@@ -357,6 +377,7 @@ class TestAddAssertionToFile:
         c_pos = content.index("C. A new assertion after multiline.")
         assert c_pos > b_pos
 
+    # Verifies: REQ-o00063-I
     def test_REQ_o00063_I_add_assertion_unicode(self, tmp_path: Path):
         """Non-ASCII text in assertion is preserved."""
         spec = tmp_path / "unicode.md"

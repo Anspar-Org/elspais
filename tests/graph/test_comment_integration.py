@@ -33,6 +33,7 @@ def _make_thread(anchor, cid="c1"):
 class TestTraceGraphComments:
     """Validates REQ-d00230-A: TraceGraph comment delegate methods."""
 
+    # Verifies: REQ-d00230-A
     def test_REQ_d00230_A_empty_graph_has_no_comments(self):
         """An empty TraceGraph has zero comments and no orphans."""
         graph = TraceGraph()
@@ -41,6 +42,7 @@ class TestTraceGraphComments:
         assert list(graph.iter_comments("REQ-p00001#A")) == []
         assert list(graph.iter_orphaned_comments()) == []
 
+    # Verifies: REQ-d00230-A
     def test_REQ_d00230_A_graph_with_comment_index(self):
         """Setting a CommentIndex on TraceGraph makes delegates work."""
         graph = TraceGraph()
@@ -55,6 +57,7 @@ class TestTraceGraphComments:
         assert len(threads) == 1
         assert threads[0].root.id == "c1"
 
+    # Verifies: REQ-d00230-A
     def test_REQ_d00230_A_orphaned_comments(self):
         """Orphaned threads are returned by iter_orphaned_comments."""
         graph = TraceGraph()
@@ -113,17 +116,20 @@ class TestFederatedGraphComments:
         )
         return fed
 
+    # Verifies: REQ-d00230-B
     def test_REQ_d00230_B_routes_to_correct_repo(self):
         """Comment queries route to the owning repo based on anchor prefix."""
         fed = self._build_federated()
         assert fed.comment_count("REQ-p00001#A") == 1
         assert fed.comment_count("REQ-d00001#B") == 1
 
+    # Verifies: REQ-d00230-B
     def test_REQ_d00230_B_unknown_anchor_returns_zero(self):
         """Unknown anchor returns zero comment count."""
         fed = self._build_federated()
         assert fed.comment_count("REQ-p99999#A") == 0
 
+    # Verifies: REQ-d00230-B
     def test_REQ_d00230_B_orphaned_aggregates_across_repos(self):
         """Orphaned comments are aggregated across all repos."""
         fed = self._build_federated()
@@ -131,6 +137,7 @@ class TestFederatedGraphComments:
         assert len(orphans) == 1
         assert orphans[0].root.id == "c3"
 
+    # Verifies: REQ-d00230-B
     def test_REQ_d00230_B_has_comments(self):
         """has_comments returns True for existing, False for non-existing."""
         fed = self._build_federated()
@@ -141,6 +148,7 @@ class TestFederatedGraphComments:
 class TestRenameHooks:
     """Validates REQ-d00230-C: rename_node and rename_assertion update comment anchors."""
 
+    # Verifies: REQ-d00230-C
     def test_REQ_d00230_C_rename_node_updates_comment_anchors(self, tmp_path):
         """rename_node calls update_anchors_on_rename for comment consistency."""
         graph = TraceGraph(repo_root=tmp_path)
@@ -165,6 +173,7 @@ class TestRenameHooks:
         assert graph.has_comments("REQ-p00002#A")
         assert not graph.has_comments("REQ-p00001#A")
 
+    # Verifies: REQ-d00230-C
     def test_REQ_d00230_C_rename_assertion_updates_comment_anchors(self, tmp_path):
         """rename_assertion calls update_anchors_on_rename for comment consistency."""
         from elspais.graph.relations import EdgeKind
@@ -230,12 +239,14 @@ class TestFederatedRepoRootFor:
             ],
         )
 
+    # Verifies: REQ-d00230-D
     def test_REQ_d00230_D_repo_root_for_known_node(self):
         """repo_root_for returns correct Path for a known node."""
         fed = self._build_federated()
         assert fed.repo_root_for("REQ-p00001") == Path("/r1")
         assert fed.repo_root_for("REQ-d00001") == Path("/r2")
 
+    # Verifies: REQ-d00230-D
     def test_REQ_d00230_D_repo_root_for_unknown_node(self):
         """repo_root_for returns None for an unknown node."""
         fed = self._build_federated()

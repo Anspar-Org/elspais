@@ -32,6 +32,7 @@ _CSS_DIR = (
 _STANDING_VAL_COLORS = ["green", "yellow", "red", "grey"]
 
 
+# Verifies: REQ-d00258-H
 @pytest.mark.parametrize("val_color", _STANDING_VAL_COLORS)
 def test_REQ_d00258_H_status_badge_has_fill_rule_for_each_standing_color(val_color):
     css = (_CSS_DIR / "_status-badges.css.j2").read_text()
@@ -43,6 +44,7 @@ def test_REQ_d00258_H_status_badge_has_fill_rule_for_each_standing_color(val_col
     )
 
 
+# Verifies: REQ-d00258-H
 @pytest.mark.parametrize("val_color", _STANDING_VAL_COLORS)
 def test_REQ_d00258_H_assertion_badge_has_fill_rule_for_each_standing_color(val_color):
     # The per-assertion badges must stay in parity with the requirement badges so

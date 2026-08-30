@@ -126,7 +126,7 @@ class TestExampleCommand:
         config_file = tmp_path / ".elspais.toml"
         config_file.write_text(
             """
-version = 3
+version = 5
 
 [project]
 name = "test"
@@ -298,7 +298,7 @@ class TestExampleTemplateContent:
         for block in blocks:
             config = tmp_path / ".elspais.toml"
             config.write_text(
-                'version = 4\n[project]\nname = "x"\nnamespace = "REQ"\n'
+                'version = 5\n[project]\nname = "x"\nnamespace = "REQ"\n'
                 '[levels.prd]\nrank = 1\nletter = "p"\nimplements = ["prd"]\n' + block,
                 encoding="utf-8",
             )

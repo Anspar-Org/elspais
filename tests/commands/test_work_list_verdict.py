@@ -22,7 +22,7 @@ from pathlib import Path
 import pytest
 
 from elspais.commands.gaps import collect_gaps
-from elspais.commands.health import check_uat_coverage
+from elspais.commands.health import check_unvalidated_requirements
 from elspais.config import load_config
 from elspais.graph.factory import build_graph
 
@@ -31,7 +31,7 @@ _JOURNEY_UAT_FIX = Path(__file__).parents[1] / "fixtures" / "journey-uat"
 # A project whose `prd` level expects validation, so the UAT branch of both
 # surfaces is live (REQ-d00258-F).
 _UAT_CONFIG = """
-version = 3
+version = 5
 
 [project]
 name = "work-list-verdict"
@@ -161,7 +161,7 @@ def test_gaps_and_health_agree_about_a_blanket_journey(uat_project) -> None:
         "REQ-p00001-B",
     ]
 
-    check = check_uat_coverage(graph, set(), cfg)
+    check = check_unvalidated_requirements(graph, cfg)
     findings = [f for f in check.findings if f.node_id == "REQ-p00001"]
     assert len(findings) == 1, "health must report the requirement gaps lists"
     assert f"assertion(s) {', '.join(labels)}" in findings[0].message
@@ -251,7 +251,7 @@ def test_partial_uat_verification_is_uncovered_and_keeps_its_fraction(
 # --- The relative denominator on the implemented/tested chain --------------
 
 _CHAIN_CONFIG = """
-version = 3
+version = 5
 
 [project]
 name = "work-list-chain"

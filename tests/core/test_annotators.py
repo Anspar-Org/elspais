@@ -29,6 +29,7 @@ from tests.core.graph_test_helpers import (
 class TestAnnotateGitState:
     """Tests for annotate_git_state function."""
 
+    # Verifies: REQ-d00050-E
     def test_REQ_d00050_E_git_state_is_idempotent(self):
         """REQ-d00050-E: Annotator functions SHALL be idempotent."""
         node = GraphNode(
@@ -175,6 +176,7 @@ class TestAnnotateGitState:
 class TestAnnotateDisplayInfo:
     """Tests for annotate_display_info function."""
 
+    # Verifies: REQ-d00050-E
     def test_REQ_d00050_E_display_info_is_idempotent(self):
         """REQ-d00050-E: Annotator functions SHALL be idempotent."""
         node = GraphNode(
@@ -396,6 +398,7 @@ class TestCollectTopics:
 class TestAggregateIterationBehavior:
     """Tests for REQ-d00051-F: Aggregate functions iteration behavior."""
 
+    # Verifies: REQ-d00051-F
     def test_REQ_d00051_F_count_by_level_uses_all_nodes(self):
         """REQ-d00051-F: count_by_level SHALL NOT duplicate iteration."""
         graph = build_graph(
@@ -413,6 +416,7 @@ class TestAggregateIterationBehavior:
         total = sum(counts1["all"].values())
         assert total == 3
 
+    # Verifies: REQ-d00051-F
     def test_REQ_d00051_F_count_by_repo_uses_all_nodes(self):
         """REQ-d00051-F: count_by_repo SHALL NOT duplicate iteration."""
         graph = build_graph(
@@ -429,6 +433,7 @@ class TestAggregateIterationBehavior:
 
         assert counts1 == counts2
 
+    # Verifies: REQ-d00051-F
     def test_REQ_d00051_F_collect_topics_uses_all_nodes(self):
         """REQ-d00051-F: collect_topics SHALL NOT duplicate iteration."""
         graph = build_graph(

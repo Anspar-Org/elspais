@@ -23,7 +23,7 @@ from elspais.graph.metrics import integrates_rollup
 from elspais.graph.relations import EdgeKind
 from tests.federation_repos import _git, make_repo
 
-LIB_TOML = """version = 3
+LIB_TOML = """version = 5
 
 [project]
 name = "lib"
@@ -41,7 +41,7 @@ implements = ["prd", "dev"]
 enabled = true
 """
 
-APP_TOML = """version = 3
+APP_TOML = """version = 5
 
 [project]
 name = "app"
@@ -342,7 +342,7 @@ def test_foreign_reference_is_not_left_broken(federated):
     app_graph = federated._repos["app"].graph
     unresolved = {
         (b.source_id, b.target_id)
-        for b in app_graph._broken_references
+        for b in app_graph._unresolved_references
         if b.target_id.startswith("LIB-")
     }
     assert unresolved == set()
@@ -363,7 +363,7 @@ def test_cross_repo_nodes_are_reachable_from_the_library_requirement(federated):
 # Crediting policy at a repository boundary
 # ─────────────────────────────────────────────────────────────────────────────
 
-POLICY_LIB_TOML = """version = 3
+POLICY_LIB_TOML = """version = 5
 
 [project]
 name = "plib"
@@ -381,7 +381,7 @@ implements = ["prd", "dev"]
 enabled = true
 """
 
-POLICY_APP_TOML = """version = 3
+POLICY_APP_TOML = """version = 5
 
 [project]
 name = "papp"

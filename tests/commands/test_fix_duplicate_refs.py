@@ -30,7 +30,7 @@ A. The system SHALL allow it.
 """
 
 CONFIG_TOML = """\
-version = 3
+version = 5
 
 [project]
 name = "test-fix-duplicate-refs"

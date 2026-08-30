@@ -19,10 +19,13 @@ resolve from the main repo, not the worktree location.
 ## Complete Configuration Reference
 
 ```toml
-# .elspais.toml - Full configuration reference (v4)
+# .elspais.toml - Full configuration reference (v5)
 
-# Config schema version (defaults to 4)
-version = 4
+# Config schema version. A file declaring any other version is refused,
+# naming each setting that has to change and what to write instead — an
+# out-of-date configuration is never upgraded in place. Omitting the line
+# is accepted; the settings themselves are checked either way.
+version = 5
 
 # MCP tool usage statistics file path (optional, or set ELSPAIS_STATS env var)
 stats = ""
@@ -184,7 +187,7 @@ line, a code or test comment, a journey.
 
 `/` is the form authors most often reach for when it is not the configured
 separator, so it is detected in every context: with the settings above,
-`Implements: REQ-p00001/A` is reported as a broken reference rather than
+`Implements: REQ-p00001/A` is reported as an unresolved reference rather than
 quietly read as a whole-requirement reference (which would credit every
 assertion of `REQ-p00001`, not just `A`). Configure `separator = "/"` if that
 is the form your authors should write. On a requirement's metadata line, any
@@ -197,6 +200,21 @@ malformed reference is reported, not just this one.
 # Each kind (spec, code, test, result, journey, docs) has its own sub-section
 # with directories, file_patterns, skip_files, and skip_dirs.
 # The global `skip` list applies to all kinds.
+#
+# Selection means the same thing for every kind, and is decided only here:
+#   1. `directories` says where to look.
+#   2. The ignore configuration (`[scanning].skip` plus that kind's own
+#      `skip_files`/`skip_dirs`) excludes. An excluded file is never read
+#      and is never reported on.
+#   3. `file_patterns` selects, from what is left, the files to scan. A
+#      pattern is matched against the file's name and against its path
+#      relative to the scanned directory; it never reaches outside
+#      `directories`. Patterns are fnmatch globs: `*` matches across `/`
+#      and `**` is not special, so `*.sql` reaches any depth while
+#      `database/**/*.sql` does NOT match `database/schema.sql`.
+# An empty `file_patterns` means that kind's built-in defaults, not "no
+# files". A file that survives step 2, matches nothing in step 3, and carries
+# a *Traceability* keyword anyway is reported rather than passed over.
 #──────────────────────────────────────────────────────────────────────────────
 
 [scanning]
@@ -222,6 +240,15 @@ index_file = "INDEX.md"
 # Code scanning (for REQ references in source code)
 [scanning.code]
 directories = ["src", "apps", "packages"]
+# The defaults are a common subset, not every language the tool can read a
+# keyword in: a comment pattern exists for many extensions these patterns do
+# not name (`.cs`, `.php`, `.toml`, `.clj`, `.tex`, `.hs` and more), and
+# `.css` is scanned though its only comment form is a block, which carries no
+# keyword. Name the extensions your project actually uses. Container image
+# files are covered (`Dockerfile`, `*.Dockerfile`, `Containerfile`).
+# `elspais init` writes the list out in full; an empty list means those same
+# defaults. The full set of comment patterns is `elspais docs linking`.
+file_patterns = []
 source_roots = []          # Optional: root directories for import resolution
 
 # Test file scanning
@@ -407,7 +434,7 @@ values = ["id", "title", "status", "implemented", "tested", "verified"]
 # Associates also enable top-down `Integrates: <ASSOCIATE-REQ>` references:
 # a consumer requirement declares that its implementation is provided by a
 # requirement in a linked library. It is external-only (the target must
-# resolve to an associate; a same-repo target is a broken reference), the
+# resolve to an associate; a same-repo target is an unresolved reference), the
 # library is never modified, and the consumer inherits the library
 # requirement's implemented/verified coverage via an INTEGRATES edge wired
 # during federation. See `elspais docs graph-model`.
@@ -548,10 +575,11 @@ provisional = ["Draft", "Proposed"]
 aspirational = ["Roadmap", "Future", "Idea"]
 retired = ["Deprecated", "Superseded", "Rejected"]
 
-# Severity of the reference checks. Each value is "ok", "info", "warning"
-# or "error"; "ok" reports the finding without failing the run. Each class
-# is how far reading a reference got before it failed -- never a later
-# class than the one it reached.
+# Severity of the reference checks. Each value is "off", "info", "warning"
+# or "error"; "off" stops reporting the class here (the check shows as
+# skipped and lists nothing), and "info" reports the findings without
+# failing the run. Each class is how far reading a reference got before it
+# failed -- never a later class than the one it reached.
 #   retired/provisional/aspirational -- a reference resolves, but to a
 #     requirement whose status makes the link stale or premature.
 #   malformed -- the text never read as a reference at all.
@@ -559,7 +587,7 @@ retired = ["Deprecated", "Superseded", "Rejected"]
 #     identifier no configured repository claims. A sibling repository
 #     that has not yet authored the requirement is advisory to one project
 #     and a build failure to another, so the level is yours to pick; set
-#     it to "ok" to silence expected cross-repository references entirely.
+#     it to "off" to silence expected cross-repository references entirely.
 #   unknown_requirement -- a configured repository's grammar claims the
 #     identifier, but it names no requirement that repository holds.
 #   unknown_assertion -- the requirement exists, but not that label.
@@ -569,7 +597,7 @@ retired = ["Deprecated", "Superseded", "Rejected"]
 #     the same target more than once.
 #   keyword_form -- a keyword written in a non-canonical case, spacing, or
 #     markdown-emphasis form. Never costs the edge its keyword introduces;
-#     a style finding, not a broken reference.
+#     a style finding, not an unresolved reference.
 #   identifier_form -- a reference spelled in a form the configuration
 #     admits that is not the canonical one (case, padding, an alias).
 #     Never costs the relationship it names; a style finding, like
@@ -577,7 +605,8 @@ retired = ["Deprecated", "Superseded", "Rejected"]
 #   undeclared -- a comment opening with an identifier that no keyword
 #     introduces: a relationship its author appears to intend and has not
 #     spelled. Nothing about it is malformed and it produces no
-#     relationship; set it to "ok" where prose citations are house style.
+#     relationship; set it to "info" where prose citations are house style
+#     and you still want them listed, or "off" to stop reporting them.
 [rules.references]
 retired = "warning"
 provisional = "info"
@@ -590,6 +619,25 @@ forbidden = "error"
 keyword_form = "warning"
 identifier_form = "warning"
 undeclared = "warning"
+
+# Severity for every check that carries no named setting of its own, keyed
+# by the name the check reports under. Check names contain a dot, so each
+# key must be quoted. Values are the same four words: "off", "info",
+# "warning", "error". Empty by default -- each check keeps its own default.
+#
+# Three things are refused when the configuration is read: a value outside
+# the four severities, a key naming no check, and a key naming a check that
+# has a named setting of its own (`spec.no_assertions`, `code.no_traceability`,
+# the `references.*` and `terms.*` checks, `tests.uncredited_evidence`,
+# `tests.external`) -- a check reads one setting, so putting it here would
+# be read by nothing.
+#
+# `elspais docs checks` lists every name this table accepts, with the
+# default severity and the route each check takes.
+[rules.severity]
+# "spec.parseable" = "off"
+# "tests.results" = "info"
+# "docs.config_drift" = "error"
 
 #──────────────────────────────────────────────────────────────────────────────
 # CHANGELOG
@@ -651,8 +699,9 @@ it could never end the daemon's watch on that client. A set
 `ELSPAIS_CLIENT_PID` is decisive: a value that is not a usable PID (not an
 integer, or a PID that is already dead) means "no session identity", not "fall
 back to the other checks" — and the daemon reports that once on stderr rather
-than silently falling through. The former name, `ELSPAIS_SPAWNER_PID`, is
-still honoured for callers that set it.
+than silently falling through. The name this override was once written under,
+`ELSPAIS_SPAWNER_PID`, is not read; a session that sets only that one is told
+so once on stderr and named the variable that is read.
 
 ## Minimal Configuration Examples
 
@@ -859,10 +908,86 @@ in test files, independent of this target. See `elspais docs test-targets`
 attribution*) for the full recipe, including the JSON `show_contexts`
 alternative for suites too small to worry about the JSON-report size cost.
 
+### Test Result Reporters (`reporter`)
+
+A `[[scanning.test.targets]]` entry names the format its results arrive in
+through `reporter`. A results-kind reporter produces pass/fail records; a
+coverage-kind one annotates files with line coverage and is chosen by sniffing
+the file at `coverage`, so a coverage-only target need not name one.
+
+<!-- generated: reporters -->
+<!-- Rendered from the program's own definitions; edits here are overwritten. Regenerate: python -m elspais.utilities.doc_tables -->
+
+| Reporter | Channel | Kind | Description |
+| --- | --- | --- | --- |
+| `coverage-json` | file | coverage | Parses the JSON report `coverage json` (coverage.py) writes, in either its aggregate or its per-context form, into per-file line coverage. |
+| `coverage-sqlite` | file | coverage | Reads coverage.py's own `.coverage` SQLite data file through coverage.py's public API, so per-test contexts are read compactly rather than through a JSON expansion of them. Needs the `coverage` package (`elspais[coverage]`) importable, and degrades to unattributed coverage where it is not. |
+| `flutter-machine` | stdout | results | Parses the `flutter test --machine` JSON-line protocol from the command's stdout. Carries the real `suite.path` and test line, so `match = "source"` binds each result to the test that produced it. |
+| `junit` | file | results | Parses JUnit XML result files matched by the `results` glob. Honours an optional per-`<testcase>` `file` attribute (a real source path) and `line` attribute, so `match = "source"` can bind to a scanned test node. |
+| `lcov` | file | coverage | Parses an LCOV report -- the `lcov.info` that `flutter test --coverage` and most language toolchains write -- into per-file line coverage. |
+| `pytest-json` | file | results | Parses the report pytest's `--json-report` writes, matched by the `results` glob. |
+
+These are the reporters the tool is built with. `register_reporter()` admits
+further formats at run time, so a project that registers one has a reporter
+this table does not name.
+<!-- /generated: reporters -->
+
+See `elspais docs test-targets` for every field of a target and the recipes
+that use them.
+
+### Check Severity (`[rules.severity]`)
+
+Every check the tool runs carries a severity, and every severity is a project
+decision. The vocabulary is four words, and only these four:
+
+| Severity | Meaning |
+|----------|---------|
+| `off` | The condition is not reported here. The check reports as skipped and produces no findings. |
+| `info` | Worth saying; never a failure. |
+| `warning` | Needs attention; the run exits non-zero unless `--lenient`. |
+| `error` | A defect; the run exits non-zero. |
+
+A value outside those four is **refused when the configuration is read**,
+wherever it is written — `[rules.references]`, `[rules.format]`,
+`[rules.coverage]`, `[terms.severity]` or `[rules.severity]`. `off` withholds
+the findings as well as the verdict; to keep seeing them without failing the
+run, use `info`.
+
+A check reads ONE setting and only one. These checks answer to a setting of
+their own:
+
+| Setting | Checks it governs |
+|---------|-------------------|
+| `[rules.references] <class>` | the `references.*` checks, and the `code.*_references` / `tests.*_references` status checks |
+| `[rules.format] no_assertions_severity` | `spec.no_assertions` |
+| `[rules.format] no_traceability_severity` | `code.no_traceability` |
+| `[rules.coverage] uncredited_evidence` | `tests.uncredited_evidence` |
+| `[rules.coverage] external_test_failure` | `tests.external` |
+| `[terms.severity] <name>` | the `terms.*` checks |
+
+Every other check is configured under the general `[rules.severity]` table,
+keyed by the name the check reports under. Check names contain a dot, so the
+key must be quoted:
+
+```toml
+[rules.severity]
+"spec.parseable" = "off"
+"tests.results" = "info"
+"docs.config_drift" = "error"
+```
+
+Two further entries are refused when the configuration is read: a key naming
+no check at all, and a key naming a check that has a named setting of its own
+— a check reads one setting, so putting it here would be read by nothing.
+
+`elspais docs checks` lists every name this table accepts, with each check's
+default severity and the route it takes.
+
 ### Coverage Severity & Theme Colors
 
 `[rules.coverage]` maps each coverage dimension's tier to a severity
-(`"ok"`, `"info"`, `"warning"`, or `"error"`), which in turn drives both
+(`"off"`, `"info"`, `"warning"`, or `"error"` — the same four words every
+severity setting takes), which in turn drives both
 health-check exit behavior and the viewer's badge/legend colors. Tiers use
 the unified state vocabulary -- `full` / `partial` / `failing` / `missing`
 (the legacy `full_direct` / `full_indirect` / `none` keys are retired;
@@ -871,7 +996,7 @@ its own measure rather than as a tier):
 
 ```toml
 [rules.coverage.implemented]
-full    = "ok"       # default: 100% of the dimension's denominator
+full    = "off"      # default: 100% of the dimension's denominator
 partial = "warning"  # default: 0 < fraction < 1
 failing = "error"    # default: a failed result on an in-denominator label
 missing = "error"    # default: no coverage
@@ -883,7 +1008,7 @@ missing = "error"    # default: no coverage
 
 Severity strings are not colors themselves -- the viewer resolves each
 severity to a color via a fixed catalog in the packaged `theme.toml`
-(`severity.ok`, `severity.info`, `severity.warning`, `severity.error`, each
+(`severity.off`, `severity.info`, `severity.warning`, `severity.error`, each
 with a `color_key` such as `green`/`yellow-green`/`yellow`/`red` that maps to
 themed CSS custom properties, e.g. `--val-green-bg`, with separate light/dark
 values). This catalog is internal (not user-configurable in
@@ -960,8 +1085,21 @@ explanations and both are defects: the implementation exists and its
 it does not exercise. Only assertion-targeted evidence names an assertion; a
 whole-requirement `Verifies: REQ-xxx` names the requirement, and is reported
 against the requirement -- once, not once per assertion -- and only where the
-dimension counts no assertion of it at all. Set `"warning"` or `"ok"` to lower
-it.
+dimension counts no assertion of it at all. Set `"warning"` or `"info"` to
+lower it, or `"off"` to stop reporting it.
+
+#### `external_test_failure` (a failure no requirement reaches)
+
+```toml
+[rules.coverage]
+external_test_failure = "warning"   # default
+```
+
+A test that failed and reaches no requirement is reported by
+`tests.external`. It is a warning by default rather than an error: a
+repository legitimately carries tests for things it has written no
+requirement for, so the condition is not always a defect — but a failure
+nobody can find through a requirement is one nobody will find at all.
 
 #### `status_words` (per-relationship dimension labels)
 

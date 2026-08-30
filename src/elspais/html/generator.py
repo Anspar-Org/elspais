@@ -1,7 +1,6 @@
 # Implements: REQ-p00006-A, REQ-p00006-B, REQ-p00006-C
 # Implements: REQ-p00050-B
 # Implements: REQ-d00052-A, REQ-d00052-D, REQ-d00052-E, REQ-d00052-F
-# Implements: REQ-d00070-A, REQ-d00070-B
 """HTML Generator for traceability reports.
 
 This module generates interactive HTML traceability views from TraceGraph.
@@ -22,6 +21,7 @@ from elspais.graph.aggregation import (
     measure_phrase,
     relative_tier_for,
 )
+from elspais.graph.parsers.directives import counted_assertion_labels
 from elspais.graph.parsers.patterns import JNY_ID_PATTERN
 from elspais.html.theme import get_catalog
 from elspais.utilities.patterns import INSTANCE_SEPARATOR
@@ -100,7 +100,7 @@ class ViewStats:
 # `neutral` (the forced N/A override, REQ-d00258-H) sits at the same low
 # priority as `info` so it never out-ranks a real gap (error/warning) for the
 # combined worst-severity — a genuine gap still wins the combined badge/bucket.
-SEVERITY_PRIORITY: dict[str, int] = {"error": 0, "warning": 1, "info": 2, "neutral": 2, "ok": 3}
+SEVERITY_PRIORITY: dict[str, int] = {"error": 0, "warning": 1, "info": 2, "neutral": 2, "off": 3}
 
 
 # Implements: REQ-d00258-D
@@ -138,7 +138,8 @@ _SEVERITY_TO_BUCKET: dict[str, str] = {
     # `neutral` (N/A override, REQ-d00258-H) is non-dragging exactly like `info`:
     # a not-applicable dimension must never pull the combined bucket below "full".
     "neutral": "full",
-    "ok": "full",
+    # A tier the dimension says nothing about (REQ-d00212-U): never a gap.
+    "off": "full",
 }
 
 # Tier descriptions for tooltip text
@@ -273,7 +274,7 @@ def compute_coverage_tiers(node: GraphNode, config: dict[str, Any] | None = None
     # Map dimension key -> (CoverageDimension, CoverageSeverityConfig, prefix).
     # The dimension is carried for the hover text only; the tier comes from the
     # shared helper, whose "verified" numerator is tested_and_passing()
-    # (REQ-d00258-N): what the declared tests returned, with an assertion its
+    # (REQ-d00277-C): what the declared tests returned, with an assertion its
     # own tests failed excluded from the figures. Line coverage credits nothing
     # here; it is reported as its own dimension (REQ-d00254-B).
     passing = tested_and_passing(rollup)
@@ -456,7 +457,6 @@ def compute_assertion_coverage_states(
     (same gate as ``compute_coverage_tiers``); standings compute for EVERY
     status (REQ-d00258, Phase 3).
     """
-    from elspais.graph.GraphNode import NodeKind
     from elspais.graph.metrics import tested_and_passing
 
     # Per-assertion standings ALWAYS compute, regardless of status (REQ-d00258,
@@ -466,12 +466,8 @@ def compute_assertion_coverage_states(
     if not rollup or rollup.total_assertions == 0:
         return {}
 
-    labels: list[str] = []
-    for child in node.iter_children():
-        if child.kind == NodeKind.ASSERTION:
-            label = child.get_field("label", "")
-            if label:
-                labels.append(label)
+    # Implements: REQ-p00017-G
+    labels: list[str] = counted_assertion_labels(node)
 
     from elspais.graph.aggregation import measure_by_label
 
@@ -510,7 +506,7 @@ def compute_assertion_coverage_states(
         it: line coverage never observes a verdict, so a failing test whose
         lines were executed leaves this assertion at full credit and failing at
         once. Reading credit first would paint it green while the Passing
-        figures beside it exclude it (REQ-d00258-N), which is the same
+        figures beside it exclude it (REQ-d00277-C), which is the same
         disagreement REQ-d00258-G exists to prevent.
         """
         if label in passing.failing_labels:
@@ -555,17 +551,13 @@ def compute_assertion_coverage_measures(node: GraphNode) -> dict[str, dict[str, 
     scored, so the measures shown can never belong to a different figure than
     the standing beside them.
     """
-    from elspais.graph.GraphNode import NodeKind
     from elspais.graph.metrics import tested_and_passing
 
     rollup = node.get_metric("rollup_metrics")
     if not rollup or rollup.total_assertions == 0:
         return {}
-    labels = [
-        c.get_field("label", "")
-        for c in node.iter_children()
-        if c.kind == NodeKind.ASSERTION and c.get_field("label", "")
-    ]
+    # Implements: REQ-p00017-G
+    labels = counted_assertion_labels(node)
     dims = {
         "implemented": rollup.implemented,
         "tested": rollup.tested,
@@ -588,8 +580,8 @@ def compute_validation_color(
 ) -> tuple[str, str]:
     """Compute a validation quality color for a requirement's Active status badge.
 
-    Backward-compatible wrapper around compute_coverage_tiers().
-    Returns the combined (worst-of-all) color and tooltip.
+    Returns compute_coverage_tiers()'s combined (worst-of-all) color and
+    tooltip.
 
     Args:
         node: A GraphNode with pre-computed rollup_metrics.
@@ -921,7 +913,7 @@ class HTMLGenerator:
                 cov = "full"
 
             # Passing-dimension failures, so an lcov-side failure is seen
-            # as well as a result-verified one (REQ-d00258-N).
+            # as well as a result-verified one (REQ-d00277-C).
             return (cov, tested_and_passing(rollup).has_failures)
 
         def get_assertion_letters(node: GraphNode, parent_id: str | None) -> list[str]:

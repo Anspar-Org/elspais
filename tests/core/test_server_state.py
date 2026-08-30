@@ -5,7 +5,7 @@ import time
 from pathlib import Path
 
 _MINIMAL_CONFIG = """\
-version = 3
+version = 5
 
 [project]
 name = "test"
@@ -251,6 +251,7 @@ class TestEnsureFreshHonestRebuildReport:
 
         monkeypatch.setattr(state, "_rebuild", _raise)
 
+    # Verifies: REQ-p00015-F
     def test_REQ_p00015_F_failed_rebuild_is_not_reported_as_rebuilt(self, tmp_path, monkeypatch):
         """A rebuild that raised must not be returned as a rebuild that happened."""
         state = self._stale_state(tmp_path)
@@ -258,6 +259,7 @@ class TestEnsureFreshHonestRebuildReport:
 
         assert state.ensure_fresh() is False, "ensure_fresh() reported a rebuild it did not perform"
 
+    # Verifies: REQ-p00015-F
     def test_REQ_p00015_F_failed_rebuild_keeps_serving_the_previous_graph(
         self, tmp_path, monkeypatch
     ):
@@ -272,6 +274,7 @@ class TestEnsureFreshHonestRebuildReport:
         assert state.graph is graph_before, "failed rebuild swapped the served graph"
         assert state.build_time == build_time_before, "failed rebuild advanced the build clock"
 
+    # Verifies: REQ-p00015-B
     def test_REQ_p00015_B_failed_rebuild_reports_the_cause(self, tmp_path, monkeypatch, capsys):
         """The unapplied rebuild and its cause reach stderr."""
         state = self._stale_state(tmp_path)
@@ -283,6 +286,7 @@ class TestEnsureFreshHonestRebuildReport:
         assert "rebuild" in err, f"failure report does not name the operation: {err!r}"
         assert self.REBUILD_CAUSE in err, f"failure report does not carry the cause: {err!r}"
 
+    # Verifies: REQ-p00015-F
     def test_REQ_p00015_F_failed_rebuild_does_not_record_the_new_config(
         self, tmp_path, monkeypatch
     ):
@@ -314,6 +318,7 @@ class TestEnsureFreshHonestRebuildReport:
             "serving the graph built from the old one"
         )
 
+    # Verifies: REQ-p00015-F
     def test_REQ_p00015_F_successful_rebuild_is_reported_as_rebuilt(self, tmp_path):
         """A rebuild that completed is still reported -- honesty cuts both ways."""
         state = self._stale_state(tmp_path)
@@ -625,6 +630,7 @@ A. The system SHALL leave no staleness a completed reload already absorbed.
         tools = {name: tool.fn for name, tool in server._tool_manager._tools.items()}
         return state, tools, spec_file
 
+    # Verifies: REQ-p00004-O
     def test_REQ_p00004_O_mcp_refresh_leaves_no_redundant_rebuild(self, tmp_path):
         """After MCP refresh_graph absorbs a disk change, the viewer's next
         freshness check must not find that same change still outstanding."""
@@ -648,6 +654,7 @@ A. The system SHALL leave no staleness a completed reload already absorbed.
             "build_time moved after the refresh with nothing changed on disk"
         )
 
+    # Verifies: REQ-p00004-O
     def test_REQ_p00004_O_mcp_refresh_syncs_daemon_config_hash(self, tmp_path):
         """A refresh that re-read an edited config must leave daemon.json's
         config_hash agreeing with that config, with no later request needed."""

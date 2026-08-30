@@ -34,6 +34,7 @@ from typing import TYPE_CHECKING, Any
 from xml.sax.saxutils import unescape
 
 from elspais.graph.parsers import ParseContext, ParsedContent
+from elspais.graph.parsers.results.diagnostics import DiagnosticRecorder
 from elspais.utilities.test_identity import build_test_id_from_result
 
 # Pattern to extract a named XML attribute value from a raw text line.
@@ -76,7 +77,7 @@ if TYPE_CHECKING:
     from elspais.utilities.patterns import IdResolver
 
 
-class JUnitXMLParser:
+class JUnitXMLParser(DiagnosticRecorder):
     """Parser for JUnit XML test result files.
 
     Parses standard JUnit XML format used by pytest, JUnit, and other
@@ -139,10 +140,21 @@ class JUnitXMLParser:
             - message: Error/failure message (if any)
         """
         results: list[dict[str, Any]] = []
+        self._start_diagnostics()
 
         try:
             root = ET.fromstring(content)
-        except ET.ParseError:
+        except ET.ParseError as exc:
+            # Implements: REQ-d00285-G
+            # A results file that will not parse yields the same empty list as
+            # a suite that ran nothing. Record which of the two happened, and
+            # where, before returning the empty list.
+            position = getattr(exc, "position", None)
+            self._record_diagnostic(
+                source_path,
+                f"JUnit XML did not parse: {exc}",
+                line=position[0] if position else None,
+            )
             return results
 
         # Results-file provenance: each record points back at the artifact
@@ -156,6 +168,15 @@ class JUnitXMLParser:
         testsuites = root.findall(".//testsuite")
         if not testsuites and root.tag == "testsuite":
             testsuites = [root]
+        if not testsuites:
+            # Implements: REQ-d00285-G
+            # A well-formed XML document holding no test suite was still read
+            # as results. Say that it held none, rather than reporting the
+            # count a suite of zero tests would produce.
+            self._record_diagnostic(
+                source_path,
+                f"XML parsed but holds no <testsuite>: root element is <{root.tag}>",
+            )
 
         for testsuite in testsuites:
             for testcase in testsuite.findall("testcase"):
@@ -166,6 +187,10 @@ class JUnitXMLParser:
                 try:
                     duration = float(time_str)
                 except ValueError:
+                    # Suppressed deliberately: a duration is a measurement of
+                    # the run, not a fact about traceability. An unreadable
+                    # one costs the record nothing that binds it to a test,
+                    # so the result is kept and the timing reads as zero.
                     duration = 0.0
 
                 # Determine status

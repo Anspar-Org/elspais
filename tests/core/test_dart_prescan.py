@@ -5,6 +5,8 @@ Dart test case becomes a line-anchored unit, without a Dart parser."""
 
 from __future__ import annotations
 
+import pytest
+
 from elspais.graph.parsers.prescan import _match_brace_end, dart_prescan
 
 
@@ -229,3 +231,112 @@ def test_span_never_inverts():
     end, accurate = _match_brace_end(lines, 0, stop_line=56)
     assert end >= lines[0][0]
     assert accurate is False
+
+
+# ---------------------------------------------------------------------------
+# Forward binding: an unowned comment binds to the first declaration below it,
+# walking down while it meets only further comments and blank lines.  There is
+# no line limit -- the length of a comment block says nothing about what it
+# describes -- so the guard against a file header claiming the first
+# declaration in the file is the first line that is neither.
+# ---------------------------------------------------------------------------
+
+# A citation seven lines above its test(): further than any five-line window
+# could reach, and followed by a second citation two lines above it.  Both name
+# the same test, and both must bind to it.
+LONG_PROSE_DART = """\
+void main() {
+  group('seed config', () {
+    // Verifies: REQ-p00001-A
+    // The seed parser reads a document holding users and assignments,
+    // and the encoding of a scope varies by role, so this case walks
+    // every encoding the fixture holds rather than asserting one of
+    // them and trusting the rest to follow.
+    // Verifies: REQ-p00001-B
+    // (the second citation names the assertion about assignments)
+    test('parses users and assignments', () {
+      expect(1, 1);
+    });
+  });
+}
+"""
+
+# A citation describing a whole group, written directly above the group() that
+# opens it.  It belongs to the group, not to the first test() inside it.
+GROUP_CITATION_DART = """\
+void main() {
+  // Verifies: REQ-p00001-C
+  group('the whole area', () {
+    test('a', () {
+      expect(1, 1);
+    });
+  });
+}
+"""
+
+# A file header, a blank line, and then an import: the import is neither a
+# comment nor a declaration, so it ends the search and the header binds to
+# nothing further down the file.
+HEADER_THEN_IMPORT_DART = """\
+// Copyright 2026 Example.
+// Verifies: REQ-p00001-D
+
+import 'package:test/test.dart';
+
+group('everything', () {
+  test('a', () {
+    expect(1, 1);
+  });
+});
+"""
+
+# The same header with the import taken out: nothing but blank lines stands
+# between it and the group(), so it does bind.  This is what makes the case
+# above a statement about the import rather than about the distance.
+HEADER_NO_IMPORT_DART = """\
+// Copyright 2026 Example.
+// Verifies: REQ-p00001-D
+
+
+group('everything', () {
+  test('a', () {
+    expect(1, 1);
+  });
+});
+"""
+
+
+@pytest.mark.parametrize(
+    ("source", "comment_line", "expected_owner_start"),
+    [
+        pytest.param(LONG_PROSE_DART, 3, 10, id="citation-above-six-prose-lines"),
+        pytest.param(LONG_PROSE_DART, 8, 10, id="second-citation-above-same-test"),
+        pytest.param(GROUP_CITATION_DART, 2, 3, id="citation-above-group"),
+        pytest.param(HEADER_NO_IMPORT_DART, 2, 5, id="header-reaching-group-over-blanks"),
+    ],
+)
+def test_comment_binds_to_first_declaration_below(source, comment_line, expected_owner_start):
+    # Verifies: REQ-d00254-K
+    # Attribution binds a scanned test to its own identity and extent; a
+    # citation written above a test is attributed to that test, however much
+    # prose sits between them, and a citation above a group() is attributed to
+    # the group rather than falling through to the first test inside it.
+    lc, _funcs, _first = dart_prescan(_lines(source))
+    assert lc[comment_line][2] == expected_owner_start
+
+
+@pytest.mark.parametrize(
+    ("source", "comment_line"),
+    [
+        pytest.param(HEADER_THEN_IMPORT_DART, 1, id="header-first-line"),
+        pytest.param(HEADER_THEN_IMPORT_DART, 2, id="header-citation-line"),
+    ],
+)
+def test_comment_does_not_bind_across_a_non_comment_line(source, comment_line):
+    # Verifies: REQ-d00254-K
+    # The negative space of per-test attribution: a file header separated from
+    # the first declaration by an import describes the file, not that
+    # declaration, and binding it there would attribute a citation to a test it
+    # says nothing about.
+    lc, _funcs, _first = dart_prescan(_lines(source))
+    assert lc[comment_line][2] == 0

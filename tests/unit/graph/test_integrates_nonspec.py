@@ -77,7 +77,7 @@ def _build_code(tmp_path: Path):
         tmp_path,
         ".elspais.toml",
         """
-        version = 3
+        version = 5
         [project]
         name = "demo"
         namespace = "REQ"
@@ -127,7 +127,7 @@ def _build_test(tmp_path: Path):
         tmp_path,
         ".elspais.toml",
         """
-        version = 3
+        version = 5
         [project]
         name = "demo"
         namespace = "REQ"
@@ -176,6 +176,7 @@ def _req(graph):
     return next(n for n in graph.iter_by_kind(NodeKind.REQUIREMENT) if n.id == "REQ-d00001")
 
 
+# Verifies: REQ-d00252-B
 def test_REQ_d00252_B_integrates_in_code_file_creates_no_edge(tmp_path):
     graph = _build_code(tmp_path)
     req = _req(graph)
@@ -187,6 +188,7 @@ def test_REQ_d00252_B_integrates_in_code_file_creates_no_edge(tmp_path):
     ), "Integrates: in a code file must not create an inbound traceability edge"
 
 
+# Verifies: REQ-d00252-B
 def test_REQ_d00252_B_integrates_in_test_file_creates_no_edge(tmp_path):
     graph = _build_test(tmp_path)
     req = _req(graph)
@@ -201,6 +203,7 @@ def test_REQ_d00252_B_integrates_in_test_file_creates_no_edge(tmp_path):
 
 
 # Verifies: REQ-d00272-J
+# Verifies: REQ-d00252-B
 def test_REQ_d00252_B_integrates_ref_skipped_in_code_transformer():
     """An Integrates: comment must not be reclassified as an IMPLEMENTS ref.
 
@@ -224,6 +227,7 @@ def test_REQ_d00252_B_integrates_ref_skipped_in_code_transformer():
 
 
 # Verifies: REQ-d00272-J
+# Verifies: REQ-d00252-B
 def test_REQ_d00252_B_integrates_ref_skipped_in_test_transformer():
     """An Integrates: comment in a test file is read and refused, not passed
     over: no VERIFIES ref, but a forbidden target the builder stamps

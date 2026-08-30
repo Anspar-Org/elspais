@@ -1,7 +1,7 @@
 # Verifies: REQ-d00085, REQ-d00241
 """Tests for traceability-focused health checks.
 
-Tests check_structural_orphans(), check_unlinked_tests(), check_unlinked_code(),
+Tests check_structural_orphans(), check_uncited_tests(), check_uncited_code(),
 check_reference_class(), config backward compatibility for allow_orphans, and
 the code.no_traceability wiring in run_code_checks() (REQ-d00241).
 """
@@ -18,8 +18,8 @@ from elspais.commands.health import (
     check_no_cycles,
     check_reference_class,
     check_structural_orphans,
-    check_unlinked_code,
-    check_unlinked_tests,
+    check_uncited_code,
+    check_uncited_tests,
     run_code_checks,
     run_spec_checks,
 )
@@ -66,6 +66,7 @@ def _wrap(graph: TraceGraph, config: dict | None = None) -> FederatedGraph:
 class TestCheckStructuralOrphans:
     """Tests for check_structural_orphans()."""
 
+    # Verifies: REQ-d00085
     def test_REQ_d00085_no_orphans_passes(self) -> None:
         """A graph with all nodes under FILE parents passes."""
         graph = build_graph(
@@ -75,6 +76,7 @@ class TestCheckStructuralOrphans:
         assert check.passed
         assert check.name == "spec.structural_orphans"
 
+    # Verifies: REQ-d00085
     def test_REQ_d00085_orphan_node_fails_with_error_severity(self) -> None:
         """A node without a FILE ancestor is a structural orphan — severity error."""
         graph = build_graph(
@@ -94,6 +96,7 @@ class TestCheckStructuralOrphans:
         orphan_ids = {f.node_id for f in check.findings}
         assert "REQ-o99999" in orphan_ids
 
+    # Verifies: REQ-d00085
     def test_REQ_d00085_allow_structural_orphans_skips(self) -> None:
         """When allow_structural_orphans=True, the check passes even with orphans."""
         graph = build_graph(
@@ -113,7 +116,7 @@ class TestCheckStructuralOrphans:
 
 
 class TestCheckUnlinkedTests:
-    """Tests for check_unlinked_tests() — file-level semantics.
+    """Tests for check_uncited_tests() — file-level semantics.
 
     Unlinked means a TEST-type FILE was scanned and either contains no
     TEST child nodes at all, or contains TEST children none of which
@@ -123,6 +126,7 @@ class TestCheckUnlinkedTests:
     fully marker-less file still has TEST children.
     """
 
+    # Verifies: REQ-d00085
     def test_REQ_d00085_all_test_files_have_markers_passes(self) -> None:
         """When all test files contain traceability markers, the check passes."""
         graph = build_graph(
@@ -134,12 +138,13 @@ class TestCheckUnlinkedTests:
                 end_line=5,
             ),
         )
-        check = check_unlinked_tests(graph)
+        check = check_uncited_tests(graph)
         assert check.passed
-        assert check.name == "tests.unlinked"
+        assert check.name == "tests.uncited_file"
 
-    def test_REQ_d00085_unlinked_test_file_has_info_severity(self) -> None:
-        """A TEST file with no TEST child nodes is unlinked — severity info."""
+    # Verifies: REQ-d00085
+    def test_REQ_d00085_uncited_test_file_has_info_severity(self) -> None:
+        """A TEST file with no TEST child nodes is uncited — severity info."""
         graph = build_graph(
             make_requirement("REQ-p00001", title="Feature", level="PRD"),
             make_test_ref(
@@ -158,15 +163,16 @@ class TestCheckUnlinkedTests:
         graph._index["file:tests/test_empty.py"] = empty_file
         graph._roots.append(empty_file)
 
-        check = check_unlinked_tests(graph)
+        check = check_uncited_tests(graph)
         assert not check.passed
         assert check.severity == "info"
-        assert check.name == "tests.unlinked"
+        assert check.name == "tests.uncited_file"
         assert len(check.findings) >= 1
         assert check.details.get("count", 0) >= 1
 
-    def test_REQ_d00085_unlinked_test_findings_have_file_path(self) -> None:
-        """Findings for unlinked test files include file_path."""
+    # Verifies: REQ-d00085
+    def test_REQ_d00085_uncited_test_findings_have_file_path(self) -> None:
+        """Findings for uncited test files include file_path."""
         graph = TraceGraph()
         empty_file = GraphNode(
             id="file:tests/test_orphan.py", kind=NodeKind.FILE, label="test_orphan.py"
@@ -176,7 +182,7 @@ class TestCheckUnlinkedTests:
         graph._index["file:tests/test_orphan.py"] = empty_file
         graph._roots.append(empty_file)
 
-        check = check_unlinked_tests(graph)
+        check = check_uncited_tests(graph)
         assert not check.passed
         assert len(check.findings) >= 1
         finding = check.findings[0]
@@ -191,7 +197,7 @@ class TestCheckUnlinkedTests:
         test function even when it has no ``Verifies:`` marker, so a
         marker-less file is NOT the zero-TEST-children case -- it has
         children, just none linked. Before REQ-d00241-D this file was
-        reported by neither tests.unlinked (which only looked for zero
+        reported by neither tests.uncited_file (which only looked for zero
         children) nor code.no_traceability (now code-only): a silent
         detection gap.
         """
@@ -210,7 +216,7 @@ class TestCheckUnlinkedTests:
             c.kind == NodeKind.TEST for c in file_node.iter_children(edge_kinds={EdgeKind.CONTAINS})
         )
 
-        check = check_unlinked_tests(graph)
+        check = check_uncited_tests(graph)
         assert not check.passed
         assert any(f.file_path == "tests/test_unmarked.py" for f in check.findings)
 
@@ -218,7 +224,7 @@ class TestCheckUnlinkedTests:
     def test_REQ_d00241_D_partially_marked_file_not_flagged(self) -> None:
         """A test FILE with at least one linked TEST child is NOT flagged.
 
-        Partial marking isn't "unlinked" -- one linked test is enough to
+        Partial marking isn't "uncited" -- one linked test is enough to
         establish file-level traceability.
         """
         graph = build_graph(
@@ -238,7 +244,7 @@ class TestCheckUnlinkedTests:
                 end_line=15,
             ),
         )
-        check = check_unlinked_tests(graph)
+        check = check_uncited_tests(graph)
         assert check.passed
         assert not any(f.file_path == "tests/test_partial.py" for f in check.findings)
 
@@ -249,12 +255,13 @@ class TestCheckUnlinkedTests:
 
 
 class TestCheckUnlinkedCode:
-    """Tests for check_unlinked_code() — file-level semantics.
+    """Tests for check_uncited_code() — file-level semantics.
 
     Unlinked means a CODE-type FILE was scanned but contains no CODE
     child nodes (no traceability markers found).
     """
 
+    # Verifies: REQ-d00085
     def test_REQ_d00085_all_code_files_have_markers_passes(self) -> None:
         """When all code files contain traceability markers, the check passes."""
         graph = build_graph(
@@ -266,12 +273,13 @@ class TestCheckUnlinkedCode:
                 end_line=5,
             ),
         )
-        check = check_unlinked_code(graph)
+        check = check_uncited_code(graph)
         assert check.passed
-        assert check.name == "code.unlinked"
+        assert check.name == "code.uncited_file"
 
-    def test_REQ_d00085_unlinked_code_file_has_info_severity(self) -> None:
-        """A CODE file with no CODE child nodes is unlinked — severity info."""
+    # Verifies: REQ-d00085
+    def test_REQ_d00085_uncited_code_file_has_info_severity(self) -> None:
+        """A CODE file with no CODE child nodes is uncited — severity info."""
         graph = build_graph(
             make_requirement("REQ-p00001", title="Feature", level="PRD"),
             make_code_ref(
@@ -288,13 +296,14 @@ class TestCheckUnlinkedCode:
         graph._index["file:src/unlinked.py"] = empty_file
         graph._roots.append(empty_file)
 
-        check = check_unlinked_code(graph)
+        check = check_uncited_code(graph)
         assert not check.passed
         assert check.severity == "info"
-        assert check.name == "code.unlinked"
+        assert check.name == "code.uncited_file"
         assert len(check.findings) >= 1
         assert check.details.get("count", 0) >= 1
 
+    # Verifies: REQ-d00085
     def test_REQ_d00085_unlinked_code_findings_have_file_path(self) -> None:
         """Findings for unlinked code files include file_path."""
         graph = TraceGraph()
@@ -304,7 +313,7 @@ class TestCheckUnlinkedCode:
         graph._index["file:src/orphan.py"] = empty_file
         graph._roots.append(empty_file)
 
-        check = check_unlinked_code(graph)
+        check = check_uncited_code(graph)
         assert not check.passed
         assert len(check.findings) >= 1
         finding = check.findings[0]
@@ -314,7 +323,7 @@ class TestCheckUnlinkedCode:
 
 # =============================================================================
 # code.no_traceability wiring — REQ-d00241 (code-only; tests owned by
-# tests.unlinked)
+# tests.uncited_file)
 # =============================================================================
 
 
@@ -328,14 +337,14 @@ class TestRunCodeChecksNoTraceabilityWiring:
     unconditionally creates a TEST node for every test function found
     (marked or not -- see ``GraphBuilder._add_test_ref``), a test file
     with unmarked functions produced marker-less TEST nodes that were
-    *also* separately reported by ``tests.unlinked``
-    (``check_unlinked_tests``), double-reporting the same file once
+    *also* separately reported by ``tests.uncited_file``
+    (``check_uncited_tests``), double-reporting the same file once
     under each category. REQ-d00241 was reworded to scope
     ``code.no_traceability`` to CODE nodes only; test files are now
-    exclusively the responsibility of ``tests.unlinked``.
+    exclusively the responsibility of ``tests.uncited_file``.
     """
 
-    # Verifies: REQ-d00241-B, REQ-d00241-E
+    # Verifies: REQ-d00241-A, REQ-d00241-E
     def test_REQ_d00241_E_dangling_implements_excluded_owned_by_reference_check(self) -> None:
         """A CODE node unlinked because its ``Implements:`` target failed to
         resolve carries a marker -- it just failed. ``code.no_traceability``
@@ -362,19 +371,19 @@ class TestRunCodeChecksNoTraceabilityWiring:
         assert check.passed
         assert not any("orphan.py" in f.message for f in check.findings)
 
-        broken = check_broken_references(fed)
+        broken = check_unresolved_references(fed)
         assert not broken.passed
         assert any("orphan.py" in (f.file_path or "") for f in broken.findings)
 
-    # Verifies: REQ-d00241-A, REQ-d00241-B, REQ-d00241-D
+    # Verifies: REQ-d00241-A, REQ-d00241-D
     def test_REQ_d00241_A_marker_less_test_function_excluded(self) -> None:
-        """A marker-less test file moves from code.no_traceability to tests.unlinked.
+        """A marker-less test file moves from code.no_traceability to tests.uncited_file.
 
         Regression guard for the double-report defect AND its inverse (the
         detection gap): a test function with no ``Verifies:`` marker still
         produces an unreachable TEST node (per the parser's unconditional
         per-function emission). code.no_traceability must not surface it
-        -- that's tests.unlinked's job -- and tests.unlinked MUST surface
+        -- that's tests.uncited_file's job -- and tests.uncited_file MUST surface
         it, otherwise the file silently escapes both checks.
         """
         graph = build_graph(
@@ -396,8 +405,8 @@ class TestRunCodeChecksNoTraceabilityWiring:
         assert check.passed
         assert not any("test_unmarked.py" in f.message for f in check.findings)
 
-        # The file MUST be owned by tests.unlinked instead (REQ-d00241-D).
-        tests_check = check_unlinked_tests(_wrap(graph))
+        # The file MUST be owned by tests.uncited_file instead (REQ-d00241-D).
+        tests_check = check_uncited_tests(_wrap(graph))
         assert not tests_check.passed
         assert any(f.file_path == "tests/test_unmarked.py" for f in tests_check.findings)
 
@@ -408,7 +417,7 @@ class TestRunCodeChecksNoTraceabilityWiring:
         file is excluded because its marker failed rather than being
         absent (REQ-d00241-E, owned by ``references.unknown_requirement``);
         the TEST file was never code.no_traceability's to report
-        (REQ-d00241-A, owned by ``tests.unlinked``).
+        (REQ-d00241-A, owned by ``tests.uncited_file``).
         """
         graph = build_graph(
             make_code_ref(
@@ -435,7 +444,7 @@ class TestRunCodeChecksNoTraceabilityWiring:
 # =============================================================================
 
 
-def check_broken_references(graph: FederatedGraph, config: dict | None = None):
+def check_unresolved_references(graph: FederatedGraph, config: dict | None = None):
     """A claimed reference naming a requirement that does not exist."""
     return check_reference_class(
         graph,
@@ -460,16 +469,18 @@ def check_unclaimed_references(graph: FederatedGraph, config: dict | None = None
 class TestCheckBrokenReferences:
     """Tests for check_reference_class(..., FaultClass.UNKNOWN_REQUIREMENT, ...)."""
 
+    # Verifies: REQ-d00085
     def test_REQ_d00085_no_broken_refs_passes(self) -> None:
         """A graph with all references resolved passes."""
         graph = build_graph(
             make_requirement("REQ-p00001", title="Parent", level="PRD"),
             make_requirement("REQ-o00001", title="Child", level="OPS", implements=["REQ-p00001"]),
         )
-        check = check_broken_references(_wrap(graph))
+        check = check_unresolved_references(_wrap(graph))
         assert check.passed
         assert check.name == "references.unknown_requirement"
 
+    # Verifies: REQ-d00085
     def test_REQ_d00085_broken_refs_warning_severity(self) -> None:
         """Broken references produce an error-severity failure by default."""
         from elspais.graph.reference_faults import ReferenceFault
@@ -479,7 +490,7 @@ class TestCheckBrokenReferences:
         )
         # Manually inject broken references (fault_class defaults to
         # UNKNOWN_REQUIREMENT, matching the class this check reports).
-        graph._broken_references = [
+        graph._unresolved_references = [
             ReferenceFault(
                 source_id="REQ-d00001",
                 target_id="REQ-p99999",
@@ -496,19 +507,20 @@ class TestCheckBrokenReferences:
         # grammar describes -- is this check's population; the full default
         # config is what makes ``REQ-`` identifiers claimed.
         config = _claimed_config()
-        check = check_broken_references(_wrap(graph, config), config)
+        check = check_unresolved_references(_wrap(graph, config), config)
         assert not check.passed
         assert check.severity == "error"  # REQ-d00204-E: unknown_requirement is an error
         assert check.name == "references.unknown_requirement"
         assert len(check.findings) == 2
         assert check.details.get("count") == 2
 
+    # Verifies: REQ-d00085
     def test_REQ_d00085_broken_ref_findings_have_source_id(self) -> None:
         """Each broken reference finding includes the source node_id."""
         from elspais.graph.reference_faults import ReferenceFault
 
         graph = TraceGraph()
-        graph._broken_references = [
+        graph._unresolved_references = [
             ReferenceFault(
                 source_id="REQ-d00001",
                 target_id="REQ-p99999",
@@ -517,13 +529,14 @@ class TestCheckBrokenReferences:
         ]
 
         config = _claimed_config()
-        check = check_broken_references(_wrap(graph, config), config)
+        check = check_unresolved_references(_wrap(graph, config), config)
         assert not check.passed
         finding = check.findings[0]
         assert isinstance(finding, HealthFinding)
         assert finding.node_id == "REQ-d00001"
         assert "REQ-p99999" in finding.message
 
+    # Verifies: REQ-d00269-F
     def test_REQ_d00269_F_unclaimed_target_reported_separately(self) -> None:
         """A target no configured repository claims is
         ``references.unknown_namespace``, not ``references.unknown_requirement``
@@ -532,7 +545,7 @@ class TestCheckBrokenReferences:
         from elspais.graph.reference_faults import ReferenceFault
 
         graph = TraceGraph()
-        graph._broken_references = [
+        graph._unresolved_references = [
             ReferenceFault(
                 source_id="REQ-d00001",
                 target_id="HHT-p00001",
@@ -547,7 +560,7 @@ class TestCheckBrokenReferences:
         assert not unclaimed.passed
         assert any("HHT-p00001" in f.message for f in unclaimed.findings)
 
-        broken = check_broken_references(fed, config)
+        broken = check_unresolved_references(fed, config)
         assert broken.passed
         assert not any("HHT-p00001" in f.message for f in broken.findings)
 
@@ -575,6 +588,7 @@ class TestCheckUnclaimedReferences:
     severity the project chooses.
     """
 
+    # Verifies: REQ-d00269-F
     def test_REQ_d00269_F_unclaimed_target_in_code_is_reported_once(self, tmp_path) -> None:
         """A real on-disk scan: one finding, naming the unreadable target.
 
@@ -600,22 +614,23 @@ class TestCheckUnclaimedReferences:
         assert "widget-42" in unclaimed.findings[0].message
 
         # The two checks partition the population: neither double-reports.
-        broken = check_broken_references(federated)
+        broken = check_unresolved_references(federated)
         assert not any("widget-42" in f.message for f in broken.findings)
         assert broken.passed
 
-    def test_REQ_d00269_F_claimed_target_stays_with_broken_references(self) -> None:
+    # Verifies: REQ-d00269-F
+    def test_REQ_d00269_F_claimed_target_stays_with_unresolved_references(self) -> None:
         """A misspelt local identifier is a broken reference, not an unclaimed one."""
         from elspais.graph.reference_faults import ReferenceFault
 
         graph = TraceGraph()
-        graph._broken_references = [
+        graph._unresolved_references = [
             ReferenceFault(source_id="REQ-d00001", target_id="REQ-p99999", edge_kind="implements"),
         ]
         config = _claimed_config()
         fed = _wrap(graph, config)
 
-        broken = check_broken_references(fed, config)
+        broken = check_unresolved_references(fed, config)
         unclaimed = check_unclaimed_references(fed, config)
 
         assert not broken.passed
@@ -623,13 +638,14 @@ class TestCheckUnclaimedReferences:
         assert unclaimed.passed
         assert unclaimed.findings == []
 
+    # Verifies: REQ-d00269-F
     @pytest.mark.parametrize("configured", ["info", "warning", "error"])
     def test_REQ_d00269_F_severity_follows_configuration(self, configured: str) -> None:
         """Noticing is not the project's decision; how loudly is."""
         from elspais.graph.reference_faults import ReferenceFault
 
         graph = TraceGraph()
-        graph._broken_references = [
+        graph._unresolved_references = [
             ReferenceFault(
                 source_id="REQ-d00001",
                 target_id="widget-42",
@@ -662,7 +678,7 @@ class TestCheckUnclaimedReferences:
 
         graph = TraceGraph()
         if has_finding:
-            graph._broken_references = [
+            graph._unresolved_references = [
                 ReferenceFault(
                     source_id="REQ-d00001",
                     target_id="widget-42",
@@ -698,7 +714,7 @@ class TestCheckUnclaimedReferences:
 
         graph = TraceGraph()
         if has_finding:
-            graph._broken_references = [
+            graph._unresolved_references = [
                 ReferenceFault(
                     source_id="REQ-d00001",
                     target_id="widget-42",
@@ -735,7 +751,7 @@ class TestCheckUnclaimedReferences:
 
         graph = TraceGraph()
         if has_finding:
-            graph._broken_references = [
+            graph._unresolved_references = [
                 ReferenceFault(
                     source_id="REQ-d00001",
                     target_id="widget-42",
@@ -753,18 +769,21 @@ class TestCheckUnclaimedReferences:
         assert sum(counts.values()) == 1
         assert report.skipped == 0
 
-    @pytest.mark.parametrize("severity", ["ok", "error"])
-    def test_REQ_d00269_F_unknown_namespace_ok_silences_the_finding(self, severity: str) -> None:
+    # Verifies: REQ-d00269-F
+    @pytest.mark.parametrize("severity", ["off", "error"])
+    def test_REQ_d00269_F_unknown_namespace_off_withholds_the_finding(self, severity: str) -> None:
         """A project that does not want to hear about references into
-        unconfigured repositories sets ``unknown_namespace = "ok"`` --
+        unconfigured repositories sets ``unknown_namespace = "off"`` --
         the successor to ``allow_unresolved_cross_repo``, which named a
         boolean flag rather than the severity the project actually wanted.
-        Any other value keeps reporting it.
+        ``off`` means the condition is not reported here at all: the check
+        reports as skipped and carries no findings. Any other value keeps
+        reporting it.
         """
         from elspais.graph.reference_faults import ReferenceFault
 
         host_graph = TraceGraph()
-        host_graph._broken_references = [
+        host_graph._unresolved_references = [
             ReferenceFault(
                 source_id="REQ-d00001",
                 target_id="widget-42",
@@ -800,10 +819,16 @@ class TestCheckUnclaimedReferences:
 
         check = check_unclaimed_references(fed, host_config)
 
-        # Silenced ("ok") still passes and still names the finding -- "ok"
-        # is a severity that reports without failing the run, not a filter.
-        assert check.passed is (severity == "ok")
-        assert any("widget-42" in f.message for f in check.findings)
+        if severity == "off":
+            # Withheld: the condition is not reported here, so the check is
+            # emitted as a skipped one carrying nothing to read.
+            assert check.passed is True
+            assert check.severity == "info"
+            assert check.findings == []
+            assert check.details["skipped"] is True
+        else:
+            assert check.passed is False
+            assert any("widget-42" in f.message for f in check.findings)
 
 
 # =============================================================================
@@ -857,11 +882,12 @@ class TestCheckNoCycles:
 class TestConfigBackwardCompat:
     """Test that legacy allow_orphans config key is respected."""
 
+    # Verifies: REQ-d00085
     def test_REQ_d00085_allow_structural_orphans_skips_check(self, tmp_path: Path) -> None:
         """allow_structural_orphans=true skips structural orphan check."""
         config_path = tmp_path / ".elspais.toml"
         config_path.write_text(
-            """version = 4
+            """version = 5
 
 [project]
 name = "test-compat"
@@ -890,11 +916,12 @@ allow_structural_orphans = true
             "allow_structural_orphans=true should skip structural orphan check"
         )
 
+    # Verifies: REQ-d00085
     def test_REQ_d00085_allow_structural_orphans_false_runs_check(self, tmp_path: Path) -> None:
         """allow_structural_orphans=false runs the check regardless of allow_orphans."""
         config_path = tmp_path / ".elspais.toml"
         config_path.write_text(
-            """version = 4
+            """version = 5
 
 [project]
 name = "test-precedence"

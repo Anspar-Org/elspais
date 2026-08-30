@@ -42,7 +42,7 @@ def _uncovered_rollup(n=2):
 # not a hard-coded hue.
 GREY = _severity_color("neutral")
 RED = _severity_color("error")
-GREEN = _severity_color("ok")
+GREEN = _severity_color("off")
 
 
 class TestImplementedGapSeverityGated:

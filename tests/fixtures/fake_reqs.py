@@ -20,6 +20,3 @@ CODE_RAW_TEXT_MULTI = "# Implements: REQ-t00001\n# Implements: REQ-t00002"
 TEST_RAW_TEXT = "# Verifies: REQ-t00001"
 TEST_RAW_TEXT_VALIDATES_A = "# Verifies: REQ-t00001-A"
 TEST_RAW_TEXT_NONEXISTENT = "# Verifies: REQ-NONEXISTENT"
-
-# Test parser input: simulated function definition with multi-assertion ref
-PARSER_INPUT_MULTI_ASSERTION = (1, "def test_REQ_d00060_A_B_combined_test():")

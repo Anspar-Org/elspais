@@ -213,7 +213,8 @@ def validate_anchor(anchor: str, graph: TraceGraph) -> bool:
         for child in node.iter_children(edge_kinds=ASSERTION_STRUCTURE_EDGES):
             if child.kind.value == "remainder" and child.get_field("heading") == frag_value:
                 return True
-        # Fallback: check sections dict field (legacy/test graphs)
+        # A requirement also carries its sections as a dict field; a graph
+        # built without REMAINDER children is anchored against that.
         sections = node.get_field("sections", None)
         if sections and frag_value in sections:
             return True

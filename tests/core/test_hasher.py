@@ -313,6 +313,7 @@ class TestComputeNormalizedHash:
 class TestChangelogStripping:
     """Validates REQ-p00004-A, REQ-p00002-C: Changelog stripping before hashing."""
 
+    # Verifies: REQ-p00004-A
     def test_REQ_p00004_A_strip_changelog_removes_section(self):
         """Body with ## Changelog section returns body without it."""
         # Verifies: REQ-d00131-J
@@ -321,6 +322,7 @@ class TestChangelogStripping:
         assert result == "Some requirement text."
         assert "## Changelog" not in result
 
+    # Verifies: REQ-p00004-A
     def test_REQ_p00004_A_strip_changelog_preserves_body_without_changelog(self):
         """Body without changelog is unchanged."""
         body = "Some requirement text.\n\nMore details here."
@@ -335,6 +337,7 @@ class TestChangelogStripping:
         assert result == "Some requirement text."
         assert not result.endswith("\n")
 
+    # Verifies: REQ-p00002-C
     def test_REQ_p00002_C_hash_excludes_changelog_section(self):
         """Hash of body WITH changelog == hash of body WITHOUT changelog."""
         body_without = "Some requirement text."
@@ -351,6 +354,7 @@ class TestChangelogStripping:
         assert hash_without == hash_with_v1
         assert hash_without == hash_with_v2
 
+    # Verifies: REQ-p00002-C
     def test_REQ_p00002_C_hash_changes_when_body_changes_not_changelog(self):
         """Changing body text before changelog changes the hash."""
         body_a = "Requirement version A.\n\n## Changelog\n\n- 2026-01-01: Created"

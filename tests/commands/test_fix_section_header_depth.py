@@ -7,7 +7,7 @@ import io
 from pathlib import Path
 
 CONFIG_TOML = """\
-version = 3
+version = 5
 
 [project]
 name = "test-section-depth"

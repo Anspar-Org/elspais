@@ -53,7 +53,7 @@ def _make_two_target_project(tmp_path: Path) -> Path:
 
     (project / ".elspais.toml").write_text(
         """\
-version = 3
+version = 5
 
 [project]
 name = "two-target"

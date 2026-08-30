@@ -26,8 +26,8 @@ COMPOSABLE_SECTIONS = (
     "failing",
     "no_assertions",
     "gaps",
-    "broken",
-    "unlinked",
+    "unresolved",
+    "uncited",
 )
 
 # Implements: REQ-d00085-E
@@ -42,8 +42,8 @@ FORMAT_SUPPORT = {
     "failing": {"text", "markdown", "json"},
     "no_assertions": {"text", "markdown", "json"},
     "gaps": {"text", "markdown", "json"},
-    "broken": {"text", "markdown", "json"},
-    "unlinked": {"text", "markdown", "json"},
+    "unresolved": {"text", "markdown", "json"},
+    "uncited": {"text", "markdown", "json"},
 }
 
 EXIT_BIT: dict[str, int] = {
@@ -57,8 +57,8 @@ EXIT_BIT: dict[str, int] = {
     "failing": 16,
     "no_assertions": 16,
     "gaps": 16,
-    "broken": 32,
-    "unlinked": 64,
+    "unresolved": 32,
+    "uncited": 64,
 }
 
 
@@ -195,8 +195,8 @@ def run(
         "failing",
         "no_assertions",
         "gaps",
-        "broken",
-        "unlinked",
+        "unresolved",
+        "uncited",
     }
     if set(sections) & graph_sections:
         from elspais.config import get_config
@@ -263,14 +263,12 @@ def _render_section(
         from elspais.commands.gaps import render_section as gap_render
 
         return gap_render(graph, config, args)
-    elif name == "broken":
-        from elspais.commands.broken import render_section as broken_render
+    elif name in ("unresolved", "uncited"):
+        # The same narrowing the standalone command applies (REQ-d00285-C):
+        # a section composed with others says what the command alone says.
+        from elspais.commands.health import render_section
 
-        return broken_render(graph, config, args)
-    elif name == "unlinked":
-        from elspais.commands.unlinked import render_section as unlinked_render
-
-        return unlinked_render(graph, config, args)
+        return render_section(graph, config, args, preset=name)
     else:
         return f"Error: Unknown section '{name}'", 1
 

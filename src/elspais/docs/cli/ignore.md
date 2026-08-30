@@ -4,7 +4,7 @@ Scanning skips are configured under the `[scanning]` section of `.elspais.toml`.
 There is no `[ignore]` section -- skips live alongside the directories and
 file patterns they apply to.
 
-Two levers control what gets skipped:
+Three lists make up the ignore configuration:
 
 | Config | Scope | Applies to |
 |--------|-------|------------|
@@ -17,6 +17,23 @@ every kind; a kind's `skip_files`/`skip_dirs` are checked only when scanning
 that kind. `skip_files` and `skip_dirs` are matched identically (both are just
 glob patterns) -- the two names are a readability convention, not different
 matching rules.
+
+## Ignoring and selecting are different questions
+
+Every kind's scan answers them in one order, and the order matters:
+
+1. **Ignore** -- the three lists above exclude a file or a whole directory.
+   An excluded path is never opened, so nothing downstream can say anything
+   about it. Ignoring is how you tell the tool a file is none of its business.
+2. **Select** -- the kind's `file_patterns` pick, from what survived, the
+   files to scan.
+
+A file that survives step 1 but matches nothing in step 2 is not scanned --
+and if it carries a *Traceability* keyword anyway, the tool reports it. That
+is the difference the two steps buy you: a citation the tool declined to read
+is disclosed, while a file you ignored is passed over in silence. If you want
+no report about a file, ignore it; narrowing `file_patterns` alone does not
+silence it.
 
 ```toml
 [scanning]
@@ -66,10 +83,12 @@ basename, each individual path component, and the full path. A pattern like
 
 elspais has no built-in code/test de-duplication: a file matched by both
 `[scanning.code].directories` and `[scanning.test]` is scanned as *both* a code
-node and a test node. This is harmless (same target) but redundant. To scan a
-directory only as tests, exclude it from the code scan via
-`[scanning.code].skip_dirs`. For example, Playwright specs living under
-`apps/**/e2e/tests` that are already scanned as test nodes:
+node and a test node. This is harmless (same target) but redundant. Exclude it
+from the code scan rather than narrowing `[scanning.code].file_patterns`: an
+ignored file is passed over in silence, while a merely unselected file that
+cites a requirement is reported. Use `[scanning.code].skip_dirs`. For example,
+Playwright specs living under `apps/**/e2e/tests` that are already scanned as
+test nodes:
 
 ```toml
 [scanning.code]

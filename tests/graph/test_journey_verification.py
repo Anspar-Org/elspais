@@ -2,8 +2,8 @@
 """Tests for journey-id recognition inside Verifies: reference lines.
 
 These tests confirm that JOURNEY_REF_PATTERN matches JNY-... targets
-(whole journeys and addressable steps), and that _extract_ids collects
-them without breaking existing REQ-id extraction.
+(whole journeys and addressable steps), and that the one reference-list
+reader resolves them without breaking existing REQ-id resolution.
 
 Wiring tests (journey_with_*_graph fixtures) confirm that the generic
 resolution path in builder.py wires TEST -> STEP and TEST -> JOURNEY
@@ -20,9 +20,9 @@ import pytest
 
 from elspais.config.schema import ElspaisConfig
 from elspais.graph.aggregation import absolute_tier
-from elspais.graph.parsers.lark.transformers.reference import ReferenceTransformer
+from elspais.graph.parsers.lark.transformers.reference import read_reference_list
 from elspais.graph.parsers.patterns import JOURNEY_REF_PATTERN
-from elspais.utilities.patterns import IdPatternConfig, IdResolver
+from elspais.utilities.patterns import FederatedIdReader, IdPatternConfig, IdResolver
 
 
 def _validated(config: dict) -> dict:
@@ -328,7 +328,7 @@ def capture_broken_refs():
     """Return a function that extracts broken references from a graph."""
 
     def _capture(graph):
-        return graph.broken_references()
+        return graph.unresolved_references()
 
     return _capture
 
@@ -363,9 +363,21 @@ def resolver():
 
 
 @pytest.fixture()
-def extractor(resolver):
-    """ReferenceTransformer instance for calling _extract_ids."""
-    return ReferenceTransformer(resolver, "test_ref")
+def reader(resolver):
+    """The federation's identifier reader over this repository alone."""
+    return FederatedIdReader(resolver)
+
+
+def _targets(reader, line):
+    """Every target ``read_reference_list`` resolves out of an annotation line.
+
+    ONE reading of a reference list, so what a journey id may be written
+    beside is what any other reference may be written beside. Reading needs
+    nothing about the file's language: a list is identifiers, separators and
+    whitespace, so it ends at the first content that is none of those
+    (REQ-d00287-B).
+    """
+    return [item.resolved for item in read_reference_list(reader, line) if item.resolved]
 
 
 # ---------------------------------------------------------------------------
@@ -393,35 +405,37 @@ def test_journey_ref_pattern_rejects_bare_jny_no_number():
 
 
 # ---------------------------------------------------------------------------
-# _extract_ids integration tests
+# Reading a Verifies: list that names a journey
 # ---------------------------------------------------------------------------
 
 
-# Verifies: REQ-d00255
-def test_extract_ids_journey_only(extractor):
-    """Verifies: JNY-OQ-Login-01 yields the whole-journey id."""
-    ids = extractor._extract_ids("Verifies: JNY-OQ-Login-01")
-    assert "JNY-OQ-Login-01" in ids
+# Verifies: REQ-d00255-A, REQ-d00256-B
+@pytest.mark.parametrize(
+    ("line", "expected"),
+    [
+        # A whole journey is a legal target (REQ-d00255-A).
+        ("Verifies: JNY-OQ-Login-01", ["JNY-OQ-Login-01"]),
+        # So is an addressable step, suffix and all (REQ-d00256-B).
+        ("Verifies: JNY-OQ-Login-01/2", ["JNY-OQ-Login-01/2"]),
+        # A journey id belongs to its own grammar rather than to any
+        # repository's identifiers, so it is offered alongside them and
+        # neither displaces the other.
+        ("Verifies: REQ-p00001-A", ["REQ-p00001-A"]),
+        (
+            "Verifies: REQ-p00001-A, JNY-OQ-Login-01/2",
+            ["REQ-p00001-A", "JNY-OQ-Login-01/2"],
+        ),
+    ],
+)
+def test_a_verifies_list_reads_journey_and_requirement_targets_alike(reader, line, expected):
+    """A journey id is a target the one reference reader resolves.
 
-
-# Verifies: REQ-d00256
-def test_extract_ids_journey_step(extractor):
-    """Verifies: JNY-OQ-Login-01/2 yields the step id with suffix."""
-    ids = extractor._extract_ids("Verifies: JNY-OQ-Login-01/2")
-    assert "JNY-OQ-Login-01/2" in ids
-
-
-def test_extract_ids_req_still_works(extractor):
-    """Existing REQ-p00001-A extraction is unaffected (no regression)."""
-    ids = extractor._extract_ids("Verifies: REQ-p00001-A")
-    assert "REQ-p00001-A" in ids
-
-
-def test_extract_ids_mixed_line(extractor):
-    """Mixed line yields both REQ and JNY ids."""
-    ids = extractor._extract_ids("Verifies: REQ-p00001-A, JNY-OQ-Login-01/2")
-    assert "REQ-p00001-A" in ids
-    assert "JNY-OQ-Login-01/2" in ids
+    Each item of a list is judged on its own, so a journey id beside a
+    requirement id must resolve without either costing the other -- and it
+    must resolve to the id as written, since a step's number is what
+    distinguishes it from its journey.
+    """
+    assert _targets(reader, line) == expected
 
 
 # ---------------------------------------------------------------------------

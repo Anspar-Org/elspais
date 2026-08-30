@@ -246,3 +246,83 @@ def test_js_zero_sentinel_parse_lines_match_comment_lines(js_graph):
         f"Test B: expected parse_line={JS_LINE_B} (comment line), "
         f"got {tests[1].get_field('parse_line')}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Integration: a citation separated from its test() by a block of prose
+#
+# The binding rule has no line limit, so the TEST node lands on the test() call
+# site however long the comment block above it is.  When the binding was
+# limited to a five-line forward window this citation reached nothing, and the
+# builder anchored the TEST node at the COMMENT's own line -- a node no result
+# recorded at the test's real line can ever match (REQ-d00254-G), so the
+# assertion read as tested and never as passing.
+# ---------------------------------------------------------------------------
+
+#   1: void main() {
+#   2:   // Verifies: REQ-p00001-A
+#   3..7: prose
+#   8:   test('alpha test', () {   <-- LONG_TEST_LINE, six lines below the citation
+LONG_COMMENT_DART = """\
+void main() {
+  // Verifies: REQ-p00001-A
+  // The alpha path is described at length here, because the length of a
+  // comment block says nothing about what that block describes.  The
+  // citation above names the test that follows it whether the author
+  // wrote one line of prose in between or a dozen, and the reader who
+  // wrote the dozen did not thereby mean a different test.
+  test('alpha test', () {
+    expect(1, 1);
+  });
+}
+"""
+
+LONG_COMMENT_PATH = "test/long_comment_test.dart"
+LONG_TEST_LINE = 8
+
+
+@pytest.fixture(scope="module")
+def long_comment_graph(resolver):
+    """Graph built from LONG_COMMENT_DART through the actual dispatch_test pipeline."""
+    dispatcher = FileDispatcher(resolver)
+    items = dispatcher.dispatch_test(LONG_COMMENT_DART, file_path=LONG_COMMENT_PATH)
+    for item in items:
+        item.source_context = MockSourceContext(LONG_COMMENT_PATH)
+
+    req = make_requirement(
+        "REQ-p00001",
+        assertions=[
+            {"label": "A", "text": "SHALL alpha"},
+            {"label": "B", "text": "SHALL beta"},
+        ],
+    )
+    return build_graph(req, *items)
+
+
+def test_citation_above_a_prose_block_anchors_on_the_test_call_line(long_comment_graph):
+    # Verifies: REQ-d00254-K
+    """One TEST node, anchored at the test() call site rather than the citation line."""
+    tests = list(long_comment_graph.iter_by_kind(NodeKind.TEST))
+    assert len(tests) == 1, f"expected 1 TEST node, got {len(tests)}: {[t.id for t in tests]}"
+    assert tests[0].get_field("parse_line") == LONG_TEST_LINE, (
+        f"expected parse_line={LONG_TEST_LINE} (the test() line), "
+        f"got {tests[0].get_field('parse_line')} — a citation that reaches no test is "
+        f"anchored at its own comment line, where no result can ever match it"
+    )
+
+
+def test_citation_above_a_prose_block_still_verifies_its_assertion(long_comment_graph):
+    # Verifies: REQ-d00254-K
+    """The test anchored at the test() line carries the assertion the citation named."""
+    req = long_comment_graph.find_by_id("REQ-p00001")
+    assert req is not None, "REQ-p00001 not found in graph"
+    tests = list(long_comment_graph.iter_by_kind(NodeKind.TEST))
+    assert len(tests) == 1, f"need 1 TEST node, got {len(tests)}"
+
+    targets = sorted(
+        label
+        for edge in req.iter_outgoing_edges()
+        if edge.kind == EdgeKind.VERIFIES and edge.target is tests[0]
+        for label in edge.assertion_targets
+    )
+    assert targets == ["A"]

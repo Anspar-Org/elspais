@@ -282,7 +282,8 @@ def _resolve_repo_info(
             break
 
     if config is None and fallback_dir is not None:
-        # Legacy fallback: walk up from spec dir to find .elspais.toml
+        # The graph entry carries no config: read one from disk by walking up
+        # from the spec directory.
         from elspais.config import get_config
 
         current = fallback_dir.resolve()

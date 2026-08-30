@@ -8,7 +8,7 @@ from pathlib import Path
 from elspais.graph.factory import build_graph
 
 CONFIG_TOML = """\
-version = 3
+version = 5
 
 [project]
 name = "test"
@@ -70,6 +70,7 @@ def _make_project(tmp_path: Path, spec_content: str) -> Path:
 class TestREQ_d00131_B_assertion_spacing_canonicalization:
     """Validates REQ-d00131-B: assertion spacing is canonicalized at parse time."""
 
+    # Verifies: REQ-d00131-B
     def test_REQ_d00131_B_consecutive_assertions_marked_dirty(self, tmp_path):
         """Consecutive assertions without blank lines should mark requirement dirty."""
         project = _make_project(tmp_path, SPEC_NO_SPACING)
@@ -83,6 +84,7 @@ class TestREQ_d00131_B_assertion_spacing_canonicalization:
         reasons = node.get_field("parse_dirty_reasons") or []
         assert "assertion_spacing" in reasons, f"Expected 'assertion_spacing' in {reasons}"
 
+    # Verifies: REQ-d00131-B
     def test_REQ_d00131_B_proper_spacing_not_dirty(self, tmp_path):
         """Assertions with proper blank-line spacing should not trigger spacing dirty."""
         project = _make_project(tmp_path, SPEC_GOOD_SPACING)
@@ -96,6 +98,7 @@ class TestREQ_d00131_B_assertion_spacing_canonicalization:
         reasons = node.get_field("parse_dirty_reasons") or []
         assert "assertion_spacing" not in reasons
 
+    # Verifies: REQ-d00131-B
     def test_REQ_d00131_B_render_save_fixes_spacing(self, tmp_path):
         """render_save on dirty file should produce canonical assertion spacing."""
         from elspais.graph.render import render_save

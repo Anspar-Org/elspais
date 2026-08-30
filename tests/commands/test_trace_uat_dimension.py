@@ -94,7 +94,7 @@ Validates: REQ-d00001-A
 
     (tmp_path / ".elspais.toml").write_text(
         """\
-version = 3
+version = 5
 
 [project]
 name = "trace-uat-test"

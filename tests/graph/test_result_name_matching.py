@@ -43,7 +43,7 @@ test('logs in', async () => {
 """
 
 _CONFIG = """\
-version = 3
+version = 5
 
 [project]
 name = "namer"
@@ -385,3 +385,70 @@ def test_check_reports_a_name_that_picked_out_several_tests(tmp_path):
     assert "matched 2 tests" in message
     assert "tests/e2e/login.spec.ts" in message
     assert "tests/smoke/login.spec.ts" in message
+
+
+# Verifies: REQ-d00284-C, REQ-d00285-A
+def test_the_report_names_the_results_it_could_not_match(tmp_path):
+    """The report names them rather than counting them.
+
+    A count told a reader that two results matched nothing and left them to
+    find out which two -- which meant moving the results file aside and
+    re-running to diff the totals. The check has always held each result's
+    recorded name and its place in the file; the renderer dropped them.
+    """
+    import argparse
+
+    from elspais.commands.health import HealthReport, _format_report
+
+    check = check_unmatched_results(_build(_project(tmp_path, declared="source-file", cwd="app")))
+    assert check.findings, "the fixture produced a result matching no test"
+
+    args = argparse.Namespace(
+        format="text",
+        verbose=True,
+        quiet=False,
+        lenient=False,
+        include_passing_details=False,
+        severity=None,
+        category=None,
+        code=None,
+        path=None,
+    )
+    out = _format_report(HealthReport(checks=[check]), args)
+
+    assert "login.spec.ts" in out, "the report names the result it could not match"
+    assert "matched no test" in out, "and says which of the two problems it is"
+    assert check.remedy in out, "and what to run about it"
+
+
+# Verifies: REQ-d00284-C, REQ-d00212-U
+def test_the_check_takes_its_severity_from_the_one_authority(tmp_path):
+    """Both outcomes carry the configured severity, not a literal.
+
+    The passing branch used to hardcode `warning`, so a project that raised
+    this check to `error` saw the severity move only when the check failed.
+    """
+    config = {"rules": {"severity": {"tests.unmatched_results": "error"}}}
+
+    matched = check_unmatched_results(_build(_project(tmp_path, declared="source-file")), config)
+    unmatched = check_unmatched_results(
+        _build(_project(tmp_path / "b", declared="source-file", cwd="app")), config
+    )
+
+    assert matched.passed is True
+    assert matched.severity == "error"
+    assert unmatched.passed is False
+    assert unmatched.severity == "error"
+
+
+# Verifies: REQ-d00285-G
+def test_the_check_reports_as_skipped_where_a_project_turns_it_off(tmp_path):
+    config = {"rules": {"severity": {"tests.unmatched_results": "off"}}}
+
+    check = check_unmatched_results(
+        _build(_project(tmp_path, declared="source-file", cwd="app")), config
+    )
+
+    assert check.severity == "info"
+    assert check.details.get("skipped") is True
+    assert check.findings == []

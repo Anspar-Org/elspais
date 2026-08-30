@@ -31,6 +31,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from elspais.config.schema import ElspaisConfig
+from elspais.graph.parsers.directives import counted_assertion_labels
 from elspais.utilities.test_identity import build_test_id_from_nodeid
 
 
@@ -504,11 +505,11 @@ def count_by_coverage(
         Dict with 'total', 'full_coverage', 'partial_coverage', 'no_coverage' counts.
 
     Note:
-        Thin delegate to `graph.aggregation.tier_buckets()` (REQ-d00258-C),
-        kept here for API compatibility. `failing` folds into `no_coverage`
-        below only because the legacy dict has three buckets and the
-        "implemented" dimension never sets `has_failures`, so `b.failing`
-        is always 0 for this dimension -- the fold is a no-op guard.
+        Thin delegate to `graph.aggregation.tier_buckets()` (REQ-d00258-C).
+        `failing` folds into `no_coverage` below only because this dict
+        carries three buckets and the "implemented" dimension never sets
+        `has_failures`, so `b.failing` is always 0 for this dimension --
+        the fold is a no-op guard.
     """
     from elspais.graph.aggregation import tier_buckets
 
@@ -584,13 +585,24 @@ def count_code_coverage(graph: FederatedGraph) -> dict[str, int]:
     - total_covered_lines: sum of lines where hit_count > 0 across FILE nodes
     - total_attributed_lines: sum of code_tested.total_lines across all REQUIREMENT nodes
       (lines shared across REQs may be counted multiple times)
+    - unmeasured_files: FILE nodes left out because their source could not be
+      re-analysed, so the figure states what it is over (REQ-d00254-Q)
     """
     from elspais.graph import NodeKind
 
     total_executable = 0
     total_covered = 0
+    unmeasured_files = 0
 
     for node in graph.iter_by_kind(NodeKind.FILE):
+        # Implements: REQ-d00254-Q
+        # A file whose source could not be re-analysed has no known total.
+        # Both sums are skipped, not just the denominator: counting its
+        # executed lines against everyone else's total would raise the
+        # figure by exactly the lines whose size is unknown.
+        if node.get_field("source_analysed") is False:
+            unmeasured_files += 1
+            continue
         executable = node.get_field("executable_lines")
         if executable:
             total_executable += executable
@@ -608,6 +620,7 @@ def count_code_coverage(graph: FederatedGraph) -> dict[str, int]:
         "total_executable_lines": total_executable,
         "total_covered_lines": total_covered,
         "total_attributed_lines": total_attributed,
+        "unmeasured_files": unmeasured_files,
     }
 
 
@@ -1008,11 +1021,10 @@ def _compute_lcov_tested(
     from elspais.graph.metrics import CoverageDimension
     from elspais.graph.relations import EdgeKind
 
-    labels = [
-        c.get_field("label", "")
-        for c in node.iter_children()
-        if c.kind == NodeKind.ASSERTION and c.get_field("label", "")
-    ]
+    # Implements: REQ-p00017-G
+    # Retired *Assertions* are absent: they are excluded from every coverage
+    # calculation, and a calculation that never sees one cannot credit it.
+    labels = counted_assertion_labels(node)
     if not labels:
         return
 
@@ -1340,14 +1352,13 @@ def annotate_coverage(
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
         metrics = RollupMetrics()
 
-        # Collect assertion children
-        assertion_labels: list[str] = []
-
-        for child in node.iter_children():
-            if child.kind == NodeKind.ASSERTION:
-                label = child.get_field("label", "")
-                if label:
-                    assertion_labels.append(label)
+        # Collect assertion children.
+        # Implements: REQ-p00017-G
+        # A retired *Assertion* does not exist for coverage purposes, so it
+        # never enters this list -- which is what takes it out of the
+        # denominator on every surface reading these metrics, rather than
+        # each of them deciding separately.
+        assertion_labels: list[str] = counted_assertion_labels(node)
 
         metrics.total_assertions = len(assertion_labels)
 
@@ -1475,7 +1486,7 @@ def annotate_coverage(
                                     )
                                 )
 
-                        # Implements: REQ-d00258-N
+                        # Implements: REQ-d00277-C
                         # Deliberately NOT registered for result lookup. This
                         # test names the CODE, not the *Assertion*: its verdict
                         # says the implementing code was exercised, which is
@@ -1729,12 +1740,8 @@ def _conduct_refines_coverage(graph: FederatedGraph) -> None:
         metrics = req.get_metric("rollup_metrics")
         if metrics is None:
             continue
-        labels = [
-            child.get_field("label", "")
-            for child in req.iter_children()
-            if child.kind == NodeKind.ASSERTION and child.get_field("label", "")
-        ]
-        labels_by_req[req.id] = labels
+        # Implements: REQ-p00017-G
+        labels_by_req[req.id] = counted_assertion_labels(req)
         imm: dict[str, tuple[dict[str, float], dict[str, float]]] = {}
         for dim_name in _PROPAGATING_DIMENSIONS:
             dim = getattr(metrics, dim_name)
@@ -1972,9 +1979,6 @@ DEFAULT_STOPWORDS = frozenset(
     ]
 )
 
-# Alias for backward compatibility
-STOPWORDS = DEFAULT_STOPWORDS
-
 
 @dataclass
 class KeywordsConfig:
@@ -2193,7 +2197,6 @@ __all__ = [
     "JourneyVerification",
     # Keyword extraction
     "DEFAULT_STOPWORDS",
-    "STOPWORDS",
     "KeywordsConfig",
     "extract_keywords",
     "annotate_keywords",

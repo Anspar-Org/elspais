@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 
 _PRIMARY_CONFIG = """\
-version = 3
+version = 5
 
 [project]
 name = "primary"
@@ -32,7 +32,7 @@ namespace = "CAL"
 """
 
 _ASSOCIATE_CONFIG = """\
-version = 3
+version = 5
 
 [project]
 name = "callisto"

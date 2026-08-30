@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 from dataclasses import dataclass, field
 from glob import glob
 from pathlib import Path
@@ -23,7 +24,11 @@ from elspais.config import (
     get_ignore_config,
     get_spec_directories,
 )
-from elspais.config.schema import ElspaisConfig
+from elspais.config.schema import (
+    DEFAULT_CODE_PATTERNS,
+    DEFAULT_TEST_PATTERNS,
+    ElspaisConfig,
+)
 from elspais.graph.builder import GraphBuilder
 from elspais.graph.deserializer import DomainFile
 from elspais.graph.federated import FederatedGraph
@@ -36,6 +41,11 @@ from elspais.graph.GraphNode import FileType, GraphNode, NodeKind, make_file_id
 from elspais.graph.parsers import ParserRegistry
 from elspais.graph.parsers.journey import JourneyParser
 from elspais.graph.parsers.lark import FileDispatcher
+from elspais.graph.parsers.patterns import (
+    KEYWORD_PATTERN,
+    METADATA_COMMENT_MARKERS,
+    comment_markers_for_path,
+)
 from elspais.graph.parsers.remainder import RemainderParser
 from elspais.utilities.patterns import FederatedIdReader, IdResolver, build_resolver
 
@@ -82,6 +92,65 @@ def _tests_named(name: str, scanned: frozenset[str]) -> list[str]:
     return sorted(p for p in scanned if p == needle or p.endswith("/" + needle))
 
 
+# Implements: REQ-d00285-A
+def _repo_relative(path: str | Path, repo_root: Path) -> str:
+    """*path* as the repository sees it, or unchanged where it is elsewhere.
+
+    A finding names a file the way the reader will look for it. Everything
+    else the graph records about a file is repo-relative, and a finding that
+    alone spelled it absolutely would not line up with any of it.
+    """
+    try:
+        return str(Path(path).resolve().relative_to(Path(repo_root).resolve()))
+    except ValueError:
+        return str(path)
+
+
+# Implements: REQ-d00285-F, REQ-d00285-G
+def _unknown_reporter_cause(reporter: str) -> str:
+    """The one wording for a target naming a reporter nothing reads.
+
+    Two places detect it -- the ingestion loop, and the ingestion function
+    called from anywhere else -- and one condition reported under two
+    descriptions reads as two conditions.
+    """
+    from elspais.graph.parsers.results.registry import REPORTER_REGISTRY
+
+    return (
+        f"no reporter named {reporter!r}; nothing reads this target's results. "
+        f"Known reporters: {', '.join(sorted(REPORTER_REGISTRY))}"
+    )
+
+
+# Implements: REQ-d00285-G
+def _record_parser_diagnostics(
+    recorder: Any,
+    parser: Any,
+    stage: str,
+    target_name: str | None,
+    fallback_path: str,
+    repo_root: Path,
+) -> None:
+    """Lift what a results parser declined to read onto the graph.
+
+    ``recorder`` is whatever holds the records -- the builder while the graph
+    is being built, the graph itself once it is. A parser that records
+    nothing contributes nothing.
+    """
+    iter_diagnostics = getattr(parser, "iter_diagnostics", None)
+    if iter_diagnostics is None:
+        return
+    for diagnostic in iter_diagnostics():
+        recorder.record_ingestion_fault(
+            path=_repo_relative(diagnostic.path or fallback_path, repo_root),
+            stage=stage,
+            cause=diagnostic.cause,
+            line=diagnostic.line,
+            target=target_name,
+            partial=getattr(diagnostic, "partial", False),
+        )
+
+
 def _ingest_target_results(
     builder,
     target,
@@ -106,10 +175,24 @@ def _ingest_target_results(
     try:
         spec = get_reporter(target.reporter)
     except KeyError:
+        # Implements: REQ-d00285-G
+        # A misspelled reporter name produces no results anywhere, and a
+        # target that ingested nothing looks exactly like a suite that
+        # reported nothing. Record the name that matched no reporter.
         _log.debug("_ingest_target_results: unknown reporter %r, skipping", target.reporter)
+        builder.record_ingestion_fault(
+            path=_repo_relative(source_path, repo_root) if source_path else "",
+            stage="target",
+            cause=_unknown_reporter_cause(target.reporter),
+            target=target.name,
+        )
         return 0
 
     if spec.kind != "results":
+        # Suppressed deliberately: this is routing, not a condition. A
+        # coverage-kind reporter has its own ingestion pass, which reads this
+        # same target and annotates FILE nodes from it; recording a fault
+        # here would report a target that was read as one that was not.
         _log.debug(
             "_ingest_target_results: reporter %r is kind=%r, not 'results', skipping",
             target.reporter,
@@ -119,6 +202,8 @@ def _ingest_target_results(
 
     parser = spec.parser_factory()
     records = parser.parse(results_text, source_path)
+    # Implements: REQ-d00285-G
+    _record_parser_diagnostics(builder, parser, "results", target.name, source_path, repo_root)
 
     # Implements: REQ-d00254-O
     # Normalise the producer's line origin to the tool's own numbering, once,
@@ -407,47 +492,133 @@ def _run_prescan_command(
         return None
 
 
-# Default file patterns for [directories].code scanning.
-# Covers all languages listed in the multi-language comment support table.
-#
-# Jinja templates are included because a template is where a viewer's
-# JavaScript is written -- the code is real, the annotations in it are real,
-# and leaving the extension out meant every one of them was invisible while
-# the requirements they implement read as unimplemented. What a `.j2` file
-# holds is decided by the comment markers found in it, exactly as for any
-# other extension: a `//` line in a `.js.j2` reads, and a `/* */` block in a
-# `.css.j2` does not, which is the block-comment gap and not specific to
-# templates.
-DEFAULT_CODE_PATTERNS = [
-    "*.py",
-    "*.js",
-    "*.ts",
-    "*.jsx",
-    "*.tsx",
-    "*.java",
-    "*.c",
-    "*.cpp",
-    "*.h",
-    "*.hpp",
-    "*.go",
-    "*.rs",
-    "*.rb",
-    "*.sh",
-    "*.bash",
-    "*.sql",
-    "*.lua",
-    "*.yml",
-    "*.yaml",
-    "*.dart",
-    "*.swift",
-    "*.kt",
-    "*.css",
-    "*.scss",
-    "*.tf",
-    "*.tfvars",
-    "*.hcl",
-    "*.j2",
-]
+# The default pattern lists live with the schema that declares them
+# (``config/schema.py``), so the value a setting defaults to and the value
+# scanning uses when a project declares none are the same object.
+
+
+# Implements: REQ-d00212-Q+W
+def _patterns_for_kind(declared: list[str], fallback: list[str]) -> list[str]:
+    """The patterns a scanning kind selects by.
+
+    A kind selects the files its declared patterns match, within the
+    directories it declares -- that is the whole of file selection, and it
+    means the same thing for every kind. Declaring none means the kind's
+    defaults, so a configuration written before the setting had a default
+    still scans what it always scanned rather than nothing at all.
+    """
+    return list(declared) if declared else list(fallback)
+
+
+# Implements: REQ-d00241-F
+# A *Traceability* keyword, read from the one authority that says what those
+# keywords are, followed by the colon that makes it a citation rather than
+# the ordinary English word. Nothing here decides whether the citation would
+# have bound -- the file was never read, so that question has no answer; what
+# is being recorded is that the tool declined to look.
+_KEYWORD_CITATION = re.compile(r"\b(" + KEYWORD_PATTERN.pattern + r")\s*:", re.IGNORECASE)
+
+# A declined file is read only far enough to answer one question. The cap
+# bounds what a stray archive or generated blob in a scanned directory can
+# cost, and a NUL byte in the opening chunk says the file is not text at all.
+_DECLINED_PROBE_BYTES = 1 << 20
+
+
+# Markdown fences hold examples. A keyword inside one is being shown, not
+# written, and a document that explains the syntax is full of them -- so a
+# fenced line is skipped rather than read as a citation the tool missed.
+_MARKDOWN_SUFFIXES = frozenset({".md", ".markdown"})
+
+# In markdown a citation opens its line, optionally wrapped in emphasis --
+# that is the shape a metadata field and a journey's `Validates:` are written
+# in. Prose ABOUT a keyword does not: it sits mid-sentence or inside an
+# inline code span, and a document explaining the syntax is made of that. The
+# looser reading is kept for every other file type, where a keyword followed
+# by a colon is a citation wherever it appears in a comment.
+_MARKDOWN_CITATION = re.compile(
+    r"^\s*(?:[*_]{1,2})?(" + KEYWORD_PATTERN.pattern + r")(?:[*_]{1,2})?\s*:",
+    re.IGNORECASE,
+)
+
+
+def _citation_in_comment(line: str, markers: tuple[str, ...]):
+    """A *Traceability* citation written behind one of *markers* on *line*.
+
+    A citation lives in a comment (REQ-d00269-K), so the keyword is looked
+    for after a marker that opens one -- otherwise ``implements: list[str]``,
+    an ordinary parameter annotation, reads as a citation the tool missed.
+    """
+    for marker in markers:
+        at = line.find(marker)
+        if at == -1:
+            continue
+        found = _KEYWORD_CITATION.search(line, at + len(marker))
+        if found:
+            return found
+    return None
+
+
+def _keyword_citation_in(path: Path) -> tuple[int, str] | None:
+    """The first *Traceability* keyword written in *path*, if any.
+
+    Returns the 1-based line and the keyword as the author spelled it, or
+    None where the file carries none, cannot be read, or is not text.
+    """
+    try:
+        with path.open("rb") as handle:
+            raw = handle.read(_DECLINED_PROBE_BYTES)
+    except OSError:
+        return None
+    if b"\0" in raw[:8192]:
+        return None
+    text = raw.decode("utf-8", errors="ignore")
+    markdown = path.suffix.lower() in _MARKDOWN_SUFFIXES
+    # The markers a comment opens with in this file's language. Where the
+    # language is not one the tool has a pattern for, the three metadata
+    # markers stand in: the whole point here is to notice a citation the
+    # tool cannot currently read, so the permissive reading is the useful
+    # one -- unlike in the grammar, where guessing a marker would BIND an
+    # edge off the strength of a shape.
+    markers = comment_markers_for_path(str(path)) or METADATA_COMMENT_MARKERS
+    in_fence = False
+    for number, line in enumerate(text.splitlines(), start=1):
+        if markdown:
+            if line.lstrip().startswith("```"):
+                in_fence = not in_fence
+                continue
+            if in_fence:
+                continue
+            found = _MARKDOWN_CITATION.match(line)
+        else:
+            found = _citation_in_comment(line, markers)
+        if found:
+            return number, found.group(1)
+    return None
+
+
+# Implements: REQ-d00241-F, REQ-d00241-G
+def _record_declined_files(
+    builder: GraphBuilder,
+    domain_file: DomainFile,
+    kind: str,
+    repo_root: Path,
+) -> None:
+    """Record every file this walk reached, declined, and that cites anyway.
+
+    A file the ignore configuration excludes never reaches this function --
+    the walk drops it before anything is read -- so an ignored file is passed
+    over in silence, which is what REQ-d00241-G requires.
+    """
+    for path in domain_file.iter_declined():
+        found = _keyword_citation_in(path)
+        if found is None:
+            continue
+        line, keyword = found
+        try:
+            relative = str(path.resolve().relative_to(repo_root.resolve()))
+        except ValueError:
+            relative = str(path)
+        builder.record_unscanned_keyword_file(relative, kind, keyword, line)
 
 
 @dataclass
@@ -559,7 +730,8 @@ def _resolve_spec_dir_config(
     # Build Lark-based FileDispatcher for spec files
     dispatcher = FileDispatcher(resolver)
 
-    # Legacy registry kept for backwards compatibility during transition
+    # Spec files reach the Lark dispatcher; the registry carries the parsers
+    # that read the rest of a spec directory.
     registry = ParserRegistry()
     # RequirementParser removed — Lark dispatcher handles spec files
     registry.register(JourneyParser(FederatedIdReader(resolver)))
@@ -739,20 +911,22 @@ def build_graph(
         # Resolve full scan config for this spec dir from its own .elspais.toml
         dir_config = _resolve_spec_dir_config(spec_dir)
 
+        # Implements: REQ-d00212-Q+W
+        # One mechanism, one meaning: the ignore configuration excludes, the
+        # declared patterns select, and both are settled inside the walk.
         domain_file = DomainFile(
             spec_dir,
             patterns=dir_config.file_patterns,
             recursive=True,
             skip_dirs=dir_config.skip_dirs,
             skip_files=dir_config.skip_files,
+            ignore_config=dir_config.ignore_config,
+            scope="spec",
         )
 
         # Use Lark FileDispatcher for spec file parsing
         for parsed_content in domain_file.dispatch(dir_config.dispatcher.dispatch_spec):
-            # Check if source should be ignored using [ignore].spec patterns
             source_path = parsed_content.source_context.metadata.get("path")
-            if source_path and dir_config.ignore_config.should_ignore(source_path, scope="spec"):
-                continue
             # Implements: REQ-d00128-A
             # Create FILE node for this spec file
             file_node = None
@@ -760,68 +934,56 @@ def build_graph(
                 file_node = _get_or_create_file_node(Path(source_path), FileType.SPEC)
             builder.add_parsed_content(parsed_content, file_node=file_node)
 
-    # 5. Scan code files from [traceability].scan_patterns AND [directories].code
+        _record_declined_files(builder, domain_file, "spec", repo_root)
+
+    # 5. Scan code files from the code kind's declared directories.
+    # Implements: REQ-d00212-Q+W
     if scan_code:
         scanned_code_files: set[str] = set()
 
-        # 5a. Explicit scan_patterns (existing behavior)
-        scan_patterns = list(typed_config.scanning.code.file_patterns)
-
-        for pattern in scan_patterns:
-            # Resolve glob pattern relative to repo_root
-            matched_files = glob(str(repo_root / pattern), recursive=True)
-            for file_path in matched_files:
-                path = Path(file_path)
-                if path.is_file():
-                    resolved = str(path.resolve())
-                    scanned_code_files.add(resolved)
-                    # Implements: REQ-d00128-A
-                    fn = _get_or_create_file_node(path, FileType.CODE)
-                    domain_file = DomainFile(path)
-                    for parsed_content in domain_file.dispatch(default_dispatcher.dispatch_code):
-                        builder.add_parsed_content(parsed_content, file_node=fn)
-
-        # 5b. [directories].code with default file patterns
         code_dirs = get_code_directories(config, repo_root)
-        ignore_dirs = list(typed_config.scanning.skip)
+        code_patterns = _patterns_for_kind(
+            typed_config.scanning.code.file_patterns, DEFAULT_CODE_PATTERNS
+        )
+        ignore_dirs = list(typed_config.scanning.code.skip_dirs) + list(typed_config.scanning.skip)
+        code_skip_files = list(typed_config.scanning.code.skip_files)
 
         for code_dir in code_dirs:
             domain_file = DomainFile(
                 code_dir,
-                patterns=DEFAULT_CODE_PATTERNS,
+                patterns=code_patterns,
                 recursive=True,
                 skip_dirs=ignore_dirs,
+                skip_files=code_skip_files,
+                ignore_config=default_ignore_config,
+                scope="code",
             )
-            # Track files already checked for ignore/dedup in this loop
-            checked_files: set[str] = set()
-            skip_files: set[str] = set()
+            # One file is scanned once, however many declared directories
+            # happen to contain it.
+            here = {str(f.resolve()) for f in domain_file.iter_selected()}
+            fresh = here - scanned_code_files
+            scanned_code_files |= here
+
             for parsed_content in domain_file.dispatch(default_dispatcher.dispatch_code):
                 source_path = parsed_content.source_context.metadata.get("path")
-                if source_path:
-                    resolved = str(Path(source_path).resolve())
-                    # Skip files already processed by scan_patterns (step 5a)
-                    if resolved in scanned_code_files:
-                        continue
-                    # Check ignore only once per file
-                    if resolved not in checked_files:
-                        checked_files.add(resolved)
-                        if default_ignore_config.should_ignore(source_path, scope="code"):
-                            skip_files.add(resolved)
-                    if resolved in skip_files:
-                        continue
+                if source_path and str(Path(source_path).resolve()) not in fresh:
+                    continue
                 # Implements: REQ-d00128-A
                 fn = None
                 if source_path:
                     fn = _get_or_create_file_node(Path(source_path), FileType.CODE)
                 builder.add_parsed_content(parsed_content, file_node=fn)
 
+            _record_declined_files(builder, domain_file, "code", repo_root)
+
     # 6. Scan test directories from testing config
     if scan_tests:
         testing_cfg = typed_config.scanning.test
         if testing_cfg.enabled:
             test_dirs = list(testing_cfg.directories)
-            test_patterns = list(testing_cfg.file_patterns)
-            test_skip_dirs = list(testing_cfg.skip_dirs)
+            # Implements: REQ-d00212-Q+W
+            test_patterns = _patterns_for_kind(testing_cfg.file_patterns, DEFAULT_TEST_PATTERNS)
+            test_skip_dirs = list(testing_cfg.skip_dirs) + list(typed_config.scanning.skip)
 
             # Run external prescan command if configured
             prescan_command = testing_cfg.prescan_command
@@ -855,11 +1017,18 @@ def build_graph(
                 for dir_path in matched_dirs:
                     path = Path(dir_path)
                     if path.is_dir():
+                        # Implements: REQ-d00212-Q+W, REQ-d00241-G
+                        # The ignore configuration governs the test kind too:
+                        # it was never asked here, so `[scanning.test]`'s own
+                        # exclusions decided nothing.
                         domain_file = DomainFile(
                             path,
                             patterns=test_patterns,
                             recursive=True,
                             skip_dirs=test_skip_dirs,
+                            skip_files=list(testing_cfg.skip_files),
+                            ignore_config=default_ignore_config,
+                            scope="test",
                         )
                         for parsed_content in domain_file.dispatch(_dispatch_test):
                             # Implements: REQ-d00128-A
@@ -878,13 +1047,32 @@ def build_graph(
                                     pass
                             builder.add_parsed_content(parsed_content, file_node=fn)
 
+                        _record_declined_files(builder, domain_file, "test", repo_root)
+
             # 6b-target. Ingest results from [[scanning.test.targets]] via reporter registry.
             # Implements: REQ-d00128-A+H
             # RemainderParser is NOT registered for RESULT file types.
             # When targets is empty (the default) this loop is a no-op.
             _captured = captured_results or {}
+            from elspais.graph.parsers.results.registry import get_reporter as _get_reporter
+
             for target in typed_config.scanning.test.targets:
                 if not target.reporter:
+                    continue
+                # Implements: REQ-d00285-G
+                # Resolve the reporter before anything is read, so a name
+                # nothing reads is reported as that, and so the conditions
+                # below can tell a target that owes results from one whose
+                # results are a coverage report read further down.
+                try:
+                    target_spec = _get_reporter(target.reporter)
+                except KeyError:
+                    builder.record_ingestion_fault(
+                        path="",
+                        stage="target",
+                        cause=_unknown_reporter_cause(target.reporter),
+                        target=target.name,
+                    )
                     continue
                 # Implements: REQ-d00254-I
                 carried = fresh_targets is not None and target.name not in fresh_targets
@@ -893,10 +1081,20 @@ def build_graph(
                 try:
                     cwd_path.resolve().relative_to(resolved_root)
                 except ValueError:
+                    # Implements: REQ-d00285-G
                     _log.warning(
                         "target %r: cwd %r escapes repo root -- skipping",
                         target.name,
                         target.cwd,
+                    )
+                    builder.record_ingestion_fault(
+                        path=str(target.cwd or ""),
+                        stage="target",
+                        cause=(
+                            f"working directory {target.cwd!r} resolves outside the "
+                            f"repository, so no results were read for this target"
+                        ),
+                        target=target.name,
                     )
                     continue
                 # Implements: REQ-d00284-B
@@ -938,13 +1136,44 @@ def build_graph(
                                     scanned_tests=target_tests,
                                 )
                     else:
+                        # Implements: REQ-d00285-G
+                        # A results pattern matching nothing is a run that
+                        # left no report where the target says one is written
+                        # -- not a run whose report said nothing.
                         _log.debug("target %r: no files matched %r", target.name, target.results)
-                else:
+                        if target_spec.kind == "results":
+                            builder.record_ingestion_fault(
+                                path=_repo_relative(cwd_path / target.results, repo_root),
+                                stage="results",
+                                cause=(
+                                    "no file matched this target's results pattern, so "
+                                    "no test results were read for it"
+                                ),
+                                target=target.name,
+                            )
+                elif target_spec.kind == "results":
                     _log.debug(
                         "target %r: stdout reporter with no captured output and no results"
                         " glob -- skipping",
                         target.name,
                     )
+                    # Implements: REQ-d00285-G
+                    # Only where this build actually ran the targets: with no
+                    # run in this invocation, a target whose reporter reads a
+                    # runner's stdout has nothing to have produced, and
+                    # recording that would report the tool's own mode of
+                    # invocation as a defect in the project.
+                    if captured_results is not None:
+                        builder.record_ingestion_fault(
+                            path="",
+                            stage="results",
+                            cause=(
+                                f"reporter {target.reporter!r} reads a runner's output, "
+                                f"the run produced none, and the target names no "
+                                f"results file"
+                            ),
+                            target=target.name,
+                        )
 
     graph = builder.build()
 
@@ -967,15 +1196,34 @@ def build_graph(
             try:
                 cwd_path.resolve().relative_to(_resolved_root)
             except ValueError:
+                # Implements: REQ-d00285-G
                 _log.warning(
                     "target %r: cwd %r escapes repo root -- skipping",
                     target.name,
                     target.cwd,
                 )
+                graph.record_ingestion_fault(
+                    path=str(target.cwd or ""),
+                    stage="target",
+                    cause=(
+                        f"working directory {target.cwd!r} resolves outside the "
+                        f"repository, so no coverage was read for this target"
+                    ),
+                    target=target.name,
+                )
                 continue
             cov_path = (cwd_path / target.coverage).resolve()
             if not cov_path.is_file():
+                # Implements: REQ-d00285-G
+                # No coverage file and coverage measuring nothing are the same
+                # zero once the numbers are aggregated.
                 _log.debug("target %r: coverage file not found: %s", target.name, cov_path)
+                graph.record_ingestion_fault(
+                    path=_repo_relative(cov_path, repo_root),
+                    stage="coverage",
+                    cause="the coverage file this target names is not there",
+                    target=target.name,
+                )
                 continue
             if lcov_parser.can_parse(cov_path):
                 cov_parser = lcov_parser
@@ -984,7 +1232,17 @@ def build_graph(
             elif cov_sqlite_parser.can_parse(cov_path):
                 cov_parser = cov_sqlite_parser
             else:
+                # Implements: REQ-d00285-G
                 _log.debug("target %r: unrecognised coverage format: %s", target.name, cov_path)
+                graph.record_ingestion_fault(
+                    path=_repo_relative(cov_path, repo_root),
+                    stage="coverage",
+                    cause=(
+                        "no coverage reader recognises this file's format, so the "
+                        "measurement it holds was not read"
+                    ),
+                    target=target.name,
+                )
                 continue
             # Binary formats (e.g. the .coverage SQLite DB) can't be
             # text-decoded -- their parser ignores `content` and reopens
@@ -1008,12 +1266,23 @@ def build_graph(
                 parsed_cov = cov_parser.parse(cov_content, str(cov_path), wanted_files=_wanted)
             else:
                 parsed_cov = cov_parser.parse(cov_content, str(cov_path))
+            # Implements: REQ-d00285-G
+            _record_parser_diagnostics(
+                graph, cov_parser, "coverage", target.name, str(cov_path), repo_root
+            )
             for source_file, data in parsed_cov.items():
                 cov_node = _resolve_coverage_file_node(graph, source_file, cov_path, repo_root)
                 if cov_node is None:
                     continue
                 cov_node.set_field("line_coverage", data["line_coverage"])
                 cov_node.set_field("executable_lines", data["executable_lines"])
+                # Implements: REQ-d00254-Q
+                # A file whose source could not be re-analysed has executed
+                # lines but no known total. Carry that, so a figure computed
+                # over this file can leave it out rather than treat its
+                # executed count as its size.
+                if not data.get("source_analysed", True):
+                    cov_node.set_field("source_analysed", False)
                 if data.get("contexts"):
                     cov_node.set_field("line_contexts", data["contexts"])
 

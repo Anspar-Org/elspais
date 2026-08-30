@@ -1,8 +1,8 @@
 {
   "mcpServers": {
     "elspais": {
-      "command": "elspais",
-      "args": ["mcp", "serve"]
+      "type": "http",
+      "url": "${ELSPAIS_MCP_URL}"
     }
   }
 }

@@ -255,7 +255,7 @@ class TestPydanticShim:
     def test_load_config_validates_schema(self, tmp_path):
         """load_config() should validate against Pydantic schema."""
         config_path = tmp_path / ".elspais.toml"
-        config_path.write_text('version = 3\n[project]\nname = "test"\nnamespace = "TEST"\n')
+        config_path.write_text('version = 5\n[project]\nname = "test"\nnamespace = "TEST"\n')
 
         config = load_config(config_path)
         assert config["project"]["namespace"] == "TEST"
@@ -263,7 +263,7 @@ class TestPydanticShim:
     def test_load_config_rejects_unknown_key(self, tmp_path):
         """load_config() should reject unknown TOML keys."""
         config_path = tmp_path / ".elspais.toml"
-        config_path.write_text('version = 3\nbogus_key = "oops"\n')
+        config_path.write_text('version = 5\nbogus_key = "oops"\n')
 
         with pytest.raises(ValueError):
             load_config(config_path)
@@ -285,7 +285,7 @@ class TestProjectNameBoundary:
     def test_load_config_rejects_missing_project_name(self, tmp_path):
         """A config file missing [project].name is rejected at load_config()."""
         cfg_path = tmp_path / ".elspais.toml"
-        cfg_path.write_text('version = 4\n[project]\nnamespace = "REQ"\n')
+        cfg_path.write_text('version = 5\n[project]\nnamespace = "REQ"\n')
         with pytest.raises(ValueError) as ei:
             load_config(cfg_path)
         msg = str(ei.value).lower()
@@ -294,7 +294,7 @@ class TestProjectNameBoundary:
     def test_load_config_rejects_empty_project_name(self, tmp_path):
         """A config file with empty [project].name is rejected at load_config()."""
         cfg_path = tmp_path / ".elspais.toml"
-        cfg_path.write_text('version = 4\n[project]\nname = ""\nnamespace = "REQ"\n')
+        cfg_path.write_text('version = 5\n[project]\nname = ""\nnamespace = "REQ"\n')
         with pytest.raises(ValueError) as ei:
             load_config(cfg_path)
         msg = str(ei.value).lower()
@@ -303,7 +303,7 @@ class TestProjectNameBoundary:
     def test_load_config_accepts_real_project_name(self, tmp_path):
         """A config file with a real [project].name loads cleanly."""
         cfg_path = tmp_path / ".elspais.toml"
-        cfg_path.write_text('version = 4\n[project]\nname = "demo"\nnamespace = "REQ"\n')
+        cfg_path.write_text('version = 5\n[project]\nname = "demo"\nnamespace = "REQ"\n')
         cfg = load_config(cfg_path)
         assert cfg["project"]["name"] == "demo"
 
@@ -334,7 +334,7 @@ class TestProjectNameBoundary:
         would be useless for the project name.
         """
         cfg_path = tmp_path / ".elspais.toml"
-        cfg_path.write_text('version = 4\n[project]\nnamespace = "REQ"\n')
+        cfg_path.write_text('version = 5\n[project]\nnamespace = "REQ"\n')
         local_path = tmp_path / ".elspais.local.toml"
         local_path.write_text('[project]\nname = "from-local"\n')
         cfg = load_config(cfg_path)
@@ -352,7 +352,7 @@ class TestProjectNamespaceBoundary:
     def test_load_config_rejects_missing_project_namespace(self, tmp_path):
         """A config file missing [project].namespace is rejected at load_config()."""
         cfg_path = tmp_path / ".elspais.toml"
-        cfg_path.write_text('version = 4\n[project]\nname = "demo"\n')
+        cfg_path.write_text('version = 5\n[project]\nname = "demo"\n')
         with pytest.raises(ValueError) as ei:
             load_config(cfg_path)
         msg = str(ei.value).lower()
@@ -361,7 +361,7 @@ class TestProjectNamespaceBoundary:
     def test_load_config_rejects_empty_project_namespace(self, tmp_path):
         """A config file with empty [project].namespace is rejected at load_config()."""
         cfg_path = tmp_path / ".elspais.toml"
-        cfg_path.write_text('version = 4\n[project]\nname = "demo"\nnamespace = ""\n')
+        cfg_path.write_text('version = 5\n[project]\nname = "demo"\nnamespace = ""\n')
         with pytest.raises(ValueError) as ei:
             load_config(cfg_path)
         msg = str(ei.value).lower()
@@ -370,14 +370,14 @@ class TestProjectNamespaceBoundary:
     def test_load_config_accepts_real_project_namespace(self, tmp_path):
         """A config file with a real [project].namespace loads cleanly."""
         cfg_path = tmp_path / ".elspais.toml"
-        cfg_path.write_text('version = 4\n[project]\nname = "demo"\nnamespace = "DEMO"\n')
+        cfg_path.write_text('version = 5\n[project]\nname = "demo"\nnamespace = "DEMO"\n')
         cfg = load_config(cfg_path)
         assert cfg["project"]["namespace"] == "DEMO"
 
     def test_load_config_accepts_namespace_via_local_override(self, tmp_path):
         """Local override supplying namespace rescues a main TOML without it."""
         cfg_path = tmp_path / ".elspais.toml"
-        cfg_path.write_text('version = 4\n[project]\nname = "demo"\n')
+        cfg_path.write_text('version = 5\n[project]\nname = "demo"\n')
         local_path = tmp_path / ".elspais.local.toml"
         local_path.write_text('[project]\nnamespace = "LOCAL"\n')
         cfg = load_config(cfg_path)
@@ -387,6 +387,7 @@ class TestProjectNamespaceBoundary:
 class TestChangelogConfig:
     """Validates REQ-p00002-A: Changelog configuration defaults and overrides."""
 
+    # Verifies: REQ-p00002-A
     def test_REQ_p00002_A_changelog_defaults_present(self):
         """config_defaults() includes changelog section with all expected keys."""
         config = config_defaults()
@@ -403,6 +404,7 @@ class TestChangelogConfig:
         for rkey in ("change_order", "reason"):
             assert rkey in changelog["require"], f"Missing require key: {rkey}"
 
+    # Verifies: REQ-p00002-A
     def test_REQ_p00002_A_changelog_defaults_values(self):
         """Verify default values for changelog configuration."""
         config = config_defaults()
@@ -412,6 +414,7 @@ class TestChangelogConfig:
         assert config["changelog"]["require"]["change_order"] is False
         assert config["changelog"]["require"]["reason"] is True
 
+    # Verifies: REQ-p00002-A
     def test_REQ_p00002_A_changelog_user_override(self):
         """User config overrides changelog defaults."""
         from elspais.config import _merge_configs

@@ -73,18 +73,21 @@ The single `spec.orphans` check is replaced by:
 | Check | Scope | Severity | Description |
 |-------|-------|----------|-------------|
 | `spec.structural_orphans` | All node kinds | Error | Nodes without a FILE parent (build bugs) |
-| `tests.unlinked` | TEST nodes | Info | Tests not linked to any requirement |
-| `code.unlinked` | CODE nodes | Info | Code refs not linked to any requirement |
+| `tests.uncited_file` | TEST files | Info | Test files in which no test cites a requirement |
+| `code.uncited_file` | CODE files | Info | Code files that cite nothing |
 | `spec.broken_references` | All edges | Warning | Edges targeting non-existent nodes |
 
 The existing `tests.coverage` and `code.coverage` checks already report
-requirement-side coverage gaps. The new `*.unlinked` checks report the inverse:
-artifact-side gaps.
+requirement-side coverage gaps. The `*.uncited_file` checks report the inverse:
+artifact-side gaps. They answer about FILES; the *unlinked* population --
+individual CODE/TEST nodes reaching no requirement -- is a different set,
+answered by `iter_unlinked(kind)` and the MCP `get_unlinked_nodes` tool. One
+name for the two answers is what REQ-d00285-F forbids.
 
 The per-file `code.references_resolve` and `tests.references_resolve` checks,
 which asked only whether a CODE/TEST node had a direct parent edge to a
-REQUIREMENT or ASSERTION, are subsumed by the reachability-based `*.unlinked`
-checks. Reference resolution itself remains checked on the spec side, by
+REQUIREMENT or ASSERTION, are subsumed by the reachability-based
+`*.uncited_file` checks. Reference resolution itself remains checked on the spec side, by
 `spec.implements_resolve` and `spec.refines_resolve`.
 
 ### Reachability API
@@ -112,7 +115,7 @@ state in the builder.
 
 ## Decisions
 
-1. **`tests.unlinked` severity**: Info. Tests without requirement links are
+1. **`tests.uncited_file` severity**: Info. Tests without requirement links are
    traceability gaps to close, not errors. Every test should eventually
    reference a requirement — create high-level requirements if needed (e.g.,
    "SHALL have integration tests") rather than leaving tests unlinked.

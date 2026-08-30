@@ -99,6 +99,7 @@ class TestTermsListEndpoint:
     """Validates REQ-d00242-A: GET /api/terms returns sorted term list with
     summary fields."""
 
+    # Verifies: REQ-d00242-A
     def test_REQ_d00242_A_returns_sorted_terms(self, tmp_path: Path) -> None:
         """GET /api/terms returns terms sorted alphabetically by term name."""
         client = _make_app(tmp_path)
@@ -111,6 +112,7 @@ class TestTermsListEndpoint:
         assert terms[0]["term"] == "API Gateway"
         assert terms[1]["term"] == "Bearer Token"
 
+    # Verifies: REQ-d00242-A
     def test_REQ_d00242_A_term_fields(self, tmp_path: Path) -> None:
         """Each term object has all required summary fields."""
         client = _make_app(tmp_path)
@@ -132,6 +134,7 @@ class TestTermsListEndpoint:
             missing = required_fields - set(t.keys())
             assert not missing, f"Missing fields: {missing}"
 
+    # Verifies: REQ-d00242-A
     def test_REQ_d00242_A_definition_short_truncated(self, tmp_path: Path) -> None:
         """definition_short is truncated to 150 chars with '...' suffix for long defs."""
         client = _make_app(tmp_path)
@@ -147,6 +150,7 @@ class TestTermsListEndpoint:
         api_gw = next(t for t in terms if t["term"] == "API Gateway")
         assert api_gw["definition_short"] == "A server that acts as a single entry point."
 
+    # Verifies: REQ-d00242-A
     def test_REQ_d00242_A_ref_count(self, tmp_path: Path) -> None:
         """ref_count matches number of references for each term."""
         client = _make_app(tmp_path)
@@ -159,6 +163,7 @@ class TestTermsListEndpoint:
         api_gw = next(t for t in terms if t["term"] == "API Gateway")
         assert api_gw["ref_count"] == 0
 
+    # Verifies: REQ-d00242-A
     def test_REQ_d00242_A_empty_dictionary(self, tmp_path: Path) -> None:
         """Empty TermDictionary returns []."""
         graph = TraceGraph(repo_root=tmp_path)
@@ -191,6 +196,7 @@ class TestTermDetailEndpoint:
     """Validates REQ-d00242-B: GET /api/term/{term_key} returns full detail
     with definition, references, and resolved node_title."""
 
+    # Verifies: REQ-d00242-B
     def test_REQ_d00242_B_returns_full_detail(self, tmp_path: Path) -> None:
         """GET /api/term/{key} returns full term with all fields."""
         client = _make_app(tmp_path)
@@ -206,6 +212,7 @@ class TestTermDetailEndpoint:
         assert isinstance(data["references"], list)
         assert len(data["references"]) == 2
 
+    # Verifies: REQ-d00242-B
     def test_REQ_d00242_B_references_include_node_title(self, tmp_path: Path) -> None:
         """Each reference has node_title resolved from the graph."""
         client = _make_app(tmp_path)
@@ -217,6 +224,7 @@ class TestTermDetailEndpoint:
             # REQ-p00001 has title "Authentication Module"
             assert ref["node_title"] == "Authentication Module"
 
+    # Verifies: REQ-d00242-B
     def test_REQ_d00242_B_reference_fields(self, tmp_path: Path) -> None:
         """Each reference has all required fields."""
         client = _make_app(tmp_path)
@@ -237,6 +245,7 @@ class TestTermDetailEndpoint:
 class TestTermNotFound:
     """Validates REQ-d00242-C: GET /api/term/{nonexistent} returns 404."""
 
+    # Verifies: REQ-d00242-C
     def test_REQ_d00242_C_nonexistent_returns_404(self, tmp_path: Path) -> None:
         """GET /api/term/nonexistent returns 404."""
         client = _make_app(tmp_path)

@@ -10,6 +10,11 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 # Hex-color and namespace patterns live in the utilities lib so all consumers
 # share a single regex. See `utilities/color.py` and `utilities/patterns.py`.
 from elspais.utilities.color import validate_hex_color as _validate_hex_color
+
+# The severity vocabulary has ONE home (REQ-d00212-U): the schema admits exactly
+# the values the resolver knows, so a setting cannot name a severity nothing can
+# act on.
+from elspais.utilities.findings import SeverityValue
 from elspais.utilities.patterns import REF_LIST_SEPARATOR, RESERVED_IDENTIFIER_CHARACTERS
 from elspais.utilities.patterns import validate_namespace as _validate_namespace
 
@@ -39,7 +44,10 @@ _DEFAULT_STATUS_ROLES: dict[str, list[str]] = {
 
 
 class _StrictModel(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True, populate_by_name=True)
+    # A field carrying an alias is written under that alias and no other: one
+    # setting has one spelling, so a file cannot say the same thing two ways
+    # and leave a reader to work out which one the tool read.
+    model_config = ConfigDict(extra="forbid", frozen=True)
 
 
 # Implements: REQ-d00212-J
@@ -363,8 +371,8 @@ class FormatConfig(_StrictModel):
     # writing `retired = "Deprecated"` was told nothing and kept treating
     # the status as active -- counted in coverage, reported as a gap.
     status_roles: dict[str, list[str]] = Field(default_factory=lambda: dict(_DEFAULT_STATUS_ROLES))
-    no_assertions_severity: str = "warning"
-    no_traceability_severity: str = "warning"
+    no_assertions_severity: SeverityValue = "warning"
+    no_traceability_severity: SeverityValue = "warning"
 
     @field_validator("status_roles")
     @classmethod
@@ -392,14 +400,17 @@ class FormatConfig(_StrictModel):
 class CoverageSeverityConfig(_StrictModel):
     """Severity mapping for a single coverage dimension's tier states.
 
-    Each tier maps to a severity: 'ok', 'info', 'warning', or 'error'. Tiers
-    are the unified vocabulary (REQ-d00258): full / partial / failing / missing.
+    Each tier maps to a severity in the one vocabulary (REQ-d00212-U): 'off',
+    'info', 'warning' or 'error'. Tiers are the unified vocabulary
+    (REQ-d00258): full / partial / failing / missing. A tier mapped to 'off'
+    is one this dimension says nothing about -- which is what a fully covered
+    dimension has to say, and why `full` defaults to it.
     """
 
-    full: str = "ok"
-    partial: str = "warning"
-    failing: str = "error"
-    missing: str = "error"
+    full: SeverityValue = "off"
+    partial: SeverityValue = "warning"
+    failing: SeverityValue = "error"
+    missing: SeverityValue = "error"
 
 
 def _uat_severity() -> CoverageSeverityConfig:
@@ -422,13 +433,13 @@ class CoverageConfig(_StrictModel):
     # has only two explanations and both are defects: the implementation exists
     # and its `Implements:` reference was never written, or the test is aimed at
     # an assertion it does not exercise.
-    uncredited_evidence: str = "error"
+    uncredited_evidence: SeverityValue = "error"
     # Implements: REQ-d00276-C
     # A test that failed and reaches no requirement. A warning by default: a
     # repository legitimately carries tests for things it has written no
     # requirement for, so the condition is not always a defect -- but a failure
     # nobody can find through a requirement is one nobody will find at all.
-    external_test_failure: str = "warning"
+    external_test_failure: SeverityValue = "warning"
     # Per-relationship label overrides (REQ-d00258). Keyed by relationship name
     # (implements/verifies/yields/validates/validated); resolved to dimension
     # labels via elspais.config.status_words.get_status_words().
@@ -443,29 +454,58 @@ class ReferenceSeverityConfig(_StrictModel):
     nothing about a line that never read as an identifier (REQ-d00269-F).
     """
 
-    retired: str = "warning"
-    provisional: str = "info"
-    aspirational: str = "info"
-    malformed: str = "warning"
-    unknown_namespace: str = "info"
-    unknown_requirement: str = "error"
-    unknown_assertion: str = "error"
-    forbidden: str = "error"
+    retired: SeverityValue = "warning"
+    provisional: SeverityValue = "info"
+    aspirational: SeverityValue = "info"
+    malformed: SeverityValue = "warning"
+    unknown_namespace: SeverityValue = "info"
+    unknown_requirement: SeverityValue = "error"
+    unknown_assertion: SeverityValue = "error"
+    forbidden: SeverityValue = "error"
     # Implements: REQ-d00272-G
-    keyword_form: str = "warning"
+    keyword_form: SeverityValue = "warning"
     # Implements: REQ-d00272-N
-    identifier_form: str = "warning"
+    identifier_form: SeverityValue = "warning"
     # Implements: REQ-d00272-O
-    undeclared: str = "warning"
+    undeclared: SeverityValue = "warning"
 
 
+# Implements: REQ-d00212-P, REQ-d00285-D
 class RulesConfig(_StrictModel):
     hierarchy: HierarchyConfig = Field(default_factory=HierarchyConfig)
     format: FormatConfig = Field(default_factory=FormatConfig)
     coverage: CoverageConfig = Field(default_factory=CoverageConfig)
     references: ReferenceSeverityConfig = Field(default_factory=ReferenceSeverityConfig)
+    # Severity for the checks that carry no setting of their own, keyed by the
+    # name the check reports under: `"spec.parseable" = "off"`. A check reads
+    # EITHER a named setting above OR an entry here -- never both, so a project
+    # that sets the one it read about always sees it take effect. Which of the
+    # two a given check reads is recorded in
+    # `elspais.utilities.findings.REGISTRY`, and a name that registry does not
+    # know is refused here rather than silently doing nothing.
+    severity: dict[str, SeverityValue] = Field(default_factory=dict)
     content_rules: list[str] = Field(default_factory=list)
     protected_branches: list[str] = Field(default=["main", "master"])
+
+    @field_validator("severity")
+    @classmethod
+    def _v_severity_names(cls, v: dict[str, Any]) -> dict[str, Any]:
+        from elspais.utilities.findings import REGISTRY
+
+        for name in v or {}:
+            rule = REGISTRY.get(name)
+            if rule is None:
+                raise ValueError(
+                    f"rules.severity.{name!r} names no check. Run `elspais docs checks` "
+                    f"for the checks this project runs."
+                )
+            if rule.path[:2] != ("rules", "severity"):
+                raise ValueError(
+                    f"rules.severity.{name!r} is configured under "
+                    f"{'.'.join(rule.path)} instead. A check reads one setting, "
+                    f"so setting it here would be read by nothing."
+                )
+        return v
 
 
 class KeywordsSearchConfig(_StrictModel):
@@ -498,6 +538,69 @@ class LevelConfig(_StrictModel):
         return _validate_hex_color(v)
 
 
+# Implements: REQ-d00212-Q+W
+# The patterns a kind selects by when its configuration declares none. They
+# are the DEFAULTS of the one selection mechanism, not a second one: a kind
+# always selects the files its `file_patterns` match, and these are what that
+# setting holds until a project writes its own. An empty list means "the
+# defaults", so a configuration written before the setting had a default
+# still scans what it always scanned.
+DEFAULT_SPEC_PATTERNS = ["*.md"]
+DEFAULT_TEST_PATTERNS = ["test_*.py", "*_test.py"]
+DEFAULT_JOURNEY_PATTERNS = ["*.md"]
+DEFAULT_DOCS_PATTERNS = ["*.md"]
+
+# Covers every language named in the comment-pattern table
+# (``graph/parsers/patterns.py``), because a file whose language has a comment
+# marker is a file a *Traceability* keyword can be written in.
+#
+# Jinja templates are included because a template is where a viewer's
+# JavaScript is written -- the code is real, the annotations in it are real,
+# and leaving the extension out meant every one of them was invisible while
+# the requirements they implement read as unimplemented. A template is
+# associated with the c-like comment pattern, whatever it renders to, like
+# every other scannable file type is associated with exactly one
+# (REQ-d00236-H): a `//` line reads in a `.js.j2` and in a `.css.j2` alike.
+# Block comments carry no citation in a template any more than anywhere else.
+#
+# Container image files are included for the same reason a `.tf` file is: an
+# image is where a deployment's configuration values are bound, so it is a
+# normal place to cite a requirement from.
+DEFAULT_CODE_PATTERNS = [
+    "*.py",
+    "*.js",
+    "*.ts",
+    "*.jsx",
+    "*.tsx",
+    "*.java",
+    "*.c",
+    "*.cpp",
+    "*.h",
+    "*.hpp",
+    "*.go",
+    "*.rs",
+    "*.rb",
+    "*.sh",
+    "*.bash",
+    "*.sql",
+    "*.lua",
+    "*.yml",
+    "*.yaml",
+    "*.dart",
+    "*.swift",
+    "*.kt",
+    "*.css",
+    "*.scss",
+    "*.tf",
+    "*.tfvars",
+    "*.hcl",
+    "*.j2",
+    "Dockerfile",
+    "*.Dockerfile",
+    "Containerfile",
+]
+
+
 # Implements: REQ-d00212-B
 class ScanningKindConfig(_StrictModel):
     directories: list[str] = Field(default_factory=list)
@@ -508,12 +611,13 @@ class ScanningKindConfig(_StrictModel):
 
 class SpecScanningConfig(ScanningKindConfig):
     directories: list[str] = Field(default_factory=lambda: ["spec"])
-    file_patterns: list[str] = Field(default_factory=lambda: ["*.md"])
+    file_patterns: list[str] = Field(default_factory=lambda: list(DEFAULT_SPEC_PATTERNS))
     index_file: str = ""
 
 
 class CodeScanningConfig(ScanningKindConfig):
     directories: list[str] = Field(default_factory=lambda: ["src"])
+    file_patterns: list[str] = Field(default_factory=lambda: list(DEFAULT_CODE_PATTERNS))
     source_roots: list[str] = Field(default_factory=lambda: ["src", ""])
 
 
@@ -611,7 +715,7 @@ class TestScanningConfig(ScanningKindConfig):
     __test__ = False  # Prevent pytest collection
 
     directories: list[str] = Field(default_factory=lambda: ["tests"])
-    file_patterns: list[str] = Field(default_factory=lambda: ["test_*.py", "*_test.py"])
+    file_patterns: list[str] = Field(default_factory=lambda: list(DEFAULT_TEST_PATTERNS))
     enabled: bool = False
     prescan_command: str = ""
     reference_keyword: str = "Verifies"
@@ -658,7 +762,7 @@ class TestScanningConfig(ScanningKindConfig):
 
 class JourneyScanningConfig(ScanningKindConfig):
     directories: list[str] = Field(default_factory=lambda: ["spec"])
-    file_patterns: list[str] = Field(default_factory=lambda: ["*.md"])
+    file_patterns: list[str] = Field(default_factory=lambda: list(DEFAULT_JOURNEY_PATTERNS))
     # Where UAT results are read from. The health check has always read this
     # setting and the shipped docs have always described it; only the field
     # was missing, so the path was fixed at its default and a project that
@@ -668,7 +772,7 @@ class JourneyScanningConfig(ScanningKindConfig):
 
 class DocsScanningConfig(ScanningKindConfig):
     directories: list[str] = Field(default_factory=lambda: ["docs"])
-    file_patterns: list[str] = Field(default_factory=lambda: ["*.md"])
+    file_patterns: list[str] = Field(default_factory=lambda: list(DEFAULT_DOCS_PATTERNS))
 
 
 # Implements: REQ-d00212-C
@@ -770,14 +874,13 @@ class StatusConfig(_StrictModel):
 class TermsSeverityConfig(_StrictModel):
     """Severity levels for defined-terms health checks."""
 
-    duplicate: str = "error"
-    undefined: str = "warning"
-    unmarked: str = "warning"
-    unused: str = "warning"
-    bad_definition: str = "error"
-    collection_empty: str = "warning"
-    canonical_form: str = "warning"
-    changed: str = "warning"  # definitions changed with unresolved review
+    duplicate: SeverityValue = "error"
+    undefined: SeverityValue = "warning"
+    unmarked: SeverityValue = "warning"
+    unused: SeverityValue = "warning"
+    bad_definition: SeverityValue = "error"
+    collection_empty: SeverityValue = "warning"
+    canonical_form: SeverityValue = "warning"
 
 
 # Implements: REQ-d00212-L
@@ -804,7 +907,7 @@ class FederationConfig(_StrictModel):
 
 # Implements: REQ-d00212-F
 class ElspaisConfig(_StrictModel):
-    version: int = 4
+    version: int = 5
     project: ProjectConfig = Field(default_factory=ProjectConfig)
     id_patterns: IdPatternsConfig = Field(alias="id-patterns", default_factory=IdPatternsConfig)
     levels: dict[str, LevelConfig] = Field(
@@ -899,6 +1002,5 @@ class ElspaisConfig(_StrictModel):
     model_config = ConfigDict(
         extra="forbid",
         frozen=True,
-        populate_by_name=True,
         json_schema_extra={"$schema": "https://json-schema.org/draft/2020-12/schema"},
     )

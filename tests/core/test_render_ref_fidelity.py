@@ -229,6 +229,7 @@ class TestDeleteLastEdgeRenderFidelity:
     restore both.
     """
 
+    # Verifies: REQ-d00132-F
     @pytest.mark.parametrize(("child_id", "parent_id"), LAST_EDGE_CASES)
     def test_REQ_d00132_F_delete_last_edge_removes_ref_from_render(
         self, fidelity_graph, child_id: str, parent_id: str
@@ -245,6 +246,7 @@ class TestDeleteLastEdgeRenderFidelity:
             f"still cites {parent_id} (stored-field fallback resurrected it)"
         )
 
+    # Verifies: REQ-d00132-F
     @pytest.mark.parametrize(("child_id", "parent_id"), LAST_EDGE_CASES)
     def test_REQ_d00132_F_delete_last_edge_changes_node_version(
         self, fidelity_graph, child_id: str, parent_id: str
@@ -260,6 +262,7 @@ class TestDeleteLastEdgeRenderFidelity:
             "on-disk representation, so node_version() must change"
         )
 
+    # Verifies: REQ-d00132-F
     @pytest.mark.parametrize(("child_id", "parent_id"), LAST_EDGE_CASES)
     def test_REQ_d00132_F_undo_delete_restores_ref_and_version(
         self, fidelity_graph, child_id: str, parent_id: str
@@ -284,6 +287,7 @@ class TestBrokenRefRenderPreservation:
     author's typo'd citation.
     """
 
+    # Verifies: REQ-d00132-G
     @pytest.mark.parametrize(("child_id", "broken_ref"), BROKEN_ALONE_CASES)
     def test_REQ_d00132_G_broken_ref_alone_still_renders(
         self, fidelity_graph, child_id: str, broken_ref: str
@@ -292,6 +296,7 @@ class TestBrokenRefRenderPreservation:
         child = _node(fidelity_graph, child_id)
         assert broken_ref in render_node(child)
 
+    # Verifies: REQ-d00132-G
     @pytest.mark.parametrize(("child_id", "valid_ref", "broken_ref"), MIXED_CASES)
     def test_REQ_d00132_G_mixed_valid_and_broken_refs_both_render(
         self, fidelity_graph, child_id: str, valid_ref: str, broken_ref: str
@@ -305,6 +310,7 @@ class TestBrokenRefRenderPreservation:
             f"author's broken {broken_ref} entry was silently dropped"
         )
 
+    # Verifies: REQ-d00132-G
     def test_REQ_d00132_G_mixed_broken_ref_survives_file_render(self, fidelity_graph):
         """render_file (the rewrite surface) keeps the broken entries too.
 
@@ -322,6 +328,7 @@ class TestBrokenRefRenderPreservation:
             "the mixed requirement's broken Refines entry was dropped from the file rewrite"
         )
 
+    # Verifies: REQ-d00132-G
     def test_REQ_d00132_G_partial_multi_assertion_keeps_broken_expansion(self, fidelity_graph):
         """`Implements: REQ-p00001-A+Z` keeps derived A and broken Z."""
         child = _node(fidelity_graph, "REQ-o00007")
@@ -340,6 +347,7 @@ class TestMutationBrokenRefLeftovers:
     render the (broken) ref; undoing either restores the prior render.
     """
 
+    # Verifies: REQ-d00132-G
     def test_REQ_d00132_G_fix_broken_reference_renders_new_ref_once(self, fidelity_graph):
         """fix_broken_reference replaces the broken entry with the real one."""
         child = _node(fidelity_graph, "REQ-o00003")
@@ -352,6 +360,7 @@ class TestMutationBrokenRefLeftovers:
             "the fixed ref must render exactly once -- not duplicated by a stale leftover entry"
         )
 
+    # Verifies: REQ-d00132-G
     def test_REQ_d00132_G_undo_fix_broken_reference_restores_broken_ref(self, fidelity_graph):
         """Undoing the fix brings the broken entry back into the render."""
         child = _node(fidelity_graph, "REQ-o00003")
@@ -363,6 +372,7 @@ class TestMutationBrokenRefLeftovers:
         assert "REQ-p77777" in rendered
         assert "REQ-p00001" not in rendered
 
+    # Verifies: REQ-d00132-G
     def test_REQ_d00132_G_add_edge_to_missing_target_renders_ref(self, fidelity_graph):
         """A mutation-added ref to a nonexistent target still renders."""
         child = _node(fidelity_graph, "REQ-o00008")
@@ -375,6 +385,7 @@ class TestMutationBrokenRefLeftovers:
             "cite it -- saving would lose the author's mutation"
         )
 
+    # Verifies: REQ-d00132-G
     def test_REQ_d00132_G_undo_broken_add_edge_removes_ref_from_render(self, fidelity_graph):
         """Undoing the broken add removes the ref from the render again."""
         child = _node(fidelity_graph, "REQ-o00008")
@@ -444,7 +455,7 @@ def template_graph(tmp_path: Path):
     )
     # Fixture premise: exactly one broken ref (refiner -> template), carrying
     # the template-rule diagnostic, and the leftover renders.
-    brs = [br for br in graph.broken_references() if br.source_id == "REQ-p00091"]
+    brs = [br for br in graph.unresolved_references() if br.source_id == "REQ-p00091"]
     assert len(brs) == 1, f"fixture premise broken: {brs!r}"
     assert brs[0].target_id == "REQ-p00090"
     assert brs[0].diagnostic, "template rejection must carry a diagnostic"
@@ -453,7 +464,7 @@ def template_graph(tmp_path: Path):
 
 
 def _broken_refs_from(graph, source_id: str):
-    return [br for br in graph.broken_references() if br.source_id == source_id]
+    return [br for br in graph.unresolved_references() if br.source_id == source_id]
 
 
 class TestRenameRetargetsBrokenLeftovers:
@@ -466,6 +477,7 @@ class TestRenameRetargetsBrokenLeftovers:
     the file disagree about which ID the author cites.
     """
 
+    # Verifies: REQ-d00132-G
     def test_REQ_d00132_G_rename_target_updates_broken_reference_report(self, template_graph):
         """The broken-references report follows the rename (existing behavior)."""
         template_graph.rename_node("REQ-p00090", "REQ-p00092")
@@ -474,6 +486,7 @@ class TestRenameRetargetsBrokenLeftovers:
         assert len(brs) == 1
         assert brs[0].target_id == "REQ-p00092"
 
+    # Verifies: REQ-d00132-G
     def test_REQ_d00132_G_rename_target_updates_rendered_leftover(self, template_graph):
         """The rendered Refines: line must cite the renamed target."""
         template_graph.rename_node("REQ-p00090", "REQ-p00092")
@@ -484,10 +497,11 @@ class TestRenameRetargetsBrokenLeftovers:
             "still cites the stale leftover -- saving would write the old ID"
         )
         assert "REQ-p00090" not in rendered, (
-            "rename_node retargeted _broken_references but left the source "
+            "rename_node retargeted _unresolved_references but left the source "
             "node's stored leftover pointing at the old ID"
         )
 
+    # Verifies: REQ-d00132-G
     @pytest.mark.parametrize(
         ("rename_from", "rename_to", "expect_source", "expect_target"),
         [
@@ -525,6 +539,7 @@ class TestUndoRenameRestoresBrokenRefs:
     report citing an ID that no longer exists.
     """
 
+    # Verifies: REQ-d00132-G
     def test_REQ_d00132_G_undo_rename_restores_broken_reference_target(self, template_graph):
         """After rename + undo, the report cites the original target again."""
         template_graph.rename_node("REQ-p00090", "REQ-p00092")
@@ -537,6 +552,7 @@ class TestUndoRenameRestoresBrokenRefs:
             "report still cites the undone name REQ-p00092"
         )
 
+    # Verifies: REQ-d00132-G
     def test_REQ_d00132_G_undo_rename_restores_rendered_leftover(self, template_graph):
         """After rename + undo, the render cites the original target again."""
         template_graph.rename_node("REQ-p00090", "REQ-p00092")
@@ -552,10 +568,11 @@ class TestDeleteRequirementBrokenRefs:
     references, and undoing the delete restores them.
 
     ``delete_requirement`` moves the node to _deleted_nodes but must not
-    leave _broken_references entries sourced from a node that no longer
+    leave _unresolved_references entries sourced from a node that no longer
     exists -- health surfaces would report a phantom citation.
     """
 
+    # Verifies: REQ-d00132-G
     def test_REQ_d00132_G_delete_requirement_retires_and_undo_restores_broken_refs(
         self, fidelity_graph
     ):
@@ -584,6 +601,7 @@ class TestRenameRetargetsAssertionSuffixedBrokenRefs:
     exact-match retargeting loop must not skip it.
     """
 
+    # Verifies: REQ-d00132-G
     def test_REQ_d00132_G_rename_retargets_assertion_suffixed_broken_reference(
         self, fidelity_graph
     ):
@@ -599,6 +617,7 @@ class TestRenameRetargetsAssertionSuffixedBrokenRefs:
             "broken target kept the old parent spelling"
         )
 
+    # Verifies: REQ-d00132-G
     def test_REQ_d00132_G_rename_retargets_assertion_suffixed_rendered_leftover(
         self, fidelity_graph
     ):

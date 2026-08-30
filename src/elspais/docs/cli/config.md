@@ -53,8 +53,18 @@ specify the keys you want to override. Environment variables always win.
 ### version
 
 ```toml
-version = 4   # Config schema version (required)
+version = 5   # Config schema version
 ```
+
+A file declaring any other version is refused. The refusal names each
+setting the running version does not read and what to write in its place,
+then the version line to set: an out-of-date configuration is never
+upgraded in place, so what a project configured is what it gets.
+
+The line may be omitted. A file that declares no version is making no
+claim about its shape, and its settings are checked either way -- that
+check, not the version line, is what actually catches a file written for
+an older elspais.
 
 ### [project] Section
 
@@ -176,6 +186,35 @@ editor rejects it before the tool is run.
 Unified file scanning configuration. Each kind has its own
 sub-section with directories, file_patterns, skip_files, skip_dirs.
 
+File selection works the same way for every kind, and this is the only place
+it is decided:
+
+1. The kind's `directories` say where to look.
+2. Anything the ignore configuration excludes is dropped first --
+   `[scanning].skip`, plus that kind's own `skip_files` and `skip_dirs`.
+   An excluded file is never read, and is never reported on.
+3. Whatever the kind's `file_patterns` match is scanned. A pattern is
+   matched against the file's name and against its path relative to the
+   scanned directory, so `*.py` selects at any depth and `api/*.py`
+   selects within a subdirectory.
+
+Patterns are `fnmatch` globs, matched the same way the ignore lists are:
+`*` matches any characters **including** `/`, and `**` is not special (it
+behaves as `*`). So `*.sql` selects a `.sql` file at any depth, while
+`database/**/*.sql` requires a literal `database/` prefix and at least one
+more `/` -- it does NOT match `database/schema.sql`. A pattern that reached
+files through the retired repository-root glob usually wants rewriting: name
+the holding directory under `directories` and match on the file, not the path.
+
+`file_patterns` never reaches outside `directories`, in any kind. A file
+inside a scanned directory that survives step 2 but matches nothing in step 3
+is simply not scanned -- and if it carries a *Traceability* keyword anyway,
+the tool reports it rather than passing over the citation in silence.
+
+An empty `file_patterns` means that kind's built-in defaults, not "no files".
+`elspais init` writes the defaults out in full, so what a kind scans is
+visible and editable rather than implied.
+
 ```toml
 [scanning]
 skip = ["node_modules", ".git", "__pycache__", "*.pyc", ".venv", ".env"]
@@ -189,7 +228,18 @@ skip_dirs = []
 
 [scanning.code]
 directories = ["src"]
-file_patterns = []
+# The default list is a common subset, not every language the tool can read a
+# keyword in: a comment pattern exists for many extensions this list does not
+# name (`.cs`, `.php`, `.toml`, `.clj`, `.tex`, `.hs` and more), and `.css` is
+# scanned though its only comment form is a block, which carries no keyword.
+# Name the extensions your project actually uses. Written out in full by
+# `elspais init`; an empty list means these same defaults. The full set of
+# patterns is `elspais docs linking`.
+file_patterns = ["*.py", "*.js", "*.ts", "*.jsx", "*.tsx", "*.java", "*.c",
+                 "*.cpp", "*.h", "*.hpp", "*.go", "*.rs", "*.rb", "*.sh",
+                 "*.bash", "*.sql", "*.lua", "*.yml", "*.yaml", "*.dart",
+                 "*.swift", "*.kt", "*.css", "*.scss", "*.tf", "*.tfvars",
+                 "*.hcl", "*.j2", "Dockerfile", "*.Dockerfile", "Containerfile"]
 skip_files = []
 skip_dirs = []
 # source_roots = []             # Root directories for import resolution
@@ -206,11 +256,9 @@ prescan_command = ""             # External test discovery command
 # prescan_command receives file paths on stdin, outputs JSON on stdout:
 #   [{"file": "path", "function": "name", "class": "Name|null", "line": N}]
 #
-# Note: function-name refs like `test_REQ_p_event_store_A` rely on `_` being
-# normalized to `-` before lookup. If you've set `[id-patterns.assertions]`
-# `separator = ":"` (or anything other than `"-"`), function-name refs will
-# resolve to the parent requirement only — put assertion-level refs in a
-# comment instead: `# Verifies: REQ-p-event-store:A`.
+# A test is linked by a comment above it and by nothing else. A requirement
+# ID spelled into the function name references nothing, whatever separators
+# are configured.
 
 # Test result ingestion is configured via [[scanning.test.targets]].
 # See: elspais docs test-targets
@@ -251,6 +299,15 @@ active = ["Active"]                 # Counted in coverage and analysis
 provisional = ["Draft", "Proposed"] # Excluded from coverage
 aspirational = ["Roadmap", "Future"]  # Excluded from coverage and analysis
 retired = ["Deprecated", "Superseded"]  # Excluded from everything
+
+# Severity for every check with no named setting of its own, keyed by the
+# name the check reports under. Quote the key -- check names contain a dot.
+# Values: "off" | "info" | "warning" | "error". "off" reports the check as
+# skipped with no findings; "info" lists the findings without failing the
+# run. `elspais docs checks` lists every name this table accepts.
+[rules.severity]
+# "spec.parseable" = "off"
+# "tests.results" = "info"
 ```
 
 ### [validation] Section

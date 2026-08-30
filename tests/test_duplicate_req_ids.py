@@ -35,7 +35,7 @@ from elspais.graph.render import render_save
 
 
 CONFIG_TOML = """\
-version = 3
+version = 5
 
 [project]
 name = "duplicate-req-id-repro"

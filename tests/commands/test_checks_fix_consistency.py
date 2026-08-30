@@ -19,7 +19,7 @@ from contextlib import redirect_stdout
 from pathlib import Path
 
 CONFIG_TOML = """\
-version = 3
+version = 5
 
 [project]
 name = "test-checks-fix-consistency"

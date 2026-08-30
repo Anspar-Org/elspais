@@ -30,16 +30,8 @@ daemon being replaced: an http client reconnects to the same address,
 where a stdio server is a process the client owns and nothing restarts
 once it exits.
 
-Installed for one project (the default), the registration names this
-working tree's address outright and there is nothing to arrange -- just
-launch the client. Each working tree keeps its own address, so parallel
-sessions in different worktrees do not collide, and the address is held
-for that tree even while nothing is serving it: restart the daemon, or
-stop and start it, and the same address answers.
-
-Installed with `--global`, one registration serves every project, so it
-cannot name any single tree's address. It names a variable instead, and
-the shell that launches the client supplies it:
+Whatever its scope, the registration names a variable rather than an
+address, and the shell that launches the client supplies it:
 
   $ eval "$(elspais mcp env)"
   $ claude
@@ -47,14 +39,38 @@ the shell that launches the client supplies it:
 `elspais mcp env` starts the daemon for the working tree you are in if
 none is running, then prints `export ELSPAIS_MCP_URL=...` for the shell
 to apply. (It prints rather than exports because no process can set a
-variable in the shell that started it.)
+variable in the shell that started it.) `--no-start` reads the address
+without starting anything.
 
-If a tree's reserved address is ever taken by something else, the daemon
-says so and serves elsewhere; re-running `elspais mcp install` records
-the new address.
+No scope can name an address outright, which is why there is only the one
+form. A registration is read wherever the client is launched, and every
+working tree of a repository reads the same one; an address settled while
+installing would name the tree that installed as though it were the tree
+reading. Resolving the variable at launch is what gives each tree its own
+answer, and it is re-derived every time, so a tree that loses its
+reservation settles a new address rather than keeping a dead one.
+
+That variable carries no default on purpose. A shell that never set it
+gets a missing-variable error naming `ELSPAIS_MCP_URL`; a default would
+fail as a refused connection and send the reader to look at the daemon.
+`elspais doctor` reports a registration that hardcodes a port, and what
+is serving this tree -- including any changes a daemon is holding that
+are not yet on disk.
+
+Within a session the address is stable. A tree's reserved address is held
+in `.elspais/daemon-port.json` and survives the process using it, so a
+daemon that restarts -- or renews itself when the program beneath it
+changes -- answers in the same place and the client reconnects. If the
+reserved address is ever taken by something else, the daemon says so and
+serves elsewhere.
+
+To point a client at a tree other than the one it is launched in, set
+`ELSPAIS_MCP_URL` to that tree's address yourself. That is per-shell and
+deliberate, which is the only way one tree's client should reach
+another's process.
 
 Running `elspais mcp install` again replaces whatever is registered, so
-switching between the two is one command either way.
+switching transport is one command either way.
 
 Use **stdio** (`elspais mcp install --transport stdio`) for a client that
 cannot speak http. A stdio server holds its own private graph: mutations
@@ -78,7 +94,7 @@ Get current graph health and statistics.
     node_counts       Count by node kind (requirement, assertion, code, test)
     total_nodes       Total nodes in graph
     has_orphans       Whether orphaned nodes exist
-    has_broken_references  Whether broken references exist
+    has_unresolved_references  Whether unresolved references exist
 
   Example response:
     {
@@ -86,16 +102,14 @@ Get current graph health and statistics.
       "node_counts": {"requirement": 45, "assertion": 120, "code": 30},
       "total_nodes": 195,
       "has_orphans": false,
-      "has_broken_references": false
+      "has_unresolved_references": false
     }
 
-**refresh_graph(full, path, force, if_tip_mutation_id)**
+**refresh_graph(path, force, if_tip_mutation_id)**
 
 Force rebuild the graph from spec files.
 
   Parameters:
-    full (bool)              Accepted for compatibility; every rebuild is
-                             full, as no cache is retained between builds
     path (str)               Switch to a different project directory first
     force (bool)             If true, discard unsaved mutations and refresh
     if_tip_mutation_id (str) The mutation-log tip; required when force=true
@@ -257,7 +271,7 @@ Get summary statistics for the project.
       - branch_changed    Changed vs main branch
     total_nodes            Total nodes in graph
     orphan_count           Requirements without parents
-    broken_reference_count References to non-existent requirements
+    unresolved_reference_count References to non-existent requirements
 
 **get_test_coverage(req_id)** / **get_uncovered_assertions(req_id?, source?)**
 
@@ -367,7 +381,7 @@ Add to Cursor's MCP settings:
 
 ### Project Health Check
 
-1. `get_graph_status()` - Check for orphans/broken refs
+1. `get_graph_status()` - Check for orphans/unresolved refs
 2. `get_project_summary()` - Review coverage stats
 3. Address requirements with `coverage: none`
 

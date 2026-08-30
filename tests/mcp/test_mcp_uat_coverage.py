@@ -34,6 +34,7 @@ def _make_uat_graph():
 class TestGetTestCoverageUATSection:
     """Validates REQ-d00069-A: get_test_coverage returns uat section."""
 
+    # Verifies: REQ-d00069-A
     def test_get_test_coverage_includes_uat_section_REQ_d00069_A(self):
         """_get_test_coverage returns a 'uat' section alongside 'test' data."""
         from elspais.mcp.server import _get_test_coverage
@@ -45,6 +46,7 @@ class TestGetTestCoverageUATSection:
         assert "referenced_pct" in result["uat"]
         assert "validated_pct" in result["uat"]
 
+    # Verifies: REQ-d00069-A
     def test_get_test_coverage_uat_referenced_pct_REQ_d00069_A(self):
         """uat.referenced_pct reflects JNY Validates coverage (1/2 assertions = 50%)."""
         from elspais.mcp.server import _get_test_coverage
@@ -53,6 +55,7 @@ class TestGetTestCoverageUATSection:
         result = _get_test_coverage(graph, "REQ-p00001")
         assert result["uat"]["referenced_pct"] == 50.0
 
+    # Verifies: REQ-d00069-A
     def test_get_test_coverage_uat_has_jny_nodes_REQ_d00069_A(self):
         """uat section includes jny_nodes list."""
         from elspais.mcp.server import _get_test_coverage
@@ -66,6 +69,7 @@ class TestGetTestCoverageUATSection:
 class TestGetUncoveredAssertionsSource:
     """Validates REQ-d00069-A: get_uncovered_assertions source parameter."""
 
+    # Verifies: REQ-d00069-A
     def test_uncovered_assertions_source_uat_REQ_d00069_A(self):
         """source='uat' returns UAT-uncovered assertions (B not covered by JNY)."""
         from elspais.mcp.server import _get_uncovered_assertions
@@ -76,6 +80,7 @@ class TestGetUncoveredAssertionsSource:
         assert "B" in result["uncovered_labels"]
         assert "A" not in result["uncovered_labels"]  # A is covered by JNY
 
+    # Verifies: REQ-d00069-A
     def test_uncovered_assertions_default_source_is_test_REQ_d00069_A(self):
         """Default source='test' — JNY coverage doesn't count as test coverage.
 
@@ -89,6 +94,7 @@ class TestGetUncoveredAssertionsSource:
         assert result["success"] is True
         assert "A" in result["uncovered_labels"]  # JNY doesn't count as automated test
 
+    # Verifies: REQ-d00069-A
     def test_uncovered_assertions_source_both_REQ_d00069_A(self):
         """source='both' — union of per-axis gaps (REQ-d00258).
 

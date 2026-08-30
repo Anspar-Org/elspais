@@ -147,7 +147,7 @@ def create_template_requirement(args: argparse.Namespace) -> int:
 # 1 line max.  For enums, list valid values.  Refer to docs for detail.
 _FIELD_COMMENTS: dict[str, str] = {
     # --- top-level scalars ---
-    "version": "Config schema version (do not change)",
+    "version": "Config schema version; any other version is refused, naming what to change",
     "cli_ttl": "Idle timeout in minutes for a daemon nobody is using "
     "(>0 = auto-start, 0 = disabled, <0 = no idle timeout); a daemon with a "
     "live client keeps running, and exits when its clients are gone",
@@ -216,20 +216,29 @@ _FIELD_COMMENTS: dict[str, str] = {
     "scanning.skip": "Global skip patterns (applied to all scan kinds)",
     "scanning.spec": "Spec file scanning",
     "scanning.spec.directories": "Directories to scan for spec files",
-    "scanning.spec.file_patterns": "Glob patterns for spec files",
+    "scanning.spec.file_patterns": (
+        "Glob patterns selecting among the files in the directories above "
+        "(empty = this kind's defaults)"
+    ),
     "scanning.spec.skip_files": "Filenames to skip in spec directories",
     "scanning.spec.skip_dirs": "Subdirectories to skip in spec directories",
     "scanning.spec.index_file": "Index file for ordering (e.g. INDEX.md)",
     "scanning.code": "Code file scanning",
     "scanning.code.directories": "Directories to scan for code files",
-    "scanning.code.file_patterns": "Glob patterns for code files",
+    "scanning.code.file_patterns": (
+        "Glob patterns selecting among the files in the directories above "
+        "(empty = this kind's defaults)"
+    ),
     "scanning.code.skip_files": "Filenames to skip in code directories",
     "scanning.code.skip_dirs": "Subdirectories to skip in code directories",
     "scanning.code.source_roots": "Import resolution roots",
     "scanning.test": "Test file scanning and reference detection",
     "scanning.test.enabled": "Enable test file scanning",
     "scanning.test.directories": "Directories to scan for test files",
-    "scanning.test.file_patterns": "Glob patterns for test files",
+    "scanning.test.file_patterns": (
+        "Glob patterns selecting among the files in the directories above "
+        "(empty = this kind's defaults)"
+    ),
     "scanning.test.skip_files": "Filenames to skip in test directories",
     "scanning.test.skip_dirs": "Subdirectories to skip in test directories",
     "scanning.test.prescan_command": (
@@ -273,12 +282,18 @@ _FIELD_COMMENTS: dict[str, str] = {
     ),
     "scanning.journey": "User journey file scanning",
     "scanning.journey.directories": "Directories to scan for journey files",
-    "scanning.journey.file_patterns": "Glob patterns for journey files",
+    "scanning.journey.file_patterns": (
+        "Glob patterns selecting among the files in the directories above "
+        "(empty = this kind's defaults)"
+    ),
     "scanning.journey.skip_files": "Filenames to skip in journey directories",
     "scanning.journey.skip_dirs": "Subdirectories to skip in journey directories",
     "scanning.docs": "Documentation file scanning",
     "scanning.docs.directories": "Directories to scan for documentation",
-    "scanning.docs.file_patterns": "Glob patterns for doc files",
+    "scanning.docs.file_patterns": (
+        "Glob patterns selecting among the files in the directories above "
+        "(empty = this kind's defaults)"
+    ),
     "scanning.docs.skip_files": "Filenames to skip in docs directories",
     "scanning.docs.skip_dirs": "Subdirectories to skip in docs directories",
     # --- [rules] ---
@@ -296,17 +311,17 @@ _FIELD_COMMENTS: dict[str, str] = {
     "rules.format.require_status": "Require Status field in requirement metadata",
     "rules.format.require_rationale": "Require Rationale section in requirements",
     "rules.format.no_assertions_severity": (
-        '"warning" | "info" — severity for REQs with no assertions'
+        '"off" | "info" | "warning" | "error" — severity for REQs with no assertions'
     ),
     "rules.format.no_traceability_severity": (
-        '"warning" | "info" — severity for code/test files with no REQ markers'
+        '"off" | "info" | "warning" | "error" — severity for code/test files with no REQ markers'
     ),
     "rules.format.status_roles": "Status role classification (metrics/viewer behavior)",
     "rules.format.status_roles.active": "Committed, normative — counted in all metrics",
     "rules.format.status_roles.provisional": "In-progress toward active — excluded from coverage",
     "rules.format.status_roles.aspirational": "Future/planning — excluded from coverage+analysis",
     "rules.format.status_roles.retired": "Concluded — excluded from everything, hidden by default",
-    "rules.coverage": "Coverage severity tiers per dimension (ok | info | warning | error)",
+    "rules.coverage": "Coverage severity tiers per dimension (off | info | warning | error)",
     "rules.coverage.implemented": "Code implements assertions",
     "rules.coverage.tested": "Tests reference assertions",
     "rules.coverage.verified": "Test results exist for assertions",
@@ -321,6 +336,11 @@ _FIELD_COMMENTS: dict[str, str] = {
         "evidence naming an assertion its dimension does not count (a test on an "
         "assertion nothing implements), which reaches no coverage figure"
     ),
+    "rules.coverage.external_test_failure": (
+        'warning (default): severity for the "tests.external" check -- a test that '
+        "failed and reaches no requirement, so nobody will find the failure through "
+        "the spec"
+    ),
     "rules.coverage.status_words": (
         "Per-relationship coverage labels. Keys: implements|verifies|yields|"
         'validates|validated. Defaults: Implemented / Tested / Passing / "UAT '
@@ -331,37 +351,45 @@ _FIELD_COMMENTS: dict[str, str] = {
     "rules.coverage.status_words.yields": "Label for passing dimension",
     "rules.coverage.status_words.validates": "Label for UAT-covered dimension",
     "rules.coverage.status_words.validated": "Label for UAT-passed dimension",
+    "rules.severity": (
+        "Severity for every check with no named setting of its own, keyed by the name "
+        'the check reports under -- quote the key, it contains a dot: "spec.parseable" = '
+        '"off". Values: "off" | "info" | "warning" | "error" ("off" reports the check as '
+        'skipped with no findings; "info" lists the findings without failing the run). '
+        "A name no check reports under, or one that has a named setting of its own, is "
+        "refused when the config is read. `elspais docs checks` lists the names"
+    ),
     "rules.references": "Severity for the reference checks",
-    "rules.references.retired": ('"ok" | "info" | "warning" | "error" — refs to retired REQs'),
+    "rules.references.retired": ('"off" | "info" | "warning" | "error" — refs to retired REQs'),
     "rules.references.provisional": (
-        '"ok" | "info" | "warning" | "error" — refs to provisional REQs'
+        '"off" | "info" | "warning" | "error" — refs to provisional REQs'
     ),
     "rules.references.aspirational": (
-        '"ok" | "info" | "warning" | "error" — refs to aspirational REQs'
+        '"off" | "info" | "warning" | "error" — refs to aspirational REQs'
     ),
     "rules.references.malformed": (
-        '"ok" | "info" | "warning" | "error" — refs that do not read as a reference'
+        '"off" | "info" | "warning" | "error" — refs that do not read as a reference'
     ),
     "rules.references.unknown_namespace": (
-        '"ok" | "info" | "warning" | "error" — refs to targets no repo claims'
+        '"off" | "info" | "warning" | "error" — refs to targets no repo claims'
     ),
     "rules.references.unknown_requirement": (
-        '"ok" | "info" | "warning" | "error" — claimed refs to a requirement that does not exist'
+        '"off" | "info" | "warning" | "error" — claimed refs to a requirement that does not exist'
     ),
     "rules.references.unknown_assertion": (
-        '"ok" | "info" | "warning" | "error" — refs naming a label the requirement lacks'
+        '"off" | "info" | "warning" | "error" — refs naming a label the requirement lacks'
     ),
     "rules.references.forbidden": (
-        '"ok" | "info" | "warning" | "error" — refs using a keyword the file kind refuses'
+        '"off" | "info" | "warning" | "error" — refs using a keyword the file kind refuses'
     ),
     "rules.references.keyword_form": (
-        '"ok" | "info" | "warning" | "error" — a keyword written in a non-canonical form'
+        '"off" | "info" | "warning" | "error" — a keyword written in a non-canonical form'
     ),
     "rules.references.identifier_form": (
-        '"ok" | "info" | "warning" | "error" — a reference spelled non-canonically'
+        '"off" | "info" | "warning" | "error" — a reference spelled non-canonically'
     ),
     "rules.references.undeclared": (
-        '"ok" | "info" | "warning" | "error" — a comment citing a requirement without a keyword'
+        '"off" | "info" | "warning" | "error" — a comment citing a requirement without a keyword'
     ),
     # --- [changelog] ---
     "changelog": "Changelog enforcement for requirement changes",
@@ -398,7 +426,6 @@ _FIELD_COMMENTS: dict[str, str] = {
     "terms.severity.bad_definition": "Malformed term definitions",
     "terms.severity.collection_empty": "Empty collection terms",
     "terms.severity.canonical_form": "Non-canonical form usage",
-    "terms.severity.changed": "Changed definitions with unresolved review",
     # --- [output] ---
     "output": "Output settings",
     "output.formats": 'Output format list (e.g. ["json", "csv"])',

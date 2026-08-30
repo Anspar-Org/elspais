@@ -213,6 +213,7 @@ class TestEdgeToolsGuardTheReferringNode:
     rewrites -- and refuses a stale token before touching the graph.
     """
 
+    # Verifies: REQ-o00062-M
     def test_REQ_o00062_M_if_version_is_a_required_parameter(
         self, tools, tool_name, referring_id, kwargs
     ):
@@ -222,6 +223,7 @@ class TestEdgeToolsGuardTheReferringNode:
         assert "if_version" in params, f"{tool_name} does not accept if_version"
         assert params["if_version"].default is inspect.Parameter.empty
 
+    # Verifies: REQ-o00062-M
     def test_REQ_o00062_M_omitting_if_version_is_a_type_error(
         self, rollback, tools, tool_name, referring_id, kwargs
     ):
@@ -233,6 +235,7 @@ class TestEdgeToolsGuardTheReferringNode:
         with pytest.raises(TypeError):
             tools[tool_name](**kwargs)
 
+    # Verifies: REQ-o00062-I
     def test_REQ_o00062_I_stale_version_rejected_and_graph_untouched(
         self, canonical_graph, tools, tool_name, referring_id, kwargs
     ):
@@ -245,6 +248,7 @@ class TestEdgeToolsGuardTheReferringNode:
         assert result["code"] == "version_conflict"
         assert node_version(canonical_graph.find_by_id(referring_id)) == before
 
+    # Verifies: REQ-o00062-M
     def test_REQ_o00062_M_conflict_names_the_referring_node(
         self, tools, tool_name, referring_id, kwargs
     ):
@@ -259,6 +263,7 @@ class TestEdgeToolsGuardTheReferringNode:
         assert isinstance(result["current_state"], dict)
         assert "error" not in result["current_state"]
 
+    # Verifies: REQ-o00062-L
     def test_REQ_o00062_L_missing_source_reports_node_not_found(
         self, tools, tool_name, referring_id, kwargs
     ):
@@ -284,6 +289,7 @@ class TestEdgeChainThreadsTheSourcesVersion:
     SOURCE = "REQ-d00003"
     TARGET = "REQ-p00001"
 
+    # Verifies: REQ-o00062-M
     def test_REQ_o00062_M_editing_the_target_does_not_invalidate_the_source_token(
         self, chain, tools
     ):
@@ -310,11 +316,13 @@ class TestEdgeChainThreadsTheSourcesVersion:
         TestEdgeChainThreadsTheSourcesVersion.spent = source_version
         TestEdgeChainThreadsTheSourcesVersion.threaded = result["version"]
 
+    # Verifies: REQ-o00062-K
     def test_REQ_o00062_K_add_edge_returns_the_sources_new_version(self, chain):
         """REQ-o00062-K: The returned token is the source's post-write version."""
         assert self.threaded == node_version(chain.find_by_id(self.SOURCE))
         assert self.threaded != self.spent
 
+    # Verifies: REQ-o00062-I
     def test_REQ_o00062_I_the_spent_token_no_longer_admits_a_retype(self, chain, tools):
         """REQ-o00062-I: The pre-add token is stale for the next edge write."""
         result = tools["mutate_change_edge_kind"](
@@ -329,6 +337,7 @@ class TestEdgeChainThreadsTheSourcesVersion:
         assert result["node_id"] == self.SOURCE
         assert "REQ-p00001" in render.render_node(chain.find_by_id(self.SOURCE))
 
+    # Verifies: REQ-o00062-K
     def test_REQ_o00062_K_threaded_token_admits_the_retype(self, chain, tools):
         """REQ-o00062-K: The token from the add is accepted with no re-read."""
         result = tools["mutate_change_edge_kind"](
@@ -342,6 +351,7 @@ class TestEdgeChainThreadsTheSourcesVersion:
         assert result["version"] == node_version(chain.find_by_id(self.SOURCE))
         TestEdgeChainThreadsTheSourcesVersion.threaded = result["version"]
 
+    # Verifies: REQ-o00062-K
     def test_REQ_o00062_K_threaded_token_admits_retargeting(self, chain, tools):
         """REQ-o00062-K: Assertion re-targeting continues the same chain."""
         result = tools["mutate_change_edge_targets"](
@@ -357,6 +367,7 @@ class TestEdgeChainThreadsTheSourcesVersion:
         )
         TestEdgeChainThreadsTheSourcesVersion.threaded = result["version"]
 
+    # Verifies: REQ-o00062-K
     def test_REQ_o00062_K_threaded_token_admits_the_delete(self, chain, tools):
         """REQ-o00062-K: Removing the reference closes the chain without a read."""
         result = tools["mutate_delete_edge"](
@@ -383,6 +394,7 @@ class TestFixBrokenReferenceGuardsTheSource:
     DANGLING = "REQ-p09999"
     REPLACEMENT = "REQ-p00002"
 
+    # Verifies: REQ-o00062-M
     def test_REQ_o00062_M_dangling_reference_is_created_to_repair(self, chain, tools):
         """REQ-o00062-M: Setup -- a reference to a missing node wires no edge,
         so the source's rendered form (and version) is unchanged by it."""
@@ -398,6 +410,7 @@ class TestFixBrokenReferenceGuardsTheSource:
         assert result["success"] is True, result.get("error")
         TestFixBrokenReferenceGuardsTheSource.spent = node_version(chain.find_by_id(self.SOURCE))
 
+    # Verifies: REQ-o00062-M
     def test_REQ_o00062_M_repair_accepts_the_sources_current_version(self, chain, tools):
         """REQ-o00062-M: The source's token admits the repair."""
         result = tools["mutate_fix_broken_reference"](
@@ -411,11 +424,13 @@ class TestFixBrokenReferenceGuardsTheSource:
         assert self.REPLACEMENT in render.render_node(chain.find_by_id(self.SOURCE))
         TestFixBrokenReferenceGuardsTheSource.threaded = result["version"]
 
+    # Verifies: REQ-o00062-K
     def test_REQ_o00062_K_repair_returns_the_sources_new_version(self, chain):
         """REQ-o00062-K: The repair reports the version it produced."""
         assert self.threaded == node_version(chain.find_by_id(self.SOURCE))
         assert self.threaded != self.spent
 
+    # Verifies: REQ-o00062-I
     def test_REQ_o00062_I_the_pre_repair_token_is_now_stale(self, tools):
         """REQ-o00062-I: A second repairer holding the old token is refused."""
         result = tools["mutate_fix_broken_reference"](
@@ -457,6 +472,7 @@ class TestCreationToolsGuardTheOwningRequirement:
     appended to -- the node whose rendered block actually grows.
     """
 
+    # Verifies: REQ-o00062-M
     def test_REQ_o00062_M_if_version_is_a_required_parameter(self, tools, tool_name, kwargs):
         """REQ-o00062-M: if_version has no default -- callers cannot omit it."""
         params = inspect.signature(tools[tool_name]).parameters
@@ -464,6 +480,7 @@ class TestCreationToolsGuardTheOwningRequirement:
         assert "if_version" in params, f"{tool_name} does not accept if_version"
         assert params["if_version"].default is inspect.Parameter.empty
 
+    # Verifies: REQ-o00062-M
     def test_REQ_o00062_M_omitting_if_version_is_a_type_error(
         self, rollback, tools, tool_name, kwargs
     ):
@@ -475,6 +492,7 @@ class TestCreationToolsGuardTheOwningRequirement:
         with pytest.raises(TypeError):
             tools[tool_name](**kwargs)
 
+    # Verifies: REQ-o00062-I
     def test_REQ_o00062_I_stale_version_rejected_and_nothing_appended(
         self, canonical_graph, tools, tool_name, kwargs
     ):
@@ -487,6 +505,7 @@ class TestCreationToolsGuardTheOwningRequirement:
         assert result["code"] == "version_conflict"
         assert node_version(canonical_graph.find_by_id("REQ-d00003")) == before
 
+    # Verifies: REQ-o00062-J
     def test_REQ_o00062_J_conflict_names_the_parent_requirement(self, tools, tool_name, kwargs):
         """REQ-o00062-J: The rejection identifies the requirement to re-read."""
         result = tools[tool_name](if_version=BOGUS_VERSION, **kwargs)
@@ -497,6 +516,7 @@ class TestCreationToolsGuardTheOwningRequirement:
         assert isinstance(result["current_state"], dict)
         assert "error" not in result["current_state"]
 
+    # Verifies: REQ-o00062-L
     def test_REQ_o00062_L_missing_parent_reports_node_not_found(self, tools, tool_name, kwargs):
         """REQ-o00062-L: Appending to an absent requirement is not retryable."""
         result = tools[tool_name](if_version=BOGUS_VERSION, **{**kwargs, "req_id": "REQ-d99999"})
@@ -516,6 +536,7 @@ class TestAddAssertionThreadsTheRequirementVersion:
 
     PARENT = "REQ-d00002"
 
+    # Verifies: REQ-o00062-M
     def test_REQ_o00062_M_parent_version_admits_the_first_assertion(self, chain, tools):
         """REQ-o00062-M: The owning requirement's token is what is accepted."""
         before = node_version(chain.find_by_id(self.PARENT))
@@ -532,11 +553,13 @@ class TestAddAssertionThreadsTheRequirementVersion:
         TestAddAssertionThreadsTheRequirementVersion.first_id = result["assertion_id"]
         TestAddAssertionThreadsTheRequirementVersion.threaded = result["version"]
 
+    # Verifies: REQ-o00062-K
     def test_REQ_o00062_K_success_returns_the_requirements_new_version(self, chain):
         """REQ-o00062-K: The token handed back is the parent's live version."""
         assert self.threaded == node_version(chain.find_by_id(self.PARENT))
         assert self.threaded != self.spent
 
+    # Verifies: REQ-o00062-I
     def test_REQ_o00062_I_second_writer_with_the_spent_token_is_rejected(self, chain, tools):
         """REQ-o00062-I: The concurrent appender must re-read first."""
         result = tools["mutate_add_assertion"](
@@ -552,6 +575,7 @@ class TestAddAssertionThreadsTheRequirementVersion:
             for node in chain.find_by_id(self.PARENT).iter_children()
         )
 
+    # Verifies: REQ-o00062-K
     def test_REQ_o00062_K_threaded_token_admits_the_second_assertion(self, chain, tools):
         """REQ-o00062-K: Reconciled via the returned token, the append lands."""
         result = tools["mutate_add_assertion"](
@@ -578,6 +602,7 @@ class TestAddRequirementGuardsTheParentOnlyWhenThereIsOne:
 
     PARENT = "REQ-o00002"
 
+    # Verifies: REQ-o00062-M
     def test_REQ_o00062_M_if_version_is_optional_in_the_signature(self, tools):
         """REQ-o00062-M: Unlike every other guarded tool, this one defaults --
         the parentless path has nothing to guard."""
@@ -586,6 +611,7 @@ class TestAddRequirementGuardsTheParentOnlyWhenThereIsOne:
         assert "if_version" in params
         assert params["if_version"].default is None
 
+    # Verifies: REQ-o00062-M
     def test_REQ_o00062_M_parentless_creation_needs_no_version(self, chain, tools):
         """REQ-o00062-M: A root-level create succeeds with no token at all."""
         result = tools["mutate_add_requirement"](
@@ -595,6 +621,7 @@ class TestAddRequirementGuardsTheParentOnlyWhenThereIsOne:
         assert result["success"] is True, result.get("error")
         assert chain.find_by_id("REQ-d00901") is not None
 
+    # Verifies: REQ-o00062-M
     def test_REQ_o00062_M_parented_creation_rejects_a_stale_parent_token(self, chain, tools):
         """REQ-o00062-M: Supply a parent and the parent's version is enforced."""
         result = tools["mutate_add_requirement"](
@@ -611,6 +638,7 @@ class TestAddRequirementGuardsTheParentOnlyWhenThereIsOne:
         assert result["node_id"] == self.PARENT
         assert chain.find_by_id("REQ-d00902") is None
 
+    # Verifies: REQ-o00062-M
     def test_REQ_o00062_M_parented_creation_accepts_the_parents_version(self, chain, tools):
         """REQ-o00062-M: The parent's live token admits the create."""
         parent_version = node_version(chain.find_by_id(self.PARENT))
@@ -629,12 +657,14 @@ class TestAddRequirementGuardsTheParentOnlyWhenThereIsOne:
         assert chain.find_by_id("REQ-d00903") is not None
         TestAddRequirementGuardsTheParentOnlyWhenThereIsOne.threaded = result["version"]
 
+    # Verifies: REQ-o00062-K
     def test_REQ_o00062_K_success_returns_the_parents_new_version(self, chain):
         """REQ-o00062-K: The new node has no prior version, so the token handed
         back is the parent's -- the thing the next sibling create must state."""
         assert self.threaded == node_version(chain.find_by_id(self.PARENT))
         assert self.threaded != self.spent
 
+    # Verifies: REQ-o00062-I
     def test_REQ_o00062_I_the_spent_parent_token_is_rejected(self, chain, tools):
         """REQ-o00062-I: A second create under the same parent must re-read."""
         result = tools["mutate_add_requirement"](
@@ -650,6 +680,7 @@ class TestAddRequirementGuardsTheParentOnlyWhenThereIsOne:
         assert result["code"] == "version_conflict"
         assert chain.find_by_id("REQ-d00904") is None
 
+    # Verifies: REQ-o00062-L
     def test_REQ_o00062_L_missing_parent_reports_node_not_found(self, tools):
         """REQ-o00062-L: Naming a parent that does not exist is not retryable."""
         result = tools["mutate_add_requirement"](
@@ -677,6 +708,7 @@ class TestAddRequirementIntoChosenFileParity:
 
     FILE = file_id("spec/dev-impl.md")
 
+    # Verifies: REQ-o00062-O
     def test_REQ_o00062_O_add_requirement_places_into_the_named_file(self, rollback, tools):
         """REQ-o00062-O: ``file_id`` plus the FILE's live token lands the
         create with the new requirement contained by that file."""
@@ -699,6 +731,7 @@ class TestAddRequirementIntoChosenFileParity:
             rollback.find_by_id(self.FILE), resolver=grammar_for(NAMESPACE)
         )
 
+    # Verifies: REQ-o00062-M
     def test_REQ_o00062_M_stale_file_token_rejects_the_placement(self, rollback, tools):
         """REQ-o00062-M: File placement is guarded on the destination FILE --
         a stale FILE token is refused, and the conflict names the file."""
@@ -732,6 +765,7 @@ class TestRenameFileGuardsTheFile:
     FILE = file_id("spec/glossary.md")
     RENAMED = file_id("spec/glossary-renamed.md")
 
+    # Verifies: REQ-o00062-M
     def test_REQ_o00062_M_if_version_is_a_required_parameter(self, tools):
         """REQ-o00062-M: if_version has no default -- callers cannot omit it."""
         params = inspect.signature(tools["mutate_rename_file"]).parameters
@@ -739,6 +773,7 @@ class TestRenameFileGuardsTheFile:
         assert "if_version" in params
         assert params["if_version"].default is inspect.Parameter.empty
 
+    # Verifies: REQ-o00062-I
     def test_REQ_o00062_I_stale_version_rejected_and_the_file_keeps_its_id(self, chain, tools):
         """REQ-o00062-I: A bogus token leaves the FILE node untouched."""
         result = tools["mutate_rename_file"](
@@ -751,6 +786,7 @@ class TestRenameFileGuardsTheFile:
         assert chain.find_by_id(self.FILE) is not None
         assert chain.find_by_id(file_id("spec/never-lands.md")) is None
 
+    # Verifies: REQ-o00062-L
     def test_REQ_o00062_L_missing_file_reports_node_not_found(self, tools):
         """REQ-o00062-L: An absent FILE id is not a version conflict."""
         result = tools["mutate_rename_file"](
@@ -762,6 +798,7 @@ class TestRenameFileGuardsTheFile:
         assert result["success"] is False
         assert result["code"] == "node_not_found"
 
+    # Verifies: REQ-o00062-M
     def test_REQ_o00062_M_current_version_admits_the_rename(self, chain, tools):
         """REQ-o00062-M: The FILE's live token is what the rename requires."""
         current = node_version(chain.find_by_id(self.FILE))
@@ -775,6 +812,7 @@ class TestRenameFileGuardsTheFile:
         assert chain.find_by_id(self.FILE) is None
         TestRenameFileGuardsTheFile.returned = result["version"]
 
+    # Verifies: REQ-o00062-K
     def test_REQ_o00062_K_success_returns_the_renamed_files_version(self, chain):
         """REQ-o00062-K: The token handed back tracks the node under its new id."""
         assert self.returned == node_version(chain.find_by_id(self.RENAMED))
@@ -816,6 +854,7 @@ class TestMoveNodeToFileGuardsAllThreeAffectedNodes:
             "if_target_version": node_version(graph.find_by_id(file_id("spec/ops-deploy.md"))),
         }
 
+    # Verifies: REQ-o00062-M
     def test_REQ_o00062_M_all_three_tokens_are_required_parameters(self, tools):
         """REQ-o00062-M: The signature demands a token per affected node."""
         params = inspect.signature(tools["mutate_move_node_to_file"]).parameters
@@ -824,6 +863,7 @@ class TestMoveNodeToFileGuardsAllThreeAffectedNodes:
             assert name in params, f"mutate_move_node_to_file does not accept {name}"
             assert params[name].default is inspect.Parameter.empty, f"{name} must be required"
 
+    # Verifies: REQ-o00062-M
     @pytest.mark.parametrize(
         ("stale_token", "expected_node_id"), MOVE_TOKENS, ids=[t[0] for t in MOVE_TOKENS]
     )
@@ -845,6 +885,7 @@ class TestMoveNodeToFileGuardsAllThreeAffectedNodes:
         assert CONFLICT_KEYS <= set(result)
         assert canonical_graph.find_by_id(self.NODE).file_node().id == self.ORIGIN
 
+    # Verifies: REQ-o00062-O
     def test_REQ_o00062_O_destination_outside_spec_dirs_is_rejected_and_nothing_created(
         self, canonical_graph, tools
     ):
@@ -868,6 +909,7 @@ class TestMoveNodeToFileGuardsAllThreeAffectedNodes:
         assert canonical_graph.find_by_id(file_id("notaspecdir/x.md")) is None
         assert canonical_graph.find_by_id(self.NODE).file_node().id == self.ORIGIN
 
+    # Verifies: REQ-o00062-O
     def test_REQ_o00062_O_path_traversal_destination_is_rejected_and_nothing_created(
         self, canonical_graph, tools
     ):
@@ -887,6 +929,7 @@ class TestMoveNodeToFileGuardsAllThreeAffectedNodes:
         assert not (HHT_LIKE.parent / "escape.md").exists()
         assert canonical_graph.find_by_id(self.NODE).file_node().id == self.ORIGIN
 
+    # Verifies: REQ-o00062-M
     def test_REQ_o00062_M_all_three_current_tokens_admit_the_move(self, rollback, tools):
         """REQ-o00062-M: With every affected node reconciled, the move lands and
         both files move on while the node's own version is content-stable."""
@@ -901,6 +944,7 @@ class TestMoveNodeToFileGuardsAllThreeAffectedNodes:
         assert node_version(rollback.find_by_id(self.ORIGIN)) != tokens["if_source_file_version"]
         assert node_version(rollback.find_by_id(self.DESTINATION)) != tokens["if_target_version"]
 
+    # Verifies: REQ-o00062-K
     def test_REQ_o00062_K_success_returns_the_moved_nodes_version(self, rollback, tools):
         """REQ-o00062-K: ``version`` tracks the node named by ``node_id``."""
         tokens = self._live_tokens(rollback)
@@ -932,6 +976,7 @@ class TestMoveNodeCreatesMissingDestinationParity:
     NEW_DESTINATION = file_id("spec/relocated.md")
     NEW_PATH = "spec/relocated.md"
 
+    # Verifies: REQ-o00062-O
     def test_REQ_o00062_O_move_to_missing_destination_creates_and_wires_the_file(
         self, disk_project, disk_tools
     ):
@@ -960,6 +1005,7 @@ class TestMoveNodeCreatesMissingDestinationParity:
         assert (disk_project / self.NEW_PATH).exists()
         assert not (HHT_LIKE / self.NEW_PATH).exists()
 
+    # Verifies: REQ-o00062-M
     def test_REQ_o00062_M_stale_node_token_rejects_before_the_file_is_created(
         self, disk_project, disk_tools
     ):
@@ -1063,6 +1109,7 @@ class TestDiskBackedMutationsAreGuarded:
     metadata line or file placement changes.
     """
 
+    # Verifies: REQ-o00062-M
     def test_REQ_o00062_M_if_version_is_a_required_parameter(
         self, disk_tools, tool_name, guarded_id, kwargs, touched_path, version_moves
     ):
@@ -1073,6 +1120,7 @@ class TestDiskBackedMutationsAreGuarded:
         assert "if_version" in params, f"{tool_name} does not accept if_version"
         assert params["if_version"].default is inspect.Parameter.empty
 
+    # Verifies: REQ-o00062-M
     def test_REQ_o00062_M_omitting_if_version_is_a_type_error(
         self, disk_tools, tool_name, guarded_id, kwargs, touched_path, version_moves
     ):
@@ -1082,6 +1130,7 @@ class TestDiskBackedMutationsAreGuarded:
         with pytest.raises(TypeError):
             tools[tool_name](**kwargs)
 
+    # Verifies: REQ-o00062-I
     def test_REQ_o00062_I_stale_version_leaves_the_file_on_disk_untouched(
         self, disk_project, disk_tools, tool_name, guarded_id, kwargs, touched_path, version_moves
     ):
@@ -1096,6 +1145,7 @@ class TestDiskBackedMutationsAreGuarded:
         assert result["code"] == "version_conflict"
         assert target.read_bytes() == before
 
+    # Verifies: REQ-o00062-J
     def test_REQ_o00062_J_conflict_names_the_node_whose_text_changes(
         self, disk_tools, tool_name, guarded_id, kwargs, touched_path, version_moves
     ):
@@ -1111,6 +1161,7 @@ class TestDiskBackedMutationsAreGuarded:
         assert isinstance(result["current_state"], dict)
         assert "error" not in result["current_state"]
 
+    # Verifies: REQ-o00062-K
     def test_REQ_o00062_K_current_version_is_accepted_and_a_version_returned(
         self, disk_project, disk_tools, tool_name, guarded_id, kwargs, touched_path, version_moves
     ):
@@ -1129,6 +1180,7 @@ class TestDiskBackedMutationsAreGuarded:
         assert result["version"] == after
         assert (after != current) is version_moves
 
+    # Verifies: REQ-o00062-L
     def test_REQ_o00062_L_missing_target_reports_node_not_found(
         self, disk_tools, tool_name, guarded_id, kwargs, touched_path, version_moves
     ):
@@ -1159,6 +1211,7 @@ class TestEveryMutationToolIsGuarded:
     token fails here rather than shipping a lost-update hole.
     """
 
+    # Verifies: REQ-o00062-I
     def test_REQ_o00062_I_the_enumeration_finds_the_mutation_surface(self, tools):
         """REQ-o00062-I: A silent empty set would make the sweep vacuous."""
         mutators = {name for name in tools if name.startswith("mutate_")}
@@ -1166,6 +1219,7 @@ class TestEveryMutationToolIsGuarded:
         assert len(mutators) >= 20, f"tool enumeration looks broken: {sorted(mutators)}"
         assert not (mutators & HISTORY_TOOLS)
 
+    # Verifies: REQ-o00062-I
     def test_REQ_o00062_I_every_mutate_tool_accepts_if_version(self, tools):
         """REQ-o00062-I: Every ``mutate_*`` tool takes a version token."""
         unguarded = sorted(
@@ -1181,6 +1235,7 @@ class TestEveryMutationToolIsGuarded:
             "Add if_version and call _guard_version before mutating."
         )
 
+    # Verifies: REQ-o00062-M
     def test_REQ_o00062_M_if_version_is_required_on_every_tool_but_the_parentless_create(
         self, tools
     ):
@@ -1204,6 +1259,7 @@ class TestEveryMutationToolIsGuarded:
             "default its token; every other tool must make it required."
         )
 
+    # Verifies: REQ-o00062-I
     def test_REQ_o00062_I_every_mutate_tool_has_behavioral_conflict_coverage(self, tools):
         """REQ-o00062-I: The signature sweep above proves a token is *accepted*;
         this proves each tool is also *exercised* against a stale token. The
@@ -1240,6 +1296,7 @@ class TestEveryMutationToolIsGuarded:
             "Remove or rename the stale entries so the sweep stays exact."
         )
 
+    # Verifies: REQ-o00062-M
     def test_REQ_o00062_M_the_disk_backed_mutations_accept_if_version(self, tools):
         """REQ-o00062-M: The MCP-only spec-file writers are guarded too --
         they are mutations without the ``mutate_`` prefix."""

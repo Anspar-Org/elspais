@@ -85,6 +85,7 @@ def _isolate_process_watcher():
 
 
 class TestExecutableHashIdentifiesTheInstalledProgram:
+    # Verifies: REQ-o00077-A
     def test_REQ_o00077_A_hash_moves_when_a_shipped_file_changes(self, tmp_path):
         """Validates REQ-o00077-A: the identity has to move when the program
         does, or nothing downstream can tell that it did."""
@@ -97,6 +98,7 @@ class TestExecutableHashIdentifiesTheInstalledProgram:
         (root / "a.py").write_text("x = 2")
         assert compute_executable_hash(root) != before
 
+    # Verifies: REQ-o00077-A
     def test_REQ_o00077_A_package_data_counts_as_the_program(self, tmp_path):
         """Validates REQ-o00077-A: shipped documentation and templates decide
         what the tool answers just as its modules do, so a change to one is a
@@ -110,6 +112,7 @@ class TestExecutableHashIdentifiesTheInstalledProgram:
         (root / "topic.md").write_text("rewritten")
         assert compute_executable_hash(root) != before
 
+    # Verifies: REQ-o00077-A
     def test_REQ_o00077_A_bytecode_is_not_the_program(self, tmp_path):
         """Validates REQ-o00077-A: __pycache__ is written by running the
         program, so counting it would make every process report itself as
@@ -124,6 +127,7 @@ class TestExecutableHashIdentifiesTheInstalledProgram:
         (cache / "a.cpython-311.pyc").write_bytes(b"\x00\x01")
         assert compute_executable_hash(root) == before
 
+    # Verifies: REQ-o00077-A
     def test_REQ_o00077_A_rename_alone_moves_the_hash(self, tmp_path):
         """Validates REQ-o00077-A: the same bytes under a different name are a
         different program, so path and content are both bound into the digest."""
@@ -135,6 +139,7 @@ class TestExecutableHashIdentifiesTheInstalledProgram:
         (root / "a.py").rename(root / "b.py")
         assert compute_executable_hash(root) != before
 
+    # Verifies: REQ-o00077-A
     def test_REQ_o00077_A_unreadable_root_reports_nothing(self, tmp_path):
         """Validates REQ-o00077-A: a reading that could not be taken is not
         evidence that the program changed."""
@@ -158,6 +163,7 @@ class TestOnlyAMovableInstallationIsWatched:
 
         monkeypatch.setattr("importlib.metadata.distribution", lambda _n: _Dist())
 
+    # Verifies: REQ-o00077-D
     def test_REQ_o00077_D_an_editable_installation_can_move(self, monkeypatch):
         """Validates REQ-o00077-D: this is the case the whole requirement
         exists for -- editing a source file installs a new program by the same
@@ -166,6 +172,7 @@ class TestOnlyAMovableInstallationIsWatched:
 
         assert installation_can_change() is True
 
+    # Verifies: REQ-o00077-D
     def test_REQ_o00077_D_a_fixed_installation_cannot(self, monkeypatch):
         """Validates REQ-o00077-D: an installation recorded as a copy rather
         than as a tree stays put until it is replaced wholesale, so watching it
@@ -174,6 +181,7 @@ class TestOnlyAMovableInstallationIsWatched:
 
         assert installation_can_change() is False
 
+    # Verifies: REQ-o00077-D
     def test_REQ_o00077_D_an_installation_from_elsewhere_cannot(self, monkeypatch):
         """Validates REQ-o00077-D: a record naming a source that is not a
         directory at all says nothing about editability, and an absent answer
@@ -182,6 +190,7 @@ class TestOnlyAMovableInstallationIsWatched:
 
         assert installation_can_change() is False
 
+    # Verifies: REQ-o00077-D
     def test_REQ_o00077_D_no_installation_record_cannot(self, monkeypatch):
         """Validates REQ-o00077-D: a wheel carries no ``direct_url.json`` at
         all, and the reader has to treat its absence as the ordinary case
@@ -190,6 +199,7 @@ class TestOnlyAMovableInstallationIsWatched:
 
         assert installation_can_change() is False
 
+    # Verifies: REQ-o00077-D
     def test_REQ_o00077_D_an_unfindable_distribution_cannot(self, monkeypatch):
         """Validates REQ-o00077-D: the tool can be run from a tree that was
         never installed as a distribution, and a process there must go on
@@ -204,6 +214,7 @@ class TestOnlyAMovableInstallationIsWatched:
 
         assert installation_can_change() is False
 
+    # Verifies: REQ-o00077-D
     def test_REQ_o00077_D_an_unreadable_record_cannot(self, monkeypatch):
         """Validates REQ-o00077-D: a record that will not parse is not evidence
         of an editable install, and guessing from one would start a watcher
@@ -214,6 +225,7 @@ class TestOnlyAMovableInstallationIsWatched:
 
 
 class TestOneRunOfChangesCausesOneResponse:
+    # Verifies: REQ-o00077-E
     def test_REQ_o00077_E_change_is_not_reported_until_it_settles(self):
         """Validates REQ-o00077-E: an editor writing a directory is one act
         arriving as many writes, so a reading taken mid-write must not count."""
@@ -224,6 +236,7 @@ class TestOneRunOfChangesCausesOneResponse:
         assert w.poll() is None  # a different value again: still moving
         assert w.poll() == "final"  # held across two readings
 
+    # Verifies: REQ-o00077-E
     def test_REQ_o00077_E_settled_change_is_announced_once(self):
         """Validates REQ-o00077-E: at most one response per run, however many
         readings follow it. Each response renews the process, so a second one
@@ -233,6 +246,7 @@ class TestOneRunOfChangesCausesOneResponse:
         assert w.poll() == "new"
         assert [w.poll() for _ in range(4)] == [None, None, None, None]
 
+    # Verifies: REQ-o00077-E
     def test_REQ_o00077_E_a_later_run_is_announced_again(self):
         """Validates REQ-o00077-E: 'once per run' is not 'once per process' --
         a second reinstall is a second run and is answered on its own."""
@@ -246,6 +260,7 @@ class TestOneRunOfChangesCausesOneResponse:
         assert w.poll() is None
         assert w.poll() == "second"
 
+    # Verifies: REQ-o00077-E
     def test_REQ_o00077_E_change_reverted_before_settling_is_never_reported(self):
         """Validates REQ-o00077-E: a branch switched and switched back leaves
         the process running exactly what it started with."""
@@ -255,6 +270,7 @@ class TestOneRunOfChangesCausesOneResponse:
         assert w.poll() is None
         assert w.settled_difference is None
 
+    # Verifies: REQ-o00077-A
     def test_REQ_o00077_A_unreadable_reading_does_not_report_a_change(self):
         """Validates REQ-o00077-A: an empty reading is a failure to look, not
         a program that vanished."""
@@ -263,6 +279,7 @@ class TestOneRunOfChangesCausesOneResponse:
         assert w.poll() is None
         assert w.settled_difference is None
 
+    # Verifies: REQ-o00077-A
     def test_REQ_o00077_A_difference_stays_once_settled(self):
         """Validates REQ-o00077-A: no amount of further polling makes this
         process the one that was installed."""
@@ -282,6 +299,7 @@ class TestDriftGuardRefusesOnlyWhatItMust:
         executable.install_watcher(w)
         return w
 
+    # Verifies: REQ-o00077-D
     def test_REQ_o00077_D_a_renewable_process_says_nothing(self):
         """Validates REQ-o00077-D: where the process renews itself out of the
         difference, the tree simply goes on being served and the client never
@@ -291,6 +309,7 @@ class TestDriftGuardRefusesOnlyWhatItMust:
 
         assert _guard_executable_drift(_renewable(), "search") is None
 
+    # Verifies: REQ-o00077-D
     def test_REQ_o00077_D_held_work_does_not_turn_renewal_into_a_refusal(self):
         """Validates REQ-o00077-D: changes held here are carried across a
         renewal, not trapped by one, so holding them is a reason to take care
@@ -301,6 +320,7 @@ class TestDriftGuardRefusesOnlyWhatItMust:
 
         assert _guard_executable_drift(_renewable(pending=7), "search") is None
 
+    # Verifies: REQ-o00077-D
     def test_REQ_o00077_D_what_the_process_holds_is_not_this_guard_s_question(self):
         """Validates REQ-o00077-D: the guard decides on how the client reaches
         the process and nothing else. Asked of a holder it cannot count at all,
@@ -313,6 +333,7 @@ class TestDriftGuardRefusesOnlyWhatItMust:
         assert _guard_executable_drift(uncountable, "search") is None
         assert _guard_executable_drift(stdio, "search") is not None
 
+    # Verifies: REQ-o00077-F
     def test_REQ_o00077_F_an_unrenewable_process_refuses(self):
         """Validates REQ-o00077-F: renewing a process whose client reaches it
         over a connection that client owns would end the session mid-task,
@@ -325,6 +346,7 @@ class TestDriftGuardRefusesOnlyWhatItMust:
         assert rejection["success"] is False
         assert rejection["code"] == "executable_changed"
 
+    # Verifies: REQ-o00077-F
     def test_REQ_o00077_F_the_refusal_names_the_action_that_renews_it(self):
         """Validates REQ-o00077-F: naming the renewing action is the whole of
         the assertion's value. A client left holding a working connection and an
@@ -335,6 +357,7 @@ class TestDriftGuardRefusesOnlyWhatItMust:
 
         assert "reconnect" in rejection["hint"].lower()
 
+    # Verifies: REQ-o00077-F
     def test_REQ_o00077_F_every_request_is_refused_alike(self):
         """Validates REQ-o00077-F: the refusal covers the other requests the
         process would otherwise answer, with no request carved out of it. A
@@ -349,6 +372,7 @@ class TestDriftGuardRefusesOnlyWhatItMust:
 
         assert [r["code"] for r in refused] == ["executable_changed", "executable_changed"]
 
+    # Verifies: REQ-o00077-F
     def test_REQ_o00077_F_unmoved_program_refuses_nothing(self):
         """Validates REQ-o00077-F: a process answering from the program it was
         installed from owes its client nothing here, however it is reached, so
@@ -361,6 +385,7 @@ class TestDriftGuardRefusesOnlyWhatItMust:
 
 
 class TestTheProcessRunsOneProgram:
+    # Verifies: REQ-o00077-A
     def test_REQ_o00077_A_difference_reports_both_identities(self):
         """Validates REQ-o00077-A: facts, not a verdict -- what is running and
         what is installed, leaving what it is worth to the reader."""
@@ -370,6 +395,7 @@ class TestTheProcessRunsOneProgram:
 
         assert executable.difference() == {"running": "running", "installed": "installed"}
 
+    # Verifies: REQ-o00077-A
     def test_REQ_o00077_A_agreement_is_reported_as_no_difference(self):
         """Validates REQ-o00077-A: a surface says nothing when there is
         nothing to say, rather than publishing an empty difference."""
@@ -379,6 +405,7 @@ class TestTheProcessRunsOneProgram:
 
         assert executable.difference() is None
 
+    # Verifies: REQ-o00077-A
     def test_REQ_o00077_A_the_installed_root_is_the_package_not_a_tree(self):
         """Validates REQ-o00077-A: resolved through the imported package, so
         that serving some other working tree cannot be mistaken for the
@@ -453,6 +480,7 @@ def _lock_is_held(shared: SharedServerState) -> bool:
 
 
 class TestTheTreeGoesOnBeingServedFromTheInstalledProgram:
+    # Verifies: REQ-o00077-D
     def test_REQ_o00077_D_an_empty_process_is_replaced_without_writing(self, monkeypatch):
         """Validates REQ-o00077-D: the client that most needs the tree re-served
         is the one that will never ask, so the process renews itself unasked.
@@ -470,6 +498,7 @@ class TestTheTreeGoesOnBeingServedFromTheInstalledProgram:
         assert exec_fn.calls == 1
         assert persist.calls == []
 
+    # Verifies: REQ-o00077-D
     def test_REQ_o00077_D_held_work_is_carried_across_the_renewal(self, monkeypatch):
         """Validates REQ-o00077-D: changes held here exist nowhere else, so the
         renewal writes them first and then goes ahead. Stopping short of the
@@ -489,6 +518,7 @@ class TestTheTreeGoesOnBeingServedFromTheInstalledProgram:
         assert persist.calls[0]["automatic"] is True
         assert persist.calls[0]["trigger"]
 
+    # Verifies: REQ-o00077-D
     def test_REQ_o00077_D_work_that_could_not_be_written_stays_where_it_is(self, monkeypatch):
         """Validates REQ-o00077-D: a renewal must never cost work. When the
         write failed the changes are still only in this process, so it keeps
@@ -504,6 +534,7 @@ class TestTheTreeGoesOnBeingServedFromTheInstalledProgram:
         assert result == "save_failed"
         assert exec_fn.calls == 0
 
+    # Verifies: REQ-o00077-D
     def test_REQ_o00077_D_a_failed_write_is_disclosed(self, monkeypatch, capsys):
         """Validates REQ-o00077-D: a renewal that quietly did not happen leaves
         the operator believing the tree is served by the installed program when
@@ -522,6 +553,7 @@ class TestTheTreeGoesOnBeingServedFromTheInstalledProgram:
         assert "disk full" in err
         assert "NOT renewing" in err
 
+    # Verifies: REQ-o00077-D
     def test_REQ_o00077_D_an_uncountable_process_is_left_alone(self, monkeypatch):
         """Validates REQ-o00077-D: 'holds nothing' has to be established, not
         assumed. Renewing on a count that could not be taken risks replacing a
@@ -538,6 +570,7 @@ class TestTheTreeGoesOnBeingServedFromTheInstalledProgram:
         assert exec_fn.calls == 0
         assert persist.calls == []
 
+    # Verifies: REQ-o00077-D
     def test_REQ_o00077_D_a_graph_that_cannot_be_reached_is_also_unknown(self, monkeypatch):
         """Validates REQ-o00077-D: the same caution covers not reaching the
         graph at all. Whichever step failed, what the process holds is unknown,
@@ -552,6 +585,7 @@ class TestTheTreeGoesOnBeingServedFromTheInstalledProgram:
         assert renew_for_installed_program(shared, no_graph, exec_fn) == "unknown"
         assert exec_fn.calls == 0
 
+    # Verifies: REQ-o00077-D
     def test_REQ_o00077_D_the_count_is_taken_under_the_write_lock(self, monkeypatch):
         """Validates REQ-o00077-D: a mutation landing while the count is being
         taken would otherwise be lost -- counted as absent, then carried off by
@@ -569,6 +603,7 @@ class TestTheTreeGoesOnBeingServedFromTheInstalledProgram:
 
         assert observed == [True]
 
+    # Verifies: REQ-o00077-D
     def test_REQ_o00077_D_the_replacement_is_reached_under_the_same_lock(self, monkeypatch):
         """Validates REQ-o00077-D: counting and writing under the lock and then
         releasing it before the replacement would reopen the gap it was taken to
@@ -595,6 +630,7 @@ class TestTheTreeGoesOnBeingServedFromTheInstalledProgram:
         assert persisted == [True]
         assert replaced == [True]
 
+    # Verifies: REQ-o00077-D
     def test_REQ_o00077_D_the_lock_is_released_once_the_decision_is_made(self, monkeypatch):
         """Validates REQ-o00077-D: the routine runs on a watcher thread beside
         everything else the process is doing, and a decision not to replace

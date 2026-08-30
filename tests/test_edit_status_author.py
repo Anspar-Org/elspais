@@ -30,7 +30,7 @@ A. The system SHALL do X.
 def _make_project(tmp_path: Path) -> Path:
     """Create a minimal project with a single Draft req."""
     (tmp_path / ".elspais.toml").write_text(
-        "version = 3\n"
+        "version = 5\n"
         "\n"
         "[project]\n"
         'name = "test"\n'

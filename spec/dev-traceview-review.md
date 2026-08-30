@@ -28,31 +28,32 @@ families are specified by the requirements that refine this server.
 
 A. The system SHALL construct the API server through an application factory function that assembles the server from pre-built application state.
 
-B. [Removed - review-thread endpoints belong to the abandoned review-package design and were never implemented; the shipped comment system (REQ-d00226) supersedes them]
+B. <RETIRED> review-thread endpoints belong to the abandoned review-package design and were never implemented; the shipped comment system (REQ-d00226) supersedes them
 
-C. [Removed - review status and approval endpoints belong to the abandoned review-package design and were never implemented]
+C. <RETIRED> review status and approval endpoints belong to the abandoned review-package design and were never implemented
 
-D. [Removed - review-package endpoints belong to the abandoned review-package design and were never implemented]
+D. <RETIRED> review-package endpoints belong to the abandoned review-package design and were never implemented
 
-E. [Removed - review sync endpoints belong to the abandoned review-package design and were never implemented]
+E. <RETIRED> review sync endpoints belong to the abandoned review-package design and were never implemented
 
 F. The API server SHALL accept cross-origin requests.
 
 G. The API server SHALL serve bundled static assets over HTTP.
 
-H. [Removed - auto-sync of review data belongs to the abandoned review-package design and was never implemented]
+H. <RETIRED> auto-sync of review data belongs to the abandoned review-package design and was never implemented
 
-I. [Removed - review archive endpoints belong to the abandoned review-package design and were never implemented]
+I. <RETIRED> review archive endpoints belong to the abandoned review-package design and were never implemented
 
-J. [Removed - a dedicated health-check endpoint was never implemented]
+J. <RETIRED> a dedicated health-check endpoint was never implemented
 
 ## Changelog
 
+- 2026-08-24 | cd30d3da | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | aaae0fb2 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms, update hash
 - 2026-07-31 | 8ae37685 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-04-23 | b647ec64 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Traceability API Server* | **Hash**: aaae0fb2
+*End* *Traceability API Server* | **Hash**: cd30d3da
 
 ---
 

@@ -108,6 +108,7 @@ def _make_two_repo_federation(
 class TestWorkspaceInfoFederation:
     """Validates REQ-d00205-A: get_workspace_info() includes federation details."""
 
+    # Verifies: REQ-d00205-A
     def test_REQ_d00205_A_workspace_info_includes_federation_repos(self):
         """get_workspace_info() with multi-repo graph includes federation section.
 
@@ -147,6 +148,7 @@ class TestWorkspaceInfoFederation:
             assert "path" in repo
             assert "status" in repo
 
+    # Verifies: REQ-d00205-A
     def test_REQ_d00205_A_workspace_info_federation_includes_error_state(self):
         """get_workspace_info() includes error state for unavailable repos.
 
@@ -188,6 +190,7 @@ class TestWorkspaceInfoFederation:
 class TestRefreshGraphSyncsConfig:
     """Validates REQ-d00205-B: refresh_graph() syncs _state config."""
 
+    # Verifies: REQ-d00205-B
     def test_REQ_d00205_B_refresh_graph_syncs_config_after_rebuild(self, tmp_path):
         """A rebuild publishes the rebuilt graph's root repo config.
 
@@ -318,6 +321,7 @@ class TestNodeSpecificConfig:
 class TestGlobalOpsUseRootConfig:
     """Validates REQ-d00205-D: Global ops use root repo config."""
 
+    # Verifies: REQ-d00205-D
     def test_REQ_d00205_D_workspace_info_uses_root_config(self):
         """get_workspace_info() extracts root config from graph for global ops.
 

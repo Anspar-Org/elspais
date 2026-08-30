@@ -948,7 +948,7 @@ css_class = "assertion-validation-btn validation-unknown"
 # named in the hover text, and introduce no tier color of their own
 # (REQ-d00258-G).
 
-[severity.ok]
+[severity.off]
 css_class = "val-green"
 color_key = "green"
 

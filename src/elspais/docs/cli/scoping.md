@@ -90,6 +90,21 @@ A scope that matches nothing is an answer, not an empty estate:
 Scope: no requirement matches this scope; the estate holds 47
 ```
 
+## Where the disclosure appears
+
+Inside the report, in whatever format it is rendered in — never only on the
+terminal. A report redirected to a file with `--output` carries its own scope,
+so the artifact still answers the question months after the terminal that
+produced it was closed:
+
+- text and markdown — the lines beneath the title, in italics
+- csv — leading `# Scope: ...` comment rows, one field each, ahead of the header
+- html — a subtitle beneath the heading
+- json — a `scope` array beside the report's own content
+
+A report narrowed by nothing declares nothing, and its JSON stays the bare array
+of requirements it has always been.
+
 ## What scoping does not change
 
 Scoping selects what a report emits. It does not change the coverage figures
@@ -221,7 +236,7 @@ them a verifying test can be named for — and it is stated only where the
 coverage tooling recorded per-test contexts; aggregate-only coverage states
 `null` there while the other three stand. `trace` and `summary` offer it
 identically, the second summing over the requirements of each level under the
-same status gate `checks --code` uses, so the two reconcile.
+same status gate `checks --code-checks` uses, so the two reconcile.
 
 A value in which a report states no figure is never written as zero. A `trace`
 table marks it `n/a`, a `summary` table `-`, and JSON states `null`. A level

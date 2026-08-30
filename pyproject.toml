@@ -4,7 +4,7 @@ build-backend = "flit_core.buildapi"
 
 [project]
 name = "elspais"
-version = "0.121.233"
+version = "0.122.0"
 description = "Requirements validation and traceability tools - L-Space connects all libraries"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -92,6 +92,29 @@ markers = [
     "browser: browser-based tests requiring Playwright (deselected by default, run with: pytest -m browser)",
     "stress: concurrency stress battery racing live daemon surfaces (deselected by default, run with: pytest -m stress; scale with ELSPAIS_STRESS_SCALE)",
 ]
+
+[tool.coverage.run]
+# Jinja templates are excluded from measurement because the coordinates
+# recorded for them are not template coordinates.
+#
+# Jinja compiles each template into a Python module whose `co_filename` is the
+# template's own path, so coverage.py records the GENERATED module's line
+# numbers under the `.j2` filename. Those numbers do not correspond to the
+# template's lines -- several templates recorded more statements than the file
+# has lines, and a 2983-line template recorded nothing past line 50.
+#
+# Nothing downstream can repair that. Reporting re-analyses the source to
+# recover the statement set, and a template does not parse as Python, so the
+# measurement falls back to executed-lines-only: every line that never ran is
+# absent from the denominator and each template reads as 100% covered. The
+# figure is fabricated rather than merely degraded, so it is not measured.
+#
+# Measuring templates properly requires a coverage.py plugin supplying a
+# run-time FileTracer that maps generated-code lines back to template lines.
+# Until one exists here, omission is the truthful answer. Omission costs the
+# per-test contexts these files carried; that attribution was real in kind but
+# recorded against unusable line numbers.
+omit = ["*.j2"]
 
 [tool.coverage.json]
 # CUR-1568: per-test line attribution (code_tested.direct) is fed by

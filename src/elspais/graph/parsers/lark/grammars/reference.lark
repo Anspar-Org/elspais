@@ -3,10 +3,11 @@
 // Parses comment-based requirement references:
 //   # Implements: REQ-p00001, REQ-p00002
 //   // Verifies: REQ-p00001-A
-//   # IMPLEMENTS REQUIREMENTS:
-//   #   REQ-p00001: Description
 //
-// Also recognizes test name patterns (def test_foo_REQ_p00001).
+// A keyword, its colon and a list of references on one comment line is the
+// only form that declares a relationship.  A comment opening with an
+// identifier that no keyword introduces is recognised so it can be reported
+// (REQ-d00272-O), and never read as a declaration.
 //
 // Pre-scan (function/class context tracking) is handled in Python,
 // not in the grammar.
@@ -18,7 +19,13 @@
 //   __NAMESPACE__       e.g. "REQ"
 //   __TYPE_PATTERN__    e.g. "p|o|d"
 //   __DIGITS_PATTERN__  e.g. "\\d{1,5}"
-//   __COMMENT_STYLES__  e.g. "\\#|//|\\-\\-"
+//   __COMMENT_STYLES__  the ONE marker opening a comment in the language of
+//                       the file this parser reads -- e.g. "\\#" for a
+//                       shell-like file, "//" for a c-like one.  A language
+//                       the named set does not cover substitutes "(?!)", which
+//                       never matches, so no keyword is read in such a file.
+//                       Built by graph/parsers/patterns.comment_style_fragment;
+//                       never spelled here.
 //   __IMPL_KEYWORDS__   e.g. "[Ii][Mm][Pp]...", matching any case
 //   __VER_KEYWORDS__    e.g. "[Vv][Ee][Rr]...", matching any case
 //   __KEYWORDS__        every keyword, case-insensitive, alternated
@@ -31,9 +38,7 @@ _entry: ref_line _NL
 
 // Each line is either a reference or an ordinary line.
 ?ref_line: single_ref
-         | block_header
-         | block_ref
-         | test_name_ref
+         | bare_ref
          | unresolved_ref
          | other_line
 
@@ -42,20 +47,15 @@ _entry: ref_line _NL
 
 single_ref.3: SINGLE_REF_LINE
 
-// --- Multi-line block header ---
-// # IMPLEMENTS REQUIREMENTS:
+// --- Comment opening with an identifier that no keyword introduces ---
+// #   REQ-p00001
+//
+// Nothing here declares a relationship.  The line is recognised so that a
+// relationship its author appears to intend and has not spelled is reported
+// (REQ-d00272-O), and so that it can continue a list the line above left
+// open (REQ-d00269-H).
 
-block_header.3: BLOCK_HEADER_LINE
-
-// --- Block reference line (follows a block header) ---
-// #   REQ-p00001: Description
-
-block_ref.3: BLOCK_REF_LINE
-
-// --- Test function name with REQ reference ---
-// def test_foo_REQ_p00001_A(...)
-
-test_name_ref.3: TEST_NAME_LINE
+bare_ref.3: BARE_REF_LINE
 
 // --- Reference comment naming no configured identifier ---
 // # Implements: WIDGET-42
@@ -80,22 +80,13 @@ other_line.1: TEXT
 // recognized even when no REQ ID appears on the line.
 SINGLE_REF_LINE.5: /[ \t]*(?:__COMMENT_STYLES__)[ \t]*(?:__KEYWORDS__):[ \t]+(?:__NAMESPACE__[-_]|JNY-)[^\n]+/
 
-// Block header: comment + keyword + REQUIREMENTS: (optional leading whitespace).
-// Case-lax like every other keyword form, but otherwise held to the same
-// strictness as the single-line forms: the plural is fixed and the colon
-// is required, so a header missing either reads as prose rather than as a
-// silently-accepted block opener.
-BLOCK_HEADER_LINE.5: /[ \t]*(?:__COMMENT_STYLES__)[ \t]*(?:__KEYWORDS__)[ \t]+[Rr][Ee][Qq][Uu][Ii][Rr][Ee][Mm][Ee][Nn][Tt][Ss]:[ \t]*/
-
-// Block reference line: comment + indented REQ-ID or JNY-ID
-BLOCK_REF_LINE.4: /[ \t]*(?:__COMMENT_STYLES__)[ \t]+(?:__NAMESPACE__[-_]|JNY-)[^\n]+/
-
-// Test function name containing REQ pattern
-TEST_NAME_LINE.4: /[ \t]*(?:async[ \t]+)?def[ \t]+test_\w*__NAMESPACE__[-_][^\n]+/
+// Comment whose first content is an identifier: comment + indented REQ-ID
+// or JNY-ID.  No keyword opens it, so it declares nothing.
+BARE_REF_LINE.4: /[ \t]*(?:__COMMENT_STYLES__)[ \t]+(?:__NAMESPACE__[-_]|JNY-)[^\n]+/
 
 // Reference comment whose target names no configured identifier.  The colon
-// must abut the keyword, so "# IMPLEMENTS REQUIREMENTS:" still lexes as a
-// block header, and a full-length match here always loses to SINGLE_REF_LINE.
+// must abut the keyword, and a full-length match here always loses to
+// SINGLE_REF_LINE.
 //
 // What decides recognition is position, not the shape of the target.  A
 // target no repository claims is by definition outside every configured

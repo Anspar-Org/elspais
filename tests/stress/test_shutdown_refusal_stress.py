@@ -112,20 +112,35 @@ class TestWritesRacingTheShutdownDecision:
         # acknowledgement landing after a refusal is visible as an order
         # violation rather than only as a count.
         timelines: list[list[str]] = [[] for _ in range(writers)]
+        # Raised by a writer once it has completed one POST, so the signal
+        # is sent into a saturated write path rather than at a fixed time
+        # a slow machine may spend still starting up.
+        hammering = [threading.Event() for _ in range(writers)]
         stop = threading.Event()
 
         def worker(i: int) -> None:
             client = httpx.Client(base_url=base, timeout=10.0)
             node = NODES[i % len(NODES)]
+            # Read the version ONCE. It goes stale on the first accepted
+            # write and stays stale, which costs the probe nothing: the
+            # shutdown guard is evaluated before the version check, so a
+            # POST carrying any version is a full-strength probe of the
+            # window. Keeping the read out of the loop is what makes a
+            # request land inside that window rather than near it -- a
+            # writer spending half its cycle on a GET can step over the
+            # whole drain without ever offering the server a write.
+            version = None
+            while version is None and not stop.is_set():
+                try:
+                    r = client.get(f"/api/node/{node}")
+                    if r.status_code == 200:
+                        version = r.json()["version"]
+                except (httpx.HTTPError, ValueError):
+                    pass
             n = 0
             while not stop.is_set():
                 n += 1
                 try:
-                    r = client.get(f"/api/node/{node}")
-                    if r.status_code != 200:
-                        timelines[i].append("read-refused")
-                        continue
-                    version = r.json()["version"]
                     r = client.post(
                         "/api/mutate/title",
                         json={
@@ -135,9 +150,16 @@ class TestWritesRacingTheShutdownDecision:
                         },
                     )
                     body = r.json()
+                except httpx.ConnectError:
+                    # The listener is gone; no refusal can arrive on a
+                    # connection that cannot be opened. Stop rather than
+                    # spinning on connect-refused, which would starve the
+                    # writers still holding a live connection.
+                    timelines[i].append("gone")
+                    break
                 except (httpx.HTTPError, ValueError):
-                    # The socket died with the process. Nothing was
-                    # acknowledged, which is a safe outcome.
+                    # An established connection died with the process.
+                    # Nothing was acknowledged, which is a safe outcome.
                     timelines[i].append("gone")
                     continue
                 if body.get("success"):
@@ -151,14 +173,27 @@ class TestWritesRacingTheShutdownDecision:
                     timelines[i].append("conflict")
                 else:
                     timelines[i].append(f"UNCLASSIFIED:{body}")
+                hammering[i].set()
             client.close()
 
         with ThreadPoolExecutor(max_workers=writers) as ex:
             futures = [ex.submit(worker, i) for i in range(writers)]
-            # Let the writers get going, then take the decision out from
-            # under them.
-            time.sleep(1.0 * SCALE)
+            # Take the decision out from under the writers only once every
+            # one of them is actually offering writes. Saturating the write
+            # path is what puts a request inside the drain: requests are
+            # serialized behind the write lock, so of those in flight when
+            # the flag goes up at most the one already executing predates
+            # it, and every one dispatched after it is refused.
+            deadline = time.time() + 60 * SCALE
+            for i, ready in enumerate(hammering):
+                remaining = deadline - time.time()
+                assert remaining > 0 and ready.wait(remaining), (
+                    f"writer {i} never completed a write before the signal"
+                )
             proc.send_signal(signal.SIGTERM)
+            # Keep hammering across the whole drain, and a moment past the
+            # end of the process, so the window is covered by traffic
+            # rather than sampled by it.
             proc.wait(timeout=30)
             time.sleep(0.5)
             stop.set()

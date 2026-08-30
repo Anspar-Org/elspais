@@ -109,7 +109,7 @@ answering Q11 first — that would pin silence into the suite.
 
 ---
 
-## 6. Aliases and underscore notation
+## 6. Aliases
 
 The implementor's design change: an item whole-matches a member's grammar
 *including its configured aliases*, because an alias is a spelling the owning
@@ -129,19 +129,19 @@ different answers.
 | ALIAS-08 | `d00001-A+B` | G-STD | A, B exist | `REQ-d00001-A`, `REQ-d00001-B` | expansion applies to the alias form |
 | ALIAS-09 | `p00001` | G-FED | core `REQ-p00001` | OPEN | Q12: the federation members configure no aliases; does the invoking repo's alias reach a member's identifier? |
 
-### Underscore notation
+### Underscore notation is gone
 
-Read by `extract_underscored_ref()`, not by `parse_ref_list()`. Included because
-it is the third spelling of the same identifier and a converter should check
-that all three normalize to one string.
+There is no second notation. A test function's name declares nothing
+(REQ-d00269-L), and an underscore spelling is not read as an identifier
+anywhere: normalization settles case and padding and nothing else, so a
+spelling differing in anything more resolves to nothing rather than being
+repaired into one that resolves (REQ-d00212-S).
 
 | ID | Input | Grammar | Expected |
 |---|---|---|---|
-| USCORE-01 | `def test_REQ_p00001_A(): ...` | G-STD | `REQ-p00001-A` |
-| USCORE-02 | `def test_REQ_p00001_validates_things(): ...` | G-STD | `REQ-p00001` — a trailing lowercase run continues the name; `_v` is not a label |
-| USCORE-03 | `def test_REQ_p00001_A_and_so_on(): ...` | G-STD | `REQ-p00001-A` — one label, not two |
-| USCORE-04 | `def test_REQ_p00001_a(): ...` | G-STD | `REQ-p00001-A` — only the first label is read tolerantly of case. Relate to CASE-09 / Q1: label-case tolerance is deliberate *here*; the dispute is whether it belongs in a reference list. |
-| USCORE-05 | `def test_REQ_p00001_A_B(): ...` | G-STD | OPEN: `REQ-p00001-A+B` or `REQ-p00001-A`? Q13. |
+| USCORE-01 | `def test_REQ_p00001_A(): ...` | G-STD | no reference; the line is ordinary code |
+| USCORE-02 | `# Verifies: REQ-p00001-A` above `def test_REQ_p00001_A(): ...` | G-STD | `REQ-p00001-A`, once — from the comment alone |
+| USCORE-03 | `# Verifies: REQ_p00001_A` | G-STD | no binding; reported, not repaired to `REQ-p00001-A` |
 
 ---
 

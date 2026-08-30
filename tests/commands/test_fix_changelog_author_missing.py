@@ -80,7 +80,7 @@ class TestFixFailsWhenAuthorMissing:
         # Build a project with hash_current = false
         config_path = tmp_path / ".elspais.toml"
         config_path.write_text(
-            "version = 3\n"
+            "version = 5\n"
             "\n"
             "[project]\n"
             'name = "test"\n'
@@ -151,7 +151,7 @@ class TestFixFailsWhenAuthorMissing:
         # Build a project with author_name not required
         config_path = tmp_path / ".elspais.toml"
         config_path.write_text(
-            "version = 3\n"
+            "version = 5\n"
             "\n"
             "[project]\n"
             'name = "test"\n'

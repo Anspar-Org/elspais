@@ -58,7 +58,7 @@ C. The system SHALL blort.
 """
 
 _CONFIG_TEMPLATE = """\
-version = 3
+version = 5
 
 [project]
 name = "septest"
@@ -229,7 +229,7 @@ def test_journey_validates_across_separator_combinations(
     assert covered_labels(rollup.uat_coverage, "immediate_direct") == set(expected_labels)
 
 
-# Verifies: REQ-d00082-E, REQ-p00014-R, REQ-d00272-A, REQ-d00252-G, REQ-d00252-K
+# Verifies: REQ-d00082-E, REQ-p00014-R, REQ-d00272-A, REQ-d00272-O, REQ-d00252-G, REQ-d00252-K
 def test_journey_dash_style_ref_under_slash_config_is_hard_broken(tmp_path):
     """A journey `Validates:` ref that still uses "-" when the project is
     configured with a "/" separator must remain a hard broken reference
@@ -266,7 +266,7 @@ def test_journey_dash_style_ref_under_slash_config_is_hard_broken(tmp_path):
     jny = graph.find_by_id("JNY-T-01")
     assert jny is not None, "JNY-T-01 should be in the graph"
 
-    journey_broken = [br for br in graph.broken_references() if br.source_id == jny.id]
+    journey_broken = [br for br in graph.unresolved_references() if br.source_id == jny.id]
     assert len(journey_broken) == 1, (
         f"Expected exactly one broken ref from {jny.id}, got {journey_broken}"
     )
@@ -290,9 +290,17 @@ def test_journey_dash_style_ref_under_slash_config_is_hard_broken(tmp_path):
     assert file_path.endswith(".md")
     assert line, "a cause is named with the line the reference was written on"
 
-    assert br.diagnostic == "", (
-        "The code and the location name the cause; prose guessing at a "
-        f"separator would name one the input does not determine: {br.diagnostic!r}"
+    # A trailing-content report names both halves: neither the code nor the
+    # verbatim target says where the reference ends and the residue begins.
+    assert "REQ-p-widget" in br.diagnostic, (
+        f"the reference that was found is named: {br.diagnostic!r}"
+    )
+    assert "-A+C" in br.diagnostic, (
+        f"the content no identifier accounts for is named: {br.diagnostic!r}"
+    )
+    assert "'/'" in br.diagnostic, (
+        "an author who wrote the dash style is told which separator this "
+        f"repository configures: {br.diagnostic!r}"
     )
 
 
@@ -313,7 +321,7 @@ def test_journey_dash_style_ref_under_slash_config_is_hard_broken(tmp_path):
 # --------------------------------------------------------------------------- #
 
 _RESIDUE_CONFIG_TEMPLATE = """\
-version = 4
+version = 5
 
 [project]
 name = "residuetest"
@@ -451,7 +459,7 @@ def test_code_comment_off_config_residue_is_a_broken_reference(tmp_path):
         f"{[e.assertion_targets for e in code_edges]}"
     )
 
-    code_broken = [br for br in graph.broken_references() if br.source_id == code_id]
+    code_broken = [br for br in graph.unresolved_references() if br.source_id == code_id]
     assert len(code_broken) == 1, (
         f"Expected exactly one broken reference from the code node, got {code_broken}"
     )
@@ -483,9 +491,9 @@ def test_spec_and_code_contexts_agree_on_the_same_malformed_reference(tmp_path):
     code_id = _code_node_id(graph)
 
     spec_targets = {
-        br.target_id for br in graph.broken_references() if br.source_id == "REQ-d-storageImpl"
+        br.target_id for br in graph.unresolved_references() if br.source_id == "REQ-d-storageImpl"
     }
-    code_targets = {br.target_id for br in graph.broken_references() if br.source_id == code_id}
+    code_targets = {br.target_id for br in graph.unresolved_references() if br.source_id == code_id}
 
     assert spec_targets == {ref}, (
         f"Spec metadata context should already report {ref!r} broken; got {spec_targets}"
@@ -529,7 +537,7 @@ def test_test_comment_off_config_residue_is_a_broken_reference(tmp_path):
         f"{[e.assertion_targets for e in verifies_edges]}"
     )
 
-    test_broken = [br for br in graph.broken_references() if br.source_id == test_id]
+    test_broken = [br for br in graph.unresolved_references() if br.source_id == test_id]
     assert [br.target_id for br in test_broken] == ["REQ-p-widget/Z"], (
         f"Expected one broken reference carrying the whole malformed token, got {test_broken}"
     )
@@ -560,7 +568,7 @@ def test_slash_configured_repo_still_parses_slash_suffix(tmp_path):
     assert sorted(targets) == ["A"], (
         f"Expected a targeted IMPLEMENTS edge for assertion A, got {sorted(targets)}"
     )
-    assert not [br for br in graph.broken_references() if br.source_id == code_id], (
+    assert not [br for br in graph.unresolved_references() if br.source_id == code_id], (
         "A correctly-styled reference under the configured separator must not be reported broken"
     )
 
@@ -590,7 +598,7 @@ def test_same_separator_multi_assertion_ref_still_resolves(tmp_path):
         "A",
         "B",
     ], f"Expected both assertions A and B to be targeted, got {sorted(targets)}"
-    assert not [br for br in graph.broken_references() if br.source_id == code_id]
+    assert not [br for br in graph.unresolved_references() if br.source_id == code_id]
 
 
 # Verifies: REQ-p00014-T, REQ-d00082-E
@@ -618,8 +626,9 @@ def test_bare_requirement_reference_stays_a_blanket_edge(tmp_path):
     assert blanket[0].assertion_targets == [], (
         f"Expected a blanket edge with no assertion targets, got {blanket[0].assertion_targets}"
     )
-    assert not graph.broken_references(), (
-        f"A bare requirement reference must not be reported broken; got {graph.broken_references()}"
+    assert not graph.unresolved_references(), (
+        f"A bare requirement reference must not be reported unresolved; "
+        f"got {graph.unresolved_references()}"
     )
 
 
@@ -635,7 +644,7 @@ def test_bare_requirement_reference_stays_a_blanket_edge(tmp_path):
 # --------------------------------------------------------------------------- #
 
 _ROUNDTRIP_CONFIG = """\
-version = 3
+version = 5
 
 [project]
 name = "roundtrip"
@@ -735,9 +744,9 @@ def test_journey_validates_two_assertions_of_one_requirement(sep, multi, tmp_pat
         "A",
         "B",
     }
-    assert not graph.broken_references(), (
+    assert not graph.unresolved_references(), (
         "A reference spelled in the repository's own grammar must resolve; "
-        f"got {graph.broken_references()}"
+        f"got {graph.unresolved_references()}"
     )
 
 

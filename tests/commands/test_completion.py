@@ -26,6 +26,7 @@ from elspais.commands.completion import (
 class TestDetectShell:
     """Validates REQ-p00001-A: shell auto-detection from $SHELL."""
 
+    # Verifies: REQ-p00001-A
     @pytest.mark.parametrize(
         ("shell_path", "expected"),
         [
@@ -43,6 +44,7 @@ class TestDetectShell:
         monkeypatch.setenv("SHELL", shell_path)
         assert _detect_shell() == expected
 
+    # Verifies: REQ-p00001-A
     def test_REQ_p00001_A_detect_empty_shell(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("SHELL", raising=False)
         assert _detect_shell() is None
@@ -51,6 +53,7 @@ class TestDetectShell:
 class TestRemoveArgcompleteLines:
     """Validates REQ-p00001-A: removal of stale argcomplete entries."""
 
+    # Verifies: REQ-p00001-A
     def test_REQ_p00001_A_removes_eval_line(self, tmp_path: Path) -> None:
         rc = tmp_path / ".zshrc"
         rc.write_text(
@@ -65,6 +68,7 @@ class TestRemoveArgcompleteLines:
         assert 'export PATH="/usr/bin"' in content
         assert "alias ll='ls -la'" in content
 
+    # Verifies: REQ-p00001-A
     def test_REQ_p00001_A_removes_comment_and_eval(self, tmp_path: Path) -> None:
         rc = tmp_path / ".zshrc"
         rc.write_text(
@@ -81,6 +85,7 @@ class TestRemoveArgcompleteLines:
         assert "# some stuff" in content
         assert "# other stuff" in content
 
+    # Verifies: REQ-p00001-A
     def test_REQ_p00001_A_preserves_unrelated_lines(self, tmp_path: Path) -> None:
         rc = tmp_path / ".zshrc"
         original = "export FOO=bar\nalias g=git\n"
@@ -89,11 +94,13 @@ class TestRemoveArgcompleteLines:
         assert removed == 0
         assert rc.read_text() == original
 
+    # Verifies: REQ-p00001-A
     def test_REQ_p00001_A_handles_missing_file(self, tmp_path: Path) -> None:
         rc = tmp_path / ".nonexistent"
         removed = _remove_argcomplete_lines(rc)
         assert removed == 0
 
+    # Verifies: REQ-p00001-A
     def test_REQ_p00001_A_removes_tab_completion_comment(self, tmp_path: Path) -> None:
         rc = tmp_path / ".bashrc"
         rc.write_text(
@@ -108,6 +115,7 @@ class TestRemoveArgcompleteLines:
 class TestRcHasBlock:
     """Validates REQ-p00001-A: detection of existing completion blocks in RC files."""
 
+    # Verifies: REQ-p00001-A
     def test_REQ_p00001_A_detects_marker(self, tmp_path: Path) -> None:
         rc = tmp_path / ".zshrc"
         rc.write_text(
@@ -118,16 +126,19 @@ class TestRcHasBlock:
         )
         assert _rc_has_block(rc, "# elspais shell completion") is True
 
+    # Verifies: REQ-p00001-A
     def test_REQ_p00001_A_detects_orphaned_fpath(self, tmp_path: Path) -> None:
         rc = tmp_path / ".zshrc"
         rc.write_text("fpath=(~/.zfunc $fpath)\nautoload -Uz compinit && compinit\n")
         assert _rc_has_block(rc, "# elspais shell completion") is True
 
+    # Verifies: REQ-p00001-A
     def test_REQ_p00001_A_returns_false_when_absent(self, tmp_path: Path) -> None:
         rc = tmp_path / ".zshrc"
         rc.write_text("export PATH=/usr/bin\n")
         assert _rc_has_block(rc, "# elspais shell completion") is False
 
+    # Verifies: REQ-p00001-A
     def test_REQ_p00001_A_returns_false_for_missing_file(self, tmp_path: Path) -> None:
         rc = tmp_path / ".zshrc"
         assert _rc_has_block(rc, "# elspais shell completion") is False
@@ -136,6 +147,7 @@ class TestRcHasBlock:
 class TestAppendRcBlock:
     """Validates REQ-p00001-A: appending completion blocks to RC files."""
 
+    # Verifies: REQ-p00001-A
     def test_REQ_p00001_A_appends_to_existing_file(self, tmp_path: Path) -> None:
         rc = tmp_path / ".zshrc"
         rc.write_text("export FOO=bar\n")
@@ -145,6 +157,7 @@ class TestAppendRcBlock:
         assert "# elspais shell completion" in content
         assert content.endswith("\n")
 
+    # Verifies: REQ-p00001-A
     def test_REQ_p00001_A_appends_to_empty_file(self, tmp_path: Path) -> None:
         rc = tmp_path / ".zshrc"
         rc.write_text("")
@@ -152,11 +165,13 @@ class TestAppendRcBlock:
         content = rc.read_text()
         assert content == "# elspais shell completion\n"
 
+    # Verifies: REQ-p00001-A
     def test_REQ_p00001_A_appends_to_nonexistent_file(self, tmp_path: Path) -> None:
         rc = tmp_path / ".zshrc"
         _append_rc_block(rc, "# elspais shell completion")
         assert rc.read_text() == "# elspais shell completion\n"
 
+    # Verifies: REQ-p00001-A
     def test_REQ_p00001_A_adds_blank_line_separator(self, tmp_path: Path) -> None:
         rc = tmp_path / ".zshrc"
         rc.write_text("export FOO=bar\n")
@@ -165,6 +180,7 @@ class TestAppendRcBlock:
         # Should have a blank line between existing content and block
         assert "export FOO=bar\n\n# block\n" == content
 
+    # Verifies: REQ-p00001-A
     def test_REQ_p00001_A_handles_no_trailing_newline(self, tmp_path: Path) -> None:
         rc = tmp_path / ".zshrc"
         rc.write_text("export FOO=bar")
@@ -176,6 +192,7 @@ class TestAppendRcBlock:
 class TestRemoveRcBlock:
     """Validates REQ-p00001-A: removal of completion blocks from RC files."""
 
+    # Verifies: REQ-p00001-A
     def test_REQ_p00001_A_removes_zsh_block(self, tmp_path: Path) -> None:
         rc = tmp_path / ".zshrc"
         rc.write_text(
@@ -194,6 +211,7 @@ class TestRemoveRcBlock:
         assert "export FOO=bar" in content
         assert "alias g=git" in content
 
+    # Verifies: REQ-p00001-A
     def test_REQ_p00001_A_removes_tcsh_block(self, tmp_path: Path) -> None:
         rc = tmp_path / ".tcshrc"
         rc.write_text(
@@ -210,12 +228,14 @@ class TestRemoveRcBlock:
         assert "elspais" not in content
         assert "set path" in content
 
+    # Verifies: REQ-p00001-A
     def test_REQ_p00001_A_returns_false_when_no_block(self, tmp_path: Path) -> None:
         rc = tmp_path / ".zshrc"
         rc.write_text("export FOO=bar\n")
         result = _remove_rc_block(rc)
         assert result is False
 
+    # Verifies: REQ-p00001-A
     def test_REQ_p00001_A_returns_false_for_missing_file(self, tmp_path: Path) -> None:
         rc = tmp_path / ".nonexistent"
         result = _remove_rc_block(rc)
@@ -270,6 +290,7 @@ class TestCmdInstall:
         monkeypatch.setattr("elspais.commands.completion._clear_zsh_compdump", lambda: 0)
         return cfg
 
+    # Verifies: REQ-p00001-A
     def test_REQ_p00001_A_install_zsh_writes_script(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -285,6 +306,7 @@ class TestCmdInstall:
         assert script_path.exists()
         assert "fake zsh completion script" in script_path.read_text()
 
+    # Verifies: REQ-p00001-A
     def test_REQ_p00001_A_install_zsh_updates_rc(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -300,6 +322,7 @@ class TestCmdInstall:
         assert "fpath=(~/.zfunc $fpath)" in content
         assert "autoload -Uz compinit && compinit" in content
 
+    # Verifies: REQ-p00001-A
     def test_REQ_p00001_A_install_bash_no_rc_block(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -313,17 +336,20 @@ class TestCmdInstall:
         # bash has rc_block=None, so RC file should be untouched
         assert rc_file.read_text() == "# existing config\n"
 
+    # Verifies: REQ-p00001-A
     def test_REQ_p00001_A_install_unsupported_shell(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         result = cmd_install("fish")
         assert result == 1
 
+    # Verifies: REQ-p00001-A
     def test_REQ_p00001_A_install_no_shell_detected(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("SHELL", raising=False)
         result = cmd_install(None)
         assert result == 1
 
+    # Verifies: REQ-p00001-A
     def test_REQ_p00001_A_install_removes_stale_argcomplete(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -351,6 +377,7 @@ class TestCmdUninstall:
         monkeypatch.setattr("elspais.commands.completion._clear_zsh_compdump", lambda: 0)
         return cfg
 
+    # Verifies: REQ-p00001-A
     def test_REQ_p00001_A_uninstall_removes_script(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -370,6 +397,7 @@ class TestCmdUninstall:
         assert result == 0
         assert not script_path.exists()
 
+    # Verifies: REQ-p00001-A
     def test_REQ_p00001_A_uninstall_removes_rc_block(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -389,6 +417,7 @@ class TestCmdUninstall:
         assert "elspais" not in content
         assert "export FOO=bar" in content
 
+    # Verifies: REQ-p00001-A
     def test_REQ_p00001_A_uninstall_no_script_present(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -399,10 +428,12 @@ class TestCmdUninstall:
         result = cmd_uninstall("bash")
         assert result == 0  # should succeed even with nothing to remove
 
+    # Verifies: REQ-p00001-A
     def test_REQ_p00001_A_uninstall_unsupported_shell(self) -> None:
         result = cmd_uninstall("fish")
         assert result == 1
 
+    # Verifies: REQ-p00001-A
     def test_REQ_p00001_A_uninstall_no_shell_detected(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -410,6 +441,7 @@ class TestCmdUninstall:
         result = cmd_uninstall(None)
         assert result == 1
 
+    # Verifies: REQ-p00001-A
     def test_REQ_p00001_A_uninstall_removes_stale_argcomplete(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -427,6 +459,7 @@ class TestCmdUninstall:
 class TestIdempotency:
     """Validates REQ-p00001-A: install is idempotent -- running twice does not duplicate."""
 
+    # Verifies: REQ-p00001-A
     def test_REQ_p00001_A_install_twice_no_duplicate_rc(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -453,6 +486,7 @@ class TestIdempotency:
         # Marker should appear exactly once
         assert second_content.count("# elspais shell completion") == 1
 
+    # Verifies: REQ-p00001-A
     def test_REQ_p00001_A_install_twice_script_updated(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:

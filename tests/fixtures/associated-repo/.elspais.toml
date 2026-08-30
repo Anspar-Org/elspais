@@ -1,7 +1,7 @@
 # Associated repository configuration
 # References core repository for cross-repo validation
 
-version = 3
+version = 5
 
 [project]
 name = "associated-callisto"

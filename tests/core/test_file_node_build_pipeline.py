@@ -81,6 +81,7 @@ def _write_code_file(tmp_path: Path, filename: str = "main.py", req_id: str = "R
 class TestFileNodeCreation:
     """Validates REQ-d00128-A: factory.py creates FILE nodes for scanned files."""
 
+    # Verifies: REQ-d00128-A
     def test_REQ_d00128_A_spec_file_gets_file_node(self, tmp_path: Path) -> None:
         """A scanned spec file produces a FILE node with file:<namespace>:<relative-path> ID."""
         config = _write_config(tmp_path)
@@ -102,6 +103,7 @@ class TestFileNodeCreation:
             f"Expected FILE node with ID '{expected_id}', got: {file_ids}"
         )
 
+    # Verifies: REQ-d00128-A
     def test_REQ_d00128_A_code_file_gets_file_node(self, tmp_path: Path) -> None:
         """A scanned code file produces a FILE node with file:<namespace>:<relative-path> ID."""
         config = _write_config(tmp_path)
@@ -121,6 +123,7 @@ class TestFileNodeCreation:
             f"Expected FILE node with ID '{expected_id}', got: {file_ids}"
         )
 
+    # Verifies: REQ-d00128-A
     def test_REQ_d00128_A_file_node_kind_is_file(self, tmp_path: Path) -> None:
         """FILE nodes have kind == NodeKind.FILE."""
         config = _write_config(tmp_path)
@@ -141,6 +144,7 @@ class TestFileNodeCreation:
 class TestFileNodeContentFields:
     """Validates REQ-d00128-B: FILE node content fields."""
 
+    # Verifies: REQ-d00128-B
     def test_REQ_d00128_B_spec_file_has_file_type(self, tmp_path: Path) -> None:
         """FILE node for spec file has file_type == FileType.SPEC."""
         config = _write_config(tmp_path)
@@ -157,6 +161,7 @@ class TestFileNodeContentFields:
         assert file_node is not None
         assert file_node.get_field("file_type") == FileType.SPEC
 
+    # Verifies: REQ-d00128-B
     def test_REQ_d00128_B_code_file_has_file_type(self, tmp_path: Path) -> None:
         """FILE node for code file has file_type == FileType.CODE."""
         config = _write_config(tmp_path)
@@ -173,6 +178,7 @@ class TestFileNodeContentFields:
         assert file_node is not None
         assert file_node.get_field("file_type") == FileType.CODE
 
+    # Verifies: REQ-d00128-B
     def test_REQ_d00128_B_paths_are_set(self, tmp_path: Path) -> None:
         """FILE node has absolute_path and relative_path fields."""
         config = _write_config(tmp_path)
@@ -192,6 +198,7 @@ class TestFileNodeContentFields:
         assert abs_path is not None
         assert str(tmp_path / "spec" / "reqs.md") == abs_path
 
+    # Verifies: REQ-d00128-B
     def test_REQ_d00128_B_repo_field_none_for_main_project(self, tmp_path: Path) -> None:
         """FILE node for main project has repo == None."""
         config = _write_config(tmp_path)
@@ -212,6 +219,7 @@ class TestFileNodeContentFields:
 class TestGitInfoCapture:
     """Validates REQ-d00128-C: git info captured once per repo."""
 
+    # Verifies: REQ-d00128-C
     def test_REQ_d00128_C_git_fields_present(self, tmp_path: Path) -> None:
         """FILE node has git_branch and git_commit fields (may be None outside git repo)."""
         config = _write_config(tmp_path)
@@ -231,6 +239,7 @@ class TestGitInfoCapture:
         assert "git_branch" in content
         assert "git_commit" in content
 
+    # Verifies: REQ-d00128-C
     def test_REQ_d00128_C_git_info_same_across_files(self, tmp_path: Path) -> None:
         """All FILE nodes from the same repo share the same git_branch and git_commit."""
         config = _write_config(tmp_path)
@@ -270,6 +279,7 @@ The system SHALL do something else.
 class TestContainsEdges:
     """Validates REQ-d00128-D: CONTAINS edges from FILE to top-level content nodes."""
 
+    # Verifies: REQ-d00128-D
     def test_REQ_d00128_D_file_contains_requirement(self, tmp_path: Path) -> None:
         """FILE node has CONTAINS edge to REQUIREMENT node."""
         config = _write_config(tmp_path)
@@ -291,6 +301,7 @@ class TestContainsEdges:
             f"FILE should CONTAINS a REQUIREMENT, got kinds: {child_kinds}"
         )
 
+    # Verifies: REQ-d00128-D
     def test_REQ_d00128_D_file_contains_code(self, tmp_path: Path) -> None:
         """FILE node has CONTAINS edge to CODE node."""
         config = _write_config(tmp_path)
@@ -310,6 +321,7 @@ class TestContainsEdges:
         child_kinds = [c.kind for c in contains_children]
         assert NodeKind.CODE in child_kinds, f"FILE should CONTAINS CODE, got kinds: {child_kinds}"
 
+    # Verifies: REQ-d00128-D
     def test_REQ_d00128_D_requirement_reachable_via_file_node_method(self, tmp_path: Path) -> None:
         """REQUIREMENT's file_node() returns its parent FILE node."""
         config = _write_config(tmp_path)
@@ -333,6 +345,7 @@ class TestContainsEdges:
 class TestContainsEdgeMetadata:
     """Validates REQ-d00128-E: CONTAINS edge metadata."""
 
+    # Verifies: REQ-d00128-E
     def test_REQ_d00128_E_contains_edge_has_start_line(self, tmp_path: Path) -> None:
         """CONTAINS edge metadata includes start_line."""
         config = _write_config(tmp_path)
@@ -358,6 +371,7 @@ class TestContainsEdgeMetadata:
         else:
             raise AssertionError("No CONTAINS edge found from FILE node")
 
+    # Verifies: REQ-d00128-E
     def test_REQ_d00128_E_contains_edge_has_render_order(self, tmp_path: Path) -> None:
         """CONTAINS edge metadata includes render_order as float."""
         config = _write_config(tmp_path)
@@ -383,6 +397,7 @@ class TestContainsEdgeMetadata:
         else:
             raise AssertionError("No CONTAINS edge found from FILE node")
 
+    # Verifies: REQ-d00128-E
     def test_REQ_d00128_E_render_order_sequential(self, tmp_path: Path) -> None:
         """CONTAINS edge render_order values are sequential from 0.0."""
         config = _write_config(tmp_path)
@@ -440,6 +455,7 @@ The system SHALL do thing two.
 class TestAssertionsNotContained:
     """Validates REQ-d00128-F: ASSERTIONs don't get CONTAINS edges from FILE."""
 
+    # Verifies: REQ-d00128-F
     def test_REQ_d00128_F_assertions_not_direct_children_of_file(self, tmp_path: Path) -> None:
         """ASSERTION nodes are NOT direct CONTAINS children of FILE nodes."""
         config = _write_config(tmp_path)
@@ -462,6 +478,7 @@ class TestAssertionsNotContained:
             f"{[c.id for c in assertion_children]}"
         )
 
+    # Verifies: REQ-d00128-F
     def test_REQ_d00128_F_assertions_reachable_via_structures(self, tmp_path: Path) -> None:
         """ASSERTION nodes are reachable from REQUIREMENT via STRUCTURES edges."""
         config = _write_config(tmp_path)
@@ -483,6 +500,7 @@ class TestAssertionsNotContained:
             "ASSERTIONs should be STRUCTURES children of REQUIREMENT"
         )
 
+    # Verifies: REQ-d00128-F
     def test_REQ_d00128_F_section_remainder_not_contained_by_file(self, tmp_path: Path) -> None:
         """Requirement-level REMAINDER sections are NOT CONTAINS children of FILE."""
         config = _write_config(tmp_path)
@@ -513,6 +531,7 @@ class TestAssertionsNotContained:
 class TestRemainderParserRegistration:
     """Validates REQ-d00128-G, REQ-d00128-H: RemainderParser registration."""
 
+    # Verifies: REQ-d00128-G
     def test_REQ_d00128_G_spec_files_have_remainder_nodes(self, tmp_path: Path) -> None:
         """Spec files produce file-level REMAINDER nodes for unclaimed lines."""
         config = _write_config(tmp_path)
@@ -536,6 +555,7 @@ class TestRemainderParserRegistration:
             "RemainderParser should produce REMAINDER nodes for unclaimed lines in spec files"
         )
 
+    # Verifies: REQ-d00128-G
     def test_REQ_d00128_G_code_files_have_coarse_remainder(self, tmp_path: Path) -> None:
         """Code files produce coarse REMAINDER nodes (one per file, not per line)."""
         config = _write_config(tmp_path)
@@ -562,6 +582,7 @@ class TestRemainderParserRegistration:
 class TestExistingBehaviorUnaffected:
     """Validates REQ-d00128-I: FILE nodes are additive, existing behavior unaffected."""
 
+    # Verifies: REQ-d00128-I
     def test_REQ_d00128_I_traceability_still_works(self, tmp_path: Path) -> None:
         """Requirements still have implementing code and coverage works."""
         config = _write_config(tmp_path)
@@ -582,6 +603,7 @@ class TestExistingBehaviorUnaffected:
         assert rollup is not None, "rollup_metrics should still be set"
         assert rollup.implemented.covered_pct == 100.0
 
+    # Verifies: REQ-d00128-I
     def test_REQ_d00128_I_roots_unchanged(self, tmp_path: Path) -> None:
         """Graph roots are still REQUIREMENT nodes, not FILE nodes."""
         config = _write_config(tmp_path)
@@ -601,6 +623,7 @@ class TestExistingBehaviorUnaffected:
         # REQUIREMENT should still be a root
         assert NodeKind.REQUIREMENT in root_kinds, "REQUIREMENT should still be a root"
 
+    # Verifies: REQ-d00128-I
     def test_REQ_d00128_I_orphan_detection_unaffected(self, tmp_path: Path) -> None:
         """Orphan detection is not affected by FILE nodes."""
         config = _write_config(tmp_path)
@@ -617,6 +640,7 @@ class TestExistingBehaviorUnaffected:
         orphan_ids = {n.id for n in graph.orphaned_nodes()}
         assert "REQ-p00001" not in orphan_ids
 
+    # Verifies: REQ-d00128-I
     def test_REQ_d00128_I_node_count_includes_file_nodes(self, tmp_path: Path) -> None:
         """FILE nodes are included in the graph index (findable by ID)."""
         config = _write_config(tmp_path)

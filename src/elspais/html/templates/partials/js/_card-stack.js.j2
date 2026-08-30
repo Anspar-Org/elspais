@@ -1,5 +1,5 @@
-// Implements: REQ-p00006-B
-// Implements: REQ-d00232-A, REQ-d00232-B
+{# Implements: REQ-p00006-B #}
+{# Implements: REQ-d00232-A, REQ-d00232-B #}
 // Partial: _card-stack.js.j2 — Card rendering, open/close
 
 // =====================================================================
@@ -279,7 +279,7 @@ function renderMarginIndicators(nodeId, threads) {
     });
 }
 
-// Implements: REQ-d00233-A
+{# Implements: REQ-d00233-A #}
 function toggleCommentThread(anchor) {
     var existing = document.querySelector('.comment-thread-inline[data-thread-anchor="' + anchor + '"]');
     if (existing) {
@@ -410,7 +410,7 @@ async function submitReply(btn, parentId, anchor, nodeId) {
     }
 }
 
-// Implements: REQ-d00233-B
+{# Implements: REQ-d00233-B #}
 function showCommentInput(anchor, afterElement) {
     // Remove any existing comment input and highlight
     var existing = document.querySelector('.comment-new-input');
@@ -849,7 +849,7 @@ function buildCardHtml(nodeId, data, collapsed) {
     // Surfaced by _serialize_node_generic when the REQ has integrations.
     // See CUR-1419 / REQ-d00252-D. Fields differ from satisfier_rollup:
     // implemented_covered/total + verified_covered/total (no covered_fraction).
-    // NOTE (REQ-d00258-N): despite the `verified_*` field names (kept for
+    // NOTE (REQ-d00277-C): despite the `verified_*` field names (kept for
     // wire compatibility), the value is the tested_and_passing() Passing
     // dimension (what the declared tests returned), so it is labeled
     // "passing" here rather than "verified". `has_failures` flags a red
@@ -1452,7 +1452,7 @@ function buildGenericCardHtml(nodeId, data, collapsed) {
 // Simple Markdown Renderer (for journey body text)
 // =====================================================================
 
-// Implements: REQ-d00245-A
+{# Implements: REQ-d00245-A #}
 function simpleMarkdown(text, annotateTerms) {
     // Phase 1: extract pipe tables into HTML chunks keyed by placeholder.
     // Cell content is escaped, bold-transformed, and term-annotated
@@ -1525,7 +1525,7 @@ function _buildTermsRegex() {
     editState.termsRegex = new RegExp('\\b(' + escaped.join('|') + ')\\b', 'gi');
 }
 
-// Implements: REQ-d00245-B
+{# Implements: REQ-d00245-B #}
 // Delegated click handler for .defined-term spans, scoped to document.body
 // so clicks land for terms surfaced anywhere —
 // card stack, file-viewer Rendered pane, etc.
@@ -2354,7 +2354,7 @@ function toggleTermRefs(cardId) {
     saveState();
 }
 
-// Implements: REQ-d00244-C
+{# Implements: REQ-d00244-C #}
 function buildTermCardHtml(cardId, data, collapsed) {
     var collapsedClass = collapsed ? ' collapsed' : '';
     var focusedClass = editState.openCardOrder[0] === cardId ? ' focused' : '';

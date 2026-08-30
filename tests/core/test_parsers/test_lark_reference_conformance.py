@@ -13,6 +13,7 @@ import pytest
 from elspais.config.schema import ElspaisConfig
 from elspais.graph.parsers.lark import FileDispatcher, GrammarFactory
 from elspais.graph.parsers.lark.transformers.reference import ReferenceTransformer
+from elspais.graph.parsers.patterns import comment_markers_for_path
 from elspais.graph.reference_faults import FaultCode
 from elspais.utilities.patterns import IdPatternConfig, IdResolver
 
@@ -53,18 +54,25 @@ def resolver():
     return IdResolver(config)
 
 
+# The grammar is compiled for one language's comment pattern (REQ-d00269-K),
+# so a conformance fixture must name a language.  Shell-like stands in for the
+# general case here because most fixtures below are written with ``#``; a test
+# about a different language names its own file below.
+_SHELL_LIKE_FILE = "demo.py"
+
+
 @pytest.fixture
 def code_parser(resolver):
     factory = GrammarFactory(resolver)
-    return factory.get_reference_parser()
+    return factory.get_reference_parser(comment_markers_for_path(_SHELL_LIKE_FILE))
 
 
-def _parse_code(content, resolver, code_parser):
-    """Parse as code_ref."""
+def _parse_code(content, resolver, code_parser, path=_SHELL_LIKE_FILE):
+    """Parse as code_ref, in the comment pattern of *path*'s language."""
     if not content.endswith("\n"):
         content += "\n"
     tree = code_parser.parse(content)
-    tx = ReferenceTransformer(resolver, "code_ref")
+    tx = ReferenceTransformer(resolver, "code_ref", comment_markers=comment_markers_for_path(path))
     return tx.transform(tree)
 
 
@@ -80,7 +88,9 @@ def parse_code(resolver, code_parser):
     def _parse(content):
         text = content if content.endswith("\n") else content + "\n"
         tree = code_parser.parse(text)
-        tx = ReferenceTransformer(resolver, "code_ref")
+        tx = ReferenceTransformer(
+            resolver, "code_ref", comment_markers=comment_markers_for_path(_SHELL_LIKE_FILE)
+        )
         return tx.transform(tree), tx
 
     return _parse
@@ -115,13 +125,33 @@ def _diagnostics(result):
     return [*tx.faults, *tx.undeclared]
 
 
-def _parse_test(content, resolver, code_parser, **kwargs):
-    """Parse as test_ref."""
+def _parse_test(content, resolver, code_parser, path=_SHELL_LIKE_FILE, **kwargs):
+    """Parse as test_ref, in the comment pattern of *path*'s language."""
     if not content.endswith("\n"):
         content += "\n"
     tree = code_parser.parse(content)
-    tx = ReferenceTransformer(resolver, "test_ref", **kwargs)
+    tx = ReferenceTransformer(
+        resolver, "test_ref", comment_markers=comment_markers_for_path(path), **kwargs
+    )
     return tx.transform(tree)
+
+
+def _parse_with_tx(content, resolver, parser, content_type, path=_SHELL_LIKE_FILE, **kwargs):
+    """Parse *content*, returning ``(results, transformer)``.
+
+    The ``parse_code`` fixture answers the same shape for the shell-like
+    language only; this takes a parser and a language of its own, so a test
+    about a c-like or function-like file can still reach the transformer's
+    reported facts (``undeclared``, ``faults``) -- which never travel on the
+    results themselves.
+    """
+    if not content.endswith("\n"):
+        content += "\n"
+    tree = parser.parse(content)
+    tx = ReferenceTransformer(
+        resolver, content_type, comment_markers=comment_markers_for_path(path), **kwargs
+    )
+    return tx.transform(tree), tx
 
 
 class TestCodeRefParsing:
@@ -150,23 +180,42 @@ class TestCodeRefParsing:
         assert len(refs) == 1
         assert refs[0].parsed_data["implements"] == ["REQ-p00001", "REQ-p00002"]
 
-    def test_block_header_and_refs(self, resolver, code_parser):
+    # Verifies: REQ-d00269-L, REQ-d00272-O
+    def test_a_block_header_binds_nothing(self, resolver, code_parser):
+        """A block header is prose, and the lines beneath it are undeclared.
+
+        ``IMPLEMENTS REQUIREMENTS:`` is not a *Traceability* keyword with its
+        separator abutting it, so it introduces no reference (REQ-d00269-E).
+        Each indented identifier line beneath it opens a comment no keyword
+        introduces, which is reported as a relationship its author appears to
+        intend and has not spelled, and produces none (REQ-d00272-O).
+        """
         content = """\
 # IMPLEMENTS REQUIREMENTS:
 #   REQ-d00050: First
 #   REQ-d00051: Second
 def foo(): pass
 """
-        results = _parse_code(content, resolver, code_parser)
-        refs = [r for r in results if r.content_type == "code_ref"]
-        assert len(refs) == 1
-        assert refs[0].parsed_data["implements"] == ["REQ-d00050", "REQ-d00051"]
-        assert refs[0].start_line == 1
-        assert refs[0].end_line == 3
+        results, tx = _parse_with_tx(content, resolver, code_parser, "code_ref")
+        assert not _all_refs((results, tx)), "a block header declares no relationship"
+        assert [line for line, _text in tx.undeclared] == [2, 3], (
+            f"each identifier line must be reported; got {tx.undeclared}"
+        )
+        assert not tx.faults, "nothing about those lines is malformed"
+        # Round-trip fidelity: every line still renders back verbatim.
+        remainder = "\n".join(r.raw_text for r in results if r.content_type == "remainder")
+        assert "# IMPLEMENTS REQUIREMENTS:" in remainder
+        assert "#   REQ-d00050: First" in remainder
+        assert "#   REQ-d00051: Second" in remainder
 
-    def test_js_style_comments(self, resolver, code_parser):
+    def test_js_style_comments(self, resolver):
+        # A c-like file is parsed under its own pattern -- the shell-like
+        # parser the other tests use cannot see a `//` comment at all.
         content = "// Implements: REQ-p00001\nfunction foo() {}\n"
-        results = _parse_code(content, resolver, code_parser)
+        js_parser = GrammarFactory(resolver).get_reference_parser(
+            comment_markers_for_path("demo.js")
+        )
+        results = _parse_code(content, resolver, js_parser, path="demo.js")
         refs = [r for r in results if r.content_type == "code_ref"]
         assert len(refs) == 1
         assert refs[0].parsed_data["implements"] == ["REQ-p00001"]
@@ -211,14 +260,29 @@ class TestTestRefParsing:
         assert len(refs) >= 1
         assert refs[0].parsed_data["verifies"] == ["REQ-p00001"]
 
-    def test_test_name_pattern(self, resolver, code_parser):
+    # Verifies: REQ-d00269-L
+    def test_a_test_functions_name_declares_nothing(self, resolver, code_parser):
+        """A name is not a comment, so it introduces no reference.
+
+        Both halves matter. The identifier the name spells binds nothing --
+        a keyword is what introduces a reference, and there is none here.
+        The function itself is still found, so a ``# Verifies:`` comment
+        written above it still has something to bind to and a result still
+        has a declaration to match against.
+        """
         content = "def test_foo_REQ_p00001_A(): pass\n"
-        results = _parse_test(content, resolver, code_parser)
+        results = _parse_test(
+            content,
+            resolver,
+            code_parser,
+            all_test_funcs=[(1, "test_foo_REQ_p00001_A", None)],
+        )
         refs = [r for r in results if r.content_type == "test_ref"]
-        assert len(refs) >= 1
-        # Find the one from test name
-        name_refs = [r for r in refs if "REQ-p00001" in str(r.parsed_data.get("verifies", []))]
-        assert len(name_refs) >= 1
+        assert len(refs) == 1, f"the test function must still be found; got {results}"
+        assert refs[0].parsed_data["function_name"] == "test_foo_REQ_p00001_A"
+        assert refs[0].parsed_data["verifies"] == [], (
+            f"a name declares no relationship; got {refs[0].parsed_data['verifies']}"
+        )
 
     def test_file_default_verifies(self, resolver, code_parser):
         content = "def test_unlinked(): pass\n"
@@ -234,17 +298,35 @@ class TestTestRefParsing:
         # Unlinked test function should inherit file defaults
         assert refs[0].parsed_data["file_default_verifies"] == ["REQ-p00001"]
 
-    def test_block_verifies(self, resolver, code_parser):
+    # Verifies: REQ-d00269-L, REQ-d00272-O
+    def test_a_block_header_binds_nothing_in_a_function_like_file(self, resolver):
+        """The same truth, pinned behind a second language's comment marker.
+
+        `--` opens a comment in SQL and nowhere else this suite parses, so a
+        header that binds nothing here is one that binds nothing wherever a
+        comment can be written -- not an accident of the shell-like pattern
+        the rest of these fixtures use.
+        """
         content = """\
 -- VERIFIES REQUIREMENTS:
 --   REQ-p00001: First test
 --   REQ-p00002: Second test
 """
-        results = _parse_test(content, resolver, code_parser)
-        refs = [r for r in results if r.content_type == "test_ref"]
-        assert len(refs) == 1
-        assert "REQ-p00001" in refs[0].parsed_data["verifies"]
-        assert "REQ-p00002" in refs[0].parsed_data["verifies"]
+        sql_parser = GrammarFactory(resolver).get_reference_parser(
+            comment_markers_for_path("t.sql")
+        )
+        results, tx = _parse_with_tx(content, resolver, sql_parser, "test_ref", path="t.sql")
+        verified = [
+            target
+            for r in results
+            if r.content_type == "test_ref"
+            for target in r.parsed_data.get("verifies", [])
+        ]
+        assert verified == [], f"a block header declares no relationship; got {verified}"
+        assert [line for line, _text in tx.undeclared] == [2, 3], (
+            f"each identifier line must be reported; got {tx.undeclared}"
+        )
+        assert not tx.faults, "nothing about those lines is malformed"
 
     # Verifies: REQ-d00269-G
     def test_a_partly_unmatched_file_default_binds_the_good_item(self, resolver):
@@ -336,19 +418,33 @@ def test_a_space_before_the_colon_is_not_a_keyword(parse_code):
     assert "REQ-d00001" not in _all_refs(result)
 
 
-# Verifies: REQ-d00269-E
+# Verifies: REQ-d00269-L, REQ-d00272-O
 @pytest.mark.parametrize(
-    "header,opens",
+    "header",
     [
-        ("# IMPLEMENTS REQUIREMENTS:", True),
-        ("# Implements Requirements:", True),
-        ("# IMPLEMENTS REQUIREMENTS", False),
-        ("# IMPLEMENTS REQUIREMENT:", False),
+        "# IMPLEMENTS REQUIREMENTS:",
+        "# Implements Requirements:",
+        "# IMPLEMENTS REQUIREMENTS",
+        "# IMPLEMENTS REQUIREMENT:",
     ],
 )
-def test_the_legacy_block_header_is_strict_about_everything_but_case(parse_code, header, opens):
+def test_a_block_header_binds_nothing_in_any_spelling(parse_code, header):
+    """No spelling of a block header opens a reference list.
+
+    A keyword introduces a reference only where it is the first content of a
+    comment with the separator that ends it abutting it (REQ-d00269-E), and
+    ``IMPLEMENTS REQUIREMENTS:`` never is -- however it is cased or
+    punctuated. The identifier line beneath it is a comment no keyword
+    introduces, reported as an undeclared relationship (REQ-d00272-O) and
+    producing none.
+    """
     result = parse_code(f"{header}\n#   REQ-d00001\ndef f():\n    return 1\n")
-    assert ("REQ-d00001" in _all_refs(result)) is opens
+    assert "REQ-d00001" not in _all_refs(result)
+    _results, tx = result
+    assert tx.undeclared == [(2, "#   REQ-d00001")], (
+        f"the identifier line must be reported, not merely dropped; got {tx.undeclared}"
+    )
+    assert tx.faults == [], "the header is ordinary prose, not a keyword introducing nothing"
 
 
 # Verifies: REQ-d00272-G
@@ -367,7 +463,7 @@ def test_markdown_emphasis_in_a_code_comment_still_binds(parse_code):
     assert (1, FaultCode.KEYWORD_MARKDOWN_EMPHASIS_OFF_MARKDOWN) in tx.style_findings
 
 
-# Verifies: REQ-d00272-B
+# Verifies: REQ-d00287-A
 def test_a_stray_leading_asterisk_on_the_target_does_not_bind(parse_code):
     """A malformed target must stay malformed, not be laundered by the
     emphasis-stripping fix.
@@ -519,7 +615,7 @@ def test_a_continuation_candidate_need_not_be_identifier_shaped(parse_code):
     identifier.  Narrowing the fold to identifier-shaped lines would leave
     ``XREQ-d00002`` (no configured namespace opens with ``X``) as silent
     prose instead of a reported, unbound item -- the anti-silence failure
-    this requirement exists to remove.  The space test (REQ-d00272-B) still
+    this requirement exists to remove.  The space test (REQ-d00287-A) still
     refuses to guess: the item is read and reported, never bound.
     """
     results, tx = parse_code(

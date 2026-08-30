@@ -45,22 +45,25 @@ A. The character joining *Assertion* labels within one reference SHALL be config
 
 B. The multi-*Assertion* separator SHALL default to `+`.
 
-C. [Removed - named a list of accepted alternate separators that no longer exists. The multi-*Assertion* separator is constrained against the characters an *Assertion* label can contain, per REQ-d00251-J.]
+C. <RETIRED> named a list of accepted alternate separators that no longer exists. The multi-*Assertion* separator is constrained against the characters an *Assertion* label can contain, per REQ-d00251-J.
 
 D. A multi-*Assertion* reference SHALL expand to the same set of individual references wherever it is written.
 
-E. [Removed - restated the derivation of a pattern rather than an obligation the tool must meet. What a multi-*Assertion* reference expands to is D; which strings the grammar admits is REQ-d00212-G.]
+E. <RETIRED> restated the derivation of a pattern rather than an obligation the tool must meet. What a multi-*Assertion* reference expands to is D; which strings the grammar admits is REQ-d00212-G.
 
-F. [Removed - an empty separator is not a configurable state. A separator is exactly one character, per REQ-d00251-K, so there is no value of it that disables expansion.]
+F. <RETIRED> an empty separator is not a configurable state. A separator is exactly one character, per REQ-d00251-K, so there is no value of it that disables expansion.
 
 G. A reference containing no multi-*Assertion* separator character SHALL pass through unchanged.
 
 ### Rationale
 
-The previous implementation hardcoded expansion in RequirementParser only, using a regex that assumed uppercase letter labels and hyphen separators. This created silent failures when code comments (`# Implements: REQ-x-A-B-C`) and test names (`test_REQ_x_A_B_C`) were not expanded. A dedicated separator character eliminates ambiguity regardless of the configured *Assertion* label style (uppercase, numeric, alphanumeric).
+Expansion belongs to the identifier grammar rather than to any one parser: a compact reference means the same set of assertions in a requirement's metadata and in a code or test annotation, and a reader that expands in one place and not the other loses references silently. A dedicated separator character keeps the expansion unambiguous whatever *Assertion* label style is configured (uppercase, numeric, alphanumeric).
 
 ### Changelog
 
+- 2026-08-24 | 6d66ba55 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-24 | b1812806 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: sync changelog hash
+- 2026-08-24 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-66: rationale states why expansion belongs to the grammar, not which parsers once missed it
 - 2026-08-12 | b1812806 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-10 | c40a462e | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-10 | 67ee3df9 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -71,7 +74,7 @@ The previous implementation hardcoded expansion in RequirementParser only, using
 - 2026-05-11 | 313fe52b | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | 313fe52b | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *Multi-Assertion Reference Expansion* | **Hash**: b1812806
+*End* *Multi-Assertion Reference Expansion* | **Hash**: 6d66ba55
 ---
 
 ## REQ-d00082: Unified Reference Configuration
@@ -82,23 +85,23 @@ The system SHALL provide a unified, configurable reference pattern system used b
 
 ### Assertions
 
-D. [Removed - named a configurable case-matching mode that does not exist. An identifier is admitted in one spelling only, per REQ-d00212-G, so there is no case-matching mode to configure.]
+D. <RETIRED> named a configurable case-matching mode that does not exist. An identifier is admitted in one spelling only, per REQ-d00212-G, so there is no case-matching mode to configure.
 
 E. Locating a reference in a source file SHALL use the separator the repository owning the referenced identifier configures, so that a reference is recognised in exactly the form that repository writes and in no other.
 
-F. [Removed - named per-file reference overrides that do not exist. One set of acceptance rules applies in every context that accepts a reference, per REQ-p00014-T.]
+F. <RETIRED> named per-file reference overrides that do not exist. One set of acceptance rules applies in every context that accepts a reference, per REQ-p00014-T.
 
 G. Reading a reference SHALL yield the parts its grammar defines, so that a consumer works from the identifier's structure rather than from the matched text.
 
-H. [Removed - named a reference-configuration artifact that does not exist. The limitation it described is real: a *Traceability* keyword inside a block comment is never read, so a block-comment-only language has no reference form.]
+H. <RETIRED> named a reference-configuration artifact that does not exist. The limitation it described is real: a *Traceability* keyword inside a block comment is never read, so a block-comment-only language has no reference form.
 
-I. [Removed - named classes that do not exist; source-file reference matching derives from the identifier grammar authority.]
+I. <RETIRED> named classes that do not exist; source-file reference matching derives from the identifier grammar authority.
 
-J. [Removed - named classes that do not exist; test-file reference matching derives from the identifier grammar authority.]
+J. <RETIRED> named classes that do not exist; test-file reference matching derives from the identifier grammar authority.
 
-K. [Removed - a result record is matched to its test by recorded identity, not by reading requirement references out of a reported test name.]
+K. <RETIRED> a result record is matched to its test by recorded identity, not by reading requirement references out of a reported test name.
 
-L. [Removed - a result record is matched to its test by recorded identity, not by reading requirement references out of a reported test name.]
+L. <RETIRED> a result record is matched to its test by recorded identity, not by reading requirement references out of a reported test name.
 
 ### Rationale
 
@@ -106,6 +109,7 @@ Different projects use different ID conventions, comment styles, and directory s
 
 ### Changelog
 
+- 2026-08-24 | edbd5d9a | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-10 | f0808bb9 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-10 | 268cdb9f | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-10 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: retire D and F, which named configuration that does not exist; G states the parts a read reference yields
@@ -116,7 +120,7 @@ Different projects use different ID conventions, comment styles, and directory s
 - 2026-05-11 | 89956cd7 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 89956cd7 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Unified Reference Configuration* | **Hash**: f0808bb9
+*End* *Unified Reference Configuration* | **Hash**: edbd5d9a
 ---
 
 ## REQ-d00084: Trace Command
@@ -179,7 +183,7 @@ G. The `--lenient` flag SHALL allow warnings to pass without affecting the exit 
 
 H. The `--format junit` option SHALL render health checks as JUnit XML, mapping categories to `<testsuite>` elements, checks to `<testcase>` elements, failures to `<failure>` elements, warnings to `<system-err>`, and info to `<system-out>`.
 
-I. Each `HealthCheck` SHALL carry a `findings` list of `HealthFinding` dataclass instances, each with `message`, `file_path`, `line`, `node_id`, and `related` fields. The `to_dict()` serialization SHALL include findings. Existing renderers (text, markdown, JUnit) SHALL remain unchanged.
+I. Each check SHALL carry the findings it raised.
 
 J. The `--format sarif` option SHALL render health findings as SARIF v2.1.0 JSON, with one `reportingDescriptor` per unique check name, one `result` per `HealthFinding` with physical locations, passing checks omitted, and coverage stats in `run.properties`.
 
@@ -197,10 +201,14 @@ Report-producing commands (`health`, `trace`, `coverage`, `changed`) currently e
 
 Quietness and verbosity are separate obligations (F, K), as are leniency and the default it departs from (G, L). Each pair was carried under one label until evidence for one half was found standing in for both: coverage is reported per assertion, so a label holding two obligations cannot distinguish an implementation from half of one.
 
+A check is where a report groups what it found, so I attaches each finding to the check that raised it; that grouping is what a report counts against a check, renders beneath it, and suppresses or expands under M. What an individual finding carries, and its agreement across the formats a report is rendered in, is REQ-d00285's subject rather than this requirement's.
+
 A failing check's findings are what the reader came for; a passing check's are noise until asked for, which is why M suppresses them by default and makes the request explicit rather than the reverse. The request is about passing checks only and is orthogonal to overall verbosity — a format carries a passing check's detail because it was asked for, not because the report as a whole is verbose. N is separate from M because a format can be wrong about invariance while the request itself works: complete findings and omitted passing checks are properties of those formats, not outcomes of the request.
 
 ### Changelog
 
+- 2026-08-24 | ee68f8ee | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-24 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-66: restate I as the attachment of a finding to the check that raised it; what a finding carries and its agreement across formats is REQ-d00285's
 - 2026-08-11 | 587285b0 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-11 | 650b3641 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-11 | 0d1e518a | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: specify passing-check detail (M) and its format invariance (N)
@@ -209,7 +217,7 @@ A failing check's findings are what the reader came for; a passing check's are n
 - 2026-05-11 | 82d76f1a | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 82d76f1a | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Unified Report Composition* | **Hash**: 587285b0
+*End* *Unified Report Composition* | **Hash**: ee68f8ee
 ---
 
 ## REQ-d00271: Diagnostic Code Vocabulary
@@ -243,6 +251,95 @@ D is what keeps B from becoming guesswork. Reporting several respects in which a
 - 2026-08-15 | - | - | Michael Lewis (<michael@anspar.org>) | Initial authoring: closed categories over open codes, multiple codes per finding, a generic code, and issuance only where determined
 
 *End* *Diagnostic Code Vocabulary* | **Hash**: 6f4019d1
+
+## REQ-d00285: The Shape of a Finding
+
+**Level**: dev | **Status**: Draft | **Implements**: REQ-p00015
+**Satisfies**: REQ-p00019
+
+A finding is what the tool hands back when something is wrong with the content or the configuration it was given. REQ-d00271 governs the vocabulary a finding names its defect in. This governs what a finding must carry besides that name, so that a reader can act on it and so that two surfaces reporting the same condition cannot disagree about it.
+
+### Assertions
+
+A. Every finding SHALL carry the location of what it is about — the file, and the line within that file — where what it is about has one.
+
+B. Every finding SHALL carry the action available to resolve it, naming that none is known where that is so.
+
+C. A finding SHALL carry the same identity, severity, location and remedy whatever format the report is rendered in.
+
+D. Every finding SHALL fall in a category for which a severity can be configured.
+
+E. One authority SHALL decide a finding's severity from its category.
+
+F. A name under which findings are reported SHALL identify one condition.
+
+G. Where a condition the tool detected is not reported, the point at which it is withheld SHALL record what was withheld and why.
+
+H. A narrowing of which findings a report presents SHALL NOT change the verdict that report reaches.
+
+I. A report that narrows which findings it presents SHALL disclose the narrowing and the extent of what it withheld.
+
+### Rationale
+
+A finding a reader cannot locate costs them the search the tool already performed, and a finding that names no remedy leaves them to infer one from the defect — which is exactly the inference the tool is better placed to make. A and B put both on the finding itself rather than in a table consulted at render time, because a table keyed by name covers only the names someone remembered to add, and it cannot travel to a surface that renders differently.
+
+C is the same property REQ-p00084-C establishes for scope, applied to findings: a report a reader checks and a report they file must not disagree. A finding that reaches one format and not another is indistinguishable, to the reader of the quieter format, from a finding that was never raised.
+
+D and E separate two questions that are easy to merge. D is about coverage — no finding may sit outside the settings a project can reach, which is what leaves a condition unconfigurable. E is about agreement — one finding, one severity, however many surfaces ask. Where two places decide severity independently, a project that changes a setting sees one of them move.
+
+F concretizes REQ-p00019-J and -K in the direction those assertions do not reach. They oblige a description to be true of every finding it covers and a finding to be reported once; F obliges the converse, that a name not be reused for a second condition. Two conditions under one name make a count uninterpretable in the same way double-reporting does, and the reader has no way to see it.
+
+G concretizes REQ-p00019-H. Suppression is legitimate; silent suppression is not, and the difference is a record at the point the decision is made. Without it, a condition detected and dropped is indistinguishable from a condition never detected, and the code that drops it reads as if nothing were being decided.
+
+H and I govern a report narrowed to the findings a reader asked for, by severity, by category, by the code a finding carries or by where it is located. A verdict is what the run found, not what the reader chose to look at; taken over the surviving findings instead, a narrowing would become a way to pass a run that failed, and the narrower the question the healthier the answer. I is the disclosure REQ-p00084-D asks of a scoped report, reached by another route: a report holding fewer findings than the run produced is indistinguishable, from the output alone, from a run that found fewer. Naming the narrowing and the extent of what it withheld separates the two without listing the withheld findings, which would undo the narrowing the reader asked for. G is the same principle where the tool rather than the reader decides.
+
+Classes of REQ-p00019 not concretized here are bound through the instance rather than left uncovered: D, E and F are properties of what a report says overall, which REQ-p00015 governs for this tool; B is governed for content staleness by the hash and index checks. This requirement concretizes A and C through I, a report narrowed to the findings a reader asked for being one that omits the rest and hands back a part of what the run found; G through B, H through G, and J and K through F.
+
+D and E are where a finding's severity is settled, for every finding the tool produces. No other requirement states that a condition is reported at a configurable severity: saying it again would put a second copy of this rule somewhere it could drift from, and a requirement that named its own severity would be describing the registry rather than an obligation.
+
+### Changelog
+
+- 2026-08-24 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-66: govern narrowing a report to selected findings — the verdict stays the run's, and the narrowing and the extent of what it withheld are disclosed
+- 2026-08-24 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-66: Initial authoring — a finding carries its location, its remedy and one severity decided in one place, and reads the same in every format
+
+*End* *The Shape of a Finding* | **Hash**: bedec247
+
+## REQ-d00286: Built-In User Documentation
+
+**Level**: dev | **Status**: Draft | **Implements**: REQ-p00001
+
+A user asks the tool what one of its subjects means and the tool answers, without a network and without the repository it was built from. This states where that documentation lives, what it must cover, and why it cannot drift from the program it describes.
+
+### Assertions
+
+A. The tool's user documentation SHALL have one source.
+
+B. Every surface presenting that documentation SHALL render it from that source.
+
+C. Each subject the tool exposes SHALL have a documentation topic.
+
+D. The documentation SHALL travel with the installed program, so that an installation and a checkout answer alike.
+
+E. A set the program defines and the documentation presents SHALL be presented from that definition, so that the two cannot disagree.
+
+F. The tool SHALL render a topic without display formatting on request.
+
+### Rationale
+
+Documentation that is copied is documentation that diverges, and the copy a reader happens to open is the one that misleads them. A and B put the whole estate behind one source so there is no second copy to fall behind, and D carries that source into the installed program so a user who never cloned anything gets the same answer as a developer reading the file.
+
+E is the sharper form of the same rule, and it is the one that fails silently. A hand-maintained list of what the program offers — its checks, its settings, the comment patterns it reads — is correct on the day it is written and wrong on the day the program gains one more. Deriving the presentation from the definition removes the opportunity: the two cannot disagree because there is only one of them. Where a fact is genuinely prose, this does not apply; it binds only where the program already holds the set.
+
+C is what makes a subject discoverable at all. A command or a setting a user can reach and cannot read about is indistinguishable, to them, from one that does not work.
+
+F exists because documentation is read by programs as well as people, and display formatting that cannot be turned off makes the text unusable to anything that is not a terminal.
+
+### Changelog
+
+- 2026-08-24 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-66: Initial authoring — one source for the tool's documentation, carried into the installed program, with any set the program defines presented from that definition
+
+*End* *Built-In User Documentation* | **Hash**: d246f21a
+
 ---
 
 ## REQ-d00086: Coverage Report Section

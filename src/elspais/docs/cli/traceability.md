@@ -199,7 +199,7 @@ it has its own name and its own absence -- coverage tooling that records no
 per-test contexts can attribute nothing, and the value is `null` rather than
 `0`. The lines covered and measured stand regardless, because those were
 measured. `summary` offers `code_tested` too, summed over each level's
-requirements under the same status gate `checks --code` uses, so the two
+requirements under the same status gate `checks --code-checks` uses, so the two
 reconcile. `lcov_tested` is not a line figure: it credits assertions from line
 evidence, so it is counted over assertions and decomposes into the same three
 scalars every assertion-counted figure does.
@@ -276,15 +276,11 @@ function hashPassword(plain) { ... }
 
 ## Marking Tests as Validating
 
-Reference requirement IDs in test function names:
+Write a comment above the test. This is the only form that links a test --
+a requirement ID in the function name references nothing:
 
 ```python
-def test_REQ_d00001_A_bcrypt_cost(): ...
-```
-
-Or with comments:
-```python
-# Tests: REQ-d00001-A
+# Verifies: REQ-d00001-A
 def test_password_uses_bcrypt(): ...
 ```
 

@@ -1,11 +1,11 @@
-# Verifies: REQ-d00252, REQ-d00258-N
+# Verifies: REQ-d00252, REQ-d00277-C
 """Validates REQ-d00252-F.
 
 Coverage reports summarize integrated requirements grouped by the owning
 associate, with a federation total. This exercises the data helper
 ``integrates_by_associate`` (and the optional ``integrates_total`` aggregate).
 The inherited "verified" figures are the Passing dimension
-(REQ-d00258-N `tested_and_passing()`): what the library's declared tests
+(REQ-d00277-C `tested_and_passing()`): what the library's declared tests
 returned, with a failing *Assertion* excluded from the figures.
 """
 
@@ -61,6 +61,7 @@ def _build_with_verified_library(tmp_path):
     return fed
 
 
+# Verifies: REQ-d00252-F
 def test_REQ_d00252_F_groups_by_associate(tmp_path):
     fed = _build_with_verified_library(tmp_path)
     rows = integrates_by_associate(fed)
@@ -72,6 +73,7 @@ def test_REQ_d00252_F_groups_by_associate(tmp_path):
     assert lib.verified_covered >= 1 and lib.verified_total >= 1
 
 
+# Verifies: REQ-d00252-F
 def test_REQ_d00252_F_total_aggregates(tmp_path):
     fed = _build_with_verified_library(tmp_path)
     rows = integrates_by_associate(fed)
@@ -87,7 +89,8 @@ def test_REQ_d00252_F_total_aggregates(tmp_path):
     assert total.verified_covered >= 1
 
 
-# Verifies: REQ-d00258-N
+# Verifies: REQ-d00277-C
+# Verifies: REQ-d00252-F
 def test_REQ_d00252_F_lcov_only_credit_does_not_count_as_passing(tmp_path):
     """A library REQ with only lcov_tested (line-coverage) credit -- no
     Verifies:-based result -- contributes nothing to the associate's passing
@@ -116,7 +119,8 @@ def test_REQ_d00252_F_lcov_only_credit_does_not_count_as_passing(tmp_path):
     assert lib.has_failures is False
 
 
-# Verifies: REQ-d00258-N
+# Verifies: REQ-d00277-C
+# Verifies: REQ-d00252-F
 def test_REQ_d00252_F_library_failures_flag_associate_row(tmp_path):
     """A library with one passing and one failing declared test reads covered
     on the count alone, so the per-associate row (and the federation total)
@@ -148,6 +152,7 @@ def test_REQ_d00252_F_library_failures_flag_associate_row(tmp_path):
     assert total.has_failures is True  # OR'd across associates
 
 
+# Verifies: REQ-d00252-F
 def test_REQ_d00252_F_no_integrates_yields_empty(tmp_path):
     """A federation with no INTEGRATES edges produces no rows."""
     fed = _federate(tmp_path)

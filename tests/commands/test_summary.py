@@ -183,6 +183,7 @@ def _build_mixed_graph() -> TraceGraph:
 class TestCollectCoverage:
     """Validates REQ-d00086-D: Uses existing graph aggregate functions."""
 
+    # Verifies: REQ-d00086-D
     def test_REQ_d00086_D_returns_levels_and_excluded_keys(self):
         """collect_coverage returns dict with 'levels' list and 'excluded' dict."""
         graph = _make_graph()
@@ -197,6 +198,7 @@ class TestCollectCoverage:
         assert all(lv["total"] == 0 for lv in data["levels"])
         assert data["excluded"] == {}
 
+    # Verifies: REQ-d00086-D
     def test_REQ_d00086_D_levels_always_three(self):
         """There are always exactly 3 level entries (PRD, OPS, DEV)."""
         graph = _make_graph()
@@ -206,6 +208,7 @@ class TestCollectCoverage:
         level_names = [lv["level"] for lv in data["levels"]]
         assert level_names == ["PRD", "OPS", "DEV"]
 
+    # Verifies: REQ-d00086-D
     def test_REQ_d00086_D_no_requirements_key(self):
         """Coverage data no longer includes per-requirement rows."""
         graph = _make_graph()
@@ -222,6 +225,7 @@ class TestCollectCoverage:
 class TestLevelGrouping:
     """Validates REQ-d00086-A: Group by level (PRD, OPS, DEV) with counts and percentages."""
 
+    # Verifies: REQ-d00086-A
     def test_REQ_d00086_A_groups_by_level(self):
         """Requirements are grouped into correct level buckets."""
         graph = _build_mixed_graph()
@@ -239,6 +243,7 @@ class TestLevelGrouping:
         assert dev["level"] == "DEV"
         assert dev["total"] == 1
 
+    # Verifies: REQ-d00086-A
     def test_REQ_d00086_A_level_assertion_counts(self):
         """Level summaries aggregate assertion counts from child requirements."""
         graph = _build_mixed_graph()
@@ -264,6 +269,7 @@ class TestLevelGrouping:
         assert dev["tested_total_covered"] == 1
         assert dev["passing_total_covered"] == 1
 
+    # Verifies: REQ-d00086-A
     def test_REQ_d00086_A_with_code_refs_count(self):
         """with_code_refs counts reqs that have at least one implemented assertion."""
         graph = _build_mixed_graph()
@@ -275,6 +281,7 @@ class TestLevelGrouping:
         assert ops["with_code_refs"] == 1
         assert dev["with_code_refs"] == 1
 
+    # Verifies: REQ-d00086-A
     def test_REQ_d00086_A_with_test_refs_count(self):
         """with_test_refs counts reqs that have at least one validated assertion."""
         graph = _build_mixed_graph()
@@ -286,6 +293,7 @@ class TestLevelGrouping:
         assert ops["with_test_refs"] == 1
         assert dev["with_test_refs"] == 1
 
+    # Verifies: REQ-d00086-A
     def test_REQ_d00086_A_with_passing_count(self):
         """with_passing counts reqs that have at least one passing assertion."""
         graph = _build_mixed_graph()
@@ -297,6 +305,7 @@ class TestLevelGrouping:
         assert ops["with_passing"] == 1
         assert dev["with_passing"] == 1
 
+    # Verifies: REQ-d00086-A
     def test_REQ_d00086_A_empty_level(self):
         """Levels with no requirements have zero counts."""
         graph = _make_graph()
@@ -319,6 +328,7 @@ class TestLevelGrouping:
 class TestStatusExclusion:
     """Validates REQ-d00086-A: Draft and Deprecated requirements are excluded."""
 
+    # Verifies: REQ-d00086-A
     def test_REQ_d00086_A_excludes_draft_from_counts(self):
         """Draft requirements are excluded from level counts."""
         graph = _make_graph()
@@ -332,6 +342,7 @@ class TestStatusExclusion:
         assert dev["total"] == 1
         assert dev["total_assertions"] == 0
 
+    # Verifies: REQ-d00086-A
     def test_REQ_d00086_A_excludes_deprecated_from_counts(self):
         """Deprecated requirements are excluded from level counts."""
         graph = _make_graph()
@@ -354,6 +365,7 @@ class TestStatusExclusion:
 class TestTextFormat:
     """Validates REQ-d00086-C: Text format output."""
 
+    # Verifies: REQ-d00086-C
     def test_REQ_d00086_C_text_has_header(self):
         """Text output starts with 'Coverage Summary' header."""
         graph = _make_graph()
@@ -362,6 +374,7 @@ class TestTextFormat:
 
         assert output.startswith("Coverage Summary\n")
 
+    # Verifies: REQ-d00086-C
     def test_REQ_d00086_C_text_level_summary(self):
         """Text output contains level summary section."""
         graph = _make_graph()
@@ -377,6 +390,7 @@ class TestTextFormat:
         assert "Tested:" in output
         assert "Passing:" in output
 
+    # Verifies: REQ-d00086-C
     def test_REQ_d00086_C_text_no_per_requirement_section(self):
         """Text output does not contain per-requirement section."""
         graph = _make_graph()
@@ -388,6 +402,7 @@ class TestTextFormat:
 
         assert "Per-Requirement Coverage" not in output
 
+    # Verifies: REQ-d00086-C
     def test_REQ_d00086_C_text_skips_empty_levels(self):
         """Text output skips levels with zero requirements."""
         graph = _make_graph()
@@ -409,6 +424,7 @@ class TestTextFormat:
 class TestMarkdownFormat:
     """Validates REQ-d00086-C: Markdown format output."""
 
+    # Verifies: REQ-d00086-C
     def test_REQ_d00086_C_markdown_has_heading(self):
         """Markdown output starts with '# Coverage Summary'."""
         graph = _make_graph()
@@ -447,6 +463,7 @@ class TestMarkdownFormat:
         # and its own proportion inside its own cell (REQ-d00282-E).
         assert "Implemented %" not in cells
 
+    # Verifies: REQ-d00086-C
     def test_REQ_d00086_C_markdown_no_per_requirement_table(self):
         """Markdown output does not contain per-requirement table."""
         graph = _make_graph()
@@ -458,6 +475,7 @@ class TestMarkdownFormat:
 
         assert "## Per-Requirement Coverage" not in output
 
+    # Verifies: REQ-d00086-C
     def test_REQ_d00086_C_markdown_level_rows_pipe_delimited(self):
         """Markdown level rows use pipe delimiters."""
         graph = _make_graph()
@@ -482,6 +500,7 @@ class TestMarkdownFormat:
 class TestJsonFormat:
     """Validates REQ-d00086-C: JSON format output."""
 
+    # Verifies: REQ-d00086-C
     def test_REQ_d00086_C_json_has_levels_and_excluded(self):
         """JSON output contains 'levels' and 'excluded' keys."""
         graph = _build_mixed_graph()
@@ -492,6 +511,7 @@ class TestJsonFormat:
         assert "levels" in parsed
         assert "excluded" in parsed
 
+    # Verifies: REQ-d00086-C
     def test_REQ_d00086_C_json_level_structure(self):
         """JSON level entries have expected fields."""
         graph = _make_graph()
@@ -510,6 +530,7 @@ class TestJsonFormat:
         assert prd["tested_total_covered"] == 1
         assert prd["passing_total_covered"] == 1
 
+    # Verifies: REQ-d00086-C
     def test_REQ_d00086_C_json_excluded_counts(self):
         """JSON output includes excluded status counts."""
         graph = _build_mixed_graph()
@@ -530,6 +551,7 @@ class TestCsvFormat:
     """Validates REQ-d00086-C: CSV format output."""
 
     # Verifies: REQ-d00258-O, REQ-d00069-L, REQ-d00258-A
+    # Verifies: REQ-d00086-C
     def test_REQ_d00086_C_csv_has_correct_headers(self):
         """CSV output has the expected column headers."""
         graph = _make_graph()
@@ -553,6 +575,7 @@ class TestCsvFormat:
             expected_headers.extend(f"{dimension} ({m})" for m in measure_headers)
         assert headers == expected_headers
 
+    # Verifies: REQ-d00086-C
     def test_REQ_d00086_C_csv_row_count(self):
         """CSV has one header row plus one row per level."""
         graph = _build_mixed_graph()
@@ -566,6 +589,7 @@ class TestCsvFormat:
         assert len(rows) == 4
 
     # Verifies: REQ-d00258-O, REQ-d00069-N, REQ-d00258-A
+    # Verifies: REQ-d00086-C
     def test_REQ_d00086_C_csv_row_values(self):
         """CSV data rows contain correct level summary values.
 
@@ -605,6 +629,7 @@ class TestCsvFormat:
         assert row["Passing"] == "1/4 (25.0%)"
         assert row["Passing (cited by name here)"] == "1/4 (25.0%)"
 
+    # Verifies: REQ-d00086-C
     def test_REQ_d00086_C_csv_parseable(self):
         """CSV output is parseable by Python csv module without errors."""
         graph = _build_mixed_graph()
@@ -638,6 +663,7 @@ class TestCsvFormat:
 class TestRenderDispatch:
     """Validates REQ-d00086-C: Support text, markdown, json, csv formats."""
 
+    # Verifies: REQ-d00086-C
     def test_REQ_d00086_C_render_text_default(self):
         """Unknown format falls back to text."""
         graph = _make_graph()
@@ -656,17 +682,20 @@ class TestRenderDispatch:
 class TestPctHelper:
     """Validates REQ-d00086-B: Percentage calculation helper."""
 
+    # Verifies: REQ-d00086-B
     def test_REQ_d00086_B_pct_normal(self):
         """_pct computes correct percentage."""
         assert _pct(3, 10) == 30.0
         assert _pct(1, 3) == 33.3
         assert _pct(10, 10) == 100.0
 
+    # Verifies: REQ-d00086-B
     def test_REQ_d00086_B_pct_zero_denom(self):
         """_pct returns 0.0 when denominator is zero."""
         assert _pct(0, 0) == 0.0
         assert _pct(5, 0) == 0.0
 
+    # Verifies: REQ-d00086-B
     def test_REQ_d00086_B_pct_zero_num(self):
         """_pct returns 0.0 when numerator is zero."""
         assert _pct(0, 10) == 0.0
@@ -685,6 +714,7 @@ class TestSummaryIntegrations:
     federation total.
     """
 
+    # Verifies: REQ-d00252-F
     def test_REQ_d00252_F_external_integrations_section(self, tmp_path):
         """Text summary contains an External integrations section with a
         per-associate 'library' row and a 'total' row."""
@@ -701,6 +731,7 @@ class TestSummaryIntegrations:
         assert "library" in text
         assert "total" in text
 
+    # Verifies: REQ-d00252-D
     def test_REQ_d00252_D_integrating_req_credited_implemented(self, tmp_path):
         """The integrating consumer requirement (APP-d00001) is credited as
         implemented in the main coverage classification, not a phantom gap."""
@@ -728,7 +759,7 @@ class TestSummaryIntegrations:
         assert "passing" in text.lower()
         assert "Passing" in md
 
-    # Verifies: REQ-d00252-D, REQ-d00252-F, REQ-d00258-N
+    # Verifies: REQ-d00252-D, REQ-d00252-F, REQ-d00277-C
     def test_REQ_d00252_F_lcov_only_library_is_not_passing_in_summary(self, tmp_path):
         """A library requirement whose only evidence is lcov_tested credit (no
         Verifies:-based result) contributes nothing to the passing column of
@@ -767,8 +798,8 @@ class TestSummaryIntegrations:
         assert by_name["library"]["verified_total"] == 1
         assert by_name["library"]["has_failures"] is False
 
-    # Verifies: REQ-d00252-F, REQ-d00258-N
-    def test_REQ_d00258_N_library_failures_flagged_in_summary(self, tmp_path):
+    # Verifies: REQ-d00252-F, REQ-d00277-C
+    def test_REQ_d00277_C_library_failures_flagged_in_summary(self, tmp_path):
         """A library with one passing and one failing declared test reads as
         covered on the covered/total figures alone. The summary must carry
         has_failures through to the integrations row/total and mark the
@@ -817,7 +848,7 @@ class TestSummaryIntegrations:
         assert "failing test result" in md
 
 
-# Verifies: REQ-d00258-N
+# Verifies: REQ-d00277-C
 class TestLineCoverageDoesNotCreditPassing:
     """The headline passing score counts what the declared tests returned;
     line-coverage credit reaches it from nowhere (REQ-d00254-B)."""
@@ -876,7 +907,7 @@ The system SHALL do something testable.
         config_path = tmp_path / ".elspais.toml"
         config_path.write_text(
             """\
-version = 3
+version = 5
 
 [project]
 name = "fresh-targets"
@@ -964,7 +995,7 @@ The system SHALL do something testable.
         config_path = tmp_path / ".elspais.toml"
         config_path.write_text(
             """\
-version = 3
+version = 5
 
 [project]
 name = "grouped-targets"
@@ -1128,7 +1159,7 @@ groups = ["uat"]
 
 
 _TWO_TARGET_CONFIG_SUMMARY = """\
-version = 3
+version = 5
 
 [project]
 name = "two-target-summary"

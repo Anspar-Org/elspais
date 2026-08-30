@@ -21,6 +21,7 @@ class TestFindCanonicalRoot:
     git rev-parse --git-common-dir.
     """
 
+    # Verifies: REQ-p00005-F
     def test_REQ_p00005_F_normal_repo_returns_git_root(self, tmp_path: Path):
         """Normal repo with .git directory returns same as find_git_root()."""
         # Set up a normal git repo structure: .git is a directory
@@ -32,6 +33,7 @@ class TestFindCanonicalRoot:
         assert result == tmp_path
         assert result == find_git_root(tmp_path)
 
+    # Verifies: REQ-p00005-F
     def test_REQ_p00005_F_worktree_returns_main_repo_root(self, tmp_path: Path, monkeypatch):
         """Worktree (.git is a file) resolves to the main repo root."""
         # Set up worktree structure: .git is a file pointing to main repo
@@ -62,6 +64,7 @@ class TestFindCanonicalRoot:
 
         assert result == main_repo
 
+    # Verifies: REQ-p00005-F
     def test_REQ_p00005_F_fallback_on_git_command_failure(self, tmp_path: Path, monkeypatch):
         """When git command fails in a worktree, falls back to git_root."""
         # Set up worktree structure: .git is a file
@@ -82,6 +85,7 @@ class TestFindCanonicalRoot:
         # Falls back to the git_root (the worktree dir itself)
         assert result == tmp_path
 
+    # Verifies: REQ-p00005-F
     def test_REQ_p00005_F_none_when_not_in_git_repo(self, tmp_path: Path):
         """Returns None when not inside any git repository."""
         # tmp_path has no .git at all
@@ -89,6 +93,7 @@ class TestFindCanonicalRoot:
 
         assert result is None
 
+    # Verifies: REQ-p00005-F
     def test_REQ_p00005_F_relative_common_dir_resolved(self, tmp_path: Path, monkeypatch):
         """Relative common_dir path is resolved relative to git_root."""
         # Set up worktree structure
@@ -119,6 +124,7 @@ class TestFindCanonicalRoot:
         # .parent of that is tmp_path
         assert result == tmp_path
 
+    # Verifies: REQ-p00005-F
     def test_REQ_p00005_F_oserror_falls_back_to_git_root(self, tmp_path: Path, monkeypatch):
         """OSError from subprocess falls back to git_root."""
         git_file = tmp_path / ".git"
@@ -133,6 +139,7 @@ class TestFindCanonicalRoot:
 
         assert result == tmp_path
 
+    # Verifies: REQ-p00005-F
     def test_REQ_p00005_F_subprocess_error_falls_back_to_git_root(
         self, tmp_path: Path, monkeypatch
     ):
@@ -149,6 +156,7 @@ class TestFindCanonicalRoot:
 
         assert result == tmp_path
 
+    # Verifies: REQ-p00005-F
     def test_REQ_p00005_F_absolute_common_dir_used_directly(self, tmp_path: Path, monkeypatch):
         """Absolute common_dir path is used directly without resolution."""
         worktree_dir = tmp_path / "wt"

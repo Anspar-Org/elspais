@@ -67,6 +67,7 @@ def _make_docs_with_sections(tmp_path: Path, sections: set[str]) -> Path:
 class TestDocsDriftBasic:
     """Validates REQ-d00210-A: doctor includes docs.config_drift health check."""
 
+    # Verifies: REQ-d00210-A
     def test_REQ_d00210_A_returns_health_check(self, tmp_path: Path) -> None:
         """check_docs_drift returns a HealthCheck with correct name and category."""
         from elspais.commands.doctor import check_docs_drift
@@ -78,6 +79,7 @@ class TestDocsDriftBasic:
         assert result.name == "docs.config_drift"
         assert result.category == "docs"
 
+    # Verifies: REQ-d00210-A
     def test_REQ_d00210_A_function_is_importable(self) -> None:
         """check_docs_drift is importable from elspais.commands.doctor."""
         from elspais.commands.doctor import check_docs_drift
@@ -88,6 +90,7 @@ class TestDocsDriftBasic:
 class TestDocsDriftPassFail:
     """Validates REQ-d00210-C: passes when all documented, fails otherwise."""
 
+    # Verifies: REQ-d00210-C
     def test_REQ_d00210_C_pass_when_all_sections_documented(self, tmp_path: Path) -> None:
         """Returns passed=True when docs file has all schema sections."""
         from elspais.commands.doctor import check_docs_drift
@@ -97,6 +100,7 @@ class TestDocsDriftPassFail:
 
         assert result.passed is True
 
+    # Verifies: REQ-d00210-C
     def test_REQ_d00210_C_fail_when_sections_missing(self, tmp_path: Path) -> None:
         """Returns passed=False when docs file is missing schema sections."""
         from elspais.commands.doctor import check_docs_drift
@@ -108,6 +112,7 @@ class TestDocsDriftPassFail:
 
         assert result.passed is False
 
+    # Verifies: REQ-d00210-C
     def test_REQ_d00210_C_fail_when_stale_sections_present(self, tmp_path: Path) -> None:
         """Returns passed=False when docs has sections not in schema."""
         from elspais.commands.doctor import check_docs_drift
@@ -118,6 +123,7 @@ class TestDocsDriftPassFail:
 
         assert result.passed is False
 
+    # Verifies: REQ-d00210-C
     def test_REQ_d00210_C_docs_file_missing(self, tmp_path: Path) -> None:
         """Handles missing docs file gracefully (passed=False or severity=info)."""
         from elspais.commands.doctor import check_docs_drift
@@ -134,6 +140,7 @@ class TestDocsDriftPassFail:
 class TestDocsDriftDetails:
     """Validates REQ-d00210-B: reports undocumented and stale sections."""
 
+    # Verifies: REQ-d00210-B
     def test_REQ_d00210_B_undocumented_sections_listed(self, tmp_path: Path) -> None:
         """Details include 'undocumented' key listing sections in schema but not docs."""
         from elspais.commands.doctor import check_docs_drift
@@ -148,6 +155,7 @@ class TestDocsDriftDetails:
         undocumented = set(result.details["undocumented"])
         assert missing <= undocumented, f"Expected {missing} in undocumented, got {undocumented}"
 
+    # Verifies: REQ-d00210-B
     def test_REQ_d00210_B_stale_sections_listed(self, tmp_path: Path) -> None:
         """Details include 'stale' key listing sections in docs but not schema."""
         from elspais.commands.doctor import check_docs_drift
@@ -162,6 +170,7 @@ class TestDocsDriftDetails:
         stale_found = set(result.details["stale"])
         assert stale <= stale_found, f"Expected {stale} in stale, got {stale_found}"
 
+    # Verifies: REQ-d00210-B
     def test_REQ_d00210_B_both_undocumented_and_stale(self, tmp_path: Path) -> None:
         """When both undocumented and stale exist, both are reported."""
         from elspais.commands.doctor import check_docs_drift
@@ -177,6 +186,7 @@ class TestDocsDriftDetails:
         assert "output" in result.details["undocumented"]
         assert "hooks" in result.details["stale"]
 
+    # Verifies: REQ-d00210-B
     def test_REQ_d00210_B_no_drift_has_empty_or_absent_details(self, tmp_path: Path) -> None:
         """When no drift, details should not have undocumented/stale or they're empty."""
         from elspais.commands.doctor import check_docs_drift
@@ -195,6 +205,7 @@ class TestDocsDriftDetails:
 class TestDocsDriftRealFile:
     """Validates REQ-d00210-B: detects actual drift in the real docs/configuration.md."""
 
+    # Verifies: REQ-d00210-B
     def test_REQ_d00210_B_real_configuration_md_in_sync(self) -> None:
         """The real docs/configuration.md should be in sync with schema."""
         from elspais.commands.doctor import check_docs_drift
@@ -211,6 +222,7 @@ class TestDocsDriftRealFile:
 class TestDocsDriftExcludesConditional:
     """Validates REQ-d00210-B: conditional sections are excluded from comparison."""
 
+    # Verifies: REQ-d00210-B
     def test_REQ_d00210_B_associates_not_required(self, tmp_path: Path) -> None:
         """'associates' section should not be required in docs."""
         from elspais.commands.doctor import check_docs_drift
@@ -225,6 +237,7 @@ class TestDocsDriftExcludesConditional:
             for excluded in ("associates",):
                 assert excluded not in result.details["undocumented"]
 
+    # Verifies: REQ-d00210-B
     def test_REQ_d00210_B_sub_sections_not_counted_as_top_level(self, tmp_path: Path) -> None:
         """Sub-table headers like [rules.hierarchy] should not be treated as top-level."""
         from elspais.commands.doctor import check_docs_drift
@@ -240,6 +253,7 @@ class TestDocsDriftExcludesConditional:
             assert "rules.hierarchy" not in stale
             assert "rules.naming" not in stale
 
+    # Verifies: REQ-d00210-B
     def test_REQ_d00210_B_array_of_tables_header_enters_section(self, tmp_path: Path) -> None:
         """A fenced block opening with [[array.of.tables]] must count as a section.
 

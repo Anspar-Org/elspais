@@ -30,9 +30,11 @@ _CLIENT_ENV = "_ELSPAIS_CLIENT_PID"
 # implicitly started daemons are reaped when it exits.
 CLIENT_OVERRIDE_ENV = "ELSPAIS_CLIENT_PID"
 
-# Former name of the public override, still honoured so existing callers
-# keep working.
-_LEGACY_OVERRIDE_ENV = "ELSPAIS_SPAWNER_PID"
+# The name the public override was once written under. It is not read; a
+# session that still sets it is told so, once, rather than being bound to a
+# lifetime it thinks it declared.
+_RETIRED_OVERRIDE_ENV = "ELSPAIS_SPAWNER_PID"
+_retired_override_reported = False
 
 # Sentinel returned by ``_declared_client_pid`` for a declaration that is
 # present but not a usable handle (unparsable, non-positive, or already
@@ -92,13 +94,10 @@ def _declared_client_pid() -> int | str | None:
     daemon would reap itself at its next check — an outcome the caller
     would read as the daemon failing rather than as its declaration being
     stale.
-
-    The former variable name is read so callers that set it keep working.
     """
-    for name in (CLIENT_OVERRIDE_ENV, _LEGACY_OVERRIDE_ENV):
-        raw = os.environ.get(name)
-        if not raw:
-            continue
+    _report_retired_override_env()
+    raw = os.environ.get(CLIENT_OVERRIDE_ENV)
+    if raw:
         try:
             pid = int(raw)
         except ValueError:
@@ -113,14 +112,36 @@ def _declared_client_pid() -> int | str | None:
     return None
 
 
+def _report_retired_override_env() -> None:
+    """Say once that the retired variable name is not read, and name the one
+    that is.
+
+    A session setting only the retired name has declared nothing: its
+    declaration is neither honoured nor refused, and without this it would
+    learn that only by outliving a daemon it believed was bound to it.
+    """
+    global _retired_override_reported
+    if _retired_override_reported:
+        return
+    if not os.environ.get(_RETIRED_OVERRIDE_ENV):
+        return
+    _retired_override_reported = True
+    if os.environ.get(CLIENT_OVERRIDE_ENV):
+        return
+    print(
+        f"note: {_RETIRED_OVERRIDE_ENV} is not read. To bind a daemon's "
+        f"lifetime to this session, set {CLIENT_OVERRIDE_ENV} instead.",
+        file=sys.stderr,
+    )
+
+
 # Implements: REQ-o00074-A, REQ-o00074-D
 def resolve_client_pid() -> int | None:
     """Identify the session on whose behalf a daemon is being auto-started.
 
     Resolution order:
-      1. ``ELSPAIS_CLIENT_PID`` env var (or its former name, still
-         honoured) — explicit declaration by the session/IDE (also the
-         deterministic hook for tests).
+      1. ``ELSPAIS_CLIENT_PID`` env var — explicit declaration by the
+         session/IDE (also the deterministic hook for tests).
       2. Inside a Claude Code session (``CLAUDECODE`` env set): the
          nearest ancestor process named ``claude`` (the session process;
          intermediate tool shells are ephemeral).
@@ -445,6 +466,76 @@ def _client_notice_path(repo_root: Path) -> Path:
     the daemon.* prefix so the existing ignore rule covers it.
     """
     return _daemon_dir(repo_root) / "daemon.client-notice"
+
+
+def _registration_notice_path(repo_root: Path) -> Path:
+    """Marker that the registration notice has been given.
+
+    NOT scoped to a daemon: what it describes is a client's configuration,
+    which outlives every process serving this tree. Named under the
+    daemon.* prefix so the existing ignore rule covers it.
+    """
+    return _daemon_dir(repo_root) / "daemon.registration-notice"
+
+
+# Implements: REQ-o00076-M
+def notify_registration(repo_root: Path) -> bool:
+    """Say once that a client here would not reach this tree.
+
+    A client that cannot connect reports a refused connection or a missing
+    variable, neither of which names what to do. Nothing else tells the
+    reader: a check they have to run first is a check they run after
+    losing an afternoon, and by then they have already blamed the daemon.
+    So this is said where any command reaches, once, and never again.
+
+    Two conditions, one notice, because they have one remedy each and a
+    reader meets whichever their configuration has.
+
+    Returns True when it printed.
+    """
+    import os
+
+    marker = _registration_notice_path(repo_root)
+    if marker.exists():
+        return False
+
+    from elspais.commands.doctor import _hardcoded_address, _registration_sources
+
+    try:
+        found, _unread = _registration_sources(repo_root, None)
+    except OSError:
+        return False
+
+    message = ""
+    for where, entry in found:
+        address = _hardcoded_address(entry)
+        if address is not None:
+            message = (
+                f"a client registration for this tree names a fixed address "
+                f"({where}: {address}). Every working tree sharing that "
+                f"registration reaches one tree's daemon, or nothing once it "
+                f"stops reserving the address. Run `elspais mcp install` to "
+                f"register the variable instead."
+            )
+            break
+    else:
+        names_variable = any("${" in str(e.get("url", "")) for _w, e in found)
+        if names_variable and not os.environ.get("ELSPAIS_MCP_URL"):
+            message = (
+                "a client registration for this tree names ELSPAIS_MCP_URL, "
+                "which this shell does not set, so a client launched from it "
+                'cannot connect. Run: eval "$(elspais mcp env)"'
+            )
+
+    if not message:
+        return False
+    print(f"note: {message}", file=sys.stderr)
+    try:
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.touch()
+    except OSError:
+        pass  # printing once more beats failing the command
+    return True
 
 
 # Implements: REQ-o00074-N
@@ -1498,6 +1589,13 @@ def ensure_daemon(repo_root: Path, ttl_minutes: int | None = None) -> int:
     Reads ``cli_ttl`` from config if ttl_minutes is not provided.
     Raises RuntimeError if cli_ttl=0 (daemon disabled) and no daemon running.
     """
+    # Implements: REQ-o00076-M
+    # Said here because every command that needs a daemon comes through,
+    # so a reader learns their client cannot reach this tree while running
+    # something else -- rather than after their client has already failed
+    # to connect and told them nothing they can act on.
+    notify_registration(repo_root)
+
     info = get_daemon_info(repo_root)
     # Implements: REQ-o00075-B, REQ-o00076-E
     # A daemon that has committed to stopping passes every liveness check

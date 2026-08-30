@@ -5,11 +5,14 @@ Content rules are markdown files that provide semantic validation guidance
 for requirements authoring. They can include YAML frontmatter for metadata.
 """
 
+import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 from elspais.config.schema import ElspaisConfig
+
+_log = logging.getLogger(__name__)
 
 
 def _validate_config(config: dict[str, Any]) -> ElspaisConfig:
@@ -28,6 +31,28 @@ class ContentRule:
     content: str
     type: str = "guidance"
     applies_to: list[str] = field(default_factory=list)
+
+
+# Implements: REQ-d00285-A, REQ-d00285-G
+@dataclass(frozen=True)
+class ContentRuleFault:
+    """A configured content rule that was not loaded, and why.
+
+    A project configures a rule so that authoring is guided by it. A rule
+    that is not there, or that cannot be read, guides nothing -- and the
+    authoring surface that never mentions it looks exactly like one where the
+    project configured no such rule at all. The path is the one the
+    configuration named, so a reader can see whether the entry or the file is
+    what is wrong.
+
+    Attributes:
+        path: The rule file as the configuration named it, resolved against
+            the base path.
+        cause: Why it was not loaded.
+    """
+
+    path: str
+    cause: str
 
 
 def parse_frontmatter(text: str) -> tuple[dict[str, Any], str]:
@@ -157,39 +182,67 @@ def load_content_rule(file_path: Path) -> ContentRule:
     )
 
 
+# Implements: REQ-d00285-G
 def load_content_rules(
     config: dict[str, Any],
     base_path: Path,
+    faults: list[ContentRuleFault] | None = None,
 ) -> list[ContentRule]:
     """
     Load all content rules from configuration.
 
+    A rule the configuration names and this call did not load is recorded,
+    never dropped: an absent rule and a rule a project never configured
+    produce the same empty guidance, and only the record tells them apart.
+
     Args:
         config: Configuration dictionary
         base_path: Base path for resolving relative paths
+        faults: Collector for the rules that were not loaded. A caller that
+            supplies one reports them itself. A caller that supplies none
+            gets them on the warning log, so the condition is disclosed
+            somewhere in every case.
 
     Returns:
-        List of ContentRule objects (missing files are skipped)
+        List of ContentRule objects
     """
     typed_config = _validate_config(config)
     rule_paths = typed_config.rules.content_rules
 
+    recorded: list[ContentRuleFault] = faults if faults is not None else []
     rules = []
     for rel_path in rule_paths:
         full_path = base_path / rel_path
-        if full_path.exists():
-            try:
-                rule = load_content_rule(full_path)
-                rules.append(rule)
-            except Exception:
-                # Skip files that can't be loaded
-                pass
+        if not full_path.exists():
+            recorded.append(
+                ContentRuleFault(
+                    path=str(full_path),
+                    cause="the configuration names this content rule, but there is no file there",
+                )
+            )
+            continue
+        try:
+            rule = load_content_rule(full_path)
+        except (OSError, UnicodeDecodeError) as exc:
+            recorded.append(
+                ContentRuleFault(
+                    path=str(full_path),
+                    cause=f"the content rule file could not be read: {exc}",
+                )
+            )
+            continue
+        rules.append(rule)
+
+    if faults is None:
+        for fault in recorded:
+            _log.warning("content rule not loaded: %s -- %s", fault.path, fault.cause)
 
     return rules
 
 
 __all__ = [
     "ContentRule",
+    "ContentRuleFault",
     "parse_frontmatter",
     "load_content_rule",
     "load_content_rules",

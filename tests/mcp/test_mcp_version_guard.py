@@ -95,6 +95,7 @@ class TestTwoClientLostUpdate:
     A_TITLE = "Authentication Module (client A)"
     B_TITLE = "Authentication Module (client B)"
 
+    # Verifies: REQ-o00062-I
     def test_REQ_o00062_I_client_a_write_with_shared_version_succeeds(self, mutable_graph, tools):
         """REQ-o00062-I: The first writer, holding a current version, succeeds."""
         shared = node_version(mutable_graph.find_by_id(self.TARGET))
@@ -107,6 +108,7 @@ class TestTwoClientLostUpdate:
         assert result["success"] is True
         assert mutable_graph.find_by_id(self.TARGET).get_label() == self.A_TITLE
 
+    # Verifies: REQ-o00062-I
     def test_REQ_o00062_I_stale_version_rejected(self, mutable_graph, tools):
         """REQ-o00062-I: Client B's now-stale version is rejected, not applied."""
         result = tools["mutate_update_title"](
@@ -121,6 +123,7 @@ class TestTwoClientLostUpdate:
         # The lost update did not happen: A's title survives.
         assert mutable_graph.find_by_id(self.TARGET).get_label() == self.A_TITLE
 
+    # Verifies: REQ-o00062-J
     def test_REQ_o00062_J_conflict_reports_both_versions(self, mutable_graph, tools):
         """REQ-o00062-J: Rejection carries the provided and the live version."""
         conflict = self.conflict
@@ -133,6 +136,7 @@ class TestTwoClientLostUpdate:
         assert conflict["current_version"] != conflict["provided_version"]
         assert isinstance(conflict["hint"], str) and conflict["hint"].strip()
 
+    # Verifies: REQ-o00062-J
     def test_REQ_o00062_J_current_state_reflects_the_winning_write(self):
         """REQ-o00062-J: current_state is post-A, so B reconciles without a re-read."""
         state = self.conflict["current_state"]
@@ -141,6 +145,7 @@ class TestTwoClientLostUpdate:
         # Not the pre-A title -- B sees what it must reconcile against.
         assert state["title"] == self.A_TITLE
 
+    # Verifies: REQ-o00062-J
     def test_REQ_o00062_J_current_state_uses_the_existing_serializer(
         self, canonical_federated_graph, tools
     ):
@@ -168,6 +173,7 @@ class TestSuccessReportsVersion:
 
     TARGET = "REQ-d00002"
 
+    # Verifies: REQ-o00062-K
     def test_REQ_o00062_K_success_returns_new_version(self, mutable_graph, tools):
         """REQ-o00062-K: Success carries the node's post-mutation version."""
         before = node_version(mutable_graph.find_by_id(self.TARGET))
@@ -181,6 +187,7 @@ class TestSuccessReportsVersion:
         assert result["version"] == node_version(mutable_graph.find_by_id(self.TARGET))
         TestSuccessReportsVersion.threaded = result["version"]
 
+    # Verifies: REQ-o00062-K
     def test_REQ_o00062_K_returned_token_threads_into_next_mutation(self, mutable_graph, tools):
         """REQ-o00062-K: The returned token is accepted with no re-read between."""
         result = tools["mutate_change_status"](
@@ -191,6 +198,7 @@ class TestSuccessReportsVersion:
         assert mutable_graph.find_by_id(self.TARGET).status == "Draft"
         TestSuccessReportsVersion.threaded_2 = result["version"]
 
+    # Verifies: REQ-o00062-K
     def test_REQ_o00062_K_threading_survives_a_third_hop(self, mutable_graph, tools):
         """REQ-o00062-K: Chained mutations never need an intervening read."""
         result = tools["mutate_update_assertion"](
@@ -202,6 +210,7 @@ class TestSuccessReportsVersion:
         assert result["success"] is True
         assert result["version"] == node_version(mutable_graph.find_by_id(self.TARGET))
 
+    # Verifies: REQ-o00062-I
     def test_REQ_o00062_I_the_consumed_token_is_now_stale(self, tools):
         """REQ-o00062-I: A token already spent by an earlier hop is rejected."""
         result = tools["mutate_change_status"](
@@ -230,6 +239,7 @@ class TestJourneyMutationReportsMovedVersion:
     TARGET = "JNY-001"
     NEW_TITLE = "Login Flow (renamed)"
 
+    # Verifies: REQ-o00062-K
     def test_REQ_o00062_K_journey_title_update_returns_moved_version(self, mutable_graph, tools):
         """Validates REQ-o00062-K: success reports a version DIFFERENT from
         the consumed if_version, and the render shows the new title."""
@@ -265,6 +275,7 @@ class TestDeleteAssertionReportsParentVersion:
 
     PARENT = "REQ-o00002"
 
+    # Verifies: REQ-o00062-K
     def test_REQ_o00062_K_delete_assertion_returns_parent_resulting_version(
         self, mutable_graph, tools
     ):
@@ -283,6 +294,7 @@ class TestDeleteAssertionReportsParentVersion:
         assert result["version"] != before
         TestDeleteAssertionReportsParentVersion.threaded = result["version"]
 
+    # Verifies: REQ-o00062-K
     def test_REQ_o00062_K_returned_token_threads_into_next_parent_mutation(
         self, mutable_graph, tools
     ):
@@ -307,6 +319,7 @@ class TestDeleteRemainderReportsParentVersion:
 
     PARENT = "REQ-o00002"
 
+    # Verifies: REQ-o00062-K
     def test_REQ_o00062_K_delete_remainder_returns_parent_resulting_version(
         self, mutable_graph, tools
     ):
@@ -325,6 +338,7 @@ class TestDeleteRemainderReportsParentVersion:
         assert result["version"] != before
         TestDeleteRemainderReportsParentVersion.threaded = result["version"]
 
+    # Verifies: REQ-o00062-K
     def test_REQ_o00062_K_returned_token_threads_into_next_parent_mutation(
         self, mutable_graph, tools
     ):
@@ -355,6 +369,7 @@ class TestSubNodeVersionOwnership:
 
     PARENT = "REQ-o00001"
 
+    # Verifies: REQ-o00062-I
     def test_REQ_o00062_I_assertion_update_takes_parent_requirement_version(
         self, mutable_graph, tools
     ):
@@ -374,6 +389,7 @@ class TestSubNodeVersionOwnership:
             == "SHALL deploy through the release pipeline"
         )
 
+    # Verifies: REQ-o00062-I
     def test_REQ_o00062_I_assertion_update_rejects_stale_parent_version(self, mutable_graph, tools):
         """REQ-o00062-I: Editing an assertion after any sibling edit needs a fresh token."""
         result = tools["mutate_update_assertion"](
@@ -389,6 +405,7 @@ class TestSubNodeVersionOwnership:
             mutable_graph.find_by_id(f"{self.PARENT}-B").get_label() or ""
         )
 
+    # Verifies: REQ-o00062-I
     def test_REQ_o00062_I_remainder_update_takes_parent_requirement_version(
         self, mutable_graph, tools
     ):
@@ -418,6 +435,7 @@ class TestMissingNodeIsDistinct:
     under its own code rather than as a version mismatch.
     """
 
+    # Verifies: REQ-o00062-L
     def test_REQ_o00062_L_missing_node_reports_node_not_found(self, tools):
         """REQ-o00062-L: An absent node id yields node_not_found."""
         result = tools["mutate_update_title"](
@@ -427,6 +445,7 @@ class TestMissingNodeIsDistinct:
         assert result["success"] is False
         assert result["code"] == "node_not_found"
 
+    # Verifies: REQ-o00062-L
     def test_REQ_o00062_L_missing_node_is_not_a_version_conflict(self, tools):
         """REQ-o00062-L: node_not_found is never conflated with version_conflict."""
         result = tools["mutate_change_status"](
@@ -436,6 +455,7 @@ class TestMissingNodeIsDistinct:
         assert result["code"] != "version_conflict"
         assert result["code"] == "node_not_found"
 
+    # Verifies: REQ-o00062-L
     def test_REQ_o00062_L_present_node_with_bad_version_is_a_conflict(self, canonical_graph, tools):
         """REQ-o00062-L: The same call against a live node yields version_conflict."""
         result = tools["mutate_change_status"](
@@ -463,6 +483,7 @@ class TestEveryInScopeToolGuards:
     rejects a mismatched one before touching the graph.
     """
 
+    # Verifies: REQ-o00062-I
     def test_REQ_o00062_I_if_version_is_a_required_parameter(self, tools, tool_name, kwargs):
         """REQ-o00062-I: if_version has no default -- callers cannot omit it."""
         import inspect
@@ -472,6 +493,7 @@ class TestEveryInScopeToolGuards:
         assert "if_version" in params, f"{tool_name} does not accept if_version"
         assert params["if_version"].default is inspect.Parameter.empty
 
+    # Verifies: REQ-o00062-I
     def test_REQ_o00062_I_stale_version_rejected_and_graph_untouched(
         self, canonical_graph, tools, tool_name, kwargs
     ):
@@ -485,6 +507,7 @@ class TestEveryInScopeToolGuards:
         assert canonical_graph.find_by_id("REQ-d00003") is not None
         assert node_version(canonical_graph.find_by_id("REQ-d00003")) == before
 
+    # Verifies: REQ-o00062-J
     def test_REQ_o00062_J_conflict_shape_is_uniform(
         self, canonical_graph, tools, tool_name, kwargs
     ):

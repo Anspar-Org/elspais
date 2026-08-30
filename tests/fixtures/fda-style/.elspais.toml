@@ -1,7 +1,7 @@
 # FDA-style configuration
 # Uses PRD-00001, OPS-00001, DEV-00001 format
 
-version = 3
+version = 5
 
 [project]
 name = "fda-style-fixture"

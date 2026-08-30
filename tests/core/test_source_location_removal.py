@@ -18,11 +18,13 @@ from elspais.graph.relations import EdgeKind
 class TestSourceLocationRemoved:
     """REQ-d00129-A: SourceLocation class SHALL NOT exist."""
 
+    # Verifies: REQ-d00129-A
     def test_REQ_d00129_A_sourcelocation_not_importable(self):
         """Importing SourceLocation from GraphNode raises ImportError."""
         with pytest.raises(ImportError):
             from elspais.graph.GraphNode import SourceLocation  # noqa: F401
 
+    # Verifies: REQ-d00129-A
     def test_REQ_d00129_A_sourcelocation_not_in_graph_init(self):
         """SourceLocation not exported from elspais.graph."""
         import elspais.graph as graph_mod
@@ -33,11 +35,13 @@ class TestSourceLocationRemoved:
 class TestGraphNodeSourceFieldRemoved:
     """REQ-d00129-B: GraphNode SHALL NOT have a source field."""
 
+    # Verifies: REQ-d00129-B
     def test_REQ_d00129_B_no_source_field(self):
         """GraphNode has no source attribute."""
         node = GraphNode(id="test-1", kind=NodeKind.REQUIREMENT, label="Test")
         assert not hasattr(node, "source")
 
+    # Verifies: REQ-d00129-B
     def test_REQ_d00129_B_no_source_in_constructor(self):
         """GraphNode constructor rejects source= keyword."""
         with pytest.raises(TypeError):
@@ -47,23 +51,27 @@ class TestGraphNodeSourceFieldRemoved:
 class TestParseLineFields:
     """REQ-d00129-C: Content nodes store parse_line and parse_end_line as fields."""
 
+    # Verifies: REQ-d00129-C
     def test_REQ_d00129_C_parse_line_via_get_field(self):
         """parse_line is accessible via get_field()."""
         node = GraphNode(id="test-1", kind=NodeKind.REQUIREMENT, label="Test")
         node.set_field("parse_line", 10)
         assert node.get_field("parse_line") == 10
 
+    # Verifies: REQ-d00129-C
     def test_REQ_d00129_C_parse_end_line_via_get_field(self):
         """parse_end_line is accessible via get_field()."""
         node = GraphNode(id="test-1", kind=NodeKind.REQUIREMENT, label="Test")
         node.set_field("parse_end_line", 25)
         assert node.get_field("parse_end_line") == 25
 
+    # Verifies: REQ-d00129-C
     def test_REQ_d00129_C_parse_line_defaults_none(self):
         """parse_line defaults to None when not set."""
         node = GraphNode(id="test-1", kind=NodeKind.REQUIREMENT, label="Test")
         assert node.get_field("parse_line") is None
 
+    # Verifies: REQ-d00129-C
     def test_REQ_d00129_C_parse_end_line_defaults_none(self):
         """parse_end_line defaults to None when not set."""
         node = GraphNode(id="test-1", kind=NodeKind.REQUIREMENT, label="Test")
@@ -86,6 +94,7 @@ class TestFileNodeTraversal:
         file_node.set_field("repo", None)
         return file_node
 
+    # Verifies: REQ-d00129-D
     def test_REQ_d00129_D_top_level_node_finds_file(self):
         """Top-level REQUIREMENT finds FILE via CONTAINS edge."""
         file_node = self._make_file_node()
@@ -97,6 +106,7 @@ class TestFileNodeTraversal:
         assert found is file_node
         assert found.get_field("relative_path") == "spec/reqs.md"
 
+    # Verifies: REQ-d00129-D
     def test_REQ_d00129_D_assertion_finds_file_two_hops(self):
         """ASSERTION finds FILE via STRUCTURES->REQUIREMENT->CONTAINS->FILE."""
         file_node = self._make_file_node()
@@ -110,6 +120,7 @@ class TestFileNodeTraversal:
         found = assertion.file_node()
         assert found is file_node
 
+    # Verifies: REQ-d00129-D
     def test_REQ_d00129_D_instance_node_returns_none(self):
         """INSTANCE node returns None from file_node()."""
         from elspais.graph.relations import Stereotype
@@ -124,12 +135,14 @@ class TestFileNodeTraversal:
 class TestParseLineFromFileNode:
     """REQ-d00129-E: Consumers use get_field('parse_line') for line numbers."""
 
+    # Verifies: REQ-d00129-E
     def test_REQ_d00129_E_line_from_field(self):
         """Line number retrieved via get_field."""
         node = GraphNode(id="REQ-001", kind=NodeKind.REQUIREMENT, label="Test")
         node.set_field("parse_line", 42)
         assert node.get_field("parse_line") == 42
 
+    # Verifies: REQ-d00129-E
     def test_REQ_d00129_E_end_line_from_field(self):
         """End line number retrieved via get_field."""
         node = GraphNode(id="REQ-001", kind=NodeKind.REQUIREMENT, label="Test")
@@ -140,6 +153,7 @@ class TestParseLineFromFileNode:
 class TestRepoFromFileNode:
     """REQ-d00129-F: Consumers use file_node().get_field('repo') for repo."""
 
+    # Verifies: REQ-d00129-F
     def test_REQ_d00129_F_repo_from_file_node(self):
         """Repo retrieved via file_node()."""
         file_node = GraphNode(id="file:spec/reqs.md", kind=NodeKind.FILE, label="reqs.md")
@@ -153,6 +167,7 @@ class TestRepoFromFileNode:
         assert found is not None
         assert found.get_field("repo") == "CAL"
 
+    # Verifies: REQ-d00129-F
     def test_REQ_d00129_F_repo_none_for_core(self):
         """Core project nodes have repo=None."""
         file_node = GraphNode(id="file:spec/reqs.md", kind=NodeKind.FILE, label="reqs.md")

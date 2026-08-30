@@ -92,7 +92,7 @@ def test_a_repeated_unmatched_item_reaches_the_caller_at_each_position():
 
 
 _SPEC_CONFIG = """\
-version = 3
+version = 5
 
 [project]
 name = "keeptypo"
@@ -154,7 +154,7 @@ def test_a_typo_in_a_spec_metadata_line_is_reported_not_dropped(tmp_path: Path):
 
     graph = build_graph(config_path=project / ".elspais.toml", repo_root=project, scan_code=False)
 
-    broken = [br for br in graph.broken_references() if br.source_id == "REQ-d00001"]
+    broken = [br for br in graph.unresolved_references() if br.source_id == "REQ-d00001"]
     assert [br.target_id for br in broken] == [_TYPO], (
         "the reference no grammar accounts for must be reported, not silently "
         f"dropped along with the line; got {broken}"

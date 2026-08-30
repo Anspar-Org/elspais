@@ -262,6 +262,7 @@ def coverage_client(coverage_app):
 class TestAppFactory:
     """Validates REQ-d00010-A: Starlette app factory pattern."""
 
+    # Verifies: REQ-d00010-A
     def test_REQ_d00010_A_create_app_returns_starlette_instance(self, sample_graph):
         """App factory returns a Starlette application."""
         from starlette.applications import Starlette
@@ -274,6 +275,7 @@ class TestAppFactory:
         app = create_app(state, mount_mcp=False)
         assert isinstance(app, Starlette)
 
+    # Verifies: REQ-d00010-A
     def test_REQ_d00010_A_create_app_accepts_config(self, sample_graph):
         """App factory stores the provided config in internal state."""
         test_config = {"project": {"name": "test", "namespace": "REQ"}}
@@ -293,6 +295,7 @@ class TestAppFactory:
 class TestGetStatus:
     """Validates REQ-d00010-A: GET /api/status returns graph status."""
 
+    # Verifies: REQ-d00010-A
     def test_REQ_d00010_A_status_returns_json(self, client):
         """GET /api/status returns JSON with expected keys."""
         resp = client.get("/api/status")
@@ -302,6 +305,7 @@ class TestGetStatus:
         assert "node_counts" in data
         assert "total_nodes" in data
 
+    # Verifies: REQ-d00010-A
     def test_REQ_d00010_A_status_contains_node_counts(self, client):
         """Status response includes non-zero node counts."""
         resp = client.get("/api/status")
@@ -313,6 +317,7 @@ class TestGetStatus:
 class TestGetRequirement:
     """Validates REQ-d00010-A: GET /api/requirement/<req_id>."""
 
+    # Verifies: REQ-d00010-A
     def test_REQ_d00010_A_requirement_found(self, client):
         """GET /api/requirement returns full requirement data."""
         resp = client.get("/api/requirement/REQ-p00001")
@@ -324,6 +329,7 @@ class TestGetRequirement:
         assert data["status"] == "Active"
         assert "assertions" in data
 
+    # Verifies: REQ-d00010-A
     def test_REQ_d00010_A_requirement_not_found(self, client):
         """GET /api/requirement returns 404 for unknown ID."""
         resp = client.get("/api/requirement/REQ-NOPE")
@@ -331,6 +337,7 @@ class TestGetRequirement:
         data = resp.json()
         assert "error" in data
 
+    # Verifies: REQ-d00010-A
     def test_REQ_d00010_A_requirement_includes_assertions(self, client):
         """Requirement response includes assertion children."""
         resp = client.get("/api/requirement/REQ-p00001")
@@ -344,6 +351,7 @@ class TestGetRequirement:
 class TestGetHierarchy:
     """Validates REQ-d00010-A: GET /api/hierarchy/<req_id>."""
 
+    # Verifies: REQ-d00010-A
     def test_REQ_d00010_A_hierarchy_found(self, client):
         """GET /api/hierarchy returns ancestors and children."""
         resp = client.get("/api/hierarchy/REQ-p00001")
@@ -353,6 +361,7 @@ class TestGetHierarchy:
         assert "ancestors" in data
         assert "children" in data
 
+    # Verifies: REQ-d00010-A
     def test_REQ_d00010_A_hierarchy_shows_children(self, client):
         """Hierarchy for PRD includes OPS child."""
         resp = client.get("/api/hierarchy/REQ-p00001")
@@ -360,6 +369,7 @@ class TestGetHierarchy:
         child_ids = [c["id"] for c in data["children"]]
         assert "REQ-o00001" in child_ids
 
+    # Verifies: REQ-d00010-A
     def test_REQ_d00010_A_hierarchy_not_found(self, client):
         """GET /api/hierarchy returns 404 for unknown ID."""
         resp = client.get("/api/hierarchy/REQ-NOPE")
@@ -369,6 +379,7 @@ class TestGetHierarchy:
 class TestGetSearch:
     """Validates REQ-d00010-A, REQ-d00061-E, REQ-d00061-C: GET /api/search."""
 
+    # Verifies: REQ-d00010-A
     def test_REQ_d00010_A_search_by_query(self, client):
         """GET /api/search?q=Security returns matching results."""
         resp = client.get("/api/search?q=Security")
@@ -379,6 +390,7 @@ class TestGetSearch:
         assert len(results) >= 1
         assert results[0]["id"] == "REQ-p00001"
 
+    # Verifies: REQ-d00010-A
     def test_REQ_d00010_A_search_empty_query(self, client):
         """Empty query returns empty results."""
         resp = client.get("/api/search?q=")
@@ -386,6 +398,7 @@ class TestGetSearch:
         data = resp.json()
         assert data == {"results": []}
 
+    # Verifies: REQ-d00010-A
     def test_REQ_d00010_A_search_no_results(self, client):
         """Non-matching query returns empty results."""
         resp = client.get("/api/search?q=zzzznonexistent")
@@ -393,12 +406,14 @@ class TestGetSearch:
         data = resp.json()
         assert data == {"results": []}
 
+    # Verifies: REQ-d00010-A
     def test_REQ_d00010_A_search_with_field(self, client):
         """Search with field parameter narrows results."""
         resp = client.get("/api/search?q=REQ-p00001&field=id")
         data = resp.json()
         assert len(data["results"]) >= 1
 
+    # Verifies: REQ-d00061-E
     def test_REQ_d00061_E_search_with_limit(self, client):
         """Limit parameter restricts result count."""
         # With limit=1, should get at most 1 result
@@ -407,6 +422,7 @@ class TestGetSearch:
         data = resp.json()
         assert len(data["results"]) <= 1
 
+    # Verifies: REQ-d00061-E
     def test_REQ_d00061_E_search_default_limit(self):
         """Default limit is 50 when not specified — truncates beyond 50."""
         # Build a graph with 60 matching nodes to verify the limit
@@ -439,6 +455,7 @@ class TestGetSearch:
         data = resp.json()
         assert len(data["results"]) == 50
 
+    # Verifies: REQ-d00061-C
     def test_REQ_d00061_C_search_with_regex(self, client):
         """Regex parameter enables regex matching."""
         resp = client.get("/api/search?q=REQ-p0000[0-9]&regex=true")
@@ -448,6 +465,7 @@ class TestGetSearch:
         assert len(results) >= 1
         assert results[0]["id"] == "REQ-p00001"
 
+    # Verifies: REQ-d00061-C
     def test_REQ_d00061_C_search_regex_defaults_false(self, client):
         """Regex defaults to false - literal bracket chars don't match."""
         resp = client.get("/api/search?q=REQ-p0000[0-9]")
@@ -460,6 +478,7 @@ class TestGetSearch:
 class TestGetTestCoverage:
     """Validates REQ-d00010-A: GET /api/test-coverage/<req_id>."""
 
+    # Verifies: REQ-d00010-A
     def test_REQ_d00010_A_test_coverage_found(self, coverage_client):
         """GET /api/test-coverage returns per-assertion test map."""
         resp = coverage_client.get("/api/test-coverage/REQ-p00001")
@@ -471,6 +490,7 @@ class TestGetTestCoverage:
         assert "A" in data["assertion_tests"]
         assert "B" in data["assertion_tests"]
 
+    # Verifies: REQ-d00010-A
     def test_REQ_d00010_A_test_coverage_assertion_has_tests(self, coverage_client):
         """Covered assertion A includes test entries with results."""
         resp = coverage_client.get("/api/test-coverage/REQ-p00001")
@@ -481,6 +501,7 @@ class TestGetTestCoverage:
         assert len(a_tests[0]["results"]) >= 1
         assert a_tests[0]["results"][0]["status"] == "passed"
 
+    # Verifies: REQ-d00010-A
     def test_REQ_d00010_A_test_coverage_uncovered_assertion(self, coverage_client):
         """Uncovered assertion B has empty test list."""
         resp = coverage_client.get("/api/test-coverage/REQ-p00001")
@@ -488,6 +509,7 @@ class TestGetTestCoverage:
         b_tests = data["assertion_tests"]["B"]["tests"]
         assert len(b_tests) == 0
 
+    # Verifies: REQ-d00010-A
     def test_REQ_d00010_A_test_coverage_stats(self, coverage_client):
         """Coverage stats reflect 1 of 2 assertions covered."""
         resp = coverage_client.get("/api/test-coverage/REQ-p00001")
@@ -496,6 +518,7 @@ class TestGetTestCoverage:
         assert data["total_covered"] == 1.0
         assert data["total_pct"] == 50.0
 
+    # Verifies: REQ-d00010-A
     def test_REQ_d00010_A_test_coverage_not_found(self, coverage_client):
         """GET /api/test-coverage returns 404 for unknown ID."""
         resp = coverage_client.get("/api/test-coverage/REQ-NOPE")
@@ -507,6 +530,7 @@ class TestGetTestCoverage:
 class TestGetTreeData:
     """Validates REQ-d00010-A: GET /api/tree-data."""
 
+    # Verifies: REQ-d00010-A
     def test_REQ_d00010_A_tree_data_row_structure(self, client):
         """Each tree row has expected keys."""
         resp = client.get("/api/tree-data")
@@ -519,6 +543,7 @@ class TestGetTreeData:
         assert "has_children" in row
         assert "assertions" in row
 
+    # Verifies: REQ-d00010-A
     def test_REQ_d00010_A_tree_data_hierarchy(self, client):
         """Tree data includes parent-child relationships."""
         resp = client.get("/api/tree-data")
@@ -536,6 +561,7 @@ class TestGetTreeData:
 class TestGetDirty:
     """Validates REQ-d00010-A: GET /api/dirty."""
 
+    # Verifies: REQ-d00010-A
     def test_REQ_d00010_A_dirty_clean_graph(self, client):
         """Clean graph reports not dirty."""
         resp = client.get("/api/dirty")
@@ -544,6 +570,7 @@ class TestGetDirty:
         assert data["dirty"] is False
         assert data["mutation_count"] == 0
 
+    # Verifies: REQ-d00010-A
     def test_REQ_d00010_A_dirty_after_mutation(self, client):
         """Graph reports dirty after a mutation."""
         # Perform a mutation
@@ -565,6 +592,7 @@ class TestGetDirty:
 class TestGetIndex:
     """Validates REQ-d00010-A: GET / serves template."""
 
+    # Verifies: REQ-d00010-A
     def test_REQ_d00010_A_index_returns_200(self, client):
         """GET / returns 200 even if template is missing."""
         resp = client.get("/")
@@ -579,6 +607,7 @@ class TestGetIndex:
 class TestMutateStatus:
     """Validates REQ-d00010-A: POST /api/mutate/status."""
 
+    # Verifies: REQ-d00010-A
     def test_REQ_d00010_A_change_status_success(self, client):
         """POST /api/mutate/status changes requirement status."""
         resp = client.post(
@@ -594,6 +623,7 @@ class TestMutateStatus:
         assert data["success"] is True
         assert "mutation" in data
 
+    # Verifies: REQ-d00010-A
     def test_REQ_d00010_A_change_status_missing_params(self, client):
         """Missing parameters return 400."""
         resp = client.post(
@@ -604,6 +634,7 @@ class TestMutateStatus:
         data = resp.json()
         assert data["success"] is False
 
+    # Verifies: REQ-d00010-A
     def test_REQ_d00010_A_change_status_invalid_node(self, client):
         """Non-existent node returns error.
 
@@ -624,6 +655,7 @@ class TestMutateStatus:
 class TestMutateTemplate:
     """Verifies REQ-p00014-E: POST /api/mutate/template (Template toggle)."""
 
+    # Verifies: REQ-p00014-E
     def test_REQ_p00014_E_toggle_template_on_then_off(self, client):
         """POST /api/mutate/template sets then clears the Template marker."""
         resp = client.post(
@@ -654,6 +686,7 @@ class TestMutateTemplate:
         assert data["success"] is True
         assert "blocked" not in data
 
+    # Verifies: REQ-p00014-E
     def test_REQ_p00014_E_missing_node_id_returns_400(self, client):
         """Missing node_id returns 400."""
         resp = client.post(
@@ -663,6 +696,7 @@ class TestMutateTemplate:
         assert resp.status_code == 400
         assert resp.json()["success"] is False
 
+    # Verifies: REQ-p00014-E
     def test_REQ_p00014_E_missing_is_template_returns_400(self, client):
         """Missing is_template returns 400."""
         resp = client.post(
@@ -672,6 +706,7 @@ class TestMutateTemplate:
         assert resp.status_code == 400
         assert resp.json()["success"] is False
 
+    # Verifies: REQ-p00014-E
     def test_REQ_p00014_E_non_boolean_is_template_returns_400(self, client):
         """Truthy-but-non-boolean is_template is rejected with 400."""
         resp = client.post(
@@ -681,6 +716,7 @@ class TestMutateTemplate:
         assert resp.status_code == 400
         assert resp.json()["success"] is False
 
+    # Verifies: REQ-p00014-E
     def test_REQ_p00014_E_unknown_node_returns_404(self, client):
         """Non-existent node returns an error payload (not a soft-block).
 
@@ -698,6 +734,7 @@ class TestMutateTemplate:
         assert data["code"] == "node_not_found"
         assert "blocked" not in data
 
+    # Verifies: REQ-p00014-E
     def test_REQ_p00014_E_guard_soft_block_is_http_200(self):
         """Un-templating a template with live instances soft-blocks as 200."""
         from tests.core.graph_test_helpers import build_graph, make_requirement
@@ -749,6 +786,7 @@ class TestMutateTemplate:
 class TestMutateTitle:
     """Validates REQ-d00010-A: POST /api/mutate/title."""
 
+    # Verifies: REQ-d00010-A
     def test_REQ_d00010_A_update_title_success(self, client):
         """POST /api/mutate/title updates requirement title."""
         resp = client.post(
@@ -763,6 +801,7 @@ class TestMutateTitle:
         data = resp.json()
         assert data["success"] is True
 
+    # Verifies: REQ-d00010-A
     def test_REQ_d00010_A_update_title_missing_params(self, client):
         """Missing parameters return 400."""
         resp = client.post(
@@ -775,6 +814,7 @@ class TestMutateTitle:
 class TestMutateAssertion:
     """Validates REQ-d00010-A: POST /api/mutate/assertion."""
 
+    # Verifies: REQ-d00010-A
     def test_REQ_d00010_A_update_assertion_success(self, client):
         """POST /api/mutate/assertion updates assertion text."""
         resp = client.post(
@@ -791,6 +831,7 @@ class TestMutateAssertion:
         data = resp.json()
         assert data["success"] is True
 
+    # Verifies: REQ-d00010-A
     def test_REQ_d00010_A_update_assertion_missing_params(self, client):
         """Missing parameters return 400."""
         resp = client.post(
@@ -803,6 +844,7 @@ class TestMutateAssertion:
 class TestMutateAssertionAdd:
     """Validates REQ-d00010-A: POST /api/mutate/assertion/add."""
 
+    # Verifies: REQ-d00010-A
     def test_REQ_d00010_A_add_assertion_success(self, client):
         """POST /api/mutate/assertion/add creates new assertion."""
         resp = client.post(
@@ -817,6 +859,7 @@ class TestMutateAssertionAdd:
         data = resp.json()
         assert data["success"] is True
 
+    # Verifies: REQ-d00010-A
     def test_REQ_d00010_A_add_assertion_missing_params(self, client):
         """Missing parameters return 400."""
         resp = client.post(
@@ -829,6 +872,7 @@ class TestMutateAssertionAdd:
 class TestMutateEdge:
     """Validates REQ-d00010-A: POST /api/mutate/edge."""
 
+    # Verifies: REQ-d00010-A
     def test_REQ_d00010_A_edge_add(self, client, sample_graph):
         """Add edge action creates new edge."""
         # First add a DEV requirement to create edge to
@@ -853,6 +897,7 @@ class TestMutateEdge:
         data = resp.json()
         assert data["success"] is True
 
+    # Verifies: REQ-d00010-A
     def test_REQ_d00010_A_edge_change_kind(self, client):
         """Change edge kind action modifies existing edge."""
         resp = client.post(
@@ -869,6 +914,7 @@ class TestMutateEdge:
         data = resp.json()
         assert data["success"] is True
 
+    # Verifies: REQ-d00010-A
     def test_REQ_d00010_A_edge_delete(self, client):
         """Delete edge action removes edge."""
         resp = client.post(
@@ -884,6 +930,7 @@ class TestMutateEdge:
         data = resp.json()
         assert data["success"] is True
 
+    # Verifies: REQ-d00010-A
     def test_REQ_d00010_A_edge_unknown_action(self, client):
         """Unknown action returns 400.
 
@@ -901,6 +948,7 @@ class TestMutateEdge:
         )
         assert resp.status_code == 400
 
+    # Verifies: REQ-d00010-A
     def test_REQ_d00010_A_edge_missing_action(self, client):
         """Missing action returns 400."""
         resp = client.post(
@@ -912,6 +960,7 @@ class TestMutateEdge:
         )
         assert resp.status_code == 400
 
+    # Verifies: REQ-d00010-A
     def test_REQ_d00010_A_edge_missing_ids(self, client):
         """Missing source/target IDs returns 400."""
         resp = client.post(
@@ -924,6 +973,7 @@ class TestMutateEdge:
 class TestMutateAssertionDelete:
     """Validates REQ-d00010-A: Delete assertion endpoint."""
 
+    # Verifies: REQ-d00010-A
     def test_REQ_d00010_A_delete_assertion_success(self, client):
         # First add a temp assertion, then delete it
         added = client.post(
@@ -949,10 +999,12 @@ class TestMutateAssertionDelete:
         assert resp.status_code == 200
         assert resp.json()["success"] is True
 
+    # Verifies: REQ-d00010-A
     def test_REQ_d00010_A_delete_assertion_missing_id(self, client):
         resp = client.post("/api/mutate/assertion/delete", json={})
         assert resp.status_code == 400
 
+    # Verifies: REQ-d00010-A
     def test_REQ_d00010_A_delete_assertion_requires_confirm(self, client):
         resp = client.post("/api/mutate/assertion/delete", json={"assertion_id": "REQ-p00001-A"})
         assert resp.status_code == 400
@@ -961,6 +1013,7 @@ class TestMutateAssertionDelete:
 class TestMutateRequirementDelete:
     """Validates REQ-d00010-A: Delete requirement endpoint."""
 
+    # Verifies: REQ-d00010-A
     def test_REQ_d00010_A_delete_requirement_success(self, client, sample_graph):
         # Add a throwaway requirement, then delete it
         sample_graph.add_requirement(req_id="REQ-z99999", title="Temp", level="DEV")
@@ -975,10 +1028,12 @@ class TestMutateRequirementDelete:
         assert resp.status_code == 200
         assert resp.json()["success"] is True
 
+    # Verifies: REQ-d00010-A
     def test_REQ_d00010_A_delete_requirement_missing_id(self, client):
         resp = client.post("/api/mutate/requirement/delete", json={})
         assert resp.status_code == 400
 
+    # Verifies: REQ-d00010-A
     def test_REQ_d00010_A_delete_requirement_requires_confirm(self, client):
         resp = client.post("/api/mutate/requirement/delete", json={"node_id": "REQ-p00001"})
         assert resp.status_code == 400
@@ -987,6 +1042,7 @@ class TestMutateRequirementDelete:
 class TestMutateUndo:
     """Validates REQ-d00010-A: POST /api/mutate/undo."""
 
+    # Verifies: REQ-d00010-A
     def test_REQ_d00010_A_undo_with_no_mutations(self, client):
         """Undo with no mutations returns error.
 
@@ -998,6 +1054,7 @@ class TestMutateUndo:
         data = resp.json()
         assert data["success"] is False
 
+    # Verifies: REQ-d00010-A
     def test_REQ_d00010_A_undo_after_mutation(self, client):
         """Undo after mutation reverses it."""
         # Perform a mutation
@@ -1026,6 +1083,7 @@ class TestMutateUndo:
 class TestPersistenceEndpoints:
     """Validates REQ-d00010-A: Persistence endpoints (save, revert, reload)."""
 
+    # Verifies: REQ-d00010-A
     def test_REQ_d00010_A_save_empty_log_succeeds(self, client):
         """POST /api/save with no pending mutations returns success."""
         resp = client.post("/api/save")
@@ -1034,6 +1092,7 @@ class TestPersistenceEndpoints:
         assert data["success"] is True
         assert data["saved_count"] == 0
 
+    # Verifies: REQ-d00010-A
     def test_REQ_d00010_A_revert_returns_result(self, client):
         """POST /api/revert attempts graph rebuild."""
         resp = client.post("/api/revert")
@@ -1041,6 +1100,7 @@ class TestPersistenceEndpoints:
         data = resp.json()
         assert "success" in data
 
+    # Verifies: REQ-d00010-A
     def test_REQ_d00010_A_reload_returns_result(self, client):
         """POST /api/reload attempts graph rebuild."""
         resp = client.post("/api/reload")
@@ -1057,6 +1117,7 @@ class TestPersistenceEndpoints:
 class TestGetFileContent:
     """Validates REQ-p00006-A: /api/file-content with syntax highlighting."""
 
+    # Verifies: REQ-p00006-A
     def test_REQ_p00006_A_file_content_returns_highlighted_lines(self, tmp_path):
         """API returns highlighted_lines and language for a Python file."""
         graph = TraceGraph(repo_root=tmp_path, _resolver=grammar_for("REQ"))
@@ -1083,6 +1144,7 @@ class TestGetFileContent:
         # plain lines should be raw text
         assert data["lines"][0] == "def foo():"
 
+    # Verifies: REQ-p00006-A
     def test_REQ_p00006_A_file_content_mutation_tracking(self, tmp_path):
         """API still returns mutation tracking alongside highlighting."""
         graph = TraceGraph(repo_root=tmp_path, _resolver=grammar_for("REQ"))
@@ -1106,16 +1168,19 @@ class TestGetFileContent:
         assert "mtime" in data
         assert data["has_pending_mutations"] is False
 
+    # Verifies: REQ-p00006-A
     def test_REQ_p00006_A_file_content_missing_path(self, client):
         """Missing path parameter returns 400."""
         resp = client.get("/api/file-content")
         assert resp.status_code == 400
 
+    # Verifies: REQ-p00006-A
     def test_REQ_p00006_A_file_content_not_found(self, client):
         """Non-existent file returns 404."""
         resp = client.get("/api/file-content?path=nonexistent.py")
         assert resp.status_code == 404
 
+    # Verifies: REQ-p00006-A
     def test_REQ_p00006_A_file_content_associated_repo_absolute_path(self, tmp_path):
         """Files from associated repos outside main repo can be loaded via absolute path."""
 
@@ -1128,7 +1193,7 @@ class TestGetFileContent:
 
         # Write a .elspais.toml that marks this as an associated repo
         (assoc_repo / ".elspais.toml").write_text(
-            'version = 3\n[project]\nname = "assoc"\nnamespace = "REQ"\n\n'
+            'version = 5\n[project]\nname = "assoc"\nnamespace = "REQ"\n\n'
             '[scanning.spec]\ndirectories = ["spec"]\n'
         )
 
@@ -1184,6 +1249,7 @@ class TestGetFileContent:
         data = resp.json()
         assert data["lines"][0] == "# REQ-A-p00001: Test Requirement"
 
+    # Verifies: REQ-p00006-A
     def test_REQ_p00006_A_file_content_rejects_arbitrary_absolute_path(self, tmp_path):
         """Absolute paths outside repo root and allowed dirs are rejected."""
         import tempfile
@@ -1220,6 +1286,7 @@ class TestGetFileContent:
 class TestCors:
     """Validates REQ-d00010-F: CORS enabled for cross-origin requests."""
 
+    # Verifies: REQ-d00010-F
     def test_REQ_d00010_F_cors_headers_present(self, client):
         """Response includes CORS Access-Control-Allow-Origin header."""
         resp = client.get("/api/status", headers={"Origin": "http://localhost:3000"})
@@ -1227,6 +1294,7 @@ class TestCors:
         # flask-cors adds Access-Control-Allow-Origin header
         assert "Access-Control-Allow-Origin" in resp.headers
 
+    # Verifies: REQ-d00010-F
     def test_REQ_d00010_F_cors_preflight(self, client):
         """OPTIONS preflight request returns CORS headers."""
         resp = client.options(
@@ -1248,6 +1316,7 @@ class TestCors:
 class TestGetNode:
     """Validates REQ-d00010-A: GET /api/node/<node_id> generic endpoint."""
 
+    # Verifies: REQ-d00010-A
     def test_REQ_d00010_A_node_requirement(self, client):
         """Fetch a requirement node, verify kind and properties."""
         resp = client.get("/api/node/REQ-p00001")
@@ -1258,6 +1327,7 @@ class TestGetNode:
         assert data["properties"]["level"] == "PRD"
         assert data["properties"]["status"] == "Active"
 
+    # Verifies: REQ-d00010-A
     def test_REQ_d00010_A_node_not_found(self, client):
         """Verify 404 for a non-existent node ID."""
         resp = client.get("/api/node/NONEXISTENT-ID")
@@ -1265,6 +1335,7 @@ class TestGetNode:
         data = resp.json()
         assert "error" in data
 
+    # Verifies: REQ-d00010-A
     def test_REQ_d00010_A_node_assertion(self, client):
         """Fetch an assertion node, verify kind and label property."""
         resp = client.get("/api/node/REQ-p00001-A")
@@ -1274,6 +1345,7 @@ class TestGetNode:
         assert data["kind"] == "assertion"
         assert data["properties"]["label"] == "A"
 
+    # Verifies: REQ-d00010-A
     def test_REQ_d00010_A_node_common_envelope(self, client):
         """Verify all common envelope fields are present in node response."""
         resp = client.get("/api/node/REQ-p00001")
@@ -1292,6 +1364,7 @@ class TestGetNode:
         }
         assert expected_keys.issubset(set(data.keys()))
 
+    # Verifies: REQ-d00010-A
     def test_REQ_d00010_A_node_journey(self, client, sample_graph):
         """Fetch a USER_JOURNEY node, verify kind and actor property."""
         journey = GraphNode(
@@ -1412,6 +1485,7 @@ def incoming_client(incoming_graph):
 class TestIncomingLinks:
     """Validates REQ-p00006-A: reverse-traceability 'Incoming Links' payload."""
 
+    # Verifies: REQ-p00006-A
     def test_REQ_p00006_A_validated_by_journey_partial(self, incoming_client):
         """A requirement validated by a partially-verified journey exposes a
         'Validated by' section naming the journey with a yellow partial state
@@ -1434,6 +1508,7 @@ class TestIncomingLinks:
         # Journey validates assertions A and B -> accurate count, not "all".
         assert "validates 2 assertion(s)" in link["tooltip"]
 
+    # Verifies: REQ-p00006-A
     def test_REQ_p00006_A_assertion_level_validate_scope(self, incoming_client):
         """An assertion-level (direct assertion -> journey) VALIDATES edge with
         no assertion_targets is attributed to that one assertion, so the tooltip
@@ -1448,6 +1523,7 @@ class TestIncomingLinks:
         # Whole-req blanket validate (no assertion named) -> "all assertions".
         assert "validates all assertions" in by_journey["JNY-BLANKET"]["tooltip"]
 
+    # Verifies: REQ-p00006-A
     def test_REQ_p00006_A_refined_by_names_the_refiner(self, incoming_client):
         """The REFINED target's 'Refined by' section names the requirement that
         refines it. REQ-o00009 refines REQ-p00006, so REQ-p00006's card lists
@@ -1461,6 +1537,7 @@ class TestIncomingLinks:
         assert links[0]["source_kind"] == "requirement"
         assert "refines this requirement" in links[0]["tooltip"]
 
+    # Verifies: REQ-p00006-A
     def test_REQ_p00006_A_refiner_has_no_phantom_refined_by(self, incoming_client):
         """The refiner's own card must NOT show a phantom 'Refined by' naming
         the requirement it refines. REQ-o00009 refines REQ-p00006 (it is not
@@ -1470,6 +1547,7 @@ class TestIncomingLinks:
         by_kind = {s["kind"]: s for s in data["incoming_links"]}
         assert "Refined by" not in by_kind
 
+    # Verifies: REQ-p00006-A
     def test_REQ_p00006_A_no_incoming_edges_empty(self, incoming_client):
         """A requirement with no reverse-traceability edges has an empty
         incoming_links list, so the card section does not render."""
@@ -1516,18 +1594,21 @@ class TestRefinedByDirection:
                 return [link["id"] for link in section["links"]]
         return []
 
+    # Verifies: REQ-p00006-A
     def test_REQ_p00006_A_refiner_omits_phantom_refined_by(self, self_spec_graph):
         """The refiner REQ-p00005 (which declares Refines: REQ-p00001) has no
         'Refined by' entry for REQ-p00001 — that would be the inverted phantom."""
         refined_by = self._refined_by(self_spec_graph, "REQ-p00005")
         assert "REQ-p00001" not in refined_by
 
+    # Verifies: REQ-p00006-A
     def test_REQ_p00006_A_refined_target_lists_real_refiner(self, self_spec_graph):
         """The refined target REQ-p00001 lists its real refiner REQ-p00005 under
         'Refined by' — the entry omitted by the pre-fix incoming-edge reading."""
         refined_by = self._refined_by(self_spec_graph, "REQ-p00001")
         assert "REQ-p00005" in refined_by
 
+    # Verifies: REQ-p00006-A
     def test_REQ_p00006_A_agrees_with_render_derive_refines(self, self_spec_graph):
         """The viewer and render.py agree on direction: the declarer's Refines
         list (render ground truth) names REQ-p00001, while the declarer's
@@ -1547,6 +1628,7 @@ class TestRefinedByDirection:
 class TestApiQuery:
     """Validates REQ-d00010-A: GET /api/query combined filter endpoint."""
 
+    # Verifies: REQ-d00010-A
     def test_REQ_d00010_A_query_by_kind(self, client):
         """Filter by kind=requirement returns only requirement nodes."""
         resp = client.get("/api/query?kind=requirement")
@@ -1556,6 +1638,7 @@ class TestApiQuery:
         for result in data["results"]:
             assert result["kind"] == "requirement"
 
+    # Verifies: REQ-d00010-A
     def test_REQ_d00010_A_query_by_level(self, client):
         """Filter by kind=requirement&level=PRD returns only PRD requirements."""
         resp = client.get("/api/query?kind=requirement&level=PRD")
@@ -1566,6 +1649,7 @@ class TestApiQuery:
             assert result["kind"] == "requirement"
             assert result["level"] == "PRD"
 
+    # Verifies: REQ-d00010-A
     def test_REQ_d00010_A_query_empty(self, client):
         """Non-existent level filter returns empty results."""
         resp = client.get("/api/query?kind=requirement&level=NONEXISTENT")
@@ -1574,6 +1658,7 @@ class TestApiQuery:
         assert data["count"] == 0
         assert data["results"] == []
 
+    # Verifies: REQ-d00010-A
     def test_REQ_d00010_A_query_limit(self, client):
         """Limit parameter restricts result count."""
         resp = client.get("/api/query?kind=requirement&limit=1")
@@ -1581,6 +1666,7 @@ class TestApiQuery:
         data = resp.json()
         assert len(data["results"]) <= 1
 
+    # Verifies: REQ-d00010-A
     def test_REQ_d00010_A_query_no_params(self, client):
         """No query params returns all nodes in the graph."""
         resp = client.get("/api/query")
@@ -1598,6 +1684,7 @@ class TestApiQuery:
 class TestTreeDataJourneys:
     """Validates REQ-d00010-A: Journey nodes in tree-data endpoint."""
 
+    # Verifies: REQ-d00010-A
     def test_REQ_d00010_A_tree_data_includes_journeys(self, client, sample_graph):
         """Journey nodes appear in tree-data with kind=journey and is_journey=True."""
         journey = GraphNode(id="JNY-Browse-01", kind=NodeKind.USER_JOURNEY, label="Browse Catalog")
@@ -1633,6 +1720,7 @@ class TestTreeDataJourneys:
 class TestGitStatus:
     """Validates REQ-d00010-A, REQ-p00004-C: GET /api/git/status."""
 
+    # Verifies: REQ-p00004-C
     def test_REQ_p00004_C_git_status_returns_expected_fields(self, client):
         """GET /api/git/status returns branch, is_main, dirty_spec_files, remote_diverged."""
         from unittest.mock import patch
@@ -1656,6 +1744,7 @@ class TestGitStatus:
         assert "remote_diverged" in data
         assert "fast_forward_possible" in data
 
+    # Verifies: REQ-p00004-C
     def test_REQ_p00004_C_git_status_uses_config_spec_dir(self, sample_graph):
         """GET /api/git/status passes spec dir from config."""
         from unittest.mock import patch
@@ -1684,6 +1773,7 @@ class TestGitStatus:
 class TestGitBranch:
     """Validates REQ-d00010-A, REQ-p00004-D: POST /api/git/branch."""
 
+    # Verifies: REQ-p00004-D
     def test_REQ_p00004_D_git_branch_creates_branch(self, client):
         """POST /api/git/branch with valid name returns success."""
         from unittest.mock import patch
@@ -1696,6 +1786,7 @@ class TestGitBranch:
         assert data["success"] is True
         assert data["branch"] == "feature-new"
 
+    # Verifies: REQ-p00004-D
     def test_REQ_p00004_D_git_branch_empty_name_returns_400(self, client):
         """POST /api/git/branch with empty name returns 400."""
         resp = client.post("/api/git/branch", json={"name": ""})
@@ -1704,11 +1795,13 @@ class TestGitBranch:
         assert data["success"] is False
         assert "required" in data["error"]
 
+    # Verifies: REQ-p00004-D
     def test_REQ_p00004_D_git_branch_missing_name_returns_400(self, client):
         """POST /api/git/branch with no name field returns 400."""
         resp = client.post("/api/git/branch", json={})
         assert resp.status_code == 400
 
+    # Verifies: REQ-p00004-D
     def test_REQ_p00004_D_git_branch_failure_returns_400(self, client):
         """POST /api/git/branch with duplicate name returns 400."""
         from unittest.mock import patch
@@ -1724,6 +1817,7 @@ class TestGitBranch:
 class TestGitPush:
     """Validates REQ-d00010-A, REQ-p00004-E: POST /api/git/push."""
 
+    # Verifies: REQ-p00004-E
     def test_REQ_p00004_E_git_push_success(self, client):
         """POST /api/git/push pushes the current branch and returns success."""
         from unittest.mock import MagicMock, patch
@@ -1742,6 +1836,7 @@ class TestGitPush:
         assert data["success"] is True
         assert data["branch"] == "feature-branch"
 
+    # Verifies: REQ-p00004-E
     def test_REQ_p00004_E_git_push_detached_head_returns_400(self, client):
         """POST /api/git/push in detached HEAD returns 400."""
         from unittest.mock import patch
@@ -1753,6 +1848,7 @@ class TestGitPush:
         assert data["success"] is False
         assert "detached" in data["error"].lower()
 
+    # Verifies: REQ-p00004-E
     def test_REQ_p00004_E_git_push_remote_error_returns_400(self, client):
         """POST /api/git/push with git push failure returns 400."""
         from unittest.mock import MagicMock, patch
@@ -1770,6 +1866,7 @@ class TestGitPush:
         assert data["success"] is False
         assert "failed" in data["error"].lower()
 
+    # Verifies: REQ-p00004-E
     def test_REQ_p00004_E_git_push_git_not_found_returns_500(self, client):
         """POST /api/git/push when git binary is missing returns 500."""
         from unittest.mock import patch
@@ -1788,6 +1885,7 @@ class TestGitPush:
 class TestGitPull:
     """Validates REQ-d00010-A, REQ-p00004-F: POST /api/git/pull."""
 
+    # Verifies: REQ-p00004-F
     def test_REQ_p00004_F_git_pull_success(self, client):
         """POST /api/git/pull returns success on fast-forward."""
         from unittest.mock import patch
@@ -1800,6 +1898,7 @@ class TestGitPull:
         assert data["success"] is True
         assert "message" in data
 
+    # Verifies: REQ-p00004-F
     def test_REQ_p00004_F_git_pull_no_remote_returns_400(self, client):
         """POST /api/git/pull with no remote returns 400."""
         from unittest.mock import patch
@@ -1812,6 +1911,7 @@ class TestGitPull:
         assert data["success"] is False
         assert "error" in data
 
+    # Verifies: REQ-p00004-F
     def test_REQ_p00004_F_git_pull_diverged_returns_400(self, client):
         """POST /api/git/pull with diverged history returns 400."""
         from unittest.mock import patch
@@ -1830,6 +1930,7 @@ class TestGitPull:
 class TestCLIWiring:
     """Validates REQ-d00010-A: viewer command wiring."""
 
+    # Verifies: REQ-d00010-A
     def test_REQ_d00010_A_viewer_default_calls_run_server_with_browser(self):
         """Default viewer delegates to _run_server with open_browser=True."""
         import argparse
@@ -1850,6 +1951,7 @@ class TestCLIWiring:
             assert result == 0
             mock.assert_called_once_with(args, open_browser=True)
 
+    # Verifies: REQ-d00010-A
     def test_REQ_d00010_A_viewer_server_flag_no_browser(self):
         """--server flag delegates to _run_server with open_browser=False."""
         import argparse
@@ -1870,6 +1972,7 @@ class TestCLIWiring:
             assert result == 0
             mock.assert_called_once_with(args, open_browser=False)
 
+    # Verifies: REQ-d00010-A
     def test_REQ_d00010_A_viewer_static_generates_html(self):
         """--static flag generates an HTML file."""
         import argparse
@@ -2824,6 +2927,7 @@ def freshness_client(freshness_app):
 class TestCheckFreshness:
     """Validates REQ-p00006-A: GET /api/check-freshness endpoint."""
 
+    # Verifies: REQ-p00006-A
     def test_REQ_p00006_A_check_freshness_fresh(self, freshness_client):
         """When no spec files have changed since build, stale=False."""
         resp = freshness_client.get("/api/check-freshness")
@@ -2833,6 +2937,7 @@ class TestCheckFreshness:
         assert data["has_pending_mutations"] is False
         assert data["stale_files"] == []
 
+    # Verifies: REQ-p00006-A
     def test_REQ_p00006_A_check_freshness_stale(self, tmp_path):
         """When spec files are newer than build_time, stale=True with stale_files."""
         import os
@@ -2856,6 +2961,7 @@ class TestCheckFreshness:
         stale_names = [Path(f).name for f in data["stale_files"]]
         assert "requirements.md" in stale_names
 
+    # Verifies: REQ-p00006-A
     def test_REQ_p00006_A_check_freshness_pending_mutations(self, tmp_path):
         """When graph has pending mutations, has_pending_mutations=True."""
         app, _graph, _spec_dir = _make_freshness_app(tmp_path)
@@ -3364,7 +3470,7 @@ def _make_full_disk_app(tmp_path):
     # Minimal config — defaults are fine (spec dirs = ["spec"], patterns = ["*.md"])
     toml_file = tmp_path / ".elspais.toml"
     toml_file.write_text(
-        "version = 3\n"
+        "version = 5\n"
         '[project]\nname = "test-project"\nnamespace = "REQ"\n'
         '[levels.prd]\nrank = 1\nletter = "p"\nimplements = ["prd"]\n'
         '[levels.dev]\nrank = 3\nletter = "t"\nimplements = ["dev", "prd"]\n',
@@ -3512,6 +3618,7 @@ class TestComputeLinkDataIntegrates:
     outgoing INTEGRATES edge as implementation evidence on the consumer REQ
     (the declaring requirement counts as implemented)."""
 
+    # Verifies: REQ-d00252-D
     def test_REQ_d00252_D_integrates_edge_marks_consumer_implemented(self) -> None:
         """A consumer REQ with an outgoing INTEGRATES edge to a library REQ
         lists that library node under the 'implemented' header links."""

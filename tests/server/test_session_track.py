@@ -32,6 +32,7 @@ class _App:
         await send({"type": "http.response.body", "body": b""})
 
 
+# Verifies: REQ-o00074-A
 @pytest.mark.anyio
 async def test_REQ_o00074_A_held_stream_counts_as_a_client():
     """Validates REQ-o00074-A: a stream still open is a handle the daemon
@@ -48,6 +49,7 @@ async def test_REQ_o00074_A_held_stream_counts_as_a_client():
     assert tracker.held() == 0
 
 
+# Verifies: REQ-o00074-F
 @pytest.mark.anyio
 async def test_REQ_o00074_F_completed_request_is_not_presence():
     """Validates REQ-o00074-F: request traffic does not discharge the
@@ -58,6 +60,7 @@ async def test_REQ_o00074_F_completed_request_is_not_presence():
     assert tracker.held() == 0
 
 
+# Verifies: REQ-o00074-A
 @pytest.mark.anyio
 async def test_REQ_o00074_A_stream_that_errors_releases_its_handle():
     """Validates REQ-o00074-A: the handle disappears when the connection
@@ -73,6 +76,7 @@ async def test_REQ_o00074_A_stream_that_errors_releases_its_handle():
     assert tracker.held() == 0
 
 
+# Verifies: REQ-o00074-A
 @pytest.mark.anyio
 async def test_REQ_o00074_A_cancelled_stream_releases_its_handle():
     """Validates REQ-o00074-A: a client killed mid-stream cooperates in
@@ -89,6 +93,7 @@ async def test_REQ_o00074_A_cancelled_stream_releases_its_handle():
     assert tracker.held() == 0
 
 
+# Verifies: REQ-o00074-A
 @pytest.mark.anyio
 async def test_REQ_o00074_A_non_http_scopes_pass_through_untouched():
     """Validates REQ-o00074-A: the tracker sits on the daemon's request

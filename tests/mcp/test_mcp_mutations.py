@@ -133,6 +133,7 @@ def _federate(graph):
 class TestMutateRenameNode:
     """Tests for mutate_rename_node() tool."""
 
+    # Verifies: REQ-d00065-A
     def test_REQ_d00065_A_delegates_to_graph_rename_node(self, mutation_graph):
         """REQ-d00065-A: Delegates to graph.rename_node()."""
         pytest.importorskip("mcp")
@@ -145,6 +146,7 @@ class TestMutateRenameNode:
         assert mutation_graph.find_by_id("REQ-o00099") is not None
         assert mutation_graph.find_by_id("REQ-o00001") is None
 
+    # Verifies: REQ-o00062-E
     def test_REQ_o00062_E_returns_mutation_entry(self, mutation_graph):
         """REQ-o00062-E: Returns MutationEntry for audit."""
         pytest.importorskip("mcp")
@@ -299,6 +301,7 @@ class TestMutateChangeStatus:
 class TestMutateAddRequirement:
     """Tests for mutate_add_requirement() tool."""
 
+    # Verifies: REQ-d00065-B
     def test_REQ_d00065_B_delegates_to_graph_add_requirement(self, mutation_graph):
         """REQ-d00065-B: Delegates to graph.add_requirement()."""
         pytest.importorskip("mcp")
@@ -435,6 +438,7 @@ class TestMutateAddRequirement:
 class TestMutateDeleteRequirement:
     """Tests for mutate_delete_requirement() tool."""
 
+    # Verifies: REQ-o00062-F
     def test_REQ_o00062_F_requires_confirm_true(self, mutation_graph):
         """REQ-o00062-F: Requires confirm=True for destructive operations."""
         pytest.importorskip("mcp")
@@ -448,6 +452,7 @@ class TestMutateDeleteRequirement:
         # Node should still exist
         assert mutation_graph.find_by_id("REQ-o00001") is not None
 
+    # Verifies: REQ-d00065-C
     def test_REQ_d00065_C_deletes_when_confirmed(self, mutation_graph):
         """REQ-d00065-C: Calls graph.delete_requirement() only if confirm=True."""
         pytest.importorskip("mcp")
@@ -704,6 +709,7 @@ class TestMutateRemainder:
     add_remainder, update_remainder, delete_remainder.
     """
 
+    # Verifies: REQ-o00062-H
     def test_REQ_o00062_H_add_remainder_creates_section(self):
         """REQ-o00062-H: _mutate_add_remainder adds a queryable section."""
         pytest.importorskip("mcp")
@@ -721,6 +727,7 @@ class TestMutateRemainder:
         assert node.get_field("heading") == "Notes"
         assert node.get_field("text") == "Some notes text"
 
+    # Verifies: REQ-o00062-E
     def test_REQ_o00062_E_add_remainder_returns_mutation_entry(self):
         """REQ-o00062-E: _mutate_add_remainder returns a MutationEntry."""
         pytest.importorskip("mcp")
@@ -733,6 +740,7 @@ class TestMutateRemainder:
         assert "mutation" in result
         assert result["mutation"]["operation"] == "add_remainder"
 
+    # Verifies: REQ-d00065-D
     def test_REQ_d00065_D_update_remainder_changes_text(self):
         """REQ-d00065-D: _mutate_update_remainder delegates and stores new text."""
         pytest.importorskip("mcp")
@@ -747,6 +755,7 @@ class TestMutateRemainder:
         assert result["success"] is True
         assert section.get_field("text") == "Updated rationale"
 
+    # Verifies: REQ-o00062-H
     def test_REQ_o00062_H_update_remainder_changes_heading(self):
         """REQ-o00062-H: _mutate_update_remainder updates the heading field."""
         pytest.importorskip("mcp")
@@ -761,6 +770,7 @@ class TestMutateRemainder:
         assert result["success"] is True
         assert section.get_field("heading") == "New Heading"
 
+    # Verifies: REQ-o00062-E
     def test_REQ_o00062_E_update_remainder_returns_mutation_entry(self):
         """REQ-o00062-E: _mutate_update_remainder returns a MutationEntry."""
         pytest.importorskip("mcp")
@@ -773,6 +783,7 @@ class TestMutateRemainder:
         assert "mutation" in result
         assert result["mutation"]["operation"] == "update_remainder"
 
+    # Verifies: REQ-o00062-H
     def test_REQ_o00062_H_delete_remainder_removes_section(self):
         """REQ-o00062-H: _mutate_delete_remainder removes the section."""
         pytest.importorskip("mcp")
@@ -786,6 +797,7 @@ class TestMutateRemainder:
         assert result["success"] is True
         assert graph.find_by_id("REQ-p00001:section:1") is None
 
+    # Verifies: REQ-o00062-E
     def test_REQ_o00062_E_delete_remainder_returns_mutation_entry(self):
         """REQ-o00062-E: _mutate_delete_remainder returns a MutationEntry."""
         pytest.importorskip("mcp")
@@ -798,6 +810,7 @@ class TestMutateRemainder:
         assert "mutation" in result
         assert result["mutation"]["operation"] == "delete_remainder"
 
+    # Verifies: REQ-o00062-H
     def test_REQ_o00062_H_update_nonexistent_returns_error(self):
         """REQ-o00062-H: Updating a missing node returns error, not an exception."""
         pytest.importorskip("mcp")
@@ -810,6 +823,7 @@ class TestMutateRemainder:
         assert result["success"] is False
         assert "error" in result
 
+    # Verifies: REQ-o00062-H
     def test_REQ_o00062_H_update_non_remainder_returns_error(self):
         """REQ-o00062-H: Updating a non-REMAINDER node returns error."""
         pytest.importorskip("mcp")
@@ -823,6 +837,7 @@ class TestMutateRemainder:
         assert result["success"] is False
         assert "error" in result
 
+    # Verifies: REQ-o00062-H
     def test_REQ_o00062_H_delete_nonexistent_returns_error(self):
         """REQ-o00062-H: Deleting a missing node returns error, not an exception."""
         pytest.importorskip("mcp")
@@ -1017,6 +1032,7 @@ class TestMutateChangeEdgeTargets:
     Validates REQ-o00062-C: Edge mutation tools include change_targets action.
     """
 
+    # Verifies: REQ-o00062-C
     def test_REQ_o00062_C_delegates_to_graph_change_edge_targets(self, mutation_graph):
         """REQ-o00062-C: Delegates to graph.change_edge_targets()."""
         pytest.importorskip("mcp")
@@ -1039,6 +1055,7 @@ class TestMutateChangeEdgeTargets:
         assert len(edges) == 1
         assert edges[0].assertion_targets == ["A"]
 
+    # Verifies: REQ-o00062-E
     def test_REQ_o00062_E_returns_mutation_entry(self, mutation_graph):
         """REQ-o00062-E: Returns MutationEntry for audit."""
         pytest.importorskip("mcp")
@@ -1181,7 +1198,7 @@ class TestMutateFixBrokenReference:
         from elspais.mcp.server import _mutate_fix_broken_reference
 
         # Create a broken reference scenario first
-        mutation_graph._broken_references.append(
+        mutation_graph._unresolved_references.append(
             ReferenceFault(
                 source_id="REQ-o00001",
                 target_id="REQ-MISSING",
@@ -1201,7 +1218,7 @@ class TestMutateFixBrokenReference:
         pytest.importorskip("mcp")
         from elspais.mcp.server import _mutate_fix_broken_reference
 
-        mutation_graph._broken_references.append(
+        mutation_graph._unresolved_references.append(
             ReferenceFault(
                 source_id="REQ-o00001",
                 target_id="REQ-BAD",
@@ -1226,7 +1243,7 @@ class TestMutateFixBrokenReference:
         pytest.importorskip("mcp")
         from elspais.mcp.server import _mutate_fix_broken_reference
 
-        mutation_graph._broken_references.append(
+        mutation_graph._unresolved_references.append(
             ReferenceFault(
                 source_id="REQ-o00001",
                 target_id="REQ-MISSING",
@@ -1256,7 +1273,7 @@ class TestMutateFixBrokenReference:
         pytest.importorskip("mcp")
         from elspais.mcp.server import _mutate_fix_broken_reference
 
-        mutation_graph._broken_references.append(
+        mutation_graph._unresolved_references.append(
             ReferenceFault(
                 source_id="REQ-o00001",
                 target_id="REQ-MISSING",
@@ -1306,6 +1323,7 @@ class TestMutateMoveNodeToFile:
 
         return graph
 
+    # Verifies: REQ-o00063-A
     def test_REQ_o00063_A_delegates_to_graph_move_node_to_file(self, file_graph):
         """REQ-o00063-A: Delegates to graph.move_node_to_file()."""
         pytest.importorskip("mcp")
@@ -1319,6 +1337,7 @@ class TestMutateMoveNodeToFile:
         req = file_graph.find_by_id("REQ-p00001")
         assert req.file_node().id == file_id("spec/other.md")
 
+    # Verifies: REQ-o00063-A
     def test_REQ_o00063_A_move_error_no_file_parent(self, file_graph):
         """REQ-o00063-A: Moving a node without a FILE parent returns error."""
         pytest.importorskip("mcp")
@@ -1357,6 +1376,7 @@ class TestMutateRenameFile:
 
         return graph
 
+    # Verifies: REQ-o00063-A
     def test_REQ_o00063_A_delegates_to_graph_rename_file(self, file_graph):
         """REQ-o00063-A: Delegates to graph.rename_file()."""
         pytest.importorskip("mcp")
@@ -1371,6 +1391,7 @@ class TestMutateRenameFile:
         # Old ID should be gone
         assert file_graph.find_by_id(file_id("spec/main.md")) is None
 
+    # Verifies: REQ-o00063-A
     def test_REQ_o00063_A_rename_error_not_found(self, file_graph):
         """REQ-o00063-A: Renaming a nonexistent file returns error."""
         pytest.importorskip("mcp")
@@ -1445,6 +1466,7 @@ class TestMutateRenameFile:
 class TestUndoLastMutation:
     """Tests for undo_last_mutation() tool."""
 
+    # Verifies: REQ-o00062-G
     def test_REQ_o00062_G_delegates_to_graph_undo_last(self, mutation_graph):
         """REQ-o00062-G: Reverses mutations using graph.undo_last()."""
         pytest.importorskip("mcp")
@@ -1476,6 +1498,7 @@ class TestUndoLastMutation:
 class TestUndoToMutation:
     """Tests for undo_to_mutation() tool."""
 
+    # Verifies: REQ-o00062-G
     def test_REQ_o00062_G_delegates_to_graph_undo_to(self, mutation_graph):
         """REQ-o00062-G: Reverses mutations using graph.undo_to()."""
         pytest.importorskip("mcp")
@@ -1628,29 +1651,53 @@ class TestGetOrphanedNodes:
         assert "REQ-o00001" in [o["id"] for o in result["orphans"]]
 
 
-class TestGetBrokenReferences:
-    """Tests for get_broken_references() tool."""
+class TestGetUnresolvedReferences:
+    """Tests for get_unresolved_references() tool."""
 
-    # Verifies: REQ-o00060-A
-    def test_returns_broken_reference_list(self, mutation_graph):
-        """Returns list of broken references."""
+    # Verifies: REQ-o00060-A, REQ-d00285-C
+    def test_returns_the_findings_the_reference_checks_raised(self, mutation_graph):
+        """Returns findings, not a shape of its own.
+
+        Each entry carries the check that raised it, the severity that check
+        resolved to and the remedy it names, so an agent asking this question
+        is told what a person running `elspais unresolved` is told.
+        """
         pytest.importorskip("mcp")
-        from elspais.mcp.server import _get_broken_references
+        from elspais.graph.federated import FederatedGraph
+        from elspais.graph.reference_faults import FaultClass
+        from elspais.mcp.server import _get_unresolved_references
 
-        mutation_graph._broken_references.append(
+        mutation_graph._unresolved_references.append(
             ReferenceFault(
                 source_id="REQ-o00001",
                 target_id="REQ-MISSING",
                 edge_kind=EdgeKind.IMPLEMENTS,
+                fault_class=FaultClass.UNKNOWN_REQUIREMENT,
             )
         )
+        federated = FederatedGraph.from_single(
+            mutation_graph,
+            config={"project": {"name": "test", "namespace": NAMESPACE}},
+            repo_root=Path("/test/repo"),
+        )
 
-        result = _get_broken_references(mutation_graph)
+        result = _get_unresolved_references(federated)
 
-        assert "broken_references" in result
-        assert len(result["broken_references"]) == 1
-        assert result["broken_references"][0]["source_id"] == "REQ-o00001"
-        assert result["broken_references"][0]["target_id"] == "REQ-MISSING"
+        assert result["count"] == 1
+        entry = result["unresolved_references"][0]
+        assert entry["node_id"] == "REQ-o00001"
+        assert "REQ-MISSING" in entry["message"]
+        assert entry["check"] == "references.unknown_requirement"
+        assert entry["severity"] == "error"
+        assert entry["remedy"] == "elspais unresolved"
+        # Every class is accounted for, whether or not it found anything.
+        assert {c["name"] for c in result["checks"]} == {
+            "references.malformed",
+            "references.unknown_namespace",
+            "references.unknown_requirement",
+            "references.unknown_assertion",
+            "references.forbidden",
+        }
 
 
 # ─────────────────────────────────────────────────────────────────────────────

@@ -181,7 +181,7 @@ the fault is any other character in that position.
 |---|---|---|---|---|---|---|
 | ASEP-01 | `REQ-d00001+A` | G-STD | all | `REQ-d00001` (A) | none | `0 -> MALFORMED / {E_WRONG_ASSERTION_SEPARATOR}` — the design's own worked example |
 | ASEP-02 | `REQ-d00001.A` | G-STD | all | `REQ-d00001` (A) | none | `0 -> MALFORMED / {E_WRONG_ASSERTION_SEPARATOR}` |
-| ASEP-03 | `REQ-d00001_A` | G-STD | all | `REQ-d00001` (A) | none | `0 -> MALFORMED / {E_WRONG_ASSERTION_SEPARATOR}` — underscore notation is for function names, not for a reference list |
+| ASEP-03 | `REQ-d00001_A` | G-STD | all | `REQ-d00001` (A) | none | `0 -> MALFORMED / {E_WRONG_ASSERTION_SEPARATOR}` — an underscore is not the configured separator, in a reference list or anywhere else |
 | ASEP-04 | `REQ-d00001/A` | G-STD | all | `REQ-d00001` (A) | none | `0 -> MALFORMED / {E_WRONG_ASSERTION_SEPARATOR}` — `Refines: P/A` prose in the docs uses this shape; it is not the grammar |
 | ASEP-05 | `REQ-d00001:A` | G-STD | all | `REQ-d00001` (A) | none | `0 -> MALFORMED / {E_WRONG_ASSERTION_SEPARATOR}` — competes with TRAIL-02; minimal set should prefer the separator reading since it accounts for `A` too |
 | ASEP-06 | `DEV-00010.1` | G-FDA | all | `DEV-00010` (1) | none | `0 -> MALFORMED / {E_WRONG_ASSERTION_SEPARATOR}` |

@@ -90,6 +90,7 @@ def _make_app(tmp_path: Path) -> TestClient:
 class TestTermCardJsRendered:
     """Validates that term card JS functions are present in the rendered HTML."""
 
+    # Verifies: REQ-d00244-A
     def test_REQ_d00244_A_openTermCard_in_html(self, tmp_path: Path) -> None:
         """GET '/' HTML contains the openTermCard function."""
         client = _make_app(tmp_path)
@@ -98,6 +99,7 @@ class TestTermCardJsRendered:
         html = resp.text
         assert "openTermCard" in html, "Expected 'openTermCard' function in the rendered HTML"
 
+    # Verifies: REQ-d00244-C
     def test_REQ_d00244_C_buildTermCardHtml_in_html(self, tmp_path: Path) -> None:
         """GET '/' HTML contains the buildTermCardHtml function."""
         client = _make_app(tmp_path)
@@ -108,6 +110,7 @@ class TestTermCardJsRendered:
             "Expected 'buildTermCardHtml' function in the rendered HTML"
         )
 
+    # Verifies: REQ-d00244-C
     def test_REQ_d00244_C_term_kind_in_renderCardStack(self, tmp_path: Path) -> None:
         """GET '/' HTML contains 'term' kind in the card rendering dispatch logic."""
         client = _make_app(tmp_path)
@@ -129,6 +132,7 @@ class TestTermCardJsRendered:
 class TestTermCardApiIntegration:
     """Validates the /api/term/{key} endpoint returns data needed for card rendering."""
 
+    # Verifies: REQ-d00244-A
     def test_REQ_d00244_A_api_term_returns_card_data(self, tmp_path: Path) -> None:
         """GET /api/term/{key} returns all fields needed for card rendering."""
         client = _make_app(tmp_path)
@@ -149,6 +153,7 @@ class TestTermCardApiIntegration:
         assert ref["namespace"] == "root"
         assert ref["marked"] is True
 
+    # Verifies: REQ-d00244-B
     def test_REQ_d00244_B_api_term_empty_references(self, tmp_path: Path) -> None:
         """GET /api/term/{key} returns empty references for term with no refs."""
         client = _make_app(tmp_path)

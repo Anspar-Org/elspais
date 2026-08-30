@@ -189,7 +189,7 @@ class TestFullPipeline:
         assert len(assertions) == 5
 
 
-# Verifies: REQ-d00081-D+E+G
+# Verifies: REQ-d00081-D+G
 class TestMultiAssertionPipelineExpansion:
     """Integration tests for multi-assertion expansion in the full pipeline.
 
@@ -244,6 +244,7 @@ class TestMultiAssertionPipelineExpansion:
 
         return builder.build()
 
+    # Verifies: REQ-d00081-D
     def test_REQ_d00081_D_spec_multi_assertion_expands_to_individual_edges(
         self, multi_assertion_spec_dir
     ):
@@ -282,7 +283,8 @@ class TestMultiAssertionPipelineExpansion:
             "C",
         ], f"Expected assertion_targets ['A', 'B', 'C'], got {sorted(all_targets)}"
 
-    def test_REQ_d00081_E_code_refs_resolve_through_same_builder(self, multi_assertion_spec_dir):
+    # Verifies: REQ-d00081-D
+    def test_REQ_d00081_D_code_refs_resolve_through_same_builder(self, multi_assertion_spec_dir):
         """Code references resolve through the same builder as spec references.
 
         Both spec multi-assertion expansion (REQ-p00001-A+B+C in OPS) and
@@ -334,6 +336,7 @@ class TestMultiAssertionPipelineExpansion:
             "C",
         ], f"Spec multi-assertion should also expand, got {sorted(spec_targets)}"
 
+    # Verifies: REQ-d00081-G
     def test_REQ_d00081_G_empty_separator_disables_expansion(self, multi_assertion_spec_dir):
         """When multi_assertion_separator is empty, no expansion occurs.
 
@@ -358,14 +361,14 @@ class TestMultiAssertionPipelineExpansion:
         )
 
         # The broken reference should be recorded
-        broken = graph.broken_references()
+        broken = graph.unresolved_references()
         literal_targets = [br.target_id for br in broken]
         assert "REQ-p00001-A+B+C" in literal_targets, (
             f"Expected broken reference for literal 'REQ-p00001-A+B+C', got {literal_targets}"
         )
 
 
-# Verifies: REQ-d00081-D+E
+# Verifies: REQ-d00081-D
 class TestMultiAssertionSeparatorRoundTrip:
     """The configured separators survive a full parse/build/render round trip.
 
@@ -373,7 +376,7 @@ class TestMultiAssertionSeparatorRoundTrip:
     ``Refines:`` line all take the boundary between a requirement ID and an
     assertion label from ``[id-patterns.assertions] separator``, and join
     several labels with ``multi_separator``. When any of those three
-    disagree, the expanded refs land in ``_broken_references`` and no
+    disagree, the expanded refs land in ``_unresolved_references`` and no
     REFINES edges wire, or the render emits a reference nothing can parse.
 
     The component style here is ``kebab-case``, so the separator has to be
@@ -525,7 +528,7 @@ The system SHALL store event records.
 
             # No broken references for the multi-assertion form. The bug
             # currently records both expanded refs as broken.
-            broken = graph.broken_references()
+            broken = graph.unresolved_references()
             broken_targets = [br.target_id for br in broken]
             offending = [t for t in broken_targets if t.startswith("EVS-PRD-event-log")]
             assert not offending, (

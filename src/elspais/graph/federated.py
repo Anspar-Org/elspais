@@ -20,6 +20,7 @@ from elspais.graph.GraphNode import (
     NodeKind,
 )
 from elspais.graph.mutations import MutationEntry
+from elspais.graph.parsers.directives import assertion_is_retired
 from elspais.graph.reference_faults import (
     FaultClass,
     IdentifierFormFinding,
@@ -31,7 +32,12 @@ from elspais.graph.reference_faults import (
 from elspais.graph.relations import EdgeKind
 
 if TYPE_CHECKING:
-    from elspais.graph.builder import TraceGraph
+    from elspais.graph.builder import (
+        IngestionFault,
+        TraceGraph,
+        UnboundCitation,
+        UnscannedKeywordFile,
+    )
     from elspais.graph.comments import CommentThread
     from elspais.graph.terms import TermDictionary
     from elspais.utilities.patterns import IdResolver
@@ -306,33 +312,53 @@ class FederatedGraph:
 
     # Implements: REQ-d00222-C
     def _merge_terms(self) -> None:
-        """Merge per-repo _terms into a single federated TermDictionary.
+        """Merge per-repo _terms into a federated TermDictionary this graph owns.
 
-        Each TermEntry is (re-)stamped with this federation's view of the
-        owning repo's name. An associate's TraceGraph reaches us already
-        carrying a ``repo_name`` from its inner ``FederatedGraph.from_single``
-        build (stamped from ``[project].name``); the host calls that same
-        repo something else in ``[associates]`` (e.g. the dict key
-        ``hht_diary``), and only the host-side name resolves via
-        ``iter_repos()`` for ``/api/file-content``. We overwrite
-        unconditionally so the term card's ``repo_name`` always matches
+        Every entry is COPIED. A repo's own dictionary holds the terms that
+        repo defines; the federated dictionary holds what this federation
+        makes of them, and ``_scan_terms`` then writes each entry's
+        references. Sharing the entry objects would put a federation's
+        findings inside state its members keep, so wrapping a live graph in
+        a second ``FederatedGraph`` -- which ``elspais checks`` does per repo
+        to obtain a per-repo config view -- would leave its scan behind in
+        the first federation's numbers.
+
+        The copy is stamped with this federation's name for the owning repo.
+        An associate's TraceGraph reaches us carrying a ``repo_name`` from
+        its inner ``FederatedGraph.from_single`` build (stamped from
+        ``[project].name``); the host calls that same repo something else in
+        ``[associates]`` (e.g. the dict key ``hht_diary``), and only the
+        host-side name resolves via ``iter_repos()`` for
+        ``/api/file-content``, so the term card's ``repo_name`` must match
         ``RepoEntry.name``.
         """
+        from dataclasses import replace
+
         from elspais.graph.terms import TermDictionary
 
         merged = TermDictionary()
         self._term_duplicates: list[tuple] = []
         for entry in self._repos.values():
-            if entry.graph is not None:
-                for term_entry in entry.graph._terms.iter_all():
-                    term_entry.repo_name = entry.name
-                dupes = merged.merge(entry.graph._terms)
-                self._term_duplicates.extend(dupes)
+            if entry.graph is None:
+                continue
+            owned = TermDictionary()
+            for term_entry in entry.graph._terms.iter_all():
+                owned.add(replace(term_entry, repo_name=entry.name, references=[]))
+            self._term_duplicates.extend(merged.merge(owned))
         self._terms = merged
 
     # Implements: REQ-d00239-A, REQ-d00239-B
     def _scan_terms(self) -> None:
         """Run term scanner across all repos using the merged dictionary.
+
+        A scan ESTABLISHES the reference set rather than adding to one.
+        ``scan_graph`` appends, and every repo is scanned against the one
+        merged dictionary so that a term defined in one repo collects the
+        references made to it in another, so the set is only whole once
+        every repo has been walked. What makes appending safe is that
+        ``_merge_terms`` supplies entries whose reference lists start empty
+        and belong to this graph alone, so a second federation built over
+        the same repo writes its findings somewhere else.
 
         Uses per-repo config for markup_styles and exclude_files so that
         cross-repo term references resolve correctly.  Always canonicalizes
@@ -779,23 +805,23 @@ class FederatedGraph:
         return sum(graph.orphan_count() for _name, graph in self._live_graphs())
 
     # Implements: REQ-d00200-E
-    def broken_references(self) -> list[ReferenceFault]:
-        """Get all broken references across all repos.
+    def unresolved_references(self) -> list[ReferenceFault]:
+        """Every reference that resolved to nothing, across all repos.
 
         # Strategy: aggregate
         """
         result: list[ReferenceFault] = []
         for _name, graph in self._live_graphs():
-            result.extend(graph.broken_references())
+            result.extend(graph.unresolved_references())
         return result
 
     # Implements: REQ-d00200-E
-    def has_broken_references(self) -> bool:
-        """Check if any repo has broken references.
+    def has_unresolved_references(self) -> bool:
+        """Whether any repo holds a reference that resolved to nothing.
 
         # Strategy: aggregate
         """
-        return any(graph.has_broken_references() for _name, graph in self._live_graphs())
+        return any(graph.has_unresolved_references() for _name, graph in self._live_graphs())
 
     # Implements: REQ-d00272-G
     def style_findings(self) -> list[StyleFinding]:
@@ -819,6 +845,28 @@ class FederatedGraph:
             result.extend(graph.identifier_form_findings())
         return result
 
+    # Implements: REQ-d00241-F
+    def unscanned_keyword_files(self) -> list[UnscannedKeywordFile]:
+        """Every declined file carrying a citation, across all repos.
+
+        # Strategy: aggregate
+        """
+        result: list[UnscannedKeywordFile] = []
+        for _name, graph in self._live_graphs():
+            result.extend(graph.unscanned_keyword_files())
+        return result
+
+    # Implements: REQ-d00274-G
+    def unbound_citations(self) -> list[UnboundCitation]:
+        """Every citation attaching to no test, across all repos.
+
+        # Strategy: aggregate
+        """
+        result: list[UnboundCitation] = []
+        for _name, graph in self._live_graphs():
+            result.extend(graph.unbound_citations())
+        return result
+
     # Implements: REQ-d00272-O
     def undeclared_relationships(self) -> list[UndeclaredRelationship]:
         """Get every undeclared relationship across all repos.
@@ -828,6 +876,17 @@ class FederatedGraph:
         result: list[UndeclaredRelationship] = []
         for _name, graph in self._live_graphs():
             result.extend(graph.undeclared_relationships())
+        return result
+
+    # Implements: REQ-d00285-G
+    def ingestion_faults(self) -> list[IngestionFault]:
+        """Every artifact ingestion produced no content from, across all repos.
+
+        # Strategy: aggregate
+        """
+        result: list[IngestionFault] = []
+        for _name, graph in self._live_graphs():
+            result.extend(graph.ingestion_faults())
         return result
 
     def duplicate_req_ids(self) -> dict[str, list[str]]:
@@ -1477,6 +1536,21 @@ class FederatedGraph:
         """
         return self._ownership.get(node.id)
 
+    # Implements: REQ-p00017-H
+    @staticmethod
+    def _holds_live_target(target_graph: TraceGraph, target_id: str) -> bool:
+        """Whether *target_graph* holds *target_id* as something a reference
+        may bind to.
+
+        A retired *Assertion* is held -- it renders, it hashes, its label
+        stays allocated -- but it does not exist for *Traceability* purposes,
+        so a reference naming one reads exactly as a reference to an
+        *Assertion* that was never written. Asked here so a federated
+        reference and a same-repository one reach the same answer.
+        """
+        node = target_graph._index.get(target_id)
+        return node is not None and not assertion_is_retired(node)
+
     @staticmethod
     def _edge_anchor(target_graph: TraceGraph, target_id: str) -> tuple[str, list[str] | None]:
         """Resolve the node a traceability edge attaches to, plus its labels.
@@ -1524,7 +1598,7 @@ class FederatedGraph:
             # Broken references that survive wiring in a different shape than
             # they were written: index -> the references that replace it.
             replacements: dict[int, list[ReferenceFault]] = {}
-            for i, br in enumerate(source_entry.graph._broken_references):
+            for i, br in enumerate(source_entry.graph._unresolved_references):
                 # SATISFIES is handled by _instantiate_cross_repo_satisfies,
                 # which clones the template subtree instead of wiring a
                 # direct cross-graph edge.  Skip it here so the broken-ref
@@ -1572,6 +1646,14 @@ class FederatedGraph:
                         continue
                 if target_repo_name and target_repo_name != source_entry.name:
                     target_entry = self._repos[target_repo_name]
+                    # Implements: REQ-p00017-H
+                    # The owning repository holds this id, but a retired
+                    # *Assertion* is not a target: the reference keeps the
+                    # classification it arrived with and stays reported.
+                    if target_entry.graph is not None and not self._holds_live_target(
+                        target_entry.graph, br.target_id
+                    ):
+                        continue
                     if target_entry.graph is not None:
                         # Wire the cross-graph edge in the same shape the
                         # same-repository builder produces (REQ-d00269-B):
@@ -1594,12 +1676,12 @@ class FederatedGraph:
             if resolved or replacements:
                 dropped = set(resolved)
                 rebuilt: list[ReferenceFault] = []
-                for idx, ref in enumerate(source_entry.graph._broken_references):
+                for idx, ref in enumerate(source_entry.graph._unresolved_references):
                     if idx in replacements:
                         rebuilt.extend(replacements[idx])
                     elif idx not in dropped:
                         rebuilt.append(ref)
-                source_entry.graph._broken_references[:] = rebuilt
+                source_entry.graph._unresolved_references[:] = rebuilt
 
         # Demote wired source nodes from _roots — they now have parent edges
         for repo_name, source_ids in wired_sources.items():
@@ -1636,10 +1718,10 @@ class FederatedGraph:
             if parsed is None or len(parsed.assertions) <= 1:
                 continue
             canonical = [resolver.render_canonical(p) for p in resolver.expand(parsed)]
-            present = [c for c in canonical if c in entry.graph._index]
+            present = [c for c in canonical if self._holds_live_target(entry.graph, c)]
             if not present:
                 continue
-            missing = [c for c in canonical if c not in entry.graph._index]
+            missing = [c for c in canonical if not self._holds_live_target(entry.graph, c)]
             return entry.name, present, missing
         return None
 
@@ -1736,7 +1818,7 @@ class FederatedGraph:
             resolver = self._resolver_for(source_entry)
             resolved_indices: list[int] = []
 
-            for i, br in enumerate(source_entry.graph._broken_references):
+            for i, br in enumerate(source_entry.graph._unresolved_references):
                 if br.edge_kind != EdgeKind.SATISFIES.value:
                     continue
 
@@ -1750,7 +1832,7 @@ class FederatedGraph:
                     if claim is not None:
                         target_repo_name, target_id_canonical = claim
                 if target_repo_name is None:
-                    # Implements: REQ-d00272-A, REQ-d00272-B
+                    # Implements: REQ-d00272-A, REQ-d00287-A
                     # An item the reader itself refused keeps the class it
                     # reached. Reading is staged, and this rewrite speaks for
                     # a later stage than an unread item got to: text that is
@@ -1786,7 +1868,7 @@ class FederatedGraph:
                             f"add `[associates.<repo>]` to .elspais.toml."
                         ),
                     )
-                    source_entry.graph._broken_references[i] = new_br
+                    source_entry.graph._unresolved_references[i] = new_br
                     continue
                 if target_repo_name == source_entry.name:
                     # In-repo (already handled by the per-repo builder).
@@ -1889,7 +1971,7 @@ class FederatedGraph:
                 resolved_indices.append(i)
 
             for idx in reversed(resolved_indices):
-                source_entry.graph._broken_references.pop(idx)
+                source_entry.graph._unresolved_references.pop(idx)
 
     # Implements: REQ-d00252
     def _wire_integrates_edges(self) -> None:
@@ -2003,9 +2085,9 @@ class FederatedGraph:
                 # the target resolves and we wire the correct edge --
                 # _wire_cross_graph_edges deliberately skips INTEGRATES, so clear
                 # the stale broken ref here or it surfaces as a false positive.
-                source_entry.graph._broken_references = [
+                source_entry.graph._unresolved_references = [
                     br
-                    for br in source_entry.graph._broken_references
+                    for br in source_entry.graph._unresolved_references
                     if not (
                         br.source_id == source_id
                         and br.target_id == target_id
@@ -2016,7 +2098,7 @@ class FederatedGraph:
 
         # Same-repo target: external-only violation (REQ-d00252-C).
         if owner == source_entry.name:
-            source_entry.graph._broken_references.append(
+            source_entry.graph._unresolved_references.append(
                 ReferenceFault(
                     source_id=source_id,
                     target_id=target_id,
@@ -2040,7 +2122,7 @@ class FederatedGraph:
             if resolver is not None and resolver.is_local_id(target_id):
                 claimed = True
                 break
-        source_entry.graph._broken_references.append(
+        source_entry.graph._unresolved_references.append(
             ReferenceFault(
                 source_id=source_id,
                 target_id=target_id,
@@ -2123,7 +2205,7 @@ class FederatedGraph:
                 cycle = dfs(node)
                 if cycle:
                     # Emit a typed broken-ref on the originating repo.
-                    entry.graph._broken_references.append(
+                    entry.graph._unresolved_references.append(
                         ReferenceFault(
                             source_id=cycle[0],
                             target_id=cycle[-1],

@@ -118,7 +118,7 @@ F. The tool SHALL NOT modify content owned by a repository outside the caller's 
 
 G. The tool SHALL support declaring, from a requirement in one workspace repository, compliance with an obligation authored in another workspace repository.
 
-H. A reference to a cross-repository obligation SHALL either resolve to that obligation or be reported as a broken reference.
+H. A reference to a cross-repository obligation SHALL either resolve to that obligation or be reported as a unresolved reference.
 
 ## Changelog
 
@@ -126,7 +126,7 @@ H. A reference to a cross-repository obligation SHALL either resolve to that obl
 - 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-37: inline design-doc content; the scaffolding doc is retired
 - 2026-07-30 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-38: author federated authority invariants (A1, A2a, A2b, A3, E1)
 
-*End* *Federated Authority and Verdict Scoping* | **Hash**: a8311d6c
+*End* *Federated Authority and Verdict Scoping* | **Hash**: b511fcfd
 ---
 
 # REQ-p00006: Interactive Traceability Viewer

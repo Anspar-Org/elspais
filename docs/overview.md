@@ -53,7 +53,7 @@ A. The system SHALL use bcrypt with cost factor 12.
 ### 3. Continuous Validation
 
 ```bash
-elspais checks            # Check format, hierarchy, broken links
+elspais checks            # Check format, hierarchy, unresolved links
 elspais fix               # Fix hashes and formatting
 elspais changed           # Show uncommitted spec changes
 ```

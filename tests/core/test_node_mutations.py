@@ -90,6 +90,7 @@ def build_graph_with_assertions(resolver=None) -> TraceGraph:
 class TestRenameNode:
     """Tests for TraceGraph.rename_node()."""
 
+    # Verifies: REQ-o00062-A
     def test_REQ_o00062_A_rename_node_updates_id_and_index(self):
         """REQ-o00062-A: Basic rename updates node ID and index."""
         graph = build_simple_graph()
@@ -292,6 +293,7 @@ class TestRenameNode:
 class TestUpdateTitle:
     """Tests for TraceGraph.update_title()."""
 
+    # Verifies: REQ-o00062-A
     def test_REQ_o00062_A_update_title_changes_field(self):
         """REQ-o00062-A: Basic title update works."""
         graph = build_simple_graph()
@@ -363,6 +365,7 @@ class TestUpdateTitle:
 class TestChangeStatus:
     """Tests for TraceGraph.change_status()."""
 
+    # Verifies: REQ-o00062-A
     def test_REQ_o00062_A_change_status_updates_field(self):
         """REQ-o00062-A: Basic status change works."""
         graph = build_simple_graph()
@@ -410,6 +413,7 @@ class TestChangeStatus:
 class TestAddRequirement:
     """Tests for TraceGraph.add_requirement()."""
 
+    # Verifies: REQ-o00062-A
     def test_REQ_o00062_A_add_requirement_creates_node(self):
         """REQ-o00062-A: Basic add creates a new node."""
         graph = build_simple_graph()
@@ -570,6 +574,7 @@ class TestAddRequirement:
 class TestDeleteRequirement:
     """Tests for TraceGraph.delete_requirement()."""
 
+    # Verifies: REQ-o00062-A
     def test_REQ_o00062_A_delete_requirement_removes_node(self):
         """REQ-o00062-A: Basic delete removes node from index."""
         graph = build_simple_graph()

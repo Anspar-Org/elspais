@@ -10,6 +10,7 @@ elspais validates requirements against configurable rules organized into categor
 | `format` | Structure and content rules | Enabled |
 | `coverage` | Per-dimension coverage severity | Enabled |
 | `references` | Severity of references to non-active requirements | Enabled |
+| `severity` | Severity of every check with no named setting of its own | Empty (each check keeps its default) |
 
 ## Hierarchy Rules
 
@@ -71,7 +72,7 @@ allow_structural_orphans = false
 When `false`, the `spec.structural_orphans` check reports any such node as an
 error. Requirements that simply have no `Implements:` reference are a separate
 concern: they are unlinked, not structural orphans, and are reported by the
-`code.unlinked` and `tests.unlinked` checks on the artifact side.
+`code.uncited_file` and `tests.uncited_file` checks on the artifact side.
 
 ### `cross_repo_implements`
 
@@ -211,15 +212,57 @@ Detects when the same requirement ID appears multiple times across specification
 
 This rule cannot be disabled as duplicate IDs cause ambiguous references.
 
-## Rule Violations
+## Severity
 
-Violations are reported with severity levels:
+Every check carries a severity, and every severity is a project decision. The
+vocabulary is four words, and only these four:
 
 | Severity | Description | Exit Code |
 |----------|-------------|-----------|
+| `off` | Not reported here — the check shows as skipped and produces no findings | 0 |
+| `info` | Informational; never a failure | 0 |
+| `warning` | Should be fixed | 1 (0 with `--lenient`) |
 | `error` | Must be fixed | 1 |
-| `warning` | Should be fixed | 0 |
-| `info` | Informational | 0 |
+
+A value outside those four is refused when the configuration is read, wherever
+it is written. `off` withholds the findings as well as the verdict; to keep
+seeing them without failing the run, use `info`.
+
+### Where a severity is set
+
+A check reads ONE setting and only one. These checks answer to a setting of
+their own:
+
+| Setting | Checks it governs |
+|---------|-------------------|
+| `[rules.references] <class>` | the `references.*` checks, and the `code.*_references` / `tests.*_references` status checks |
+| `[rules.format] no_assertions_severity` | `spec.no_assertions` |
+| `[rules.format] no_traceability_severity` | `code.no_traceability` |
+| `[rules.coverage] uncredited_evidence` | `tests.uncredited_evidence` |
+| `[rules.coverage] external_test_failure` | `tests.external` |
+| `[terms.severity] <name>` | the `terms.*` checks |
+
+Every other check is configured under the general `[rules.severity]` table,
+keyed by the name the check reports under. Check names contain a dot, so the
+key must be quoted:
+
+```toml
+[rules.severity]
+"spec.parseable" = "off"
+"tests.results" = "info"
+"docs.config_drift" = "error"
+```text
+
+A key naming no check, and a key naming a check that has a named setting of
+its own, are both refused when the configuration is read — a check reads one
+setting, so putting it here would be read by nothing. `elspais docs checks`
+lists every name this table accepts, with each check's default severity and
+the route it takes.
+
+Coverage tier severities (`[rules.coverage.<dimension>]`) use the same four
+words; `full` defaults to `off`.
+
+## Rule Violations
 
 ### Example Output
 
@@ -232,7 +275,7 @@ Violations are reported with severity levels:
    Implements reference not found: p99999
    File: spec/dev-impl.md:120
 
-ℹ️ INFO [tests.unlinked] tests/test_widget.py
+ℹ️ INFO [tests.uncited_file] tests/test_widget.py
    Test file has no traceability markers
 
 ⚠️ WARNING [spec.hash_integrity] REQ-p00003
@@ -289,9 +332,37 @@ require_rationale = false  # Not required during development
 ## Relaxing Rules
 
 Rule categories are sub-tables, not on/off switches — there is no boolean that
-disables a whole category. Relax individual settings instead (for example
-`allow_structural_orphans = true`, or `require_rationale = false`), or suppress
-expected issues with inline comments in spec files.
+disables a whole category. Two mechanisms relax a rule, and only these two.
+
+Relax an individual setting (for example `allow_structural_orphans = true`, or
+`require_rationale = false`). Where a check reads a severity, `"off"` is one of
+the values that severity accepts, and it withholds the check's findings as well
+as its verdict; `"info"` keeps the findings visible without failing the run:
+
+```toml
+[rules.format]
+no_assertions_severity = "info"
+
+[rules.references]
+retired = "off"
+
+[terms.severity]
+unused = "off"
+```text
+
+Or keep the files out of scanning altogether, so nothing in them is examined:
+`[scanning] skip` applies to every kind of scan, and each kind's own
+`skip_files` / `skip_dirs` narrow one of them.
+
+There is no per-finding waiver: no inline pragma or comment in a spec file
+suppresses an issue, and no baseline file records issues as expected. A rule
+is relaxed for the whole project, or the file is not scanned.
+
+An individual check is turned off by setting its severity to `off`, through
+whichever of the two routes above it reads. That is the sanctioned per-check
+disable: the check reports as skipped and produces no findings. Where the
+findings are still wanted but the run should not fail on them, `info` is the
+setting, not `off`.
 
 ## Best Practices
 

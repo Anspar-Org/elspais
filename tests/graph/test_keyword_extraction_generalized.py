@@ -100,6 +100,7 @@ def multi_kind_graph():
 class TestAnnotateKeywordsAllKinds:
     """Tests for annotate_keywords() operating on all node kinds."""
 
+    # Verifies: REQ-d00069-A
     def test_REQ_d00069_A_annotates_assertion_nodes(self, multi_kind_graph):
         """annotate_keywords() SHALL annotate ASSERTION nodes with keywords."""
         from elspais.graph.annotators import annotate_keywords
@@ -114,6 +115,7 @@ class TestAnnotateKeywordsAllKinds:
         assert "authentication" in keywords
         assert "support" in keywords
 
+    # Verifies: REQ-d00069-B
     def test_REQ_d00069_B_annotates_user_journey_nodes(self, multi_kind_graph):
         """annotate_keywords() SHALL annotate USER_JOURNEY nodes from actor/goal/description."""
         from elspais.graph.annotators import annotate_keywords
@@ -131,6 +133,7 @@ class TestAnnotateKeywordsAllKinds:
         assert "oauth" in keywords
         assert "login" in keywords
 
+    # Verifies: REQ-d00069-C
     def test_REQ_d00069_C_annotates_test_nodes(self, multi_kind_graph):
         """annotate_keywords() SHALL annotate TEST nodes from label."""
         from elspais.graph.annotators import annotate_keywords
@@ -143,6 +146,7 @@ class TestAnnotateKeywordsAllKinds:
         # Label: "test_oauth_login_success"
         assert "test_oauth_login_success" in keywords or "oauth" in keywords
 
+    # Verifies: REQ-d00069-D
     def test_REQ_d00069_D_annotates_remainder_nodes(self, multi_kind_graph):
         """annotate_keywords() SHALL annotate REMAINDER nodes from raw_text."""
         from elspais.graph.annotators import annotate_keywords
@@ -157,6 +161,7 @@ class TestAnnotateKeywordsAllKinds:
         assert "requirements" in keywords
         assert "authentication" in keywords
 
+    # Verifies: REQ-d00069-E
     def test_REQ_d00069_E_annotates_code_nodes(self, multi_kind_graph):
         """annotate_keywords() SHALL annotate CODE nodes from label."""
         from elspais.graph.annotators import annotate_keywords
@@ -179,7 +184,8 @@ class TestAnnotateKeywordsAllKinds:
 class TestFindByKeywordsWithKind:
     """Tests for find_by_keywords() with optional kind parameter."""
 
-    def test_REQ_d00070_A_find_by_keywords_with_kind_filters_by_kind(self, multi_kind_graph):
+    # Verifies: REQ-d00215-D
+    def test_REQ_d00215_D_find_by_keywords_with_kind_filters_by_kind(self, multi_kind_graph):
         """find_by_keywords(kind=X) SHALL only return nodes of that kind."""
         from elspais.graph.annotators import annotate_keywords, find_by_keywords
 
@@ -196,7 +202,8 @@ class TestFindByKeywordsWithKind:
         result_ids = [n.id for n in results]
         assert "REQ-p00001-A" in result_ids
 
-    def test_REQ_d00070_B_find_by_keywords_kind_none_searches_all(self, multi_kind_graph):
+    # Verifies: REQ-d00215-D
+    def test_REQ_d00215_D_find_by_keywords_kind_none_searches_all(self, multi_kind_graph):
         """find_by_keywords(kind=None) SHALL search all node kinds."""
         from elspais.graph.annotators import annotate_keywords, find_by_keywords
 
@@ -211,7 +218,8 @@ class TestFindByKeywordsWithKind:
         # REQUIREMENT, ASSERTION, and REMAINDER all mention authentication
         assert len(result_kinds) >= 2
 
-    def test_REQ_d00070_C_find_by_keywords_default_is_none(self, multi_kind_graph):
+    # Verifies: REQ-d00215-D
+    def test_REQ_d00215_D_find_by_keywords_default_is_none(self, multi_kind_graph):
         """find_by_keywords() without kind parameter SHALL default to None (all kinds)."""
         from elspais.graph.annotators import annotate_keywords, find_by_keywords
 
@@ -224,7 +232,8 @@ class TestFindByKeywordsWithKind:
         result_kinds = {n.kind for n in results}
         assert len(result_kinds) >= 2
 
-    def test_REQ_d00070_D_find_assertions_by_keywords(self, multi_kind_graph):
+    # Verifies: REQ-d00215-D
+    def test_REQ_d00215_D_find_assertions_by_keywords(self, multi_kind_graph):
         """find_by_keywords(kind=ASSERTION) enables assertion keyword search."""
         from elspais.graph.annotators import annotate_keywords, find_by_keywords
 
@@ -245,6 +254,7 @@ class TestFindByKeywordsWithKind:
 class TestCollectAllKeywordsWithKind:
     """Tests for collect_all_keywords() with optional kind parameter."""
 
+    # Verifies: REQ-d00071-A
     def test_REQ_d00071_A_collect_keywords_with_kind_filters_by_kind(self, multi_kind_graph):
         """collect_all_keywords(kind=X) SHALL only collect from that kind."""
         from elspais.graph.annotators import annotate_keywords, collect_all_keywords
@@ -261,6 +271,7 @@ class TestCollectAllKeywordsWithKind:
         # Should NOT have keywords only found in other node kinds
         # (unless they coincidentally appear in journey text)
 
+    # Verifies: REQ-d00071-B
     def test_REQ_d00071_B_collect_keywords_kind_none_collects_all(self, multi_kind_graph):
         """collect_all_keywords(kind=None) SHALL collect from all node kinds."""
         from elspais.graph.annotators import annotate_keywords, collect_all_keywords
@@ -274,6 +285,7 @@ class TestCollectAllKeywordsWithKind:
         assert "developer" in all_keywords  # From USER_JOURNEY
         assert "security" in all_keywords  # From REMAINDER
 
+    # Verifies: REQ-d00071-C
     def test_REQ_d00071_C_collect_keywords_default_is_none(self, multi_kind_graph):
         """collect_all_keywords() without kind parameter SHALL default to None."""
         from elspais.graph.annotators import annotate_keywords, collect_all_keywords

@@ -177,6 +177,7 @@ def coverage_graph():
 class TestGetTestCoverage:
     """Tests for get_test_coverage() tool."""
 
+    # Verifies: REQ-d00066-A
     def test_REQ_d00066_A_finds_test_nodes_targeting_requirement(self, coverage_graph):
         """REQ-d00066-A: SHALL find TEST nodes by searching for edges targeting the requirement."""
         from elspais.mcp.server import _get_test_coverage
@@ -187,6 +188,7 @@ class TestGetTestCoverage:
         assert len(result["test_nodes"]) == 1
         assert result["test_nodes"][0]["id"] == "test:test_encryption.py::test_data_encrypted"
 
+    # Verifies: REQ-d00066-B
     def test_REQ_d00066_B_returns_test_results(self, coverage_graph):
         """REQ-d00066-B: SHALL return TEST_RESULT nodes associated with found TEST nodes."""
         from elspais.mcp.server import _get_test_coverage
@@ -196,6 +198,7 @@ class TestGetTestCoverage:
         assert len(result["test_nodes"][0]["results"]) == 1
         assert result["test_nodes"][0]["results"][0]["status"] == "passed"
 
+    # Verifies: REQ-d00066-C
     def test_REQ_d00066_C_identifies_coverage_gaps(self, coverage_graph):
         """REQ-d00066-C: SHALL identify assertion coverage gaps."""
         from elspais.mcp.server import _get_test_coverage
@@ -206,6 +209,7 @@ class TestGetTestCoverage:
         assert result["covered_assertions"] == ["REQ-p00001-A"]
         assert set(result["uncovered_assertions"]) == {"REQ-p00001-B", "REQ-p00001-C"}
 
+    # Verifies: REQ-d00066-D
     def test_REQ_d00066_D_returns_coverage_percentage(self, coverage_graph):
         """REQ-d00066-D: SHALL return coverage percentage and breakdown."""
         from elspais.mcp.server import _get_test_coverage
@@ -217,6 +221,7 @@ class TestGetTestCoverage:
         assert result["covered_count"] == 1
         assert 33 <= result["referenced_pct"] <= 34
 
+    # Verifies: REQ-d00066-E
     def test_REQ_d00066_E_handles_no_test_coverage(self, coverage_graph):
         """REQ-d00066-E: SHALL handle requirements with no test coverage gracefully."""
         from elspais.mcp.server import _get_test_coverage
@@ -261,6 +266,7 @@ class TestGetTestCoverage:
 class TestGetUncoveredAssertions:
     """Tests for get_uncovered_assertions() tool."""
 
+    # Verifies: REQ-d00067-A
     def test_REQ_d00067_A_iterates_all_assertions_when_no_req_id(self, coverage_graph):
         """REQ-d00067-A: SHALL iterate all ASSERTION nodes when req_id is None."""
         from elspais.mcp.server import _get_uncovered_assertions
@@ -276,6 +282,7 @@ class TestGetUncoveredAssertions:
         assert "REQ-p00002" in reqs
         assert "A" in reqs["REQ-p00002"]["uncovered_labels"]
 
+    # Verifies: REQ-d00067-B
     def test_REQ_d00067_B_iterates_child_assertions_when_req_id_provided(self, coverage_graph):
         """REQ-d00067-B: SHALL iterate only child assertions when req_id is provided."""
         from elspais.mcp.server import _get_uncovered_assertions
@@ -287,6 +294,7 @@ class TestGetUncoveredAssertions:
         assert "C" in result["uncovered_labels"]
         assert "A" not in result["uncovered_labels"]  # covered
 
+    # Verifies: REQ-d00067-D
     def test_REQ_d00067_D_returns_requirement_context(self, coverage_graph):
         """REQ-d00067-D: SHALL return requirement id, title, and uncovered label summary."""
         from elspais.mcp.server import _get_uncovered_assertions
@@ -299,6 +307,7 @@ class TestGetUncoveredAssertions:
         assert result["uncovered_count"] == 2
         assert set(result["uncovered_labels"]) == {"B", "C"}
 
+    # Verifies: REQ-d00067-E
     def test_REQ_d00067_E_sorts_by_requirement_id(self, coverage_graph):
         """REQ-d00067-E: SHALL sort results by requirement ID for logical grouping."""
         from elspais.mcp.server import _get_uncovered_assertions
@@ -557,6 +566,7 @@ class TestUncoveredTestingGapDenominator:
 class TestFindAssertionsByKeywords:
     """Tests for find_assertions_by_keywords() tool."""
 
+    # Verifies: REQ-d00068-A
     def test_REQ_d00068_A_searches_assertion_text(self, coverage_graph):
         """REQ-d00068-A: SHALL iterate ASSERTION nodes and check text content."""
         from elspais.mcp.server import _find_assertions_by_keywords
@@ -566,6 +576,7 @@ class TestFindAssertionsByKeywords:
         assert len(result["assertions"]) == 1
         assert result["assertions"][0]["id"] == "REQ-p00001-A"
 
+    # Verifies: REQ-d00068-B
     def test_REQ_d00068_B_match_all_true_requires_all_keywords(self, coverage_graph):
         """REQ-d00068-B: SHALL support match_all=True for AND logic."""
         from elspais.mcp.server import _find_assertions_by_keywords
@@ -582,6 +593,7 @@ class TestFindAssertionsByKeywords:
         )
         assert len(result["assertions"]) == 0
 
+    # Verifies: REQ-d00068-C
     def test_REQ_d00068_C_match_all_false_accepts_any_keyword(self, coverage_graph):
         """REQ-d00068-C: SHALL support match_all=False for OR logic."""
         from elspais.mcp.server import _find_assertions_by_keywords
@@ -595,6 +607,7 @@ class TestFindAssertionsByKeywords:
         assert "REQ-p00001-A" in ids  # encrypt
         assert "REQ-p00001-B" in ids  # TLS
 
+    # Verifies: REQ-d00068-D
     def test_REQ_d00068_D_returns_assertion_context(self, coverage_graph):
         """REQ-d00068-D: SHALL return assertion id, text, label, and parent context."""
         from elspais.mcp.server import _find_assertions_by_keywords
@@ -608,6 +621,7 @@ class TestFindAssertionsByKeywords:
         assert "validate" in assertion["text"].lower()
         assert assertion["parent_id"] == "REQ-p00001"
 
+    # Verifies: REQ-d00068-E
     def test_REQ_d00068_E_case_insensitive_matching(self, coverage_graph):
         """REQ-d00068-E: SHALL normalize keywords to lowercase for case-insensitive matching."""
         from elspais.mcp.server import _find_assertions_by_keywords

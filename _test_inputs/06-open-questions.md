@@ -204,11 +204,11 @@ identifiers — that would be a config merge by the back door.
 
 **Cited by**: USCORE-05.
 
-`test_REQ_p00001_A_B`. The docstring says the notation has spent its
-distinguishing punctuation and `test_REQ_p00001_A_and_so_on` names one label.
-`_B` is uppercase, so the tail pattern (`assertion_label_exact`) may read it as a
-second label, giving `REQ-p00001-A+B`. Determine which, since a test function
-naming two assertions is a real authoring pattern.
+RESOLVED, by removal. Underscore notation is not read at all: a test function's
+name declares nothing (REQ-d00269-L), and an underscore spelling is not repaired
+into one that resolves anywhere else either (REQ-d00212-S). A test naming two
+assertions writes them in a comment, where the multi-*Assertion* separator
+distinguishes them without ambiguity.
 
 ---
 

@@ -8,7 +8,7 @@ from pathlib import Path
 # An identifier configuration whose namespace is not "REQ": FDA-style
 # `PRD-00001` / `DEV-00001` identifiers, as the e2e-fda-numeric fixture uses.
 _FDA_CONFIG = """
-version = 3
+version = 5
 
 [project]
 name = "fda-shaped"

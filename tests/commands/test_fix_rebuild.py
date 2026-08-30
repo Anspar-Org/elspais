@@ -16,7 +16,7 @@ from elspais.graph.factory import build_graph
 # ─────────────────────────────────────────────────────────────────────────────
 
 CONFIG_TOML = """\
-version = 3
+version = 5
 
 [project]
 name = "test"
@@ -87,6 +87,7 @@ def _make_fix_args(
 class TestREQ_d00131_B_post_save_rebuild:
     """Validates REQ-d00131-B: post-save rebuild produces clean graph."""
 
+    # Verifies: REQ-d00131-B
     def test_REQ_d00131_B_rebuild_after_fix_has_no_dirty_nodes(self, tmp_path):
         """After fix + rebuild, _detect_fixable returns empty for all reqs."""
         from elspais.commands.fix_cmd import _detect_fixable, run
@@ -110,6 +111,7 @@ class TestREQ_d00131_B_post_save_rebuild:
             reasons = _detect_fixable(node, hash_mode, changelog_enforce=False)
             assert reasons == [], f"{node.id} still has fixable issues after fix: {reasons}"
 
+    # Verifies: REQ-d00131-B
     def test_REQ_d00131_B_rebuild_after_fix_mixed_issues(self, tmp_path):
         """Fix on file with assertion spacing + wrong hash -> clean rebuild."""
         from elspais.commands.fix_cmd import _detect_fixable, run

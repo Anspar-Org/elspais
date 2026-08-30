@@ -269,7 +269,7 @@ The system SHALL do something testable.
     config_path = tmp_path / ".elspais.toml"
     config_path.write_text(
         """\
-version = 3
+version = 5
 
 [project]
 name = "fresh-targets"

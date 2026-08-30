@@ -1,0 +1,435 @@
+# Verifies: REQ-d00285-A+B+C+G, REQ-d00085-K+M
+"""`elspais checks` as the one findings surface.
+
+The report used to hand a reader a count and keep the names: findings reached
+`--format json` and `--format sarif` and no other format, while the hint at the
+foot of the terse report promised that `elspais -v checks` would show detail.
+These tests hold the promise -- that a finding renders wherever the report
+renders, carrying the same identity, severity, location and remedy in each --
+and hold the narrowing that lets a reader ask for a few of them.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import xml.etree.ElementTree as ET
+
+import pytest
+
+from elspais.commands.health import (
+    FindingFilter,
+    HealthCheck,
+    HealthFinding,
+    HealthReport,
+    _build_summary_line,
+    _format_report,
+    _render_sarif,
+    _report_from_dict,
+    apply_finding_filter,
+)
+from elspais.utilities.findings import NO_KNOWN_REMEDY, REGISTRY, remedy_for
+
+# One finding a reader must be able to act on: it names a file, a line, the
+# node it is about, and the diagnostic code it reached.
+LOCATED = HealthFinding(
+    message="REQ-d00001-A extra -- identifier followed by text [E_IDENTIFIER_WITH_TRAILING_TEXT]",
+    file_path="spec/dev-cli.md",
+    line=247,
+    node_id="REQ-d00001",
+    repo="core",
+    codes=["E_IDENTIFIER_WITH_TRAILING_TEXT"],
+)
+
+# A second finding, in another file and another category, so a narrowing has
+# something to leave behind.
+ELSEWHERE = HealthFinding(
+    message="target 'unit': result named 'login.spec.ts' matched no test",
+    file_path=".test-results/junit.xml",
+    line=12,
+    node_id="result:unit:login",
+    related=["tests/e2e/login.spec.ts"],
+)
+
+
+def _report() -> HealthReport:
+    return HealthReport(
+        checks=[
+            HealthCheck(
+                name="references.malformed",
+                passed=False,
+                message="1 reference(s): does not read as a reference",
+                category="references",
+                severity="warning",
+                findings=[LOCATED],
+            ),
+            HealthCheck(
+                name="tests.unmatched_results",
+                passed=False,
+                message="1 ingested result(s) matched no test",
+                category="tests",
+                severity="warning",
+                findings=[ELSEWHERE],
+            ),
+            HealthCheck(
+                name="spec.parseable",
+                passed=True,
+                message="Parsed 12 requirements",
+                category="spec",
+                severity="warning",
+            ),
+        ]
+    )
+
+
+def _args(**kwargs) -> argparse.Namespace:
+    base = {
+        "format": "text",
+        "verbose": False,
+        "quiet": False,
+        "lenient": False,
+        "include_passing_details": False,
+        "severity": None,
+        "category": None,
+        "code": None,
+        "file": None,
+    }
+    base.update(kwargs)
+    return argparse.Namespace(**base)
+
+
+# ---------------------------------------------------------------------------
+# A finding reaches the formats a person reads
+# ---------------------------------------------------------------------------
+
+
+# Verifies: REQ-d00085-K, REQ-d00285-A
+@pytest.mark.parametrize("fmt", ["text", "markdown"])
+def test_a_finding_renders_under_verbose_carrying_its_location(fmt: str) -> None:
+    """`-v` shows each failing check's findings, with the file and line."""
+    out = _format_report(_report(), _args(format=fmt, verbose=True))
+
+    assert "identifier followed by text" in out, "the finding's own words reach the report"
+    assert "spec/dev-cli.md:247" in out, "and the place a reader must go to act on it"
+    assert "REQ-d00001" in out, "and what it is about"
+
+
+# Verifies: REQ-d00085-K
+@pytest.mark.parametrize("fmt", ["text", "markdown"])
+def test_the_default_report_stays_terse(fmt: str) -> None:
+    """Without `-v` the report is one line per check, as it has always been."""
+    out = _format_report(_report(), _args(format=fmt))
+
+    assert "1 reference(s): does not read as a reference" in out, "the check line stays"
+    assert "spec/dev-cli.md:247" not in out, "the findings do not"
+
+
+# Verifies: REQ-d00085-K
+def test_the_verbose_hint_is_no_longer_a_promise_the_report_breaks() -> None:
+    """The terse report points at `-v checks`; running it must show more."""
+    terse = _format_report(_report(), _args())
+    verbose = _format_report(_report(), _args(verbose=True))
+
+    assert "elspais -v checks" in terse, "the terse report still points the reader at -v"
+    assert len(verbose) > len(terse)
+    assert "spec/dev-cli.md:247" in verbose
+
+
+# Verifies: REQ-d00085-M
+@pytest.mark.parametrize("fmt", ["text", "markdown"])
+def test_a_passing_checks_findings_stay_behind_their_own_request(fmt: str) -> None:
+    """Verbosity is not the request for passing detail; they are separate."""
+    report = _report()
+    report.checks[2].findings = [HealthFinding(message="REQ-p00001 parsed", file_path="spec/a.md")]
+
+    verbose_only = _format_report(report, _args(format=fmt, verbose=True))
+    on_request = _format_report(
+        report, _args(format=fmt, verbose=True, include_passing_details=True)
+    )
+
+    assert "REQ-p00001 parsed" not in verbose_only
+    assert "REQ-p00001 parsed" in on_request
+
+
+# ---------------------------------------------------------------------------
+# The same finding, whatever the format
+# ---------------------------------------------------------------------------
+
+
+# Verifies: REQ-d00285-C
+def test_identity_severity_location_and_remedy_agree_across_formats() -> None:
+    """One finding, four renderings, and no disagreement between them.
+
+    This is REQ-d00285-C stated directly: a finding reaching one format and
+    not another is, to the reader of the quieter one, a finding never raised.
+    """
+    report = _report()
+    check = report.checks[0]
+
+    text = _format_report(report, _args(verbose=True))
+    markdown = _format_report(report, _args(format="markdown", verbose=True))
+    payload = json.loads(_format_report(report, _args(format="json")))
+    sarif = json.loads(_render_sarif(report))
+    junit = ET.fromstring(_format_report(report, _args(format="junit")))
+
+    # -- identity
+    for rendering in (text, markdown):
+        assert LOCATED.node_id in rendering
+        assert check.name in rendering
+    json_check = next(c for c in payload["checks"] if c["name"] == check.name)
+    assert json_check["findings"][0]["node_id"] == LOCATED.node_id
+    sarif_result = next(r for r in sarif["runs"][0]["results"] if r["ruleId"] == check.name)
+    assert sarif_result["properties"]["nodeId"] == LOCATED.node_id
+
+    # -- severity
+    assert json_check["severity"] == check.severity == "warning"
+    assert sarif_result["level"] == "warning"
+    assert junit.find(f".//testcase[@name='{check.name}']/system-err") is not None
+
+    # -- location
+    assert "spec/dev-cli.md:247" in text
+    assert "spec/dev-cli.md:247" in markdown
+    assert json_check["findings"][0]["file_path"] == LOCATED.file_path
+    assert json_check["findings"][0]["line"] == LOCATED.line
+    location = sarif_result["locations"][0]["physicalLocation"]
+    assert location["artifactLocation"]["uri"] == LOCATED.file_path
+    assert location["region"]["startLine"] == LOCATED.line
+
+    # -- remedy
+    remedy = remedy_for(check.name)
+    assert remedy and remedy != NO_KNOWN_REMEDY, "this check has a known remedy to carry"
+    assert remedy in text
+    assert remedy in markdown
+    assert json_check["remedy"] == remedy
+    assert sarif_result["properties"]["remedy"] == remedy
+    rule = next(r for r in sarif["runs"][0]["tool"]["driver"]["rules"] if r["id"] == check.name)
+    assert rule["help"]["text"] == remedy
+    system_err = junit.find(f".//testcase[@name='{check.name}']/system-err")
+    assert remedy in (system_err.text or "")
+
+
+# Verifies: REQ-d00285-B
+def test_a_check_with_no_recorded_remedy_says_that_none_is_known() -> None:
+    """Silence about a remedy is indistinguishable from a forgotten one."""
+    report = HealthReport(
+        checks=[
+            HealthCheck(
+                name="worktree.status",
+                passed=False,
+                message="uncommitted changes",
+                category="environment",
+                severity="warning",
+                findings=[HealthFinding(message="spec/a.md modified", file_path="spec/a.md")],
+            )
+        ]
+    )
+
+    text = _format_report(report, _args(verbose=True))
+    payload = json.loads(_format_report(report, _args(format="json")))
+
+    assert NO_KNOWN_REMEDY in text
+    assert payload["checks"][0]["remedy"] == NO_KNOWN_REMEDY
+
+
+# Verifies: REQ-d00285-B
+def test_the_remedy_reaches_a_check_whose_name_is_composed() -> None:
+    """A name built at run time is a registered name like any other.
+
+    The table the text renderer used to consult was keyed by literal name, so
+    every check whose name is composed from a category and a status role
+    silently carried no remedy at all.
+    """
+    check = HealthCheck(
+        name="code.retired_references",
+        passed=False,
+        message="2 reference(s) to retired requirements",
+        category="code",
+        severity="warning",
+    )
+    assert check.remedy == REGISTRY["code.retired_references"].remedy
+    assert check.remedy.strip(), "a composed name reaches the registry like any other"
+
+
+# Verifies: REQ-d00285-C
+def test_remedy_and_codes_survive_the_serving_round_trip() -> None:
+    """A report computed by a daemon renders as one computed here.
+
+    Every report reaches the renderer through `to_dict()` and back, so a value
+    the round trip drops is a value the served path renders without and the
+    local path renders with.
+    """
+    restored = _report_from_dict(_report().to_dict())
+
+    assert restored.checks[0].remedy == remedy_for("references.malformed")
+    assert restored.checks[0].findings[0].codes == LOCATED.codes
+    assert restored.checks[0].findings[0].file_path == LOCATED.file_path
+    assert restored.checks[1].findings[0].related == ELSEWHERE.related
+
+
+# ---------------------------------------------------------------------------
+# Narrowing the report
+# ---------------------------------------------------------------------------
+
+
+# Verifies: REQ-d00285-C+G
+@pytest.mark.parametrize(
+    "flags,kept,dropped",
+    [
+        ({"severity": ["error"]}, [], ["references.malformed", "tests.unmatched_results"]),
+        (
+            {"severity": ["warning"]},
+            ["references.malformed", "tests.unmatched_results"],
+            [],
+        ),
+        ({"category": ["tests"]}, ["tests.unmatched_results"], ["references.malformed"]),
+        (
+            {"code": ["E_IDENTIFIER_WITH_TRAILING_TEXT"]},
+            ["references.malformed"],
+            ["tests.unmatched_results"],
+        ),
+        ({"code": ["E_NOT_RAISED"]}, [], ["references.malformed"]),
+        ({"file": ["spec/*.md"]}, ["references.malformed"], ["tests.unmatched_results"]),
+        ({"file": [".test-results/*"]}, ["tests.unmatched_results"], ["references.malformed"]),
+    ],
+)
+def test_each_filter_narrows(flags: dict, kept: list[str], dropped: list[str]) -> None:
+    outcome = apply_finding_filter(_report(), FindingFilter.from_args(_args(**flags)))
+    names = [c.name for c in outcome.report.checks]
+
+    for name in kept:
+        assert name in names, f"{flags} should have kept {name}"
+    for name in dropped:
+        assert name not in names, f"{flags} should have dropped {name}"
+
+
+# Verifies: REQ-d00285-G
+def test_filters_compose_as_conditions_met_at_once() -> None:
+    """Values within one filter are alternatives; filters are conditions."""
+    both = apply_finding_filter(
+        _report(),
+        FindingFilter.from_args(_args(category=["references"], file=[".test-results/*"])),
+    )
+    assert both.report.checks == [], "no finding is in both a spec file and a results file"
+
+    either = apply_finding_filter(
+        _report(),
+        FindingFilter.from_args(_args(file=["spec/*.md", ".test-results/*"])),
+    )
+    assert len(either.report.checks) == 2
+
+
+# Verifies: REQ-d00285-G
+@pytest.mark.parametrize("fmt", ["text", "markdown"])
+def test_a_narrowed_report_says_what_it_withheld(fmt: str) -> None:
+    """A report showing some of what it found and not saying so reads as clean."""
+    out = _format_report(_report(), _args(format=fmt, category=["tests"]))
+
+    assert "of 3 checks" in out
+    assert "--category tests" in out
+
+
+# Verifies: REQ-d00285-G
+def test_a_narrowed_json_report_carries_the_narrowing() -> None:
+    payload = json.loads(_format_report(_report(), _args(format="json", category=["tests"])))
+
+    assert payload["filter"]["category"] == ["tests"]
+    assert payload["filter"]["checks_total"] == 3
+    assert payload["filter"]["checks_shown"] == 1
+    assert [c["name"] for c in payload["checks"]] == ["tests.unmatched_results"]
+
+
+# Verifies: REQ-d00285-G
+def test_naming_a_finding_by_code_renders_it_without_asking_for_verbosity() -> None:
+    """A reader who named the code asked for those findings, not for a count."""
+    out = _format_report(_report(), _args(code=["E_IDENTIFIER_WITH_TRAILING_TEXT"]))
+
+    assert "spec/dev-cli.md:247" in out
+
+
+# Verifies: REQ-d00285-G
+def test_narrowing_does_not_move_the_verdict() -> None:
+    """A filter chooses what to look at, never what the run found."""
+    report = _report()
+    assert report.failed == 0 and report.warnings == 2
+
+    outcome = apply_finding_filter(report, FindingFilter.from_args(_args(category=["tests"])))
+
+    assert outcome.report is not report
+    assert report.warnings == 2, "the report the exit code is taken from is untouched"
+    assert outcome.findings_total == 2
+    assert outcome.findings_shown == 1
+
+
+# Verifies: REQ-d00285-G
+@pytest.mark.parametrize(
+    "flags,expected",
+    [
+        ({"severity": ["fatal"]}, "--severity fatal"),
+        ({"category": ["speling"]}, "--category speling"),
+    ],
+)
+def test_a_name_the_vocabulary_does_not_admit_is_refused(flags: dict, expected: str) -> None:
+    """Selecting nothing must not look like finding nothing."""
+    problems = FindingFilter.from_args(_args(**flags)).unadmitted()
+
+    assert problems and problems[0].startswith(expected)
+
+
+# Verifies: REQ-d00285-G
+def test_a_code_or_path_is_not_judged_against_a_fixed_vocabulary() -> None:
+    """Codes and paths are values the estate carries, not a list the tool owns."""
+    filt = FindingFilter.from_args(_args(code=["E_ANYTHING"], file=["whatever/*"]))
+    assert filt.unadmitted() == []
+
+
+# Verifies: REQ-d00285-G
+@pytest.mark.parametrize("fmt", ["text", "markdown"])
+def test_a_narrowed_report_still_states_the_whole_runs_verdict(fmt: str) -> None:
+    """The summary line speaks for the run, not for the part being looked at.
+
+    A filter that also moved the verdict would let a reader narrow their way
+    to a clean-looking report over a run that failed.
+    """
+    report = _report()
+    whole = _format_report(report, _args(format=fmt))
+    narrowed = _format_report(report, _args(format=fmt, category=["tests"]))
+
+    verdict = _build_summary_line(report)
+    assert verdict in whole
+    assert verdict in narrowed
+
+
+# Verifies: REQ-d00285-G
+def test_a_narrowed_json_report_still_states_the_whole_runs_verdict() -> None:
+    whole = json.loads(_format_report(_report(), _args(format="json")))
+    narrowed = json.loads(_format_report(_report(), _args(format="json", category=["tests"])))
+
+    assert narrowed["healthy"] == whole["healthy"]
+    assert narrowed["summary"] == whole["summary"]
+    assert len(narrowed["checks"]) == 1
+
+
+# Verifies: REQ-d00085-K+M, REQ-d00285-A
+def test_an_info_check_that_reported_a_condition_shows_its_findings_under_verbose() -> None:
+    """Loudness is not the question; whether the check passed is.
+
+    An info-severity check that found something has findings a reader came
+    for. Gating them behind the request for PASSING detail hid the largest
+    finding sets the tool produces -- `references.undeclared` among them --
+    from every reader who asked for detail the ordinary way.
+    """
+    report = HealthReport(
+        checks=[
+            HealthCheck(
+                name="references.undeclared",
+                passed=False,
+                message="3 comment(s) cite a requirement without declaring a relationship",
+                category="references",
+                severity="info",
+                findings=[LOCATED],
+            )
+        ]
+    )
+
+    assert "spec/dev-cli.md:247" not in _format_report(report, _args())
+    assert "spec/dev-cli.md:247" in _format_report(report, _args(verbose=True))

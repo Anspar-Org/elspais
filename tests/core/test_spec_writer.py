@@ -88,6 +88,7 @@ class TestChangeReferenceType:
     Implements/Refines relationships in spec files.
     """
 
+    # Verifies: REQ-o00063-A
     def test_REQ_o00063_A_implements_to_refines(self, spec_file: Path):
         """Changing Implements to Refines updates the spec file."""
         result = change_reference_type(spec_file, "REQ-t00001", "REQ-p00001", "REFINES")
@@ -97,6 +98,7 @@ class TestChangeReferenceType:
         assert "**Refines**: REQ-p00001" in content
         assert "**Implements**: REQ-p00001" not in content
 
+    # Verifies: REQ-o00063-A
     def test_REQ_o00063_A_refines_to_implements(self, tmp_path: Path):
         """Changing Refines back to Implements updates the spec file."""
         spec = tmp_path / "refines.md"
@@ -112,18 +114,21 @@ class TestChangeReferenceType:
         assert "**Implements**: REQ-p00001" in content
         assert "**Refines**: REQ-p00001" not in content
 
+    # Verifies: REQ-o00063-A
     def test_REQ_o00063_A_invalid_type_rejected(self, spec_file: Path):
         """Invalid reference type returns an error."""
         result = change_reference_type(spec_file, "REQ-t00001", "REQ-p00001", "DEPENDS")
         assert result["success"] is False
         assert "Invalid reference type" in result["error"]
 
+    # Verifies: REQ-o00063-A
     def test_REQ_o00063_A_missing_target_returns_error(self, spec_file: Path):
         """Reference to a non-existent target returns an error."""
         result = change_reference_type(spec_file, "REQ-t00001", "REQ-p99999", "REFINES")
         assert result["success"] is False
         assert "not found" in result["error"]
 
+    # Verifies: REQ-o00063-A
     def test_REQ_o00063_A_case_insensitive_type(self, spec_file: Path):
         """Type argument is case-insensitive ('refines', 'REFINES', 'Refines')."""
         result = change_reference_type(spec_file, "REQ-t00001", "REQ-p00001", "refines")
@@ -145,6 +150,7 @@ class TestModifyImplements:
     Implements field of a requirement in a spec file.
     """
 
+    # Verifies: REQ-o00063-A
     def test_REQ_o00063_A_change_implements_target(self, spec_file: Path):
         """Changing implements target updates the file."""
         result = modify_implements(spec_file, "REQ-t00001", ["REQ-p00099"])
@@ -156,6 +162,7 @@ class TestModifyImplements:
         assert "REQ-p00099" in content
         assert "REQ-p00001" not in content
 
+    # Verifies: REQ-o00063-A
     def test_REQ_o00063_A_clear_implements_to_dash(self, spec_file: Path):
         """Empty list sets implements to '-'."""
         result = modify_implements(spec_file, "REQ-t00001", [])
@@ -164,6 +171,7 @@ class TestModifyImplements:
         content = spec_file.read_text(encoding="utf-8")
         assert "**Implements**: -" in content
 
+    # Verifies: REQ-o00063-A
     def test_REQ_o00063_A_multiple_implements(self, spec_file: Path):
         """Multiple implements targets are comma-separated."""
         result = modify_implements(spec_file, "REQ-t00001", ["REQ-p00001", "REQ-p00002"])
@@ -172,6 +180,7 @@ class TestModifyImplements:
         content = spec_file.read_text(encoding="utf-8")
         assert "REQ-p00001, REQ-p00002" in content
 
+    # Verifies: REQ-o00063-A
     def test_REQ_o00063_A_dry_run_no_file_change(self, spec_file: Path):
         """dry_run=True returns result without modifying the file."""
         result = modify_implements(spec_file, "REQ-t00001", ["REQ-p00099"], dry_run=True)
@@ -182,12 +191,14 @@ class TestModifyImplements:
         assert "REQ-p00001" in content  # unchanged
         assert "REQ-p00099" not in content
 
+    # Verifies: REQ-o00063-A
     def test_REQ_o00063_A_no_change_same_value(self, spec_file: Path):
         """Same value returns no_change=True without rewriting."""
         result = modify_implements(spec_file, "REQ-t00001", ["REQ-p00001"])
         assert result["success"] is True
         assert result.get("no_change") is True
 
+    # Verifies: REQ-o00063-A
     def test_REQ_o00063_A_missing_req_returns_error(self, spec_file: Path):
         """Non-existent requirement returns error."""
         result = modify_implements(spec_file, "REQ-z99999", ["REQ-p00001"])
@@ -207,6 +218,7 @@ class TestModifyStatus:
     field of a requirement in a spec file.
     """
 
+    # Verifies: REQ-o00063-A
     def test_REQ_o00063_A_change_status(self, spec_file: Path):
         """Changing status from Active to Deprecated updates the file."""
         result = modify_status(spec_file, "REQ-t00001", "Deprecated")
@@ -218,6 +230,7 @@ class TestModifyStatus:
         assert "**Status**: Deprecated" in content
         assert "**Status**: Active" not in content
 
+    # Verifies: REQ-o00063-A
     def test_REQ_o00063_A_dry_run_preserves_file(self, spec_file: Path):
         """dry_run=True returns result without modifying status."""
         result = modify_status(spec_file, "REQ-t00001", "Deprecated", dry_run=True)
@@ -227,12 +240,14 @@ class TestModifyStatus:
         content = spec_file.read_text(encoding="utf-8")
         assert "**Status**: Active" in content
 
+    # Verifies: REQ-o00063-A
     def test_REQ_o00063_A_no_change_same_status(self, spec_file: Path):
         """Same status value returns no_change=True."""
         result = modify_status(spec_file, "REQ-t00001", "Active")
         assert result["success"] is True
         assert result.get("no_change") is True
 
+    # Verifies: REQ-o00063-A
     def test_REQ_o00063_A_missing_req_returns_error(self, spec_file: Path):
         """Non-existent requirement returns error."""
         result = modify_status(spec_file, "REQ-z99999", "Active")
@@ -252,6 +267,7 @@ class TestMoveRequirement:
     requirement between spec files.
     """
 
+    # Verifies: REQ-o00063-B
     def test_REQ_o00063_B_move_to_new_file(self, spec_file: Path, tmp_path: Path):
         """Requirement is removed from source and appended to destination."""
         dest = tmp_path / "dest.md"
@@ -267,6 +283,7 @@ class TestMoveRequirement:
         assert "REQ-t00001" in dest_content
         assert "**Hash**: abcd1234" in dest_content
 
+    # Verifies: REQ-o00063-B
     def test_REQ_o00063_B_source_marked_empty(self, spec_file: Path, tmp_path: Path):
         """After moving the only requirement, source_empty is True."""
         dest = tmp_path / "dest.md"
@@ -275,6 +292,7 @@ class TestMoveRequirement:
         result = move_requirement(spec_file, dest, "REQ-t00001")
         assert result["source_empty"] is True
 
+    # Verifies: REQ-o00063-B
     def test_REQ_o00063_B_move_one_of_two(self, two_req_file: Path, tmp_path: Path):
         """Moving one requirement leaves the other intact."""
         dest = tmp_path / "dest.md"
@@ -291,6 +309,7 @@ class TestMoveRequirement:
         dest_content = dest.read_text(encoding="utf-8")
         assert "REQ-t00001" in dest_content
 
+    # Verifies: REQ-o00063-B
     def test_REQ_o00063_B_dry_run_no_file_changes(self, spec_file: Path, tmp_path: Path):
         """dry_run=True returns result without modifying either file."""
         dest = tmp_path / "dest.md"
@@ -306,6 +325,7 @@ class TestMoveRequirement:
         dest_content = dest.read_text(encoding="utf-8")
         assert "REQ-t00001" not in dest_content  # still empty
 
+    # Verifies: REQ-o00063-B
     def test_REQ_o00063_B_missing_req_returns_error(self, spec_file: Path, tmp_path: Path):
         """Non-existent requirement returns error."""
         dest = tmp_path / "dest.md"
@@ -315,6 +335,7 @@ class TestMoveRequirement:
         assert result["success"] is False
         assert "not found" in result["error"]
 
+    # Verifies: REQ-o00063-B
     def test_REQ_o00063_B_dest_gets_separator(self, spec_file: Path, tmp_path: Path):
         """Moved block ends with --- separator in destination."""
         dest = tmp_path / "dest.md"
@@ -338,6 +359,7 @@ class TestUpdateHashInFile:
     hash in the End marker of a spec file.
     """
 
+    # Verifies: REQ-o00063-A
     def test_REQ_o00063_A_update_hash(self, spec_file: Path):
         """Hash value in the End marker is replaced."""
         err = update_hash_in_file(spec_file, "REQ-t00001", "deadbeef")
@@ -347,12 +369,14 @@ class TestUpdateHashInFile:
         assert "**Hash**: deadbeef" in content
         assert "abcd1234" not in content
 
+    # Verifies: REQ-o00063-A
     def test_REQ_o00063_A_missing_req_returns_error(self, spec_file: Path):
         """Non-existent requirement returns descriptive error."""
         err = update_hash_in_file(spec_file, "REQ-z99999", "deadbeef")
         assert err is not None
         assert "not found" in err
 
+    # Verifies: REQ-o00063-A
     def test_REQ_o00063_A_preserves_surrounding_content(self, two_req_file: Path):
         """Updating hash for one requirement does not affect another."""
         err = update_hash_in_file(two_req_file, "REQ-t00001", "newh1111")
@@ -375,6 +399,7 @@ class TestEncodingConsistency:
     consistently (the encoding bug fix).
     """
 
+    # Verifies: REQ-o00063-D
     def test_REQ_o00063_D_unicode_survives_modify_implements(self, tmp_path: Path):
         """Non-ASCII content is preserved through modify_implements."""
         spec = tmp_path / "unicode.md"
@@ -386,6 +411,7 @@ class TestEncodingConsistency:
         content = spec.read_text(encoding="utf-8")
         assert "Prueba Requisicion" in content
 
+    # Verifies: REQ-o00063-D
     def test_REQ_o00063_D_unicode_survives_modify_status(self, tmp_path: Path):
         """Non-ASCII content is preserved through modify_status."""
         spec = tmp_path / "unicode.md"
@@ -397,6 +423,7 @@ class TestEncodingConsistency:
         content = spec.read_text(encoding="utf-8")
         assert "hacer algo especial" in content
 
+    # Verifies: REQ-o00063-D
     def test_REQ_o00063_D_unicode_survives_move(self, tmp_path: Path):
         """Non-ASCII content is preserved through move_requirement."""
         src = tmp_path / "src.md"
@@ -410,6 +437,7 @@ class TestEncodingConsistency:
         content = dest.read_text(encoding="utf-8")
         assert "faire quelque chose" in content
 
+    # Verifies: REQ-o00063-D
     def test_REQ_o00063_D_unicode_survives_change_reference_type(self, tmp_path: Path):
         """Non-ASCII content is preserved through change_reference_type."""
         spec = tmp_path / "unicode.md"
@@ -421,6 +449,7 @@ class TestEncodingConsistency:
         content = spec.read_text(encoding="utf-8")
         assert "etwas tun" in content
 
+    # Verifies: REQ-o00063-D
     def test_REQ_o00063_D_unicode_survives_update_hash(self, tmp_path: Path):
         """Non-ASCII content is preserved through update_hash_in_file."""
         spec = tmp_path / "unicode.md"
@@ -433,6 +462,7 @@ class TestEncodingConsistency:
         assert "hacer algo" in content
         assert "**Hash**: deadbeef" in content
 
+    # Verifies: REQ-o00063-A
     def test_REQ_o00063_A_preserves_crlf_line_endings(self, tmp_path: Path):
         """CRLF line endings survive update_hash_in_file.
 
@@ -510,6 +540,7 @@ class TestAddChangelogEntry:
     entries into spec files.
     """
 
+    # Verifies: REQ-p00004-A
     def test_REQ_p00004_A_adds_changelog_to_req_without_section(self, tmp_path: Path):
         """A requirement without ## Changelog gets a new section created."""
         spec = tmp_path / "spec.md"
@@ -529,6 +560,7 @@ class TestAddChangelogEntry:
         end_pos = content.index("*End*")
         assert assertion_pos < changelog_pos < end_pos
 
+    # Verifies: REQ-p00004-A
     def test_REQ_p00004_A_prepends_entry_to_existing_changelog(self, tmp_path: Path):
         """A requirement with existing ## Changelog gets the new entry at the top."""
         spec = tmp_path / "spec.md"
@@ -546,6 +578,7 @@ class TestAddChangelogEntry:
         # New entry appears before old entry
         assert content.index(new_entry) < content.index(old_entry)
 
+    # Verifies: REQ-p00004-A
     def test_REQ_p00004_A_returns_error_for_missing_req(self, tmp_path: Path):
         """Returns error string when req_id not found in file."""
         spec = tmp_path / "spec.md"
@@ -623,6 +656,7 @@ class TestSubheadingFalsePositiveRegression:
     for change detection.
     """
 
+    # Verifies: REQ-p00004-A
     def test_REQ_p00004_A_update_hash_with_subheadings(self, tmp_path: Path):
         """update_hash_in_file succeeds when the REQ body contains
         subheadings like ### OS-Level Notifications."""
@@ -638,6 +672,7 @@ class TestSubheadingFalsePositiveRegression:
         assert "### OS-Level Notifications" in content
         assert "### UI-Driven Alerts" in content
 
+    # Verifies: REQ-p00004-A
     def test_REQ_p00004_A_add_status_with_subheadings(self, tmp_path: Path):
         """add_status_to_file works when REQ body has subheadings."""
         spec = tmp_path / "spec.md"
@@ -649,6 +684,7 @@ class TestSubheadingFalsePositiveRegression:
         content = spec.read_text(encoding="utf-8")
         assert "**Status**: Active" in content
 
+    # Verifies: REQ-p00004-A
     def test_REQ_p00004_A_modify_assertion_with_subheadings(self, tmp_path: Path):
         """modify_assertion_text works when REQ body has subheadings."""
         spec = tmp_path / "spec.md"
@@ -662,6 +698,7 @@ class TestSubheadingFalsePositiveRegression:
         content = spec.read_text(encoding="utf-8")
         assert "show a readiness check" in content
 
+    # Verifies: REQ-p00004-A
     def test_REQ_p00004_A_add_assertion_with_subheadings(self, tmp_path: Path):
         """add_assertion_to_file works when REQ body has subheadings."""
         spec = tmp_path / "spec.md"

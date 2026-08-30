@@ -29,7 +29,7 @@ from pathlib import Path
 # normalized-text hash mode is the default. Changelog enforcement is OFF so
 # that a fix run touches nothing but the End marker's hash.
 CONFIG_TOML = """\
-version = 3
+version = 5
 
 [project]
 name = "test"

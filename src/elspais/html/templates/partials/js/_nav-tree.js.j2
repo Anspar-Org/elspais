@@ -353,7 +353,7 @@ function updateHeaderStats() {
 // recompute it, so it must say so rather than keep presenting the last number
 // as current fact (which asserts work that may exist in no process) or fall
 // back to zero (which would hide work still pending behind a momentary blip).
-// Implements: REQ-d00267-A
+{# Implements: REQ-d00267-A #}
 function markDirtyCountUnknown() {
     var last = editState.mutationCount;
     // State first, DOM second: if the badge element were ever absent, leaving
@@ -401,7 +401,7 @@ async function refreshDirtyCount(options) {
     const btnSave = document.getElementById('btn-save');
     const btnUndo = document.getElementById('btn-undo');
     // A server answer always supersedes an unknown presentation.
-    // Implements: REQ-d00267-B
+    {# Implements: REQ-d00267-B #}
     badge.classList.remove('unknown');
     badge.title = '';
     if (editState.mutationCount > 0) {
@@ -513,7 +513,7 @@ function renderNavTree() {
         return;
     }
 
-    // Implements: REQ-d00243-B, REQ-d00243-C
+    {# Implements: REQ-d00243-B, REQ-d00243-C #}
     if (activeTab === 'terms') {
         var termsArr = editState.termsData || [];
         // Client-side text filter for terms
@@ -944,7 +944,7 @@ function toggleTreeNode(nodeId) {
     saveState();
 }
 
-// Implements: REQ-d00243-A, REQ-d00243-C
+{# Implements: REQ-d00243-A, REQ-d00243-C #}
 function switchNavTab(kind) {
     editState.activeNavTab = kind;
     document.querySelectorAll('.nav-tab').forEach(function(tab) {

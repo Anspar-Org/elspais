@@ -77,7 +77,7 @@ def test_REQ_d00258_I_empty_denominator_tested_is_neutral_not_yellow():
     assert _severity_color("neutral") == "grey"
     assert result["tested_color"] != _severity_color("error")  # not red
     assert result["tested_color"] != _severity_color("warning")  # not yellow
-    assert result["tested_color"] != _severity_color("ok")  # not green
+    assert result["tested_color"] != _severity_color("off")  # not green
 
     # Passing relative to an EMPTY tested denominator -> also N/A neutral grey.
     assert result["verified_color"] == _severity_color("neutral")
@@ -200,9 +200,10 @@ def test_REQ_d00258_I_all_zero_implemented_makes_tested_na_neutral():
 
     assert result["tested_tier"] == "missing"
     assert result["tested_color"] == _severity_color("neutral")
-    assert result["tested_color"] != _severity_color("ok")
+    assert result["tested_color"] != _severity_color("off")
 
 
+# Verifies: REQ-d00258-F
 def test_REQ_d00258_F_expects_validation_still_reds_empty_uat_coverage():
     """expects_validation level: empty UAT-Covered is a real red gap, not neutral.
 

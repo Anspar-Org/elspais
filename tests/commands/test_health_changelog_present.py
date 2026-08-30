@@ -34,7 +34,7 @@ def _make_config(tmp_path: Path, changelog_overrides: dict | None = None) -> Pat
         return str(v)
 
     lines = [
-        'version = 3\n[project]\nname = "test"\nnamespace = "REQ"\n',
+        'version = 5\n[project]\nname = "test"\nnamespace = "REQ"\n',
         '[scanning.spec]\ndirectories = ["spec"]\n',
         "[changelog]",
     ]

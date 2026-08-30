@@ -32,7 +32,7 @@ class TestInitConfig:
         assert config_path.exists()
         content = config_path.read_text()
         assert "[project]" in content
-        assert "version = 4" in content
+        assert "version = 5" in content
 
         # Round-trip: init's output must be accepted by load_config()
         # (load_config now enforces non-empty [project].name).
@@ -60,7 +60,7 @@ class TestInitConfig:
 
         assert result == 0
         content = (tmp_path / ".elspais.toml").read_text()
-        assert "version = 4" in content
+        assert "version = 5" in content
         assert "[project]" in content
 
     # Verifies: REQ-d00209-B
@@ -83,7 +83,7 @@ class TestInitConfig:
         assert result == 0
         config_path = tmp_path / ".elspais.toml"
         content = config_path.read_text()
-        assert "version = 4" in content
+        assert "version = 5" in content
         assert 'namespace = "CAL"' in content
 
         # Round-trip: init's output must be accepted by load_config()
@@ -279,7 +279,7 @@ class TestInitTemplate:
         config_path = tmp_path / ".elspais.toml"
         config_path.write_text(
             """
-version = 3
+version = 5
 [project]
 name = "test"
 namespace = "REQ"

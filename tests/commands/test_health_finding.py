@@ -25,6 +25,7 @@ from elspais.commands.health import (
 class TestHealthCheckFindings:
     """Validates REQ-d00085-I: HealthCheck carries a findings list."""
 
+    # Verifies: REQ-d00085-I
     def test_REQ_d00085_I_healthcheck_findings_accepts_finding_instances(self) -> None:
         """HealthCheck.findings accepts HealthFinding instances."""
         f1 = HealthFinding(message="ref broken", file_path="spec/a.md", line=10)
@@ -44,6 +45,7 @@ class TestHealthCheckFindings:
 class TestHealthFindingSerialization:
     """Validates REQ-d00085-I: to_dict() serialization includes findings."""
 
+    # Verifies: REQ-d00085-I
     def test_REQ_d00085_I_report_to_dict_includes_findings(self) -> None:
         """HealthReport.to_dict() includes findings in each check's serialization."""
         f1 = HealthFinding(message="bad ref", file_path="spec/a.md", line=3)
@@ -108,6 +110,7 @@ class TestHealthFindingRendererCompat:
         )
         return HealthReport(checks=[check_fail, check_pass])
 
+    # Verifies: REQ-d00085-I
     def test_REQ_d00085_I_text_rendering_unaffected(self, capsys: pytest.CaptureFixture) -> None:
         """Text rendering output is the same whether findings are present or not."""
         report_with = self._make_report_with_findings()
@@ -121,6 +124,7 @@ class TestHealthFindingRendererCompat:
 
         assert output_with == output_without
 
+    # Verifies: REQ-d00085-I
     def test_REQ_d00085_I_markdown_rendering_unaffected(self) -> None:
         """Markdown rendering is the same with or without findings."""
         report_with = self._make_report_with_findings()
@@ -138,19 +142,37 @@ class TestHealthFindingRendererCompat:
 
         assert md_with == md_without
 
-    def test_REQ_d00085_I_junit_rendering_unaffected(self) -> None:
-        """JUnit XML rendering output is the same whether findings are present or not."""
+    # Verifies: REQ-d00285-A+B+C
+    def test_junit_carries_each_finding_and_its_remedy(self) -> None:
+        """JUnit carries what the other formats carry.
+
+        REQ-d00285-C obliges a finding to carry the same identity, severity,
+        location and remedy whatever format the report is rendered in, so a
+        format that dropped its findings would be showing its reader a
+        different set of facts from the one the terminal showed. That
+        supersedes REQ-d00085-I's clause holding this renderer unchanged: it
+        was written when findings reached no renderer at all.
+        """
         report_with = self._make_report_with_findings()
         report_without = self._make_report_without_findings()
 
         junit_with = _render_junit(report_with)
         junit_without = _render_junit(report_without)
 
-        # Parse both to compare structure (ignore whitespace differences)
-        tree_with = ET.fromstring(junit_with)
-        tree_without = ET.fromstring(junit_without)
+        failure = ET.fromstring(junit_with).find(".//failure")
+        assert failure is not None and failure.text is not None
+        assert "spec/ops/req-o00001.md:15" in failure.text
+        assert "Dangling ref" in failure.text
+        assert "REQ-o00001-A" in failure.text
+        remedy = report_with.checks[0].remedy
+        assert remedy.strip(), "a check always names a remedy, or names that none is known"
+        assert f"remedy: {remedy}" in failure.text, "the remedy travels with the finding"
 
-        assert ET.tostring(tree_with) == ET.tostring(tree_without)
+        # The check's own line is unchanged by the presence of findings: the
+        # structure a consumer keys on is the same either way.
+        assert ET.fromstring(junit_with).find(".//failure").get("message") == ET.fromstring(
+            junit_without
+        ).find(".//failure").get("message")
 
 
 class TestRetiredFindingDowngrade:
@@ -272,7 +294,7 @@ class TestDetailHint:
                 findings=[HealthFinding(message="bad", node_id="REQ-001")],
             ),
             HealthCheck(
-                name="code.unlinked",
+                name="code.uncited_file",
                 passed=False,
                 message="unlinked",
                 category="code",
@@ -286,5 +308,5 @@ class TestDetailHint:
         assert "Follow-up:" in output
         assert "spec.hash_integrity" in output
         assert "elspais fix" in output
-        assert "code.unlinked" in output
-        assert "elspais unlinked" in output
+        assert "code.uncited_file" in output
+        assert "elspais uncited" in output

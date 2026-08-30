@@ -33,6 +33,7 @@ def _write_record(repo_root: Path, pid: int, port: int = 65000) -> Path:
 
 
 class TestStopWaitsForTheProcess:
+    # Verifies: REQ-o00076-E
     def test_REQ_o00076_E_record_outlives_the_process_it_describes(self, tmp_path):
         """Validates REQ-o00076-E: the record is removed only once the
         process it describes is gone, so it never names a process a client
@@ -48,6 +49,7 @@ class TestStopWaitsForTheProcess:
         assert proc.poll() is not None, "stop_daemon returned while the process was alive"
         assert not record.exists()
 
+    # Verifies: REQ-o00075-B
     def test_REQ_o00075_B_ignored_stop_is_escalated_until_the_process_goes(self, tmp_path):
         """Validates REQ-o00075-B: the deadline on a stop belongs to whoever
         asked for it. A daemon that will not go on being asked -- a drain a
@@ -81,11 +83,13 @@ class TestStopWaitsForTheProcess:
             proc.kill()
             proc.wait()
 
+    # Verifies: REQ-o00076-E
     def test_REQ_o00076_E_no_record_is_not_an_error(self, tmp_path):
         """Validates REQ-o00076-E: stopping when nothing is serving reports
         that nothing was stopped rather than failing."""
         assert stop_daemon(tmp_path) is StopOutcome.NOT_RUNNING
 
+    # Verifies: REQ-o00076-E
     def test_REQ_o00076_E_unreaped_zombie_is_seen_as_gone_promptly(self):
         """Validates REQ-o00076-E: a process that exited but was never
         reaped -- a zombie -- still answers kill(pid, 0), which is not
@@ -106,6 +110,7 @@ class TestStopWaitsForTheProcess:
             "seeing the unreaped exit promptly"
         )
 
+    # Verifies: REQ-o00075-B
     def test_REQ_o00075_B_unreaped_child_counts_as_stopped(self, tmp_path):
         """Validates REQ-o00075-B: stop_daemon must not mistake a zombie
         for a still-serving process -- that would refuse a restart, or a
@@ -126,6 +131,7 @@ class TestTheStopperOwnsTheDeadline:
     or not at all.
     """
 
+    # Verifies: REQ-o00075-B
     def test_REQ_o00075_B_cooperative_daemon_is_never_killed(self, tmp_path, monkeypatch):
         """Validates REQ-o00075-B: escalation is what happens when the ask
         was not enough. A daemon that stops on the ask writes what it holds
@@ -148,6 +154,7 @@ class TestTheStopperOwnsTheDeadline:
         assert stop_daemon(tmp_path) is StopOutcome.STOPPED
         assert signal_module.SIGKILL not in sent, f"a cooperative daemon was killed: {sent}"
 
+    # Verifies: REQ-o00075-B
     def test_REQ_o00075_B_the_kill_comes_only_after_the_wait(self, tmp_path, monkeypatch):
         """Validates REQ-o00075-B: the wait before the kill is the margin a
         save runs in. Writing a spec file is not atomic, so a kill that
@@ -200,6 +207,7 @@ class TestTheStopperOwnsTheDeadline:
 
 
 class TestRecordIsNeverSeenHalfWritten:
+    # Verifies: REQ-o00076-E
     def test_REQ_o00076_E_concurrent_reader_never_sees_a_torn_record(self, tmp_path):
         """Validates REQ-o00076-E: what a client locates describes the process
         it would reach. A reader landing mid-write on a truncate-then-write
@@ -244,6 +252,7 @@ class TestRecordIsNeverSeenHalfWritten:
 
 
 class TestStopDistinguishesGoneFromRefusing:
+    # Verifies: REQ-o00075-B
     def test_REQ_o00075_B_daemon_that_exits_first_is_not_a_refusal(self, tmp_path):
         """Validates REQ-o00075-B: a caller refuses to start a second process
         only when one is still serving. A daemon that exits between the
@@ -259,6 +268,7 @@ class TestStopDistinguishesGoneFromRefusing:
         assert outcome is StopOutcome.NOT_RUNNING
         assert outcome.is_gone, "an already-exited daemon must not read as a refusal"
 
+    # Verifies: REQ-o00075-B
     def test_REQ_o00075_B_only_a_daemon_that_survived_the_kill_reads_as_still_running(
         self, tmp_path, monkeypatch
     ):
@@ -295,6 +305,7 @@ class TestStopDistinguishesGoneFromRefusing:
 
 
 class TestStartRefusesToJoinALiveDaemon:
+    # Verifies: REQ-o00075-B
     def test_REQ_o00075_B_start_refuses_when_the_predecessor_will_not_go(
         self, tmp_path, monkeypatch
     ):

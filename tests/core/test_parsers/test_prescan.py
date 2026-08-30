@@ -14,6 +14,8 @@ text route rather than its presence.  Naming an assertion they do not
 establish would report coverage the estate has not earned.
 """
 
+import pytest
+
 from elspais.graph.parsers.prescan import (
     ast_prescan,
     build_line_context,
@@ -120,6 +122,7 @@ class TestBuildLineContext:
 class TestTextPrescan:
     """Tests for text_prescan utility."""
 
+    # Verifies: REQ-d00254-K
     def test_REQ_d00254_K_finds_test_functions(self):
         """Text prescan identifies test_ functions."""
         lines = [
@@ -137,6 +140,7 @@ class TestTextPrescan:
         assert all_test_funcs[1] == (6, "test_another", None)
         assert first_def_line == 3
 
+    # Verifies: REQ-d00254-K
     def test_REQ_d00254_K_finds_test_class(self):
         """Text prescan identifies Test classes."""
         lines = [
@@ -149,6 +153,7 @@ class TestTextPrescan:
         assert all_test_funcs[0] == (2, "test_bar", "TestFoo")
         assert first_def_line == 1
 
+    # Verifies: REQ-d00254-K
     def test_REQ_d00254_K_line_context_maps_correctly(self):
         """Line context maps each line to its enclosing function."""
         lines = [
@@ -165,6 +170,7 @@ class TestTextPrescan:
 class TestAstPrescan:
     """Tests for ast_prescan utility."""
 
+    # Verifies: REQ-d00254-K
     def test_REQ_d00254_K_finds_module_level_test(self):
         """AST prescan finds module-level test functions."""
         source = "def test_foo():\n    assert True\n"
@@ -174,6 +180,7 @@ class TestAstPrescan:
         assert all_test_funcs[0][1] == "test_foo"
         assert all_test_funcs[0][2] is None  # no class
 
+    # Verifies: REQ-d00254-K
     def test_REQ_d00254_K_finds_class_test(self):
         """AST prescan finds test functions inside Test classes."""
         source = "class TestBar:\n    def test_baz(self):\n        pass\n"
@@ -191,6 +198,7 @@ class TestAstPrescan:
 class TestExternalPrescan:
     """Tests for external_prescan utility."""
 
+    # Verifies: REQ-d00254-K
     def test_REQ_d00254_K_builds_context_from_entries(self):
         """External prescan builds line context from provided entries."""
         entries = [
@@ -211,6 +219,7 @@ class TestExternalPrescan:
 class TestPrescanFuncEndLine:
     """Tests that prescan functions return 4-tuples with func_end_line."""
 
+    # Verifies: REQ-d00254-K
     def test_REQ_d00254_K_ast_prescan_returns_4_tuples(self):
         """ast_prescan line_context values are 4-tuples with func_end_line."""
         source = "def test_foo():\n    assert True\n\ndef test_bar():\n    x = 1\n    assert x\n"
@@ -233,6 +242,7 @@ class TestPrescanFuncEndLine:
         # Line 3 is outside any function
         assert line_context[3] == (None, None, 0, 0)
 
+    # Verifies: REQ-d00254-K
     def test_REQ_d00254_K_ast_prescan_class_method_end_line(self):
         """ast_prescan returns correct func_end_line for class methods."""
         source = "class TestBar:\n    def test_baz(self):\n        pass\n"
@@ -259,6 +269,7 @@ class TestPrescanFuncEndLine:
         assert line_context[1][3] == 0
         assert line_context[2][3] == 0
 
+    # Verifies: REQ-d00254-K
     def test_REQ_d00254_K_external_prescan_returns_4_tuples(self):
         """external_prescan returns 4-tuples with func_end_line."""
         entries = [
@@ -274,6 +285,7 @@ class TestPrescanFuncEndLine:
         # test_beta spans lines 15-20 (end of file)
         assert line_context[15][3] == 20  # func_end_line
 
+    # Verifies: REQ-d00254-K
     def test_REQ_d00254_K_external_prescan_with_explicit_end_line(self):
         """external_prescan uses end_line from JSON entries when present."""
         entries = [
@@ -286,6 +298,7 @@ class TestPrescanFuncEndLine:
         assert line_context[5][3] == 10
         assert line_context[15][3] == 18
 
+    # Verifies: REQ-d00254-K
     def test_REQ_d00254_K_ast_prescan_forward_fixup_4_tuple(self):
         """Forward-looking fixup in ast_prescan produces 4-tuples."""
         source = "# Implements: REQ-p00001\ndef test_foo():\n    assert True\n"
@@ -299,3 +312,136 @@ class TestPrescanFuncEndLine:
         assert len(line_context[1]) == 4
         assert line_context[1][0] == "test_foo"
         assert line_context[1][3] == 3  # func_end_line of test_foo
+
+
+# ---------------------------------------------------------------------------
+# Forward binding, shared by every built-in route
+#
+# A comment carrying a citation describes the declaration below it.  The three
+# built-in routes -- ast_prescan (Python), text_prescan (the fallback for every
+# other language) and build_line_context (ordinary code) -- answer that the
+# same way: walk down from the unowned comment while only further comments and
+# blank lines are met, and bind at the first declaration reached.  The length
+# of the comment block is not a bound on the search; the first line that is
+# neither a comment nor a declaration is.
+#
+# These name REQ-d00254-K.  Binding a citation to the test it was written above
+# is how that test's evidence reaches that test's identity and extent, and
+# binding one to a declaration it was not written above would attribute
+# evidence to a test it says nothing about.
+# ---------------------------------------------------------------------------
+
+
+def _numbered(source: str) -> list[tuple[int, str]]:
+    return [(i + 1, text) for i, text in enumerate(source.rstrip("\n").split("\n"))]
+
+
+def _via_ast(source: str):
+    line_context, _funcs, _first = ast_prescan(source, _numbered(source))
+    return line_context
+
+
+def _via_text(source: str):
+    line_context, _funcs, _first = text_prescan(_numbered(source))
+    return line_context
+
+
+def _via_line_context(source: str):
+    return build_line_context(_numbered(source), "python")
+
+
+ROUTES = [
+    pytest.param(_via_ast, id="ast_prescan"),
+    pytest.param(_via_text, id="text_prescan"),
+    pytest.param(_via_line_context, id="build_line_context"),
+]
+
+
+# A citation six lines above its declaration, and a second citation two lines
+# above it.  Both name the same test and both must bind to it.
+#   1: # Verifies: REQ-p00001-A   <- reachable by no five-line window
+#   6: # Verifies: REQ-p00001-B
+#   7: def test_alpha():
+LONG_PROSE = """\
+# Verifies: REQ-p00001-A
+# The test below is described at length because the shape of a comment
+# block says nothing about what it describes: a citation may sit above
+# six lines of prose or above one, and it describes the same
+# declaration either way.
+# Verifies: REQ-p00001-B
+def test_alpha():
+    assert True
+"""
+
+# A citation written one line above its declaration -- the ordinary shape, kept
+# beside the long one so the pair distinguishes "no window" from "a window".
+SHORT_PROSE = """\
+# Verifies: REQ-p00001-A
+def test_alpha():
+    assert True
+"""
+
+# A file header, a blank line, and then an import.  The import is neither a
+# comment nor a declaration, so it ends the search: the header describes the
+# file and must not claim the first test in it.
+#   1: # Copyright 2026 Example.
+#   2: # Verifies: REQ-p00001-A
+#   4: import pytest
+#   7: def test_alpha():
+HEADER_THEN_IMPORT = """\
+# Copyright 2026 Example.
+# Verifies: REQ-p00001-A
+
+import pytest
+
+
+def test_alpha():
+    assert True
+"""
+
+# The same header with the import removed: only blank lines stand between it
+# and the declaration, so it does bind.  This is what makes the case above a
+# statement about the import rather than about the distance.
+HEADER_NO_IMPORT = """\
+# Copyright 2026 Example.
+# Verifies: REQ-p00001-A
+
+
+def test_alpha():
+    assert True
+"""
+
+
+# Verifies: REQ-d00254-K
+@pytest.mark.parametrize("route", ROUTES)
+@pytest.mark.parametrize(
+    ("source", "comment_line", "declaration_line"),
+    [
+        pytest.param(LONG_PROSE, 1, 7, id="citation-above-five-prose-lines"),
+        pytest.param(LONG_PROSE, 6, 7, id="second-citation-above-same-test"),
+        pytest.param(SHORT_PROSE, 1, 2, id="citation-directly-above"),
+        pytest.param(HEADER_NO_IMPORT, 2, 5, id="header-reaching-declaration-over-blanks"),
+    ],
+)
+def test_REQ_d00254_K_comment_binds_to_first_declaration_below(
+    route, source, comment_line, declaration_line
+):
+    """A citation is attributed to the declaration below it, at any distance."""
+    line_context = route(source)
+    func_name, _class_name, func_line, _end = line_context[comment_line]
+    assert func_name == "test_alpha"
+    assert func_line == declaration_line
+
+
+# Verifies: REQ-d00254-K
+@pytest.mark.parametrize("route", ROUTES)
+@pytest.mark.parametrize(
+    "comment_line",
+    [pytest.param(1, id="header-first-line"), pytest.param(2, id="header-citation-line")],
+)
+def test_REQ_d00254_K_comment_does_not_bind_across_a_non_comment_line(route, comment_line):
+    """A header separated from the first declaration by an import binds to nothing."""
+    line_context = route(HEADER_THEN_IMPORT)
+    func_name, _class_name, func_line, _end = line_context[comment_line]
+    assert func_name is None
+    assert func_line == 0

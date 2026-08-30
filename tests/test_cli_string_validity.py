@@ -3,10 +3,11 @@
 the real tyro dataclasses in `args.py`.
 
 Background:
-    Commit c04d237 added `--terms` to the `checks` follow-up hints in
-    `_FOLLOWUP_COMMANDS`, but the flag didn't exist on `ChecksArgs` at the
-    time. Users who followed the hint hit "Unrecognized options: --terms".
-    Nothing caught the drift until it hit the user.
+    A `checks` follow-up hint once suggested `--terms` when no such flag
+    existed on `ChecksArgs`. Users who followed the hint hit "Unrecognized
+    options: --terms", and nothing caught the drift until it hit the user.
+    Every remedy a finding carries is a suggestion of the same kind, so the
+    same drift is possible wherever the tool spells an invocation.
 
 What this test does:
     1. Introspects the `Command` union in `elspais.commands.args` to build

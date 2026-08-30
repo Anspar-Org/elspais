@@ -90,6 +90,7 @@ class TestOpenCursorScopedSearch:
     and returns the first matching item with correct metadata.
     """
 
+    # Verifies: REQ-o00068-F
     def test_REQ_o00068_F_open_cursor_scoped_search(self, scoped_cursor_state):
         """REQ-o00068-F: open_cursor with scoped_search query type returns first item."""
         from elspais.mcp.server import _open_cursor
@@ -116,6 +117,7 @@ class TestOpenCursorScopedSearch:
         assert result["position"] == 1
         assert result["remaining"] == result["total"] - 1
 
+    # Verifies: REQ-d00076-B
     def test_REQ_d00076_B_scoped_search_materializes_results(self, scoped_cursor_state):
         """REQ-d00076-B: _materialize_cursor_items dispatches scoped_search to _scoped_search."""
         from elspais.mcp.server import _materialize_cursor_items
@@ -141,6 +143,7 @@ class TestOpenCursorScopedSearch:
         result_ids = {item["id"] for item in items}
         assert "OPS-auth" in result_ids
 
+    # Verifies: REQ-o00068-F
     def test_REQ_o00068_F_open_cursor_scoped_search_empty(self, scoped_cursor_state):
         """REQ-o00068-F: open_cursor with scoped_search and no matches returns empty."""
         from elspais.mcp.server import _open_cursor
@@ -161,6 +164,7 @@ class TestOpenCursorScopedSearch:
         assert result["total"] == 0
         assert result["remaining"] == 0
 
+    # Verifies: REQ-o00068-F
     def test_REQ_o00068_F_open_cursor_scoped_search_scope_not_found(self, scoped_cursor_state):
         """REQ-o00068-F: open_cursor with non-existent scope_id returns empty results."""
         from elspais.mcp.server import _open_cursor
@@ -194,6 +198,7 @@ class TestCursorNextScopedSearch:
     cursor_next advances through scoped_search results correctly.
     """
 
+    # Verifies: REQ-o00068-F
     def test_REQ_o00068_F_cursor_next_advances_through_scoped_results(self, scoped_cursor_state):
         """REQ-o00068-F: cursor_next advances through scoped_search results one at a time."""
         from elspais.mcp.server import _cursor_next, _open_cursor
@@ -221,6 +226,7 @@ class TestCursorNextScopedSearch:
         assert len(result["items"]) == 1
         assert result["position"] == 2  # 1 from open + 1 from next
 
+    # Verifies: REQ-d00076-B
     def test_REQ_d00076_B_cursor_next_collects_all_scoped_items(self, scoped_cursor_state):
         """REQ-d00076-B: Iterating through all scoped_search results collects every match."""
         from elspais.mcp.server import _cursor_next, _open_cursor
@@ -258,6 +264,7 @@ class TestCursorNextScopedSearch:
         # DEV-pipeline is under OPS-data, should NOT be present
         assert "DEV-pipeline" not in collected_ids
 
+    # Verifies: REQ-o00068-F
     def test_REQ_o00068_F_cursor_next_at_end_returns_empty(self, scoped_cursor_state):
         """REQ-o00068-F: cursor_next past end returns empty items list."""
         from elspais.mcp.server import _cursor_next, _open_cursor
@@ -299,6 +306,7 @@ class TestCursorInfoScopedSearch:
     scoped_search cursor without advancing.
     """
 
+    # Verifies: REQ-o00068-F
     def test_REQ_o00068_F_cursor_info_reports_correct_position(self, scoped_cursor_state):
         """REQ-o00068-F: cursor_info reports correct position/total/remaining after open."""
         from elspais.mcp.server import _cursor_info, _open_cursor
@@ -323,6 +331,7 @@ class TestCursorInfoScopedSearch:
         assert info["remaining"] == open_result["remaining"]
         assert info["query"] == "scoped_search"
 
+    # Verifies: REQ-d00076-B
     def test_REQ_d00076_B_cursor_info_after_next(self, scoped_cursor_state):
         """REQ-d00076-B: cursor_info reflects updated position after cursor_next."""
         from elspais.mcp.server import _cursor_info, _cursor_next, _open_cursor
@@ -351,6 +360,7 @@ class TestCursorInfoScopedSearch:
         assert info["total"] == total
         assert info["remaining"] == total - 2
 
+    # Verifies: REQ-o00068-F
     def test_REQ_o00068_F_cursor_info_does_not_advance(self, scoped_cursor_state):
         """REQ-o00068-F: Calling cursor_info multiple times does not change position."""
         from elspais.mcp.server import _cursor_info, _open_cursor
@@ -374,6 +384,7 @@ class TestCursorInfoScopedSearch:
         assert info1["total"] == info2["total"]
         assert info1["remaining"] == info2["remaining"]
 
+    # Verifies: REQ-d00076-B
     def test_REQ_d00076_B_cursor_info_at_end(self, scoped_cursor_state):
         """REQ-d00076-B: cursor_info at end shows remaining=0."""
         from elspais.mcp.server import _cursor_info, _cursor_next, _open_cursor

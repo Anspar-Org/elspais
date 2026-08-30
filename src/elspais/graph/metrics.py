@@ -537,6 +537,14 @@ def direct_coverage_for(node: GraphNode) -> int:
     from elspais.graph.GraphNode import NodeKind
 
     if node.kind == NodeKind.ASSERTION:
+        # Implements: REQ-p00017-G
+        # A retired *Assertion* takes no credit from a blanket citation of its
+        # requirement: it is excluded from every coverage calculation, and a
+        # citation naming the requirement as a whole is one of them.
+        from elspais.graph.parsers.directives import assertion_is_retired
+
+        if assertion_is_retired(node):
+            return 0
         label = node.get_field("label")
         count = 0
         for parent in node.iter_parents():
@@ -633,13 +641,13 @@ def satisfier_rollup(node: GraphNode) -> SatisfierRollup:
         A :class:`SatisfierRollup` with combined counts and fraction.
     """
     from elspais.graph.GraphNode import NodeKind
+    from elspais.graph.parsers.directives import assertion_is_retired, counted_assertions
     from elspais.graph.relations import EdgeKind
 
-    own_assertions = [
-        c
-        for c in node.iter_children(edge_kinds={EdgeKind.STRUCTURES})
-        if c.kind == NodeKind.ASSERTION
-    ]
+    # Implements: REQ-p00017-G
+    # A retired *Assertion* leaves both halves of this footing: it is neither
+    # work the satisfier owes nor work the template asks of it.
+    own_assertions = counted_assertions(node, structural=True)
     own_covered = sum(1 for a in own_assertions if direct_coverage_for(a) > 0)
 
     satisfied_clones = [
@@ -648,7 +656,11 @@ def satisfier_rollup(node: GraphNode) -> SatisfierRollup:
     template_assertions: list[GraphNode] = []
     for clone in satisfied_clones:
         for ce in clone.iter_outgoing_edges():
-            if ce.kind == EdgeKind.STRUCTURES and ce.target.kind == NodeKind.ASSERTION:
+            if (
+                ce.kind == EdgeKind.STRUCTURES
+                and ce.target.kind == NodeKind.ASSERTION
+                and not assertion_is_retired(ce.target)
+            ):
                 template_assertions.append(ce.target)
     template_covered = sum(1 for a in template_assertions if inherited_coverage_for(a) > 0)
 
@@ -671,7 +683,7 @@ class IntegratesRollup:
     # non-integer. Totals are assertion counts and stay int.
     implemented_covered: float
     implemented_total: int
-    # NOTE (REQ-d00258-N): the field name is kept for MCP/GUI wire
+    # NOTE (REQ-d00277-C): the field name is kept for MCP/GUI wire
     # compatibility (see `integrates_rollup()`); the value is the Passing
     # dimension from `tested_and_passing()`, which counts what the library's
     # own declared tests returned and excludes an assertion any of them
@@ -682,7 +694,7 @@ class IntegratesRollup:
     # failure. A failing assertion is excluded from the covered figure rather
     # than counted, but the figure alone cannot distinguish "failed" from
     # "never tested", so every surface showing covered/total must surface this
-    # flag too (REQ-d00258-N).
+    # flag too (REQ-d00277-C).
     has_failures: bool = False
 
     @property
@@ -712,7 +724,7 @@ def integrates_rollup(node: GraphNode) -> IntegratesRollup:
     For each outgoing INTEGRATES edge (consumer REQ -> library node), read the
     library node's finalized ``rollup_metrics`` (computed in its own repo) and
     fold its implemented and Passing dimensions in. "Passing" is
-    :func:`tested_and_passing` (REQ-d00258-N): what the library's own declared
+    :func:`tested_and_passing` (REQ-d00277-C): what the library's own declared
     tests returned, with a failing assertion excluded. A consumer REQ with no
     INTEGRATES edges yields all zeros.
     """
@@ -751,7 +763,7 @@ class AssociateIntegration:
     # REQ-d00069-J); totals are assertion counts and stay int.
     implemented_covered: float
     implemented_total: int
-    # NOTE (REQ-d00258-N): the "verified" field name is kept for MCP/summary
+    # NOTE (REQ-d00277-C): the "verified" field name is kept for MCP/summary
     # wire compatibility; the value is the Passing dimension
     # (`tested_and_passing()`), which excludes a failing assertion.
     verified_covered: float
@@ -768,7 +780,7 @@ def integrates_by_associate(graph) -> list[AssociateIntegration]:
 
     Scans every INTEGRATES edge in the federation (consumer REQ -> library REQ),
     groups by the owning associate repo of the target library node, and sums the
-    inherited implemented coverage plus the Passing dimension (REQ-d00258-N,
+    inherited implemented coverage plus the Passing dimension (REQ-d00277-C,
     `tested_and_passing()`), read live from each target's ``rollup_metrics``. Returns one entry per
     associate, sorted by associate name. A federation total is the caller's
     concern (see :func:`integrates_total`). ``graph`` is a FederatedGraph.
@@ -853,12 +865,12 @@ def integrates_total(items: list[AssociateIntegration]) -> AssociateIntegration:
 
 
 # Implements: REQ-d00254-B
-# Implements: REQ-d00258-N
+# Implements: REQ-d00277-C
 def tested_and_passing(metrics: RollupMetrics) -> CoverageDimension:
     """The Passing dimension: what the declared tests themselves returned.
 
     An *Assertion* passes when a test declared against it returned a passing
-    result and none returned a failure (REQ-d00258-N). Line coverage is not
+    result and none returned a failure (REQ-d00277-C). Line coverage is not
     consulted. Executing a line of the code that implements an *Assertion*
     says the code was reached; it does not say the *Assertion* was checked,
     and a test can always carry its own `Verifies:`, so an *Assertion*
@@ -877,11 +889,11 @@ def tested_and_passing(metrics: RollupMetrics) -> CoverageDimension:
     vd = metrics.verified
     failing = set(vd.failing_labels)
 
-    # Implements: REQ-d00069-L, REQ-d00258-N
+    # Implements: REQ-d00069-L, REQ-d00277-C
     # The four measures come through with the failing assertions removed, the
     # same exclusion the scalar sums above apply: these maps ARE the Passing
     # figures now, and an *Assertion* whose declared test returned a failure
-    # does not pass (REQ-d00258-N). The failure itself is not lost -- it is
+    # does not pass (REQ-d00277-C). The failure itself is not lost -- it is
     # carried in ``failing_labels``, which is what a standing reads first
     # (REQ-d00258-G).
     def _passing_only(by_label: dict[str, float]) -> dict[str, float]:

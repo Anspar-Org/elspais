@@ -14,6 +14,8 @@ from pathlib import Path
 import pytest
 
 from elspais.utilities.docs_loader import (
+    DOCS_TOPICS,
+    PSEUDO_TOPICS,
     TOPIC_ORDER,
     find_docs_dir,
     get_available_topics,
@@ -37,14 +39,14 @@ def _make_env() -> dict[str, str]:
 class TestDocsExistence:
     """Test that all documentation files exist."""
 
-    # Verifies: REQ-p00013-A
+    # Verifies: REQ-d00286-A
     def test_docs_dir_found(self):
         """docs/cli directory should be locatable."""
         docs_dir = find_docs_dir()
         assert docs_dir is not None, "docs/cli directory not found"
         assert docs_dir.is_dir(), f"{docs_dir} is not a directory"
 
-    # Verifies: REQ-p00013-A
+    # Verifies: REQ-d00286-C
     @pytest.mark.parametrize("topic", TOPIC_ORDER)
     def test_topic_file_exists(self, topic: str):
         """Each topic should have a corresponding markdown file."""
@@ -53,7 +55,93 @@ class TestDocsExistence:
         topic_file = docs_dir / f"{topic}.md"
         assert topic_file.is_file(), f"Missing documentation file: {topic}.md"
 
-    # Verifies: REQ-p00013-A
+    # Verifies: REQ-d00286-A
+    def test_REQ_d00286_A_declared_topics_match_files_on_disk(self):
+        """`DOCS_TOPICS` and the shipped `.md` files must name the same set.
+
+        `DOCS_TOPICS` is the one declaration of what the tool documents, and
+        the files under `src/elspais/docs/cli/` are what it can actually
+        serve. Nothing at runtime reconciles the two: a declared topic with
+        no file is dropped silently by `get_available_topics()`, and a file
+        with no declaration cannot be asked for at all. This test is what
+        keeps them one set.
+        """
+        docs_dir = find_docs_dir()
+        assert docs_dir is not None, "docs/cli directory not found"
+
+        declared = set(TOPIC_ORDER)
+        on_disk = {path.stem for path in docs_dir.glob("*.md")}
+
+        undeclared = sorted(on_disk - declared)
+        missing_file = sorted(declared - on_disk)
+
+        problems: list[str] = []
+        for topic in undeclared:
+            problems.append(
+                f"  {topic}.md ships in src/elspais/docs/cli/ but no topic declares it. "
+                f'Add "{topic}" to DOCS_TOPICS in src/elspais/utilities/docs_loader.py '
+                "(in reading order), or delete the file."
+            )
+        for topic in missing_file:
+            problems.append(
+                f'  "{topic}" is declared in DOCS_TOPICS in '
+                "src/elspais/utilities/docs_loader.py but src/elspais/docs/cli/"
+                f"{topic}.md does not exist. Write that file, or remove the entry."
+            )
+
+        assert not problems, (
+            "Documentation topics have drifted from the files that serve them:\n"
+            + "\n".join(problems)
+        )
+
+    # Verifies: REQ-d00286-A
+    def test_REQ_d00286_A_cli_positional_offers_every_topic(self):
+        """The CLI's `docs <topic>` positional must accept exactly the topics.
+
+        `DocsArgs.topic` is what tyro validates a user's argument against, so
+        a topic it does not carry is unreachable from the command line however
+        well the file ships. Its type resolves through the one declaration, so
+        this test guards the wiring rather than a second copy of the list.
+        """
+        import typing
+
+        from elspais.commands.args import DocsArgs
+
+        annotation = typing.get_type_hints(DocsArgs, include_extras=True)["topic"]
+        literal = next(
+            arg for arg in typing.get_args(annotation) if typing.get_origin(arg) is typing.Literal
+        )
+        accepted = set(typing.get_args(literal))
+
+        expected = set(TOPIC_ORDER) | set(PSEUDO_TOPICS)
+        assert accepted == expected, (
+            "`elspais docs <topic>` accepts a different set from the declared topics. "
+            "DocsArgs.topic in src/elspais/commands/args.py must be typed "
+            "`tyro.conf.Positional[DOCS_TOPICS]`, importing DOCS_TOPICS from "
+            "src/elspais/utilities/docs_loader.py rather than restating it. "
+            f"Only in the CLI: {sorted(accepted - expected)}; "
+            f"only in DOCS_TOPICS: {sorted(expected - accepted)}."
+        )
+
+    # Verifies: REQ-d00286-A
+    def test_REQ_d00286_A_topic_order_is_the_declaration_order(self):
+        """`TOPIC_ORDER` must be `DOCS_TOPICS` minus the pseudo-topics, in order.
+
+        Order is load-bearing — it is the reading order of `docs topics` and
+        the concatenation order of `docs all` — so this compares sequences,
+        which also catches a duplicated entry that a set comparison would hide.
+        """
+        import typing
+
+        expected = [t for t in typing.get_args(DOCS_TOPICS) if t not in PSEUDO_TOPICS]
+        assert TOPIC_ORDER == expected, (
+            "TOPIC_ORDER is no longer derived from DOCS_TOPICS. In "
+            "src/elspais/utilities/docs_loader.py it must read "
+            "`[t for t in get_args(DOCS_TOPICS) if t not in PSEUDO_TOPICS]`; "
+            "edit DOCS_TOPICS to change the topic set or the reading order."
+        )
+
+    # Verifies: REQ-d00286-C
     def test_all_topics_available(self):
         """get_available_topics should return all expected topics."""
         available = get_available_topics()
@@ -63,7 +151,7 @@ class TestDocsExistence:
 class TestDocsContent:
     """Test that documentation files have required content."""
 
-    # Verifies: REQ-p00013-A
+    # Verifies: REQ-d00286-C
     @pytest.mark.parametrize("topic", TOPIC_ORDER)
     def test_topic_has_heading(self, topic: str):
         """Each topic file should start with a level-1 heading."""
@@ -73,7 +161,7 @@ class TestDocsContent:
         assert len(lines) > 0, f"{topic}.md is empty"
         assert lines[0].startswith("# "), f"{topic}.md should start with # heading"
 
-    # Verifies: REQ-p00013-A
+    # Verifies: REQ-d00286-C
     @pytest.mark.parametrize("topic", TOPIC_ORDER)
     def test_topic_has_subheadings(self, topic: str):
         """Each topic file should have at least one ## subheading."""
@@ -81,7 +169,7 @@ class TestDocsContent:
         assert content is not None
         assert "## " in content, f"{topic}.md should have at least one ## subheading"
 
-    # Verifies: REQ-p00013-A
+    # Verifies: REQ-d00286-C
     def test_quickstart_has_essential_sections(self):
         """quickstart.md should have initialize, validate, and next steps."""
         content = load_topic("quickstart")
@@ -90,7 +178,7 @@ class TestDocsContent:
         assert "elspais init" in content, "quickstart should show init command"
         assert "elspais checks" in content, "quickstart should show checks command"
 
-    # Verifies: REQ-p00013-A
+    # Verifies: REQ-d00286-C
     def test_format_has_structure_section(self):
         """format.md should explain requirement structure."""
         content = load_topic("format")
@@ -99,7 +187,7 @@ class TestDocsContent:
         assert "Level" in content, "format should explain Level field"
         assert "Hash" in content, "format should explain Hash"
 
-    # Verifies: REQ-p00013-A
+    # Verifies: REQ-d00286-C
     def test_hierarchy_has_levels(self):
         """hierarchy.md should explain PRD, OPS, DEV."""
         content = load_topic("hierarchy")
@@ -108,7 +196,7 @@ class TestDocsContent:
         assert "OPS" in content, "hierarchy should mention OPS"
         assert "DEV" in content, "hierarchy should mention DEV"
 
-    # Verifies: REQ-p00013-A
+    # Verifies: REQ-d00286-C
     def test_assertions_has_keywords(self):
         """assertions.md should explain normative keywords."""
         content = load_topic("assertions")
@@ -116,7 +204,7 @@ class TestDocsContent:
         assert "SHALL" in content, "assertions should explain SHALL"
         assert "SHALL NOT" in content, "assertions should explain SHALL NOT"
 
-    # Verifies: REQ-p00013-A
+    # Verifies: REQ-d00286-C
     def test_commands_has_all_commands(self):
         """commands.md should document all CLI commands."""
         content = load_topic("commands")
@@ -127,7 +215,7 @@ class TestDocsContent:
         # Check for global options
         assert "Global Options" in content, "commands should have global options"
 
-    # Verifies: REQ-p00013-A
+    # Verifies: REQ-d00286-B
     def test_all_topics_concatenation(self):
         """load_all_topics should return all topics concatenated."""
         all_content = load_all_topics()
@@ -144,7 +232,7 @@ class TestDocsContent:
 class TestMarkdownRenderer:
     """Test markdown-to-ANSI rendering."""
 
-    # Verifies: REQ-p00013-A
+    # Verifies: REQ-d00286
     def test_render_heading(self):
         """Level-1 heading should render with box borders."""
         renderer = MarkdownRenderer(use_color=True)
@@ -152,7 +240,7 @@ class TestMarkdownRenderer:
         assert "═" in result, "Heading should have box border"
         assert "My Title" in result
 
-    # Verifies: REQ-p00013-A
+    # Verifies: REQ-d00286-F
     def test_render_heading_no_color(self):
         """Heading without color should have no ANSI codes."""
         renderer = MarkdownRenderer(use_color=False)
@@ -160,7 +248,7 @@ class TestMarkdownRenderer:
         assert "\033[" not in result, "Should have no ANSI codes"
         assert "My Title" in result
 
-    # Verifies: REQ-p00013-A
+    # Verifies: REQ-d00286
     def test_render_subheading(self):
         """Level-2 heading should render with underline."""
         renderer = MarkdownRenderer(use_color=True)
@@ -168,7 +256,7 @@ class TestMarkdownRenderer:
         assert "─" in result, "Subheading should have underline"
         assert "Subheading" in result
 
-    # Verifies: REQ-p00013-A
+    # Verifies: REQ-d00286
     def test_render_code_block(self):
         """Code blocks should be indented and dimmed."""
         renderer = MarkdownRenderer(use_color=True)
@@ -178,7 +266,7 @@ class TestMarkdownRenderer:
         # Should have DIM escape code when colors enabled
         assert "\033[2m" in result, "Code should be dimmed"
 
-    # Verifies: REQ-p00013-A
+    # Verifies: REQ-d00286
     def test_render_bold(self):
         """Bold text should use BOLD escape code."""
         renderer = MarkdownRenderer(use_color=True)
@@ -186,7 +274,7 @@ class TestMarkdownRenderer:
         assert "\033[1m" in result, "Bold should use BOLD code"
         assert "bold" in result
 
-    # Verifies: REQ-p00013-A
+    # Verifies: REQ-d00286
     def test_render_inline_code(self):
         """Inline code should use CYAN."""
         renderer = MarkdownRenderer(use_color=True)
@@ -194,7 +282,7 @@ class TestMarkdownRenderer:
         assert "\033[36m" in result, "Inline code should be CYAN"
         assert "command" in result
 
-    # Verifies: REQ-p00013-A
+    # Verifies: REQ-d00286
     def test_render_command_with_comment(self):
         """Command lines with comments should have green $ and dim comment."""
         renderer = MarkdownRenderer(use_color=True)
@@ -202,14 +290,14 @@ class TestMarkdownRenderer:
         assert "\033[32m" in result, "$ should be green"
         assert "\033[2m" in result, "Comment should be dim"
 
-    # Verifies: REQ-p00013-A
+    # Verifies: REQ-d00286-F
     def test_convenience_function_auto_color(self):
         """render_markdown should auto-detect TTY."""
         # When forced off, should have no ANSI codes
         result = render_markdown("# Test", use_color=False)
         assert "\033[" not in result
 
-    # Verifies: REQ-p00013-A
+    # Verifies: REQ-d00286-F
     def test_render_preserves_blank_lines(self):
         """Blank lines between paragraphs should be preserved."""
         content = "# Title\n\nParagraph one.\n\nParagraph two."
@@ -228,7 +316,7 @@ class TestMarkdownRenderer:
 class TestCLIIntegration:
     """Test CLI docs command integration."""
 
-    # Verifies: REQ-p00013-B
+    # Verifies: REQ-d00286-B
     def test_docs_quickstart(self):
         """elspais docs quickstart should succeed."""
         result = subprocess.run(
@@ -241,7 +329,7 @@ class TestCLIIntegration:
         assert result.returncode == 0, f"Failed: {result.stderr}"
         assert "ELSPAIS" in result.stdout
 
-    # Verifies: REQ-p00013-B
+    # Verifies: REQ-d00286-B
     def test_docs_all(self):
         """elspais docs all should show all topics."""
         result = subprocess.run(
@@ -257,7 +345,7 @@ class TestCLIIntegration:
         assert "HIERARCHY" in result.stdout
         assert "CONFIGURATION" in result.stdout
 
-    # Verifies: REQ-p00013-B
+    # Verifies: REQ-d00286-F
     def test_docs_plain_no_ansi(self):
         """--plain should produce output without ANSI codes."""
         result = subprocess.run(
@@ -270,7 +358,7 @@ class TestCLIIntegration:
         assert result.returncode == 0
         assert "\033[" not in result.stdout, "Plain output should have no ANSI codes"
 
-    # Verifies: REQ-p00013-B
+    # Verifies: REQ-d00286-B
     @pytest.mark.parametrize("topic", TOPIC_ORDER)
     def test_each_topic_loads(self, topic: str):
         """Each topic should be loadable via CLI."""

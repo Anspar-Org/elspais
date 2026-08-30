@@ -68,7 +68,7 @@ class TestSatisfiesAgainstUnmarkedRaises:
 
         brs = [
             br
-            for br in graph.broken_references()
+            for br in graph.unresolved_references()
             if br.source_id == "REQ-p00002" and br.edge_kind == "satisfies"
         ]
         assert brs, "expected a satisfies broken-ref"
@@ -120,7 +120,7 @@ class TestRefinesTemplateRaises:
 
         brs = [
             br
-            for br in graph.broken_references()
+            for br in graph.unresolved_references()
             if br.source_id == "REQ-p00002" and br.edge_kind == "refines"
         ]
         # A concrete REQ refining a template is ONE mistake -> ONE broken-ref
@@ -160,7 +160,7 @@ class TestRefinesTemplateRaises:
 
         brs = [
             br
-            for br in graph.broken_references()
+            for br in graph.unresolved_references()
             if br.source_id == "REQ-o00002" and br.edge_kind == "refines"
         ]
         # Rules 3 (source-perspective) and 8 (target-perspective) describe the
@@ -214,7 +214,7 @@ class TestRefinesInstanceRaises:
 
         brs = [
             br
-            for br in graph.broken_references()
+            for br in graph.unresolved_references()
             if br.source_id == "REQ-p00003" and br.edge_kind == "refines"
         ]
         assert brs, "expected a refines broken-ref against the instance"
@@ -252,7 +252,7 @@ class TestTemplateWithBehaviouralMetadataRaises:
         )
         graph = build_graph(other, template_with_impl)
 
-        brs = [br for br in graph.broken_references() if br.source_id == "REQ-p00001"]
+        brs = [br for br in graph.unresolved_references() if br.source_id == "REQ-p00001"]
         assert brs, "expected at least one broken-ref on REQ-p00001"
         assert any("Templates are pure specs" in br.diagnostic for br in brs), (
             f"diagnostics: {[br.diagnostic for br in brs]!r}"
@@ -274,7 +274,7 @@ class TestTemplateWithBehaviouralMetadataRaises:
         )
         graph = build_graph(other, template_with_refines)
 
-        brs = [br for br in graph.broken_references() if br.source_id == "REQ-p00001"]
+        brs = [br for br in graph.unresolved_references() if br.source_id == "REQ-p00001"]
         assert brs, "expected at least one broken-ref on REQ-p00001"
         assert any("Templates are pure specs" in br.diagnostic for br in brs), (
             f"diagnostics: {[br.diagnostic for br in brs]!r}"
@@ -308,7 +308,7 @@ class TestTemplateInboundRefinesRaises:
 
         brs = [
             br
-            for br in graph.broken_references()
+            for br in graph.unresolved_references()
             if br.target_id == "REQ-p00001" and br.edge_kind == "refines"
         ]
         assert len(brs) == 1, f"expected exactly one refines broken-ref, got {brs!r}"
@@ -350,7 +350,7 @@ class TestTemplateInboundRefinesRaises:
         # asserted below.)
         rule8_brs = [
             br
-            for br in graph.broken_references()
+            for br in graph.unresolved_references()
             if br.target_id == "REQ-p00001"
             and br.edge_kind == "refines"
             and "is a Template" in br.diagnostic
@@ -367,7 +367,7 @@ class TestTemplateInboundRefinesRaises:
         # (Refines:) -- this is also flagged because templates are pure specs.
         rule7_brs = [
             br
-            for br in graph.broken_references()
+            for br in graph.unresolved_references()
             if br.source_id == "REQ-p00002" and br.edge_kind == "refines"
         ]
         assert rule7_brs, "expected a rule-7 refines broken-ref on the refining template"
@@ -413,7 +413,7 @@ class TestChainedInstantiationRaises:
 
         brs = [
             br
-            for br in graph.broken_references()
+            for br in graph.unresolved_references()
             if br.source_id == "REQ-p00003" and br.edge_kind == "satisfies"
         ]
         assert brs, "expected a satisfies broken-ref for chained instantiation"
@@ -456,7 +456,7 @@ class TestImplementsTemplateIsLegal:
         graph = build_graph(template, code)
 
         # No broken-ref for IMPLEMENTS.
-        impl_brs = [br for br in graph.broken_references() if br.edge_kind == "implements"]
+        impl_brs = [br for br in graph.unresolved_references() if br.edge_kind == "implements"]
         assert not impl_brs, f"Implements: TEMPLATE should be legal, got broken-refs: {impl_brs!r}"
 
         # Template REQ should have an outgoing IMPLEMENTS edge to the CODE
@@ -487,7 +487,7 @@ class TestImplementsTemplateIsLegal:
         )
         graph = build_graph(template, test_ref)
 
-        ver_brs = [br for br in graph.broken_references() if br.edge_kind == "verifies"]
+        ver_brs = [br for br in graph.unresolved_references() if br.edge_kind == "verifies"]
         assert not ver_brs, f"Verifies: TEMPLATE should be legal, got broken-refs: {ver_brs!r}"
 
 
@@ -522,7 +522,7 @@ class TestImplementsInstanceIsError:
 
         brs = [
             br
-            for br in graph.broken_references()
+            for br in graph.unresolved_references()
             if br.edge_kind == "implements" and "REQ-p00002::REQ-p00001" in br.target_id
         ]
         assert brs, "expected a rule-5 broken-ref for implements -> instance"
@@ -564,7 +564,7 @@ class TestVerifiesInstanceIsError:
 
         brs = [
             br
-            for br in graph.broken_references()
+            for br in graph.unresolved_references()
             if br.edge_kind == "verifies" and "REQ-p00002::REQ-p00001" in br.target_id
         ]
         assert brs, "expected a rule-6 broken-ref for verifies -> instance"
