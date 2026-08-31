@@ -480,7 +480,7 @@ A. A surface that reports over a set of requirements SHALL accept a scope naming
 
 B. A scoped report SHALL emit as its answer the requirements its scope selects and no others.
 
-C. The requirements a scoped report presents SHALL NOT depend on the format the report is rendered in.
+C. When a value is reported it SHALL be the same in all formats.
 
 D. A scoped report SHALL disclose the scope under which it was produced.
 
@@ -504,7 +504,7 @@ F is what makes a selection survive contact with a project. A selection that exi
 
 G is the second axis, and it is separate from A because the two are separate questions a reader answers independently. Which requirements a report is about and which facts it states about them are decided for different reasons and by different readers -- a compliance pack wants few requirements described fully, a status review wants many described briefly -- so a reader answering one says nothing about the other. What is common to them is everything else this requirement asks: an answer is honoured, disclosed where its absence would otherwise be invisible, and does not vary by the format it is rendered in. REQ-d00282 fixes the vocabulary the second answer is written in, as REQ-d00278 does for the first.
 
-*End* *Audience-Scoped Reporting* | **Hash**: 199562bd
+*End* *Audience-Scoped Reporting* | **Hash**: c9cc3173
 
 ---
 
@@ -799,8 +799,6 @@ D. `run_term_checks()` SHALL call all six term checks (`duplicates`, `undefined`
 
 **Level**: dev | **Status**: Draft | **Implements**: REQ-p00002, REQ-p00081
 
-A marked term whose definition varies by context SHALL resolve through an explicit, position-independent binding declaration, so that requirement text stays terse at the point of use while its meaning stays deterministic.
-
 ### Assertions
 
 A. A file or an individual requirement SHALL be able to declare a binding that maps a base term to a specific bound term for its own scope.
@@ -826,8 +824,6 @@ Cross-cutting policy text wants to say `*system*` once and mean `portal system` 
 ## REQ-d00264: Usage-Driven Glossary Selection
 
 **Level**: dev | **Status**: Draft | **Implements**: REQ-p00002, REQ-p00081
-
-A generated glossary SHALL be selected by usage: definitions may live anywhere in the federated view, and a generation context emits exactly the terms referenced within it.
 
 ### Assertions
 
@@ -861,7 +857,7 @@ C. Severity SHALL be read from `[rules.format] no_traceability_severity` (defaul
 
 D. A test file SHALL be reported where no test it holds reaches a requirement, whether it holds no tests at all or only tests that reach none.
 
-E. A file carrying a *Traceability* marker that produced no relationship SHALL NOT be reported as carrying no marker. Carrying none and carrying only markers that bound nothing are distinct findings, and each SHALL be reported under a description true of it.
+E. A file carrying no *Traceability* marker and a file carrying only markers that bound nothing are distinct findings, and each SHALL be reported under a description true of it.
 
 F. A file within a scanned directory that is not ignored and does not match the patterns declared for its kind SHALL be reported where it carries a *Traceability* keyword.
 
@@ -877,6 +873,7 @@ H is why the code description and the test description are stated separately rat
 
 ### Changelog
 
+- 2026-08-25 | ba5c7326 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-25 | 0a2e48b7 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-24 | bdfbd910 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-24 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-66: A and D restated as properties rather than as routines and signatures; B retired as mechanism; H added so one file is not reported twice
@@ -891,7 +888,7 @@ H is why the code description and the test description are stated separately rat
 - 2026-03-30 | e1272219 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: sync changelog hash
 - 2026-03-29 | 6e481d63 | - | Michael Lewis (<michael@anspar.org>) | Initial creation
 
-*End* *Code No-Traceability Health Check* | **Hash**: 0a2e48b7
+*End* *Code No-Traceability Health Check* | **Hash**: ba5c7326
 
 ## REQ-d00246: Markdown Emphasis Normalization Utility
 
@@ -978,13 +975,14 @@ E. That applied work exists only in a running process's memory SHALL be recorded
 
 F. When work is lost to an ending the tool does not execute, the tool SHALL disclose that a loss occurred at the earliest point it can, and SHALL NOT present that disclosure as an account of what was lost.
 
-G. The tool SHALL NOT accept work into a process that has already decided to end, and SHALL report the refusal to whoever offered it.
+G. The tool SHALL refuse work offered to a process that has already decided to end, and SHALL report the refusal to whoever offered it.
 
 H. A record disclosed under assertion C SHALL be retired once the affected content has been persisted at a party's own request, so that what the tool discloses describes a state that still stands.
 
 ## Changelog
 
+- 2026-08-25 | 5b33b676 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-08 | 80cf3ca1 | - | Michael Lewis (<michael@anspar.org>) | TOOL-12: author uncommitted-work durability invariants
 - 2026-08-08 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-12: author uncommitted-work durability invariants
 
-*End* *Durability of Uncommitted Work* | **Hash**: 80cf3ca1
+*End* *Durability of Uncommitted Work* | **Hash**: 5b33b676

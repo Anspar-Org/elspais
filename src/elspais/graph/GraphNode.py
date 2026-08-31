@@ -1,4 +1,4 @@
-# Implements: REQ-p00050-A, REQ-p00050-C
+# Implements: REQ-p00050-A
 # Implements: REQ-d00127-A, REQ-d00127-B, REQ-d00127-C, REQ-d00127-D
 """GraphNode - Unified node representation for traceability graph.
 

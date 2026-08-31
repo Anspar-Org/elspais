@@ -146,7 +146,7 @@ def _requirement_graph() -> TraceGraph:
 
 
 class TestOneSelectionOneValueSet:
-    # Verifies: REQ-d00282-E+K
+    # Verifies: REQ-d00282-K, REQ-p00084-C
     @pytest.mark.parametrize("selection", SELECTIONS)
     def test_trace_states_one_value_set_in_every_format(self, canonical_federated_graph, selection):
         """csv, markdown, html and json state the same values in the same
@@ -162,7 +162,7 @@ class TestOneSelectionOneValueSet:
         for fmt in ("csv", "markdown", "html"):
             assert stated[fmt] == expected, f"{fmt} states {stated[fmt]}"
 
-    # Verifies: REQ-d00282-E+K
+    # Verifies: REQ-d00282-K, REQ-p00084-C
     @pytest.mark.parametrize("selection", ("tested", "implemented,uat_coverage"))
     def test_summary_states_one_value_set_in_every_format(self, coverage_payload, selection):
         values = ["level", *selection.split(",")]
@@ -172,7 +172,7 @@ class TestOneSelectionOneValueSet:
         for fmt in ("csv", "markdown"):
             assert _summary_stated(payload, fmt) == expected, fmt
 
-    # Verifies: REQ-d00282-E, REQ-d00258-O+P
+    # Verifies: REQ-p00084-C, REQ-d00258-O+P
     def test_a_figure_states_its_own_denominator_and_proportion(self, coverage_payload):
         """One named value produces one cell carrying the whole fact.
 
@@ -376,7 +376,7 @@ class TestSelectingValuesChangesNothingElse:
         figure = rows[0]["tested"]
         assert (figure["count"], figure["total"], figure["ratio"]) == (1.0, 2.0, 0.5)
 
-    # Verifies: REQ-d00282-H
+    # Verifies: REQ-p00084-B
     def test_selecting_values_does_not_change_which_requirements_are_reported(
         self, canonical_federated_graph
     ):
@@ -507,7 +507,7 @@ class TestAFigureDecomposesIntoItsScalars:
         assert figure["ratio"] == figure["count"] / figure["total"]
         assert repr(figure["ratio"]) == repr(1 / 3)
 
-    # Verifies: REQ-d00282-B, REQ-d00282-E
+    # Verifies: REQ-d00282-B, REQ-p00084-C
     def test_a_table_may_round_the_proportion_the_value_carries_whole(self):
         """REQ-d00282-E binds which values are stated, never how each is
         spelled: a cell states a rounded proportion and the number stays the
@@ -618,7 +618,7 @@ class TestCountsOnlyValues:
 
 
 class TestScalarsStateOneValueSetInEveryFormat:
-    # Verifies: REQ-d00282-E
+    # Verifies: REQ-p00084-C
     def test_trace_states_the_same_scalar_set_in_every_format(self):
         """Rendered as a number where the format has numbers and as text where
         it has cells -- the same values either way."""
@@ -635,7 +635,7 @@ class TestScalarsStateOneValueSetInEveryFormat:
         # One credited of three, a third of them, and nothing failing.
         assert [_at(row, v) for v in values[1:]] == [1.0, 1 / 3, 0]
 
-    # Verifies: REQ-d00282-E
+    # Verifies: REQ-p00084-C
     def test_summary_states_the_same_scalar_set_in_every_format(self):
         values = ["level", "implemented.count", "implemented.ratio", "tested.failed"]
         payload = {
@@ -690,7 +690,7 @@ class TestScalarsStateOneValueSetInEveryFormat:
 
 
 class TestOfferingAValueMovesNothing:
-    # Verifies: REQ-d00282-G
+    # Verifies: REQ-d00282-A
     def test_the_composite_states_what_it_always_stated(self):
         """`--values implemented` is the selection projects committed before
         the scalars existed, and it still states the one composite cell it did
@@ -714,7 +714,7 @@ class TestOfferingAValueMovesNothing:
             "implemented": {"count": 1.0, "total": 3.0, "ratio": 1 / 3},
         }
 
-    # Verifies: REQ-d00282-G
+    # Verifies: REQ-d00282-A
     def test_a_report_asked_for_nothing_is_not_handed_the_new_values(self):
         """A default set may grow; one that swept in every value offered would
         move what an unselected report states each time one was added."""
@@ -722,7 +722,7 @@ class TestOfferingAValueMovesNothing:
         assert not [k for k in summary_cmd.DEFAULT_VALUES if k.endswith((".count", ".ratio"))]
         assert "implemented.count" in summary_cmd.OFFERED_VALUES
 
-    # Verifies: REQ-d00282-G
+    # Verifies: REQ-d00282-A
     def test_the_named_default_sets_state_composites(self):
         for preset in trace_cmd.REPORT_PRESETS.values():
             assert not [c for c in preset.values if "." in c], preset.name
@@ -751,7 +751,7 @@ def _paths(obj: dict, prefix: str = "") -> list[str]:
 
 
 class TestAValueIsStatedAtThePathItsKeySpells:
-    # Verifies: REQ-d00282-B+E
+    # Verifies: REQ-d00282-B, REQ-p00084-C
     @pytest.mark.parametrize(
         "selection,expected",
         (
@@ -787,7 +787,7 @@ class TestAValueIsStatedAtThePathItsKeySpells:
         assert "tested.immediate_direct.count" in VALUE_SPECS
         assert "tested.immediate_direct.count.ratio" not in VALUE_SPECS
 
-    # Verifies: REQ-d00258-O, REQ-d00282-B+E
+    # Verifies: REQ-d00258-O, REQ-d00282-B, REQ-p00084-C
     def test_the_tested_figure_carries_its_breakdown_and_a_measure_of_it_does_not(self):
         """The counts are what came back for the tested assertions OVERALL, so
         they qualify the dimension's own figure. A measure of Tested counts a
@@ -805,7 +805,7 @@ class TestAValueIsStatedAtThePathItsKeySpells:
         }
         assert set(row["tested"]["immediate_direct"]) == {"count", "total", "ratio"}
 
-    # Verifies: REQ-d00282-E
+    # Verifies: REQ-p00084-C
     @pytest.mark.parametrize(
         "selection",
         (
@@ -919,7 +919,7 @@ class TestAFigureNeverTakenIsNotAFigureOfZero:
             }[part]
         )
 
-    # Verifies: REQ-d00254-J, REQ-d00282-E+M
+    # Verifies: REQ-d00254-J, REQ-d00282-M, REQ-p00084-C
     def test_the_table_cell_says_it_too(self):
         """One distinction, both formats: the read format marks the absence
         and the machine format nulls it, and neither prints a zero."""
@@ -949,7 +949,7 @@ class TestAFigureNeverTakenIsNotAFigureOfZero:
 
 
 class TestTheProvenanceBitIsSelectable:
-    # Verifies: REQ-d00254-I, REQ-d00282-B+E
+    # Verifies: REQ-d00254-I, REQ-d00282-B, REQ-p00084-C
     def test_a_bit_is_a_word_in_a_table_and_a_boolean_in_a_format_that_has_one(self):
         """A bit is a state rather than a quantity, so a table states the word
         for the state and JSON states the boolean -- and where no verdict was
@@ -978,7 +978,7 @@ class TestTheProvenanceBitIsSelectable:
         assert cells[_GENUINE_ZERO] == "baseline"
         assert cells[_NOT_RUN] == trace_cmd.ABSENT_FIGURE
 
-    # Verifies: REQ-d00254-I, REQ-d00282-E
+    # Verifies: REQ-d00254-I, REQ-p00084-C
     def test_a_fresh_verdict_reads_fresh(self):
         """The other state of the same bit, so the word is not a constant."""
         from elspais.graph.values import flag_cell
@@ -1054,7 +1054,7 @@ def _sevenths_level() -> dict:
 
 
 class TestAProportionSurvivesTheTrip:
-    # Verifies: REQ-d00282-B+E
+    # Verifies: REQ-d00282-B, REQ-p00084-C
     def test_the_number_is_whole_and_the_cell_is_rounded(self):
         """Three of seven is not a number a cell can hold. Rounded into the
         value, a consumer re-deriving the proportion from the credit and the
@@ -1077,7 +1077,7 @@ class TestAProportionSurvivesTheTrip:
         )[1]
         assert cell == ["0.429"]
 
-    # Verifies: REQ-d00282-B+E
+    # Verifies: REQ-d00282-B, REQ-p00084-C
     def test_the_group_report_carries_it_whole_too(self):
         """The same number over a group: one vocabulary, one precision."""
         row = _summary_json(_sevenths_level(), ["level", "implemented"])
@@ -1243,7 +1243,7 @@ class TestALineFigureDecomposesIntoItsLines:
         assert row["code_tested"]["total"] == 20.0  # not the 2 assertions
         assert row["code_tested"]["ratio"] == 0.8
 
-    # Verifies: REQ-d00282-E+N
+    # Verifies: REQ-d00282-N, REQ-p00084-C
     @pytest.mark.parametrize("fmt", ("csv", "markdown"))
     def test_a_table_states_one_cell_per_line_value(self, fmt):
         """One named value is one value wherever it is stated: the figure is a
@@ -1397,7 +1397,7 @@ class TestALineFigureSurvivesAnAssertionLessGroup:
     is not the absence of the other.
     """
 
-    # Verifies: REQ-d00282-E+M+N
+    # Verifies: REQ-d00282-M+N, REQ-p00084-C
     @pytest.mark.parametrize("fmt", ("text", "csv", "markdown", "json"))
     def test_every_format_states_the_lines_of_a_group_with_no_assertions(self, fmt):
         row = _lines_level()

@@ -201,7 +201,6 @@ class TestSelectableProperties:
         scope = ReportScope(include=include, exclude=exclude)
         assert _ids(estate, scope, estate_config) == expected
 
-    # Verifies: REQ-d00278-M
     def test_a_further_property_does_not_move_an_existing_scope(
         self, estate, estate_config, monkeypatch
     ):

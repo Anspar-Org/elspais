@@ -1,5 +1,5 @@
 # Verifies: REQ-d00130-A, REQ-d00130-B, REQ-d00130-C, REQ-d00130-D
-# Verifies: REQ-d00130-E, REQ-d00130-F
+# Verifies: REQ-d00130-E, REQ-d00130-A
 """Tests for parameterized iter_roots() and iter_by_kind().
 
 Verifies that iter_roots() accepts an optional NodeKind filter,
@@ -220,7 +220,7 @@ class TestIterByKind:
 class TestFileNodesExcludedFromDefault:
     """Validates REQ-d00130-F: FILE nodes not in default iter_roots()."""
 
-    # Verifies: REQ-d00130-F
+    # Verifies: REQ-d00130-A
     def test_REQ_d00130_F_file_nodes_not_in_default_roots(self, tmp_path: Path) -> None:
         """Default iter_roots() does not yield FILE nodes."""
         _write_spec(tmp_path)
@@ -237,7 +237,7 @@ class TestFileNodesExcludedFromDefault:
             "FILE nodes should not appear in default iter_roots()"
         )
 
-    # Verifies: REQ-d00130-F
+    # Verifies: REQ-d00130-A
     def test_REQ_d00130_F_root_count_unchanged(self, tmp_path: Path) -> None:
         """root_count() continues to reflect only non-FILE roots."""
         _write_spec(tmp_path)

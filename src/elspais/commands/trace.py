@@ -356,7 +356,7 @@ def _get_node_data(node, graph: FederatedGraph, *, assertion_labels: bool = Fals
     selective = fresh_targets is not None
 
     def _fmt_count(num: float, total: int) -> str:
-        # Implements: REQ-d00282-E
+        # Implements: REQ-p00084-C
         # Through the shared cell authority, so a figure reads the same here as
         # in every other report that states one.
         if total == 0:
@@ -420,7 +420,7 @@ def _get_node_data(node, graph: FederatedGraph, *, assertion_labels: bool = Fals
         },
     )
 
-    # Implements: REQ-d00282-H, REQ-d00282-L
+    # Implements: REQ-p00084-B, REQ-d00282-L
     # Read for every requirement whatever the selection names: the journeys
     # value states a fact ABOUT a row, and a value switch that decided
     # whether the row existed would be a second row-selection.
@@ -472,7 +472,7 @@ def _get_node_data(node, graph: FederatedGraph, *, assertion_labels: bool = Fals
             # the four measures, taken once per *Assertion* -- with no
             # marker standing in for a measure the cell does not show; the
             # four measures are published as their own values below.
-            # Implements: REQ-d00282-E
+            # Implements: REQ-p00084-C
             # ONE value per name, whatever the detail flag asks for: the
             # labels form replaces the count in the cell rather than splitting
             # the value in the formats that could carry two.
@@ -507,7 +507,7 @@ def _get_node_data(node, graph: FederatedGraph, *, assertion_labels: bool = Fals
                 data[f"{key}_{FLAG_CARRIED}"] = (
                     bool(dim.carried) if taken and dim.total > 0 else None
                 )
-        # Implements: REQ-d00258-O, REQ-d00282-E
+        # Implements: REQ-d00258-O, REQ-p00084-C
         # The breakdown QUALIFIES the Tested figure, so it is put inside that
         # figure's value once, here, and every format states the one cell.
         # Given cells of its own in one format and a bracket in another, the
@@ -607,7 +607,7 @@ def _value_headers(config: dict | None = None) -> dict[str, str]:
     return {key: header_for(key, config) for key in OFFERED_VALUES}
 
 
-# Implements: REQ-d00282-E
+# Implements: REQ-p00084-C
 # The measures behind each dimension are values like any other, named in the
 # selection vocabulary (``tested.immediate_direct``) and stated only where the
 # selection names them. They were previously bolted onto CSV and JSON alone,
@@ -615,7 +615,7 @@ def _value_headers(config: dict | None = None) -> dict[str, str]:
 # in -- the divergence REQ-d00282-E forbids.
 
 
-# Implements: REQ-d00282-E+M
+# Implements: REQ-d00282-M, REQ-p00084-C
 def _format_row(data: dict, keys: Sequence[str]) -> list[str]:
     """One row as the formats people read state it, one cell per stated value.
 
@@ -661,7 +661,7 @@ def _report_values(preset: ReportPreset, values: Sequence[str] | None) -> list[s
     return list(values) if values is not None else _default_values(preset)
 
 
-# Implements: REQ-d00282-B+E+K+M
+# Implements: REQ-d00282-B+K+M, REQ-p00084-C
 def _json_row(data: dict, keys: Sequence[str], node=None) -> dict:
     """One JSON object stating exactly the values the report states.
 
@@ -699,7 +699,7 @@ def _json_row(data: dict, keys: Sequence[str], node=None) -> dict:
     )
 
 
-# Implements: REQ-p00084-B+C
+# Implements: REQ-p00084-B
 def _scoped_requirements(graph: FederatedGraph, scope_ids: frozenset[str] | None):
     """The requirements a rendering emits, honouring the scope it was given.
 
@@ -727,7 +727,7 @@ def format_markdown(
     yield "# Traceability Matrix"
     yield ""
 
-    # Implements: REQ-p00084-C+D
+    # Implements: REQ-p00084-B+D
     # The scope rides inside the rendering, so the artifact a reader files
     # declares what selected its rows -- in this format as in every other.
     for line in scope_lines or []:
@@ -838,14 +838,14 @@ def format_csv(
             return '"' + s.replace('"', '""') + '"'
         return s
 
-    # Implements: REQ-p00084-C+D
+    # Implements: REQ-p00084-B+D
     # A leading comment row per disclosure line. It is one escaped field, so a
     # consumer still reads the file as CSV, and it precedes the header so the
     # table beneath it is the shape it always was.
     for line in scope_lines or []:
         yield escape(f"# {line}")
 
-    # Implements: REQ-d00282-C+E+K
+    # Implements: REQ-d00282-C+K, REQ-p00084-C
     # One header and one cell per stated value, headed by the words the
     # project configures (REQ-d00258-K). Nothing rides alongside: a figure's
     # proportion lives inside its own cell and the Tested breakdown inside the
@@ -912,7 +912,7 @@ def format_html(
     yield "</style></head><body>"
     yield "<h1>Traceability Matrix</h1>"
 
-    # Implements: REQ-p00084-C+D
+    # Implements: REQ-p00084-B+D
     # A subtitle beneath the heading: the page states the scope that produced
     # it, so the file a reader saves is not silent about what it left out.
     for line in scope_lines or []:
@@ -973,7 +973,7 @@ def format_json(
 
     cols = _report_values(preset, values)
 
-    # Implements: REQ-p00084-C+D
+    # Implements: REQ-p00084-B+D
     if scope_lines:
         yield "{"
         yield f'"scope": {json.dumps(list(scope_lines), indent=2)},'
@@ -1083,7 +1083,7 @@ def render_section(
 
     result = resolve_scope_for_report(graph, args, config)
     scope_ids = None if len(result.ids) == result.population else result.ids
-    # Implements: REQ-p00084-C+D
+    # Implements: REQ-p00084-B+D
     # The disclosure goes THROUGH the formatter rather than ahead of it, so a
     # composed section declares its scope in the shape of the format it is
     # rendered in -- a bare line ahead of a CSV or JSON section is neither.
@@ -1098,7 +1098,7 @@ def _render_json_from_data(
     values: Sequence[str] | None = None,
 ) -> None:
     """Render JSON output from compute_trace data dict."""
-    # Implements: REQ-p00084-C+D
+    # Implements: REQ-p00084-B+D
     # The scope reaches this path inside the computed data, and leaves it the
     # same way: the document states the scope a table rendering states, rather
     # than leaving it on a stream the artifact does not carry.
@@ -1106,7 +1106,7 @@ def _render_json_from_data(
     cols = _report_values(preset, values)
     nodes = []
     for node_data in data["nodes"]:
-        # Implements: REQ-d00282-E
+        # Implements: REQ-p00084-C
         # The same row builder the live-graph path uses, so a selection reaches
         # the same values whether a serving process or this process computed
         # the report.
@@ -1198,7 +1198,7 @@ def run(args: argparse.Namespace) -> int:
     skip_daemon = bool(spec_dir) or fresh_targets is not None
 
     if dimension == "uat":
-        # Implements: REQ-d00257-A+C, REQ-d00282-H
+        # Implements: REQ-d00257-A+C, REQ-p00084-B
         # `--dimension uat` is a named default value set and nothing else: it
         # states the UAT dimensions and the journeys validating each row, and
         # leaves the code dimensions out. Which requirements the report is
@@ -1227,7 +1227,7 @@ def run(args: argparse.Namespace) -> int:
             include_test_refs=getattr(args, "show_tests", False),
         )
 
-    # Implements: REQ-d00282-A+E+F
+    # Implements: REQ-d00282-A+F, REQ-p00084-C
     # Resolved before anything is built or asked of a serving process, and
     # carried in the same parameters the scope travels in.
     resolved = _resolve_values_or_report(args, preset, config)

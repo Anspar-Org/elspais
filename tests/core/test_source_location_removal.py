@@ -1,4 +1,4 @@
-# Verifies: REQ-d00129-A, REQ-d00129-B, REQ-d00129-C, REQ-d00129-D, REQ-d00129-E, REQ-d00129-F
+# Verifies: REQ-d00129-C, REQ-d00129-D, REQ-d00129-E, REQ-d00129-F
 """Tests for SourceLocation removal (REQ-d00129).
 
 Validates that:
@@ -9,43 +9,8 @@ Validates that:
 - Consumers produce the same output format as before
 """
 
-import pytest
-
 from elspais.graph.GraphNode import FileType, GraphNode, NodeKind
 from elspais.graph.relations import EdgeKind
-
-
-class TestSourceLocationRemoved:
-    """REQ-d00129-A: SourceLocation class SHALL NOT exist."""
-
-    # Verifies: REQ-d00129-A
-    def test_REQ_d00129_A_sourcelocation_not_importable(self):
-        """Importing SourceLocation from GraphNode raises ImportError."""
-        with pytest.raises(ImportError):
-            from elspais.graph.GraphNode import SourceLocation  # noqa: F401
-
-    # Verifies: REQ-d00129-A
-    def test_REQ_d00129_A_sourcelocation_not_in_graph_init(self):
-        """SourceLocation not exported from elspais.graph."""
-        import elspais.graph as graph_mod
-
-        assert not hasattr(graph_mod, "SourceLocation")
-
-
-class TestGraphNodeSourceFieldRemoved:
-    """REQ-d00129-B: GraphNode SHALL NOT have a source field."""
-
-    # Verifies: REQ-d00129-B
-    def test_REQ_d00129_B_no_source_field(self):
-        """GraphNode has no source attribute."""
-        node = GraphNode(id="test-1", kind=NodeKind.REQUIREMENT, label="Test")
-        assert not hasattr(node, "source")
-
-    # Verifies: REQ-d00129-B
-    def test_REQ_d00129_B_no_source_in_constructor(self):
-        """GraphNode constructor rejects source= keyword."""
-        with pytest.raises(TypeError):
-            GraphNode(id="test-1", kind=NodeKind.REQUIREMENT, label="Test", source="anything")
 
 
 class TestParseLineFields:

@@ -422,7 +422,7 @@ class TraceGraph:
     _mutation_log: MutationLog = field(default_factory=MutationLog, init=False)
     _deleted_nodes: list[GraphNode] = field(default_factory=list, init=False)
 
-    # Implements: REQ-d00130-A, REQ-d00130-B, REQ-d00130-C, REQ-d00130-D, REQ-d00130-F
+    # Implements: REQ-d00130-A, REQ-d00130-B, REQ-d00130-C, REQ-d00130-D
     def iter_roots(self, kind: NodeKind | None = None) -> Iterator[GraphNode]:
         """Iterate root nodes, optionally filtered by NodeKind.
 
@@ -4260,7 +4260,7 @@ class GraphBuilder:
             if source_path_rel:
                 entry.append(source_path_rel)
 
-        # Implements: REQ-d00129-A, REQ-d00129-B
+        # Implements: REQ-d00129-C
         # Create requirement node
         node = GraphNode(
             id=req_id,
@@ -5313,7 +5313,7 @@ class GraphBuilder:
                 # INSTANCE edge from clone to original
                 clone.link(orig, EdgeKind.INSTANCE)
 
-            # Implements: REQ-d00128-K
+            # Implements: REQ-d00128-L
             # Recreate internal edges in cloned subtree
             for orig in template_nodes:
                 clone = clone_map.get(orig.id)

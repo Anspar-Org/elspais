@@ -122,28 +122,23 @@ class TestEdge:
 class TestEdgeSemantics:
     """Tests for edge semantic differences."""
 
-    # Verifies: REQ-d00126-D
     def test_implements_rollup_flag(self):
         """IMPLEMENTS edges contribute to coverage rollup."""
         assert EdgeKind.IMPLEMENTS.contributes_to_coverage() is True
 
-    # Verifies: REQ-d00126-D
     def test_refines_no_rollup_flag(self):
         """REFINES edges do NOT contribute to coverage rollup."""
         assert EdgeKind.REFINES.contributes_to_coverage() is False
 
-    # Verifies: REQ-d00126-D
     def test_validates_rollup_flag(self):
         """VERIFIES edges (tests) contribute to coverage."""
         assert EdgeKind.VERIFIES.contributes_to_coverage() is True
 
-    # Verifies: REQ-d00126-D
     def test_contains_no_rollup_flag(self):
         """CONTAINS edges (file structure) don't affect coverage."""
         assert EdgeKind.CONTAINS.contributes_to_coverage() is False
 
 
-# Verifies: REQ-d00126-D
 def test_validates_REQ_contributes_to_coverage():
     """EdgeKind.VALIDATES contributes to coverage.
 

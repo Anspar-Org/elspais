@@ -61,8 +61,6 @@ J. <RETIRED> a dedicated health-check endpoint was never implemented
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-d00010, REQ-d00200
 
-The review server SHALL expose federation repo metadata and staleness information.
-
 ### Assertions
 
 A. `/api/repos` SHALL return a list of federated repos from `iter_repos()` with name, path, status (ok/error), git_origin, and error fields.

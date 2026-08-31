@@ -68,7 +68,7 @@ class TestTraceCommand:
         assert isinstance(parsed, list)
         assert any(item["id"] == "REQ-p00001" for item in parsed)
 
-    # Verifies: REQ-d00069-L, REQ-d00282-B+E
+    # Verifies: REQ-d00069-L, REQ-d00282-B, REQ-p00084-C
     def test_the_measures_are_selected_not_granted_by_the_format(
         self, canonical_federated_graph, capsys
     ):
@@ -103,7 +103,7 @@ class TestTraceCommand:
         assert list(item["implemented"]) == ["rolled_indirect"]
         assert set(item["tested"]["immediate_direct"]) == {"count", "total", "ratio"}
 
-    # Verifies: REQ-d00069-L, REQ-d00282-E
+    # Verifies: REQ-d00069-L, REQ-p00084-C
     def test_format_json_graph_path_states_the_same_values(self, canonical_federated_graph, capsys):
         """The live-graph JSON path (``format_json``) states what the
         daemon-payload path (``_render_json_from_data``) states, for one
@@ -1298,7 +1298,7 @@ class TestTraceFooting:
         assert _format_row(data, ["code_tested.attributed"]) == [ABSENT_FIGURE]
         assert ABSENT_FIGURE == "n/a"
 
-    # Verifies: REQ-d00258-E, REQ-d00282-E+N
+    # Verifies: REQ-d00258-E, REQ-d00282-N, REQ-p00084-C
     def test_the_line_figure_is_unmoved_by_the_assertion_label_flag(
         self, code_tested_no_attribution_project
     ):
@@ -1586,7 +1586,7 @@ class TestTraceTestedBreakdown:
         assert "> Tested breakdown:" not in out
         assert "1P" not in out
 
-    # Verifies: REQ-d00258-O, REQ-d00282-E
+    # Verifies: REQ-d00258-O, REQ-p00084-C
     def test_csv_states_the_breakdown_inside_the_one_tested_column(self, tested_breakdown_project):
         """The breakdown qualifies the Tested figure, so it rides in that
         figure's cell here exactly as it does in markdown.
@@ -1609,7 +1609,7 @@ class TestTraceTestedBreakdown:
         )
         assert first[headers.index("Tested")] == "3/3 (100%) [1P 1F 1A]"
 
-    # Verifies: REQ-d00069-L, REQ-d00258-A, REQ-d00282-B+E
+    # Verifies: REQ-d00069-L, REQ-d00258-A, REQ-d00282-B, REQ-p00084-C
     def test_a_measure_is_a_value_a_selection_names_in_every_format(self, tested_breakdown_project):
         """A measure is reachable by selecting it, not by choosing a format.
 

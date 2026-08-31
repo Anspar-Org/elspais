@@ -4,7 +4,7 @@
 # Implements: REQ-d00050-A, REQ-d00050-B, REQ-d00050-C, REQ-d00050-D, REQ-d00050-E
 # Implements: REQ-d00051-A, REQ-d00051-B, REQ-d00051-C, REQ-d00051-D
 # Implements: REQ-d00051-F
-# Implements: REQ-d00055-A, REQ-d00055-B, REQ-d00055-C, REQ-d00055-D, REQ-d00055-E
+# Implements: REQ-d00055-A, REQ-d00055-C, REQ-d00055-D, REQ-d00055-E
 # Implements: REQ-d00069-A, REQ-d00069-B, REQ-d00069-D
 # Implements: REQ-d00215-A+B+C+D+E
 """Node annotation functions for TraceGraph.

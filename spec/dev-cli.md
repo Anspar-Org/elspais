@@ -4,8 +4,6 @@
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-p00002, REQ-p00005-E
 
-Diagnostic commands (`doctor`, `health`) SHALL exit non-zero when they detect configuration or validation failures, ensuring CI pipelines and callers can rely on exit codes to gate merges.
-
 ### Assertions
 
 A. Diagnostic commands (`doctor`, `health`) SHALL exit non-zero when any check produces a warning-level or error-level finding. The `--lenient` flag SHALL relax this so that only error-level findings cause non-zero exit.
@@ -81,7 +79,7 @@ Expansion belongs to the identifier grammar rather than to any one parser: a com
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-p00001-A
 
-The system SHALL provide a unified, configurable reference pattern system used by all parsers (CodeParser, TestParser, JUnitXMLParser, PytestJSONParser) to locate requirement references in source files.
+A single, configurable reference pattern is used to locate requirement references across every kind of source file.
 
 ### Assertions
 
@@ -127,8 +125,6 @@ Different projects use different ID conventions, comment styles, and directory s
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-p00003
 
-The `trace` command SHALL generate *Traceability* output from the requirement graph, supporting multiple output formats with configurable column presets and detail levels.
-
 ### Assertions
 
 A. The command SHALL support structured JSON graph output via `--graph-json`, including git change annotations when available.
@@ -162,8 +158,6 @@ A JSON graph output mode enables programmatic consumption of the full *Traceabil
 ## REQ-d00085: Unified Report Composition
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-p00002, REQ-p00003
-
-The CLI SHALL support composable report output by accepting multiple section names as positional arguments. Sections are rendered in the order specified and concatenated into a single output stream.
 
 ### Assertions
 
@@ -236,7 +230,7 @@ C. There SHALL be a code meaning that the defect could not be determined beyond 
 
 D. A code SHALL be issued only where the input determines the defect it names. Where the input admits two accounts of equal extent, neither SHALL be issued.
 
-E. Introducing a code SHALL NOT change which category a finding falls in, the severity configured for that category, or the meaning of a code already in use.
+E. <RETIRED> forbade introducing a code from changing a category, a configured severity, or the meaning of a code in use. Nothing permits introducing a code to do any of those, so nothing had to forbid it.
 
 ### Rationale
 
@@ -246,11 +240,12 @@ D is what keeps B from becoming guesswork. Reporting several respects in which a
 
 ### Changelog
 
+- 2026-08-25 | fb458e96 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-16 | 6f4019d1 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: sync changelog hash
 - 2026-08-16 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: Active — every reported fault carries codes, the codes are documented with a producing input in `elspais docs linking`, and two codes no input could produce are retired from the vocabulary
 - 2026-08-15 | - | - | Michael Lewis (<michael@anspar.org>) | Initial authoring: closed categories over open codes, multiple codes per finding, a generic code, and issuance only where determined
 
-*End* *Diagnostic Code Vocabulary* | **Hash**: 6f4019d1
+*End* *Diagnostic Code Vocabulary* | **Hash**: fb458e96
 
 ## REQ-d00285: The Shape of a Finding
 
@@ -275,7 +270,7 @@ F. A name under which findings are reported SHALL identify one condition.
 
 G. Where a condition the tool detected is not reported, the point at which it is withheld SHALL record what was withheld and why.
 
-H. A narrowing of which findings a report presents SHALL NOT change the verdict that report reaches.
+H. <RETIRED> forbade a narrowing of which findings a report presents from changing the verdict that report reaches. Nothing permits which findings are shown to bear on the verdict, so nothing had to forbid it.
 
 I. A report that narrows which findings it presents SHALL disclose the narrowing and the extent of what it withheld.
 
@@ -302,7 +297,7 @@ D and E are where a finding's severity is settled, for every finding the tool pr
 - 2026-08-24 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-66: govern narrowing a report to selected findings — the verdict stays the run's, and the narrowing and the extent of what it withheld are disclosed
 - 2026-08-24 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-66: Initial authoring — a finding carries its location, its remedy and one severity decided in one place, and reads the same in every format
 
-*End* *The Shape of a Finding* | **Hash**: bedec247
+*End* *The Shape of a Finding* | **Hash**: b0ffe9ce
 
 ## REQ-d00286: Built-In User Documentation
 
@@ -346,8 +341,6 @@ F exists because documentation is read by programs as well as people, and displa
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-p00003
 
-The `coverage` section SHALL produce a coverage report showing implemented, tested, and passing status at the requirement and *Assertion* level.
-
 ### Assertions
 
 A. The report SHALL group requirements by level as REQ-d00281 determines those groups, and show counts and percentages of requirements with code references, test references, and passing tests.
@@ -382,7 +375,7 @@ Coverage data is already computed during graph construction but is only surfaced
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-o00065
 
-The `commands/link_suggest.py` module SHALL provide the `elspais link suggest` CLI command.
+`elspais link suggest` is a CLI command.
 
 ### Assertions
 
@@ -413,8 +406,6 @@ CLI exposure enables both interactive use and CI pipeline integration. JSON outp
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-p00003
 
-The `analysis` module SHALL provide read-only analytical functions that operate on a `TraceGraph` to rank requirements by foundational importance. The module SHALL NOT modify the graph or create parallel data structures.
-
 ### Assertions
 
 A. The module SHALL compute PageRank-style centrality scores for requirement nodes by iterating on reversed edges (children distribute score to parents) with a configurable damping factor, converging within a tolerance threshold.
@@ -431,24 +422,25 @@ F. The module SHALL filter nodes by `NodeKind`, defaulting to REQUIREMENT and *A
 
 G. The module SHALL rank actionable leaf nodes by summing the composite scores of their ancestors, surfacing the most impactful uncovered work items.
 
+H. Ranking SHALL read the graph without modifying it.
+
 ### Rationale
 
 In a large requirements DAG, naive metrics like descendant count always favor the root node. PageRank centrality naturally handles DAGs and rewards cross-cutting dependencies. Combined with fan-in (how many independent areas depend on a node) and coverage gaps, this enables evidence-based prioritization of foundational work.
 
 ### Changelog
 
+- 2026-08-30 | 87bc52f2 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | b153d5f6 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 86bb619b | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | 86bb619b | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *Graph Analysis Engine* | **Hash**: b153d5f6
+*End* *Graph Analysis Engine* | **Hash**: 87bc52f2
 ---
 
 ## REQ-d00125: Analysis CLI Command
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-p00003
-
-The `elspais analysis` command SHALL invoke the graph analysis engine and render ranked results in table or JSON format.
 
 ### Assertions
 
@@ -609,8 +601,6 @@ running tests.
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-p00002
 
-The `example` command SHALL display requirement format reference material to help authors discover and follow the correct structure, without requiring a spec directory or a built graph.
-
 ### Assertions
 
 A. Invoking `elspais example` with no subcommand SHALL print a quick-reference summary covering the basic requirement structure and the available `example` subcommands.
@@ -625,16 +615,19 @@ E. `elspais example ids` SHALL print the ID pattern configuration for the curren
 
 F. `elspais example --full` SHALL display the full contents of the project's `requirements-spec.md` (or `requirements-format.md`) file when found, and SHALL return a non-zero exit code with the searched paths listed when neither file exists.
 
+G. The `example` command SHALL run without a spec directory or a built graph.
+
 ### Rationale
 
 Authors writing their first requirement, or reviewers checking format conventions, need a fast, offline reference without opening the full *Specification*. `example` fills this role independently of `elspais init` (which scaffolds a new project's configuration) by surfacing format templates and rules on demand.
 
 ### Changelog
 
+- 2026-08-30 | 99ce6269 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | c3b67490 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-03 | 8e05d02e | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms, update hash, add missing changelog section
 
-*End* *Requirement Format Reference Command* | **Hash**: c3b67490
+*End* *Requirement Format Reference Command* | **Hash**: 99ce6269
 
 ## REQ-d00266: Mechanical Style Checks
 
@@ -700,7 +693,7 @@ K. A name the vocabulary does not admit SHALL select no requirement in that voca
 
 L. Where a scope selects no requirement from an estate that holds requirements, the tool SHALL report the empty selection as the scope's answer rather than as an absence of requirements.
 
-M. Admitting a further property a scope can select on SHALL NOT change which requirements an already expressible scope selects.
+M. <RETIRED> forbade admitting a further property a scope can select on from changing which requirements an already expressible scope selects. Nothing permits a scope's meaning to turn on properties it does not name.
 
 ### Rationale
 
@@ -714,7 +707,7 @@ J, K and L are the honesty group, separate because opposite situations produce t
 
 M is what allows the vocabulary to grow, and growth is owed. Selection axes beyond level and status are foreseeable: a compiled document offering its stakeholder audience the product-level requirements of every member of a federation, or a ranking narrowed to one level (REQ-d00125-E), are selections of this kind and are expressed in this vocabulary. The cost of admitting a property must fall on the scopes that use it and on nothing else — a project whose committed scopes shifted meaning because the tool learned a new property would have to re-audit every report it ever committed.
 
-*End* *Report Scope Selection Vocabulary* | **Hash**: ef2221cc
+*End* *Report Scope Selection Vocabulary* | **Hash**: 622363f0
 
 ---
 
@@ -758,15 +751,15 @@ C. A value taken on one measure SHALL be named for both the coverage dimension i
 
 D. A value a report states SHALL equal the value a report stating every value it offers states for the same row.
 
-E. The values a report states SHALL NOT depend on the format it is rendered in.
+E. <RETIRED> forbade the values a report states from depending on the format it is rendered in. A format may offer values another does not, so what carries across formats is agreement rather than presence: a value that IS reported is the same in all of them, per REQ-p00084-C.
 
 F. A report SHALL NOT be produced under a selection the tool did not honour in full.
 
-G. Offering a further value SHALL NOT change which values an already expressible selection states.
+G. <RETIRED> forbade offering a further value from changing which values an already expressible selection states. A selection states the values it names, per REQ-d00282-A and REQ-d00282-K; nothing permits an unnamed value to enter it.
 
-H. Selecting which values a report states SHALL NOT change which requirements the report is about.
+H. <RETIRED> forbade selecting which values a report states from changing which requirements the report is about. Which requirements a report is about is its scope, per REQ-p00084-B; nothing permits a value selection to bear on it.
 
-I. Selecting which requirements a report is about SHALL NOT change which values it states.
+I. <RETIRED> forbade selecting which requirements a report is about from changing which values it states. A report states the values its selection names, per REQ-d00282-A; nothing permits its scope to bear on them.
 
 J. The names a selection uses SHALL be independent of the words a project configures its values to be displayed under.
 
@@ -800,7 +793,7 @@ N reaches the one figure B cannot. Line coverage is measured in lines and confer
 
 M is the distinction between having nothing to say and saying nothing. Not every value a report offers exists for every row -- a coverage figure has none for a group whose requirements confer none. Where those two look alike a reader reads absence as zero and concludes work is undone that was never owed, which is the same defect REQ-d00258-E keeps out of line coverage by recording whether a measurement was taken rather than letting an absent one read as none.
 
-*End* *Report Value Selection* | **Hash**: 70ab39ac
+*End* *Report Value Selection* | **Hash**: b0d3912d
 
 ---
 

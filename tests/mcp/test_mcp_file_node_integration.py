@@ -263,7 +263,7 @@ class TestSubtreeKindDefaults:
 class TestSearchExcludesFileNodes:
     """Validates REQ-d00133-D: search does not return FILE nodes."""
 
-    # Verifies: REQ-d00133-D
+    # Verifies: REQ-d00061-A
     def test_REQ_d00133_D_search_excludes_file_nodes(self, file_node_graph):
         """_search should not return FILE nodes even if query matches."""
         from elspais.mcp.server import _search
@@ -276,7 +276,7 @@ class TestSearchExcludesFileNodes:
         for rid in result_ids:
             assert not rid.startswith("file:")
 
-    # Verifies: REQ-d00133-D
+    # Verifies: REQ-d00061-A
     def test_REQ_d00133_D_search_returns_requirements_only(self, file_node_graph):
         """_search should only return REQUIREMENT nodes."""
         from elspais.mcp.server import _search

@@ -85,7 +85,7 @@ def _render_table(
     scope_lines: Sequence[str] | None = None,
 ) -> None:
     """Render the report as a formatted table."""
-    # Implements: REQ-p00084-C+D
+    # Implements: REQ-p00084-B+D
     for line in scope_lines or []:
         print(line)
     if scope_lines:
@@ -137,7 +137,7 @@ def _render_table(
 
 def _render_json(report: FoundationReport, scope_lines: Sequence[str] | None = None) -> None:
     """Render the report as JSON."""
-    # Implements: REQ-p00084-C+D
+    # Implements: REQ-p00084-B+D
     # The same disclosure the table states, in the document a reader files.
     payload = asdict(report)
     if scope_lines:

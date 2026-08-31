@@ -1,5 +1,5 @@
 # Implements: REQ-d00054-A
-# Implements: REQ-d00128-A, REQ-d00128-B, REQ-d00128-C, REQ-d00128-G, REQ-d00128-H
+# Implements: REQ-d00128-A, REQ-d00128-B, REQ-d00128-C, REQ-d00128-G
 """Graph Factory - Shared utility for building TraceGraph from spec files.
 
 This module provides a single entry point for all commands to build a TraceGraph
@@ -1050,7 +1050,7 @@ def build_graph(
                         _record_declined_files(builder, domain_file, "test", repo_root)
 
             # 6b-target. Ingest results from [[scanning.test.targets]] via reporter registry.
-            # Implements: REQ-d00128-A+H
+            # Implements: REQ-d00128-A+G
             # RemainderParser is NOT registered for RESULT file types.
             # When targets is empty (the default) this loop is a no-op.
             _captured = captured_results or {}

@@ -87,7 +87,7 @@ def parse_shared_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--not-status", nargs="*", default=None, dest="not_status")
     parser.add_argument("--match-status-roles", action="store_true", dest="match_status_roles")
     parser.add_argument("--scope", default=None)
-    # Implements: REQ-d00282-E
+    # Implements: REQ-p00084-C
     # The other axis of the same report, registered here for the same reason:
     # a selection this parser does not read is one the composed report cannot
     # honour, and a section composed with others would state different values

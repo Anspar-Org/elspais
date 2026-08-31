@@ -4,11 +4,9 @@
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-p00005, REQ-p00050
 
-FederatedGraph SHALL wrap one or more TraceGraph instances, each paired with its own configuration and repo root, delegating all read-only TraceGraph methods with documented federation strategies.
-
 ### Assertions
 
-A. FederatedGraph SHALL wrap one or more TraceGraph instances, directly or indirectly
+A. FederatedGraph SHALL wrap one or more TraceGraph instances, directly or indirectly, each paired with its own configuration and repo root.
 
 B. FederatedGraph SHALL provide a way to create a federation-of-one from a single TraceGraph, config, and repo_root, using "root" as the default repo name.
 
@@ -30,20 +28,19 @@ FederatedGraph provides config isolation for multi-repo builds while presenting 
 
 ### Changelog
 
+- 2026-08-30 | 625365b9 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-25 | ed077a7c | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-25 | b351e9ad | - | Michael Lewis (<michael@anspar.org>) | Made assertions less fragile
 - 2026-07-31 | 06b84d97 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 72471144 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 72471144 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *FederatedGraph Read-Only Delegation* | **Hash**: ed077a7c
+*End* *FederatedGraph Read-Only Delegation* | **Hash**: 625365b9
 ---
 
 ## REQ-d00201: FederatedGraph Mutation Delegation
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-d00200, REQ-p00050
-
-FederatedGraph SHALL delegate all mutation operations to the appropriate sub-graph, maintain a unified mutation log across repos, and update internal ownership when IDs change.
 
 ### Assertions
 
@@ -78,8 +75,6 @@ Mutation delegation preserves TraceGraph's existing mutation+undo logic while ad
 ## REQ-d00202: Associates Config Loading
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-p00005
-
-The config system SHALL parse `[associates.<name>]` sections from `.elspais.toml` to declare federated repository associations.
 
 ### Assertions
 
@@ -138,8 +133,6 @@ A namespace answers whose identifiers these are, so a federation in which two re
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-d00200, REQ-p00005
 
-The `build_graph()` factory SHALL build separate TraceGraph instances per repository when associates are configured, constructing a multi-repo FederatedGraph.
-
 ### Assertions
 
 A. When `[associates]` config is present, `build_graph()` SHALL create a separate `TraceGraph` per associate repo, each with its own config-derived resolver.
@@ -170,8 +163,6 @@ Per-repo building ensures config isolation: each repo's hierarchy rules, format 
 ## REQ-d00204: Per-Repo Health Check Delegation
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-d00200, REQ-p00002
-
-Health checks that depend on per-repo configuration SHALL run once per federated repo using that repo's own config, ensuring config isolation in multi-repo federations.
 
 ### Assertions
 
@@ -266,8 +257,6 @@ The bottom-up reference model (`Implements:` authored on the implementer) would 
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-d00200
 
-Associate repositories SHALL affect only read and validation surfaces by default; the write and generation surfaces SHALL be primary-repo-only unless explicitly opted in via the `[federation]` config table.
-
 ### Assertions
 
 A. The `[federation]` config table SHALL expose `write_associates` and `index_associates`, both defaulting to false.
@@ -304,8 +293,6 @@ Global booleans alone cannot express the common cross-repo workflow — enable w
 ## REQ-d00260: Workspace Registry and Federated View Assembly
 
 **Level**: dev | **Status**: Draft | **Implements**: REQ-p00081, REQ-p00082
-
-Workspace membership SHALL be declared once per machine in a per-user registry, and SHALL feed the same federation assembly as directed dependency declarations, under one set of identity and deduplication rules.
 
 ### Assertions
 
@@ -363,8 +350,6 @@ Known deviation, accepted 2026-07-29: redundant-work cost (invariant C1 — the 
 ## REQ-d00261: Federation Role Model
 
 **Level**: dev | **Status**: Draft | **Implements**: REQ-d00253, REQ-p00082
-
-Every repository in a federated view SHALL carry a role that determines its treatment per surface, replacing the single root-versus-associate axis.
 
 ### Assertions
 

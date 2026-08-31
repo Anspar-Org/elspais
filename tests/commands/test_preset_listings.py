@@ -1,4 +1,4 @@
-# Verifies: REQ-d00285-B, REQ-d00285-C, REQ-d00285-F, REQ-d00285-G, REQ-d00285-H, REQ-d00285-I
+# Verifies: REQ-d00285-B, REQ-d00285-C, REQ-d00285-F, REQ-d00285-G, REQ-d00285-I
 """The preset listings are the findings report narrowed, not a second report.
 
 `elspais unresolved`, `elspais errors` and `elspais uncited` each answer one
@@ -262,7 +262,6 @@ def _report(*checks: HealthCheck) -> HealthReport:
     return report
 
 
-# Verifies: REQ-d00285-H
 def test_a_readers_narrowing_does_not_move_the_verdict():
     """`checks --severity` chooses what to look at, never what the run found.
 
@@ -291,7 +290,6 @@ def test_a_readers_narrowing_does_not_move_the_verdict():
     assert report.is_healthy is False, "the run's own verdict must be untouched by it"
 
 
-# Verifies: REQ-d00285-H
 def test_a_preset_takes_its_verdict_from_the_checks_it_names():
     """`elspais unresolved` answers about unresolved references. A failing
     check it does not list must not decide its exit code, or the command stops

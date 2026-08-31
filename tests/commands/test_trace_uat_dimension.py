@@ -176,7 +176,7 @@ class TestUATStatesEveryRequirement:
     (REQ-d00282-H). REQ-d00002 carries no journey; it is a row that says so.
     """
 
-    # Verifies: REQ-d00257-B, REQ-d00282-H
+    # Verifies: REQ-d00257-B, REQ-p00084-B
     def test_json_states_the_requirement_no_journey_validates(self, mixed_graph, uat_preset):
         from elspais.commands.trace import format_json
 
@@ -186,7 +186,7 @@ class TestUATStatesEveryRequirement:
             f"Every requirement is reported whatever validates it; got {ids}"
         )
 
-    # Verifies: REQ-d00257-B, REQ-d00282-H
+    # Verifies: REQ-d00257-B, REQ-p00084-B
     def test_json_row_with_no_journey_states_an_empty_journeys_list(self, mixed_graph, uat_preset):
         """The unvalidated row states the absence rather than being removed."""
         from elspais.commands.trace import format_json
@@ -197,7 +197,7 @@ class TestUATStatesEveryRequirement:
         )
         assert [j["id"] for j in rows["REQ-d00001"]["journeys"]] == ["JNY-OQ-01"]
 
-    # Verifies: REQ-d00257-B, REQ-d00282-H+I
+    # Verifies: REQ-d00257-B, REQ-p00084-B, REQ-d00282-A
     def test_markdown_states_every_requirement(self, mixed_graph, uat_preset):
         from elspais.commands.trace import format_markdown
 

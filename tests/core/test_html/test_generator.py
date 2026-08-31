@@ -319,7 +319,7 @@ class TestHTMLGeneratorFiltering:
         assert "status-filter-buttons" in result
         assert 'data-group="coverage"' in result
 
-    # Verifies: REQ-d00052-D
+    # Verifies: REQ-d00052-A
     def test_REQ_d00052_D_includes_toolbar_git_filter_buttons(self, sample_graph):
         """Includes toolbar git filter buttons."""
         generator = HTMLGenerator(sample_graph)
@@ -427,7 +427,7 @@ class TestHTMLGeneratorAssertions:
 class TestHTMLGeneratorGitIntegration:
     """Tests for git change detection integration."""
 
-    # Verifies: REQ-d00052-D
+    # Verifies: REQ-d00052-A
     def test_REQ_d00052_D_git_state_in_embedded_json(self, sample_graph):
         """Git state data is in embedded node-index JSON with requirement properties."""
         generator = HTMLGenerator(sample_graph)
@@ -441,7 +441,7 @@ class TestHTMLGeneratorGitIntegration:
         assert '"status": "Active"' in result
         assert '"hash": "abc12345"' in result
 
-    # Verifies: REQ-d00052-D
+    # Verifies: REQ-d00052-A
     def test_REQ_d00052_D_includes_git_filter_buttons(self, sample_graph):
         # Verifies: REQ-p00006-A
         """Includes git filter buttons in toolbar."""
@@ -496,6 +496,6 @@ class TestHTMLGeneratorJourneyBadges:
         generator = HTMLGenerator(graph)
 
         result = generator.generate()
-        # Verifies: REQ-d00052-D
+        # Verifies: REQ-d00052-A
 
         assert '<span class="journey-ref-badge"' not in result

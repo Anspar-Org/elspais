@@ -13,9 +13,13 @@ This document intentionally avoids workflow, tooling, or process guidance. Those
 ## Normative Model
 
 - Requirements define **obligations**, not descriptions.
-- Obligations are stated using **SHALL** or **SHALL NOT**.
+- Obligations are stated using **SHALL**.
+- **Anything not permitted is forbidden.** The system does what the requirements oblige and admit, and nothing else. An assertion forbidding what nothing permits forbids nothing, and does not belong in the spec.
+- **SHALL NOT** is reserved for what that default cannot settle: where two obligations each permit an outcome, and the spec must say which governs when both apply. Everywhere else, state the positive form.
+- **An obligation is stated only in an assertion.** SHALL and SHALL NOT do not appear in a requirement's body, in a rationale, or in any other prose. Only assertion text is hashed, so an obligation stated outside one changes without leaving a trace, and nothing cites it.
 - Each obligation appears **exactly once** in the repository.
 - Traceability is **one-way only**: more specific requirements reference more generic requirements via `Implements:` metadata.
+- A rule for reading the requirements is stated here, not as a requirement. Such a rule governs the authors of the spec rather than the system it describes, and nothing decides it true or false.
 
 ---
 
@@ -160,7 +164,7 @@ B. The system SHALL ...
 ### Assertion Rules
 
 - Each assertion MUST:
-  - use SHALL,
+  - use SHALL, or SHALL NOT in the case the Normative Model reserves for it,
   - express exactly one obligation,
   - be independently decidable as true or false.
 - Assertion labels:
@@ -205,7 +209,7 @@ Tests and other verification artifacts MAY reference:
 A requirement MAY include a `Rationale`, `Description`, `Discussion` or other non-normative blocks.
 These are for context only and are NOT part of the testable requirements.
 Rationale blocks MAY exist before and after the Assertion block.
-Any section not titled "Assertions" SHALL be treated as a Rationale block.
+Any section not titled "Assertions" MUST be treated as a Rationale block.
 
 ```markdown
 ## {Rationale Block Type}
@@ -222,7 +226,7 @@ Rules:
 
 ## Acceptance Criteria
 
-Acceptance Criteria SHALL NOT be used.
+Acceptance Criteria MUST NOT be used.
 
 Requirements MUST be written such that the assertions themselves constitute the acceptance conditions.
 
@@ -305,11 +309,11 @@ User Journeys exist to:
 - provide context for why requirements exist,
 - help stakeholders understand the system from the user's point of view.
 
-User Journeys are **non-normative** with respect to obligations — they do not define system requirements and SHALL NOT use normative keywords (SHALL, SHALL NOT, MUST, MUST NOT, REQUIRED).
+User Journeys are **non-normative** with respect to obligations — they do not define system requirements and MUST NOT use normative keywords (SHALL, SHALL NOT, MUST, MUST NOT, REQUIRED).
 
 However, User Journeys MAY declare `Validates:` references that link them to specific requirements or assertions. These links contribute to UAT coverage metrics and represent planned manual acceptance tests.
 
-User Journeys SHALL NOT use normative keywords (SHALL, SHALL NOT, MUST, MUST NOT, REQUIRED).
+User Journeys MUST NOT use normative keywords (SHALL, SHALL NOT, MUST, MUST NOT, REQUIRED).
 
 ### User Journey IDs
 
@@ -462,7 +466,7 @@ The hash calculation mode is configurable via `[validation].hash_mode` in `.elsp
 
 ### `full-text` Mode
 
-The hash SHALL be calculated from:
+The hash MUST be calculated from:
 
 - every line AFTER the Header line
 - every line BEFORE the Footer line
@@ -471,9 +475,9 @@ No normalization is applied. The hash is computed from the raw text between the 
 
 ### `normalized-text` Mode (Default)
 
-The hash SHALL be calculated from **assertion text only**. Non-assertion body text (context, definitions, explanations) is excluded from the hash.
+The hash MUST be calculated from **assertion text only**. Non-assertion body text (context, definitions, explanations) is excluded from the hash.
 
-Any material behavioral constraint SHALL be expressed as an Assertion. Non-assertion text is supplementary context and does not affect the content hash.
+Any material behavioral constraint MUST be expressed as an Assertion. Non-assertion text is supplementary context and does not affect the content hash.
 
 **Normalization rules** — for each assertion:
 

@@ -42,7 +42,7 @@ class FaultCode:
     specific is known -- not the absence of a diagnosis (REQ-d00271-C).
     """
 
-    # Implements: REQ-d00271-A, REQ-d00271-E
+    # Implements: REQ-d00271-A
     SYNTAX_ERROR = "E_SYNTAX_ERROR"
     NOT_AN_IDENTIFIER = "E_NOT_AN_IDENTIFIER"
     WRONG_ASSERTION_SEPARATOR = "E_WRONG_ASSERTION_SEPARATOR"

@@ -95,7 +95,7 @@ class TestTraceRenderingCarriesTheScope:
         for line in scoped[1]:
             assert line in out, f"{fmt} rendering does not state {line!r}"
 
-    # Verifies: REQ-p00084-C
+    # Verifies: REQ-p00084-B
     def test_the_disclosure_does_not_depend_on_the_format(
         self, canonical_federated_graph, canonical_config, standard_preset, scoped
     ):
@@ -112,7 +112,7 @@ class TestTraceRenderingCarriesTheScope:
             missing = [line for line in scoped[1] if line not in out]
             assert not missing, f"{fmt} omits {missing}"
 
-    # Verifies: REQ-p00084-C
+    # Verifies: REQ-p00084-B
     def test_every_format_presents_the_same_requirements(
         self, canonical_federated_graph, canonical_config, standard_preset, scoped
     ):
@@ -280,7 +280,7 @@ class TestAnalysisDisclosesItsScope:
         data = analysis_cmd.compute_analysis(canonical_federated_graph, canonical_config, {})
         assert "scope" not in data
 
-    # Verifies: REQ-p00084-C+D
+    # Verifies: REQ-p00084-B+D
     @pytest.mark.parametrize("fmt", ["table", "json"])
     def test_both_renderings_state_the_scope_on_stdout(
         self, canonical_federated_graph, canonical_config, scope_params, capsys, fmt
@@ -320,7 +320,7 @@ class TestSummaryCsvDisclosesItsScope:
             f"# {line}" for line in scoped_summary["scope"]
         ]
 
-    # Verifies: REQ-p00084-C
+    # Verifies: REQ-p00084-B
     def test_csv_states_what_the_other_formats_state(self, scoped_summary, canonical_config):
         lines = scoped_summary["scope"]
         csv_out = summary._render_csv(scoped_summary, canonical_config)

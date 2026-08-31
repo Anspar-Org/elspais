@@ -4,8 +4,6 @@
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-o00060-A
 
-The `get_graph_status()` tool SHALL report graph state using direct graph inspection.
-
 ### Assertions
 
 A. SHALL return `is_stale` boolean from graph metadata, not recomputed.
@@ -16,7 +14,7 @@ C. SHALL return `last_refresh` timestamp from graph metadata.
 
 D. SHALL return `root_count` using `graph.root_count()`.
 
-E. SHALL NOT iterate the full graph to count nodes when kind-specific counts suffice.
+E. <RETIRED> forbade counting nodes by iterating the whole graph. How a count is taken is stated by REQ-d00060-B.
 
 ### Rationale
 
@@ -24,18 +22,17 @@ Graph status provides a quick health check without expensive traversal operation
 
 ### Changelog
 
+- 2026-08-25 | 20b43899 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | 8c173481 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 4e2277cc | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 4e2277cc | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Graph Status Tool Implementation* | **Hash**: 8c173481
+*End* *Graph Status Tool Implementation* | **Hash**: 20b43899
 ---
 
 ## REQ-d00061: Requirement Search Tool Implementation
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-o00060-C
-
-The `search()` tool SHALL find requirements using graph iteration with filtering.
 
 ### Assertions
 
@@ -82,8 +79,6 @@ Search enables AI agents to discover requirements by content without knowing exa
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-o00060-D
 
-The `get_requirement()` tool SHALL return full requirement details from a single graph lookup.
-
 ### Assertions
 
 A. SHALL use `graph.get_node(req_id)` for O(1) lookup.
@@ -115,8 +110,6 @@ Single-requirement lookup is the most common operation. O(1) access via graph in
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-o00060-E
 
-The `get_hierarchy()` tool SHALL return ancestors and children for tree navigation.
-
 ### Assertions
 
 A. SHALL return `ancestors` by walking `node.iter_parents()` recursively to roots.
@@ -146,8 +139,6 @@ Hierarchy navigation enables AI agents to understand requirement context and rel
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-p00060-B
 
-Serializer functions SHALL convert GraphNode data to JSON-safe dictionaries.
-
 ### Assertions
 
 A. Summary serialization SHALL return id, title, level, status only.
@@ -158,7 +149,9 @@ C. Serializers SHALL read from `node.get_field()` and `node.metrics`, not access
 
 D. Serializers SHALL handle missing fields gracefully with sensible defaults.
 
-E. Serializers SHALL NOT trigger graph traversal beyond the single node being serialized.
+E. <RETIRED> forbade a serializer from traversing beyond the node it serializes. What a serializer reads is stated by REQ-d00064-C.
+
+F. Serialized output SHALL be safe to encode as JSON.
 
 ### Rationale
 
@@ -166,18 +159,18 @@ Serializers provide the boundary between graph internals and MCP responses. They
 
 ### Changelog
 
+- 2026-08-30 | f93f0ff5 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-08-25 | 8952e26c | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | 9d76735a | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 8d56d937 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 8d56d937 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Serializer Functions* | **Hash**: 9d76735a
+*End* *Serializer Functions* | **Hash**: f93f0ff5
 ---
 
 ## REQ-d00065: Mutation Tool Delegation
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-o00062-D
-
-MCP mutation tools SHALL delegate to TraceGraph mutation methods.
 
 ### Assertions
 
@@ -187,7 +180,7 @@ B. Requirement creation mutations SHALL delegate to the graph's add method.
 
 C. `mutate_delete_requirement(id, confirm)` SHALL call `graph.delete_requirement(id)` only if `confirm=True`.
 
-D. Mutation tools SHALL NOT implement mutation logic - only parameter validation and delegation.
+D. A mutation tool SHALL delegate its mutation to the graph.
 
 E. Mutation tools SHALL return the MutationEntry from the graph method for audit trail.
 
@@ -197,18 +190,17 @@ Delegation ensures mutation logic lives in one place (TraceGraph) and MCP is pur
 
 ### Changelog
 
+- 2026-08-30 | bf53ef18 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | 1544d997 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 5d1f7627 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 5d1f7627 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Mutation Tool Delegation* | **Hash**: 1544d997
+*End* *Mutation Tool Delegation* | **Hash**: bf53ef18
 ---
 
 ## REQ-d00066: Test Coverage Tool Implementation
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-o00064-A
-
-The `get_test_coverage()` tool SHALL return test coverage information for a requirement.
 
 ### Assertions
 
@@ -243,8 +235,6 @@ Test coverage per requirement enables targeted test writing and gap analysis.
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-o00064-B
 
-The `get_uncovered_assertions()` tool SHALL find assertions lacking test coverage.
-
 ### Assertions
 
 A. SHALL accept optional `req_id` parameter; when None, scan all requirements.
@@ -275,8 +265,6 @@ Finding uncovered assertions enables systematic test coverage improvement across
 ## REQ-d00068: Assertion Keyword Search Tool Implementation
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-o00064-C
-
-The `find_assertions_by_keywords()` tool SHALL search *Assertion* text for keyword matches.
 
 ### Assertions
 
@@ -310,8 +298,6 @@ Searching within *Assertion* text enables AI agents to find assertions related t
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-o00064, REQ-o00065-D
 
-The MCP server SHALL provide link suggestion tools that expose the suggestion engine to AI agents.
-
 ### Assertions
 
 A. `suggest_links(file_path?, limit?)` SHALL return structured link suggestions from the core engine, including source node, target requirement, confidence, and reason.
@@ -339,8 +325,6 @@ MCP exposure enables AI agents to discover and apply link suggestions during cod
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-o00067
 
-The subtree extraction tool SHALL be implemented as MCP-layer helpers that consume the graph iterator API.
-
 ### Assertions
 
 A. Subtree collection SHALL perform BFS traversal with depth tracking and a visited set for DAG deduplication.
@@ -355,7 +339,7 @@ E. Nested format SHALL return recursive JSON with `children` arrays.
 
 F. Conservative kind defaults SHALL include `REQUIREMENT` + `ASSERTION` for requirement roots, and `USER_JOURNEY` for journey roots.
 
-G. The implementation SHALL NOT modify Graph, GraphTrace, or GraphBuilder structures.
+G. Subtree extraction SHALL only read the graph.
 
 ### Rationale
 
@@ -363,18 +347,17 @@ BFS with depth tracking and kind filtering provides the flexible subtree extract
 
 ### Changelog
 
+- 2026-08-30 | 102ff287 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | bd1f28e6 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 5ba55cf2 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | 5ba55cf2 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *Subtree Extraction Implementation* | **Hash**: bd1f28e6
+*End* *Subtree Extraction Implementation* | **Hash**: 102ff287
 ---
 
 ## REQ-d00076: Cursor Protocol Implementation
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-o00068
-
-The cursor protocol SHALL be implemented as a `CursorState` dataclass with three MCP tool wrappers.
 
 ### Assertions
 
@@ -409,8 +392,6 @@ A single-cursor model with materialized items provides simple, predictable itera
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-o00069
 
-The `minimize_requirement_set` tool SHALL be implemented as a helper function with ancestor walking and set pruning.
-
 ### Assertions
 
 A. The minimizer SHALL resolve each ID via the graph index, separating found and not_found IDs.
@@ -441,8 +422,6 @@ Separating the helper from the tool wrapper enables reuse by `discover_requireme
 ## REQ-d00078: Scoped Search Implementation
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-o00070
-
-The `scoped_search` tool SHALL be implemented using scope collection and reusable matching helpers.
 
 ### Assertions
 
@@ -475,8 +454,6 @@ Separating scope collection from search logic enables reuse of `_collect_scope_i
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-o00071
 
-The `discover_requirements` tool SHALL be implemented by chaining existing `_scoped_search` and `_minimize_requirement_set` helpers.
-
 ### Assertions
 
 A. Discovery SHALL chain scoped search to get candidate results, then pass them through the minimizer.
@@ -504,8 +481,6 @@ Chaining existing helpers avoids duplicating search or pruning logic and maintai
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-d00060, REQ-d00061, REQ-o00067
 
-MCP tools SHALL be aware of FILE nodes without exposing them where they do not belong.
-
 ### Assertions
 
 A. Subtree extraction starting from a FILE node SHALL walk CONTAINS edges, producing the file's physical contents view.
@@ -514,7 +489,7 @@ B. Subtree extraction starting from a REQUIREMENT node SHALL walk domain edges (
 
 C. `_SUBTREE_KIND_DEFAULTS` SHALL include a `NodeKind.FILE` entry that maps to `{NodeKind.REQUIREMENT, NodeKind.ASSERTION, NodeKind.REMAINDER}` for FILE root traversal.
 
-D. `_search()` SHALL NOT return FILE nodes in search results for requirement queries.
+D. <RETIRED> forbade a search over requirements from returning FILE nodes. What a search of each kind walks is REQ-d00133-A through REQ-d00133-C; nothing permits a requirement query to return a file.
 
 E. `_get_graph_status()` SHALL include FILE node counts in its `node_counts` dict (already satisfied by iterating all NodeKind values).
 
@@ -526,18 +501,17 @@ FILE nodes are structural infrastructure. They enhance the graph's completeness 
 
 ### Changelog
 
+- 2026-08-25 | b593514b | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | 08e2973f | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | ae564dae | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | ae564dae | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *MCP FILE Node Integration* | **Hash**: 08e2973f
+*End* *MCP FILE Node Integration* | **Hash**: b593514b
 ---
 
 ## REQ-d00205: MCP Federation Support
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-d00200, REQ-o00061
-
-The MCP server SHALL leverage FederatedGraph's per-repo config access for federation-aware operation.
 
 ### Assertions
 
@@ -594,8 +568,6 @@ G. All operations SHALL produce a clear error when the underlying CLI command fa
 ## REQ-d00262: Search Term Discrimination
 
 **Level**: dev | **Status**: Draft | **Implements**: REQ-o00060-C, REQ-o00071
-
-Relevance ranking SHALL discriminate by term informativeness: a match on a term that is rare in the indexed corpus outranks a match on a term that is common in it.
 
 ### Assertions
 
