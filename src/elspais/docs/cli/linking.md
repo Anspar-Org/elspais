@@ -114,6 +114,12 @@ list declares a relationship: an indented identifier written beneath a
 keyword line the separator did not continue is reported as an undeclared
 relationship (`references.undeclared`) and produces nothing.
 
+How you divide the references changes nothing about what they do. One list,
+a list continued across lines, and separate keyword lines naming one
+requirement each all declare the same relationships and attribute the same
+code -- including the code a citation precedes when it sits in no function.
+Divide the list to suit the reader.
+
 ## Test Linking
 
 A test is linked by a comment above it, in exactly the form code uses. A

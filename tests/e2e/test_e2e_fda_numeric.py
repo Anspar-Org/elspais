@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import json
 import re
-import shutil
 import subprocess
 
 import pytest
@@ -28,11 +27,12 @@ from .conftest import (
     load_fixture,
     run_elspais,
 )
+from .helpers import resolve_elspais
 
 pytestmark = [
     pytest.mark.e2e,
     pytest.mark.skipif(
-        shutil.which("elspais") is None,
+        resolve_elspais() is None,
         reason="elspais CLI not found on PATH",
     ),
 ]

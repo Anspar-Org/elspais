@@ -21,8 +21,25 @@ def _build_req_with_code(
     line_coverage: dict[int, int] | None = None,
     code_path: str = "src/module.py",
     extra_code_refs: list[tuple[int, int]] | None = None,
+    function_extents: list[tuple[int, int]] | None = None,
 ):
     """Build a minimal graph with a REQ node, CODE node, FILE nodes, and IMPLEMENTS edge.
+
+    Two shapes, matching the two answers ``attributed_lines`` can give
+    (REQ-d00254-D):
+
+    ``function_extents`` -- one ``(first, last)`` per citation -- gives each
+    citation an ENCLOSING FUNCTION whose extent is known. The citation is the
+    comment written on the line above the ``def``, which is where a
+    ``# Implements:`` actually goes and which the pre-scan binds to the
+    function it describes. Such a citation speaks for the function's whole
+    body, so its implementation lines are known whether or not any run
+    measured them.
+
+    Otherwise ``impl_start``/``impl_end`` are the lines of CODE a
+    function-less citation precedes, and the lines it speaks for are that
+    block -- read from the file's ``line_coverage``, which is what says which
+    lines are executable at all.
 
     Returns (graph, req_node).
     """
@@ -38,24 +55,38 @@ def _build_req_with_code(
         level="PRD",
         assertions=assertions,
     )
-    code_refs = [
-        make_code_ref(
-            implements=["REQ-p00001"],
-            source_path=code_path,
-            start_line=impl_start,
-            end_line=impl_end,
-        ),
-    ]
-    if extra_code_refs:
-        for start, end in extra_code_refs:
-            code_refs.append(
-                make_code_ref(
-                    implements=["REQ-p00001"],
-                    source_path=code_path,
-                    start_line=start,
-                    end_line=end,
-                )
+    if function_extents:
+        code_refs = [
+            make_code_ref(
+                implements=["REQ-p00001"],
+                source_path=code_path,
+                start_line=first - 1,
+                end_line=first - 1,
+                function_name=f"func_{first}",
+                function_line=first,
+                function_end_line=last,
             )
+            for first, last in function_extents
+        ]
+    else:
+        code_refs = [
+            make_code_ref(
+                implements=["REQ-p00001"],
+                source_path=code_path,
+                start_line=impl_start - 1,
+                end_line=impl_start - 1,
+            ),
+        ]
+        if extra_code_refs:
+            for start, _end in extra_code_refs:
+                code_refs.append(
+                    make_code_ref(
+                        implements=["REQ-p00001"],
+                        source_path=code_path,
+                        start_line=start - 1,
+                        end_line=start - 1,
+                    )
+                )
 
     graph = build_graph(req, *code_refs)
 
@@ -76,11 +107,12 @@ def _build_req_with_code(
 
 
 class TestCodeTestedIndirectFromFileCoverage:
-    """REQ with CODE node (function lines 10-20), FILE node with partial line_coverage."""
+    """A citation preceding executable lines 10-20, with partial line_coverage."""
 
     def test_code_tested_indirect_from_file_coverage(self):
         """Partial file coverage yields correct indirect count."""
-        # Lines 10-20 = 11 lines. Coverage hits on lines 10,12,14,16,18,20 = 6 hits
+        # The citation precedes lines 10-20 = 11 executable lines.
+        # Coverage hits on lines 10,12,14,16,18,20 = 6 hits
         line_cov = {i: (1 if i % 2 == 0 else 0) for i in range(10, 21)}
         _, req_node = _build_req_with_code(
             impl_start=10,
@@ -97,45 +129,67 @@ class TestCodeTestedIndirectFromFileCoverage:
 
 
 class TestCodeTestedNoCoverageData:
-    """REQ with CODE node but no line_coverage on FILE -> code_tested stays zeros."""
+    """No line_coverage on FILE -> nothing attributed, and that fact is said."""
 
     def test_code_tested_no_coverage_data(self):
-        """No line_coverage data means code_tested has total but zero indirect."""
-        _, req_node = _build_req_with_code(
-            impl_start=10,
-            impl_end=20,
+        """With no measurement there is no total, and ``has_measurement`` is
+        what carries the difference between the two zeros.
+
+        Only a coverage map knows which lines are code, so a citation
+        attributes nothing until one is ingested -- counting lines a run could
+        never reach would report a requirement as less covered than its code
+        is. That leaves "no run was measured" and "the run reached nothing"
+        both looking like zero coverage, so ``has_measurement`` is asserted
+        against BOTH states here: a surface reads it to say the first rather
+        than showing the second.
+        """
+        _, unmeasured = _build_req_with_code(
+            function_extents=[(10, 20)],
             line_coverage=None,
         )
+        # The same code, measured -- by a run that reached none of it.
+        _, reached_nothing = _build_req_with_code(
+            function_extents=[(10, 20)],
+            line_coverage=dict.fromkeys(range(10, 21), 0),
+        )
 
-        rollup: RollupMetrics = req_node.get_metric("rollup_metrics")
-        assert rollup is not None
-        ct = rollup.code_tested
-        # total should reflect implementation lines, indirect 0 (no coverage data)
-        assert ct.total_lines == 11
-        assert ct.covered_lines == 0
-        assert ct.attributed_lines == 0
+        never_ran = unmeasured.get_metric("rollup_metrics").code_tested
+        assert never_ran.total_lines == 0
+        assert never_ran.covered_lines == 0
+        assert never_ran.attributed_lines == 0
+        assert never_ran.has_measurement is False
+
+        ran_and_missed = reached_nothing.get_metric("rollup_metrics").code_tested
+        assert ran_and_missed.total_lines == 11
+        assert ran_and_missed.covered_lines == 0
+        assert ran_and_missed.has_measurement is True
 
 
 class TestCodeTestedDeduplicatesOverlappingRanges:
-    """Two IMPLEMENTS edges from same function -> total is deduplicated."""
+    """Two citations whose function extents overlap -> total is deduplicated."""
 
     def test_code_tested_deduplicates_overlapping_ranges(self):
-        """Overlapping ranges are deduplicated in total count."""
-        # First code ref: lines 10-15, second: lines 13-20
-        # Union: lines 10-20 = 11 unique lines
+        """Overlapping extents are deduplicated in total count.
+
+        Nested functions are how one file produces two different, overlapping
+        extents: an outer function 10-20 containing an inner one 13-18, each
+        cited. The outer citation speaks for 11 lines and the inner for 6, and
+        6 of the outer's lines ARE the inner's -- so the requirement's
+        implementation is 11 lines, not 17. Counting the shared lines twice
+        would report more implementation than the file contains.
+        """
+        # Outer 10-20 = 11 lines, inner 13-18 = 6 lines, union = 10..20 = 11.
         line_cov = dict.fromkeys(range(10, 21), 1)  # all covered
 
         _, req_node = _build_req_with_code(
-            impl_start=10,
-            impl_end=15,
-            extra_code_refs=[(13, 20)],
+            function_extents=[(10, 20), (13, 18)],
             line_coverage=line_cov,
         )
 
         rollup: RollupMetrics = req_node.get_metric("rollup_metrics")
         assert rollup is not None
         ct = rollup.code_tested
-        assert ct.total_lines == 11  # deduplicated: 10..20
+        assert ct.total_lines == 11  # deduplicated: 10..20, not 11 + 6
         assert ct.covered_lines == 11  # all covered
 
 
@@ -196,9 +250,10 @@ def _build_req_code_test_with_contexts(
     """Build a REQ, a CODE impl, and a TEST that Verifies the REQ, with
     line_coverage + line_contexts set on the CODE's FILE node.
 
-    Mirrors ``_build_req_with_code`` above but adds a verifying TEST node
-    (via ``make_test_ref``) and ``line_contexts`` so per-test direct
-    attribution (CUR-1568) can be exercised.
+    Mirrors ``_build_req_with_code`` above -- the citation is the comment line
+    above the code it speaks for -- but adds a verifying TEST node (via
+    ``make_test_ref``) and ``line_contexts`` so per-test direct attribution
+    (CUR-1568) can be exercised.
     """
     req = make_requirement(
         "REQ-p00001",
@@ -209,8 +264,8 @@ def _build_req_code_test_with_contexts(
     code_ref = make_code_ref(
         implements=["REQ-p00001"],
         source_path=code_path,
-        start_line=impl_start,
-        end_line=impl_end,
+        start_line=impl_start - 1,
+        end_line=impl_start - 1,
     )
     test_ref = make_test_ref(
         verifies=["REQ-p00001"] if verifies else [],

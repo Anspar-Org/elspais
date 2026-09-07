@@ -741,18 +741,6 @@ def _compute_code_tested(
         if target.kind != NodeKind.CODE:
             continue
 
-        impl_start = edge.metadata.get("impl_start_line")
-        impl_end = edge.metadata.get("impl_end_line")
-        if not impl_start:
-            continue
-
-        # Fallback: if impl_end is 0 or missing, use parse_end_line
-        if not impl_end:
-            impl_end = target.get_field("parse_end_line") or 0
-
-        if not impl_end or impl_end < impl_start:
-            continue
-
         # Find FILE ancestor of CODE node
         fn = target.file_node()
         if fn is None:
@@ -761,15 +749,10 @@ def _compute_code_tested(
         if not rel_path:
             continue
 
-        if impl_end == impl_start:
-            owned = _block_region_lines(fn, region_cache if region_cache is not None else {}).get(
-                impl_start, set()
-            )
-            for line_no in owned:
-                impl_lines.add((rel_path, line_no))
-        else:
-            for line_no in range(impl_start, impl_end + 1):
-                impl_lines.add((rel_path, line_no))
+        for line_no in attributed_lines(
+            target, fn, region_cache if region_cache is not None else {}
+        ):
+            impl_lines.add((rel_path, line_no))
 
     if not impl_lines:
         return
@@ -961,16 +944,26 @@ def _under_dirs(rel_path: str, dirs: tuple[str, ...]) -> bool:
     return _match_app_dir(rel_path, dirs) is not None
 
 
-# Implements: REQ-d00254-D
-def _block_region_lines(file_node, cache: dict) -> dict:
-    """Map each // Implements: marker line in a CODE file to the executable
-    lines its *block* owns (CUR-1533 block-scoped attribution).
+# Implements: REQ-d00254-D, REQ-d00269-M
+def _citation_extents(file_node, cache: dict) -> dict[int, set[int]]:
+    """The lines every citation in a file attributes, keyed by its first line.
 
-    A block is a run of marker lines with no executable (line_coverage) line
-    strictly between consecutive markers; it owns the executable lines after
-    its last marker up to the next block's first marker (or EOF). For languages
-    without function detection (e.g. Dart) this lets a file-/block-scoped marker
-    credit the code it precedes. Cached per FILE id for one annotate_coverage run.
+    Four rules, and nothing else:
+
+    * Citations with no executable line between them form one RUN and share one
+      answer -- so how an author divides a list of references, between items or
+      across lines, changes nothing it attributes (REQ-d00269-M).
+    * A run written ABOVE a function attributes that function's executable lines.
+    * Any other run attributes the executable lines that FOLLOW it, up to the
+      earliest of: the next citation, the end of its enclosing function, the end
+      of the file. That bound is what lets two citations inside one function
+      speak for different code.
+    * A run above a function and the runs inside that function therefore
+      overlap. That is the only overlap these rules admit.
+
+    A function's extent is a BOUND here, never an alternative mode of
+    attribution. Choosing between two modes by inspecting line numbers is what
+    made a citation's own comment lines readable as its implementation.
     """
     from elspais.graph.GraphNode import NodeKind
     from elspais.graph.relations import EdgeKind
@@ -978,33 +971,76 @@ def _block_region_lines(file_node, cache: dict) -> dict:
     fid = file_node.id
     if fid in cache:
         return cache[fid]
-    result: dict[int, set[int]] = {}
-    lc = file_node.get_field("line_coverage")
-    if lc:
-        markers = sorted(
-            c.get_field("parse_line")
-            for c in file_node.iter_children(edge_kinds={EdgeKind.CONTAINS})
-            if c.kind == NodeKind.CODE
-            and c.get_field("parse_line")
-            and (c.get_field("parse_end_line") in (None, c.get_field("parse_line")))
+
+    citations = sorted(
+        (
+            c.get_field("parse_line"),
+            c.get_field("parse_end_line") or c.get_field("parse_line"),
+            c.get_field("function_line") or 0,
+            c.get_field("function_end_line") or 0,
         )
-        cov = sorted(lc.keys())
-        if markers:
-            blocks: list[list[int]] = [[markers[0]]]
-            for m in markers[1:]:
-                prev = blocks[-1][-1]
-                if any(prev < L < m for L in cov):
-                    blocks.append([m])
-                else:
-                    blocks[-1].append(m)
-            for i, blk in enumerate(blocks):
-                last = blk[-1]
-                nxt = blocks[i + 1][0] if i + 1 < len(blocks) else None
-                owned = {L for L in cov if L > last and (nxt is None or L < nxt)}
-                for m in blk:
-                    result[m] = owned
+        for c in file_node.iter_children(edge_kinds={EdgeKind.CONTAINS})
+        if c.kind == NodeKind.CODE and c.get_field("parse_line")
+    )
+
+    result: dict[int, set[int]] = {}
+    if citations:
+        # Only a line that can be covered may be counted as attributed: a
+        # denominator holding lines the numerator can never reach reports a
+        # requirement as less covered than its code is. Executability is known
+        # only from a measurement, so every rule attributes nothing until one
+        # is ingested -- an absent figure, never a false one.
+        executable = sorted(file_node.get_field("line_coverage") or {})
+        every_start = [c[0] for c in citations]
+
+        follows: list[tuple[int, int, int, int]] = []
+        for cit_start, cit_end, func_start, func_end in citations:
+            if func_start and func_end and func_start > cit_end:
+                result[cit_start] = {line for line in executable if func_start <= line <= func_end}
+            else:
+                follows.append((cit_start, cit_end, func_start, func_end))
+
+        runs: list[list[tuple[int, int, int, int]]] = []
+        for cit in follows:
+            prev = runs[-1][-1] if runs else None
+            if (
+                prev is not None
+                and prev[2] == cit[2]
+                and not any(prev[1] < line < cit[0] for line in executable)
+            ):
+                runs[-1].append(cit)
+            else:
+                runs.append([cit])
+
+        for run in runs:
+            run_end = run[-1][1]
+            func_end = run[-1][3]
+            later = [s for s in every_start if s > run_end]
+            next_citation = min(later) if later else None
+            owned = {
+                line
+                for line in executable
+                if line > run_end
+                and (next_citation is None or line < next_citation)
+                and (not func_end or line <= func_end)
+            }
+            for cit_start, *_rest in run:
+                result[cit_start] = owned
+
     cache[fid] = result
     return result
+
+
+# Implements: REQ-d00254-D
+def attributed_lines(code_node, file_node, region_cache: dict) -> set[int]:
+    """The implementation lines a citation speaks for. ONE authority.
+
+    The rules live in ``_citation_extents``, which answers for a whole file at
+    once because three of the four bounds -- the run, the next citation, the
+    enclosing function -- are relationships between citations rather than
+    properties of any one of them.
+    """
+    return _citation_extents(file_node, region_cache).get(code_node.get_field("parse_line"), set())
 
 
 # Implements: REQ-d00254-B
@@ -1041,14 +1077,6 @@ def _compute_lcov_tested(
         target = edge.target
         if target.kind != NodeKind.CODE:
             continue
-        start = edge.metadata.get("impl_start_line")
-        end = edge.metadata.get("impl_end_line")
-        if not start:
-            continue
-        if not end:
-            end = target.get_field("parse_end_line") or 0
-        if not end or end < start:
-            continue
         fn = target.file_node()
         if fn is None:
             continue
@@ -1066,13 +1094,10 @@ def _compute_lcov_tested(
         file_app.setdefault(rel, _match_app_dir(rel, credit.app_dirs))
         file_credit.setdefault(rel, credit)
         file_owner.setdefault(rel, owner)
-        if end == start:
-            owned = _block_region_lines(fn, region_cache if region_cache is not None else {}).get(
-                start, set()
-            )
-            rng = {(rel, ln) for ln in owned}
-        else:
-            rng = {(rel, ln) for ln in range(start, end + 1)}
+        rng = {
+            (rel, ln)
+            for ln in attributed_lines(target, fn, region_cache if region_cache is not None else {})
+        }
         if edge.assertion_targets:
             for lbl in edge.assertion_targets:
                 if lbl in labels:

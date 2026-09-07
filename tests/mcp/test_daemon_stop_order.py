@@ -32,13 +32,55 @@ def _write_record(repo_root: Path, pid: int, port: int = 65000) -> Path:
     return path
 
 
+# argv[0] a real daemon's would match. See _spawn_stand_in for why.
+_STAND_IN_ARGV0 = "elspais-mcp-serve (test stand-in)"
+
+_SLEEP = "import time; time.sleep(30)"
+
+# SIGTERM ignored: the process outlives the request to stop. It prints once
+# the handler is actually installed, and callers block on that line before
+# sending SIGTERM -- without it, the signal can arrive during interpreter
+# startup, before signal.signal() has run, and the process dies of the
+# *default* disposition instead of proving anything about the ignore.
+_IGNORE_SIGTERM = (
+    "import signal, time; "
+    "signal.signal(signal.SIGTERM, signal.SIG_IGN); "
+    "print('ready', flush=True); "
+    "time.sleep(30)"
+)
+
+
+def _spawn_stand_in(code: str, *, wait_for_ready: bool = False) -> subprocess.Popen:
+    """Spawn a stand-in daemon that stop_daemon will recognise as one.
+
+    argv[0] is set to a name containing "elspais" and "serve" while the real
+    interpreter runs the given code. That is not cosmetic: stop_daemon reads
+    /proc/<pid>/cmdline and REFUSES to signal a process it cannot identify as
+    an elspais daemon, so a stand-in spawned as a plain `python -c ...` is not
+    a stand-in at all -- every test using one would exercise the refusal path
+    and prove nothing about the ordering of the stop.
+
+    With ``wait_for_ready``, blocks until the child prints its ready line, so
+    the caller knows its signal handler is installed.
+    """
+    proc = subprocess.Popen(
+        [_STAND_IN_ARGV0, "-c", code],
+        executable=sys.executable,
+        stdout=subprocess.PIPE,
+        text=True,
+    )
+    if wait_for_ready:
+        assert proc.stdout.readline().strip() == "ready"
+    return proc
+
+
 class TestStopWaitsForTheProcess:
     # Verifies: REQ-o00076-E
     def test_REQ_o00076_E_record_outlives_the_process_it_describes(self, tmp_path):
         """Validates REQ-o00076-E: the record is removed only once the
         process it describes is gone, so it never names a process a client
         cannot reach and never goes missing while one is serving."""
-        proc = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
+        proc = _spawn_stand_in(_SLEEP)
         # This test process is the child's real parent. wait_for_daemon_exit
         # reaps a pid it owns as part of its liveness check (see its
         # docstring), which is what lets this assertion hold without a
@@ -56,24 +98,7 @@ class TestStopWaitsForTheProcess:
         held-open client keeps from ever finishing -- is escalated to a kill
         it cannot decline, so one working tree is not left with a process
         that neither stops nor can be replaced."""
-        # SIGTERM ignored: the process outlives the request to stop. It
-        # prints once the handler is actually installed, and the test
-        # blocks on that line before sending SIGTERM -- without it, the
-        # signal can arrive during interpreter startup, before
-        # signal.signal() has run, and the process dies of the *default*
-        # disposition instead of proving anything about the ignore.
-        ignore_sigterm = (
-            "import signal, time; "
-            "signal.signal(signal.SIGTERM, signal.SIG_IGN); "
-            "print('ready', flush=True); "
-            "time.sleep(30)"
-        )
-        proc = subprocess.Popen(
-            [sys.executable, "-c", ignore_sigterm],
-            stdout=subprocess.PIPE,
-            text=True,
-        )
-        proc.stdout.readline()
+        proc = _spawn_stand_in(_IGNORE_SIGTERM, wait_for_ready=True)
         record = _write_record(tmp_path, proc.pid)
         try:
             assert stop_daemon(tmp_path, timeout=1.0) is StopOutcome.STOPPED
@@ -111,12 +136,18 @@ class TestStopWaitsForTheProcess:
         )
 
     # Verifies: REQ-o00075-B
-    def test_REQ_o00075_B_unreaped_child_counts_as_stopped(self, tmp_path):
+    def test_REQ_o00075_B_unreaped_child_counts_as_stopped(self, tmp_path, monkeypatch):
         """Validates REQ-o00075-B: stop_daemon must not mistake a zombie
         for a still-serving process -- that would refuse a restart, or a
         viewer takeover, over a daemon that has actually already gone."""
         proc = subprocess.Popen([sys.executable, "-c", "pass"])
         time.sleep(0.3)  # let it exit and sit unreaped
+        # A zombie has no argv left to spoof -- the kernel frees the cmdline
+        # at exit, so /proc/<pid>/cmdline reads empty for any process, daemon
+        # or not. Identity is not this test's question; whether the wait sees
+        # an unreaped exit as gone is. Answering the identity question for it
+        # is what lets the wait be reached at all.
+        monkeypatch.setattr("elspais.mcp.daemon.process_is_daemon", lambda pid: True)
         record = _write_record(tmp_path, proc.pid)
 
         assert stop_daemon(tmp_path) is StopOutcome.STOPPED
@@ -148,7 +179,7 @@ class TestTheStopperOwnsTheDeadline:
             real_kill(pid, sig)
 
         monkeypatch.setattr(daemon_module.os, "kill", _record)
-        proc = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
+        proc = _spawn_stand_in(_SLEEP)
         _write_record(tmp_path, proc.pid)
 
         assert stop_daemon(tmp_path) is StopOutcome.STOPPED
@@ -170,17 +201,7 @@ class TestTheStopperOwnsTheDeadline:
         marks: list[tuple[int, float]] = []
         start = time_module.monotonic()
 
-        proc = subprocess.Popen(
-            [
-                sys.executable,
-                "-c",
-                "import signal,time;signal.signal(signal.SIGTERM,signal.SIG_IGN);"
-                "print('ready',flush=True);time.sleep(30)",
-            ],
-            stdout=subprocess.PIPE,
-            text=True,
-        )
-        assert proc.stdout.readline().strip() == "ready"
+        proc = _spawn_stand_in(_IGNORE_SIGTERM, wait_for_ready=True)
         _write_record(tmp_path, proc.pid)
 
         real_kill = daemon_module.os.kill
@@ -281,17 +302,7 @@ class TestStopDistinguishesGoneFromRefusing:
         Nothing in a test can hold a process against SIGKILL (an
         uninterruptible wait in the kernel can, which is why the outcome
         exists), so the wait reports what such a process would."""
-        proc = subprocess.Popen(
-            [
-                sys.executable,
-                "-c",
-                "import signal,time;signal.signal(signal.SIGTERM,signal.SIG_IGN);"
-                "print('ready',flush=True);time.sleep(30)",
-            ],
-            stdout=subprocess.PIPE,
-            text=True,
-        )
-        assert proc.stdout.readline().strip() == "ready"
+        proc = _spawn_stand_in(_IGNORE_SIGTERM, wait_for_ready=True)
         record = _write_record(tmp_path, proc.pid)
         monkeypatch.setattr("elspais.mcp.daemon.wait_for_daemon_exit", lambda *a, **k: False)
         try:
@@ -318,17 +329,7 @@ class TestStartRefusesToJoinALiveDaemon:
 
         from elspais.mcp.daemon import start_daemon
 
-        proc = subprocess.Popen(
-            [
-                sys.executable,
-                "-c",
-                "import signal,time;signal.signal(signal.SIGTERM,signal.SIG_IGN);"
-                "print('ready',flush=True);time.sleep(30)",
-            ],
-            stdout=subprocess.PIPE,
-            text=True,
-        )
-        assert proc.stdout.readline().strip() == "ready"
+        proc = _spawn_stand_in(_IGNORE_SIGTERM, wait_for_ready=True)
         record = _write_record(tmp_path, proc.pid)
         # A process nothing can remove: the stop escalates to a kill, and
         # the predecessor is still there afterwards.
@@ -337,6 +338,50 @@ class TestStartRefusesToJoinALiveDaemon:
             with _pytest.raises(RuntimeError, match="did not stop"):
                 start_daemon(tmp_path, ttl_minutes=30)
             assert record.exists(), "the live daemon's record must survive the refusal"
+        finally:
+            proc.kill()
+            proc.wait()
+
+
+class TestStopSignalsOnlyADaemon:
+    # Verifies: REQ-o00076-E
+    def test_REQ_o00076_E_a_process_that_is_not_a_daemon_is_left_alone(
+        self, tmp_path, monkeypatch
+    ):
+        """Validates REQ-o00076-E: a record is a claim about the process a
+        client would reach, and a pid is not evidence for it. Pids are reused,
+        and a stale record names whatever holds that number now -- so a stop
+        that trusted the number ended a stranger, and once ended it in this
+        repository's own test run. What the record claims is checked before
+        anything is signalled: the process is left running, the record that
+        described nothing reachable is discarded, and the caller is told
+        nothing was stopped.
+
+        The stranger's own survival has no assertion of its own; it is the
+        cost of the record being unverified, which E is what makes checkable.
+        """
+        from elspais.mcp import daemon as daemon_module
+
+        sent: list[int] = []
+        real_kill = daemon_module.os.kill
+
+        def _record_signal(pid: int, sig: int) -> None:
+            if sig != 0:
+                sent.append(sig)
+            real_kill(pid, sig)
+
+        # A plain interpreter, deliberately NOT spawned through
+        # _spawn_stand_in: nothing in its argv says "elspais serve", which is
+        # exactly what makes it a stranger. It is also maximally killable --
+        # it declines no signal -- so surviving means nothing was sent.
+        proc = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
+        record = _write_record(tmp_path, proc.pid)
+        monkeypatch.setattr(daemon_module.os, "kill", _record_signal)
+        try:
+            assert stop_daemon(tmp_path, timeout=1.0) is StopOutcome.NOT_RUNNING
+            assert sent == [], f"a process that is not a daemon was signalled: {sent}"
+            assert proc.poll() is None, "a process that is not a daemon was ended"
+            assert not record.exists(), "the record describing no reachable daemon was kept"
         finally:
             proc.kill()
             proc.wait()

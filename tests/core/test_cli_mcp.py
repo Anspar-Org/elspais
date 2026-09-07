@@ -22,9 +22,10 @@ from elspais.cli import (
     _mcp_uninstall_desktop,
 )
 from elspais.commands.daemon_cmd import run_env
+from tests.e2e.helpers import resolve_elspais
 
 _has_claude = shutil.which("claude") is not None
-_has_elspais = shutil.which("elspais") is not None
+_has_elspais = resolve_elspais() is not None
 _inside_claude_code = os.environ.get("CLAUDECODE") == "1"
 _skip_e2e = pytest.mark.skipif(
     not (_has_claude and _has_elspais) or _inside_claude_code,

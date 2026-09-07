@@ -24,11 +24,15 @@ from tests.core.graph_test_helpers import (
 
 def _build(*, covered, result_status="passed", credit_mode="verified", min_frac=0.0):
     req = make_requirement("REQ-p00001", assertions=[{"label": "A", "text": "SHALL A"}])
+    # The citation is the comment on line 9; the code it speaks for is the
+    # block it precedes, lines 10-12. It has no enclosing function -- Dart has
+    # no function detection at all -- so those are the lines it credits
+    # (REQ-d00254-D).
     code = make_code_ref(
         implements=["REQ-p00001-A"],
         source_path="provenance/lib/foo.dart",
-        start_line=10,
-        end_line=12,
+        start_line=9,
+        end_line=9,
     )
     contents = [req, code]
     if result_status is not None:

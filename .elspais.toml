@@ -144,7 +144,7 @@ reference_patterns = []
 # from source-scanned `# Verifies:` comments, independent of this target.
 [[scanning.test.targets]]
 name = "elspais-unit"
-command = "pytest tests/ -q --junitxml=.results/junit.xml -o junit_family=xunit1 --cov=src/elspais --cov-context=test --cov-report="
+command = "pytest tests/ -q --junitxml=.results/junit.xml -o junit_family=xunit1"
 reporter = "junit"
 results = ".results/junit.xml"
 coverage = ".coverage"

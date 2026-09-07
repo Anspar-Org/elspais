@@ -26,11 +26,12 @@ from .conftest import (
     load_fixture,
     run_elspais,
 )
+from .helpers import resolve_elspais
 
 pytestmark = [
     pytest.mark.e2e,
     pytest.mark.skipif(
-        shutil.which("elspais") is None,
+        resolve_elspais() is None,
         reason="elspais CLI not found on PATH",
     ),
 ]
@@ -2052,7 +2053,6 @@ class TestRunTestsFlag:
     """
 
     def test_run_tests_happy_path(self, tmp_path, project):
-        import shutil
 
         scratch = tmp_path / "happy"
         shutil.copytree(project, scratch)
@@ -2067,7 +2067,6 @@ class TestRunTestsFlag:
         assert result_path.exists(), "stub runner did not write expected result file"
 
     def test_run_tests_banner_in_output(self, tmp_path, project):
-        import shutil
 
         scratch = tmp_path / "banner"
         shutil.copytree(project, scratch)
@@ -2077,7 +2076,6 @@ class TestRunTestsFlag:
         assert "Running 'stub' target" in combined
 
     def test_run_tests_no_targets_configured_exits_2(self, tmp_path, project):
-        import shutil
 
         scratch = tmp_path / "no_targets"
         shutil.copytree(project, scratch)
@@ -2093,7 +2091,6 @@ class TestRunTestsFlag:
 
     # Verifies: REQ-d00254-H
     def test_targets_flag_runs_only_named_target(self, tmp_path, project):
-        import shutil
 
         scratch = tmp_path / "targets_subset"
         shutil.copytree(project, scratch)
@@ -2123,7 +2120,6 @@ class TestRunTestsFlag:
 
     # Verifies: REQ-d00254-H
     def test_targets_flag_unknown_name_exits_2(self, tmp_path, project):
-        import shutil
 
         scratch = tmp_path / "targets_unknown"
         shutil.copytree(project, scratch)
@@ -2136,7 +2132,6 @@ class TestRunTestsFailFast:
     """Verifies: REQ-d00249-C, REQ-d00249-G"""
 
     def test_fail_fast_skips_remaining_and_checks(self, tmp_path, project):
-        import shutil
 
         scratch = tmp_path / "fail_fast"
         shutil.copytree(project, scratch)
@@ -2173,7 +2168,6 @@ class TestStaleResultsWarning:
     @staticmethod
     def _build_stale_project(scratch, project):
         import os
-        import shutil
         import time
 
         shutil.copytree(project, scratch)

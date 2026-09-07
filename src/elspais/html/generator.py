@@ -609,6 +609,7 @@ class HTMLGenerator:
         version: Version string for display (defaults to elspais package version).
     """
 
+    # Implements: REQ-d00052-A
     def __init__(
         self,
         graph: FederatedGraph,
@@ -631,6 +632,7 @@ class HTMLGenerator:
             namespace = self.config.get("project", {}).get("namespace") or "REQ"
         self.namespace = namespace
 
+    # Implements: REQ-p00006-A
     def generate(self, embed_content: bool = False) -> str:
         """Generate the complete HTML report.
 
@@ -720,6 +722,7 @@ class HTMLGenerator:
 
         return html_content
 
+    # Implements: REQ-d00054-A
     def _annotate_git_state(self) -> None:
         """Apply git state and display annotations to all requirement nodes.
 
@@ -786,6 +789,7 @@ class HTMLGenerator:
 
         return False
 
+    # Implements: REQ-d00052-F, REQ-d00258-C
     def _compute_stats(self) -> ViewStats:
         """Compute statistics for the header.
 
@@ -837,6 +841,7 @@ class HTMLGenerator:
 
         return stats
 
+    # Implements: REQ-p00006-A
     def _build_tree_rows(self) -> list[TreeRow]:
         """Build flat list of rows representing the hierarchical tree.
 
@@ -878,6 +883,7 @@ class HTMLGenerator:
                 return False
             return "roadmap" in (_fn.get_field("relative_path") or "").lower()
 
+        # Implements: REQ-d00052-E, REQ-d00258-C
         def compute_coverage(node: GraphNode) -> tuple[str, bool]:
             """Get coverage status and failure flag from pre-computed metrics.
 
@@ -1245,6 +1251,7 @@ class HTMLGenerator:
                 return filename[len(prefix) :]
         return filename
 
+    # Implements: REQ-p00006-A
     def _build_tree_data(self) -> dict[str, Any]:
         """Build tree data structure for embedded JSON."""
         from elspais.graph import NodeKind
@@ -1270,6 +1277,7 @@ class HTMLGenerator:
             }
         return data
 
+    # Implements: REQ-p00006-A
     def _build_node_index(self) -> dict[str, Any]:
         """Build node index for embedded JSON — matches /api/node/<id> response shape.
 
@@ -1284,6 +1292,7 @@ class HTMLGenerator:
             index[node.id] = _serialize_node_generic(node, self.graph)
         return index
 
+    # Implements: REQ-p00006-B
     def _build_coverage_index(self) -> dict[str, Any]:
         """Build per-requirement coverage index for embedded JSON.
 
@@ -1316,6 +1325,7 @@ class HTMLGenerator:
 
         return _get_graph_status(self.graph)
 
+    # Implements: REQ-p00006-C
     def _collect_source_files(self) -> dict[str, Any]:
         """Collect source file contents with syntax highlighting for inline viewer.
 

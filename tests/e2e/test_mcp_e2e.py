@@ -6,14 +6,15 @@ and exercises tool calls via newline-delimited JSON-RPC 2.0.
 """
 
 import json
-import shutil
 import subprocess
 
 import pytest
 
+from .helpers import resolve_elspais
+
 pytest.importorskip("mcp")
 
-_ELSPAIS = shutil.which("elspais")
+_ELSPAIS = resolve_elspais()
 pytestmark = [
     pytest.mark.skipif(
         _ELSPAIS is None,
