@@ -802,6 +802,7 @@ class TraceGraph:
 
         return undone
 
+    # Implements: REQ-o00062-G
     def _apply_undo(self, entry: MutationEntry) -> None:
         """Apply an undo operation based on mutation type.
 
@@ -870,6 +871,7 @@ class TraceGraph:
             self._undo_add_changelog_entry(entry)
         # Unknown operations are silently ignored (forward compatibility)
 
+    # Implements: REQ-p00017-B, REQ-d00132-G
     def _retarget_broken_refs(self, old_id: str, new_id: str) -> None:
         """Rewrite broken references (and their leftovers) after a rename.
 
@@ -972,6 +974,7 @@ class TraceGraph:
             edge.assertion_targets.clear()
             edge.assertion_targets.extend(targets)
 
+    # Implements: REQ-o00062-P
     def _undo_delete_requirement(self, entry: MutationEntry) -> None:
         """Undo a delete requirement, restoring the node AND its attachment.
 
@@ -1055,6 +1058,7 @@ class TraceGraph:
             stored.remove(ref)
             node.set_field(field, stored)
 
+    # Implements: REQ-o00062-G
     def _undo_add_edge(self, entry: MutationEntry) -> None:
         """Undo an add edge operation."""
         if entry.after_state.get("duplicate"):
@@ -1192,6 +1196,7 @@ class TraceGraph:
             if old_abs_path is not None:
                 node.set_field("absolute_path", old_abs_path)
 
+    # Implements: REQ-o00062-G
     def _undo_fix_broken_reference(self, entry: MutationEntry) -> None:
         """Undo a fix broken reference operation."""
         source_id = entry.before_state.get("source_id")
@@ -1245,6 +1250,7 @@ class TraceGraph:
                 if "parent_hash" in entry.before_state:
                     parent.set_field("hash", entry.before_state["parent_hash"])
 
+    # Implements: REQ-o00062-P
     def _undo_delete_assertion(self, entry: MutationEntry) -> None:
         """Undo a delete assertion operation."""
         # First, undo any compaction renames in reverse order
@@ -1308,6 +1314,7 @@ class TraceGraph:
             if parent_id and parent_id in self._index and "parent_hash" in entry.before_state:
                 self._index[parent_id].set_field("hash", entry.before_state["parent_hash"])
 
+    # Implements: REQ-o00062-G
     def _undo_rename_assertion(self, entry: MutationEntry) -> None:
         """Undo an assertion rename."""
         old_id = entry.before_state.get("id")
@@ -1335,6 +1342,7 @@ class TraceGraph:
             if parent_id and parent_id in self._index and "parent_hash" in entry.before_state:
                 self._index[parent_id].set_field("hash", entry.before_state["parent_hash"])
 
+    # Implements: REQ-o00062-G
     def _undo_journey_body_mutation(self, entry: MutationEntry) -> None:
         """Undo a journey field/section/body mutation by restoring body + fields."""
         node_id = entry.target_id
@@ -1454,6 +1462,7 @@ class TraceGraph:
         if parent_id and parent_id in self._index and "parent_hash" in entry.before_state:
             self._index[parent_id].set_field("hash", entry.before_state["parent_hash"])
 
+    # Implements: REQ-o00062-P
     def _undo_delete_remainder(self, entry: MutationEntry) -> None:
         """Undo a delete_remainder by re-creating and re-linking the node."""
         node_id = entry.target_id
@@ -1800,6 +1809,7 @@ class TraceGraph:
         if node_id in self._index:
             self._index[node_id].set_field("changelog", entry.before_state.get("changelog", []))
 
+    # Implements: REQ-o00062-A
     def add_requirement(
         self,
         req_id: str,
@@ -2199,6 +2209,7 @@ class TraceGraph:
             ) from exc
 
     @staticmethod
+    # Implements: REQ-o00062-R
     def _order_after_assertions(parent: GraphNode, new_edge: Any) -> float:
         """A render_order placing ``new_edge`` after the last assertion.
 
@@ -2316,6 +2327,7 @@ class TraceGraph:
         self._mutation_log.append(entry)
         return entry
 
+    # Implements: REQ-o00062-B
     def delete_assertion(
         self,
         assertion_id: str,
@@ -2451,6 +2463,7 @@ class TraceGraph:
     # Edge Mutation API
     # ─────────────────────────────────────────────────────────────────────────
 
+    # Implements: REQ-o00062-C
     def add_edge(
         self,
         source_id: str,
@@ -2993,6 +3006,7 @@ class TraceGraph:
         self._mutation_log.append(entry)
         return entry
 
+    # Implements: REQ-o00062-C
     def fix_broken_reference(
         self,
         source_id: str,
@@ -3391,6 +3405,7 @@ class TraceGraph:
 
     # ── REMAINDER section mutations ──
 
+    # Implements: REQ-o00062-H
     def update_remainder(
         self,
         node_id: str,
@@ -3463,6 +3478,7 @@ class TraceGraph:
         self._mutation_log.append(entry)
         return entry
 
+    # Implements: REQ-o00062-H
     def add_remainder(
         self,
         req_id: str,
@@ -3559,6 +3575,7 @@ class TraceGraph:
         self._mutation_log.append(entry)
         return entry
 
+    # Implements: REQ-o00062-H
     def delete_remainder(
         self,
         node_id: str,
@@ -4636,7 +4653,13 @@ class GraphBuilder:
 
         func_name = data.get("function_name")
         class_name = data.get("class_name")
-        func_line = data.get("function_line", content.start_line)
+        # Implements: REQ-d00254-D
+        # Whether a citation sits in a function is the pre-scan's answer to
+        # give, and it gives 0 where it found none. Defaulting to the
+        # citation's own line invents an enclosing function one line long,
+        # which reads downstream exactly like a real one and costs the
+        # citation the block of code it precedes.
+        func_line = data.get("function_line", 0)
 
         # Build a descriptive label that includes function context
         if func_name and class_name:
@@ -5609,32 +5632,20 @@ class GraphBuilder:
                     if parent_reqs:
                         parent_req = parent_reqs[0]
                         assertion_label = target.get_field("label", "")
-                        edge = parent_req.link(
+                        parent_req.link(
                             source,
                             edge_kind,
                             assertion_targets=[assertion_label] if assertion_label else None,
                         )
                     else:
                         # Fallback: link directly if no parent found
-                        edge = target.link(source, edge_kind)
+                        target.link(source, edge_kind)
                 else:
                     # Link target as parent of source (implements relationship)
-                    edge = target.link(source, edge_kind)
+                    target.link(source, edge_kind)
 
                 resolved_refs.add((source_id, target_id, edge_kind.value))
 
-                # Store implementation line range on IMPLEMENTS/VERIFIES edges
-                if edge_kind in (EdgeKind.IMPLEMENTS, EdgeKind.VERIFIES):
-                    impl_start = source.get_field("function_line") or source.get_field("parse_line")
-                    impl_end = (
-                        source.get_field("function_end_line")
-                        or source.get_field("parse_end_line")
-                        or 0
-                    )
-                    if impl_start:
-                        edge.metadata["impl_start_line"] = impl_start
-                    if impl_end:
-                        edge.metadata["impl_end_line"] = impl_end
             elif source and not target:
                 # Broken reference: target doesn't exist. Consult the
                 # verdict Task 3's reader carried for this item first; only

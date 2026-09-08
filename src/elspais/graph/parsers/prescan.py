@@ -65,6 +65,96 @@ def bind_unowned_comments(lines, is_owned, target_at, assign) -> None:
                 break
 
 
+# Implements: REQ-d00254-D
+def python_line_context(
+    lines: list[tuple[int, str]],
+) -> dict[int, tuple[str | None, str | None, int, int]] | None:
+    """Per-line function/class context for a Python file, read from the AST.
+
+    Indentation tracking answers two questions wrongly, and both cost a
+    citation the code it speaks for. It cannot see the end of a function, so a
+    citation inside one is bounded only by the next citation and claims the
+    bodies of functions it says nothing about; and it keeps a function current
+    across a comment written after that function ended, so a module-level
+    citation is read as belonging to the function above it. The AST knows every
+    declaration's real extent and is not fooled by a dedented line inside a
+    multi-line string.
+
+    Returns None when the source does not parse, so the caller keeps the
+    indentation reading rather than losing context altogether.
+    """
+    try:
+        tree = ast.parse("\n".join(text for _, text in lines))
+    except (SyntaxError, ValueError):
+        return None
+
+    class_ranges: list[tuple[int, int, str]] = []
+    func_ranges: list[tuple[int, int, str, str | None]] = []
+
+    def _collect(node, class_name: str | None) -> None:
+        for child in ast.iter_child_nodes(node):
+            if isinstance(child, ast.ClassDef):
+                class_ranges.append((child.lineno, child.end_lineno or child.lineno, child.name))
+                _collect(child, child.name)
+            elif isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                func_ranges.append(
+                    (child.lineno, child.end_lineno or child.lineno, child.name, class_name)
+                )
+                # A nested declaration is the narrower answer for its own lines.
+                _collect(child, class_name)
+
+    _collect(tree, None)
+
+    context: dict[int, tuple[str | None, str | None, int, int]] = {}
+    for ln, _text in lines:
+        name: str | None = None
+        class_name: str | None = None
+        start = end = 0
+        for c_start, c_end, c_name in class_ranges:
+            if c_start <= ln <= c_end:
+                class_name = c_name
+        for f_start, f_end, f_name, f_class in func_ranges:
+            if f_start <= ln <= f_end:
+                name, class_name, start, end = f_name, f_class or class_name, f_start, f_end
+        context[ln] = (name, class_name, start, end)
+    return context
+
+
+def _bind_comments_to_declarations(
+    lines: list[tuple[int, str]],
+    context: dict[int, tuple[str | None, str | None, int, int]],
+    func_patterns: list,
+) -> dict[int, tuple[str | None, str | None, int, int]]:
+    """Bind a comment above a declaration to it, carrying that declaration's extent.
+
+    A citation is written above the thing it describes at least as often as
+    inside it, and a comment sits outside every declaration's own line range.
+    Binding is therefore what gives the canonical placement its function -- and
+    with it the bound that stops the citation claiming the code of the next one.
+    """
+
+    def _declaration_at(_idx, ahead_ln, ahead_text):
+        for pattern in func_patterns:
+            if pattern.match(ahead_text):
+                name, class_name, start, end = context.get(ahead_ln, (None, None, 0, 0))
+                if name is not None:
+                    return (name, class_name, start, end)
+        return None
+
+    def _assign(ln, target):
+        name, class_name, start, end = target
+        _, own_class, _, _ = context[ln]
+        context[ln] = (name, class_name or own_class, start, end)
+
+    bind_unowned_comments(
+        lines,
+        lambda ln: context[ln][0] is not None,
+        _declaration_at,
+        _assign,
+    )
+    return context
+
+
 # Language-aware function/class patterns for context tracking
 # Python: def name(
 _PYTHON_FUNC = re.compile(r"^(\s*)(?:async\s+)?def\s+(\w+)\s*\(")
@@ -182,6 +272,14 @@ def build_line_context(
         class_patterns = [_PYTHON_CLASS]
         scope_mode = "indent"
 
+    # Implements: REQ-d00254-D
+    # A citation's enclosing function bounds the lines it attributes, so the
+    # precise reading is preferred wherever it is available.
+    if language == "python":
+        ast_context = python_line_context(lines)
+        if ast_context is not None:
+            return _bind_comments_to_declarations(lines, ast_context, func_patterns)
+
     current_class: str | None = None
     current_class_indent: int = -1
     current_func: str | None = None
@@ -208,6 +306,7 @@ def build_line_context(
             if current_func and brace_depth <= func_brace_start:
                 current_func = None
                 current_func_indent = -1
+                current_func_line = 0
 
             # Exit class scope when braces close
             if current_class and brace_depth <= class_brace_start:
@@ -258,6 +357,7 @@ def build_line_context(
                 if not stripped.startswith("#") and not stripped.startswith("//"):
                     current_func = None
                     current_func_indent = -1
+                    current_func_line = 0
 
         # Suppress match variable leaking (used in loop above)
         class_match = None  # type: ignore[assignment]
@@ -286,6 +386,19 @@ def build_line_context(
         _declaration_at,
         _assign,
     )
+
+    # Implements: REQ-d00254-D
+    # The last line a function was current for is the end of its extent. It is
+    # read after binding so a comment bound to the declaration below it inherits
+    # that declaration's extent rather than a zero.
+    end_by_start: dict[int, int] = {}
+    for ln, _text in lines:
+        start = line_context[ln][2]
+        if start and line_context[ln][0] is not None:
+            end_by_start[start] = max(end_by_start.get(start, start), ln)
+    for ln in line_context:
+        name, class_name, start, _ = line_context[ln]
+        line_context[ln] = (name, class_name, start, end_by_start.get(start, 0) if start else 0)
 
     return line_context
 

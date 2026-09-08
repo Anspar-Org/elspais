@@ -680,6 +680,7 @@ def check_spec_undefined_levels(graph: FederatedGraph, config: dict[str, Any]) -
     )
 
 
+# Implements: REQ-p00002-B
 def check_spec_hierarchy_levels(graph: FederatedGraph, config: dict[str, Any]) -> HealthCheck:
     """Check that hierarchy levels follow configured rules."""
     severity = severity_for("spec.hierarchy_levels", config)
@@ -1185,6 +1186,7 @@ def check_reference_undeclared(graph: FederatedGraph, config: dict[str, Any] | N
     )
 
 
+# Implements: REQ-p00002-A
 def check_spec_format_rules(
     graph: FederatedGraph, config: dict[str, Any], resolver: IdResolver | None = None
 ) -> HealthCheck:
@@ -2993,9 +2995,8 @@ def check_line_coverage(graph, config=None, level_filter=None) -> HealthCheck:
             name="code.code_tested",
             passed=True,
             message=(
-                f"Code Tested (line coverage): no line-coverage data ingested for"
-                f" {agg.total_lines} attributed implementation lines"
-                f" across {agg.req_count} REQs" + _excluded_note(graph, config=config)
+                "Code Tested (line coverage): no line-coverage data ingested"
+                + _excluded_note(graph, config=config)
             ),
             category="code",
             severity="info",
@@ -3562,6 +3563,7 @@ def run_code_checks(
 ) -> list[HealthCheck]:
     """Run all code reference health checks."""
     from elspais.graph import NodeKind
+    from elspais.graph.relations import EdgeKind
 
     checks = [
         check_code_coverage(graph, exclude_status=exclude_status, config=config),
@@ -3587,12 +3589,17 @@ def run_code_checks(
         check_unscanned_keyword_files(graph, config),
     ]
 
-    # Add line coverage only when line coverage data is present
-    has_coverage = any(
-        (m := node.get_metric("rollup_metrics")) is not None and m.code_tested.total_lines > 0
+    # Implements: REQ-d00258-E
+    # Asked whenever there is implementation to measure -- not only when a
+    # measurement exists. Attributed lines are read from the coverage map, so
+    # gating on a nonzero count would silence the check in exactly the case it
+    # exists to report: implementation nobody has measured.
+    has_implementation = any(
+        edge.kind == EdgeKind.IMPLEMENTS and edge.target.kind == NodeKind.CODE
         for node in graph.nodes_by_kind(NodeKind.REQUIREMENT)
+        for edge in node.iter_outgoing_edges()
     )
-    if has_coverage:
+    if has_implementation:
         checks.append(check_line_coverage(graph, config=config))
 
     # Implements: REQ-d00241-A, REQ-d00241-C
@@ -3693,6 +3700,7 @@ def _configured_test_targets(graph: FederatedGraph, config: dict | None) -> list
     return targets
 
 
+# Implements: REQ-d00249-D
 def check_test_results(graph: FederatedGraph, config: dict | None = None) -> HealthCheck:
     """Check test result status from JUnit/pytest output.
 
@@ -3802,6 +3810,7 @@ def check_test_results(graph: FederatedGraph, config: dict | None = None) -> Hea
     )
 
 
+# Implements: REQ-d00249-E
 def check_test_results_stale(
     graph: FederatedGraph, config: dict[str, Any] | None = None
 ) -> HealthCheck:
@@ -4073,6 +4082,7 @@ def check_uncited_tests(graph: FederatedGraph, config: dict[str, Any] | None = N
     )
 
 
+# Implements: REQ-d00219-C+D
 def check_uat_results(graph: FederatedGraph, config: dict[str, Any] | None = None) -> HealthCheck:
     """Check UAT results from a journey results CSV file.
 
@@ -5286,6 +5296,7 @@ def apply_finding_filter(report: HealthReport, filt: FindingFilter) -> _FilterOu
     )
 
 
+# Implements: REQ-d00085-E+F, REQ-d00285-C+H
 def _format_report(
     report: HealthReport,
     args: argparse.Namespace,
@@ -5676,6 +5687,7 @@ def _finding_text_lines(finding: HealthFinding, indent: str) -> list[str]:
     return lines
 
 
+# Implements: REQ-d00085-E, REQ-d00285-I
 def _render_text(data: _ReportData) -> str:
     """Render _ReportData as plain text checklist."""
     lines: list[str] = []

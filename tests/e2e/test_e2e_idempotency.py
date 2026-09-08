@@ -17,7 +17,6 @@ includes the bug-trigger content classes:
 
 from __future__ import annotations
 
-import shutil
 import subprocess
 from pathlib import Path
 
@@ -28,12 +27,13 @@ from .helpers import (
     Requirement,
     base_config,
     build_project,
+    resolve_elspais,
 )
 
 pytestmark = [
     pytest.mark.e2e,
     pytest.mark.skipif(
-        shutil.which("elspais") is None,
+        resolve_elspais() is None,
         reason="elspais CLI not found on PATH",
     ),
 ]

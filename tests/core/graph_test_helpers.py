@@ -229,14 +229,30 @@ def make_code_ref(
     source_path: str = "src/module.py",
     start_line: int = 1,
     end_line: int = 10,
+    function_name: str | None = None,
+    class_name: str | None = None,
+    function_line: int = 0,
+    function_end_line: int = 0,
 ) -> ParsedContent:
     """Factory for creating test code references.
+
+    ``start_line``/``end_line`` are the lines the CITATION's own comment
+    occupies -- one line, or several where a reference list is continued
+    (REQ-d00269-H). They say nothing about an enclosing function: that is
+    ``function_line``/``function_end_line``, which the real pre-scan supplies
+    and reports as ``0`` when the citation sits in no function at all. The
+    default is that same ``0``, so a citation built here is module-level
+    unless a caller says otherwise.
 
     Args:
         implements: List of requirement IDs this code implements
         source_path: Source file path
-        start_line: Start line in source
-        end_line: End line in source
+        start_line: First line of the citation's comment
+        end_line: Last line of the citation's comment
+        function_name: Optional enclosing function name
+        class_name: Optional enclosing class name
+        function_line: Line of the enclosing function's ``def`` (0 = none)
+        function_end_line: Last line of the enclosing function (0 = none)
 
     Returns:
         ParsedContent ready for GraphBuilder.add_parsed_content()
@@ -248,6 +264,10 @@ def make_code_ref(
         raw_text="",
         parsed_data={
             "implements": implements,
+            "function_name": function_name,
+            "class_name": class_name,
+            "function_line": function_line,
+            "function_end_line": function_end_line,
         },
     )
     content.source_context = MockSourceContext(source_id=source_path)

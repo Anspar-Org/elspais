@@ -828,8 +828,44 @@ def replace_stopping_daemon(repo_root: Path, info: dict, timeout: float = 20.0) 
 
 
 # Implements: REQ-o00076-C, REQ-o00076-D
+def process_is_daemon(pid: int) -> bool | None:
+    """Whether *pid* names an elspais daemon, or None when that cannot be told.
+
+    A pid alone identifies nothing: the number is reused, and a record can name
+    a process that never was a daemon. Signalling on a pid alone is therefore
+    signalling a stranger, so this answers the question the pid cannot.
+
+    Three answers, and the third is not the second: True (it is a daemon),
+    False (it is some other process -- do not signal it), None (this platform
+    will not say). None must not be read as False; refusing to stop a daemon
+    that cannot be inspected would strand it forever.
+    """
+    try:
+        raw = Path(f"/proc/{pid}/cmdline").read_bytes()
+    except OSError:
+        return None
+    if not raw.strip(b"\0"):
+        # The kernel frees a process's argv when it exits, so a zombie -- and a
+        # kernel thread -- reads as empty. Empty is therefore not evidence of
+        # anything: answering False here would name a daemon's own corpse "not
+        # an elspais daemon" and refuse to clear up after it.
+        return None
+    argv = raw.replace(b"\0", b" ").decode("utf-8", "replace")
+    return "elspais" in argv and "serve" in argv
+
+
 def get_daemon_info(repo_root: Path) -> dict | None:
-    """Read daemon.json and verify the process is alive.
+    """Read the daemon record, drop it if the pid it names is not in use.
+
+    TWO things, and the second is a WRITE: a record naming a pid nobody holds
+    is deleted here. That deletion is why this is not a pure read, and callers
+    that only want to look must read the record instead of calling this.
+
+    What it checks is LIVENESS, not identity: ``os.kill(pid, 0)`` says a
+    process holds that number, never that the process is a daemon. Pids are
+    reused, and a record can be written by something that is not a daemon, so
+    a caller about to SIGNAL the pid must ask ``process_is_daemon`` as well --
+    this function's answer is not grounds for killing anything.
 
     A client arranges nothing in advance: it reads the record kept at a
     known place under the working tree it is operating in, so a session
@@ -1029,11 +1065,41 @@ def stop_daemon(repo_root: Path, wait: bool = True, timeout: float = 20.0) -> St
     info = get_daemon_info(repo_root)
     if info is None:
         return StopOutcome.NOT_RUNNING
+
+    # A record names a pid; a pid names whatever holds that number now. Confirm
+    # the process is a daemon before signalling it, because the alternative is
+    # killing a stranger -- a record naming a pid that has been reused, or one
+    # written by a process that was never a daemon, is indistinguishable here
+    # from a real one. An answer of None means the platform will not say, and
+    # that is not permission to assume the worst in either direction: the stop
+    # proceeds, but the escalation to SIGKILL below does not.
+    identified = process_is_daemon(info["pid"])
+    if identified is False:
+        print(
+            f"warning: {_daemon_json_path(repo_root)} names pid {info['pid']}, "
+            "which is not an elspais daemon. Leaving that process alone and "
+            "discarding the record.",
+            file=sys.stderr,
+        )
+        _daemon_json_path(repo_root).unlink(missing_ok=True)
+        return StopOutcome.NOT_RUNNING
+
     try:
         os.kill(info["pid"], signal.SIGTERM)
     except OSError:
         pass  # already gone; fall through and clear the record
     if wait and not wait_for_daemon_exit(info, timeout=timeout):
+        if identified is not True:
+            # Never escalate to a signal nothing survives on a process this
+            # platform could not confirm. A daemon left running is recoverable;
+            # a stranger killed is not.
+            print(
+                f"warning: pid {info['pid']} did not stop within {timeout:.0f}s "
+                "and this platform cannot confirm it is an elspais daemon, so "
+                "it has not been ended. Its record is left in place.",
+                file=sys.stderr,
+            )
+            return StopOutcome.STILL_RUNNING
         print(
             f"warning: the daemon (pid {info['pid']}) did not stop within "
             f"{timeout:.0f}s -- a client holding a request open can stall its "

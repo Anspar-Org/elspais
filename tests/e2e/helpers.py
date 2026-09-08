@@ -608,9 +608,6 @@ def _deep_merge(base: dict, overlay: dict) -> dict:
 # ---------------------------------------------------------------------------
 
 
-_ELSPAIS = _shutil.which("elspais")
-
-
 def _discover_repo_root() -> Path:
     """Resolve the repo root, falling back to the worktree path if git can't.
 
@@ -641,6 +638,50 @@ def _discover_repo_root() -> Path:
 
 
 REPO_ROOT = _discover_repo_root()
+
+
+def resolve_elspais() -> str | None:
+    """The elspais CLI the e2e tier exercises, most specific source first.
+
+    1. ``ELSPAIS_BIN`` -- an explicit override, for CI or a bisect.
+    2. ``<repo root>/.venv/bin/elspais`` -- the checkout's own editable
+       install, so a worktree tests ITSELF whether or not its venv happens to
+       be activated in the shell that started pytest.
+    3. ``shutil.which("elspais")`` -- whatever is on PATH.
+
+    Order matters, and (2) is the whole point. Resolution is by PATH, not by
+    directory: standing in a worktree does not make ``elspais`` mean that
+    worktree's build. Without (2), running this tier in a checkout whose venv
+    is not activated silently exercises the globally installed elspais and
+    reports green for code that is not under test -- the one failure a test
+    suite must never have, because it is indistinguishable from success.
+    """
+    override = _os.environ.get("ELSPAIS_BIN")
+    if override:
+        return override
+    local = REPO_ROOT / ".venv" / "bin" / "elspais"
+    if local.is_file() and _os.access(local, _os.X_OK):
+        return str(local)
+    return _shutil.which("elspais")
+
+
+_ELSPAIS = resolve_elspais()
+
+# Whether the resolved CLI is this checkout's own build. False means the tier
+# is exercising some other installation; say so rather than passing quietly.
+ELSPAIS_IS_LOCAL = bool(_ELSPAIS) and Path(_ELSPAIS).resolve().is_relative_to(REPO_ROOT)
+
+if _ELSPAIS is not None and not ELSPAIS_IS_LOCAL:
+    import warnings as _warnings
+
+    _warnings.warn(
+        f"e2e tier is running {_ELSPAIS}, which is not this checkout "
+        f"({REPO_ROOT}). These tests are exercising a different build of "
+        f"elspais than the code under test. Create the checkout's editable "
+        f"venv (.venv/bin/elspais) or set ELSPAIS_BIN.",
+        RuntimeWarning,
+        stacklevel=2,
+    )
 
 
 def run_elspais(
@@ -681,9 +722,7 @@ def run_elspais(
 
 def start_mcp(cwd: str | Path) -> subprocess.Popen:
     """Start an MCP server as a subprocess and perform handshake."""
-    import shutil
-
-    exe = shutil.which("elspais")
+    exe = _ELSPAIS
     if exe is None:
         import pytest
 

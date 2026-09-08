@@ -4,7 +4,7 @@ build-backend = "flit_core.buildapi"
 
 [project]
 name = "elspais"
-version = "0.122.0"
+version = "0.123.0"
 description = "Requirements validation and traceability tools - L-Space connects all libraries"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -86,7 +86,7 @@ include = ["tests/", "docs/"]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_functions = ["test_*"]
-addopts = "--tb=short --ignore=tests/_obsolete --ignore=tests/fixtures -m 'not e2e and not browser and not stress'"
+addopts = "--tb=short --ignore=tests/_obsolete --ignore=tests/fixtures --cov=src/elspais --cov-context=test --cov-report= -m 'not e2e and not browser and not stress'"
 markers = [
     "e2e: end-to-end tests requiring external tools or subprocess invocation (deselected by default, run with: pytest -m e2e)",
     "browser: browser-based tests requiring Playwright (deselected by default, run with: pytest -m browser)",

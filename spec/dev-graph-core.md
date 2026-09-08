@@ -571,7 +571,7 @@ B. The annotator SHALL compute a separate `lcov_tested` dimension by measuring t
 
 C. The configuration surface SHALL express test result and coverage ingestion via `[[scanning.test.targets]]` entries, each declaring how a target's results and coverage are produced (`command`, `groups`) and ingested (`reporter`, `results`, `coverage`, `match`, `classname`, `credit_coverage`, `min_coverage_fraction`). User documentation SHALL include a `test-targets` topic describing the target model, the available reporters, and a worked Flutter recipe.
 
-D. When an `// Implements:` marker has no function range (i.e., `impl_start_line == impl_end_line`), the annotator SHALL attribute coverage via block-scoped attribution: a run of consecutive marker lines with no executable line strictly between them forms one block, and that block owns the executable lines that follow it up to the next block's first marker or end-of-file. This enables languages without function detection (e.g. Dart) to receive lcov coverage credit for the code each marker precedes.
+D. A run of citations with no executable line between them SHALL attribute the lines of the function it is written above, or else the executable lines following it up to the next citation, the end of its enclosing function, or the end of the file, whichever comes first.
 
 E. A reporter registry SHALL map each `reporter` format name to a parser and an input channel (`stdout` or `file`). The registry SHALL include a native `flutter test --machine` reporter that parses the machine JSON event stream into result records carrying each test's real source-file path (from the suite path), pass/fail/skip status, and line -- without an external JUnit converter.
 
@@ -619,6 +619,11 @@ Q is the half that bites. Evidence read in part yields a figure whose basis is n
 
 ### Changelog
 
+- 2026-09-06 | 4ec40251 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-09-06 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-80: one rule for what a citation attributes, bounded by the run, the next citation and the enclosing function (D)
+- 2026-09-04 | 4374955e | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-09-04 | 6ca69e33 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-09-04 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-80: block attribution follows from an unknown function extent, not from a one-line comment (D)
 - 2026-08-25 | 8264ac9a | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-24 | e16eaff7 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-24 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-66: an artifact ingestion could not read is reported, and a partial read is told apart from a total one
@@ -643,7 +648,7 @@ Q is the half that bites. Evidence read in part yields a figure whose basis is n
 - 2026-06-20 | 98120740 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-06-20 | 00000000 | - | Michael Lewis (<michael@anspar.org>) | CUR-1533: initial
 
-*End* *Test Evidence: Attribution, Ingestion, and Coverage Crediting* | **Hash**: 8264ac9a
+*End* *Test Evidence: Attribution, Ingestion, and Coverage Crediting* | **Hash**: 4ec40251
 
 ---
 

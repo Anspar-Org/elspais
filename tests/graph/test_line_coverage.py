@@ -33,8 +33,13 @@ from tests.core.graph_test_helpers import (
     make_test_ref,
 )
 
-# Lines 10-12 implement the requirement; the run executed 10 and 12.
-_IMPL_START, _IMPL_END = 10, 12
+# Lines 10-12 implement the requirement -- a function whose extent the
+# pre-scan knows, cited by the comment on line 9 above its ``def``, which is
+# where a ``# Implements:`` is written. The run executed 10 and 12. Because
+# the extent is the function's, it is known whether or not any run measured
+# it (REQ-d00254-D).
+_CITATION_LINE = 9
+_FUNC_START, _FUNC_END = 10, 12
 _PARTIAL_COVERAGE = {10: 1, 11: 0, 12: 1}
 
 
@@ -44,7 +49,8 @@ def _graph(
     line_contexts: dict[int, list[str]] | None = None,
     status: str = "Active",
 ):
-    """A requirement implemented by lines 10-12 of one file, plus a verifying
+    """A requirement implemented by a function on lines 10-12 of one file --
+    cited by the comment on line 9, above its ``def`` -- plus a verifying
     test, with the file's coverage data set as given."""
     req = make_requirement(
         "REQ-p00001",
@@ -58,8 +64,11 @@ def _graph(
         make_code_ref(
             implements=["REQ-p00001"],
             source_path="src/module.py",
-            start_line=_IMPL_START,
-            end_line=_IMPL_END,
+            start_line=_CITATION_LINE,
+            end_line=_CITATION_LINE,
+            function_name="do_a",
+            function_line=_FUNC_START,
+            function_end_line=_FUNC_END,
         ),
         make_test_ref(
             verifies=["REQ-p00001"],
@@ -115,24 +124,31 @@ class TestAggregateLineCoverage:
         assert agg.req_count == 1
         assert agg.req_with_covered == 1
 
-    def test_lines_are_counted_from_the_implementation_not_the_coverage_file(self):
-        """``total_lines`` is the implementation attributed to the requirement,
-        so it is known even when no run measured it. Without coverage data the
-        requirement is in the denominator with nothing covered.
+    def test_an_unmeasured_estate_reports_nothing_not_an_empty_denominator(self):
+        """Lines are counted from the coverage map, so an estate no run
+        measured reports NOTHING -- not a denominator of lines with nothing
+        covered.
 
-        This is the shape the tool has always had, and it is worth pinning
-        because the reading is easy to get wrong: "0/3 lines covered" here
-        means no run was measured, not that the tests reached none of the
-        code. What tells the two apart is whether any coverage data exists at
-        all -- the caller in ``health.py`` only runs this check when some
-        requirement has implementation lines, and ``has_attribution`` answers
-        the same question one level down for per-test contexts.
+        The coverage map is the only thing that knows which lines are code: a
+        function's extent spans its docstring, its blanks and its comments,
+        none of which any run can reach. Counting those would make "0/3 lines
+        covered" a claim about the tests when it is a fact about the data, and
+        would report every requirement as less covered than its code is. So
+        the requirement leaves the aggregate entirely and ``has_measurement``
+        is what says why -- the same question ``has_attribution`` answers one
+        level down for per-test contexts.
         """
         agg = aggregate_line_coverage(_graph(line_coverage=None))
-        assert agg.total_lines == 3
+        assert agg.total_lines == 0
         assert agg.covered_lines == 0
-        assert agg.req_count == 1
+        assert agg.req_count == 0
         assert agg.req_with_covered == 0
+        assert agg.has_measurement is False
+
+        # The contrast: the same requirement, measured, IS in the aggregate.
+        measured = aggregate_line_coverage(_graph(line_coverage=_PARTIAL_COVERAGE))
+        assert measured.req_count == 1
+        assert measured.has_measurement is True
 
     # Verifies: REQ-d00258-C
     def test_excluded_statuses_are_excluded_here_too(self):

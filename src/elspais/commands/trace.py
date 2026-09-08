@@ -954,6 +954,7 @@ def format_html(
     yield "</table></body></html>"
 
 
+# Implements: REQ-p00084-C+D
 def format_json(
     graph: FederatedGraph,
     preset: ReportPreset | None = None,
@@ -973,7 +974,6 @@ def format_json(
 
     cols = _report_values(preset, values)
 
-    # Implements: REQ-p00084-C+D
     if scope_lines:
         yield "{"
         yield f'"scope": {json.dumps(list(scope_lines), indent=2)},'
@@ -1092,13 +1092,13 @@ def render_section(
     return "\n".join(lines), 0
 
 
+# Implements: REQ-p00084-C+D
 def _render_json_from_data(
     data: dict,
     preset: ReportPreset,
     values: Sequence[str] | None = None,
 ) -> None:
     """Render JSON output from compute_trace data dict."""
-    # Implements: REQ-p00084-C+D
     # The scope reaches this path inside the computed data, and leaves it the
     # same way: the document states the scope a table rendering states, rather
     # than leaving it on a stream the artifact does not carry.

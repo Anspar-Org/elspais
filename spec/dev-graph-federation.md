@@ -419,6 +419,8 @@ K. A *Traceability* keyword SHALL be read only in a comment introduced by the pa
 
 L. A *Traceability* keyword introducing a reference list, as E and G require, SHALL be the only form that declares a relationship. Nothing else about a source file SHALL declare one — in particular neither the name of the declaration an annotation sits above, nor a line beneath a keyword line that H does not continue.
 
+M. How references are divided between lists and lines SHALL NOT change the relationships they declare or the lines those relationships attribute.
+
 ### Rationale
 
 Cross-repository credit is what multi-repository *Traceability* is for: a sponsor repository's tests verifying a platform requirement is the ordinary case, not an exotic one. The obligations here are separated because each fails independently and each fails silently. Computing coverage before the federation is wired starves the computation of the very edges that cross repositories (A). Wiring those edges in a shape the coverage computation does not read starves it a second time, so ordering alone is not sufficient (B). Refusing to recognise a foreign identifier in a code or test comment drops the evidence before any edge exists at all (C), which bites hardest because annotating code and tests is where cross-repository evidence is most naturally authored.
@@ -441,6 +443,8 @@ Two lines are excluded from continuing a list, and both exclusions keep continua
 
 L closes the set E opens. E settles where a keyword counts and G settles what it introduces, but neither excludes a mechanism that reads a reference with no keyword at all. Two such mechanisms had accumulated: a citation read out of a test function's name, and a list gathered from the indented lines beneath a header. Each is a second grammar with its own rules about case, punctuation and adjacency, and an author who spells a citation the way one of them accepts learns nothing about the other — while every surface that reports on annotations has to know all of them or be quietly wrong. One form is also the only arrangement a reader can check by eye: a relationship is present exactly where a keyword is written, so a file's declarations can be counted without knowing which convention its author had in mind. Nothing a retired form could carry is beyond the surviving one, so what L removes is choice rather than reach.
 
+M states what G, H and L leave implicit. Each of them makes one spelling equivalent to another — items within a list, a list continued onto a second line, separate keyword lines naming one target each — without saying that the equivalence reaches the whole of what a citation produces. It did not. The *Traceability* edges were invariant, while the extent of code a citation attributed was taken from the span of the comment it was written on: a continued list attributed the two comment lines it occupied, and the pair of keyword lines saying the same thing attributed the code beneath them. That divergence is silent in the direction that costs most, because a spelling the author is free to choose decides whether line coverage credits the requirement, and a citation attributing the wrong lines reads in every report exactly like one attributing none. Naming the property where the equivalences are declared is what makes a new reading of a list answerable for it.
+
 The complementary negative rule — that federation membership alone credits nothing — belongs to the federation role model and is not restated here. Together the two bound the behaviour from both sides: coverage crosses a boundary exactly where a *Traceability* edge crosses it, and nowhere else.
 
 Coverage computed over a wired federation is idempotent, so a surface may recompute without double-counting.
@@ -449,6 +453,8 @@ A concurrency version is derived from a node's content and its outgoing *Traceab
 
 ### Changelog
 
+- 2026-09-04 | 95db81d6 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-09-04 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-80: dividing references between lists and lines changes nothing a citation produces (M)
 - 2026-08-25 | 8c9eb97a | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-25 | 09843cb9 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-24 | a7f382b1 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -468,7 +474,7 @@ A concurrency version is derived from a node's content and its outgoing *Traceab
 - 2026-08-08 | bd05142f | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 - 2026-08-09 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: cross-repository coverage credit
 
-*End* *Cross-Repository Coverage Credit* | **Hash**: 8c9eb97a
+*End* *Cross-Repository Coverage Credit* | **Hash**: 95db81d6
 ---
 
 ## REQ-d00275: Whose Configuration Governs a Federated Answer

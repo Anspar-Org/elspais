@@ -992,6 +992,8 @@ def _matches_query(
     return False
 
 
+# Implements: REQ-o00060-C, REQ-d00061-A, REQ-d00061-B, REQ-d00061-C,
+# REQ-d00061-D, REQ-d00061-E, REQ-d00061-F, REQ-d00061-L, REQ-d00061-M
 def _search(
     graph: FederatedGraph,
     query: str,
@@ -1667,6 +1669,7 @@ def _get_requirement(graph: FederatedGraph, req_id: str) -> dict[str, Any]:
     }
 
 
+# Implements: REQ-o00060-E, REQ-d00063-A, REQ-d00063-B, REQ-d00063-D, REQ-d00063-E
 def _get_hierarchy(graph: FederatedGraph, req_id: str) -> dict[str, Any]:
     """Get requirement hierarchy.
 
@@ -1837,6 +1840,7 @@ def _lost_changes_notice(working_dir: Path | str | None) -> dict[str, Any] | Non
 # ── Shared profile helpers ──────────────────────────────────────────────────
 
 
+# Implements: REQ-o00061-A, REQ-o00061-D
 def _build_id_patterns(config: dict[str, Any]) -> dict[str, Any]:
     """Build ID pattern info from config."""
     typed_config = _validate_config(config) if isinstance(config, dict) else config
@@ -1863,6 +1867,7 @@ def _build_id_patterns(config: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+# Implements: REQ-o00061-A, REQ-o00061-D
 def _build_assertion_format(config: dict[str, Any]) -> dict[str, Any]:
     """Build assertion format info from config."""
     typed_config = _validate_config(config) if isinstance(config, dict) else config
@@ -1934,6 +1939,7 @@ def _build_coverage_stats(graph: FederatedGraph | None, config: dict[str, Any]) 
     }
 
 
+# Implements: REQ-d00205-A
 def _build_associates_info(
     config: dict[str, Any],
     working_dir: Path,
@@ -2140,6 +2146,7 @@ def _workspace_profile_worktree(
     return result
 
 
+# Implements: REQ-o00061-A, REQ-o00061-D
 def _workspace_profile_all(
     base: dict[str, Any],
     working_dir: Path,
@@ -2854,6 +2861,7 @@ def _get_docs(topic: str) -> dict[str, Any]:
 # ─────────────────────────────────────────────────────────────────────────────
 
 
+# Implements: REQ-d00253-D
 def _guard_associate_write(graph: Any, config: Any, *node_ids: str) -> dict[str, Any] | None:
     """Return a read-only error dict if any node_id is associate-owned and
     associate writes are disabled; otherwise None. Implements: REQ-d00253-D
@@ -3668,6 +3676,7 @@ def _normalization_note(before: list[str], after: list[str]) -> str:
     return f" (normalized: {', '.join(before)} -> {', '.join(after)})"
 
 
+# Implements: REQ-d00212-R
 def _normalize_assertion_targets(
     targets: list[str], target_id: str, config: dict[str, Any]
 ) -> list[str]:
@@ -5103,6 +5112,7 @@ def _find_assertions_by_keywords(
 # ─────────────────────────────────────────────────────────────────────────────
 
 
+# Implements: REQ-o00063-A, REQ-o00063-D
 def _change_reference_type(
     repo_root: Path,
     req_id: str,
@@ -5161,6 +5171,7 @@ def _change_reference_type(
     return result
 
 
+# Implements: REQ-o00063-B, REQ-o00063-D
 def _move_requirement(
     repo_root: Path,
     req_id: str,
@@ -5396,6 +5407,7 @@ def _compute_coverage_summary(req_node: Any) -> dict[str, Any]:
     return {"total_assertions": total, "dimensions": dimensions}
 
 
+# Implements: REQ-d00075-A, REQ-o00067-A, REQ-o00067-B, REQ-o00067-E, REQ-d00133-A, REQ-d00133-B
 def _collect_subtree(
     graph: FederatedGraph,
     root_id: str,
@@ -5454,6 +5466,7 @@ def _collect_subtree(
     return result
 
 
+# Implements: REQ-d00075-C, REQ-o00067-F
 def _subtree_to_markdown(
     collected: list[tuple[Any, int]],
     graph: FederatedGraph,
@@ -5625,6 +5638,7 @@ def _subtree_to_nested(
     return entry
 
 
+# Implements: REQ-o00067-C, REQ-o00067-D
 def _get_subtree(
     graph: FederatedGraph,
     root_id: str,
@@ -5710,6 +5724,7 @@ class CursorState:
         self.position: int = 0
 
 
+# Implements: REQ-o00068-E, REQ-d00076-B, REQ-d00076-G
 def _reshape_for_batch_size(
     nodes: list[tuple[Any, int]],
     batch_size: int,
@@ -5807,6 +5822,7 @@ def _reshape_for_batch_size(
     return items
 
 
+# Implements: REQ-o00068-F, REQ-d00076-B
 def _materialize_cursor_items(
     query: str,
     params: dict[str, Any],
@@ -5906,7 +5922,6 @@ def _materialize_cursor_items(
         return [result]
 
     elif query == "scoped_search":
-        # Implements: REQ-o00068-F, REQ-d00076-B
         result = _scoped_search(
             graph,
             query=params.get("query", ""),

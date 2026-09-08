@@ -32,11 +32,12 @@ from playwright.sync_api import TimeoutError as PlaywrightTimeoutError  # noqa: 
 from playwright.sync_api import sync_playwright  # noqa: E402
 
 from .conftest import REPO_ROOT  # noqa: E402
+from .helpers import resolve_elspais  # noqa: E402
 
 pytestmark = [
     pytest.mark.browser,
     pytest.mark.skipif(
-        shutil.which("elspais") is None,
+        resolve_elspais() is None,
         reason="elspais CLI not found on PATH",
     ),
 ]
@@ -83,7 +84,7 @@ def _wait_for_server(base_url: str, *, timeout: float = 30.0) -> None:
 @pytest.fixture(scope="session")
 def viewer_url():
     """Start elspais viewer server and yield base URL."""
-    elspais_bin = shutil.which("elspais")
+    elspais_bin = resolve_elspais()
     if elspais_bin is None:
         pytest.skip("elspais CLI not found on PATH")
 
@@ -238,7 +239,7 @@ def viewer_url_tables(tmp_path_factory):
     so the viewer treats it as a standalone project (its own daemon,
     own .elspais.toml). Yields the base URL.
     """
-    elspais_bin = shutil.which("elspais")
+    elspais_bin = resolve_elspais()
     if elspais_bin is None:
         pytest.skip("elspais CLI not found on PATH")
 
@@ -945,7 +946,7 @@ def concurrency_viewer_url(tmp_path_factory):
     The repo is put on a working branch so the edit toggle activates
     without the create-a-branch modal that guards main.
     """
-    elspais_bin = shutil.which("elspais")
+    elspais_bin = resolve_elspais()
     if elspais_bin is None:
         pytest.skip("elspais CLI not found on PATH")
 
@@ -1181,7 +1182,7 @@ def badge_viewer_url(tmp_path_factory):
     every other test. The repo is put on a non-main working branch so the
     edit surfaces are usable without the create-a-branch modal.
     """
-    elspais_bin = shutil.which("elspais")
+    elspais_bin = resolve_elspais()
     if elspais_bin is None:
         pytest.skip("elspais CLI not found on PATH")
 

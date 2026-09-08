@@ -11,7 +11,6 @@ Each test class manages its own project setup because it needs:
 import csv
 import io
 import json
-import shutil
 import subprocess
 from pathlib import Path
 
@@ -19,10 +18,12 @@ import pytest
 
 from tests.e2e.conftest import run_elspais
 
+from .helpers import resolve_elspais
+
 pytestmark = [
     pytest.mark.e2e,
     pytest.mark.skipif(
-        shutil.which("elspais") is None,
+        resolve_elspais() is None,
         reason="elspais CLI not found on PATH",
     ),
 ]

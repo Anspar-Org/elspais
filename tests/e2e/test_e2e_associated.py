@@ -35,12 +35,13 @@ from .helpers import (
     base_config,
     build_associate,
     build_project,
+    resolve_elspais,
 )
 
 pytestmark = [
     pytest.mark.e2e,
     pytest.mark.skipif(
-        shutil.which("elspais") is None,
+        resolve_elspais() is None,
         reason="elspais CLI not found on PATH",
     ),
 ]

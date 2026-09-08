@@ -9,6 +9,7 @@ import pytest
 
 from elspais.config import config_defaults
 from elspais.graph import NodeKind
+from elspais.graph.annotators import attributed_lines
 from elspais.graph.builder import GraphBuilder, TraceGraph
 from elspais.graph.GraphNode import make_definition_id, make_file_id, make_remainder_id
 from elspais.graph.parsers import ParsedContent
@@ -1407,121 +1408,128 @@ class TestParseDirtyFlag:
         assert not node.get_field("parse_dirty")
 
 
-class TestImplementsEdgeMetadata:
-    """Tests for impl_start_line/impl_end_line metadata on IMPLEMENTS edges."""
+def _citation(*, line, func_line=0, func_end_line=0, func_name=None, req="REQ-p00001"):
+    """A ``# Implements:`` citation on one line, with the enclosing function
+    the pre-scan recorded for it (0/0 meaning it found none)."""
+    code = ParsedContent(
+        content_type="code_ref",
+        start_line=line,
+        end_line=line,
+        raw_text=f"# Implements: {req}",
+        parsed_data={
+            "implements": [req],
+            "verifies": [],
+            "function_name": func_name,
+            "class_name": None,
+            "function_line": func_line,
+            "function_end_line": func_end_line,
+        },
+    )
+    code.source_context = type("Ctx", (), {"source_id": "src/module.py"})()
+    return code
 
-    # Verifies: REQ-p00061-A
-    def test_implements_edge_has_line_metadata(self):
-        """IMPLEMENTS edge from CODE node carries impl_start_line and impl_end_line."""
+
+class TestCitationFunctionExtent:
+    """The builder records a citation's enclosing function on the CODE node,
+    and that recording is what decides the lines the citation attributes.
+
+    The extent used to be copied onto every IMPLEMENTS edge as
+    ``impl_start_line``/``impl_end_line`` and chosen between by comparing the
+    pair. Those fields are gone: ``attributed_lines`` is the one authority and
+    reads the node directly, so what these tests protect is the recording plus
+    the answer it produces -- never a second copy of it.
+
+    A recorded function is read two ways, and which one applies is decided by
+    where the citation sits relative to it: ABOVE it, the function is the
+    answer; INSIDE it, the function is only a BOUND on the code that follows.
+    """
+
+    # Verifies: REQ-d00254-D
+    def test_citation_above_a_function_attributes_that_functions_code(self):
+        """A citation written above a ``def`` attributes that function's
+        executable lines: the function bounds the answer, and the coverage map
+        -- the only thing that knows which lines are code -- picks it.
+
+        Line 65 is executable but past the function's end, so the bound still
+        holds; the lines between the recorded ones are absent from the map and
+        so are never counted against the requirement.
+        """
         req = make_requirement(
             req_id="REQ-p00001",
             title="Test Requirement",
             level="PRD",
             assertions=[{"label": "A", "text": "Something"}],
         )
-        code = ParsedContent(
-            content_type="code_ref",
-            start_line=42,
-            end_line=42,
-            raw_text="# Implements: REQ-p00001",
-            parsed_data={
-                "implements": ["REQ-p00001"],
-                "verifies": [],
-                "function_name": "do_something",
-                "class_name": None,
-                "function_line": 30,
-                "function_end_line": 60,
-            },
-        )
-        code.source_context = type("Ctx", (), {"source_id": "src/module.py"})()
+        code = _citation(line=29, func_line=30, func_end_line=60, func_name="do_something")
 
         graph = build_graph(req, code)
 
-        # Find the CODE node
-        code_node = graph.find_by_id("code:src/module.py:42")
+        code_node = graph.find_by_id("code:src/module.py:29")
         assert code_node is not None
         assert code_node.get_field("function_line") == 30
         assert code_node.get_field("function_end_line") == 60
 
-        # Check IMPLEMENTS edge metadata
-        edges = [e for e in code_node.iter_incoming_edges() if e.kind == EdgeKind.IMPLEMENTS]
-        assert len(edges) >= 1
-        edge = edges[0]
-        assert edge.metadata.get("impl_start_line") == 30
-        assert edge.metadata.get("impl_end_line") == 60
+        file_node = graph.find_by_id(make_file_id("REQ", "src/module.py"))
+        file_node.set_field("line_coverage", {30: 1, 35: 0, 44: 1, 60: 1, 65: 1})
+        assert attributed_lines(code_node, file_node, {}) == {30, 35, 44, 60}
 
-    # Verifies: REQ-p00061-A
-    def test_implements_edge_falls_back_to_parse_line(self):
-        """IMPLEMENTS edge falls back to parse_line when function_line is not set."""
+    # Verifies: REQ-d00254-D
+    def test_citation_inside_a_function_attributes_what_follows_it(self):
+        """A citation INSIDE a function speaks for the code after it, not for
+        the whole function -- otherwise two citations in one function would
+        both claim all of it and neither could name its own code.
+
+        Two bounds are asserted at once: the next citation (line 52 stops the
+        first) and the function's end (line 65 is past it and belongs to
+        neither). Line 35 precedes both citations, so it belongs to neither
+        either.
+        """
+        req = make_requirement(
+            req_id="REQ-p00001",
+            title="Test Requirement",
+            level="PRD",
+            assertions=[{"label": "A", "text": "Something"}],
+        )
+        first = _citation(line=42, func_line=30, func_end_line=60, func_name="do_something")
+        second = _citation(line=52, func_line=30, func_end_line=60, func_name="do_something")
+
+        graph = build_graph(req, first, second)
+
+        file_node = graph.find_by_id(make_file_id("REQ", "src/module.py"))
+        file_node.set_field("line_coverage", {35: 1, 45: 1, 50: 1, 55: 1, 58: 0, 65: 1})
+
+        cache: dict = {}
+        first_node = graph.find_by_id("code:src/module.py:42")
+        second_node = graph.find_by_id("code:src/module.py:52")
+        assert attributed_lines(first_node, file_node, cache) == {45, 50}
+        assert attributed_lines(second_node, file_node, cache) == {55, 58}
+
+    # Verifies: REQ-d00254-D
+    def test_citation_with_no_function_attributes_the_code_that_follows(self):
+        """With no enclosing function recorded, the citation's own line is the
+        KEY into the extent map, never the extent itself.
+
+        The retired reading made the citation's comment line its own
+        implementation, which credited a line no coverage tool reports as
+        executable. Here the citation on line 15 answers with the executable
+        lines beneath it, and 15 is not among them.
+        """
         req = make_requirement(
             req_id="REQ-p00001",
             title="Test Requirement",
             level="PRD",
         )
-        code = ParsedContent(
-            content_type="code_ref",
-            start_line=15,
-            end_line=15,
-            raw_text="# Implements: REQ-p00001",
-            parsed_data={
-                "implements": ["REQ-p00001"],
-                "verifies": [],
-                "function_name": None,
-                "class_name": None,
-                "function_line": 0,
-                "function_end_line": 0,
-            },
-        )
-        code.source_context = type("Ctx", (), {"source_id": "src/module.py"})()
+        code = _citation(line=15)
 
         graph = build_graph(req, code)
 
         code_node = graph.find_by_id("code:src/module.py:15")
         assert code_node is not None
+        assert not code_node.get_field("function_line")
 
-        edges = [e for e in code_node.iter_incoming_edges() if e.kind == EdgeKind.IMPLEMENTS]
-        assert len(edges) >= 1
-        edge = edges[0]
-        # Falls back to parse_line
-        assert edge.metadata.get("impl_start_line") == 15
-        # Falls back to parse_end_line
-        assert edge.metadata.get("impl_end_line") == 15
-
-    # Verifies: REQ-p00061-A
-    def test_implements_edge_to_assertion_has_metadata(self):
-        """IMPLEMENTS edge targeting an assertion still gets line metadata."""
-        req = make_requirement(
-            req_id="REQ-p00001",
-            title="Test Requirement",
-            level="PRD",
-            assertions=[{"label": "A", "text": "Something"}],
-        )
-        code = ParsedContent(
-            content_type="code_ref",
-            start_line=10,
-            end_line=10,
-            raw_text="# Implements: REQ-p00001-A",
-            parsed_data={
-                "implements": ["REQ-p00001-A"],
-                "verifies": [],
-                "function_name": "my_func",
-                "class_name": "MyClass",
-                "function_line": 5,
-                "function_end_line": 25,
-            },
-        )
-        code.source_context = type("Ctx", (), {"source_id": "src/module.py"})()
-
-        graph = build_graph(req, code)
-
-        code_node = graph.find_by_id("code:src/module.py:10")
-        assert code_node is not None
-
-        edges = [e for e in code_node.iter_incoming_edges() if e.kind == EdgeKind.IMPLEMENTS]
-        assert len(edges) >= 1
-        edge = edges[0]
-        assert edge.metadata.get("impl_start_line") == 5
-        assert edge.metadata.get("impl_end_line") == 25
+        file_node = graph.find_by_id(make_file_id("REQ", "src/module.py"))
+        file_node.set_field("line_coverage", {20: 1, 21: 0, 22: 1})
+        assert attributed_lines(code_node, file_node, {}) == {20, 21, 22}
 
 
 class TestStructuresEdgeRenderOrder:

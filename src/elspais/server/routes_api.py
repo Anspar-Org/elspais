@@ -319,6 +319,7 @@ def _journey_state(journey: Any) -> dict[str, Any]:
     }
 
 
+# Implements: REQ-p00006-A
 def _compute_incoming_links(node: Any) -> list[dict[str, Any]]:
     """Reverse-traceability view: things that point AT this requirement.
 
@@ -568,6 +569,7 @@ async def api_requirement(request: Request) -> JSONResponse:
     return JSONResponse(result)
 
 
+# Implements: REQ-p00006-A, REQ-p00006-B
 async def api_node(request: Request) -> JSONResponse:
     """GET /api/node/{node_id} - Full details for any node kind."""
     from elspais.html.generator import (
@@ -756,6 +758,7 @@ async def api_refines_coverage(request: Request) -> JSONResponse:
     return JSONResponse(result)
 
 
+# Implements: REQ-p00006-A, REQ-p00006-B
 async def api_tree_data(request: Request) -> JSONResponse:
     """GET /api/tree-data - Build tree data for nav panel."""
 
@@ -1013,6 +1016,7 @@ async def api_tree_data(request: Request) -> JSONResponse:
     return JSONResponse(rows)
 
 
+# Implements: REQ-p00006-C
 async def api_file_content(request: Request) -> JSONResponse:
     """GET /api/file-content?path=<path>&node_id=<id>&repo_name=<name>.
 
@@ -1377,6 +1381,7 @@ def _with_version(state: Any, result: dict, node_id: str) -> dict:
 
 
 @_serialized_write
+# Implements: REQ-o00062-A, REQ-o00062-O
 async def api_mutate_status(request: Request) -> JSONResponse:
     """POST /api/mutate/status - Change requirement status."""
     state = _st(request)
@@ -1397,6 +1402,7 @@ async def api_mutate_status(request: Request) -> JSONResponse:
 
 
 @_serialized_write
+# Implements: REQ-o00062-O
 async def api_mutate_template(request: Request) -> JSONResponse:
     """POST /api/mutate/template - Set/clear a requirement's Template marker.
 
@@ -1426,6 +1432,7 @@ async def api_mutate_template(request: Request) -> JSONResponse:
 
 
 @_serialized_write
+# Implements: REQ-o00062-A, REQ-o00062-O
 async def api_mutate_title(request: Request) -> JSONResponse:
     """POST /api/mutate/title - Update requirement title."""
     state = _st(request)
@@ -1451,6 +1458,7 @@ async def api_mutate_title(request: Request) -> JSONResponse:
 
 
 @_serialized_write
+# Implements: REQ-o00062-B, REQ-o00062-O
 async def api_mutate_assertion(request: Request) -> JSONResponse:
     """POST /api/mutate/assertion - Update assertion text."""
     state = _st(request)
@@ -1471,6 +1479,7 @@ async def api_mutate_assertion(request: Request) -> JSONResponse:
 
 
 @_serialized_write
+# Implements: REQ-o00062-B, REQ-o00062-R, REQ-o00062-O
 async def api_mutate_assertion_add(request: Request) -> JSONResponse:
     """POST /api/mutate/assertion/add - Add assertion to requirement."""
     state = _st(request)
@@ -1514,6 +1523,7 @@ async def api_mutate_assertion_delete(request: Request) -> JSONResponse:
 
 
 @_serialized_write
+# Implements: REQ-o00062-H, REQ-o00062-O
 async def api_mutate_remainder(request: Request) -> JSONResponse:
     """POST /api/mutate/remainder - Update remainder text/heading."""
     state = _st(request)
@@ -1538,6 +1548,7 @@ async def api_mutate_remainder(request: Request) -> JSONResponse:
 
 
 @_serialized_write
+# Implements: REQ-o00062-H, REQ-o00062-O
 async def api_mutate_remainder_add(request: Request) -> JSONResponse:
     """POST /api/mutate/remainder/add - Add remainder section to requirement."""
     state = _st(request)
@@ -1635,6 +1646,7 @@ async def api_next_req_id(request: Request) -> JSONResponse:
 
 
 @_serialized_write
+# Implements: REQ-o00062-A, REQ-o00062-O
 async def api_mutate_requirement_add(request: Request) -> JSONResponse:
     """POST /api/mutate/requirement/add - Create a new requirement."""
     from elspais.mcp.server import _mutate_add_requirement as _add_req
@@ -1781,6 +1793,7 @@ async def api_mutate_edge(request: Request) -> JSONResponse:
 
 
 @_serialized_write
+# Implements: REQ-o00062-O
 async def api_mutate_journey_field(request: Request) -> JSONResponse:
     """POST /api/mutate/journey/field - Update actor/goal/context/preamble."""
     state = _st(request)
@@ -1803,6 +1816,7 @@ async def api_mutate_journey_field(request: Request) -> JSONResponse:
 
 
 @_serialized_write
+# Implements: REQ-o00062-O
 async def api_mutate_journey_section(request: Request) -> JSONResponse:
     """POST /api/mutate/journey/section - Add/update/delete a section."""
     state = _st(request)
@@ -1827,6 +1841,7 @@ async def api_mutate_journey_section(request: Request) -> JSONResponse:
 
 
 @_serialized_write
+# Implements: REQ-o00062-O
 async def api_mutate_journey_add(request: Request) -> JSONResponse:
     """POST /api/mutate/journey/add - Create new journey."""
     from elspais.graph.parsers.patterns import JNY_ID_PATTERN
@@ -1871,6 +1886,7 @@ async def api_mutate_journey_add(request: Request) -> JSONResponse:
 
 
 @_serialized_write
+# Implements: REQ-o00062-O
 async def api_mutate_journey_delete(request: Request) -> JSONResponse:
     """POST /api/mutate/journey/delete - Delete a journey."""
     state = _st(request)
@@ -2040,6 +2056,7 @@ def _validate_new_spec_path(relative_path: str, config: dict[str, Any]) -> str |
 
 
 @_serialized_write
+# Implements: REQ-o00062-O
 async def api_mutate_rename_file(request: Request) -> JSONResponse:
     """POST /api/mutate/rename-file - Rename a FILE node."""
     state = _st(request)

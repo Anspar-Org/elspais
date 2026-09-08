@@ -830,6 +830,7 @@ class MarkdownAssembler:
     # File grouping
     # ------------------------------------------------------------------
 
+    # Implements: REQ-d00129-D, REQ-d00129-E
     def _group_by_file(self) -> dict[str, list[GraphNode]]:
         """Group requirement nodes by their source file path.
 
@@ -837,7 +838,6 @@ class MarkdownAssembler:
             Dict mapping file path → list of requirement nodes (document order).
         """
         groups: dict[str, list[GraphNode]] = defaultdict(list)
-        # Implements: REQ-d00129-D, REQ-d00129-E
         for node in self._graph.nodes_by_kind(NodeKind.REQUIREMENT):
             _fn = node.file_node()
             _rp = _fn.get_field("relative_path") if _fn else None

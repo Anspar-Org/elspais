@@ -18,8 +18,6 @@ REQ-d00134-F: Undo operations properly reverted
 
 from __future__ import annotations
 
-import shutil
-
 import pytest
 
 from .helpers import (
@@ -27,6 +25,7 @@ from .helpers import (
     base_config,
     build_project,
     mcp_call,
+    resolve_elspais,
     start_mcp,
     stop_mcp,
 )
@@ -34,7 +33,7 @@ from .helpers import (
 pytestmark = [
     pytest.mark.e2e,
     pytest.mark.skipif(
-        shutil.which("elspais") is None,
+        resolve_elspais() is None,
         reason="elspais CLI not found on PATH",
     ),
 ]
