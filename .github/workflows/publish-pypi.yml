@@ -1,3 +1,6 @@
+# Implements: REQ-o00078-A+B
+# The Homebrew half of REQ-o00078 is carried by the tap repository, which
+# this graph does not index; only the index channel's evidence lives here.
 name: Publish to PyPI & Update Homebrew
 
 on:
