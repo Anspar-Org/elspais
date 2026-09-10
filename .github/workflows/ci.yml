@@ -180,6 +180,16 @@ jobs:
       - name: Check with ruff
         run: ruff check src/ tests/
 
+      # Implements: REQ-o00066-H
+      # Formatting is enforced here and not only by the pre-commit hook: the
+      # hook is absent from a fresh clone until `core.hooksPath` is set, it
+      # can be bypassed, and it never runs for a commit created on the forge
+      # (an automated version bump, or an edit accepted through the web).
+      # Whatever reaches main unformatted is then inherited by whoever next
+      # commits, because the hook checks the whole tree.
+      - name: Check formatting with ruff
+        run: ruff format --check src/ tests/
+
   self-validate:
     name: Self-Validate Specs
     runs-on: ubuntu-latest
