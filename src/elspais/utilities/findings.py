@@ -195,6 +195,12 @@ _REMEDIES: dict[str, str] = {
     "uat.results": "elspais failing",
     "uat.uat_coverage": "elspais unvalidated",
     "uat.unvalidated": "elspais unvalidated",
+    # `uat.inert_journey`, `uat.journey_scope` and `references.placeholder`
+    # are deliberately absent. Each is resolved by editing a journey's
+    # `Validates:` line, by widening the selection a report asks over, or by
+    # choosing the target a placeholder stands in for. No command does any of
+    # those, and naming one would send a reader to a surface that reports the
+    # condition again rather than resolving it.
     "uat.uat_verified": "elspais failing",
     # -- terms -----------------------------------------------------------
     "terms.duplicates": "elspais -v checks --terms",
@@ -308,6 +314,10 @@ _DESCRIPTIONS: dict[str, str] = {
         "No keyword is written in a non-canonical case, spacing, or markdown-emphasis form (never "
         "costs the edge its keyword introduces)"
     ),
+    "references.placeholder": (
+        "Targets an author declared as not yet chosen, reported so a blank deliberately left "
+        "stays visible"
+    ),
     "references.identifier_form": (
         "No reference is spelled in a non-canonical form the configuration admits (never costs the "
         "relationship it names)"
@@ -413,6 +423,13 @@ _DESCRIPTIONS: dict[str, str] = {
         "on the same verdict `elspais unvalidated` reaches"
     ),
     "uat.uat_verified": "The `uat_verified` (UAT Passed) coverage dimension",
+    "uat.inert_journey": (
+        "Journeys that validate nothing -- no validation target was declared, or what was "
+        "declared names nothing this estate holds"
+    ),
+    "uat.journey_scope": (
+        "Journeys whose validation targets all resolve but fall outside what this report counts"
+    ),
     # -- terms -------------------------------------------------------------
     "terms.duplicates": "Same term defined in two locations",
     "terms.undefined": "Bold/italic token with no matching definition",
@@ -516,6 +533,12 @@ def _registry() -> dict[str, CheckRule]:
             "identifier_form",
         ),
         _named("references.undeclared", "references", Severity.WARNING, *_REFERENCES, "undeclared"),
+        # A target declared as not yet chosen is not a defect and never a
+        # fault: reading it succeeded, and what it says is that the author
+        # has not chosen. It is reported so the blank stays visible, which
+        # is what `info` is for -- a project for which an unfilled target
+        # must not survive review raises it under `[rules.severity]`.
+        _general("references.placeholder", "references", Severity.INFO),
         # -- code --------------------------------------------------------
         _general("code.uncited_file", "code", Severity.INFO),
         _general("code.code_tested", "code", Severity.INFO),
@@ -600,6 +623,14 @@ def _registry() -> dict[str, CheckRule]:
         # and a project that wants it to fail the run raises it here.
         _general("uat.unvalidated", "uat", Severity.WARNING),
         _general("uat.uat_verified", "uat", Severity.ERROR),
+        # A journey that validates nothing and a journey validating only
+        # outside the selection are two conditions with two remedies
+        # (REQ-d00285-F), so they carry two names a project moves apart.
+        # Both default to `info` (REQ-d00288-E): repositories carry journeys
+        # in these states today, and a rule that fails a run the first time
+        # it appears teaches projects to switch it off rather than look.
+        _general("uat.inert_journey", "uat", Severity.INFO),
+        _general("uat.journey_scope", "uat", Severity.INFO),
         # -- terms -------------------------------------------------------
         _named("terms.duplicates", "terms", Severity.ERROR, *_TERMS, "duplicate"),
         _named("terms.undefined", "terms", Severity.WARNING, *_TERMS, "undefined"),

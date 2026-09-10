@@ -204,3 +204,85 @@ Validates: REQ-p00001, REQ-p00002
     assert "validates" in data
     assert "addresses" not in data
     assert data["validates"] == ["REQ-p00001", "REQ-p00002"]
+
+
+# ---------------------------------------------------------------------------
+# What the author wrote where the validation targets go.
+#
+# A journey that declared nothing and one whose declaration named nothing
+# this estate holds both end with an empty ``validates`` list, and only
+# ``validates_declared`` says which happened (REQ-d00288-C). A target
+# declared as not yet chosen is a third state again, and it is carried
+# verbatim so a reader learns the journey is waiting rather than broken
+# (REQ-d00288-D).
+# ---------------------------------------------------------------------------
+
+_JOURNEY_LINES = """\
+## JNY-TST-100: Waiting Journey
+**Actor**: Tester
+**Goal**: Verify something
+{validates}*End* *JNY-TST-100*
+"""
+
+
+def _journey_data(validates_line: str | None):
+    """The parsed data for a journey carrying *validates_line*, or none."""
+    text = _JOURNEY_LINES.format(
+        validates=f"{validates_line}\n" if validates_line is not None else ""
+    )
+    lines = [(i + 1, line) for i, line in enumerate(text.splitlines())]
+    results = list(_parser().claim_and_parse(lines, context=None))
+    assert len(results) == 1
+    return results[0].parsed_data
+
+
+# Verifies: REQ-d00288-C
+def test_a_journey_with_no_validates_line_records_that_none_was_written():
+    data = _journey_data(None)
+
+    assert data["validates"] == []
+    assert data["validates_declared"] is False, (
+        "an absent line and a line naming nothing produce the same empty "
+        "reference list; only this distinguishes them"
+    )
+    assert data["validates_placeholders"] == []
+
+
+# Verifies: REQ-d00288-C
+def test_a_journey_whose_declaration_names_nothing_records_that_one_was_written():
+    """``REQ-p09999`` reads as an identifier and names no requirement, so the
+    journey validates nothing -- but its author did write the line, which is
+    a different authoring defect from having written none."""
+    data = _journey_data("Validates: REQ-p09999")
+
+    assert data["validates_declared"] is True
+    assert data["validates_placeholders"] == []
+
+
+# Verifies: REQ-d00288-D, REQ-d00287-I
+def test_a_journey_declaring_a_placeholder_carries_it_verbatim():
+    """The placeholder contributes no reference -- there is nothing to
+    validate yet -- and survives as written, which is what lets the report
+    say the journey is awaiting its requirement rather than missing one."""
+    data = _journey_data("Validates: <TBD>")
+
+    assert data["validates"] == []
+    assert data["validates_declared"] is True
+    assert data["validates_placeholders"] == ["<TBD>"]
+
+
+# Verifies: REQ-d00288-D
+def test_a_placeholder_beside_a_real_target_leaves_the_target_validating():
+    data = _journey_data("Validates: REQ-p00001, <the second one>")
+
+    assert data["validates"] == ["REQ-p00001"]
+    assert data["validates_placeholders"] == ["<the second one>"]
+
+
+# Verifies: REQ-d00288-C
+def test_a_journey_whose_targets_resolve_declares_no_placeholder():
+    data = _journey_data("Validates: REQ-p00001, REQ-p00002")
+
+    assert data["validates"] == ["REQ-p00001", "REQ-p00002"]
+    assert data["validates_declared"] is True
+    assert data["validates_placeholders"] == []

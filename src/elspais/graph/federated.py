@@ -24,6 +24,7 @@ from elspais.graph.parsers.directives import assertion_is_retired
 from elspais.graph.reference_faults import (
     FaultClass,
     IdentifierFormFinding,
+    PlaceholderFinding,
     ReferenceFault,
     StyleFinding,
     UndeclaredRelationship,
@@ -843,6 +844,17 @@ class FederatedGraph:
         result: list[IdentifierFormFinding] = []
         for _name, graph in self._live_graphs():
             result.extend(graph.identifier_form_findings())
+        return result
+
+    # Implements: REQ-d00287-I
+    def placeholder_findings(self) -> list[PlaceholderFinding]:
+        """Every target declared as not yet chosen, across all repos.
+
+        # Strategy: aggregate
+        """
+        result: list[PlaceholderFinding] = []
+        for _name, graph in self._live_graphs():
+            result.extend(graph.placeholder_findings())
         return result
 
     # Implements: REQ-d00241-F

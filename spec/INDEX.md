@@ -202,7 +202,8 @@
 | REQ-d00284 | How a Result Names Its Test                                   | dev-graph-core.md       | 7baae0b0 |
 | REQ-d00285 | The Shape of a Finding                                        | dev-cli.md              | bedec247 |
 | REQ-d00286 | Built-In User Documentation                                   | dev-cli.md              | d246f21a |
-| REQ-d00287 | Reading a Reference                                           | dev-graph-core.md       | 0803d023 |
+| REQ-d00287 | Reading a Reference                                           | dev-graph-core.md       | 02eb02ff |
+| REQ-d00288 | Journeys That Validate Nothing                                | dev-graph-core.md       | 184a67af |
 
 ## User Journeys
 

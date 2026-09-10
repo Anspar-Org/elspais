@@ -190,6 +190,10 @@ class ReferenceTransformer:
         self._comment_marker_re = re.compile(comment_style_fragment(self.comment_markers))
         self.warnings: list[str] = []
         self.faults: list[tuple[RefItem, int, str]] = []
+        # Implements: REQ-d00287-I
+        # Targets the author declared as not yet chosen. Kept apart from
+        # faults: nothing went wrong reading one.
+        self.placeholders: list[tuple[int, str, str]] = []
         # Continuation state (REQ-d00269-H), rebuilt once per transform() call
         # and consulted by id(node) rather than threaded through every call
         # site.  ``_joined_text``/``_joined_end_line``/``_joined_raw`` are
@@ -491,6 +495,7 @@ class ReferenceTransformer:
             # on the admitted path -- reporting the refusal for it would name
             # a later stage than reading actually reached.
             items = read_reference_list(self.reader, text)
+            self._record_placeholders(items, line_num, keyword)
             targets, verdicts = refs_and_verdicts(items, keyword)
             if not targets:
                 return None
@@ -567,6 +572,7 @@ class ReferenceTransformer:
         # every malformed item vanish -- the defect this work exists to
         # remove.  Its verdict rides alongside so the builder can stamp the
         # class rather than re-deriving it.
+        self._record_placeholders(items, line_num, keyword)
         refs, verdicts = refs_and_verdicts(items, keyword)
         if not refs:
             return None
@@ -710,6 +716,13 @@ class ReferenceTransformer:
             return None
         content = stripped[marker.end() :].strip()
         return content or None
+
+    # Implements: REQ-d00287-I
+    def _record_placeholders(self, items: list, line_num: int, keyword: str) -> None:
+        """Note every target *items* declared as not yet chosen."""
+        for it in items:
+            if it.placeholder:
+                self.placeholders.append((line_num, it.raw, keyword))
 
     def _detect_keyword(self, text: str) -> str:
         """Detect which reference keyword is used in *text*.

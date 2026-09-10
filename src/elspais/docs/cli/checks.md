@@ -350,6 +350,7 @@ that never cost the relationship they name.
 | `references.keyword_form` | No keyword is written in a non-canonical case, spacing, or markdown-emphasis form (never costs the edge its keyword introduces) | warning | `[rules.references] keyword_form` | `elspais -v checks --spec` |
 | `references.identifier_form` | No reference is spelled in a non-canonical form the configuration admits (never costs the relationship it names) | warning | `[rules.references] identifier_form` | `elspais -v checks --spec` |
 | `references.undeclared` | No comment opens with an identifier that no keyword introduces (produces no relationship) | warning | `[rules.references] undeclared` | `elspais -v checks --spec` |
+| `references.placeholder` | Targets an author declared as not yet chosen, reported so a blank deliberately left stays visible | info | `[rules.severity]` | no command resolves this; resolve it by hand |
 <!-- /generated: check-catalog:references -->
 
 #### The Five Reference Checks — How Far Reading Got
@@ -433,7 +434,61 @@ coverage and results from user journey validation.
 | `uat.uat_coverage` | The `uat_coverage` (UAT Covered) coverage dimension, counted over requirements at levels that set `expects_validation = true`. Levels without `expects_validation` are not counted; when no level expects validation the check passes trivially. Which requirements are unvalidated is reported by `uat.unvalidated` | error | `[rules.severity]` | `elspais unvalidated` |
 | `uat.unvalidated` | A requirement at a level that sets `expects_validation = true` that no USER_JOURNEY validates, or that a journey names without naming its assertions -- reported by name, on the same verdict `elspais unvalidated` reaches | warning | `[rules.severity]` | `elspais unvalidated` |
 | `uat.uat_verified` | The `uat_verified` (UAT Passed) coverage dimension | error | `[rules.severity]` | `elspais failing` |
+| `uat.inert_journey` | Journeys that validate nothing -- no validation target was declared, or what was declared names nothing this estate holds | info | `[rules.severity]` | no command resolves this; resolve it by hand |
+| `uat.journey_scope` | Journeys whose validation targets all resolve but fall outside what this report counts | info | `[rules.severity]` | no command resolves this; resolve it by hand |
 <!-- /generated: check-catalog:uat -->
+
+#### A Journey That Validates Nothing
+
+The unit of traceability is the edge. A requirement carrying no assertion is
+a defect the report already names; a journey carrying no validating
+relationship is that same defect from the other end, and it is harder to see
+— such a journey has an actor, a goal and steps, and nothing about it looks
+missing.
+
+Two conditions, because the remedies differ:
+
+- **`uat.inert_journey`** — the journey's declaration yields no target at
+  all. Either no `Validates:` line was written, or what was written names
+  nothing this estate holds. Only the author can repair it.
+- **`uat.journey_scope`** — the journey's targets resolve, but none of them
+  is counted by this report. That is a question about the selection as much
+  as about the journey: the journey may be right and the selection too
+  narrow, or the requirement may sit at a level you did not ask for. The
+  selection is the one `uat.unvalidated` reads — levels setting
+  `expects_validation = true`, and statuses that expect implementation — so
+  the two checks cannot disagree about a requirement.
+
+Every journey declared is examined by both. The selection never decides
+which journeys are looked at, only which requirements each is credited
+with, and both findings name that list:
+
+```text
+- JNY-QNR-01: validates DIARY-BASE-questionnaire-cycle-tracking,
+  DIARY-BASE-questionnaire-manage-modal -- in scope (GUI, PRD): none
+```
+
+Being credited with one counted requirement is enough, so a journey naming
+both in-scope and out-of-scope requirements is reported by neither check.
+
+> **Set `expects_validation` on every level the report counts.** The
+> selection is built from that flag alone, so a level your report includes
+> but that does not set it makes every journey pointing only there look
+> out of scope. That reads as a finding about journeys when it is really
+> one about the configuration.
+
+Both default to `info`, so neither fails a run that has journeys in these
+states today. Raise either under `[rules.severity]` where the condition
+should bite:
+
+```toml
+[rules.severity]
+"uat.inert_journey" = "warning"
+```
+
+A journey whose target is a placeholder is reported by neither — it is
+awaiting its requirement, and appears under `references.placeholder`
+instead. See the `linking` topic for the placeholder form.
 
 ### Terms Checks (`--terms`)
 

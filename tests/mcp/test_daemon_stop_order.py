@@ -345,9 +345,7 @@ class TestStartRefusesToJoinALiveDaemon:
 
 class TestStopSignalsOnlyADaemon:
     # Verifies: REQ-o00076-E
-    def test_REQ_o00076_E_a_process_that_is_not_a_daemon_is_left_alone(
-        self, tmp_path, monkeypatch
-    ):
+    def test_REQ_o00076_E_a_process_that_is_not_a_daemon_is_left_alone(self, tmp_path, monkeypatch):
         """Validates REQ-o00076-E: a record is a claim about the process a
         client would reach, and a pid is not evidence for it. Pids are reused,
         and a stale record names whatever holds that number now -- so a stop

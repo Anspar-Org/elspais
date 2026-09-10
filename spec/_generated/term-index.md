@@ -77,6 +77,7 @@
 - REQ-d00254:section:0
 - REQ-d00254:section:1
 - REQ-d00258:section:1
+- REQ-d00288:section:1
 - REQ-d00261:section:1
 - REQ-d00269:section:0
 - REQ-d00269:section:1
@@ -113,6 +114,7 @@
 **REQ:**
 
 - REQ-p00003
+- REQ-d00288:section:0
 - JNY-CEO-Sponsor-01
 - JNY-CEO-Audit-01
 - JNY-PM-MultiRepo-01

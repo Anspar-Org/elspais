@@ -138,6 +138,10 @@ class RefItem:
         index: Position in the list, 0-based.
         fault_class: How far reading this item got, or None if it read.
         codes: What is wrong with it, where the input determines that.
+        placeholder: Whether the item is a target the author declared as not
+            yet chosen (REQ-d00287-H).  It is a well-formed member of the
+            list, so it is not a fault; it names nothing, so it binds
+            nothing.  Reported wherever it is written (REQ-d00287-I).
         residue: Whether this is the content the list ended at rather than an
             item of it.  A list is identifiers, separators and whitespace, so
             what follows is not a reference that failed -- it was never part
@@ -154,6 +158,7 @@ class RefItem:
     fault_class: FaultClass | None = None
     codes: tuple[str, ...] = ()
     residue: bool = False
+    placeholder: bool = False
 
 
 # Implements: REQ-d00269-G, REQ-d00272-K
@@ -203,7 +208,12 @@ def refs_and_verdicts(
     # neither a reference nor a reference that failed. Passing it through as
     # either would have the builder try to bind a sentence, or report one as
     # a citation nobody wrote.
-    listed = [i for i in items if not i.residue]
+    # Implements: REQ-d00287-H
+    # A placeholder is neither a reference nor a reference that failed: its
+    # author said the target is not yet chosen. Passing it through as either
+    # would have the builder try to bind it, or report a deliberate blank as
+    # a citation that broke. It is reported through ``placeholders_of``.
+    listed = [i for i in items if not i.residue and not i.placeholder]
     # An item with no raw text names no target, so it contributes no
     # reference -- but it still carries a verdict. A dangling separator and
     # a gap between two items are both reported that way, and filtering
@@ -213,6 +223,16 @@ def refs_and_verdicts(
         (keyword, i.raw): (i.fault_class, i.codes) for i in listed if i.fault_class is not None
     }
     return refs, verdicts
+
+
+# Implements: REQ-d00287-I
+def placeholders_of(items: list[RefItem]) -> list[str]:
+    """The targets a list declared as not yet chosen, as they were written.
+
+    Named where the reporting side reads it, so a caller asks one question
+    rather than knowing how a placeholder is carried.
+    """
+    return [item.raw for item in items if item.placeholder]
 
 
 # Implements: REQ-d00272-O
@@ -248,6 +268,30 @@ class StyleFinding:
 
     source_id: str
     code: str
+    line: int | None = None
+
+
+# Implements: REQ-d00287-I
+@dataclass(frozen=True)
+class PlaceholderFinding:
+    """A target its author declared as not yet chosen.
+
+    Never a fault: the author said what they meant, and what they meant is
+    that no target is chosen.  Reported so that a blank deliberately left is
+    still visible as a blank, wherever the keyword introducing it was
+    written.
+
+    Attributes:
+        source_id: ID of the node the finding is anchored to (a FILE node,
+            when no more specific node exists for the line).
+        text: The placeholder as written, enclosure included.
+        keyword: The *Traceability* keyword that introduced it.
+        line: The line it was written on.
+    """
+
+    source_id: str
+    text: str
+    keyword: str
     line: int | None = None
 
 
