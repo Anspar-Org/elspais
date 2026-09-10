@@ -154,6 +154,36 @@ A. The partial implementer SHALL keep the broken expansion.
 
 ---
 
+## REQ-o00009: Placeholder Implementer
+
+**Level**: OPS | **Status**: Active | **Implements**: <TBD>
+
+The only implements target is one its author has not chosen yet.
+
+### Assertions
+
+A. The placeholder implementer SHALL still be authored.
+
+*End* *Placeholder Implementer* | **Hash**: 00000000
+
+---
+
+## REQ-o00010: Mixed Placeholder Implementer
+
+**Level**: OPS | **Status**: Active | **Implements**: REQ-p00001, <the second half>
+**Refines**: <not chosen yet>
+
+One implements target resolves, one is declared as not yet chosen, and the
+refines target is declared as not yet chosen.
+
+### Assertions
+
+A. The mixed placeholder implementer SHALL keep every citation.
+
+*End* *Mixed Placeholder Implementer* | **Hash**: 00000000
+
+---
+
 ## REQ-o00008: Unreferenced Requirement
 
 **Level**: OPS | **Status**: Active | **Implements**: -
@@ -630,3 +660,103 @@ class TestRenameRetargetsAssertionSuffixedBrokenRefs:
             "the broken expansion's leftover still cites the old parent ID"
         )
         assert "REQ-p00001-Z" not in rendered
+
+
+# ---------------------------------------------------------------------------
+# A target its author declared as not yet chosen (REQ-d00287-H/I).
+#
+# It is the same silent-loss hazard the broken-reference cases above exist
+# to close, reached by a different route: a placeholder binds nothing, so no
+# edge carries it -- and unlike a broken reference it is not a defect its
+# author will be told about, so a rewrite that dropped it would delete a
+# deliberate blank with nothing left to notice.
+# ---------------------------------------------------------------------------
+
+
+# Verifies: REQ-d00287-H
+def test_a_metadata_placeholder_wires_no_edge_and_reports_no_broken_reference(fidelity_graph):
+    """Reading the placeholder succeeded and what it said is that no target
+    is chosen. Binding it would credit a requirement nobody has written;
+    reporting it as unresolved would call a deliberate blank a typo."""
+
+    # An edge is stored inverted, so a requirement's own citations arrive as
+    # incoming edges. The control is REQ-o00001, whose real citation does
+    # produce one -- without it this assertion would pass on any direction.
+    def implements_edges(req_id: str) -> list:
+        req = _node(fidelity_graph, req_id)
+        return [
+            e
+            for e in list(req.iter_incoming_edges()) + list(req.iter_outgoing_edges())
+            if e.kind == EdgeKind.IMPLEMENTS
+        ]
+
+    assert implements_edges("REQ-o00001"), "the fixture's real citation must wire an edge"
+    assert implements_edges("REQ-o00009") == [], (
+        f"a placeholder must wire no edge; got {implements_edges('REQ-o00009')}"
+    )
+
+    broken = [br.target_id for br in fidelity_graph.unresolved_references()]
+    assert "<TBD>" not in broken, (
+        f"a placeholder must reach no broken-reference report; got {broken}"
+    )
+
+
+# Verifies: REQ-d00287-I
+@pytest.mark.parametrize(
+    ("node_id", "keyword", "declared"),
+    [
+        ("REQ-o00009", "implements", "<TBD>"),
+        ("REQ-o00010", "implements", "<the second half>"),
+        ("REQ-o00010", "refines", "<not chosen yet>"),
+    ],
+)
+def test_a_metadata_placeholder_is_reported_against_the_requirement_that_wrote_it(
+    fidelity_graph, node_id, keyword, declared
+):
+    """Every keyword a requirement may introduce a list with reports its own
+    blanks, and each is attributed to the requirement rather than to the
+    file, so a reader is sent to the line that has to change."""
+    reported = [(f.source_id, f.keyword, f.text) for f in fidelity_graph.placeholder_findings()]
+
+    assert (node_id, keyword, declared) in reported, (
+        f"{declared} declared under {keyword} on {node_id} was not reported; got {reported}"
+    )
+
+
+# Verifies: REQ-d00287-I
+def test_a_metadata_placeholder_survives_a_render(fidelity_graph):
+    """The whole point of declaring one: a save must not quietly replace the
+    author's blank with the no-references marker, which would read as a
+    requirement that implements nothing on purpose."""
+    rendered = render_node(_node(fidelity_graph, "REQ-o00009"), grammar_for())
+    metadata = next(line for line in rendered.splitlines() if "Implements" in line)
+
+    assert "<TBD>" in metadata, f"the declared blank must survive the render; got {metadata!r}"
+    assert "**Implements**: -" not in metadata, (
+        "rendering the placeholder away as the no-references marker turns a "
+        f"target left open into one deliberately absent; got {metadata!r}"
+    )
+
+
+# Verifies: REQ-d00287-H, REQ-d00287-I
+def test_a_placeholder_beside_a_reference_costs_neither_the_edge_nor_the_blank(fidelity_graph):
+    """Each item of the list is judged on its own, and both survive the
+    round trip: the real reference through its edge, the placeholder through
+    the field that keeps it."""
+    node = _node(fidelity_graph, "REQ-o00010")
+    # An edge is stored inverted -- the CITED node is its source -- so the
+    # requirement this one implements is reached through its incoming edges.
+    implemented = [e.source.id for e in node.iter_incoming_edges() if e.kind == EdgeKind.IMPLEMENTS]
+
+    assert "REQ-p00001" in implemented, (
+        f"the reference beside a placeholder must still wire its edge; got {implemented}"
+    )
+
+    rendered = render_node(node, grammar_for())
+    metadata = next(line for line in rendered.splitlines() if "Implements" in line)
+    assert "REQ-p00001" in metadata
+    assert "<the second half>" in metadata, (
+        f"the declared blank must survive beside the reference; got {metadata!r}"
+    )
+    refines_line = next(line for line in rendered.splitlines() if "Refines" in line)
+    assert "<not chosen yet>" in refines_line

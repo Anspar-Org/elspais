@@ -111,6 +111,8 @@ The pipeline validates at three levels:
 
 These checks are required status checks on the main branch, preventing merges that do not meet the standards.
 
+H is stated apart from B because formatting and linting are enforced by the same tool and were not enforced in the same places. A local hook cannot be the only gate for a standard: it is absent from a fresh clone until configured, a contributor may bypass it, and it never runs at all for a commit created on the forge -- an automated version bump, or an edit accepted through the web. A standard enforced only there reaches main unenforced, and is then inherited by whoever next touches the tree.
+
 ## Assertions
 
 A. The CI pipeline SHALL run the full test suite across supported Python versions on every push to main and every pull request targeting main.
@@ -127,12 +129,15 @@ F. The PR validation pipeline SHALL require a Linear ticket reference in PR titl
 
 G. The PR validation pipeline SHALL require both a ticket reference (uppercase team prefix and issue number) and a requirement reference (REQ-XXXXX) in commit messages.
 
+H. The CI pipeline SHALL enforce the project's code formatting.
+
 ## Changelog
 
+- 2026-09-10 | 133e2f0d | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | 67d7ec07 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | 84723bf6 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-37: F/G accept any Linear team prefix, not only CUR — the repo's team moved to TOOL; matches the commit-msg hook's existing pattern
 - 2026-03-30 | 315accce | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *CI/CD Pipeline Enforcement* | **Hash**: 67d7ec07
+*End* *CI/CD Pipeline Enforcement* | **Hash**: 133e2f0d
 ---

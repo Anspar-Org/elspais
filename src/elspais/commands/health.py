@@ -2577,6 +2577,7 @@ def run_spec_checks(
         check_reference_keyword_form(graph, config),
         check_reference_identifier_form(graph, config),
         check_reference_undeclared(graph, config),
+        check_reference_placeholder(graph, config),
         check_spec_hash_integrity(graph, config),
         check_no_cycles(graph, config),
     ]
@@ -4035,6 +4036,241 @@ def check_unvalidated_requirements(
     )
 
 
+def _journey_location(node: Any) -> tuple[str | None, int | None]:
+    """The file and line a journey was written at."""
+    fn = node.file_node()
+    path = fn.get_field("relative_path") if fn is not None else None
+    return path, node.get_field("parse_line")
+
+
+def _validating_targets(node: Any) -> list[Any]:
+    """The requirements a journey validates.
+
+    A journey's ``Validates:`` is stored inverted like every other
+    declaration -- the cited requirement is the edge's source -- so the
+    journey's validating relationships are its INCOMING edges.
+    """
+    from elspais.graph.relations import EdgeKind
+
+    return [e.source for e in node.iter_incoming_edges() if e.kind == EdgeKind.VALIDATES]
+
+
+# Implements: REQ-d00288-F
+def _counted_targets(targets: list[Any], cfg: dict[str, Any]) -> list[Any]:
+    """The requirements among *targets* this report counts.
+
+    Every journey declared is examined; what the selection narrows is the
+    list of requirements a journey is credited with. Where no level expects
+    validation there is no narrowing to apply, so every validated
+    requirement counts.
+    """
+    from elspais.config import status_expects_implementation
+
+    if not _any_level_expects_validation(cfg):
+        return list(targets)
+    level_filter = _validation_level_filter(cfg)
+    return [
+        t for t in targets if level_filter(t.level) and status_expects_implementation(cfg, t.status)
+    ]
+
+
+# Implements: REQ-d00288-F
+def _no_credit_note(cfg: dict[str, Any]) -> str:
+    """That the journey is credited with nothing, and over which levels.
+
+    Said outright rather than left to be inferred from a finding that
+    mentions no requirement. Every journey either check reports is credited
+    with nothing -- being credited with one counted requirement is enough to
+    be reported by neither -- so this states that emptiness and names the
+    levels it was judged over, which is what a reader needs to tell "the
+    journey is wrong" from "the selection is narrow".
+    """
+    levels = (
+        sorted(key for key in (cfg.get("levels") or {}) if _validation_level_filter(cfg)(key))
+        if _any_level_expects_validation(cfg)
+        else []
+    )
+    scope = f" ({', '.join(levels)})" if levels else ""
+    return f"in scope{scope}: none"
+
+
+# Implements: REQ-d00288-A, REQ-d00288-B, REQ-d00288-C, REQ-d00288-E
+def check_inert_journeys(
+    graph: FederatedGraph, config: dict[str, Any] | None = None
+) -> HealthCheck:
+    """Report journeys whose declaration yields no target at all.
+
+    The journey is complete in every other respect -- an actor, a goal,
+    steps -- and validates nothing, which is why nothing else finds it. A
+    journey whose declared target is a placeholder is deliberately unfilled
+    and belongs to `references.placeholder`, not here (REQ-d00288-D).
+    """
+    from elspais.graph import NodeKind
+
+    severity = severity_for("uat.inert_journey", config)
+    if severity == Severity.OFF:
+        return skipped_check("uat.inert_journey", "Journeys that validate nothing")
+
+    findings: list[HealthFinding] = []
+    for node in graph.nodes_by_kind(NodeKind.USER_JOURNEY):
+        if _validating_targets(node) or node.get_field("validates_placeholders"):
+            continue
+        path, line = _journey_location(node)
+        if node.get_field("validates_declared"):
+            what = "declares validation targets, none of which produced a relationship"
+        else:
+            what = "declares no validation target"
+        findings.append(
+            HealthFinding(
+                message=f"{node.id}: {what} -- {_no_credit_note(config or {})}",
+                file_path=path,
+                line=line,
+                node_id=node.id,
+            )
+        )
+
+    if not findings:
+        return HealthCheck(
+            name="uat.inert_journey",
+            passed=True,
+            message="Every journey validates something",
+            category="uat",
+            severity=severity,
+        )
+    findings.sort(key=lambda f: f.node_id or "")
+    return HealthCheck(
+        name="uat.inert_journey",
+        passed=False,
+        message=f"{len(findings)} journey(s) validate nothing",
+        category="uat",
+        severity=severity,
+        details={"count": len(findings), "journeys": [f.node_id for f in findings]},
+        findings=findings,
+    )
+
+
+# Implements: REQ-d00288-A, REQ-d00288-B, REQ-d00288-C
+def check_journey_scope(graph: FederatedGraph, config: dict[str, Any] | None = None) -> HealthCheck:
+    """Report journeys every one of whose targets the report does not count.
+
+    A different condition from `uat.inert_journey` and a different remedy.
+    The journey validates something; the selection this run reports over
+    does not reach it, which is a question about the selection as much as
+    about the journey. The selection is the one `uat.unvalidated` reads, so
+    the two cannot disagree about a requirement.
+    """
+    from elspais.graph import NodeKind
+
+    severity = severity_for("uat.journey_scope", config)
+    if severity == Severity.OFF:
+        return skipped_check("uat.journey_scope", "Journeys validating outside the selection")
+
+    cfg = config or {}
+
+    findings: list[HealthFinding] = []
+    for node in graph.nodes_by_kind(NodeKind.USER_JOURNEY):
+        targets = _validating_targets(node)
+        # A journey declaring nothing at all is `uat.inert_journey`'s to
+        # report; this one answers for a journey that declared targets and
+        # was credited with none of them.
+        if not targets:
+            continue
+        if _counted_targets(targets, cfg):
+            continue
+        named = ", ".join(sorted({t.id for t in targets}))
+        path, line = _journey_location(node)
+        findings.append(
+            HealthFinding(
+                message=(
+                    f"{node.id}: validates {named} -- {_no_credit_note(cfg)}; "
+                    f"the journey may be right and the selection too narrow"
+                ),
+                file_path=path,
+                line=line,
+                node_id=node.id,
+            )
+        )
+
+    if not findings:
+        return HealthCheck(
+            name="uat.journey_scope",
+            passed=True,
+            message="Every journey validates something this report counts",
+            category="uat",
+            severity=severity,
+        )
+    findings.sort(key=lambda f: f.node_id or "")
+    return HealthCheck(
+        name="uat.journey_scope",
+        passed=False,
+        message=f"{len(findings)} journey(s) validate nothing this report counts",
+        category="uat",
+        severity=severity,
+        details={"count": len(findings), "journeys": [f.node_id for f in findings]},
+        findings=findings,
+    )
+
+
+# Implements: REQ-d00287-I, REQ-d00288-D
+def check_reference_placeholder(
+    graph: FederatedGraph, config: dict[str, Any] | None = None
+) -> HealthCheck:
+    """Report every target an author declared as not yet chosen.
+
+    Never a fault: reading the placeholder succeeded, and what it says is
+    that no target is chosen. Reported so a blank deliberately left is still
+    a blank a reader can see.
+    """
+    from elspais.graph import NodeKind
+
+    severity = severity_for("references.placeholder", config)
+    if severity == Severity.OFF:
+        return skipped_check("references.placeholder", "Targets declared as not yet chosen")
+
+    findings: list[HealthFinding] = []
+    for declared in graph.placeholder_findings():
+        node = graph.find_by_id(declared.source_id)
+        path = None
+        if node is not None:
+            # A citation in a code or test file is anchored to the FILE node
+            # itself, which is its own location; anything else reports the
+            # file it was written in.
+            fn = node if node.kind == NodeKind.FILE else node.file_node()
+            path = fn.get_field("relative_path") if fn is not None else None
+        awaiting = (
+            "awaiting the requirement it will validate"
+            if declared.keyword == "validates"
+            else "awaiting the requirement it will name"
+        )
+        findings.append(
+            HealthFinding(
+                message=(f"{declared.source_id}: {declared.keyword} {declared.text} -- {awaiting}"),
+                file_path=path,
+                line=declared.line,
+                node_id=declared.source_id,
+            )
+        )
+
+    if not findings:
+        return HealthCheck(
+            name="references.placeholder",
+            passed=True,
+            message="No targets declared as not yet chosen",
+            category="references",
+            severity=severity,
+        )
+    findings.sort(key=lambda f: (f.node_id or "", f.line or 0))
+    return HealthCheck(
+        name="references.placeholder",
+        passed=False,
+        message=f"{len(findings)} target(s) declared as not yet chosen",
+        category="references",
+        severity=severity,
+        details={"count": len(findings)},
+        findings=findings,
+    )
+
+
 # Implements: REQ-d00241-D, REQ-d00285-F
 def check_uncited_tests(graph: FederatedGraph, config: dict[str, Any] | None = None) -> HealthCheck:
     """Report scanned test files in which no test cites anything.
@@ -4619,6 +4855,8 @@ def run_uat_checks(
             graph, "uat_verified", exclude_status=exclude_status, config=config
         ),
         check_uat_results(graph, config=config),
+        check_inert_journeys(graph, config=config),
+        check_journey_scope(graph, config=config),
     ]
 
 

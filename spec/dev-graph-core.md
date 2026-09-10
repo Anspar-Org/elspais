@@ -529,7 +529,7 @@ A *Traceability* reference is read from the characters its author wrote, and the
 
 A. An identifier SHALL be composed of characters drawn from a set its grammar defines.
 
-B. A reference list SHALL be composed of identifiers, separators, and whitespace.
+B. A reference list SHALL be composed of identifiers, placeholders, separators, and whitespace.
 
 C. A reference the grammar admits SHALL produce the relationship it names, in the canonical spelling and in every other spelling the configuration admits.
 
@@ -541,21 +541,28 @@ F. A reference list SHALL produce a relationship only for a target it names exac
 
 G. A *Traceability* keyword SHALL produce relationships only in a file whose kind admits it.
 
+H. A placeholder SHALL be written in a form no identifier can take.
+
+I. A declared placeholder SHALL be reported wherever it is written.
+
 ### Rationale
 
 Reading a reference asks two questions: where the writing ends, and what the reading produces. Each is settled by stating what something is composed of, rather than by listing the cases that end it.
 
-The character set and the list composition answer the first question completely. An identifier is made of the characters its set allows, so it ends at the first character that is not one of them; a list is made of identifiers, separators and whitespace, so it ends at the first content that is none of those. Every question about what may follow a reference is answered at once, for a space, a bracket, a word, and a character nobody has thought of yet. Enumerating terminators would state one property once per case and leave the estate a single unlisted character away from a reference with no end.
+The character set and the list composition answer the first question completely. An identifier is made of the characters its set allows, so it ends at the first character that is not one of them; a list is made of identifiers, placeholders, separators and whitespace, so it ends at the first content that is none of those. Every question about what may follow a reference is answered at once, for a space, a bracket, a word, and a character nobody has thought of yet. Enumerating terminators would state one property once per case and leave the estate a single unlisted character away from a reference with no end.
 
 The remaining assertions answer the second question, and answer it narrowly. A file is read for two reasons -- to build the graph, and to describe what was found -- and the moment those readings share a result, a requirement is credited by evidence its author never cited. Description is therefore given no power to produce: an item examined closely enough to say what is wrong with it produces nothing by having been examined. Getting this backwards costs nothing visible, because a relationship that exists reads in every report exactly like one somebody wrote.
+
+A placeholder is how an author says a target is not yet chosen. Without one there are two spellings available and neither is honest: a real identifier credits a requirement nobody has written, and nothing at all is indistinguishable from an omission. H keeps the two apart by spelling alone, so a placeholder is never mistaken for an identifier and a mistyped identifier is never excused as a placeholder. I keeps it visible, because a target deliberately unfilled is still a target unfilled.
 
 Case and padding are admitted rather than tolerated. A configuration that accepts an unpadded number or a lower-case keyword has said those forms are the same reference, and honouring one while dropping the other makes coverage depend on typing rather than on meaning. The two remaining assertions cover readings that look successful and are not: a list naming one target twice has lost track of itself, and choosing an instance resolves its author's confusion invisibly; a keyword outside its file's kind is unmistakably a declaration, and unmistakably one that file may not make.
 
 ### Changelog
 
+- 2026-09-09 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-91: a reference list admits a placeholder, which binds nothing
 - 2026-08-25 | - | - | Michael Lewis (<michael@anspar.org>) | Initial authoring: what a reference is composed of, and what a reading produces
 
-*End* *Reading a Reference* | **Hash**: 0803d023
+*End* *Reading a Reference* | **Hash**: 02eb02ff
 
 ## REQ-d00254: Test Evidence: Attribution, Ingestion, and Coverage Crediting
 
@@ -874,6 +881,47 @@ C defaults to warning rather than error because the condition is not always a de
 - 2026-08-24 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-66: a scanned test file nothing configured can run is reported
 
 *End* *Tests Outside the Requirement Estate* | **Hash**: ca4cd1fc
+
+---
+
+## REQ-d00288: Journeys That Validate Nothing
+
+**Level**: dev | **Status**: Draft | **Implements**: REQ-p00015
+
+A journey earns its place by validating something. One that validates nothing still reads as a finished journey -- it has an actor, a goal and steps -- and reaches no requirement and no figure. This requirement obliges the tool to report those journeys, so that a reader learns of one from the report rather than from a *Traceability Matrix* that omits it without saying so.
+
+### Assertions
+
+A. A journey that produces no validating relationship SHALL be reported, and reporting it SHALL NOT credit or discredit any coverage figure.
+
+B. The report SHALL name the file and the line each reported journey was written at.
+
+C. A journey whose declaration yields no target SHALL be distinguished from one whose targets resolve but fall outside what the report counts.
+
+D. A journey whose declared target is a placeholder SHALL be reported as awaiting the requirement it will validate.
+
+E. Reporting a journey that validates nothing SHALL be informational where the project configures nothing.
+
+F. A journey SHALL be judged on the requirements it validates that the report counts, and a report of it SHALL state what it was credited with and the levels it was judged over.
+
+### Rationale
+
+The unit of *Traceability* is the edge. A requirement carrying no assertion is a defect the report already names; a journey carrying no validating relationship is that same defect seen from the other end, and it is the harder of the two to see, because such a journey is complete in every other respect. Nothing about it is missing on the page.
+
+C separates two conditions whose remedies differ. A journey whose declaration yields no target -- because none was written, or because what was written names nothing this estate holds -- is an authoring defect, and only its author can repair it. A journey whose declared targets resolve but fall outside what a report counts is a question about scope -- the journey may be right and the selection too narrow, or the requirement may sit at a level the reader did not ask for -- and it is answered by changing the question rather than the journey.
+
+D exists because a journey written ahead of the requirement it will validate is a legitimate state and a common one. Left unmarked it is indistinguishable from an author who forgot, and the tool would have to report both the same way or neither. A target the author declared as not yet chosen says which of the two this is, in the place a reader is already looking.
+
+F settles what a journey is judged against. Every journey declared is examined -- a journey is never dropped from the report for pointing outside the selection, because a defect in one is worth knowing about wherever it points. What the selection narrows is the list of requirements the journey is credited with. Being credited with one counted requirement is enough, so every journey reported is credited with nothing -- and saying so, together with the levels it was judged over, is what separates a journey that is wrong from a selection that is narrow. Without the levels a reader cannot tell which it is, and would have to go and read the configuration to find out.
+
+E is informational because repositories carry journeys in this state today, and a rule that fails a run the first time it appears teaches projects to switch it off rather than to look at it. A project that wants the condition to bite says so.
+
+### Changelog
+
+- 2026-09-09 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-91: a journey is judged on the requirements the report counts
+- 2026-09-09 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-91: a journey producing no validating relationship is reported
+
+*End* *Journeys That Validate Nothing* | **Hash**: 184a67af
 
 ---
 

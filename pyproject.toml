@@ -4,7 +4,7 @@ build-backend = "flit_core.buildapi"
 
 [project]
 name = "elspais"
-version = "0.123.0"
+version = "0.123.3"
 description = "Requirements validation and traceability tools - L-Space connects all libraries"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -32,7 +32,12 @@ dependencies = ["tomlkit>=0.12", "pydantic>=2.0", "tyro>=0.9", "lark>=1.0"]
 dev = [
     "pytest>=7.0",
     "pytest-cov>=4.0",
-    "ruff>=0.1.0",
+    # Pinned exactly, because ruff is the FORMATTER as well as the linter and
+    # its formatting decisions change between releases. A range lets CI and a
+    # developer's hook disagree about the same file -- and lets a release
+    # redden a build that touched nothing. Raise it deliberately, and run
+    # `ruff format src/ tests/` in the same commit.
+    "ruff==0.16.6",
     "mypy>=1.0",
     "pyyaml>=6.0",
 ]

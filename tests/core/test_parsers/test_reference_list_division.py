@@ -17,6 +17,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from elspais.config.schema import ElspaisConfig
 from elspais.utilities.patterns import FederatedIdReader, build_resolver
 
@@ -172,3 +174,101 @@ def test_a_typo_in_a_spec_metadata_line_is_reported_not_dropped(tmp_path: Path):
         "A",
         "B",
     ], f"the readable references on the same line must still wire; got {targets}"
+
+
+# ---------------------------------------------------------------------------
+# Placeholders: a target its author declared as not yet chosen.
+#
+# REQ-d00287-B widened what a reference list is composed of -- identifiers,
+# PLACEHOLDERS, separators and whitespace -- and REQ-d00287-H fixes the
+# spelling: a form no identifier can take. Everything below is asked of the
+# reader configured above, whose separators are "/" and "&" rather than the
+# shipped defaults, so nothing here can be passing because of a separator.
+# ---------------------------------------------------------------------------
+
+
+# Verifies: REQ-d00287-B, REQ-d00287-H
+@pytest.mark.parametrize(
+    "written",
+    ["<TBD>", "[TODO]", "<TBD, see the ticket>", "[the requirement for step 3]"],
+)
+def test_a_target_declared_as_not_yet_chosen_reads_as_one_placeholder(written: str):
+    """An item wholly enclosed is one item, and it is a placeholder rather
+    than a reading that failed. ``<TBD, see the ticket>`` is the case that
+    matters most: the separator inside the enclosure must not shred it into
+    two items, which would report one deliberate blank as two broken
+    references."""
+    items = _reader().parse_ref_list(written)
+
+    assert len(items) == 1, f"an enclosure is one item however it is spelled inside; got {items}"
+    item = items[0]
+    assert item.raw == written
+    assert item.placeholder is True
+    assert item.resolved is None, "a placeholder names nothing, so it binds nothing"
+    assert item.fault_class is None, (
+        "nothing went wrong reading a placeholder -- carrying a fault class "
+        f"would report a deliberate blank as a defect; got {item}"
+    )
+
+
+# Verifies: REQ-d00287-H
+@pytest.mark.parametrize("written", ["TBD", "TODO", "a <b> c", "<TBD", "TBD>", "REQ-p00001<A>"])
+def test_a_target_not_wholly_enclosed_is_not_excused_as_a_placeholder(written: str):
+    """The enclosure is what puts a placeholder out of the identifier
+    grammar's reach, so it must be the whole item. A bare word and a partial
+    enclosure are references that did not read, and each keeps the class it
+    reached -- otherwise a mistyped identifier could be excused as a blank
+    its author left on purpose."""
+    items = _reader().parse_ref_list(written)
+
+    assert len(items) == 1
+    item = items[0]
+    assert item.placeholder is False, f"{written!r} must not read as a placeholder; got {item}"
+    assert item.resolved is None
+    assert item.fault_class is not None, (
+        f"{written!r} is a reference that did not read and must carry its class; got {item}"
+    )
+
+
+# Verifies: REQ-d00287-B
+def test_a_placeholder_beside_a_reference_costs_the_reference_nothing():
+    """Each item is judged on its own, so a blank left on purpose in one
+    position leaves the real reference beside it resolving."""
+    items = _reader().parse_ref_list(f"<TBD>, {_GOOD}")
+
+    assert [i.placeholder for i in items] == [True, False]
+    assert items[1].resolved is not None and items[1].resolved.startswith("REQ-p00001"), (
+        f"the reference beside a placeholder must still resolve; got {items}"
+    )
+
+
+# Verifies: REQ-d00287-H, REQ-d00287-I
+def test_a_placeholder_produces_no_reference_and_no_verdict():
+    """``refs_and_verdicts`` is what a caller wires edges and reports faults
+    from. A placeholder must reach neither: passing it through as a
+    reference would have the builder bind a blank, and as a verdict would
+    report one as a citation that broke. ``placeholders_of`` is where it
+    does surface, as written."""
+    from elspais.graph.reference_faults import placeholders_of, refs_and_verdicts
+
+    items = _reader().parse_ref_list(f"<TBD>, {_GOOD}")
+    refs, verdicts = refs_and_verdicts(items, "implements")
+
+    assert "<TBD>" not in refs
+    assert not any("<TBD>" in str(key) for key in verdicts)
+    assert len(refs) == 1, f"only the real reference contributes a target; got {refs}"
+    assert placeholders_of(items) == ["<TBD>"]
+
+
+# Verifies: REQ-d00287-B
+def test_the_separator_divides_a_list_only_outside_an_enclosure():
+    """The division is the mirror of the composition rule: enclosures are
+    recognised before the separator is honoured, so a list mixing the two
+    yields one item per author-intended target."""
+    from elspais.utilities.patterns import split_ref_list
+
+    assert split_ref_list("<TBD, see the ticket>, REQ-p00001, [later]") == [
+        "<TBD, see the ticket>",
+        " REQ-p00001",
+        " [later]",
+    ]

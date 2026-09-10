@@ -17,7 +17,7 @@ from elspais.graph.parsers.patterns import (
     JNY_ID_LINE_PATTERN,
     VALIDATES_PATTERN,
 )
-from elspais.graph.reference_faults import refs_and_verdicts
+from elspais.graph.reference_faults import placeholders_of, refs_and_verdicts
 
 
 class JourneyParser:
@@ -138,6 +138,12 @@ class JourneyParser:
             "actor": None,
             "goal": None,
             "validates": [],
+            # Implements: REQ-d00288-C
+            # Whether the line was written at all, kept because an absent
+            # line and one naming nothing this estate holds are different
+            # authoring states that produce the same empty reference list.
+            "validates_declared": False,
+            "validates_placeholders": [],
         }
 
         actor_match = self.ACTOR_PATTERN.search(text)
@@ -154,5 +160,8 @@ class JourneyParser:
             refs, verdicts = refs_and_verdicts(items, "validates")
             data["validates"] = refs
             data["reference_verdicts"] = verdicts
+            data["validates_declared"] = bool(items)
+            # Implements: REQ-d00288-D
+            data["validates_placeholders"] = placeholders_of(items)
 
         return data

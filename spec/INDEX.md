@@ -56,7 +56,7 @@
 | REQ-o00063 | MCP File Mutation Tools             | ops-mcp.md          | 05c1e9c4 |
 | REQ-o00064 | MCP Test Coverage Analysis Tools    | ops-mcp.md          | a97fc5c4 |
 | REQ-o00065 | Agent-Assisted Link Suggestion      | ops-mcp.md          | 06f8e1ac |
-| REQ-o00066 | CI/CD Pipeline Enforcement          | ops-architecture.md | 67d7ec07 |
+| REQ-o00066 | CI/CD Pipeline Enforcement          | ops-architecture.md | 133e2f0d |
 | REQ-o00067 | MCP Subtree Extraction Tool         | ops-mcp.md          | ea2ba371 |
 | REQ-o00068 | MCP Cursor Protocol                 | ops-mcp.md          | f876db43 |
 | REQ-o00069 | MCP Minimize Requirement Set Tool   | ops-mcp.md          | 68c20489 |
@@ -202,7 +202,8 @@
 | REQ-d00284 | How a Result Names Its Test                                   | dev-graph-core.md       | 7baae0b0 |
 | REQ-d00285 | The Shape of a Finding                                        | dev-cli.md              | bedec247 |
 | REQ-d00286 | Built-In User Documentation                                   | dev-cli.md              | d246f21a |
-| REQ-d00287 | Reading a Reference                                           | dev-graph-core.md       | 0803d023 |
+| REQ-d00287 | Reading a Reference                                           | dev-graph-core.md       | 02eb02ff |
+| REQ-d00288 | Journeys That Validate Nothing                                | dev-graph-core.md       | 184a67af |
 
 ## User Journeys
 
