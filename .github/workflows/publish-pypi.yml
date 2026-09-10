@@ -1,4 +1,4 @@
-# Implements: REQ-o00078-A+B
+# Implements: REQ-o00078-A+B+C
 # The Homebrew half of REQ-o00078 is carried by the tap repository, which
 # this graph does not index; only the index channel's evidence lives here.
 name: Publish to PyPI & Update Homebrew
@@ -153,21 +153,28 @@ jobs:
           RUN_ID: ${{ github.run_id }}
         run: |
           RUN_URL="${SERVER_URL}/${REPOSITORY}/actions/runs/${RUN_ID}"
-          PUBLISHED="Published to <https://pypi.org/project/elspais/${VERSION}/|PyPI>"
+          PUBLISHED="<https://pypi.org/project/elspais/${VERSION}/|PyPI> carries this version."
+          # This run verifies the index and nothing else: the tap completes
+          # later, in another repository, and posts its own result here. The
+          # headline therefore names the channel it checked rather than
+          # calling the release done while a channel's outcome is unknown.
+          PENDING="The Homebrew tap updates separately and reports its own result to this channel."
 
           # printf rather than embedded literal newlines so every line of
           # the run: block scalar stays at one indent (YAML doesn't allow
           # zero-indented continuation lines inside a `|` block).
           if [ "$PR_FOUND" = "true" ]; then
-            MSG=$(printf '%s\n\n%s\n%s\n%s' \
-              ":white_check_mark: *elspais v${VERSION} released*" \
+            MSG=$(printf '%s\n\n%s\n%s\n%s\n%s' \
+              ":white_check_mark: *elspais v${VERSION} published to PyPI*" \
               "${PUBLISHED}" \
+              "${PENDING}" \
               "*PR:* <${PR_URL}|#${PR_NUM} ${PR_TITLE}>" \
               "*Run:* <${RUN_URL}|View run>")
           else
-            MSG=$(printf '%s\n\n%s\n%s' \
-              ":white_check_mark: *elspais v${VERSION} released*" \
+            MSG=$(printf '%s\n\n%s\n%s\n%s' \
+              ":white_check_mark: *elspais v${VERSION} published to PyPI*" \
               "${PUBLISHED}" \
+              "${PENDING}" \
               "*Run:* <${RUN_URL}|View run>")
           fi
 
