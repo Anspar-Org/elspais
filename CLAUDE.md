@@ -107,6 +107,8 @@ An extension the map does not name has NO pattern, so a keyword in it is read no
 
 `prescan._COMMENT_PREFIXES` is DELIBERATELY separate and wider. It answers "does this line keep the downward walk to the next declaration alive?" — a question about file layout — not "may a keyword bind here?". Narrowing it to the file's one pattern would stop the walk at a block comment and cost the citation below it its declaration.
 
+`prescan.opens_a_declaration` answers the same layout question for the lines that are not comments: a decorator/annotation (`@`) and a class header stand between a citation and the function it was written above without ending the downward walk, and are passed over (REQ-d00254-D speaks of functions and never of classes, so a class is passed over rather than bound to — a citation above one reaches the first function inside it, or nothing). It is passed as `skippable=` at the two CODE call sites and DELIBERATELY at none of the three test prescans, where an unbound citation is already answered by `UnboundCitation` (REQ-d00274-G/H) rather than by mis-attribution.
+
 ## Workflow
 
 - **ALWAYS** use a sub-agent to write tests (unless you are the sub-agent)

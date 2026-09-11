@@ -300,6 +300,7 @@ def _serialize_journey_info(jny_node: Any, graph: FederatedGraph) -> dict[str, A
     return info
 
 
+# Implements: REQ-d00064-C, REQ-d00064-D
 def _serialize_code_info(code_node: Any, graph: FederatedGraph) -> dict[str, Any]:
     """Unified CODE-node serializer.
 
@@ -1165,6 +1166,7 @@ def _collect_scope_ids(
     return visited
 
 
+# Implements: REQ-d00078-D
 def _match_assertions(
     node: GraphNode,
     include_assertions: bool,
@@ -1190,6 +1192,7 @@ def _match_assertions(
     return matched
 
 
+# Implements: REQ-d00078-C, REQ-d00078-E
 def _scoped_search_regex(
     graph: FederatedGraph,
     compiled_pattern: re.Pattern[str],
@@ -1907,6 +1910,7 @@ def _build_assertion_format(config: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+# Implements: REQ-o00061-A, REQ-o00061-D
 def _build_hierarchy_rules(config: dict[str, Any]) -> dict[str, Any]:
     """Build hierarchy rules info from config."""
     typed_config = _validate_config(config) if isinstance(config, dict) else config
@@ -2007,6 +2011,7 @@ def _build_change_metrics(graph: FederatedGraph | None) -> dict[str, Any]:
 # ── Profile functions ───────────────────────────────────────────────────────
 
 
+# Implements: REQ-o00061-A, REQ-o00061-D
 def _workspace_profile_testing(
     base: dict[str, Any],
     working_dir: Path,
@@ -2030,6 +2035,7 @@ def _workspace_profile_testing(
     return result
 
 
+# Implements: REQ-o00061-A, REQ-o00061-D
 def _workspace_profile_code_refs(
     base: dict[str, Any],
     working_dir: Path,
@@ -2069,6 +2075,7 @@ def _workspace_profile_coverage(
     return result
 
 
+# Implements: REQ-o00061-A, REQ-o00061-D
 def _workspace_profile_retrofit(
     base: dict[str, Any],
     working_dir: Path,
@@ -2125,6 +2132,7 @@ def _workspace_profile_manager(
     return result
 
 
+# Implements: REQ-o00061-A, REQ-o00061-D
 def _workspace_profile_worktree(
     base: dict[str, Any],
     working_dir: Path,
@@ -3103,6 +3111,7 @@ def _owning_container(graph: Any, node_id: str) -> Any | None:
     return node.file_node()
 
 
+# Implements: REQ-o00062-K
 def _attach_version(result: dict[str, Any], node: Any) -> dict[str, Any]:
     """Add the mutated node's resulting version to a successful result.
 
@@ -3211,6 +3220,7 @@ def _mutate_rename_node(graph: FederatedGraph, old_id: str, new_id: str) -> dict
         return {"success": False, "error": str(e)}
 
 
+# Implements: REQ-d00065-D, REQ-o00062-E
 def _mutate_update_title(graph: FederatedGraph, node_id: str, new_title: str) -> dict[str, Any]:
     """Update requirement title.
 
@@ -3372,6 +3382,7 @@ def _mutate_add_requirement(
         return {"success": False, "error": str(e)}
 
 
+# Implements: REQ-d00065-C, REQ-o00062-F, REQ-o00062-E
 def _mutate_delete_requirement(
     graph: FederatedGraph, node_id: str, confirm: bool = False
 ) -> dict[str, Any]:
@@ -3469,6 +3480,7 @@ def _mutate_add_journey(
         return {"success": False, "error": str(e)}
 
 
+# Implements: REQ-o00062-F
 def _mutate_delete_journey(
     graph: FederatedGraph,
     node_id: str,
@@ -3496,6 +3508,7 @@ def _mutate_delete_journey(
 # ─────────────────────────────────────────────────────────────────────────────
 
 
+# Implements: REQ-o00062-R, REQ-o00062-E
 def _mutate_add_assertion(graph: FederatedGraph, req_id: str, text: str) -> dict[str, Any]:
     """Add assertion to requirement.
 
@@ -3517,6 +3530,7 @@ def _mutate_add_assertion(graph: FederatedGraph, req_id: str, text: str) -> dict
         return {"success": False, "error": str(e)}
 
 
+# Implements: REQ-o00062-B, REQ-o00062-E
 def _mutate_update_assertion(
     graph: FederatedGraph, assertion_id: str, new_text: str
 ) -> dict[str, Any]:
@@ -3536,6 +3550,7 @@ def _mutate_update_assertion(
         return {"success": False, "error": str(e)}
 
 
+# Implements: REQ-o00062-B, REQ-o00062-F, REQ-o00062-E
 def _mutate_delete_assertion(
     graph: FederatedGraph,
     assertion_id: str,
@@ -3615,6 +3630,7 @@ def _mutate_update_remainder(
         return {"success": False, "error": str(e)}
 
 
+# Implements: REQ-o00062-H, REQ-o00062-E
 def _mutate_add_remainder(
     graph: FederatedGraph, req_id: str, heading: str, text: str
 ) -> dict[str, Any]:
@@ -3630,6 +3646,7 @@ def _mutate_add_remainder(
         return {"success": False, "error": str(e)}
 
 
+# Implements: REQ-o00062-H, REQ-o00062-E
 def _mutate_delete_remainder(graph: FederatedGraph, node_id: str) -> dict[str, Any]:
     """Delete a REMAINDER section node."""
     try:
@@ -3648,6 +3665,7 @@ def _mutate_delete_remainder(graph: FederatedGraph, node_id: str) -> dict[str, A
 # ─────────────────────────────────────────────────────────────────────────────
 
 
+# Implements: REQ-d00205-C
 def _config_for_node(graph: Any, node_id: str) -> dict[str, Any] | None:
     """The config of the repo owning node_id, or None where none is derivable.
 
@@ -3751,6 +3769,7 @@ def _mutate_add_edge(
         return {"success": False, "error": str(e)}
 
 
+# Implements: REQ-o00062-C, REQ-o00062-E
 def _mutate_change_edge_kind(
     graph: FederatedGraph,
     source_id: str,
@@ -3815,6 +3834,7 @@ def _mutate_change_edge_targets(
         return {"success": False, "error": str(e)}
 
 
+# Implements: REQ-o00062-C, REQ-o00062-F, REQ-o00062-E
 def _mutate_delete_edge(
     graph: FederatedGraph,
     source_id: str,
@@ -3954,6 +3974,7 @@ def _mutate_rename_file(
 # ─────────────────────────────────────────────────────────────────────────────
 
 
+# Implements: REQ-o00062-G
 def _undo_last_mutation(graph: FederatedGraph) -> dict[str, Any]:
     """Undo the most recent mutation.
 
@@ -3970,6 +3991,7 @@ def _undo_last_mutation(graph: FederatedGraph) -> dict[str, Any]:
     }
 
 
+# Implements: REQ-o00062-G
 def _undo_to_mutation(graph: FederatedGraph, mutation_id: str) -> dict[str, Any]:
     """Undo all mutations back to a specific point.
 
@@ -4875,6 +4897,7 @@ def _get_uncovered_assertions(
         Dict with success and list of uncovered assertions with parent context.
     """
 
+    # Implements: REQ-d00258-M
     def _axis_covered_labels(req_node: Any, kind: NodeKind, dimension: str) -> set[str]:
         """Return labels ~fully covered on one axis, on the work-list measure.
 
@@ -4900,6 +4923,7 @@ def _get_uncovered_assertions(
                 )
         return covered
 
+    # Implements: REQ-d00258-I, REQ-d00258-M
     def _implemented_labels(req_node: Any) -> set[str]:
         """Return labels with any implementation evidence naming them.
 
@@ -4950,6 +4974,7 @@ def _get_uncovered_assertions(
             dims.append("uat_coverage")
         return tuple(dims)
 
+    # Implements: REQ-d00258-M
     def _fraction_for_label(req_node: Any, label: str) -> float:
         # The strongest work-list fraction across the dimensions this call
         # considers, for annotating a gap with how far along it is. Read on the
@@ -4965,6 +4990,7 @@ def _get_uncovered_assertions(
                 fractions.append(measure_by_label(dim, WORK_LIST_MEASURE).get(label, 0.0))
         return max(fractions) if fractions else 0.0
 
+    # Implements: REQ-d00258-J
     def _uncovered_detail(req_node: Any, labels: list[str], id_by_label: dict[str, str]) -> list:
         rollup = req_node.get_metric("rollup_metrics")
         detail = []
@@ -5051,6 +5077,7 @@ def _get_uncovered_assertions(
     }
 
 
+# Implements: REQ-d00068-A, REQ-d00068-B, REQ-d00068-C, REQ-d00068-D, REQ-d00068-E
 def _find_assertions_by_keywords(
     graph: FederatedGraph,
     keywords: list[str],
@@ -5235,6 +5262,7 @@ def _move_requirement(
     return result
 
 
+# Implements: REQ-o00063-E
 def _restore_from_safety_branch(
     repo_root: Path,
     branch_name: str,
@@ -5275,6 +5303,7 @@ def _list_safety_branches_impl(repo_root: Path) -> dict[str, Any]:
 # ─────────────────────────────────────────────────────────────────────────────
 
 
+# Implements: REQ-d00074-A, REQ-d00074-C
 def _suggest_links_impl(
     graph: FederatedGraph,
     working_dir: Path,
@@ -5301,6 +5330,7 @@ def _suggest_links_impl(
     }
 
 
+# Implements: REQ-d00074-B, REQ-d00074-D
 def _apply_link_impl(
     state: dict[str, Any],
     file_path: str,
@@ -5710,6 +5740,7 @@ class CursorState:
 
     __slots__ = ("query", "params", "batch_size", "items", "position")
 
+    # Implements: REQ-d00076-A
     def __init__(
         self,
         query: str,
@@ -5938,6 +5969,7 @@ def _materialize_cursor_items(
         return []
 
 
+# Implements: REQ-o00068-A, REQ-o00068-D, REQ-d00076-C, REQ-d00076-D
 def _open_cursor(
     state: dict[str, Any],
     query: str,
@@ -5977,6 +6009,7 @@ def _open_cursor(
     }
 
 
+# Implements: REQ-o00068-B, REQ-d00076-E
 def _cursor_next(
     state: dict[str, Any],
     count: int = 1,
@@ -6005,6 +6038,7 @@ def _cursor_next(
     }
 
 
+# Implements: REQ-o00068-C, REQ-d00076-F
 def _cursor_info(
     state: dict[str, Any],
 ) -> dict[str, Any]:
@@ -6655,6 +6689,7 @@ def create_server(
             parsed_kinds,
         )
 
+    # Implements: REQ-o00060-D
     @mcp.tool()
     def get_requirement(req_id: str) -> dict[str, Any]:
         """Get focused details for a single requirement.
@@ -6716,6 +6751,7 @@ def create_server(
             _state["graph"], kind, kw_list, match_all, filters or None, limit, _state.get("config")
         )
 
+    # Implements: REQ-o00060-E
     @mcp.tool()
     def get_hierarchy(req_id: str) -> dict[str, Any]:
         """Trace a requirement's position in the hierarchy: ancestors up to roots, direct children.
@@ -6729,6 +6765,7 @@ def create_server(
     # Workspace Context Tools (REQ-o00061)
     # ─────────────────────────────────────────────────────────────────────
 
+    # Implements: REQ-o00061-A
     @mcp.tool()
     def get_workspace_info(detail: str = "default") -> dict[str, Any]:
         """Project identity, configuration, and federation details.
@@ -6747,6 +6784,7 @@ def create_server(
             detail=detail,
         )
 
+    # Implements: REQ-o00061-B
     @mcp.tool()
     def get_project_summary() -> dict[str, Any]:
         """Project overview: requirement counts by level, coverage percentages, change metrics.
@@ -6807,6 +6845,7 @@ def create_server(
     # Node Mutation Tools (REQ-o00062-A)
     # ─────────────────────────────────────────────────────────────────────
 
+    # Implements: REQ-o00062-A, REQ-o00062-I
     @mcp.tool()
     @_locked
     def mutate_rename_node(old_id: str, new_id: str, if_version: str) -> dict[str, Any]:
@@ -6825,6 +6864,7 @@ def create_server(
         node = _state["graph"].find_by_id(old_id)
         return _attach_version(_mutate_rename_node(_state["graph"], old_id, new_id), node)
 
+    # Implements: REQ-o00062-A, REQ-o00062-I, REQ-o00062-K
     @mcp.tool()
     @_locked
     def mutate_update_title(node_id: str, new_title: str, if_version: str) -> dict[str, Any]:
@@ -6842,6 +6882,7 @@ def create_server(
         node = _state["graph"].find_by_id(node_id)
         return _attach_version(_mutate_update_title(_state["graph"], node_id, new_title), node)
 
+    # Implements: REQ-o00062-A, REQ-o00062-I, REQ-o00062-K
     @mcp.tool()
     @_locked
     def mutate_change_status(node_id: str, new_status: str, if_version: str) -> dict[str, Any]:
@@ -6916,6 +6957,7 @@ def create_server(
                 file_node.link(req_node, EdgeKind.CONTAINS)
         return _attach_version(result, parent) if parent is not None else result
 
+    # Implements: REQ-o00062-I, REQ-o00062-K
     @mcp.tool()
     @_locked
     def mutate_delete_requirement(
@@ -6946,6 +6988,7 @@ def create_server(
     # Assertion Mutation Tools (REQ-o00062-B)
     # ─────────────────────────────────────────────────────────────────────
 
+    # Implements: REQ-o00062-B, REQ-o00062-I, REQ-o00062-K
     @mcp.tool()
     @_locked
     def mutate_add_assertion(req_id: str, text: str, if_version: str) -> dict[str, Any]:
@@ -6970,6 +7013,7 @@ def create_server(
         parent = _state["graph"].find_by_id(req_id)
         return _attach_version(_mutate_add_assertion(_state["graph"], req_id, text), parent)
 
+    # Implements: REQ-o00062-B, REQ-o00062-I, REQ-o00062-K
     @mcp.tool()
     @_locked
     def mutate_update_assertion(
@@ -6993,6 +7037,7 @@ def create_server(
             _mutate_update_assertion(_state["graph"], assertion_id, new_text), node
         )
 
+    # Implements: REQ-o00062-B, REQ-o00062-I, REQ-o00062-K
     @mcp.tool()
     @_locked
     def mutate_delete_assertion(
@@ -7019,6 +7064,7 @@ def create_server(
         result = _mutate_delete_assertion(_state["graph"], assertion_id, compact, confirm)
         return _attach_version(result, parent) if parent is not None else result
 
+    # Implements: REQ-o00062-B, REQ-o00062-I
     @mcp.tool()
     @_locked
     def mutate_rename_assertion(old_id: str, new_label: str, if_version: str) -> dict[str, Any]:
@@ -7041,6 +7087,7 @@ def create_server(
     # Remainder (Non-Normative Section) Mutation Tools
     # ─────────────────────────────────────────────────────────────────────
 
+    # Implements: REQ-o00062-H, REQ-o00062-I, REQ-o00062-K
     @mcp.tool()
     @_locked
     def mutate_update_remainder(
@@ -7070,6 +7117,7 @@ def create_server(
             _mutate_update_remainder(_state["graph"], node_id, text, heading), node
         )
 
+    # Implements: REQ-o00062-H, REQ-o00062-I
     @mcp.tool()
     @_locked
     def mutate_add_remainder(
@@ -7095,6 +7143,7 @@ def create_server(
             _mutate_add_remainder(_state["graph"], req_id, heading, text), parent
         )
 
+    # Implements: REQ-o00062-F, REQ-o00062-H, REQ-o00062-K
     @mcp.tool()
     @_locked
     def mutate_delete_remainder(
@@ -7125,6 +7174,7 @@ def create_server(
         result = _mutate_delete_remainder(_state["graph"], node_id)
         return _attach_version(result, parent) if parent is not None else result
 
+    # Implements: REQ-o00060-G
     @mcp.tool()
     def get_versions(node_ids: list[str]) -> dict[str, str]:
         """Get current version tokens for several nodes, without their content.
@@ -7852,6 +7902,7 @@ def create_server(
     # Link Suggestion Tools (REQ-d00074)
     # ─────────────────────────────────────────────────────────────────────
 
+    # Implements: REQ-d00074-A
     @mcp.tool()
     def suggest_links(
         file_path: str | None = None,
@@ -7869,6 +7920,7 @@ def create_server(
             limit=limit,
         )
 
+    # Implements: REQ-d00074-B, REQ-o00062-I
     @mcp.tool()
     @_locked
     def apply_link(
@@ -7911,6 +7963,7 @@ def create_server(
     # Subtree Extraction Tool (REQ-o00067)
     # ─────────────────────────────────────────────────────────────────────
 
+    # Implements: REQ-o00067-A
     @mcp.tool()
     def get_subtree(
         root_id: str,
@@ -7950,6 +8003,7 @@ def create_server(
     # Cursor Protocol Tools (REQ-o00068)
     # ─────────────────────────────────────────────────────────────────────
 
+    # Implements: REQ-o00068-A
     @mcp.tool()
     def open_cursor(
         query: str,
@@ -8022,6 +8076,7 @@ def create_server(
         """
         return {"results": _search_terms_logic(_state["graph"].terms, query)}
 
+    # Implements: REQ-o00068-B
     @mcp.tool()
     def cursor_next(
         count: int = 1,
@@ -8029,6 +8084,7 @@ def create_server(
         """Get next item(s) from an open cursor. Call after open_cursor()."""
         return _cursor_next(_state, count=count)
 
+    # Implements: REQ-o00068-C
     @mcp.tool()
     def cursor_info() -> dict[str, Any]:
         """Check cursor state: current position, total items, and how many remain."""

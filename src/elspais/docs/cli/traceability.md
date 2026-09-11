@@ -274,6 +274,21 @@ Or:
 function hashPassword(plain) { ... }
 ```
 
+The citation attributes the lines of the function it is written above. Decorators
+and a class header do not break that: write it above the decorators, or between
+the last decorator and the `def` -- both name the same function.
+
+```python
+# Implements: REQ-d00001-A
+@app.route("/hash")
+def hash_password(plain: str) -> str: ...
+```
+
+A citation above a `class` binds to the first function inside it, and to nothing
+at all if the class opens with a docstring, a field, or an enum member -- a class
+is not itself an extent. Where a citation names no function, it instead speaks for
+the executable lines following it, up to the next citation or the end of the file.
+
 ## Marking Tests as Validating
 
 Write a comment above the test. This is the only form that links a test --

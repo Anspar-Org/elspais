@@ -463,6 +463,7 @@ class RequirementTransformer:
     # Assertion extraction from pre-classified tokens
     # ------------------------------------------------------------------
 
+    # Implements: REQ-d00250-A
     def _extract_assertions(
         self, node: Tree, req_start_line: int
     ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], int]:
@@ -576,6 +577,7 @@ class RequirementTransformer:
     # Named section extraction
     # ------------------------------------------------------------------
 
+    # Implements: REQ-d00250-A
     def _extract_named_section(self, node: Tree) -> dict[str, Any] | None:
         """Extract a named section (## Heading + content)."""
         header_token = node.children[0]  # SECTION_HDR
@@ -623,6 +625,7 @@ class RequirementTransformer:
     # Changelog extraction
     # ------------------------------------------------------------------
 
+    # Implements: REQ-d00250-A
     def _extract_changelog(self, node: Tree) -> tuple[list[dict[str, str]], int]:
         """Extract changelog entries and the depth of the Changelog header.
 
@@ -907,6 +910,7 @@ class RequirementTransformer:
             "reference_source": reference_source,
         }
 
+    # Implements: REQ-d00221-B
     def _transform_definition_block(self, node: Tree) -> ParsedContent:
         """Transform a file-level definition_block into ParsedContent."""
         data = self._extract_definition_block(node)
@@ -1041,6 +1045,7 @@ class RequirementTransformer:
         verdicts = {key: v for key, v in verdicts.items() if key[1] not in _NO_REF_VALUES}
         return refs, verdicts
 
+    # Implements: REQ-d00272-K
     @staticmethod
     def _merge_ref_field(
         accumulator: list[str],

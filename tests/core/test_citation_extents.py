@@ -26,8 +26,10 @@ How many lines a citation's own comment occupies enters none of this
 continued (REQ-d00269-H), and it attributes what a one-line citation in the
 same place would; a citation's comment lines are never its implementation.
 
-``TestCitationExtentRules`` at the foot of this file pins the four rules one
-by one; the cases above it exercise them through the coverage metrics.
+``TestCitationExtentRules`` pins the four rules one by one; the cases above it
+exercise them through the coverage metrics.  Case 9, at the foot of the file,
+chains the pre-scan to the rules, because which function a citation was read
+as written above is what decides which of the four it is answered by.
 """
 
 from pathlib import Path
@@ -714,3 +716,68 @@ class TestCitationExtentRules:
         assert overlapping == {frozenset((2, 5))}, (
             f"only an enclosing function may overlap what it contains; got {overlapping}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Case 9: the pre-scan and the extent rules, chained
+# ---------------------------------------------------------------------------
+
+
+def _extents_from_source(source, coverage, path="src/m.py"):
+    """Run the pre-scan over real source, then answer the extents from it.
+
+    The two halves of REQ-d00254-D meet here.  ``build_line_context`` decides
+    which function a citation was written above; ``_citation_extents`` decides
+    what that citation therefore attributes.  Exercising them apart cannot see
+    the consequence of the first getting it wrong, because a citation bound to
+    no function does not fail -- it silently falls to D's second branch and
+    claims the executable lines below it as far as the next citation or the end
+    of the file.
+    """
+    from elspais.graph.parsers.prescan import build_line_context
+
+    lines = [(i + 1, text) for i, text in enumerate(source.rstrip("\n").split("\n"))]
+    context = build_line_context(lines, "python")
+    citations = [
+        (ln, ln, context[ln][2], context[ln][3]) for ln, text in lines if "Implements:" in text
+    ]
+    assert citations, "source must hold at least one citation"
+    return _extents(citations, coverage, path=path)
+
+
+# A lone citation above a decorated function, with an unrelated function below
+# it.  Nothing separates the two but blank lines, so under D's second branch
+# the citation would reach the second function's code as well.
+DECORATED_THEN_UNRELATED = """\
+# Implements: REQ-p00001-A
+@app.route("/x")
+def handler():
+    value = 1
+    return value
+
+
+def unrelated():
+    other = 2
+    return other
+"""
+
+
+# Verifies: REQ-d00254-D
+def test_REQ_d00254_D_a_citation_above_a_decorated_function_claims_only_that_function():
+    """A citation above a decorated ``def`` attributes that function and no more.
+
+    The decorator stands between the citation and the function it was written
+    above.  Passing over it is what puts the citation in D's FIRST branch,
+    where the function bounds the answer; failing to pass over it puts the
+    citation in the second, where nothing nearer than the end of the file does
+    -- and the unrelated function below is then attributed to a requirement it
+    implements no part of.
+
+    The whole map is asserted, which is what says nobody else was attributed
+    anything either.
+    """
+    extents = _extents_from_source(DECORATED_THEN_UNRELATED, [4, 5, 9, 10])
+
+    assert extents == {1: {4, 5}}, (
+        "the citation speaks for handler's executable lines and for nothing below it"
+    )

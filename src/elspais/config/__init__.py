@@ -51,6 +51,7 @@ def default_level_keys() -> list[str]:
     return [k for k, _r in ranked]
 
 
+# Implements: REQ-d00258-F
 def level_expects_validation(config: dict[str, Any], level_key: str | None) -> bool:
     """Return whether a level is expected to have UAT validation.
 
@@ -349,6 +350,7 @@ def _declared_version_of(config: dict[str, Any], source: Path) -> int | None:
         ) from None
 
 
+# Implements: REQ-d00212-X
 def _outdated_config_message(
     config_path: Path,
     declared_version: int | None,
@@ -402,6 +404,7 @@ def _outdated_config_message(
 
 
 # Implements: REQ-d00207-B
+# Implements: REQ-d00212-V, REQ-d00212-X
 def load_config(config_path: Path) -> dict[str, Any]:
     """Load configuration from a TOML file.
 
@@ -1121,6 +1124,7 @@ def validate_config(config: dict[str, Any]) -> Any:
     return ElspaisConfig.model_validate(config)
 
 
+# Implements: REQ-d00202-A, REQ-d00202-B, REQ-d00202-C
 def get_associates_config(
     config: dict[str, Any],
     repo_root: Path | None = None,

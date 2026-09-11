@@ -35,6 +35,7 @@ from pathlib import Path
 _COMMENT_PREFIXES: tuple[str, ...] = ("#", "//", "--", "/*", "<!--")
 
 
+# Implements: REQ-d00254-D
 def is_comment_line(text: str) -> bool:
     """Whether a source line's first content looks like a comment opener.
 
@@ -44,13 +45,47 @@ def is_comment_line(text: str) -> bool:
     return any(stripped.startswith(prefix) for prefix in _COMMENT_PREFIXES)
 
 
-def bind_unowned_comments(lines, is_owned, target_at, assign) -> None:
+# A decorator, an annotation, an attribute -- whatever the language calls the
+# line, it is part of the declaration written below it and not code that does
+# work.  Matched by its opener alone: what a decorator NAMES is irrelevant here,
+# only that the line cannot itself be the declaration the walk is looking for.
+_DECORATOR = re.compile(r"^\s*@")
+
+
+# Implements: REQ-d00254-D
+def opens_a_declaration(text: str, class_patterns) -> bool:
+    """Whether a line is a declaration's header rather than work of its own.
+
+    REQ-d00254-D attributes a citation the lines of "the function it is written
+    above".  Between a citation and that function the author may write a
+    decorator, or a class the function is a method of -- neither of which is
+    the function, and neither of which stops the citation being written above
+    it.  Reading such a line as the end of the search answers a question the
+    author did not ask: the citation then falls to D's second branch and takes
+    the lines FOLLOWING it, unbounded by the function it was written for, up to
+    the next citation or the end of the file.
+
+    A class is skipped rather than bound to.  D speaks of functions and never
+    of classes, so a class is not an extent here; it is passed through, and a
+    citation above one binds to the first function inside it, or to nothing
+    when the class opens with anything else.
+    """
+    return bool(_DECORATOR.match(text)) or any(p.match(text) for p in class_patterns)
+
+
+# Implements: REQ-d00254-D
+def bind_unowned_comments(lines, is_owned, target_at, assign, skippable=None) -> None:
     """Bind each unowned comment line to the next declaration below it.
 
     ``is_owned(line_number)`` says whether a line already has an owner,
     ``target_at(index, line_number, text)`` returns the binding target for a
-    line or None if it is not a declaration, and ``assign(line_number, target)``
-    records the binding.
+    line or None if it is not a declaration, ``assign(line_number, target)``
+    records the binding, and ``skippable(text)`` -- when given -- says a line
+    stands between the citation and its declaration without ending the search.
+
+    The walk stops at the first line that is none of these, because a citation
+    is written above a declaration only when nothing that does work separates
+    them.
     """
     for idx, (ln, text) in enumerate(lines):
         if is_owned(ln) or not is_comment_line(text):
@@ -61,6 +96,8 @@ def bind_unowned_comments(lines, is_owned, target_at, assign) -> None:
             if target is not None:
                 assign(ln, target)
                 break
+            if skippable is not None and skippable(ahead_text):
+                continue
             if ahead_text.strip() and not is_comment_line(ahead_text):
                 break
 
@@ -120,10 +157,12 @@ def python_line_context(
     return context
 
 
+# Implements: REQ-d00254-D
 def _bind_comments_to_declarations(
     lines: list[tuple[int, str]],
     context: dict[int, tuple[str | None, str | None, int, int]],
     func_patterns: list,
+    class_patterns: list,
 ) -> dict[int, tuple[str | None, str | None, int, int]]:
     """Bind a comment above a declaration to it, carrying that declaration's extent.
 
@@ -151,6 +190,7 @@ def _bind_comments_to_declarations(
         lambda ln: context[ln][0] is not None,
         _declaration_at,
         _assign,
+        skippable=lambda text: opens_a_declaration(text, class_patterns),
     )
     return context
 
@@ -222,6 +262,7 @@ def detect_language(file_path: str) -> str:
     return _LANG_MAP.get(ext, "unknown")
 
 
+# Implements: REQ-d00254-D
 def build_line_context(
     lines: list[tuple[int, str]],
     language: str,
@@ -232,10 +273,11 @@ def build_line_context(
     belongs to. Supports Python (indentation-based) and C-family
     languages (brace-based scoping).
 
-    After the initial scan, performs a forward-looking fixup:
-    comment lines with no function context look ahead up to 5 lines
-    to find a subsequent function definition. This handles the common
-    pattern of ``# Implements: <REQ-ID>`` placed above a function.
+    After the initial scan, performs a forward-looking fixup: a comment line
+    with no function context binds to the next function declaration below it,
+    passing over blank lines, further comments, and the declaration headers
+    (decorators, class statements) that may stand between the two. This handles
+    the common pattern of ``# Implements: <REQ-ID>`` placed above a function.
 
     Args:
         lines: List of (line_number, content) tuples.
@@ -278,7 +320,7 @@ def build_line_context(
     if language == "python":
         ast_context = python_line_context(lines)
         if ast_context is not None:
-            return _bind_comments_to_declarations(lines, ast_context, func_patterns)
+            return _bind_comments_to_declarations(lines, ast_context, func_patterns, class_patterns)
 
     current_class: str | None = None
     current_class_indent: int = -1
@@ -385,6 +427,7 @@ def build_line_context(
         lambda ln: line_context[ln][0] is not None,
         _declaration_at,
         _assign,
+        skippable=lambda text: opens_a_declaration(text, class_patterns),
     )
 
     # Implements: REQ-d00254-D
@@ -434,6 +477,7 @@ def ast_string_literal_lines(source: str) -> set[int]:
     return lines
 
 
+# Implements: REQ-d00254-K
 def ast_prescan(
     source: str,
     lines: list[tuple[int, str]],
@@ -611,6 +655,7 @@ def text_prescan(
         # func_end_line=0 sentinel: text-based scanning can't reliably determine end lines
         line_context[ln] = (current_func, current_class, current_func_line, 0)
 
+    # Implements: REQ-d00254-D
     # A citation written above a test binds to it here too; without this a file
     # reaching this branch has no forward binding at all.
     def _declaration_at(_idx, ahead_ln, ahead_text):
@@ -696,6 +741,7 @@ class _DartLineScanner:
             i += 1
 
 
+# Implements: REQ-d00254-K
 def _match_brace_end(
     lines: list[tuple[int, str]],
     start_idx: int,
@@ -732,6 +778,7 @@ def _match_brace_end(
     return last, False  # ran to EOF without closing
 
 
+# Implements: REQ-d00254-K
 def dart_prescan(
     lines: list[tuple[int, str]],
 ) -> tuple[
@@ -816,6 +863,7 @@ def dart_prescan(
     return line_context, all_test_funcs, first_def_line
 
 
+# Implements: REQ-d00254-K
 def external_prescan(
     file_entries: list[dict],
     lines: list[tuple[int, str]],

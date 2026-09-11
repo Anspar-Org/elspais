@@ -7,6 +7,11 @@ The tests that bind a scanned test to its identity within its file and to
 that test's line extent name REQ-d00254-K, which obliges exactly that, on
 both the built-in and the external-record routes.
 
+The tests at the foot of the file name REQ-d00254-D instead: what a citation
+binds to decides the extent D attributes to it, so a citation walking past a
+decorator or a class header -- or stopping at a member that is neither -- is
+that assertion being met or missed.
+
 The rest are deliberately uncited.  Extension-to-language detection and
 line-context tracking over ordinary (non-test) code answer to no assertion
 in the estate, and the sentinel test pins the *absence* of extent on the
@@ -445,3 +450,254 @@ def test_REQ_d00254_K_comment_does_not_bind_across_a_non_comment_line(route, com
     func_name, _class_name, func_line, _end = line_context[comment_line]
     assert func_name is None
     assert func_line == 0
+
+
+# ---------------------------------------------------------------------------
+# Declaration headers between a citation and its function
+#
+# REQ-d00254-D attributes a citation the lines of "the function it is written
+# above".  Between the citation and that function an author may write lines
+# that are part of the declaration rather than work of their own: a decorator,
+# or the class the function is a method of.  Neither is the function, and
+# neither stops the citation being written above it -- so the downward walk
+# passes over them and binds at the function beyond.
+#
+# Reading such a line as the end of the search costs the citation its function
+# outright: it then falls to D's second branch and attributes the executable
+# lines FOLLOWING it, bounded by nothing nearer than the next citation or the
+# end of the file, spilling across functions it says nothing about.
+#
+# A class is passed OVER, never bound TO.  D speaks of functions and never of
+# classes, so a citation above a class binds to the first function inside it,
+# and to nothing at all when the class opens with something else.
+#
+# Both routes through ``build_line_context`` answer the same way, and are
+# exercised on identical sources.  They differ only in the END of the extent:
+# the AST knows a function's real last line, while indent tracking carries the
+# function across the blank lines below it, so the end is asserted as a bound
+# rather than an equality.
+# ---------------------------------------------------------------------------
+
+
+# (language, whether the route knows a function's exact last line).  The AST
+# does; indent tracking carries a function across the blank lines below it and
+# so reports an end past the body, which is why only the AST route is held to
+# an equality there.
+CODE_ROUTES = [
+    pytest.param(("python", True), id="ast"),  # build_line_context -> python_line_context
+    pytest.param(("unknown", False), id="indent"),  # build_line_context -> indent tracking
+]
+
+
+def _later_line(source: str) -> int:
+    """Line of the unrelated ``def later()`` every source below ends with.
+
+    Its presence is what stops a negative assertion being vacuous: a citation
+    reported as bound to nothing must be bound to nothing *while a function it
+    could have walked on to exists below it*.
+    """
+    for ln, text in _numbered(source):
+        if text.startswith("def later("):
+            return ln
+    raise AssertionError("source must end with an unrelated 'def later()'")
+
+
+DECORATED = """\
+# Implements: REQ-p00001-A
+@app.route("/x")
+def handler():
+    return 1
+
+
+def later():
+    return 2
+"""
+
+STACKED_DECORATORS = """\
+# Implements: REQ-p00001-A
+@app.route("/x")
+@requires_auth
+@cache(seconds=30)
+def handler():
+    return 1
+
+
+def later():
+    return 2
+"""
+
+CITATION_BELOW_DECORATOR = """\
+@app.route("/x")
+# Implements: REQ-p00001-A
+def handler():
+    return 1
+
+
+def later():
+    return 2
+"""
+
+BARE_DEF = """\
+# Implements: REQ-p00001-A
+def handler():
+    return 1
+
+
+def later():
+    return 2
+"""
+
+INSIDE_BODY = """\
+def handler():
+    # Implements: REQ-p00001-A
+    return 1
+
+
+def later():
+    return 2
+"""
+
+CLASS_FIRST_MEMBER_IS_A_DEF = """\
+# Implements: REQ-p00001-A
+class Widget:
+    def render(self):
+        return 1
+
+
+def later():
+    return 2
+"""
+
+DECORATED_METHOD_IN_CLASS = """\
+# Implements: REQ-p00001-A
+class Widget:
+    @property
+    def render(self):
+        return 1
+
+
+def later():
+    return 2
+"""
+
+# The three shapes a class may open with that are not a function.  Each has a
+# ``def`` further down, so binding to nothing here is a statement about the
+# member the walk met and not about the file running out of functions.
+CLASS_OPENING_ON_AN_ENUM_MEMBER = """\
+# Implements: REQ-p00001-A
+class Color(Enum):
+    RED = 1
+
+    def label(self):
+        return self.name
+
+
+def later():
+    return 2
+"""
+
+CLASS_OPENING_ON_A_FIELD = """\
+# Implements: REQ-p00001-A
+class Point:
+    x: int = 0
+
+    def shift(self):
+        return self.x
+
+
+def later():
+    return 2
+"""
+
+CLASS_OPENING_ON_A_DOCSTRING = """\
+# Implements: REQ-p00001-A
+class Store:
+    \"\"\"Holds things.\"\"\"
+
+    def get(self):
+        return None
+
+
+def later():
+    return 2
+"""
+
+
+# Verifies: REQ-d00254-D
+@pytest.mark.parametrize("language", CODE_ROUTES)
+@pytest.mark.parametrize(
+    ("source", "citation_line", "func_name", "class_name", "func_line", "last_body_line"),
+    [
+        pytest.param(DECORATED, 1, "handler", None, 3, 4, id="decorated-def"),
+        pytest.param(STACKED_DECORATORS, 1, "handler", None, 5, 6, id="stacked-decorators"),
+        pytest.param(CLASS_FIRST_MEMBER_IS_A_DEF, 1, "render", "Widget", 3, 4, id="class-then-def"),
+        pytest.param(
+            DECORATED_METHOD_IN_CLASS, 1, "render", "Widget", 4, 5, id="class-then-decorated-def"
+        ),
+        # Regression guards: the three shapes that bound correctly before a
+        # header was ever skipped, and must still bind identically.
+        pytest.param(
+            CITATION_BELOW_DECORATOR, 2, "handler", None, 3, 4, id="guard-below-last-decorator"
+        ),
+        pytest.param(BARE_DEF, 1, "handler", None, 2, 3, id="guard-above-bare-def"),
+        pytest.param(INSIDE_BODY, 2, "handler", None, 1, 3, id="guard-inside-body"),
+    ],
+)
+def test_REQ_d00254_D_a_citation_binds_past_the_headers_of_its_function(
+    language, source, citation_line, func_name, class_name, func_line, last_body_line
+):
+    """A citation above a decorated or method definition binds to that function.
+
+    The extent is asserted as well as the identity: a citation bound to a name
+    but not to a range attributes nothing, and a citation bound to a range that
+    runs past its function attributes code the function does not contain.
+    """
+    lang, exact_end = language
+    context = build_line_context(_numbered(source), lang)
+    name, cls, start, end = context[citation_line]
+
+    assert (name, cls, start) == (func_name, class_name, func_line)
+    if exact_end:
+        assert end == last_body_line, (
+            f"the AST knows {func_name} ends at line {last_body_line}, got {end}"
+        )
+    else:
+        assert end >= last_body_line, (
+            f"extent must reach the end of {func_name}'s body (line {last_body_line}), got {end}"
+        )
+    assert end < _later_line(source), (
+        f"extent must stop before the unrelated function at line {_later_line(source)}, got {end}"
+    )
+
+
+# Verifies: REQ-d00254-D
+@pytest.mark.parametrize("language", CODE_ROUTES)
+@pytest.mark.parametrize(
+    "source",
+    [
+        pytest.param(CLASS_OPENING_ON_AN_ENUM_MEMBER, id="enum-member"),
+        pytest.param(CLASS_OPENING_ON_A_FIELD, id="annotated-field"),
+        pytest.param(CLASS_OPENING_ON_A_DOCSTRING, id="docstring"),
+    ],
+)
+def test_REQ_d00254_D_a_citation_above_a_class_binds_to_nothing_beyond_its_first_member(
+    language, source
+):
+    """A class whose first member is not a function leaves the citation unbound.
+
+    The class header is passed over, but what lies beyond it is a member that
+    does work -- an enum member, a field, a docstring -- and that ends the
+    search.  The citation must NOT walk on to the method below it, nor to the
+    unrelated function at the foot of the file: binding a citation to a
+    declaration it was not written above attributes evidence to code it says
+    nothing about.
+    """
+    lang, _exact_end = language
+    context = build_line_context(_numbered(source), lang)
+
+    assert context[1] == (None, None, 0, 0), f"citation must stay unbound, got {context[1]}"
+
+    # ...and the file does hold functions the walk could have reached, so the
+    # assertion above is about the member met and not about an empty file.
+    later = _later_line(source)
+    assert context[later][0] == "later"

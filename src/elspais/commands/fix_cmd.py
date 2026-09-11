@@ -175,6 +175,7 @@ def _scan_and_report_unfixable(graph) -> int:  # noqa: ANN001
     return 1 if found else 0
 
 
+# Implements: REQ-p00004-A
 def _detect_fixable(node, hash_mode: str, changelog_enforce: bool) -> list[str]:  # noqa: ANN001
     """Detect all fixable conditions on a requirement node.
 
@@ -534,6 +535,7 @@ def _fix_parse_dirty(args: argparse.Namespace, dry_run: bool) -> int:
     return _scan_and_report_unfixable(graph)
 
 
+# Implements: REQ-p00004-A, REQ-p00004-N
 def _fix_single(args: argparse.Namespace, req_id: str) -> int:
     """Fix a single requirement via the render pipeline.
 
@@ -750,6 +752,7 @@ def _ensure_changelog_section(
     return 0
 
 
+# Implements: REQ-d00248-A
 def _fix_index(args: argparse.Namespace, dry_run: bool) -> None:
     """Regenerate INDEX.md from current graph state (no-op when already current)."""
     from elspais.commands.index import _build_index_content, _regenerate_index
@@ -795,6 +798,7 @@ def _fix_index(args: argparse.Namespace, dry_run: bool) -> None:
     _regenerate_index(graph, all_spec_dirs, args, include_associates=include_assoc)
 
 
+# Implements: REQ-d00253-C
 def _select_terms_dictionary(graph, include_associates: bool):
     """Return the TermDictionary to render for glossary/term-index.
 
@@ -828,6 +832,7 @@ def _select_terms_dictionary(graph, include_associates: bool):
     return federated
 
 
+# Implements: REQ-d00253-C
 def _foreign_namespaces(graph) -> set[str]:
     """Return the REQ-id namespaces of every federation member but the root.
 

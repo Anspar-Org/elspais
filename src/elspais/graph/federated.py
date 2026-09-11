@@ -79,6 +79,7 @@ class FederatedMutationLog:
         """
         self._dirty_observer = observer
 
+    # Implements: REQ-p00083-E
     def _notify_dirty(self, holding: bool) -> None:
         observer = self._dirty_observer
         if observer is not None:
@@ -93,6 +94,7 @@ class FederatedMutationLog:
         """Bind repo lookup for resolving pointers."""
         self._repos = repos
 
+    # Implements: REQ-d00201-B
     def record(self, repo_name: str, mutation_id: str) -> None:
         """Record a mutation pointer."""
         was_holding = bool(self._pointers)
@@ -111,6 +113,7 @@ class FederatedMutationLog:
             self._notify_dirty(False)
         return pointer
 
+    # Implements: REQ-d00201-F
     def iter_entries(self) -> Iterator[MutationEntry]:
         """Yield full MutationEntry objects from sub-graphs in federated order.
 
@@ -123,6 +126,7 @@ class FederatedMutationLog:
                 if found:
                     yield found
 
+    # Implements: REQ-d00201-F
     def tail(self, limit: int) -> list[MutationEntry]:
         """Return the most recent ``limit`` resolved entries, oldest-to-newest.
 
@@ -149,6 +153,7 @@ class FederatedMutationLog:
                 return list(self._pointers[i:])
         raise ValueError(f"Mutation {mutation_id} not found in federated log")
 
+    # Implements: REQ-d00201-F
     def find_by_id(self, mutation_id: str) -> MutationEntry | None:
         """Find a mutation entry by ID across all repos."""
         for ptr in self._pointers:
@@ -410,6 +415,7 @@ class FederatedGraph:
             if entry and entry.graph:
                 yield from entry.graph.iter_comments(anchor)
 
+    # Implements: REQ-d00230-B
     def comment_count(self, anchor: str) -> int:
         """Count comment threads for an anchor."""
         from elspais.graph.comment_store import parse_anchor
@@ -422,16 +428,19 @@ class FederatedGraph:
                 return entry.graph.comment_count(anchor)
         return 0
 
+    # Implements: REQ-d00230-B
     def has_comments(self, anchor: str) -> bool:
         """Check if any comment threads exist for an anchor."""
         return self.comment_count(anchor) > 0
 
+    # Implements: REQ-d00230-B
     def iter_orphaned_comments(self) -> Iterator[CommentThread]:
         """Yield orphaned comments aggregated across all repos."""
         for entry in self._repos.values():
             if entry.graph:
                 yield from entry.graph.iter_orphaned_comments()
 
+    # Implements: REQ-d00230-B
     def add_comment_thread(self, node_id: str, thread: CommentThread, source_file: str) -> None:
         """Add a comment thread to the correct repo's in-memory index."""
         repo_name = self._ownership.get(node_id)
@@ -458,6 +467,7 @@ class FederatedGraph:
                     return anchor
         return None
 
+    # Implements: REQ-d00230-B
     def iter_comments_for_card(self, node_id: str) -> Iterator[tuple[str, list[CommentThread]]]:
         """Yield (anchor, threads) for all anchors belonging to a node."""
         repo_name = self._ownership.get(node_id)
@@ -482,6 +492,7 @@ class FederatedGraph:
                 promote_orphaned_comments(idx, entry.graph, entry.repo_root)
                 entry.graph._comment_index = idx
 
+    # Implements: REQ-d00230-B
     def comment_source_file(self, anchor: str) -> str | None:
         """Return the JSONL source file path for an anchor."""
         from elspais.graph.comment_store import parse_anchor
@@ -627,6 +638,7 @@ class FederatedGraph:
             raise KeyError(f"Node '{node_id}' not found in any repo")
         return self._repos[repo_name]
 
+    # Implements: REQ-d00200-G
     def repo_for_node(self, node) -> RepoEntry:
         """Return the RepoEntry holding this node OBJECT.
 
@@ -665,6 +677,7 @@ class FederatedGraph:
         entry = self._repos.get(self._root_repo)
         return entry.config if entry else None
 
+    # Implements: REQ-d00200-G
     def config_for(self, node_id: str) -> dict[str, Any] | None:
         """Return the config dict for the repo owning node_id.
 
@@ -680,6 +693,7 @@ class FederatedGraph:
         """
         yield from self._repos.values()
 
+    # Implements: REQ-d00200-F
     def _live_graphs(self) -> Iterator[tuple[str, TraceGraph]]:
         """Yield (name, graph) for repos with non-None graphs."""
         for entry in self._repos.values():
@@ -889,6 +903,7 @@ class FederatedGraph:
             result.extend(graph.ingestion_faults())
         return result
 
+    # Implements: REQ-d00200-E
     def duplicate_req_ids(self) -> dict[str, list[str]]:
         """Aggregate cross-file duplicate REQ IDs across all repos.
 
@@ -900,6 +915,7 @@ class FederatedGraph:
                 result.setdefault(canonical, []).extend(sources)
         return result
 
+    # Implements: REQ-d00200-E
     def has_duplicate_req_ids(self) -> bool:
         """Check if any repo has cross-file duplicate REQ IDs.
 
@@ -972,6 +988,7 @@ class FederatedGraph:
         """
         return self._federated_log
 
+    # Implements: REQ-d00200-D
     def _graph_for(self, node_id: str) -> TraceGraph:
         """Get the sub-graph owning node_id. Raises KeyError if not found."""
         repo_name = self._ownership.get(node_id)
@@ -982,6 +999,7 @@ class FederatedGraph:
             raise KeyError(f"Repo '{repo_name}' has no graph (error state)")
         return graph
 
+    # Implements: REQ-d00201-B
     def _record_mutation(self, repo_name: str, entry: MutationEntry) -> None:
         """Record a mutation in the federated log."""
         self._federated_log.record(repo_name, entry.id)
@@ -1047,6 +1065,7 @@ class FederatedGraph:
         self._record_mutation(repo_name, result)
         return result
 
+    # Implements: REQ-d00201-A
     def add_changelog_entry(self, node_id: str, changelog_entry: dict[str, str]) -> MutationEntry:
         """Add a changelog entry to a requirement.
 
@@ -1261,6 +1280,7 @@ class FederatedGraph:
     # Journey Mutations
     # ─────────────────────────────────────────────────────────────────────────
 
+    # Implements: REQ-d00201-A
     def update_journey_field(
         self,
         node_id: str,
@@ -1276,6 +1296,7 @@ class FederatedGraph:
         self._record_mutation(repo_name, result)
         return result
 
+    # Implements: REQ-d00201-A
     def update_journey_section(
         self,
         node_id: str,
@@ -1297,6 +1318,7 @@ class FederatedGraph:
         self._record_mutation(repo_name, result)
         return result
 
+    # Implements: REQ-d00201-A
     def add_journey_section(
         self,
         node_id: str,
@@ -1312,6 +1334,7 @@ class FederatedGraph:
         self._record_mutation(repo_name, result)
         return result
 
+    # Implements: REQ-d00201-A
     def delete_journey_section(
         self,
         node_id: str,
@@ -1346,6 +1369,7 @@ class FederatedGraph:
         self._record_mutation(repo_name, result)
         return result
 
+    # Implements: REQ-d00201-A
     def delete_journey(self, node_id: str) -> MutationEntry:
         """Delete a USER_JOURNEY node. Removes from ownership.
 
@@ -1357,6 +1381,7 @@ class FederatedGraph:
         self._record_mutation(repo_name, result)
         return result
 
+    # Implements: REQ-d00201-A
     def reconstruct_journey_body(self, node_id: str) -> MutationEntry:
         """Reconstruct journey body from structured fields.
 
@@ -1367,6 +1392,7 @@ class FederatedGraph:
         self._record_mutation(repo_name, result)
         return result
 
+    # Implements: REQ-d00201-A
     def delete_remainder(self, node_id: str) -> MutationEntry:
         """Delete a non-normative section node.
 
@@ -1377,6 +1403,7 @@ class FederatedGraph:
         self._record_mutation(repo_name, result)
         return result
 
+    # Implements: REQ-d00201-A
     def add_remainder(self, req_id: str, heading: str, text: str) -> MutationEntry:
         """Add a non-normative section to a requirement.
 
@@ -1387,6 +1414,7 @@ class FederatedGraph:
         self._record_mutation(repo_name, result)
         return result
 
+    # Implements: REQ-d00201-A
     def update_remainder(
         self,
         node_id: str,
@@ -1551,6 +1579,7 @@ class FederatedGraph:
         node = target_graph._index.get(target_id)
         return node is not None and not assertion_is_retired(node)
 
+    # Implements: REQ-d00269-B
     @staticmethod
     def _edge_anchor(target_graph: TraceGraph, target_id: str) -> tuple[str, list[str] | None]:
         """Resolve the node a traceability edge attaches to, plus its labels.
@@ -1572,6 +1601,7 @@ class FederatedGraph:
         label = target.get_field("label", "")
         return parent_reqs[0].id, [label] if label else None
 
+    # Implements: REQ-d00269-B
     def _wire_cross_graph_edges(self) -> None:
         """Wire cross-graph edges by resolving broken references across repos.
 
@@ -1974,6 +2004,7 @@ class FederatedGraph:
                 source_entry.graph._unresolved_references.pop(idx)
 
     # Implements: REQ-d00252
+    # Implements: REQ-d00252-D
     def _wire_integrates_edges(self) -> None:
         """Wire top-down ``Integrates:`` refs into reverse INTEGRATES edges.
 
@@ -2289,6 +2320,7 @@ class FederatedGraph:
         return ownership
 
 
+# Implements: REQ-d00253-B
 def is_associate_owned(graph: Any, node: Any) -> bool:
     """Whether *node* is owned by an associate repo rather than the primary.
 

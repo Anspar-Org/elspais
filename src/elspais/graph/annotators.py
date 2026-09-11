@@ -324,6 +324,7 @@ def annotate_graph_git_state(graph: FederatedGraph) -> None:
         annotate_git_state(node, git_info)
 
 
+# Implements: REQ-d00050-C, REQ-d00050-D
 def annotate_implementation_files(
     node: GraphNode,
     implementation_files: list[tuple[str, int]],
@@ -404,6 +405,7 @@ def count_by_level(
     return counts
 
 
+# Implements: REQ-d00051-B
 def count_by_repo(
     graph: FederatedGraph,
     config: dict[str, Any] | None = None,
@@ -449,6 +451,7 @@ def count_by_repo(
     return repo_counts
 
 
+# Implements: REQ-d00051-C
 def count_implementation_files(graph: FederatedGraph) -> int:
     """Count total implementation files across all requirements.
 
@@ -490,6 +493,7 @@ def collect_topics(graph: FederatedGraph) -> list[str]:
     return sorted(all_topics)
 
 
+# Implements: REQ-d00051-E
 def count_by_coverage(
     graph: FederatedGraph,
     config: dict | None = None,
@@ -664,6 +668,7 @@ def _failing_targets(targets: list[str] | None, assertion_labels: list[str]) -> 
     return set(assertion_labels)
 
 
+# Implements: REQ-d00069-B
 def _compute_coverage_from_source(
     req_node,
     assertion_labels: list,
@@ -2013,6 +2018,7 @@ class KeywordsConfig:
     min_length: int = 3
 
 
+# Implements: REQ-d00215-A
 def extract_keywords(
     text: str,
     config: KeywordsConfig | None = None,
@@ -2075,6 +2081,7 @@ def extract_keywords(
     return keywords
 
 
+# Implements: REQ-d00215-B, REQ-d00215-C
 def annotate_keywords(
     graph: FederatedGraph,
     config: KeywordsConfig | None = None,
@@ -2132,6 +2139,7 @@ def annotate_keywords(
         node.set_field("keywords", keywords)
 
 
+# Implements: REQ-d00215-D
 def find_by_keywords(
     graph: FederatedGraph,
     keywords: list[str],
@@ -2176,6 +2184,7 @@ def find_by_keywords(
     return results
 
 
+# Implements: REQ-d00215-E
 def collect_all_keywords(
     graph: FederatedGraph,
     kind: NodeKind | None = None,

@@ -245,6 +245,7 @@ def __getattr__(name: str):  # noqa: N807
 # =============================================================================
 
 
+# Implements: REQ-d00080-B
 def check_spec_files_parseable(
     graph: FederatedGraph, config: dict[str, Any] | None = None
 ) -> HealthCheck:
@@ -838,6 +839,7 @@ def check_structural_orphans(
     )
 
 
+# Implements: REQ-d00252-K
 def _fault_location(
     graph: FederatedGraph, source_id: str, line: int | None
 ) -> tuple[str | None, int | None]:
@@ -1770,6 +1772,7 @@ def check_spec_index_current(
     )
 
 
+# Implements: REQ-d00204-C
 def _annotate_findings(check: HealthCheck, repo_name: str) -> HealthCheck:
     """Annotate all findings in a HealthCheck with the source repo name."""
     for finding in check.findings:
@@ -2367,6 +2370,7 @@ def check_no_cycles(graph: FederatedGraph, config: dict[str, Any] | None = None)
     )
 
 
+# Implements: REQ-d00080-B
 def check_no_requirements(
     graph: FederatedGraph, config: dict[str, Any] | None = None
 ) -> HealthCheck:
@@ -2430,6 +2434,7 @@ def _flatten_settings(value: Any, prefix: str) -> dict[str, Any]:
     return flat
 
 
+# Implements: REQ-d00275-D
 def _governed_settings(config: dict[str, Any] | None) -> dict[str, Any]:
     """The governed settings a config holds, as dotted keys.
 
@@ -3647,6 +3652,7 @@ def _read_run_meta(config: dict | None) -> dict:
     return {"deselected_count": 0, "runner": ""}
 
 
+# Implements: REQ-d00249-E
 def _collect_file_mtimes(
     graph: FederatedGraph,
     file_types: set,
@@ -3920,6 +3926,7 @@ def check_uat_coverage(
     )
 
 
+# Implements: REQ-d00258-F
 def _any_level_expects_validation(cfg: dict[str, Any] | Any) -> bool:
     """Whether any configured level sets ``expects_validation``."""
     from elspais.config import level_expects_validation
@@ -3928,6 +3935,7 @@ def _any_level_expects_validation(cfg: dict[str, Any] | Any) -> bool:
     return isinstance(levels, dict) and any(level_expects_validation(cfg, key) for key in levels)
 
 
+# Implements: REQ-d00258-F
 def _validation_level_filter(cfg: dict[str, Any] | Any) -> Any:
     """A predicate selecting the levels that expect validation."""
     from elspais.config import level_expects_validation
@@ -5867,6 +5875,7 @@ def _render_junit(
     return ET.tostring(testsuites, encoding="unicode", xml_declaration=True)
 
 
+# Implements: REQ-d00285-B, REQ-d00285-C
 def _failure_body(check: HealthCheck) -> str:
     """The body of a failing check: its remedy, its findings, then its details."""
     parts: list[str] = [f"remedy: {check.remedy}"]
@@ -5888,6 +5897,7 @@ def _format_details(details: dict[str, Any]) -> str:
     return "\n".join(parts)
 
 
+# Implements: REQ-d00285-B, REQ-d00285-C
 def _finding_properties(check: HealthCheck, finding: HealthFinding) -> dict[str, Any]:
     """The values a finding carries beyond its message and its location."""
     props: dict[str, Any] = {"remedy": check.remedy}

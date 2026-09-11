@@ -777,6 +777,7 @@ class TraceGraph:
             self._apply_undo(entry)
         return entry
 
+    # Implements: REQ-o00062-G
     def undo_to(self, mutation_id: str) -> list[MutationEntry]:
         """Undo all mutations back to (and including) a specific mutation.
 
@@ -900,6 +901,7 @@ class TraceGraph:
                 self._remove_leftover_ref(source_node, ref_kind, br.target_id)
                 self._add_leftover_ref(source_node, ref_kind, new_target)
 
+    # Implements: REQ-o00062-G
     def _undo_rename_node(self, entry: MutationEntry) -> None:
         """Undo a node rename operation."""
         old_id = entry.before_state.get("id")
@@ -921,6 +923,7 @@ class TraceGraph:
             self._retarget_broken_refs(new_id, old_id)
         self._restore_journey_bodies(entry)
 
+    # Implements: REQ-o00062-G
     def _undo_update_title(self, entry: MutationEntry) -> None:
         """Undo a title update operation."""
         node_id = entry.target_id
@@ -929,6 +932,7 @@ class TraceGraph:
             self._index[node_id].set_label(old_title)
             self._restore_journey_bodies(entry)
 
+    # Implements: REQ-o00062-G
     def _undo_change_status(self, entry: MutationEntry) -> None:
         """Undo a status change operation."""
         node_id = entry.target_id
@@ -936,6 +940,7 @@ class TraceGraph:
         if node_id in self._index and old_status is not None:
             self._index[node_id].set_field("status", old_status)
 
+    # Implements: REQ-o00062-G
     def _undo_set_stereotype(self, entry: MutationEntry) -> None:
         """Undo a set_stereotype operation (node + assertion children)."""
         node = self._index.get(entry.target_id)
@@ -947,6 +952,7 @@ class TraceGraph:
             if child is not None:
                 child.set_field("stereotype", Stereotype(child_old))
 
+    # Implements: REQ-o00062-G
     def _undo_add_requirement(self, entry: MutationEntry) -> None:
         """Undo an add requirement operation (delete the added node)."""
         node_id = entry.target_id
@@ -958,6 +964,7 @@ class TraceGraph:
             for parent in list(node.iter_parents()):
                 parent.unlink(node)
 
+    # Implements: REQ-o00062-P
     @staticmethod
     def _restore_edge_attrs(edge: Any, metadata: dict, targets: list[str]) -> None:
         """Reapply captured metadata and assertion targets to a replayed edge.
@@ -1032,6 +1039,7 @@ class TraceGraph:
         EdgeKind.REFINES: "refines_refs",
     }
 
+    # Implements: REQ-d00132-G
     def _add_leftover_ref(self, node: GraphNode | None, edge_kind: EdgeKind, ref: str) -> None:
         """Record an unresolved reference so it keeps rendering.
 
@@ -1045,6 +1053,7 @@ class TraceGraph:
             stored.append(ref)
             node.set_field(field, stored)
 
+    # Implements: REQ-d00132-G
     def _remove_leftover_ref(self, node: GraphNode | None, edge_kind: EdgeKind, ref: str) -> None:
         """Drop an unresolved reference that has been resolved or undone.
 
@@ -1102,6 +1111,7 @@ class TraceGraph:
             if was_orphan and source_id in self._index:
                 self._orphaned_ids.add(source_id)
 
+    # Implements: REQ-o00062-G
     def _undo_delete_edge(self, entry: MutationEntry) -> None:
         """Undo a delete edge operation (restore the edge)."""
         source_id = entry.before_state.get("source_id")
@@ -1124,6 +1134,7 @@ class TraceGraph:
                 if became_orphan:
                     self._orphaned_ids.discard(source_id)
 
+    # Implements: REQ-o00062-G
     def _undo_change_edge_kind(self, entry: MutationEntry) -> None:
         """Undo an edge kind change."""
         source_id = entry.before_state.get("source_id")
@@ -1140,6 +1151,7 @@ class TraceGraph:
                         break
                 self._restore_journey_bodies(entry)
 
+    # Implements: REQ-o00062-G
     def _undo_change_edge_targets(self, entry: MutationEntry) -> None:
         """Undo an edge assertion_targets change."""
         source_id = entry.before_state.get("source_id")
@@ -1159,6 +1171,7 @@ class TraceGraph:
                         break
                 self._restore_journey_bodies(entry)
 
+    # Implements: REQ-o00062-G
     def _undo_move_node_to_file(self, entry: MutationEntry) -> None:
         """Undo a move_node_to_file operation."""
         node_id = entry.target_id
@@ -1179,6 +1192,7 @@ class TraceGraph:
                 edge = old_file.link(node, EdgeKind.CONTAINS)
                 edge.metadata.update(old_metadata)
 
+    # Implements: REQ-o00062-G
     def _undo_rename_file(self, entry: MutationEntry) -> None:
         """Undo a rename_file operation."""
         old_id = entry.before_state.get("id")
@@ -1239,6 +1253,7 @@ class TraceGraph:
             if was_orphan and source_id in self._index:
                 self._orphaned_ids.add(source_id)
 
+    # Implements: REQ-o00062-G
     def _undo_add_assertion(self, entry: MutationEntry) -> None:
         """Undo an add assertion operation."""
         assertion_id = entry.target_id
@@ -1391,6 +1406,7 @@ class TraceGraph:
                     break
             node.set_field("sections", sections)
 
+    # Implements: REQ-o00062-G
     def _undo_add_journey(self, entry: MutationEntry) -> None:
         """Undo an add journey operation (delete the added node)."""
         node_id = entry.target_id
@@ -1433,6 +1449,7 @@ class TraceGraph:
         if entry.before_state.get("was_root") and not any(r.id == node_id for r in self._roots):
             self._roots.append(node)
 
+    # Implements: REQ-o00062-G
     def _undo_update_remainder(self, entry: MutationEntry) -> None:
         """Undo an update_remainder by restoring original text/heading."""
         node_id = entry.target_id
@@ -1450,6 +1467,7 @@ class TraceGraph:
         if parent_id and parent_id in self._index and "parent_hash" in entry.before_state:
             self._index[parent_id].set_field("hash", entry.before_state["parent_hash"])
 
+    # Implements: REQ-o00062-G
     def _undo_add_remainder(self, entry: MutationEntry) -> None:
         """Undo an add_remainder by removing the created node."""
         node_id = entry.target_id
@@ -1633,6 +1651,7 @@ class TraceGraph:
                     cited.append(journey)
         return cited
 
+    # Implements: REQ-o00062-A
     def update_title(self, node_id: str, new_title: str) -> MutationEntry:
         """Update requirement title. Does not affect hash.
 
@@ -1669,6 +1688,7 @@ class TraceGraph:
         self._mutation_log.append(entry)
         return entry
 
+    # Implements: REQ-o00062-A
     def change_status(self, node_id: str, new_status: str) -> MutationEntry:
         """Change requirement status (e.g., Draft -> Active).
 
@@ -1803,6 +1823,7 @@ class TraceGraph:
         self._mutation_log.append(entry)
         return entry
 
+    # Implements: REQ-o00062-G
     def _undo_add_changelog_entry(self, entry: MutationEntry) -> None:
         """Undo an add_changelog_entry operation."""
         node_id = entry.target_id
@@ -2119,6 +2140,7 @@ class TraceGraph:
         self._mutation_log.append(entry)
         return entry
 
+    # Implements: REQ-o00062-B
     def update_assertion(self, assertion_id: str, new_text: str) -> MutationEntry:
         """Update assertion text.
 
@@ -2929,6 +2951,7 @@ class TraceGraph:
         self._mutation_log.append(entry)
         return entry
 
+    # Implements: REQ-o00062-G
     def _undo_add_file_node(self, entry: MutationEntry) -> None:
         """Undo an add_file_node operation (remove the FILE node)."""
         node_id = entry.target_id
@@ -3176,6 +3199,7 @@ class TraceGraph:
             if node is not None and node.kind == NodeKind.USER_JOURNEY
         }
 
+    # Implements: REQ-o00062-G
     def _restore_journey_bodies(self, entry: MutationEntry) -> None:
         """Restore journey bodies captured by _journey_bodies_snapshot."""
         for node_id, body in (entry.before_state.get("journey_bodies") or {}).items():
@@ -3183,6 +3207,7 @@ class TraceGraph:
             if node is not None:
                 node.set_field("body", body)
 
+    # Implements: REQ-d00131-L
     def _reconcile_journey_bodies(self, *nodes: GraphNode | None) -> None:
         """Refresh the cached body of any USER_JOURNEY among *nodes*.
 
@@ -3846,26 +3871,32 @@ class TraceGraph:
     # Comment Delegates (Implements: REQ-d00230-A)
     # ─────────────────────────────────────────────────────────────────────────
 
+    # Implements: REQ-d00230-A
     def iter_comments(self, anchor: str) -> Iterator[CommentThread]:
         """Yield comment threads for an anchor."""
         return self._comment_index.iter_threads(anchor)
 
+    # Implements: REQ-d00230-A
     def comment_count(self, anchor: str) -> int:
         """Count comment threads for an anchor."""
         return self._comment_index.thread_count(anchor)
 
+    # Implements: REQ-d00230-A
     def has_comments(self, anchor: str) -> bool:
         """Check if any comment threads exist for an anchor."""
         return self._comment_index.has_threads(anchor)
 
+    # Implements: REQ-d00230-A
     def iter_orphaned_comments(self) -> Iterator[CommentThread]:
         """Yield orphaned comment threads."""
         return self._comment_index.iter_orphaned()
 
+    # Implements: REQ-d00230-A
     def add_comment_thread(self, thread: CommentThread, source_file: str) -> None:
         """Add a comment thread to the in-memory index."""
         self._comment_index.add_thread(thread, source_file)
 
+    # Implements: REQ-d00230-A
     def find_comment_thread(self, comment_id: str) -> tuple[str, CommentThread] | None:
         """Find a thread containing a comment by its ID.
 
@@ -3873,6 +3904,7 @@ class TraceGraph:
         """
         return self._comment_index.find_thread(comment_id)
 
+    # Implements: REQ-d00230-A
     def remove_comment_thread(self, comment_id: str) -> str | None:
         """Remove a thread by its root comment ID from the in-memory index.
 
@@ -3880,6 +3912,7 @@ class TraceGraph:
         """
         return self._comment_index.remove_thread(comment_id)
 
+    # Implements: REQ-d00230-A
     def iter_comments_for_card(self, node_id: str) -> Iterator[tuple[str, list[CommentThread]]]:
         """Yield (anchor, threads) pairs for all anchors belonging to a node."""
         for anchor in self._comment_index.iter_all_anchors_for_node(node_id):
@@ -3887,6 +3920,7 @@ class TraceGraph:
             if threads:
                 yield anchor, threads
 
+    # Implements: REQ-d00230-A
     def comment_source_file(self, anchor: str) -> str | None:
         """Return the JSONL source file path for an anchor."""
         return self._comment_index.source_file_for(anchor)
@@ -4944,6 +4978,7 @@ class GraphBuilder:
         self._nodes[remainder_id] = node
         self._pending_terms.append((remainder_id, data))
 
+    # Implements: REQ-d00129-C
     def _add_remainder(self, content: ParsedContent) -> None:
         """Add a remainder/unclaimed content node."""
         data = content.parsed_data
@@ -5399,6 +5434,7 @@ class GraphBuilder:
             for ref_id in node.get_field("refines_refs") or []:
                 self._emit_template_metadata_diagnostic(node_id, ref_id, EdgeKind.REFINES)
 
+    # Implements: REQ-p00014-G
     def _emit_template_metadata_diagnostic(
         self, template_id: str, ref_id: str, edge_kind: EdgeKind
     ) -> None:
