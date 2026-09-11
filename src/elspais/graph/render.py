@@ -1186,9 +1186,8 @@ def _run_consistency_check(
 
     return {"consistent": True, "checked": checked}
 
-    # Implements: REQ-d00134-D
 
-
+# Implements: REQ-d00134-D
 def _wire_new_requirements_to_files(graph: FederatedGraph) -> None:
     """Wire newly added requirements to their parent's FILE node.
 
