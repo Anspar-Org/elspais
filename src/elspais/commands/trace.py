@@ -656,6 +656,7 @@ def _default_values(preset: ReportPreset) -> list[str]:
     return values
 
 
+# Implements: REQ-d00084-B
 def _report_values(preset: ReportPreset, values: Sequence[str] | None) -> list[str]:
     """The values a rendering states: the selection if one was made, else the default."""
     return list(values) if values is not None else _default_values(preset)
@@ -1150,6 +1151,7 @@ def _render_table_from_graph(
     return 0
 
 
+# Implements: REQ-d00282-F
 def _resolve_values_or_report(
     args: argparse.Namespace,
     preset: ReportPreset,

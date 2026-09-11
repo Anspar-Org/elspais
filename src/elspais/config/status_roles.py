@@ -98,6 +98,7 @@ class StatusRolesConfig:
                 result.add(self._original_case.get(name_lower, name_lower.title()))
         return result
 
+    # Implements: REQ-d00211-D
     def sort_by_role(self, statuses: list[str]) -> list[str]:
         """Sort statuses by role order: active, provisional, aspirational, retired.
 

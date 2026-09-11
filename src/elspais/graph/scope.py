@@ -257,6 +257,7 @@ def satisfies(node: Any, resolved: ResolvedScope) -> bool:
     return True
 
 
+# Implements: REQ-d00278-H
 def carried_values(nodes: Iterable[Any]) -> dict[str, set[str]]:
     """The values these requirements carry, per selectable property."""
     seen: dict[str, set[str]] = {prop: set() for prop in SCOPE_PROPERTIES}
@@ -278,6 +279,7 @@ class ScopeResult:
     unadmitted: tuple[UnadmittedName, ...]
     scope: ReportScope
 
+    # Implements: REQ-d00278-L
     @property
     def selected_nothing_from_a_populated_estate(self) -> bool:
         """REQ-d00278-L: an empty answer that is an answer, not an empty estate."""
@@ -288,6 +290,7 @@ def _requirements(graph: Any) -> Iterator[Any]:
     yield from graph.nodes_by_kind(NodeKind.REQUIREMENT)
 
 
+# Implements: REQ-d00278-I
 def _config_for_node(graph: Any, node: Any, fallback: dict[str, Any] | None) -> Any:
     """The configuration of the member that owns this requirement.
 
@@ -390,6 +393,7 @@ def describe_scope(scope: ReportScope | None) -> str:
     return described
 
 
+# Implements: REQ-d00279-C
 def scope_to_params(scope: ReportScope | None) -> dict[str, str]:
     """Serialize a scope for a report computed by a serving process.
 
@@ -411,6 +415,7 @@ def scope_to_params(scope: ReportScope | None) -> dict[str, str]:
     return params
 
 
+# Implements: REQ-d00279-C
 def scope_from_params(params: Mapping[str, str]) -> ReportScope | None:
     """Rebuild a scope a serving process was handed. Inverse of scope_to_params."""
     include: dict[str, tuple[str, ...]] = {}

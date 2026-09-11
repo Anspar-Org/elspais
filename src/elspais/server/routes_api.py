@@ -1366,6 +1366,7 @@ def _version_conflict(state: Any, data: dict, node_id: str, field: str = "if_ver
     return JSONResponse(conflict, status_code=status)
 
 
+# Implements: REQ-o00062-N, REQ-o00062-O
 def _tip_conflict(state: Any, data: dict, field: str = "if_mutation_id"):
     """Return a 409 response if the caller's mutation-log tip is stale."""
     conflict = _guard_mutation_tip(state.graph, data.get(field) or "")
@@ -1374,6 +1375,7 @@ def _tip_conflict(state: Any, data: dict, field: str = "if_mutation_id"):
     return JSONResponse(conflict, status_code=409)
 
 
+# Implements: REQ-o00062-K
 def _with_version(state: Any, result: dict, node_id: str) -> dict:
     """Attach the resulting version, resolving the node after the mutation."""
     node = state.graph.find_by_id(node_id)
@@ -1570,6 +1572,7 @@ async def api_mutate_remainder_add(request: Request) -> JSONResponse:
 
 
 @_serialized_write
+# Implements: REQ-o00062-H, REQ-o00062-O
 async def api_mutate_remainder_delete(request: Request) -> JSONResponse:
     """POST /api/mutate/remainder/delete - Delete a remainder section."""
     state = _st(request)
@@ -2048,6 +2051,7 @@ async def api_mutate_move_to_file(request: Request) -> JSONResponse:
     return JSONResponse(result, status_code=status_code)
 
 
+# Implements: REQ-o00062-O
 def _validate_new_spec_path(relative_path: str, config: dict[str, Any]) -> str | None:
     """Single home: utilities/spec_paths.validate_new_spec_path (REQ-o00062-O)."""
     from elspais.utilities.spec_paths import validate_new_spec_path
@@ -2087,6 +2091,7 @@ async def api_mutate_rename_file(request: Request) -> JSONResponse:
 
 
 @_serialized_write
+# Implements: REQ-o00062-G, REQ-o00062-N, REQ-o00062-O
 async def api_mutate_undo(request: Request) -> JSONResponse:
     """POST /api/mutate/undo - Undo the most recent mutation."""
     state = _st(request)
@@ -2212,6 +2217,7 @@ async def api_shutdown(request: Request) -> JSONResponse:
 # ─────────────────────────────────────────────────────────────────
 
 
+# Implements: REQ-o00062-N
 async def _history_json(request: Request) -> dict:
     """Parse the JSON body of a history route, tolerating an empty body.
 
@@ -2315,6 +2321,7 @@ async def api_reload(request: Request) -> JSONResponse:
 # ─────────────────────────────────────────────────────────────────────────────
 
 
+# Implements: REQ-d00231-D
 def _thread_to_dict(thread: CommentThread) -> dict:
     """Serialize a CommentThread for JSON response."""
     return {
@@ -2347,6 +2354,7 @@ def _thread_to_dict(thread: CommentThread) -> dict:
     }
 
 
+# Implements: REQ-d00231-A, REQ-d00231-B
 def _event_to_response_dict(evt: CommentEvent) -> dict:
     """Serialize a CommentEvent for write-endpoint response."""
     d: dict[str, str] = {
@@ -2363,11 +2371,13 @@ def _event_to_response_dict(evt: CommentEvent) -> dict:
     return d
 
 
+# Implements: REQ-d00231-E
 def _resolve_author(state: Any) -> dict[str, str]:
     """Resolve author identity from config (REQ-d00231-E)."""
     return get_author_info(state.config.get("changelog", {}).get("id_source", "gh"))
 
 
+# Implements: REQ-d00231-A, REQ-d00231-B, REQ-d00231-C
 def _resolve_jsonl_path(state: Any, node_id: str) -> Path | None:
     """Resolve the JSONL file path for a node's comments."""
     graph = state.graph

@@ -220,11 +220,13 @@ def dimension_measures(dim: CoverageDimension) -> dict[str, float]:
     return {m: measure_total(dim, m) for m in MEASURES}
 
 
+# Implements: REQ-d00069-L
 def assertion_measures(dim: CoverageDimension, label: str) -> dict[str, float]:
     """The four measures for ONE *Assertion* of a dimension, as fractions."""
     return {m: measure_by_label(dim, m).get(label, 0.0) for m in MEASURES}
 
 
+# Implements: REQ-d00258-A, REQ-d00258-J
 def measure_phrase(values: dict[str, float], *, as_percent: bool = False) -> str:
     """Render the four measures under their one shared vocabulary.
 
@@ -386,6 +388,7 @@ def work_verdict(
     )
 
 
+# Implements: REQ-d00258-I
 def denominator_labels(rollup: RollupMetrics, dimension: str, *, measure: str) -> set[str] | None:
     """The label set a chained dimension is measured over; None if absolute.
 
@@ -411,6 +414,7 @@ def denominator_labels(rollup: RollupMetrics, dimension: str, *, measure: str) -
     return covered_labels(getattr(rollup, denom_name), measure)
 
 
+# Implements: REQ-d00277-C
 def numerator_dimension(rollup: RollupMetrics, dimension: str) -> CoverageDimension:
     """The dimension whose coverage is measured for ``dimension``.
 
@@ -437,6 +441,7 @@ def authored_dimension(rollup: RollupMetrics, dimension: str) -> CoverageDimensi
     return getattr(rollup, dimension)
 
 
+# Implements: REQ-d00258-I
 def relative_tier_for(
     rollup: RollupMetrics,
     dimension: str,
@@ -537,6 +542,7 @@ class UncreditedEvidence:
     source_ids: tuple[str, ...]
 
 
+# Implements: REQ-d00274-A
 def _evidence_sources_for(
     rollup: RollupMetrics, dimension: str, labels: set[str]
 ) -> tuple[str, ...]:
@@ -857,6 +863,7 @@ def level_group_keys(
     return configured + [undefined[k] for k in sorted(undefined)]
 
 
+# Implements: REQ-d00258-L
 def _counts_for_coverage(config: dict[str, Any] | None, status: str | None) -> bool:
     """Whether a requirement STATUS is INCLUDED in coverage aggregation.
 

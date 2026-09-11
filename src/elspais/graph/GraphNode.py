@@ -263,6 +263,7 @@ class GraphNode:
                     seen.add(edge.target.id)
                     yield edge.target
 
+    # Implements: REQ-d00127-C
     def iter_parents(self, edge_kinds: set[EdgeKind] | None = None) -> Iterator[GraphNode]:
         """Iterate over parent nodes.
 
@@ -437,6 +438,7 @@ class GraphNode:
 
         return True
 
+    # Implements: REQ-d00127-A
     def link(
         self,
         child: GraphNode,
@@ -517,6 +519,7 @@ class GraphNode:
         else:
             raise ValueError(f"Unknown traversal order: {order}")
 
+    # Implements: REQ-d00127-C
     def _walk_preorder(
         self,
         edge_kinds: set[EdgeKind] | None = None,
@@ -537,6 +540,7 @@ class GraphNode:
                 continue
             yield from child._walk_preorder(edge_kinds, child_ancestors)
 
+    # Implements: REQ-d00127-C
     def _walk_postorder(
         self,
         edge_kinds: set[EdgeKind] | None = None,
@@ -551,6 +555,7 @@ class GraphNode:
             yield from child._walk_postorder(edge_kinds, child_ancestors)
         yield self
 
+    # Implements: REQ-d00127-C
     def _walk_level(self, edge_kinds: set[EdgeKind] | None = None) -> Iterator[GraphNode]:
         """Level-order (breadth-first) traversal. Cycle-safe: each queue entry
         carries its root->node path so back-edges are skipped (see

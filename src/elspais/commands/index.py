@@ -197,6 +197,7 @@ def _repo_name_for(graph: FederatedGraph, node_id: str) -> str | None:
         return None
 
 
+# Implements: REQ-d00253-C
 def _indexed_node_ids(
     graph: FederatedGraph, kind: NodeKind, include_associates: bool = False
 ) -> set[str]:
@@ -260,6 +261,7 @@ def _classify_node(node: object, spec_dirs: list[Path]) -> Path | None:
     return None
 
 
+# Implements: REQ-d00217-A
 def _resolve_repo_info(
     graph: FederatedGraph, repo_name: str, fallback_dir: Path | None = None
 ) -> _SpecDirInfo:

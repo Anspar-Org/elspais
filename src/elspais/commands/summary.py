@@ -216,6 +216,7 @@ def _scalar(level_row: dict, key: str) -> float | None:
     return scalar_value(figure, level_row["total_assertions"], spec.part)
 
 
+# Implements: REQ-d00282-E
 def _stated_values(data: dict) -> tuple[str, ...]:
     """The values this rendering states.
 
@@ -228,6 +229,7 @@ def _stated_values(data: dict) -> tuple[str, ...]:
     return tuple(stated) if stated else DEFAULT_VALUES
 
 
+# Implements: REQ-d00282-A
 def _resolve_values_for(args_or_params: Any, config: dict | None) -> tuple[str, ...]:
     from elspais.commands._values import resolve_report_values
 
@@ -240,6 +242,7 @@ def _resolve_values_for(args_or_params: Any, config: dict | None) -> tuple[str, 
     )
 
 
+# Implements: REQ-d00282-E
 def _stamp_values(data: dict, args_or_params: Any, config: dict | None) -> None:
     """Record the stated values on the payload, where a selection named any.
 
@@ -821,6 +824,7 @@ def _project_level(lv: dict, keys: tuple[str, ...]) -> dict:
     return structured_row(keys, lambda key: _scalar(lv, key), plain_value, offers=OFFERED_VALUES)
 
 
+# Implements: REQ-d00282-E
 def _render_json(data: dict) -> str:
     stated = data.get("values")
     if stated:

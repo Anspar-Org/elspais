@@ -148,6 +148,7 @@ class DomainFile:
                 return True
         return False
 
+    # Implements: REQ-d00241-G
     def _ignored(self, path: Path) -> bool:
         """Whether the ignore configuration excludes *path*."""
         if self.ignore_config is None:
@@ -332,6 +333,7 @@ class DomainFile:
                     source_context=ctx,
                 )
 
+    # Implements: REQ-o00072-A
     def dispatch(
         self,
         dispatch_fn: Any,

@@ -713,6 +713,7 @@ def find_unmatched_emphasis(
     return results
 
 
+# Implements: REQ-d00238-A, REQ-d00238-B, REQ-d00238-C
 def scan_graph(
     terms: TermDictionary,
     graph: TraceGraph,
@@ -826,6 +827,7 @@ def scan_graph(
     return unmatched
 
 
+# Implements: REQ-d00238-D
 def _is_excluded(node, excl: list[str]) -> bool:  # noqa: ANN001
     """Check if a node's file matches any exclusion pattern."""
     if not excl:

@@ -635,6 +635,7 @@ class ValueSelection:
         return tuple(VALUE_SPECS[k] for k in self.keys)
 
 
+# Implements: REQ-d00282-A
 def parse_value_selection(raw: str | Sequence[str] | None) -> ValueSelection | None:
     """Read a selection as written, without judging it against any report.
 
@@ -694,6 +695,7 @@ def resolve_values(
     return tuple(chosen)
 
 
+# Implements: REQ-d00258-K
 def header_for(key: str, config: Mapping[str, Any] | None = None) -> str:
     """The words a value is displayed under.
 

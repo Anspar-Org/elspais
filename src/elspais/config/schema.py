@@ -158,6 +158,7 @@ class AssociatedPatternConfig(_StrictModel):
 _PRINTABLE = frozenset(chr(code) for code in range(0x21, 0x7F))
 
 
+# Implements: REQ-d00251-F, REQ-d00251-J
 def _in_set_chars(items) -> set[str]:
     """The printable characters a parsed ``[...]`` set admits."""
     negated = False
@@ -179,6 +180,7 @@ def _in_set_chars(items) -> set[str]:
     return (_PRINTABLE - collected) if negated else collected
 
 
+# Implements: REQ-d00251-F, REQ-d00251-J
 def _category_chars(category: str) -> set[str]:
     digits = set("0123456789")
     word = digits | set("abcdefghijklmnopqrstuvwxyz") | set("ABCDEFGHIJKLMNOPQRSTUVWXYZ") | {"_"}
@@ -197,6 +199,7 @@ def _category_chars(category: str) -> set[str]:
     return set(_PRINTABLE)  # unknown category: assume it admits anything
 
 
+# Implements: REQ-d00251-F, REQ-d00251-J
 def _walk_pattern(parsed, legal: set[str]) -> None:
     for op, av in parsed:
         name = str(op)
@@ -227,6 +230,7 @@ def _walk_pattern(parsed, legal: set[str]) -> None:
         # repeats characters already collected -- none add to the alphabet.
 
 
+# Implements: REQ-d00251-F, REQ-d00251-J
 def _legal_chars(pattern: str) -> set[str]:
     """The printable characters ``pattern`` can match at some position.
 

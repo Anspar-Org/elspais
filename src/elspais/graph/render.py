@@ -139,6 +139,7 @@ def reconstruct_body_text(node: GraphNode) -> str:
     return "\n".join(parts)
 
 
+# Implements: REQ-d00131-J
 def compute_hash_for_node(node: GraphNode, hash_mode: str) -> str | None:
     """Compute the content hash for a requirement node.
 
@@ -715,11 +716,13 @@ def _derive_refs_for_edge_kind(
     return sorted(refs)
 
 
+# Implements: REQ-d00132-F
 def _derive_implements_refs(node: GraphNode, resolver: Any | None = None) -> list[str]:
     """Derive the implements reference list from live graph edges."""
     return _derive_refs_for_edge_kind(node, EdgeKind.IMPLEMENTS, "implements_refs", resolver)
 
 
+# Implements: REQ-d00132-F
 def _derive_refines_refs(node: GraphNode, resolver: Any | None = None) -> list[str]:
     """Derive the refines reference list from live graph edges."""
     return _derive_refs_for_edge_kind(node, EdgeKind.REFINES, "refines_refs", resolver)
@@ -756,6 +759,7 @@ def _find_dirty_files(graph: FederatedGraph) -> list[Any]:
         if node is not None and node.kind == NodeKind.FILE:
             dirty_files[id(node)] = node
 
+    # Implements: REQ-d00132-A
     def _mark_node_file(node_id: str) -> None:
         """Find the FILE ancestor of a node and mark it dirty."""
         node = graph.find_by_id(node_id)
@@ -777,6 +781,7 @@ def _find_dirty_files(graph: FederatedGraph) -> list[Any]:
         (REQ-d00251-L). A string no member claims names nothing here, and
         marking a file on a guess would rewrite the wrong one.
         """
+        # Implements: REQ-d00251-L
         for member in graph.iter_repos():
             member_graph = getattr(member, "graph", None)
             member_resolver = getattr(member_graph, "_resolver", None)
@@ -1180,6 +1185,8 @@ def _run_consistency_check(
         return {"consistent": False, "details": details, "checked": checked}
 
     return {"consistent": True, "checked": checked}
+
+    # Implements: REQ-d00134-D
 
 
 def _wire_new_requirements_to_files(graph: FederatedGraph) -> None:

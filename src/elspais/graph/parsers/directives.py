@@ -204,6 +204,7 @@ def counted_assertion_labels(node: GraphNode, *, structural: bool = False) -> li
     ]
 
 
+# Implements: REQ-p00017-G
 def apply_directive(node: GraphNode, text: str | None) -> str:
     """Record the directive *text* carries on *node* and return its rendering.
 
@@ -222,6 +223,7 @@ def apply_directive(node: GraphNode, text: str | None) -> str:
     return canonical_assertion_text(text)
 
 
+# Implements: REQ-p00017-G
 def directive_fields(text: str | None) -> dict[str, Any]:
     """The node fields recording the directive *text* carries, if any.
 

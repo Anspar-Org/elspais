@@ -689,6 +689,7 @@ def _main_repo_root(git_root: Path) -> Path | None:
     return common.parent
 
 
+# Implements: REQ-o00076-M
 def _hardcoded_address(entry: dict) -> str | None:
     """The fixed address in a client entry, if it has one.
 
@@ -705,6 +706,7 @@ def _hardcoded_address(entry: dict) -> str | None:
     return None
 
 
+# Implements: REQ-o00076-M
 def _registration_sources(
     git_root: Path, claude_config: Path | None
 ) -> tuple[list[tuple[str, dict]], list[str]]:
@@ -910,6 +912,7 @@ def check_daemon_status(git_root: Path | None, config: dict[str, Any] | None = N
     )
 
 
+# Implements: REQ-o00074-P
 def _daemon_pending_count(info: dict) -> int:
     """How many changes the running daemon holds, or 0 if it will not say."""
     import json
@@ -927,6 +930,7 @@ def _daemon_pending_count(info: dict) -> int:
     return count if isinstance(count, int) and count > 0 else 0
 
 
+# Implements: REQ-o00074-P
 def _automatic_save_record(git_root: Path) -> dict | None:
     """A save a daemon performed without being asked, if one stands."""
     import json

@@ -347,6 +347,7 @@ def _run_server(args: argparse.Namespace, open_browser: bool = False) -> int:
     return 0
 
 
+# Implements: REQ-p00006-A
 def _run_static(args: argparse.Namespace) -> int:
     """Generate a static interactive HTML file."""
     from pathlib import Path

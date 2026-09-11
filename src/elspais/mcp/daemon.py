@@ -42,6 +42,7 @@ _retired_override_reported = False
 _UNUSABLE = "unusable"
 
 
+# Implements: REQ-o00074-D
 def _iter_proc_ancestors(pid: int | None = None):
     """Yield (pid, comm) for each ancestor of ``pid`` (exclusive), via /proc.
 
@@ -70,6 +71,7 @@ def _read_comm(pid: int) -> str | None:
         return None
 
 
+# Implements: REQ-o00074-D
 def _session_leader_has_tty(sid: int) -> bool:
     """True if the session leader has a controlling terminal (tty_nr != 0)."""
     try:
@@ -80,6 +82,7 @@ def _session_leader_has_tty(sid: int) -> bool:
         return False
 
 
+# Implements: REQ-o00074-D
 def _declared_client_pid() -> int | str | None:
     """Read the caller's declared client handle.
 
@@ -112,6 +115,7 @@ def _declared_client_pid() -> int | str | None:
     return None
 
 
+# Implements: REQ-o00074-N
 def _report_retired_override_env() -> None:
     """Say once that the retired variable name is not read, and name the one
     that is.
@@ -174,6 +178,7 @@ def resolve_client_pid() -> int | None:
     return None
 
 
+# Implements: REQ-o00076-I
 def compute_config_hash(config_path: Path) -> str:
     """Compute a hash of all config files that affect the graph.
 
@@ -430,6 +435,7 @@ def reserve_port(repo_root: Path, port: int) -> None:
         print(f"warning: could not record this tree's daemon port: {exc}", file=sys.stderr)
 
 
+# Implements: REQ-o00076-D
 def _write_json_atomic(path: Path, payload: dict) -> None:
     """Replace a state record without a reader ever seeing it half-written.
 
@@ -854,6 +860,7 @@ def process_is_daemon(pid: int) -> bool | None:
     return "elspais" in argv and "serve" in argv
 
 
+# Implements: REQ-o00076-C, REQ-o00076-E
 def get_daemon_info(repo_root: Path) -> dict | None:
     """Read the daemon record, drop it if the pid it names is not in use.
 
@@ -1208,6 +1215,7 @@ def notify_serving_difference(difference: ServingDifference, because: str) -> No
     )
 
 
+# Implements: REQ-o00076-I
 def _config_hash_stale(info: dict, repo_root: Path) -> bool:
     """Check if the daemon's config hash is stale.
 
@@ -1468,6 +1476,7 @@ def _proc_is_zombie(pid: int) -> bool:
         return False
 
 
+# Implements: REQ-o00075-B
 def wait_for_daemon_exit(info: dict, timeout: float = 20.0) -> bool:
     """Block until the daemon process is gone. True if it went.
 

@@ -135,6 +135,7 @@ def compute_version_hash(content: str, length: int = 16) -> str:
     return _select_hasher("sha256")(content.encode("utf-8")).hexdigest()[:length]
 
 
+# Implements: REQ-p00004-A
 def verify_hash(
     content: str,
     expected_hash: str,

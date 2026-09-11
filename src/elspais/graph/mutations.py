@@ -86,6 +86,7 @@ class MutationLog:
         """
         self._dirty_observer = observer
 
+    # Implements: REQ-p00083-E
     def _notify_dirty(self, holding: bool) -> None:
         observer = self._dirty_observer
         if observer is not None:
@@ -102,6 +103,7 @@ class MutationLog:
         """
         return self._revision
 
+    # Implements: REQ-p00083-E
     def append(self, entry: MutationEntry) -> None:
         """Append a mutation entry to the log.
 
@@ -155,6 +157,7 @@ class MutationLog:
                 return entry
         return None
 
+    # Implements: REQ-o00062-G
     def entries_since(self, mutation_id: str) -> list[MutationEntry]:
         """Get all entries since (and including) a specific mutation.
 
@@ -174,6 +177,7 @@ class MutationLog:
                 return list(self._entries[i:])
         raise ValueError(f"Mutation {mutation_id} not found in log")
 
+    # Implements: REQ-o00074-L
     def pop(self) -> MutationEntry | None:
         """Remove and return the most recent entry.
 
@@ -190,6 +194,7 @@ class MutationLog:
             self._notify_dirty(False)
         return entry
 
+    # Implements: REQ-o00074-L
     def clear(self) -> None:
         """Clear all entries from the log."""
         was_holding = bool(self._entries)

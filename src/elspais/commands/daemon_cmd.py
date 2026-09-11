@@ -65,6 +65,7 @@ def run_env(args: argparse.Namespace) -> int:
     return 0
 
 
+# Implements: REQ-o00076-G
 def _run_restart(args: argparse.Namespace) -> int:
     from elspais.mcp.daemon import restart_daemon
 

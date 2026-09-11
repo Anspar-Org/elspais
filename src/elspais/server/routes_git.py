@@ -236,6 +236,7 @@ async def api_git_branches(request: Request) -> JSONResponse:
     return JSONResponse(result)
 
 
+# Implements: REQ-p00004-I
 def _checkout_single_repo(repo: Path, branch: str, is_remote: bool) -> dict:
     """Checkout a branch in a single repo.
 
@@ -319,6 +320,7 @@ async def api_git_commits(request: Request) -> JSONResponse:
     return JSONResponse(result)
 
 
+# Implements: REQ-p00004-E
 async def api_git_commit(request: Request) -> JSONResponse:
     """POST /api/git/commit - Commit spec files locally (checkpoint)."""
     from elspais.utilities.git import (

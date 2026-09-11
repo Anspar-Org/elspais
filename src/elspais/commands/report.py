@@ -273,6 +273,7 @@ def _render_section(
         return f"Error: Unknown section '{name}'", 1
 
 
+# Implements: REQ-d00085-D
 def _render_changed(args: argparse.Namespace) -> tuple[str, int]:
     """Render changed section by capturing stdout from changed.run()."""
     from elspais.commands import changed

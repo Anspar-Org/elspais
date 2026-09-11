@@ -170,6 +170,7 @@ class ExecutableWatcher:
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
 
+    # Implements: REQ-o00077-A
     @property
     def baseline(self) -> str:
         """Identity of the program this process is actually running."""
@@ -177,6 +178,7 @@ class ExecutableWatcher:
             self._baseline_value = self._read_hash()
         return self._baseline_value
 
+    # Implements: REQ-o00077-A
     @property
     def settled_difference(self) -> str | None:
         """The differing identity once it has stopped moving, else None.

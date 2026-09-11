@@ -318,6 +318,7 @@ def _count_descendants(
 # ---------------------------------------------------------------------------
 
 
+# Implements: REQ-d00124-E
 def _normalize(values: dict[str, float]) -> dict[str, float]:
     """Normalize values to 0.0-1.0 range."""
     if not values:
@@ -328,6 +329,7 @@ def _normalize(values: dict[str, float]) -> dict[str, float]:
     return {k: v / max_val for k, v in values.items()}
 
 
+# Implements: REQ-d00124-E, REQ-d00124-F, REQ-d00124-G
 def analyze_foundations(
     graph: FederatedGraph,
     include_kinds: set[NodeKind] | None = None,

@@ -50,6 +50,7 @@ def _levels_with_carried(typed, graph) -> list[dict[str, Any]]:
     return catalog
 
 
+# Implements: REQ-d00211-A, REQ-d00211-B, REQ-d00211-C
 def _extract_viewer_config(config: dict[str, Any], federation: Any = None) -> dict[str, Any]:
     """Extract viewer-relevant values from the config dict.
 

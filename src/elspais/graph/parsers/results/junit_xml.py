@@ -55,6 +55,7 @@ def _attr_value(text: str, attr: str) -> str | None:
     return unescape(m.group(1), _XML_ENTITIES) if m else None
 
 
+# Implements: REQ-d00254-F
 def _testcase_line_index(content: str) -> dict[tuple[str, str], int]:
     """Map ``(classname, name)`` to the 1-based line of its ``<testcase``.
 

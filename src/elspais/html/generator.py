@@ -1373,6 +1373,7 @@ class HTMLGenerator:
 
         return result
 
+    # Implements: REQ-p00006-C
     def _get_pygments_css(self) -> str:
         """Generate Pygments CSS theme for syntax highlighting.
 
@@ -1383,6 +1384,7 @@ class HTMLGenerator:
 
         return get_pygments_css()
 
+    # Implements: REQ-p00006-C
     def _get_pygments_css_dark(self) -> str:
         """Generate dark-theme Pygments CSS for syntax highlighting.
 
