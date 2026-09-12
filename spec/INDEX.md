@@ -38,6 +38,7 @@
 | ---------------------- | --------------------------------------- | ---- | -------- |
 | REQ-d00272::REQ-p00019 | Truthful Reporting and Error Discipline |      | 946a0e4c |
 | REQ-d00285::REQ-p00019 | Truthful Reporting and Error Discipline |      | 946a0e4c |
+| REQ-o00078::REQ-p00019 | Truthful Reporting and Error Discipline |      | 946a0e4c |
 | REQ-p00015::REQ-p00019 | Truthful Reporting and Error Discipline |      | 946a0e4c |
 | REQ-p00080::REQ-p00019 | Truthful Reporting and Error Discipline |      | 946a0e4c |
 | REQ-p00081::REQ-p00019 | Truthful Reporting and Error Discipline |      | 946a0e4c |
@@ -46,28 +47,29 @@
 
 ## OPERATIONS
 
-| ID         | Title                               | File                | Hash     |
-| ---------- | ----------------------------------- | ------------------- | -------- |
-| REQ-o00050 | Graph Builder as Single Entry Point | ops-architecture.md | 33e0f3ec |
-| REQ-o00051 | Composable Annotation Design        | ops-architecture.md | 2fabd3d4 |
-| REQ-o00060 | MCP Core Query Tools                | ops-mcp.md          | 3a9ae713 |
-| REQ-o00061 | MCP Workspace Context Tools         | ops-mcp.md          | 3306c687 |
-| REQ-o00062 | MCP Graph Mutation Tools            | ops-mcp.md          | 31e8183f |
-| REQ-o00063 | MCP File Mutation Tools             | ops-mcp.md          | 05c1e9c4 |
-| REQ-o00064 | MCP Test Coverage Analysis Tools    | ops-mcp.md          | a97fc5c4 |
-| REQ-o00065 | Agent-Assisted Link Suggestion      | ops-mcp.md          | 06f8e1ac |
-| REQ-o00066 | CI/CD Pipeline Enforcement          | ops-architecture.md | 133e2f0d |
-| REQ-o00067 | MCP Subtree Extraction Tool         | ops-mcp.md          | ea2ba371 |
-| REQ-o00068 | MCP Cursor Protocol                 | ops-mcp.md          | f876db43 |
-| REQ-o00069 | MCP Minimize Requirement Set Tool   | ops-mcp.md          | 68c20489 |
-| REQ-o00070 | MCP Scoped Search Tool              | ops-mcp.md          | c79f263d |
-| REQ-o00071 | MCP Discover Requirements Tool      | ops-mcp.md          | 128366d2 |
-| REQ-o00072 | Domain Deserialization Layer        | ops-architecture.md | 53789928 |
-| REQ-o00073 | MCP Org-Wide Context                | ops-mcp.md          | 346f3031 |
-| REQ-o00074 | Background Daemon Lifetime          | ops-mcp.md          | fb36047e |
-| REQ-o00075 | Shared Graph Daemon                 | ops-mcp.md          | 2598192d |
-| REQ-o00076 | Reaching the Serving Process        | ops-mcp.md          | 7505310d |
-| REQ-o00077 | Serving From the Installed Program  | ops-mcp.md          | 3488ba9c |
+| ID         | Title                                             | File                | Hash     |
+| ---------- | ------------------------------------------------- | ------------------- | -------- |
+| REQ-o00050 | Graph Builder as Single Entry Point               | ops-architecture.md | 33e0f3ec |
+| REQ-o00051 | Composable Annotation Design                      | ops-architecture.md | 2fabd3d4 |
+| REQ-o00060 | MCP Core Query Tools                              | ops-mcp.md          | 3a9ae713 |
+| REQ-o00061 | MCP Workspace Context Tools                       | ops-mcp.md          | 3306c687 |
+| REQ-o00062 | MCP Graph Mutation Tools                          | ops-mcp.md          | 31e8183f |
+| REQ-o00063 | MCP File Mutation Tools                           | ops-mcp.md          | 05c1e9c4 |
+| REQ-o00064 | MCP Test Coverage Analysis Tools                  | ops-mcp.md          | a97fc5c4 |
+| REQ-o00065 | Agent-Assisted Link Suggestion                    | ops-mcp.md          | 06f8e1ac |
+| REQ-o00066 | CI/CD Pipeline Enforcement                        | ops-architecture.md | 133e2f0d |
+| REQ-o00067 | MCP Subtree Extraction Tool                       | ops-mcp.md          | ea2ba371 |
+| REQ-o00068 | MCP Cursor Protocol                               | ops-mcp.md          | f876db43 |
+| REQ-o00069 | MCP Minimize Requirement Set Tool                 | ops-mcp.md          | 68c20489 |
+| REQ-o00070 | MCP Scoped Search Tool                            | ops-mcp.md          | c79f263d |
+| REQ-o00071 | MCP Discover Requirements Tool                    | ops-mcp.md          | 128366d2 |
+| REQ-o00072 | Domain Deserialization Layer                      | ops-architecture.md | 53789928 |
+| REQ-o00073 | MCP Org-Wide Context                              | ops-mcp.md          | 346f3031 |
+| REQ-o00074 | Background Daemon Lifetime                        | ops-mcp.md          | fb36047e |
+| REQ-o00075 | Shared Graph Daemon                               | ops-mcp.md          | 2598192d |
+| REQ-o00076 | Reaching the Serving Process                      | ops-mcp.md          | 7505310d |
+| REQ-o00077 | Serving From the Installed Program                | ops-mcp.md          | 3488ba9c |
+| REQ-o00078 | Release Completeness Across Distribution Channels | ops-architecture.md | 3f2d4577 |
 
 ## DEVELOPMENT
 
