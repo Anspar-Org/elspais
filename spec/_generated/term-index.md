@@ -68,7 +68,7 @@
 - REQ-d00241-E
 - REQ-d00241-F
 - REQ-p00005-B
-- rem:REQ:spec/AI-AGENT.md:20
+- rem:REQ:spec/AI-AGENT.md:19
 - REQ-d00084:section:0
 - REQ-d00084:section:1
 - REQ-d00069:section:1

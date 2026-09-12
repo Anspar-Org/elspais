@@ -203,7 +203,12 @@ class TestDiamondConvergence:
 
     # Verifies: REQ-d00202-F
     def test_REQ_d00202_F_shared_associate_appears_once(self, tmp_path):
-        """A declares B and C; both declare D. D resolves to exactly one entry."""
+        """A declares B and C; both declare D. D resolves to exactly one entry.
+
+        The two declarations of D name one namespace at one directory, which
+        is what makes the second arrival convergence rather than the collision
+        REQ-d00202-K reports.
+        """
         shared = make_repo(tmp_path, "shared")
         make_repo(tmp_path, "left", associates={"shared": "../shared"})
         make_repo(tmp_path, "right", associates={"shared": "../shared"})
@@ -222,11 +227,25 @@ class TestDiamondConvergence:
 
 
 class TestRepositoryIdentity:
-    """Validates REQ-d00202-G."""
+    """Validates REQ-d00202-G, REQ-d00202-K.
+
+    A member is identified by the namespace its declaration names.  Nothing
+    on disk decides it: not the directory, not the declared name, and not
+    the repository the directory is a checkout of.  Two directories that
+    name different namespaces are therefore two members however closely
+    related they are, and two that name one namespace are a collision to
+    report rather than one member to guess at.
+    """
 
     # Verifies: REQ-d00202-G
-    def test_REQ_d00202_G_shared_git_origin_is_one_repo(self, tmp_path):
-        """Two distinct directories carrying the same origin URL are one entry."""
+    def test_REQ_d00202_G_shared_git_origin_is_two_members(self, tmp_path):
+        """Two directories sharing one origin, naming two namespaces, are two members.
+
+        The origin is still detected and recorded on every planned entry --
+        reporting surfaces publish it -- but it decides nothing about
+        identity: these entries are distinct because their declarations name
+        distinct namespaces, and they would be distinct with no origin at all.
+        """
         origin = "https://example.com/shared-lib.git"
         copy_a = make_repo(tmp_path, "libA", origin=origin)
         copy_b = make_repo(tmp_path, "libB", origin=origin)
@@ -239,15 +258,57 @@ class TestRepositoryIdentity:
         planned = _plan(root)
 
         assert copy_a.resolve() != copy_b.resolve()
-        assert [e.name for e in planned] == ["consumer", "libA"]
-        # The identity is derived from the origin (the planner may normalize the
-        # URL form); what matters is that the origin was detected at all.
-        assert planned[1].git_origin is not None
-        assert "example.com/shared-lib" in planned[1].git_origin
+        assert [e.name for e in planned] == ["consumer", "libA", "libB"]
+        # Carried as data on both entries (the planner may normalize the URL
+        # form); what matters is that one shared origin cost neither member
+        # its place in the federation.
+        for entry in planned[1:]:
+            assert entry.git_origin is not None
+            assert "example.com/shared-lib" in entry.git_origin
+
+    # Verifies: REQ-d00202-G, REQ-d00202-K
+    def test_REQ_d00202_G_one_namespace_at_two_directories_conflicts(self, tmp_path):
+        """Two directories declared under one namespace are a collision.
+
+        This is the case the origin-based identity rule could not reach at
+        all: two unrelated directories, no shared origin, each declaring
+        'SHARED'.  Identity is the namespace, so the second claim is
+        reported -- naming both directories and the declaration that reached
+        each -- rather than silently dropped.
+        """
+        from elspais.graph.federation_plan import NamespaceConflict
+
+        first = make_repo(tmp_path, "alpha", namespace="SHARED")
+        second = make_repo(tmp_path, "beta", namespace="SHARED")
+        root = make_repo(
+            tmp_path,
+            "top",
+            associates={"alpha": "../alpha", "beta": "../beta"},
+            associate_namespaces={"alpha": "SHARED", "beta": "SHARED"},
+        )
+
+        with pytest.raises(NamespaceConflict) as excinfo:
+            _plan(root)
+
+        message = str(excinfo.value)
+        assert "SHARED" in message, message
+        # Both directories, or the shadowed one would be invisible...
+        assert str(first.resolve()) in message, message
+        assert str(second.resolve()) in message, message
+        # ...and the declaration chain that reached each, which is the only
+        # thing telling the two claims apart.  The separator glyph is not
+        # pinned; the ordering is.
+        assert re.search(r"top\W+alpha", message), message
+        assert re.search(r"top\W+beta", message), message
 
     # Verifies: REQ-d00202-G
-    def test_REQ_d00202_G_originless_repos_stay_distinct(self, tmp_path):
-        """Without an origin, identity falls back to the resolved real path."""
+    def test_REQ_d00202_G_repos_are_distinguished_without_any_origin(self, tmp_path):
+        """Two originless directories are two members because they name two namespaces.
+
+        Nothing here has an origin to be compared, so the separation cannot
+        be credited to one: the declarations name PLAINA and PLAINB, and
+        that alone is what makes two entries.
+        """
         make_repo(tmp_path, "plainA")
         make_repo(tmp_path, "plainB")
         root = make_repo(
@@ -259,6 +320,7 @@ class TestRepositoryIdentity:
         planned = _plan(root)
 
         assert [e.name for e in planned] == ["host", "plainA", "plainB"]
+        # Pins the premise: no origin was available to tell these apart.
         assert all(entry.git_origin is None for entry in planned)
 
 
@@ -651,13 +713,15 @@ class TestNamespaceCollision:
         assert len([e for e in planned if e.repo_root == shared.resolve()]) == 1
 
     # Verifies: REQ-d00202-K
-    def test_REQ_d00202_K_unloadable_repos_are_not_namespace_claimants(self, tmp_path):
-        """A repo that failed to load declares nothing, so two cannot collide.
+    def test_REQ_d00202_K_unloadable_repos_keep_their_declared_namespaces(self, tmp_path):
+        """Two unreachable paths declared under two namespaces are two error entries.
 
-        Their configs are None, so both would present the same empty
-        namespace; treating that as a claim would turn every pair of broken
-        associate paths into a spurious collision and hide the real reason
-        each one failed.
+        A namespace is claimed by the DECLARATION, not by the config at the
+        path, so a repository that could not be loaded still occupies the
+        namespace its declaration named.  Two such declarations therefore
+        collide exactly when they name one namespace and stay apart when they
+        do not -- the failure to load neither creates a collision nor excuses
+        one, and each path keeps the real reason it failed.
         """
         root = make_repo(
             tmp_path,

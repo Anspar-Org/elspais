@@ -813,6 +813,9 @@ class AssociateArgs:
     unlink: str | None = None
     """Remove a linked associate (matches name, path, or prefix code)."""
 
+    force: Annotated[bool, tyro.conf.arg(aliases=["-f"])] = False
+    """Replace the path recorded for an associate that is already registered."""
+
 
 # ---------------------------------------------------------------------------
 # PDF command

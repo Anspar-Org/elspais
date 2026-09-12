@@ -93,9 +93,9 @@ D. When an associate declares its own `[associates]` section, those declarations
 
 E. When directed dependency declarations form a cycle, the build SHALL report a configuration error naming the declaration path that forms the cycle.
 
-F. When the same repository is reachable through more than one dependency chain (a diamond), the federation SHALL resolve it to a single entry and SHALL NOT report a cycle.
+F. When one member is reachable through more than one dependency chain (a diamond), the federation SHALL resolve it to a single entry and SHALL NOT report a cycle.
 
-G. The federation SHALL identify a repository across discovery paths by its git origin, not by its filesystem path or declared name.
+G. The federation SHALL identify a member by the namespace its declaration names, not by its filesystem path, its declared name, or the repository the directory is a checkout of. One authority SHALL answer this question for every surface that asks it, whether a federation is being built or a declaration recorded.
 
 H. When two federated repositories both claim the same requirement ID, the build SHALL fail with an error naming the ID and both repositories.
 
@@ -103,22 +103,23 @@ I. When scanning directories for candidate associates, a directory whose elspais
 
 J. When two distinct repositories would enter one federation under the same declared name, the build SHALL fail with an error naming both repository paths and the declaration chain that reached each.
 
-K. When two distinct repositories would enter one federation declaring the same namespace, the build SHALL fail with an error naming both repository paths and the declaration chain that reached each.
+K. When two declarations of one federation name one namespace at different directories, the build SHALL fail with an error naming both directories and the declaration chain that reached each.
 
 L. When the repository at an associate's declared path declares a namespace other than the one the declaration names, the build SHALL fail with an error naming the path, the namespace the declaration named, and the namespace found.
 
 ### Rationale
 
-Associates are declared in `.elspais.toml` using a structured TOML section. Each associate specifies a relative filesystem path, a namespace, and an optional git remote URL. Transitive resolution (assertion D) is what lets the tool work from any repository in a dependency chain rather than from the root alone, and it is what allows an org-policy repository reachable only through a chain to be federated at all. Directed cycles are a genuine error because dependency direction drives resolution order; diamonds are convergence, not cycles, and the git-origin identity rule (assertion G) is what makes the two distinguishable. Disjoint ID spaces (assertion H) are a precondition of federation rather than a preference: a reference resolves to a repository by asking which one claims the identifier, so two claimants make the answer arbitrary.
+Associates are declared in `.elspais.toml` using a structured TOML section. Each associate specifies a relative filesystem path, a namespace, and an optional git remote URL. Transitive resolution (assertion D) is what lets the tool work from any repository in a dependency chain rather than from the root alone, and it is what allows an org-policy repository reachable only through a chain to be federated at all. Directed cycles are a genuine error because dependency direction drives resolution order; diamonds are convergence, not cycles, and the identity rule (assertion G) is what makes the two distinguishable: one namespace reached twice at one directory is convergence, and reached at two directories is the collision K reports. Disjoint ID spaces (assertion H) are a precondition of federation rather than a preference: a reference resolves to a repository by asking which one claims the identifier, so two claimants make the answer arbitrary.
 
 A repository declares everything it directly needs in order to resolve on its own, without regard to what its associates happen to declare. Redundancy between those declarations is therefore expected rather than exceptional, and assertion F is what makes it harmless: a repository reached both directly and through a chain resolves to one entry, so declaring it twice is idempotent. Pruning a declaration because some other repository already reaches it would couple the two configurations and break the pruned repository's own invocations.
 
 Name uniqueness (assertion J) becomes an obligation only once declarations from several repositories are combined. A single declaration table cannot collide with itself, so under root-only resolution uniqueness was guaranteed by TOML's own syntax. A federation keys repositories by name, so two repositories arriving under one name would leave only the later of them reachable — the earlier repository's requirements would resolve against the wrong configuration and its graph would never be read at all. Failing is the honest outcome because the alternative is a silent partial federation.
 
-A namespace answers whose identifiers these are, so a federation in which two repositories claim one namespace can answer nothing — the same argument disjoint requirement IDs rest on under H. A repository owns its own namespace; an associate declaration does not name a second one but states the namespace the declaring repository expects at that path, so a mismatch means the declaration points somewhere its author did not intend. Both are declaration-time failures, reported before any graph is built, because a federation assembled on an ambiguous or mistaken namespace produces wrong answers rather than missing ones.
+A namespace answers whose identifiers these are, so a federation in which two directories claim one namespace can answer nothing — the same argument disjoint requirement IDs rest on under H. That is also why the namespace is the identity (G): it is the one thing a member cannot share, it is declared rather than discovered, and L binds it to what the repository at that path says of itself, so it cannot be claimed by mistake. A repository reached at two directories under one namespace is therefore a collision to report rather than a convergence to guess at, while two directories that declare different namespaces are two members however closely related they are — their identifiers cannot be confused, so nothing about holding both is ambiguous. Identity that read the git origin instead answered a question nobody asked: it converged two directories a federation had every reason to hold apart, and it silently dropped the second. A repository owns its own namespace; an associate declaration does not name a second one but states the namespace the declaring repository expects at that path, so a mismatch means the declaration points somewhere its author did not intend. Both are declaration-time failures, reported before any graph is built, because a federation assembled on an ambiguous or mistaken namespace produces wrong answers rather than missing ones.
 
 ### Changelog
 
+- 2026-09-11 | e7e61b6a | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-10 | 0522f86c | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-10 | b599e6ec | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: require a namespace to be unique across a federation (K) and to match the repository the declaration points at (L)
 - 2026-08-08 | b599e6ec | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -131,7 +132,7 @@ A namespace answers whose identifiers these are, so a federation in which two re
 - 2026-05-11 | 479dcbb8 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 479dcbb8 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Associates Config Loading* | **Hash**: 0522f86c
+*End* *Associates Config Loading* | **Hash**: e7e61b6a
 ---
 
 ## REQ-d00203: Multi-Repo Build Pipeline

@@ -120,7 +120,7 @@
 | REQ-d00134 | Mutation Round-Trip Fidelity                                  | dev-graph-file-nodes.md | 19cb065b |
 | REQ-d00200 | FederatedGraph Read-Only Delegation                           | dev-graph-federation.md | ed077a7c |
 | REQ-d00201 | FederatedGraph Mutation Delegation                            | dev-graph-federation.md | c51794b3 |
-| REQ-d00202 | Associates Config Loading                                     | dev-graph-federation.md | 0522f86c |
+| REQ-d00202 | Associates Config Loading                                     | dev-graph-federation.md | e7e61b6a |
 | REQ-d00203 | Multi-Repo Build Pipeline                                     | dev-graph-federation.md | 957568b6 |
 | REQ-d00204 | Per-Repo Health Check Delegation                              | dev-graph-federation.md | 15c6ff55 |
 | REQ-d00205 | MCP Federation Support                                        | dev-mcp-tools.md        | 42c7a840 |
@@ -206,6 +206,7 @@
 | REQ-d00286 | Built-In User Documentation                                   | dev-cli.md              | d246f21a |
 | REQ-d00287 | Reading a Reference                                           | dev-graph-core.md       | 02eb02ff |
 | REQ-d00288 | Journeys That Validate Nothing                                | dev-graph-core.md       | 184a67af |
+| REQ-d00289 | Associate Registration Outcome                                | dev-cli.md              | 0d4c2b04 |
 
 ## User Journeys
 

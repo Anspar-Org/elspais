@@ -6,6 +6,30 @@ All notable changes to elspais will be documented in this file.
 
 ### Changed
 
+- **Breaking: a federation member is identified by its namespace, not by its git origin (REQ-d00202-G+K)** — the planner keyed identity on the git origin of the directory a declaration pointed at, which answered a question nobody asked. Two directories holding one repository converged whatever they declared, so a copy that renamed its namespace was recorded, resolved to the original, and contributed nothing to the federation — silently. Two directories claiming ONE namespace converged the same way, so the collision REQ-d00202-K exists to report could not be reached at all.
+
+  A member is now the namespace its declaration names. One namespace reached again at the same directory is a diamond and converges as before; reached again at a different directory it is a `NamespaceConflict` naming both directories and the declaration chain that reached each; reached again up the current chain it is still a cycle. Two directories declaring different namespaces are two members, however closely related the directories are — their identifiers cannot be confused, so a fork or a derived copy that renames its namespace now federates alongside the original instead of vanishing into it.
+
+  Git origin is still recorded on `PlannedRepo` and `RepoEntry`, and the viewer still reports it; it simply decides nothing. The planner no longer probes git while walking, which was its dominant cost.
+
+  A project whose configuration pointed two declarations at one namespace was building a federation missing one of them; it now fails to build until one declaration is corrected or removed.
+
+- **`elspais associate` and the graph builder decide membership the same way (REQ-d00289-E+H)** — registration asks `plan_federation()` the question a build would ask, rather than carrying rules of its own, so a declaration is recorded exactly when a build would admit it. A namespace collision the planner reports becomes the refusal the operator reads, carrying `-f` where the rival is an entry of this configuration and naming it without the offer where it was declared by another member — that one is not this configuration's to change.
+
+- **Breaking: registering an associate reports the configuration, and an entry already recorded is refused (REQ-d00289)** — `elspais associate <path>` keys a registration by the name the target repository declares for itself. Pointing it at a different directory that declares a recorded name used to leave the recorded path untouched and report the directory it was given as linked; a copy registered that way meant every later run read the original while the operator believed it read the copy.
+
+  Every run now states the entry and the path the configuration holds when the command returns, never the path typed at it, and a run that recorded nothing says so (`No change: callisto (CAL) stays registered at ...`) distinguishably from one that recorded something.
+
+  A registration naming an entry already recorded at another path is refused, nothing is written, and the message names the entry, the recorded path, `-f` as the way to replace it, and `--list` as the way to inspect what is there. `-f`/`--force` repoints the entry and reports both paths. A refusal exits non-zero, so a compile script that registers as a build step fails rather than continuing against a repository it did not intend.
+
+  What a federation build would refuse a member for is now refused at registration: a declaration missing a path or a namespace, a namespace other than the one the repository at that path declares, and a namespace another member already claims (REQ-d00202-B/K/L). The associate documentation no longer tells you to resolve a namespace collision by hand before linking.
+
+  All of this holds for `--all` auto-discovery too. A refused candidate is reported and the scan carries on, the summary line counts linked, unchanged and refused, and the run exits non-zero if any candidate was refused. Two candidates of one scan that stand for one entry -- one name, or one namespace -- are refused rather than resolved by sort order (REQ-d00289-G): `-f` was given about neither of them.
+
+  A namespace already registered at another directory is refused whatever the two entries are called (REQ-d00289-H). One namespace names one member, so a second directory claiming it is a second answer where one is admitted -- the ticket's copy-at-a-new-path arriving under a second name instead of a second path. `-f` leaves one entry, recorded at the directory named, and the report says which entry it replaced. A copy that declares its own namespace registers normally: its identifiers cannot be confused with the original's.
+
+  A registration put to a configuration that would not federate before it is refused too, reported as a fault the configuration already held and naming the entries actually at fault (REQ-d00289-I), so an operator is not sent looking at the candidate they just named.
+
 - **Breaking: an MCP registration names `ELSPAIS_MCP_URL` rather than a port (REQ-o00076-L)** — `elspais mcp install` no longer writes an address into a client's configuration. A registration is read wherever the client is launched, and every working tree of a repository reads the same one, so an address settled while installing was one tree's answer offered to all of them: they reached that tree's daemon, or nothing once it stopped reserving the address.
 
   **To upgrade:** run `elspais mcp install` once per registration, then `eval "$(elspais mcp env)"` in each shell before launching a client. Put it in whatever launches yours -- a shell wrapper, or a `direnv` `.envrc` -- and it is arranged once. An existing literal registration keeps working until re-installed; nothing is rewritten for you.
