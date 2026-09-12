@@ -571,7 +571,7 @@ B. The annotator SHALL compute a separate `lcov_tested` dimension by measuring t
 
 C. The configuration surface SHALL express test result and coverage ingestion via `[[scanning.test.targets]]` entries, each declaring how a target's results and coverage are produced (`command`, `groups`) and ingested (`reporter`, `results`, `coverage`, `match`, `classname`, `credit_coverage`, `min_coverage_fraction`). User documentation SHALL include a `test-targets` topic describing the target model, the available reporters, and a worked Flutter recipe.
 
-D. A run of citations with no executable line between them SHALL attribute the lines of the function it is written above, or else the executable lines following it up to the next citation, the end of its enclosing function, or the end of the file, whichever comes first.
+D. A run of citations with no executable line between them SHALL attribute the lines of the function it is written above, or else the executable lines following it up to the next citation, the end of its enclosing function or -- where no function encloses it -- the start of the next function declaration (its first decorator line, where it has decorators), or the end of the file, whichever comes first.
 
 E. A reporter registry SHALL map each `reporter` format name to a parser and an input channel (`stdout` or `file`). The registry SHALL include a native `flutter test --machine` reporter that parses the machine JSON event stream into result records carrying each test's real source-file path (from the suite path), pass/fail/skip status, and line -- without an external JUnit converter.
 
@@ -619,6 +619,8 @@ Q is the half that bites. Evidence read in part yields a figure whose basis is n
 
 ### Changelog
 
+- 2026-09-12 | 2de47895 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-09-11 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-82: a citation no function encloses stops at the next function declaration, its first decorator line where decorated (D)
 - 2026-09-06 | 4ec40251 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-09-06 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-80: one rule for what a citation attributes, bounded by the run, the next citation and the enclosing function (D)
 - 2026-09-04 | 4374955e | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -648,7 +650,7 @@ Q is the half that bites. Evidence read in part yields a figure whose basis is n
 - 2026-06-20 | 98120740 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-06-20 | 00000000 | - | Michael Lewis (<michael@anspar.org>) | CUR-1533: initial
 
-*End* *Test Evidence: Attribution, Ingestion, and Coverage Crediting* | **Hash**: 4ec40251
+*End* *Test Evidence: Attribution, Ingestion, and Coverage Crediting* | **Hash**: 2de47895
 
 ---
 

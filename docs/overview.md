@@ -71,7 +71,7 @@ def test_password_hashing():
 Code references implementations:
 
 ```python
-# Implements: REQ-d00001
+# Implements: REQ-d00001-A
 def hash_password(plain: str) -> str:
     ...
 ```

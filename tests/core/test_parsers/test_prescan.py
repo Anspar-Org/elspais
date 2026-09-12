@@ -24,6 +24,7 @@ import pytest
 from elspais.graph.parsers.prescan import (
     ast_prescan,
     build_line_context,
+    declaration_starts,
     detect_language,
     external_prescan,
     text_prescan,
@@ -701,3 +702,687 @@ def test_REQ_d00254_D_a_citation_above_a_class_binds_to_nothing_beyond_its_first
     # assertion above is about the member met and not about an empty file.
     later = _later_line(source)
     assert context[later][0] == "later"
+
+
+# ---------------------------------------------------------------------------
+# Nested declarations: the narrower answer wins
+#
+# REQ-d00254-D attributes a citation the lines of "the function it is written
+# above", and a citation inside a function may be written above a function
+# too.  A nested declaration BEGINS below the citation, so the citation is
+# written above it, and its extent is the narrower of the two answers.
+#
+# Binding to the enclosing function instead attributes to the cited
+# requirement every nested declaration of its neighbour: the citation falls to
+# D's second branch, where nothing nearer than the enclosing function's end
+# bounds it, and the sibling defined below the cited one is credited to a
+# requirement it implements no part of.
+#
+# The walk is what decides, so real code between the citation and the nested
+# declaration ends it: such a citation speaks for the body it stands in,
+# bounded by the function that holds it.  That is the line between reading the
+# author's placement and over-reaching past it.
+# ---------------------------------------------------------------------------
+
+
+NESTED_DEF = """\
+def outer():
+    value = 1
+
+    # Implements: REQ-p00001-A
+    def inner():
+        return value
+
+    def sibling():
+        return 2
+
+    return inner
+
+
+def later():
+    return 3
+"""
+
+NESTED_DECORATED_DEF = """\
+def outer():
+    value = 1
+
+    # Implements: REQ-p00001-A
+    @functools.cache
+    def inner():
+        return value
+
+    def sibling():
+        return 2
+
+    return inner
+
+
+def later():
+    return 3
+"""
+
+# The same file with the citation moved above work of its own.  The nested
+# declaration is still below it, but no longer directly below it.
+CODE_THEN_NESTED_DEF = """\
+def outer():
+    # Implements: REQ-p00001-A
+    value = 1
+
+    def inner():
+        return value
+
+    return inner
+
+
+def later():
+    return 3
+"""
+
+# Two citations inside one function, each above work of its own.  Neither is
+# written above a declaration, so both keep the function that encloses them.
+TWO_CITATIONS_IN_ONE_FUNCTION = """\
+def handler():
+    # Implements: REQ-p00001-A
+    first = 1
+    # Implements: REQ-p00001-B
+    second = 2
+    return first + second
+
+
+def later():
+    return 3
+"""
+
+
+def _sibling_line(source: str) -> int:
+    """Line of the ``def sibling()`` declared beside the cited nested function.
+
+    The sibling is what makes the extent assertion a claim: an answer that
+    reached it would credit the cited requirement with a function declared
+    next to the one the author wrote about.
+    """
+    for ln, text in _numbered(source):
+        if text.strip().startswith("def sibling("):
+            return ln
+    raise AssertionError("source must declare a 'def sibling()' beside the cited function")
+
+
+# Verifies: REQ-d00254-D
+@pytest.mark.parametrize("language", CODE_ROUTES)
+@pytest.mark.parametrize(
+    ("source", "citation_line", "func_line", "last_body_line"),
+    [
+        pytest.param(NESTED_DEF, 4, 5, 6, id="nested-def"),
+        pytest.param(NESTED_DECORATED_DEF, 4, 6, 7, id="nested-decorated-def"),
+    ],
+)
+def test_REQ_d00254_D_a_citation_above_a_nested_declaration_binds_to_that_declaration(
+    language, source, citation_line, func_line, last_body_line
+):
+    """A citation directly above a nested ``def`` binds to the nested function.
+
+    ``outer`` encloses the citation and ``inner`` begins below it, so both
+    could answer; D names the one the citation is written above.  The extent is
+    asserted with it, because an identity without a range attributes nothing
+    and a range reaching ``sibling`` attributes a function the citation says
+    nothing about.
+
+    In the decorated case the binding still lands on ``inner`` -- the decorator
+    is passed over, exactly as it is above a top-level function
+    (``decorated-def``) -- and the extent begins at the ``def``, which is where
+    the declaration's own line range begins.  Where the DECLARATION begins,
+    decorator included, is a separate question, answered by
+    ``declaration_starts`` below.
+    """
+    lang, exact_end = language
+    context = build_line_context(_numbered(source), lang)
+    name, cls, start, end = context[citation_line]
+
+    assert (name, cls, start) == ("inner", None, func_line), (
+        f"the citation is written above 'inner', got {(name, cls, start)}"
+    )
+    if exact_end:
+        assert end == last_body_line, (
+            f"the AST knows inner ends at line {last_body_line}, got {end}"
+        )
+    else:
+        assert end >= last_body_line, (
+            f"extent must reach the end of inner's body (line {last_body_line}), got {end}"
+        )
+    assert end < _sibling_line(source), (
+        f"extent must stop before the sibling declared at line {_sibling_line(source)}, got {end}"
+    )
+
+
+# Verifies: REQ-d00254-D
+@pytest.mark.parametrize("language", CODE_ROUTES)
+def test_REQ_d00254_D_work_between_a_citation_and_a_nested_declaration_keeps_the_enclosing_one(
+    language,
+):
+    """Real code below the citation ends the walk, so ``outer`` still answers.
+
+    This is the bound on the case above: a citation is written above a nested
+    declaration only when nothing that does work separates them.  ``value = 1``
+    does, so the citation speaks for the body it stands in and ``inner`` --
+    declared further down and never written about -- does not become the
+    answer.
+
+    Only the AST route is held to an equality on the end: indent tracking hands
+    the context over to ``inner`` when its ``def`` is reached and reports a
+    shorter end for ``outer``, which is the sentinel behaviour the file already
+    records elsewhere.  The identity, and the absence of any spill past
+    ``outer``, are asserted on both routes.
+    """
+    lang, exact_end = language
+    context = build_line_context(_numbered(CODE_THEN_NESTED_DEF), lang)
+    name, cls, start, end = context[2]
+
+    assert (name, cls, start) == ("outer", None, 1), (
+        f"the citation must stay with the function that holds it, got {(name, cls, start)}"
+    )
+    if exact_end:
+        assert end == 8, f"the AST knows outer ends at line 8, got {end}"
+    assert end < _later_line(CODE_THEN_NESTED_DEF), (
+        "extent must stop before the unrelated function at line "
+        f"{_later_line(CODE_THEN_NESTED_DEF)}, got {end}"
+    )
+
+
+# Verifies: REQ-d00254-D
+@pytest.mark.parametrize("language", CODE_ROUTES)
+@pytest.mark.parametrize(
+    "citation_line",
+    [pytest.param(2, id="first-citation"), pytest.param(4, id="second-citation")],
+)
+def test_REQ_d00254_D_two_citations_dividing_one_function_both_keep_it(language, citation_line):
+    """Two citations inside one function are both bound to that function.
+
+    Regression guard: offering every comment line to the downward walk must
+    not move a citation that divides a body.  Each of these has work directly
+    below it, so neither binds to a declaration, and the function that holds
+    them bounds both -- which is what lets the extent rules give each one a
+    different piece of the same body.
+    """
+    lang, exact_end = language
+    context = build_line_context(_numbered(TWO_CITATIONS_IN_ONE_FUNCTION), lang)
+    name, cls, start, end = context[citation_line]
+
+    assert (name, cls, start) == ("handler", None, 1), (
+        f"citation on line {citation_line} must stay with handler, got {(name, cls, start)}"
+    )
+    if exact_end:
+        assert end == 6, f"the AST knows handler ends at line 6, got {end}"
+    assert end < _later_line(TWO_CITATIONS_IN_ONE_FUNCTION)
+
+
+# ---------------------------------------------------------------------------
+# ``declaration_starts``: where the next function declaration BEGINS.
+#
+# REQ-d00254-D bounds a citation that no function encloses at the start of the
+# next function declaration.  A decorator is part of the declaration written
+# below it, so the declaration begins at the FIRST decorator line: reporting
+# the ``def`` would leave a decorated function's decorator lines attributable
+# to a citation written about something else entirely.
+# ---------------------------------------------------------------------------
+
+
+DECLARATIONS_WITH_DECORATORS = """\
+VALUE = 1
+
+@app.route("/x")
+@requires_auth
+def handler():
+    return 1
+
+
+def later():
+    return 2
+"""
+
+
+# Verifies: REQ-d00254-D
+@pytest.mark.parametrize("language", CODE_ROUTES)
+def test_REQ_d00254_D_a_declaration_begins_at_its_first_decorator(language):
+    """A stacked-decorator function is reported at its first decorator line.
+
+    Line 5 -- the ``def`` -- is deliberately NOT in the answer: a bound placed
+    there admits lines 3 and 4 to whatever citation stands above, which is the
+    decorated half of the defect this bound closes.  ``later`` is reported at
+    its own ``def`` because it has no decorators, which is what says the walk
+    back is over decorators rather than over any line above a ``def``.
+    """
+    lang, _exact_end = language
+
+    assert declaration_starts(_numbered(DECLARATIONS_WITH_DECORATORS), lang) == [3, 9], (
+        "a declaration begins at its first decorator, never at its 'def'"
+    )
+
+
+# A nested decorated declaration, with the enclosing function's own start above
+# it and an undecorated sibling below.
+NESTED_DECLARATIONS_WITH_A_DECORATOR = """\
+def outer():
+    @functools.cache
+    def inner():
+        return 1
+
+    def sibling():
+        return 2
+
+    return inner
+
+
+def later():
+    return 3
+"""
+
+
+# Verifies: REQ-d00254-D
+@pytest.mark.parametrize("language", CODE_ROUTES)
+def test_REQ_d00254_D_a_nested_declaration_begins_at_its_first_decorator(language):
+    """A nested declaration is reported, and reported at its decorator line.
+
+    A nested ``def`` is a declaration like any other, so the bound a citation
+    at module level stops at counts it: line 2, not line 3.  ``sibling`` and
+    the enclosing ``outer`` are reported at their own ``def`` lines, which is
+    what says the walk back is over decorators and not over whatever line
+    happens to sit above a ``def``.
+    """
+    lang, _exact_end = language
+
+    assert declaration_starts(_numbered(NESTED_DECLARATIONS_WITH_A_DECORATOR), lang) == [
+        1,
+        2,
+        6,
+        12,
+    ], "a nested declaration begins at its first decorator, never at its 'def'"
+
+
+# ---------------------------------------------------------------------------
+# Dart and Go: recognising a declaration in a brace language
+#
+# REQ-d00254-D attributes a citation the lines of "the function it is written
+# above".  Knowing which function that is means recognising a declaration by
+# sight, and in a type-first brace language that is harder than in Python:
+# there is no ``def`` and no ``fn``.  ``Widget build(BuildContext c) {`` and
+# ``return Column(`` have the same shape, and so do ``String get title =>``
+# and a field initialised from a ternary.
+#
+# Both halves of that matter, so both are asserted here.  A shape that IS a
+# declaration must bind, or the citation falls to D's second branch and
+# attributes the executable lines following it, bounded by nothing nearer than
+# the next citation -- spilling across members it says nothing about.  A shape
+# that is NOT a declaration must not bind, because a citation bound to a call
+# attributes that call's argument lines to the requirement and, in brace
+# scoping, sets a brace floor that ends the real enclosing member early.
+#
+# The extents are asserted as equalities, unlike the indent route above: brace
+# scoping knows where a member's ``}`` is, so an end past the body or short of
+# it is a defect rather than a known limitation.  The one exception is called
+# out where it arises.
+#
+# The sources are real shapes, taken or modelled from the Cure-HHT diary estate
+# (app_lock_controller.dart, recording_draft_store.dart, app_config.dart,
+# db_tracing.dart, diary_originated_events.dart, role_selection_screen.dart,
+# checkchars.go, main.go) with the citations rewritten to this repository's
+# identifiers.
+# ---------------------------------------------------------------------------
+
+
+def _brace_later_line(source: str) -> int:
+    """Line of the unrelated declaration named ``later`` each source ends with.
+
+    The same job ``_later_line`` does for the Python sources: an extent that
+    reached this line would credit the cited requirement with a member declared
+    beside the one the author wrote about, and a citation reported as bound to
+    nothing must be bound to nothing *while a declaration it could have walked
+    on to exists below it*.
+    """
+    for ln, text in _numbered(source):
+        if "later(" in text:
+            return ln
+    raise AssertionError("source must end with an unrelated declaration named 'later'")
+
+
+# A method with an ordinary return type, inside a class, with a widget tree in
+# its body.  ``return Column(`` and ``const SizedBox(height: 8)`` are the shapes
+# a declaration pattern must refuse; the constructor on line 2 is the shape it
+# must accept.
+DART_METHOD_WITH_RETURN_TYPE = """\
+class RoleSelectionScreen extends StatelessWidget {
+  const RoleSelectionScreen({super.key});
+
+  /// Renders the role picker.
+  // Implements: REQ-p00001-A
+  Widget build(BuildContext context) {
+    return Column(
+      children: const [SizedBox(height: 8)],
+    );
+  }
+
+  Widget later(BuildContext context) {
+    return const SizedBox();
+  }
+}
+"""
+
+# Two async methods, one returning ``Future<void>`` and one a nullable generic.
+# The generic return type is what the type pattern has to read without letting
+# its match run past the line.
+DART_FUTURE_METHODS = """\
+class RecordingDraftStore {
+  String get _draftKey => 'recording_draft_v1';
+
+  /// Durably persists [draft], replacing any previous snapshot.
+  // Implements: REQ-p00001-A
+  Future<void> save(RecordingDraft draft) async {
+    final prefs = await _getPrefs();
+    await prefs.setString(_draftKey, jsonEncode(draft.toJson()));
+  }
+
+  /// The surviving draft, or null when none exists.
+  // Implements: REQ-p00001-B
+  Future<RecordingDraft?> load() async {
+    final raw = (await _getPrefs()).getString(_draftKey);
+    if (raw == null) return null;
+    return RecordingDraft.fromJson(jsonDecode(raw));
+  }
+
+  Future<void> later() async {
+    await (await _getPrefs()).remove(_draftKey);
+  }
+}
+"""
+
+# A getter with a body.  ``get`` sits where a function's name would, so a
+# pattern that read this as a function would name it ``get`` and stop at the
+# wrong word -- and the ``if (...) {`` inside is a statement with a
+# declaration's shape.
+DART_GETTER_WITH_A_BODY = """\
+class AppConfig {
+  static const String _diaryApiBaseOverride = '';
+
+  /// API base URL - derived from the active EnvProfile.
+  // Implements: REQ-p00001-A
+  static String get apiBase {
+    if (testApiBaseOverride != null) {
+      return testApiBaseOverride!;
+    }
+    return _diaryApiBaseOverride;
+  }
+
+  static String later() => 'x';
+}
+"""
+
+# A getter whose arrow body the formatter split over three lines.
+DART_GETTER_WITH_AN_ARROW = """\
+class AppLockController extends ChangeNotifier {
+  bool needsDeviceLock = false;
+
+  /// The gate to render.
+  // Implements: REQ-p00001-A
+  AppLockGateState get gateState => needsDeviceLock
+      ? AppLockGateState.deviceLockRequired
+      : AppLockGateState.none;
+
+  Future<void> later() async {
+    notifyListeners();
+  }
+}
+"""
+
+# A top-level function: no class encloses it, so the class name in the answer
+# must stay None rather than borrowing whatever declared last.
+DART_TOP_LEVEL_FUNCTION = """\
+import 'dart:convert';
+
+/// Redacts values from a SQL statement before it reaches a trace span.
+// Implements: REQ-p00001-A
+String sanitizeSql(String sql) {
+  var sanitized = sql.replaceAll(RegExp(r"'[^']*'"), "'?'");
+  return sanitized;
+}
+
+void later() {
+  print('x');
+}
+"""
+
+# A citation above a class header binds to the class's first method, exactly as
+# it does in Python: D speaks of functions and never of classes, so the header
+# is passed over and the member beyond it answers.
+DART_CLASS_FIRST_METHOD = """\
+// Implements: REQ-p00001-A
+class RecordingDraftStore {
+  Future<void> save(RecordingDraft draft) async {
+    await _prefs.setString(_draftKey, jsonEncode(draft.toJson()));
+  }
+
+  Future<void> clear() async {
+    await _prefs.remove(_draftKey);
+  }
+}
+
+void later() {
+  print('x');
+}
+"""
+
+# The shape left DELIBERATELY unbound: a const constructor invocation inside a
+# list literal.  ``SharedEventType(`` is a call, and nothing in it tells it from
+# a formatter-split constructor declaration -- so it is refused, and the
+# citation falls to D's second branch, which attributes the entry's own lines
+# and stops at the next declaration.  Binding here would name the citation's
+# function ``SharedEventType`` and, worse, set a brace floor inside a list
+# literal.
+DART_CALL_SHAPED_LIST_ENTRY = """\
+const List<SharedEventType> diaryOriginatedEventTypes = <SharedEventType>[
+  // Implements: REQ-p00001-A
+  SharedEventType(
+    origin: EventOrigin.mobile,
+    definition: EntryTypeDefinition(
+      id: 'epistaxis_event',
+      registeredVersion: 1,
+    ),
+  ),
+];
+
+void later() {
+  print('x');
+}
+"""
+
+
+# Verifies: REQ-d00254-D
+@pytest.mark.parametrize(
+    ("source", "citation_line", "func_name", "class_name", "func_line", "last_body_line"),
+    [
+        pytest.param(
+            DART_METHOD_WITH_RETURN_TYPE,
+            5,
+            "build",
+            "RoleSelectionScreen",
+            6,
+            9,
+            id="method-with-a-return-type",
+        ),
+        pytest.param(
+            DART_FUTURE_METHODS, 5, "save", "RecordingDraftStore", 6, 8, id="future-void-async"
+        ),
+        pytest.param(
+            DART_FUTURE_METHODS,
+            12,
+            "load",
+            "RecordingDraftStore",
+            13,
+            16,
+            id="future-nullable-generic-async",
+        ),
+        pytest.param(
+            DART_GETTER_WITH_A_BODY, 5, "apiBase", "AppConfig", 6, 10, id="getter-with-a-body"
+        ),
+        # The arrow getter's body runs to line 8 and the recorded end is 6.
+        # ``None`` says the end is deliberately not asserted: a signature the
+        # formatter split leaves the declaration line closing at the depth it
+        # opened at, so the extent collapses to that line.  That under-credits
+        # the getter by two lines; it never over-credits, and it is a separate
+        # defect from the binding this test is about.  Asserting the wrong end
+        # here would pin the defect in place.
+        pytest.param(
+            DART_GETTER_WITH_AN_ARROW,
+            5,
+            "gateState",
+            "AppLockController",
+            6,
+            None,
+            id="getter-with-an-arrow",
+        ),
+        pytest.param(
+            DART_TOP_LEVEL_FUNCTION, 4, "sanitizeSql", None, 5, 7, id="top-level-function"
+        ),
+        pytest.param(
+            DART_CLASS_FIRST_METHOD,
+            1,
+            "save",
+            "RecordingDraftStore",
+            3,
+            4,
+            id="class-then-first-method",
+        ),
+    ],
+)
+def test_REQ_d00254_D_a_dart_citation_binds_to_the_declaration_below_it(
+    source, citation_line, func_name, class_name, func_line, last_body_line
+):
+    """Each Dart declaration shape is recognised, and bounds what it attributes.
+
+    Before these patterns existed ``.dart`` fell through to the Python
+    fallback, so every shape here was invisible: the citation was bound to
+    nothing and attributed the executable lines following it as far as the next
+    citation.  The identity and the extent are asserted together, because a
+    citation bound to a name but not to a range attributes nothing, and a range
+    running past its member attributes code that member does not contain.
+    """
+    context = build_line_context(_numbered(source), "dart")
+    name, cls, start, end = context[citation_line]
+
+    assert (name, cls, start) == (func_name, class_name, func_line), (
+        f"the citation is written above {func_name}, got {(name, cls, start)}"
+    )
+    if last_body_line is not None:
+        assert end == last_body_line, (
+            f"brace scoping knows {func_name} ends at line {last_body_line}, got {end}"
+        )
+    assert end < _brace_later_line(source), (
+        f"extent must stop before the declaration at line {_brace_later_line(source)}, got {end}"
+    )
+
+
+# Verifies: REQ-d00254-D
+def test_REQ_d00254_D_a_dart_citation_above_a_call_shaped_line_stays_unbound():
+    """A const constructor invocation is not a declaration and binds nothing.
+
+    Two surfaces read the same patterns and both must refuse the line: the
+    context builder leaves the citation unbound, and ``declaration_starts``
+    does not report line 3 as a declaration -- so a citation above the list
+    would not be cut short there either.  ``later`` IS bound, which is what
+    says the walk had somewhere to go and the refusal is about the shape it
+    met rather than about the file running out of declarations.
+    """
+    lines = _numbered(DART_CALL_SHAPED_LIST_ENTRY)
+    context = build_line_context(lines, "dart")
+
+    assert context[2] == (None, None, 0, 0), f"citation must stay unbound, got {context[2]}"
+    assert 3 not in declaration_starts(lines, "dart"), (
+        "'SharedEventType(' is a call; reporting it as a declaration would bound a "
+        "citation above it at a line no function begins on"
+    )
+
+    later = _brace_later_line(DART_CALL_SHAPED_LIST_ENTRY)
+    assert context[later][0] == "later"
+
+
+# A package-level function, a method with a pointer receiver, and a function
+# with a type-parameter list.  Transcribed from checkchars.go / main.go, with
+# the generic added: Go 1.18 admits one anywhere a function is declared.
+GO_DECLARATIONS = """\
+package main
+
+// Implements: REQ-p00001-A
+func checkCharsFor(input, sponsorKey string) string {
+\th := hmac.New(sha256.New, []byte(sponsorKey))
+\treturn string([]byte{charset[h.Sum(nil)[0]%28]})
+}
+
+// Implements: REQ-p00001-B
+func (r *resolver) verify(code string) bool {
+\tif len(code) != 10 {
+\t\treturn false
+\t}
+\treturn true
+}
+
+// Implements: REQ-p00001-C
+func mapKeys[K comparable, V any](m map[K]V) []K {
+\tout := make([]K, 0, len(m))
+\treturn out
+}
+
+func later() int {
+\treturn 2
+}
+"""
+
+
+# Verifies: REQ-d00254-D
+@pytest.mark.parametrize(
+    ("citation_line", "func_name", "func_line", "last_body_line"),
+    [
+        pytest.param(3, "checkCharsFor", 4, 6, id="package-level-func"),
+        pytest.param(9, "verify", 10, 14, id="method-with-a-pointer-receiver"),
+        pytest.param(
+            17,
+            "mapKeys",
+            18,
+            20,
+            id="generic-func",
+            marks=pytest.mark.xfail(
+                strict=True,
+                raises=AssertionError,
+                reason="_GO_FUNC requires '(' immediately after the name, so a "
+                "type-parameter list hides the declaration; the citation falls "
+                "to REQ-d00254-D's second branch instead",
+            ),
+        ),
+    ],
+)
+def test_REQ_d00254_D_a_go_citation_binds_to_the_func_below_it(
+    citation_line, func_name, func_line, last_body_line
+):
+    """A citation above a Go ``func`` binds to it, whatever its declaration shape.
+
+    A receiver and a type-parameter list are both written between ``func`` and
+    the parameter list, and neither is work of the citation's own -- so neither
+    changes what the citation is written above.  The receiver form is
+    recognised; the generic form is NOT, and is recorded here as a strict xfail
+    so that widening the pattern is what removes the marker rather than a
+    silent behaviour change going unnoticed.
+
+    Go has no class construct here, so the class name is None in every case: a
+    name borrowed from a ``type ... struct`` above would attribute the method
+    to a type it is not declared on.
+    """
+    context = build_line_context(_numbered(GO_DECLARATIONS), "go")
+    name, cls, start, end = context[citation_line]
+
+    assert (name, cls, start) == (func_name, None, func_line), (
+        f"the citation is written above {func_name}, got {(name, cls, start)}"
+    )
+    assert end == last_body_line, (
+        f"brace scoping knows {func_name} ends at line {last_body_line}, got {end}"
+    )
+    assert end < _brace_later_line(GO_DECLARATIONS), (
+        f"extent must stop before the func at line {_brace_later_line(GO_DECLARATIONS)}, got {end}"
+    )

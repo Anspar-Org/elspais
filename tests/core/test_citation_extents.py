@@ -9,8 +9,9 @@ of them:
   RUN and share one answer.
 * A run written ABOVE a function attributes that function's EXECUTABLE lines.
 * Any other run attributes the executable lines FOLLOWING it, up to the
-  earliest of the next citation, the end of its enclosing function, or the
-  end of the file.
+  earliest of the next citation, the end of its enclosing function or -- where
+  no function encloses it -- the start of the next function declaration (its
+  first decorator line, where it has decorators), or the end of the file.
 * A run above a function therefore overlaps the runs inside it. That is the
   only overlap admitted.
 
@@ -27,9 +28,11 @@ continued (REQ-d00269-H), and it attributes what a one-line citation in the
 same place would; a citation's comment lines are never its implementation.
 
 ``TestCitationExtentRules`` pins the four rules one by one; the cases above it
-exercise them through the coverage metrics.  Case 9, at the foot of the file,
-chains the pre-scan to the rules, because which function a citation was read
-as written above is what decides which of the four it is answered by.
+exercise them through the coverage metrics.  Case 9 chains the pre-scan to the
+rules, because which function a citation was read as written above is what
+decides which of the four it is answered by.  Case 10, at the foot of the
+file, reads real source off disk, because the declaration bound is answered
+from the file's own text and from nothing the graph holds.
 """
 
 from pathlib import Path
@@ -459,11 +462,20 @@ def _elspais_repo_root():
     return Path(__file__).resolve().parents[2]
 
 
-def _build_module_level_project(tmp_path, code_text):
-    """Build a one-file project whose citation has no enclosing function.
+def _build_module_level_project(tmp_path, code_text, coverage=None):
+    """Build a one-file project holding *code_text* at ``src/m.py``.
 
     Returns ``(graph, file_node)`` with ``line_coverage`` already recorded on
     the code FILE node, ready for :func:`annotate_coverage`.
+
+    The file is written to DISK and scanned by the real pre-scan, which is
+    what the declaration bound of REQ-d00254-D needs: the pre-scan keeps only
+    the function each citation bound to, so the declarations a module-level
+    citation must stop at are read from the file itself and exist nowhere in
+    a synthetic graph.
+
+    ``coverage`` is the executable-line map, defaulting to the three-line
+    module-level shape the spelling cases share.
     """
     from elspais.config import load_config
     from elspais.graph.factory import build_graph as build_real_graph
@@ -488,7 +500,9 @@ def _build_module_level_project(tmp_path, code_text):
     file_node = next(
         n for n in graph.iter_by_kind(NodeKind.FILE) if n.get_field("relative_path") == "src/m.py"
     )
-    file_node.set_field("line_coverage", dict(_LINE_COVERAGE))
+    file_node.set_field(
+        "line_coverage", dict(_LINE_COVERAGE) if coverage is None else dict(coverage)
+    )
     return graph, file_node
 
 
@@ -731,8 +745,12 @@ def _extents_from_source(source, coverage, path="src/m.py"):
     what that citation therefore attributes.  Exercising them apart cannot see
     the consequence of the first getting it wrong, because a citation bound to
     no function does not fail -- it silently falls to D's second branch and
-    claims the executable lines below it as far as the next citation or the end
-    of the file.
+    claims the executable lines below it as far as the next citation, the next
+    function declaration, or the end of the file.
+
+    The declaration bound is NOT exercised through this helper: it is read
+    from the file on disk, and the graph built here has none.  Case 10 builds
+    a real project for that.
     """
     from elspais.graph.parsers.prescan import build_line_context
 
@@ -781,3 +799,208 @@ def test_REQ_d00254_D_a_citation_above_a_decorated_function_claims_only_that_fun
     assert extents == {1: {4, 5}}, (
         "the citation speaks for handler's executable lines and for nothing below it"
     )
+
+
+# A citation inside ``outer``, written directly above the nested ``inner``, with
+# a sibling nested function below it.  Every nested body is executable, so an
+# answer that reached past ``inner`` is visible in the map.
+NESTED_THEN_SIBLING = """\
+def outer():
+    value = 1
+
+    # Implements: REQ-p00001-A
+    def inner():
+        return value
+
+    def sibling():
+        return 2
+
+    return inner
+"""
+
+
+# Verifies: REQ-d00254-D
+def test_REQ_d00254_D_a_citation_above_a_nested_function_claims_only_that_function():
+    """A citation above a nested ``def`` attributes that function and no more.
+
+    Both halves of D meet here.  The pre-scan reads the citation as written
+    above ``inner`` rather than merely inside ``outer``, which puts it in D's
+    FIRST branch, where ``inner`` bounds the answer.  Read as ``outer``'s, it
+    falls to the second: the lines FOLLOWING it to the end of ``outer``, which
+    is ``sibling``'s body and ``outer``'s own return as well -- code the cited
+    requirement implements no part of.
+
+    The whole map is asserted, which is what says nobody else was attributed
+    anything either.
+    """
+    extents = _extents_from_source(NESTED_THEN_SIBLING, [2, 6, 9, 11])
+
+    assert extents == {4: {6}}, (
+        "the citation speaks for inner's executable line and for neither its "
+        "sibling's nor its enclosing function's"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Case 10: the declaration bound -- a citation no function encloses stops at
+# the next function declaration.
+#
+# The bound is read from the file's own text, so every case here builds a real
+# project on disk and scans it.  The pre-scan keeps only the function each
+# citation bound to; a function nobody cites leaves no trace on any node, and
+# it is precisely those a module-level citation would otherwise speak for.
+# ---------------------------------------------------------------------------
+
+
+# A citation at module level, the module-level code it is written about, and
+# an unrelated function below.  Nothing but blank lines separates them.
+MODULE_LEVEL_THEN_FUNCTION = """\
+# Implements: REQ-d00001-A
+VALUE = 1
+OTHER = 2
+
+
+def helper():
+    inner = 3
+    return inner
+"""
+
+# The same shape with the function decorated.  Line 4 is the decorator and
+# line 5 the ``def``; a coverage tool reports both as executable, because both
+# run when the module is imported.
+MODULE_LEVEL_THEN_DECORATED = """\
+# Implements: REQ-d00001-A
+VALUE = 1
+
+@register
+def helper():
+    inner = 3
+    return inner
+"""
+
+
+def _project_extents(tmp_path, source, coverage):
+    """``_citation_extents`` for a real one-file project holding *source*."""
+    from elspais.graph.annotators import _citation_extents
+
+    _graph, file_node = _build_module_level_project(
+        tmp_path, source, coverage=dict.fromkeys(coverage, 1)
+    )
+    return _citation_extents(file_node, {})
+
+
+class TestModuleLevelCitationStopsAtTheNextDeclaration:
+    """A citation outside any function speaks for the code beside it, and for
+    no function declared below it.
+
+    Citing code at module level is supported and is not what the declaration
+    bound removes -- so the two halves are asserted together: the module-level
+    lines ARE attributed, and the function's lines are NOT.  A wrong
+    attribution is worse than none, because the reference resolves, the
+    requirement is credited with code implementing no part of it, and no check
+    reports it.
+    """
+
+    # Verifies: REQ-d00254-D
+    def test_a_module_level_citation_attributes_the_code_beside_it(self, tmp_path):
+        """The supported half: module-level code below the citation is its own."""
+        extents = _project_extents(tmp_path, MODULE_LEVEL_THEN_FUNCTION, [2, 3, 6, 7, 8])
+
+        assert extents[1] >= {2, 3}, (
+            "a citation outside any function must still attribute the module-level "
+            f"code it precedes; got {extents}"
+        )
+
+    # Verifies: REQ-d00254-D
+    def test_a_module_level_citation_does_not_attribute_the_function_below(self, tmp_path):
+        """The new bound: ``helper``'s declaration and body belong to nobody.
+
+        Lines 6, 7 and 8 are ``def helper():`` and its two body lines, all
+        executable.  Without the declaration bound the citation reaches the
+        end of the file and claims every one of them -- the whole map is
+        asserted, which is what says nobody else took them either.
+        """
+        extents = _project_extents(tmp_path, MODULE_LEVEL_THEN_FUNCTION, [2, 3, 6, 7, 8])
+
+        assert extents == {1: {2, 3}}, (
+            f"the citation must stop at the declaration of 'helper' (line 6); got {extents}"
+        )
+
+    # Verifies: REQ-d00254-D
+    def test_the_bound_lands_on_the_first_decorator_not_the_def(self, tmp_path):
+        """A decorated function's decorator lines are not swallowed either.
+
+        A decorator is part of the declaration written below it.  The three
+        answers are distinguishable in this one set: ``{2}`` bounds at the
+        decorator (line 4), ``{2, 4}`` bounds at the ``def`` (line 5) and
+        leaves the decorator attributed to a citation written about something
+        else, and ``{2, 4, 5, 6, 7}`` is no bound at all.
+        """
+        extents = _project_extents(tmp_path, MODULE_LEVEL_THEN_DECORATED, [2, 4, 5, 6, 7])
+
+        assert extents == {1: {2}}, (
+            "the citation must stop at the decorator on line 4, not at the 'def' "
+            f"on line 5; got {extents}"
+        )
+
+
+# A citation above a function, and a second inside it, with an unrelated
+# function below.  The declaration bound must not touch either: both are
+# enclosed by, or written about, a function of their own.
+ABOVE_AND_INSIDE_A_FUNCTION = """\
+# Implements: REQ-d00001-A
+def alpha():
+    a = 1
+    # Implements: REQ-d00001-B
+    b = 2
+    return b
+
+
+def beta():
+    d = 4
+"""
+
+# Two citations inside one function, with executable code between them.
+TWO_CITATIONS_IN_ONE_FUNCTION = """\
+def alpha():
+    # Implements: REQ-d00001-A
+    a = 1
+    # Implements: REQ-d00001-B
+    b = 2
+    return b
+"""
+
+
+class TestTheDeclarationBoundLeavesTheOtherRulesAlone:
+    """Regression: the three answers that were already right stay right.
+
+    The declaration bound applies only where no function encloses the run, so
+    a citation written above a function and a citation written inside one must
+    answer exactly as they did before.  Each test asserts the WHOLE map, which
+    is what says the new bound neither widened nor narrowed them.
+    """
+
+    # Verifies: REQ-d00254-D
+    def test_a_citation_above_a_function_still_attributes_exactly_that_function(self, tmp_path):
+        """And the citation inside it is still bounded by its function's end.
+
+        Both halves are in one map.  The citation on line 1 was written above
+        ``alpha`` and takes alpha's executable lines 2, 3, 5 and 6.  The one on
+        line 4 sits inside alpha and takes what follows it up to alpha's end --
+        never ``beta``'s lines 9 and 10, which belong to nobody.
+        """
+        extents = _project_extents(tmp_path, ABOVE_AND_INSIDE_A_FUNCTION, [2, 3, 5, 6, 9, 10])
+
+        assert extents == {1: {2, 3, 5, 6}, 4: {5, 6}}, (
+            "the run above alpha owns alpha, the run inside owns the rest of it, "
+            f"and beta belongs to nobody; got {extents}"
+        )
+
+    # Verifies: REQ-d00254-D
+    def test_two_citations_inside_one_function_still_divide_it(self, tmp_path):
+        """The enclosing bound is what lets two citations speak for different code."""
+        extents = _project_extents(tmp_path, TWO_CITATIONS_IN_ONE_FUNCTION, [1, 3, 5, 6])
+
+        assert extents == {2: {3}, 4: {5, 6}}, (
+            f"each citation owns the code between it and the next; got {extents}"
+        )

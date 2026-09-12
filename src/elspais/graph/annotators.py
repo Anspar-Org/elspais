@@ -949,6 +949,38 @@ def _under_dirs(rel_path: str, dirs: tuple[str, ...]) -> bool:
     return _match_app_dir(rel_path, dirs) is not None
 
 
+# Implements: REQ-d00254-D
+def _declaration_starts(file_node, cache: dict) -> list[int]:
+    """The lines a function declaration begins at in this file, ascending.
+
+    The pre-scan knows every declaration's extent while it parses, but keeps
+    only the one each citation bound to: a function nobody cites leaves no
+    trace on any node, and it is precisely those that a module-level citation
+    would otherwise speak for. So the file is read again here, once, and the
+    answer cached beside the extents it bounds. A file that cannot be read
+    yields no starts, and the bound is simply not imposed -- never a wrong one.
+    """
+    from elspais.graph.parsers.prescan import declaration_starts, detect_language
+
+    key = ("declarations", file_node.id)
+    if key in cache:
+        return cache[key]
+
+    starts: list[int] = []
+    abs_path = file_node.get_field("absolute_path")
+    if abs_path:
+        try:
+            text = Path(abs_path).read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            text = None
+        if text is not None:
+            lines = [(i + 1, line) for i, line in enumerate(text.split("\n"))]
+            starts = declaration_starts(lines, detect_language(str(abs_path)))
+
+    cache[key] = starts
+    return starts
+
+
 # Implements: REQ-d00254-D, REQ-d00269-M
 def _citation_extents(file_node, cache: dict) -> dict[int, set[int]]:
     """The lines every citation in a file attributes, keyed by its first line.
@@ -960,9 +992,12 @@ def _citation_extents(file_node, cache: dict) -> dict[int, set[int]]:
       across lines, changes nothing it attributes (REQ-d00269-M).
     * A run written ABOVE a function attributes that function's executable lines.
     * Any other run attributes the executable lines that FOLLOW it, up to the
-      earliest of: the next citation, the end of its enclosing function, the end
-      of the file. That bound is what lets two citations inside one function
-      speak for different code.
+      earliest of: the next citation, the end of its enclosing function or --
+      where no function encloses it -- the start of the next function
+      declaration (its first decorator line, where it has decorators), the end
+      of the file. The enclosing bound is what lets two citations inside one
+      function speak for different code; the declaration bound is what stops a
+      citation written at module level speaking for every function below it.
     * A run above a function and the runs inside that function therefore
       overlap. That is the only overlap these rules admit.
 
@@ -1022,12 +1057,22 @@ def _citation_extents(file_node, cache: dict) -> dict[int, set[int]]:
             func_end = run[-1][3]
             later = [s for s in every_start if s > run_end]
             next_citation = min(later) if later else None
+            # "Where no function encloses it": a run's own function_line says
+            # whether one does. A function's END is not that question -- a
+            # text-scanned language reports no end line at all, and reading an
+            # absent end as an absent function would re-bound a citation
+            # written INSIDE a function at the next declaration below it.
+            next_decl = None
+            if not run[0][2]:
+                declared = [d for d in _declaration_starts(file_node, cache) if d > run_end]
+                next_decl = min(declared) if declared else None
             owned = {
                 line
                 for line in executable
                 if line > run_end
                 and (next_citation is None or line < next_citation)
                 and (not func_end or line <= func_end)
+                and (next_decl is None or line < next_decl)
             }
             for cit_start, *_rest in run:
                 result[cit_start] = owned
@@ -1041,9 +1086,10 @@ def attributed_lines(code_node, file_node, region_cache: dict) -> set[int]:
     """The implementation lines a citation speaks for. ONE authority.
 
     The rules live in ``_citation_extents``, which answers for a whole file at
-    once because three of the four bounds -- the run, the next citation, the
-    enclosing function -- are relationships between citations rather than
-    properties of any one of them.
+    once because no bound is a property of the citation alone: the run, the
+    next citation and the enclosing function are relationships between
+    citations, and the next declaration is a property of the file they are
+    written in.
     """
     return _citation_extents(file_node, region_cache).get(code_node.get_field("parse_line"), set())
 

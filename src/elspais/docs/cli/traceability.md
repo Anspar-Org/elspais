@@ -270,7 +270,7 @@ def hash_password(plain: str) -> str: ...
 
 Or:
 ```javascript
-// Implements: REQ-d00001
+// Implements: REQ-d00001-A
 function hashPassword(plain) { ... }
 ```
 
