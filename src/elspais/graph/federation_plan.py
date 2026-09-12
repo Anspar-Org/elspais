@@ -181,6 +181,18 @@ def repository_origin(repo_root: Path) -> str | None:
     return _normalize_origin(origin) if origin else None
 
 
+def _path_identity(repo_root: Path) -> str:
+    """Identify a member that has claimed no namespace, by its directory.
+
+    Implements: REQ-d00202-M
+
+    A declaration that could not be read, and the root repository where it
+    declares none, are placed by the one thing known about them. The prefix
+    cannot occur in a namespace, so such a key never meets a real one.
+    """
+    return f"\x00path:{repo_root}"
+
+
 def _identity(declared_namespace: str, repo_root: Path) -> str:
     """Identify a member for convergence, cycle and collision detection.
 
@@ -191,7 +203,7 @@ def _identity(declared_namespace: str, repo_root: Path) -> str:
     repository that declares none still has to be placed, so it falls
     back to its directory -- the one case where nothing has been claimed.
     """
-    return declared_namespace or f"\x00path:{repo_root}"
+    return declared_namespace or _path_identity(repo_root)
 
 
 def plan_federation(
@@ -226,6 +238,7 @@ def plan_federation(
 
     planned: list[PlannedRepo] = []
     resolved: dict[str, PlannedRepo] = {}
+    by_root: dict[Path, PlannedRepo] = {}
     by_name: dict[str, PlannedRepo] = {}
 
     def _declared_namespace(config: dict[str, Any] | None) -> str:
@@ -244,9 +257,11 @@ def plan_federation(
     )
     planned.append(root_entry)
     resolved[root_identity] = root_entry
+    by_root[root_root] = root_entry
     by_name[root_name] = root_entry
 
     def _record(entry: PlannedRepo, identity: str) -> None:
+        by_root[entry.repo_root] = entry
         # A federation keys repositories by name, so two repositories
         # arriving under one name would leave only the later of them
         # reachable -- the earlier repo's requirements would resolve
@@ -270,31 +285,20 @@ def plan_federation(
         parent_config: dict[str, Any],
         parent_root: Path,
         declaration_path: tuple[str, ...],
-        on_path: dict[str, str],
+        on_path: dict[Path, str],
     ) -> None:
         associates = declared_associates(parent_config, parent_root)
         for name, info in associates.items():
             assoc_path = Path(parent_root, info["path"]).resolve()
             child_path = declaration_path + (name,)
-            identity = _identity(info.get("namespace") or "", assoc_path)
-
-            # A namespace reached again is one member reached again only
-            # where the directory is the same one.  At another directory
-            # it is two claimants, whether the first was reached up this
-            # chain or across the walk -- so the collision is answered
-            # before the cycle, or a second checkout of a repository
-            # already on the path would read as a cycle.
-            seen = resolved.get(identity)
-            if seen is not None and seen.repo_root != assoc_path:
-                # Implements: REQ-d00202-K
-                raise NamespaceConflict(
-                    info.get("namespace") or "",
-                    (seen.repo_root, seen.declaration_path),
-                    (assoc_path, child_path),
-                )
 
             # Implements: REQ-d00202-E
-            if identity in on_path:
+            # A cycle is the same directory reached again up the chain in
+            # hand.  Asked of the directory rather than of the namespace,
+            # it is answerable before the repository there has been read --
+            # which it must be, since reaching it again is the reason the
+            # walk would not terminate.
+            if assoc_path in on_path:
                 chain = " -> ".join(list(on_path.values()) + [name])
                 raise FederationCycleError(
                     f"Associate declarations form a cycle: {chain}. "
@@ -303,13 +307,27 @@ def plan_federation(
                 )
 
             # Implements: REQ-d00202-F
-            if seen is not None:
+            # One directory reached by two chains is one member: the
+            # diamond converges here, before anything is read a second
+            # time.
+            if assoc_path in by_root:
                 continue
+
+            # Implements: REQ-d00202-M
+            # Whether the repository can be read is settled before it is
+            # allowed to claim a namespace.  A declaration pointing at
+            # nothing has said nothing about a namespace, and reporting it
+            # as a claimant would name a collision with a directory that
+            # is not there instead of the declaration that points nowhere.
+            # An error entry is keyed by its path, so two of them never
+            # collide and neither is mistaken for a member.
+            identity = _path_identity(assoc_path)
 
             if not assoc_path.exists():
                 reason = f"Path does not exist: {assoc_path}"
                 if strict:
                     raise FederationError(f"Associate '{name}' path does not exist: {assoc_path}")
+                # Nothing is there to have an origin.
                 _record(
                     PlannedRepo(name, assoc_path, None, None, reason, child_path),
                     identity,
@@ -327,7 +345,9 @@ def plan_federation(
                 if strict:
                     raise FederationError(f"Associate '{name}': {reason}")
                 _record(
-                    PlannedRepo(name, assoc_path, None, None, reason, child_path),
+                    PlannedRepo(
+                        name, assoc_path, None, repository_origin(assoc_path), reason, child_path
+                    ),
                     identity,
                 )
                 continue
@@ -338,7 +358,9 @@ def plan_federation(
                 if strict:
                     raise FederationError(f"Associate '{name}': {reason}") from exc
                 _record(
-                    PlannedRepo(name, assoc_path, None, None, reason, child_path),
+                    PlannedRepo(
+                        name, assoc_path, None, repository_origin(assoc_path), reason, child_path
+                    ),
                     identity,
                 )
                 continue
@@ -359,6 +381,21 @@ def plan_federation(
                     f"means, or correct the namespace it names."
                 )
 
+            # Implements: REQ-d00202-K
+            # The repository has been read, so the namespace its
+            # declaration names is a claim it can be held to.  The same
+            # namespace already resolved at another directory is the
+            # second claimant K reports; at this same directory the walk
+            # converged above and never arrived here.
+            identity = _identity(info.get("namespace") or "", assoc_path)
+            seen = resolved.get(identity)
+            if seen is not None and seen.repo_root != assoc_path:
+                raise NamespaceConflict(
+                    info.get("namespace") or "",
+                    (seen.repo_root, seen.declaration_path),
+                    (assoc_path, child_path),
+                )
+
             _record(
                 PlannedRepo(
                     name,
@@ -374,10 +411,10 @@ def plan_federation(
                 assoc_config,
                 assoc_path,
                 child_path,
-                {**on_path, identity: name},
+                {**on_path, assoc_path: name},
             )
 
-    _visit(root_config, root_root, (root_name,), {root_identity: root_name})
+    _visit(root_config, root_root, (root_name,), {root_root: root_name})
     return planned
 
 

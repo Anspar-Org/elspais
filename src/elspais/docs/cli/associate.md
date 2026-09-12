@@ -96,6 +96,22 @@ elspais associate ../callisto-copy -f
 # Replaced callisto at /home/user/repos/callisto with clone (CAL) at /home/user/repos/callisto-copy
 ```
 
+`-f` reaches only what this command writes, which is `.elspais.local.toml`.
+Where the entry holding the namespace is declared in `.elspais.toml` -- the
+shared configuration, committed and read by everyone -- there is nothing `-f`
+could do: removing a local entry would leave that declaration standing and the
+next run would read it again. That case is refused naming the file to edit,
+with no offer to force it:
+
+```bash
+elspais associate ../callisto-copy
+# Refused: the namespace CAL is already registered to callisto at ../callisto,
+#   and nothing was changed.
+# That entry is declared in /home/user/repos/core/.elspais.toml, which this
+#   command does not write, so -f cannot replace it.
+# Edit ... to point callisto elsewhere, or give this repository a namespace of its own.
+```
+
 A copy that declares its own namespace is a different matter and registers
 normally: its identifiers cannot be confused with the original's, so holding
 both is unambiguous. Nothing here consults git -- the question is answered from

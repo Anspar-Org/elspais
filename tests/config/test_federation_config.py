@@ -637,7 +637,7 @@ class TestDeclarationRequiredFields:
 
 
 class TestNamespaceCollision:
-    """Validates REQ-d00202-K.
+    """Validates REQ-d00202-K, and REQ-d00202-M where it bounds K.
 
     A namespace answers whose identifiers these are.  Two repositories
     claiming one namespace leave that question unanswerable: identifiers
@@ -712,21 +712,30 @@ class TestNamespaceCollision:
         assert [entry.name for entry in planned] == ["top", "core", "mid"]
         assert len([e for e in planned if e.repo_root == shared.resolve()]) == 1
 
-    # Verifies: REQ-d00202-K
-    def test_REQ_d00202_K_unloadable_repos_keep_their_declared_namespaces(self, tmp_path):
-        """Two unreachable paths declared under two namespaces are two error entries.
+    @pytest.mark.parametrize(
+        "namespaces",
+        [
+            pytest.param({"gone1": "ABSENT1", "gone2": "ABSENT2"}, id="two-namespaces"),
+            pytest.param({"gone1": "LIB", "gone2": "LIB"}, id="one-namespace"),
+        ],
+    )
+    # Verifies: REQ-d00202-M
+    def test_REQ_d00202_M_unreachable_paths_are_error_entries_not_claimants(
+        self, tmp_path, namespaces
+    ):
+        """Two unreachable paths are two error entries, whatever they name.
 
-        A namespace is claimed by the DECLARATION, not by the config at the
-        path, so a repository that could not be loaded still occupies the
-        namespace its declaration named.  Two such declarations therefore
-        collide exactly when they name one namespace and stay apart when they
-        do not -- the failure to load neither creates a collision nor excuses
-        one, and each path keeps the real reason it failed.
+        A namespace is claimed by the repository the declaration reaches, and
+        a declaration that reached nothing has claimed none -- so two of them
+        neither collide with each other nor merge into one member, however
+        their declarations are spelled.  Each keeps the real reason it failed,
+        which is the fault the reader has to be sent to.
         """
         root = make_repo(
             tmp_path,
             "hub",
             associates={"gone1": "../absent1", "gone2": "../absent2"},
+            associate_namespaces=namespaces,
         )
 
         planned = _plan(root)
@@ -812,3 +821,117 @@ class TestDeclaredNamespaceMismatch:
 
         assert [entry.name for entry in planned] == ["app", "lib"]
         assert all(entry.error is None for entry in planned)
+
+
+def _hub_with_unreadable_twin(tmp_path: Path, kind: str) -> tuple[Path, Path]:
+    """A hub declaring one readable member and one unreadable one, both 'LIB'.
+
+    The readable repository at `../lib` declares LIB and the declaration at
+    `../<bad>` names LIB too, so a planner that let an unread declaration
+    claim a namespace reports a collision between a real directory and a
+    path it never reached.  Returns (hub, bad_path).
+    """
+    make_repo(tmp_path, "lib")  # namespace_for("lib") == "LIB"
+    if kind == "missing":
+        bad_path = tmp_path / "gone"
+    elif kind == "no-config":
+        bad_path = tmp_path / "bare"
+        (bad_path / "spec").mkdir(parents=True)
+    else:
+        bad_path = make_repo(tmp_path, "rubble", config_text=_BROKEN_TOML)
+    hub = make_repo(
+        tmp_path,
+        "hub",
+        associates={"libold": f"../{bad_path.name}", "lib": "../lib"},
+        associate_namespaces={"libold": "LIB", "lib": "LIB"},
+    )
+    return hub, bad_path
+
+
+class TestUnreadableDeclaration:
+    """Validates REQ-d00202-M, REQ-d00202-N.
+
+    A declaration whose repository cannot be read has said nothing about a
+    namespace, so it is not one of the two claimants a namespace collision
+    is about.  The fault to report is that the declaration points nowhere,
+    and the members that could be read carry on -- as a federation missing a
+    member it never chose to drop, which is why N keeps the unreadable
+    declaration a failed check.
+    """
+
+    @pytest.mark.parametrize("kind", ["missing", "no-config", "unparseable"])
+    # Verifies: REQ-d00202-M
+    def test_REQ_d00202_M_unreadable_declaration_does_not_claim_its_namespace(self, tmp_path, kind):
+        """The unreadable declaration reports its own fault; the readable member resolves."""
+        hub, bad_path = _hub_with_unreadable_twin(tmp_path, kind)
+
+        planned = _plan(hub)
+        by_name = {entry.name: entry for entry in planned}
+
+        assert set(by_name) == {"hub", "libold", "lib"}
+        broken = by_name["libold"]
+        assert broken.config is None
+        assert broken.error, "an unreadable declaration must carry the reason it failed"
+        assert str(bad_path.resolve()) in broken.error, broken.error
+        # The member that WAS read keeps the namespace it declares, and
+        # nothing about the declaration that reached nothing touches it.
+        assert by_name["lib"].error is None
+        assert by_name["lib"].config is not None
+
+    # Verifies: REQ-d00202-M
+    def test_REQ_d00202_M_order_does_not_decide_which_fault_is_named(self, tmp_path):
+        """Declared after the readable member, the unreadable one still reports its own fault."""
+        make_repo(tmp_path, "lib")
+        hub = make_repo(
+            tmp_path,
+            "hub",
+            associates={"lib": "../lib", "libold": "../gone"},
+            associate_namespaces={"lib": "LIB", "libold": "LIB"},
+        )
+
+        by_name = {entry.name: entry for entry in _plan(hub)}
+
+        assert by_name["lib"].error is None
+        assert "gone" in (by_name["libold"].error or "")
+
+    @pytest.mark.parametrize("kind", ["missing", "no-config", "unparseable"])
+    # Verifies: REQ-d00202-N
+    def test_REQ_d00202_N_unreadable_declaration_is_a_failed_check(self, tmp_path, kind):
+        """The surface carries on with what it read, and says so as a failure."""
+        from elspais.commands.health import check_associate_paths
+
+        hub, bad_path = _hub_with_unreadable_twin(tmp_path, kind)
+
+        check = check_associate_paths(_load(hub), hub)
+
+        assert check.passed is False, "a member that could not be read is not a pass"
+        blamed = {finding.node_id for finding in check.findings}
+        assert blamed == {"libold"}, [f.message for f in check.findings]
+        assert bad_path.name in check.findings[0].message, check.findings[0].message
+
+    # Verifies: REQ-d00202-K
+    def test_REQ_d00202_K_two_read_directories_under_one_namespace_still_raise(self, tmp_path):
+        """The same shape with BOTH directories readable is still the collision K reports.
+
+        Paired with the M cases above so the narrowing is pinned from both
+        sides: what changed is which declarations can claim a namespace, not
+        what happens once two of them do.
+        """
+        from elspais.graph.federation_plan import NamespaceConflict
+
+        make_repo(tmp_path, "lib")  # namespace_for("lib") == "LIB"
+        make_repo(tmp_path, "twin", namespace="LIB", dirname="readable")
+        hub = make_repo(
+            tmp_path,
+            "hub",
+            associates={"libold": "../readable", "lib": "../lib"},
+            associate_namespaces={"libold": "LIB", "lib": "LIB"},
+        )
+
+        with pytest.raises(NamespaceConflict) as excinfo:
+            _plan(hub)
+
+        message = str(excinfo.value)
+        assert "LIB" in message
+        assert str((tmp_path / "readable").resolve()) in message, message
+        assert str((tmp_path / "lib").resolve()) in message, message

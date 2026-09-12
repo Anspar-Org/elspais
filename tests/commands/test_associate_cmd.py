@@ -1433,3 +1433,128 @@ class TestAssociateBothObstaclesAtOnce:
         entries = {k for k in doc["associates"] if isinstance(doc["associates"][k], dict)}
         assert entries == {"europa"}
         assert doc["associates"]["europa"]["path"] == str(second)
+
+
+def _core_declaring(tmp_path: Path, entries: str) -> Path:
+    """A core repo whose MAIN config declares associate entries of its own.
+
+    `elspais associate` writes only `.elspais.local.toml`, so an entry the
+    main config declares is one the command reads but cannot rewrite.
+    """
+    core = _make_core_repo(tmp_path / "core")
+    config = core / ".elspais.toml"
+    config.write_text(config.read_text() + entries)
+    return core
+
+
+class TestAssociateTwinDeclaredInMainConfig:
+    """Validates REQ-d00289-H: an entry recording the declared namespace is
+    an obstacle, and where that entry lives in the main configuration this
+    command does not write, it is one no flag of this command can clear."""
+
+    # Verifies: REQ-d00289-H
+    def test_REQ_d00289_H_twin_in_main_config_refuses_the_same_with_or_without_force(
+        self, tmp_path, monkeypatch, capsys
+    ):
+        """The refusal names the file to edit, offers no -f, and is the same
+        answer either way -- an entry this command cannot retire is not made
+        retireable by asking harder."""
+        from elspais.commands.associate_cmd import run
+
+        core = _core_declaring(
+            tmp_path, '\n[associates.libA]\npath = "../libA"\nnamespace = "LIB"\n'
+        )
+        _write_associate_config(tmp_path / "libA", "libA", "LIB")
+        second = _write_associate_config(tmp_path / "libB", "libB", "LIB")
+        local_config = core / ".elspais.local.toml"
+
+        monkeypatch.chdir(core)
+        assert run(_link_args(core, str(second))) != 0
+        plain = capsys.readouterr().err
+
+        assert run(_link_args(core, str(second), force=True)) != 0, (
+            "-f cannot retire an entry this command does not write"
+        )
+        forced = capsys.readouterr().err
+
+        assert forced == plain, "the answer must not depend on whether -f was given"
+        assert not local_config.exists(), "a refused registration must write nothing"
+        assert "the namespace LIB is already registered to libA" in plain, plain
+        assert str(core / ".elspais.toml") in plain, (
+            "the refusal must name the file holding the entry, which is where the fix is"
+        )
+        assert "Use -f" not in plain, (
+            "offering -f for an entry -f cannot retire sends the operator into a crash"
+        )
+
+    # Verifies: REQ-d00289-H
+    def test_REQ_d00289_H_twin_declared_in_both_files_is_not_retireable(
+        self, tmp_path, monkeypatch, capsys
+    ):
+        """A local override of a main-config entry is the same obstacle:
+        deleting the override leaves the declaration that actually collides,
+        so the entry is reported rather than reported as retired."""
+        from elspais.commands.associate_cmd import run
+
+        core = _core_declaring(
+            tmp_path, '\n[associates.libA]\npath = "../libA"\nnamespace = "LIB"\n'
+        )
+        first = _write_associate_config(tmp_path / "libA", "libA", "LIB")
+        second = _write_associate_config(tmp_path / "libB", "libB", "LIB")
+
+        local_config = core / ".elspais.local.toml"
+        local_config.write_text(f'[associates.libA]\npath = "{first}"\nnamespace = "LIB"\n')
+        before = local_config.read_bytes()
+
+        monkeypatch.chdir(core)
+        assert run(_link_args(core, str(second), force=True)) != 0
+        assert local_config.read_bytes() == before, (
+            "removing the local entry would leave the main declaration standing"
+        )
+
+        err = capsys.readouterr().err
+        assert str(core / ".elspais.toml") in err, err
+        assert "Use -f" not in err, err
+
+
+class TestAssociateForcedPastAnUnretireableRival:
+    """Validates REQ-d00289-C: what a refusal says once -f has been given."""
+
+    # Verifies: REQ-d00289-C, REQ-d00289-E
+    def test_REQ_d00289_C_forced_refusal_carries_the_collision_not_another_force_hint(
+        self, tmp_path, monkeypatch, capsys
+    ):
+        """The namespace is claimed by a repository another member declares,
+        so no entry of this configuration can be retired to make room. Under
+        -f the refusal reports that collision; repeating an instruction the
+        operator has already followed names no fault at all."""
+        from elspais.commands.associate_cmd import run
+
+        core = _core_declaring(tmp_path, '\n[associates.mid]\npath = "../mid"\nnamespace = "MID"\n')
+        mid = _write_associate_config(tmp_path / "mid", "mid", "MID")
+        (mid / ".elspais.toml").write_text(
+            (mid / ".elspais.toml").read_text()
+            + '\n[associates.beta]\npath = "../beta"\nnamespace = "LIB"\n'
+        )
+        beta = _write_associate_config(tmp_path / "beta", "beta", "LIB")
+        # The entry under the name the candidate declares points elsewhere,
+        # so the registration would move it -- the one obstacle -f is for.
+        old = _write_associate_config(tmp_path / "libx-old", "libx", "OLD")
+        candidate = _write_associate_config(tmp_path / "libx-copy", "libx", "LIB")
+
+        local_config = core / ".elspais.local.toml"
+        local_config.write_text(f'[associates.libx]\npath = "{old}"\nnamespace = "OLD"\n')
+        before = local_config.read_bytes()
+
+        monkeypatch.chdir(core)
+        assert run(_link_args(core, str(candidate), force=True)) != 0
+        assert local_config.read_bytes() == before, "a refused registration must write nothing"
+
+        err = capsys.readouterr().err
+        assert "Use -f" not in err, (
+            "-f was given; repeating it reports an obstacle that is not the one met"
+        )
+        assert "would not federate" in err, err
+        assert "LIB" in err and str(beta) in err and str(candidate) in err, (
+            "the refusal must name the namespace and both directories claiming it"
+        )

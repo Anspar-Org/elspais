@@ -51,6 +51,9 @@ class Registration:
     twin_path: str = ""
     """An entry recording this namespace at another directory."""
 
+    declared_in: str = ""
+    """The configuration file holding an entry this run cannot retire."""
+
     retired_name: str = ""
     retired_path: str = ""
     """An entry this run removed, its namespace now recorded elsewhere."""
@@ -80,6 +83,16 @@ class Registration:
                 "Run 'elspais associate --list' to see the current registrations.",
             ]
             return lines
+        if self.reason == "same-namespace-shared":
+            # Implements: REQ-d00289-H
+            return [
+                f"Refused: the namespace {self.namespace} is already registered to "
+                f"{self.previous_name} at {self.previous_path}, and nothing was changed.",
+                f"That entry is declared in {self.declared_in}, which this command does "
+                f"not write, so -f cannot replace it.",
+                f"Edit {self.declared_in} to point {self.previous_name} elsewhere, or "
+                f"give this repository a namespace of its own.",
+            ]
         if self.reason == "same-namespace":
             # Implements: REQ-d00289-H
             return [
@@ -629,7 +642,26 @@ def register_associate(
     # namespace at another directory is a second answer to a question that
     # admits one. It is a separate obstacle from an entry under this name,
     # and both can stand at once.
-    twin_name, twin_path = verdict.rival(root_name_of=associates)
+    twin_name, twin_path, twin_where = verdict.rival(
+        local_entries=associates, main_entries=_main_associates(config_path)
+    )
+    # Only an entry this file holds alone can be retired by rewriting this
+    # file. Anything else is reported and left standing, because removing
+    # the local entry would leave the declaration that actually collides.
+    if twin_where == "main":
+        return Registration(
+            kind="refused",
+            name=assoc_name,
+            namespace=namespace,
+            path=twin_path,
+            previous_path=twin_path,
+            previous_name=twin_name,
+            target=repo_path,
+            reason="same-namespace-shared",
+            declared_in=str(config_path) if config_path else ".elspais.toml",
+        )
+    if twin_where != "local":
+        twin_name, twin_path = "", ""
 
     if existing_entry is not None and not entry_moves and not twin_name and not verdict.refusal:
         return Registration(
@@ -639,11 +671,11 @@ def register_associate(
             path=existing_path,
         )
 
-    if not force or (verdict.conflict is not None and not twin_name):
-        # A rival this registration cannot retire -- one declared by
-        # another repository in the federation -- is refused with no
-        # offer to replace it, because replacing it is not this
-        # configuration's to do.
+    if not force:
+        # Where -f WAS given and the rival still cannot be retired, this
+        # block is skipped deliberately: the refusal below carries the
+        # collision's own reason, rather than repeating an instruction the
+        # operator has already followed.
         if entry_moves:
             return Registration(
                 kind="refused",
@@ -733,6 +765,26 @@ def register_associate(
     )
 
 
+def _main_associates(config_path: Path | None) -> dict[str, Any]:
+    """The `[associates]` table of the main configuration file.
+
+    Implements: REQ-d00289-H
+
+    Read separately from the merged configuration because the question is
+    not what the federation holds but which FILE holds it: a registration
+    writes only the machine-local file, so an entry declared here is one
+    it cannot retire.
+    """
+    if config_path is None or not config_path.exists():
+        return {}
+    try:
+        doc = parse_toml_document(config_path.read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001 - an unreadable main config is not this
+        return {}  # run's fault to report; the planner says so already.
+    table = doc.get("associates", {})
+    return dict(table) if isinstance(table, dict) else {}
+
+
 def _resolve_recorded(path_str: str, base: Path) -> Path:
     """Resolve a recorded path, which may be relative to the repository root."""
     recorded = Path(path_str)
@@ -799,23 +851,30 @@ class FederationVerdict:
     def as_reason(self) -> tuple[str | None, bool]:
         return self.refusal, self.pre_existing
 
-    def rival(self, root_name_of: Any = None) -> tuple[str, str]:
-        """The entry already holding this namespace, if this run can retire it.
+    def rival(self, local_entries: Any = None, main_entries: Any = None) -> tuple[str, str, str]:
+        """The entry already holding this namespace, and which file holds it.
 
-        A collision is answerable here only where this registration is
-        one of its two sides and the other is an entry of this
-        configuration: a collision between two other members, or one
-        declared by another repository, is not this run's to settle, so
-        it is reported and left alone.
+        Returns the entry's name, the path recorded for it, and where it
+        is declared -- ``local`` for one this run could retire, ``main``
+        for one declared in the main configuration, and ``""`` where the
+        collision is not this run's to settle at all (between two other
+        members, or declared by another repository).
+
+        A registration writes only the machine-local file, so an entry
+        the main configuration declares cannot be retired by removing the
+        local one: the declaration would come back on the next read. An
+        entry declared in BOTH is the same case -- deleting the override
+        leaves the main entry standing -- so only an entry the local file
+        holds alone is reported as retireable.
         """
         if self.conflict is None:
-            return ("", "")
+            return ("", "", "")
         sides = (
             (self.conflict.first_root, self.conflict.first_declaration),
             (self.conflict.second_root, self.conflict.second_declaration),
         )
         if not any(root == self.candidate for root, _ in sides):
-            return ("", "")
+            return ("", "", "")
         for root, declaration in sides:
             if root == self.candidate:
                 continue
@@ -824,12 +883,16 @@ class FederationVerdict:
             if len(declaration) != 2:
                 continue
             name = declaration[-1]
-            if root_name_of is not None:
-                entry = root_name_of.get(name)
-                if isinstance(entry, dict):
-                    return (name, entry.get("path", ""))
-            return (name, str(root))
-        return ("", "")
+            in_main = isinstance((main_entries or {}).get(name), dict)
+            local = (local_entries or {}).get(name)
+            if isinstance(local, dict) and not in_main:
+                return (name, local.get("path", ""), "local")
+            if in_main:
+                entry = (main_entries or {}).get(name)
+                path = entry.get("path", "") if isinstance(entry, dict) else str(root)
+                return (name, path, "main")
+            return (name, str(root), "")
+        return ("", "", "")
 
 
 def _federation_verdict(

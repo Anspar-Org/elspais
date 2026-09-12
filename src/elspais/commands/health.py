@@ -2187,7 +2187,7 @@ def run_term_checks(
     ]
 
 
-# Implements: REQ-d00202-A+D+I, REQ-d00203-C
+# Implements: REQ-d00202-A+D+I+N, REQ-d00203-C
 def check_associate_paths(
     config: dict[str, Any],
     repo_root: Path,

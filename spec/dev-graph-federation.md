@@ -103,9 +103,13 @@ I. When scanning directories for candidate associates, a directory whose elspais
 
 J. When two distinct repositories would enter one federation under the same declared name, the build SHALL fail with an error naming both repository paths and the declaration chain that reached each.
 
-K. When two declarations of one federation name one namespace at different directories, the build SHALL fail with an error naming both directories and the declaration chain that reached each.
+K. When two directories of one federation are read and both declare the same namespace, the build SHALL fail with an error naming both directories and the declaration chain that reached each.
 
 L. When the repository at an associate's declared path declares a namespace other than the one the declaration names, the build SHALL fail with an error naming the path, the namespace the declaration named, and the namespace found.
+
+M. When a declaration's repository cannot be read -- no directory at the declared path, no elspais configuration there, or a configuration that will not load -- the fault reported SHALL be that the repository could not be read, naming the path and the declaration chain that reached it.
+
+N. Where a surface continues with the members it could read, a declaration that could not be read SHALL be reported as a failed check.
 
 ### Rationale
 
@@ -115,10 +119,13 @@ A repository declares everything it directly needs in order to resolve on its ow
 
 Name uniqueness (assertion J) becomes an obligation only once declarations from several repositories are combined. A single declaration table cannot collide with itself, so under root-only resolution uniqueness was guaranteed by TOML's own syntax. A federation keys repositories by name, so two repositories arriving under one name would leave only the later of them reachable — the earlier repository's requirements would resolve against the wrong configuration and its graph would never be read at all. Failing is the honest outcome because the alternative is a silent partial federation.
 
+A declaration that cannot be read has said nothing about a namespace, so it is not one of the two claimants K is about -- K reaches directories that were read, and a directory that is not there was not. Treating it as one produces a report naming a collision between a real directory and a path that does not exist, which sends the reader looking for a conflict instead of at the missing repository -- the fault is that a declaration points nowhere, and that is what has to be said. Failing remains the right outcome, since a configuration naming a repository that is not there is misconfigured whatever else is true of it; what M fixes is which fault is named. Where a surface is built to carry on with the members it could read, N keeps the unreadable one a failed check: a federation quietly missing a member answers questions about a corpus nobody chose.
+
 A namespace answers whose identifiers these are, so a federation in which two directories claim one namespace can answer nothing — the same argument disjoint requirement IDs rest on under H. That is also why the namespace is the identity (G): it is the one thing a member cannot share, it is declared rather than discovered, and L binds it to what the repository at that path says of itself, so it cannot be claimed by mistake. A repository reached at two directories under one namespace is therefore a collision to report rather than a convergence to guess at, while two directories that declare different namespaces are two members however closely related they are — their identifiers cannot be confused, so nothing about holding both is ambiguous. Identity that read the git origin instead answered a question nobody asked: it converged two directories a federation had every reason to hold apart, and it silently dropped the second. A repository owns its own namespace; an associate declaration does not name a second one but states the namespace the declaring repository expects at that path, so a mismatch means the declaration points somewhere its author did not intend. Both are declaration-time failures, reported before any graph is built, because a federation assembled on an ambiguous or mistaken namespace produces wrong answers rather than missing ones.
 
 ### Changelog
 
+- 2026-09-12 | ee7bf24d | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-09-11 | e7e61b6a | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-10 | 0522f86c | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-10 | b599e6ec | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: require a namespace to be unique across a federation (K) and to match the repository the declaration points at (L)
@@ -132,7 +139,7 @@ A namespace answers whose identifiers these are, so a federation in which two di
 - 2026-05-11 | 479dcbb8 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 479dcbb8 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Associates Config Loading* | **Hash**: e7e61b6a
+*End* *Associates Config Loading* | **Hash**: ee7bf24d
 ---
 
 ## REQ-d00203: Multi-Repo Build Pipeline

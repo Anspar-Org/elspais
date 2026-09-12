@@ -120,7 +120,7 @@
 | REQ-d00134 | Mutation Round-Trip Fidelity                                  | dev-graph-file-nodes.md | 19cb065b |
 | REQ-d00200 | FederatedGraph Read-Only Delegation                           | dev-graph-federation.md | ed077a7c |
 | REQ-d00201 | FederatedGraph Mutation Delegation                            | dev-graph-federation.md | c51794b3 |
-| REQ-d00202 | Associates Config Loading                                     | dev-graph-federation.md | e7e61b6a |
+| REQ-d00202 | Associates Config Loading                                     | dev-graph-federation.md | ee7bf24d |
 | REQ-d00203 | Multi-Repo Build Pipeline                                     | dev-graph-federation.md | 957568b6 |
 | REQ-d00204 | Per-Repo Health Check Delegation                              | dev-graph-federation.md | 15c6ff55 |
 | REQ-d00205 | MCP Federation Support                                        | dev-mcp-tools.md        | 42c7a840 |
