@@ -1,6 +1,6 @@
 """Tests for utilities.color.resolve_color()."""
 
-# Verifies: REQ-d00212-A, REQ-d00212-J, REQ-d00212-K
+# Verifies: REQ-d00212-Y
 
 from __future__ import annotations
 

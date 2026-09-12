@@ -137,37 +137,11 @@ D. Statuses presented in order SHALL run active first, then provisional, then as
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-p00002
 
-The `ElspaisConfig` Pydantic schema SHALL be restructured to v3 shape with first-class level definitions, unified scanning configuration, simplified references, and cleaner changelog sub-models. New models SHALL be strict (`extra="forbid"`) and frozen by default.
+A repository's configuration is read against a schema that defines every setting the configuration may carry, together with the shape and the default of each. The schema is the one authority on what a configuration may contain, and it is published in a form a reader and an editor can both consult.
 
 ### Assertions
 
-A. A `LevelConfig` model SHALL define per-level properties: `rank` (int), `letter` (str), `display_name` (str, optional), `implements` (list[str]), and `expects_validation` (bool, default false). Unknown fields SHALL be rejected.
-
-B. A `ScanningKindConfig` base model SHALL define common scanning fields: `directories` (list[str]), `file_patterns` (list[str]), `skip_files` (list[str]), `skip_dirs` (list[str]). Per-kind subclasses SHALL add kind-specific extras (e.g., `SpecScanningConfig` adds `index_file`, `TestScanningConfig` adds `enabled`, `prescan_command`, `reference_keyword`, `reference_patterns`).
-
-C. A `ScanningConfig` composite model SHALL contain all scanning kinds (`spec`, `code`, `test`, `result`, `journey`, `docs`) plus a global `skip` list that applies to all kinds.
-
-D. An `OutputConfig` model SHALL define output configuration: `formats` (list[str], default empty) and `dir` (str, default empty).
-
-E. A `ChangelogRequireConfig` sub-model SHALL group changelog requirement booleans: `reason`, `author_name`, `author_id`, `change_order`. `ChangelogConfig` SHALL use renamed fields (`hash_current` for `enforce`, `present` for `require_present`) and a `require` sub-model of type `ChangelogRequireConfig`.
-
-F. `ElspaisConfig` SHALL have `levels` (dict[str, LevelConfig]), `scanning` (ScanningConfig), and `output` (OutputConfig) fields. The `directories`, `spec`, `testing`, `ignore`, `graph`, `traceability`, `core`, and `associated` fields SHALL be removed. Version SHALL default to 3.
-
 G. A repository's identifier configuration SHALL admit exactly one spelling of any given identifier, up to case. Two elements of an identifier configuration that differ only in case SHALL be rejected at configuration-validation time, naming both and the element they collide in.
-
-H. `HierarchyConfig` SHALL contain only boolean flags (`allow_circular`, `allow_structural_orphans`, `allow_orphans`, `cross_repo_implements`). Per-level implement rules SHALL be defined in `LevelConfig.implements` instead. The model SHALL be strict (`extra="forbid"`).
-
-I. <RETIRED> named a references section of the configuration that does not exist. Identifier grammar is configured under identifier patterns, and an identifier is admitted in one spelling only, per REQ-d00212-G.
-
-J. `ProjectConfig` SHALL contain only `namespace` and `name`. The `version` and `type` fields SHALL be removed.
-
-K. `AssociateEntryConfig` SHALL define the fields an associate declaration is written in: `path` (str) and `namespace` (str), both required, together with the optional `git` remote and `color`. A declaration SHALL be admitted only where every field it carries is one this model defines.
-
-L. A `TermsConfig` model SHALL define defined-terms configuration: `output_dir` (str, default "spec/_generated"), `markup_styles` (list[str], default ["*", "**"]), `exclude_files` (list[str], default []), and a nested `severity` field of type `TermsSeverityConfig`. `TermsSeverityConfig` SHALL define 6 severity fields: `duplicate` (default "error"), `undefined` (default "warning"), `unmarked` (default "warning"), `unused` (default "warning"), `bad_definition` (default "error"), `collection_empty` (default "warning"). `ElspaisConfig` SHALL include a `terms` field of type `TermsConfig` with factory default.
-
-M. `FormatConfig` SHALL include a `no_traceability_severity` field (str | None, default None) to configure the severity of code/test files lacking *Traceability* markers.
-
-N. <RETIRED> Backwards compatibility is not a goal of this project, so a configuration is not upgraded in place. An out-of-date setting is refused and named, per X.
 
 O. The configuration schema SHALL locate each rule setting under the concern it governs, such that a setting's position in the schema identifies which checks it affects.
 
@@ -177,7 +151,7 @@ Q. The configuration schema SHALL express file selection for scanning through a 
 
 R. An identifier SHALL resolve to a requirement only where it is spelled as the configuration of the repository owning that requirement admits. Neither case nor, for a numeric component, the number of leading zeros SHALL decide whether it resolves, except where a component's configured style makes its case part of the pattern it must match. An identifier SHALL be rendered in the one form that configuration names, on every surface.
 
-S. Reading an identifier without regard to case and padding SHALL NOT extend to any other difference. A spelling that differs from what the configuration admits in anything else SHALL resolve to nothing, and SHALL NOT be repaired into one that resolves.
+S. A spelling that differs from what the configuration admits in anything other than case or the digit-padding of a numeric component SHALL resolve to nothing.
 
 T. Where a component is configured as numeric, its value SHALL be its identity, and the configured digit count SHALL bound that value rather than the number of characters written. A component whose value exceeds what the configuration admits SHALL resolve to nothing.
 
@@ -188,6 +162,8 @@ V. A severity value the schema does not admit SHALL be refused when the configur
 W. The patterns declared for a scanning kind SHALL select among the files within that kind's declared directories, with the same meaning for every kind.
 
 X. A configuration carrying a setting this version does not read SHALL be refused with a message naming each setting to change and what to write instead.
+
+Y. A configuration SHALL be admitted only where every setting it carries is one this version's schema defines.
 
 ### Rationale
 
@@ -211,6 +187,7 @@ R is a condition on resolving, never on writing, which is what keeps a reference
 
 ### Changelog
 
+- 2026-09-12 | dfcf9d49 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-24 | 277219e9 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-24 | 22e31e30 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-24 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-66: N retired -- a configuration is refused and named rather than upgraded in place; X states the refusal
@@ -241,7 +218,7 @@ R is a condition on resolving, never on writing, which is what keeps a reference
 - 2026-03-30 | db4ad28c | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 - 2026-03-29 | c75b87f8 | - | Michael Lewis (<michael@anspar.org>) | Add assertion N for config migration v3 to v4
 
-*End* *Config Schema v3 Models* | **Hash**: 277219e9
+*End* *Config Schema v3 Models* | **Hash**: dfcf9d49
 ---
 
 ## REQ-d00251: A Repository's Identifier Grammar
@@ -349,3 +326,27 @@ G. <RETIRED> carried by REQ-d00212-R, which admits one spelling and lets any oth
 
 *End* *Single-Authority Identifier Grammar Derivation* | **Hash**: fe29efc0
 ---
+
+---
+
+## REQ-d00290: Machine-Local Configuration Overlay
+
+**Level**: dev | **Status**: Draft | **Implements**: REQ-p00002
+
+A repository's configuration may be assembled from a committed file and a machine-local file layered over it, so that a path or a setting that differs per machine can be held outside the shared configuration. This requirement governs what that layering may change.
+
+### Assertions
+
+A. A configuration assembled with a machine-local overlay SHALL produce the same graph, and the same relationships, as a configuration holding the assembled result in its committed file alone.
+
+B. Where a repository's configuration was assembled using a machine-local overlay, the tool SHALL report that repository as locally overridden.
+
+### Rationale
+
+An overlay exists so that one machine can point a declaration somewhere else without that pointing being committed. It is a way of writing the configuration, not a second kind of configuration, so the assembled result is the whole of what anything downstream may see: a question answered one way when a value sits in the committed file and another way when the same value arrives through the overlay has found a distinction that is not supposed to exist. A is that property stated as an obligation, and it is decidable by construction -- move the overlay's content into the committed file, and every answer must be identical.
+
+The failure it forecloses is not hypothetical. Code that reaches for the file it is about to write, rather than for the configuration, sees a declaration that is present in one arrangement and absent in the other, and the operator is told a registration changed nothing when in truth the tool was looking in the wrong place. Two readings of "what is already recorded" are then live at once, and which one a given line of code gets depends on what happened to be in scope.
+
+B is the single exception, and it is a disclosure rather than a difference: which arrangement produced a configuration is a fact about the machine, and an operator comparing an answer here against an answer elsewhere needs to know that a local file took part. It is deliberately coarse -- a repository was overridden, or it was not. Reporting which values an overlay contributed would put the shape of the overlay back into the answers, which is the thing A exists to keep out, and an operator who needs that detail can read the file.
+
+*End* *Machine-Local Configuration Overlay* | **Hash**: 9019f766

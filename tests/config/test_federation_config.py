@@ -576,7 +576,7 @@ class TestDeclarationRequiredFields:
         # way it takes no part in locating the repository.
         assert resolved["lib"]["git"] == git
 
-    # Verifies: REQ-d00202-B, REQ-d00212-K
+    # Verifies: REQ-d00202-B, REQ-d00212-Y
     def test_REQ_d00202_B_git_remote_survives_a_config_on_disk(self, tmp_path):
         """An authored `.elspais.toml` may carry the remote, and it arrives intact.
 

@@ -349,7 +349,7 @@ O. Registry-related errors — unmet workspace expectation, unreadable registry,
 
 ### Rationale
 
-The registry is the second discovery source beside `[associates]` (directed dependencies): membership is flat and undirected, so cycles are impossible by construction, while dependency direction — which drives resolution order and base/overlay relationships — stays in `[associates]` where cycles remain a genuine error. Both sources feed one assembly keyed by git origin, which is stable across worktrees and clones where path and name are not. This is what dissolves the symmetric-configuration circularity: neither of two mutually-dependent repos needs to declare the other for membership.
+The registry is the second discovery source beside `[associates]` (directed dependencies): membership is flat and undirected, so cycles are impossible by construction, while dependency direction — which drives resolution order and base/overlay relationships — stays in `[associates]` where cycles remain a genuine error. Both sources feed one assembly keyed by the namespace each member declares, which is what identifies a member wherever it is reached from. This is what dissolves the symmetric-configuration circularity: neither of two mutually-dependent repos needs to declare the other for membership.
 
 A per-user file solves what committed config cannot: associate paths are machine-specific, so org membership cannot live in `.elspais.toml`; one list per machine replaces one list per repo per machine; a workspace root is addressable even though it is not a repository (REQ-p00081-E); and CI points the environment override at a generated file resolving that job's checkout paths.
 

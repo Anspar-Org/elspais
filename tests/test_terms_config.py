@@ -1,11 +1,11 @@
 """Tests for TermsConfig, TermsSeverityConfig, and FormatConfig models.
 
-Validates REQ-d00212-L: TermsConfig SHALL have output_dir, markup_styles
+Validates REQ-d00212-Y over the terms configuration
 (default ["*", "**"]), exclude_files (default []), and nested
 severity: TermsSeverityConfig. TermsSeverityConfig SHALL define 6 severity
 fields.
 
-Validates REQ-d00212-M: FormatConfig SHALL include no_traceability_severity.
+Validates REQ-d00212-Y over the format configuration.
 """
 
 import pytest
@@ -18,9 +18,9 @@ TermsConfig = _schema.TermsConfig
 
 
 class TestTermsSeverityConfig:
-    """Validates REQ-d00212-L: TermsSeverityConfig model with 6 severity fields."""
+    """Validates REQ-d00212-Y: TermsSeverityConfig model with 6 severity fields."""
 
-    # Verifies: REQ-d00212-L
+    # Verifies: REQ-d00212-Y
     def test_REQ_d00212_L_terms_severity_config_defaults(self):
         """TermsSeverityConfig() has correct 6 defaults."""
         TermsSeverityConfig = _schema.TermsSeverityConfig
@@ -32,7 +32,7 @@ class TestTermsSeverityConfig:
         assert sc.bad_definition == "error"
         assert sc.collection_empty == "warning"
 
-    # Verifies: REQ-d00212-L
+    # Verifies: REQ-d00212-Y
     def test_REQ_d00212_L_terms_severity_config_strict(self):
         """TermsSeverityConfig rejects unknown fields (extra='forbid')."""
         TermsSeverityConfig = _schema.TermsSeverityConfig
@@ -41,28 +41,28 @@ class TestTermsSeverityConfig:
 
 
 class TestTermsConfig:
-    """Validates REQ-d00212-L: TermsConfig restructured model."""
+    """Validates REQ-d00212-Y: TermsConfig restructured model."""
 
-    # Verifies: REQ-d00212-L
+    # Verifies: REQ-d00212-Y
     def test_REQ_d00212_L_terms_config_nested_severity(self):
         """TermsConfig().severity is a TermsSeverityConfig instance."""
         TermsSeverityConfig = _schema.TermsSeverityConfig
         tc = TermsConfig()
         assert isinstance(tc.severity, TermsSeverityConfig)
 
-    # Verifies: REQ-d00212-L
+    # Verifies: REQ-d00212-Y
     def test_REQ_d00212_L_terms_config_markup_styles_default(self):
         """TermsConfig().markup_styles defaults to ["*", "**"]."""
         tc = TermsConfig()
         assert tc.markup_styles == ["*", "**"]
 
-    # Verifies: REQ-d00212-L
+    # Verifies: REQ-d00212-Y
     def test_REQ_d00212_L_terms_config_exclude_files_default(self):
         """TermsConfig().exclude_files defaults to []."""
         tc = TermsConfig()
         assert tc.exclude_files == []
 
-    # Verifies: REQ-d00212-L
+    # Verifies: REQ-d00212-Y
     def test_REQ_d00212_L_terms_config_no_flat_severity(self):
         """TermsConfig does NOT have flat duplicate_severity etc."""
         tc = TermsConfig()
@@ -70,7 +70,7 @@ class TestTermsConfig:
         assert not hasattr(tc, "undefined_severity")
         assert not hasattr(tc, "unmarked_severity")
 
-    # Verifies: REQ-d00212-L
+    # Verifies: REQ-d00212-Y
     def test_REQ_d00212_L_elspais_config_terms_field(self):
         """ElspaisConfig().terms has the new nested structure."""
         TermsSeverityConfig = _schema.TermsSeverityConfig
@@ -83,15 +83,15 @@ class TestTermsConfig:
 
 
 class TestFormatConfig:
-    """Validates REQ-d00212-M: FormatConfig no_traceability_severity field."""
+    """Validates REQ-d00212-Y: FormatConfig no_traceability_severity field."""
 
-    # Verifies: REQ-d00212-M
+    # Verifies: REQ-d00212-Y
     def test_REQ_d00212_M_no_traceability_severity_default(self):
         """FormatConfig().no_traceability_severity defaults to 'warning'."""
         fc = _schema.FormatConfig()
         assert fc.no_traceability_severity == "warning"
 
-    # Verifies: REQ-d00212-M
+    # Verifies: REQ-d00212-Y
     def test_REQ_d00212_M_no_traceability_severity_accepts_values(self):
         """FormatConfig accepts warning/error/off for no_traceability_severity."""
         for val in ("warning", "error", "off"):

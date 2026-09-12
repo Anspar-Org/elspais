@@ -68,7 +68,7 @@ class TestDomainFile:
             assert hasattr(result, "source_context")
             assert "prd.md" in result.source_context.source_id
 
-    # Verifies: REQ-d00212-B
+    # Verifies: REQ-d00212-Y
     def test_skip_dirs_filters_subdirectories(self, temp_spec_dir):
         """Test that skip_dirs excludes files in specified subdirectories."""
         # Create a roadmap subdirectory with a file
@@ -91,7 +91,7 @@ class TestDomainFile:
         source_paths = [ctx.source_id for ctx, _ in sources]
         assert not any("roadmap" in s for s in source_paths), "Should exclude roadmap with skip"
 
-    # Verifies: REQ-d00212-B
+    # Verifies: REQ-d00212-Y
     def test_skip_files_filters_specific_files(self, temp_spec_dir):
         """Test that skip_files excludes files with specified names."""
         # Create a README.md file
@@ -110,7 +110,7 @@ class TestDomainFile:
         source_paths = [ctx.source_id for ctx, _ in sources]
         assert not any("README.md" in s for s in source_paths), "Should exclude README with skip"
 
-    # Verifies: REQ-d00212-B
+    # Verifies: REQ-d00212-Y
     def test_skip_dirs_and_files_combined(self, temp_spec_dir):
         """Test that skip_dirs and skip_files work together."""
         # Create a roadmap subdirectory with files
@@ -139,7 +139,7 @@ class TestDomainFile:
         assert any("prd.md" in s for s in source_paths)
         assert any("ops.md" in s for s in source_paths)
 
-    # Verifies: REQ-d00212-B
+    # Verifies: REQ-d00212-Y
     def test_skip_dirs_multi_segment_path(self, temp_spec_dir):
         """Test that skip_dirs supports multi-segment paths like 'regulations/fda'."""
         # Create nested directory: regulations/fda/ with a file

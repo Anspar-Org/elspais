@@ -140,7 +140,7 @@ def _resolve_spec_dir_info(spec_dir: Path) -> _SpecDirInfo:
     Finds the nearest ``.elspais.toml`` above *spec_dir* and reads
     the project name and level definitions via typed config.
     """
-    # Implements: REQ-d00212-F, REQ-d00207-C
+    # Implements: REQ-d00212-Y, REQ-d00207-C
     from elspais.config import get_config
     from elspais.config.schema import ElspaisConfig
 

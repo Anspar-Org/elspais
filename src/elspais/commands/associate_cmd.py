@@ -365,7 +365,7 @@ def cmd_list(args: argparse.Namespace) -> int:
     Returns:
         Exit code.
     """
-    # Implements: REQ-d00202-A, REQ-d00212-K
+    # Implements: REQ-d00202-A, REQ-d00212-Y
     from elspais.config import get_associates_config, get_config
 
     config_path = _get_config_path(args)
@@ -434,7 +434,7 @@ def cmd_unlink(args: argparse.Namespace) -> int:
         print(f"Error: No associate '{name}' found (no local config).", file=sys.stderr)
         return 1
 
-    # Implements: REQ-d00212-K
+    # Implements: REQ-d00212-Y
     doc = parse_toml_document(local_path.read_text(encoding="utf-8"))
     associates = doc.get("associates", {})
 
@@ -573,7 +573,7 @@ def register_associate(
     Returns:
         The outcome, carrying the path the configuration holds afterwards.
     """
-    # Implements: REQ-d00212-K
+    # Implements: REQ-d00212-Y
     local_path = config_dir / ".elspais.local.toml"
 
     if local_path.exists():
