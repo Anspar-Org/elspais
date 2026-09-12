@@ -1516,6 +1516,43 @@ class TestAssociateTwinDeclaredInMainConfig:
         assert str(core / ".elspais.toml") in err, err
         assert "Use -f" not in err, err
 
+    # Verifies: REQ-d00289-H
+    def test_REQ_d00289_H_refusal_names_the_directory_the_federation_reached(
+        self, tmp_path, monkeypatch, capsys
+    ):
+        """A local override redirects the entry, so the colliding directory
+        is the one the override names -- the path written in the main file
+        is not in the federation at all, and sending the operator there
+        names a directory that collides with nothing."""
+        from elspais.commands.associate_cmd import run
+
+        core = _core_declaring(
+            tmp_path, '\n[associates.libA]\npath = "../libA"\nnamespace = "LIB"\n'
+        )
+        # The path the MAIN file writes, which the override takes out of
+        # the federation. Its name is not a substring of the override's.
+        abandoned = _write_associate_config(tmp_path / "libA", "libA", "LIB")
+        moved = _write_associate_config(tmp_path / "moved" / "libA", "libA", "LIB")
+        second = _write_associate_config(tmp_path / "libB", "libB", "LIB")
+
+        local_config = core / ".elspais.local.toml"
+        local_config.write_text(f'[associates.libA]\npath = "{moved}"\nnamespace = "LIB"\n')
+        before = local_config.read_bytes()
+
+        monkeypatch.chdir(core)
+        assert run(_link_args(core, str(second))) != 0
+        assert local_config.read_bytes() == before, "a refused registration must write nothing"
+
+        err = capsys.readouterr().err
+        assert f"already registered to libA at {moved}" in err, err
+        assert str(abandoned) not in err, (
+            "the main file's path is not the directory the federation reached"
+        )
+        assert "../libA" not in err, (
+            "the refusal must not quote the relative path the main file writes"
+        )
+        assert "Use -f" not in err, err
+
 
 class TestAssociateForcedPastAnUnretireableRival:
     """Validates REQ-d00289-C: what a refusal says once -f has been given."""

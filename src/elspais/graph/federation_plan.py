@@ -15,12 +15,14 @@ to guess at.  Two directories declaring different namespaces are two
 members, however closely related the directories are -- their
 identifiers cannot be confused.
 
-That identity rule is what separates a diamond from a cycle.  A
-namespace already resolved elsewhere in the walk, at the same directory,
-is convergence and is skipped; one already on the current declaration
-path is a cycle and is an error, because dependency direction is what
-orders resolution.  At a *different* directory either is the collision
-of REQ-d00202-K.
+Whether the walk has been somewhere before is asked of the DIRECTORY,
+which is answerable before the repository there has been read: the same
+directory reached again up the chain in hand is a cycle, and reached
+again across the walk it is a diamond converging on one member.  The
+namespace is what identifies a member once it HAS been read -- one
+namespace found at two directories is the collision of REQ-d00202-K --
+and a declaration that could not be read claims none at all
+(REQ-d00202-M).
 
 This module is the one authority on what enters a federation.  A surface
 recording a declaration asks it the same question the build asks, so a
@@ -181,6 +183,41 @@ def repository_origin(repo_root: Path) -> str | None:
     return _normalize_origin(origin) if origin else None
 
 
+def _assert_declared_namespace(
+    name: str, assoc_path: Path, declared_ns: str, found_ns: str
+) -> None:
+    """Hold a declaration to the namespace the repository there declares.
+
+    Implements: REQ-d00202-L
+
+    Asked wherever a declaration meets a repository that has been read --
+    on loading it, and on converging onto one already loaded -- because a
+    mismatch is a property of the declaration, and which of two
+    declarations reached the directory first must not decide whether it is
+    reported.
+    """
+    if declared_ns and found_ns and declared_ns != found_ns:
+        raise FederationError(
+            f"Associate '{name}' at {assoc_path} declares the namespace "
+            f"'{declared_ns}', but the repository there declares "
+            f"'{found_ns}'. Point the declaration at the repository it "
+            f"means, or correct the namespace it names."
+        )
+
+
+def _error_identity(repo_root: Path, declaration: tuple[str, ...]) -> str:
+    """Identify a declaration that could not be read, uniquely to itself.
+
+    Implements: REQ-d00202-M, REQ-d00202-N
+
+    Keyed by the declaration as well as the directory, because two
+    declarations pointing at one unreadable path are two faults to report:
+    collapsing them would have an operator fix one, re-run, and meet the
+    other.
+    """
+    return f"\x00error:{repo_root}\x00{' -> '.join(declaration)}"
+
+
 def _path_identity(repo_root: Path) -> str:
     """Identify a member that has claimed no namespace, by its directory.
 
@@ -194,7 +231,7 @@ def _path_identity(repo_root: Path) -> str:
 
 
 def _identity(declared_namespace: str, repo_root: Path) -> str:
-    """Identify a member for convergence, cycle and collision detection.
+    """Identify a member that has been read, for collision detection.
 
     Implements: REQ-d00202-G
 
@@ -261,7 +298,12 @@ def plan_federation(
     by_name[root_name] = root_entry
 
     def _record(entry: PlannedRepo, identity: str) -> None:
-        by_root[entry.repo_root] = entry
+        # Only a repository that was read stands for its directory. An
+        # entry recording a fault is not a member the walk can converge
+        # on, and must not stop a later declaration at that path being
+        # reported in its own right.
+        if entry.config is not None:
+            by_root[entry.repo_root] = entry
         # A federation keys repositories by name, so two repositories
         # arriving under one name would leave only the later of them
         # reachable -- the earlier repo's requirements would resolve
@@ -309,8 +351,18 @@ def plan_federation(
             # Implements: REQ-d00202-F
             # One directory reached by two chains is one member: the
             # diamond converges here, before anything is read a second
-            # time.
-            if assoc_path in by_root:
+            # time.  The declaration is still held to the namespace that
+            # member declares -- the config is already in hand, and
+            # skipping the check would let the order declarations are
+            # reached in decide whether a mismatch is reported.
+            converged = by_root.get(assoc_path)
+            if converged is not None:
+                _assert_declared_namespace(
+                    name,
+                    assoc_path,
+                    info.get("namespace") or "",
+                    _declared_namespace(converged.config),
+                )
                 continue
 
             # Implements: REQ-d00202-M
@@ -319,9 +371,10 @@ def plan_federation(
             # nothing has said nothing about a namespace, and reporting it
             # as a claimant would name a collision with a directory that
             # is not there instead of the declaration that points nowhere.
-            # An error entry is keyed by its path, so two of them never
-            # collide and neither is mistaken for a member.
-            identity = _path_identity(assoc_path)
+            # An error entry is keyed by its own declaration, so two
+            # declarations at one unreadable path are two reported faults
+            # and neither is mistaken for a member.
+            identity = _error_identity(assoc_path, child_path)
 
             if not assoc_path.exists():
                 reason = f"Path does not exist: {assoc_path}"
@@ -371,15 +424,12 @@ def plan_federation(
             # find there.  A mismatch means the declaration points
             # somewhere its author did not intend, which is a mistake to
             # report rather than a preference to reconcile.
-            declared_ns = info.get("namespace") or ""
-            found_ns = _declared_namespace(assoc_config)
-            if declared_ns and found_ns and declared_ns != found_ns:
-                raise FederationError(
-                    f"Associate '{name}' at {assoc_path} declares the namespace "
-                    f"'{declared_ns}', but the repository there declares "
-                    f"'{found_ns}'. Point the declaration at the repository it "
-                    f"means, or correct the namespace it names."
-                )
+            _assert_declared_namespace(
+                name,
+                assoc_path,
+                info.get("namespace") or "",
+                _declared_namespace(assoc_config),
+            )
 
             # Implements: REQ-d00202-K
             # The repository has been read, so the namespace its

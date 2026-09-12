@@ -888,9 +888,11 @@ class FederationVerdict:
             if isinstance(local, dict) and not in_main:
                 return (name, local.get("path", ""), "local")
             if in_main:
-                entry = (main_entries or {}).get(name)
-                path = entry.get("path", "") if isinstance(entry, dict) else str(root)
-                return (name, path, "main")
+                # The colliding directory is the one the federation
+                # reached, which a local override may have redirected --
+                # the path written in the main file can be a directory
+                # that is not in the federation at all.
+                return (name, str(root), "main")
             return (name, str(root), "")
         return ("", "", "")
 

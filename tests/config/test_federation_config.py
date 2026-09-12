@@ -822,6 +822,45 @@ class TestDeclaredNamespaceMismatch:
         assert [entry.name for entry in planned] == ["app", "lib"]
         assert all(entry.error is None for entry in planned)
 
+    @pytest.mark.parametrize(
+        ("mismatched", "namespaces"),
+        [
+            ("a_lib", {"a_lib": "WRONG", "z_lib": "LIB"}),
+            ("z_lib", {"a_lib": "LIB", "z_lib": "WRONG"}),
+        ],
+        ids=["mismatched-first", "mismatched-second"],
+    )
+    # Verifies: REQ-d00202-L
+    def test_REQ_d00202_L_mismatch_on_a_converged_directory_still_raises(
+        self, tmp_path, mismatched, namespaces
+    ):
+        """Two declarations reach one directory; the one naming the wrong
+        namespace is reported whichever of them the walk reaches first.
+
+        Converging on a directory already read is not a reason to stop
+        asking what the declaration claimed about it: which declaration
+        arrived first is an accident of the table's order, and a mismatch
+        is a property of the declaration.
+        """
+        from elspais.graph.federated import FederationError
+
+        lib = make_repo(tmp_path, "lib")  # declares namespace 'LIB'
+        root = make_repo(
+            tmp_path,
+            "app",
+            associates={"a_lib": "../lib", "z_lib": "../lib"},
+            associate_namespaces=namespaces,
+        )
+
+        with pytest.raises(FederationError) as excinfo:
+            _plan(root)
+
+        message = str(excinfo.value)
+        assert f"Associate '{mismatched}'" in message, message
+        assert str(lib.resolve()) in message, message
+        assert "'WRONG'" in message, message
+        assert "'LIB'" in message, message
+
 
 def _hub_with_unreadable_twin(tmp_path: Path, kind: str) -> tuple[Path, Path]:
     """A hub declaring one readable member and one unreadable one, both 'LIB'.
@@ -935,3 +974,55 @@ class TestUnreadableDeclaration:
         assert "LIB" in message
         assert str((tmp_path / "readable").resolve()) in message, message
         assert str((tmp_path / "lib").resolve()) in message, message
+
+    @pytest.mark.parametrize("kind", ["missing", "no-config", "unparseable"])
+    # Verifies: REQ-d00202-M
+    def test_REQ_d00202_M_two_declarations_at_one_unreadable_path_are_two_faults(
+        self, tmp_path, kind
+    ):
+        """Both declarations pointing at one unreadable directory are reported.
+
+        A declaration that could not be read is not a member the walk can
+        converge on, so it cannot stand for its directory and silence the
+        next declaration naming it -- an operator who fixed one, re-ran,
+        and met the other would have been told only half the fault.
+        """
+        if kind == "missing":
+            bad_path = tmp_path / "gone"
+        elif kind == "no-config":
+            bad_path = tmp_path / "bare"
+            (bad_path / "spec").mkdir(parents=True)
+        else:
+            bad_path = make_repo(tmp_path, "rubble", config_text=_BROKEN_TOML)
+        relative = f"../{bad_path.name}"
+        hub = make_repo(tmp_path, "hub", associates={"a": relative, "b": relative})
+
+        by_name = {entry.name: entry for entry in _plan(hub)}
+
+        assert set(by_name) == {"hub", "a", "b"}
+        for name in ("a", "b"):
+            assert by_name[name].config is None
+            assert by_name[name].error, f"declaration '{name}' must carry its own reason"
+            assert str(bad_path.resolve()) in by_name[name].error, by_name[name].error
+
+    @pytest.mark.parametrize("kind", ["missing", "no-config", "unparseable"])
+    # Verifies: REQ-d00202-N
+    def test_REQ_d00202_N_both_declarations_at_one_unreadable_path_are_blamed(self, tmp_path, kind):
+        """The health surface blames each declaration, not just the first."""
+        from elspais.commands.health import check_associate_paths
+
+        if kind == "missing":
+            bad_path = tmp_path / "gone"
+        elif kind == "no-config":
+            bad_path = tmp_path / "bare"
+            (bad_path / "spec").mkdir(parents=True)
+        else:
+            bad_path = make_repo(tmp_path, "rubble", config_text=_BROKEN_TOML)
+        relative = f"../{bad_path.name}"
+        hub = make_repo(tmp_path, "hub", associates={"a": relative, "b": relative})
+
+        check = check_associate_paths(_load(hub), hub)
+
+        assert check.passed is False
+        blamed = {finding.node_id for finding in check.findings}
+        assert blamed == {"a", "b"}, [f.message for f in check.findings]
