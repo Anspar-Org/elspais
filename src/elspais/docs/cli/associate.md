@@ -96,7 +96,9 @@ elspais associate ../callisto-copy -f
 # Replaced callisto at /home/user/repos/callisto with clone (CAL) at /home/user/repos/callisto-copy
 ```
 
-`-f` reaches only what this command writes, which is `.elspais.local.toml`.
+Changing a recorded path works wherever the entry is declared: the change is
+written to `.elspais.local.toml`, and the configuration a later run assembles
+holds the value you gave. Retiring an entry is the case an overlay cannot do.
 Where the entry holding the namespace is declared in `.elspais.toml` -- the
 shared configuration, committed and read by everyone -- there is nothing `-f`
 could do: removing a local entry would leave that declaration standing and the
@@ -164,7 +166,10 @@ elspais associate --all
 Auto-discovery reports and refuses on the same terms as a single
 registration. A candidate that would be refused is reported and the scan
 carries on to the ones after it, so the state of every candidate is on the
-screen together; the run exits non-zero if any was refused. `--all -f`
+screen together; the run exits non-zero if any was refused. Two candidates
+of one scan standing for one entry are settled before anything is written:
+neither is recorded, and each is reported naming the other, so which the scan
+reached first decides nothing. `--all -f`
 repoints each candidate whose recorded path differs.
 
 Two candidates of one scan that stand for the same entry -- they declare one
@@ -177,9 +182,16 @@ path.
 
 ```bash
 elspais associate --list
-# Name                 Prefix     Status       Path
-# callisto             CAL        OK           /home/user/repos/callisto
+# Name                 Prefix     Status       Local   Path
+# callisto             CAL        OK           -       /home/user/repos/callisto
+# titan                TTN        OK           yes     /home/user/repos/titan
 ```
+
+`Local` says whether that repository's own configuration was assembled with a
+`.elspais.local.toml` of its own. It answers one question -- was a machine-local
+file involved -- and deliberately not which values it contributed: an overlay
+changes nothing about the graph, so what it holds is a fact about this machine
+rather than about the federation. Read the file when you need the detail.
 
 ### Unlinking
 

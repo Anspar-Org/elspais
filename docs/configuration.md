@@ -690,6 +690,13 @@ path the configuration holds afterwards, and a registration naming an entry
 that is already recorded at another path is refused until `-f` says to
 replace it.
 
+A local file is an overlay, not a second kind of configuration: the tool
+answers every question about the assembled result, so which of the two files
+a value was written in changes nothing about the graph or its relationships.
+The one thing that differs is disclosure -- a repository whose configuration
+was assembled with a local file is reported as locally overridden, per
+repository rather than per value.
+
 Two variables the tool reads directly, neither of which is a setting:
 
 `ELSPAIS_VERSION` pins the minimum CLI version.

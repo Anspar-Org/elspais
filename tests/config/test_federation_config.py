@@ -1026,3 +1026,62 @@ class TestUnreadableDeclaration:
         assert check.passed is False
         blamed = {finding.node_id for finding in check.findings}
         assert blamed == {"a", "b"}, [f.message for f in check.findings]
+
+
+class TestLocalOverlayDisclosure:
+    """Validates REQ-d00290-B: a repository whose configuration was assembled
+    with a machine-local overlay is reported as locally overridden."""
+
+    @staticmethod
+    def _hub_with_one_overridden_member(tmp_path: Path) -> Path:
+        """A hub over two members, one of which holds a machine-local overlay."""
+        overridden = make_repo(tmp_path, "lib")
+        make_repo(tmp_path, "other")
+        # An overlay that changes no value: what is disclosed is that a
+        # machine-local file took part, not what it contributed.
+        (overridden / ".elspais.local.toml").write_text(
+            "# machine-local overlay\n", encoding="utf-8"
+        )
+        return make_repo(tmp_path, "hub", associates={"lib": "../lib", "other": "../other"})
+
+    # Verifies: REQ-d00290-B
+    def test_REQ_d00290_B_plan_records_the_overlay_per_repository(self, tmp_path):
+        """The plan answers for every repository it reached, the invoking one
+        included, and only the one holding an overlay is marked."""
+        hub = self._hub_with_one_overridden_member(tmp_path)
+
+        planned = _plan(hub)
+
+        assert {entry.name: entry.locally_overridden for entry in planned} == {
+            "hub": False,
+            "lib": True,
+            "other": False,
+        }
+
+    # Verifies: REQ-d00290-B
+    def test_REQ_d00290_B_health_names_the_overridden_member_beside_its_verdict(self, tmp_path):
+        """A passing check still says which members a local file took part in
+        assembling: two machines can pass this check over different
+        configurations, and that is the fact which says so."""
+        from elspais.commands.health import check_associate_paths
+
+        hub = self._hub_with_one_overridden_member(tmp_path)
+
+        check = check_associate_paths(_load(hub), hub)
+
+        assert check.passed is True, [f.message for f in check.findings]
+        assert check.message.endswith("locally overridden: lib"), check.message
+
+    # Verifies: REQ-d00290-B
+    def test_REQ_d00290_B_health_says_nothing_where_no_overlay_took_part(self, tmp_path):
+        """With every member assembled from its committed file alone there is
+        nothing to disclose, so the verdict carries no such clause."""
+        from elspais.commands.health import check_associate_paths
+
+        make_repo(tmp_path, "lib")
+        hub = make_repo(tmp_path, "hub", associates={"lib": "../lib"})
+
+        check = check_associate_paths(_load(hub), hub)
+
+        assert check.passed is True, [f.message for f in check.findings]
+        assert "locally overridden" not in check.message, check.message

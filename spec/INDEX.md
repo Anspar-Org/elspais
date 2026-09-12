@@ -206,7 +206,7 @@
 | REQ-d00286 | Built-In User Documentation                                   | dev-cli.md              | d246f21a |
 | REQ-d00287 | Reading a Reference                                           | dev-graph-core.md       | 02eb02ff |
 | REQ-d00288 | Journeys That Validate Nothing                                | dev-graph-core.md       | 184a67af |
-| REQ-d00289 | Associate Registration Outcome                                | dev-cli.md              | 0d4c2b04 |
+| REQ-d00289 | Associate Registration Outcome                                | dev-cli.md              | c4a4e569 |
 | REQ-d00290 | Machine-Local Configuration Overlay                           | dev-graph-config.md     | 9019f766 |
 
 ## User Journeys

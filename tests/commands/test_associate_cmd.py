@@ -1,4 +1,4 @@
-# Verifies: REQ-p00005-C, REQ-d00202-I, REQ-d00289-A+B+C+D+E+F+G+H+I
+# Verifies: REQ-p00005-C, REQ-d00202-I, REQ-d00289-A+B+C+D+E+F+G+H+I, REQ-d00290-A+B
 """Tests for elspais associate command.
 
 Validates REQ-p00005-C: CLI-based management of associate repository links.
@@ -1031,13 +1031,13 @@ class TestAssociateRivalCandidates:
     """Validates REQ-d00289: two candidates claiming one entry, and an entry
     matched by name against an entry matched by path."""
 
-    # Verifies: REQ-d00289-G, REQ-d00289-A
-    def test_REQ_d00289_G_all_refuses_rival_candidate_even_under_force(
+    # Verifies: REQ-d00289-G
+    def test_REQ_d00289_G_all_records_neither_candidate_for_one_name(
         self, tmp_path, monkeypatch, capsys
     ):
-        """Two scanned candidates declaring one name at different paths: the
-        second is refused naming the rival, not left to win by sort order --
-        force was given about neither of them."""
+        """Two scanned candidates declaring one name at different paths stand
+        for one entry: neither of them is recorded, each refusal names the
+        other, and force -- given about neither of them -- elects no winner."""
         from elspais.commands.associate_cmd import run
 
         workspace = tmp_path / "workspace"
@@ -1051,19 +1051,22 @@ class TestAssociateRivalCandidates:
         assert rc != 0, "a scan that refused a candidate must not exit 0"
 
         captured = capsys.readouterr()
-        assert "Linked 1 associate(s), 0 unchanged, 1 refused" in captured.out
-        assert str(second) in captured.err, "the refusal must name the candidate refused"
-        assert str(first) in captured.err, "the refusal must name the rival already recorded"
+        assert "Linked 0 associate(s), 0 unchanged, 2 refused" in captured.out
+        assert str(first) in captured.err, "both contested directories must be named"
+        assert str(second) in captured.err, "both contested directories must be named"
         assert "by path" in captured.err.lower(), (
             "the refusal must say how to register the one meant"
         )
 
-        doc = tomlkit.parse((core / ".elspais.local.toml").read_text())
-        entries = {k for k in doc["associates"] if isinstance(doc["associates"][k], dict)}
-        assert entries == {"callisto"}
-        assert doc["associates"]["callisto"]["path"] == str(first), (
-            "the entry recorded first must not be repointed by its rival"
+        local_config = core / ".elspais.local.toml"
+        recorded_text = local_config.read_text() if local_config.exists() else ""
+        assert "callisto" not in recorded_text, (
+            "a contested candidate must not reach the configuration"
         )
+        if recorded_text:
+            doc = tomlkit.parse(recorded_text)
+            recorded = doc.get("associates", {})
+            assert not [k for k in recorded if isinstance(recorded[k], dict)]
 
     # Verifies: REQ-d00289-C
     @pytest.mark.parametrize("name_entry_first", [True, False])
@@ -1227,20 +1230,31 @@ class TestAssociateSameNamespaceTwice:
         assert doc["associates"]["libfork"]["path"] == str(derived)
 
     # Verifies: REQ-d00289-G, REQ-d00289-H
-    def test_REQ_d00289_G_all_refuses_a_second_candidate_for_one_namespace(
-        self, tmp_path, monkeypatch, capsys
+    @pytest.mark.parametrize(
+        "clean_dir,rival_dirs",
+        [
+            ("a-callisto", ("b-lib", "c-lib")),
+            ("b-callisto", ("a-lib", "c-lib")),
+            ("c-callisto", ("a-lib", "b-lib")),
+        ],
+    )
+    def test_REQ_d00289_G_all_records_neither_candidate_for_one_namespace(
+        self, tmp_path, monkeypatch, capsys, clean_dir, rival_dirs
     ):
-        """Two candidates of one scan declaring one namespace are one entry:
-        the later is refused naming both directories while the candidates
-        around it still link, and the run exits non-zero even under force."""
+        """Two candidates of one scan declaring one namespace stand for one
+        entry: neither is recorded and both directories are named, while an
+        uncontested candidate of the same scan still links. The scan reaches
+        candidates in directory-name order, so the directories are named to
+        place the uncontested one before, between and after the contested
+        pair -- the outcome is the same each way round."""
         from elspais.commands.associate_cmd import run
 
         workspace = tmp_path / "workspace"
         workspace.mkdir()
         core = _make_core_repo(workspace / "core")
-        first = _write_associate_config(workspace / "a-lib", "lib", "LIB")
-        second = _write_associate_config(workspace / "b-lib", "lib2", "LIB")
-        _write_associate_config(workspace / "c-callisto", "callisto", "CAL")
+        first = _write_associate_config(workspace / rival_dirs[0], "lib", "LIB")
+        second = _write_associate_config(workspace / rival_dirs[1], "lib2", "LIB")
+        _write_associate_config(workspace / clean_dir, "callisto", "CAL")
 
         monkeypatch.chdir(core)
         assert run(_link_args(core, None, all=True, force=True)) != 0, (
@@ -1248,16 +1262,17 @@ class TestAssociateSameNamespaceTwice:
         )
 
         captured = capsys.readouterr()
-        assert "Linked 2 associate(s), 0 unchanged, 1 refused" in captured.out
-        assert str(second) in captured.err, "the refusal must name the candidate refused"
-        assert str(first) in captured.err, "the refusal must name the rival already recorded"
+        assert "Linked 1 associate(s), 0 unchanged, 2 refused" in captured.out
+        assert str(first) in captured.err, "both contested directories must be named"
+        assert str(second) in captured.err, "both contested directories must be named"
         assert "both declare the namespace 'LIB'" in captured.err
         assert "by path" in captured.err.lower()
 
         doc = tomlkit.parse((core / ".elspais.local.toml").read_text())
         entries = {k for k in doc["associates"] if isinstance(doc["associates"][k], dict)}
-        assert entries == {"lib", "callisto"}
-        assert doc["associates"]["lib"]["path"] == str(first)
+        assert entries == {"callisto"}, (
+            "the uncontested candidate links; neither contested candidate is recorded"
+        )
 
 
 class TestAssociatePreExistingFederationFault:
@@ -1595,3 +1610,142 @@ class TestAssociateForcedPastAnUnretireableRival:
         assert "LIB" in err and str(beta) in err and str(candidate) in err, (
             "the refusal must name the namespace and both directories claiming it"
         )
+
+
+# One entry, one spelling: the same declaration content routed into either
+# configuration file, so the only thing a test varies is which file holds it.
+_MISPOINTED_ENTRY = '\n[associates.oldname]\npath = "../libX"\nnamespace = "WRONG"\n'
+
+
+def _core_holding(tmp_path: Path, holder: str) -> Path:
+    """A core repo whose configuration holds `_MISPOINTED_ENTRY` in `holder`."""
+    if holder == ".elspais.toml":
+        return _core_declaring(tmp_path, _MISPOINTED_ENTRY)
+    core = _make_core_repo(tmp_path / "core")
+    (core / holder).write_text(_MISPOINTED_ENTRY.lstrip("\n"))
+    return core
+
+
+class TestAssociateReadsTheAssembledConfiguration:
+    """Validates REQ-d00290-A: a configuration assembled with a machine-local
+    overlay answers as one holding the assembled result in its committed file
+    alone, so which file a declaration was written into settles nothing."""
+
+    # Verifies: REQ-d00290-A, REQ-d00289-I
+    @pytest.mark.parametrize("holder", [".elspais.toml", ".elspais.local.toml"])
+    def test_REQ_d00290_A_registration_answers_the_same_from_either_file(
+        self, tmp_path, monkeypatch, capsys, holder
+    ):
+        """An entry pointing at a repository that declares another namespace
+        (REQ-d00202-L) is a configuration that does not federate. Registering
+        the repository it points at is refused for that standing fault -- and
+        is refused identically whether the entry was committed or written by
+        the machine-local overlay, since a registration reads the assembled
+        configuration and not the file it happens to write."""
+        from elspais.commands.associate_cmd import run
+
+        core = _core_holding(tmp_path, holder)
+        # The entry expects WRONG; the repository there declares LIB.
+        target = _write_associate_config(tmp_path / "libX", "libX", "LIB")
+
+        local_config = core / ".elspais.local.toml"
+        before = local_config.read_bytes() if local_config.exists() else None
+
+        monkeypatch.chdir(core)
+        rc = run(_link_args(core, str(target)))
+
+        captured = capsys.readouterr()
+        after = local_config.read_bytes() if local_config.exists() else None
+        assert after == before, "a refused registration must write nothing"
+
+        assert rc == 1, "a configuration that will not federate is refused however it was assembled"
+        assert "No change" not in captured.out, (
+            "reporting success over a configuration that will not federate is "
+            "the failure this invariant exists to catch"
+        )
+        assert "does not federate as it stands" in captured.err
+        assert str(target) in captured.err
+        assert "WRONG" in captured.err and "LIB" in captured.err, (
+            "the refusal must carry the mismatch the planner reached"
+        )
+
+
+class TestAssociateListReportsLocalOverride:
+    """Validates REQ-d00290-B: a member assembled with a machine-local overlay
+    is reported as locally overridden."""
+
+    # Verifies: REQ-d00290-B
+    def test_REQ_d00290_B_list_marks_only_the_overridden_member(
+        self, tmp_path, monkeypatch, capsys
+    ):
+        """The listing marks the member holding a machine-local overlay and
+        leaves the one assembled from its committed file alone unmarked."""
+        from elspais.commands.associate_cmd import run
+
+        core = _make_core_repo(tmp_path / "core")
+        overridden = _make_associate_repo(tmp_path, "callisto", "CAL")
+        plain = _make_associate_repo(tmp_path, "europa", "EUR")
+        # An overlay that changes no value: what is reported is that a
+        # machine-local file took part, not what it contributed.
+        (overridden / ".elspais.local.toml").write_text("# machine-local overlay\n")
+
+        (core / ".elspais.local.toml").write_text(
+            f'[associates.callisto]\npath = "{overridden}"\nnamespace = "CAL"\n\n'
+            f'[associates.europa]\npath = "{plain}"\nnamespace = "EUR"\n'
+        )
+
+        monkeypatch.chdir(core)
+        assert run(_link_args(core, None, list=True)) == 0
+
+        rows = {
+            line.split()[0]: line.split()
+            for line in capsys.readouterr().out.splitlines()
+            if line.split() and line.split()[0] in ("callisto", "europa")
+        }
+        assert set(rows) == {"callisto", "europa"}, rows
+        # Name, prefix, status, local, path.
+        assert rows["callisto"][3] == "yes", rows["callisto"]
+        assert rows["europa"][3] == "-", rows["europa"]
+
+
+class TestAssociateRelativePathResolution:
+    """Validates REQ-d00289-A: a recorded relative path is read against the
+    repository root it was written against."""
+
+    # Verifies: REQ-d00289-A, REQ-d00290-A
+    def test_REQ_d00289_A_recorded_relative_path_resolves_against_the_repo_root(self, tmp_path):
+        """Under a worktree the repository root is not the directory holding
+        the configuration. A recorded relative path resolves against the root
+        given, so the entry already recording the repository being registered
+        is recognised as that entry rather than as an unrelated one."""
+        from elspais.commands.associate_cmd import register_associate
+
+        (tmp_path / "held").mkdir()
+        config_dir = _make_core_repo(tmp_path / "held" / "core")
+        repo_root = tmp_path / "tree" / "worktree"
+        repo_root.mkdir(parents=True)
+        target = _write_associate_config(tmp_path / "tree" / "lib", "lib", "LIB")
+        # The same relative path read against config_dir names a directory
+        # that is not there at all, so the two bases cannot agree by accident.
+        assert not (config_dir.parent / "lib").exists()
+
+        (config_dir / ".elspais.local.toml").write_text(
+            '[associates.lib]\npath = "../lib"\nnamespace = "LIB"\n'
+        )
+        before = (config_dir / ".elspais.local.toml").read_bytes()
+
+        outcome = register_associate(
+            config_dir,
+            str(target),
+            "lib",
+            "LIB",
+            repo_root=repo_root,
+            config_path=config_dir / ".elspais.toml",
+        )
+
+        assert outcome.kind == "unchanged", (
+            "the recorded relative path names this very repository once it is "
+            "read against the repository root"
+        )
+        assert outcome.path == "../lib", "the report states what the configuration holds"
+        assert (config_dir / ".elspais.local.toml").read_bytes() == before

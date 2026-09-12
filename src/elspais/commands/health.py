@@ -2276,10 +2276,18 @@ def check_associate_paths(
             severity=severity,
             findings=findings,
         )
+    # Implements: REQ-d00290-B
+    # Which members were assembled with a machine-local overlay is stated
+    # alongside the verdict: two machines can pass this check over
+    # different configurations, and that is the fact which says so.
+    overridden = [m.name for m in members if m.locally_overridden]
+    message = f"All {len(members)} federated repository path(s) valid"
+    if overridden:
+        message += f"; locally overridden: {', '.join(sorted(overridden))}"
     return HealthCheck(
         name="config.associate_paths",
         passed=True,
-        message=f"All {len(members)} federated repository path(s) valid",
+        message=message,
         category="spec",
     )
 

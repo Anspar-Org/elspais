@@ -112,6 +112,8 @@ class PlannedRepo:
         error: Why ``config`` is None. None when the repo loaded.
         declaration_path: Repository names from the root to this
             repository inclusive, along the chain that first reached it.
+        locally_overridden: Whether a machine-local overlay took part in
+            assembling this repository's configuration.
     """
 
     name: str
@@ -120,6 +122,7 @@ class PlannedRepo:
     git_origin: str | None
     error: str | None
     declaration_path: tuple[str, ...]
+    locally_overridden: bool = False
 
 
 def _normalize_origin(url: str) -> str:
@@ -218,6 +221,20 @@ def _error_identity(repo_root: Path, declaration: tuple[str, ...]) -> str:
     return f"\x00error:{repo_root}\x00{' -> '.join(declaration)}"
 
 
+def uses_local_overlay(repo_root: Path) -> bool:
+    """Whether a machine-local overlay contributes to this repository's config.
+
+    Implements: REQ-d00290-B
+
+    Reported per repository rather than per value: which arrangement
+    produced a configuration is a fact about the machine, and an operator
+    comparing an answer here against one from elsewhere needs to know a
+    local file took part. What it contributed is deliberately not carried,
+    since that would put the overlay's shape back into the answers.
+    """
+    return (repo_root / ".elspais.local.toml").is_file()
+
+
 def _path_identity(repo_root: Path) -> str:
     """Identify a member that has claimed no namespace, by its directory.
 
@@ -291,6 +308,7 @@ def plan_federation(
         git_origin=repository_origin(root_root),
         error=None,
         declaration_path=(root_name,),
+        locally_overridden=uses_local_overlay(root_root),
     )
     planned.append(root_entry)
     resolved[root_identity] = root_entry
@@ -379,7 +397,7 @@ def plan_federation(
             if not assoc_path.exists():
                 reason = f"Path does not exist: {assoc_path}"
                 if strict:
-                    raise FederationError(f"Associate '{name}' path does not exist: {assoc_path}")
+                    raise FederationError(f"Associate '{name}': {reason}")
                 # Nothing is there to have an origin.
                 _record(
                     PlannedRepo(name, assoc_path, None, None, reason, child_path),
@@ -454,6 +472,7 @@ def plan_federation(
                     repository_origin(assoc_path),
                     None,
                     child_path,
+                    uses_local_overlay(assoc_path),
                 ),
                 identity,
             )
