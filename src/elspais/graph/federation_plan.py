@@ -6,18 +6,25 @@ repositories are in this federation, and what is each one's
 configuration?" without constructing a single graph.  ``build_graph()``
 turns the answer into ``RepoEntry`` objects.
 
-Declarations are walked depth-first from the root repository.  A
-repository is identified by its git origin, so the same repository
-reached down two different chains -- or reached once by its main
-checkout and once by a worktree -- converges on one entry rather than
-being federated twice.  A repository with no origin falls back to its
-resolved filesystem path, which keeps two unrelated originless
-directories distinct.
+Declarations are walked depth-first from the root repository.  A member
+is identified by the namespace its declaration names (REQ-d00202-G):
+one namespace names one member, REQ-d00202-L binds that namespace to
+what the repository at that path declares of itself, and two directories
+claiming one namespace are a collision to report rather than one member
+to guess at.  Two directories declaring different namespaces are two
+members, however closely related the directories are -- their
+identifiers cannot be confused.
 
-That identity rule is what separates a diamond from a cycle.  A repo
-already resolved somewhere else in the walk is convergence and is
-skipped; a repo already on the current declaration path is a cycle and
-is an error, because dependency direction is what orders resolution.
+That identity rule is what separates a diamond from a cycle.  A
+namespace already resolved elsewhere in the walk, at the same directory,
+is convergence and is skipped; one already on the current declaration
+path is a cycle and is an error, because dependency direction is what
+orders resolution.  At a *different* directory either is the collision
+of REQ-d00202-K.
+
+This module is the one authority on what enters a federation.  A surface
+recording a declaration asks it the same question the build asks, so a
+registration is admitted exactly when a build would admit it.
 """
 
 from __future__ import annotations
@@ -32,6 +39,7 @@ from elspais.graph.federated import FederationError
 
 __all__ = [
     "FederationCycleError",
+    "NamespaceConflict",
     "PlannedRepo",
     "declared_associates",
     "repository_origin",
@@ -57,6 +65,34 @@ def declared_associates(config: dict[str, Any], repo_root: Path) -> dict[str, di
 
 class FederationCycleError(FederationError):
     """Raised when associate declarations form a directed cycle."""
+
+
+class NamespaceConflict(FederationError):
+    """Raised when two directories of one federation claim one namespace.
+
+    Implements: REQ-d00202-K
+
+    Carries the two sides so a surface that can act on one of them --
+    a registration about to record the second, say -- can tell which is
+    which instead of parsing the message.
+    """
+
+    def __init__(
+        self,
+        namespace: str,
+        first: tuple[Path, tuple[str, ...]],
+        second: tuple[Path, tuple[str, ...]],
+    ) -> None:
+        self.namespace = namespace
+        self.first_root, self.first_declaration = first
+        self.second_root, self.second_declaration = second
+        super().__init__(
+            f"Two directories are federated under the namespace '{namespace}': "
+            f"{self.first_root} (declared via {' -> '.join(self.first_declaration)}) "
+            f"and {self.second_root} (declared via "
+            f"{' -> '.join(self.second_declaration)}). A namespace identifies one "
+            f"member's identifiers, so give each member its own."
+        )
 
 
 @dataclass(frozen=True)
@@ -85,11 +121,12 @@ class PlannedRepo:
 
 
 def _normalize_origin(url: str) -> str:
-    """Reduce an origin URL to a comparable identity.
+    """Reduce an origin URL to a comparable form.
 
     The same repository is routinely addressed as ``git@host:org/repo.git``
-    and ``https://host/org/repo``; both name one repository and must
-    compare equal, or a diamond through two remotes would federate twice.
+    and ``https://host/org/repo``; both name one repository, so a surface
+    comparing what two members were cloned from needs one spelling. This
+    decides no membership -- a member is its namespace (REQ-d00202-G).
     """
     url = url.strip().rstrip("/")
     if url.endswith(".git"):
@@ -112,11 +149,12 @@ def _normalize_origin(url: str) -> str:
 def repository_origin(repo_root: Path) -> str | None:
     """Return the normalized origin of the repository rooted at ``repo_root``.
 
-    Answers only for a directory that *is* a repository root.  Git
-    answers from the enclosing repository for any subdirectory, so a
-    federation whose members are directories inside one repository --
-    every on-disk test fixture, among others -- would otherwise see one
-    origin shared by all of them and read the second member as a cycle.
+    Recorded on each member and published by reporting surfaces; it
+    settles nothing about membership. Answers only for a directory that
+    *is* a repository root, because git answers from the enclosing
+    repository for any subdirectory -- so every directory inside one
+    repository would otherwise report that repository's origin as its
+    own.
     """
     from elspais.utilities.git import _clean_git_env
 
@@ -143,11 +181,17 @@ def repository_origin(repo_root: Path) -> str | None:
     return _normalize_origin(origin) if origin else None
 
 
-def _identity(repo_root: Path, git_origin: str | None) -> tuple[str, str]:
-    """Identify a repository for convergence and cycle detection."""
-    if git_origin:
-        return ("origin", git_origin)
-    return ("path", str(repo_root))
+def _identity(declared_namespace: str, repo_root: Path) -> str:
+    """Identify a member for convergence, cycle and collision detection.
+
+    Implements: REQ-d00202-G
+
+    The namespace a declaration names is the key. A declaration without
+    one is refused before it reaches here (REQ-d00202-B), but a root
+    repository that declares none still has to be placed, so it falls
+    back to its directory -- the one case where nothing has been claimed.
+    """
+    return declared_namespace or f"\x00path:{repo_root}"
 
 
 def plan_federation(
@@ -181,43 +225,28 @@ def plan_federation(
     loader = config_loader or get_config
 
     planned: list[PlannedRepo] = []
-    resolved: dict[tuple[str, str], PlannedRepo] = {}
+    resolved: dict[str, PlannedRepo] = {}
     by_name: dict[str, PlannedRepo] = {}
-    by_namespace: dict[str, PlannedRepo] = {}
-
-    # One answer per directory per walk.  Identity decides diamond from
-    # cycle, so a directory that answered with an origin once and with
-    # None a moment later would be two repositories to this walk and a
-    # cycle would go unseen.  Probing git is also the walk's dominant
-    # cost, and a chain re-reaches the same directory often.
-    origins: dict[Path, str | None] = {}
-
-    def _origin_of(path: Path) -> str | None:
-        if path not in origins:
-            origins[path] = repository_origin(path) if path.is_dir() else None
-        return origins[path]
 
     def _declared_namespace(config: dict[str, Any] | None) -> str:
         return (config or {}).get("project", {}).get("namespace", "") or ""
 
     root_root = Path(root_repo_root).resolve()
     root_name = root_config.get("project", {}).get("name", "") or str(root_root.name)
-    root_origin = _origin_of(root_root)
+    root_identity = _identity(_declared_namespace(root_config), root_root)
     root_entry = PlannedRepo(
         name=root_name,
         repo_root=root_root,
         config=root_config,
-        git_origin=root_origin,
+        git_origin=repository_origin(root_root),
         error=None,
         declaration_path=(root_name,),
     )
     planned.append(root_entry)
-    resolved[_identity(root_root, root_origin)] = root_entry
+    resolved[root_identity] = root_entry
     by_name[root_name] = root_entry
-    if _declared_namespace(root_config):
-        by_namespace[_declared_namespace(root_config)] = root_entry
 
-    def _record(entry: PlannedRepo, identity: tuple[str, str]) -> None:
+    def _record(entry: PlannedRepo, identity: str) -> None:
         # A federation keys repositories by name, so two repositories
         # arriving under one name would leave only the later of them
         # reachable -- the earlier repo's requirements would resolve
@@ -234,27 +263,6 @@ def plan_federation(
             )
         by_name[entry.name] = entry
 
-        # Implements: REQ-d00202-K
-        # A namespace answers whose identifiers these are, so two
-        # repositories claiming one namespace leave the question
-        # unanswerable -- the same argument disjoint requirement IDs rest
-        # on.  A repository that failed to load declares nothing and is
-        # not a claimant.
-        namespace = _declared_namespace(entry.config)
-        if namespace:
-            ns_clash = by_namespace.get(namespace)
-            if ns_clash is not None:
-                raise FederationError(
-                    f"Two repositories are federated under the namespace "
-                    f"'{namespace}': {ns_clash.repo_root} (declared via "
-                    f"{' -> '.join(ns_clash.declaration_path)}) and "
-                    f"{entry.repo_root} (declared via "
-                    f"{' -> '.join(entry.declaration_path)}). A namespace "
-                    f"identifies one repository's identifiers, so give each "
-                    f"repository its own."
-                )
-            by_namespace[namespace] = entry
-
         planned.append(entry)
         resolved[identity] = entry
 
@@ -262,14 +270,28 @@ def plan_federation(
         parent_config: dict[str, Any],
         parent_root: Path,
         declaration_path: tuple[str, ...],
-        on_path: dict[tuple[str, str], str],
+        on_path: dict[str, str],
     ) -> None:
         associates = declared_associates(parent_config, parent_root)
         for name, info in associates.items():
             assoc_path = Path(parent_root, info["path"]).resolve()
             child_path = declaration_path + (name,)
-            origin = _origin_of(assoc_path)
-            identity = _identity(assoc_path, origin)
+            identity = _identity(info.get("namespace") or "", assoc_path)
+
+            # A namespace reached again is one member reached again only
+            # where the directory is the same one.  At another directory
+            # it is two claimants, whether the first was reached up this
+            # chain or across the walk -- so the collision is answered
+            # before the cycle, or a second checkout of a repository
+            # already on the path would read as a cycle.
+            seen = resolved.get(identity)
+            if seen is not None and seen.repo_root != assoc_path:
+                # Implements: REQ-d00202-K
+                raise NamespaceConflict(
+                    info.get("namespace") or "",
+                    (seen.repo_root, seen.declaration_path),
+                    (assoc_path, child_path),
+                )
 
             # Implements: REQ-d00202-E
             if identity in on_path:
@@ -281,7 +303,7 @@ def plan_federation(
                 )
 
             # Implements: REQ-d00202-F
-            if identity in resolved:
+            if seen is not None:
                 continue
 
             if not assoc_path.exists():
@@ -289,7 +311,7 @@ def plan_federation(
                 if strict:
                     raise FederationError(f"Associate '{name}' path does not exist: {assoc_path}")
                 _record(
-                    PlannedRepo(name, assoc_path, None, origin, reason, child_path),
+                    PlannedRepo(name, assoc_path, None, None, reason, child_path),
                     identity,
                 )
                 continue
@@ -305,7 +327,7 @@ def plan_federation(
                 if strict:
                     raise FederationError(f"Associate '{name}': {reason}")
                 _record(
-                    PlannedRepo(name, assoc_path, None, origin, reason, child_path),
+                    PlannedRepo(name, assoc_path, None, None, reason, child_path),
                     identity,
                 )
                 continue
@@ -316,7 +338,7 @@ def plan_federation(
                 if strict:
                     raise FederationError(f"Associate '{name}': {reason}") from exc
                 _record(
-                    PlannedRepo(name, assoc_path, None, origin, reason, child_path),
+                    PlannedRepo(name, assoc_path, None, None, reason, child_path),
                     identity,
                 )
                 continue
@@ -338,7 +360,14 @@ def plan_federation(
                 )
 
             _record(
-                PlannedRepo(name, assoc_path, assoc_config, origin, None, child_path),
+                PlannedRepo(
+                    name,
+                    assoc_path,
+                    assoc_config,
+                    repository_origin(assoc_path),
+                    None,
+                    child_path,
+                ),
                 identity,
             )
             _visit(
@@ -348,7 +377,7 @@ def plan_federation(
                 {**on_path, identity: name},
             )
 
-    _visit(root_config, root_root, (root_name,), {_identity(root_root, root_origin): root_name})
+    _visit(root_config, root_root, (root_name,), {root_identity: root_name})
     return planned
 
 

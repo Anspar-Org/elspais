@@ -444,7 +444,9 @@ values = ["id", "title", "status", "implemented", "tested", "verified"]
 # there; both are required. The namespace must match the one the
 # repository at that path declares for itself, and no two repositories in
 # one federation may declare the same namespace — a namespace is what
-# says whose identifiers these are.
+# says whose identifiers these are. `elspais associate` checks all three
+# when it records a declaration, so a declaration that would not build is
+# refused where it is written rather than by a later command.
 
 [associates.callisto]
 path = "../callisto"
@@ -683,7 +685,10 @@ min_length = 3
 The environment does not supply configuration. Every setting comes from
 `.elspais.toml`, with `.elspais.local.toml` merged over it for values that
 differ per machine (associate paths, most often) — and `elspais associate`
-registers those without editing either file by hand.
+registers those without editing either file by hand. Each run reports the
+path the configuration holds afterwards, and a registration naming an entry
+that is already recorded at another path is refused until `-f` says to
+replace it.
 
 Two variables the tool reads directly, neither of which is a setting:
 
@@ -743,9 +748,11 @@ implements = ["task", "story", "epic"]
 
 Each associate's own `[associates]` declarations are read as well, depth-first,
 so the federation is every repository reachable from this one rather than only
-the ones named here. Members are identified by git origin, so two chains
-reaching one repository converge on a single member; a repository reached
-through itself is an error naming the declaration chain.
+the ones named here. Members are identified by the namespace their declaration
+names, so two chains reaching one namespace at one directory converge on a
+single member, two directories claiming one namespace are an error naming
+both, and a member reached through itself is an error naming the declaration
+chain.
 
 ```toml
 [project]
