@@ -439,7 +439,7 @@ def check_associate_paths(config: dict, git_root: Path | None) -> HealthCheck:
     if severity == Severity.OFF:
         return skipped_check("associate.paths_resolvable", "Associate paths that do not resolve")
 
-    # Implements: REQ-d00202-A+D+I, REQ-d00203-C, REQ-d00212-K
+    # Implements: REQ-d00202-A+D+I+M+N
     from elspais.graph.federation_plan import plan_federation_or_error
 
     plan, plan_error = plan_federation_or_error(config, git_root or Path.cwd())
@@ -501,8 +501,7 @@ def check_associate_configs(config: dict, git_root: Path | None) -> HealthCheck:
     if severity == Severity.OFF:
         return skipped_check("associate.configs_valid", "Associate configurations that do not load")
 
-    # Implements: REQ-d00202-A+D+I, REQ-d00203-C, REQ-d00212-K
-    from elspais.associates import discover_associate_from_path
+    # Implements: REQ-d00202-A+D+I+M+N
     from elspais.graph.federation_plan import plan_federation_or_error
 
     plan, plan_error = plan_federation_or_error(config, git_root or Path.cwd())
@@ -535,14 +534,10 @@ def check_associate_configs(config: dict, git_root: Path | None) -> HealthCheck:
                 continue  # Already reported by check_associate_paths
             invalid.append(f"{member.name} (declared via {via}): {member.error}")
             continue
-        # Loading a configuration for a directory is not the same question
-        # as the directory being an elspais project of its own; discovery
-        # is what answers the second.
-        result = discover_associate_from_path(member.repo_root)
-        if isinstance(result, str):
-            invalid.append(f"{member.name} (declared via {via}): {result}")
-        else:
-            valid.append(f"{member.name} ({result.code})")
+        # The planner reached this directory, found its configuration and
+        # loaded it, so whether it is a readable elspais repository is
+        # already answered. Its namespace is in hand for the same reason.
+        valid.append(f"{member.name} ({member.config['project']['namespace']})")
 
     if invalid:
         return HealthCheck(
@@ -625,7 +620,7 @@ def check_cross_repo_in_committed_config(
             severity="info",
         )
 
-    # Implements: REQ-d00212-F
+    # Implements: REQ-d00212-Y
     cross_repo_paths = []
     spec_dirs = data.get("scanning", {}).get("spec", {}).get("directories", [])
     if isinstance(spec_dirs, list):

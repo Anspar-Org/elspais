@@ -1,6 +1,6 @@
 """Schema validation for optional color fields on levels, namespaces, statuses."""
 
-# Verifies: REQ-d00212-A, REQ-d00212-J, REQ-d00212-K
+# Verifies: REQ-d00212-Y
 
 from __future__ import annotations
 

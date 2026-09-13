@@ -122,7 +122,7 @@ def _federate(graph):
     config["project"]["name"] = "test"
     config["project"]["namespace"] = NAMESPACE
     entry = RepoEntry(name="test", graph=graph, config=config, repo_root=Path("/test/repo"))
-    return FederatedGraph([entry], root_repo="test")
+    return FederatedGraph([entry])
 
 
 # ─────────────────────────────────────────────────────────────────────────────

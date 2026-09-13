@@ -66,14 +66,6 @@ def _copy_full(tmp_path: Path) -> Path:
     return dest / "app"
 
 
-def _copy_app_only(tmp_path: Path) -> Path:
-    """Copy only the app/ tree to tmp so ``../library`` does not exist."""
-    dest = tmp_path / "proj"
-    (dest).mkdir(parents=True)
-    shutil.copytree(FIX / "app", dest / "app")
-    return dest / "app"
-
-
 def _outgoing_integrates(node):
     return [e for e in node.iter_outgoing_edges() if e.kind == EdgeKind.INTEGRATES]
 
@@ -85,7 +77,7 @@ class TestIntegratesWiresEdge:
     def test_REQ_d00252_D_integrates_wires_cross_graph_edge(self, tmp_path):
         app_root = _copy_full(tmp_path)
         fed = _federate(app_root)
-        app_req = fed._repos["app"].graph._index["APP-d00001"]
+        app_req = fed.find_by_id("APP-d00001")
         edges = _outgoing_integrates(app_req)
         assert len(edges) == 1
         assert edges[0].target.id == "LIB-d00007"
@@ -94,14 +86,14 @@ class TestIntegratesWiresEdge:
     def test_REQ_d00252_D_consumer_requirement_is_implemented(self, tmp_path):
         app_root = _copy_full(tmp_path)
         fed = _federate(app_root)
-        app_req = fed._repos["app"].graph._index["APP-d00001"]
+        app_req = fed.find_by_id("APP-d00001")
         assert direct_coverage_for(app_req) >= 1
 
     # Verifies: REQ-d00252-D
     def test_REQ_d00252_D_library_node_unmodified(self, tmp_path):
         app_root = _copy_full(tmp_path)
         fed = _federate(app_root)
-        lib_req = fed._repos["library"].graph._index["LIB-d00007"]
+        lib_req = fed.find_by_id("LIB-d00007")
         assert "APP-d00001" not in render_node(lib_req)
 
     # Verifies: REQ-d00252-D
@@ -112,24 +104,29 @@ class TestIntegratesWiresEdge:
         app_spec = app_root / "spec" / "dev-app.md"
         app_spec.write_text(app_spec.read_text().replace("LIB-d00007", "LIB-d00007-A"))
         fed = _federate(app_root)
-        app_req = fed._repos["app"].graph._index["APP-d00001"]
+        app_req = fed.find_by_id("APP-d00001")
         integ = _outgoing_integrates(app_req)
         assert len(integ) == 1
         assert integ[0].target.id == "LIB-d00007"
         # no broken ref for the suffixed target
-        assert not fed._repos["app"].graph._unresolved_references
+        assert not fed.repo_for("APP-d00001").graph._unresolved_references
 
 
 class TestIntegratesUnresolved:
     """Validates REQ-d00252-E: unresolved targets are soft or hard per claim."""
 
     # Verifies: REQ-d00252-E
-    def test_REQ_d00252_E_absent_associate_is_soft(self, tmp_path):
-        # Copy only app/ so ../library does not exist: associate soft-fails.
-        app_root = _copy_app_only(tmp_path)
+    def test_REQ_d00252_E_unclaimed_id_format_is_soft(self, tmp_path):
+        """No federated member claims the ``EVS`` namespace, so the target is
+        recorded as presumed foreign and the build still completes."""
+        app_root = _copy_full(tmp_path)
+        spec = app_root / "spec" / "dev-app.md"
+        spec.write_text(
+            spec.read_text().replace("**Integrates**: LIB-d00007", "**Integrates**: EVS-d00007")
+        )
         fed = _federate(app_root)  # must not raise
-        brs = fed._repos["app"].graph._unresolved_references
-        matches = [b for b in brs if b.target_id == "LIB-d00007"]
+        brs = fed.repo_for("APP-d00001").graph._unresolved_references
+        matches = [b for b in brs if b.target_id == "EVS-d00007"]
         assert len(matches) == 1
         assert matches[0].presumed_foreign is True
 
@@ -141,7 +138,7 @@ class TestIntegratesUnresolved:
             spec.read_text().replace("**Integrates**: LIB-d00007", "**Integrates**: LIB-d99999")
         )
         fed = _federate(app_root)
-        brs = fed._repos["app"].graph._unresolved_references
+        brs = fed.repo_for("APP-d00001").graph._unresolved_references
         matches = [b for b in brs if b.target_id == "LIB-d99999"]
         assert len(matches) == 1
         assert matches[0].presumed_foreign is False
@@ -169,7 +166,7 @@ class TestIntegratesRefusedByReader:
 
         app_root = self._retarget(tmp_path, "not a reference")
         fed = _federate(app_root)
-        brs = fed._repos["app"].graph._unresolved_references
+        brs = fed.repo_for("APP-d00001").graph._unresolved_references
         matches = [b for b in brs if b.target_id == "not a reference"]
         assert len(matches) == 1, f"the refused item must be reported once; got {brs}"
         assert matches[0].fault_class is FaultClass.MALFORMED
@@ -182,7 +179,7 @@ class TestIntegratesRefusedByReader:
     def test_a_malformed_integrates_target_wires_nothing_and_renders_verbatim(self, tmp_path):
         app_root = self._retarget(tmp_path, "not a reference")
         fed = _federate(app_root)
-        app_req = fed._repos["app"].graph._index["APP-d00001"]
+        app_req = fed.find_by_id("APP-d00001")
         assert _outgoing_integrates(app_req) == []
         assert "not a reference" in render_node(app_req), (
             "the author's own text is stored and rendered back unchanged, "
@@ -199,7 +196,7 @@ class TestIntegratesRefusedByReader:
         working integration."""
         app_root = _copy_full(tmp_path)
         fed = _federate(app_root)
-        app_req = fed._repos["app"].graph._index["APP-d00001"]
+        app_req = fed.find_by_id("APP-d00001")
         assert app_req.get_field("integrates_refused") in (
             None,
             [],
@@ -227,10 +224,10 @@ class TestIntegratesSameRepo:
         )
         spec.write_text(text)
         fed = _federate(app_root)
-        app_req = fed._repos["app"].graph._index["APP-d00001"]
+        app_req = fed.find_by_id("APP-d00001")
         # No INTEGRATES edge created for a same-repo target.
         assert _outgoing_integrates(app_req) == []
-        brs = fed._repos["app"].graph._unresolved_references
+        brs = fed.repo_for("APP-d00001").graph._unresolved_references
         matches = [b for b in brs if b.target_id == "APP-d00002"]
         assert len(matches) == 1
 
@@ -288,7 +285,7 @@ class TestIntegratesHierarchyLevels:
         counted as a hierarchy parent. Fails on the unfixed code because the
         check iterates all parents and flags LIB-p00001 <- APP-d00001."""
         fed = self._build_cross_level_federation(tmp_path)
-        lib_entry = fed._repos["library"]
+        lib_entry = fed.repo_for("LIB-p00001")
 
         # Sanity: the cross-repo INTEGRATES edge exists, so the library node
         # really does have the consumer as an INTEGRATES parent. Without this
@@ -386,8 +383,8 @@ class TestIntegratesHierarchyLevels:
         library; (2) the library has NO outgoing INTEGRATES edge back to the
         consumer; (3) no broken reference remains for the resolved target."""
         fed = self._build_associate_consumer_federation(tmp_path)
-        consumer = fed._repos["assoc_a"].graph._index["AAA-d00001"]
-        library = fed._repos["assoc_b"].graph._index["BBB-p00001"]
+        consumer = fed.find_by_id("AAA-d00001")
+        library = fed.find_by_id("BBB-p00001")
 
         # (1) Exactly one outgoing INTEGRATES edge from consumer -> library.
         out = [e for e in consumer.iter_outgoing_edges() if e.kind == EdgeKind.INTEGRATES]
@@ -404,7 +401,7 @@ class TestIntegratesHierarchyLevels:
         # (3) No surviving broken reference for the resolved Integrates target.
         leftover = [
             br
-            for br in fed._repos["assoc_a"].graph._unresolved_references
+            for br in fed.repo_for("AAA-d00001").graph._unresolved_references
             if br.target_id == "BBB-p00001"
         ]
         assert leftover == [], f"resolved Integrates target left a broken ref: {leftover}"
@@ -437,7 +434,7 @@ class TestIntegratesHierarchyLevels:
             scan_code=False,
             scan_tests=False,
         )
-        entry = fed._repos["repo"]
+        entry = fed.repo_for("REPO-p00001")
 
         res = check_spec_hierarchy_levels(entry.graph, entry.config)
         violations = res.details.get("violations", [])
@@ -538,25 +535,25 @@ class TestMultiAssertionCrossRepoReference:
         """``Implements: LIB-p00001-A+B`` wires an edge for A and one for B,
         each hanging off the owning requirement and naming its label."""
         fed = self._build(tmp_path, "LIB-p00001-A+B")
-        lib_req = fed._repos["library"].graph._index["LIB-p00001"]
+        lib_req = fed.find_by_id("LIB-p00001")
         shapes = self._shapes(lib_req)
         assert (EdgeKind.IMPLEMENTS, ("A",), "APP-d00001") in shapes
         assert (EdgeKind.IMPLEMENTS, ("B",), "APP-d00001") in shapes
-        assert fed._repos["app"].graph._unresolved_references == []
+        assert fed.repo_for("APP-d00001").graph._unresolved_references == []
 
     # Verifies: REQ-d00269-C
     def test_multi_assertion_code_annotation_wires_one_edge_per_label(self, tmp_path):
         """The same reference written in a code annotation credits both
         labels of the foreign requirement."""
         fed = self._build(tmp_path, "-", code_target="LIB-p00001-A+B")
-        lib_req = fed._repos["library"].graph._index["LIB-p00001"]
+        lib_req = fed.find_by_id("LIB-p00001")
         labels = {
             tuple(e.assertion_targets or ())
             for e in lib_req.iter_outgoing_edges()
             if e.kind == EdgeKind.IMPLEMENTS and e.target.kind.name == "CODE"
         }
         assert labels == {("A",), ("B",)}
-        assert fed._repos["app"].graph._unresolved_references == []
+        assert fed.repo_for("APP-d00001").graph._unresolved_references == []
 
     # Verifies: REQ-d00269-D, REQ-d00269-F
     def test_label_the_owner_lacks_is_a_hard_broken_reference(self, tmp_path):
@@ -564,10 +561,10 @@ class TestMultiAssertionCrossRepoReference:
         identifier's format but has no assertion C, so the leftover is a hard
         broken reference with a diagnostic, not a presumed-foreign one."""
         fed = self._build(tmp_path, "LIB-p00001-A+C")
-        lib_req = fed._repos["library"].graph._index["LIB-p00001"]
+        lib_req = fed.find_by_id("LIB-p00001")
         assert (EdgeKind.IMPLEMENTS, ("A",), "APP-d00001") in self._shapes(lib_req)
 
-        brs = fed._repos["app"].graph._unresolved_references
+        brs = fed.repo_for("APP-d00001").graph._unresolved_references
         assert [b.target_id for b in brs] == ["LIB-p00001-C"]
         assert brs[0].presumed_foreign is False
         assert brs[0].diagnostic

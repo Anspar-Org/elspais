@@ -626,7 +626,7 @@ def _make_federated_overview_graph(tmp_path: Path):
         config={"project": {"name": "assoc", "namespace": "ASSOC"}},
         repo_root=assoc_dir,
     )
-    fed = FederatedGraph([root_entry, assoc_entry], root_repo="root")
+    fed = FederatedGraph([root_entry, assoc_entry])
     return fed, root_dir, assoc_dir
 
 
@@ -1457,91 +1457,6 @@ class TestAbsoluteImageReferences:
         assert asm.diagnostic_count() == 0, (
             f"a URL reference must never be reported as a missing local file: "
             f"{[d.reference for d in asm.iter_diagnostics()]}"
-        )
-
-
-# ---------------------------------------------------------------------------
-# Unloadable associate repository (REQ-p00080-J)
-# ---------------------------------------------------------------------------
-
-
-def _fed_with_unloadable_associate(tmp_path: Path):
-    """Federation whose associate never loaded: no graph, no directory.
-
-    This is the shape a misconfigured ``[associates.<name>] path`` produces --
-    the entry survives federation so the name is still known, but it carries
-    no graph and its configured root is not on disk.
-    """
-    from elspais.graph.federated import FederatedGraph, RepoEntry
-
-    fed, root_dir, assoc_dir = _make_federated_overview_graph(tmp_path)
-    missing_root = tmp_path / "nowhere"
-    entries = []
-    for entry in fed.iter_repos():
-        if entry.name == "assoc":
-            entries.append(RepoEntry(name="assoc", graph=None, config=None, repo_root=missing_root))
-        else:
-            entries.append(entry)
-    return FederatedGraph(entries, root_repo="root"), root_dir, missing_root
-
-
-class TestUnloadableRepositoryDiagnostics:
-    """Validates REQ-p00080-J: a configured repository that never loaded is
-    reported, rather than silently subtracting every requirement it owns.
-
-    A repository whose configured path does not resolve contributes no graph,
-    so nothing downstream ever names one of its files -- the file-level report
-    cannot fire, and the document simply comes out without that repository's
-    section. The reader has no way to tell that from a project that legitimately
-    has one fewer repository. The omission is a whole repository, so it is
-    disclosed as one, naming the repository and the path that was expected to
-    hold it.
-    """
-
-    # Verifies: REQ-p00080-J
-    def test_REQ_p00080_J_unloadable_repository_is_reported(self, tmp_path):
-        """One unloadable associate yields exactly one repository diagnostic
-        naming the repo and the configured root, and the root repo's content
-        still renders.
-        """
-        fed, _root_dir, missing_root = _fed_with_unloadable_associate(tmp_path)
-
-        asm = MarkdownAssembler(fed)
-        output = asm.assemble()
-
-        repo_diags = [d for d in asm.iter_diagnostics() if d.kind == "repository"]
-        assert len(repo_diags) == 1, (
-            f"expected exactly one repository diagnostic, got "
-            f"{[(d.kind, d.reference) for d in asm.iter_diagnostics()]}"
-        )
-        diag = repo_diags[0]
-        assert diag.reference == "assoc"
-        assert diag.source_file == "", "the omitted thing IS the repository"
-        assert diag.repo == "assoc"
-        assert any(str(missing_root) in location for location in diag.searched), (
-            f"the configured root is missing from the searched locations: {diag.searched!r}"
-        )
-        assert diag.cause, "the diagnostic must state why the repository is absent"
-        assert "associate" in diag.remedy.lower(), (
-            f"the remedy must point at the associate configuration, which is "
-            f"where the wrong path lives: {diag.remedy!r}"
-        )
-
-        # Degraded, not aborted.
-        assert "Root Product Vision" in output
-
-    # Verifies: REQ-p00080-J
-    def test_REQ_p00080_J_healthy_federation_reports_no_repository(self, tmp_path):
-        """Regression guard: every repo loading normally reports nothing."""
-        fed, _root_dir, _assoc_dir = _make_federated_overview_graph(tmp_path)
-
-        asm = MarkdownAssembler(fed)
-        asm.assemble()
-
-        repo_diags = [d for d in asm.iter_diagnostics() if d.kind == "repository"]
-        assert repo_diags == [], (
-            f"a healthy federation must report no missing repository: "
-            f"{[d.reference for d in repo_diags]}"
         )
 
 

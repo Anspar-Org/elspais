@@ -11,14 +11,38 @@ from __future__ import annotations
 import argparse
 import sys
 from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
 from typing import Any
 
 import tomlkit
 
 from elspais.associates import Associate, discover_associate_from_path
-from elspais.config import find_config_file, parse_toml_document
+from elspais.config import find_config_file, get_config, parse_toml_document
 from elspais.graph.federated import FederationError
+
+
+class Outcome(Enum):
+    """What a registration run did, or why it did nothing.
+
+    Implements: REQ-d00289-B
+
+    A run that changed the configuration, a run that deliberately did
+    not, and each way a run can refuse are separate values rather than
+    shades of one, so no caller has to read a message to find out which
+    happened.
+    """
+
+    RECORDED = "recorded"
+    UNCHANGED = "unchanged"
+    REPOINTED = "repointed"
+
+    ENTRY_EXISTS = "entry-exists"
+    CONTESTED = "contested"
+    WOULD_NOT_FEDERATE = "would-not-federate"
+
+
+_REFUSALS = frozenset({Outcome.ENTRY_EXISTS, Outcome.CONTESTED, Outcome.WOULD_NOT_FEDERATE})
 
 
 @dataclass
@@ -31,106 +55,78 @@ class Registration:
     has returned -- for a refusal, the path that was already there.
     """
 
-    kind: str
-    """One of: recorded, unchanged, repointed, replaced, refused."""
-
+    kind: Outcome
     name: str
     namespace: str
-    path: str
+    path: str = ""
     previous_path: str = ""
-    previous_name: str = ""
     target: str = ""
+
     reason: str = ""
-    pre_existing_fault: bool = False
+    """Why a federation refused this registration, in its own words."""
+
+    pre_existing: bool = False
     """The reason was true of the configuration before this registration."""
 
-    scan_rival: bool = False
-    """Another candidate of this same run already stands for the entry."""
-
-    twin_name: str = ""
-    twin_path: str = ""
-    """An entry recording this namespace at another directory."""
-
-    retired_name: str = ""
-    retired_path: str = ""
-    """An entry this run removed, its namespace now recorded elsewhere."""
+    contested_paths: tuple[str, ...] = ()
+    """Other directories of this same run claiming this namespace."""
 
     @property
     def refused(self) -> bool:
-        return self.kind == "refused"
+        return self.kind in _REFUSALS
 
     def report_lines(self) -> list[str]:
         """The lines describing this outcome, first line first."""
-        if self.kind in ("recorded", "unchanged", "repointed", "replaced"):
-            return self._recorded_lines()
-        if self.reason == "entry-exists":
-            # Implements: REQ-d00289-C
-            lines = [
-                f"Refused: {self.name} is already registered at {self.previous_path}, "
-                f"and nothing was changed.",
-            ]
-            if self.twin_name:
-                # Implements: REQ-d00289-H
-                lines.append(
-                    f"{self.twin_name} at {self.twin_path} records the namespace "
-                    f"{self.namespace} too."
-                )
-            lines += [
-                f"Use -f to replace that path with {self.target}.",
-                "Run 'elspais associate --list' to see the current registrations.",
-            ]
-            return lines
-        if self.reason == "same-namespace":
-            # Implements: REQ-d00289-H
-            return [
-                f"Refused: the namespace {self.namespace} is already registered to "
-                f"{self.previous_name} at {self.previous_path}, and nothing was changed.",
-                f"Use -f to record {self.target} instead, replacing that entry.",
-                "Run 'elspais associate --list' to see the current registrations.",
-            ]
-        if self.scan_rival:
-            # Implements: REQ-d00289-G
-            return [
-                f"Refused: {self.target} and {self.previous_path} are two directories "
-                f"for one entry in this scan ({self.reason}), and nothing was changed.",
-                "Register the one you mean by path.",
-            ]
-        if self.pre_existing_fault:
-            # Implements: REQ-d00289-I
-            return [
-                f"Refused: this configuration does not federate as it stands, before "
-                f"{self.name} at {self.target} is considered. Nothing was changed.",
-                f"  {self.reason}",
-            ]
-        return [
-            f"Refused: {self.name} at {self.target} would not federate, and nothing was changed.",
-            f"  {self.reason}",
-        ]
+        match self.kind:
+            case Outcome.RECORDED:
+                return [f"Linked {self.name} ({self.namespace}) at {self.path}"]
 
-    def _recorded_lines(self) -> list[str]:
-        """The lines for a run that wrote, or deliberately did not."""
-        if self.kind == "recorded":
-            lines = [f"Linked {self.name} ({self.namespace}) at {self.path}"]
-        elif self.kind == "unchanged":
-            lines = [f"No change: {self.name} ({self.namespace}) stays registered at {self.path}"]
-        elif self.kind == "repointed":
-            lines = [
-                f"Repointed {self.name} ({self.namespace}): was {self.previous_path}, "
-                f"now registered at {self.path}"
-            ]
-        else:
-            # Implements: REQ-d00289-H
-            lines = [
-                f"Replaced {self.previous_name} at {self.previous_path} with "
-                f"{self.name} ({self.namespace}) at {self.path}"
-            ]
-        if self.retired_name:
-            # Implements: REQ-d00289-H
-            lines.append(
-                f"Removed {self.retired_name} at {self.retired_path}: "
-                f"the namespace {self.namespace} is now recorded as {self.name}."
-            )
-        return lines
+            case Outcome.UNCHANGED:
+                # Implements: REQ-d00289-B
+                return [
+                    f"No change: {self.name} ({self.namespace}) stays registered at {self.path}"
+                ]
+
+            case Outcome.REPOINTED:
+                # Implements: REQ-d00289-D
+                return [
+                    f"Repointed {self.name} ({self.namespace}): "
+                    f"was {self.previous_path}, now registered at {self.path}"
+                ]
+
+            case Outcome.ENTRY_EXISTS:
+                # Implements: REQ-d00289-C
+                return [
+                    f"Refused: {self.name} is already registered at "
+                    f"{self.previous_path}, and nothing was changed.",
+                    f"Use -f to replace that path with {self.target}.",
+                    "Run 'elspais associate --list' to see the current registrations.",
+                ]
+
+            case Outcome.CONTESTED:
+                # Implements: REQ-d00289-G
+                others = ", ".join(self.contested_paths)
+                return [
+                    f"Refused: {self.target} and {others} claim the namespace "
+                    f"{self.namespace} in this scan; none of them was recorded.",
+                    "Register the one you mean by path.",
+                ]
+
+            case Outcome.WOULD_NOT_FEDERATE if self.pre_existing:
+                # Implements: REQ-d00289-I
+                return [
+                    f"Refused: this configuration does not federate as it stands, before "
+                    f"{self.name} at {self.target} is considered. Nothing was changed.",
+                    f"  {self.reason}",
+                ]
+
+            case Outcome.WOULD_NOT_FEDERATE:
+                # Implements: REQ-d00289-E, REQ-d00289-H
+                return [
+                    f"Refused: {self.name} at {self.target} would not federate, "
+                    f"and nothing was changed.",
+                    f"  {self.reason}",
+                ]
 
 
 def run(args: argparse.Namespace) -> int:
@@ -207,7 +203,7 @@ def cmd_link(args: argparse.Namespace) -> int:
         str(repo_path),
         result.name,
         result.code,
-        repo_root=gr,
+        repo_root=gr or config_dir,
         force=getattr(args, "force", False),
         config_path=_get_config_path(args),
     )
@@ -284,30 +280,27 @@ def cmd_all(args: argparse.Namespace) -> int:
     unchanged_count = 0
     refused_count = 0
 
+    # Implements: REQ-d00289-G
+    # Which candidates stand for one entry is settled across the whole
+    # scan before any of them is written. Deciding as it went would have
+    # recorded the first of an ambiguous pair and refused the second, so
+    # the order the scan reached them in would be standing in for a choice
+    # the operator never made.
+    contested = _contested_candidates(found)
+
     # Implements: REQ-d00289-F
     # A candidate the tool will not record is one candidate: the scan
     # reports it and carries on, so the state of the ones around it is
     # still on the screen when the operator reads the refusal.
-    recorded_here: list[tuple[str, str, str]] = []
     for repo_path, assoc in found:
-        rival = _scan_rival(recorded_here, assoc.name, assoc.code, repo_path)
-        if rival is not None:
-            # Implements: REQ-d00289-G
-            # Two candidates of one scan stand for one entry. An instruction
-            # to replace what was recorded cannot decide between them -- it
-            # was given about neither -- so the second is refused rather than
-            # left to win by sort order.
-            rival_name, rival_path, why = rival
+        rivals = contested.get(str(repo_path))
+        if rivals is not None:
             outcome = Registration(
-                kind="refused",
+                kind=Outcome.CONTESTED,
                 name=assoc.name,
                 namespace=assoc.code,
-                path=rival_path,
-                previous_path=rival_path,
-                previous_name=rival_name,
                 target=str(repo_path),
-                reason=why,
-                scan_rival=True,
+                contested_paths=rivals,
             )
         else:
             outcome = register_associate(
@@ -315,7 +308,7 @@ def cmd_all(args: argparse.Namespace) -> int:
                 str(repo_path),
                 assoc.name,
                 assoc.code,
-                repo_root=gr,
+                repo_root=gr or config_dir,
                 force=force,
                 config_path=config_path,
             )
@@ -329,8 +322,7 @@ def cmd_all(args: argparse.Namespace) -> int:
             refused_count += 1
             continue
 
-        recorded_here.append((assoc.name, assoc.code, str(repo_path)))
-        if outcome.kind == "unchanged":
+        if outcome.kind is Outcome.UNCHANGED:
             unchanged_count += 1
         else:
             linked_count += 1
@@ -352,7 +344,7 @@ def cmd_list(args: argparse.Namespace) -> int:
     Returns:
         Exit code.
     """
-    # Implements: REQ-d00202-A, REQ-d00212-K
+    # Implements: REQ-d00202-A
     from elspais.config import get_associates_config, get_config
 
     config_path = _get_config_path(args)
@@ -376,8 +368,22 @@ def cmd_list(args: argparse.Namespace) -> int:
 
     git_root = getattr(args, "git_root", None)
 
-    print(f"{'Name':<20} {'Prefix':<10} {'Status':<12} Path")
-    print("-" * 72)
+    # Implements: REQ-d00290-B
+    # A repository whose configuration was assembled with a machine-local
+    # overlay is marked, so an answer read here can be compared against one
+    # read elsewhere without the reader having to guess why they differ.
+    from elspais.graph.federation_plan import uses_local_overlay
+
+    # Implements: REQ-d00290-B
+    # This repository's own overlay is where `elspais associate` writes, so
+    # it is stated before the table rather than left out of it: the rows
+    # answer for the associates, and this line answers for the repository
+    # doing the asking.
+    own_root = _get_config_dir(args)
+    if own_root is not None and uses_local_overlay(own_root):
+        print("This repository's configuration is locally overridden (.elspais.local.toml).")
+    print(f"{'Name':<20} {'Prefix':<10} {'Status':<12} {'Local':<7} Path")
+    print("-" * 80)
 
     for assoc_name, assoc_info in associates.items():
         path_str = assoc_info["path"]
@@ -385,81 +391,114 @@ def cmd_list(args: argparse.Namespace) -> int:
         if not repo_path.is_absolute() and git_root:
             repo_path = Path(git_root) / repo_path
         if not repo_path.exists():
-            print(f"{assoc_name:<20} {'?':<10} {'NOT FOUND':<12} {path_str}")
+            print(f"{assoc_name:<20} {'?':<10} {'NOT FOUND':<12} {'-':<7} {path_str}")
             continue
 
+        local = "yes" if uses_local_overlay(repo_path) else "-"
         result = discover_associate_from_path(repo_path)
         if isinstance(result, str):
-            print(f"{assoc_name:<20} {'?':<10} {'BROKEN':<12} {path_str}")
+            print(f"{assoc_name:<20} {'?':<10} {'BROKEN':<12} {local:<7} {path_str}")
         else:
             spec_dir = repo_path / result.spec_path
             status = "OK" if spec_dir.exists() else "NO SPEC"
-            print(f"{result.name:<20} {result.code:<10} {status:<12} {path_str}")
+            print(f"{result.name:<20} {result.code:<10} {status:<12} {local:<7} {path_str}")
 
     return 0
 
 
 def cmd_unlink(args: argparse.Namespace) -> int:
-    """Remove an associate link by name.
+    """Retire an associate entry, or say why this file cannot retire it.
 
-    Finds the matching entry in .elspais.local.toml and removes it.
+    Implements: REQ-d00289-A, REQ-d00289-B
+
+    Implements: REQ-d00290-A
+
+    What is recorded is read from the configuration as assembled, and the
+    machine-local file is the only file written. The two are not the same
+    set: a declaration sitting in the committed file is recorded and cannot
+    be taken out from here, so a run that reads the file it writes reports a
+    declaration it can see in a listing as not existing at all.
+
+    Four states follow from that, and they are reported as four:
+
+      1. Nothing in the configuration answers to the name.
+      2. Only the machine-local file declares the entry -- removing it
+         retires the associate.
+      3. Only the committed file declares it -- nothing is written, and the
+         file to edit is named.
+      4. Both declare it -- removing the local entry withdraws the override
+         and leaves the committed declaration standing, which the report
+         states rather than reading as a retirement.
 
     Args:
         args: Parsed arguments with .unlink set to the name.
 
     Returns:
-        Exit code.
+        Exit code: 0 where an entry was removed, non-zero where none was.
     """
     name = args.unlink
     config_dir = _get_config_dir(args)
-    if config_dir is None:
+    config_path = _get_config_path(args)
+    if config_dir is None or config_path is None:
         print("Error: No configuration directory found.", file=sys.stderr)
         return 1
 
-    local_path = config_dir / ".elspais.local.toml"
-    if not local_path.exists():
-        print(f"Error: No associate '{name}' found (no local config).", file=sys.stderr)
+    # Implements: REQ-d00290-A
+    # Every entry the configuration holds, however it was written, read
+    # once -- the same answer a later run will read.
+    try:
+        config = get_config(config_path=config_path, start_path=config_dir, quiet=True)
+    except Exception as exc:  # noqa: BLE001 - reported, never raised at a user
+        # Removing a declaration is one of the ways a configuration gets
+        # repaired, so meeting an unreadable one is ordinary.
+        print(f"Error: the configuration cannot be read: {exc}", file=sys.stderr)
         return 1
 
-    # Implements: REQ-d00212-K
-    doc = parse_toml_document(local_path.read_text(encoding="utf-8"))
-    associates = doc.get("associates", {})
-
-    if not associates or not any(isinstance(v, dict) for v in associates.values()):
+    recorded = _assembled_associates(config)
+    found_key = _matching_entry(recorded, name)
+    if found_key is None:
         print(f"Error: No associate '{name}' found.", file=sys.stderr)
         return 1
 
-    # Find matching entry by name, namespace code, or path basename
-    found_key = None
-    found_path = None
-    name_lower = name.lower()
+    local_path = _local_config(config_dir)
+    doc, local_entries = _local_associates(local_path)
+    local_entry = local_entries.get(found_key)
+    committed_path = _committed_path(config_path, found_key)
 
-    for assoc_key, entry in associates.items():
-        if not isinstance(entry, dict):
-            continue
-        path_str = entry.get("path", "")
-        ns = entry.get("namespace", "")
-
-        if (
-            assoc_key == name
-            or assoc_key.lower() == name_lower
-            or ns.lower() == name_lower
-            or Path(path_str).name == name
-        ):
-            found_key = assoc_key
-            found_path = path_str
-            break
-
-    if found_key is None:
-        print(f"Error: No associate '{name}' found in linked associates.", file=sys.stderr)
+    if not isinstance(local_entry, dict):
+        # Implements: REQ-d00289-B
+        # A committed declaration outlives any local write, so the run
+        # records nothing and names the file that does hold it.
+        print(
+            f"Refused: {found_key} is declared in {config_path.name} at "
+            f"{committed_path}, and nothing was changed.",
+            file=sys.stderr,
+        )
+        print(
+            "Remove it there; a machine-local write cannot retire a committed declaration.",
+            file=sys.stderr,
+        )
         return 1
 
-    # Remove the entry
-    del associates[found_key]
-    # Write back
+    # Implements: REQ-d00289-A
+    # The path reported is the one the entry being removed was recorded at,
+    # rather than the name the invocation matched on.
+    removed_path = local_entry.get("path", "")
+    del local_entries[found_key]
     local_path.write_text(tomlkit.dumps(doc), encoding="utf-8")
 
-    print(f"Unlinked {name} (was {found_key}: {found_path})")
+    if committed_path:
+        # Implements: REQ-d00289-B
+        # The override is gone and the associate is not: reporting this as
+        # an unlink would name a retirement that did not happen.
+        print(f"Removed the local override for {found_key} (was {removed_path})")
+        print(
+            f"{found_key} remains declared in {config_path.name} at {committed_path}. "
+            f"Remove it there to retire it."
+        )
+        return 0
+
+    print(f"Unlinked {name} (was {found_key}: {removed_path})")
     return 0
 
 
@@ -535,7 +574,7 @@ def register_associate(
     assoc_name: str,
     namespace: str,
     *,
-    repo_root: Path | None = None,
+    repo_root: Path,
     force: bool = False,
     config_path: Path | None = None,
 ) -> Registration:
@@ -543,16 +582,37 @@ def register_associate(
 
     Implements: REQ-d00289-A, REQ-d00289-B, REQ-d00289-C, REQ-d00289-D, REQ-d00289-E
 
-    The registration is decided against the entries already on disk, checked
-    against the federation those entries would form, and only then written,
-    so a refusal leaves the file exactly as it was.
+    Implements: REQ-d00290-A
+
+    What is already recorded is read from the configuration as assembled,
+    which is the whole of what a later run will see; the machine-local file
+    is where a change is written, and nothing more. Asking the file that is
+    about to be written what is recorded would answer differently for a
+    declaration sitting in the committed file, which is the one thing an
+    overlay may not change.
+
+    The run decides in one direction and writes once at the end, so a
+    refusal leaves the file exactly as it was:
+
+      1. What does the configuration record under this name?
+      2. Would the resulting configuration federate?
+      3. Does the operator's instruction allow changing what is recorded?
+
+    The federation is asked first because it answers the more fundamental
+    question. A namespace two directories both claim is refused however
+    the operator instructs (REQ-d00289-H), so reporting an entry-exists
+    refusal over it would offer `-f` as a way past an obstacle `-f` does
+    not move.
 
     Args:
         config_dir: Directory containing the config files.
         repo_path: Absolute path string of the repository to record.
         assoc_name: Name of the associate entry.
         namespace: Namespace the repository declares for itself.
-        repo_root: Repository root for resolving existing relative paths.
+        repo_root: Repository root that recorded relative paths resolve
+            against. Required: under a worktree it is not the directory
+            holding the configuration, and defaulting to that one resolves
+            a recorded path against the wrong tree without saying so.
         force: Replace the path recorded for an entry that already exists.
         config_path: The main config file, read to plan the prospective
             federation.
@@ -560,177 +620,191 @@ def register_associate(
     Returns:
         The outcome, carrying the path the configuration holds afterwards.
     """
-    # Implements: REQ-d00212-K
-    local_path = config_dir / ".elspais.local.toml"
-
-    if local_path.exists():
-        doc = parse_toml_document(local_path.read_text(encoding="utf-8"))
-    else:
-        doc = tomlkit.document()
-
-    if "associates" not in doc:
-        doc.add("associates", tomlkit.table())
-
-    associates = doc["associates"]
-
-    # A recorded relative path is written against the repository root, so
-    # that is what it is read against -- never the current directory, which
-    # under a worktree is somewhere else entirely (REQ-p00005-F).
-    base = repo_root or config_dir
-    resolved_new = Path(repo_path).resolve()
-    existing_entry = None
-    existing_path = ""
-    by_path: tuple[str, dict] | None = None
-
-    # The whole table is read before anything is decided: an entry under
-    # this name and an entry under this path are different answers, and
-    # which one the operator gets must not depend on which was written
-    # into the file first.
-    for existing_name, entry in associates.items():
-        if not isinstance(entry, dict):
-            continue
-        entry_path = entry.get("path", "")
-        if existing_name == assoc_name:
-            existing_entry = existing_name
-            existing_path = entry_path
-        elif by_path is None and _resolve_recorded(entry_path, base) == resolved_new:
-            by_path = (existing_name, entry)
-
-    if existing_entry is None and by_path is not None:
-        # This directory is already recorded, under another name; the entry
-        # that answers for it is that one.
-        other_name, other_entry = by_path
+    # Implements: REQ-d00290-A
+    # Every entry the configuration holds, wherever it was written, read
+    # once. A registration writes the machine-local file, but what counts
+    # as already recorded is what a later run will read.
+    resolved_path = config_path if config_path else find_config_file(config_dir)
+    try:
+        config = get_config(config_path=resolved_path, start_path=config_dir, quiet=True)
+    except Exception as exc:  # noqa: BLE001 - reported, never raised at a user
+        # Implements: REQ-d00289-I
+        # This command is one of the ways a configuration gets repaired, so
+        # meeting an unreadable one is ordinary. It is a fault the
+        # configuration already held, and it is reported as one rather than
+        # ending the run in a traceback.
         return Registration(
-            kind="unchanged",
-            name=other_name,
-            namespace=other_entry.get("namespace", ""),
-            path=other_entry.get("path", ""),
+            kind=Outcome.WOULD_NOT_FEDERATE,
+            name=assoc_name,
+            namespace=namespace,
+            target=repo_path,
+            reason=str(exc),
+            pre_existing=True,
         )
 
-    entry_moves = existing_entry is not None and _resolve_recorded(existing_path, base) != (
-        resolved_new
-    )
+    recorded = _assembled_associates(config)
+    existing = recorded.get(assoc_name)
+    existing_path = existing.get("path", "") if existing else ""
+    target = Path(repo_path).resolve()
+    entry_moves = existing is not None and _resolve_recorded(existing_path, repo_root) != target
 
     # Implements: REQ-d00289-E, REQ-d00289-H
     # What may enter a federation is not decided here. The planner is
     # asked the question a build would ask (REQ-d00202-G), and a
     # membership it refuses is a registration this refuses -- so a
-    # declaration is admitted exactly when a build would admit it.
-    verdict = _federation_verdict(
-        config_dir,
+    # declaration is admitted exactly when a build would admit it. This
+    # is asked even where there is nothing to write, since reporting "no
+    # change" over a configuration that will not federate would be a run
+    # that looked at a broken configuration and said nothing.
+    refusal, pre_existing = _federation_refusal(
+        config,
         assoc_name,
         repo_path,
         namespace,
         repo_root=repo_root,
-        config_path=config_path,
     )
-
-    # One namespace names one member, so an entry already recording this
-    # namespace at another directory is a second answer to a question that
-    # admits one. It is a separate obstacle from an entry under this name,
-    # and both can stand at once.
-    twin_name, twin_path = verdict.rival(root_name_of=associates)
-
-    if existing_entry is not None and not entry_moves and not twin_name and not verdict.refusal:
-        return Registration(
-            kind="unchanged",
-            name=existing_entry,
-            namespace=namespace,
-            path=existing_path,
-        )
-
-    if not force or (verdict.conflict is not None and not twin_name):
-        # A rival this registration cannot retire -- one declared by
-        # another repository in the federation -- is refused with no
-        # offer to replace it, because replacing it is not this
-        # configuration's to do.
-        if entry_moves:
-            return Registration(
-                kind="refused",
-                name=existing_entry or assoc_name,
-                namespace=namespace,
-                path=existing_path,
-                previous_path=existing_path,
-                previous_name=existing_entry or "",
-                target=repo_path,
-                reason="entry-exists",
-                twin_name=twin_name,
-                twin_path=twin_path,
-            )
-        if twin_name:
-            return Registration(
-                kind="refused",
-                name=assoc_name,
-                namespace=namespace,
-                path=twin_path,
-                previous_path=twin_path,
-                previous_name=twin_name,
-                target=repo_path,
-                reason="same-namespace",
-            )
-
-    refusal, pre_existing = verdict.refusal, verdict.pre_existing
-    if refusal is not None and twin_name and force:
-        # The rival is going; ask again without it, so its collision is
-        # not reported against a registration that retires it.
-        refusal, pre_existing = _federation_verdict(
-            config_dir,
-            assoc_name,
-            repo_path,
-            namespace,
-            repo_root=repo_root,
-            config_path=config_path,
-            retiring=twin_name,
-        ).as_reason()
-    twin = (twin_name, twin_path) if twin_name else None
-
     if refusal is not None:
         return Registration(
-            kind="refused",
+            kind=Outcome.WOULD_NOT_FEDERATE,
             name=assoc_name,
             namespace=namespace,
             path=existing_path,
             previous_path=existing_path,
             target=repo_path,
             reason=refusal,
-            pre_existing_fault=pre_existing,
+            pre_existing=pre_existing,
         )
 
-    # Forced past the obstacles: one entry is left holding this namespace,
-    # and it is the one the operator named. The entry that recorded the
-    # other directory goes with it -- excluding it from the plan above and
-    # leaving it in the file would be two answers again.
-    if twin is not None:
-        del associates[twin_name]
-
-    if existing_entry is not None:
-        associates[existing_entry]["path"] = repo_path
-        associates[existing_entry]["namespace"] = namespace
-        local_path.write_text(tomlkit.dumps(doc), encoding="utf-8")
+    # Implements: REQ-d00289-C
+    # The recorded path is a fact the invocation does not know it is
+    # contradicting, so replacing it is a decision the operator makes
+    # rather than an outcome they discover.
+    if entry_moves and not force:
         return Registration(
-            kind="repointed" if entry_moves else "unchanged",
-            name=existing_entry,
+            kind=Outcome.ENTRY_EXISTS,
+            name=assoc_name,
             namespace=namespace,
-            path=_recorded_path(local_path, existing_entry),
+            path=existing_path,
             previous_path=existing_path,
-            retired_name=twin_name,
-            retired_path=twin_path,
+            target=repo_path,
         )
 
-    entry = tomlkit.table()
-    entry["path"] = repo_path
-    entry["namespace"] = namespace
-    associates.add(assoc_name, entry)
+    if existing is not None and not entry_moves:
+        # Implements: REQ-d00289-B
+        return Registration(
+            kind=Outcome.UNCHANGED,
+            name=assoc_name,
+            namespace=namespace,
+            path=existing_path,
+        )
+
+    # Implements: REQ-d00290-A
+    # The entry may be declared in the committed file and absent from the
+    # one written here. Changing a value is what an overlay is for: the
+    # entry is written locally, and the assembled result is the value given.
+    local_path = _local_config(config_dir)
+    doc, associates = _local_associates(local_path)
+    _write_entry(associates, assoc_name, repo_path, namespace)
     local_path.write_text(tomlkit.dumps(doc), encoding="utf-8")
 
     return Registration(
-        kind="replaced" if twin is not None else "recorded",
+        kind=Outcome.REPOINTED if entry_moves else Outcome.RECORDED,
         name=assoc_name,
         namespace=namespace,
+        # Implements: REQ-d00289-A
+        # Read back from the file, so the report states what a later run
+        # will read rather than the argument meant to put it there.
         path=_recorded_path(local_path, assoc_name),
-        previous_name=twin_name,
-        previous_path=twin_path,
+        previous_path=existing_path,
+        target=repo_path,
     )
+
+
+def _local_config(config_dir: Path) -> Path:
+    """The machine-local file a registration writes."""
+    return config_dir / ".elspais.local.toml"
+
+
+def _local_associates(local_path: Path) -> tuple[Any, Any]:
+    """The local document and its `[associates]` table, creating both if absent."""
+    if local_path.exists():
+        doc = parse_toml_document(local_path.read_text(encoding="utf-8"))
+    else:
+        doc = tomlkit.document()
+    if "associates" not in doc:
+        doc.add("associates", tomlkit.table())
+    return doc, doc["associates"]
+
+
+def _write_entry(associates: Any, name: str, repo_path: str, namespace: str) -> None:
+    """Record an entry in the machine-local table, adding it if it is absent.
+
+    Implements: REQ-d00290-A
+
+    The entry being changed may be declared in the committed file and not
+    here; writing it here is what an overlay does, and the assembled
+    configuration then holds the value given.
+    """
+    entry = associates.get(name)
+    if isinstance(entry, dict):
+        entry["path"] = repo_path
+        entry["namespace"] = namespace
+        return
+    fresh = tomlkit.table()
+    fresh["path"] = repo_path
+    fresh["namespace"] = namespace
+    associates.add(name, fresh)
+
+
+def _assembled_associates(config: dict[str, Any]) -> dict[str, Any]:
+    """Every associate the configuration holds, however it was written.
+
+    Implements: REQ-d00290-A
+
+    Read from the assembled configuration rather than from the file a
+    registration writes, so a declaration carried by the machine-local
+    overlay and one committed alongside it are the same fact here.
+    """
+    table = config.get("associates") or {}
+    return {n: e for n, e in table.items() if isinstance(e, dict)}
+
+
+def _matching_entry(recorded: dict[str, Any], name: str) -> str | None:
+    """The entry a name addresses: its key, its namespace, or its last path segment.
+
+    Implements: REQ-d00290-A
+
+    The entries searched are the assembled configuration's, so a name
+    addresses the same entry whichever file declared it. Key and namespace
+    match without regard to case; the path is matched on its last segment,
+    which is how a directory is named on a command line.
+    """
+    wanted = name.lower()
+    for key, entry in recorded.items():
+        if (
+            key == name
+            or key.lower() == wanted
+            or str(entry.get("namespace", "")).lower() == wanted
+            or Path(str(entry.get("path", ""))).name == name
+        ):
+            return key
+    return None
+
+
+def _committed_path(config_path: Path | None, assoc_name: str) -> str:
+    """The path the committed file records for an entry, or "" if it records none.
+
+    Implements: REQ-d00289-A
+
+    Nothing is decided here: which entries exist is settled by the
+    assembled configuration, and this reads the one path a machine-local
+    write cannot change so the report can state it.
+    """
+    if config_path is None or not config_path.exists():
+        return ""
+    doc = parse_toml_document(config_path.read_text(encoding="utf-8"))
+    entry = doc.get("associates", {}).get(assoc_name, {})
+    return str(entry.get("path", "")) if isinstance(entry, dict) else ""
 
 
 def _resolve_recorded(path_str: str, base: Path) -> Path:
@@ -754,137 +828,78 @@ def _recorded_path(local_path: Path, assoc_name: str) -> str:
     return entry.get("path", "") if isinstance(entry, dict) else ""
 
 
-def _scan_rival(
-    recorded_here: list[tuple[str, str, str]],
-    assoc_name: str,
-    namespace: str,
-    repo_path: Path,
-) -> tuple[str, str, str] | None:
-    """A candidate of this same run that stands for the entry in hand.
+def _contested_candidates(
+    found: list[tuple[Path, Associate]],
+) -> dict[str, tuple[str, ...]]:
+    """The candidates of one scan claiming one namespace, and their rivals.
 
     Implements: REQ-d00289-G
 
-    Returns the rival's entry name, the directory it was recorded from,
-    and why it is the same entry -- or None.
+    One namespace names one member (REQ-d00202-G), so two candidates
+    declaring one namespace are two answers to a question that admits
+    one. Deciding as the scan went would record whichever it reached
+    first and refuse the rest, leaving directory order to stand for a
+    choice the operator never made -- an instruction to replace what is
+    recorded was given about neither. So the whole scan is judged before
+    any of it is written, and none of a contesting group is recorded.
+
+    A shared *name* is not this rule's business: the entry key is a
+    label, and two candidates declaring different namespaces are two
+    members whose identifiers cannot be confused.
+
+    Returns a mapping from each contested directory to the others
+    contesting it.
     """
-    for rival_name, rival_namespace, rival_path in recorded_here:
-        if rival_path == str(repo_path):
+    by_namespace: dict[str, list[str]] = {}
+    for repo_path, assoc in found:
+        by_namespace.setdefault(assoc.code, []).append(str(repo_path))
+
+    contested: dict[str, tuple[str, ...]] = {}
+    for paths in by_namespace.values():
+        unique = sorted(set(paths))
+        if len(unique) < 2:
             continue
-        if rival_name == assoc_name:
-            return (rival_name, rival_path, f"both declare the name '{assoc_name}'")
-        if rival_namespace == namespace:
-            return (rival_name, rival_path, f"both declare the namespace '{namespace}'")
-    return None
+        for path in unique:
+            contested[path] = tuple(o for o in unique if o != path)
+    return contested
 
 
-@dataclass
-class FederationVerdict:
-    """What the federation planner says about a prospective declaration.
-
-    Implements: REQ-d00289-E, REQ-d00289-H, REQ-d00289-I
-
-    The planner is the single authority on what enters a federation
-    (REQ-d00202-G); this carries its answer in a form a registration can
-    act on -- which side of a namespace collision is the one already
-    recorded, and whether the fault was there before this registration.
-    """
-
-    refusal: str | None = None
-    pre_existing: bool = False
-    conflict: Any = None
-    """The NamespaceConflict raised, where that is what refused it."""
-
-    candidate: Path | None = None
-
-    def as_reason(self) -> tuple[str | None, bool]:
-        return self.refusal, self.pre_existing
-
-    def rival(self, root_name_of: Any = None) -> tuple[str, str]:
-        """The entry already holding this namespace, if this run can retire it.
-
-        A collision is answerable here only where this registration is
-        one of its two sides and the other is an entry of this
-        configuration: a collision between two other members, or one
-        declared by another repository, is not this run's to settle, so
-        it is reported and left alone.
-        """
-        if self.conflict is None:
-            return ("", "")
-        sides = (
-            (self.conflict.first_root, self.conflict.first_declaration),
-            (self.conflict.second_root, self.conflict.second_declaration),
-        )
-        if not any(root == self.candidate for root, _ in sides):
-            return ("", "")
-        for root, declaration in sides:
-            if root == self.candidate:
-                continue
-            # (root_repo, entry) -- anything longer was declared by a
-            # repository other than the one being configured.
-            if len(declaration) != 2:
-                continue
-            name = declaration[-1]
-            if root_name_of is not None:
-                entry = root_name_of.get(name)
-                if isinstance(entry, dict):
-                    return (name, entry.get("path", ""))
-            return (name, str(root))
-        return ("", "")
-
-
-def _federation_verdict(
-    config_dir: Path,
+def _federation_refusal(
+    config: dict[str, Any],
     assoc_name: str,
     repo_path: str,
     namespace: str,
     *,
-    repo_root: Path | None = None,
-    config_path: Path | None = None,
-    retiring: str = "",
-) -> FederationVerdict:
-    """Ask the planner whether this declaration may join, and why not.
+    repo_root: Path,
+) -> tuple[str | None, bool]:
+    """Why the federation would refuse this declaration, and whose fault it is.
 
     Implements: REQ-d00289-E, REQ-d00289-I
 
-    It is planned twice: a configuration that already will not federate
-    refuses every candidate put to it, and reporting that against the
-    candidate sends the operator to the wrong directory.
+    The planner is the one authority on what enters a federation
+    (REQ-d00202-G), so this asks it, and puts the answer to the same
+    refusal a build applies, rather than deciding anything. It is
+    planned twice: a configuration that already will not federate refuses
+    every candidate put to it, and reporting that against the candidate
+    sends the operator to the wrong directory.
 
-    Args:
-        retiring: An entry this registration would remove, left out of
-            both plans so a member about to go is not what refuses its
-            successor.
+    Returns:
+        The reason a federation would be refused and whether the
+        configuration already held that fault, or ``(None, False)``.
     """
-    from elspais.config import get_config
-    from elspais.graph.federation_plan import NamespaceConflict, plan_federation
+    from elspais.graph.federation_plan import plan_federation, refuse_unreadable
 
-    resolved_path = config_path if config_path else find_config_file(config_dir)
-    config = get_config(config_path=resolved_path, start_path=config_dir, quiet=True)
-    root = repo_root or config_dir
-    candidate = Path(repo_path).resolve()
-
-    recorded = {
-        name: entry for name, entry in (config.get("associates") or {}).items() if name != retiring
-    }
+    recorded = config.get("associates") or {}
 
     try:
-        plan_federation({**config, "associates": recorded}, root)
+        refuse_unreadable(plan_federation({**config, "associates": recorded}, repo_root))
     except FederationError as exc:
-        # A standing collision this registration is itself one side of is
-        # still this run's to settle; one between other members is not.
-        return FederationVerdict(
-            refusal=str(exc),
-            pre_existing=True,
-            conflict=exc if isinstance(exc, NamespaceConflict) else None,
-            candidate=candidate,
-        )
+        return str(exc), True
 
     prospective = {**recorded, assoc_name: {"path": repo_path, "namespace": namespace}}
     try:
-        plan_federation({**config, "associates": prospective}, root)
-    except NamespaceConflict as exc:
-        return FederationVerdict(refusal=str(exc), conflict=exc, candidate=candidate)
+        refuse_unreadable(plan_federation({**config, "associates": prospective}, repo_root))
     except FederationError as exc:
-        return FederationVerdict(refusal=str(exc), candidate=candidate)
+        return str(exc), False
 
-    return FederationVerdict(candidate=candidate)
+    return None, False

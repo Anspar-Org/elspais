@@ -829,7 +829,7 @@ C is what makes a declaration answer for a whole audience rather than half of on
 
 ## REQ-d00289: Associate Registration Outcome
 
-**Level**: dev | **Status**: Draft | **Implements**: REQ-p00005-C+E
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00005-C+E
 
 Registering an associate writes to a machine-local configuration file, often from a script, so the report the command makes is the only record of what it did. This requirement covers what a registration run states, what it does when the entry it would write already exists, and which conditions it refuses at.
 
@@ -847,9 +847,9 @@ E. A registration SHALL be refused, leaving the configuration unchanged, on any 
 
 F. These properties SHALL hold on every surface that records a registration, including discovery of candidates by scanning; a candidate refused SHALL neither end the scan nor suppress the report of the candidates around it.
 
-G. When one run reaches two candidates for one entry, the tool SHALL refuse the later of them naming both paths, rather than resolving them by the order they were reached in.
+G. When one run reaches two candidates declaring one namespace, the run SHALL record neither and report both paths.
 
-H. When a registration would record a namespace another entry already records at a different directory, the tool SHALL refuse it naming that entry and both directories, whether or not the registration would be recorded under the entry's own name. Where an explicit replacement instruction is given, one entry SHALL remain, recording the directory given, and the report SHALL name the entry and the directory it replaced.
+H. When a registration would record a namespace another entry already records at a different directory, the tool SHALL refuse it naming that entry and both directories, whether or not the registration would be recorded under the entry's own name.
 
 I. When the configuration a registration would be recorded into does not federate as it stands, the tool SHALL refuse the registration reporting that fault as one the configuration already held, distinguishably from a fault the registration itself would introduce.
 
@@ -857,8 +857,12 @@ I. When the configuration a registration would be recorded into does not federat
 
 A registration is the one moment at which an operator can still tell the tool what they meant. Reporting the argument rather than the recorded state (A) makes a run that changed nothing indistinguishable from one that did what was asked, and an operator who then reads the wrong repository has no signal that they are doing so — which is why B separates the two outcomes rather than leaving both to read as success.
 
-G is the same decision one step earlier. An instruction to replace a recorded path is given about a path the operator has seen; it says nothing about which of two candidates found in one scan they meant, so resolving the pair by sort order would record an arbitrary one of them under a report that reads as success. C and D make an existing entry a decision rather than a silent outcome. Refusal is the default because the recorded path is a fact the invocation does not know it is contradicting, and naming the way to replace it costs the operator who did mean to replace it a single retry. E moves the membership rules to where the mistake is made: the conditions of REQ-d00202-B, REQ-d00202-K and REQ-d00202-L are decidable about a prospective member before anything is written, and a federation that will not build is worth less than a registration that will not complete. F is what keeps the guarantee a property of registration rather than of one invocation form.
+G is the same decision one step earlier, and it is the namespace rule read at scan time. An instruction to replace a recorded path is given about a path the operator has seen; it says nothing about which of two candidates claiming one namespace they meant. Recording either of them would be a guess reported as success, and recording the one that happened to be reached first is that guess with the order of the scan standing in for a decision nobody made -- so neither is recorded, and the operator is told which two directories they have to choose between. A shared declared name is not the same case: the entry key is a label, and two candidates declaring different namespaces are two members whose identifiers cannot be confused. That the pair is detectable at all requires the run to decide about every candidate before it writes any of them; a run that writes as it goes has already chosen by the time it can see the conflict. C and D make an existing entry a decision rather than a silent outcome. Refusal is the default because the recorded path is a fact the invocation does not know it is contradicting, and naming the way to replace it costs the operator who did mean to replace it a single retry. E moves the membership rules to where the mistake is made: the conditions of REQ-d00202-B, REQ-d00202-K and REQ-d00202-L are decidable about a prospective member before anything is written, and a federation that will not build is worth less than a registration that will not complete. F is what keeps the guarantee a property of registration rather than of one invocation form.
 
 H and I are E read honestly. A namespace is what a reference resolves through, so it is the one thing a member cannot share: two directories claiming one namespace are two answers to a question that admits one, whatever the entries holding them are called. That is decidable from the declarations alone, which is why it is answered here rather than left to the federation — and naming both directories is what tells the operator which of the two they are about to stop reading. Two directories declaring *different* namespaces are not this rule's business, however closely related they are: their identifiers cannot be confused, so nothing is ambiguous about holding both. I is the other half: a registration planned against a configuration that already would not federate can be refused for a fault that has nothing to do with it, and an operator reading their own candidate's name beside somebody else's collision will go looking in the wrong place. The registration is still refused — a configuration that cannot federate is not a state to add to — but the report says whose fault it is.
 
-*End* *Associate Registration Outcome* | **Hash**: 0d4c2b04
+### Changelog
+
+- 2026-09-12 | 008983e5 | - | Michael Lewis (<michael@anspar.org>) | Active; G and H narrowed to the namespace, the one identity
+
+*End* *Associate Registration Outcome* | **Hash**: 008983e5

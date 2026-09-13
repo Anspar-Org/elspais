@@ -2,7 +2,7 @@
 """Syntax highlighting utilities for the file viewer.
 
 Extracts Pygments-based highlighting into reusable functions shared by
-both the static HTML generator (view mode) and the Flask server (edit mode).
+both the static HTML generator (view mode) and the viewer server (edit mode).
 
 Gracefully degrades to plain HTML-escaped text when Pygments is unavailable.
 """

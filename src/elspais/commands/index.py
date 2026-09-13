@@ -140,22 +140,15 @@ def _resolve_spec_dir_info(spec_dir: Path) -> _SpecDirInfo:
     Finds the nearest ``.elspais.toml`` above *spec_dir* and reads
     the project name and level definitions via typed config.
     """
-    # Implements: REQ-d00212-F, REQ-d00207-C
-    from elspais.config import get_config
-    from elspais.config.schema import ElspaisConfig
+    # Implements: REQ-d00207-C
+    from elspais.config import get_config, validate_config
 
     resolved = spec_dir.resolve()
     current = resolved
     while current != current.parent:
         config_file = current / ".elspais.toml"
         if config_file.exists():
-            cfg = get_config(config_file, current)
-            # Use typed config for validated access
-            schema_fields = {
-                f.alias or name for name, f in ElspaisConfig.model_fields.items()
-            } | set(ElspaisConfig.model_fields.keys())
-            filtered = {k: v for k, v in cfg.items() if k in schema_fields}
-            typed_config = ElspaisConfig.model_validate(filtered)
+            typed_config = validate_config(get_config(config_file, current))
             project_name = typed_config.project.name or current.name
             try:
                 spec_subpath = str(resolved.relative_to(current))
@@ -221,11 +214,10 @@ def _repo_spec_dirs(graph: FederatedGraph, repo_name: str, fallback: list[Path])
     """Return the absolute spec directory paths for a repo.
 
     Reads ``[scanning.spec].directories`` from the repo's config; falls
-    back to ``fallback`` only when the repo is unknown to the graph or
-    its entry has no config.
+    back to ``fallback`` only when the repo is unknown to the graph.
     """
     for entry in graph.iter_repos():
-        if entry.name != repo_name or entry.config is None:
+        if entry.name != repo_name:
             continue
         scanning = entry.config.get("scanning", {})
         spec_cfg = scanning.get("spec", {}) if isinstance(scanning, dict) else {}
@@ -277,7 +269,7 @@ def _resolve_repo_info(
 
     config = None
     for entry in graph.iter_repos():
-        if entry.name == repo_name and entry.config is not None:
+        if entry.name == repo_name:
             config = entry.config
             break
 

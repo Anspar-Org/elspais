@@ -816,7 +816,7 @@ def _select_terms_dictionary(graph, include_associates: bool):
     if root is None or not hasattr(graph, "iter_repos"):
         return federated
     for entry in graph.iter_repos():
-        if entry.name != root or entry.graph is None:
+        if entry.name != root:
             continue
         own = getattr(entry.graph, "terms", None)
         if own is None:
@@ -849,7 +849,7 @@ def _foreign_namespaces(graph) -> set[str]:
     root_ns = ""
     namespaces: set[str] = set()
     for entry in graph.iter_repos():
-        namespace = (entry.config or {}).get("project", {}).get("namespace", "") or entry.name
+        namespace = entry.config.get("project", {}).get("namespace", "") or entry.name
         if entry.name == root_name:
             root_ns = namespace
         else:

@@ -96,6 +96,24 @@ elspais associate ../callisto-copy -f
 # Replaced callisto at /home/user/repos/callisto with clone (CAL) at /home/user/repos/callisto-copy
 ```
 
+Changing a recorded path works wherever the entry is declared: the change is
+written to `.elspais.local.toml`, and the configuration a later run assembles
+holds the value you gave. Retiring an entry is the case an overlay cannot do.
+Where the entry holding the namespace is declared in `.elspais.toml` -- the
+shared configuration, committed and read by everyone -- there is nothing `-f`
+could do: removing a local entry would leave that declaration standing and the
+next run would read it again. That case is refused naming the file to edit,
+with no offer to force it:
+
+```bash
+elspais associate ../callisto-copy
+# Refused: the namespace CAL is already registered to callisto at ../callisto,
+#   and nothing was changed.
+# That entry is declared in /home/user/repos/core/.elspais.toml, which this
+#   command does not write, so -f cannot replace it.
+# Edit ... to point callisto elsewhere, or give this repository a namespace of its own.
+```
+
 A copy that declares its own namespace is a different matter and registers
 normally: its identifiers cannot be confused with the original's, so holding
 both is unambiguous. Nothing here consults git -- the question is answered from
@@ -148,39 +166,62 @@ elspais associate --all
 Auto-discovery reports and refuses on the same terms as a single
 registration. A candidate that would be refused is reported and the scan
 carries on to the ones after it, so the state of every candidate is on the
-screen together; the run exits non-zero if any was refused. `--all -f`
+screen together; the run exits non-zero if any was refused. Two candidates
+of one scan standing for one entry are settled before anything is written:
+neither is recorded, and each is reported naming the other, so which the scan
+reached first decides nothing. `--all -f`
 repoints each candidate whose recorded path differs.
 
 Two candidates of one scan that stand for the same entry -- they declare one
 name, or one namespace -- are a case `-f` cannot
-settle, since it was given about neither of them. The second is refused naming
-the first rather than winning on sort order. Register the one you meant by
-path.
+settle, since it was given about neither of them. Neither is recorded, and
+each is reported naming the others, so which one the scan reached first
+decides nothing. Register the one you meant by path.
 
 ### Listing links
 
 ```bash
 elspais associate --list
-# Name                 Prefix     Status       Path
-# callisto             CAL        OK           /home/user/repos/callisto
+# Name                 Prefix     Status       Local   Path
+# callisto             CAL        OK           -       /home/user/repos/callisto
+# titan                TTN        OK           yes     /home/user/repos/titan
 ```
+
+`Local` says whether that repository's own configuration was assembled with a
+`.elspais.local.toml` of its own. It answers one question -- was a machine-local
+file involved -- and deliberately not which values it contributed: an overlay
+changes nothing about the graph, so what it holds is a fact about this machine
+rather than about the federation. Read the file when you need the detail.
 
 ### Unlinking
 
 ```bash
 elspais associate --unlink callisto
-# Unlinked callisto
+# Unlinked callisto (was callisto: /path/to/callisto)
 ```
 
-The `--unlink` argument matches by (in order): exact path, directory name, path component substring, project name, or prefix code. This means all of these work:
+The name addresses an entry of the assembled configuration by its entry key, by the namespace it declares, or by the last segment of the path it records. Key and namespace are matched without regard to case:
 
 ```bash
-elspais associate --unlink ../callisto                    # exact path
-elspais associate --unlink callisto                       # directory name or project name
-elspais associate --unlink CAL                            # prefix code
+elspais associate --unlink callisto                       # entry key, or the directory it records
+elspais associate --unlink CAL                            # the namespace it declares
 ```
 
-Even when the linked path is a worktree (e.g., `callisto-worktrees/some-branch`), `--unlink callisto` still matches via path component substring.
+Which file declares the entry decides what a run can do about it, because only `.elspais.local.toml` is written:
+
+```bash
+elspais associate --unlink beta
+# Refused: beta is declared in .elspais.toml at ../beta, and nothing was changed.
+# Remove it there; a machine-local write cannot retire a committed declaration.
+```
+
+An entry declared in both files is overridden locally rather than created locally, so removing the local entry withdraws the override and leaves the committed declaration standing:
+
+```bash
+elspais associate --unlink beta
+# Removed the local override for beta (was /home/user/moved/beta)
+# beta remains declared in .elspais.toml at ../beta. Remove it there to retire it.
+```
 
 ## Who is in the federation
 
@@ -210,7 +251,7 @@ ones reached indirectly.
 |------|-------------|
 | `--all` | Auto-discover and link all associates |
 | `--list` | Show status of linked associates |
-| `--unlink NAME` | Remove a linked associate by name, path, or prefix code |
+| `--unlink NAME` | Retire an associate recorded in `.elspais.local.toml`, addressed by entry key, namespace, or recorded directory |
 | `-f`, `--force` | Replace the path recorded for an associate that is already registered |
 
 ## Referencing an associate's requirements

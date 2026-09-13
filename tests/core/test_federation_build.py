@@ -1,10 +1,10 @@
-# Verifies: REQ-d00203-A, REQ-d00203-B, REQ-d00203-C, REQ-d00203-D, REQ-d00203-E, REQ-d00200-D
+# Verifies: REQ-d00203-A, REQ-d00203-B, REQ-d00203-E, REQ-d00200-D, REQ-d00202-M
 """Tests for multi-repo federation building in factory.build_graph().
 
 Validates REQ-d00203-A: build_graph() builds separate TraceGraphs per repo
 Validates REQ-d00203-B: An associate's own declarations join the federation
-Validates REQ-d00203-C: Missing associate path creates error-state RepoEntry (soft fail)
-Validates REQ-d00203-D: strict=True raises on missing associate
+Validates REQ-d00202-M: a declaration whose repository cannot be read is
+refused by the build, naming the path it reached nothing at
 Validates REQ-d00203-E: FederatedGraph root repo is the invoking repo, not an associate
 """
 
@@ -241,8 +241,7 @@ class TestFederationBuild:
 
     Validates REQ-d00203-A: Separate graphs per repo
     Validates REQ-d00203-B: An associate's own declarations join the federation
-    Validates REQ-d00203-C: Missing associate soft-fails
-    Validates REQ-d00203-D: strict raises on missing associate
+    Validates REQ-d00202-M: an unreadable declaration is refused
     Validates REQ-d00203-E: Root repo identity
     """
 
@@ -270,45 +269,31 @@ class TestFederationBuild:
                 "each repo should have a built TraceGraph"
             )
 
-    # Verifies: REQ-d00203-C
-    def test_REQ_d00203_C_missing_associate_soft_fail(self, missing_assoc_repo: Path) -> None:
-        """Root declares associate at non-existent path.
-        Default (non-strict) mode: FederatedGraph has an error-state
-        RepoEntry with graph=None for the missing associate."""
-        fed = build_graph(
-            repo_root=missing_assoc_repo,
-            scan_code=False,
-            scan_tests=False,
-        )
-
-        entries = list(fed.iter_repos())
-        # Expect 2 entries: root (ok) + ghost (error)
-        assert len(entries) == 2, (
-            f"Expected 2 repo entries (root + error-state ghost), got {len(entries)}: "
-            f"{[e.name for e in entries]}"
-        )
-        error_entries = [e for e in entries if e.graph is None]
-        assert len(error_entries) == 1, (
-            "Expected exactly one error-state RepoEntry (graph=None) "
-            f"for the missing associate, got {len(error_entries)}"
-        )
-        assert error_entries[0].error is not None, (
-            "Error-state RepoEntry should have a human-readable error message"
-        )
-
-    # Verifies: REQ-d00203-D
-    def test_REQ_d00203_D_strict_raises_on_missing_associate(
+    # Verifies: REQ-d00202-M
+    def test_REQ_d00202_M_unreadable_declaration_stops_the_build(
         self, missing_assoc_repo: Path
     ) -> None:
-        """Root declares associate at non-existent path with strict=True.
-        Should raise FederationError or ValueError."""
-        with pytest.raises((FederationError, ValueError)):
+        """A declaration reaching no readable repository refuses the build.
+
+        The federation is the corpus every later answer is computed over, so
+        a member missing from it makes every answer a different question.
+        The fault reported is that the repository could not be read, and it
+        names the path the declaration reached nothing at.
+        """
+        with pytest.raises(FederationError) as excinfo:
             build_graph(
                 repo_root=missing_assoc_repo,
                 scan_code=False,
                 scan_tests=False,
-                strict=True,  # type: ignore[call-arg]
             )
+
+        message = str(excinfo.value)
+        assert "ghost" in message, (
+            f"the refusal must name the declaration that reached nothing: {message}"
+        )
+        assert str(missing_assoc_repo.parent / "ghost") in message, (
+            f"the refusal must name the path that could not be read: {message}"
+        )
 
     # Verifies: REQ-d00203-E
     def test_REQ_d00203_E_root_is_root_repo(self, two_repos: dict[str, Path]) -> None:
@@ -651,8 +636,8 @@ def _make_coverage_repo(
 def coverage_repos(tmp_path_factory) -> dict[str, Path]:
     """One repo of every build shape, each self-evidencing its own assertion A.
 
-    ``app`` hosts a live federation with ``lib``; ``orphan`` declares an
-    associate that cannot be loaded at all; ``solo`` declares none.
+    ``app`` hosts a live federation with ``lib``; ``solo`` declares no
+    associates at all.
     """
     base = tmp_path_factory.mktemp("cov_shapes")
     lib = _make_coverage_repo(base, "lib", "LIB")
@@ -662,14 +647,8 @@ def coverage_repos(tmp_path_factory) -> dict[str, Path]:
         "APP",
         associates='\n[associates.lib]\npath = "../lib"\nnamespace = "LIB"\n',
     )
-    orphan = _make_coverage_repo(
-        base,
-        "orphan",
-        "ORPHAN",
-        associates='\n[associates.ghost]\npath = "../ghost"\nnamespace = "GHOST"\n',
-    )
     solo = _make_coverage_repo(base, "solo", "SOLO")
-    return {"lib": lib, "app": app, "orphan": orphan, "solo": solo}
+    return {"lib": lib, "app": app, "solo": solo}
 
 
 def _implemented(fed, req_id: str):
@@ -705,7 +684,7 @@ class TestCoverageAnnotatedInEveryBuildShape:
 
     Validates REQ-d00269-A: no coverage number depends on the order in which
     a federation was assembled -- including the degenerate orders, where the
-    federation has one live member or none to recompute over.
+    federation has a single member to recompute over.
     Validates REQ-d00261-E: a member's own coverage is the same number built
     alone as it is inside a federation.
     """
@@ -721,23 +700,6 @@ class TestCoverageAnnotatedInEveryBuildShape:
         assert len(live) == 2, f"expected two live members, got {[e.name for e in live]}"
         _assert_a_implemented(fed, "APP-d00001")
         _assert_a_implemented(fed, "LIB-d00001")
-
-    # Verifies: REQ-d00269-A
-    def test_REQ_d00269_A_host_with_no_loadable_associate_carries_coverage(
-        self, coverage_repos: dict[str, Path]
-    ) -> None:
-        """A host whose every associate failed to load still carries coverage.
-
-        No recompute runs over this graph, so the host's own annotation is
-        the only one there will ever be.
-        """
-        fed = build_graph(repo_root=coverage_repos["orphan"])
-
-        entries = list(fed.iter_repos())
-        assert [e.name for e in entries if e.graph is None] == ["ghost"], (
-            "fixture must produce exactly one associate that failed to load"
-        )
-        _assert_a_implemented(fed, "ORPHAN-d00001")
 
     # Verifies: REQ-d00269-A
     def test_REQ_d00269_A_lone_repository_carries_coverage(

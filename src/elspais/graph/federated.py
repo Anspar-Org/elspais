@@ -1,4 +1,4 @@
-# Implements: REQ-d00200-A+B+C+D+E+F+G+H
+# Implements: REQ-d00200-A+B+C+D+E+G+H
 # Implements: REQ-d00201-A+B+C+D+E+F+G
 """FederatedGraph — wraps one or more TraceGraphs with per-repo config.
 
@@ -49,10 +49,12 @@ if TYPE_CHECKING:
 class FederatedMutationPointer:
     """Lightweight entry in the federated mutation log.
 
-    Points to a sub-graph's mutation by repo name and mutation ID.
+    Points to a sub-graph's mutation by the owning member's namespace and
+    the mutation ID. The namespace, because that is what identifies a
+    member (REQ-d00202-G) and what the federation holds its members under.
     """
 
-    repo_name: str
+    repo_namespace: str
     mutation_id: str
 
 
@@ -94,10 +96,10 @@ class FederatedMutationLog:
         """Bind repo lookup for resolving pointers."""
         self._repos = repos
 
-    def record(self, repo_name: str, mutation_id: str) -> None:
+    def record(self, repo_namespace: str, mutation_id: str) -> None:
         """Record a mutation pointer."""
         was_holding = bool(self._pointers)
-        self._pointers.append(FederatedMutationPointer(repo_name, mutation_id))
+        self._pointers.append(FederatedMutationPointer(repo_namespace, mutation_id))
         self._revision += 1
         if not was_holding:
             self._notify_dirty(True)
@@ -118,7 +120,7 @@ class FederatedMutationLog:
         Compatible with existing MutationLog.iter_entries() consumers.
         """
         for ptr in self._pointers:
-            entry = self._repos.get(ptr.repo_name)
+            entry = self._repos.get(ptr.repo_namespace)
             if entry and entry.graph:
                 found = entry.graph.mutation_log.find_by_id(ptr.mutation_id)
                 if found:
@@ -136,7 +138,7 @@ class FederatedMutationLog:
             pointers = pointers[-limit:]
         entries: list[MutationEntry] = []
         for ptr in pointers:
-            entry = self._repos.get(ptr.repo_name)
+            entry = self._repos.get(ptr.repo_namespace)
             if entry and entry.graph:
                 found = entry.graph.mutation_log.find_by_id(ptr.mutation_id)
                 if found:
@@ -154,7 +156,7 @@ class FederatedMutationLog:
         """Find a mutation entry by ID across all repos."""
         for ptr in self._pointers:
             if ptr.mutation_id == mutation_id:
-                entry = self._repos.get(ptr.repo_name)
+                entry = self._repos.get(ptr.repo_namespace)
                 if entry and entry.graph:
                     return entry.graph.mutation_log.find_by_id(mutation_id)
         return None
@@ -178,7 +180,9 @@ class FederatedMutationLog:
 class FederationError(Exception):
     """Error raised for federation configuration issues.
 
-    Examples: transitive associates, ID conflicts across repos.
+    Examples: a declaration cycle, two directories claiming one namespace,
+    a declaration whose repository cannot be read, ID conflicts across
+    members.
     """
 
 
@@ -193,24 +197,39 @@ class RepoEntry:
             empty/missing names at the TOML boundary; ``config_defaults()``
             provides ``"example"`` for the fresh-directory / no-config-file
             path). For associates, the key under ``[associates]``.
-        graph: The repo's TraceGraph, or None if repo unavailable.
-        config: The repo's config dict, or None if repo unavailable.
+        graph: The repo's TraceGraph. Every member was read before it
+            joined, so every member has one.
+        config: The repo's config dict, read from the repository's own
+            root. Always carries a ``[project]`` with a non-empty
+            ``namespace`` -- that is what identifies the member, and a
+            member without one cannot join a federation.
         repo_root: Expected local filesystem path.
         git_origin: The repository's origin, reduced to a comparable
-            identity -- scheme, credentials and a trailing ".git" removed,
-            so the same repository addressed two ways compares equal. It is
-            what says two members are one repository, and what the surfaces
-            report; it is not a URL to clone from, and the remote a
-            declaration may carry is a separate thing.
-        error: Human-readable error message if repo is in error state.
+            form -- scheme, credentials and a trailing ".git" removed, so
+            the same repository addressed two ways compares equal. It
+            settles nothing about identity, which is the namespace
+            (REQ-d00202-G); surfaces report it. It is not a URL to clone
+            from, and the remote a declaration may carry is a separate
+            thing.
     """
 
     name: str
-    graph: TraceGraph | None
-    config: dict[str, Any] | None
+    graph: TraceGraph
+    config: dict[str, Any]
     repo_root: Path
     git_origin: str | None = None
-    error: str | None = None
+
+    @property
+    def namespace(self) -> str:
+        """The namespace this repository declares, which is what identifies it.
+
+        Implements: REQ-d00202-G
+
+        A member is its namespace. ``name`` is a label the declaring
+        repository chose -- shown to people, never used to tell two
+        members apart.
+        """
+        return self.config["project"]["namespace"]
 
 
 class FederatedGraph:
@@ -228,17 +247,14 @@ class FederatedGraph:
         repos: list[RepoEntry],
         root_repo: str | None = None,
     ) -> None:
-        # Invariant: every RepoEntry must carry a non-empty ``name`` and
-        # ``repo_root``. When the backing config declares a ``[project]``
-        # section, that section must carry non-empty ``name`` and
-        # ``namespace`` — the three identifiers (host-side handle,
-        # display name, REQ-id prefix) are distinct and downstream
-        # consumers (term cards, file routing, viewer namespace labels,
-        # render save) assume all three are present. A repo that carries a
-        # graph must declare both: its nodes name their repository in their
-        # ids, and there is no namespace-less repository for them to name.
-        # A repo that failed to load carries no graph and no config, and is
-        # exempt because it contributes no nodes.
+        # Invariant: every RepoEntry carries a non-empty ``name`` and
+        # ``repo_root``, and a config declaring a non-empty ``namespace``
+        # and ``name``. The namespace is what identifies the member, so
+        # there is no exemption for an entry carrying no graph: a
+        # repository that declares no namespace cannot be placed at all,
+        # and inventing a key for it would be a second kind of identity.
+        # Downstream consumers (term cards, file routing, viewer namespace
+        # labels, render save) read all three and assume all three.
         for r in repos:
             if not r.name or not str(r.name).strip():
                 raise FederationError(
@@ -248,30 +264,64 @@ class FederatedGraph:
                 )
             if r.repo_root is None or str(r.repo_root) == "":
                 raise FederationError(f"RepoEntry({r.name!r}).repo_root must be set")
-            if r.graph is not None:
-                project = (r.config or {}).get("project") or {}
-                if not project.get("name") or not str(project["name"]).strip():
-                    raise FederationError(
-                        f"RepoEntry({r.name!r}).config is missing non-empty "
-                        f"[project].name; load_config() should enforce this "
-                        f"at the TOML boundary"
-                    )
-                if not project.get("namespace") or not str(project["namespace"]).strip():
-                    raise FederationError(
-                        f"RepoEntry({r.name!r}).config is missing non-empty "
-                        f"[project].namespace; load_config() should enforce "
-                        f"this at the TOML boundary"
-                    )
+            # Implements: REQ-d00202-G
+            # A member is identified by its namespace, so a member without
+            # one cannot be placed at all -- not under a fallback, which
+            # would be a second kind of identity. Every entry reaching a
+            # federation has been read, so every entry has one.
+            project = r.config.get("project") or {}
+            if not project.get("namespace") or not str(project["namespace"]).strip():
+                raise FederationError(
+                    f"RepoEntry({r.name!r}) declares no namespace. A member is "
+                    f"identified by the namespace it declares, so a repository "
+                    f"that declares none cannot join a federation."
+                )
+            if not project.get("name") or not str(project["name"]).strip():
+                raise FederationError(
+                    f"RepoEntry({r.name!r}).config is missing non-empty "
+                    f"[project].name; load_config() should enforce this "
+                    f"at the TOML boundary"
+                )
 
-        self._repos: dict[str, RepoEntry] = {r.name: r for r in repos}
-        self._root_repo = root_repo or (repos[0].name if repos else "")
-        # Build ownership map: node_id -> repo name
+        # Implements: REQ-d00202-G
+        # Keyed by namespace, which is what identifies a member. Keying by
+        # the declared name made two members named alike one member and
+        # silently dropped the earlier; the collision that had to be
+        # checked for is now impossible to express.
+        # Implements: REQ-d00202-K
+        # One namespace names one member, so two entries claiming one are
+        # two answers to a question that admits one. Building the mapping
+        # without asking would keep whichever came last and drop the other
+        # silently -- its requirements would resolve against the wrong
+        # configuration and its graph would never be read.
+        by_namespace: dict[str, RepoEntry] = {}
+        for r in repos:
+            clash = by_namespace.get(r.namespace)
+            if clash is not None:
+                raise FederationError(
+                    f"Two repositories are federated under the namespace "
+                    f"'{r.namespace}': {clash.repo_root} and {r.repo_root}. "
+                    f"A namespace identifies one member's identifiers, so "
+                    f"give each member its own."
+                )
+            by_namespace[r.namespace] = r
+        self._repos: dict[str, RepoEntry] = by_namespace
+        self._root_repo = root_repo or (repos[0].namespace if repos else "")
+        # A caller naming the root names it the way members are identified.
+        # Accepting anything else produced a federation whose every lookup
+        # missed, silently -- the root's own graph included.
+        if repos and self._root_repo not in self._repos:
+            raise FederationError(
+                f"root_repo '{self._root_repo}' is not the namespace of any "
+                f"member. A member is identified by the namespace it declares; "
+                f"this federation holds {sorted(self._repos)}."
+            )
+        # Build ownership map: node_id -> owning repo's namespace
         self._ownership = self._build_ownership(repos)
         # Cache of per-repo IdResolvers, populated on first access by
         # ``_resolver_for``.  Cross-repo ownership / canonicalisation
         # probes hit this cache instead of rebuilding the resolver on
-        # every call.  Lazy so repos with ``config is None`` (error
-        # state) and repos never probed pay no cost.
+        # every call.  Lazy so a repo never probed pays no cost.
         self._resolver_cache: dict[str, IdResolver] = {}
         # Wire cross-graph edges after ownership is established.
         #
@@ -287,7 +337,7 @@ class FederatedGraph:
         #   - _detect_satisfies_cycles also runs unconditionally; cycles can
         #     in principle exist inside a single repo via in-repo Satisfies
         #     chains, though Phase-2 validation usually prevents that.
-        multi_repo = len([e for e in repos if e.graph is not None]) > 1
+        multi_repo = len(repos) > 1
         if multi_repo:
             self._wire_cross_graph_edges()
         # Implements: REQ-p00014-H
@@ -340,8 +390,6 @@ class FederatedGraph:
         merged = TermDictionary()
         self._term_duplicates: list[tuple] = []
         for entry in self._repos.values():
-            if entry.graph is None:
-                continue
             owned = TermDictionary()
             for term_entry in entry.graph._terms.iter_all():
                 owned.add(replace(term_entry, repo_name=entry.name, references=[]))
@@ -377,12 +425,8 @@ class FederatedGraph:
 
         self._unmatched_emphasis: list[dict] = []
         for entry in self._repos.values():
-            if entry.graph is None:
-                continue
-            config = entry.config or {}
+            config = entry.config
             terms_cfg = config.get("terms", {})
-            # A repo with a graph has a config, and a config that loaded has a
-            # namespace -- load_config refuses one without. No substitute needed.
             req_namespace = config["project"]["namespace"]
             unmatched = scan_graph(
                 self._terms,
@@ -520,13 +564,38 @@ class FederatedGraph:
 
     @property
     def root_repo_name(self) -> str:
-        """Return the host (root) repo's name as used in RepoEntry/index."""
+        """The host (root) repository's display name.
+
+        A name, not the key this federation holds it under: it reaches
+        people -- report headings, the assembled PDF, the index -- and a
+        namespace is not what a repository is called.
+        """
+        entry = self._repos.get(self._root_repo)
+        return entry.name if entry else self._root_repo
+
+    @property
+    def root_repo_namespace(self) -> str:
+        """The host repository's namespace -- what identifies it.
+
+        Implements: REQ-d00202-G
+
+        Distinct from ``root_repo_name``, which is what the repository is
+        called. A caller deciding whether a member IS the root asks this
+        one: two members may share a display name.
+        """
         return self._root_repo
 
     @property
     def repo_root(self) -> Path:
-        """Return the root repo's filesystem path."""
-        return self._repos[self._root_repo].repo_root
+        """The root repository's filesystem path.
+
+        A federation that holds no member has no root to answer for --
+        the degraded object ``empty()`` returns -- and says so with the
+        working directory rather than raising at a caller that is already
+        reporting a configuration it could not read.
+        """
+        entry = self._repos.get(self._root_repo)
+        return entry.repo_root if entry else Path(".")
 
     @property
     def hash_mode(self) -> str:
@@ -553,19 +622,15 @@ class FederatedGraph:
         so the degraded state is visible at the call site rather than hidden
         behind a default.
 
-        The entry carries no graph, which is the same shape a repository
-        that failed to load takes. A graph would have to say which
-        repository it holds, and this stands for a repository that could
-        not be read at all.
+        Implements: REQ-d00202-G
+
+        It holds no members. A member is identified by the namespace it
+        declares, and a configuration that could not be read declares
+        none -- so there is no repository here to stand for, and putting
+        one in would be inventing an identity for something unreadable.
+        The sentinel is carried for display alone.
         """
-        entry = RepoEntry(
-            name=name,
-            graph=None,
-            config=None,
-            repo_root=Path("."),
-            error="Configuration could not be read",
-        )
-        return cls([entry], root_repo=name)
+        return cls([], root_repo=name)
 
     # Implements: REQ-d00200-B
     @classmethod
@@ -602,7 +667,7 @@ class FederatedGraph:
             # receives the staleness reporting that depends on having one.
             git_origin=repository_origin(repo_root),
         )
-        return cls([entry], root_repo=host_name)
+        return cls([entry])
 
     # ─────────────────────────────────────────────────────────────────────────
     # Repo Access
@@ -666,7 +731,7 @@ class FederatedGraph:
         entry = self._repos.get(self._root_repo)
         return entry.config if entry else None
 
-    def config_for(self, node_id: str) -> dict[str, Any] | None:
+    def config_for(self, node_id: str) -> dict[str, Any]:
         """Return the config dict for the repo owning node_id.
 
         # Strategy: by_id
@@ -675,7 +740,7 @@ class FederatedGraph:
 
     # Implements: REQ-d00200-H
     def iter_repos(self) -> Iterator[RepoEntry]:
-        """Yield all RepoEntry objects including error-state repos.
+        """Yield every member of this federation.
 
         # Strategy: all
         """
@@ -684,8 +749,7 @@ class FederatedGraph:
     def _live_graphs(self) -> Iterator[tuple[str, TraceGraph]]:
         """Yield (name, graph) for repos with non-None graphs."""
         for entry in self._repos.values():
-            if entry.graph is not None:
-                yield entry.name, entry.graph
+            yield entry.namespace, entry.graph
 
     # ─────────────────────────────────────────────────────────────────────────
     # Read-Only Methods
@@ -701,8 +765,6 @@ class FederatedGraph:
         if repo_name is None:
             return None
         graph = self._repos[repo_name].graph
-        if graph is None:
-            return None
         return graph.find_by_id(node_id)
 
     # Implements: REQ-d00200-E
@@ -775,10 +837,7 @@ class FederatedGraph:
         repo_name = self._ownership.get(node_id)
         if repo_name is None:
             return False
-        graph = self._repos[repo_name].graph
-        if graph is None:
-            return False
-        return graph.has_root(node_id)
+        return self._repos[repo_name].graph.has_root(node_id)
 
     # Implements: REQ-d00200-E
     def orphaned_nodes(self) -> Iterator[GraphNode]:
@@ -928,10 +987,7 @@ class FederatedGraph:
         repo_name = self._ownership.get(node.id)
         if repo_name is None:
             return False
-        graph = self._repos[repo_name].graph
-        if graph is None:
-            return False
-        return graph.is_reachable_to_requirement(node)
+        return self._repos[repo_name].graph.is_reachable_to_requirement(node)
 
     # Implements: REQ-d00200-E
     def iter_unlinked(self, kind: NodeKind) -> Iterator[GraphNode]:
@@ -989,10 +1045,7 @@ class FederatedGraph:
         repo_name = self._ownership.get(node_id)
         if repo_name is None:
             raise KeyError(f"Node '{node_id}' not found in any repo")
-        graph = self._repos[repo_name].graph
-        if graph is None:
-            raise KeyError(f"Repo '{repo_name}' has no graph (error state)")
-        return graph
+        return self._repos[repo_name].graph
 
     def _record_mutation(self, repo_name: str, entry: MutationEntry) -> None:
         """Record a mutation in the federated log."""
@@ -1351,7 +1404,7 @@ class FederatedGraph:
         """
         repo_name = target_repo or self._root_repo
         entry = self._repos.get(repo_name)
-        if entry is None or entry.graph is None:
+        if entry is None:
             raise KeyError(f"Repo '{repo_name}' not found or unavailable")
         result = entry.graph.add_journey(journey_id, title, file_id)
         self._ownership[journey_id] = repo_name
@@ -1437,7 +1490,7 @@ class FederatedGraph:
         """
         repo_name = target_repo or self._root_repo
         entry = self._repos.get(repo_name)
-        if entry is None or entry.graph is None:
+        if entry is None:
             raise KeyError(f"Repo '{repo_name}' not found or unavailable")
         result = entry.graph.add_file_node(
             absolute_path,
@@ -1468,7 +1521,7 @@ class FederatedGraph:
         """
         repo_name = target_repo or self._root_repo
         entry = self._repos.get(repo_name)
-        if entry is None or entry.graph is None:
+        if entry is None:
             raise KeyError(f"Repo '{repo_name}' not found or unavailable")
         result = entry.graph.add_requirement(req_id, title, level, status, parent_id, edge_kind)
         self._ownership[req_id] = repo_name
@@ -1530,10 +1583,8 @@ class FederatedGraph:
 
         by_repo = {}
         for entry in self._repos.values():
-            if entry.graph is None or entry.config is None:
-                continue
             targets = _validate_config(entry.config).scanning.test.targets
-            by_repo[entry.name] = _derive_credit_config(targets)
+            by_repo[entry.namespace] = _derive_credit_config(targets)
         policy = CreditPolicy(by_repo=by_repo, owner=self._owner_of_node)
         annotate_journey_verification(self)
         annotate_coverage(self, policy)
@@ -1604,8 +1655,6 @@ class FederatedGraph:
         wired_sources: dict[str, set[str]] = {}
 
         for source_entry in self._repos.values():
-            if source_entry.graph is None:
-                continue
             resolved: list[int] = []  # indices to remove
             # Broken references that survive wiring in a different shape than
             # they were written: index -> the references that replace it.
@@ -1630,11 +1679,13 @@ class FederatedGraph:
                 target_repo_name = self._ownership.get(br.target_id)
                 if target_repo_name is None:
                     expansion = self._expand_foreign_multi_reference(br.target_id)
-                    if expansion is not None and expansion[0] != source_entry.name:
+                    if expansion is not None and expansion[0] != source_entry.namespace:
                         owner, present, missing = expansion
                         wired = self._wire_expanded_labels(source_entry, br, owner, present)
                         if wired and EdgeKind(br.edge_kind) in self._CONTENT_EDGE_KINDS:
-                            wired_sources.setdefault(source_entry.name, set()).add(br.source_id)
+                            wired_sources.setdefault(source_entry.namespace, set()).add(
+                                br.source_id
+                            )
                         replacements[i] = [
                             ReferenceFault(
                                 source_id=br.source_id,
@@ -1656,33 +1707,30 @@ class FederatedGraph:
                             for missing_id in missing
                         ]
                         continue
-                if target_repo_name and target_repo_name != source_entry.name:
+                if target_repo_name and target_repo_name != source_entry.namespace:
                     target_entry = self._repos[target_repo_name]
                     # Implements: REQ-p00017-H
                     # The owning repository holds this id, but a retired
                     # *Assertion* is not a target: the reference keeps the
                     # classification it arrived with and stays reported.
-                    if target_entry.graph is not None and not self._holds_live_target(
-                        target_entry.graph, br.target_id
-                    ):
+                    if not self._holds_live_target(target_entry.graph, br.target_id):
                         continue
-                    if target_entry.graph is not None:
-                        # Wire the cross-graph edge in the same shape the
-                        # same-repository builder produces (REQ-d00269-B):
-                        # an assertion-targeted reference hangs off the
-                        # owning REQUIREMENT and names the assertion in
-                        # ``assertion_targets``.
-                        anchor_id, targets = self._edge_anchor(target_entry.graph, br.target_id)
-                        source_entry.graph.add_edge(
-                            br.source_id,
-                            anchor_id,
-                            EdgeKind(br.edge_kind),
-                            assertion_targets=targets,
-                            target_graph=target_entry.graph,
-                        )
-                        resolved.append(i)
-                        if EdgeKind(br.edge_kind) in self._CONTENT_EDGE_KINDS:
-                            wired_sources.setdefault(source_entry.name, set()).add(br.source_id)
+                    # Wire the cross-graph edge in the same shape the
+                    # same-repository builder produces (REQ-d00269-B):
+                    # an assertion-targeted reference hangs off the
+                    # owning REQUIREMENT and names the assertion in
+                    # ``assertion_targets``.
+                    anchor_id, targets = self._edge_anchor(target_entry.graph, br.target_id)
+                    source_entry.graph.add_edge(
+                        br.source_id,
+                        anchor_id,
+                        EdgeKind(br.edge_kind),
+                        assertion_targets=targets,
+                        target_graph=target_entry.graph,
+                    )
+                    resolved.append(i)
+                    if EdgeKind(br.edge_kind) in self._CONTENT_EDGE_KINDS:
+                        wired_sources.setdefault(source_entry.namespace, set()).add(br.source_id)
             # Drop the resolved broken references and swap in the
             # replacements, in one rebuild so no index shifts underfoot.
             if resolved or replacements:
@@ -1698,8 +1746,7 @@ class FederatedGraph:
         # Demote wired source nodes from _roots — they now have parent edges
         for repo_name, source_ids in wired_sources.items():
             graph = self._repos[repo_name].graph
-            if graph is not None:
-                graph._roots = [r for r in graph._roots if r.id not in source_ids]
+            graph._roots = [r for r in graph._roots if r.id not in source_ids]
 
     # Implements: REQ-d00269-B
     def _expand_foreign_multi_reference(
@@ -1721,11 +1768,7 @@ class FederatedGraph:
         here.
         """
         for entry in self._repos.values():
-            if entry.graph is None:
-                continue
             resolver = self._resolver_for(entry)
-            if resolver is None:
-                continue
             parsed = resolver.parse(target_id)
             if parsed is None or len(parsed.assertions) <= 1:
                 continue
@@ -1734,7 +1777,7 @@ class FederatedGraph:
             if not present:
                 continue
             missing = [c for c in canonical if not self._holds_live_target(entry.graph, c)]
-            return entry.name, present, missing
+            return entry.namespace, present, missing
         return None
 
     # Implements: REQ-d00269-B
@@ -1747,7 +1790,7 @@ class FederatedGraph:
     ) -> bool:
         """Wire one cross-graph edge per expanded target. Returns True if any."""
         target_entry = self._repos[owner]
-        if target_entry.graph is None or not target_ids:
+        if not target_ids:
             return False
         for target_id in target_ids:
             anchor_id, targets = self._edge_anchor(target_entry.graph, target_id)
@@ -1760,22 +1803,19 @@ class FederatedGraph:
             )
         return True
 
-    def _resolver_for(self, entry: RepoEntry) -> IdResolver | None:
+    def _resolver_for(self, entry: RepoEntry) -> IdResolver:
         """Return the cached ``IdResolver`` for ``entry``'s repo.
 
-        Builds and memoises the resolver on first access. Returns
-        ``None`` when the repo has no config (error-state repos can't
-        be probed). Used by every federation pass that needs ID-format
-        tolerance: ``_claim_for`` and ``_instantiate_cross_repo_satisfies``.
+        Builds and memoises the resolver on first access. Used by every
+        federation pass that needs ID-format tolerance: ``_claim_for`` and
+        ``_instantiate_cross_repo_satisfies``.
         """
-        if entry.config is None:
-            return None
-        cached = self._resolver_cache.get(entry.name)
+        cached = self._resolver_cache.get(entry.namespace)
         if cached is None:
             from elspais.utilities.patterns import build_resolver
 
             cached = build_resolver(entry.config)
-            self._resolver_cache[entry.name] = cached
+            self._resolver_cache[entry.namespace] = cached
         return cached
 
     # Implements: REQ-p00014-H
@@ -1790,11 +1830,7 @@ class FederatedGraph:
         different padding).
         """
         for entry in self._repos.values():
-            if entry.graph is None:
-                continue
             resolver = self._resolver_for(entry)
-            if resolver is None:
-                continue
             if not resolver.is_local_id(target_id):
                 continue
             parsed = resolver.parse(target_id)
@@ -1802,7 +1838,7 @@ class FederatedGraph:
                 continue
             canonical = resolver.render_canonical(parsed)
             if canonical in entry.graph._index:
-                return entry.name, canonical
+                return entry.namespace, canonical
         return None
 
     # Implements: REQ-p00014-H
@@ -1822,11 +1858,8 @@ class FederatedGraph:
         """
         from elspais.graph.GraphNode import GraphNode
         from elspais.graph.relations import Stereotype
-        from elspais.utilities.patterns import INSTANCE_SEPARATOR
 
         for source_entry in self._repos.values():
-            if source_entry.graph is None:
-                continue
             resolver = self._resolver_for(source_entry)
             resolved_indices: list[int] = []
 
@@ -1859,7 +1892,7 @@ class FederatedGraph:
                     # what IS declared (and what's missing).
                     # Implements: REQ-p00014-J
                     available = sorted(
-                        name for name in self._repos.keys() if name != source_entry.name
+                        ns for ns in self._repos.keys() if ns != source_entry.namespace
                     )
                     available_str = (
                         f"Available associates: {', '.join(available)}. "
@@ -1882,13 +1915,11 @@ class FederatedGraph:
                     )
                     source_entry.graph._unresolved_references[i] = new_br
                     continue
-                if target_repo_name == source_entry.name:
+                if target_repo_name == source_entry.namespace:
                     # In-repo (already handled by the per-repo builder).
                     continue
 
                 target_entry = self._repos[target_repo_name]
-                if target_entry.graph is None:
-                    continue
                 template_node = target_entry.graph._index.get(target_id_canonical)
                 if template_node is None:
                     continue
@@ -1912,11 +1943,7 @@ class FederatedGraph:
 
                 clone_map: dict[str, GraphNode] = {}
                 for orig in template_nodes:
-                    clone_id = (
-                        resolver.build_instance_id(br.source_id, orig.id)
-                        if resolver is not None
-                        else f"{br.source_id}{INSTANCE_SEPARATOR}{orig.id}"
-                    )
+                    clone_id = resolver.build_instance_id(br.source_id, orig.id)
                     clone = GraphNode(
                         id=clone_id,
                         kind=orig.kind,
@@ -1929,14 +1956,20 @@ class FederatedGraph:
                     # Implements: REQ-p00014-K
                     # Record the template's owning repo so viewers can show
                     # "Template defined in <repo>" provenance without needing
-                    # to walk the cross-graph INSTANCE edge.
-                    clone.set_field("template_repo", target_repo_name)
+                    # to walk the cross-graph INSTANCE edge. The repository's
+                    # NAME, because this is shown to a reader; the namespace
+                    # identifies the member but is not what it is called.
+                    template_entry = self._repos.get(target_repo_name)
+                    clone.set_field(
+                        "template_repo",
+                        template_entry.name if template_entry else target_repo_name,
+                    )
                     # Source files live in foreign repo; do NOT copy parse_line.
                     clone.set_field("parse_line", None)
                     clone.set_field("parse_end_line", None)
 
                     source_entry.graph._index[clone_id] = clone
-                    self._ownership[clone_id] = source_entry.name
+                    self._ownership[clone_id] = source_entry.namespace
                     clone_map[orig.id] = clone
 
                     # Cross-graph INSTANCE edge: clone -> template original.
@@ -2008,8 +2041,6 @@ class FederatedGraph:
         from elspais.graph.GraphNode import NodeKind
 
         for source_entry in self._repos.values():
-            if source_entry.graph is None:
-                continue
             for req in list(source_entry.graph.iter_by_kind(NodeKind.REQUIREMENT)):
                 # Implements: REQ-d00272-K
                 # An item the reader refused binds nothing. The builder has
@@ -2044,7 +2075,7 @@ class FederatedGraph:
         from elspais.graph.GraphNode import NodeKind
 
         entry = self._repos.get(owner)
-        if entry is None or entry.graph is None:
+        if entry is None:
             return False
         node = entry.graph._index.get(canonical)
         return node is not None and node.kind == NodeKind.REQUIREMENT
@@ -2078,9 +2109,9 @@ class FederatedGraph:
 
         # Resolved to a foreign associate: wire the reverse INTEGRATES edge.
         # consumer (source_id) = PARENT, library node (canonical) = CHILD.
-        if owner is not None and owner != source_entry.name:
+        if owner is not None and owner != source_entry.namespace:
             target_entry = self._repos[owner]
-            if target_entry.graph is not None and canonical in target_entry.graph._index:
+            if canonical in target_entry.graph._index:
                 target_entry.graph.add_edge(
                     canonical,  # source_id (child, local to library graph)
                     source_id,  # target_id (parent, resolved in consumer graph)
@@ -2109,7 +2140,7 @@ class FederatedGraph:
                 return
 
         # Same-repo target: external-only violation (REQ-d00252-C).
-        if owner == source_entry.name:
+        if owner == source_entry.namespace:
             source_entry.graph._unresolved_references.append(
                 ReferenceFault(
                     source_id=source_id,
@@ -2128,10 +2159,9 @@ class FederatedGraph:
         # lacks the ID, soft presumed-foreign otherwise (REQ-d00252-E).
         claimed = False
         for entry in self._repos.values():
-            if entry.graph is None or entry.name == source_entry.name:
+            if entry.namespace == source_entry.namespace:
                 continue
-            resolver = self._resolver_for(entry)
-            if resolver is not None and resolver.is_local_id(target_id):
+            if self._resolver_for(entry).is_local_id(target_id):
                 claimed = True
                 break
         source_entry.graph._unresolved_references.append(
@@ -2207,8 +2237,6 @@ class FederatedGraph:
             return None
 
         for entry in self._repos.values():
-            if entry.graph is None:
-                continue
             for node_id, node in list(entry.graph._index.items()):
                 if node.kind != NodeKind.REQUIREMENT:
                     continue
@@ -2242,7 +2270,7 @@ class FederatedGraph:
         ptr = self._federated_log.pop()
         if ptr is None:
             return None
-        entry = self._repos.get(ptr.repo_name)
+        entry = self._repos.get(ptr.repo_namespace)
         if entry and entry.graph:
             result = entry.graph.undo_last()
             if result:
@@ -2288,16 +2316,14 @@ class FederatedGraph:
         """
         ownership: dict[str, str] = {}
         for entry in repos:
-            if entry.graph is None:
-                continue
             for node_id in entry.graph._index:
                 existing_repo = ownership.get(node_id)
                 if existing_repo is not None:
                     raise FederationError(
                         f"ID conflict: '{node_id}' exists in both "
-                        f"'{existing_repo}' and '{entry.name}'"
+                        f"'{existing_repo}' and '{entry.namespace}'"
                     )
-                ownership[node_id] = entry.name
+                ownership[node_id] = entry.namespace
         return ownership
 
 

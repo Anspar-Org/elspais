@@ -240,7 +240,7 @@ def test_claim_probe_claims_what_the_resolver_accepts(
     federation: FederatedGraph, probe: str
 ) -> None:
     # Verifies: REQ-p00014-T
-    assert federation._claim_for(probe) == ("lib", "LIB-d00001")
+    assert federation._claim_for(probe) == ("LIB", "LIB-d00001")
 
 
 @pytest.mark.parametrize(
@@ -256,7 +256,7 @@ def test_claim_probe_refuses_what_the_resolver_rejects(
     federation: FederatedGraph, probe: str
 ) -> None:
     # Verifies: REQ-p00014-T
-    resolver = federation._resolver_for(federation._repos["lib"])
+    resolver = federation._resolver_for(federation.repo_for("LIB-d00001"))
     assert resolver is not None
     assert not resolver.is_local_id(probe), "probe must be one the owning resolver rejects"
     assert federation._claim_for(probe) is None

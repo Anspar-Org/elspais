@@ -304,7 +304,7 @@ def test_recomputation_does_not_double_count(federated):
     by_repo = {
         entry.name: _derive_credit_config(_validate_config(entry.config).scanning.test.targets)
         for entry in federated._repos.values()
-        if entry.graph is not None and entry.config is not None
+        if entry.graph is not None
     }
     annotate_journey_verification(federated)
     annotate_coverage(
@@ -339,7 +339,7 @@ def test_integrates_credit_stays_with_its_overlay(federated):
 def test_foreign_reference_is_not_left_broken(federated):
     """A reference the federation resolves is no longer a broken reference in
     the repository that wrote it."""
-    app_graph = federated._repos["app"].graph
+    app_graph = federated.repo_for("APP-d00003").graph
     unresolved = {
         (b.source_id, b.target_id)
         for b in app_graph._unresolved_references

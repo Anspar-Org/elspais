@@ -501,12 +501,9 @@ async def api_status(request: Request) -> JSONResponse:
         repo_info: dict[str, Any] = {
             "name": entry.name,
             "path": str(entry.repo_root),
-            "status": "error" if entry.graph is None else "ok",
         }
         if entry.git_origin:
             repo_info["git_origin"] = entry.git_origin
-        if entry.error:
-            repo_info["error"] = entry.error
         repos_info.append(repo_info)
     result["repos"] = repos_info
 
@@ -534,15 +531,12 @@ async def api_repos(request: Request) -> JSONResponse:
         repo_info: dict = {
             "name": entry.name,
             "path": str(entry.repo_root),
-            "status": "error" if entry.graph is None else "ok",
         }
         if entry.git_origin:
             repo_info["git_origin"] = entry.git_origin
-        if entry.error:
-            repo_info["error"] = entry.error
 
         # REQ-d00206-B: Staleness info for repos with git_origin
-        if entry.git_origin and entry.graph is not None:
+        if entry.git_origin:
             try:
                 from elspais.utilities.git import git_status_summary
 
@@ -788,7 +782,7 @@ async def api_tree_data(request: Request) -> JSONResponse:
             entry = g.repo_for(node.id)
         except Exception:  # noqa: BLE001 - fail-soft per row, never break /api/tree-data
             entry = None
-        if entry is not None and entry.config is not None:
+        if entry is not None:
             cfg = entry.config
             cache_key = (cfg.get("project") or {}).get("namespace") or _LOCAL_KEY
         else:
@@ -836,7 +830,7 @@ async def api_tree_data(request: Request) -> JSONResponse:
             entry = g.repo_for(node.id)
         except Exception:  # noqa: BLE001 - fail-soft per row
             return None
-        if entry is None or entry.config is None:
+        if entry is None:
             return None
         ns = (entry.config.get("project") or {}).get("namespace")
         return ns or None

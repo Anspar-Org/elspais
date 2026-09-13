@@ -96,7 +96,8 @@ def _member(
 
 
 def _federation(*entries: RepoEntry) -> FederatedGraph:
-    return FederatedGraph(list(entries), root_repo=entries[0].name)
+    """The host is the first entry, identified the way every member is."""
+    return FederatedGraph(list(entries))
 
 
 ROOT_ROLES = {

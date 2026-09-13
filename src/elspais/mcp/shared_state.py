@@ -504,9 +504,8 @@ def rebuild_shared_graph(state: SharedServerState) -> dict[str, Any]:
     iter_repos = getattr(new_graph, "iter_repos", None)
     if iter_repos is not None:
         for entry in iter_repos():
-            if entry.config is not None:
-                root_config = entry.config
-                break
+            root_config = entry.config
+            break
 
     with state.write_lock:
         state["config"] = root_config if root_config is not None else new_config

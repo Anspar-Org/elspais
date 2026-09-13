@@ -2,7 +2,7 @@
 """
 elspais.commands.viewer - Interactive traceability viewer server.
 
-Starts a Flask-based server for browsing and editing the traceability graph.
+Starts a Starlette server for browsing and editing the traceability graph.
 Extracted from trace.py to separate the interactive viewer from static report
 generation.
 """

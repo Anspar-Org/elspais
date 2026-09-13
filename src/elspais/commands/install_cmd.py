@@ -89,7 +89,7 @@ def detect_installed_extras() -> list[str]:
     extras_deps: dict[str, list[str]] = {
         "mcp": ["mcp"],
         "trace-view": ["jinja2", "pygments"],
-        "trace-review": ["jinja2", "pygments", "flask", "flask_cors"],
+        "trace-review": ["jinja2", "pygments", "starlette", "uvicorn"],
         "coverage": ["coverage"],
     }
 

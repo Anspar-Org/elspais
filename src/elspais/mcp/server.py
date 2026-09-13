@@ -1957,11 +1957,20 @@ def _build_associates_info(
     members: list[tuple[str, Path, str | None]] = []
     try:
         if graph is not None:
-            root_name = graph.root_repo_name
+            # Which member is the root is asked of the namespace, which
+            # identifies it (REQ-d00202-G). Asked of the display name, an
+            # associate that happens to share the root's name drops out of
+            # the listing and the count silently disagrees with the
+            # federation.
+            root_namespace = graph.root_repo_namespace
             members = [
-                (entry.name, entry.repo_root, entry.error)
+                # A member in a built federation was read, so it carries
+                # no fault; a declaration that could not be read stopped
+                # the build. The planner branch below is where a fault is
+                # still possible.
+                (entry.name, entry.repo_root, None)
                 for entry in graph.iter_repos()
-                if entry.name != root_name
+                if entry.namespace != root_namespace
             ]
         else:
             from elspais.graph.federation_plan import plan_federation
@@ -2232,9 +2241,8 @@ def _get_workspace_info(
     # REQ-d00205-D: Derive root config from graph when not provided.
     if config is None and graph is not None:
         for entry in graph.iter_repos():
-            if entry.config is not None:
-                config = entry.config
-                break
+            config = entry.config
+            break
     if config is None:
         config = get_config(start_path=working_dir, quiet=True)
 
@@ -2248,12 +2256,9 @@ def _get_workspace_info(
             repo_info: dict[str, Any] = {
                 "name": entry.name,
                 "path": str(entry.repo_root),
-                "status": "error" if entry.graph is None else "ok",
             }
             if entry.git_origin:
                 repo_info["git_origin"] = entry.git_origin
-            if entry.error:
-                repo_info["error"] = entry.error
             repos_info.append(repo_info)
         if len(repos_info) > 1:
             base["federation"] = {

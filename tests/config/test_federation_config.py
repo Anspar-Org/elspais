@@ -225,6 +225,40 @@ class TestDiamondConvergence:
         assert len(planned) == 4
         assert all(entry.error is None for entry in planned)
 
+    # Verifies: REQ-d00202-F
+    def test_REQ_d00202_F_directly_and_transitively_reached_repo_appears_once(
+        self, tmp_path
+    ) -> None:
+        """The root reaches one repository both directly and through a chain.
+
+        The two arrivals name one namespace at one directory, so they are
+        one member.  This is the shape a repository produces by declaring
+        everything it needs itself: redundancy with what its associates
+        declare is expected, and must be idempotent rather than a fault.
+        """
+        shared = make_repo(
+            tmp_path,
+            "shared",
+            origin="https://example.com/shared.git",
+        )
+        make_repo(
+            tmp_path,
+            "mid",
+            associates={"core": "../shared"},
+            associate_namespaces={"core": "SHARED"},
+        )
+        root = make_repo(
+            tmp_path,
+            "top",
+            associates={"core": "../shared", "mid": "../mid"},
+            associate_namespaces={"core": "SHARED"},
+        )
+
+        planned = _plan(root)
+
+        assert [entry.name for entry in planned] == ["top", "core", "mid"]
+        assert len([e for e in planned if e.repo_root == shared.resolve()]) == 1
+
 
 class TestRepositoryIdentity:
     """Validates REQ-d00202-G, REQ-d00202-K.
@@ -346,11 +380,16 @@ def _federation_with_bad_associate(tmp_path: Path, kind: str) -> tuple[Path, Pat
 
 
 class TestLoadFailureReporting:
-    """Validates REQ-d00202-I, REQ-d00203-C, REQ-d00203-D."""
+    """Validates REQ-d00202-M, crossing the ways a repository can be unreadable.
+
+    A configuration that parses but fails validation is unreadable for the
+    same reason a missing directory is -- nothing there says what namespace
+    the declaration claims -- so the three kinds are held to one outcome.
+    """
 
     @pytest.mark.parametrize("kind", ["missing", "unparseable", "invalid"])
-    # Verifies: REQ-d00202-I, REQ-d00203-C
-    def test_REQ_d00202_I_bad_associate_is_reported_not_dropped(self, tmp_path, kind):
+    # Verifies: REQ-d00202-M
+    def test_REQ_d00202_M_bad_associate_is_reported_not_dropped(self, tmp_path, kind):
         """The bad repo survives in the plan with config=None and a reason."""
         root, bad_path = _federation_with_bad_associate(tmp_path, kind)
 
@@ -367,18 +406,67 @@ class TestLoadFailureReporting:
         assert by_name["good"].error is None
 
     @pytest.mark.parametrize("kind", ["missing", "unparseable", "invalid"])
-    # Verifies: REQ-d00203-D
-    def test_REQ_d00203_D_strict_raises_on_load_failure(self, tmp_path, kind):
-        """strict=True turns the same soft report into a hard failure."""
+    # Verifies: REQ-d00202-M
+    def test_REQ_d00202_M_a_caller_wanting_a_federation_refuses_an_unreadable_one(
+        self, tmp_path, kind
+    ):
+        """A caller that needs members, not a report, refuses the plan.
+
+        The same fault the reporting surfaces record is what stops a
+        build, and it names the declaration and the path it points at, so
+        the reader is sent to the declaration to fix rather than left with
+        a federation quietly short of a member.
+        """
         from elspais.graph.federated import FederationError
+        from elspais.graph.federation_plan import refuse_unreadable
 
         root, bad_path = _federation_with_bad_associate(tmp_path, kind)
 
         with pytest.raises(FederationError) as excinfo:
-            _plan(root, strict=True)
+            refuse_unreadable(_plan(root))
 
         message = str(excinfo.value)
         assert str(bad_path) in message or bad_path.name in message
+        assert "'bad'" in message, message
+
+    # Verifies: REQ-d00202-M
+    def test_REQ_d00202_M_every_unreadable_declaration_is_named_at_once(self, tmp_path):
+        """Two unreadable declarations are two faults in one refusal.
+
+        An operator told only about the first would fix it, re-run, and
+        meet the second, so the refusal accounts for every declaration
+        that could not be read.
+        """
+        from elspais.graph.federated import FederationError
+        from elspais.graph.federation_plan import refuse_unreadable
+
+        root = make_repo(
+            tmp_path,
+            "consumer",
+            associates={"first": "../absent-one", "second": "../absent-two"},
+        )
+
+        with pytest.raises(FederationError) as excinfo:
+            refuse_unreadable(_plan(root))
+
+        message = str(excinfo.value)
+        assert "'first'" in message, message
+        assert "'second'" in message, message
+        assert "absent-one" in message and "absent-two" in message, message
+
+    # Verifies: REQ-d00202-M
+    def test_REQ_d00202_M_a_readable_plan_is_not_refused(self, tmp_path):
+        """A plan every declaration of which was read passes the refusal.
+
+        Without this the refusal could pass its other tests by refusing
+        everything, and no federation would ever build.
+        """
+        from elspais.graph.federation_plan import refuse_unreadable
+
+        make_repo(tmp_path, "lib")
+        root = make_repo(tmp_path, "app", associates={"lib": "../lib"})
+
+        refuse_unreadable(_plan(root))
 
 
 class TestCrossRepoIdentifierCollision:
@@ -426,93 +514,13 @@ class TestCrossRepoIdentifierCollision:
             build_graph(config=_load(root), repo_root=root)
 
         message = str(excinfo.value)
+        # The ID, and both repositories that claim it.  A repository is
+        # named by the namespace it declares (REQ-d00202-G) -- a declared
+        # name cannot tell two members apart, so it cannot be what says
+        # which two are in conflict here.
         assert "REQ-d00001" in message
-        assert "appmain" in message
-        assert "libcore" in message
-
-
-class TestDuplicateNameCollision:
-    """Validates REQ-d00202-J.
-
-    ``FederatedGraph`` keys its repos by name, so two DIFFERENT repositories
-    arriving under one declared name would silently shadow each other: the
-    loser's graph is never yielded, while ``find_by_id`` still routes its IDs
-    to the winner and returns None.  TOML's duplicate-key rule prevented this
-    under root-only resolution; transitive resolution removes that guarantee.
-    """
-
-    # Verifies: REQ-d00202-J
-    def test_REQ_d00202_J_two_repos_under_one_name_raise(self, tmp_path):
-        """Distinct repos declared as 'core' at different depths is an error."""
-        from elspais.graph.federated import FederationError
-
-        near = make_repo(
-            tmp_path,
-            "coreX",
-            origin="https://example.com/core-x.git",
-        )
-        far = make_repo(
-            tmp_path,
-            "coreY",
-            origin="https://example.com/core-y.git",
-        )
-        make_repo(
-            tmp_path,
-            "mid",
-            associates={"core": "../coreY"},
-            associate_namespaces={"core": "COREY"},
-        )
-        root = make_repo(
-            tmp_path,
-            "top",
-            associates={"core": "../coreX", "mid": "../mid"},
-            associate_namespaces={"core": "COREX"},
-        )
-
-        with pytest.raises(FederationError) as excinfo:
-            _plan(root)
-
-        message = str(excinfo.value)
-        # Both repositories must be identified by path -- naming only the
-        # surviving one would leave the shadowed repo invisible.
-        assert str(near.resolve()) in message, message
-        assert str(far.resolve()) in message, message
-        # ...and the declaration chain that reached each, which is the only
-        # thing distinguishing the two 'core' declarations from one another.
-        # Ordering is pinned; the separator glyph is not.
-        assert re.search(r"top\W+core", message), message
-        assert re.search(r"top\W+mid\W+core", message), message
-
-    # Verifies: REQ-d00202-J
-    def test_REQ_d00202_J_same_repo_under_one_name_is_not_a_collision(self, tmp_path):
-        """An ordinary diamond re-declaring one repo under one name is fine.
-
-        Identity dedupe must skip the second arrival rather than trip the
-        duplicate-name guard; without this the guard would reject every
-        legitimate shared associate.
-        """
-        shared = make_repo(
-            tmp_path,
-            "shared",
-            origin="https://example.com/shared.git",
-        )
-        make_repo(
-            tmp_path,
-            "mid",
-            associates={"core": "../shared"},
-            associate_namespaces={"core": "SHARED"},
-        )
-        root = make_repo(
-            tmp_path,
-            "top",
-            associates={"core": "../shared", "mid": "../mid"},
-            associate_namespaces={"core": "SHARED"},
-        )
-
-        planned = _plan(root)
-
-        assert [entry.name for entry in planned] == ["top", "core", "mid"]
-        assert len([e for e in planned if e.repo_root == shared.resolve()]) == 1
+        assert "APPMAIN" in message
+        assert "LIBCORE" in message
 
 
 class TestDeclarationRequiredFields:
@@ -576,7 +584,7 @@ class TestDeclarationRequiredFields:
         # way it takes no part in locating the repository.
         assert resolved["lib"]["git"] == git
 
-    # Verifies: REQ-d00202-B, REQ-d00212-K
+    # Verifies: REQ-d00202-B, REQ-d00212-Y
     def test_REQ_d00202_B_git_remote_survives_a_config_on_disk(self, tmp_path):
         """An authored `.elspais.toml` may carry the remote, and it arrives intact.
 
@@ -637,7 +645,7 @@ class TestDeclarationRequiredFields:
 
 
 class TestNamespaceCollision:
-    """Validates REQ-d00202-K.
+    """Validates REQ-d00202-K, and REQ-d00202-M where it bounds K.
 
     A namespace answers whose identifiers these are.  Two repositories
     claiming one namespace leave that question unanswerable: identifiers
@@ -712,21 +720,30 @@ class TestNamespaceCollision:
         assert [entry.name for entry in planned] == ["top", "core", "mid"]
         assert len([e for e in planned if e.repo_root == shared.resolve()]) == 1
 
-    # Verifies: REQ-d00202-K
-    def test_REQ_d00202_K_unloadable_repos_keep_their_declared_namespaces(self, tmp_path):
-        """Two unreachable paths declared under two namespaces are two error entries.
+    @pytest.mark.parametrize(
+        "namespaces",
+        [
+            pytest.param({"gone1": "ABSENT1", "gone2": "ABSENT2"}, id="two-namespaces"),
+            pytest.param({"gone1": "LIB", "gone2": "LIB"}, id="one-namespace"),
+        ],
+    )
+    # Verifies: REQ-d00202-M
+    def test_REQ_d00202_M_unreachable_paths_are_error_entries_not_claimants(
+        self, tmp_path, namespaces
+    ):
+        """Two unreachable paths are two error entries, whatever they name.
 
-        A namespace is claimed by the DECLARATION, not by the config at the
-        path, so a repository that could not be loaded still occupies the
-        namespace its declaration named.  Two such declarations therefore
-        collide exactly when they name one namespace and stay apart when they
-        do not -- the failure to load neither creates a collision nor excuses
-        one, and each path keeps the real reason it failed.
+        A namespace is claimed by the repository the declaration reaches, and
+        a declaration that reached nothing has claimed none -- so two of them
+        neither collide with each other nor merge into one member, however
+        their declarations are spelled.  Each keeps the real reason it failed,
+        which is the fault the reader has to be sent to.
         """
         root = make_repo(
             tmp_path,
             "hub",
             associates={"gone1": "../absent1", "gone2": "../absent2"},
+            associate_namespaces=namespaces,
         )
 
         planned = _plan(root)
@@ -812,3 +829,267 @@ class TestDeclaredNamespaceMismatch:
 
         assert [entry.name for entry in planned] == ["app", "lib"]
         assert all(entry.error is None for entry in planned)
+
+    @pytest.mark.parametrize(
+        ("mismatched", "namespaces"),
+        [
+            ("a_lib", {"a_lib": "WRONG", "z_lib": "LIB"}),
+            ("z_lib", {"a_lib": "LIB", "z_lib": "WRONG"}),
+        ],
+        ids=["mismatched-first", "mismatched-second"],
+    )
+    # Verifies: REQ-d00202-L
+    def test_REQ_d00202_L_mismatch_on_a_converged_directory_still_raises(
+        self, tmp_path, mismatched, namespaces
+    ):
+        """Two declarations reach one directory; the one naming the wrong
+        namespace is reported whichever of them the walk reaches first.
+
+        Converging on a directory already read is not a reason to stop
+        asking what the declaration claimed about it: which declaration
+        arrived first is an accident of the table's order, and a mismatch
+        is a property of the declaration.
+        """
+        from elspais.graph.federated import FederationError
+
+        lib = make_repo(tmp_path, "lib")  # declares namespace 'LIB'
+        root = make_repo(
+            tmp_path,
+            "app",
+            associates={"a_lib": "../lib", "z_lib": "../lib"},
+            associate_namespaces=namespaces,
+        )
+
+        with pytest.raises(FederationError) as excinfo:
+            _plan(root)
+
+        message = str(excinfo.value)
+        assert f"Associate '{mismatched}'" in message, message
+        assert str(lib.resolve()) in message, message
+        assert "'WRONG'" in message, message
+        assert "'LIB'" in message, message
+
+
+def _hub_with_unreadable_twin(tmp_path: Path, kind: str) -> tuple[Path, Path]:
+    """A hub declaring one readable member and one unreadable one, both 'LIB'.
+
+    The readable repository at `../lib` declares LIB and the declaration at
+    `../<bad>` names LIB too, so a planner that let an unread declaration
+    claim a namespace reports a collision between a real directory and a
+    path it never reached.  Returns (hub, bad_path).
+    """
+    make_repo(tmp_path, "lib")  # namespace_for("lib") == "LIB"
+    if kind == "missing":
+        bad_path = tmp_path / "gone"
+    elif kind == "no-config":
+        bad_path = tmp_path / "bare"
+        (bad_path / "spec").mkdir(parents=True)
+    else:
+        bad_path = make_repo(tmp_path, "rubble", config_text=_BROKEN_TOML)
+    hub = make_repo(
+        tmp_path,
+        "hub",
+        associates={"libold": f"../{bad_path.name}", "lib": "../lib"},
+        associate_namespaces={"libold": "LIB", "lib": "LIB"},
+    )
+    return hub, bad_path
+
+
+class TestUnreadableDeclaration:
+    """Validates REQ-d00202-M, REQ-d00202-N.
+
+    A declaration whose repository cannot be read has said nothing about a
+    namespace, so it is not one of the two claimants a namespace collision
+    is about.  The fault to report is that the declaration points nowhere,
+    and the members that could be read carry on -- as a federation missing a
+    member it never chose to drop, which is why N keeps the unreadable
+    declaration a failed check.
+    """
+
+    @pytest.mark.parametrize("kind", ["missing", "no-config", "unparseable"])
+    # Verifies: REQ-d00202-M
+    def test_REQ_d00202_M_unreadable_declaration_does_not_claim_its_namespace(self, tmp_path, kind):
+        """The unreadable declaration reports its own fault; the readable member resolves."""
+        hub, bad_path = _hub_with_unreadable_twin(tmp_path, kind)
+
+        planned = _plan(hub)
+        by_name = {entry.name: entry for entry in planned}
+
+        assert set(by_name) == {"hub", "libold", "lib"}
+        broken = by_name["libold"]
+        assert broken.config is None
+        assert broken.error, "an unreadable declaration must carry the reason it failed"
+        assert str(bad_path.resolve()) in broken.error, broken.error
+        # The member that WAS read keeps the namespace it declares, and
+        # nothing about the declaration that reached nothing touches it.
+        assert by_name["lib"].error is None
+        assert by_name["lib"].config is not None
+
+    # Verifies: REQ-d00202-M
+    def test_REQ_d00202_M_order_does_not_decide_which_fault_is_named(self, tmp_path):
+        """Declared after the readable member, the unreadable one still reports its own fault."""
+        make_repo(tmp_path, "lib")
+        hub = make_repo(
+            tmp_path,
+            "hub",
+            associates={"lib": "../lib", "libold": "../gone"},
+            associate_namespaces={"lib": "LIB", "libold": "LIB"},
+        )
+
+        by_name = {entry.name: entry for entry in _plan(hub)}
+
+        assert by_name["lib"].error is None
+        assert "gone" in (by_name["libold"].error or "")
+
+    @pytest.mark.parametrize("kind", ["missing", "no-config", "unparseable"])
+    # Verifies: REQ-d00202-N
+    def test_REQ_d00202_N_unreadable_declaration_is_a_failed_check(self, tmp_path, kind):
+        """The surface carries on with what it read, and says so as a failure."""
+        from elspais.commands.health import check_associate_paths
+
+        hub, bad_path = _hub_with_unreadable_twin(tmp_path, kind)
+
+        check = check_associate_paths(_load(hub), hub)
+
+        assert check.passed is False, "a member that could not be read is not a pass"
+        blamed = {finding.node_id for finding in check.findings}
+        assert blamed == {"libold"}, [f.message for f in check.findings]
+        assert bad_path.name in check.findings[0].message, check.findings[0].message
+
+    # Verifies: REQ-d00202-K
+    def test_REQ_d00202_K_two_read_directories_under_one_namespace_still_raise(self, tmp_path):
+        """The same shape with BOTH directories readable is still the collision K reports.
+
+        Paired with the M cases above so the narrowing is pinned from both
+        sides: what changed is which declarations can claim a namespace, not
+        what happens once two of them do.
+        """
+        from elspais.graph.federation_plan import NamespaceConflict
+
+        make_repo(tmp_path, "lib")  # namespace_for("lib") == "LIB"
+        make_repo(tmp_path, "twin", namespace="LIB", dirname="readable")
+        hub = make_repo(
+            tmp_path,
+            "hub",
+            associates={"libold": "../readable", "lib": "../lib"},
+            associate_namespaces={"libold": "LIB", "lib": "LIB"},
+        )
+
+        with pytest.raises(NamespaceConflict) as excinfo:
+            _plan(hub)
+
+        message = str(excinfo.value)
+        assert "LIB" in message
+        assert str((tmp_path / "readable").resolve()) in message, message
+        assert str((tmp_path / "lib").resolve()) in message, message
+
+    @pytest.mark.parametrize("kind", ["missing", "no-config", "unparseable"])
+    # Verifies: REQ-d00202-M
+    def test_REQ_d00202_M_two_declarations_at_one_unreadable_path_are_two_faults(
+        self, tmp_path, kind
+    ):
+        """Both declarations pointing at one unreadable directory are reported.
+
+        A declaration that could not be read is not a member the walk can
+        converge on, so it cannot stand for its directory and silence the
+        next declaration naming it -- an operator who fixed one, re-ran,
+        and met the other would have been told only half the fault.
+        """
+        if kind == "missing":
+            bad_path = tmp_path / "gone"
+        elif kind == "no-config":
+            bad_path = tmp_path / "bare"
+            (bad_path / "spec").mkdir(parents=True)
+        else:
+            bad_path = make_repo(tmp_path, "rubble", config_text=_BROKEN_TOML)
+        relative = f"../{bad_path.name}"
+        hub = make_repo(tmp_path, "hub", associates={"a": relative, "b": relative})
+
+        by_name = {entry.name: entry for entry in _plan(hub)}
+
+        assert set(by_name) == {"hub", "a", "b"}
+        for name in ("a", "b"):
+            assert by_name[name].config is None
+            assert by_name[name].error, f"declaration '{name}' must carry its own reason"
+            assert str(bad_path.resolve()) in by_name[name].error, by_name[name].error
+
+    @pytest.mark.parametrize("kind", ["missing", "no-config", "unparseable"])
+    # Verifies: REQ-d00202-N
+    def test_REQ_d00202_N_both_declarations_at_one_unreadable_path_are_blamed(self, tmp_path, kind):
+        """The health surface blames each declaration, not just the first."""
+        from elspais.commands.health import check_associate_paths
+
+        if kind == "missing":
+            bad_path = tmp_path / "gone"
+        elif kind == "no-config":
+            bad_path = tmp_path / "bare"
+            (bad_path / "spec").mkdir(parents=True)
+        else:
+            bad_path = make_repo(tmp_path, "rubble", config_text=_BROKEN_TOML)
+        relative = f"../{bad_path.name}"
+        hub = make_repo(tmp_path, "hub", associates={"a": relative, "b": relative})
+
+        check = check_associate_paths(_load(hub), hub)
+
+        assert check.passed is False
+        blamed = {finding.node_id for finding in check.findings}
+        assert blamed == {"a", "b"}, [f.message for f in check.findings]
+
+
+class TestLocalOverlayDisclosure:
+    """Validates REQ-d00290-B: a repository whose configuration was assembled
+    with a machine-local overlay is reported as locally overridden."""
+
+    @staticmethod
+    def _hub_with_one_overridden_member(tmp_path: Path) -> Path:
+        """A hub over two members, one of which holds a machine-local overlay."""
+        overridden = make_repo(tmp_path, "lib")
+        make_repo(tmp_path, "other")
+        # An overlay that changes no value: what is disclosed is that a
+        # machine-local file took part, not what it contributed.
+        (overridden / ".elspais.local.toml").write_text(
+            "# machine-local overlay\n", encoding="utf-8"
+        )
+        return make_repo(tmp_path, "hub", associates={"lib": "../lib", "other": "../other"})
+
+    # Verifies: REQ-d00290-B
+    def test_REQ_d00290_B_plan_records_the_overlay_per_repository(self, tmp_path):
+        """The plan answers for every repository it reached, the invoking one
+        included, and only the one holding an overlay is marked."""
+        hub = self._hub_with_one_overridden_member(tmp_path)
+
+        planned = _plan(hub)
+
+        assert {entry.name: entry.locally_overridden for entry in planned} == {
+            "hub": False,
+            "lib": True,
+            "other": False,
+        }
+
+    # Verifies: REQ-d00290-B
+    def test_REQ_d00290_B_health_names_the_overridden_member_beside_its_verdict(self, tmp_path):
+        """A passing check still says which members a local file took part in
+        assembling: two machines can pass this check over different
+        configurations, and that is the fact which says so."""
+        from elspais.commands.health import check_associate_paths
+
+        hub = self._hub_with_one_overridden_member(tmp_path)
+
+        check = check_associate_paths(_load(hub), hub)
+
+        assert check.passed is True, [f.message for f in check.findings]
+        assert check.message.endswith("locally overridden: lib"), check.message
+
+    # Verifies: REQ-d00290-B
+    def test_REQ_d00290_B_health_says_nothing_where_no_overlay_took_part(self, tmp_path):
+        """With every member assembled from its committed file alone there is
+        nothing to disclose, so the verdict carries no such clause."""
+        from elspais.commands.health import check_associate_paths
+
+        make_repo(tmp_path, "lib")
+        hub = make_repo(tmp_path, "hub", associates={"lib": "../lib"})
+
+        check = check_associate_paths(_load(hub), hub)
+
+        assert check.passed is True, [f.message for f in check.findings]
+        assert "locally overridden" not in check.message, check.message

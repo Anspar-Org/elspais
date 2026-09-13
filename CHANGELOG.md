@@ -6,13 +6,27 @@ All notable changes to elspais will be documented in this file.
 
 ### Changed
 
+- **A federation member is identified by its namespace, never its declared name** (REQ-d00202-G+J, REQ-d00200) — the declared name is a label; two members named alike are two members.
+
+- **An associate declaration that cannot be read now stops the build** (REQ-d00203-C+D retired) — a partial federation answers questions about a corpus nobody chose. `build_graph()`'s `strict` parameter is gone; `health` and `doctor` still report the fault, citing the declaration chain that reached it.
+
+- **`elspais associate` refuses a namespace collision however it is instructed** (REQ-d00289-H) — `-f` repoints an entry's path; it no longer retires another entry to clear a namespace.
+
 - **Breaking: a federation member is identified by its namespace, not by its git origin (REQ-d00202-G+K)** — the planner keyed identity on the git origin of the directory a declaration pointed at, which answered a question nobody asked. Two directories holding one repository converged whatever they declared, so a copy that renamed its namespace was recorded, resolved to the original, and contributed nothing to the federation — silently. Two directories claiming ONE namespace converged the same way, so the collision REQ-d00202-K exists to report could not be reached at all.
 
   A member is now the namespace its declaration names. One namespace reached again at the same directory is a diamond and converges as before; reached again at a different directory it is a `NamespaceConflict` naming both directories and the declaration chain that reached each; reached again up the current chain it is still a cycle. Two directories declaring different namespaces are two members, however closely related the directories are — their identifiers cannot be confused, so a fork or a derived copy that renames its namespace now federates alongside the original instead of vanishing into it.
 
-  Git origin is still recorded on `PlannedRepo` and `RepoEntry`, and the viewer still reports it; it simply decides nothing. The planner no longer probes git while walking, which was its dominant cost.
+  Git origin is still recorded on `PlannedRepo` and `RepoEntry`, and the viewer still reports it; it simply decides nothing.
 
   A project whose configuration pointed two declarations at one namespace was building a federation missing one of them; it now fails to build until one declaration is corrected or removed.
+
+- **A machine-local configuration overlay changes nothing but disclosure (REQ-d00290)** — a `.elspais.local.toml` is a way of writing a configuration, not a second kind of one, so every answer is the answer for the assembled result and which file a value was written in is not a difference the tool may have an opinion about. Registration used to decide what was already recorded by reading the file it writes rather than the configuration, so a declaration sitting in the committed file was invisible to it: the same registration refused from one arrangement and reported `No change` with a success status from the other, over a configuration that would not federate at all. The one permitted difference is a disclosure — `elspais associate --list` carries a `Local` column and the associate-paths check names the members assembled with an overlay, per repository rather than per value, since reporting which values it contributed would put the overlay's shape back into the answers.
+
+  Changing a recorded path now works wherever the entry is declared, by writing the override the overlay exists for. Retiring an entry the committed file declares is still refused naming that file, because no local write can remove it. Removing a local override of an entry the committed file also declares reports the override removed and the committed declaration still standing, rather than an unlink.
+
+- **Two candidates of one scan for one entry record neither (REQ-d00289-G)** — the rule said to refuse the later of two candidates "rather than resolving them by the order they were reached in", which is what refusing the later of them is. One of the pair was recorded and the run read as a partial success. Candidates are now grouped before any of them is written, neither of a contested pair is recorded, and each is reported naming the others; unambiguous candidates in the same scan still register and the run exits non-zero.
+
+- **A declaration that cannot be read is reported as that, not as a namespace collision (REQ-d00202-K+M+N)** — whether a declared repository can be read is now settled before it is allowed to claim a namespace. A declaration pointing at a directory that does not exist used to claim the namespace it named and fail the whole federation with a collision between a real directory and a path that was not there, which sent the reader looking for a conflict instead of at the missing repository. The fault named is now the one encountered, the members that could be read still build, and the unreadable declaration is a failed `config.associate_paths` check — a federation quietly missing a member would answer questions about a corpus nobody chose. K is correspondingly about two directories that were READ and both declare one namespace; a cycle and a diamond are now both decided by the directory reached, so a second checkout of a repository already on the chain is no longer mistaken for one or the other.
 
 - **`elspais associate` and the graph builder decide membership the same way (REQ-d00289-E+H)** — registration asks `plan_federation()` the question a build would ask, rather than carrying rules of its own, so a declaration is recorded exactly when a build would admit it. A namespace collision the planner reports becomes the refusal the operator reads, carrying `-f` where the rival is an entry of this configuration and naming it without the offer where it was declared by another member — that one is not this configuration's to change.
 
@@ -25,6 +39,8 @@ All notable changes to elspais will be documented in this file.
   What a federation build would refuse a member for is now refused at registration: a declaration missing a path or a namespace, a namespace other than the one the repository at that path declares, and a namespace another member already claims (REQ-d00202-B/K/L). The associate documentation no longer tells you to resolve a namespace collision by hand before linking.
 
   All of this holds for `--all` auto-discovery too. A refused candidate is reported and the scan carries on, the summary line counts linked, unchanged and refused, and the run exits non-zero if any candidate was refused. Two candidates of one scan that stand for one entry -- one name, or one namespace -- are refused rather than resolved by sort order (REQ-d00289-G): `-f` was given about neither of them.
+
+  An entry declared in `.elspais.toml` is refused without an offer to replace it, naming that file as the one to edit (REQ-d00289-H). Registration writes only `.elspais.local.toml`, so retiring such an entry from there would leave the declaration standing and the next read would bring it back; the refusal says so rather than advertising a `-f` that cannot work. `-f` given against a rival that still cannot be retired reports the collision's own reason instead of repeating the instruction the operator has already followed.
 
   A namespace already registered at another directory is refused whatever the two entries are called (REQ-d00289-H). One namespace names one member, so a second directory claiming it is a second answer where one is admitted -- the ticket's copy-at-a-new-path arriving under a second name instead of a second path. `-f` leaves one entry, recorded at the directory named, and the report says which entry it replaced. A copy that declares its own namespace registers normally: its identifiers cannot be confused with the original's.
 
@@ -236,6 +252,8 @@ All notable changes to elspais will be documented in this file.
 - **Whether a run counts as selective now follows from the targets it executed (REQ-d00254-I, REQ-d00254-J)** — previously the presence of `--targets` decided it, which would have made every run "selective" once an absent selector resolved to the `default` group. A run covering every configured target is a full run however it was asked for, so a project declaring no groups renders exactly as before; a run leaving any configured target out is selective, so its unexecuted targets are tagged *carried* and a requirement with no results renders as not-run rather than as zero.
 
 ### Fixed
+
+- **`elspais install` detects the `trace-review` extra** — it probed for Flask, which that extra has never installed.
 
 - **A journey metadata field written with nothing after it no longer swallows the next line** — the space between a field's separator and its value could cross a newline, so `Validates:` with an empty value took the following non-blank line as its target, and the journey lost the section that line opened. `Actor`, `Goal` and `Context` had the same defect. A field now ends at its own line.
 

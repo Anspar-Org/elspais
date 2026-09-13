@@ -24,14 +24,14 @@ TestScanningCfg = _schema.TestScanningConfig
 
 
 # ---------------------------------------------------------------------------
-# REQ-d00212-A: LevelConfig
+# REQ-d00212-Y: LevelConfig
 # ---------------------------------------------------------------------------
 
 
 class TestLevelConfig:
-    """Validates REQ-d00212-A: LevelConfig model."""
+    """Validates REQ-d00212-Y: LevelConfig model."""
 
-    # Verifies: REQ-d00212-A
+    # Verifies: REQ-d00212-Y
     def test_REQ_d00212_A_level_config_fields(self):
         """All required fields are accepted and stored."""
         lc = LevelConfig(rank=1, letter="p", display_name="Product", implements=["ops"])
@@ -40,19 +40,19 @@ class TestLevelConfig:
         assert lc.display_name == "Product"
         assert lc.implements == ["ops"]
 
-    # Verifies: REQ-d00212-A
+    # Verifies: REQ-d00212-Y
     def test_REQ_d00212_A_level_config_rejects_unknown(self):
         """Strict mode rejects extra fields."""
         with pytest.raises(ValidationError, match="extra"):
             LevelConfig(rank=1, letter="p", implements=[], bogus="nope")
 
-    # Verifies: REQ-d00212-A
+    # Verifies: REQ-d00212-Y
     def test_REQ_d00212_A_level_config_display_name_optional(self):
         """display_name defaults to empty string when omitted."""
         lc = LevelConfig(rank=2, letter="o", implements=["prd"])
         assert lc.display_name == ""
 
-    # Verifies: REQ-d00212-A, REQ-d00258-F
+    # Verifies: REQ-d00212-Y, REQ-d00258-F
     def test_REQ_d00212_A_expects_validation_defaults_false(self):
         """expects_validation defaults False and is accepted when set."""
         lc = LevelConfig(rank=1, letter="p", implements=["prd"])
@@ -60,32 +60,32 @@ class TestLevelConfig:
         lc2 = LevelConfig(rank=1, letter="p", implements=["prd"], expects_validation=True)
         assert lc2.expects_validation is True
 
-    # Verifies: REQ-d00212-A
+    # Verifies: REQ-d00212-Y
     def test_REQ_d00212_A_level_config_rank_required(self):
         """rank is required."""
         with pytest.raises(ValidationError):
             LevelConfig(letter="p", implements=[])  # type: ignore[call-arg]
 
-    # Verifies: REQ-d00212-A
+    # Verifies: REQ-d00212-Y
     def test_REQ_d00212_A_level_config_letter_required(self):
         """letter is required."""
         with pytest.raises(ValidationError):
             LevelConfig(rank=1, implements=[])  # type: ignore[call-arg]
 
-    # Verifies: REQ-d00212-A
+    # Verifies: REQ-d00212-Y
     def test_REQ_d00212_A_level_config_implements_required(self):
         """implements is required."""
         with pytest.raises(ValidationError):
             LevelConfig(rank=1, letter="d")  # type: ignore[call-arg]
 
-    # Verifies: REQ-d00212-A
+    # Verifies: REQ-d00212-Y
     def test_REQ_d00212_A_level_config_frozen(self):
         """Model is frozen (immutable)."""
         lc = LevelConfig(rank=1, letter="p", implements=[])
         with pytest.raises(ValidationError):
             lc.rank = 99  # type: ignore[misc]
 
-    # Verifies: REQ-d00212-A
+    # Verifies: REQ-d00212-Y
     def test_REQ_d00212_A_level_config_implements_empty_list(self):
         """implements can be an empty list (top-level requirement)."""
         lc = LevelConfig(rank=1, letter="p", implements=[])
@@ -93,14 +93,14 @@ class TestLevelConfig:
 
 
 # ---------------------------------------------------------------------------
-# REQ-d00212-B: ScanningKindConfig base + subclasses
+# REQ-d00212-Y: ScanningKindConfig base + subclasses
 # ---------------------------------------------------------------------------
 
 
 class TestScanningKindConfig:
-    """Validates REQ-d00212-B: ScanningKindConfig base and subclasses."""
+    """Validates REQ-d00212-Y: ScanningKindConfig base and subclasses."""
 
-    # Verifies: REQ-d00212-B
+    # Verifies: REQ-d00212-Y
     def test_REQ_d00212_B_base_common_fields(self):
         """Base model has directories, file_patterns, skip_files, skip_dirs."""
         sc = ScanningKindConfig(
@@ -114,7 +114,7 @@ class TestScanningKindConfig:
         assert sc.skip_files == ["setup.py"]
         assert sc.skip_dirs == ["__pycache__"]
 
-    # Verifies: REQ-d00212-B
+    # Verifies: REQ-d00212-Y
     def test_REQ_d00212_B_base_rejects_unknown(self):
         """Base model rejects extra fields."""
         with pytest.raises(ValidationError, match="extra"):
@@ -124,9 +124,9 @@ class TestScanningKindConfig:
 
 
 class TestSpecScanningConfig:
-    """Validates REQ-d00212-B: SpecScanningConfig subclass."""
+    """Validates REQ-d00212-Y: SpecScanningConfig subclass."""
 
-    # Verifies: REQ-d00212-B
+    # Verifies: REQ-d00212-Y
     def test_REQ_d00212_B_spec_index_file_default_empty(self):
         """SpecScanningConfig.index_file defaults to empty string."""
         sc = SpecScanningConfig(
@@ -134,7 +134,7 @@ class TestSpecScanningConfig:
         )
         assert sc.index_file == ""
 
-    # Verifies: REQ-d00212-B
+    # Verifies: REQ-d00212-Y
     def test_REQ_d00212_B_spec_index_file_set(self):
         """SpecScanningConfig.index_file can be set."""
         sc = SpecScanningConfig(
@@ -146,7 +146,7 @@ class TestSpecScanningConfig:
         )
         assert sc.index_file == "INDEX.md"
 
-    # Verifies: REQ-d00212-B
+    # Verifies: REQ-d00212-Y
     def test_REQ_d00212_B_spec_inherits_base_fields(self):
         """SpecScanningConfig inherits all base fields."""
         sc = SpecScanningConfig(
@@ -160,9 +160,9 @@ class TestSpecScanningConfig:
 
 
 class TestCodeScanningConfig:
-    """Validates REQ-d00212-B: CodeScanningConfig subclass."""
+    """Validates REQ-d00212-Y: CodeScanningConfig subclass."""
 
-    # Verifies: REQ-d00212-B
+    # Verifies: REQ-d00212-Y
     def test_REQ_d00212_B_code_source_roots_default(self):
         """CodeScanningConfig.source_roots defaults to ["src", ""]."""
         cc = CodeScanningConfig(
@@ -170,7 +170,7 @@ class TestCodeScanningConfig:
         )
         assert cc.source_roots == ["src", ""]
 
-    # Verifies: REQ-d00212-B
+    # Verifies: REQ-d00212-Y
     def test_REQ_d00212_B_code_source_roots_set(self):
         """CodeScanningConfig.source_roots can be set."""
         cc = CodeScanningConfig(
@@ -184,9 +184,9 @@ class TestCodeScanningConfig:
 
 
 class TestTestScanningConfig:
-    """Validates REQ-d00212-B: TestScanningConfig subclass."""
+    """Validates REQ-d00212-Y: TestScanningConfig subclass."""
 
-    # Verifies: REQ-d00212-B
+    # Verifies: REQ-d00212-Y
     def test_REQ_d00212_B_test_defaults(self):
         """TestScanningConfig has correct defaults for extra fields."""
         tc = TestScanningCfg(
@@ -197,7 +197,7 @@ class TestTestScanningConfig:
         assert tc.reference_keyword == "Verifies"
         assert tc.reference_patterns == []
 
-    # Verifies: REQ-d00212-B
+    # Verifies: REQ-d00212-Y
     def test_REQ_d00212_B_test_custom_values(self):
         """TestScanningConfig extra fields accept custom values."""
         tc = TestScanningCfg(
@@ -217,9 +217,9 @@ class TestTestScanningConfig:
 
 
 class TestJourneyScanningConfig:
-    """Validates REQ-d00212-B: JourneyScanningConfig subclass (no extras)."""
+    """Validates REQ-d00212-Y: JourneyScanningConfig subclass (no extras)."""
 
-    # Verifies: REQ-d00212-B
+    # Verifies: REQ-d00212-Y
     def test_REQ_d00212_B_journey_no_extras(self):
         """JourneyScanningConfig has no extra fields beyond base."""
         jc = JourneyScanningConfig(
@@ -227,7 +227,7 @@ class TestJourneyScanningConfig:
         )
         assert jc.directories == ["journeys"]
 
-    # Verifies: REQ-d00212-B
+    # Verifies: REQ-d00212-Y
     def test_REQ_d00212_B_journey_rejects_unknown(self):
         """JourneyScanningConfig rejects unknown fields."""
         with pytest.raises(ValidationError, match="extra"):
@@ -237,9 +237,9 @@ class TestJourneyScanningConfig:
 
 
 class TestDocsScanningConfig:
-    """Validates REQ-d00212-B: DocsScanningConfig subclass (no extras)."""
+    """Validates REQ-d00212-Y: DocsScanningConfig subclass (no extras)."""
 
-    # Verifies: REQ-d00212-B
+    # Verifies: REQ-d00212-Y
     def test_REQ_d00212_B_docs_no_extras(self):
         """DocsScanningConfig has no extra fields beyond base."""
         dc = DocsScanningConfig(
@@ -247,7 +247,7 @@ class TestDocsScanningConfig:
         )
         assert dc.directories == ["docs"]
 
-    # Verifies: REQ-d00212-B
+    # Verifies: REQ-d00212-Y
     def test_REQ_d00212_B_docs_rejects_unknown(self):
         """DocsScanningConfig rejects unknown fields."""
         with pytest.raises(ValidationError, match="extra"):
@@ -257,14 +257,14 @@ class TestDocsScanningConfig:
 
 
 # ---------------------------------------------------------------------------
-# REQ-d00212-C: ScanningConfig composite
+# REQ-d00212-Y: ScanningConfig composite
 # ---------------------------------------------------------------------------
 
 
 class TestScanningConfig:
-    """Validates REQ-d00212-C: ScanningConfig composite model."""
+    """Validates REQ-d00212-Y: ScanningConfig composite model."""
 
-    # Verifies: REQ-d00212-C
+    # Verifies: REQ-d00212-Y
     def test_REQ_d00212_C_scanning_config_has_all_kinds(self):
         """ScanningConfig exposes spec, code, test, journey, docs fields."""
         sc = ScanningConfig()
@@ -274,25 +274,25 @@ class TestScanningConfig:
         assert isinstance(sc.journey, JourneyScanningConfig)
         assert isinstance(sc.docs, DocsScanningConfig)
 
-    # Verifies: REQ-d00212-C
+    # Verifies: REQ-d00212-Y
     def test_REQ_d00212_C_scanning_config_skip_default(self):
         """ScanningConfig.skip defaults to empty list."""
         sc = ScanningConfig()
         assert sc.skip == []
 
-    # Verifies: REQ-d00212-C
+    # Verifies: REQ-d00212-Y
     def test_REQ_d00212_C_scanning_config_skip_custom(self):
         """ScanningConfig.skip accepts custom patterns."""
         sc = ScanningConfig(skip=["*.bak", "tmp/"])
         assert sc.skip == ["*.bak", "tmp/"]
 
-    # Verifies: REQ-d00212-C
+    # Verifies: REQ-d00212-Y
     def test_REQ_d00212_C_scanning_config_rejects_unknown(self):
         """ScanningConfig rejects unknown fields."""
         with pytest.raises(ValidationError, match="extra"):
             ScanningConfig(unknown_kind="x")
 
-    # Verifies: REQ-d00212-C
+    # Verifies: REQ-d00212-Y
     def test_REQ_d00212_C_scanning_config_frozen(self):
         """ScanningConfig is frozen."""
         sc = ScanningConfig()
@@ -301,34 +301,34 @@ class TestScanningConfig:
 
 
 # ---------------------------------------------------------------------------
-# REQ-d00212-D: OutputConfig
+# REQ-d00212-Y: OutputConfig
 # ---------------------------------------------------------------------------
 
 
 class TestOutputConfig:
-    """Validates REQ-d00212-D: OutputConfig model."""
+    """Validates REQ-d00212-Y: OutputConfig model."""
 
-    # Verifies: REQ-d00212-D
+    # Verifies: REQ-d00212-Y
     def test_REQ_d00212_D_output_config_defaults(self):
         """OutputConfig defaults: formats=[], dir=''."""
         oc = OutputConfig()
         assert oc.formats == []
         assert oc.dir == ""
 
-    # Verifies: REQ-d00212-D
+    # Verifies: REQ-d00212-Y
     def test_REQ_d00212_D_output_config_custom(self):
         """OutputConfig accepts custom values."""
         oc = OutputConfig(formats=["html", "json"], dir="output/")
         assert oc.formats == ["html", "json"]
         assert oc.dir == "output/"
 
-    # Verifies: REQ-d00212-D
+    # Verifies: REQ-d00212-Y
     def test_REQ_d00212_D_output_config_rejects_unknown(self):
         """OutputConfig rejects unknown fields."""
         with pytest.raises(ValidationError, match="extra"):
             OutputConfig(formats=[], dir="", extra="x")
 
-    # Verifies: REQ-d00212-D
+    # Verifies: REQ-d00212-Y
     def test_REQ_d00212_D_output_config_frozen(self):
         """OutputConfig is frozen."""
         oc = OutputConfig()
@@ -337,14 +337,14 @@ class TestOutputConfig:
 
 
 # ---------------------------------------------------------------------------
-# REQ-d00212-E: ChangelogRequireConfig + updated ChangelogConfig
+# REQ-d00212-Y: ChangelogRequireConfig + updated ChangelogConfig
 # ---------------------------------------------------------------------------
 
 
 class TestChangelogRequireConfig:
-    """Validates REQ-d00212-E: ChangelogRequireConfig sub-model."""
+    """Validates REQ-d00212-Y: ChangelogRequireConfig sub-model."""
 
-    # Verifies: REQ-d00212-E
+    # Verifies: REQ-d00212-Y
     def test_REQ_d00212_E_changelog_require_defaults(self):
         """ChangelogRequireConfig has correct boolean defaults."""
         cr = ChangelogRequireConfig()
@@ -353,7 +353,7 @@ class TestChangelogRequireConfig:
         assert cr.author_id is True
         assert cr.change_order is False
 
-    # Verifies: REQ-d00212-E
+    # Verifies: REQ-d00212-Y
     def test_REQ_d00212_E_changelog_require_custom(self):
         """ChangelogRequireConfig accepts custom boolean values."""
         cr = ChangelogRequireConfig(
@@ -364,13 +364,13 @@ class TestChangelogRequireConfig:
         assert cr.author_id is False
         assert cr.change_order is True
 
-    # Verifies: REQ-d00212-E
+    # Verifies: REQ-d00212-Y
     def test_REQ_d00212_E_changelog_require_rejects_unknown(self):
         """ChangelogRequireConfig rejects unknown fields."""
         with pytest.raises(ValidationError, match="extra"):
             ChangelogRequireConfig(bogus=True)
 
-    # Verifies: REQ-d00212-E
+    # Verifies: REQ-d00212-Y
     def test_REQ_d00212_E_changelog_require_frozen(self):
         """ChangelogRequireConfig is frozen."""
         cr = ChangelogRequireConfig()
@@ -379,27 +379,27 @@ class TestChangelogRequireConfig:
 
 
 class TestChangelogConfigV3:
-    """Validates REQ-d00212-E: Updated ChangelogConfig with renamed fields and require sub-model."""
+    """Validates REQ-d00212-Y: Updated ChangelogConfig with renamed fields and require sub-model."""
 
-    # Verifies: REQ-d00212-E
+    # Verifies: REQ-d00212-Y
     def test_REQ_d00212_E_changelog_hash_current_default(self):
         """hash_current defaults to True."""
         cc = ChangelogConfig()
         assert cc.hash_current is True
 
-    # Verifies: REQ-d00212-E
+    # Verifies: REQ-d00212-Y
     def test_REQ_d00212_E_changelog_present_default(self):
         """present defaults to False."""
         cc = ChangelogConfig()
         assert cc.present is False
 
-    # Verifies: REQ-d00212-E
+    # Verifies: REQ-d00212-Y
     def test_REQ_d00212_E_changelog_require_sub_model(self):
         """ChangelogConfig has a require sub-model of type ChangelogRequireConfig."""
         cc = ChangelogConfig()
         assert isinstance(cc.require, ChangelogRequireConfig)
 
-    # Verifies: REQ-d00212-E
+    # Verifies: REQ-d00212-Y
     def test_REQ_d00212_E_changelog_rejects_old_field_names(self):
         """Old field names (enforce, require_present) are rejected — no backward compat."""
         with pytest.raises(ValidationError, match="extra"):
@@ -407,7 +407,7 @@ class TestChangelogConfigV3:
         with pytest.raises(ValidationError, match="extra"):
             ChangelogConfig(require_present=True)
 
-    # Verifies: REQ-d00212-E
+    # Verifies: REQ-d00212-Y
     def test_REQ_d00212_E_changelog_require_sub_model_override(self):
         """ChangelogConfig.require sub-model can be customized."""
         cc = ChangelogConfig(require=ChangelogRequireConfig(reason=False, change_order=True))

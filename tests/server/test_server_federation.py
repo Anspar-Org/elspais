@@ -76,7 +76,7 @@ class TestApiRepos:
 
     # Verifies: REQ-d00206-A
     def test_REQ_d00206_A_api_repos_returns_federation_info(self):
-        """GET /api/repos returns repos list with name, path, status fields."""
+        """GET /api/repos returns repos list with name, path, git_origin fields."""
         fed = _make_federated_multi()
         client = _make_client(fed)
 
@@ -96,43 +96,7 @@ class TestApiRepos:
         for repo in repos:
             assert "name" in repo
             assert "path" in repo
-            assert "status" in repo
-            assert repo["status"] == "ok"
             assert "git_origin" in repo
-
-    # Verifies: REQ-d00206-A
-    def test_REQ_d00206_A_api_repos_includes_error_state(self):
-        """GET /api/repos shows error for repos with graph=None."""
-        root_graph = _make_graph(Path("/test/root"), "REQ-p00001", "Root Req")
-        root_entry = RepoEntry(
-            name="root",
-            graph=root_graph,
-            config={"project": {"name": "root", "namespace": "REQ"}},
-            repo_root=Path("/test/root"),
-        )
-        error_entry = RepoEntry(
-            name="missing-repo",
-            graph=None,
-            config=None,
-            repo_root=Path("/test/missing"),
-            git_origin="https://github.com/org/missing.git",
-            error="Repository not found at /test/missing",
-        )
-        fed = FederatedGraph([root_entry, error_entry])
-        client = _make_client(fed)
-
-        response = client.get("/api/repos")
-        data = response.json()
-        repos = data["repos"]
-
-        error_repo = next(r for r in repos if r["name"] == "missing-repo")
-        assert error_repo["status"] == "error"
-        assert "error" in error_repo
-        assert "not found" in error_repo["error"]
-
-        ok_repo = next(r for r in repos if r["name"] == "root")
-        assert ok_repo["status"] == "ok"
-        assert "error" not in ok_repo
 
 
 class TestApiReposStaleness:
@@ -250,7 +214,6 @@ class TestApiStatusRepos:
         for repo in repos:
             assert "name" in repo
             assert "path" in repo
-            assert "status" in repo
 
     # Verifies: REQ-d00206-C
     def test_REQ_d00206_C_api_status_single_repo(self):
@@ -269,4 +232,4 @@ class TestApiStatusRepos:
         assert "repos" in data
         assert len(data["repos"]) == 1
         assert data["repos"][0]["name"] == "root"
-        assert data["repos"][0]["status"] == "ok"
+        assert data["repos"][0]["path"] == "/test/repo"

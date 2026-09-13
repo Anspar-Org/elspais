@@ -1,4 +1,4 @@
-# Verifies: REQ-d00202-D, REQ-d00202-E, REQ-d00202-I, REQ-d00203-B, REQ-d00203-C
+# Verifies: REQ-d00202-D, REQ-d00202-E, REQ-d00202-I, REQ-d00202-M, REQ-d00203-B
 """The health and doctor associate checks report on the whole federation.
 
 Associates carry declarations of their own, so the set of repositories
@@ -79,18 +79,27 @@ class TestUnloadableTransitiveMemberIsNamed:
             str((tmp_path / "leaf").resolve()) in m and "could not be loaded" in m for m in messages
         )
 
-    # Verifies: REQ-d00203-C
-    def test_REQ_d00203_C_missing_transitive_path_soft_fails(self, tmp_path):
+    # Verifies: REQ-d00202-M
+    def test_REQ_d00202_M_missing_transitive_path_cites_its_declaration(self, tmp_path):
+        """A repository reached only through a chain, and not there, is reported
+        together with the declaration chain that reached it -- so the reader is
+        sent to the repository that names the path rather than to the root.
+
+        Held against the doctor surface as well as the health one, since a
+        reader diagnosing a federation reaches for either.
+        """
         root = _chain(tmp_path, leaf_path="../nowhere")
+        missing = str((tmp_path / "nowhere").resolve())
         doctor_result = check_associate_paths(load_config(root / ".elspais.toml"), root)
         health_result = health_check_associate_paths(load_config(root / ".elspais.toml"), root)
 
         assert doctor_result.passed is False
-        assert str((tmp_path / "nowhere").resolve()) in doctor_result.message
+        assert missing in doctor_result.message
+        assert "root -> mid -> leaf" in doctor_result.message, doctor_result.message
+
         assert health_result.passed is False
-        assert any(
-            str((tmp_path / "nowhere").resolve()) in f.message for f in health_result.findings
-        )
+        messages = [f.message for f in health_result.findings]
+        assert any(missing in m and "root -> mid -> leaf" in m for m in messages), messages
 
 
 class TestUnresolvableFederationIsReported:

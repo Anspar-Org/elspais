@@ -729,7 +729,7 @@ Manage links to associated repositories.
 
   `--all`            Auto-discover and link all associates
   `--list`           Show status of linked associates
-  `--unlink NAME`    Remove a linked associate (matches name, path, or prefix code)
+  `--unlink NAME`    Retire an associate (matches entry key, namespace, or recorded directory)
 
 **Notes:**
 

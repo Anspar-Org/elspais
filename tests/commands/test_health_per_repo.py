@@ -1,6 +1,7 @@
 # Verifies: REQ-d00204-A, REQ-d00204-B, REQ-d00204-C, REQ-d00204-D
-# Verifies: REQ-d00204-E, REQ-d00204-F
+# Verifies: REQ-d00202-M, REQ-d00202-N, REQ-d00204-F
 # Verifies: REQ-d00275-A, REQ-d00275-D
+# Verifies: REQ-d00285-E
 """Tests for per-repo health check delegation in federated graphs.
 
 Validates REQ-d00204: Config-sensitive health checks run per-repo with
@@ -13,7 +14,6 @@ from __future__ import annotations
 from pathlib import Path
 
 from elspais.commands.health import (
-    _REFERENCE_CHECKS,
     HealthFinding,
     check_governed_rule_divergence,
     check_reference_class,
@@ -61,6 +61,15 @@ def _make_config(hierarchy_rules: dict | None = None, **overrides) -> dict:
     return _merge_configs(config_defaults(), data)
 
 
+def _with_namespace(config: dict, namespace: str) -> dict:
+    """The same config, declaring the namespace that identifies its member.
+
+    A member is identified by the namespace it declares and by nothing else
+    (REQ-d00202-G), so two members of one federation declare two namespaces.
+    """
+    return {**config, "project": {**config.get("project", {}), "namespace": namespace}}
+
+
 def _build_two_repo_federation(
     alpha_graph: TraceGraph,
     alpha_config: dict,
@@ -71,13 +80,13 @@ def _build_two_repo_federation(
     alpha_entry = RepoEntry(
         name="alpha",
         graph=alpha_graph,
-        config=alpha_config,
+        config=_with_namespace(alpha_config, "ALPHA"),
         repo_root=Path("/repo/alpha"),
     )
     beta_entry = RepoEntry(
         name="beta",
         graph=beta_graph,
-        config=beta_config,
+        config=_with_namespace(beta_config, "BETA"),
         repo_root=Path("/repo/beta"),
     )
     return FederatedGraph([alpha_entry, beta_entry])
@@ -135,16 +144,17 @@ class TestPerRepoHierarchyCheck:
         # Alpha: DEV implements OPS (allowed by alpha's rules: dev -> [ops])
         alpha_graph = build_graph(
             make_requirement(
-                "REQ-o00001", title="Alpha OPS", level="OPS", source_path="spec/alpha-ops.md"
+                "ALPHA-o00001", title="Alpha OPS", level="OPS", source_path="spec/alpha-ops.md"
             ),
             make_requirement(
-                "REQ-d00001",
+                "ALPHA-d00001",
                 title="Alpha DEV",
                 level="DEV",
-                implements=["REQ-o00001"],
+                implements=["ALPHA-o00001"],
                 source_path="spec/alpha-dev.md",
             ),
             repo_root=Path("/repo/alpha"),
+            namespace="ALPHA",
         )
         alpha_config = _make_config(
             hierarchy_rules={"dev": ["ops"]},
@@ -154,16 +164,17 @@ class TestPerRepoHierarchyCheck:
         # Beta: DEV implements PRD (allowed by beta's rules: dev -> [prd])
         beta_graph = build_graph(
             make_requirement(
-                "REQ-p00002", title="Beta PRD", level="PRD", source_path="spec/beta-prd.md"
+                "BETA-p00002", title="Beta PRD", level="PRD", source_path="spec/beta-prd.md"
             ),
             make_requirement(
-                "REQ-d00002",
+                "BETA-d00002",
                 title="Beta DEV",
                 level="DEV",
-                implements=["REQ-p00002"],
+                implements=["BETA-p00002"],
                 source_path="spec/beta-dev.md",
             ),
             repo_root=Path("/repo/beta"),
+            namespace="BETA",
         )
         beta_config = _make_config(
             hierarchy_rules={"dev": ["prd"]},
@@ -204,13 +215,14 @@ class TestPerRepoFormatRules:
         # Alpha: requirement WITH assertions (satisfies alpha's require_assertions=true)
         alpha_graph = build_graph(
             make_requirement(
-                "REQ-p00010",
+                "ALPHA-p00010",
                 title="Alpha Req",
                 level="PRD",
                 assertions=[{"label": "A", "text": "Must do something"}],
                 source_path="spec/alpha.md",
             ),
             repo_root=Path("/repo/alpha"),
+            namespace="ALPHA",
         )
         alpha_config = _make_config(
             **{"rules.format.require_assertions": True},
@@ -219,12 +231,13 @@ class TestPerRepoFormatRules:
         # Beta: requirement WITHOUT assertions (ok since beta has require_assertions=false)
         beta_graph = build_graph(
             make_requirement(
-                "REQ-p00020",
+                "BETA-p00020",
                 title="Beta Req",
                 level="PRD",
                 source_path="spec/beta.md",
             ),
             repo_root=Path("/repo/beta"),
+            namespace="BETA",
         )
         beta_config = _make_config(
             **{"rules.format.require_assertions": False},
@@ -261,12 +274,16 @@ class TestNonConfigChecksRunOnFullFederation:
         non-config checks run once (1x).
         """
         alpha_graph = build_graph(
-            make_requirement("REQ-p00001", title="Alpha", level="PRD", source_path="spec/alpha.md"),
+            make_requirement(
+                "ALPHA-p00001", title="Alpha", level="PRD", source_path="spec/alpha.md"
+            ),
             repo_root=Path("/repo/alpha"),
+            namespace="ALPHA",
         )
         beta_graph = build_graph(
-            make_requirement("REQ-p00002", title="Beta", level="PRD", source_path="spec/beta.md"),
+            make_requirement("BETA-p00002", title="Beta", level="PRD", source_path="spec/beta.md"),
             repo_root=Path("/repo/beta"),
+            namespace="BETA",
         )
 
         alpha_config = _make_config(
@@ -310,16 +327,17 @@ class TestPerRepoFindingsAttribution:
         # (DEV implements PRD, but alpha only allows dev -> ops)
         alpha_graph = build_graph(
             make_requirement(
-                "REQ-p00050", title="Alpha PRD", level="PRD", source_path="spec/alpha-prd.md"
+                "ALPHA-p00050", title="Alpha PRD", level="PRD", source_path="spec/alpha-prd.md"
             ),
             make_requirement(
-                "REQ-d00050",
+                "ALPHA-d00050",
                 title="Alpha DEV",
                 level="DEV",
-                implements=["REQ-p00050"],
+                implements=["ALPHA-p00050"],
                 source_path="spec/alpha-dev.md",
             ),
             repo_root=Path("/repo/alpha"),
+            namespace="ALPHA",
         )
         alpha_config = _make_config(
             hierarchy_rules={"dev": ["ops"]},  # dev -> prd NOT allowed
@@ -328,9 +346,10 @@ class TestPerRepoFindingsAttribution:
 
         beta_graph = build_graph(
             make_requirement(
-                "REQ-p00060", title="Beta PRD", level="PRD", source_path="spec/beta.md"
+                "BETA-p00060", title="Beta PRD", level="PRD", source_path="spec/beta.md"
             ),
             repo_root=Path("/repo/beta"),
+            namespace="BETA",
         )
         beta_config = _make_config()
 
@@ -365,37 +384,35 @@ def _check_unknown_requirement(graph, config=None):
     )
 
 
-class TestBrokenReferenceSeverity:
+class TestReferenceFaultSeverity:
     """Tests for reference-fault severity in federation.
 
-    Validates REQ-d00204-E: a claimed reference to a requirement that does
-    not exist is an error. The severity is fixed per class by configuration
-    (REQ-d00269-F) rather than varying by whether the target's repo happens
-    to be in error state -- a class answers "how far did reading get",
-    which the target repo's live/error status does not change. What the
-    repository's state does decide is whether the report carries the
-    information a reader needs to obtain it.
+    The severity of a reference fault is fixed per class by configuration
+    and decided by one authority (REQ-d00285-E). A class answers "how far
+    did reading get", so nothing about the federation's own state moves it.
     """
 
-    # Verifies: REQ-d00204-E
-    def test_REQ_d00204_E_broken_refs_within_repo_is_error(self) -> None:
+    # Verifies: REQ-d00285-E
+    def test_REQ_d00285_E_broken_refs_within_repo_is_error(self) -> None:
         """Broken reference within a single repo should be severity=error."""
         # Create a graph with a broken reference (target doesn't exist)
         alpha_graph = build_graph(
             make_requirement(
-                "REQ-d00070",
+                "ALPHA-d00070",
                 title="Broken Dev",
                 level="DEV",
-                implements=["REQ-p99999"],  # target doesn't exist
+                implements=["ALPHA-p99999"],  # target doesn't exist
                 source_path="spec/alpha.md",
             ),
             repo_root=Path("/repo/alpha"),
+            namespace="ALPHA",
         )
         alpha_config = _make_config()
 
         beta_graph = build_graph(
-            make_requirement("REQ-p00080", title="Beta", level="PRD", source_path="spec/beta.md"),
+            make_requirement("BETA-p00080", title="Beta", level="PRD", source_path="spec/beta.md"),
             repo_root=Path("/repo/beta"),
+            namespace="BETA",
         )
         beta_config = _make_config()
 
@@ -409,150 +426,64 @@ class TestBrokenReferenceSeverity:
             f"got '{check.severity}'."
         )
 
-    # Verifies: REQ-d00204-E
-    def test_REQ_d00204_E_broken_refs_to_error_state_repo_still_reported(self) -> None:
-        """A reference that would target a repo now in error state is still
-        reported, at the same fixed severity as any other claimed-but-missing
-        reference -- an error-state repo is not a reason to go quiet.
+
+class TestUnreadableDeclarationIsReported:
+    """Validates REQ-d00202-M and REQ-d00202-N.
+
+    A declaration whose repository cannot be read is a fault of the
+    declaration, not of the directory that is not there. What the report
+    has to carry is therefore which declaration reached nothing, and the
+    chain of declarations that arrived at it -- a reader working in a
+    repository three links up the chain has no other way to find the
+    configuration to fix.
+    """
+
+    # Verifies: REQ-d00202-M+N
+    def test_REQ_d00202_M_unreadable_declaration_is_reported_citing_the_chain(
+        self, tmp_path
+    ) -> None:
+        """The report names the declaration, the chain reaching it, and why."""
+        from elspais.commands.health import check_associate_paths
+        from elspais.config import get_config
+        from tests.federation_repos import make_repo
+
+        hub = make_repo(tmp_path, "hub", associates={"ghost": "../ghost"})
+
+        check = check_associate_paths(get_config(None, hub), hub)
+
+        assert check.passed is False, "a declaration reaching nothing is not a pass"
+        messages = [f.message for f in check.findings]
+        assert len(messages) == 1, messages
+        reported = messages[0]
+        assert "ghost" in reported, reported
+        assert "hub -> ghost" in reported, (
+            f"the report must cite the declaration chain that reached it: {reported}"
+        )
+        assert str((tmp_path / "ghost").resolve()) in reported, (
+            f"the report must name the path that could not be read: {reported}"
+        )
+
+    # Verifies: REQ-d00202-M
+    def test_REQ_d00202_M_chain_cites_the_repository_that_declared_it(self, tmp_path) -> None:
+        """A declaration made by an associate is cited through that associate.
+
+        Nothing in the invoking repository's own configuration names the
+        missing repository, so the chain is the only thing that says where
+        to go and fix it.
         """
-        alpha_graph = build_graph(
-            make_requirement(
-                "REQ-d00090",
-                title="Alpha Dev A",
-                level="DEV",
-                implements=["REQ-p99000"],  # would be in beta
-                source_path="spec/alpha-a.md",
-            ),
-            make_requirement(
-                "REQ-d00091",
-                title="Alpha Dev B",
-                level="DEV",
-                implements=["REQ-p99999"],  # doesn't exist anywhere
-                source_path="spec/alpha-b.md",
-            ),
-            repo_root=Path("/repo/alpha"),
-        )
-        alpha_config = _make_config()
+        from elspais.commands.health import check_associate_paths
+        from elspais.config import get_config
+        from tests.federation_repos import make_repo
 
-        # Beta is in error state (graph=None)
-        alpha_entry = RepoEntry(
-            name="alpha",
-            graph=alpha_graph,
-            config=alpha_config,
-            repo_root=Path("/repo/alpha"),
-        )
-        beta_entry = RepoEntry(
-            name="beta",
-            graph=None,
-            config=None,
-            repo_root=Path("/repo/beta"),
-            error="Failed to build graph",
-        )
-        fed = FederatedGraph([alpha_entry, beta_entry])
+        make_repo(tmp_path, "mid", associates={"ghost": "../ghost"})
+        root = make_repo(tmp_path, "root", associates={"mid": "../mid"})
 
-        check = _check_unknown_requirement(fed, alpha_config)
+        check = check_associate_paths(get_config(None, root), root)
 
-        assert not check.passed, "Broken references should fail the check"
-        assert len(check.findings) == 2, f"Expected 2 findings, got {len(check.findings)}"
-        assert all(f.repo == "alpha" for f in check.findings)
-
-        # REQ-d00204-E: the report carries what a reader needs to obtain the
-        # repository that could not be read -- which one it is and where it
-        # lives -- whatever severity the class was given.
-        unavailable = check.details["unavailable_repos"]
-        assert [r["name"] for r in unavailable] == ["beta"]
-        assert unavailable[0]["path"] == str(Path("/repo/beta"))
-        assert unavailable[0]["error"] == "Failed to build graph"
-        assert "beta" in check.message and str(Path("/repo/beta")) in check.message
-
-    # Verifies: REQ-d00204-E
-    def test_REQ_d00204_E_a_federation_that_loaded_names_no_repository_to_obtain(self) -> None:
-        """The obtaining information is present because a repository is
-        missing, not as boilerplate on every report."""
-        alpha_graph = build_graph(
-            make_requirement(
-                "REQ-d00092",
-                title="Alpha Dev",
-                level="DEV",
-                implements=["REQ-p99999"],
-                source_path="spec/alpha.md",
-            ),
-            repo_root=Path("/repo/alpha"),
-        )
-        alpha_config = _make_config()
-        beta_graph = build_graph(
-            make_requirement("REQ-p00081", title="Beta", level="PRD", source_path="spec/beta.md"),
-            repo_root=Path("/repo/beta"),
-        )
-        fed = _build_two_repo_federation(alpha_graph, alpha_config, beta_graph, _make_config())
-
-        check = _check_unknown_requirement(fed, alpha_config)
-
-        assert check.findings
-        assert check.details["unavailable_repos"] == []
-        assert "could not be read" not in check.message
-
-    # Verifies: REQ-d00204-E
-    def test_REQ_d00204_E_only_the_classes_a_missing_repo_explains_name_one(self) -> None:
-        """A missing repository is named beside the classes it can account
-        for, and beside no others -- even while one is genuinely missing.
-
-        Three classes refute the explanation on their own terms: MALFORMED
-        identified no target at all, and FORBIDDEN and UNKNOWN_ASSERTION
-        both resolved theirs, so the repository owning it demonstrably
-        loaded. Naming a missing repository there would be prose naming a
-        cause the finding does not have (REQ-p00019-J, REQ-d00252-K).
-        """
-        from elspais.graph.reference_faults import ReferenceFault
-
-        alpha_graph = build_graph(
-            make_requirement("REQ-d00093", title="Alpha", level="DEV", source_path="spec/a.md"),
-            repo_root=Path("/repo/alpha"),
-        )
-        # One fault of every class, so each check has a finding to describe.
-        alpha_graph._unresolved_references = [
-            ReferenceFault(
-                source_id="REQ-d00093",
-                target_id=f"target-{fc.label}",
-                edge_kind="implements",
-                fault_class=fc,
-            )
-            for fc in FaultClass
-        ]
-        alpha_config = _make_config()
-        fed = FederatedGraph(
-            [
-                RepoEntry(
-                    name="alpha",
-                    graph=alpha_graph,
-                    config=alpha_config,
-                    repo_root=Path("/repo/alpha"),
-                ),
-                RepoEntry(
-                    name="beta",
-                    graph=None,
-                    config=None,
-                    repo_root=Path("/repo/beta"),
-                    error="Failed to build graph",
-                ),
-            ]
-        )
-
-        explained = {FaultClass.UNKNOWN_NAMESPACE, FaultClass.UNKNOWN_REQUIREMENT}
-        named = set()
-        for fault_class, name, description in _REFERENCE_CHECKS:
-            check = check_reference_class(fed, alpha_config, fault_class, name, description)
-            assert check.findings, f"{name} must have a finding to describe"
-            if check.details["unavailable_repos"]:
-                named.add(fault_class)
-                assert "beta" in check.message
-            else:
-                assert "could not be read" not in check.message
-
-        assert named == explained, (
-            "a missing repository must be named beside exactly the classes it "
-            f"can account for; named {sorted(c.label for c in named)}"
-        )
+        assert check.passed is False
+        reported = [f.message for f in check.findings if "ghost" in f.message]
+        assert len(reported) == 1, [f.message for f in check.findings]
+        assert "root -> mid -> ghost" in reported[0], reported[0]
 
 
 class TestRunSpecChecksIteratesRepos:
@@ -572,16 +503,17 @@ class TestRunSpecChecksIteratesRepos:
         # Alpha: dev -> ops only
         alpha_graph = build_graph(
             make_requirement(
-                "REQ-o00100", title="Alpha OPS", level="OPS", source_path="spec/alpha-ops.md"
+                "ALPHA-o00100", title="Alpha OPS", level="OPS", source_path="spec/alpha-ops.md"
             ),
             make_requirement(
-                "REQ-d00100",
+                "ALPHA-d00100",
                 title="Alpha DEV",
                 level="DEV",
-                implements=["REQ-o00100"],
+                implements=["ALPHA-o00100"],
                 source_path="spec/alpha-dev.md",
             ),
             repo_root=Path("/repo/alpha"),
+            namespace="ALPHA",
         )
         alpha_config = _make_config(
             hierarchy_rules={"dev": ["ops"]},
@@ -591,16 +523,17 @@ class TestRunSpecChecksIteratesRepos:
         # Beta: dev -> prd only
         beta_graph = build_graph(
             make_requirement(
-                "REQ-p00200", title="Beta PRD", level="PRD", source_path="spec/beta-prd.md"
+                "BETA-p00200", title="Beta PRD", level="PRD", source_path="spec/beta-prd.md"
             ),
             make_requirement(
-                "REQ-d00200",
+                "BETA-d00200",
                 title="Beta DEV",
                 level="DEV",
-                implements=["REQ-p00200"],
+                implements=["BETA-p00200"],
                 source_path="spec/beta-dev.md",
             ),
             repo_root=Path("/repo/beta"),
+            namespace="BETA",
         )
         beta_config = _make_config(
             hierarchy_rules={"dev": ["prd"]},

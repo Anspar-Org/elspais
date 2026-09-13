@@ -55,7 +55,6 @@ def _make_two_repo_federation(
     *,
     root_config: dict[str, Any] | None = None,
     assoc_config: dict[str, Any] | None = None,
-    assoc_error: str | None = None,
 ) -> FederatedGraph:
     """Build a 2-repo FederatedGraph for testing.
 
@@ -66,29 +65,19 @@ def _make_two_repo_federation(
         **{"project.name": "RootProject", "project.namespace": "ROOT"}
     )
 
-    if assoc_error:
-        assoc_entry = RepoEntry(
-            name="associate",
-            graph=None,
-            config=None,
-            repo_root=Path("/repo/associate"),
-            git_origin="https://github.com/org/associate.git",
-            error=assoc_error,
-        )
-    else:
-        assoc_graph = _make_simple_graph(
-            "REQ-a00001", "Associate Requirement", "OPS", Path("/repo/associate")
-        )
-        assoc_cfg = assoc_config or _make_config(
-            **{"project.name": "AssocProject", "project.namespace": "ASSOC"}
-        )
-        assoc_entry = RepoEntry(
-            name="associate",
-            graph=assoc_graph,
-            config=assoc_cfg,
-            repo_root=Path("/repo/associate"),
-            git_origin="https://github.com/org/associate.git",
-        )
+    assoc_graph = _make_simple_graph(
+        "REQ-a00001", "Associate Requirement", "OPS", Path("/repo/associate")
+    )
+    assoc_cfg = assoc_config or _make_config(
+        **{"project.name": "AssocProject", "project.namespace": "ASSOC"}
+    )
+    assoc_entry = RepoEntry(
+        name="associate",
+        graph=assoc_graph,
+        config=assoc_cfg,
+        repo_root=Path("/repo/associate"),
+        git_origin="https://github.com/org/associate.git",
+    )
 
     root_entry = RepoEntry(
         name="root",
@@ -96,7 +85,7 @@ def _make_two_repo_federation(
         config=root_cfg,
         repo_root=Path("/repo/root"),
     )
-    return FederatedGraph([root_entry, assoc_entry], root_repo="root")
+    return FederatedGraph([root_entry, assoc_entry])
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -113,13 +102,13 @@ class TestWorkspaceInfoFederation:
         """get_workspace_info() with multi-repo graph includes federation section.
 
         Validates REQ-d00205-A: The default workspace info response includes
-        a 'federation' section listing repo names, paths, and status.
+        a 'federation' section listing repo names, paths, and git origins.
         """
         pytest.importorskip("mcp")
         from elspais.mcp.server import _get_workspace_info
 
         fed = _make_two_repo_federation()
-        config_dict = fed._repos["root"].config or {}
+        config_dict = fed.root_config or {}
 
         result = _get_workspace_info(
             Path("/repo/root"),
@@ -134,7 +123,7 @@ class TestWorkspaceInfoFederation:
         )
         federation = result["federation"]
 
-        # Must list repos with name, path, status fields
+        # Must list repos with name and path, and the git origin where one is known
         assert "repos" in federation
         repos = federation["repos"]
         assert len(repos) >= 2
@@ -146,39 +135,9 @@ class TestWorkspaceInfoFederation:
         for repo in repos:
             assert "name" in repo
             assert "path" in repo
-            assert "status" in repo
 
-    # Verifies: REQ-d00205-A
-    def test_REQ_d00205_A_workspace_info_federation_includes_error_state(self):
-        """get_workspace_info() includes error state for unavailable repos.
-
-        Validates REQ-d00205-A: Federation section includes error info
-        for repos in error state.
-        """
-        pytest.importorskip("mcp")
-        from elspais.mcp.server import _get_workspace_info
-
-        fed = _make_two_repo_federation(assoc_error="Clone failed: repo not found")
-        config_dict = fed._repos["root"].config or {}
-
-        result = _get_workspace_info(
-            Path("/repo/root"),
-            config=config_dict,
-            graph=fed,
-            detail="default",
-        )
-
-        assert "federation" in result
-        repos = result["federation"]["repos"]
-        assoc_repos = [r for r in repos if r["name"] == "associate"]
-        assert len(assoc_repos) == 1
-
-        assoc = assoc_repos[0]
-        assert assoc["status"] == "error" or "error" in assoc
-        # Error message should be present
-        assert "error" in assoc or "error_message" in assoc
-        error_msg = assoc.get("error") or assoc.get("error_message", "")
-        assert "Clone failed" in str(error_msg)
+        associate = next(r for r in repos if r["name"] == "associate")
+        assert associate["git_origin"] == "https://github.com/org/associate.git"
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -289,7 +248,6 @@ class TestNodeSpecificConfig:
                     git_origin="https://github.com/org/associate.git",
                 ),
             ],
-            root_repo="root",
         )
 
         result = _mutate_add_edge(
@@ -372,21 +330,26 @@ class TestWorkspaceInfoAssociatesAgreeWithFederation:
 
         root_graph = _make_simple_graph("REQ-p00001", "Root", "PRD", Path("/repo/root"))
         entries = [
-            RepoEntry(name="root", graph=root_graph, config=_make_config(), repo_root=Path("/r")),
+            RepoEntry(
+                name="root",
+                graph=root_graph,
+                config=_make_config(**{"project.namespace": "ROOT"}),
+                repo_root=Path("/r"),
+            ),
             RepoEntry(
                 name="direct",
                 graph=_make_simple_graph("REQ-a00001", "Direct", "OPS", Path("/repo/direct")),
-                config=_make_config(),
+                config=_make_config(**{"project.namespace": "DIRECT"}),
                 repo_root=Path("/repo/direct"),
             ),
             RepoEntry(
                 name="transitive",
                 graph=_make_simple_graph("REQ-b00001", "Transitive", "OPS", Path("/repo/deep")),
-                config=_make_config(),
+                config=_make_config(**{"project.namespace": "DEEP"}),
                 repo_root=Path("/repo/deep"),
             ),
         ]
-        fed = FederatedGraph(entries, root_repo="root")
+        fed = FederatedGraph(entries)
 
         result = _get_workspace_info(
             Path("/r"), config=_make_config(), graph=fed, detail="worktree"

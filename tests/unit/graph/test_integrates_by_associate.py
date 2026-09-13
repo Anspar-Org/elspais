@@ -45,8 +45,8 @@ def _build_with_verified_library(tmp_path):
     its verified dimension is non-zero). Proven recipe shared with
     test_integrates_propagation.py."""
     fed = _federate(tmp_path)
-    lib_req = fed._repos["library"].graph._index["LIB-d00007"]
-    lib_graph = fed._repos["library"].graph
+    lib_req = fed.find_by_id("LIB-d00007")
+    lib_graph = fed.repo_for("LIB-d00007").graph
 
     code = GraphNode(id="LIB-code-1", kind=NodeKind.CODE, label="append_only")
     lib_req.link(code, EdgeKind.IMPLEMENTS, ["A"])  # REQ --IMPLEMENTS(A)--> CODE
@@ -98,7 +98,7 @@ def test_REQ_d00252_F_lcov_only_credit_does_not_count_as_passing(tmp_path):
     reads 0 of 1 rather than borrowing a verdict no test returned.
     """
     fed = _federate(tmp_path)
-    lib_req = fed._repos["library"].graph._index["LIB-d00007"]
+    lib_req = fed.find_by_id("LIB-d00007")
     lib_req.set_metric(
         "rollup_metrics",
         RollupMetrics(
@@ -128,7 +128,7 @@ def test_REQ_d00252_F_library_failures_flag_associate_row(tmp_path):
     clean.
     """
     fed = _federate(tmp_path)
-    lib_req = fed._repos["library"].graph._index["LIB-d00007"]
+    lib_req = fed.find_by_id("LIB-d00007")
     lib_req.set_metric(
         "rollup_metrics",
         RollupMetrics(
@@ -157,8 +157,8 @@ def test_REQ_d00252_F_no_integrates_yields_empty(tmp_path):
     """A federation with no INTEGRATES edges produces no rows."""
     fed = _federate(tmp_path)
     # Remove the only INTEGRATES edge so nothing integrates an associate.
-    app_req = fed._repos["app"].graph._index["APP-d00001"]
-    lib_req = fed._repos["library"].graph._index["LIB-d00007"]
+    app_req = fed.find_by_id("APP-d00001")
+    lib_req = fed.find_by_id("LIB-d00007")
     app_req.unlink(lib_req)
     rows = integrates_by_associate(fed)
     assert rows == []

@@ -1,4 +1,4 @@
-# Verifies: REQ-d00212-E, REQ-d00231-E
+# Verifies: REQ-d00212-Y, REQ-d00231-E
 """Unit tests for the changelog author resolution helper.
 
 Validates that ``resolve_changelog_author`` honors
@@ -40,7 +40,7 @@ class TestResolveChangelogAuthor:
     """Tests for ``resolve_changelog_author``.
 
     Validates REQ-d00231-E (author identity resolved server-side via the
-    changelog.id_source config) and REQ-d00212-E (``ChangelogRequireConfig``
+    changelog.id_source config) and REQ-d00212-Y (``ChangelogRequireConfig``
     drives whether missing fields are fatal).
     """
 

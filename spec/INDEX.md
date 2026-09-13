@@ -118,19 +118,19 @@
 | REQ-d00132 | Render-Based Save Operation                                   | dev-graph-file-nodes.md | f5a4193c |
 | REQ-d00133 | MCP FILE Node Integration                                     | dev-mcp-tools.md        | 08e2973f |
 | REQ-d00134 | Mutation Round-Trip Fidelity                                  | dev-graph-file-nodes.md | 19cb065b |
-| REQ-d00200 | FederatedGraph Read-Only Delegation                           | dev-graph-federation.md | ed077a7c |
+| REQ-d00200 | FederatedGraph Read-Only Delegation                           | dev-graph-federation.md | a634ab59 |
 | REQ-d00201 | FederatedGraph Mutation Delegation                            | dev-graph-federation.md | c51794b3 |
-| REQ-d00202 | Associates Config Loading                                     | dev-graph-federation.md | e7e61b6a |
-| REQ-d00203 | Multi-Repo Build Pipeline                                     | dev-graph-federation.md | 957568b6 |
-| REQ-d00204 | Per-Repo Health Check Delegation                              | dev-graph-federation.md | 15c6ff55 |
-| REQ-d00205 | MCP Federation Support                                        | dev-mcp-tools.md        | 42c7a840 |
-| REQ-d00206 | Server Federation and Staleness                               | dev-traceview-review.md | ddd6dc73 |
+| REQ-d00202 | Associates Config Loading                                     | dev-graph-federation.md | faadf2aa |
+| REQ-d00203 | Multi-Repo Build Pipeline                                     | dev-graph-federation.md | f3cbca11 |
+| REQ-d00204 | Per-Repo Health Check Delegation                              | dev-graph-federation.md | f3afb6e4 |
+| REQ-d00205 | MCP Federation Support                                        | dev-mcp-tools.md        | 31c8b0c5 |
+| REQ-d00206 | Server Federation and Staleness                               | dev-traceview-review.md | a8300f60 |
 | REQ-d00207 | Declarative Config Schema Cleanup                             | dev-graph-config.md     | 6dfbf578 |
 | REQ-d00208 | JSON Schema Export for IDE Autocomplete                       | dev-graph-config.md     | 27ca773c |
 | REQ-d00209 | Schema-Driven Init Template Generation                        | dev-graph-config.md     | b25e4468 |
 | REQ-d00210 | Documentation Drift Detection                                 | dev-graph-config.md     | 59023724 |
 | REQ-d00211 | Config-Driven Viewer UI Values                                | dev-graph-config.md     | 254fcba9 |
-| REQ-d00212 | Config Schema v3 Models                                       | dev-graph-config.md     | 277219e9 |
+| REQ-d00212 | Configuration Schema                                          | dev-graph-config.md     | 492083b5 |
 | REQ-d00213 | Version Check and Update Notification                         | dev-cli.md              | cedd398b |
 | REQ-d00214 | MCP Server Install/Uninstall CLI Commands                     | dev-mcp-tools.md        | 5f372b62 |
 | REQ-d00215 | Keyword Extraction Annotator                                  | dev-graph-core.md       | db477d99 |
@@ -206,7 +206,8 @@
 | REQ-d00286 | Built-In User Documentation                                   | dev-cli.md              | d246f21a |
 | REQ-d00287 | Reading a Reference                                           | dev-graph-core.md       | 02eb02ff |
 | REQ-d00288 | Journeys That Validate Nothing                                | dev-graph-core.md       | 184a67af |
-| REQ-d00289 | Associate Registration Outcome                                | dev-cli.md              | 0d4c2b04 |
+| REQ-d00289 | Associate Registration Outcome                                | dev-cli.md              | 008983e5 |
+| REQ-d00290 | Machine-Local Configuration Overlay                           | dev-graph-config.md     | 9019f766 |
 
 ## User Journeys
 
