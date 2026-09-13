@@ -174,9 +174,9 @@ repoints each candidate whose recorded path differs.
 
 Two candidates of one scan that stand for the same entry -- they declare one
 name, or one namespace -- are a case `-f` cannot
-settle, since it was given about neither of them. The second is refused naming
-the first rather than winning on sort order. Register the one you meant by
-path.
+settle, since it was given about neither of them. Neither is recorded, and
+each is reported naming the others, so which one the scan reached first
+decides nothing. Register the one you meant by path.
 
 ### Listing links
 

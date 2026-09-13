@@ -15,24 +15,23 @@ from typing import Any
 
 @dataclass
 class Associate:
-    """
-    Represents an associate repository configuration.
+    """What reading a candidate directory's own configuration found there.
+
+    Produced only where no federation plan is in hand yet -- scanning
+    sibling directories for candidates. Once a repository is a planned
+    member, its configuration is carried on the plan and answers these
+    questions directly; reading the file again would be a second
+    authority on what a directory declares.
 
     Attributes:
-        name: Associate name (e.g., "callisto")
-        code: Short code used in requirement IDs (e.g., "CAL")
-        enabled: Whether this associate is enabled for scanning
-        path: Default path relative to project root
-        spec_path: Spec directory within associate path (e.g., "spec")
-        local_path: Override path for local development
+        name: The repository's own ``[project].name``.
+        code: The namespace it declares, which is what identifies it.
+        spec_path: The directory it keeps its spec files in.
     """
 
     name: str
     code: str
-    enabled: bool = True
-    path: str = ""
     spec_path: str = "spec"
-    local_path: str | None = None
 
 
 def spec_directory_name(config: dict) -> str:
@@ -147,13 +146,7 @@ def discover_associate_from_path(
     namespace = project["namespace"]
     spec_path = spec_directory_name(config)
 
-    return Associate(
-        name=name,
-        code=namespace,
-        enabled=True,
-        path=str(repo_path),
-        spec_path=spec_path,
-    )
+    return Associate(name=name, code=namespace, spec_path=spec_path)
 
 
 __all__ = [

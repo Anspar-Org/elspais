@@ -1766,7 +1766,7 @@ class TestNamespaceRequiredToConstruct:
             file_id_for_reference("spec/x.md", {"project": {}})
 
     # Verifies: REQ-d00222-D
-    def test_REQ_d00222_D_federated_entry_carrying_a_graph_must_declare_a_project(self, tmp_path):
+    def test_REQ_d00222_D_federated_entry_carrying_a_graph_must_declare_a_namespace(self, tmp_path):
         from elspais.graph.federated import FederatedGraph, FederationError, RepoEntry
 
         entry = RepoEntry(
@@ -1776,28 +1776,5 @@ class TestNamespaceRequiredToConstruct:
             repo_root=tmp_path,
         )
 
-        with pytest.raises(FederationError, match=r"\[project\]"):
+        with pytest.raises(FederationError, match="namespace"):
             FederatedGraph([entry])
-
-    # Verifies: REQ-d00222-D
-    def test_REQ_d00222_D_federated_error_state_entry_stays_exempt(self, tmp_path):
-        """An entry that holds no graph contributes no nodes to identify."""
-        from elspais.graph.federated import FederatedGraph, RepoEntry
-
-        host = RepoEntry(
-            name="host",
-            graph=TraceGraph(repo_root=tmp_path),
-            config={"project": {"name": "host", "namespace": "REQ"}},
-            repo_root=tmp_path,
-        )
-        broken = RepoEntry(
-            name="broken-assoc",
-            graph=None,
-            config=None,
-            repo_root=tmp_path / "missing",
-            error="Path does not exist",
-        )
-
-        fed = FederatedGraph([host, broken])
-
-        assert {r.name for r in fed.iter_repos()} == {"host", "broken-assoc"}

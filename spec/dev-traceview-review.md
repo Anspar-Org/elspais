@@ -65,7 +65,7 @@ The review server SHALL expose federation repo metadata and staleness informatio
 
 ### Assertions
 
-A. `/api/repos` SHALL return a list of federated repos from `iter_repos()` with name, path, status (ok/error), git_origin, and error fields.
+A. `/api/repos` SHALL return every member of the federation, each with its name, its path, and its git origin.
 
 B. `/api/repos` SHALL include staleness info (remote_diverged, branch) for repos with a `git_origin` configured, using `git_status_summary()` per-repo.
 
@@ -79,8 +79,9 @@ Multi-repo federation users need visibility into which repos are current and whi
 
 ### Changelog
 
+- 2026-09-12 | a8300f60 | - | Michael Lewis (<michael@anspar.org>) | A drops status and error fields; no member can be either
 - 2026-07-31 | ddd6dc73 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | b4fae1d0 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | b4fae1d0 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Server Federation and Staleness* | **Hash**: ddd6dc73
+*End* *Server Federation and Staleness* | **Hash**: a8300f60

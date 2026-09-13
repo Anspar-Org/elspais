@@ -816,7 +816,7 @@ def _select_terms_dictionary(graph, include_associates: bool):
     if root is None or not hasattr(graph, "iter_repos"):
         return federated
     for entry in graph.iter_repos():
-        if entry.name != root or entry.graph is None:
+        if entry.name != root:
             continue
         own = getattr(entry.graph, "terms", None)
         if own is None:

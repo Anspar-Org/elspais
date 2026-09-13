@@ -225,6 +225,40 @@ class TestDiamondConvergence:
         assert len(planned) == 4
         assert all(entry.error is None for entry in planned)
 
+    # Verifies: REQ-d00202-F
+    def test_REQ_d00202_F_directly_and_transitively_reached_repo_appears_once(
+        self, tmp_path
+    ) -> None:
+        """The root reaches one repository both directly and through a chain.
+
+        The two arrivals name one namespace at one directory, so they are
+        one member.  This is the shape a repository produces by declaring
+        everything it needs itself: redundancy with what its associates
+        declare is expected, and must be idempotent rather than a fault.
+        """
+        shared = make_repo(
+            tmp_path,
+            "shared",
+            origin="https://example.com/shared.git",
+        )
+        make_repo(
+            tmp_path,
+            "mid",
+            associates={"core": "../shared"},
+            associate_namespaces={"core": "SHARED"},
+        )
+        root = make_repo(
+            tmp_path,
+            "top",
+            associates={"core": "../shared", "mid": "../mid"},
+            associate_namespaces={"core": "SHARED"},
+        )
+
+        planned = _plan(root)
+
+        assert [entry.name for entry in planned] == ["top", "core", "mid"]
+        assert len([e for e in planned if e.repo_root == shared.resolve()]) == 1
+
 
 class TestRepositoryIdentity:
     """Validates REQ-d00202-G, REQ-d00202-K.
@@ -346,11 +380,16 @@ def _federation_with_bad_associate(tmp_path: Path, kind: str) -> tuple[Path, Pat
 
 
 class TestLoadFailureReporting:
-    """Validates REQ-d00202-I, REQ-d00203-C, REQ-d00203-D."""
+    """Validates REQ-d00202-M, crossing the ways a repository can be unreadable.
+
+    A configuration that parses but fails validation is unreadable for the
+    same reason a missing directory is -- nothing there says what namespace
+    the declaration claims -- so the three kinds are held to one outcome.
+    """
 
     @pytest.mark.parametrize("kind", ["missing", "unparseable", "invalid"])
-    # Verifies: REQ-d00202-I, REQ-d00203-C
-    def test_REQ_d00202_I_bad_associate_is_reported_not_dropped(self, tmp_path, kind):
+    # Verifies: REQ-d00202-M
+    def test_REQ_d00202_M_bad_associate_is_reported_not_dropped(self, tmp_path, kind):
         """The bad repo survives in the plan with config=None and a reason."""
         root, bad_path = _federation_with_bad_associate(tmp_path, kind)
 
@@ -367,9 +406,17 @@ class TestLoadFailureReporting:
         assert by_name["good"].error is None
 
     @pytest.mark.parametrize("kind", ["missing", "unparseable", "invalid"])
-    # Verifies: REQ-d00203-D
-    def test_REQ_d00203_D_strict_raises_on_load_failure(self, tmp_path, kind):
-        """strict=True turns the same soft report into a hard failure."""
+    # Verifies: REQ-d00202-M
+    def test_REQ_d00202_M_planning_for_a_build_refuses_an_unreadable_declaration(
+        self, tmp_path, kind
+    ):
+        """Planning on behalf of a build refuses rather than carrying on.
+
+        The same fault the reporting surfaces record is what stops the
+        build, and it names the declaration and the path it points at, so
+        the reader is sent to the declaration to fix rather than left with
+        a federation quietly short of a member.
+        """
         from elspais.graph.federated import FederationError
 
         root, bad_path = _federation_with_bad_associate(tmp_path, kind)
@@ -379,6 +426,7 @@ class TestLoadFailureReporting:
 
         message = str(excinfo.value)
         assert str(bad_path) in message or bad_path.name in message
+        assert "'bad'" in message, message
 
 
 class TestCrossRepoIdentifierCollision:
@@ -426,93 +474,13 @@ class TestCrossRepoIdentifierCollision:
             build_graph(config=_load(root), repo_root=root)
 
         message = str(excinfo.value)
+        # The ID, and both repositories that claim it.  A repository is
+        # named by the namespace it declares (REQ-d00202-G) -- a declared
+        # name cannot tell two members apart, so it cannot be what says
+        # which two are in conflict here.
         assert "REQ-d00001" in message
-        assert "appmain" in message
-        assert "libcore" in message
-
-
-class TestDuplicateNameCollision:
-    """Validates REQ-d00202-J.
-
-    ``FederatedGraph`` keys its repos by name, so two DIFFERENT repositories
-    arriving under one declared name would silently shadow each other: the
-    loser's graph is never yielded, while ``find_by_id`` still routes its IDs
-    to the winner and returns None.  TOML's duplicate-key rule prevented this
-    under root-only resolution; transitive resolution removes that guarantee.
-    """
-
-    # Verifies: REQ-d00202-J
-    def test_REQ_d00202_J_two_repos_under_one_name_raise(self, tmp_path):
-        """Distinct repos declared as 'core' at different depths is an error."""
-        from elspais.graph.federated import FederationError
-
-        near = make_repo(
-            tmp_path,
-            "coreX",
-            origin="https://example.com/core-x.git",
-        )
-        far = make_repo(
-            tmp_path,
-            "coreY",
-            origin="https://example.com/core-y.git",
-        )
-        make_repo(
-            tmp_path,
-            "mid",
-            associates={"core": "../coreY"},
-            associate_namespaces={"core": "COREY"},
-        )
-        root = make_repo(
-            tmp_path,
-            "top",
-            associates={"core": "../coreX", "mid": "../mid"},
-            associate_namespaces={"core": "COREX"},
-        )
-
-        with pytest.raises(FederationError) as excinfo:
-            _plan(root)
-
-        message = str(excinfo.value)
-        # Both repositories must be identified by path -- naming only the
-        # surviving one would leave the shadowed repo invisible.
-        assert str(near.resolve()) in message, message
-        assert str(far.resolve()) in message, message
-        # ...and the declaration chain that reached each, which is the only
-        # thing distinguishing the two 'core' declarations from one another.
-        # Ordering is pinned; the separator glyph is not.
-        assert re.search(r"top\W+core", message), message
-        assert re.search(r"top\W+mid\W+core", message), message
-
-    # Verifies: REQ-d00202-J
-    def test_REQ_d00202_J_same_repo_under_one_name_is_not_a_collision(self, tmp_path):
-        """An ordinary diamond re-declaring one repo under one name is fine.
-
-        Identity dedupe must skip the second arrival rather than trip the
-        duplicate-name guard; without this the guard would reject every
-        legitimate shared associate.
-        """
-        shared = make_repo(
-            tmp_path,
-            "shared",
-            origin="https://example.com/shared.git",
-        )
-        make_repo(
-            tmp_path,
-            "mid",
-            associates={"core": "../shared"},
-            associate_namespaces={"core": "SHARED"},
-        )
-        root = make_repo(
-            tmp_path,
-            "top",
-            associates={"core": "../shared", "mid": "../mid"},
-            associate_namespaces={"core": "SHARED"},
-        )
-
-        planned = _plan(root)
-
-        assert [entry.name for entry in planned] == ["top", "core", "mid"]
-        assert len([e for e in planned if e.repo_root == shared.resolve()]) == 1
+        assert "APPMAIN" in message
+        assert "LIBCORE" in message
 
 
 class TestDeclarationRequiredFields:

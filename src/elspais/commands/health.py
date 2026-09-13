@@ -894,47 +894,6 @@ _REFERENCE_CHECKS: tuple[tuple[FaultClass, str, str], ...] = (
 )
 
 
-# Implements: REQ-d00204-E
-# The two classes an unreadable repository can actually account for. A
-# reference REACHES one of these by failing to find its target, which a
-# missing repository explains. The other three refute the explanation on
-# their own terms: MALFORMED identified no target at all, and FORBIDDEN and
-# UNKNOWN_ASSERTION both resolved theirs -- so the repository owning it
-# demonstrably loaded. Naming a missing repository beside any of those would
-# be prose naming a cause the finding does not have, which is the defect the
-# whole classification exists to remove (REQ-p00019-J, REQ-d00252-K).
-_CLASSES_A_MISSING_REPO_EXPLAINS = frozenset(
-    {FaultClass.UNKNOWN_NAMESPACE, FaultClass.UNKNOWN_REQUIREMENT}
-)
-
-
-def _unavailable_repos(graph: FederatedGraph) -> list[dict[str, str]]:
-    """The configured repositories that could not be loaded, with where each
-    one lives and why it failed.
-
-    A reader who cannot resolve a reference because a repository is missing
-    needs to know how to obtain it, and that belongs in the report whatever
-    severity the project has chosen for the class -- severity follows the
-    class a reference reached, this follows from the federation's state.
-
-    Which reports it belongs on is decided by the caller, and REQ-d00204-E
-    scopes it: the obligation attaches to a reference that fails *because*
-    the repository owning its target is in an error state.
-    """
-    out: list[dict[str, str]] = []
-    for entry in graph.iter_repos():
-        if entry.graph is not None:
-            continue
-        out.append(
-            {
-                "name": entry.name,
-                "path": str(entry.repo_root) if entry.repo_root else "",
-                "error": entry.error or "",
-            }
-        )
-    return sorted(out, key=lambda r: r["name"])
-
-
 # Implements: REQ-d00275-A
 def check_reference_class(
     graph: FederatedGraph,
@@ -954,9 +913,6 @@ def check_reference_class(
         return skipped_check(name, f"References that {description}")
 
     faults = [f for f in graph.unresolved_references() if f.fault_class is fault_class]
-    unavailable = (
-        _unavailable_repos(graph) if fault_class in _CLASSES_A_MISSING_REPO_EXPLAINS else []
-    )
     if not faults:
         return HealthCheck(
             name=name,
@@ -987,14 +943,7 @@ def check_reference_class(
                 codes=list(f.codes),
             )
         )
-    # Implements: REQ-d00204-E
     message = f"{len(faults)} reference(s): {description}"
-    if unavailable:
-        obtain = "; ".join(
-            f"{r['name']} at {r['path']}" + (f" ({r['error']})" if r["error"] else "")
-            for r in unavailable
-        )
-        message += f" -- a target may belong to a repository that could not be read: {obtain}"
     return HealthCheck(
         name=name,
         passed=False,
@@ -1003,7 +952,6 @@ def check_reference_class(
         severity=severity,
         details={
             "count": len(faults),
-            "unavailable_repos": unavailable,
             "references": [
                 {
                     "source": f.source_id,
@@ -2187,7 +2135,7 @@ def run_term_checks(
     ]
 
 
-# Implements: REQ-d00202-A+D+I+N, REQ-d00203-C
+# Implements: REQ-d00202-A+D+I+N, REQ-d00204-E
 def check_associate_paths(
     config: dict[str, Any],
     repo_root: Path,
@@ -2203,7 +2151,7 @@ def check_associate_paths(
     if severity == Severity.OFF:
         return skipped_check("config.associate_paths", "Associate repositories that cannot be read")
 
-    from elspais.associates import discover_associate_from_path
+    from elspais.associates import spec_directory_name
     from elspais.graph.federation_plan import plan_federation_or_error
 
     plan, plan_error = plan_federation_or_error(config, repo_root)
@@ -2239,29 +2187,19 @@ def check_associate_paths(
             )
             continue
 
-        # The planner answers whether a configuration could be loaded for
-        # this directory; it does not answer whether the directory is
-        # itself an elspais repository, which is what discovery decides.
-        disc_result = discover_associate_from_path(member.repo_root)
-        if isinstance(disc_result, str):
-            findings.append(
-                HealthFinding(
-                    message=(
-                        f"Associate '{member.name}' (declared via {via}) "
-                        f"is misconfigured: {disc_result}"
-                    ),
-                    node_id=member.name,
-                )
-            )
-            continue
-
-        assoc_spec_dir = member.repo_root / disc_result.spec_path
+        # Whether this directory is a readable elspais repository is
+        # already settled: the planner reached it, found its
+        # configuration and loaded it, which is the whole of what
+        # discovery decides. Reading the file again here would put a
+        # second answer to that question in the tool.
+        spec_dir_name = spec_directory_name(member.config)
+        assoc_spec_dir = member.repo_root / spec_dir_name
         if not assoc_spec_dir.exists() or not any(assoc_spec_dir.glob("*.md")):
             findings.append(
                 HealthFinding(
                     message=(
                         f"Associate '{member.name}' (declared via {via}) has no spec files"
-                        f" in {disc_result.spec_path}"
+                        f" in {spec_dir_name}"
                     ),
                     node_id=member.name,
                 )
@@ -2280,7 +2218,10 @@ def check_associate_paths(
     # Which members were assembled with a machine-local overlay is stated
     # alongside the verdict: two machines can pass this check over
     # different configurations, and that is the fact which says so.
-    overridden = [m.name for m in members if m.locally_overridden]
+    # The invoking repository is where this tool writes an overlay of its
+    # own, so leaving it out would omit the one member most likely to have
+    # one. The plan's first entry is that repository.
+    overridden = [m.name for m in plan if m.locally_overridden]
     message = f"All {len(members)} federated repository path(s) valid"
     if overridden:
         message += f"; locally overridden: {', '.join(sorted(overridden))}"
@@ -2592,7 +2533,7 @@ def run_spec_checks(
 
     # --- Config-sensitive checks: run per-repo ---
     for entry in graph.iter_repos():
-        if entry.graph is None or entry.config is None:
+        if entry.config is None:
             continue
         from elspais.utilities.patterns import build_resolver
 
@@ -4541,7 +4482,6 @@ def check_unbound_citations(
             repo=entry.name,
         )
         for entry in graph.iter_repos()
-        if entry.graph is not None
         for c in sorted(entry.graph.unbound_citations(), key=lambda c: (c.path, c.line))
     ]
     if not findings:
@@ -4602,8 +4542,6 @@ def check_ingestion_faults(
 
     findings: list[HealthFinding] = []
     for entry in graph.iter_repos():
-        if entry.graph is None:
-            continue
         for fault in sorted(
             (f for f in entry.graph.ingestion_faults() if not f.partial),
             key=lambda f: (f.stage, f.path, f.target or "", f.cause),
@@ -4669,8 +4607,6 @@ def check_partial_reads(graph: FederatedGraph, config: dict[str, Any] | None = N
     findings: list[HealthFinding] = []
     total_files = 0
     for entry in graph.iter_repos():
-        if entry.graph is None:
-            continue
         by_stage: dict[str, list] = {}
         for fault in entry.graph.ingestion_faults():
             if fault.partial:
@@ -4768,8 +4704,6 @@ def check_unrunnable_test_files(
 
     findings: list[HealthFinding] = []
     for entry in graph.iter_repos():
-        if entry.graph is None:
-            continue
         reach = _target_reach(entry.config)
         if reach is None:
             continue

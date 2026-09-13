@@ -6,6 +6,12 @@ All notable changes to elspais will be documented in this file.
 
 ### Changed
 
+- **A federation member is identified by its namespace, never its declared name** (REQ-d00202-G+J, REQ-d00200) — the declared name is a label; two members named alike are two members.
+
+- **An associate declaration that cannot be read now stops the build** (REQ-d00203-C+D retired) — a partial federation answers questions about a corpus nobody chose. `build_graph()`'s `strict` parameter is gone; `health` and `doctor` still report the fault, citing the declaration chain that reached it.
+
+- **`elspais associate` refuses a namespace collision however it is instructed** (REQ-d00289-H) — `-f` repoints an entry's path; it no longer retires another entry to clear a namespace.
+
 - **Breaking: a federation member is identified by its namespace, not by its git origin (REQ-d00202-G+K)** — the planner keyed identity on the git origin of the directory a declaration pointed at, which answered a question nobody asked. Two directories holding one repository converged whatever they declared, so a copy that renamed its namespace was recorded, resolved to the original, and contributed nothing to the federation — silently. Two directories claiming ONE namespace converged the same way, so the collision REQ-d00202-K exists to report could not be reached at all.
 
   A member is now the namespace its declaration names. One namespace reached again at the same directory is a diamond and converges as before; reached again at a different directory it is a `NamespaceConflict` naming both directories and the declaration chain that reached each; reached again up the current chain it is still a cycle. Two directories declaring different namespaces are two members, however closely related the directories are — their identifiers cannot be confused, so a fork or a derived copy that renames its namespace now federates alongside the original instead of vanishing into it.
@@ -246,6 +252,8 @@ All notable changes to elspais will be documented in this file.
 - **Whether a run counts as selective now follows from the targets it executed (REQ-d00254-I, REQ-d00254-J)** — previously the presence of `--targets` decided it, which would have made every run "selective" once an absent selector resolved to the `default` group. A run covering every configured target is a full run however it was asked for, so a project declaring no groups renders exactly as before; a run leaving any configured target out is selective, so its unexecuted targets are tagged *carried* and a requirement with no results renders as not-run rather than as zero.
 
 ### Fixed
+
+- **`elspais install` detects the `trace-review` extra** — it probed for Flask, which that extra has never installed.
 
 - **A journey metadata field written with nothing after it no longer swallows the next line** — the space between a field's separator and its value could cross a newline, so `Validates:` with an empty value took the following non-blank line as its target, and the journey lost the section that line opened. `Actor`, `Goal` and `Context` had the same defect. A field now ends at its own line.
 

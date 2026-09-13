@@ -133,7 +133,7 @@ D. Statuses presented in order SHALL run active first, then provisional, then as
 *End* *Config-Driven Viewer UI Values* | **Hash**: 254fcba9
 ---
 
-## REQ-d00212: Config Schema v3 Models
+## REQ-d00212: Configuration Schema
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-p00002
 
@@ -187,7 +187,7 @@ R is a condition on resolving, never on writing, which is what keeps a reference
 
 ### Changelog
 
-- 2026-09-12 | dfcf9d49 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-09-12 | dfcf9d49 | - | Michael Lewis (<michael@anspar.org>) | Retitled; model inventory replaced by the invariants the schema holds
 - 2026-08-24 | 277219e9 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-24 | 22e31e30 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-24 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-66: N retired -- a configuration is refused and named rather than upgraded in place; X states the refusal
@@ -218,7 +218,7 @@ R is a condition on resolving, never on writing, which is what keeps a reference
 - 2026-03-30 | db4ad28c | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 - 2026-03-29 | c75b87f8 | - | Michael Lewis (<michael@anspar.org>) | Add assertion N for config migration v3 to v4
 
-*End* *Config Schema v3 Models* | **Hash**: dfcf9d49
+*End* *Configuration Schema* | **Hash**: dfcf9d49
 ---
 
 ## REQ-d00251: A Repository's Identifier Grammar
@@ -331,7 +331,7 @@ G. <RETIRED> carried by REQ-d00212-R, which admits one spelling and lets any oth
 
 ## REQ-d00290: Machine-Local Configuration Overlay
 
-**Level**: dev | **Status**: Draft | **Implements**: REQ-p00002
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00002
 
 A repository's configuration may be assembled from a committed file and a machine-local file layered over it, so that a path or a setting that differs per machine can be held outside the shared configuration. This requirement governs what that layering may change.
 
@@ -348,5 +348,9 @@ An overlay exists so that one machine can point a declaration somewhere else wit
 The failure it forecloses is not hypothetical. Code that reaches for the file it is about to write, rather than for the configuration, sees a declaration that is present in one arrangement and absent in the other, and the operator is told a registration changed nothing when in truth the tool was looking in the wrong place. Two readings of "what is already recorded" are then live at once, and which one a given line of code gets depends on what happened to be in scope.
 
 B is the single exception, and it is a disclosure rather than a difference: which arrangement produced a configuration is a fact about the machine, and an operator comparing an answer here against an answer elsewhere needs to know that a local file took part. It is deliberately coarse -- a repository was overridden, or it was not. Reporting which values an overlay contributed would put the shape of the overlay back into the answers, which is the thing A exists to keep out, and an operator who needs that detail can read the file.
+
+### Changelog
+
+- 2026-09-12 | 9019f766 | - | Michael Lewis (<michael@anspar.org>) | Active; an overlay changes how a value is written, nothing else
 
 *End* *Machine-Local Configuration Overlay* | **Hash**: 9019f766

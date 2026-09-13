@@ -46,7 +46,8 @@ def _federate_integrates(tmp_path):
         scan_code=False,
         scan_tests=False,
     )
-    lib_graph = fed._repos["library"].graph
+    # A member is reached by the namespace it owns, not by its display label.
+    lib_graph = fed.repo_for("LIB-d00007").graph
     lib_req = lib_graph._index["LIB-d00007"]
     test = GraphNode(id="LIB-test-1", kind=NodeKind.TEST, label="test_append_only")
     result = GraphNode(id="LIB-test-1::result", kind=NodeKind.RESULT, label="result")
@@ -779,7 +780,7 @@ class TestSummaryIntegrations:
             scan_code=False,
             scan_tests=False,
         )
-        lib_req = fed._repos["library"].graph._index["LIB-d00007"]
+        lib_req = fed.repo_for("LIB-d00007").graph._index["LIB-d00007"]
         lib_req.set_metric(
             "rollup_metrics",
             RollupMetrics(
@@ -818,7 +819,7 @@ class TestSummaryIntegrations:
             scan_code=False,
             scan_tests=False,
         )
-        lib_req = fed._repos["library"].graph._index["LIB-d00007"]
+        lib_req = fed.repo_for("LIB-d00007").graph._index["LIB-d00007"]
         lib_req.set_metric(
             "rollup_metrics",
             RollupMetrics(

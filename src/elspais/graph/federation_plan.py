@@ -1,4 +1,4 @@
-# Implements: REQ-d00202-D+E+F+G+I+J+K+L, REQ-d00203-B
+# Implements: REQ-d00202-D+E+F+G+I+K+L, REQ-d00203-B
 """Resolve a federation's membership from declared associates.
 
 Planning is separated from building: this module answers "which
@@ -186,6 +186,20 @@ def repository_origin(repo_root: Path) -> str | None:
     return _normalize_origin(origin) if origin else None
 
 
+def _unreadable(declaration: tuple[str, ...], reason: str) -> str:
+    """Say that a declaration's repository could not be read, and whose it is.
+
+    Implements: REQ-d00202-M
+
+    The chain is carried, not just the declaration's own name: a
+    repository reached through an associate is declared in THAT
+    repository's configuration, and a reader told only the last name has
+    no way to tell which file to open.
+    """
+    chain = " -> ".join(declaration)
+    return f"Associate '{declaration[-1]}' (declared via {chain}): {reason}"
+
+
 def _assert_declared_namespace(
     name: str, assoc_path: Path, declared_ns: str, found_ns: str
 ) -> None:
@@ -293,7 +307,6 @@ def plan_federation(
     planned: list[PlannedRepo] = []
     resolved: dict[str, PlannedRepo] = {}
     by_root: dict[Path, PlannedRepo] = {}
-    by_name: dict[str, PlannedRepo] = {}
 
     def _declared_namespace(config: dict[str, Any] | None) -> str:
         return (config or {}).get("project", {}).get("namespace", "") or ""
@@ -313,7 +326,6 @@ def plan_federation(
     planned.append(root_entry)
     resolved[root_identity] = root_entry
     by_root[root_root] = root_entry
-    by_name[root_name] = root_entry
 
     def _record(entry: PlannedRepo, identity: str) -> None:
         # Only a repository that was read stands for its directory. An
@@ -322,21 +334,6 @@ def plan_federation(
         # reported in its own right.
         if entry.config is not None:
             by_root[entry.repo_root] = entry
-        # A federation keys repositories by name, so two repositories
-        # arriving under one name would leave only the later of them
-        # reachable -- the earlier repo's requirements would resolve
-        # against the wrong config and its graph would never be read.
-        # One declaration table cannot collide with itself, so this can
-        # only happen once declarations from several repos are combined.
-        clash = by_name.get(entry.name)
-        if clash is not None:
-            raise FederationError(
-                f"Two repositories are federated under the name '{entry.name}': "
-                f"{clash.repo_root} (declared via {' -> '.join(clash.declaration_path)}) "
-                f"and {entry.repo_root} (declared via "
-                f"{' -> '.join(entry.declaration_path)}). Rename one declaration."
-            )
-        by_name[entry.name] = entry
 
         planned.append(entry)
         resolved[identity] = entry
@@ -397,7 +394,7 @@ def plan_federation(
             if not assoc_path.exists():
                 reason = f"Path does not exist: {assoc_path}"
                 if strict:
-                    raise FederationError(f"Associate '{name}': {reason}")
+                    raise FederationError(_unreadable(child_path, reason))
                 # Nothing is there to have an origin.
                 _record(
                     PlannedRepo(name, assoc_path, None, None, reason, child_path),
@@ -414,7 +411,7 @@ def plan_federation(
             if not (assoc_path / ".elspais.toml").exists():
                 reason = f"No .elspais.toml at {assoc_path}"
                 if strict:
-                    raise FederationError(f"Associate '{name}': {reason}")
+                    raise FederationError(_unreadable(child_path, reason))
                 _record(
                     PlannedRepo(
                         name, assoc_path, None, repository_origin(assoc_path), reason, child_path
@@ -427,7 +424,7 @@ def plan_federation(
             except Exception as exc:  # noqa: BLE001 - reported, never swallowed
                 reason = f"Configuration at {assoc_path} could not be loaded: {exc}"
                 if strict:
-                    raise FederationError(f"Associate '{name}': {reason}") from exc
+                    raise FederationError(_unreadable(child_path, reason)) from exc
                 _record(
                     PlannedRepo(
                         name, assoc_path, None, repository_origin(assoc_path), reason, child_path

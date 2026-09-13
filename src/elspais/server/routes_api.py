@@ -501,12 +501,9 @@ async def api_status(request: Request) -> JSONResponse:
         repo_info: dict[str, Any] = {
             "name": entry.name,
             "path": str(entry.repo_root),
-            "status": "error" if entry.graph is None else "ok",
         }
         if entry.git_origin:
             repo_info["git_origin"] = entry.git_origin
-        if entry.error:
-            repo_info["error"] = entry.error
         repos_info.append(repo_info)
     result["repos"] = repos_info
 
@@ -534,15 +531,12 @@ async def api_repos(request: Request) -> JSONResponse:
         repo_info: dict = {
             "name": entry.name,
             "path": str(entry.repo_root),
-            "status": "error" if entry.graph is None else "ok",
         }
         if entry.git_origin:
             repo_info["git_origin"] = entry.git_origin
-        if entry.error:
-            repo_info["error"] = entry.error
 
         # REQ-d00206-B: Staleness info for repos with git_origin
-        if entry.git_origin and entry.graph is not None:
+        if entry.git_origin:
             try:
                 from elspais.utilities.git import git_status_summary
 

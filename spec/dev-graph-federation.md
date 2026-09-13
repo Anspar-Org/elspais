@@ -10,7 +10,7 @@ FederatedGraph SHALL wrap one or more TraceGraph instances, each paired with its
 
 A. FederatedGraph SHALL wrap one or more TraceGraph instances, directly or indirectly
 
-B. FederatedGraph SHALL provide a way to create a federation-of-one from a single TraceGraph, config, and repo_root, using "root" as the default repo name.
+B. FederatedGraph SHALL provide a way to create a federation-of-one from a single TraceGraph, config, and repo root, identifying that member the way every member is identified.
 
 C. All read-only TraceGraph public methods SHALL be explicitly implemented on FederatedGraph with a strategy comment (by_id, aggregate, or special).
 
@@ -18,25 +18,28 @@ D. `by_id strategy` methods SHALL look up the owning graph via an internal owner
 
 E. `Aggregate` strategy methods SHALL combine results from all sub-graphs.
 
-F. `Aggregate` strategy methods SHALL skip repos with graph set to None (error-state repos).
+F. <RETIRED> had aggregate methods skip a member holding no graph. Every member is read before it joins (REQ-d00202-G), so a member without a graph is not a state a federation can be in.
 
 G. FederatedGraph SHALL provide a way to get the repositry and config based on a node
 
-H. FederatedGraph SHALL provide a way to iterate over all repos regardless of their error state.
+H. FederatedGraph SHALL provide a way to iterate over every member it holds.
 
 ### Rationale
 
-FederatedGraph provides config isolation for multi-repo builds while presenting a unified API to consumers. The federation-of-one pattern ensures all code paths go through FederatedGraph, preventing accidental direct TraceGraph usage. Error-state repos (missing associates) are represented in the federation but skipped during aggregation, preserving graceful degradation.
+FederatedGraph provides config isolation for multi-repo builds while presenting a unified API to consumers. The federation-of-one pattern ensures all code paths go through FederatedGraph, preventing accidental direct TraceGraph usage.
+
+Every member is identified by the namespace it declares (REQ-d00202-G), so B fixes no particular name: a federation of one identifies its single member exactly as a federation of many does, and the two cases cannot drift apart. A declaration whose repository cannot be read names no namespace and so joins nothing -- the build refuses it rather than carrying it as a member that answers nothing. F is retired for the same reason: with no way to enter a federation unread, there is no member for an aggregate to skip, and a rule guarding an unreachable state reads as though the state were supported.
 
 ### Changelog
 
+- 2026-09-12 | a634ab59 | - | Michael Lewis (<michael@anspar.org>) | F retired: every member is read, so none can lack a graph
 - 2026-08-25 | ed077a7c | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-25 | b351e9ad | - | Michael Lewis (<michael@anspar.org>) | Made assertions less fragile
 - 2026-07-31 | 06b84d97 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 72471144 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 72471144 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *FederatedGraph Read-Only Delegation* | **Hash**: ed077a7c
+*End* *FederatedGraph Read-Only Delegation* | **Hash**: a634ab59
 ---
 
 ## REQ-d00201: FederatedGraph Mutation Delegation
@@ -101,7 +104,7 @@ H. When two federated repositories both claim the same requirement ID, the build
 
 I. When scanning directories for candidate associates, a directory whose elspais configuration fails to parse or validate SHALL be skipped without aborting the scan, and each skip SHALL be reported with the directory path and the reason. Directories without an elspais configuration are not candidates and need no report.
 
-J. When two distinct repositories would enter one federation under the same declared name, the build SHALL fail with an error naming both repository paths and the declaration chain that reached each.
+J. <RETIRED> named the declared name as a second identity a member could collide on. A member is identified by its namespace alone, per G, so two members under one declared name are two members whose identifiers cannot be confused.
 
 K. When two directories of one federation are read and both declare the same namespace, the build SHALL fail with an error naming both directories and the declaration chain that reached each.
 
@@ -117,15 +120,13 @@ Associates are declared in `.elspais.toml` using a structured TOML section. Each
 
 A repository declares everything it directly needs in order to resolve on its own, without regard to what its associates happen to declare. Redundancy between those declarations is therefore expected rather than exceptional, and assertion F is what makes it harmless: a repository reached both directly and through a chain resolves to one entry, so declaring it twice is idempotent. Pruning a declaration because some other repository already reaches it would couple the two configurations and break the pruned repository's own invocations.
 
-Name uniqueness (assertion J) becomes an obligation only once declarations from several repositories are combined. A single declaration table cannot collide with itself, so under root-only resolution uniqueness was guaranteed by TOML's own syntax. A federation keys repositories by name, so two repositories arriving under one name would leave only the later of them reachable — the earlier repository's requirements would resolve against the wrong configuration and its graph would never be read at all. Failing is the honest outcome because the alternative is a silent partial federation.
-
 A declaration that cannot be read has said nothing about a namespace, so it is not one of the two claimants K is about -- K reaches directories that were read, and a directory that is not there was not. Treating it as one produces a report naming a collision between a real directory and a path that does not exist, which sends the reader looking for a conflict instead of at the missing repository -- the fault is that a declaration points nowhere, and that is what has to be said. Failing remains the right outcome, since a configuration naming a repository that is not there is misconfigured whatever else is true of it; what M fixes is which fault is named. Where a surface is built to carry on with the members it could read, N keeps the unreadable one a failed check: a federation quietly missing a member answers questions about a corpus nobody chose.
 
-A namespace answers whose identifiers these are, so a federation in which two directories claim one namespace can answer nothing — the same argument disjoint requirement IDs rest on under H. That is also why the namespace is the identity (G): it is the one thing a member cannot share, it is declared rather than discovered, and L binds it to what the repository at that path says of itself, so it cannot be claimed by mistake. A repository reached at two directories under one namespace is therefore a collision to report rather than a convergence to guess at, while two directories that declare different namespaces are two members however closely related they are — their identifiers cannot be confused, so nothing about holding both is ambiguous. Identity that read the git origin instead answered a question nobody asked: it converged two directories a federation had every reason to hold apart, and it silently dropped the second. A repository owns its own namespace; an associate declaration does not name a second one but states the namespace the declaring repository expects at that path, so a mismatch means the declaration points somewhere its author did not intend. Both are declaration-time failures, reported before any graph is built, because a federation assembled on an ambiguous or mistaken namespace produces wrong answers rather than missing ones.
+A member's declared name is a label the declaring repository chose for its own convenience, and it settles nothing: two members named alike are still two members, distinguishable by the one thing they cannot share. A namespace answers whose identifiers these are, so a federation in which two directories claim one namespace can answer nothing — the same argument disjoint requirement IDs rest on under H. That is also why the namespace is the identity (G): it is the one thing a member cannot share, it is declared rather than discovered, and L binds it to what the repository at that path says of itself, so it cannot be claimed by mistake. A repository reached at two directories under one namespace is therefore a collision to report rather than a convergence to guess at, while two directories that declare different namespaces are two members however closely related they are — their identifiers cannot be confused, so nothing about holding both is ambiguous. Identity that read the git origin instead answered a question nobody asked: it converged two directories a federation had every reason to hold apart, and it silently dropped the second. A repository owns its own namespace; an associate declaration does not name a second one but states the namespace the declaring repository expects at that path, so a mismatch means the declaration points somewhere its author did not intend. Both are declaration-time failures, reported before any graph is built, because a federation assembled on an ambiguous or mistaken namespace produces wrong answers rather than missing ones.
 
 ### Changelog
 
-- 2026-09-12 | ee7bf24d | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-09-12 | faadf2aa | - | Michael Lewis (<michael@anspar.org>) | J retired: a member is its namespace, not its declared name
 - 2026-09-11 | e7e61b6a | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-10 | 0522f86c | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-10 | b599e6ec | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: require a namespace to be unique across a federation (K) and to match the repository the declaration points at (L)
@@ -139,7 +140,7 @@ A namespace answers whose identifiers these are, so a federation in which two di
 - 2026-05-11 | 479dcbb8 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 479dcbb8 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Associates Config Loading* | **Hash**: ee7bf24d
+*End* *Associates Config Loading* | **Hash**: faadf2aa
 ---
 
 ## REQ-d00203: Multi-Repo Build Pipeline
@@ -154,25 +155,28 @@ A. When `[associates]` config is present, `build_graph()` SHALL create a separat
 
 B. Each associate's config SHALL be loaded from its own `.elspais.toml`, and any associates it declares SHALL be discovered and built into the same federation.
 
-C. Missing associate paths SHALL produce error-state `RepoEntry` with `graph=None` and a descriptive `error` message (soft fail).
+C. <RETIRED> required a missing associate to become a member carrying no graph. A member is identified by the namespace it declares (REQ-d00202-G), and a repository that cannot be read declares none, so the build refuses it rather than admitting a member that answers nothing.
 
-D. A `strict` parameter on `build_graph()` SHALL cause missing associates to raise an error instead of soft-failing.
+D. <RETIRED> selected between refusing and soft-failing. Refusing is now the only behaviour, so there is nothing to select.
 
 E. The root repo and all valid associates SHALL be combined into a single `FederatedGraph` with the root repo as `_root_repo`.
 
 ### Rationale
 
-Per-repo building ensures config isolation: each repo's hierarchy rules, format rules, and hash mode apply only to its own nodes. Error-state entries preserve visibility of missing associates in health reports without blocking the build.
+Per-repo building ensures config isolation: each repo's hierarchy rules, format rules, and hash mode apply only to its own nodes. A declared repository that cannot be read stops the build, so a federation that exists holds only members that were read.
+
+A federation is the corpus every later answer is computed over, so a member missing from it is not a smaller corpus but a different question. C and D are retired together because the choice they offered was between answering that different question silently and refusing: a repository that cannot be read declares no namespace, and a member is its namespace, so there was never a member there to carry. The fault is reported once, naming the declaration that reaches nothing, and no answer is computed until it is fixed.
 
 ### Changelog
 
+- 2026-09-12 | f3cbca11 | - | Michael Lewis (<michael@anspar.org>) | C and D retired: an unreadable declaration now stops the build
 - 2026-07-31 | 957568b6 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-30 | 5544c03c | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-30 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-38/TOOL-33: amend B — transitive associates are built into the federation instead of being validated against
 - 2026-05-11 | 31e019a1 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 31e019a1 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Multi-Repo Build Pipeline* | **Hash**: 957568b6
+*End* *Multi-Repo Build Pipeline* | **Hash**: f3cbca11
 ---
 
 ## REQ-d00204: Per-Repo Health Check Delegation
@@ -191,7 +195,7 @@ C. Per-repo checks SHALL produce a separate `HealthCheck` per repo per check typ
 
 D. `HealthFinding` SHALL support an optional `repo` field (str | None) for per-repo attribution.
 
-E. A reference that fails to resolve because the repository owning its target is in an error state SHALL still be reported, and the report SHALL carry what a reader needs to obtain that repository. How loudly it is reported SHALL follow from the class the reference reached, not from the state of the repository that would have owned it.
+E. Where a declared repository cannot be read, the tool SHALL report that fault, citing the declaration that referenced it.
 
 F. `run_spec_checks` SHALL accept a `FederatedGraph` and iterate `iter_repos()` for config-sensitive checks, using `FederatedGraph.from_single()` to create per-repo sub-federations.
 
@@ -213,6 +217,7 @@ Assertions H–J realize REQ-p00082's verdict-scoping invariants for the checks 
 
 ### Changelog
 
+- 2026-09-12 | 62e03a0c | - | Michael Lewis (<michael@anspar.org>) | E now reports an unreadable repository, citing the declaration reaching it
 - 2026-08-16 | 15c6ff55 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-16 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: severity follows the class a reference reached, not the load state of the repository that would own its target (E)
 - 2026-07-31 | 7e0f5586 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -222,7 +227,7 @@ Assertions H–J realize REQ-p00082's verdict-scoping invariants for the checks 
 - 2026-05-11 | 2313140d | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 2313140d | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Per-Repo Health Check Delegation* | **Hash**: 15c6ff55
+*End* *Per-Repo Health Check Delegation* | **Hash**: 62e03a0c
 ---
 
 ## REQ-d00252: External Library Integration via Integrates Keyword

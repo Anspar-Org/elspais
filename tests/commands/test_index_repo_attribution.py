@@ -18,13 +18,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from elspais.commands.glossary_cmd import generate_term_index
 from elspais.commands.index import _build_index_content
 from elspais.graph import GraphNode, NodeKind
 from elspais.graph.builder import TraceGraph
 from elspais.graph.federated import FederatedGraph, RepoEntry
 from elspais.graph.relations import EdgeKind
-from elspais.graph.terms import TermDictionary, TermEntry, TermRef
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Helpers
@@ -120,7 +118,7 @@ def _build_two_repo_federation(
         config=_project_config("callisto", "REQ-CAL"),
         repo_root=callisto_repo,
     )
-    fed = FederatedGraph([root_entry, cal_entry], root_repo="root")
+    fed = FederatedGraph([root_entry, cal_entry])
     return fed, root_repo, callisto_repo
 
 
@@ -260,7 +258,7 @@ class TestUnattributedBucket:
             config=_project_config("root", "REQ"),
             repo_root=tmp_path,
         )
-        fed = _OrphanIDFederation([entry], root_repo="root")
+        fed = _OrphanIDFederation([entry])
 
         spec_dirs = [tmp_path / "spec"]
         (tmp_path / "spec").mkdir(parents=True, exist_ok=True)
@@ -337,83 +335,3 @@ class TestNoSpecDirPathMatching:
             "REQ-p00001 has a known owner ('root'); it must NOT bucket "
             "as 'Unattributed' just because its file is outside spec_dirs."
         )
-
-
-class TestCrossGeneratorConsistency:
-    """Validates REQ-d00217-B: INDEX.md and term-index.md agree on bucket label."""
-
-    # Verifies: REQ-d00217-B
-    def test_REQ_d00217_B_index_label_matches_term_index_namespace(self, tmp_path: Path) -> None:
-        """For a federated graph, any REQ ID present in both INDEX.md and
-        term-index.md must use the same bucket label.
-
-        term-index.md groups TermRef by ``namespace`` (which is the repo
-        name). After the INDEX.md fix, the INDEX.md bucket for the same
-        REQ must also be the repo name — so the labels align.
-        """
-        fed, root_repo, _cal_repo = _build_two_repo_federation(tmp_path)
-        spec_dirs = [root_repo / "spec"]
-
-        # include_associates=True: this test validates that INDEX.md bucket labels
-        # align with term-index namespaces when associates ARE included.
-        _output, index_content, _r, _j = _build_index_content(
-            fed, spec_dirs, include_associates=True
-        )
-
-        # Build a term dictionary that references the foreign REQ from the
-        # callisto namespace. This mirrors how the federation's _scan_terms
-        # would attribute references — by repo name.
-        td = TermDictionary()
-        td.add(
-            TermEntry(
-                term="Federation",
-                definition="A union of repositories sharing terms.",
-                indexed=True,
-                defined_in="REQ-CAL-p00001",
-                namespace="callisto",
-                references=[
-                    TermRef(
-                        node_id="REQ-CAL-p00001",
-                        namespace="callisto",
-                        marked=True,
-                        line=1,
-                    ),
-                ],
-            )
-        )
-        td.add(
-            TermEntry(
-                term="Root",
-                definition="The primary repository in a federation.",
-                indexed=True,
-                defined_in="REQ-p00001",
-                namespace="root",
-                references=[
-                    TermRef(
-                        node_id="REQ-p00001",
-                        namespace="root",
-                        marked=True,
-                        line=1,
-                    ),
-                ],
-            )
-        )
-        term_index_content = generate_term_index(td, format="markdown")
-
-        # term-index.md uses **<namespace>:** as the bucket header.
-        assert "**callisto:**" in term_index_content
-        assert "**root:**" in term_index_content
-        assert "REQ-CAL-p00001" in term_index_content
-        assert "REQ-p00001" in term_index_content
-
-        # The foreign REQ's term-index namespace is 'callisto'. The INDEX.md
-        # bucket label for the same REQ MUST also surface 'callisto' — not
-        # 'Unknown Source' and not the primary's path-derived label.
-        assert "callisto" in index_content, (
-            "INDEX.md bucket label for REQ-CAL-p00001 must align with the "
-            "term-index.md namespace ('callisto'). Pre-fix it surfaces as "
-            "'Unknown Source' instead."
-        )
-        # Same for the root REQ.
-        assert "root" in index_content
-        assert "Unknown Source" not in index_content

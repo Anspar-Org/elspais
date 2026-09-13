@@ -33,9 +33,9 @@ def _federate(tmp_path):
 # Verifies: REQ-d00252-D
 def test_REQ_d00252_D_consumer_inherits_library_coverage(tmp_path):
     fed = _federate(tmp_path)
-    app_req = fed._repos["app"].graph._index["APP-d00001"]
-    lib_req = fed._repos["library"].graph._index["LIB-d00007"]
-    lib_graph = fed._repos["library"].graph
+    app_req = fed.find_by_id("APP-d00001")
+    lib_req = fed.find_by_id("LIB-d00007")
+    lib_graph = fed.repo_for("LIB-d00007").graph
 
     # Library REQ has assertion A. Give it CODE that implements A so its
     # `implemented` dimension populates (test Verifies alone is NOT implemented
@@ -65,7 +65,7 @@ def test_REQ_d00252_D_consumer_inherits_library_coverage(tmp_path):
 def test_REQ_d00252_D_no_integrates_yields_zero(tmp_path):
     """A requirement with no INTEGRATES edge inherits nothing."""
     fed = _federate(tmp_path)
-    lib_req = fed._repos["library"].graph._index["LIB-d00007"]
+    lib_req = fed.find_by_id("LIB-d00007")
     rollup = integrates_rollup(lib_req)
     assert rollup.implemented_total == 0 and rollup.verified_total == 0
 
@@ -81,8 +81,8 @@ def test_REQ_d00252_D_lcov_only_credit_does_not_propagate_as_passing(tmp_path):
     sees 0 of 1 rather than nothing at all.
     """
     fed = _federate(tmp_path)
-    app_req = fed._repos["app"].graph._index["APP-d00001"]
-    lib_req = fed._repos["library"].graph._index["LIB-d00007"]
+    app_req = fed.find_by_id("APP-d00001")
+    lib_req = fed.find_by_id("LIB-d00007")
 
     # Library REQ has assertion A. Give it ONLY lcov_tested credit -- with
     # no result from a `Verifies` test, its raw `verified` dimension stays
@@ -114,8 +114,8 @@ def test_REQ_d00252_D_library_failures_propagate_to_consumer(tmp_path):
     has_failures=True for the consumer to flag.
     """
     fed = _federate(tmp_path)
-    app_req = fed._repos["app"].graph._index["APP-d00001"]
-    lib_req = fed._repos["library"].graph._index["LIB-d00007"]
+    app_req = fed.find_by_id("APP-d00001")
+    lib_req = fed.find_by_id("LIB-d00007")
 
     lib_req.set_metric(
         "rollup_metrics",

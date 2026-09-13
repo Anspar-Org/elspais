@@ -814,7 +814,6 @@ class TestCheckUnclaimedReferences:
                     repo_root=Path("/repo/lib"),
                 ),
             ],
-            root_repo="host",
         )
 
         check = check_unclaimed_references(fed, host_config)

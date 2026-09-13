@@ -132,7 +132,7 @@ class TestSiblingIdentifiersAreRecognised:
         )
 
         federated = build_graph(repo_root=consumer)
-        library = federated._repos["b"].graph
+        library = federated.repo_for("BBB-d00002").graph
 
         annotators = _annotators_of(library, "BBB-d00002", "A")
         assert len(annotators) == 1
@@ -147,7 +147,7 @@ class TestSiblingIdentifiersAreRecognised:
         )
 
         federated = build_graph(repo_root=consumer)
-        library = federated._repos["b"].graph
+        library = federated.repo_for("BBB-d00002").graph
 
         assert _annotators_of(library, "BBB-d00002", "B") == {"test:tests/test_x.py::test_foreign"}
         assert federated.unresolved_references() == []
@@ -166,8 +166,8 @@ class TestSiblingIdentifiersAreRecognised:
 
         federated = build_graph(repo_root=consumer)
 
-        assert len(_annotators_of(federated._repos["b"].graph, "BBB-d00002", "A")) == 1
-        assert len(_annotators_of(federated._repos["d"].graph, "DDD-d00005", "A")) == 1
+        assert len(_annotators_of(federated.repo_for("BBB-d00002").graph, "BBB-d00002", "A")) == 1
+        assert len(_annotators_of(federated.repo_for("DDD-d00005").graph, "DDD-d00005", "A")) == 1
 
     # Verifies: REQ-d00269-C, REQ-d00269-B
     def test_REQ_d00269_C_a_whole_requirement_sibling_reference_carries_no_labels(self, tmp_path):
@@ -187,7 +187,7 @@ class TestSiblingIdentifiersAreRecognised:
         )
 
         federated = build_graph(repo_root=consumer)
-        library = federated._repos["b"].graph
+        library = federated.repo_for("BBB-d00002").graph
         requirement = library.find_by_id("BBB-d00002")
         assert requirement is not None
 
@@ -220,7 +220,7 @@ class TestSiblingIdentifiersAreRecognised:
 
         federated = build_graph(repo_root=consumer)
 
-        assert len(_annotators_of(federated._repos["b"].graph, "BBB-d00002", "A")) == 1
+        assert len(_annotators_of(federated.repo_for("BBB-d00002").graph, "BBB-d00002", "A")) == 1
         assert federated.unresolved_references() == []
 
 
@@ -248,10 +248,10 @@ class TestALoneRepositoryIsUnchanged:
             code="# Implements: DDD-d00005-A\ndef local():\n    pass\n",
             tests="# Verifies: DDD-d00005-B\ndef test_local():\n    assert True\n",
         )
-        federated_census = _census(build_graph(repo_root=consumer), "d")
+        federated_census = _census(build_graph(repo_root=consumer), "DDD-d00005")
 
         _drop_associates(consumer)
-        lone_census = _census(build_graph(repo_root=consumer), "d")
+        lone_census = _census(build_graph(repo_root=consumer), "DDD-d00005")
 
         assert lone_census == federated_census
 
@@ -317,12 +317,13 @@ class TestUnresolvableReferencesAreReported:
         assert [br.target_id for br in federated.unresolved_references()] == [
             "the caching strategy described above"
         ]
-        assert [node.id for node in federated._repos["d"].graph.iter_by_kind(NodeKind.CODE)] != []
+        consumer_graph = federated.repo_for("DDD-d00005").graph
+        assert [node.id for node in consumer_graph.iter_by_kind(NodeKind.CODE)] != []
 
 
-def _census(federated, repo_name: str) -> tuple:
-    """A comparable summary of one repository's scanned annotations."""
-    graph = federated._repos[repo_name].graph
+def _census(federated, owned_id: str) -> tuple:
+    """A comparable summary of the repository owning ``owned_id``."""
+    graph = federated.repo_for(owned_id).graph
     nodes = sorted(
         (node.kind.value, node.id)
         for node in graph._index.values()

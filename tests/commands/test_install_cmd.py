@@ -133,9 +133,9 @@ class TestDetectInstalledExtras:
 
     @patch("importlib.util.find_spec")
     def test_REQ_p00001_A_trace_review_dedupes_trace_view(self, mock_find):
-        """When all jinja2/pygments/flask/flask_cors are present,
-        trace-review should suppress trace-view."""
-        available = {"jinja2", "pygments", "flask", "flask_cors"}
+        """When every dependency of trace-review is present, trace-review
+        should suppress trace-view, whose dependencies it is a superset of."""
+        available = {"jinja2", "pygments", "starlette", "uvicorn"}
         mock_find.side_effect = lambda dep: MagicMock() if dep in available else None
         result = install_cmd.detect_installed_extras()
         assert "trace-review" in result

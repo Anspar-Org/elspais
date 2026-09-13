@@ -203,7 +203,7 @@ class TestResourcePathsCallSite:
             config={"project": {"name": "assoc", "namespace": "ASSOC"}},
             repo_root=assoc_dir,
         )
-        fed = FederatedGraph([root_entry, assoc_entry], root_repo="root")
+        fed = FederatedGraph([root_entry, assoc_entry])
 
         captured = {}
 

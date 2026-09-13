@@ -1,5 +1,5 @@
 # Verifies: REQ-d00200-A, REQ-d00200-B, REQ-d00200-C, REQ-d00200-D
-# Verifies: REQ-d00200-E, REQ-d00200-F, REQ-d00200-G, REQ-d00200-H
+# Verifies: REQ-d00200-E, REQ-d00200-G, REQ-d00200-H
 """Tests for FederatedGraph read-only delegation.
 
 Validates REQ-d00200: FederatedGraph wraps one or more TraceGraphs,
@@ -68,51 +68,68 @@ def config() -> dict:
     return cfg
 
 
+def _project_config(name: str, namespace: str) -> dict:
+    """A config declaring the display name and the namespace that identifies it."""
+    cfg = config_defaults()
+    project = cfg.setdefault("project", {})
+    project["name"] = name
+    project["namespace"] = namespace
+    return cfg
+
+
 # === Tests ===
 
 
 class TestFederatedGraphReadOnly:
     """Tests for FederatedGraph as a read-only wrapper around TraceGraph.
 
-    Validates REQ-d00200-A: RepoEntry dataclass fields
+    Validates REQ-d00200-A: the graphs a federation's members carry are wrapped
     Validates REQ-d00200-B: from_single classmethod
     Validates REQ-d00200-C: is_reachable_to_requirement delegation
     Validates REQ-d00200-D: by_id delegation (find_by_id, has_root)
     Validates REQ-d00200-E: aggregate delegation (iter_roots, all_nodes, etc.)
-    Validates REQ-d00200-F: error-state repos skipped in aggregation
     Validates REQ-d00200-G: repo_for and config_for lookups
-    Validates REQ-d00200-H: iter_repos yields all entries including errors
+    Validates REQ-d00200-H: iter_repos yields every member
     """
 
     # Verifies: REQ-d00200-A
-    def test_REQ_d00200_A_repo_entry_dataclass(self) -> None:
-        """RepoEntry has all required fields with correct defaults."""
-        entry = RepoEntry(
-            name="core",
-            graph=None,
-            config=None,
-            repo_root=Path("/repo/core"),
-        )
-        assert entry.name == "core"
-        assert entry.graph is None
-        assert entry.config is None
-        assert entry.repo_root == Path("/repo/core")
-        assert entry.git_origin is None
-        assert entry.error is None
+    def test_REQ_d00200_A_wraps_the_graphs_its_members_carry(self) -> None:
+        """A federation holds the TraceGraph each of its members brought.
 
-    # Verifies: REQ-d00200-A
-    def test_REQ_d00200_A_repo_entry_with_optional_fields(self) -> None:
-        """RepoEntry accepts git_origin and error fields."""
-        entry = RepoEntry(
-            name="associated",
-            graph=None,
-            config=None,
-            repo_root=Path("/repo/assoc"),
-            git_origin="git@github.com:org/assoc.git",
-            error="Config file not found",
+        Wrapping is the whole point of the type: the graphs handed in are
+        the graphs held, and their content is reachable through the
+        federation rather than only through the graph object itself.
+        """
+        alpha_graph = build_graph(
+            make_requirement("REQ-p00001", title="Alpha", level="PRD"),
+            repo_root=Path("/repo/alpha"),
+            namespace="ALPHA",
         )
-        assert entry.git_origin == "git@github.com:org/assoc.git"
-        assert entry.error == "Config file not found"
+        beta_graph = build_graph(
+            make_requirement("REQ-p00002", title="Beta", level="PRD"),
+            repo_root=Path("/repo/beta"),
+            namespace="BETA",
+        )
+        fed = FederatedGraph(
+            [
+                RepoEntry(
+                    name="alpha",
+                    graph=alpha_graph,
+                    config=_project_config("alpha", "ALPHA"),
+                    repo_root=Path("/repo/alpha"),
+                ),
+                RepoEntry(
+                    name="beta",
+                    graph=beta_graph,
+                    config=_project_config("beta", "BETA"),
+                    repo_root=Path("/repo/beta"),
+                ),
+            ]
+        )
+
+        assert {id(r.graph) for r in fed.iter_repos()} == {id(alpha_graph), id(beta_graph)}
+        assert fed.find_by_id("REQ-p00001") is not None
+        assert fed.find_by_id("REQ-p00002") is not None
 
     # Verifies: REQ-d00200-B
     def test_REQ_d00200_B_from_single_creates_federation_of_one(
@@ -143,19 +160,22 @@ class TestFederatedGraphReadOnly:
         with pytest.raises(KeyError):
             FederatedGraph.from_single(graph, {"project": {}}, Path("."))
 
-    def test_empty_graph_repo_name_visible_at_call_site(self) -> None:
-        """REQ-d00200-B: FederatedGraph.empty(name=...) makes the degraded-state
-        sentinel visible — its name flows to iter_repos() and root_repo_name.
+    # Verifies: REQ-d00202-G
+    def test_empty_graph_names_the_degraded_state_without_inventing_a_member(
+        self,
+    ) -> None:
+        """``FederatedGraph.empty(name=...)`` shows the sentinel and holds nobody.
 
         Both MCP error-recovery sites pass "<unconfigured>"; the keyword-only
-        parameter is the contract that surfaces the degraded state at the
-        call site instead of hiding it behind a default.
+        parameter is the contract that surfaces the degraded state at the call
+        site instead of hiding it behind a default. The sentinel is a display
+        label only: a configuration that could not be read declares no
+        namespace, and a member is identified by the namespace it declares,
+        so there is no repository here for the federation to stand for.
         """
         g = FederatedGraph.empty(name="<unconfigured>")
-        repos = list(g.iter_repos())
-        assert len(repos) == 1
-        assert repos[0].name == "<unconfigured>"
         assert g.root_repo_name == "<unconfigured>"
+        assert list(g.iter_repos()) == []
 
     # Verifies: REQ-d00200-D
     def test_REQ_d00200_D_find_by_id_delegates(
@@ -275,38 +295,6 @@ class TestFederatedGraphReadOnly:
         assert fed.deleted_nodes() == simple_graph.deleted_nodes()
         assert fed.has_deletions() == simple_graph.has_deletions()
 
-    # Verifies: REQ-d00200-F
-    def test_REQ_d00200_F_skips_error_state_repos(self) -> None:
-        """Aggregate methods skip repos where graph is None (error state)."""
-        # Build one working graph
-        good_graph = build_graph(
-            make_requirement("REQ-p00001", title="Good", level="PRD"),
-            repo_root=Path("/repo/good"),
-        )
-        good_entry = RepoEntry(
-            name="good",
-            graph=good_graph,
-            config=config_defaults(),
-            repo_root=Path("/repo/good"),
-        )
-        error_entry = RepoEntry(
-            name="broken",
-            graph=None,
-            config=None,
-            repo_root=Path("/repo/broken"),
-            error="Failed to load config",
-        )
-        fed = FederatedGraph([good_entry, error_entry])
-
-        # Aggregations should only include the good graph
-        assert fed.node_count() == good_graph.node_count()
-        all_ids = {n.id for n in fed.all_nodes()}
-        good_ids = {n.id for n in good_graph.all_nodes()}
-        assert all_ids == good_ids
-
-        # find_by_id should still work for good graph nodes
-        assert fed.find_by_id("REQ-p00001") is not None
-
     # Verifies: REQ-d00200-G
     def test_REQ_d00200_G_repo_for_returns_entry(
         self, simple_graph: TraceGraph, config: dict
@@ -328,33 +316,57 @@ class TestFederatedGraphReadOnly:
         assert result is config
 
     # Verifies: REQ-d00200-H
-    def test_REQ_d00200_H_iter_repos_yields_all(self) -> None:
-        """iter_repos yields all entries, including error-state repos."""
-        good_graph = build_graph(
-            make_requirement("REQ-p00001", title="Good", level="PRD"),
-            repo_root=Path("/repo/good"),
+    def test_REQ_d00200_H_iter_repos_yields_every_member(self) -> None:
+        """Every member is yielded, whatever it shares with another member.
+
+        Two members bearing one display name are still two members —
+        identity is the namespace each declares (REQ-d00202-G) — so a
+        shared display name may not be what makes iter_repos lose one.
+        """
+        alpha_graph = build_graph(
+            make_requirement("REQ-p00001", title="Alpha", level="PRD"),
+            repo_root=Path("/repo/alpha"),
+            namespace="ALPHA",
+        )
+        beta_graph = build_graph(
+            make_requirement("REQ-p00002", title="Beta", level="PRD"),
+            repo_root=Path("/repo/beta"),
+            namespace="BETA",
+        )
+        gamma_graph = build_graph(
+            make_requirement("REQ-p00003", title="Gamma", level="PRD"),
+            repo_root=Path("/repo/gamma"),
+            namespace="GAMMA",
         )
         entries = [
             RepoEntry(
-                name="good",
-                graph=good_graph,
-                config=config_defaults(),
-                repo_root=Path("/repo/good"),
+                name="core",
+                graph=alpha_graph,
+                config=_project_config("core", "ALPHA"),
+                repo_root=Path("/repo/alpha"),
             ),
             RepoEntry(
-                name="broken",
-                graph=None,
-                config=None,
-                repo_root=Path("/repo/broken"),
-                error="Load failed",
+                name="core",
+                graph=beta_graph,
+                config=_project_config("core", "BETA"),
+                repo_root=Path("/repo/beta"),
+            ),
+            RepoEntry(
+                name="gamma",
+                graph=gamma_graph,
+                config=_project_config("gamma", "GAMMA"),
+                repo_root=Path("/repo/gamma"),
             ),
         ]
         fed = FederatedGraph(entries)
 
         repos = list(fed.iter_repos())
-        assert len(repos) == 2
-        names = {r.name for r in repos}
-        assert names == {"good", "broken"}
+        assert {r.namespace for r in repos} == {"ALPHA", "BETA", "GAMMA"}
+        assert [r.repo_root for r in repos] == [
+            Path("/repo/alpha"),
+            Path("/repo/beta"),
+            Path("/repo/gamma"),
+        ]
 
     # Verifies: REQ-d00200-C
     def test_REQ_d00200_C_is_reachable_to_requirement_works(
@@ -600,12 +612,13 @@ class TestFederatedGraphMutations:
 class TestFederatedGraphInvariants:
     """FederatedGraph.__init__ asserts the name+repo_root+project contract.
 
-    Regression for CUR-1357: every RepoEntry the federation sees must
-    carry a non-empty host-side ``name`` and ``repo_root``, and (when a
-    ``[project]`` block is supplied) the block must declare non-empty
-    ``name`` and ``namespace``. These three identifiers are distinct;
-    the term card / file viewer / namespace label all assume all three
-    are present and authoritative.
+    Every RepoEntry the federation sees must carry a non-empty host-side
+    ``name`` and ``repo_root``, and a ``[project]`` block declaring
+    non-empty ``name`` and ``namespace``. These three identifiers are
+    distinct; the term card / file viewer / namespace label all assume
+    all three are present and authoritative. The namespace is required of
+    every entry without exception, since it is what identifies a member
+    and is therefore the key the federation holds it under.
     """
 
     def _entry(self, tmp_path, **overrides) -> RepoEntry:
@@ -630,12 +643,14 @@ class TestFederatedGraphInvariants:
         with pytest.raises(FederationError, match=r"\[project\]\.name"):
             FederatedGraph([self._entry(tmp_path, config={"project": {"namespace": "REQ"}})])
 
+    # Verifies: REQ-d00202-G
     def test_missing_project_namespace_in_config_rejected(self, tmp_path):
         from elspais.graph.federated import FederationError
 
-        with pytest.raises(FederationError, match=r"\[project\]\.namespace"):
+        with pytest.raises(FederationError, match=r"declares no namespace"):
             FederatedGraph([self._entry(tmp_path, config={"project": {"name": "r1"}})])
 
+    # Verifies: REQ-d00202-G
     def test_graph_without_a_declared_namespace_is_refused(self, tmp_path):
         """A repo carrying a graph must say which repository it is.
 
@@ -646,20 +661,23 @@ class TestFederatedGraphInvariants:
         """
         from elspais.graph.federated import FederationError
 
-        with pytest.raises(FederationError, match=r"\[project\]"):
+        with pytest.raises(FederationError, match=r"declares no namespace"):
             FederatedGraph([self._entry(tmp_path, config={})])
 
-    def test_error_state_entry_skips_config_check(self, tmp_path):
-        """An associate in error state (graph=None, config=None) is allowed."""
+    # Verifies: REQ-d00202-G
+    def test_entry_carrying_no_config_at_all_is_refused(self, tmp_path):
+        """An absent config is refused exactly as an empty one is.
+
+        A member is identified by the namespace it declares and by nothing
+        else, so an entry that declares none cannot be placed — there is no
+        key to hold it under. Having no config to read it out of is the
+        same absence as having a config that omits it.
+        """
+        from elspais.graph.federated import FederationError
+
         entries = [
             self._entry(tmp_path, name="host"),
-            RepoEntry(
-                name="broken-assoc",
-                graph=None,
-                config=None,
-                repo_root=tmp_path / "missing",
-                error="Path does not exist",
-            ),
+            self._entry(tmp_path / "other", name="broken-assoc", config=None),
         ]
-        fed = FederatedGraph(entries)
-        assert {r.name for r in fed.iter_repos()} == {"host", "broken-assoc"}
+        with pytest.raises(FederationError, match=r"declares no namespace"):
+            FederatedGraph(entries)
