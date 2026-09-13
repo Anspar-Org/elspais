@@ -129,9 +129,9 @@ class AssertionConfig(_StrictModel):
     separator: str = Field(default="-", min_length=1, max_length=1, pattern=_NO_COLON)
     multi_separator: str = Field(default="+", min_length=1, max_length=1, pattern=_NO_COLON)
 
+    # Implements: REQ-d00251-M
     @model_validator(mode="after")
     def _separators_do_not_divide_references(self):
-        # Implements: REQ-d00251-M
         # A list is divided before its items are read, so this character is
         # spent on the outer boundary first: what reaches the identifier
         # reader is a fragment cut short and a bare label with no
@@ -270,9 +270,9 @@ class IdPatternsConfig(_StrictModel):
     assertions: AssertionConfig = Field(default_factory=AssertionConfig)
     associated: AssociatedPatternConfig = Field(default_factory=AssociatedPatternConfig)
 
+    # Implements: REQ-p00014-S
     @model_validator(mode="after")
     def _validate_style_pattern_and_separator(self):
-        # Implements: REQ-p00014-S
         # The two places a `:` can enter an identifier without any single
         # field spelling one: an alias template, whose values are a mapping
         # rather than a field, and a component pattern that ADMITS a colon
@@ -951,9 +951,9 @@ class ElspaisConfig(_StrictModel):
             _validate_namespace(key)
         return v
 
+    # Implements: REQ-d00212-G
     @model_validator(mode="after")
     def _v_levels_letter_case_collision(self):
-        # Implements: REQ-d00212-G
         # An identifier's level code is matched case-insensitively
         # (REQ-d00212-R): two levels whose letter differs only in case would
         # make that tolerance ambiguous -- an identifier written in one

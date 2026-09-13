@@ -128,6 +128,7 @@ def _get_result_status(test_or_jny_node: Any) -> str | None:
     return "mixed"
 
 
+# Implements: REQ-p00017-G
 def _compute_link_data(
     node: Any,
 ) -> tuple[dict[str, dict[str, bool]], dict[str, list[dict[str, str]]]]:
@@ -142,7 +143,6 @@ def _compute_link_data(
     from elspais.graph.relations import EdgeKind
 
     # Collect assertion labels.
-    # Implements: REQ-p00017-G
     # A retired *Assertion* carries no coverage flags, because it is excluded
     # from the calculation that would produce them.
     assertion_labels: list[str] = counted_assertion_labels(node)
@@ -486,6 +486,7 @@ def _compute_incoming_links(node: Any) -> list[dict[str, Any]]:
 # ─────────────────────────────────────────────────────────────────
 
 
+# Implements: REQ-d00206-C
 async def api_status(request: Request) -> JSONResponse:
     """GET /api/status - Graph status with federation repo info."""
     from elspais import __version__
@@ -493,7 +494,6 @@ async def api_status(request: Request) -> JSONResponse:
     state = _st(request)
     result = _get_graph_status(state.graph, state.repo_root)
     result["version"] = __version__
-    # Implements: REQ-d00206-C
     # Include federation repo metadata from iter_repos().
     graph = state.graph
     repos_info = []
@@ -1194,6 +1194,7 @@ async def api_attach_client(request: Request) -> JSONResponse:
     return JSONResponse({"attached": attached, "clients": clients, "held_sessions": held})
 
 
+# Implements: REQ-p00083-C
 async def api_dirty(request: Request) -> JSONResponse:
     """GET /api/dirty - Check if graph has unsaved mutations."""
     state = _st(request)
@@ -1208,7 +1209,6 @@ async def api_dirty(request: Request) -> JSONResponse:
         "mutation_count": len(entries),
         "tip": entries[-1].id if entries else None,
     }
-    # Implements: REQ-p00083-C
     record = _automatic_save_record(state.repo_root)
     if record is not None:
         body["automatic_save"] = record
@@ -1223,8 +1223,8 @@ async def api_dirty(request: Request) -> JSONResponse:
     return JSONResponse(body)
 
 
+# Implements: REQ-p00006-A
 async def api_check_freshness(request: Request) -> JSONResponse:
-    # Implements: REQ-p00006-A
     """GET /api/check-freshness - Check if spec files changed since last build."""
     import os
 
@@ -1291,6 +1291,7 @@ async def api_run_checks(request: Request) -> JSONResponse:
     return JSONResponse(result)
 
 
+# Implements: REQ-d00282-F
 async def api_run_summary(request: Request) -> JSONResponse:
     """GET /api/run/summary - Coverage summary data."""
     from elspais.commands._values import UnofferedValues
@@ -1301,7 +1302,6 @@ async def api_run_summary(request: Request) -> JSONResponse:
     try:
         return JSONResponse(compute_summary(state.graph, state.config, params))
     except UnofferedValues as exc:
-        # Implements: REQ-d00282-F
         # A report is not produced under a selection honoured in part, and a
         # caller asking for a value this report does not offer is told so
         # rather than handed a narrower report that looks like the one asked
@@ -1327,6 +1327,7 @@ async def api_run_analysis(request: Request) -> JSONResponse:
     return JSONResponse(compute_analysis(state.graph, state.config, params))
 
 
+# Implements: REQ-d00282-F
 async def api_run_trace(request: Request) -> JSONResponse:
     """GET /api/run/trace - Traceability matrix data as JSON."""
     from elspais.commands._values import UnofferedValues
@@ -1337,7 +1338,6 @@ async def api_run_trace(request: Request) -> JSONResponse:
     try:
         return JSONResponse(compute_trace(state.graph, state.config, params))
     except UnofferedValues as exc:
-        # Implements: REQ-d00282-F
         # A report is not produced under a selection honoured in part, and a
         # caller asking for a value this report does not offer is told so
         # rather than handed a narrower report that looks like the one asked
@@ -1504,9 +1504,9 @@ async def api_mutate_assertion_add(request: Request) -> JSONResponse:
     return JSONResponse(result, status_code=status_code)
 
 
+# Implements: REQ-d00010-A
 @_serialized_write
 async def api_mutate_assertion_delete(request: Request) -> JSONResponse:
-    # Implements: REQ-d00010-A
     """POST /api/mutate/assertion/delete - Delete an assertion."""
     state = _st(request)
     data = await request.json()
@@ -1708,9 +1708,9 @@ async def api_mutate_requirement_add(request: Request) -> JSONResponse:
     return JSONResponse(result, status_code=status_code)
 
 
+# Implements: REQ-d00010-A
 @_serialized_write
 async def api_mutate_requirement_delete(request: Request) -> JSONResponse:
-    # Implements: REQ-d00010-A
     """POST /api/mutate/requirement/delete - Delete a requirement."""
     state = _st(request)
     data = await request.json()
@@ -1728,6 +1728,7 @@ async def api_mutate_requirement_delete(request: Request) -> JSONResponse:
     return JSONResponse(result, status_code=status_code)
 
 
+# Implements: REQ-o00062-M
 @_serialized_write
 async def api_mutate_edge(request: Request) -> JSONResponse:
     """POST /api/mutate/edge - Edge mutations (add/change_kind/change_targets/delete)."""
@@ -1743,7 +1744,6 @@ async def api_mutate_edge(request: Request) -> JSONResponse:
         return JSONResponse(
             {"success": False, "error": "source_id and target_id required"}, status_code=400
         )
-    # Implements: REQ-o00062-M
     # Only the source's rendered reference line changes.
     conflict = _version_conflict(state, data, source_id)
     if conflict is not None:
@@ -1950,6 +1950,7 @@ async def api_journey_files(request: Request) -> JSONResponse:
     return JSONResponse({"files": files})
 
 
+# Implements: REQ-o00062-M
 @_serialized_write
 async def api_mutate_move_to_file(request: Request) -> JSONResponse:
     """POST /api/mutate/move-to-file - Move node to a different file.
@@ -1993,7 +1994,6 @@ async def api_mutate_move_to_file(request: Request) -> JSONResponse:
             status_code=400,
         )
 
-    # Implements: REQ-o00062-M
     # The node, the file it leaves and the file it joins all change, so all
     # three are guarded.
     #
@@ -2230,6 +2230,7 @@ async def _history_json(request: Request) -> dict:
         return {}
 
 
+# Implements: REQ-d00132-A, REQ-p00083-H
 @_serialized_write
 async def api_save(request: Request) -> JSONResponse:
     """POST /api/save - Persist mutations to spec files on disk.
@@ -2247,7 +2248,6 @@ async def api_save(request: Request) -> JSONResponse:
     because the caller has to supply something, and a write that failed
     is 500, because retrying the same request is not the answer.
     """
-    # Implements: REQ-d00132-A, REQ-p00083-H
     from elspais.mcp.shared_state import persist_pending
 
     state = _st(request)
@@ -2269,9 +2269,9 @@ async def api_save(request: Request) -> JSONResponse:
     return JSONResponse(result, status_code=status_code)
 
 
+# Implements: REQ-p00004-J, REQ-p00004-O
 @_serialized_write
 async def api_revert(request: Request) -> JSONResponse:
-    # Implements: REQ-p00004-J, REQ-p00004-O
     """POST /api/revert - Revert all unsaved mutations by rebuilding from disk."""
     from elspais.mcp.shared_state import rebuild_shared_graph
 
@@ -2293,9 +2293,9 @@ async def api_revert(request: Request) -> JSONResponse:
         return JSONResponse({"success": False, "error": str(e)}, status_code=500)
 
 
+# Implements: REQ-p00004-J, REQ-p00004-O
 @_serialized_write
 async def api_reload(request: Request) -> JSONResponse:
-    # Implements: REQ-p00004-J, REQ-p00004-O
     """POST /api/reload - Reload graph from disk with fresh config."""
     from elspais.mcp.shared_state import rebuild_shared_graph
 

@@ -122,6 +122,7 @@ class RequirementTransformer:
             reader = FederatedIdReader(resolver)
         self.reader = reader
 
+    # Implements: REQ-d00247-A
     def transform(self, tree: Tree, source: str = "") -> list[ParsedContent]:
         """Transform the full parse tree into a list of ParsedContent.
 
@@ -150,7 +151,6 @@ class RequirementTransformer:
                     results.append(self._transform_definition_block(child))
                 elif child.data == "remainder_line":
                     token = child.children[0]  # TEXT token
-                    # Implements: REQ-d00247-A
                     # Token text comes from the neutralized parse buffer; pull
                     # from _source_lines (original) so fence content survives.
                     line_no = token.line  # type: ignore[attr-defined]
@@ -389,6 +389,7 @@ class RequirementTransformer:
     # Metadata extraction from pre-classified tokens
     # ------------------------------------------------------------------
 
+    # Implements: REQ-d00269-H
     def _extract_metadata(
         self, node: Tree, continuations: dict[int, str] | None = None
     ) -> dict[str, Any]:
@@ -402,7 +403,6 @@ class RequirementTransformer:
         for child in node.children:
             if isinstance(child, Token):
                 text = str(child).strip()
-                # Implements: REQ-d00269-H
                 # A list continued onto the lines below reads as the joined
                 # text, so the reader divides one list rather than seeing a
                 # separator with nothing after it.
@@ -666,6 +666,7 @@ class RequirementTransformer:
     # Journey transformation
     # ------------------------------------------------------------------
 
+    # Implements: REQ-d00272-K
     def _transform_journey(self, node: Tree) -> ParsedContent:
         """Transform a journey tree node into ParsedContent.
 
@@ -734,7 +735,6 @@ class RequirementTransformer:
                 token = child.children[0]
                 text = str(token)
                 val = re.sub(r"^[Vv]alidates[:=\s]\s*", "", text).strip()
-                # Implements: REQ-d00272-K
                 parsed_data["validates"], parsed_data["reference_verdicts"] = self._parse_ref_list(
                     val, "validates"
                 )

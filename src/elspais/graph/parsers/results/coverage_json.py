@@ -21,6 +21,7 @@ class CoverageJsonParser(DiagnosticRecorder):
     produced with ``coverage run --context=<name>``.
     """
 
+    # Implements: REQ-d00285-G
     def parse(self, content: str, source_path: str) -> dict[str, dict]:
         """Parse coverage.json into per-file coverage dicts.
 
@@ -42,7 +43,6 @@ class CoverageJsonParser(DiagnosticRecorder):
         try:
             data = json.loads(content)
         except (json.JSONDecodeError, ValueError) as exc:
-            # Implements: REQ-d00285-G
             # A coverage report that will not parse leaves every file it
             # measured unmeasured, which reads downstream exactly like a run
             # with no coverage at all. Record which one happened.

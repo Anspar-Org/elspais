@@ -317,6 +317,7 @@ def compute_summary(graph: FederatedGraph, config: dict, params: dict[str, str])
     return data
 
 
+# Implements: REQ-d00254-I, REQ-d00283-D+E+I
 def run(args: argparse.Namespace) -> int:
     """Run the coverage command.
 
@@ -334,7 +335,6 @@ def run(args: argparse.Namespace) -> int:
     spec_dir = getattr(args, "spec_dir", None)
     config_path = getattr(args, "config", None)
     config = get_config(config_path)
-    # Implements: REQ-d00254-I, REQ-d00283-D+E+I
     from elspais.commands._targets import resolve_fresh_targets
 
     try:
@@ -600,8 +600,8 @@ def _level_lines(lv: dict, keys: tuple[str, ...], config: dict | None, carry: st
     return lines
 
 
+# Implements: REQ-d00254-I
 def _render_text(data: dict, config: dict | None = None) -> str:
-    # Implements: REQ-d00254-I
     carried = data.get("carried_result_targets", 0) or 0
     total_targets = data.get("total_result_targets", 0) or 0
     carry_marker = "*" if carried > 0 else ""
@@ -704,8 +704,8 @@ def _tabular_headers(keys: tuple[str, ...], config: dict | None) -> list[str]:
     return [header_for(key, config) for key in keys]
 
 
+# Implements: REQ-d00254-I
 def _render_markdown(data: dict, config: dict | None = None) -> str:
-    # Implements: REQ-d00254-I
     carried = data.get("carried_result_targets", 0) or 0
     total_targets = data.get("total_result_targets", 0) or 0
     carry_marker = "*" if carried > 0 else ""

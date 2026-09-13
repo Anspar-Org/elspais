@@ -430,6 +430,7 @@ _REFERENCES = ("rules", "references")
 _TERMS = ("terms", "severity")
 
 
+# Implements: REQ-d00286-E
 def _registry() -> dict[str, CheckRule]:
     rules: list[CheckRule] = [
         # -- config ------------------------------------------------------
@@ -636,7 +637,6 @@ def _registry() -> dict[str, CheckRule]:
             f"_REMEDIES names checks that are not registered: {', '.join(stray)}. "
             f"Every remedy must belong to a registered check."
         )
-    # Implements: REQ-d00286-E
     # A description is refused in BOTH directions: one for a check that is not
     # registered would appear in no catalog, and a registered check without one
     # would print an empty cell in the catalog rendered from this registry.

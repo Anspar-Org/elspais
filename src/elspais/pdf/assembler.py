@@ -312,6 +312,7 @@ class MarkdownAssembler:
     # File rendering — reads source files directly
     # ------------------------------------------------------------------
 
+    # Implements: REQ-p00080-I
     def _render_file(self, file_path: str, owning_repo_root: Path | None = None) -> list[str]:
         """Render a spec file's content with adjusted heading levels.
 
@@ -439,7 +440,6 @@ class MarkdownAssembler:
             # requirement headings and end markers past that point were
             # never processed. The document is degraded in a way no
             # reference-level check can see; say so.
-            # Implements: REQ-p00080-I
             self._record_diagnostic(
                 AssemblyDiagnostic(
                     kind="code-fence",

@@ -2087,6 +2087,7 @@ def check_term_collection_empty(
     )
 
 
+# Implements: REQ-d00237-F
 def check_term_canonical_form(
     entries: list,
     severity: str | None = None,
@@ -2105,7 +2106,6 @@ def check_term_canonical_form(
                 continue
             if ref.is_canonical(canonical):
                 continue
-            # Implements: REQ-d00237-F
             # Embedded-in-identifier occurrences are
             # references, not non-canonical prose; leave them untouched.
             if ref.embedded:
@@ -2795,6 +2795,7 @@ def _excluded_note(
     return f" [{', '.join(parts)} excluded]"
 
 
+# Implements: REQ-d00258-A, REQ-d00069-L, REQ-d00069-N
 def check_dimension_coverage(
     graph: FederatedGraph,
     dimension: str,
@@ -2864,7 +2865,6 @@ def check_dimension_coverage(
     total_assertions = agg.total
     has_any_failures = agg.has_failures
 
-    # Implements: REQ-d00258-A, REQ-d00069-L, REQ-d00069-N
     # The headline is the per-*Assertion* total -- the greatest of the four
     # measures per *Assertion*, so each *Assertion* is counted once however
     # many ways it is covered -- and the four measures behind it are reported
@@ -3561,6 +3561,7 @@ def check_unscanned_keyword_files(
     )
 
 
+# Implements: REQ-d00258-E
 def run_code_checks(
     graph: FederatedGraph,
     exclude_status: set[str] | None = None,
@@ -3594,7 +3595,6 @@ def run_code_checks(
         check_unscanned_keyword_files(graph, config),
     ]
 
-    # Implements: REQ-d00258-E
     # Asked whenever there is implementation to measure -- not only when a
     # measurement exists. Attributed lines are read from the coverage map, so
     # gating on a nonzero count would silence the check in exactly the case it
@@ -4800,6 +4800,7 @@ def _report_from_dict(data: dict[str, Any]) -> HealthReport:
     return report
 
 
+# Implements: REQ-d00283-D+E+H+I
 def run(args: argparse.Namespace) -> int:
     """Run the health command.
 
@@ -4847,7 +4848,6 @@ def run(args: argparse.Namespace) -> int:
                     file=sys.stderr,
                 )
                 return 2
-        # Implements: REQ-d00283-D+E+H+I
         # One authority resolves both selectors; None means every configured
         # target, which is what keeps a project declaring no groups rendering
         # exactly as it did before (REQ-d00254-J).

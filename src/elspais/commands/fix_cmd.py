@@ -80,6 +80,7 @@ def _precheck_duplicates(args: argparse.Namespace) -> int:
     return _abort_if_duplicates(graph)
 
 
+# Implements: REQ-d00225-B
 def run(args: argparse.Namespace) -> int:
     """Run the fix command.
 
@@ -109,7 +110,6 @@ def run(args: argparse.Namespace) -> int:
     # Fix stale INDEX.md if present
     _fix_index(args, dry_run)
 
-    # Implements: REQ-d00225-B
     # Generate glossary and term index if terms are defined
     _fix_terms(args, dry_run)
 

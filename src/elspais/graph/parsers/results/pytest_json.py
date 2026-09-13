@@ -65,6 +65,7 @@ class PytestJSONParser(DiagnosticRecorder):
 
         return build_resolver(config_defaults())
 
+    # Implements: REQ-d00285-G
     def parse(self, content: str, source_path: str) -> list[dict[str, Any]]:
         """Parse Pytest JSON content and return test result dicts.
 
@@ -87,7 +88,6 @@ class PytestJSONParser(DiagnosticRecorder):
         try:
             data = json.loads(content)
         except json.JSONDecodeError as exc:
-            # Implements: REQ-d00285-G
             # An unreadable report and a suite that never ran both arrive here
             # as no results. Record which one this was, and the line the
             # decoder stopped at, before returning the empty list.

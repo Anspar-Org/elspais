@@ -812,9 +812,9 @@ def _level_keys(config: dict[str, Any] | None) -> list[str]:
     return default_level_keys()
 
 
+# Implements: REQ-d00069-L, REQ-d00069-N
 def _accumulate(sums: DimensionSums, dim: CoverageDimension) -> None:
     sums.total += dim.total
-    # Implements: REQ-d00069-L, REQ-d00069-N
     sums.immediate_direct += measure_total(dim, "immediate_direct")
     sums.immediate_indirect += measure_total(dim, "immediate_indirect")
     sums.rolled_direct += measure_total(dim, "rolled_direct")
@@ -881,6 +881,7 @@ def _counts_for_coverage(config: dict[str, Any] | None, status: str | None) -> b
     return status_expects_implementation(config or {}, status)
 
 
+# Implements: REQ-d00258-A
 def aggregate_by_level(
     graph: Any,
     config: dict[str, Any] | None = None,
@@ -917,7 +918,6 @@ def aggregate_by_level(
         _accumulate(agg.uat_covered, rollup.uat_coverage)
         _accumulate(agg.uat_passed, rollup.uat_verified)
         # REQ-d00252-F: INTEGRATES delegation counts as implemented.
-        # Implements: REQ-d00258-A
         # "has any coverage at all" is asked of the per-*Assertion* total
         # (REQ-d00069-N) -- the greatest of the four measures -- so a
         # requirement counts here exactly when some measure credits it.
@@ -938,6 +938,7 @@ def aggregate_by_level(
     return [groups[k.lower()] for k in keys]
 
 
+# Implements: REQ-d00069-L, REQ-d00069-N
 def aggregate_dimension(
     graph: Any,
     dimension: str,
@@ -992,7 +993,6 @@ def aggregate_dimension(
             continue
         dim: CoverageDimension = numerator_dimension(rollup, dimension)
         agg.total += dim.total
-        # Implements: REQ-d00069-L, REQ-d00069-N
         agg.immediate_direct += measure_total(dim, "immediate_direct")
         agg.immediate_indirect += measure_total(dim, "immediate_indirect")
         agg.rolled_direct += measure_total(dim, "rolled_direct")
@@ -1102,6 +1102,7 @@ def aggregate_line_coverage(
     return agg
 
 
+# Implements: REQ-d00258-A, REQ-d00258-C
 def tier_buckets(
     graph: Any,
     dimension: str = "implemented",
@@ -1121,7 +1122,6 @@ def tier_buckets(
     question with the badge's answer (REQ-d00258-C). ``config`` still gates
     which requirements are counted at all.
     """
-    # Implements: REQ-d00258-A, REQ-d00258-C
     # The headline measure: each *Assertion* counted once at the greatest of
     # its four (REQ-d00069-N). The same measure the viewer badge and the CLI
     # summary headline, so a requirement that badges FULL in one surface can

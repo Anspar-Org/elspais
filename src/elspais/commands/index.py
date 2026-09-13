@@ -134,13 +134,13 @@ class _SpecDirInfo:
     level_names: dict[str, str]  # e.g. {"PRD": "Product", "OPS": "Operations"}
 
 
+# Implements: REQ-d00212-F, REQ-d00207-C
 def _resolve_spec_dir_info(spec_dir: Path) -> _SpecDirInfo:
     """Resolve label and level ordering for a spec directory.
 
     Finds the nearest ``.elspais.toml`` above *spec_dir* and reads
     the project name and level definitions via typed config.
     """
-    # Implements: REQ-d00212-F, REQ-d00207-C
     from elspais.config import get_config
     from elspais.config.schema import ElspaisConfig
 
@@ -316,6 +316,7 @@ def _resolve_repo_info(
     return _SpecDirInfo(label=label, level_order=level_order, level_names=level_names)
 
 
+# Implements: REQ-d00217-B
 def _build_index_content(
     graph: FederatedGraph, spec_dirs: list[Path], include_associates: bool = False
 ) -> tuple[Path, str, int, int]:
@@ -329,7 +330,6 @@ def _build_index_content(
     subsections for projects with multiple spec dirs in a single repo).
     Nodes whose repo cannot be determined bucket under ``(UNATTRIBUTED, None)``.
     """
-    # Implements: REQ-d00217-B
     from collections import defaultdict
 
     UNATTRIBUTED = "__unattributed__"

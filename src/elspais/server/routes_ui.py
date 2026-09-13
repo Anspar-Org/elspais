@@ -95,6 +95,7 @@ def _extract_viewer_config(config: dict[str, Any], federation: Any = None) -> di
     }
 
 
+# Implements: REQ-d00279-B
 async def index(request: Request):
     """Serve the trace-edit UI template with enriched context."""
     from starlette.templating import Jinja2Templates
@@ -138,7 +139,6 @@ async def index(request: Request):
             "statuses": statuses,
             "topics": topics,
             "default_hidden_statuses": sorted(default_hidden),
-            # Implements: REQ-d00279-B
             # The role a project assigns each status, so a view evaluating
             # membership for itself can widen a status to its role the way the
             # authority does. Without it the browser knows only which statuses

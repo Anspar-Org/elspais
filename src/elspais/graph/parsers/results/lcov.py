@@ -23,6 +23,7 @@ class LcovParser(DiagnosticRecorder):
     to read but content it has no question about.
     """
 
+    # Implements: REQ-d00285-G
     def parse(self, content: str, source_path: str) -> dict[str, dict]:
         """Parse LCOV content into per-file coverage dicts.
 
@@ -61,7 +62,6 @@ class LcovParser(DiagnosticRecorder):
 
             elif line.startswith("DA:"):
                 parts = line[3:].split(",", 1)
-                # Implements: REQ-d00285-G
                 # A DA record the format cannot read leaves its line
                 # unmeasured, and an unmeasured line reads as an uncovered
                 # one. Record the record rather than dropping it.

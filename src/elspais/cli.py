@@ -240,6 +240,7 @@ def _to_namespace(global_args: GlobalArgs) -> argparse.Namespace:
     return ns
 
 
+# Implements: REQ-d00085-A+D
 def main(argv: list[str] | None = None) -> int:
     """
     Main entry point for the CLI.
@@ -272,7 +273,6 @@ def main(argv: list[str] | None = None) -> int:
         _print_help()
         return 0
 
-    # Implements: REQ-d00085-A+D
     # Detect multi-section composition before Tyro parsing
     from elspais.commands.report import COMPOSABLE_SECTIONS
 

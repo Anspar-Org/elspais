@@ -237,6 +237,7 @@ def analyze_neighborhood(
 # ---------------------------------------------------------------------------
 
 
+# Implements: REQ-d00258-M
 def _count_uncovered_descendants(
     graph: FederatedGraph,
     node_id: str,
@@ -263,7 +264,6 @@ def _count_uncovered_descendants(
 
         if not included_children and nid != node_id:
             # Leaf node — check coverage.
-            # Implements: REQ-d00258-M
             # "Uncovered" is asked on the immediate direct measure: this count
             # ranks requirements by how much UNDONE work depends on them, and
             # a leaf whose only credit is whole-requirement evidence or the

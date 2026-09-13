@@ -300,6 +300,7 @@ def _store_scalars(
         data[f"{base}_{part}"] = scalar_value(covered, total, part) if (total and present) else None
 
 
+# Implements: REQ-d00084-D
 def _get_node_data(node, graph: FederatedGraph, *, assertion_labels: bool = False) -> dict:
     """Extract data from a node for use in formatters.
 
@@ -346,7 +347,6 @@ def _get_node_data(node, graph: FederatedGraph, *, assertion_labels: bool = Fals
                 {"label": child.get_field("label", ""), "text": child.get_label() or ""}
             )
 
-    # Implements: REQ-d00084-D
     # Coverage values from RollupMetrics
     rollup: RollupMetrics | None = node.get_metric("rollup_metrics")
     total_a = rollup.total_assertions if rollup else 0
@@ -713,6 +713,7 @@ def _scoped_requirements(graph: FederatedGraph, scope_ids: frozenset[str] | None
             yield node
 
 
+# Implements: REQ-p00084-C+D
 def format_markdown(
     graph: FederatedGraph,
     preset: ReportPreset | None = None,
@@ -728,7 +729,6 @@ def format_markdown(
     yield "# Traceability Matrix"
     yield ""
 
-    # Implements: REQ-p00084-C+D
     # The scope rides inside the rendering, so the artifact a reader files
     # declares what selected its rows -- in this format as in every other.
     for line in scope_lines or []:
@@ -818,6 +818,7 @@ def format_markdown(
         )
 
 
+# Implements: REQ-p00084-C+D
 def format_csv(
     graph: FederatedGraph,
     preset: ReportPreset | None = None,
@@ -839,7 +840,6 @@ def format_csv(
             return '"' + s.replace('"', '""') + '"'
         return s
 
-    # Implements: REQ-p00084-C+D
     # A leading comment row per disclosure line. It is one escaped field, so a
     # consumer still reads the file as CSV, and it precedes the header so the
     # table beneath it is the shape it always was.
@@ -885,6 +885,7 @@ def format_csv(
                     yield ",".join(["TEST"] + empty_cols + [key, escape(ref)])
 
 
+# Implements: REQ-p00084-C+D
 def format_html(
     graph: FederatedGraph,
     preset: ReportPreset | None = None,
@@ -913,7 +914,6 @@ def format_html(
     yield "</style></head><body>"
     yield "<h1>Traceability Matrix</h1>"
 
-    # Implements: REQ-p00084-C+D
     # A subtitle beneath the heading: the page states the scope that produced
     # it, so the file a reader saves is not silent about what it left out.
     for line in scope_lines or []:
@@ -1173,6 +1173,7 @@ def _resolve_values_or_report(
     return values, value_params_from_args(args, config)
 
 
+# Implements: REQ-d00254-I, REQ-d00283-D+E+I
 def run(args: argparse.Namespace) -> int:
     """Run the trace command.
 
@@ -1183,7 +1184,6 @@ def run(args: argparse.Namespace) -> int:
 
     fmt = getattr(args, "format", "markdown")
     spec_dir = getattr(args, "spec_dir", None)
-    # Implements: REQ-d00254-I, REQ-d00283-D+E+I
     # --targets/--groups mark provenance on the rendered graph; force a local
     # build (bypassing any cached daemon graph) so the fresh set actually
     # threads into build_graph().

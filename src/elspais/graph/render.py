@@ -283,6 +283,7 @@ def node_version(node: GraphNode) -> str:
     return compute_version_hash(f"{kind}\x1d{text}\x1d{_canonical_edges(node)}")
 
 
+# Implements: REQ-d00131-A
 def render_node(node: GraphNode, resolver: Any | None = None) -> str:
     """Render a graph node back to its text representation.
 
@@ -301,7 +302,6 @@ def render_node(node: GraphNode, resolver: Any | None = None) -> str:
         ValueError: If the node kind cannot be rendered independently
             (ASSERTION, RESULT).
     """
-    # Implements: REQ-d00131-A
     kind = node.kind
 
     if kind == NodeKind.REQUIREMENT:
@@ -657,6 +657,7 @@ def render_file(node: GraphNode, resolver: Any | None = None) -> str:
 # ─────────────────────────────────────────────────────────────────────────
 
 
+# Implements: REQ-p00014-U
 def _derive_refs_for_edge_kind(
     node: GraphNode,
     edge_kind: EdgeKind,
@@ -699,7 +700,6 @@ def _derive_refs_for_edge_kind(
         if whole or not labels:
             refs.add(src)
         if labels:
-            # Implements: REQ-p00014-U
             if resolver is None:
                 raise GrammarUnavailable(
                     f"Cannot render {node.id!r}: citing assertions of {src!r} means "
@@ -770,6 +770,7 @@ def _find_dirty_files(graph: FederatedGraph) -> list[Any]:
         else:
             _mark(node.file_node())
 
+    # Implements: REQ-d00251-L
     def _mark_owning_file_of_assertion(assertion_id: str) -> None:
         """Mark the file holding a deleted assertion's requirement.
 
@@ -781,7 +782,6 @@ def _find_dirty_files(graph: FederatedGraph) -> list[Any]:
         (REQ-d00251-L). A string no member claims names nothing here, and
         marking a file on a guess would rewrite the wrong one.
         """
-        # Implements: REQ-d00251-L
         for member in graph.iter_repos():
             member_graph = getattr(member, "graph", None)
             member_resolver = getattr(member_graph, "_resolver", None)
@@ -1111,6 +1111,7 @@ def render_save(
     return result
 
 
+# Implements: REQ-d00132-C
 def _run_consistency_check(
     original_graph: FederatedGraph,
     rebuild_fn: Any,
@@ -1131,7 +1132,6 @@ def _run_consistency_check(
         - details: str (if inconsistent)
         - checked: int (number of nodes compared)
     """
-    # Implements: REQ-d00132-C
     try:
         rebuild_result, new_graph = rebuild_fn()
     except Exception as e:

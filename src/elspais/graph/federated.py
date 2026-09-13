@@ -227,6 +227,7 @@ class FederatedGraph:
     - special: custom logic
     """
 
+    # Implements: REQ-p00014-H
     def __init__(
         self,
         repos: list[RepoEntry],
@@ -294,7 +295,6 @@ class FederatedGraph:
         multi_repo = len([e for e in repos if e.graph is not None]) > 1
         if multi_repo:
             self._wire_cross_graph_edges()
-        # Implements: REQ-p00014-H
         self._instantiate_cross_repo_satisfies()
         # Implements: REQ-d00252-D
         self._wire_integrates_edges()

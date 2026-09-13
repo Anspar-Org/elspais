@@ -560,6 +560,7 @@ def find_git_root(start_path: Path | None = None) -> Path | None:
     return None
 
 
+# Implements: REQ-p00005-F
 def find_canonical_root(start_path: Path | None = None) -> Path | None:
     """Find the canonical (non-worktree) git repository root.
 
@@ -573,7 +574,6 @@ def find_canonical_root(start_path: Path | None = None) -> Path | None:
     Returns:
         Path to canonical git repository root, or None if not in a git repo.
     """
-    # Implements: REQ-p00005-F
     import subprocess
 
     git_root = find_git_root(start_path)
@@ -689,6 +689,7 @@ def _set_nested(data: dict[str, Any], key: str, value: Any) -> None:
     current[parts[-1]] = value
 
 
+# Implements: REQ-p00002-A
 def _parse_toml(content: str) -> dict[str, Any]:
     """Parse TOML content into a plain dictionary.
 
@@ -701,11 +702,11 @@ def _parse_toml(content: str) -> dict[str, Any]:
     Returns:
         Parsed dictionary.
     """
-    # Implements: REQ-p00002-A
     doc = tomlkit.parse(content)
     return doc.unwrap()
 
 
+# Implements: REQ-p00002-A
 def parse_toml_document(content: str) -> tomlkit.TOMLDocument:
     """Parse TOML content into a TOMLDocument for round-trip editing.
 
@@ -718,7 +719,6 @@ def parse_toml_document(content: str) -> tomlkit.TOMLDocument:
     Returns:
         TOMLDocument that preserves formatting on dumps().
     """
-    # Implements: REQ-p00002-A
     return tomlkit.parse(content)
 
 

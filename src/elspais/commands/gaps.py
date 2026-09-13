@@ -101,6 +101,7 @@ def _integrates_associates(graph: FederatedGraph, node: Any) -> list[str]:
     return sorted(owners)
 
 
+# Implements: REQ-p00084-B
 def collect_gaps(
     graph: FederatedGraph,
     exclude_status: set[str],
@@ -126,7 +127,6 @@ def collect_gaps(
 
     excluded_ids: set[str] = set()
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
-        # Implements: REQ-p00084-B
         # A requirement a scope does not select is not a gap in this report: the
         # reader asked a question about a set, and work outside it is not an
         # answer to that question.
@@ -360,6 +360,7 @@ def render_gap_markdown(gap_type: str, data: GapData) -> str:
 _ALL_GAP_TYPES = ["uncovered", "untested", "unvalidated", "failing", "no_assertions"]
 
 
+# Implements: REQ-p00084-A+B
 def render_section(
     graph: FederatedGraph,
     config: dict[str, Any] | None,
@@ -378,7 +379,6 @@ def render_section(
         gap_types = _ALL_GAP_TYPES
 
     exclude_status = _resolve_exclude_status(args, config=config or {})
-    # Implements: REQ-p00084-A+B
     from elspais.commands._scope import resolve_scope_for_report, scope_disclosure
 
     scope_result = resolve_scope_for_report(graph, args, config)
@@ -479,6 +479,7 @@ def _gap_data_from_dict(data: dict[str, Any]) -> GapData:
     return gd
 
 
+# Implements: REQ-d00279-C
 def compute_gaps(graph: FederatedGraph, config: dict, params: dict[str, str]) -> dict:
     """Engine-compatible wrapper around collect_gaps.
 
@@ -494,7 +495,6 @@ def compute_gaps(graph: FederatedGraph, config: dict, params: dict[str, str]) ->
     treat_str = params.get("treat_active", None)
     fake_args.treat_active = treat_str.split(",") if treat_str else None
     exclude_status = _resolve_exclude_status(fake_args, config=config)
-    # Implements: REQ-d00279-C
     from elspais.commands._scope import resolve_scope_for_report, scope_disclosure
 
     scope_result = resolve_scope_for_report(graph, params, config)
@@ -537,6 +537,7 @@ def compute_gaps(graph: FederatedGraph, config: dict, params: dict[str, str]) ->
     return result
 
 
+# Implements: REQ-d00279-C
 def run(args: argparse.Namespace) -> int:
     """Run a standalone gap listing command.
 
@@ -560,7 +561,6 @@ def run(args: argparse.Namespace) -> int:
     if treat_active:
         params["treat_active"] = ",".join(treat_active)
 
-    # Implements: REQ-d00279-C
     # The scope reaches the compute path the same way and for the same reason.
     from elspais.commands._scope import scope_params_from_args
     from elspais.config import get_config

@@ -62,6 +62,7 @@ EXIT_BIT: dict[str, int] = {
 }
 
 
+# Implements: REQ-d00279-C
 def parse_shared_args(argv: list[str]) -> argparse.Namespace:
     """Parse shared flags for composed reports."""
     parser = argparse.ArgumentParser(prog="elspais", add_help=False)
@@ -77,7 +78,6 @@ def parse_shared_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--mode", choices=["core", "combined"], default="core")
     parser.add_argument("--config", type=Path)
     parser.add_argument("--spec-dir", type=Path, dest="spec_dir")
-    # Implements: REQ-d00279-C
     # A composed report is assembled differently from the same section asked for
     # alone, and this parser is where the difference would show: a selection it
     # does not register is a selection the composed report cannot honour.

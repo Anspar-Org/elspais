@@ -151,6 +151,7 @@ def _record_parser_diagnostics(
         )
 
 
+# Implements: REQ-d00285-G
 def _ingest_target_results(
     builder,
     target,
@@ -175,7 +176,6 @@ def _ingest_target_results(
     try:
         spec = get_reporter(target.reporter)
     except KeyError:
-        # Implements: REQ-d00285-G
         # A misspelled reporter name produces no results anywhere, and a
         # target that ingested nothing looks exactly like a suite that
         # reported nothing. Record the name that matched no reporter.
@@ -690,6 +690,7 @@ def _find_repo_root(spec_dir: Path) -> Path | None:
     return None
 
 
+# Implements: REQ-d00128-G
 def _resolve_spec_dir_config(
     spec_dir: Path,
 ) -> SpecDirConfig:
@@ -735,7 +736,6 @@ def _resolve_spec_dir_config(
     registry = ParserRegistry()
     # RequirementParser removed — Lark dispatcher handles spec files
     registry.register(JourneyParser(FederatedIdReader(resolver)))
-    # Implements: REQ-d00128-G
     registry.register(RemainderParser())
 
     patterns = typed_repo_config.scanning.spec.file_patterns

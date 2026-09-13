@@ -427,6 +427,7 @@ def check_worktree_status(
     )
 
 
+# Implements: REQ-d00202-A+D+I, REQ-d00203-C, REQ-d00212-K
 def check_associate_paths(config: dict, git_root: Path | None) -> HealthCheck:
     """Check that every federated project's path exists on disk.
 
@@ -439,7 +440,6 @@ def check_associate_paths(config: dict, git_root: Path | None) -> HealthCheck:
     if severity == Severity.OFF:
         return skipped_check("associate.paths_resolvable", "Associate paths that do not resolve")
 
-    # Implements: REQ-d00202-A+D+I, REQ-d00203-C, REQ-d00212-K
     from elspais.graph.federation_plan import plan_federation_or_error
 
     plan, plan_error = plan_federation_or_error(config, git_root or Path.cwd())
@@ -491,6 +491,7 @@ def check_associate_paths(config: dict, git_root: Path | None) -> HealthCheck:
     )
 
 
+# Implements: REQ-d00202-A+D+I, REQ-d00203-C, REQ-d00212-K
 def check_associate_configs(config: dict, git_root: Path | None) -> HealthCheck:
     """Check that every federated project has a usable configuration.
 
@@ -501,7 +502,6 @@ def check_associate_configs(config: dict, git_root: Path | None) -> HealthCheck:
     if severity == Severity.OFF:
         return skipped_check("associate.configs_valid", "Associate configurations that do not load")
 
-    # Implements: REQ-d00202-A+D+I, REQ-d00203-C, REQ-d00212-K
     from elspais.associates import discover_associate_from_path
     from elspais.graph.federation_plan import plan_federation_or_error
 
@@ -592,6 +592,7 @@ def check_local_toml_exists(start_path: Path, config: dict[str, Any] | None = No
     )
 
 
+# Implements: REQ-d00212-F
 def check_cross_repo_in_committed_config(
     config_path: Path | None, config: dict[str, Any] | None = None
 ) -> HealthCheck:
@@ -625,7 +626,6 @@ def check_cross_repo_in_committed_config(
             severity="info",
         )
 
-    # Implements: REQ-d00212-F
     cross_repo_paths = []
     spec_dirs = data.get("scanning", {}).get("spec", {}).get("directories", [])
     if isinstance(spec_dirs, list):

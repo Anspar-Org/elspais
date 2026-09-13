@@ -173,6 +173,7 @@ if TYPE_CHECKING:
     from elspais.utilities.git import GitChangeInfo
 
 
+# Implements: REQ-d00129-D
 def annotate_git_state(node: GraphNode, git_info: GitChangeInfo | None) -> None:
     """Annotate a node with git state information.
 
@@ -196,7 +197,6 @@ def annotate_git_state(node: GraphNode, git_info: GitChangeInfo | None) -> None:
     if node.kind != NodeKind.REQUIREMENT:
         return
 
-    # Implements: REQ-d00129-D
     # Get file path relative to repo via FILE parent node
     fn = node.file_node()
     file_path = fn.get_field("relative_path") if fn else ""
@@ -236,6 +236,7 @@ def annotate_git_state(node: GraphNode, git_info: GitChangeInfo | None) -> None:
     node.set_metric("is_new", is_new)
 
 
+# Implements: REQ-d00129-D
 def annotate_display_info(node: GraphNode) -> None:
     """Annotate a node with display-friendly information.
 
@@ -259,7 +260,6 @@ def annotate_display_info(node: GraphNode) -> None:
     if node.kind != NodeKind.REQUIREMENT:
         return
 
-    # Implements: REQ-d00129-D
     # Get file path relative to repo via FILE parent node
     fn = node.file_node()
     file_path = fn.get_field("relative_path") if fn else ""
@@ -353,6 +353,7 @@ def annotate_implementation_files(
 # They follow the composable pattern: take a graph, return computed values.
 
 
+# Implements: REQ-d00281-A
 def count_by_level(
     graph: FederatedGraph,
     config: dict[str, Any] | None = None,
@@ -373,7 +374,6 @@ def count_by_level(
     from elspais.graph.aggregation import level_group_keys
 
     if config is not None:
-        # Implements: REQ-d00281-A
         # Groups come from the one derivation every reporting surface reads, so
         # this count and the per-level coverage rollup form the same groups.
         level_keys = level_group_keys(graph, config)
@@ -470,6 +470,7 @@ def count_implementation_files(graph: FederatedGraph) -> int:
     return total
 
 
+# Implements: REQ-d00129-D
 def collect_topics(graph: FederatedGraph) -> list[str]:
     """Collect unique topics from requirement file names.
 
@@ -482,7 +483,6 @@ def collect_topics(graph: FederatedGraph) -> list[str]:
     from elspais.graph import NodeKind
 
     all_topics: set[str] = set()
-    # Implements: REQ-d00129-D
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
         fn = node.file_node()
         rel_path = fn.get_field("relative_path") if fn else None
@@ -581,6 +581,7 @@ def count_with_code_refs(
     }
 
 
+# Implements: REQ-d00254-Q
 def count_code_coverage(graph: FederatedGraph) -> dict[str, int]:
     """Compute project-wide code coverage statistics.
 
@@ -599,7 +600,6 @@ def count_code_coverage(graph: FederatedGraph) -> dict[str, int]:
     unmeasured_files = 0
 
     for node in graph.iter_by_kind(NodeKind.FILE):
-        # Implements: REQ-d00254-Q
         # A file whose source could not be re-analysed has no known total.
         # Both sums are skipped, not just the denominator: counting its
         # executed lines against everyone else's total would raise the
@@ -719,6 +719,7 @@ def _compute_coverage_from_source(
     return contributions, source_nodes
 
 
+# Implements: REQ-d00258-E
 def _compute_code_tested(
     node: GraphNode, metrics: RollupMetrics, region_cache: dict | None = None
 ) -> None:
@@ -790,7 +791,6 @@ def _compute_code_tested(
         has_any_coverage = True
         break  # Just checking existence
 
-    # Implements: REQ-d00258-E
     # Whether the ingested coverage carried per-test contexts is a fact about
     # the TOOLING, established at ingestion: the factory sets `line_contexts`
     # only when the parser returned a non-empty contexts map, and aggregate-only
@@ -1243,6 +1243,7 @@ class JourneyVerification:
     verified_steps: int = 0
     total_steps: int = 0
 
+    # Implements: REQ-d00255-C
     @property
     def fraction(self) -> float:
         """Verified-step ratio in [0, 1] used to credit ``uat_verified``.
@@ -1255,13 +1256,13 @@ class JourneyVerification:
         (REQ-d00255-C). Whole-journey (stepless) units have no ratio, so they
         credit full only when ``fully_verified`` (else 0.0).
         """
-        # Implements: REQ-d00255-C
         if self.fully_verified:
             return 1.0
         if self.total_steps > 0:
             return self.verified_steps / self.total_steps
         return 0.0
 
+    # Implements: REQ-d00255-D
     @property
     def verdict(self) -> str:
         """Simple display verdict for this journey.
@@ -1272,7 +1273,6 @@ class JourneyVerification:
             'partial'    if some steps pass but not all.
             'unverified' if no verifying tests are recorded.
         """
-        # Implements: REQ-d00255-D
         if self.has_failures:
             return "fail"
         if self.fully_verified:

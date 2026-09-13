@@ -98,6 +98,7 @@ def cmd_link(args: argparse.Namespace) -> int:
     return 0
 
 
+# Implements: REQ-d00202-I
 def cmd_all(args: argparse.Namespace) -> int:
     """Auto-discover and link all associate repos in sibling directories.
 
@@ -139,7 +140,6 @@ def cmd_all(args: argparse.Namespace) -> int:
         if isinstance(result, Associate):
             found.append((child.resolve(), result))
         elif (child / ".elspais.toml").exists():
-            # Implements: REQ-d00202-I
             # A sibling that claims to be an elspais repo but whose config
             # cannot be loaded is skipped visibly; dirs without a config are
             # not candidates and stay silent.
@@ -168,6 +168,7 @@ def cmd_all(args: argparse.Namespace) -> int:
     return 0
 
 
+# Implements: REQ-d00202-A, REQ-d00212-K
 def cmd_list(args: argparse.Namespace) -> int:
     """List current associate links and their status.
 
@@ -179,7 +180,6 @@ def cmd_list(args: argparse.Namespace) -> int:
     Returns:
         Exit code.
     """
-    # Implements: REQ-d00202-A, REQ-d00212-K
     from elspais.config import get_associates_config, get_config
 
     config_path = _get_config_path(args)
@@ -226,6 +226,7 @@ def cmd_list(args: argparse.Namespace) -> int:
     return 0
 
 
+# Implements: REQ-d00212-K
 def cmd_unlink(args: argparse.Namespace) -> int:
     """Remove an associate link by name.
 
@@ -248,7 +249,6 @@ def cmd_unlink(args: argparse.Namespace) -> int:
         print(f"Error: No associate '{name}' found (no local config).", file=sys.stderr)
         return 1
 
-    # Implements: REQ-d00212-K
     doc = parse_toml_document(local_path.read_text(encoding="utf-8"))
     associates = doc.get("associates", {})
 
@@ -356,6 +356,7 @@ def _find_by_name(name: str, args: argparse.Namespace) -> Path | None:
     return None
 
 
+# Implements: REQ-d00212-K
 def _add_path_to_local_config(
     config_dir: Path,
     repo_path: str,
@@ -378,7 +379,6 @@ def _add_path_to_local_config(
     Returns:
         True if already linked, False if newly added.
     """
-    # Implements: REQ-d00212-K
     local_path = config_dir / ".elspais.local.toml"
 
     if local_path.exists():

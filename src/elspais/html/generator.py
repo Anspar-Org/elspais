@@ -166,6 +166,7 @@ def _tier_to_severity(tier: str, severity_config: Any) -> str:
     return getattr(severity_config, tier, "error")
 
 
+# Implements: REQ-d00069-L, REQ-d00258-A, REQ-d00258-J
 def compute_coverage_tiers(node: GraphNode, config: dict[str, Any] | None = None) -> dict[str, Any]:
     """Compute per-dimension severity colors and combined worst-of-all.
 
@@ -348,7 +349,6 @@ def compute_coverage_tiers(node: GraphNode, config: dict[str, Any] | None = None
         label = status_words[dim_key]
         desc = _TIER_DESCRIPTIONS.get(tier, tier)
 
-        # Implements: REQ-d00069-L, REQ-d00258-A, REQ-d00258-J
         # The four measures behind the headline standing, published in the
         # hover text. A marker standing in for a measure the badge does not
         # show is retired (REQ-d00258-J): a reader who wants to know what
@@ -423,6 +423,7 @@ def _standing_color(standing: str) -> str:
         return ""
 
 
+# Implements: REQ-p00017-G
 def compute_assertion_coverage_states(
     node: GraphNode, config: dict[str, Any] | None = None
 ) -> dict[str, dict[str, str]]:
@@ -466,7 +467,6 @@ def compute_assertion_coverage_states(
     if not rollup or rollup.total_assertions == 0:
         return {}
 
-    # Implements: REQ-p00017-G
     labels: list[str] = counted_assertion_labels(node)
 
     from elspais.graph.aggregation import measure_by_label
@@ -739,6 +739,7 @@ class HTMLGenerator:
         for node in self.graph.nodes_by_kind(NodeKind.REQUIREMENT):
             annotate_display_info(node)
 
+    # Implements: REQ-d00129-D
     def _is_associated(self, node: GraphNode) -> bool:
         """Check if a node is from an associated/sponsor repository.
 
@@ -761,7 +762,6 @@ class HTMLGenerator:
             if re.match(r"^[A-Z]{2,}-[a-z]", after_prefix):
                 return True
 
-        # Implements: REQ-d00129-D
         _fn = node.file_node()
         if not _fn:
             return False

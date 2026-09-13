@@ -124,6 +124,7 @@ class JUnitXMLParser(DiagnosticRecorder):
 
         return build_resolver(config_defaults())
 
+    # Implements: REQ-d00285-G
     def parse(self, content: str, source_path: str) -> list[dict[str, Any]]:
         """Parse JUnit XML content and return test result dicts.
 
@@ -146,7 +147,6 @@ class JUnitXMLParser(DiagnosticRecorder):
         try:
             root = ET.fromstring(content)
         except ET.ParseError as exc:
-            # Implements: REQ-d00285-G
             # A results file that will not parse yields the same empty list as
             # a suite that ran nothing. Record which of the two happened, and
             # where, before returning the empty list.

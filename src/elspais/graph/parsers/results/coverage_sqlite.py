@@ -53,6 +53,7 @@ class CoverageSqliteParser(DiagnosticRecorder):
     #: and must not be read via `Path.read_text()`.
     binary = True
 
+    # Implements: REQ-d00285-G
     def parse(
         self,
         content: str,
@@ -94,7 +95,6 @@ class CoverageSqliteParser(DiagnosticRecorder):
             import coverage
             from coverage.exceptions import CoverageException
         except ImportError:
-            # Implements: REQ-d00285-G
             _log.warning(_INSTALL_HINT)
             self._record_diagnostic(source_path, _INSTALL_HINT)
             return {}

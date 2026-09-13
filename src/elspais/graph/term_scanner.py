@@ -331,13 +331,13 @@ def scan_text_for_terms(
 # -- Graph-wide term scan ------------------------------------------------------
 
 
+# Implements: REQ-d00238-B
 def _get_node_text(node) -> str | None:  # noqa: ANN001
     """Extract scannable text from *node* based on its kind.
 
     Returns ``None`` when the node should be skipped entirely
     (e.g. definition_block REMAINDER nodes).
     """
-    # Implements: REQ-d00238-B
     kind = node.kind
     if kind == NodeKind.REQUIREMENT:
         return node.get_label() or ""
@@ -352,6 +352,7 @@ def _get_node_text(node) -> str | None:  # noqa: ANN001
     return None
 
 
+# Implements: REQ-d00238-C
 def _extract_file_comments(file_node) -> list[tuple[str, int]] | None:  # noqa: ANN001
     """Extract comments from a FILE node's source on disk.
 
@@ -359,7 +360,6 @@ def _extract_file_comments(file_node) -> list[tuple[str, int]] | None:  # noqa: 
     (or other language) source.  Returns a list of
     ``(comment_text, file_line_number)`` pairs, or ``None``.
     """
-    # Implements: REQ-d00238-C
     abs_path = file_node.get_field("absolute_path")
     rel_path = file_node.get_field("relative_path") or ""
     if not abs_path:
@@ -431,6 +431,7 @@ def _find_emphasis_spans(text: str) -> list[tuple[int, int]]:
     return spans
 
 
+# Implements: REQ-d00237-G
 def _canonicalize_text(
     text: str, td: TermDictionary, markup_style: str, styles_set: set[str]
 ) -> tuple[str, list[tuple[str, str]]]:
@@ -466,7 +467,6 @@ def _canonicalize_text(
     claimed: list[tuple[int, int]] = []
     replacements: list[tuple[str, str]] = []  # (old_form, new_form)
 
-    # Implements: REQ-d00237-G
     # Longest-first, so a compound term (e.g.
     # "Sponsor Portal") is marked as a whole rather than having its inner
     # term ("Sponsor") wrapped first.
@@ -626,9 +626,9 @@ def _mark_req_dirty(
             return
 
 
+# Implements: REQ-d00238-D
 def _should_exclude(rel_path: str, patterns: list[str]) -> bool:
     """Check if *rel_path* matches any exclusion glob pattern."""
-    # Implements: REQ-d00238-D
     for pat in patterns:
         if fnmatch(rel_path, pat):
             return True

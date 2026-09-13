@@ -358,6 +358,7 @@ class RollupMetrics:
             self.assertion_coverage[label] = []
         self.assertion_coverage[label].append(contribution)
 
+    # Implements: REQ-d00069-B, REQ-d00069-M
     def finalize(self) -> None:
         """Compute aggregate counts after all contributions are added.
 
@@ -412,7 +413,6 @@ class RollupMetrics:
         # CODE_INDIRECT). The two are DISJOINT -- an *Assertion* cited by name
         # is not also whole-requirement evidence (REQ-d00069-L).
         impl_direct = direct_labels | explicit_labels
-        # Implements: REQ-d00069-B, REQ-d00069-M
         # Immediate credit here is whole -- Implemented evidence (DIRECT/
         # EXPLICIT/INFERRED sources) is all-or-nothing, unlike uat_verified
         # below, whose partially-verified journeys carry a genuine fraction.
@@ -437,6 +437,7 @@ class RollupMetrics:
         # after this method runs, because they need label-set data from the
         # annotator (tested_labels, validated_labels, etc.)
 
+    # Implements: REQ-d00069-L, REQ-d00069-M
     def populate_test_dimensions(
         self,
         *,
@@ -475,7 +476,6 @@ class RollupMetrics:
             immediate_indirect_by_label=dict.fromkeys(verified_indirect_labels, 1.0),
         )
         self.verified.carried = verified_carried
-        # Implements: REQ-d00069-L, REQ-d00069-M
         # The two measures record WHAT THE CITATION NAMED, and neither is
         # defined in terms of the other: a journey naming the *Assertion*
         # credits only the direct measure, a journey naming the requirement

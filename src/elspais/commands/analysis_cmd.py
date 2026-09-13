@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     from elspais.graph.analysis import FoundationReport
 
 
+# Implements: REQ-d00279-A
 def compute_analysis(graph: Any, config: dict[str, Any], params: dict[str, str]) -> dict:
     """Pure compute function: run foundation analysis on a graph.
 
@@ -55,7 +56,6 @@ def compute_analysis(graph: Any, config: dict[str, Any], params: dict[str, str])
         top_n=top_n,
     )
 
-    # Implements: REQ-d00279-A
     # Membership comes from the one authority rather than a comparison of this
     # command's own; a second reading is how two surfaces answering the same
     # question start giving different answers.
@@ -79,13 +79,13 @@ def compute_analysis(graph: Any, config: dict[str, Any], params: dict[str, str])
     return payload
 
 
+# Implements: REQ-p00084-C+D
 def _render_table(
     report: FoundationReport,
     show: str,
     scope_lines: Sequence[str] | None = None,
 ) -> None:
     """Render the report as a formatted table."""
-    # Implements: REQ-p00084-C+D
     for line in scope_lines or []:
         print(line)
     if scope_lines:
@@ -135,9 +135,9 @@ def _render_table(
         print("No requirements found for analysis.")
 
 
+# Implements: REQ-p00084-C+D
 def _render_json(report: FoundationReport, scope_lines: Sequence[str] | None = None) -> None:
     """Render the report as JSON."""
-    # Implements: REQ-p00084-C+D
     # The same disclosure the table states, in the document a reader files.
     payload = asdict(report)
     if scope_lines:
@@ -170,6 +170,7 @@ def _report_from_dict(data: dict) -> FoundationReport:
     )
 
 
+# Implements: REQ-d00279-C
 def run(args: argparse.Namespace) -> int:
     """Run the analysis command.
 
@@ -189,7 +190,6 @@ def run(args: argparse.Namespace) -> int:
     weights_str = getattr(args, "weights", None)
     if weights_str:
         params["weights"] = weights_str
-    # Implements: REQ-d00279-C
     from elspais.commands._scope import scope_params_from_args
     from elspais.config import get_config
 

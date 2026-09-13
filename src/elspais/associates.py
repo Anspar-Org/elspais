@@ -48,6 +48,7 @@ def spec_directory_name(config: dict) -> str:
     return directories[0] if directories else "spec"
 
 
+# Implements: REQ-p00005-F, REQ-d00202-D
 def get_associate_spec_directories(
     config: dict[str, Any],
     base_path: Path | None = None,
@@ -70,7 +71,6 @@ def get_associate_spec_directories(
         is missing, and for a declaration set that cannot be resolved at all
         (a cycle, or two repositories federated under one name).
     """
-    # Implements: REQ-p00005-F, REQ-d00202-D
     if base_path is None:
         base_path = Path.cwd()
 
@@ -99,6 +99,7 @@ def get_associate_spec_directories(
     return spec_dirs, errors
 
 
+# Implements: REQ-p00005-D
 def discover_associate_from_path(
     repo_path: Path,
 ) -> Associate | str:
@@ -113,7 +114,6 @@ def discover_associate_from_path(
     Returns:
         Associate object if valid, error message string otherwise.
     """
-    # Implements: REQ-p00005-D
     repo_path = Path(repo_path)
 
     if not repo_path.exists():

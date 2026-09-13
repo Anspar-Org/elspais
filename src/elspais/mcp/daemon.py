@@ -897,6 +897,7 @@ def get_daemon_info(repo_root: Path) -> dict | None:
         return None
 
 
+# Implements: REQ-o00075-B
 def start_daemon(
     repo_root: Path,
     ttl_minutes: int = _DEFAULT_TTL,
@@ -919,7 +920,6 @@ def start_daemon(
     # Stop any existing server before overwriting daemon.json. Without
     # this, the old server becomes an undiscoverable orphan.
     #
-    # Implements: REQ-o00075-B
     # And refuse if it would not go. Every caller today checks this for
     # itself and reaches here with the tree already clear, so this guard
     # is unreachable in practice -- which is exactly why it belongs here.
@@ -1651,6 +1651,7 @@ def restart_daemon(
     }
 
 
+# Implements: REQ-o00076-M
 def ensure_daemon(repo_root: Path, ttl_minutes: int | None = None) -> int:
     """Return port of a running daemon, starting one if needed.
 
@@ -1664,7 +1665,6 @@ def ensure_daemon(repo_root: Path, ttl_minutes: int | None = None) -> int:
     Reads ``cli_ttl`` from config if ttl_minutes is not provided.
     Raises RuntimeError if cli_ttl=0 (daemon disabled) and no daemon running.
     """
-    # Implements: REQ-o00076-M
     # Said here because every command that needs a daemon comes through,
     # so a reader learns their client cannot reach this tree while running
     # something else -- rather than after their client has already failed

@@ -331,6 +331,7 @@ class ClientWatchdog:
         except Exception:
             return None, self._last_token
 
+    # Implements: REQ-o00074-H
     def check_once(self) -> Decision:
         """Evaluate the decision matrix once and act on the outcome.
 
@@ -355,7 +356,6 @@ class ClientWatchdog:
 
         now = self._clock()
 
-        # Implements: REQ-o00074-H
         # A token that moved since the previous check is a writer using
         # this daemon whose identity was never resolvable. Keep serving
         # and restart the countdown; the first token seen is a baseline,

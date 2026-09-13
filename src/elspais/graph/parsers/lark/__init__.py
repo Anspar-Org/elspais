@@ -65,6 +65,7 @@ class GrammarFactory:
     # Token builders (derive regex fragments from IdResolver / config)
     # ------------------------------------------------------------------
 
+    # Implements: REQ-d00269-K
     def _build_tokens(
         self,
         federated: bool = False,
@@ -102,7 +103,6 @@ class GrammarFactory:
 
         # Reference grammar tokens (comment styles + keywords).
         #
-        # Implements: REQ-d00269-K
         # The marker comes from the one association between a file type and
         # its comment pattern, so a keyword is recognised only where the
         # language of the file actually opens a comment: `--` introduces a
@@ -223,6 +223,7 @@ class FileDispatcher:
             member that claims it (REQ-d00269-C).
     """
 
+    # Implements: REQ-d00269-K
     def __init__(
         self,
         resolver: IdResolver,
@@ -234,7 +235,6 @@ class FileDispatcher:
         self._reader = FederatedIdReader(resolver, member_resolvers)
         self._factory = GrammarFactory(resolver, member_resolvers)
         self._req_parser: Lark | None = None
-        # Implements: REQ-d00269-K
         # One parser per comment pattern, not one per dispatcher: the marker
         # a reference may be written behind differs between the files this
         # dispatcher reads, so a single cached parser would serve one
@@ -313,6 +313,7 @@ class FileDispatcher:
             quoted |= ast_string_literal_lines(content)
         return quoted
 
+    # Implements: REQ-d00247-A
     def dispatch_spec(
         self,
         content: str,
@@ -323,7 +324,6 @@ class FileDispatcher:
 
         if not content.endswith("\n"):
             content += "\n"
-        # Implements: REQ-d00247-A
         # Neutralize fenced code blocks for grammar matching only; the
         # neutralized buffer must NOT escape the parser. Pass the original
         # content as `source` so REMAINDER nodes capture the original text.
@@ -369,6 +369,7 @@ class FileDispatcher:
         results.extend(_fault_and_style_content(transformer))
         return results
 
+    # Implements: REQ-d00254-K
     def dispatch_test(
         self,
         content: str,
@@ -393,7 +394,6 @@ class FileDispatcher:
         lines = [(i + 1, line) for i, line in enumerate(content.split("\n"))]
 
         # Pre-scan for function/class context
-        # Implements: REQ-d00254-K
         is_python = file_path.endswith(".py")
         is_dart = file_path.endswith(".dart")
 

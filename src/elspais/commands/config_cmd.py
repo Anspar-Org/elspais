@@ -280,13 +280,13 @@ def _get_config_path(args: argparse.Namespace) -> Path | None:
     return find_config_file(Path.cwd())
 
 
+# Implements: REQ-p00002-A
 def _load_user_config_doc(config_path: Path) -> tomlkit.TOMLDocument:
     """Load user configuration as TOMLDocument for round-trip editing.
 
     Preserves comments, whitespace, and formatting so that writing
     back only changes the modified fields.
     """
-    # Implements: REQ-p00002-A
     if config_path.exists():
         return parse_toml_document(config_path.read_text(encoding="utf-8"))
     return tomlkit.document()
@@ -431,11 +431,11 @@ def _print_section(section: dict[str, Any], path: str, indent: int = 0) -> None:
         _print_section(value, new_path)
 
 
+# Implements: REQ-p00002-A
 def _write_config(config_path: Path, config: Any) -> None:
     """Write configuration to TOML file.
 
     Accepts a TOMLDocument (preserves formatting) or plain dict.
     """
-    # Implements: REQ-p00002-A
     content = tomlkit.dumps(config)
     config_path.write_text(content, encoding="utf-8")

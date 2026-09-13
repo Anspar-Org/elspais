@@ -217,6 +217,7 @@ def plan_federation(
     if _declared_namespace(root_config):
         by_namespace[_declared_namespace(root_config)] = root_entry
 
+    # Implements: REQ-d00202-K
     def _record(entry: PlannedRepo, identity: tuple[str, str]) -> None:
         # A federation keys repositories by name, so two repositories
         # arriving under one name would leave only the later of them
@@ -234,7 +235,6 @@ def plan_federation(
             )
         by_name[entry.name] = entry
 
-        # Implements: REQ-d00202-K
         # A namespace answers whose identifiers these are, so two
         # repositories claiming one namespace leave the question
         # unanswerable -- the same argument disjoint requirement IDs rest
@@ -258,6 +258,7 @@ def plan_federation(
         planned.append(entry)
         resolved[identity] = entry
 
+    # Implements: REQ-d00202-E
     def _visit(
         parent_config: dict[str, Any],
         parent_root: Path,
@@ -271,7 +272,6 @@ def plan_federation(
             origin = _origin_of(assoc_path)
             identity = _identity(assoc_path, origin)
 
-            # Implements: REQ-d00202-E
             if identity in on_path:
                 chain = " -> ".join(list(on_path.values()) + [name])
                 raise FederationCycleError(

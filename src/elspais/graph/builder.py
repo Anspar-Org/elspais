@@ -1312,13 +1312,13 @@ class TraceGraph:
                         parent.set_field("hash", entry.before_state["parent_hash"])
                 break
 
+    # Implements: REQ-p00002-E
     def _undo_update_assertion(self, entry: MutationEntry) -> None:
         """Undo an assertion text update."""
         node_id = entry.target_id
         old_text = entry.before_state.get("text")
         if node_id in self._index and old_text is not None:
             node = self._index[node_id]
-            # Implements: REQ-p00002-E
             # Restoring the text has to restore what the text SAYS: an
             # *Assertion* retired by a mutation and then un-retired by its
             # undo would otherwise keep the flag and stay out of every
@@ -1513,6 +1513,7 @@ class TraceGraph:
     # Node Mutation API
     # ─────────────────────────────────────────────────────────────────────────
 
+    # Verifies: REQ-d00256
     def rename_node(self, old_id: str, new_id: str) -> MutationEntry:
         """Rename a node (e.g., REQ-p00001 -> REQ-p00002).
 
@@ -1593,7 +1594,6 @@ class TraceGraph:
         # Step IDs are "<journey_id>/N"; renaming the journey requires
         # updating both the _index keys and the node .id fields so that
         # find_by_id() and graph queries return the correct nodes.
-        # Verifies: REQ-d00256
         if node.kind == NodeKind.USER_JOURNEY:
             for child in list(node.iter_children(edge_kinds={EdgeKind.STRUCTURES})):
                 if child.kind == NodeKind.STEP:
@@ -1913,6 +1913,7 @@ class TraceGraph:
         self._mutation_log.append(entry)
         return entry
 
+    # Implements: REQ-o00062-V
     def delete_requirement(
         self,
         node_id: str,
@@ -1940,7 +1941,6 @@ class TraceGraph:
             raise KeyError(f"Node '{node_id}' not found")
 
         node = self._index[node_id]
-        # Implements: REQ-o00062-V
         if node.kind != NodeKind.REQUIREMENT:
             raise ValueError(f"Node '{node_id}' is not a requirement")
         was_root = node in self._roots
@@ -2051,6 +2051,7 @@ class TraceGraph:
         req_node.set_field("hash", new_hash)
         return new_hash
 
+    # Implements: REQ-d00230-C
     def rename_assertion(self, old_id: str, new_label: str) -> MutationEntry:
         """Rename assertion label (e.g., REQ-p00001-A -> REQ-p00001-D).
 
@@ -2122,7 +2123,6 @@ class TraceGraph:
         # Recompute parent hash
         self._recompute_requirement_hash(parent)
 
-        # Implements: REQ-d00230-C
         old_anchor = f"{parent.id}#{old_label}"
         new_anchor = f"{parent.id}#{new_label}"
         update_anchors_on_rename(self._comment_index, old_anchor, new_anchor, self.repo_root)
@@ -2576,6 +2576,7 @@ class TraceGraph:
         self._mutation_log.append(entry)
         return entry
 
+    # Implements: REQ-o00062-V
     def change_edge_kind(
         self,
         source_id: str,
@@ -2614,7 +2615,6 @@ class TraceGraph:
         if edge_to_update is None:
             raise ValueError(f"No edge exists from '{target_id}' to '{source_id}'")
 
-        # Implements: REQ-o00062-V
         if edge_to_update.kind in _PLACEMENT_EDGE_KINDS or new_kind in _PLACEMENT_EDGE_KINDS:
             raise ValueError(
                 "Edge kind changes are for traceability edges: a "
@@ -2719,6 +2719,7 @@ class TraceGraph:
         self._mutation_log.append(entry)
         return entry
 
+    # Implements: REQ-o00062-V
     def delete_edge(self, source_id: str, target_id: str) -> MutationEntry:
         """Remove an edge.
 
@@ -2754,7 +2755,6 @@ class TraceGraph:
         if edge_to_delete is None:
             raise ValueError(f"No edge exists from '{target_id}' to '{source_id}'")
 
-        # Implements: REQ-o00062-V
         if edge_to_delete.kind in _PLACEMENT_EDGE_KINDS:
             raise ValueError(
                 f"Cannot delete a {edge_to_delete.kind.value} edge: it places "
@@ -3125,6 +3125,7 @@ class TraceGraph:
     # Journey Mutation API
     # ─────────────────────────────────────────────────────────────────────────
 
+    # Implements: REQ-p00014-U
     def _reconstruct_journey_body(self, node: GraphNode) -> str:
         """Rebuild body text from structured fields + live graph edges."""
         lines: list[str] = []
@@ -3162,7 +3163,6 @@ class TraceGraph:
             if whole or not labels:
                 validates_refs.append(src)
             if labels:
-                # Implements: REQ-p00014-U
                 # The separators are the owning repository's, not constants:
                 # a journey citing an assertion writes the same boundary
                 # characters a spec file's metadata line writes.
@@ -3668,6 +3668,7 @@ class TraceGraph:
         self._mutation_log.append(entry)
         return entry
 
+    # Implements: REQ-o00062-U
     def add_journey(
         self,
         journey_id: str,
@@ -3688,7 +3689,6 @@ class TraceGraph:
             ValueError: If journey_id already exists.
             KeyError: If file_id is not found.
         """
-        # Implements: REQ-o00062-U
         # The journey header line is grammar: an id outside its shape makes
         # the whole block loose text on the next parse.
         from elspais.graph.parsers.patterns import JNY_ID_PATTERN
@@ -3753,6 +3753,7 @@ class TraceGraph:
         self._mutation_log.append(entry)
         return entry
 
+    # Implements: REQ-o00062-P
     def delete_journey(self, node_id: str) -> MutationEntry:
         """Delete a USER_JOURNEY node.
 
@@ -3798,7 +3799,6 @@ class TraceGraph:
                 "was_root": was_root,
                 "source_path": source_path,
                 "validates_ids": validates_ids,
-                # Implements: REQ-o00062-P
                 # Full edge capture so undo can reattach the journey rather
                 # than restoring an orphan that renders into no file.
                 "parent_edges": [
@@ -4259,6 +4259,7 @@ class GraphBuilder:
                 )
             )
 
+    # Implements: REQ-d00129-A, REQ-d00129-B
     def _add_requirement(self, content: ParsedContent) -> None:
         """Add a requirement node and its assertions."""
         data = content.parsed_data
@@ -4311,7 +4312,6 @@ class GraphBuilder:
             if source_path_rel:
                 entry.append(source_path_rel)
 
-        # Implements: REQ-d00129-A, REQ-d00129-B
         # Create requirement node
         node = GraphNode(
             id=req_id,
@@ -4594,6 +4594,7 @@ class GraphBuilder:
                 if child_node.kind == NodeKind.ASSERTION:
                     child_node.set_field("stereotype", Stereotype.TEMPLATE)
 
+    # Implements: REQ-d00256-A
     def _add_journey(self, content: ParsedContent) -> None:
         """Add a user journey node."""
         data = content.parsed_data
@@ -4620,7 +4621,6 @@ class GraphBuilder:
         }
         self._nodes[journey_id] = node
 
-        # Implements: REQ-d00256-A
         # Create one STEP node per numbered step in the ## Steps section,
         # linked from the journey via STRUCTURES edges (read-only; never rendered).
         step_children: list[tuple[int, GraphNode]] = []
@@ -4674,6 +4674,7 @@ class GraphBuilder:
                 )
             )
 
+    # Implements: REQ-d00254-D
     def _add_code_ref(self, content: ParsedContent) -> None:
         """Add code reference nodes.
 
@@ -4687,7 +4688,6 @@ class GraphBuilder:
 
         func_name = data.get("function_name")
         class_name = data.get("class_name")
-        # Implements: REQ-d00254-D
         # Whether a citation sits in a function is the pre-scan's answer to
         # give, and it gives 0 where it found none. Defaulting to the
         # citation's own line invents an enclosing function one line long,
@@ -4756,6 +4756,7 @@ class GraphBuilder:
                 )
             )
 
+    # Implements: REQ-d00274-G, REQ-d00274-H
     def _add_test_ref(self, content: ParsedContent) -> None:
         """Add test reference nodes.
 
@@ -4789,7 +4790,6 @@ class GraphBuilder:
             label = f"Test at {source_id}:{anchor_line}"
             source_line = anchor_line
 
-        # Implements: REQ-d00274-G, REQ-d00274-H
         # The parser says whether this citation found a test. False is its
         # answer and nothing else's: a citation the parser never judged (a
         # test function emitted by the unlinked-test pass, a name-carried
@@ -4858,6 +4858,7 @@ class GraphBuilder:
                 )
             )
 
+    # Implements: REQ-d00254-I
     def _add_test_result(self, content: ParsedContent) -> None:
         """Add a test result node.
 
@@ -4902,7 +4903,6 @@ class GraphBuilder:
             "line": data.get("line"),
             "root_line": data.get("root_line"),
             "root_file": data.get("root_file"),
-            # Implements: REQ-d00254-I
             "carried": data.get("carried", False),
             "target": data.get("target"),
             # Results-file provenance: where this result was RECORDED
@@ -5492,6 +5492,7 @@ class GraphBuilder:
                 tests.append(test_node)
         return tests
 
+    # Implements: REQ-p00017-H
     def build(self) -> TraceGraph:
         """Build the final TraceGraph.
 
@@ -5546,7 +5547,6 @@ class GraphBuilder:
             target = (
                 None if (edge_kind.value, target_id) in verdicts else self._nodes.get(target_id)
             )
-            # Implements: REQ-p00017-H
             # A retired *Assertion* does not exist for *Traceability*
             # purposes, so a reference naming it is treated exactly as a
             # reference to an *Assertion* that was never written: it binds

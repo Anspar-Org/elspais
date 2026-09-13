@@ -321,6 +321,7 @@ def _serialize_code_info(code_node: Any, graph: FederatedGraph) -> dict[str, Any
 # ─────────────────────────────────────────────────────────────────────────────
 
 
+# Implements: REQ-p00014-K
 def _serialize_node_generic(node: Any, graph: FederatedGraph | None = None) -> dict[str, Any]:
     """Serialize any graph node to full format with kind-specific properties.
 
@@ -354,7 +355,6 @@ def _serialize_node_generic(node: Any, graph: FederatedGraph | None = None) -> d
             }
             if ro is not None:
                 entry["render_order"] = ro
-            # Implements: REQ-p00014-K
             # INSTANCE-cloned assertions: expose template_repo, the
             # template original's assertion ID, and the inherited
             # coverage count (from the template's direct coverage).
@@ -810,6 +810,7 @@ def _search_terms_logic(td: TermDictionary, query: str) -> list[dict[str, Any]]:
     return results
 
 
+# Implements: REQ-o00077-A
 def _get_graph_status(
     graph: FederatedGraph, working_dir: Path | str | None = None
 ) -> dict[str, Any]:
@@ -840,7 +841,6 @@ def _get_graph_status(
     record = _automatic_save_record(working_dir)
     if record is not None:
         status["automatic_save"] = record
-    # Implements: REQ-o00077-A
     difference = _executable_difference()
     if difference is not None:
         status["executable_difference"] = difference
@@ -938,6 +938,7 @@ def _add_changelog_for_active_mutations(
     return {"success": True, "added": added}
 
 
+# Implements: REQ-d00061-B, REQ-d00061-C, REQ-d00061-F, REQ-p00050-D
 def _matches_query(
     node: GraphNode,
     field: str,
@@ -961,7 +962,6 @@ def _matches_query(
         compiled_pattern: Pre-compiled regex pattern (required when regex=True).
         parsed: Pre-parsed ParsedQuery (used when regex=False).
     """
-    # Implements: REQ-d00061-B, REQ-d00061-C, REQ-d00061-F, REQ-p00050-D
 
     if not regex:
         return matches_node(node, parsed, field) if parsed else False
@@ -1042,6 +1042,7 @@ def _search(
     return [entry for _, entry in scored[:limit]]
 
 
+# Implements: REQ-o00069-A, REQ-o00069-B, REQ-o00069-C, REQ-o00069-D, REQ-o00069-E
 def _minimize_requirement_set(
     graph: FederatedGraph,
     req_ids: list[str],
@@ -1057,7 +1058,6 @@ def _minimize_requirement_set(
     REQ-d00077-D: Records superseded_by for each pruned req.
     REQ-d00077-E: Returns {minimal_set, pruned, not_found, stats}.
     """
-    # Implements: REQ-o00069-A, REQ-o00069-B, REQ-o00069-C, REQ-o00069-D, REQ-o00069-E
     # Implements: REQ-d00077-A, REQ-d00077-B, REQ-d00077-C, REQ-d00077-D, REQ-d00077-E
 
     # REQ-d00077-A: Resolve IDs, separating found/not_found
@@ -1131,6 +1131,7 @@ def _minimize_requirement_set(
     }
 
 
+# Implements: REQ-d00078-A, REQ-d00078-B
 def _collect_scope_ids(
     graph: FederatedGraph,
     scope_id: str,
@@ -1144,7 +1145,6 @@ def _collect_scope_ids(
     Returns:
         Set of reachable node IDs, or None if scope_id not found.
     """
-    # Implements: REQ-d00078-A, REQ-d00078-B
     scope_node = graph.find_by_id(scope_id)
     if scope_node is None:
         return None
@@ -1224,6 +1224,7 @@ def _scoped_search_regex(
     return {"results": results, "scope_id": scope_id, "direction": direction}
 
 
+# Implements: REQ-o00070-A, REQ-o00070-B, REQ-o00070-C, REQ-o00070-D, REQ-o00070-E
 def _scoped_search(
     graph: FederatedGraph,
     query: str,
@@ -1244,7 +1245,6 @@ def _scoped_search(
     REQ-d00061-L: Score and sort by relevance descending.
     REQ-d00061-M: Include score in results.
     """
-    # Implements: REQ-o00070-A, REQ-o00070-B, REQ-o00070-C, REQ-o00070-D, REQ-o00070-E
     # Implements: REQ-d00078-C, REQ-d00078-D, REQ-d00078-E
 
     # REQ-o00070-D: Return error if scope_id not found
@@ -1302,6 +1302,7 @@ def _scoped_search(
     }
 
 
+# Implements: REQ-o00071-A, REQ-o00071-B, REQ-o00071-C, REQ-o00071-D
 def _discover_requirements(
     graph: FederatedGraph,
     query: str,
@@ -1323,7 +1324,6 @@ def _discover_requirements(
     REQ-d00079-C: Preserves matched_assertions metadata on minimal-set items.
     REQ-o00071-B: Chains scoped_search through minimize_requirement_set.
     """
-    # Implements: REQ-o00071-A, REQ-o00071-B, REQ-o00071-C, REQ-o00071-D
     # Implements: REQ-d00079-A, REQ-d00079-B, REQ-d00079-C
 
     if edge_kinds is None:
@@ -1540,6 +1540,7 @@ def _search_with_assertions(
     return [entry for _, entry in scored[:limit]]
 
 
+# Implements: REQ-o00060-G
 def _get_node(graph: FederatedGraph, node_id: str) -> dict[str, Any]:
     """Get any graph node by ID.
 
@@ -1559,12 +1560,12 @@ def _get_node(graph: FederatedGraph, node_id: str) -> dict[str, Any]:
     if node is None:
         return {"error": f"Node '{node_id}' not found"}
     envelope = _serialize_node_generic(node, graph)
-    # Implements: REQ-o00060-G
     # Hand back the token a mutation of this node will require.
     envelope["version"] = node_version(node)
     return envelope
 
 
+# Implements: REQ-d00258-A, REQ-d00069-N
 def _get_requirement(graph: FederatedGraph, req_id: str) -> dict[str, Any]:
     """Get requirement details in a focused, readable format.
 
@@ -1624,7 +1625,6 @@ def _get_requirement(graph: FederatedGraph, req_id: str) -> dict[str, Any]:
     metrics_data = None
     metrics = node.get_metric("rollup_metrics")
     if metrics is not None:
-        # Implements: REQ-d00258-A, REQ-d00069-N
         # A requirement-detail payload is a REPORT, not a work list, so both
         # figures are the per-*Assertion* total -- the greatest of an
         # *Assertion*'s four measures, counting each *Assertion* once however
@@ -1739,6 +1739,7 @@ def _get_elspais_version() -> str:
         return "unknown"
 
 
+# Implements: REQ-p00083-C
 def _build_base_workspace_info(working_dir: Path, config: dict[str, Any]) -> dict[str, Any]:
     """Build the base workspace info dict (always returned).
 
@@ -1772,7 +1773,6 @@ def _build_base_workspace_info(working_dir: Path, config: dict[str, Any]) -> dic
         "available_details": dict(_WORKSPACE_DETAIL_PROFILES),
         "config_summary": config_summary,
     }
-    # Implements: REQ-p00083-C
     # Carried on the base profile, not a detail level, so a client that
     # asks the ordinary orientation question is told how the files it is
     # about to read reached their current form.
@@ -2292,6 +2292,7 @@ def _get_workspace_info(
     return profile_fn(base, working_dir, config, graph)
 
 
+# Implements: REQ-d00254-Q
 def _get_project_summary(
     graph: FederatedGraph, working_dir: Path, config: dict[str, Any] | None = None
 ) -> dict[str, Any]:
@@ -2346,7 +2347,6 @@ def _get_project_summary(
     result["coverage_by_level"] = collect_coverage(graph, config)["levels"]
 
     code_cov = count_code_coverage(graph)
-    # Implements: REQ-d00254-Q
     # Reported when anything was measured, and also when nothing was because
     # every file's source defeated analysis -- omitting it there would be the
     # same silence as reporting no coverage at all.
@@ -3191,6 +3191,7 @@ def _reattach_version_after_rebuild(
     return result
 
 
+# Implements: REQ-d00205-C
 def _mutate_rename_node(graph: FederatedGraph, old_id: str, new_id: str) -> dict[str, Any]:
     """Rename a node.
 
@@ -3199,7 +3200,6 @@ def _mutate_rename_node(graph: FederatedGraph, old_id: str, new_id: str) -> dict
     """
     try:
         note = ""
-        # Implements: REQ-d00205-C
         # A new identifier the owning repo's grammar parses is stored in its
         # canonical spelling; one it does not parse (a journey id, or a shape
         # the grammar has no opinion on) is stored as given.
@@ -3238,6 +3238,7 @@ def _mutate_update_title(graph: FederatedGraph, node_id: str, new_title: str) ->
         return {"success": False, "error": str(e)}
 
 
+# Implements: REQ-o00062-U
 def _mutate_change_status(graph: FederatedGraph, node_id: str, new_status: str) -> dict[str, Any]:
     """Change requirement status.
 
@@ -3245,7 +3246,6 @@ def _mutate_change_status(graph: FederatedGraph, node_id: str, new_status: str) 
     REQ-o00062-E: Returns MutationEntry for audit.
     """
     try:
-        # Implements: REQ-o00062-U
         # The status field's grammar carries one word: a value the parser
         # cannot read back renders a file that fails to build at all.
         if not re.fullmatch(r"\w+", new_status):
@@ -3310,6 +3310,7 @@ def _mutate_set_stereotype(
         return {"success": False, "error": str(e)}
 
 
+# Implements: REQ-o00062-U
 def _mutate_add_requirement(
     graph: FederatedGraph,
     req_id: str,
@@ -3326,7 +3327,6 @@ def _mutate_add_requirement(
     """
     try:
         note = ""
-        # Implements: REQ-o00062-U
         # A new requirement is added to the root repo, so the root repo's
         # grammar is what its identifier must satisfy (REQ-d00205-C); the
         # status and level fields carry one grammar word each, and a level
@@ -3579,6 +3579,7 @@ def _mutate_delete_assertion(
         return {"success": False, "error": str(e)}
 
 
+# Implements: REQ-d00205-C
 def _mutate_rename_assertion(graph: FederatedGraph, old_id: str, new_label: str) -> dict[str, Any]:
     """Rename assertion label.
 
@@ -3587,7 +3588,6 @@ def _mutate_rename_assertion(graph: FederatedGraph, old_id: str, new_label: str)
     """
     try:
         note = ""
-        # Implements: REQ-d00205-C
         # The label is stored bare and rendered verbatim, so a full assertion
         # id or an admitted case variant is normalized to the canonical bare
         # label of the owning repo's series before it is stored.
@@ -3728,6 +3728,7 @@ def _normalize_assertion_targets(
     return normalized
 
 
+# Implements: REQ-d00205-C
 def _mutate_add_edge(
     graph: FederatedGraph,
     source_id: str,
@@ -3743,7 +3744,6 @@ def _mutate_add_edge(
     try:
         note = ""
         if assertion_targets:
-            # Implements: REQ-d00205-C
             # The targets are labels of the TARGET requirement, so the grammar
             # that reads them is the one of the repo owning that requirement.
             config = _config_for_node(graph, target_id)
@@ -3863,6 +3863,7 @@ def _mutate_delete_edge(
         return {"success": False, "error": str(e)}
 
 
+# Implements: REQ-d00205-C
 def _mutate_fix_broken_reference(
     graph: FederatedGraph,
     source_id: str,
@@ -3876,7 +3877,6 @@ def _mutate_fix_broken_reference(
     """
     try:
         note = ""
-        # Implements: REQ-d00205-C
         # The new target is system-composed content: it is stored and later
         # rendered verbatim, so it is normalized under the grammar of the
         # member that claims it -- which cannot be found by ownership lookup,
@@ -4227,6 +4227,7 @@ def _get_all_keywords(graph: FederatedGraph) -> dict[str, Any]:
     }
 
 
+# Implements: REQ-d00279-A
 def _query_nodes(
     graph: FederatedGraph,
     kind: str | None = None,
@@ -4272,7 +4273,6 @@ def _query_nodes(
         candidates = [n for n in candidates if n.id in keyword_ids]
 
     # 3. Property post-filters.
-    # Implements: REQ-d00279-A
     # Level and status are scope properties, so they are judged by the one
     # authority rather than compared here -- a second comparison is how two
     # surfaces asked the same question start giving different answers. Each
@@ -4335,6 +4335,7 @@ def _gap_measures(rollup: Any, dimension: str, label: str) -> dict[str, float]:
     return {m: round(v, 4) for m, v in assertion_measures(dim, label).items()}
 
 
+# Implements: REQ-p00017-G
 def _get_test_coverage(graph: FederatedGraph, req_id: str) -> dict[str, Any]:
     """Get test coverage information for a requirement.
 
@@ -4362,7 +4363,6 @@ def _get_test_coverage(graph: FederatedGraph, req_id: str) -> dict[str, Any]:
         return {"success": False, "error": f"{req_id} is not a requirement"}
 
     # Collect assertions
-    # Implements: REQ-p00017-G
     assertions: list[tuple[str, str]] = [
         (child.id, child.get_field("label", "")) for child in counted_assertions(node)
     ]
@@ -4582,6 +4582,7 @@ def _dimension_figures(node: Any, dimension: str) -> dict[str, Any]:
     }
 
 
+# Implements: REQ-p00017-G
 def _get_assertion_test_map(graph: FederatedGraph, req_id: str) -> dict[str, Any]:
     """Build per-assertion test coverage map for a requirement.
 
@@ -4606,7 +4607,6 @@ def _get_assertion_test_map(graph: FederatedGraph, req_id: str) -> dict[str, Any
         return {"success": False, "error": f"{req_id} is not a requirement"}
 
     # Collect assertions
-    # Implements: REQ-p00017-G
     assertions: list[tuple[str, str]] = [
         (child.id, child.get_field("label", "")) for child in counted_assertions(node)
     ]
@@ -4636,6 +4636,7 @@ def _get_assertion_test_map(graph: FederatedGraph, req_id: str) -> dict[str, Any
     }
 
 
+# Implements: REQ-p00017-G
 def _get_assertion_uat_map(graph: FederatedGraph, req_id: str) -> dict[str, Any]:
     """Build per-assertion UAT (journey) coverage map for a requirement.
 
@@ -4661,7 +4662,6 @@ def _get_assertion_uat_map(graph: FederatedGraph, req_id: str) -> dict[str, Any]
         return {"success": False, "error": f"{req_id} is not a requirement"}
 
     # Collect assertions
-    # Implements: REQ-p00017-G
     assertions: list[tuple[str, str]] = [
         (child.id, child.get_field("label", "")) for child in counted_assertions(node)
     ]
@@ -4691,6 +4691,7 @@ def _get_assertion_uat_map(graph: FederatedGraph, req_id: str) -> dict[str, Any]
     }
 
 
+# Implements: REQ-p00017-G
 def _get_assertion_code_map(
     graph: FederatedGraph, req_id: str, edge_kind: str | None = None
 ) -> dict[str, Any]:
@@ -4722,7 +4723,6 @@ def _get_assertion_code_map(
         return {"success": False, "error": f"{req_id} is not a requirement"}
 
     # Collect assertions
-    # Implements: REQ-p00017-G
     assertions: list[tuple[str, str]] = [
         (child.id, child.get_field("label", "")) for child in counted_assertions(node)
     ]
@@ -4801,6 +4801,7 @@ def _get_assertion_code_map(
     }
 
 
+# Implements: REQ-p00017-G
 def _get_assertion_refines_map(graph: FederatedGraph, req_id: str) -> dict[str, Any]:
     """Build per-assertion refines map for a requirement.
 
@@ -4823,7 +4824,6 @@ def _get_assertion_refines_map(graph: FederatedGraph, req_id: str) -> dict[str, 
     if node.kind != NodeKind.REQUIREMENT:
         return {"success": False, "error": f"{req_id} is not a requirement"}
 
-    # Implements: REQ-p00017-G
     assertions: list[tuple[str, str]] = [
         (child.id, child.get_field("label", "")) for child in counted_assertions(node)
     ]
@@ -5550,6 +5550,7 @@ def _subtree_to_markdown(
     return "\n".join(lines)
 
 
+# Implements: REQ-o00060-G
 def _subtree_to_flat(
     collected: list[tuple[Any, int]],
     graph: FederatedGraph,
@@ -5570,7 +5571,6 @@ def _subtree_to_flat(
             "kind": node.kind.value,
             "title": node.get_label(),
             "depth": depth_level,
-            # Implements: REQ-o00060-G
             "version": node_version(node),
         }
 
@@ -5610,6 +5610,7 @@ def _subtree_to_flat(
     }
 
 
+# Implements: REQ-o00060-G
 def _subtree_to_nested(
     node: Any,
     depth_limit: int,
@@ -5633,7 +5634,6 @@ def _subtree_to_nested(
         "id": node.id,
         "kind": node.kind.value,
         "title": node.get_label(),
-        # Implements: REQ-o00060-G
         "version": node_version(node),
     }
 
@@ -6563,6 +6563,7 @@ def create_server(
         """
         return _search(_state["graph"], query, field, regex, limit)
 
+    # Implements: REQ-d00077-F
     @mcp.tool()
     def minimize_requirement_set(
         req_ids: list[str],
@@ -6573,7 +6574,6 @@ def create_server(
         Use when: you have search results and want to eliminate redundant parent
         requirements already covered by their children in the list.
         """
-        # Implements: REQ-d00077-F
         parsed_kinds: set[EdgeKind] = set()
         for kind_str in edge_kinds.split(","):
             kind_str = kind_str.strip().lower()
@@ -6585,6 +6585,7 @@ def create_server(
             parsed_kinds = {EdgeKind.IMPLEMENTS, EdgeKind.REFINES}
         return _minimize_requirement_set(_state["graph"], req_ids, parsed_kinds)
 
+    # Implements: REQ-d00078-F
     @mcp.tool()
     def scoped_search(
         query: str,
@@ -6602,11 +6603,11 @@ def create_server(
         Prefer discover_requirements() when you want only the most-specific
         (leaf-level) matches with ancestors pruned out.
         """
-        # Implements: REQ-d00078-F
         return _scoped_search(
             _state["graph"], query, scope_id, direction, field, regex, include_assertions, limit
         )
 
+    # Implements: REQ-d00079-D
     @mcp.tool()
     def discover_requirements(
         query: str,
@@ -6625,7 +6626,6 @@ def create_server(
         searches descendants of scope_id, then prunes ancestor matches that are
         superseded by more-specific descendants.
         """
-        # Implements: REQ-d00079-D
         parsed_kinds: set[EdgeKind] = set()
         for kind_str in edge_kinds.split(","):
             kind_str = kind_str.strip().lower()
@@ -6901,6 +6901,7 @@ def create_server(
         node = _state["graph"].find_by_id(node_id)
         return _attach_version(_mutate_change_status(_state["graph"], node_id, new_status), node)
 
+    # Implements: REQ-o00062-M
     @mcp.tool()
     @_locked
     def mutate_add_requirement(
@@ -6936,7 +6937,6 @@ def create_server(
         if guard:
             return guard
         parent = None
-        # Implements: REQ-o00062-M
         # Placement changes the destination file's
         # composition, so the FILE token is the one that must be current.
         guarded_id = file_id or parent_id
@@ -7826,6 +7826,7 @@ def create_server(
             rebuild_shared_graph(_state)
         return _reattach_version_after_rebuild(_state["graph"], result, req_id)
 
+    # Implements: REQ-o00062-N
     @mcp.tool()
     @_locked
     def restore_from_safety_branch(branch_name: str, if_tip_mutation_id: str) -> dict[str, Any]:
@@ -7837,7 +7838,6 @@ def create_server(
                 overwrites files and discards every writer's pending work, so
                 you cannot roll back over a mutation set you have never seen.
         """
-        # Implements: REQ-o00062-N
         conflict = _guard_mutation_tip(_state["graph"], if_tip_mutation_id)
         if conflict:
             return conflict
@@ -7855,6 +7855,7 @@ def create_server(
         """
         return _list_safety_branches_impl(_state["working_dir"])
 
+    # Implements: REQ-d00132-A, REQ-d00132-B
     @mcp.tool()
     @_locked
     def save_mutations(
@@ -7879,7 +7880,6 @@ def create_server(
                 Required when mutations affect Active requirements
                 (when changelog enforcement is enabled).
         """
-        # Implements: REQ-d00132-A, REQ-d00132-B
         graph = _state["graph"]
         if graph is None:
             return {"success": False, "error": "graph not available"}
@@ -8124,6 +8124,7 @@ def _config_hash_for_daemon(working_dir: Path) -> str:
     return ""
 
 
+# Implements: REQ-p00083-A
 def run_server(
     working_dir: Path | None = None,
     transport: str = "stdio",
@@ -8148,7 +8149,6 @@ def run_server(
         daemon_json = Path(env_dj)
 
     if transport == "stdio":
-        # Implements: REQ-p00083-A
         # A stdio server holds its own graph and its own pending
         # mutations, and it ends when its client's pipe closes rather
         # than by any decision of its own. Hold the holder so the same
