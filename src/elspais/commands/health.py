@@ -1284,7 +1284,7 @@ def check_spec_format_rules(
             passed=True,
             message=f"{req_count} requirements pass format rules ({len(warnings)} warning(s))",
             category="spec",
-            severity="warning",
+            severity=severity,
             details={
                 "warnings": [
                     {"rule": v.rule, "message": v.message, "node": v.node_id} for v in warnings
@@ -1822,6 +1822,7 @@ def check_term_duplicates(
     duplicates: list[tuple],
     severity: str | None = None,
     config: dict[str, Any] | None = None,
+    graph: FederatedGraph | None = None,
 ) -> HealthCheck:
     """Check for duplicate term definitions."""
     severity = severity or severity_for("terms.duplicates", config)
@@ -1839,6 +1840,13 @@ def check_term_duplicates(
 
     findings = []
     for existing, incoming in duplicates:
+        # `defined_in` is a NODE id (the nearest REQUIREMENT or FILE ancestor),
+        # not a path, so the location is resolved the one way the estate
+        # resolves a node id into a file and a line.
+        file_path: str | None = None
+        line: int | None = existing.defined_at_line
+        if graph is not None and existing.defined_in:
+            file_path, line = _fault_location(graph, existing.defined_in, existing.defined_at_line)
         findings.append(
             HealthFinding(
                 message=(
@@ -1847,7 +1855,8 @@ def check_term_duplicates(
                     f"and {incoming.defined_in}:{incoming.defined_at_line}"
                 ),
                 node_id=existing.defined_in,
-                line=existing.defined_at_line,
+                file_path=file_path,
+                line=line,
             )
         )
 
@@ -2180,7 +2189,7 @@ def run_term_checks(
                 )
 
     return [
-        check_term_duplicates(duplicates, config=config),
+        check_term_duplicates(duplicates, config=config, graph=graph),
         check_undefined_terms(undefined, config=config),
         check_unmarked_usage(unmarked, config=config),
         check_term_unused(entries, config=config),
@@ -3489,6 +3498,7 @@ def check_no_traceability(
     findings = [
         HealthFinding(
             message=f"No traceability markers in {path}",
+            file_path=path,
         )
         for path in unlinked_files
     ]
@@ -5015,12 +5025,16 @@ def _run_local_checks(args: argparse.Namespace, params: dict[str, str]) -> dict[
         try:
             config = get_config(config_path, start_path=start_path)
         except Exception as e:
+            # No config was read, so the authority necessarily answers with the
+            # registered default -- asked through the authority all the same,
+            # because a severity is never decided at a call site.
             report.add(
                 HealthCheck(
                     name="config.load",
                     passed=False,
                     message=f"Failed to load config: {e}",
                     category="config",
+                    severity=severity_for("config.load", config),
                 )
             )
 
@@ -5036,14 +5050,19 @@ def _run_local_checks(args: argparse.Namespace, params: dict[str, str]) -> dict[
         if config is None:
             config = get_config(config_path, start_path=start_path)
     except Exception as e:
-        report.add(
-            HealthCheck(
-                name="graph.build",
-                passed=False,
-                message=f"Failed to build graph: {e}",
-                category="spec",
+        build_severity = severity_for("graph.build", config)
+        if build_severity == Severity.OFF:
+            report.add(skipped_check("graph.build", "A graph that cannot be built"))
+        else:
+            report.add(
+                HealthCheck(
+                    name="graph.build",
+                    passed=False,
+                    message=f"Failed to build graph: {e}",
+                    category="spec",
+                    severity=build_severity,
+                )
             )
-        )
         return report.to_dict(lenient=lenient)
 
     if graph is not None and config is not None:
@@ -5394,9 +5413,25 @@ def _format_report(
         data.meta = meta
         return _render_markdown(data)
     elif fmt == "junit":
-        return _render_junit(report, include_passing_details=include_passing)
+        # The verdict and the narrowing travel into the filed document too: a
+        # CI consumer never sees the exit code, so a JUnit file whose verdict
+        # came from the surviving checks would read green for a run that
+        # failed (REQ-d00285-H), and one that named no narrowing could not be
+        # told from a run that found less (REQ-d00285-I).
+        return _render_junit(
+            report,
+            include_passing_details=include_passing,
+            verdict=whole_run,
+            disclosure=disclosure,
+            filter_info=outcome.to_dict() if outcome.filter.active else None,
+        )
     elif fmt == "sarif":
-        return _render_sarif(report, verdict=whole_run)
+        return _render_sarif(
+            report,
+            verdict=whole_run,
+            disclosure=disclosure,
+            filter_info=outcome.to_dict() if outcome.filter.active else None,
+        )
     else:
         if quiet:
             return _build_summary_line(whole_run)
@@ -5761,9 +5796,15 @@ def _print_text_report(
     print(_render_text(data))
 
 
-# Implements: REQ-d00085-E
+# Implements: REQ-d00085-E, REQ-d00285-C
 def _render_markdown(data: _ReportData) -> str:
-    """Render _ReportData as markdown checklist."""
+    """Render _ReportData as markdown checklist.
+
+    A failing check states its severity token, because `- [ ]` alone says
+    only that the box is unticked: an error and a warning would render
+    identically, and a finding has to carry the severity it carries in the
+    other formats (REQ-d00285-C).
+    """
     lines: list[str] = []
 
     for i, section in enumerate(data.sections):
@@ -5773,12 +5814,14 @@ def _render_markdown(data: _ReportData) -> str:
         lines.append(f"## {section.icon} {section.name} ({section.stats})")
         lines.append("")
         for check in section.checks:
-            if check.icon == "~":
-                lines.append(f"- [ ] ~ {check.name}: {check.message}")
+            if check.severity == "info":
+                lines.append(f"- [ ] {check.icon} {check.name}: {check.message}")
             elif check.icon == "\u2713":
                 lines.append(f"- [x] {check.name}: {check.message}")
             else:
-                lines.append(f"- [ ] {check.name}: {check.message}")
+                # The icon IS the severity token `_build_report_data` chose
+                # (\u2717 error, \u26a0 warning); the box cannot tell them apart.
+                lines.append(f"- [ ] {check.icon} {check.name}: {check.message}")
             if check.findings:
                 # A command is code and reads as code; "no command resolves
                 # this" is a sentence and would read as one if it were not.
@@ -5814,16 +5857,35 @@ def _render_markdown(data: _ReportData) -> str:
     return "\n".join(lines)
 
 
-# Implements: REQ-d00085-H
+# Implements: REQ-d00085-H, REQ-d00285-H+I
 def _render_junit(
     report: HealthReport,
     include_passing_details: bool = False,
+    verdict: HealthReport | None = None,
+    disclosure: str | None = None,
+    filter_info: dict[str, Any] | None = None,
 ) -> str:
     """Render health report as JUnit XML.
 
     Maps categories to <testsuite> elements, checks to <testcase> elements.
     Failed checks with severity=error become <failure>, severity=warning become
     <system-err> with WARNING prefix, and severity=info become <system-out>.
+
+    Args:
+        report: The checks to render -- the narrowed ones, where the report
+            was narrowed.
+        include_passing_details: Also render the findings of passing checks.
+        verdict: The report the document's verdict speaks for. Each
+            <testsuite> counts the checks it actually holds, which is what is
+            presented; the VERDICT is this report's, so a narrowing cannot
+            move it (REQ-d00285-H). Defaults to *report*.
+        disclosure: What the narrowing withheld, where there was one. Its
+            presence is what says this document is a narrowed view, so the
+            verdict and the extent are stated in a <testsuite> of their own
+            (REQ-d00285-I) -- an unnarrowed run needs neither and gets
+            neither.
+        filter_info: The narrowing as values, for a consumer reading
+            properties rather than text.
     """
     import xml.etree.ElementTree as ET
 
@@ -5854,8 +5916,18 @@ def _render_junit(
             )
 
             if check.severity == "info":
+                # The element an info check reports through is <system-out>
+                # (REQ-d00085-H); what it carries is still everything the
+                # finding carries in the other formats (REQ-d00285-C), so a
+                # condition reported at info is not the one case whose
+                # locations, codes and remedy are dropped.
+                # Implements: REQ-d00285-C
                 sys_out = ET.SubElement(tc, "system-out")
-                sys_out.text = check.message
+                detail = not check.passed or (include_passing_details and check.findings)
+                if detail:
+                    sys_out.text = f"{check.message}\n{_failure_body(check)}"
+                else:
+                    sys_out.text = check.message
             elif not check.passed:
                 # The remedy and the findings travel here too, so a report
                 # filed to CI names what a report read on a terminal names.
@@ -5868,11 +5940,83 @@ def _render_junit(
                     sys_err = ET.SubElement(tc, "system-err")
                     sys_err.text = f"WARNING: {check.message}\n{body}"
             elif check.passed and include_passing_details and check.findings:
+                # The same body a failing check renders: a finding asked for
+                # by name carries its location, its codes and its remedy
+                # whichever check reported it (REQ-d00285-C).
+                # Implements: REQ-d00285-C
                 sys_out = ET.SubElement(tc, "system-out")
-                finding_lines = [f.message for f in check.findings]
-                sys_out.text = "\n".join(finding_lines)
+                sys_out.text = _failure_body(check)
+
+    if disclosure is not None:
+        _junit_verdict_suite(testsuites, verdict or report, disclosure, filter_info)
 
     return ET.tostring(testsuites, encoding="unicode", xml_declaration=True)
+
+
+# Implements: REQ-d00285-H, REQ-d00285-I
+def _junit_verdict_suite(
+    testsuites: Any,
+    verdict: HealthReport,
+    disclosure: str,
+    filter_info: dict[str, Any] | None,
+) -> None:
+    """Write the whole run's verdict, and the narrowing, into a JUnit document.
+
+    A narrowed document holds fewer checks than the run produced, so its own
+    <testsuite failures=> counts speak for what is presented and cannot speak
+    for the run. This testcase is where the verdict lives instead: it fails
+    when the run had errors, whichever checks the reader asked to see
+    (REQ-d00285-H), and it states the narrowing and the extent of what was
+    withheld for a consumer that never sees the terminal (REQ-d00285-I).
+    """
+    import xml.etree.ElementTree as ET
+
+    failed = verdict.failed
+    suite = ET.SubElement(
+        testsuites,
+        "testsuite",
+        name="elspais.report",
+        tests="1",
+        failures="1" if failed else "0",
+        errors="0",
+    )
+    props = ET.SubElement(suite, "properties")
+    recorded: list[tuple[str, str]] = [
+        ("narrowing", disclosure),
+        ("run.passed", str(verdict.passed)),
+        ("run.failed", str(failed)),
+        ("run.warnings", str(verdict.warnings)),
+        ("run.skipped", str(verdict.skipped)),
+    ]
+    for key, value in (filter_info or {}).items():
+        if isinstance(value, list):
+            if not value:
+                continue
+            recorded.append((f"filter.{key}", " ".join(str(v) for v in value)))
+        elif value not in (None, ""):
+            recorded.append((f"filter.{key}", str(value)))
+    for key, value in recorded:
+        ET.SubElement(props, "property", name=key, value=value)
+
+    tc = ET.SubElement(
+        suite,
+        "testcase",
+        name="report.verdict",
+        classname="elspais.health.report",
+    )
+    summary = _build_summary_line(verdict)
+    body = f"{summary}\n{disclosure}"
+    if failed:
+        failure = ET.SubElement(tc, "failure", message=summary)
+        failure.text = body
+    elif verdict.warnings:
+        # Warnings are reported here the way this renderer reports a warning
+        # check: stated, and not a failure.
+        sys_err = ET.SubElement(tc, "system-err")
+        sys_err.text = f"WARNING: {body}"
+    else:
+        sys_out = ET.SubElement(tc, "system-out")
+        sys_out.text = body
 
 
 # Implements: REQ-d00285-B, REQ-d00285-C
@@ -5912,13 +6056,23 @@ def _finding_properties(check: HealthCheck, finding: HealthFinding) -> dict[str,
     return props
 
 
-# Implements: REQ-d00085-J
-def _render_sarif(report: HealthReport, verdict: HealthReport | None = None) -> str:
+# Implements: REQ-d00085-J, REQ-d00285-I
+def _render_sarif(
+    report: HealthReport,
+    verdict: HealthReport | None = None,
+    disclosure: str | None = None,
+    filter_info: dict[str, Any] | None = None,
+) -> str:
     """Render health report as SARIF v2.1.0 JSON.
 
     One reportingDescriptor per unique failing check name, one result per
     HealthFinding with physical locations. Passing checks are omitted.
     Coverage stats go in run.properties.
+
+    Where the results were narrowed, run.properties also carries the
+    narrowing and the extent of what it withheld (REQ-d00285-I): a results
+    list holding fewer findings than the run produced, saying nothing, is one
+    a consumer cannot tell from a run that found fewer.
     """
     _SARIF_SEVERITY = {"error": "error", "warning": "warning", "info": "note"}
 
@@ -5976,6 +6130,18 @@ def _render_sarif(report: HealthReport, verdict: HealthReport | None = None) -> 
                 }
             )
 
+    run_properties: dict[str, Any] = {
+        # The run's counts, not the narrowed view's -- a filtered
+        # report states what the run found and lists a subset.
+        "passed": (verdict or report).passed,
+        "failed": (verdict or report).failed,
+        "warnings": (verdict or report).warnings,
+    }
+    if disclosure is not None:
+        run_properties["narrowing"] = disclosure
+        if filter_info is not None:
+            run_properties["filter"] = filter_info
+
     sarif = {
         "$schema": (
             "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/main/"
@@ -5991,13 +6157,7 @@ def _render_sarif(report: HealthReport, verdict: HealthReport | None = None) -> 
                     },
                 },
                 "results": results,
-                "properties": {
-                    # The run's counts, not the narrowed view's -- a filtered
-                    # report states what the run found and lists a subset.
-                    "passed": (verdict or report).passed,
-                    "failed": (verdict or report).failed,
-                    "warnings": (verdict or report).warnings,
-                },
+                "properties": run_properties,
             }
         ],
     }

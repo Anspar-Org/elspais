@@ -65,6 +65,22 @@ def _trace_stated(graph, fmt: str, values: list[str]) -> list[str]:
     return list(json.loads(out)[0].keys())
 
 
+# The renderings whose stated values can be read back as value keys: two
+# tables and one structured document.
+FORMATS_WITH_KEYS = ("csv", "markdown", "json")
+
+
+def _numbers_under(figure) -> list[float]:
+    """Every number a figure states, however deeply it is nested.
+
+    A figure a row has nothing to state for states none of them -- which is
+    what keeps it distinguishable from one whose numbers are genuinely zero.
+    """
+    if isinstance(figure, dict):
+        return [n for value in figure.values() for n in _numbers_under(value)]
+    return [] if figure is None else [figure]
+
+
 def _summary_stated(data: dict, fmt: str) -> list[str]:
     """What one summary rendering states, by the same reading."""
     out = summary_cmd._render(dict(data), fmt, None)
@@ -74,6 +90,45 @@ def _summary_stated(data: dict, fmt: str) -> list[str]:
         header = next(ln for ln in out.splitlines() if ln.startswith("| "))
         return [c.strip() for c in header.strip("|").split("|")]
     return list(json.loads(out)["levels"][0].keys())
+
+
+# The numbers a figure is spelled as, rather than values of their own: they are
+# how a structured format renders the value standing at the path above them.
+_FIGURE_PARTS = ("count", "total", "ratio", "attributed", "passed", "failed", "awaiting")
+
+
+def _stated_paths(row: dict) -> list[str]:
+    """Every value KEY one structured row states, in the order it states them.
+
+    A value keyed by a path is nested under that path, and a figure is spelled
+    as the object of its numbers -- so the path an object stands at is a stated
+    value, the numbers inside it are that value's spelling, and a nested object
+    is a value of its own.
+    """
+    stated: list[str] = []
+
+    def walk(obj: dict, prefix: str) -> None:
+        for key, value in obj.items():
+            if isinstance(value, dict):
+                stated.append(f"{prefix}{key}")
+                walk(value, f"{prefix}{key}.")
+            elif not (prefix and key in _FIGURE_PARTS):
+                stated.append(f"{prefix}{key}")
+
+    walk(row, "")
+    return stated
+
+
+# The display words a value is stated under are the project's to rename
+# (REQ-d00282-J), so a tabular rendering is read back through the same
+# ``header_for`` that wrote it -- the comparison is between value SETS, never
+# between spellings.
+def _summary_stated_keys(data: dict, fmt: str) -> list[str]:
+    """The value keys one summary rendering states, however it spells them."""
+    if fmt == "json":
+        return _stated_paths(json.loads(summary_cmd._render(dict(data), fmt, None))["levels"][0])
+    by_word = {summary_cmd.header_for(key, None): key for key in summary_cmd.OFFERED_VALUES}
+    return [by_word[word] for word in _summary_stated(data, fmt)]
 
 
 # ---------------------------------------------------------------------------
@@ -172,6 +227,25 @@ class TestOneSelectionOneValueSet:
         for fmt in ("csv", "markdown"):
             assert _summary_stated(payload, fmt) == expected, fmt
 
+    # Verifies: REQ-d00282-E
+    def test_a_report_under_no_selection_states_one_value_set_in_every_format(
+        self, coverage_payload
+    ):
+        """A reader who names nothing is answered with the report's default set
+        -- and with the SAME set whichever format they render it in.
+
+        The failure this ends was silent: the structured rendering stated the
+        collector's own figures, which included values the table renderings
+        never stated and omitted nothing they did, so the same report answered
+        two different questions depending on which artifact you opened.
+        """
+        stated = {fmt: _summary_stated_keys(coverage_payload, fmt) for fmt in FORMATS_WITH_KEYS}
+        assert stated["csv"] == stated["json"], stated
+        assert stated["markdown"] == stated["json"], stated
+        # And it is a set the report offers as values, rather than whatever the
+        # collector happened to carry.
+        assert set(stated["json"]) <= set(summary_cmd.OFFERED_VALUES), stated["json"]
+
     # Verifies: REQ-d00282-E, REQ-d00258-O+P
     def test_a_figure_states_its_own_denominator_and_proportion(self, coverage_payload):
         """One named value produces one cell carrying the whole fact.
@@ -193,6 +267,73 @@ class TestOneSelectionOneValueSet:
             argparse.Namespace(values="tested", scope=None), None
         )
         assert values[0] == "level"
+
+
+# ---------------------------------------------------------------------------
+# REQ-d00282-K: the selection decides the order, in every format
+# ---------------------------------------------------------------------------
+
+
+# Each selection names the values that identify and count a group out of the
+# place a report used to put them: after a figure, in the middle, and last.
+ORDERINGS = (
+    ("level", "implemented", "requirements", "assertions"),
+    ("requirements", "level", "assertions"),
+    ("assertions", "implemented", "level"),
+)
+
+# How the text rendering spells each of the values these selections name. Read
+# as positions rather than as lines, so the test says nothing about how the
+# rendering lays them out -- only about the order a reader meets them in.
+_TEXT_TOKEN = {
+    "level": "PRD",
+    "requirements": "2 requirements",
+    "assertions": "4 assertions",
+    "implemented": "Implemented:",
+}
+
+
+@pytest.fixture()
+def one_group() -> dict:
+    """One group with assertions, so every selected value has something to
+    state and position is the only thing under test."""
+    return {"levels": [_level_row("PRD", 2, 4)], "excluded": {}, "integrations": []}
+
+
+class TestValuesAreStatedInTheOrderNamed:
+    # Verifies: REQ-d00282-K
+    @pytest.mark.parametrize("values", ORDERINGS)
+    @pytest.mark.parametrize("fmt", FORMATS_WITH_KEYS)
+    def test_a_tabular_or_structured_report_states_them_in_the_named_order(
+        self, one_group, values, fmt
+    ):
+        payload = {**one_group, "values": list(values)}
+        assert _summary_stated_keys(payload, fmt) == list(values)
+
+    # Verifies: REQ-d00282-K+L
+    @pytest.mark.parametrize("values", ORDERINGS)
+    def test_the_text_report_states_them_in_the_named_order(self, one_group, values):
+        """A consumer reads a committed artifact where it left the values, so a
+        rendering that decided the order for itself broke it exactly as a
+        changed set would. The values naming and counting the group are values
+        like any other: stated where the selection named them, not gathered
+        into a fixed opening.
+        """
+        payload = {**one_group, "values": list(values)}
+        out = summary_cmd._render(payload, "text", None)
+        for value in values:
+            assert _TEXT_TOKEN[value] in out, f"{value} not stated: {out}"
+        positions = [out.index(_TEXT_TOKEN[value]) for value in values]
+        assert positions == sorted(positions), out
+
+    # Verifies: REQ-d00282-L
+    @pytest.mark.parametrize("values", ORDERINGS)
+    def test_every_rendering_still_says_what_the_row_is_about(self, one_group, values):
+        """Wherever the selection puts it, the group is named: a row that
+        cannot be attributed to what it is a fact about is not a report."""
+        payload = {**one_group, "values": list(values)}
+        for fmt in ("text", "csv", "markdown", "json"):
+            assert "PRD" in summary_cmd._render(dict(payload), fmt, None), fmt
 
 
 # ---------------------------------------------------------------------------
@@ -245,18 +386,23 @@ class TestAbsenceIsNotZero:
         assert levels["PRD"]["implemented"] == {"count": 0.0, "total": 4.0, "ratio": 0.0}
 
     # Verifies: REQ-d00282-M, REQ-d00258-O
-    def test_the_unselected_payload_keeps_the_distinction_too(self, coverage_payload):
-        """A reader who named no values receives the whole payload, and it
-        answers the same question the same way."""
+    def test_the_report_under_no_selection_keeps_the_distinction_too(self, coverage_payload):
+        """A reader who named no values receives the report's default set, and
+        it answers the same question the same way.
+
+        Read as numbers rather than as keys: a group owed no coverage states no
+        number anywhere beneath the figure, and a group whose evidence is
+        genuinely absent states the zero it computed.
+        """
         levels = {
             lv["level"]: lv
             for lv in json.loads(summary_cmd._render(coverage_payload, "json", None))["levels"]
         }
-        assert levels["OPS"]["implemented_total_covered"] is None
-        assert levels["OPS"]["tested_awaiting"] is None
+        assert _numbers_under(levels["OPS"]["implemented"]) == [], levels["OPS"]["implemented"]
         # A real group's zeros are real answers and stay as computed.
-        assert levels["PRD"]["implemented_total_covered"] == 0.0
-        assert levels["PRD"]["tested_awaiting"] == 0
+        assert levels["PRD"]["implemented"]["count"] == 0.0
+        assert levels["PRD"]["implemented"]["total"] == 4.0
+        assert levels["PRD"]["implemented"]["immediate_direct"]["count"] == 0.0
 
 
 # ---------------------------------------------------------------------------

@@ -3,7 +3,14 @@
 
 from __future__ import annotations
 
+import contextlib
+import os
+import sys
+import threading
+import time
 from pathlib import Path
+
+import pytest
 
 from elspais.commands.test_runner import run_configured_targets
 from elspais.config.schema import (
@@ -16,6 +23,35 @@ from elspais.config.schema import (
 
 def _cfg_with_targets(targets: list[TestTargetConfig]) -> ElspaisConfig:
     return ElspaisConfig(scanning=ScanningConfig(test=TestScanningConfig(targets=targets)))
+
+
+@contextlib.contextmanager
+def _terminal_tee(path: Path):
+    """Capture everything this process sends to its terminal into `path`.
+
+    Both the Python-level streams and the underlying file descriptors are
+    redirected, so a child that inherits fd 1/2 and an echo written through
+    `sys.stdout`/`sys.stderr` land in the same place -- which is what "the
+    invoking terminal" means to the developer running the command.
+    """
+    with open(path, "w", buffering=1) as sink:
+        saved_out_fd = os.dup(1)
+        saved_err_fd = os.dup(2)
+        saved_out, saved_err = sys.stdout, sys.stderr
+        try:
+            sys.stdout.flush()
+            sys.stderr.flush()
+            os.dup2(sink.fileno(), 1)
+            os.dup2(sink.fileno(), 2)
+            sys.stdout = sink
+            sys.stderr = sink
+            yield
+        finally:
+            sys.stdout, sys.stderr = saved_out, saved_err
+            os.dup2(saved_out_fd, 1)
+            os.dup2(saved_err_fd, 2)
+            os.close(saved_out_fd)
+            os.close(saved_err_fd)
 
 
 def test_no_targets_returns_empty(tmp_path: Path):
@@ -177,3 +213,93 @@ def test_only_none_runs_all_targets(tmp_path: Path):
     )
     results, _captured = run_configured_targets(cfg, tmp_path, only=None)
     assert [r.name for r in results] == ["a", "b"]
+
+
+# Verifies: REQ-d00249-B
+@pytest.mark.parametrize(
+    ("reporter", "stdout_is_captured"),
+    [("junit", False), ("flutter-machine", True)],
+)
+def test_REQ_d00249_B_both_streams_reach_terminal(
+    tmp_path: Path, reporter: str, stdout_is_captured: bool
+):
+    """A runner's stdout AND stderr reach the invoking terminal, whatever its reporter.
+
+    A stdout-channel reporter additionally needs that stdout captured for its
+    parser (REQ-d00254-F); capturing it must not cost the developer sight of it.
+    """
+    # The sentinels live in files the command reads, never in the command text
+    # itself -- the runner banner echoes the command, and a sentinel spelled
+    # there would be found on the terminal whether or not the runner's own
+    # output ever arrived.
+    (tmp_path / "out.txt").write_text("OUTLINE\n")
+    (tmp_path / "err.txt").write_text("ERRLINE\n")
+    cfg = _cfg_with_targets(
+        [
+            TestTargetConfig(
+                name="t",
+                command="cat out.txt; cat err.txt >&2; exit 3",
+                reporter=reporter,
+            )
+        ]
+    )
+    log = tmp_path / "terminal.log"
+    with _terminal_tee(log):
+        results, captured = run_configured_targets(cfg, tmp_path)
+    terminal = log.read_text()
+
+    assert results[0].returncode == 3
+    assert "OUTLINE" in terminal, f"runner stdout never reached the terminal: {terminal!r}"
+    assert "ERRLINE" in terminal, f"runner stderr never reached the terminal: {terminal!r}"
+    if stdout_is_captured:
+        assert "OUTLINE" in captured["t"]
+    else:
+        assert "t" not in captured
+
+
+# Verifies: REQ-d00249-B
+def test_REQ_d00249_B_stdout_channel_streams_live_not_at_exit(tmp_path: Path):
+    """Output appears on the terminal while the runner is still going, not after it ends."""
+    # Sentinels come from files, not the command text (see above).
+    (tmp_path / "early.txt").write_text("EARLY\n")
+    (tmp_path / "late.txt").write_text("LATE\n")
+    cfg = _cfg_with_targets(
+        [
+            TestTargetConfig(
+                name="slow",
+                command="cat early.txt; sleep 1.5; cat late.txt",
+                reporter="flutter-machine",
+            )
+        ]
+    )
+    log = tmp_path / "terminal.log"
+    log.write_text("")
+    seen_early_at: list[float] = []
+    stop = threading.Event()
+    start = time.monotonic()
+
+    def watch() -> None:
+        while not stop.is_set():
+            if "EARLY" in log.read_text():
+                seen_early_at.append(time.monotonic() - start)
+                return
+            time.sleep(0.02)
+
+    watcher = threading.Thread(target=watch, daemon=True)
+    watcher.start()
+    try:
+        with _terminal_tee(log):
+            results, captured = run_configured_targets(cfg, tmp_path)
+    finally:
+        stop.set()
+        watcher.join(timeout=2.0)
+    total = time.monotonic() - start
+
+    assert results[0].returncode == 0
+    assert "LATE" in captured["slow"]
+    assert total >= 1.4, "the runner did not actually take the time the probe relies on"
+    assert seen_early_at, "no runner output reached the terminal before the runner exited"
+    assert seen_early_at[0] < 1.0, (
+        f"output was withheld until the runner finished (EARLY seen at {seen_early_at[0]:.2f}s "
+        f"of a {total:.2f}s run)"
+    )

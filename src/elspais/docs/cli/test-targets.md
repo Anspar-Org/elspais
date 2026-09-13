@@ -72,7 +72,10 @@ this table does not name.
 <!-- /generated: reporters -->
 
 A **stdout-channel** reporter captures output directly from the running
-`command`; the `results` field is not used.
+`command`; the `results` field is not used.  Capturing it does not hide it: each
+line is echoed to elspais's stderr as it arrives, so the run is visible live
+while the text itself is kept for the parser.  The command's own stderr is never
+captured and passes straight through.
 
 A **file-channel** reporter reads files from disk -- those matched by the
 `results` glob for a results-kind reporter, and the `coverage` path for a

@@ -697,6 +697,7 @@ Produces JUnit XML that CI systems (GitHub Actions, Jenkins, GitLab CI) can inge
 | Failed check (error severity) | `<testcase>` with `<failure>` element |
 | Failed check (warning severity) | `<testcase>` with `<system-err>` prefixed `WARNING:` |
 | Info message | `<testcase>` with `<system-out>` |
+| Narrowed report | extra `<testsuite name="elspais.report">` carrying the run's verdict and the narrowing |
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -747,6 +748,7 @@ Produces [SARIF v2.1.0](https://docs.oasis-open.org/sarif/sarif/v2.1.0/sarif-v2.
 | Finding with `file_path` | `physicalLocation` with `artifactLocation.uri` |
 | Finding with `line` | `region.startLine` |
 | Coverage stats | `run.properties` (`passed`, `failed`, `warnings`) |
+| Narrowed report | `run.properties.narrowing` (the sentence) and `run.properties.filter` (the values and the extent) |
 
 ```json
 {
@@ -881,6 +883,18 @@ A narrowed report says what it withheld — `showing 2 of 47 checks, 3 of 310
 findings` — because a report that showed a reader some of what it found and
 did not say so reads exactly like a clean run. The exit code is the whole
 run's: narrowing chooses what to look at, never what the run found.
+
+Every format says both. `--format json` carries them in a `filter` block
+beside the whole run's `healthy` and `summary`. `--format sarif` carries them
+in `run.properties` as `narrowing` and `filter`, beside the run's counts.
+`--format junit` gains one extra `<testsuite name="elspais.report">`: its
+`<properties>` state the narrowing and the run's counts, and its
+`report.verdict` testcase FAILS when the run had errors, whichever checks the
+reader asked to see. Without it, a document filed to CI would be read as green
+whenever the narrowing happened to exclude the failing check — the exit code
+that says otherwise is not something a test reporter ever sees. The
+per-category `<testsuite failures=…>` counts still speak for the checks the
+document actually holds.
 
 A `--severity`, `--category` or `--check` naming something outside the tool's
 vocabulary is refused (exit code 2) rather than silently selecting nothing.

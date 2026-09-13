@@ -523,12 +523,15 @@ class TestJsonFormat:
         parsed = json.loads(output)
 
         prd = parsed["levels"][0]
+        # Keyed by the value each figure is selected under, and a figure is the
+        # object of its numbers -- the format decides the spelling, never which
+        # values are stated (REQ-d00282-E).
         assert prd["level"] == "PRD"
-        assert prd["total"] == 1
-        assert prd["total_assertions"] == 3
-        assert prd["implemented_total_covered"] == 2
-        assert prd["tested_total_covered"] == 1
-        assert prd["passing_total_covered"] == 1
+        assert prd["requirements"] == 1
+        assert prd["assertions"] == 3
+        assert prd["implemented"]["count"] == 2
+        assert prd["tested"]["count"] == 1
+        assert prd["verified"]["count"] == 1
 
     # Verifies: REQ-d00086-C
     def test_REQ_d00086_C_json_excluded_counts(self):

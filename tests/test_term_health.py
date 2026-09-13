@@ -10,6 +10,10 @@ empty collection terms, and updated run_term_checks aggregator.
 
 Validates REQ-d00241-A: check_no_traceability reports code files
 with no traceability markers.
+
+Validates REQ-d00285-A: a finding these checks raise carries the location of
+what it is about, so a reader is not made to repeat the search the tool
+already performed.
 """
 
 from __future__ import annotations
@@ -477,6 +481,10 @@ class _FakeGraph:
         self.terms = terms or TermDictionary()
         self.term_duplicates = term_duplicates or []
 
+    def find_by_id(self, node_id: str):
+        """No nodes in the stand-in, so no location resolves."""
+        return None
+
 
 class TestRunTermChecks:
     """Validates REQ-d00223-E and REQ-d00240-D: run_term_checks aggregator."""
@@ -716,6 +724,89 @@ class TestCheckNoTraceability:
 
         assert result.passed is True
         assert result.severity == "info"
+
+
+# =========================================================================
+# REQ-d00285-A: a finding carries the location of what it is about
+# =========================================================================
+
+
+class _ResolvingGraph(_FakeGraph):
+    """A stand-in whose node ids resolve, the way a real graph's do."""
+
+    def __init__(self, federated, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self._federated = federated
+
+    def find_by_id(self, node_id: str):
+        return self._federated.find_by_id(node_id)
+
+
+class TestFindingsCarryTheirLocation:
+    """Validates REQ-d00285-A: the file, and the line where there is one.
+
+    A finding a reader cannot locate costs them the search the tool already
+    performed, so the location travels on the finding itself rather than
+    being recoverable only by whoever knows how to read the identifier it
+    happens to mention in its prose.
+    """
+
+    # Verifies: REQ-d00285-A
+    def test_REQ_d00285_A_an_unmarked_code_file_is_located(self):
+        """The condition is about a whole file, so the file is the location.
+
+        The path is what a reader must open; naming it only inside the
+        sentence leaves every consumer that selects or groups by location --
+        ``checks --file``, SARIF's ``physicalLocation`` -- with nothing to
+        read.
+        """
+        result = check_no_traceability(["src/utils/helper.py", "src/utils/other.py"])
+
+        located = {f.location() for f in result.findings}
+        assert located == {"src/utils/helper.py", "src/utils/other.py"}
+        for finding in result.findings:
+            assert finding.file_path in ("src/utils/helper.py", "src/utils/other.py")
+
+    # Verifies: REQ-d00285-A
+    def test_REQ_d00285_A_a_duplicate_definition_is_located(
+        self, canonical_federated_graph, canonical_graph
+    ):
+        """A duplicate term reports the file and line of the definition it
+        is about.
+
+        What the entry records is a NODE id -- the nearest requirement or
+        file ancestor -- which is not a location a reader can open. The
+        check is obliged to produce one anyway, resolved the way the rest of
+        the estate resolves a node id into a file and a line.
+        """
+        from elspais.graph import NodeKind
+
+        node = next(n for n in canonical_graph.iter_by_kind(NodeKind.REQUIREMENT) if n.file_node())
+        relative_path = node.file_node().get_field("relative_path")
+        assert relative_path, "fixture no longer offers a located requirement"
+
+        first = TermEntry(
+            term="Electronic Record",
+            definition="A record stored electronically.",
+            defined_in=node.id,
+            defined_at_line=42,
+            namespace="REQ",
+        )
+        second = TermEntry(
+            term="Electronic Record",
+            definition="An electronic storage of data.",
+            defined_in="REQ-d00042",
+            defined_at_line=18,
+            namespace="REQ",
+        )
+        graph = _ResolvingGraph(canonical_federated_graph, term_duplicates=[(first, second)])
+
+        checks = run_term_checks(graph, {})
+        duplicates = next(c for c in checks if c.name == "terms.duplicates")
+
+        assert duplicates.passed is False, "input no longer exercises the check"
+        finding = duplicates.findings[0]
+        assert finding.location() == f"{relative_path}:42"
 
 
 # =========================================================================

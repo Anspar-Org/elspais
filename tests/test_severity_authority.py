@@ -572,3 +572,182 @@ class TestOneNameOneCondition:
         for name in ("code.uncited_file", "tests.uncited_file"):
             assert "get_unlinked_nodes" in REGISTRY[name].description
             assert REGISTRY[name].remedy == "elspais uncited"
+
+
+# =============================================================================
+# The authority answers for every branch a check can take
+# =============================================================================
+
+
+_WARNING_ONLY_SPEC = """# REQ-p00010: Gapped Labels
+
+**Level**: PRD | **Status**: Active
+
+A requirement whose only format fault is a gap in its assertion labels.
+
+### Assertions
+
+A. The system SHALL do one thing.
+
+C. The system SHALL do another thing.
+
+*End* *Gapped Labels*
+"""
+
+_WARNING_ONLY_CONFIG = """
+[scanning.spec]
+directories = ["spec"]
+
+[rules.format]
+labels_sequential = true
+require_hash = false
+require_assertions = false
+require_rationale = false
+require_shall = false
+require_status = false
+"""
+
+
+def _warning_only_project(tmp_path: Path, severity_table: str = "") -> tuple[Any, dict[str, Any]]:
+    """A graph holding one requirement whose only fault is a warning.
+
+    The warnings-only outcome is a branch of its own -- the check passes and
+    still reports findings -- so it is the branch where a severity decided
+    beside the authority goes unnoticed.
+    """
+    from elspais.config import _merge_configs, config_defaults, get_config
+    from elspais.graph.factory import build_graph
+
+    config_path = _write_config(tmp_path, _WARNING_ONLY_CONFIG + severity_table)
+    spec_dir = tmp_path / "spec"
+    spec_dir.mkdir()
+    (spec_dir / "reqs.md").write_text(_WARNING_ONLY_SPEC, encoding="utf-8")
+
+    graph = build_graph(
+        spec_dirs=[spec_dir],
+        config_path=config_path,
+        repo_root=tmp_path,
+        scan_code=False,
+        scan_tests=False,
+    )
+    return graph, _merge_configs(config_defaults(), get_config(config_path))
+
+
+class TestEveryBranchAsksTheAuthority:
+    """REQ-d00285-E: one authority decides a finding's severity -- in every
+    branch the check reporting it can take, not only the one someone thought
+    to route through it.
+
+    A branch deciding for itself is exactly the divergence E forbids: the
+    project writes the setting it read about, the condition it names is
+    reported, and the severity does not move.
+    """
+
+    # Verifies: REQ-d00285-E
+    @pytest.mark.parametrize(
+        "severity_table",
+        ["", '[rules.severity]\n"spec.format_rules" = "info"\n'],
+        ids=["unconfigured", "configured"],
+    )
+    def test_REQ_d00285_E_a_format_warning_carries_the_resolved_severity(
+        self, tmp_path: Path, severity_table: str
+    ) -> None:
+        """A format fault reported as a warning is still this check's finding,
+        so it carries this check's severity -- the registered default where the
+        project says nothing, the written value where it speaks."""
+        from elspais.commands.health import check_spec_format_rules
+
+        graph, config = _warning_only_project(tmp_path, severity_table)
+
+        check = check_spec_format_rules(graph, config)
+
+        assert check.passed is True, "input no longer reaches the warnings-only branch"
+        assert check.findings, "input no longer produces a finding"
+        assert check.severity == severity_for("spec.format_rules", config)
+
+    # Verifies: REQ-d00285-E
+    def test_REQ_d00285_E_a_graph_that_will_not_build_carries_the_resolved_severity(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The failure that precedes every other check is a finding like any
+        other: its severity comes from the authority, so a project can say how
+        loudly an unbuildable graph is reported.
+
+        The configured value is the case that can distinguish anything: the
+        registered default for this check coincides with the severity a check
+        carries when nobody supplies one, so an unconfigured project cannot
+        tell a branch that asked the authority from one that asked nothing.
+        """
+        import argparse
+
+        import elspais.graph.factory as factory
+        from elspais.commands import health
+
+        expected = "warning"
+        assert expected != REGISTRY["graph.build"].default, (
+            "the configured value must differ from the default, or the assertion proves nothing"
+        )
+        config_path = _write_config(
+            tmp_path,
+            '[scanning.spec]\ndirectories = ["spec"]\n'
+            '[rules.severity]\n"graph.build" = "warning"\n',
+        )
+        (tmp_path / "spec").mkdir()
+
+        def unbuildable(*args: Any, **kwargs: Any):
+            raise RuntimeError("spec tree unreadable")
+
+        monkeypatch.setattr(factory, "build_graph", unbuildable)
+
+        result = health._run_local_checks(
+            argparse.Namespace(
+                spec_dir=None,
+                config=config_path,
+                _captured_results=None,
+                _fresh_targets=None,
+            ),
+            {},
+        )
+
+        build = next(c for c in result["checks"] if c["name"] == "graph.build")
+        assert build["passed"] is False, "the graph still built; the failure was not reached"
+        assert build["severity"] == expected
+
+    # Verifies: REQ-d00285-E, REQ-d00212-P
+    def test_REQ_d00285_E_an_unbuildable_graph_set_off_is_withheld_not_failed(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """`off` is one of the four words the authority answers with, so a
+        branch that never asked it could not honour the setting at all: the
+        same failure is recorded as withheld rather than reported."""
+        import argparse
+
+        import elspais.graph.factory as factory
+        from elspais.commands import health
+
+        config_path = _write_config(
+            tmp_path,
+            '[scanning.spec]\ndirectories = ["spec"]\n[rules.severity]\n"graph.build" = "off"\n',
+        )
+        (tmp_path / "spec").mkdir()
+
+        def unbuildable(*args: Any, **kwargs: Any):
+            raise RuntimeError("spec tree unreadable")
+
+        monkeypatch.setattr(factory, "build_graph", unbuildable)
+
+        result = health._run_local_checks(
+            argparse.Namespace(
+                spec_dir=None,
+                config=config_path,
+                _captured_results=None,
+                _fresh_targets=None,
+            ),
+            {},
+        )
+
+        build = next(c for c in result["checks"] if c["name"] == "graph.build")
+        assert build["passed"] is True
+        assert build["severity"] == "info"
+        assert build["details"]["skipped"] is True
+        assert "not reported" in build["message"], "the withholding says what was withheld"

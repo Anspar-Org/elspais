@@ -18,6 +18,8 @@ level and the dedupe a DAG forces -- ``/api/tree-data`` emits one row per path.
 
 from __future__ import annotations
 
+import json
+import re
 from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
@@ -394,3 +396,139 @@ def test_the_scopes_under_test_divide_the_estate(scope_client, tree_rows):
     }
     partial = {c: n for c, n in sizes.items() if 0 < n < population}
     assert partial == sizes, f"scopes deciding nothing: {set(sizes) - set(partial)}"
+
+
+# ---------------------------------------------------------------------------
+# A level only a requirement carries.
+#
+# REQ-d00279-B is an obligation on EVERY rendering of the view that judges
+# membership for itself, and the vocabulary the authority reads a scope against
+# is the configuration's levels TOGETHER with the levels requirements carry
+# (REQ-d00278-H). So a requirement whose level its project never declared is one
+# the authority admits and names -- and the client-side evaluator, whose whole
+# level vocabulary is the catalog its rendering shipped, must be able to judge it
+# too. The fixture above declares every level it carries, so it cannot tell a
+# catalog built from the configuration alone from one that also accounts for what
+# the estate carries; this one can.
+# ---------------------------------------------------------------------------
+
+CARRIED_ONLY_LEVEL = "ARCH"
+
+CARRIED_REQUIREMENTS: tuple[tuple[str, str, str, str, str], ...] = (
+    ("REQ-p00001", "Signed Records", "PRD", "Active", ""),
+    ("REQ-o00001", "Record Store", "OPS", "Active", "REQ-p00001"),
+    ("REQ-d00001", "Signature Block", "DEV", "Active", "REQ-o00001"),
+    ("REQ-d00002", "Mesh Layout", CARRIED_ONLY_LEVEL, "Active", ""),
+)
+
+
+@pytest.fixture(scope="module")
+def carried_repo(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    root = tmp_path_factory.mktemp("scope-carried-level")
+    (root / "spec").mkdir()
+    (root / ".elspais.toml").write_text(CONFIG)
+    (root / "spec" / "requirements.md").write_text(_spec_text(CARRIED_REQUIREMENTS))
+    return root
+
+
+@pytest.fixture(scope="module")
+def carried_served(carried_repo: Path):
+    """A serving process over the fixture, plus the graph and config it serves."""
+    federated = build_graph(repo_root=carried_repo)
+    config = federated._repos[federated._root_repo].config
+    state = AppState(graph=federated, repo_root=carried_repo, config=config)
+    client = TestClient(create_app(state, mount_mcp=False))
+    return client, federated, config
+
+
+def _shipped_level_catalog(html: str) -> list[dict[str, Any]]:
+    """The level catalog a rendering handed its client-side evaluator.
+
+    Read off the rendered page rather than from the builder that produced it, so
+    the assertion is about what a rendering actually filters by.
+    """
+    match = re.search(r"var LEVELS = (\[.*?\]);", html, re.S)
+    assert match, "rendering shipped no level catalog"
+    return json.loads(match.group(1))
+
+
+def _exported_page(graph, config, repo: Path) -> str:
+    from elspais.html.generator import HTMLGenerator
+
+    return HTMLGenerator(graph, base_path=str(repo), config=config).generate()
+
+
+# Verifies: REQ-d00279-B
+def test_carried_level_fixture_is_outside_the_configuration(carried_served):
+    """Guard the two tests below: without this the level would be configured."""
+    client, _graph, config = carried_served
+    configured = {str(k).lower() for k in (config.get("levels") or {})}
+    assert CARRIED_ONLY_LEVEL.lower() not in configured
+    rows = client.get("/api/tree-data").json()
+    carried = {(r.get("level") or "").lower() for r in rows}
+    assert CARRIED_ONLY_LEVEL.lower() in carried, "fixture must carry the undeclared level"
+
+
+# Verifies: REQ-d00279-B
+def test_every_rendering_filters_by_the_same_level_catalog(carried_served, carried_repo):
+    """One evaluator, one vocabulary, whichever rendering a reader has.
+
+    The live route and the static export run the same client-side rule over the
+    same estate. A catalog naming fewer levels in one of them is a second
+    semantics reached by a second route: the same selection would admit a
+    requirement on screen and refuse it in the file the reader keeps.
+    """
+    client, graph, config = carried_served
+    live = [e["key"] for e in _shipped_level_catalog(client.get("/").text)]
+    export_page = _exported_page(graph, config, carried_repo)
+    exported = [e["key"] for e in _shipped_level_catalog(export_page)]
+    assert exported == live
+
+
+CARRIED_SCOPES: dict[str, ReportScope] = {
+    "the-carried-level-alone": ReportScope(include={"level": (CARRIED_ONLY_LEVEL.lower(),)}),
+    "the-carried-level-refused": ReportScope(exclude={"level": (CARRIED_ONLY_LEVEL.lower(),)}),
+    "a-configured-level-beside-it": ReportScope(
+        include={"level": ("dev", CARRIED_ONLY_LEVEL.lower())}
+    ),
+}
+
+
+# Verifies: REQ-d00279-B
+@pytest.mark.parametrize("case", sorted(CARRIED_SCOPES))
+@pytest.mark.parametrize("rendering", ["live", "export"])
+def test_rendering_judges_a_carried_level_as_the_authority_does(
+    case, rendering, carried_served, carried_repo
+):
+    """A rendering has to be able to judge every level its own rows carry.
+
+    The authority admits a level its requirements carry (REQ-d00278-H), so a
+    scope naming it selects a requirement. A rendering whose catalog cannot name
+    that level resolves the row to a button it does not have and refuses it under
+    every selection -- consistent with itself and not the membership owed.
+    """
+    client, graph, config = carried_served
+    scope = CARRIED_SCOPES[case]
+
+    response = client.get("/api/scope", params=scope_to_params(scope))
+    assert response.status_code == 200
+    authority = set(response.json()["ids"])
+
+    if rendering == "live":
+        page = client.get("/").text
+    else:
+        page = _exported_page(graph, config, carried_repo)
+    level_buttons = [e["key"] for e in _shipped_level_catalog(page)]
+    rows = client.get("/api/tree-data").json()
+    status_buttons = _status_button_keys(rows)
+    levels_on, statuses_on = on_sets_for_scope(scope, config, level_buttons, status_buttons)
+    viewer = viewer_membership(
+        rows,
+        levels_on=levels_on,
+        statuses_on=statuses_on,
+        level_buttons=level_buttons,
+        status_buttons=status_buttons,
+    )
+
+    assert 0 < len(authority) < len(rows), "scope must divide the estate to decide anything"
+    assert viewer == authority

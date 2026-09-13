@@ -594,6 +594,45 @@ def compute_validation_color(
     return (tiers["combined_color"], tiers["combined_tip"])
 
 
+# Implements: REQ-d00279-B, REQ-d00281-A
+def levels_with_carried(typed, graph) -> list[dict[str, Any]]:
+    """The level catalog a rendered view filters by, including levels only carried.
+
+    A view that judges membership for itself has to be able to judge every
+    requirement it displays. Building the catalog from the configuration alone
+    leaves a requirement whose level only its own repository declares matching no
+    button at all, so the view would exclude it under any selection while the
+    authority admits it -- a second semantics rather than a second evaluator.
+
+    ONE catalog for every rendering of that view: the live viewer route and the
+    static export both read it, so the same declaration cannot resolve one way on
+    screen and another in the exported file.
+    """
+    from elspais.view_model import build_levels
+
+    catalog = build_levels(typed)
+    known = {str(entry.get("key", "")).lower() for entry in catalog}
+    if graph is None or not hasattr(graph, "nodes_by_kind"):
+        return catalog
+    from elspais.graph.aggregation import level_group_keys
+
+    for key in level_group_keys(graph, None):
+        if key.lower() in known:
+            continue
+        known.add(key.lower())
+        catalog.append(
+            {
+                "key": key,
+                "label": key,
+                "rank": 9999,
+                "letter": "",
+                "bg": "",
+                "text": "",
+            }
+        )
+    return catalog
+
+
 class HTMLGenerator:
     """Generates interactive HTML traceability view from TraceGraph.
 
@@ -684,13 +723,17 @@ class HTMLGenerator:
         # Build dynamic category catalogs (levels/namespaces/statuses with
         # resolved colors). Same shape used by the live viewer routes.
         from elspais.config.schema import ElspaisConfig
-        from elspais.view_model import build_levels, build_namespaces, build_statuses
+        from elspais.view_model import build_namespaces, build_statuses
 
         try:
             typed_cfg = ElspaisConfig.model_validate(self.config)
         except Exception:
             typed_cfg = ElspaisConfig.model_validate({})
-        levels_ctx = build_levels(typed_cfg)
+        # Implements: REQ-d00279-B
+        # The graph-aware catalog, not the configuration alone: the exported file
+        # runs the same client-side evaluator as the live route, so it has to be
+        # able to judge every level its own rows carry.
+        levels_ctx = levels_with_carried(typed_cfg, self.graph)
         namespaces_ctx = build_namespaces(typed_cfg, self.graph)
         statuses_ctx = build_statuses(typed_cfg, candidates=sorted(statuses))
 

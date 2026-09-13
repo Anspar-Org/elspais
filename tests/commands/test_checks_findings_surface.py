@@ -1,4 +1,4 @@
-# Verifies: REQ-d00285-A+B+C+G, REQ-d00085-K+M
+# Verifies: REQ-d00285-A+B+C+G+H+I, REQ-d00085-K+M
 """`elspais checks` as the one findings surface.
 
 The report used to hand a reader a count and keep the names: findings reached
@@ -433,3 +433,164 @@ def test_an_info_check_that_reported_a_condition_shows_its_findings_under_verbos
 
     assert "spec/dev-cli.md:247" not in _format_report(report, _args())
     assert "spec/dev-cli.md:247" in _format_report(report, _args(verbose=True))
+
+
+# ---------------------------------------------------------------------------
+# The filed formats: the verdict, and the disclosure
+# ---------------------------------------------------------------------------
+
+
+def _narrowable() -> HealthReport:
+    """A failing run in one category and a clean check in another.
+
+    So a narrowing can be asked for that leaves the failure behind entirely.
+    """
+    return HealthReport(
+        checks=[
+            HealthCheck(
+                name="spec.hash_integrity",
+                passed=False,
+                message="1 requirement(s) have stale hashes",
+                category="spec",
+                severity="error",
+                findings=[HealthFinding(message="REQ-d00001 stale", file_path="spec/r.md", line=3)],
+            ),
+            HealthCheck(
+                name="code.orphans",
+                passed=True,
+                message="no orphaned code references",
+                category="code",
+                severity="warning",
+            ),
+        ]
+    )
+
+
+# Verifies: REQ-d00285-H
+def test_a_narrowed_junit_document_still_reaches_the_whole_runs_verdict() -> None:
+    """A CI consumer reads the document, never the exit code.
+
+    A JUnit file whose verdict came from the checks that survived the reader's
+    narrowing would report green for a run that failed -- and the narrower the
+    question, the greener the answer.
+    """
+    report = _narrowable()
+    assert report.failed == 1, "the run failed, whatever is asked to be shown"
+
+    narrowed = ET.fromstring(_format_report(report, _args(format="junit", category=["code"])))
+    assert narrowed.findall(".//failure"), (
+        "the failing check was narrowed away, but the run it belongs to still failed"
+    )
+
+    # And the same document over a run that did not fail stays green, so the
+    # verdict is the run's and not a constant.
+    clean = HealthReport(checks=[_narrowable().checks[1]])
+    green = ET.fromstring(_format_report(clean, _args(format="junit", category=["code"])))
+    assert green.findall(".//failure") == []
+
+
+# Verifies: REQ-d00285-I
+@pytest.mark.parametrize("fmt", ["junit", "sarif"])
+def test_a_narrowed_filed_report_discloses_the_narrowing_and_its_extent(fmt: str) -> None:
+    """A filed document holding fewer findings than the run produced, saying
+    nothing about it, cannot be told from a run that found fewer."""
+    report = _narrowable()
+    args = _args(format=fmt, category=["code"])
+    expected = apply_finding_filter(report, FindingFilter.from_args(args)).disclosure()
+    assert expected, "this narrowing is one that withholds something"
+
+    out = _format_report(report, args)
+    assert expected in out, f"{fmt} does not disclose the narrowing"
+    assert "--category code" in out, "nor how to ask for the same view again"
+
+    whole = _format_report(report, _args(format=fmt))
+    assert "of 2 checks" not in whole, "an unnarrowed run has no narrowing to disclose"
+
+
+# ---------------------------------------------------------------------------
+# The severity a finding carries, in the formats that had dropped it
+# ---------------------------------------------------------------------------
+
+
+def _one_failing(severity: str) -> HealthReport:
+    return HealthReport(
+        checks=[
+            HealthCheck(
+                name="spec.hash_integrity",
+                passed=False,
+                message="1 requirement(s) have stale hashes",
+                category="spec",
+                severity=severity,
+            )
+        ]
+    )
+
+
+# Verifies: REQ-d00285-C
+def test_a_markdown_report_tells_a_failing_error_from_a_failing_warning() -> None:
+    """An unticked box says the check did not pass, not how much it matters.
+
+    Rendered with the box alone, an error and a warning are the same line, so
+    a reader of the markdown cannot recover the severity every other format
+    carries.
+    """
+    name = "spec.hash_integrity"
+
+    def line(out: str) -> str:
+        return next(ln for ln in out.splitlines() if name in ln)
+
+    error_md = line(_format_report(_one_failing("error"), _args(format="markdown")))
+    warning_md = line(_format_report(_one_failing("warning"), _args(format="markdown")))
+
+    assert error_md != warning_md, "markdown renders both severities identically"
+
+    # And the severity it shows is the one the text report shows, so the two
+    # do not disagree about it either.
+    error_text = line(_format_report(_one_failing("error"), _args(format="text")))
+    warning_text = line(_format_report(_one_failing("warning"), _args(format="text")))
+    for md, text in ((error_md, error_text), (warning_md, warning_text)):
+        token = text.strip().split()[0]
+        assert token in md, f"the text report marks this check {token!r}; markdown does not"
+
+
+# Verifies: REQ-d00285-C
+@pytest.mark.parametrize(
+    "passed,flags",
+    [
+        (False, {}),
+        (True, {"include_passing_details": True}),
+    ],
+    ids=["a-condition-reported-at-info", "a-passing-checks-findings-on-request"],
+)
+def test_a_junit_finding_carries_its_location_and_remedy_however_it_is_reported(
+    passed: bool, flags: dict
+) -> None:
+    """The quiet element is still an element the reader acts from.
+
+    `<system-out>` is where an info-severity check and a passing check's
+    requested detail report, and a finding that reaches it stripped of its
+    location and its remedy is a finding the reader of this format cannot act
+    on -- while the reader of the text report can.
+    """
+    name = "references.undeclared"
+    report = HealthReport(
+        checks=[
+            HealthCheck(
+                name=name,
+                passed=passed,
+                message="3 comment(s) cite a requirement without declaring a relationship",
+                category="references",
+                severity="info",
+                findings=[LOCATED],
+            )
+        ]
+    )
+
+    root = ET.fromstring(_format_report(report, _args(format="junit", **flags)))
+    sys_out = root.find(f".//testcase[@name='{name}']/system-out")
+    assert sys_out is not None and sys_out.text
+    body = sys_out.text
+
+    assert "spec/dev-cli.md:247" in body, "the place the reader must go was dropped"
+    assert remedy_for(name) in body, "the action available to resolve it was dropped"
+    assert "E_IDENTIFIER_WITH_TRAILING_TEXT" in body, "the code it reached was dropped"

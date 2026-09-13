@@ -461,17 +461,32 @@ def _cell(level_row: dict, key: str, carry: str = "") -> str:
 
 # Implements: REQ-d00282-K
 def _value_groups(keys: tuple[str, ...]) -> list[tuple[str, str, tuple[str, ...]]]:
-    """The stated values in the stated order, consecutive measures gathered.
+    """The stated values in the stated order, consecutive runs gathered.
 
-    Grouping decides only how a run of measures is LAID OUT; it never moves a
-    value past another, so a report still states its values in the order the
-    selection named them. Yields ``(kind, dimension, keys)`` where kind is
-    "measures" for a gathered run and "value" for anything else.
+    Grouping decides only how a run is LAID OUT; it never moves a value past
+    another, so a report still states its values in the order the selection
+    named them. Yields ``(kind, dimension, keys)`` where kind is "measures" for
+    a gathered run of one dimension's measures, "identity" for a gathered run
+    of the values naming what the group is and counting it, and "value" for
+    anything else.
     """
     groups: list[tuple[str, str, tuple[str, ...]]] = []
     index = 0
     while index < len(keys):
         spec = VALUE_SPECS[keys[index]]
+        # A value stating no figure is laid out on the line that names the
+        # group, and a consecutive run of them shares that one line -- which is
+        # what lets the default selection read as "PRD: 24 requirements, 189
+        # assertions". Gathered only while they are ADJACENT in the selection,
+        # so one named after a figure is stated after that figure
+        # (REQ-d00282-K).
+        if not spec.states_a_figure:
+            run = []
+            while index < len(keys) and not VALUE_SPECS[keys[index]].states_a_figure:
+                run.append(keys[index])
+                index += 1
+            groups.append(("identity", "", tuple(run)))
+            continue
         # A scalar part is laid out as a value of its own however it is keyed:
         # gathered into a measures run it would render as "cited by name here:
         # 3", indistinguishable from the composite that measure states
@@ -526,28 +541,53 @@ def _tested_breakdown(lv: dict) -> str:
     )
 
 
+# Implements: REQ-d00282-E+K
+# name: _IDENTITY_TEXT
+# use:  how the text rendering spells each value that states no figure.
+# def:  value key -> the words one level states it in.
+#
+# One entry per value rather than a branch per position: the position is the
+# selection's to decide (REQ-d00282-K) and only the spelling is this format's
+# (REQ-d00282-E).
+_IDENTITY_TEXT: dict[str, Any] = {
+    "level": lambda lv: str(lv["level"]),
+    "requirements": lambda lv: f"{lv['total']} requirements",
+    "assertions": lambda lv: f"{lv['total_assertions']} assertions",
+}
+
+
 # Implements: REQ-d00282-E+K+L
-def _level_heading(lv: dict, keys: tuple[str, ...]) -> str:
-    """The line naming what a group of rows is about, and what else it counts.
+def _level_heading(lv: dict, run: tuple[str, ...]) -> str:
+    """One line stating a run of the values that name and count the group.
 
     The identity value is always stated (REQ-d00282-L), so a reader always
-    knows which level the figures beneath belong to. The two counts appear only
-    where the selection named them -- a text rendering that stated them
-    regardless would make the same selection state more here than in a table,
-    which is the format-dependence REQ-d00282-E forbids.
+    knows which level the figures beneath belong to -- but it is stated WHERE
+    the selection names it, and the counts beside it only where the selection
+    named them. A text rendering that stated the counts regardless would make
+    the same selection state more here than in a table, which is the
+    format-dependence REQ-d00282-E forbids; one that stated the three in a
+    fixed order would state them in an order the selection did not name, which
+    is what REQ-d00282-K forbids.
     """
-    counts = []
-    if "requirements" in keys:
-        counts.append(f"{lv['total']} requirements")
-    if "assertions" in keys:
-        counts.append(f"{lv['total_assertions']} assertions")
-    tail = f" {', '.join(counts)}" if counts else ""
-    return f"  {lv['level']}:{tail}"
+    spelled = [_IDENTITY_TEXT[key](lv) for key in run]
+    # The run the selection OPENS with names the group, so it reads as a
+    # heading: the level, a colon, and whatever the selection named next.
+    if run[0] == IDENTITY_VALUE:
+        tail = ", ".join(spelled[1:])
+        return f"  {lv[IDENTITY_VALUE]}:{f' {tail}' if tail else ''}"
+    indent = "  " if IDENTITY_VALUE in run else "    "
+    return indent + ", ".join(spelled)
 
 
-# Implements: REQ-d00282-A+C+K+M
-def _level_lines(lv: dict, keys: tuple[str, ...], config: dict | None, carry: str) -> list[str]:
-    """One level's stated figures, as text, in the order they were named.
+# Implements: REQ-d00282-A+C+K+L+M
+def _level_block(lv: dict, keys: tuple[str, ...], config: dict | None, carry: str) -> list[str]:
+    """One level's stated values, as text, in the order they were named.
+
+    ONE walk over the stated values, so every value is stated in its named
+    position -- the values that name and count the group included. Splitting
+    the walk in two (a heading built by membership test, then the figures)
+    stated those three in a fixed order whatever the selection said, which is
+    what REQ-d00282-K forbids.
 
     A group conferring no *Assertion* is owed no assertion coverage, and says so
     once rather than printing a row of zeros (REQ-d00282-M).
@@ -562,8 +602,7 @@ def _level_lines(lv: dict, keys: tuple[str, ...], config: dict | None, carry: st
     states_lines = _lines_measured(lv) and any(
         VALUE_SPECS[k].dimension in LINE_DIMENSIONS for k in keys
     )
-    if not total_assertions and not states_lines:
-        return ["    (no assertions in this group; no coverage figure is stated)"]
+    barren = not total_assertions and not states_lines
 
     width = max(
         (
@@ -576,7 +615,20 @@ def _level_lines(lv: dict, keys: tuple[str, ...], config: dict | None, carry: st
     )
     lines: list[str] = []
     headline_dimension = ""
+    said_nothing_to_state = False
     for kind, dimension, run in _value_groups(keys):
+        if kind == "identity":
+            lines.append(_level_heading(lv, run))
+            headline_dimension = ""
+            continue
+        if barren:
+            # Said once, and said WHERE the first figure was named, so the
+            # values named around it keep their places.
+            if not said_nothing_to_state:
+                lines.append("    (no assertions in this group; no coverage figure is stated)")
+                said_nothing_to_state = True
+            headline_dimension = ""
+            continue
         if kind == "measures":
             body = _measures_line(lv, run)
             if headline_dimension == dimension:
@@ -588,9 +640,6 @@ def _level_lines(lv: dict, keys: tuple[str, ...], config: dict | None, carry: st
             headline_dimension = ""
             continue
         spec = VALUE_SPECS[run[0]]
-        if not spec.states_a_figure:
-            headline_dimension = ""
-            continue
         label = f"{header_for(run[0], config)}:"
         lines.append(f"    {label:<{width}} {_cell(lv, run[0], carry)}")
         # Only a dimension's own headline can say what a run beneath it
@@ -633,8 +682,7 @@ def _render_text(data: dict, config: dict | None = None) -> str:
     for lv in data["levels"]:
         if lv["total"] == 0:
             continue
-        lines.append(_level_heading(lv, keys))
-        lines.extend(_level_lines(lv, keys, config, carry_marker))
+        lines.extend(_level_block(lv, keys, config, carry_marker))
 
     excluded = data.get("excluded", {})
     if excluded:
@@ -826,53 +874,25 @@ def _project_level(lv: dict, keys: tuple[str, ...]) -> dict:
 
 # Implements: REQ-d00282-E
 def _render_json(data: dict) -> str:
-    stated = data.get("values")
-    if stated:
-        # A report produced under a selection states that selection here too:
-        # the values a report states do not depend on the format it is
-        # rendered in (REQ-d00282-E). Absent a selection the payload is left
-        # whole -- it is a data document, and a reader who named nothing asked
-        # for nothing to be withheld.
-        keys = tuple(stated)
-        data = {**data, "levels": [_project_level(lv, keys) for lv in data["levels"]]}
-    else:
-        data = {**data, "levels": [_absent_figures_as_null(lv) for lv in data["levels"]]}
-    return json.dumps(data, indent=2) + "\n"
+    """The report as a structured document, stating the values it states.
 
-
-# Implements: REQ-d00282-M, REQ-d00258-O
-# name: _absent_figures_as_null
-# use:  keep a group with nothing to state distinguishable from one whose
-#       figures are genuinely zero, in the whole payload a reader who named no
-#       values receives.
-# def:  every coverage figure, every measure behind it and the three counts of
-#       the Tested breakdown, set to null for a group conferring no *Assertion*
-#       and left exactly as computed for every other group.
-#
-# A level whose requirements confer no *Assertion* is owed no coverage; a level
-# with assertions and no evidence is owed all of it. Reported as 0 the two read
-# alike, and a reader concludes work is undone that was never owed. The zeros a
-# real group reports are real answers and are untouched -- nothing tested and
-# nothing failing is a finding, not an absence.
-def _absent_figures_as_null(lv: dict) -> dict:
-    fields: set[str] = set()
-    if not lv.get("total_assertions"):
-        fields |= {"tested_passed", "tested_failed", "tested_awaiting"}
-        for prefix in _PAYLOAD_PREFIX.values():
-            fields.add(f"{prefix}_total_covered")
-            fields.update(f"{prefix}_{measure}" for measure in MEASURES)
-    # Implements: REQ-d00254-B, REQ-d00258-E, REQ-d00282-M+N
-    # The same distinction for the figure measured in lines, which reaches it
-    # by two routes: no run measured this group at all, and a run that recorded
-    # no per-test contexts. The first takes the whole figure; the second takes
-    # the attribution alone, because the lines covered WERE measured.
-    if not _lines_measured(lv):
-        fields |= {"code_tested_covered", "code_tested_total", "code_tested_attributed"}
-    elif not lv.get("code_tested_has_contexts"):
-        fields.add("code_tested_attributed")
-    if not fields:
-        return lv
-    return {k: (None if k in fields else v) for k, v in lv.items()}
+    Projected through ``_project_level`` whatever reached the payload, because
+    the values a report states do not depend on the format it is rendered in
+    (REQ-d00282-E). A payload carrying no stamp was produced under no selection
+    and states the report's default set -- the same set the text, markdown and
+    csv renderings state for it -- so this format states that set too rather
+    than the whole collector payload, which carries values none of the other
+    three state. What differs per format is how each value is SPELLED: a table
+    renders a figure as a cell, and here it is the object of its numbers.
+    """
+    keys = _stated_values(data)
+    return (
+        json.dumps(
+            {**data, "levels": [_project_level(lv, keys) for lv in data["levels"]]},
+            indent=2,
+        )
+        + "\n"
+    )
 
 
 # Implements: REQ-d00069-L, REQ-d00069-N, REQ-d00258-A, REQ-d00282-A+E+K

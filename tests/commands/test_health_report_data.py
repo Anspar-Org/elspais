@@ -521,7 +521,9 @@ class TestRenderMarkdown:
         report = _make_mixed_report()
         data = _build_report_data(report)
         output = _render_markdown(data)
-        assert "- [ ] spec.refs: 2 broken references" in output
+        # The severity token rides with the box: `- [ ]` alone cannot tell an
+        # error from a warning (REQ-d00285-C).
+        assert "- [ ] \u2717 spec.refs: 2 broken references" in output
 
     def test_info_check_uses_tilde_prefix(self) -> None:
         report = _make_mixed_report()
