@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -545,8 +546,22 @@ def run(args: argparse.Namespace) -> int:
     falls back to local graph build.
     """
     from elspais.commands._engine import call as engine_call
+    from elspais.commands._values import value_silent_refusal
+    from elspais.config import get_config
 
     command = getattr(args, "command", "gaps")
+
+    # Implements: REQ-d00282-F
+    # Judged before anything is built or asked of a serving process: this report
+    # lists what is missing and states no values, so a selection reaching it --
+    # from a named declaration carrying one (REQ-d00280-C) -- cannot be honoured
+    # even in part, and F wants no report produced under it. The composed path
+    # (report.py) refuses the same input in the same words.
+    refusal = value_silent_refusal(args, get_config(getattr(args, "config", None)), command)
+    if refusal is not None:
+        print(f"Error: {refusal}", file=sys.stderr)
+        return 1
+
     gap_type = _GAP_TYPE_MAP.get(command)
     gap_types: list[str] | None = [gap_type] if gap_type else None
     fmt = getattr(args, "format", "text")
@@ -563,7 +578,6 @@ def run(args: argparse.Namespace) -> int:
 
     # The scope reaches the compute path the same way and for the same reason.
     from elspais.commands._scope import scope_params_from_args
-    from elspais.config import get_config
 
     params.update(scope_params_from_args(args, get_config(getattr(args, "config", None))))
 

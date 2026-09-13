@@ -30,6 +30,7 @@ __all__ = [
     "VALUES_PARAM",
     "UnofferedValues",
     "values_from_args",
+    "value_silent_refusal",
     "values_from_params",
     "values_to_params",
     "value_params_from_args",
@@ -59,6 +60,7 @@ def _declared_values(config: Mapping[str, Any] | None, name: str) -> tuple[str, 
     return ()
 
 
+# Implements: REQ-d00282-I
 def values_from_args(args: Any, config: Mapping[str, Any] | None = None) -> ValueSelection | None:
     """The values this invocation asks for, or None where it asks for none.
 
@@ -73,6 +75,55 @@ def values_from_args(args: Any, config: Mapping[str, Any] | None = None) -> Valu
     if named:
         return parse_value_selection(_declared_values(config, str(named)))
     return None
+
+
+# Implements: REQ-d00282-F, REQ-d00280-C
+def value_silent_refusal(
+    args: Any,
+    config: Mapping[str, Any] | None,
+    report: str,
+    does: str = "it lists what is missing",
+) -> str | None:
+    """Why a report that states no values cannot be produced under this selection.
+
+    Some reports state facts about each requirement and some list which
+    requirements are missing something; the second kind offers no values, so a
+    selection reaching one of them names nothing it offers and cannot be
+    honoured to any degree. F's disposition for that is non-production -- the
+    opposite of the disclose-and-continue REQ-d00278-K takes for a scope name a
+    member does not admit -- so this returns the reason rather than a caveat to
+    print beside a report.
+
+    A selection reaches a command two ways (``--values`` and the values half of
+    a named declaration, REQ-d00280-C) and the refusal names the route the
+    reader actually wrote: one telling a reader to drop a flag they never wrote
+    tells them nothing. Returns None where no selection arrived at all -- a
+    declaration naming no values constrains none.
+
+    ``does`` says what the report does instead, so the refusal tells a reader
+    why this report has nothing to select among rather than only that it has
+    not.
+    """
+    stated = parse_value_selection(getattr(args, "values", None))
+    if stated is not None:
+        return (
+            f"--values states which facts a report gives about each requirement, "
+            f"and '{report}' states none: {does}. "
+            "Ask for it without --values, or compose only sections that state values."
+        )
+    named = getattr(args, "scope", None)
+    if not named:
+        return None
+    declared = parse_value_selection(_declared_values(config, str(named)))
+    if declared is None:
+        return None
+    listed = ", ".join(declared.keys)
+    return (
+        f"the scope '{named}' declares values ({listed}), and '{report}' states "
+        f"none: {does} rather than stating facts about each "
+        f"requirement. Refer to a scope that declares no values, or state this "
+        f"scope's requirements in full with --level/--status and their --not- forms."
+    )
 
 
 def values_to_params(selection: ValueSelection | None) -> dict[str, str]:
@@ -92,6 +143,7 @@ def value_params_from_args(args: Any, config: Mapping[str, Any] | None = None) -
     return values_to_params(values_from_args(args, config))
 
 
+# Implements: REQ-d00282-E
 def resolve_report_values(
     args_or_params: Any,
     offered: Sequence[str],

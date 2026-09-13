@@ -102,6 +102,7 @@ def resolve_scope_for_report(
     return scoped_requirements(graph, scope, config)
 
 
+# Implements: REQ-d00278-L
 def scope_disclosure(result: ScopeResult) -> list[str]:
     """What a scoped report owes its reader about the scope that produced it.
 

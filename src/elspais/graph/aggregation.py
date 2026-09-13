@@ -1212,7 +1212,7 @@ def collect_coverage(
                 "tested_passed": agg.tested_passed,
                 "tested_failed": agg.tested_failed,
                 "tested_awaiting": agg.tested_awaiting,
-                # Implements: REQ-d00254-B, REQ-d00282-N
+                # Implements: REQ-d00254-B, REQ-d00282-M+N
                 # The line figure of this group, kept in lines and named for
                 # lines. The two ingestion bits travel with it: without them a
                 # zero says both "measured and never reached" and "never

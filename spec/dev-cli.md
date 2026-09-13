@@ -580,7 +580,7 @@ D. When no UAT results CSV file exists, the uat.results check SHALL report as sk
 
 ### Assertions
 
-A. The system SHALL execute each entry in `[[scanning.test.runners]]` in declaration order when invoked with `elspais checks --run-tests`, resolving each entry's `cwd` relative to the repository root and rejecting any `cwd` that resolves outside the repository root.
+A. The system SHALL execute each entry in `[[scanning.test.targets]]` in declaration order when invoked with `elspais checks --run-tests`, resolving each entry's `cwd` relative to the repository root and rejecting any `cwd` that resolves outside the repository root.
 
 B. The system SHALL stream runner stdout and stderr live to the invoking terminal, emit a per-runner banner before invocation, and a tally line with elapsed seconds and the exit code after invocation.
 
@@ -590,7 +590,7 @@ D. When result file patterns are configured but no matching files exist on disk,
 
 E. When result files exist but the oldest result file mtime is earlier than the newest scanned spec, code, or test FILE-node mtime, the system SHALL return a separate `tests.results_stale` health check with `passed = false` and severity `warning`, flipping the exit code unless `--lenient` is passed.
 
-F. The system SHALL return exit code 2 and an error message pointing at `docs/cli/checks.md` when `elspais checks --run-tests` is invoked with no runners configured.
+F. The system SHALL return exit code 2 and an error message pointing at `docs/cli/test-targets.md` when `elspais checks --run-tests` is invoked with no runners configured.
 
 G. The system SHALL return a non-zero exit code if any runner failed OR any check failed, and 0 only if all succeeded.
 
@@ -606,9 +606,12 @@ running tests.
 
 ### Changelog
 
+- 2026-09-13 | 36cbd540 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-09-13 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-82: name the test-target config table the tool actually reads (A)
+- 2026-09-13 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-82: point the no-runners error at the document carrying target configuration examples (F)
 - 2026-09-12 | 784f8350 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: add missing changelog section
 
-*End* *Configured test runner execution* | **Hash**: 784f8350
+*End* *Configured test runner execution* | **Hash**: 36cbd540
 
 ## REQ-d00259: Requirement Format Reference Command
 

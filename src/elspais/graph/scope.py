@@ -62,6 +62,7 @@ def _configured_statuses(config: dict[str, Any] | None) -> set[str]:
     return names
 
 
+# Implements: REQ-d00278-M
 # Implements: REQ-d00278-A, REQ-d00278-B
 SCOPE_PROPERTIES: dict[str, ScopeProperty] = {
     "level": ScopeProperty(
@@ -77,6 +78,7 @@ SCOPE_PROPERTIES: dict[str, ScopeProperty] = {
 }
 
 
+# Implements: REQ-d00278-C
 @dataclass(frozen=True)
 class ReportScope:
     """A selection a reader wrote, before it is read against any vocabulary.
@@ -140,6 +142,7 @@ class ResolvedScope:
     """
 
 
+# Implements: REQ-d00278-G
 def _role_siblings(config: dict[str, Any] | None, status: str) -> set[str]:
     """Every status the project assigns the same role as ``status``."""
     from elspais.config import get_status_roles
@@ -150,6 +153,7 @@ def _role_siblings(config: dict[str, Any] | None, status: str) -> set[str]:
     return {s for s in known if roles.role_of(s) == target}
 
 
+# Implements: REQ-d00278-M
 # Implements: REQ-d00278-G+H+I+J+K
 def resolve_scope(
     scope: ReportScope,
@@ -235,6 +239,7 @@ def resolve_scope(
     )
 
 
+# Implements: REQ-d00278-C+K+M
 # Implements: REQ-d00278-D+E+F
 def satisfies(node: Any, resolved: ResolvedScope) -> bool:
     """Whether one requirement falls within a resolved scope.

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from collections.abc import Sequence
 from dataclasses import asdict
 from typing import TYPE_CHECKING, Any
@@ -178,6 +179,23 @@ def run(args: argparse.Namespace) -> int:
     falls back to local graph build.
     """
     from elspais.commands._engine import call as engine_call
+    from elspais.commands._values import value_silent_refusal
+    from elspais.config import get_config
+
+    # Implements: REQ-d00282-F
+    # Judged before anything is built or asked of a serving process. This report
+    # offers no values to select among, so a selection reaching it -- from a
+    # named declaration carrying one (REQ-d00280-C) -- cannot be honoured even
+    # in part, and F wants no report produced under one honoured in part.
+    refusal = value_silent_refusal(
+        args,
+        get_config(getattr(args, "config", None)),
+        "analysis",
+        does="it ranks requirements by how much the estate rests on them",
+    )
+    if refusal is not None:
+        print(f"Error: {refusal}", file=sys.stderr)
+        return 1
 
     output_format = getattr(args, "format", "table")
     show = getattr(args, "show", "all")

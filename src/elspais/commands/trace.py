@@ -54,6 +54,7 @@ from elspais.graph.values import (
 )
 
 # Implements: REQ-d00282-A
+# Implements: REQ-d00282-B
 # Every value this report can state. A selection is judged against this set
 # and nothing narrower: the values a report offers are the tool's own, so a
 # name among them that does not resolve is a mistake rather than a difference
@@ -68,6 +69,10 @@ OFFERED_VALUES: tuple[str, ...] = tuple(
 )
 
 
+# Implements: REQ-d00282-B
+# Selecting a measure or a scalar part of a dimension reaches its number
+# only through here: the selection spells the path (`tested.immediate_direct`,
+# `implemented.count`) and the row stores it flattened.
 def _data_key(value: str) -> str:
     """The ``_get_node_data`` field a value reads.
 
@@ -616,6 +621,7 @@ def _value_headers(config: dict | None = None) -> dict[str, str]:
 
 
 # Implements: REQ-d00282-E+M
+# Implements: REQ-d00282-K
 def _format_row(data: dict, keys: Sequence[str]) -> list[str]:
     """One row as the formats people read state it, one cell per stated value.
 
@@ -657,6 +663,9 @@ def _default_values(preset: ReportPreset) -> list[str]:
 
 
 # Implements: REQ-d00084-B
+# Implements: REQ-d00282-A
+# Where a selection is honoured: named values replace the preset's default
+# set outright, and every formatter states what this returns.
 def _report_values(preset: ReportPreset, values: Sequence[str] | None) -> list[str]:
     """The values a rendering states: the selection if one was made, else the default."""
     return list(values) if values is not None else _default_values(preset)
@@ -701,6 +710,10 @@ def _json_row(data: dict, keys: Sequence[str], node=None) -> dict:
 
 
 # Implements: REQ-p00084-B+C
+# Implements: REQ-d00282-H
+# Which requirements the report is about is decided here, from the scope
+# alone: this takes no `values`, `preset` or `dimension`, so a selection of
+# values cannot reach the decision to change it.
 def _scoped_requirements(graph: FederatedGraph, scope_ids: frozenset[str] | None):
     """The requirements a rendering emits, honouring the scope it was given.
 
@@ -886,6 +899,9 @@ def format_csv(
 
 
 # Implements: REQ-p00084-C+D
+# Implements: REQ-d00282-K
+# Headers and cells alike are taken from `cols` in the order the selection
+# named them, so this page states its values in that order and no other.
 def format_html(
     graph: FederatedGraph,
     preset: ReportPreset | None = None,

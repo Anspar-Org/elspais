@@ -21,7 +21,7 @@ import tyro
 from elspais.utilities.docs_loader import DOCS_TOPICS
 
 
-# Implements: REQ-d00278-A+B+C, REQ-p00084-A
+# Implements: REQ-d00278-A+B+C, REQ-p00084-A, REQ-d00279-C
 @dataclasses.dataclass
 class ScopeOptions:
     """Selection shared by every surface that reports over a set of requirements.

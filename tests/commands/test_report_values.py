@@ -1567,3 +1567,127 @@ class TestALineFigureSurvivesAnAssertionLessGroup:
         stated = _summary_json(row, ["implemented", "code_tested"])
         assert stated["implemented"] is None
         assert stated["code_tested"]["count"] == 16.0
+
+
+# ---------------------------------------------------------------------------
+# REQ-d00282-F: a report that states no values is not produced under a
+# selection of values either
+# ---------------------------------------------------------------------------
+
+
+# One declaration carries both halves of what an audience reads (REQ-d00280-C),
+# so a name carrying values reaches the listings that state none. The two names
+# differ in that half alone: the requirements they select are identical.
+_SCOPED_PROJECT = """\
+version = 5
+
+[project]
+name = "value-silent"
+namespace = "vs"
+
+[scopes.overview]
+level = ["prd"]
+values = ["tested", "implemented"]
+
+[scopes.plain]
+level = ["prd"]
+"""
+
+
+@pytest.fixture(scope="module")
+def scoped_project(tmp_path_factory):
+    """A project declaring one scope that names values and one that does not."""
+    path = tmp_path_factory.mktemp("value-silent") / ".elspais.toml"
+    path.write_text(_SCOPED_PROJECT)
+    return path
+
+
+class _Computed(Exception):
+    """Raised in place of computing a report, so reaching the compute path is
+    an observation rather than a slow build."""
+
+
+@pytest.fixture
+def no_compute(monkeypatch):
+    """Nothing is built or asked of a serving process behind this fixture."""
+
+    def refuse(*_args, **_kwargs):
+        raise _Computed
+
+    monkeypatch.setattr("elspais.commands._engine.call", refuse)
+
+
+def _run_listing(command: str, config, scope: str) -> int:
+    """One of the value-silent reports, asked for alone under a declared name."""
+    from elspais.commands import analysis_cmd
+    from elspais.commands import gaps as gaps_cmd
+
+    if command == "analysis":
+        return analysis_cmd.run(
+            argparse.Namespace(config=config, scope=scope, format="table", show="all", top=10)
+        )
+    return gaps_cmd.run(
+        argparse.Namespace(command=command, config=config, scope=scope, format="text")
+    )
+
+
+class TestAValueSilentReportIsNotProducedUnderAValueSelection:
+    """These reports list which requirements are missing something; they state
+    no facts about each one. A selection of values reaching one of them names
+    nothing it offers, so there is no part of it the report could honour -- and
+    REQ-d00282-F's disposition for a selection honoured in part is that no
+    report is produced, not that one is produced with a caveat beside it.
+    """
+
+    # Verifies: REQ-d00282-F, REQ-d00280-C
+    @pytest.mark.parametrize(
+        "command", ("gaps", "uncovered", "untested", "unvalidated", "failing", "analysis")
+    )
+    def test_a_declaration_naming_values_stops_the_listing(
+        self, command, scoped_project, no_compute, capsys
+    ):
+        """The values half of the declaration is refused, and the refusal lands
+        before anything is computed: a report already assembled has been
+        produced under the selection whatever is printed afterwards.
+
+        The same invocation under the declaration that names no values is NOT
+        refused -- it reaches the compute path -- so the refusal is answering
+        the values and not the name.
+        """
+        try:
+            code = _run_listing(command, scoped_project, "overview")
+        except _Computed:
+            pytest.fail(f"'{command}' computed a report under a selection it cannot honour")
+        assert code == 1
+        err = capsys.readouterr().err
+        assert "overview" in err, err
+        assert command in err, err
+
+        with pytest.raises(_Computed):
+            _run_listing(command, scoped_project, "plain")
+
+    # Verifies: REQ-d00282-F, REQ-d00279-C, REQ-d00085-D
+    def test_composing_the_section_and_asking_for_it_alone_refuse_alike(
+        self, scoped_project, tmp_path, no_compute, capsys
+    ):
+        """One report, two ways of asking for it. A composition that refused
+        what the standalone command produced -- or refused it in words naming a
+        flag the reader never wrote -- would be two answers to one question.
+        """
+        try:
+            standalone = _run_listing("gaps", scoped_project, "overview")
+        except _Computed:
+            pytest.fail("the standalone listing computed a report it cannot honour")
+        alone_err = capsys.readouterr().err
+
+        out = tmp_path / "report.txt"
+        composed = report_cmd.run(
+            ["gaps"],
+            ["--scope", "overview", "--config", str(scoped_project), "-o", str(out)],
+        )
+        composed_err = capsys.readouterr().err
+
+        assert standalone == 1
+        assert composed == 1
+        assert not out.exists(), "a refused report produced the artifact it refused"
+        assert composed_err == alone_err, (composed_err, alone_err)

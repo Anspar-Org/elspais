@@ -129,24 +129,29 @@ def _refuse_unhonourable_values(sections: list[str], args: argparse.Namespace) -
     """
     from importlib import import_module
 
-    from elspais.commands._values import UnofferedValues, values_from_args
+    from elspais.commands._values import (
+        UnofferedValues,
+        value_silent_refusal,
+        values_from_args,
+    )
     from elspais.config import get_config
     from elspais.graph.values import resolve_values
 
     # Read against the project's own declarations too: a selection a named
     # scope carries (REQ-d00280-C) is refused on the same terms as one written
     # on the invocation.
-    selection = values_from_args(args, get_config(getattr(args, "config", None)))
-    if selection is None:
-        return None
+    config = get_config(getattr(args, "config", None))
     silent = [s for s in sections if s not in VALUE_SECTIONS]
     if silent:
-        named = ", ".join(sorted(set(silent)))
-        return (
-            f"--values states which facts a report gives about each requirement, "
-            f"and '{named}' states none: it lists what is missing. "
-            "Ask for it without --values, or compose only sections that state values."
-        )
+        # The same helper the standalone invocation of such a section uses, so
+        # composing it and asking for it alone refuse in the same words
+        # (REQ-d00279-C, REQ-d00085-D).
+        refusal = value_silent_refusal(args, config, ", ".join(sorted(set(silent))))
+        if refusal is not None:
+            return refusal
+    selection = values_from_args(args, config)
+    if selection is None:
+        return None
     for section in sections:
         module = import_module(VALUE_SECTIONS[section])
         try:

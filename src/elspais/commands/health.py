@@ -67,6 +67,7 @@ class HealthFinding:
     # and a structured format can carry it as a value.
     codes: list[str] = field(default_factory=list)
 
+    # Implements: REQ-d00285-A, REQ-d00285-C
     def to_dict(self) -> dict[str, Any]:
         d: dict[str, Any] = {
             "message": self.message,
@@ -82,6 +83,7 @@ class HealthFinding:
             d["codes"] = list(self.codes)
         return d
 
+    # Implements: REQ-d00285-A
     def location(self) -> str | None:
         """Where the finding is about, as `path:line` -- or None where it has none."""
         if not self.file_path:
@@ -189,6 +191,7 @@ class HealthReport:
             if check.category == category:
                 yield check
 
+    # Implements: REQ-d00285-B, REQ-d00285-C
     def to_dict(self, lenient: bool = False) -> dict[str, Any]:
         healthy = self.is_healthy_lenient if lenient else self.is_healthy
         return {
@@ -839,6 +842,7 @@ def check_structural_orphans(
     )
 
 
+# Implements: REQ-d00285-A
 # Implements: REQ-d00252-K
 def _fault_location(
     graph: FederatedGraph, source_id: str, line: int | None
@@ -3826,6 +3830,7 @@ def check_test_results(graph: FederatedGraph, config: dict | None = None) -> Hea
     )
 
 
+# Implements: REQ-d00285-F
 # Implements: REQ-d00249-E
 def check_test_results_stale(
     graph: FederatedGraph, config: dict[str, Any] | None = None
@@ -4275,6 +4280,7 @@ def check_unmatched_results(
     )
 
 
+# Implements: REQ-d00285-F
 # Implements: REQ-d00274-G
 def check_unbound_citations(
     graph: FederatedGraph, config: dict[str, Any] | None = None
@@ -4810,6 +4816,7 @@ def _report_from_dict(data: dict[str, Any]) -> HealthReport:
     return report
 
 
+# Implements: REQ-d00249-A+F+G, REQ-d00285-H
 # Implements: REQ-d00283-D+E+H+I
 def run(args: argparse.Namespace) -> int:
     """Run the health command.
@@ -5240,6 +5247,7 @@ class _FilterOutcome:
     findings_total: int
     filter: FindingFilter
 
+    # Implements: REQ-d00285-I
     def disclosure(self) -> str | None:
         if not self.filter.active:
             return None
@@ -5256,6 +5264,7 @@ class _FilterOutcome:
             )
         return f"Filtered by {self.filter.describe()}: {extent}"
 
+    # Implements: REQ-d00285-I
     def to_dict(self) -> dict[str, Any]:
         return {
             "preset": self.filter.label,
@@ -5271,6 +5280,7 @@ class _FilterOutcome:
         }
 
 
+# Implements: REQ-d00285-I
 # Implements: REQ-d00285-G
 def apply_finding_filter(report: HealthReport, filt: FindingFilter) -> _FilterOutcome:
     """Narrow a report to the checks and findings a filter admits.
@@ -5323,6 +5333,7 @@ def apply_finding_filter(report: HealthReport, filt: FindingFilter) -> _FilterOu
     )
 
 
+# Implements: REQ-d00285-I
 # Implements: REQ-d00085-E+F, REQ-d00285-C+H
 def _format_report(
     report: HealthReport,
@@ -5587,6 +5598,7 @@ def _build_summary_line(report: HealthReport) -> str:
         return f"UNHEALTHY: {report.failed} errors, {report.warnings} warnings{skip_suffix}"
 
 
+# Implements: REQ-d00285-H
 # Implements: REQ-d00085-K+M, REQ-d00285-A+B+C
 def _build_report_data(
     report: HealthReport,
@@ -5730,6 +5742,7 @@ def _finding_text_lines(finding: HealthFinding, indent: str) -> list[str]:
     return lines
 
 
+# Implements: REQ-d00285-B, REQ-d00285-C
 # Implements: REQ-d00085-E, REQ-d00285-I
 def _render_text(data: _ReportData) -> str:
     """Render _ReportData as plain text checklist."""
@@ -5796,6 +5809,7 @@ def _print_text_report(
     print(_render_text(data))
 
 
+# Implements: REQ-d00285-B, REQ-d00285-I
 # Implements: REQ-d00085-E, REQ-d00285-C
 def _render_markdown(data: _ReportData) -> str:
     """Render _ReportData as markdown checklist.
@@ -6056,6 +6070,7 @@ def _finding_properties(check: HealthCheck, finding: HealthFinding) -> dict[str,
     return props
 
 
+# Implements: REQ-d00285-H
 # Implements: REQ-d00085-J, REQ-d00285-I
 def _render_sarif(
     report: HealthReport,

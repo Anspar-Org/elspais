@@ -262,6 +262,7 @@ _DIMENSION_HEADERS: dict[str, str] = {
 }
 
 
+# Implements: REQ-d00282-C
 def _qualified_header(
     head: str,
     measure: str,
@@ -286,6 +287,7 @@ def _qualified_header(
     return f"{head} ({', '.join(qualifiers)})" if qualifiers else head
 
 
+# Implements: REQ-d00282-C
 def _figure_specs(
     dim: str, head: str, measure: str, words: Mapping[str, str] | None = None
 ) -> list[ValueSpec]:
@@ -317,6 +319,7 @@ def _figure_specs(
     return specs
 
 
+# Implements: REQ-d00282-J
 def _build_specs() -> dict[str, ValueSpec]:
     specs: dict[str, ValueSpec] = {c.key: c for c in _IDENTITY_VALUES}
     for dim in COVERAGE_DIMENSIONS:
@@ -533,6 +536,7 @@ def nest_values(items: Iterable[tuple[str, Any]]) -> dict[str, Any]:
     return out
 
 
+# Implements: REQ-d00282-D
 # Implements: REQ-d00282-B+E+K+M
 # name: structured_row
 # use:  the ONE place a report's row becomes the object a format with numbers
@@ -635,6 +639,7 @@ class ValueSelection:
         return tuple(VALUE_SPECS[k] for k in self.keys)
 
 
+# Implements: REQ-d00282-G
 # Implements: REQ-d00282-A
 def parse_value_selection(raw: str | Sequence[str] | None) -> ValueSelection | None:
     """Read a selection as written, without judging it against any report.
@@ -667,6 +672,7 @@ def parse_value_selection(raw: str | Sequence[str] | None) -> ValueSelection | N
     return ValueSelection(keys=tuple(ordered))
 
 
+# Implements: REQ-d00282-G+J
 # Implements: REQ-d00282-A+F+K+L
 def resolve_values(
     selection: ValueSelection | None,
@@ -695,6 +701,7 @@ def resolve_values(
     return tuple(chosen)
 
 
+# Implements: REQ-d00282-C+J
 # Implements: REQ-d00258-K
 def header_for(key: str, config: Mapping[str, Any] | None = None) -> str:
     """The words a value is displayed under.

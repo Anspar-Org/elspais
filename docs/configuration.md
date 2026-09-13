@@ -408,6 +408,10 @@ dir = ""
 #   code_tested, lcov_tested   (measured in lines, so they carry no measures)
 # A name the report being produced does not offer is refused rather than
 # skipped: a report is never produced under a selection honoured in part.
+# For the same reason, a declaration carrying `values` is refused by the
+# reports that state no values at all -- `gaps`, `uncovered`, `untested`,
+# `unvalidated`, `failing` and `analysis`. Declare a second, values-free scope
+# where one audience reads both a table and a gap listing.
 #──────────────────────────────────────────────────────────────────────────────
 
 [scopes.sponsor]

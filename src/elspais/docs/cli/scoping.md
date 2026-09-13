@@ -59,6 +59,14 @@ elspais trace --scope sponsor --level prd ops   # narrows the named scope
 A name selects exactly what the same scope stated in full selects. Flags given
 alongside `--scope` narrow it rather than replacing it.
 
+A declaration may also name the values a report states under it (`values = [
+...]`, see below), so one name answers for a whole audience. Because those are
+values, the reports that state none — `gaps`, `uncovered`, `untested`,
+`unvalidated`, `failing` and `analysis` — refuse a name that carries them
+rather than producing a listing with half the declaration honoured. Where one
+audience reads both a table and a gap listing, declare a values-free scope for
+the listing or state its requirements in full.
+
 ## What a scoped report tells you
 
 A report narrowed on purpose and one that lost requirements on the way are the
@@ -252,8 +260,10 @@ test references but no result record at all has taken no verdict, so its
 facts about each row. The gap listings (`gaps`, `uncovered`, `untested`,
 `unvalidated`, `failing`) and `analysis` do not offer it: they list what is
 missing rather than tabulating facts about requirements, and a flag a command
-cannot honour is worse than its absence. A composed report is refused outright
-if `--values` reaches a section that states no values.
+cannot honour is worse than its absence. A report is refused outright where a
+selection reaches a section that states no values — `--values` on a composed
+report, and equally the values half of a named declaration on one of those
+commands asked for alone.
 
 ## Not the same as `--treat-active`
 
