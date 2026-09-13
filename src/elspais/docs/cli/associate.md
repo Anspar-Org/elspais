@@ -197,18 +197,31 @@ rather than about the federation. Read the file when you need the detail.
 
 ```bash
 elspais associate --unlink callisto
-# Unlinked callisto
+# Unlinked callisto (was callisto: /path/to/callisto)
 ```
 
-The `--unlink` argument matches by (in order): exact path, directory name, path component substring, project name, or prefix code. This means all of these work:
+The name addresses an entry of the assembled configuration by its entry key, by the namespace it declares, or by the last segment of the path it records. Key and namespace are matched without regard to case:
 
 ```bash
-elspais associate --unlink ../callisto                    # exact path
-elspais associate --unlink callisto                       # directory name or project name
-elspais associate --unlink CAL                            # prefix code
+elspais associate --unlink callisto                       # entry key, or the directory it records
+elspais associate --unlink CAL                            # the namespace it declares
 ```
 
-Even when the linked path is a worktree (e.g., `callisto-worktrees/some-branch`), `--unlink callisto` still matches via path component substring.
+Which file declares the entry decides what a run can do about it, because only `.elspais.local.toml` is written:
+
+```bash
+elspais associate --unlink beta
+# Refused: beta is declared in .elspais.toml at ../beta, and nothing was changed.
+# Remove it there; a machine-local write cannot retire a committed declaration.
+```
+
+An entry declared in both files is overridden locally rather than created locally, so removing the local entry withdraws the override and leaves the committed declaration standing:
+
+```bash
+elspais associate --unlink beta
+# Removed the local override for beta (was /home/user/moved/beta)
+# beta remains declared in .elspais.toml at ../beta. Remove it there to retire it.
+```
 
 ## Who is in the federation
 
@@ -238,7 +251,7 @@ ones reached indirectly.
 |------|-------------|
 | `--all` | Auto-discover and link all associates |
 | `--list` | Show status of linked associates |
-| `--unlink NAME` | Remove a linked associate by name, path, or prefix code |
+| `--unlink NAME` | Retire an associate recorded in `.elspais.local.toml`, addressed by entry key, namespace, or recorded directory |
 | `-f`, `--force` | Replace the path recorded for an associate that is already registered |
 
 ## Referencing an associate's requirements

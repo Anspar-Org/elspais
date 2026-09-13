@@ -1662,3 +1662,139 @@ class TestAssociateRelativePathResolution:
         )
         assert outcome.path == "../lib", "the report states what the configuration holds"
         assert (config_dir / ".elspais.local.toml").read_bytes() == before
+
+
+class TestAssociateUnlinkReadsTheAssembledConfiguration:
+    """Validates REQ-d00290-A with REQ-d00289-A+B: unlinking decides from the
+    assembled configuration and writes only the machine-local file, so the four
+    states a name can be in -- declared nowhere, locally, committed, or both --
+    are four outcomes and read as four."""
+
+    # Verifies: REQ-d00290-A, REQ-d00289-B
+    def test_REQ_d00290_A_a_name_the_configuration_does_not_hold_is_no_such_entry(
+        self, tmp_path, monkeypatch, capsys
+    ):
+        """A name nothing answers to is reported as that, and reads differently
+        from a name the committed file does hold."""
+        from elspais.commands.associate_cmd import run
+
+        core = _core_declaring(
+            tmp_path, '\n[associates.core-lib]\npath = "../libdir"\nnamespace = "LIB"\n'
+        )
+        _write_associate_config(tmp_path / "libdir", "lib", "LIB")
+
+        monkeypatch.chdir(core)
+        assert run(_link_args(core, None, unlink="ghost")) == 1
+
+        err = capsys.readouterr().err
+        assert "No associate 'ghost' found" in err
+        assert ".elspais.toml" not in err, (
+            "a name the configuration does not hold names no file to edit"
+        )
+        assert not (core / ".elspais.local.toml").exists()
+
+    # Verifies: REQ-d00290-A, REQ-d00289-A, REQ-d00289-B
+    @pytest.mark.parametrize("addressed_as", ["core-lib", "LIB", "lib", "libdir"])
+    def test_REQ_d00290_A_a_committed_entry_is_refused_naming_the_file_that_holds_it(
+        self, tmp_path, monkeypatch, capsys, addressed_as
+    ):
+        """`elspais associate` writes the machine-local file, so an entry the
+        committed file declares cannot be retired from here: the run records
+        nothing and names the file to edit. The entry is addressed by its key,
+        by the namespace it declares and by the last segment of its path --
+        all three spellings reach the same entry, none of which is the other,
+        because the entries searched are the configuration's own."""
+        from elspais.commands.associate_cmd import run
+
+        core = _core_declaring(
+            tmp_path, '\n[associates.core-lib]\npath = "../libdir"\nnamespace = "LIB"\n'
+        )
+        _write_associate_config(tmp_path / "libdir", "lib", "LIB")
+        committed_before = (core / ".elspais.toml").read_bytes()
+        local_path = core / ".elspais.local.toml"
+
+        monkeypatch.chdir(core)
+        assert run(_link_args(core, None, unlink=addressed_as)) == 1
+
+        err = capsys.readouterr().err
+        assert (core / ".elspais.toml").read_bytes() == committed_before, (
+            "a refused unlink must not edit the shared configuration"
+        )
+        assert not local_path.exists(), "a refused unlink must write nothing"
+        assert "core-lib" in err, "the refusal must name the entry it addressed"
+        assert ".elspais.toml" in err and "../libdir" in err, (
+            "the refusal must name the file that declares the entry and the path it records"
+        )
+        assert "not found" not in err.lower() and "No associate" not in err, (
+            "an entry the listing shows must not be reported as one the configuration does not hold"
+        )
+
+    # Verifies: REQ-d00289-B, REQ-d00290-A
+    def test_REQ_d00289_B_removing_an_override_says_the_entry_is_still_declared(
+        self, tmp_path, monkeypatch, capsys
+    ):
+        """An entry declared in both files is overridden locally, not created
+        locally: removing the local entry withdraws the override and leaves the
+        committed declaration standing. The report states both, since reading
+        it as a retirement would be the falsehood the assembled configuration
+        exists to prevent."""
+        from elspais.commands.associate_cmd import run
+
+        core = _core_declaring(
+            tmp_path, '\n[associates.core-lib]\npath = "../libdir"\nnamespace = "LIB"\n'
+        )
+        _write_associate_config(tmp_path / "libdir", "lib", "LIB")
+        moved = _write_associate_config(tmp_path / "moved" / "libdir", "lib", "LIB")
+        other = _write_associate_config(tmp_path / "europa", "europa", "EUR")
+
+        committed_before = (core / ".elspais.toml").read_bytes()
+        local_path = core / ".elspais.local.toml"
+        local_path.write_text(
+            f'[associates.core-lib]\npath = "{moved}"\nnamespace = "LIB"\n\n'
+            f'[associates.europa]\npath = "{other}"\nnamespace = "EUR"\n'
+        )
+
+        monkeypatch.chdir(core)
+        assert run(_link_args(core, None, unlink="core-lib")) == 0
+
+        out = capsys.readouterr().out
+        doc = tomlkit.parse(local_path.read_text())
+        assert "core-lib" not in doc.get("associates", {}), "the override must be removed"
+        assert doc["associates"]["europa"]["path"] == str(other), (
+            "removing one override must leave the others alone"
+        )
+        assert (core / ".elspais.toml").read_bytes() == committed_before, (
+            "the shared configuration is never written"
+        )
+
+        assert str(moved) in out, "the report must state the override that was removed"
+        assert "remains declared" in out, "the entry is still in the federation"
+        assert ".elspais.toml" in out and "../libdir" in out, (
+            "the report must name the file still declaring the entry and the path it records"
+        )
+        assert "Unlinked" not in out, (
+            "the associate was not retired; reporting an unlink here is a fresh falsehood"
+        )
+
+    # Verifies: REQ-d00289-B, REQ-d00290-A
+    def test_REQ_d00289_B_removing_the_only_declaration_retires_the_associate(
+        self, tmp_path, monkeypatch, capsys
+    ):
+        """An entry only the machine-local file declares is retired by removing
+        it, and that reads as a retirement rather than as a withdrawn override."""
+        from elspais.commands.associate_cmd import run
+
+        core = _make_core_repo(tmp_path / "core")
+        lib = _write_associate_config(tmp_path / "libdir", "lib", "LIB")
+        local_path = core / ".elspais.local.toml"
+        local_path.write_text(f'[associates.core-lib]\npath = "{lib}"\nnamespace = "LIB"\n')
+
+        monkeypatch.chdir(core)
+        assert run(_link_args(core, None, unlink="LIB")) == 0
+
+        out = capsys.readouterr().out
+        assert "core-lib" not in tomlkit.parse(local_path.read_text()).get("associates", {})
+        assert "Unlinked" in out and str(lib) in out
+        assert "remains declared" not in out, (
+            "nothing declares the entry now, so saying it stands would be false"
+        )

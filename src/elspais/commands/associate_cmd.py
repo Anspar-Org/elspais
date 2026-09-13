@@ -407,65 +407,98 @@ def cmd_list(args: argparse.Namespace) -> int:
 
 
 def cmd_unlink(args: argparse.Namespace) -> int:
-    """Remove an associate link by name.
+    """Retire an associate entry, or say why this file cannot retire it.
 
-    Finds the matching entry in .elspais.local.toml and removes it.
+    Implements: REQ-d00289-A, REQ-d00289-B
+
+    Implements: REQ-d00290-A
+
+    What is recorded is read from the configuration as assembled, and the
+    machine-local file is the only file written. The two are not the same
+    set: a declaration sitting in the committed file is recorded and cannot
+    be taken out from here, so a run that reads the file it writes reports a
+    declaration it can see in a listing as not existing at all.
+
+    Four states follow from that, and they are reported as four:
+
+      1. Nothing in the configuration answers to the name.
+      2. Only the machine-local file declares the entry -- removing it
+         retires the associate.
+      3. Only the committed file declares it -- nothing is written, and the
+         file to edit is named.
+      4. Both declare it -- removing the local entry withdraws the override
+         and leaves the committed declaration standing, which the report
+         states rather than reading as a retirement.
 
     Args:
         args: Parsed arguments with .unlink set to the name.
 
     Returns:
-        Exit code.
+        Exit code: 0 where an entry was removed, non-zero where none was.
     """
     name = args.unlink
     config_dir = _get_config_dir(args)
-    if config_dir is None:
+    config_path = _get_config_path(args)
+    if config_dir is None or config_path is None:
         print("Error: No configuration directory found.", file=sys.stderr)
         return 1
 
-    local_path = config_dir / ".elspais.local.toml"
-    if not local_path.exists():
-        print(f"Error: No associate '{name}' found (no local config).", file=sys.stderr)
+    # Implements: REQ-d00290-A
+    # Every entry the configuration holds, however it was written, read
+    # once -- the same answer a later run will read.
+    try:
+        config = get_config(config_path=config_path, start_path=config_dir, quiet=True)
+    except Exception as exc:  # noqa: BLE001 - reported, never raised at a user
+        # Removing a declaration is one of the ways a configuration gets
+        # repaired, so meeting an unreadable one is ordinary.
+        print(f"Error: the configuration cannot be read: {exc}", file=sys.stderr)
         return 1
 
-    doc = parse_toml_document(local_path.read_text(encoding="utf-8"))
-    associates = doc.get("associates", {})
-
-    if not associates or not any(isinstance(v, dict) for v in associates.values()):
+    recorded = _assembled_associates(config)
+    found_key = _matching_entry(recorded, name)
+    if found_key is None:
         print(f"Error: No associate '{name}' found.", file=sys.stderr)
         return 1
 
-    # Find matching entry by name, namespace code, or path basename
-    found_key = None
-    found_path = None
-    name_lower = name.lower()
+    local_path = _local_config(config_dir)
+    doc, local_entries = _local_associates(local_path)
+    local_entry = local_entries.get(found_key)
+    committed_path = _committed_path(config_path, found_key)
 
-    for assoc_key, entry in associates.items():
-        if not isinstance(entry, dict):
-            continue
-        path_str = entry.get("path", "")
-        ns = entry.get("namespace", "")
-
-        if (
-            assoc_key == name
-            or assoc_key.lower() == name_lower
-            or ns.lower() == name_lower
-            or Path(path_str).name == name
-        ):
-            found_key = assoc_key
-            found_path = path_str
-            break
-
-    if found_key is None:
-        print(f"Error: No associate '{name}' found in linked associates.", file=sys.stderr)
+    if not isinstance(local_entry, dict):
+        # Implements: REQ-d00289-B
+        # A committed declaration outlives any local write, so the run
+        # records nothing and names the file that does hold it.
+        print(
+            f"Refused: {found_key} is declared in {config_path.name} at "
+            f"{committed_path}, and nothing was changed.",
+            file=sys.stderr,
+        )
+        print(
+            "Remove it there; a machine-local write cannot retire a committed declaration.",
+            file=sys.stderr,
+        )
         return 1
 
-    # Remove the entry
-    del associates[found_key]
-    # Write back
+    # Implements: REQ-d00289-A
+    # The path reported is the one the entry being removed was recorded at,
+    # rather than the name the invocation matched on.
+    removed_path = local_entry.get("path", "")
+    del local_entries[found_key]
     local_path.write_text(tomlkit.dumps(doc), encoding="utf-8")
 
-    print(f"Unlinked {name} (was {found_key}: {found_path})")
+    if committed_path:
+        # Implements: REQ-d00289-B
+        # The override is gone and the associate is not: reporting this as
+        # an unlink would name a retirement that did not happen.
+        print(f"Removed the local override for {found_key} (was {removed_path})")
+        print(
+            f"{found_key} remains declared in {config_path.name} at {committed_path}. "
+            f"Remove it there to retire it."
+        )
+        return 0
+
+    print(f"Unlinked {name} (was {found_key}: {removed_path})")
     return 0
 
 
@@ -734,6 +767,44 @@ def _assembled_associates(config: dict[str, Any]) -> dict[str, Any]:
     """
     table = config.get("associates") or {}
     return {n: e for n, e in table.items() if isinstance(e, dict)}
+
+
+def _matching_entry(recorded: dict[str, Any], name: str) -> str | None:
+    """The entry a name addresses: its key, its namespace, or its last path segment.
+
+    Implements: REQ-d00290-A
+
+    The entries searched are the assembled configuration's, so a name
+    addresses the same entry whichever file declared it. Key and namespace
+    match without regard to case; the path is matched on its last segment,
+    which is how a directory is named on a command line.
+    """
+    wanted = name.lower()
+    for key, entry in recorded.items():
+        if (
+            key == name
+            or key.lower() == wanted
+            or str(entry.get("namespace", "")).lower() == wanted
+            or Path(str(entry.get("path", ""))).name == name
+        ):
+            return key
+    return None
+
+
+def _committed_path(config_path: Path | None, assoc_name: str) -> str:
+    """The path the committed file records for an entry, or "" if it records none.
+
+    Implements: REQ-d00289-A
+
+    Nothing is decided here: which entries exist is settled by the
+    assembled configuration, and this reads the one path a machine-local
+    write cannot change so the report can state it.
+    """
+    if config_path is None or not config_path.exists():
+        return ""
+    doc = parse_toml_document(config_path.read_text(encoding="utf-8"))
+    entry = doc.get("associates", {}).get(assoc_name, {})
+    return str(entry.get("path", "")) if isinstance(entry, dict) else ""
 
 
 def _resolve_recorded(path_str: str, base: Path) -> Path:
