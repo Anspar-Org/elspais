@@ -209,7 +209,7 @@ class RequirementTransformer:
         implements: list[str] = []
         refines: list[str] = []
         satisfies: list[str] = []
-        # Implements: REQ-d00252
+        # Implements: REQ-d00252-A
         integrates: list[str] = []
         # Implements: REQ-d00272-K
         # Keyed by the *Traceability* keyword the item was written under
@@ -277,7 +277,7 @@ class RequirementTransformer:
                         meta.get("satisfies_verdicts", {}),
                     ):
                         has_redundant_refs = True
-                # Implements: REQ-d00252
+                # Implements: REQ-d00252-A
                 if meta.get("integrates"):
                     if self._merge_ref_field(
                         integrates,
@@ -359,7 +359,7 @@ class RequirementTransformer:
             "implements": implements,
             "refines": refines,
             "satisfies": satisfies,
-            # Implements: REQ-d00252
+            # Implements: REQ-d00252-A
             "integrates": integrates,
             # Implements: REQ-p00014-E
             "template": is_template,
@@ -424,7 +424,7 @@ class RequirementTransformer:
                     result["satisfies"], result["satisfies_verdicts"] = self._parse_ref_list(
                         val, "satisfies"
                     )
-                # Implements: REQ-d00252
+                # Implements: REQ-d00252-A
                 elif child.type == "INTEGRATES_FIELD":
                     result["integrates"], result["integrates_verdicts"] = self._parse_ref_list(
                         val, "integrates"

@@ -1400,7 +1400,7 @@ def check_spec_unknown_directive(graph: FederatedGraph, config: dict[str, Any]) 
     )
 
 
-# Implements: REQ-p00004
+# Implements: REQ-p00004-K
 def check_spec_hash_integrity(
     graph: FederatedGraph, config: dict[str, Any] | None = None
 ) -> HealthCheck:

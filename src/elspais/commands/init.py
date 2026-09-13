@@ -140,7 +140,7 @@ def create_template_requirement(args: argparse.Namespace) -> int:
     return 0
 
 
-# Implements: REQ-d00209
+# Implements: REQ-d00209-C+D
 # Per-field comments for generated TOML.  Keyed by dotted TOML path.
 # Section-level comments use the bare section name (e.g. "project").
 # Field-level comments use the full path (e.g. "project.namespace").
@@ -671,6 +671,7 @@ def _add_table(
     doc.add(key, tbl)
 
 
+# Implements: REQ-d00209-A, REQ-d00209-B
 def generate_config(
     project_type: str,
     associated_prefix: str | None = None,

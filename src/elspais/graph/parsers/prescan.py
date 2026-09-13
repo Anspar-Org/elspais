@@ -145,6 +145,12 @@ def python_line_context(
     declaration's real extent and is not fooled by a dedented line inside a
     multi-line string.
 
+    Every declaration is read, wherever it is written: the walk descends
+    through compound statements, so a function declared under a module-level
+    ``if`` or a ``try`` has an extent of its own and is the narrower answer
+    for its own lines.  ``declaration_starts`` reads the same set from the
+    same tree, and the two are the two halves of one rule.
+
     Returns None when the source does not parse, so the caller keeps the
     indentation reading rather than losing context altogether.
     """
@@ -166,6 +172,20 @@ def python_line_context(
                     (child.lineno, child.end_lineno or child.lineno, child.name, class_name)
                 )
                 # A nested declaration is the narrower answer for its own lines.
+                _collect(child, class_name)
+            else:
+                # A declaration written under an ``if``, a ``try``, a ``with``
+                # or a loop is a declaration like any other, and the walk
+                # descends through the compound statement to reach it.
+                # Stopping at anything that is not itself a class or a
+                # function would leave such a declaration with no extent, so
+                # a citation written above it would bind to whatever merely
+                # encloses both -- ``_run_server``'s two hundred lines for a
+                # six-line signal handler.  ``declaration_starts`` already
+                # reads these declarations (it walks the whole tree), and the
+                # two must agree about what a declaration is.  The class name
+                # threads through unchanged, so a function declared under an
+                # ``if`` inside a class still reports that class.
                 _collect(child, class_name)
 
     _collect(tree, None)
@@ -253,8 +273,24 @@ _JS_FUNC = re.compile(r"^(\s*)(?:export\s+)?(?:async\s+)?function\s+(\w+)\s*\(")
 _JS_METHOD = re.compile(rf"^(\s*)(?:async\s+)?{_NOT_STATEMENT_WORD}(\w+)\s*\([^)]*\)\s*\{{")
 _JS_CLASS = re.compile(r"^(\s*)class\s+(\w+)")
 
-# Go: func name(, func (receiver) name(
-_GO_FUNC = re.compile(r"^(\s*)func\s+(?:\([^)]+\)\s+)?(\w+)\s*\(")
+# Go: func name(, func (receiver) name(, func name[type params](
+#
+# A type-parameter list sits between the name and the parameter list, exactly
+# where a receiver sits between ``func`` and the name -- neither is work of the
+# citation's own, so neither may hide the declaration the citation is written
+# above.  The list nests (``func F[T ~[]E, E any](``), which a regular
+# expression can only follow to a fixed depth: ``_GO_TYPE_PARAMS`` follows
+# THREE levels of ``[`` and refuses deeper: that is the bound, chosen because a
+# declaration this declines to see falls to REQ-d00254-D's second branch rather
+# than binding wrongly.  The list is recognised only after ``func`` and a name,
+# so ``mapKeys[int, string](m)`` stays a call site and
+# ``type Set[T any] struct`` stays a type.
+_GO_BRACKET_FREE = r"[^\[\]]"
+_GO_TYPE_PARAMS = (
+    rf"\[(?:{_GO_BRACKET_FREE}|"
+    rf"\[(?:{_GO_BRACKET_FREE}|\[{_GO_BRACKET_FREE}*\])*\])*\]"
+)
+_GO_FUNC = re.compile(rf"^(\s*)func\s+(?:\([^)]+\)\s+)?(\w+)\s*(?:{_GO_TYPE_PARAMS}\s*)?\(")
 _GO_STRUCT = re.compile(r"^(\s*)type\s+(\w+)\s+struct\s*\{")
 
 # Rust: pub? fn name(, pub? async fn name(
@@ -450,9 +486,12 @@ def declaration_starts(lines: list[tuple[int, str]], language: str) -> list[int]
     attributed to a citation written about something else.
 
     Read from the AST where the source parses, because a declaration written
-    under an ``if`` or a ``try`` is a declaration like any other and a
-    structural walk that only descends into classes and functions would miss
-    it -- and a missed declaration is exactly the hole this bound closes.
+    under an ``if`` or a ``try`` is a declaration like any other, and a
+    structural walk that stopped at classes and functions would miss it --
+    a missed declaration is exactly the hole this bound closes.
+    ``python_line_context`` descends through the same compound statements for
+    the same reason, so the extent and the bound agree about what a
+    declaration is.
     Where the source does not parse, or the language has no AST here, the same
     patterns ``build_line_context`` recognises are matched line by line and
     the walk steps back over any decorators above the match.

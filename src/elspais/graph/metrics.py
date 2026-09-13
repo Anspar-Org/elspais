@@ -702,7 +702,7 @@ class IntegratesRollup:
         return self.implemented_total > 0
 
 
-# Implements: REQ-d00252
+# Implements: REQ-d00252-F
 def has_integration(node: GraphNode) -> bool:
     """True if ``node`` delegates implementation via at least one INTEGRATES edge.
 
@@ -717,7 +717,7 @@ def has_integration(node: GraphNode) -> bool:
     return any(e.kind == EdgeKind.INTEGRATES for e in node.iter_outgoing_edges())
 
 
-# Implements: REQ-d00252
+# Implements: REQ-d00252-D
 def integrates_rollup(node: GraphNode) -> IntegratesRollup:
     """Inherit implemented/passing status from library nodes via INTEGRATES.
 
@@ -774,7 +774,7 @@ class AssociateIntegration:
     has_failures: bool = False
 
 
-# Implements: REQ-d00252
+# Implements: REQ-d00252-F
 def integrates_by_associate(graph) -> list[AssociateIntegration]:
     """Summarize Integrates inheritance grouped by owning associate (REQ-d00252-F).
 
@@ -844,7 +844,7 @@ def integrates_by_associate(graph) -> list[AssociateIntegration]:
     ]
 
 
-# Implements: REQ-d00252
+# Implements: REQ-d00252-F
 def integrates_total(items: list[AssociateIntegration]) -> AssociateIntegration:
     """Aggregate per-associate integration rows into a federation total.
 

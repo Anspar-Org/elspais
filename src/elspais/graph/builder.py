@@ -4333,7 +4333,7 @@ class GraphBuilder:
             "implements_refs": data.get("implements", []),
             "refines_refs": data.get("refines", []),
             "satisfies_refs": data.get("satisfies", []),
-            # Implements: REQ-d00252
+            # Implements: REQ-d00252-A
             "integrates_refs": data.get("integrates", []),
             # Implements: REQ-d00272-K
             # The raw items the reader refused. They stay in

@@ -562,7 +562,7 @@ def _serialize_node_generic(node: Any, graph: FederatedGraph | None = None) -> d
         m = JNY_ID_PATTERN.match(node.id)
         if m:
             descriptor = m.group("descriptor")
-        # Implements: REQ-d00255, REQ-d00256
+        # Implements: REQ-d00255-D, REQ-d00256-D
         # Surface verdict and failing_steps so viewers can show journey UAT status
         # without duplicating the verdict-derivation logic.
         jv = node.get_metric("journey_verification")

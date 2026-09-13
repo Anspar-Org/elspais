@@ -397,7 +397,7 @@ def _render_requirement(node: GraphNode, resolver: Any | None = None) -> str:
         lines.append(f"**Satisfies**: {sat_str}")
 
     # Integrates line (if present)
-    # Implements: REQ-d00252
+    # Implements: REQ-d00252-A
     # Rendered from the stored field (not derived from edges): targets are
     # external and may be absent from the build.
     if integrates_refs:

@@ -1,4 +1,4 @@
-# Implements: REQ-d00211
+# Implements: REQ-d00211-A, REQ-d00211-C
 """Pure view-model builders for the traceability viewer.
 
 Level / namespace / status entries (with resolved colors) derived from typed

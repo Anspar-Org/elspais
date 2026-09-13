@@ -254,7 +254,7 @@ D is what keeps B from becoming guesswork. Reporting several respects in which a
 
 ## REQ-d00285: The Shape of a Finding
 
-**Level**: dev | **Status**: Draft | **Implements**: REQ-p00015
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00015
 **Satisfies**: REQ-p00019
 
 A finding is what the tool hands back when something is wrong with the content or the configuration it was given. REQ-d00271 governs the vocabulary a finding names its defect in. This governs what a finding must carry besides that name, so that a reader can act on it and so that two surfaces reporting the same condition cannot disagree about it.
@@ -299,6 +299,7 @@ D and E are where a finding's severity is settled, for every finding the tool pr
 
 ### Changelog
 
+- 2026-09-12 | bedec247 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: sync changelog hash
 - 2026-08-24 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-66: govern narrowing a report to selected findings — the verdict stays the run's, and the narrowing and the extent of what it withheld are disclosed
 - 2026-08-24 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-66: Initial authoring — a finding carries its location, its remedy and one severity decided in one place, and reads the same in every format
 
@@ -575,7 +576,7 @@ D. When no UAT results CSV file exists, the uat.results check SHALL report as sk
 
 ## REQ-d00249: Configured test runner execution
 
-**Level**: dev | **Status**: Draft | **Implements**: -
+**Level**: dev | **Status**: Active | **Implements**: -
 
 ### Assertions
 
@@ -602,6 +603,10 @@ indication that test results were not recent. This requirement closes
 both gaps: a single command can execute tests and re-evaluate checks,
 and the checks pass warns when results are out of date even without
 running tests.
+
+### Changelog
+
+- 2026-09-12 | 784f8350 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: add missing changelog section
 
 *End* *Configured test runner execution* | **Hash**: 784f8350
 
@@ -670,7 +675,7 @@ Agent-generated code routinely cannot reliably be constrained to generate assert
 
 ## REQ-d00278: Report Scope Selection Vocabulary
 
-**Level**: dev | **Status**: Draft | **Implements**: REQ-p00084
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00084
 
 A scope is written by a person and read by the tool, so it needs a vocabulary: which properties of a requirement can be selected on, which values those properties admit, what a requirement must and must not carry to satisfy them, whose configuration a name is read against, and what becomes of a name the vocabulary does not account for. This requirement fixes that vocabulary and leaves it open to properties not yet named.
 
@@ -714,13 +719,17 @@ J, K and L are the honesty group, separate because opposite situations produce t
 
 M is what allows the vocabulary to grow, and growth is owed. Selection axes beyond level and status are foreseeable: a compiled document offering its stakeholder audience the product-level requirements of every member of a federation, or a ranking narrowed to one level (REQ-d00125-E), are selections of this kind and are expressed in this vocabulary. The cost of admitting a property must fall on the scopes that use it and on nothing else — a project whose committed scopes shifted meaning because the tool learned a new property would have to re-audit every report it ever committed.
 
+### Changelog
+
+- 2026-09-12 | ef2221cc | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: add missing changelog section
+
 *End* *Report Scope Selection Vocabulary* | **Hash**: ef2221cc
 
 ---
 
 ## REQ-d00279: One Authority for Report Scope Membership
 
-**Level**: dev | **Status**: Draft | **Implements**: REQ-p00084
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00084
 
 Whether a requirement falls within a scope is a judgement, and a judgement made independently in several places drifts. This requirement fixes where that judgement is made and what is owed by a surface that answers it elsewhere.
 
@@ -738,13 +747,17 @@ A is what makes the promises above this requirement hold everywhere at once inst
 
 B grants a second evaluator without granting a second semantics. A view that must answer immediately as a reader narrows it cannot wait on an authority elsewhere, and that responsiveness is worth having; what it is not worth is a reader seeing one set on screen and a different set in the report they then take away. Naming the authority's answer as the comparand is what makes the permission safe to grant: agreement is decided by comparison against a stated referent, so a second evaluator that is consistent with itself and wrong is not conforming. The estate elsewhere requires a shared decision to be computed once and read by every surface — the per-*Assertion* coverage standing of REQ-d00258-G is computed where the graph is and applied on first render rather than being re-derived by the reader's view. That is the right settlement where the decision is expensive and the inputs are not to hand. Scope membership is the opposite case on both counts: it is a comparison of properties the view already holds for every requirement it is displaying, and the reader is changing it continuously, so equivalence is the obligation that fits and derivation is not owed.
 
+### Changelog
+
+- 2026-09-12 | 2b755b50 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: add missing changelog section
+
 *End* *One Authority for Report Scope Membership* | **Hash**: 2b755b50
 
 ---
 
 ## REQ-d00282: Report Value Selection
 
-**Level**: dev | **Status**: Draft | **Implements**: REQ-p00084
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00084
 
 A report states values about each of its rows, whether a row is a requirement or a group of them. Which requirements a report is about is a scope; which values it states is this. The two are separate choices about one report, and a reader making one of them says nothing about the other.
 
@@ -799,6 +812,10 @@ K and L are what make a stated selection a stated shape. A committed artifact is
 N reaches the one figure B cannot. Line coverage is measured in lines and confers no assertion credit (REQ-d00254-B), so it has none of the four measures B decomposes and was left whole -- but whole is not the same as indivisible. It is a count of lines covered out of lines measured, and a reader wanting the proportion should not have to take a rendering and read the numbers back out of it. A further reading of the same lines, how many of them a verifying test can be named for, is a different question again: it is named for that attribution rather than for the figure at large (C), and where the tooling records no test contexts it is not stated at all rather than stated as none (REQ-d00258-E). What that suppression must not do is take the lines covered with it -- they were measured, and a report that has them and says nothing has withheld an answer it holds.
 
 M is the distinction between having nothing to say and saying nothing. Not every value a report offers exists for every row -- a coverage figure has none for a group whose requirements confer none. Where those two look alike a reader reads absence as zero and concludes work is undone that was never owed, which is the same defect REQ-d00258-E keeps out of line coverage by recording whether a measurement was taken rather than letting an absent one read as none.
+
+### Changelog
+
+- 2026-09-12 | 70ab39ac | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: add missing changelog section
 
 *End* *Report Value Selection* | **Hash**: 70ab39ac
 

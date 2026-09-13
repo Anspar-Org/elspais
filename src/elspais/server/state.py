@@ -1,4 +1,4 @@
-# Implements: REQ-d00010
+# Implements: REQ-d00010-A
 """Shared application state with auto-refresh.
 
 Holds the in-memory FederatedGraph, config, and file mtime snapshot.

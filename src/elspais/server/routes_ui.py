@@ -12,7 +12,7 @@ from starlette.responses import JSONResponse
 
 from elspais.view_model import build_levels, build_namespaces, build_statuses
 
-# Implements: REQ-d00211
+# Implements: REQ-d00211-B
 # User-selectable relationship kinds for the edit UI.
 _USER_RELATIONSHIP_KINDS = ["implements", "refines", "satisfies"]
 

@@ -1272,7 +1272,7 @@ class JourneyVerification:
             'partial'    if some steps pass but not all.
             'unverified' if no verifying tests are recorded.
         """
-        # Implements: REQ-d00255, REQ-d00256
+        # Implements: REQ-d00255-D
         if self.has_failures:
             return "fail"
         if self.fully_verified:
@@ -1286,7 +1286,7 @@ _UAT_PASS = ("passed", "pass", "success")
 _UAT_FAIL = ("failed", "fail", "failure", "error")
 
 
-# Implements: REQ-d00255, REQ-d00256
+# Implements: REQ-d00255-B
 def _node_verifying_status(node) -> tuple[bool, bool]:
     """Return ``(passed, failed)`` over the tests this node directly VERIFIES.
 
@@ -1312,7 +1312,7 @@ def _node_verifying_status(node) -> tuple[bool, bool]:
     return passed, failed
 
 
-# Implements: REQ-d00255, REQ-d00256
+# Implements: REQ-d00255-B, REQ-d00256-C, REQ-d00256-D, REQ-d00256-E
 def annotate_journey_verification(graph: FederatedGraph) -> None:
     """Roll each journey's verifying tests up into a ``JourneyVerification``.
 

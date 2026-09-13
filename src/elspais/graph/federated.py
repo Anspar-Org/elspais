@@ -296,7 +296,7 @@ class FederatedGraph:
             self._wire_cross_graph_edges()
         # Implements: REQ-p00014-H
         self._instantiate_cross_repo_satisfies()
-        # Implements: REQ-d00252
+        # Implements: REQ-d00252-D
         self._wire_integrates_edges()
         # Implements: REQ-p00014-J
         self._detect_satisfies_cycles()
@@ -2041,7 +2041,7 @@ class FederatedGraph:
                         continue
                     self._wire_one_integrates(source_entry, req.id, raw)
 
-    # Implements: REQ-d00252
+    # Implements: REQ-d00252-D
     @staticmethod
     def _integrates_candidates(target_id: str):
         """Yield the target id as written, then a base id with one trailing
@@ -2052,7 +2052,7 @@ class FederatedGraph:
         if sep and base:
             yield base
 
-    # Implements: REQ-d00252
+    # Implements: REQ-d00252-D
     def _resolves_to_requirement(self, owner: str, canonical: str) -> bool:
         """True if ``canonical`` names a REQUIREMENT node in ``owner``'s graph.
 
@@ -2068,7 +2068,7 @@ class FederatedGraph:
         node = entry.graph._index.get(canonical)
         return node is not None and node.kind == NodeKind.REQUIREMENT
 
-    # Implements: REQ-d00252
+    # Implements: REQ-d00252-D
     def _resolve_integrates_target(self, target_id: str):
         """Resolve an Integrates target to ``(owner_repo_name, canonical_id)``.
 
@@ -2085,7 +2085,7 @@ class FederatedGraph:
                 return claim  # (repo_name, canonical_id)
         return None, target_id
 
-    # Implements: REQ-d00252
+    # Implements: REQ-d00252-C+D+E
     def _wire_one_integrates(
         self,
         source_entry: RepoEntry,

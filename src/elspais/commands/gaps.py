@@ -76,7 +76,7 @@ def _reqs_with_code_refs(graph: FederatedGraph, excluded_ids: set[str]) -> set[s
     return covered
 
 
-# Implements: REQ-d00252
+# Implements: REQ-d00252-F
 def _integrates_associates(graph: FederatedGraph, node: Any) -> list[str]:
     """Return sorted owning-associate names for a requirement's INTEGRATES targets.
 

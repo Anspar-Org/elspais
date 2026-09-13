@@ -917,6 +917,199 @@ def test_REQ_d00254_D_two_citations_dividing_one_function_both_keep_it(language,
 
 
 # ---------------------------------------------------------------------------
+# Declarations written under a compound statement
+#
+# REQ-d00254-D attributes a citation the lines of "the function it is written
+# above", and nothing in that qualifies where the function is written.  A
+# ``def`` under a module-level ``if`` -- the platform branch, the optional
+# import, the ``TYPE_CHECKING`` block -- is a declaration like any other, so a
+# citation directly above one is written above it and takes its extent.
+#
+# A walk that descended only into classes and functions would leave such a
+# declaration with no extent at all, and the citation would fall to D's second
+# branch: bounded by nothing nearer than the next citation or the next
+# declaration, it would attribute lines of whatever merely encloses both.  That
+# is the wrong attribution rather than a weaker one -- the requirement is
+# credited with code declared beside the code it names, the reference resolves,
+# and no check reports it.
+#
+# ``declaration_starts`` has always read these declarations (it walks the whole
+# tree), so the extent and the bound are asserted together here: they are the
+# two halves of one rule and a file where they disagree is a file where a
+# citation is bounded at a line the extent says is inside its own function.
+# ---------------------------------------------------------------------------
+
+
+# A function declared under a module-level ``if``, with a sibling declared
+# beside it under the same branch and an unrelated ``later`` below.
+DEF_UNDER_A_MODULE_IF = """\
+import sys
+
+if sys.platform == "win32":
+    # Implements: REQ-p00001-A
+    def resolve():
+        return "win"
+
+    def sibling():
+        return "posix"
+
+
+def later():
+    return 3
+"""
+
+# The same shape under a ``try``: the optional-dependency import, where the
+# declaration that uses the dependency is written inside the branch that
+# proved it importable.
+DEF_UNDER_A_TRY = """\
+try:
+    import orjson
+
+    # Implements: REQ-p00001-A
+    def dumps(value):
+        return orjson.dumps(value)
+
+    def sibling():
+        return None
+
+except ImportError:
+    orjson = None
+
+
+def later():
+    return 3
+"""
+
+# A method declared under an ``if`` inside a class.  The class encloses the
+# compound statement, so the answer must still name it: a method reported
+# without its class is a method that cannot be told from a free function of
+# the same name elsewhere in the file.
+METHOD_UNDER_AN_IF_IN_A_CLASS = """\
+class Store:
+    if TYPE_CHECKING:
+        # Implements: REQ-p00001-A
+        def keys(self):
+            return ()
+
+        def sibling(self):
+            return ()
+
+    def other(self):
+        return 1
+
+
+def later():
+    return 3
+"""
+
+# A ``def`` under an ``if`` INSIDE a function -- the signal handler installed
+# only when the server reloads.  This is the shape where a missed declaration
+# mis-credits rather than merely under-credits: ``outer`` encloses the citation,
+# so binding to it attributes ``outer``'s whole body, ``sibling`` included, to a
+# requirement the six-line handler alone implements.
+DEF_UNDER_AN_IF_IN_A_FUNCTION = """\
+def outer(config):
+    prepared = 1
+
+    if config.reload:
+        # Implements: REQ-p00001-A
+        def handler(signum, frame):
+            return prepared
+
+        def sibling(signum, frame):
+            return 0
+
+        return handler
+
+    return None
+
+
+def later():
+    return 3
+"""
+
+# The same file with the compound statement removed.  This is the regression
+# guard: descending through an ``if`` must not change what a citation above an
+# ordinary module-level ``def`` binds to.
+DEF_AT_MODULE_LEVEL = """\
+import sys
+
+# Implements: REQ-p00001-A
+def resolve():
+    return "win"
+
+
+def sibling():
+    return "posix"
+
+
+def later():
+    return 3
+"""
+
+
+# Verifies: REQ-d00254-D
+@pytest.mark.parametrize("language", CODE_ROUTES)
+@pytest.mark.parametrize(
+    ("source", "citation_line", "func_name", "class_name", "func_line", "last_body_line"),
+    [
+        pytest.param(DEF_UNDER_A_MODULE_IF, 4, "resolve", None, 5, 6, id="under-a-module-if"),
+        pytest.param(DEF_UNDER_A_TRY, 4, "dumps", None, 5, 6, id="under-a-try"),
+        pytest.param(
+            METHOD_UNDER_AN_IF_IN_A_CLASS, 3, "keys", "Store", 4, 5, id="under-an-if-in-a-class"
+        ),
+        pytest.param(
+            DEF_UNDER_AN_IF_IN_A_FUNCTION, 5, "handler", None, 6, 7, id="under-an-if-in-a-function"
+        ),
+        pytest.param(DEF_AT_MODULE_LEVEL, 3, "resolve", None, 4, 5, id="no-compound-statement"),
+    ],
+)
+def test_REQ_d00254_D_a_citation_above_a_def_under_a_compound_statement_binds_to_that_def(
+    language, source, citation_line, func_name, class_name, func_line, last_body_line
+):
+    """A ``def`` under an ``if`` or a ``try`` answers for the citation above it.
+
+    The compound statement is not the function and does no work of the
+    citation's own, so the declaration below it is what the citation is written
+    above.  The extent is asserted with the identity, because a name without a
+    range attributes nothing and a range reaching ``sibling`` -- declared beside
+    the cited function under the same branch -- attributes a function the
+    citation says nothing about.
+
+    The class name is asserted in every case: under an ``if`` inside a class it
+    must still be reported, and outside a class it must stay None rather than
+    borrowing whatever declared last.
+
+    The last case carries no compound statement at all, so the three above it
+    are a statement about reaching a nested declaration rather than about the
+    binding rule changing.
+    """
+    lang, exact_end = language
+    lines = _numbered(source)
+    context = build_line_context(lines, lang)
+    name, cls, start, end = context[citation_line]
+
+    assert (name, cls, start) == (func_name, class_name, func_line), (
+        f"the citation is written above {func_name}, got {(name, cls, start)}"
+    )
+    if exact_end:
+        assert end == last_body_line, (
+            f"the AST knows {func_name} ends at line {last_body_line}, got {end}"
+        )
+    else:
+        assert end >= last_body_line, (
+            f"extent must reach the end of {func_name}'s body (line {last_body_line}), got {end}"
+        )
+    assert end < _sibling_line(source), (
+        f"extent must stop before the sibling declared at line {_sibling_line(source)}, got {end}"
+    )
+    assert start in declaration_starts(lines, lang), (
+        f"the bound and the extent must agree about what a declaration is: "
+        f"{func_name} begins at line {start}, which declaration_starts does not report"
+    )
+
+
+# ---------------------------------------------------------------------------
 # ``declaration_starts``: where the next function declaration BEGINS.
 #
 # REQ-d00254-D bounds a citation that no function encloses at the start of the
@@ -1342,20 +1535,7 @@ func later() int {
     [
         pytest.param(3, "checkCharsFor", 4, 6, id="package-level-func"),
         pytest.param(9, "verify", 10, 14, id="method-with-a-pointer-receiver"),
-        pytest.param(
-            17,
-            "mapKeys",
-            18,
-            20,
-            id="generic-func",
-            marks=pytest.mark.xfail(
-                strict=True,
-                raises=AssertionError,
-                reason="_GO_FUNC requires '(' immediately after the name, so a "
-                "type-parameter list hides the declaration; the citation falls "
-                "to REQ-d00254-D's second branch instead",
-            ),
-        ),
+        pytest.param(17, "mapKeys", 18, 20, id="generic-func"),
     ],
 )
 def test_REQ_d00254_D_a_go_citation_binds_to_the_func_below_it(
@@ -1365,10 +1545,9 @@ def test_REQ_d00254_D_a_go_citation_binds_to_the_func_below_it(
 
     A receiver and a type-parameter list are both written between ``func`` and
     the parameter list, and neither is work of the citation's own -- so neither
-    changes what the citation is written above.  The receiver form is
-    recognised; the generic form is NOT, and is recorded here as a strict xfail
-    so that widening the pattern is what removes the marker rather than a
-    silent behaviour change going unnoticed.
+    changes what the citation is written above.  Both forms are recognised: the
+    receiver is matched between ``func`` and the name, the type-parameter list
+    between the name and the parameter list.
 
     Go has no class construct here, so the class name is None in every case: a
     name borrowed from a ``type ... struct`` above would attribute the method
@@ -1386,3 +1565,131 @@ def test_REQ_d00254_D_a_go_citation_binds_to_the_func_below_it(
     assert end < _brace_later_line(GO_DECLARATIONS), (
         f"extent must stop before the func at line {_brace_later_line(GO_DECLARATIONS)}, got {end}"
     )
+
+
+# Two generic funcs whose type-parameter lists nest: ``~[]E`` holds a bracket
+# inside the list, and ``~map[K][]V`` holds two.  A list is read to a bounded
+# depth, so these stand for the shapes real generic Go is written in -- the
+# constraint that names a slice of the second parameter, and the one that names
+# a map of slices.  Beyond that bound a declaration is simply not seen, and the
+# citation falls to REQ-d00254-D's second branch: a weaker attribution, never a
+# wrong one.
+GO_NESTED_TYPE_PARAMS = """\
+package main
+
+// Implements: REQ-p00001-A
+func Filter[S ~[]E, E any](s S, keep func(E) bool) S {
+\tout := s[:0]
+\treturn out
+}
+
+// Implements: REQ-p00001-B
+func Index[M ~map[K][]V, K comparable, V any](m M) []K {
+\tkeys := make([]K, 0, len(m))
+\treturn keys
+}
+
+func later() int {
+\treturn 2
+}
+"""
+
+# The two generic shapes that are NOT declarations.  ``type Set[T comparable]
+# struct {`` declares a type, and ``mapKeys[string, int](m)`` instantiates and
+# calls one -- both carry a name followed by a bracketed list, which is the
+# whole of what the widened pattern looks for after ``func``.  Reading either as
+# a func declaration is the wrong attribution the widening must not buy: the
+# citation above the type would be bound to ``Set``, and the one above the call
+# would be bound to ``mapKeys`` and, in brace scoping, set a brace floor inside
+# ``collect`` that ends the real enclosing func early -- so every citation below
+# it in that func loses its bound too.
+GO_GENERIC_NON_DECLARATIONS = """\
+package main
+
+// Implements: REQ-p00001-A
+type Set[T comparable] struct {
+\tmembers map[T]struct{}
+}
+
+func collect(m map[string]int) []string {
+\t// Implements: REQ-p00001-B
+\tmapKeys[string, int](m)
+\treturn nil
+}
+
+func later() int {
+\treturn 2
+}
+"""
+
+
+# Verifies: REQ-d00254-D
+@pytest.mark.parametrize(
+    ("citation_line", "func_name", "func_line", "last_body_line"),
+    [
+        pytest.param(3, "Filter", 4, 6, id="constraint-naming-a-slice"),
+        pytest.param(9, "Index", 10, 12, id="constraint-naming-a-map-of-slices"),
+    ],
+)
+def test_REQ_d00254_D_a_go_citation_binds_past_a_nested_type_parameter_list(
+    citation_line, func_name, func_line, last_body_line
+):
+    """A type-parameter list holding brackets of its own still leaves the func visible.
+
+    The list sits between the name and the parameter list and is no work of the
+    citation's own, so a bracket written inside it cannot decide what the
+    citation is written above.  The extent is asserted with the identity: an
+    end short of the body under-credits the func, and one reaching ``later``
+    credits a func declared beside the one the author wrote about.
+    """
+    context = build_line_context(_numbered(GO_NESTED_TYPE_PARAMS), "go")
+    name, cls, start, end = context[citation_line]
+
+    assert (name, cls, start) == (func_name, None, func_line), (
+        f"the citation is written above {func_name}, got {(name, cls, start)}"
+    )
+    assert end == last_body_line, (
+        f"brace scoping knows {func_name} ends at line {last_body_line}, got {end}"
+    )
+    assert end < _brace_later_line(GO_NESTED_TYPE_PARAMS), (
+        f"extent must stop before the func at line "
+        f"{_brace_later_line(GO_NESTED_TYPE_PARAMS)}, got {end}"
+    )
+
+
+# Verifies: REQ-d00254-D
+@pytest.mark.parametrize(
+    ("citation_line", "declaration_line", "bound_to", "shape"),
+    [
+        pytest.param(3, 4, None, "type Set[T comparable] struct {", id="generic-type"),
+        pytest.param(9, 10, "collect", "mapKeys[string, int](m)", id="generic-call-site"),
+    ],
+)
+def test_REQ_d00254_D_a_go_generic_type_or_call_is_not_a_func_declaration(
+    citation_line, declaration_line, bound_to, shape
+):
+    """A name followed by a bracketed list is only a declaration after ``func``.
+
+    Both surfaces reading the Go patterns must refuse the line.  The context
+    builder must not bind the citation to it -- the generic type leaves the
+    citation bound to nothing, and the citation inside ``collect`` keeps the
+    func that encloses it -- and ``declaration_starts`` must not report the
+    line, or a citation above it would be cut short at a line no func begins
+    on.  ``later`` IS reported and bound, which is what says the refusal is
+    about the shape met rather than about the file running out of funcs.
+    """
+    lines = _numbered(GO_GENERIC_NON_DECLARATIONS)
+    context = build_line_context(lines, "go")
+    starts = declaration_starts(lines, "go")
+
+    assert context[citation_line][0] == bound_to, (
+        f"{shape!r} is not a func declaration, so the citation above it must be "
+        f"bound to {bound_to}, got {context[citation_line]}"
+    )
+    assert declaration_line not in starts, (
+        f"{shape!r} declares no func; reporting line {declaration_line} as a "
+        f"declaration would bound a citation above it at a line no func begins on"
+    )
+
+    later = _brace_later_line(GO_GENERIC_NON_DECLARATIONS)
+    assert later in starts and context[later][0] == "later"
