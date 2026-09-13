@@ -509,7 +509,7 @@ class TestCheckBrokenReferences:
         config = _claimed_config()
         check = check_unresolved_references(_wrap(graph, config), config)
         assert not check.passed
-        assert check.severity == "error"  # REQ-d00204-E: unknown_requirement is an error
+        assert check.severity == "error"  # references.unknown_requirement is an error by default
         assert check.name == "references.unknown_requirement"
         assert len(check.findings) == 2
         assert check.details.get("count") == 2

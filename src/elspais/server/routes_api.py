@@ -782,7 +782,7 @@ async def api_tree_data(request: Request) -> JSONResponse:
             entry = g.repo_for(node.id)
         except Exception:  # noqa: BLE001 - fail-soft per row, never break /api/tree-data
             entry = None
-        if entry is not None and entry.config is not None:
+        if entry is not None:
             cfg = entry.config
             cache_key = (cfg.get("project") or {}).get("namespace") or _LOCAL_KEY
         else:
@@ -830,7 +830,7 @@ async def api_tree_data(request: Request) -> JSONResponse:
             entry = g.repo_for(node.id)
         except Exception:  # noqa: BLE001 - fail-soft per row
             return None
-        if entry is None or entry.config is None:
+        if entry is None:
             return None
         ns = (entry.config.get("project") or {}).get("namespace")
         return ns or None

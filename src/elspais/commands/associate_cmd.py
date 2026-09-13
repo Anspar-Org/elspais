@@ -18,7 +18,7 @@ from typing import Any
 import tomlkit
 
 from elspais.associates import Associate, discover_associate_from_path
-from elspais.config import find_config_file, parse_toml_document
+from elspais.config import find_config_file, get_config, parse_toml_document
 from elspais.graph.federated import FederationError
 
 
@@ -77,67 +77,56 @@ class Registration:
 
     def report_lines(self) -> list[str]:
         """The lines describing this outcome, first line first."""
-        return _REPORTERS[self.kind](self)
+        match self.kind:
+            case Outcome.RECORDED:
+                return [f"Linked {self.name} ({self.namespace}) at {self.path}"]
 
+            case Outcome.UNCHANGED:
+                # Implements: REQ-d00289-B
+                return [
+                    f"No change: {self.name} ({self.namespace}) stays registered at {self.path}"
+                ]
 
-def _report_recorded(r: Registration) -> list[str]:
-    return [f"Linked {r.name} ({r.namespace}) at {r.path}"]
+            case Outcome.REPOINTED:
+                # Implements: REQ-d00289-D
+                return [
+                    f"Repointed {self.name} ({self.namespace}): "
+                    f"was {self.previous_path}, now registered at {self.path}"
+                ]
 
+            case Outcome.ENTRY_EXISTS:
+                # Implements: REQ-d00289-C
+                return [
+                    f"Refused: {self.name} is already registered at "
+                    f"{self.previous_path}, and nothing was changed.",
+                    f"Use -f to replace that path with {self.target}.",
+                    "Run 'elspais associate --list' to see the current registrations.",
+                ]
 
-def _report_unchanged(r: Registration) -> list[str]:
-    # Implements: REQ-d00289-B
-    return [f"No change: {r.name} ({r.namespace}) stays registered at {r.path}"]
+            case Outcome.CONTESTED:
+                # Implements: REQ-d00289-G
+                others = ", ".join(self.contested_paths)
+                return [
+                    f"Refused: {self.target} and {others} claim the namespace "
+                    f"{self.namespace} in this scan; none of them was recorded.",
+                    "Register the one you mean by path.",
+                ]
 
+            case Outcome.WOULD_NOT_FEDERATE if self.pre_existing:
+                # Implements: REQ-d00289-I
+                return [
+                    f"Refused: this configuration does not federate as it stands, before "
+                    f"{self.name} at {self.target} is considered. Nothing was changed.",
+                    f"  {self.reason}",
+                ]
 
-def _report_repointed(r: Registration) -> list[str]:
-    # Implements: REQ-d00289-D
-    return [
-        f"Repointed {r.name} ({r.namespace}): was {r.previous_path}, now registered at {r.path}"
-    ]
-
-
-def _report_entry_exists(r: Registration) -> list[str]:
-    # Implements: REQ-d00289-C
-    return [
-        f"Refused: {r.name} is already registered at {r.previous_path}, and nothing was changed.",
-        f"Use -f to replace that path with {r.target}.",
-        "Run 'elspais associate --list' to see the current registrations.",
-    ]
-
-
-def _report_contested(r: Registration) -> list[str]:
-    # Implements: REQ-d00289-G
-    others = ", ".join(r.contested_paths)
-    return [
-        f"Refused: {r.target} and {others} claim the namespace {r.namespace} "
-        f"in this scan; none of them was recorded.",
-        "Register the one you mean by path.",
-    ]
-
-
-def _report_federation(r: Registration) -> list[str]:
-    if r.pre_existing:
-        # Implements: REQ-d00289-I
-        return [
-            f"Refused: this configuration does not federate as it stands, before "
-            f"{r.name} at {r.target} is considered. Nothing was changed.",
-            f"  {r.reason}",
-        ]
-    # Implements: REQ-d00289-E, REQ-d00289-H
-    return [
-        f"Refused: {r.name} at {r.target} would not federate, and nothing was changed.",
-        f"  {r.reason}",
-    ]
-
-
-_REPORTERS = {
-    Outcome.RECORDED: _report_recorded,
-    Outcome.UNCHANGED: _report_unchanged,
-    Outcome.REPOINTED: _report_repointed,
-    Outcome.ENTRY_EXISTS: _report_entry_exists,
-    Outcome.CONTESTED: _report_contested,
-    Outcome.WOULD_NOT_FEDERATE: _report_federation,
-}
+            case Outcome.WOULD_NOT_FEDERATE:
+                # Implements: REQ-d00289-E, REQ-d00289-H
+                return [
+                    f"Refused: {self.name} at {self.target} would not federate, "
+                    f"and nothing was changed.",
+                    f"  {self.reason}",
+                ]
 
 
 def run(args: argparse.Namespace) -> int:
@@ -355,7 +344,7 @@ def cmd_list(args: argparse.Namespace) -> int:
     Returns:
         Exit code.
     """
-    # Implements: REQ-d00202-A, REQ-d00212-Y
+    # Implements: REQ-d00202-A
     from elspais.config import get_associates_config, get_config
 
     config_path = _get_config_path(args)
@@ -439,7 +428,6 @@ def cmd_unlink(args: argparse.Namespace) -> int:
         print(f"Error: No associate '{name}' found (no local config).", file=sys.stderr)
         return 1
 
-    # Implements: REQ-d00212-Y
     doc = parse_toml_document(local_path.read_text(encoding="utf-8"))
     associates = doc.get("associates", {})
 
@@ -603,7 +591,25 @@ def register_associate(
     # Every entry the configuration holds, wherever it was written, read
     # once. A registration writes the machine-local file, but what counts
     # as already recorded is what a later run will read.
-    recorded = _assembled_associates(config_dir, config_path)
+    resolved_path = config_path if config_path else find_config_file(config_dir)
+    try:
+        config = get_config(config_path=resolved_path, start_path=config_dir, quiet=True)
+    except Exception as exc:  # noqa: BLE001 - reported, never raised at a user
+        # Implements: REQ-d00289-I
+        # This command is one of the ways a configuration gets repaired, so
+        # meeting an unreadable one is ordinary. It is a fault the
+        # configuration already held, and it is reported as one rather than
+        # ending the run in a traceback.
+        return Registration(
+            kind=Outcome.WOULD_NOT_FEDERATE,
+            name=assoc_name,
+            namespace=namespace,
+            target=repo_path,
+            reason=str(exc),
+            pre_existing=True,
+        )
+
+    recorded = _assembled_associates(config)
     existing = recorded.get(assoc_name)
     existing_path = existing.get("path", "") if existing else ""
     target = Path(repo_path).resolve()
@@ -618,12 +624,11 @@ def register_associate(
     # change" over a configuration that will not federate would be a run
     # that looked at a broken configuration and said nothing.
     refusal, pre_existing = _federation_refusal(
-        config_dir,
+        config,
         assoc_name,
         repo_path,
         namespace,
         repo_root=repo_root,
-        config_path=config_path,
     )
     if refusal is not None:
         return Registration(
@@ -684,7 +689,6 @@ def register_associate(
 
 def _local_config(config_dir: Path) -> Path:
     """The machine-local file a registration writes."""
-    # Implements: REQ-d00212-Y
     return config_dir / ".elspais.local.toml"
 
 
@@ -719,7 +723,7 @@ def _write_entry(associates: Any, name: str, repo_path: str, namespace: str) -> 
     associates.add(name, fresh)
 
 
-def _assembled_associates(config_dir: Path, config_path: Path | None) -> dict[str, Any]:
+def _assembled_associates(config: dict[str, Any]) -> dict[str, Any]:
     """Every associate the configuration holds, however it was written.
 
     Implements: REQ-d00290-A
@@ -728,13 +732,6 @@ def _assembled_associates(config_dir: Path, config_path: Path | None) -> dict[st
     registration writes, so a declaration carried by the machine-local
     overlay and one committed alongside it are the same fact here.
     """
-    from elspais.config import get_config
-
-    resolved = config_path if config_path else find_config_file(config_dir)
-    try:
-        config = get_config(config_path=resolved, start_path=config_dir, quiet=True)
-    except Exception:  # noqa: BLE001 - an unreadable configuration is the
-        return {}  # planner's to report, and it refuses this run anyway.
     table = config.get("associates") or {}
     return {n: e for n, e in table.items() if isinstance(e, dict)}
 
@@ -797,20 +794,20 @@ def _contested_candidates(
 
 
 def _federation_refusal(
-    config_dir: Path,
+    config: dict[str, Any],
     assoc_name: str,
     repo_path: str,
     namespace: str,
     *,
-    repo_root: Path | None = None,
-    config_path: Path | None = None,
+    repo_root: Path,
 ) -> tuple[str | None, bool]:
     """Why the federation would refuse this declaration, and whose fault it is.
 
     Implements: REQ-d00289-E, REQ-d00289-I
 
     The planner is the one authority on what enters a federation
-    (REQ-d00202-G), so this asks it rather than deciding anything. It is
+    (REQ-d00202-G), so this asks it, and puts the answer to the same
+    refusal a build applies, rather than deciding anything. It is
     planned twice: a configuration that already will not federate refuses
     every candidate put to it, and reporting that against the candidate
     sends the operator to the wrong directory.
@@ -819,31 +816,18 @@ def _federation_refusal(
         The reason a federation would be refused and whether the
         configuration already held that fault, or ``(None, False)``.
     """
-    from elspais.config import get_config
-    from elspais.graph.federation_plan import plan_federation
+    from elspais.graph.federation_plan import plan_federation, refuse_unreadable
 
-    resolved_path = config_path if config_path else find_config_file(config_dir)
-    try:
-        config = get_config(config_path=resolved_path, start_path=config_dir, quiet=True)
-    except Exception as exc:  # noqa: BLE001 - reported, never raised at a user
-        # Implements: REQ-d00289-I
-        # This command is one of the ways a configuration gets repaired, so
-        # meeting an unreadable one is ordinary. It is a fault the
-        # configuration already held, and it is reported as one rather than
-        # ending the run in a traceback.
-        return str(exc), True
-
-    root = repo_root or config_dir
     recorded = config.get("associates") or {}
 
     try:
-        plan_federation({**config, "associates": recorded}, root)
+        refuse_unreadable(plan_federation({**config, "associates": recorded}, repo_root))
     except FederationError as exc:
         return str(exc), True
 
     prospective = {**recorded, assoc_name: {"path": repo_path, "namespace": namespace}}
     try:
-        plan_federation({**config, "associates": prospective}, root)
+        refuse_unreadable(plan_federation({**config, "associates": prospective}, repo_root))
     except FederationError as exc:
         return str(exc), False
 

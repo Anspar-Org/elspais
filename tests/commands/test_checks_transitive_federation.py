@@ -1,4 +1,4 @@
-# Verifies: REQ-d00202-D, REQ-d00202-E, REQ-d00202-I, REQ-d00203-B, REQ-d00204-E
+# Verifies: REQ-d00202-D, REQ-d00202-E, REQ-d00202-I, REQ-d00202-M, REQ-d00203-B
 """The health and doctor associate checks report on the whole federation.
 
 Associates carry declarations of their own, so the set of repositories
@@ -79,8 +79,8 @@ class TestUnloadableTransitiveMemberIsNamed:
             str((tmp_path / "leaf").resolve()) in m and "could not be loaded" in m for m in messages
         )
 
-    # Verifies: REQ-d00204-E
-    def test_REQ_d00204_E_missing_transitive_path_cites_its_declaration(self, tmp_path):
+    # Verifies: REQ-d00202-M
+    def test_REQ_d00202_M_missing_transitive_path_cites_its_declaration(self, tmp_path):
         """A repository reached only through a chain, and not there, is reported
         together with the declaration chain that reached it -- so the reader is
         sent to the repository that names the path rather than to the root.

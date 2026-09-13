@@ -304,7 +304,7 @@ def test_recomputation_does_not_double_count(federated):
     by_repo = {
         entry.name: _derive_credit_config(_validate_config(entry.config).scanning.test.targets)
         for entry in federated._repos.values()
-        if entry.graph is not None and entry.config is not None
+        if entry.graph is not None
     }
     annotate_journey_verification(federated)
     annotate_coverage(

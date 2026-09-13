@@ -2135,7 +2135,7 @@ def run_term_checks(
     ]
 
 
-# Implements: REQ-d00202-A+D+I+N, REQ-d00204-E
+# Implements: REQ-d00202-A+D+I+M+N
 def check_associate_paths(
     config: dict[str, Any],
     repo_root: Path,
@@ -2430,7 +2430,7 @@ def check_governed_rule_divergence(
     invoking = _governed_settings(config)
     findings: list[HealthFinding] = []
     for entry in graph.iter_repos():
-        if entry.config is None or entry.config == config:
+        if entry.config == config:
             continue
         member = _governed_settings(entry.config)
         for key in sorted(set(invoking) | set(member)):
@@ -2533,8 +2533,6 @@ def run_spec_checks(
 
     # --- Config-sensitive checks: run per-repo ---
     for entry in graph.iter_repos():
-        if entry.config is None:
-            continue
         from elspais.utilities.patterns import build_resolver
 
         repo_config = entry.config
@@ -3634,14 +3632,11 @@ def _configured_test_targets(graph: FederatedGraph, config: dict | None) -> list
     config, so the answer is unchanged.
 
     The invoking config is one of those members and is counted once, through
-    whichever it is. It is read separately only when the federation does not
-    hold it -- no member declares it, or no member carries a config at all.
+    whichever it is. It is read separately only when no member declares it.
     """
     targets: list[tuple[str, Any]] = []
     held = False
     for entry in graph.iter_repos():
-        if entry.config is None:
-            continue
         held = held or entry.config == config
         member = _validate_config(entry.config)
         targets.extend((entry.name, t) for t in member.scanning.test.targets)

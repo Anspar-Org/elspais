@@ -141,7 +141,33 @@ A repository's configuration is read against a schema that defines every setting
 
 ### Assertions
 
+A. <RETIRED> inventoried the fields a level definition is written in. A field list restates the schema rather than constraining it; that a configuration is admitted only for the settings the schema defines is Y.
+
+B. <RETIRED> inventoried the fields a scanning kind is written in. What the tool must hold true of scanning configuration is W, which gives a kind's declared patterns one meaning, and Q, which keeps one surface deciding whether a file is scanned.
+
+C. <RETIRED> inventoried how scanning configuration composes, including the second file-selection surface Q forbids. Which kinds exist and how they nest is the schema's shape; what that shape must satisfy is Q and W.
+
+D. <RETIRED> inventoried the fields output configuration is written in. A field list restates the schema rather than constraining it; that a configuration is admitted only for the settings the schema defines is Y.
+
+E. <RETIRED> inventoried the changelog sub-models and the names of their fields. Field names and their groupings are the schema's shape rather than an obligation; that only settings the schema defines are admitted is Y.
+
+F. <RETIRED> named the fields the top-level configuration gains and loses at one schema version. A setting this version does not read is refused under X, and only settings the schema defines are admitted under Y, so a version-by-version field list obliges nothing further.
+
 G. A repository's identifier configuration SHALL admit exactly one spelling of any given identifier, up to case. Two elements of an identifier configuration that differ only in case SHALL be rejected at configuration-validation time, naming both and the element they collide in.
+
+H. <RETIRED> inventoried the fields hierarchy configuration is written in. Which concern a rule setting sits under is O, and that only settings the schema defines are admitted is Y.
+
+I. <RETIRED> named a references section of the configuration that does not exist. Identifier grammar is configured under identifier patterns, and an identifier is admitted in one spelling only, per REQ-d00212-G.
+
+J. <RETIRED> inventoried the fields project configuration is written in. The one setting there that carries an obligation is the namespace, and what it must answer for is REQ-d00202-G and REQ-d00202-L; the rest of the list is schema shape, admitted under Y.
+
+K. <RETIRED> inventoried the fields an associate declaration is written in. That a declaration requires both a path and a namespace, with the git remote optional and serving clone assistance alone, is REQ-d00202-B; that only fields the schema defines are admitted is Y.
+
+L. <RETIRED> inventoried the defined-terms settings and the severity each defaults to. That every health check's severity is configurable under one convention is P, and that the values a severity admits are fixed by the schema and an unadmitted one refused is U and V.
+
+M. <RETIRED> named one severity setting and its type. Health-check severity is configurable under one convention per P, and the values that setting admits are fixed by the schema per U.
+
+N. <RETIRED> Backwards compatibility is not a goal of this project, so a configuration is not upgraded in place. An out-of-date setting is refused and named, per X.
 
 O. The configuration schema SHALL locate each rule setting under the concern it governs, such that a setting's position in the schema identifies which checks it affects.
 
@@ -167,9 +193,7 @@ Y. A configuration SHALL be admitted only where every setting it carries is one 
 
 ### Rationale
 
-Most lettered entries inventory the v3/v4 model shapes; G and O–R state the organising invariants those shapes must converge on.
-
-K carries the remote because a federation member is a git repository, and a member declared but absent from this machine is an ordinary situation rather than an error to be merely reported: the declaration is the one place that knows where the repository can be obtained. The remote never identifies a member — the path and the namespace do that, which is why it stays optional and why a declaration without one is complete. What a declaration may contain and what it must contain are one question, so the field list and the strictness that enforces it belong together rather than in separate assertions that could drift.
+This requirement holds the invariants a configuration schema must satisfy, whatever shape it takes: what an identifier configuration may admit, which concern a rule setting sits under, how severity and file selection are expressed, and what becomes of a setting the schema does not define.
 
 G, R and S hold within a single repository, not only where several meet. G fixes what the configuration admits; R fixes what an inadmissible spelling may do; S bounds how far R's tolerance reaches. The failure R forbids is not silence but a wrong answer: a spelling nobody wrote being repaired into one that resolves, so a reference lands on a requirement its author did not name. That is invisible in every report, because the reference looks satisfied.
 
@@ -183,10 +207,12 @@ The two obligations are therefore a pair rather than a compromise: matching rela
 
 Reporting is deliberately absent from R. Once an inadmissible spelling resolves to nothing, it is an unresolved reference like any other, and the existing obligations to record it and to report it at a project-chosen severity carry it the rest of the way. Stating the reporting again here would duplicate them and invite the two statements to drift apart.
 
-R is a condition on resolving, never on writing, which is what keeps a reference authored ahead of its target legitimate. A requirement may be named before the repository owning it is declared, or before that requirement exists; the reference simply finds nothing yet, and how loudly that is reported is the project's decision. R also judges a spelling against the configuration of the repository owning the named requirement, not the one doing the writing — otherwise no reference could ever cross a repository boundary, since a neighbour's identifiers are foreign to the local grammar by construction. Rule settings have drifted into a layout where a setting's location no longer predicts what it governs, some check severities are configurable while others are hardcoded with no stated principle distinguishing them, and "why was this file (not) scanned" can have more than one configuration answer (per-kind skip lists alongside a global skip list, plus pattern lists). O–Q close those gaps as invariants only: candidate mechanisms discussed during design — splitting rules into concern sections such as `[rules.changelog]` and `[rules.status]`, or collapsing file selection into a unified `patterns` list — are proposals, not obligations, and deliberately absent from the assertions. Which existing semantics survive, and how existing configs migrate, is decided at implementation. Current schema shapes that contradict O–Q (including the dual file-selection surfaces described alongside B and C) are conformance-defect territory for later implementation tickets.
+R is a condition on resolving, never on writing, which is what keeps a reference authored ahead of its target legitimate. A requirement may be named before the repository owning it is declared, or before that requirement exists; the reference simply finds nothing yet, and how loudly that is reported is the project's decision. R also judges a spelling against the configuration of the repository owning the named requirement, not the one doing the writing — otherwise no reference could ever cross a repository boundary, since a neighbour's identifiers are foreign to the local grammar by construction. Rule settings have drifted into a layout where a setting's location no longer predicts what it governs, some check severities are configurable while others are hardcoded with no stated principle distinguishing them, and "why was this file (not) scanned" can have more than one configuration answer (per-kind skip lists alongside a global skip list, plus pattern lists). O–Q close those gaps as invariants only: candidate mechanisms discussed during design — splitting rules into concern sections such as `[rules.changelog]` and `[rules.status]`, or collapsing file selection into a unified `patterns` list — are proposals, not obligations, and deliberately absent from the assertions. Which existing semantics survive is decided at implementation. A current schema shape that contradicts O–Q is a conformance defect to be corrected, not a reading of the invariant.
 
 ### Changelog
 
+- 2026-09-12 | 492083b5 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-09-12 | 1816c146 | - | Michael Lewis (<michael@anspar.org>) | Retire the model inventory rather than delete it, so every label stays allocated
 - 2026-09-12 | dfcf9d49 | - | Michael Lewis (<michael@anspar.org>) | Retitled; model inventory replaced by the invariants the schema holds
 - 2026-08-24 | 277219e9 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-24 | 22e31e30 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -218,7 +244,7 @@ R is a condition on resolving, never on writing, which is what keeps a reference
 - 2026-03-30 | db4ad28c | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 - 2026-03-29 | c75b87f8 | - | Michael Lewis (<michael@anspar.org>) | Add assertion N for config migration v3 to v4
 
-*End* *Configuration Schema* | **Hash**: dfcf9d49
+*End* *Configuration Schema* | **Hash**: 492083b5
 ---
 
 ## REQ-d00251: A Repository's Identifier Grammar

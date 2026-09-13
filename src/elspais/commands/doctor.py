@@ -439,7 +439,7 @@ def check_associate_paths(config: dict, git_root: Path | None) -> HealthCheck:
     if severity == Severity.OFF:
         return skipped_check("associate.paths_resolvable", "Associate paths that do not resolve")
 
-    # Implements: REQ-d00202-A+D+I, REQ-d00204-E, REQ-d00212-Y
+    # Implements: REQ-d00202-A+D+I+M+N
     from elspais.graph.federation_plan import plan_federation_or_error
 
     plan, plan_error = plan_federation_or_error(config, git_root or Path.cwd())
@@ -501,7 +501,7 @@ def check_associate_configs(config: dict, git_root: Path | None) -> HealthCheck:
     if severity == Severity.OFF:
         return skipped_check("associate.configs_valid", "Associate configurations that do not load")
 
-    # Implements: REQ-d00202-A+D+I, REQ-d00204-E, REQ-d00212-Y
+    # Implements: REQ-d00202-A+D+I+M+N
     from elspais.graph.federation_plan import plan_federation_or_error
 
     plan, plan_error = plan_federation_or_error(config, git_root or Path.cwd())

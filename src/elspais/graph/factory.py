@@ -36,6 +36,7 @@ from elspais.graph.federation_plan import (
     PlannedRepo,
     declared_associates,
     plan_federation,
+    refuse_unreadable,
 )
 from elspais.graph.GraphNode import FileType, GraphNode, NodeKind, make_file_id
 from elspais.graph.parsers import ParserRegistry
@@ -840,12 +841,11 @@ def build_graph(
             # namespace, and a member without one cannot be placed.
             # Building around it would answer questions about a corpus
             # nobody chose, so the build stops and says which
-            # declaration is at fault. Surfaces that exist to REPORT
-            # the fault use plan_federation_or_error instead.
-            plan = plan_federation(config, repo_root, strict=True)
-            federation_resolvers.extend(
-                build_resolver(member.config) for member in plan[1:] if member.config is not None
-            )
+            # declarations are at fault. Surfaces that exist to REPORT
+            # the faults use plan_federation_or_error instead.
+            plan = plan_federation(config, repo_root)
+            refuse_unreadable(plan)
+            federation_resolvers.extend(build_resolver(member.config) for member in plan[1:])
     own_namespace = default_resolver.config.namespace
     member_resolvers = [r for r in federation_resolvers if r.config.namespace != own_namespace]
 

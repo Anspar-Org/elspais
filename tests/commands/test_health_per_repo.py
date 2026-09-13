@@ -1,5 +1,5 @@
 # Verifies: REQ-d00204-A, REQ-d00204-B, REQ-d00204-C, REQ-d00204-D
-# Verifies: REQ-d00204-E, REQ-d00204-F
+# Verifies: REQ-d00202-M, REQ-d00202-N, REQ-d00204-F
 # Verifies: REQ-d00275-A, REQ-d00275-D
 # Verifies: REQ-d00285-E
 """Tests for per-repo health check delegation in federated graphs.
@@ -144,16 +144,17 @@ class TestPerRepoHierarchyCheck:
         # Alpha: DEV implements OPS (allowed by alpha's rules: dev -> [ops])
         alpha_graph = build_graph(
             make_requirement(
-                "REQ-o00001", title="Alpha OPS", level="OPS", source_path="spec/alpha-ops.md"
+                "ALPHA-o00001", title="Alpha OPS", level="OPS", source_path="spec/alpha-ops.md"
             ),
             make_requirement(
-                "REQ-d00001",
+                "ALPHA-d00001",
                 title="Alpha DEV",
                 level="DEV",
-                implements=["REQ-o00001"],
+                implements=["ALPHA-o00001"],
                 source_path="spec/alpha-dev.md",
             ),
             repo_root=Path("/repo/alpha"),
+            namespace="ALPHA",
         )
         alpha_config = _make_config(
             hierarchy_rules={"dev": ["ops"]},
@@ -163,16 +164,17 @@ class TestPerRepoHierarchyCheck:
         # Beta: DEV implements PRD (allowed by beta's rules: dev -> [prd])
         beta_graph = build_graph(
             make_requirement(
-                "REQ-p00002", title="Beta PRD", level="PRD", source_path="spec/beta-prd.md"
+                "BETA-p00002", title="Beta PRD", level="PRD", source_path="spec/beta-prd.md"
             ),
             make_requirement(
-                "REQ-d00002",
+                "BETA-d00002",
                 title="Beta DEV",
                 level="DEV",
-                implements=["REQ-p00002"],
+                implements=["BETA-p00002"],
                 source_path="spec/beta-dev.md",
             ),
             repo_root=Path("/repo/beta"),
+            namespace="BETA",
         )
         beta_config = _make_config(
             hierarchy_rules={"dev": ["prd"]},
@@ -213,13 +215,14 @@ class TestPerRepoFormatRules:
         # Alpha: requirement WITH assertions (satisfies alpha's require_assertions=true)
         alpha_graph = build_graph(
             make_requirement(
-                "REQ-p00010",
+                "ALPHA-p00010",
                 title="Alpha Req",
                 level="PRD",
                 assertions=[{"label": "A", "text": "Must do something"}],
                 source_path="spec/alpha.md",
             ),
             repo_root=Path("/repo/alpha"),
+            namespace="ALPHA",
         )
         alpha_config = _make_config(
             **{"rules.format.require_assertions": True},
@@ -228,12 +231,13 @@ class TestPerRepoFormatRules:
         # Beta: requirement WITHOUT assertions (ok since beta has require_assertions=false)
         beta_graph = build_graph(
             make_requirement(
-                "REQ-p00020",
+                "BETA-p00020",
                 title="Beta Req",
                 level="PRD",
                 source_path="spec/beta.md",
             ),
             repo_root=Path("/repo/beta"),
+            namespace="BETA",
         )
         beta_config = _make_config(
             **{"rules.format.require_assertions": False},
@@ -270,12 +274,16 @@ class TestNonConfigChecksRunOnFullFederation:
         non-config checks run once (1x).
         """
         alpha_graph = build_graph(
-            make_requirement("REQ-p00001", title="Alpha", level="PRD", source_path="spec/alpha.md"),
+            make_requirement(
+                "ALPHA-p00001", title="Alpha", level="PRD", source_path="spec/alpha.md"
+            ),
             repo_root=Path("/repo/alpha"),
+            namespace="ALPHA",
         )
         beta_graph = build_graph(
-            make_requirement("REQ-p00002", title="Beta", level="PRD", source_path="spec/beta.md"),
+            make_requirement("BETA-p00002", title="Beta", level="PRD", source_path="spec/beta.md"),
             repo_root=Path("/repo/beta"),
+            namespace="BETA",
         )
 
         alpha_config = _make_config(
@@ -319,16 +327,17 @@ class TestPerRepoFindingsAttribution:
         # (DEV implements PRD, but alpha only allows dev -> ops)
         alpha_graph = build_graph(
             make_requirement(
-                "REQ-p00050", title="Alpha PRD", level="PRD", source_path="spec/alpha-prd.md"
+                "ALPHA-p00050", title="Alpha PRD", level="PRD", source_path="spec/alpha-prd.md"
             ),
             make_requirement(
-                "REQ-d00050",
+                "ALPHA-d00050",
                 title="Alpha DEV",
                 level="DEV",
-                implements=["REQ-p00050"],
+                implements=["ALPHA-p00050"],
                 source_path="spec/alpha-dev.md",
             ),
             repo_root=Path("/repo/alpha"),
+            namespace="ALPHA",
         )
         alpha_config = _make_config(
             hierarchy_rules={"dev": ["ops"]},  # dev -> prd NOT allowed
@@ -337,9 +346,10 @@ class TestPerRepoFindingsAttribution:
 
         beta_graph = build_graph(
             make_requirement(
-                "REQ-p00060", title="Beta PRD", level="PRD", source_path="spec/beta.md"
+                "BETA-p00060", title="Beta PRD", level="PRD", source_path="spec/beta.md"
             ),
             repo_root=Path("/repo/beta"),
+            namespace="BETA",
         )
         beta_config = _make_config()
 
@@ -388,19 +398,21 @@ class TestReferenceFaultSeverity:
         # Create a graph with a broken reference (target doesn't exist)
         alpha_graph = build_graph(
             make_requirement(
-                "REQ-d00070",
+                "ALPHA-d00070",
                 title="Broken Dev",
                 level="DEV",
-                implements=["REQ-p99999"],  # target doesn't exist
+                implements=["ALPHA-p99999"],  # target doesn't exist
                 source_path="spec/alpha.md",
             ),
             repo_root=Path("/repo/alpha"),
+            namespace="ALPHA",
         )
         alpha_config = _make_config()
 
         beta_graph = build_graph(
-            make_requirement("REQ-p00080", title="Beta", level="PRD", source_path="spec/beta.md"),
+            make_requirement("BETA-p00080", title="Beta", level="PRD", source_path="spec/beta.md"),
             repo_root=Path("/repo/beta"),
+            namespace="BETA",
         )
         beta_config = _make_config()
 
@@ -416,7 +428,7 @@ class TestReferenceFaultSeverity:
 
 
 class TestUnreadableDeclarationIsReported:
-    """Validates REQ-d00204-E.
+    """Validates REQ-d00202-M and REQ-d00202-N.
 
     A declaration whose repository cannot be read is a fault of the
     declaration, not of the directory that is not there. What the report
@@ -426,8 +438,8 @@ class TestUnreadableDeclarationIsReported:
     configuration to fix.
     """
 
-    # Verifies: REQ-d00204-E
-    def test_REQ_d00204_E_unreadable_declaration_is_reported_citing_the_chain(
+    # Verifies: REQ-d00202-M+N
+    def test_REQ_d00202_M_unreadable_declaration_is_reported_citing_the_chain(
         self, tmp_path
     ) -> None:
         """The report names the declaration, the chain reaching it, and why."""
@@ -451,8 +463,8 @@ class TestUnreadableDeclarationIsReported:
             f"the report must name the path that could not be read: {reported}"
         )
 
-    # Verifies: REQ-d00204-E
-    def test_REQ_d00204_E_chain_cites_the_repository_that_declared_it(self, tmp_path) -> None:
+    # Verifies: REQ-d00202-M
+    def test_REQ_d00202_M_chain_cites_the_repository_that_declared_it(self, tmp_path) -> None:
         """A declaration made by an associate is cited through that associate.
 
         Nothing in the invoking repository's own configuration names the
@@ -491,16 +503,17 @@ class TestRunSpecChecksIteratesRepos:
         # Alpha: dev -> ops only
         alpha_graph = build_graph(
             make_requirement(
-                "REQ-o00100", title="Alpha OPS", level="OPS", source_path="spec/alpha-ops.md"
+                "ALPHA-o00100", title="Alpha OPS", level="OPS", source_path="spec/alpha-ops.md"
             ),
             make_requirement(
-                "REQ-d00100",
+                "ALPHA-d00100",
                 title="Alpha DEV",
                 level="DEV",
-                implements=["REQ-o00100"],
+                implements=["ALPHA-o00100"],
                 source_path="spec/alpha-dev.md",
             ),
             repo_root=Path("/repo/alpha"),
+            namespace="ALPHA",
         )
         alpha_config = _make_config(
             hierarchy_rules={"dev": ["ops"]},
@@ -510,16 +523,17 @@ class TestRunSpecChecksIteratesRepos:
         # Beta: dev -> prd only
         beta_graph = build_graph(
             make_requirement(
-                "REQ-p00200", title="Beta PRD", level="PRD", source_path="spec/beta-prd.md"
+                "BETA-p00200", title="Beta PRD", level="PRD", source_path="spec/beta-prd.md"
             ),
             make_requirement(
-                "REQ-d00200",
+                "BETA-d00200",
                 title="Beta DEV",
                 level="DEV",
-                implements=["REQ-p00200"],
+                implements=["BETA-p00200"],
                 source_path="spec/beta-dev.md",
             ),
             repo_root=Path("/repo/beta"),
+            namespace="BETA",
         )
         beta_config = _make_config(
             hierarchy_rules={"dev": ["prd"]},

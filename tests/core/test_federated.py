@@ -665,19 +665,19 @@ class TestFederatedGraphInvariants:
             FederatedGraph([self._entry(tmp_path, config={})])
 
     # Verifies: REQ-d00202-G
-    def test_entry_carrying_no_config_at_all_is_refused(self, tmp_path):
-        """An absent config is refused exactly as an empty one is.
+    def test_a_member_declaring_no_namespace_is_refused_wherever_it_sits(self, tmp_path):
+        """The entry at fault need not be the one the federation is rooted at.
 
         A member is identified by the namespace it declares and by nothing
         else, so an entry that declares none cannot be placed — there is no
-        key to hold it under. Having no config to read it out of is the
-        same absence as having a config that omits it.
+        key to hold it under. Checking only the first entry would admit a
+        federation whose associate answers for nothing.
         """
         from elspais.graph.federated import FederationError
 
         entries = [
             self._entry(tmp_path, name="host"),
-            self._entry(tmp_path / "other", name="broken-assoc", config=None),
+            self._entry(tmp_path / "other", name="broken-assoc", config={}),
         ]
         with pytest.raises(FederationError, match=r"declares no namespace"):
             FederatedGraph(entries)

@@ -407,26 +407,66 @@ class TestLoadFailureReporting:
 
     @pytest.mark.parametrize("kind", ["missing", "unparseable", "invalid"])
     # Verifies: REQ-d00202-M
-    def test_REQ_d00202_M_planning_for_a_build_refuses_an_unreadable_declaration(
+    def test_REQ_d00202_M_a_caller_wanting_a_federation_refuses_an_unreadable_one(
         self, tmp_path, kind
     ):
-        """Planning on behalf of a build refuses rather than carrying on.
+        """A caller that needs members, not a report, refuses the plan.
 
-        The same fault the reporting surfaces record is what stops the
+        The same fault the reporting surfaces record is what stops a
         build, and it names the declaration and the path it points at, so
         the reader is sent to the declaration to fix rather than left with
         a federation quietly short of a member.
         """
         from elspais.graph.federated import FederationError
+        from elspais.graph.federation_plan import refuse_unreadable
 
         root, bad_path = _federation_with_bad_associate(tmp_path, kind)
 
         with pytest.raises(FederationError) as excinfo:
-            _plan(root, strict=True)
+            refuse_unreadable(_plan(root))
 
         message = str(excinfo.value)
         assert str(bad_path) in message or bad_path.name in message
         assert "'bad'" in message, message
+
+    # Verifies: REQ-d00202-M
+    def test_REQ_d00202_M_every_unreadable_declaration_is_named_at_once(self, tmp_path):
+        """Two unreadable declarations are two faults in one refusal.
+
+        An operator told only about the first would fix it, re-run, and
+        meet the second, so the refusal accounts for every declaration
+        that could not be read.
+        """
+        from elspais.graph.federated import FederationError
+        from elspais.graph.federation_plan import refuse_unreadable
+
+        root = make_repo(
+            tmp_path,
+            "consumer",
+            associates={"first": "../absent-one", "second": "../absent-two"},
+        )
+
+        with pytest.raises(FederationError) as excinfo:
+            refuse_unreadable(_plan(root))
+
+        message = str(excinfo.value)
+        assert "'first'" in message, message
+        assert "'second'" in message, message
+        assert "absent-one" in message and "absent-two" in message, message
+
+    # Verifies: REQ-d00202-M
+    def test_REQ_d00202_M_a_readable_plan_is_not_refused(self, tmp_path):
+        """A plan every declaration of which was read passes the refusal.
+
+        Without this the refusal could pass its other tests by refusing
+        everything, and no federation would ever build.
+        """
+        from elspais.graph.federation_plan import refuse_unreadable
+
+        make_repo(tmp_path, "lib")
+        root = make_repo(tmp_path, "app", associates={"lib": "../lib"})
+
+        refuse_unreadable(_plan(root))
 
 
 class TestCrossRepoIdentifierCollision:

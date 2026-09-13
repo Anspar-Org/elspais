@@ -2241,9 +2241,8 @@ def _get_workspace_info(
     # REQ-d00205-D: Derive root config from graph when not provided.
     if config is None and graph is not None:
         for entry in graph.iter_repos():
-            if entry.config is not None:
-                config = entry.config
-                break
+            config = entry.config
+            break
     if config is None:
         config = get_config(start_path=working_dir, quiet=True)
 

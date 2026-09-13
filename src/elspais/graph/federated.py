@@ -199,9 +199,10 @@ class RepoEntry:
             path). For associates, the key under ``[associates]``.
         graph: The repo's TraceGraph. Every member was read before it
             joined, so every member has one.
-        config: The repo's config dict. Always carries a ``[project]``
-            with a non-empty ``namespace`` -- that is what identifies the
-            member, and a member without one cannot join a federation.
+        config: The repo's config dict, read from the repository's own
+            root. Always carries a ``[project]`` with a non-empty
+            ``namespace`` -- that is what identifies the member, and a
+            member without one cannot join a federation.
         repo_root: Expected local filesystem path.
         git_origin: The repository's origin, reduced to a comparable
             form -- scheme, credentials and a trailing ".git" removed, so
@@ -214,7 +215,7 @@ class RepoEntry:
 
     name: str
     graph: TraceGraph
-    config: dict[str, Any] | None
+    config: dict[str, Any]
     repo_root: Path
     git_origin: str | None = None
 
@@ -228,7 +229,7 @@ class RepoEntry:
         repository chose -- shown to people, never used to tell two
         members apart.
         """
-        return ((self.config or {}).get("project") or {})["namespace"]
+        return self.config["project"]["namespace"]
 
 
 class FederatedGraph:
@@ -268,7 +269,7 @@ class FederatedGraph:
             # one cannot be placed at all -- not under a fallback, which
             # would be a second kind of identity. Every entry reaching a
             # federation has been read, so every entry has one.
-            project = (r.config or {}).get("project") or {}
+            project = r.config.get("project") or {}
             if not project.get("namespace") or not str(project["namespace"]).strip():
                 raise FederationError(
                     f"RepoEntry({r.name!r}) declares no namespace. A member is "
@@ -424,10 +425,8 @@ class FederatedGraph:
 
         self._unmatched_emphasis: list[dict] = []
         for entry in self._repos.values():
-            config = entry.config or {}
+            config = entry.config
             terms_cfg = config.get("terms", {})
-            # A repo with a graph has a config, and a config that loaded has a
-            # namespace -- load_config refuses one without. No substitute needed.
             req_namespace = config["project"]["namespace"]
             unmatched = scan_graph(
                 self._terms,
@@ -732,7 +731,7 @@ class FederatedGraph:
         entry = self._repos.get(self._root_repo)
         return entry.config if entry else None
 
-    def config_for(self, node_id: str) -> dict[str, Any] | None:
+    def config_for(self, node_id: str) -> dict[str, Any]:
         """Return the config dict for the repo owning node_id.
 
         # Strategy: by_id
@@ -1584,8 +1583,6 @@ class FederatedGraph:
 
         by_repo = {}
         for entry in self._repos.values():
-            if entry.config is None:
-                continue
             targets = _validate_config(entry.config).scanning.test.targets
             by_repo[entry.namespace] = _derive_credit_config(targets)
         policy = CreditPolicy(by_repo=by_repo, owner=self._owner_of_node)
@@ -1772,8 +1769,6 @@ class FederatedGraph:
         """
         for entry in self._repos.values():
             resolver = self._resolver_for(entry)
-            if resolver is None:
-                continue
             parsed = resolver.parse(target_id)
             if parsed is None or len(parsed.assertions) <= 1:
                 continue
@@ -1808,16 +1803,13 @@ class FederatedGraph:
             )
         return True
 
-    def _resolver_for(self, entry: RepoEntry) -> IdResolver | None:
+    def _resolver_for(self, entry: RepoEntry) -> IdResolver:
         """Return the cached ``IdResolver`` for ``entry``'s repo.
 
-        Builds and memoises the resolver on first access. Returns
-        ``None`` when the repo has no config (error-state repos can't
-        be probed). Used by every federation pass that needs ID-format
-        tolerance: ``_claim_for`` and ``_instantiate_cross_repo_satisfies``.
+        Builds and memoises the resolver on first access. Used by every
+        federation pass that needs ID-format tolerance: ``_claim_for`` and
+        ``_instantiate_cross_repo_satisfies``.
         """
-        if entry.config is None:
-            return None
         cached = self._resolver_cache.get(entry.namespace)
         if cached is None:
             from elspais.utilities.patterns import build_resolver
@@ -1839,8 +1831,6 @@ class FederatedGraph:
         """
         for entry in self._repos.values():
             resolver = self._resolver_for(entry)
-            if resolver is None:
-                continue
             if not resolver.is_local_id(target_id):
                 continue
             parsed = resolver.parse(target_id)
@@ -1868,7 +1858,6 @@ class FederatedGraph:
         """
         from elspais.graph.GraphNode import GraphNode
         from elspais.graph.relations import Stereotype
-        from elspais.utilities.patterns import INSTANCE_SEPARATOR
 
         for source_entry in self._repos.values():
             resolver = self._resolver_for(source_entry)
@@ -1954,11 +1943,7 @@ class FederatedGraph:
 
                 clone_map: dict[str, GraphNode] = {}
                 for orig in template_nodes:
-                    clone_id = (
-                        resolver.build_instance_id(br.source_id, orig.id)
-                        if resolver is not None
-                        else f"{br.source_id}{INSTANCE_SEPARATOR}{orig.id}"
-                    )
+                    clone_id = resolver.build_instance_id(br.source_id, orig.id)
                     clone = GraphNode(
                         id=clone_id,
                         kind=orig.kind,
@@ -2176,8 +2161,7 @@ class FederatedGraph:
         for entry in self._repos.values():
             if entry.namespace == source_entry.namespace:
                 continue
-            resolver = self._resolver_for(entry)
-            if resolver is not None and resolver.is_local_id(target_id):
+            if self._resolver_for(entry).is_local_id(target_id):
                 claimed = True
                 break
         source_entry.graph._unresolved_references.append(

@@ -116,7 +116,7 @@ N. Where a surface continues with the members it could read, a declaration that 
 
 ### Rationale
 
-Associates are declared in `.elspais.toml` using a structured TOML section. Each associate specifies a relative filesystem path, a namespace, and an optional git remote URL. Transitive resolution (assertion D) is what lets the tool work from any repository in a dependency chain rather than from the root alone, and it is what allows an org-policy repository reachable only through a chain to be federated at all. Directed cycles are a genuine error because dependency direction drives resolution order; diamonds are convergence, not cycles, and the identity rule (assertion G) is what makes the two distinguishable: one namespace reached twice at one directory is convergence, and reached at two directories is the collision K reports. Disjoint ID spaces (assertion H) are a precondition of federation rather than a preference: a reference resolves to a repository by asking which one claims the identifier, so two claimants make the answer arbitrary.
+Associates are declared in `.elspais.toml` using a structured TOML section. Each associate specifies a relative filesystem path, a namespace, and an optional git remote URL. The remote is optional because it identifies nothing: the path and the namespace do that, so a declaration without one is complete. It is carried so that the refusal a repository that cannot be read produces can say where to obtain it, the declaration being the one place that knows. Transitive resolution (assertion D) is what lets the tool work from any repository in a dependency chain rather than from the root alone, and it is what allows an org-policy repository reachable only through a chain to be federated at all. Directed cycles are a genuine error because dependency direction drives resolution order; diamonds are convergence, not cycles, and the identity rule (assertion G) is what makes the two distinguishable: one namespace reached twice at one directory is convergence, and reached at two directories is the collision K reports. Disjoint ID spaces (assertion H) are a precondition of federation rather than a preference: a reference resolves to a repository by asking which one claims the identifier, so two claimants make the answer arbitrary.
 
 A repository declares everything it directly needs in order to resolve on its own, without regard to what its associates happen to declare. Redundancy between those declarations is therefore expected rather than exceptional, and assertion F is what makes it harmless: a repository reached both directly and through a chain resolves to one entry, so declaring it twice is idempotent. Pruning a declaration because some other repository already reaches it would couple the two configurations and break the pruned repository's own invocations.
 
@@ -195,7 +195,7 @@ C. Per-repo checks SHALL produce a separate `HealthCheck` per repo per check typ
 
 D. `HealthFinding` SHALL support an optional `repo` field (str | None) for per-repo attribution.
 
-E. Where a declared repository cannot be read, the tool SHALL report that fault, citing the declaration that referenced it.
+E. <RETIRED> had this requirement report a declared repository that could not be read. The fault that is reported, and the path and declaration chain that name it, is REQ-d00202-M; that a surface continuing with the members it could read reports the unreadable one as a failed check is REQ-d00202-N.
 
 F. `run_spec_checks` SHALL accept a `FederatedGraph` and iterate `iter_repos()` for config-sensitive checks, using `FederatedGraph.from_single()` to create per-repo sub-federations.
 
@@ -209,14 +209,13 @@ J. Findings attributed to repositories outside the invocation's write scope SHAL
 
 ### Rationale
 
-E once tied a reference's severity to whether the repository that would own its target happened to be loadable. That made the same defect report at two different volumes depending on a condition the author of the reference has no control over and often cannot see, and it duplicated a decision that belongs to the classification: how far reading the reference got. Severity now follows the class and nothing else. What survives from the old rule is the part that helped — a reader who cannot resolve a reference because a repository is missing needs to know how to obtain it, and that belongs in the report whatever severity the project has chosen for the class.
-
 Without per-repo delegation, all nodes are validated against the root repo's config. When repos have different hierarchy rules, format rules, or changelog policies, this produces false positives (root config rejects valid associate nodes) or false negatives (root config allows invalid associate nodes). Per-repo delegation ensures each repo is validated by its own rules.
 
 Assertions H–J realize REQ-p00082's verdict-scoping invariants for the checks surface: a unresolved reference from the caller's repository *into* an org repository is the caller's bug and must gate the caller's change, while a malformed requirement *inside* a repository the caller cannot write to must never turn the command into noise by failing runs the caller cannot fix.
 
 ### Changelog
 
+- 2026-09-12 | f3afb6e4 | - | Michael Lewis (<michael@anspar.org>) | E retired: an unreadable declaration is reported under REQ-d00202-M and N
 - 2026-09-12 | 62e03a0c | - | Michael Lewis (<michael@anspar.org>) | E now reports an unreadable repository, citing the declaration reaching it
 - 2026-08-16 | 15c6ff55 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-16 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: severity follows the class a reference reached, not the load state of the repository that would own its target (E)
@@ -227,7 +226,7 @@ Assertions H–J realize REQ-p00082's verdict-scoping invariants for the checks 
 - 2026-05-11 | 2313140d | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 2313140d | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Per-Repo Health Check Delegation* | **Hash**: 62e03a0c
+*End* *Per-Repo Health Check Delegation* | **Hash**: f3afb6e4
 ---
 
 ## REQ-d00252: External Library Integration via Integrates Keyword

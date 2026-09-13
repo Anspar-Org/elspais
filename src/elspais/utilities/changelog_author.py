@@ -1,4 +1,4 @@
-# Implements: REQ-d00212-Y, REQ-d00231-E
+# Implements: REQ-d00231-E
 """Author resolution for changelog entries.
 
 When changelog enforcement is on, every new changelog entry MUST be

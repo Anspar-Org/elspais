@@ -47,6 +47,7 @@ __all__ = [
     "repository_origin",
     "plan_federation",
     "plan_federation_or_error",
+    "refuse_unreadable",
 ]
 
 
@@ -213,26 +214,13 @@ def _assert_declared_namespace(
     declarations reached the directory first must not decide whether it is
     reported.
     """
-    if declared_ns and found_ns and declared_ns != found_ns:
+    if declared_ns != found_ns:
         raise FederationError(
             f"Associate '{name}' at {assoc_path} declares the namespace "
             f"'{declared_ns}', but the repository there declares "
             f"'{found_ns}'. Point the declaration at the repository it "
             f"means, or correct the namespace it names."
         )
-
-
-def _error_identity(repo_root: Path, declaration: tuple[str, ...]) -> str:
-    """Identify a declaration that could not be read, uniquely to itself.
-
-    Implements: REQ-d00202-M, REQ-d00202-N
-
-    Keyed by the declaration as well as the directory, because two
-    declarations pointing at one unreadable path are two faults to report:
-    collapsing them would have an operator fix one, re-run, and meet the
-    other.
-    """
-    return f"\x00error:{repo_root}\x00{' -> '.join(declaration)}"
 
 
 def uses_local_overlay(repo_root: Path) -> bool:
@@ -249,45 +237,23 @@ def uses_local_overlay(repo_root: Path) -> bool:
     return (repo_root / ".elspais.local.toml").is_file()
 
 
-def _path_identity(repo_root: Path) -> str:
-    """Identify a member that has claimed no namespace, by its directory.
-
-    Implements: REQ-d00202-M
-
-    A declaration that could not be read, and the root repository where it
-    declares none, are placed by the one thing known about them. The prefix
-    cannot occur in a namespace, so such a key never meets a real one.
-    """
-    return f"\x00path:{repo_root}"
-
-
-def _identity(declared_namespace: str, repo_root: Path) -> str:
-    """Identify a member that has been read, for collision detection.
-
-    Implements: REQ-d00202-G
-
-    The namespace a declaration names is the key. A declaration without
-    one is refused before it reaches here (REQ-d00202-B), but a root
-    repository that declares none still has to be placed, so it falls
-    back to its directory -- the one case where nothing has been claimed.
-    """
-    return declared_namespace or _path_identity(repo_root)
-
-
 def plan_federation(
     root_config: dict[str, Any],
     root_repo_root: Path,
     *,
-    strict: bool = False,
     config_loader: Callable[..., dict[str, Any]] | None = None,
 ) -> list[PlannedRepo]:
     """Resolve every repository reachable from ``root_config``.
 
+    Every declaration the walk reaches is carried, including one whose
+    repository could not be read: collecting the faults is what lets a
+    reporting surface name all of them in one run.  A caller that needs a
+    federation rather than a report asks ``refuse_unreadable()`` of the
+    answer.
+
     Args:
         root_config: The invoking repository's configuration.
         root_repo_root: The invoking repository's root directory.
-        strict: Raise on a repository that cannot be loaded instead of
-            recording it as an error entry.
         config_loader: Override for config loading, for tests.
 
     Returns:
@@ -297,8 +263,9 @@ def plan_federation(
 
     Raises:
         FederationCycleError: Declarations form a directed cycle.
-        FederationError: A repository could not be loaded and
-            ``strict`` is set.
+        NamespaceConflict: Two directories claim one namespace.
+        FederationError: A declaration names no namespace, or names one
+            other than the repository at its path declares.
     """
     from elspais.config import get_config
 
@@ -308,12 +275,11 @@ def plan_federation(
     resolved: dict[str, PlannedRepo] = {}
     by_root: dict[Path, PlannedRepo] = {}
 
-    def _declared_namespace(config: dict[str, Any] | None) -> str:
-        return (config or {}).get("project", {}).get("namespace", "") or ""
+    def _declared_namespace(config: dict[str, Any]) -> str:
+        return config.get("project", {}).get("namespace", "") or ""
 
     root_root = Path(root_repo_root).resolve()
     root_name = root_config.get("project", {}).get("name", "") or str(root_root.name)
-    root_identity = _identity(_declared_namespace(root_config), root_root)
     root_entry = PlannedRepo(
         name=root_name,
         repo_root=root_root,
@@ -324,19 +290,23 @@ def plan_federation(
         locally_overridden=uses_local_overlay(root_root),
     )
     planned.append(root_entry)
-    resolved[root_identity] = root_entry
+    resolved[_declared_namespace(root_config)] = root_entry
     by_root[root_root] = root_entry
 
     def _record(entry: PlannedRepo, identity: str) -> None:
-        # Only a repository that was read stands for its directory. An
-        # entry recording a fault is not a member the walk can converge
-        # on, and must not stop a later declaration at that path being
-        # reported in its own right.
-        if entry.config is not None:
-            by_root[entry.repo_root] = entry
-
+        by_root[entry.repo_root] = entry
         planned.append(entry)
         resolved[identity] = entry
+
+    def _fault(
+        name: str, assoc_path: Path, origin: str | None, reason: str, chain: tuple[str, ...]
+    ) -> None:
+        # Implements: REQ-d00202-M, REQ-d00202-N
+        # A fault is carried in the plan but placed nowhere: it claims no
+        # namespace, and it does not stand for its directory, so a second
+        # declaration pointing at that same path is reported in its own
+        # right rather than converging on the first and going unfixed.
+        planned.append(PlannedRepo(name, assoc_path, None, origin, reason, chain))
 
     def _visit(
         parent_config: dict[str, Any],
@@ -375,7 +345,7 @@ def plan_federation(
                 _assert_declared_namespace(
                     name,
                     assoc_path,
-                    info.get("namespace") or "",
+                    info["namespace"],
                     _declared_namespace(converged.config),
                 )
                 continue
@@ -386,20 +356,9 @@ def plan_federation(
             # nothing has said nothing about a namespace, and reporting it
             # as a claimant would name a collision with a directory that
             # is not there instead of the declaration that points nowhere.
-            # An error entry is keyed by its own declaration, so two
-            # declarations at one unreadable path are two reported faults
-            # and neither is mistaken for a member.
-            identity = _error_identity(assoc_path, child_path)
-
             if not assoc_path.exists():
-                reason = f"Path does not exist: {assoc_path}"
-                if strict:
-                    raise FederationError(_unreadable(child_path, reason))
                 # Nothing is there to have an origin.
-                _record(
-                    PlannedRepo(name, assoc_path, None, None, reason, child_path),
-                    identity,
-                )
+                _fault(name, assoc_path, None, f"Path does not exist: {assoc_path}", child_path)
                 continue
 
             # Implements: REQ-d00203-B
@@ -409,27 +368,23 @@ def plan_federation(
             # join as a member configured by something above it -- and then
             # report the namespace it inherited as one it declared.
             if not (assoc_path / ".elspais.toml").exists():
-                reason = f"No .elspais.toml at {assoc_path}"
-                if strict:
-                    raise FederationError(_unreadable(child_path, reason))
-                _record(
-                    PlannedRepo(
-                        name, assoc_path, None, repository_origin(assoc_path), reason, child_path
-                    ),
-                    identity,
+                _fault(
+                    name,
+                    assoc_path,
+                    repository_origin(assoc_path),
+                    f"No .elspais.toml at {assoc_path}",
+                    child_path,
                 )
                 continue
             try:
                 assoc_config = loader(None, assoc_path, quiet=True)
             except Exception as exc:  # noqa: BLE001 - reported, never swallowed
-                reason = f"Configuration at {assoc_path} could not be loaded: {exc}"
-                if strict:
-                    raise FederationError(_unreadable(child_path, reason)) from exc
-                _record(
-                    PlannedRepo(
-                        name, assoc_path, None, repository_origin(assoc_path), reason, child_path
-                    ),
-                    identity,
+                _fault(
+                    name,
+                    assoc_path,
+                    repository_origin(assoc_path),
+                    f"Configuration at {assoc_path} could not be loaded: {exc}",
+                    child_path,
                 )
                 continue
 
@@ -442,7 +397,7 @@ def plan_federation(
             _assert_declared_namespace(
                 name,
                 assoc_path,
-                info.get("namespace") or "",
+                info["namespace"],
                 _declared_namespace(assoc_config),
             )
 
@@ -452,11 +407,11 @@ def plan_federation(
             # namespace already resolved at another directory is the
             # second claimant K reports; at this same directory the walk
             # converged above and never arrived here.
-            identity = _identity(info.get("namespace") or "", assoc_path)
+            identity = info["namespace"]
             seen = resolved.get(identity)
             if seen is not None and seen.repo_root != assoc_path:
                 raise NamespaceConflict(
-                    info.get("namespace") or "",
+                    identity,
                     (seen.repo_root, seen.declaration_path),
                     (assoc_path, child_path),
                 )
@@ -482,6 +437,29 @@ def plan_federation(
 
     _visit(root_config, root_root, (root_name,), {root_root: root_name})
     return planned
+
+
+def refuse_unreadable(plan: list[PlannedRepo]) -> None:
+    """Refuse a plan holding a declaration whose repository could not be read.
+
+    Implements: REQ-d00202-M
+
+    A member is identified by the namespace it declares (REQ-d00202-G), and
+    a declaration that could not be read declares none, so a caller wanting
+    a federation rather than a report has nothing to place.  Every such
+    declaration is named: an operator who fixed the first and re-ran would
+    otherwise meet the second.
+
+    Raises:
+        FederationError: One or more declarations could not be read.
+    """
+    faults = [
+        _unreadable(member.declaration_path, member.error)
+        for member in plan
+        if member.error is not None
+    ]
+    if faults:
+        raise FederationError("\n".join(faults))
 
 
 def plan_federation_or_error(

@@ -1361,6 +1361,62 @@ class TestAssociatePreExistingFederationFault:
             "a standing fault and one the candidate introduces must read differently"
         )
 
+    # Verifies: REQ-d00289-E, REQ-d00289-I
+    def test_REQ_d00289_I_a_standing_unreadable_declaration_refuses_the_candidate(
+        self, tmp_path, monkeypatch, capsys
+    ):
+        """A declaration pointing at nothing is a fault the build refuses
+        (REQ-d00202-M), so a registration put to that configuration is
+        refused too -- reported as a fault the configuration already held,
+        naming the entry that points nowhere rather than the candidate."""
+        from elspais.commands.associate_cmd import run
+
+        core = _make_core_repo(tmp_path / "core")
+        nowhere = tmp_path / "nowhere"
+        local_config = core / ".elspais.local.toml"
+        local_config.write_text(f'[associates.ghost]\npath = "{nowhere}"\nnamespace = "GHO"\n')
+        before = local_config.read_bytes()
+
+        gamma = _write_associate_config(tmp_path / "gamma", "gamma", "GAM")
+
+        monkeypatch.chdir(core)
+        assert run(_link_args(core, str(gamma))) != 0
+        assert local_config.read_bytes() == before, "a refused registration must write nothing"
+
+        err = capsys.readouterr().err
+        assert "does not federate as it stands" in err
+        assert "before gamma" in err
+        assert "ghost" in err, "the refusal must name the entry that points nowhere"
+        assert str(nowhere) in err
+
+    # Verifies: REQ-d00289-E, REQ-d00289-I
+    def test_REQ_d00289_E_an_unreadable_declaration_the_candidate_brings_is_refused(
+        self, tmp_path, monkeypatch, capsys
+    ):
+        """A candidate whose own declarations reach nothing would make the
+        federation unbuildable, so it is refused before anything is written
+        -- as a fault the registration introduces, not a standing one."""
+        from elspais.commands.associate_cmd import run
+
+        core = _make_core_repo(tmp_path / "core")
+        nowhere = tmp_path / "nowhere"
+        lib = _write_associate_config(tmp_path / "lib", "lib", "LIB")
+        (lib / ".elspais.toml").write_text(
+            (lib / ".elspais.toml").read_text()
+            + f'\n[associates.phantom]\npath = "{nowhere}"\nnamespace = "PHA"\n'
+        )
+        local_config = core / ".elspais.local.toml"
+
+        monkeypatch.chdir(core)
+        assert run(_link_args(core, str(lib))) != 0
+        assert not local_config.exists(), "a refused registration must write nothing"
+
+        err = capsys.readouterr().err
+        assert "would not federate" in err
+        assert "does not federate as it stands" not in err
+        assert "phantom" in err
+        assert str(nowhere) in err
+
 
 def _core_declaring(tmp_path: Path, entries: str) -> Path:
     """A core repo whose MAIN config declares associate entries of its own.
