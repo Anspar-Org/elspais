@@ -13,6 +13,7 @@ question agree.
 ```sh
 elspais trace --level prd
 elspais trace --level prd gui             # either level
+elspais trace --level prd --level gui     # the same thing, written twice
 elspais summary --not-status Deprecated   # everything except
 elspais gaps --level prd --status Active
 ```
@@ -20,6 +21,11 @@ elspais gaps --level prd --status Active
 Values named for one property are alternatives: `--level prd gui` selects
 requirements at either. Different properties are all required at once:
 `--level prd --status Active` selects requirements that are both.
+
+A property accumulates every value the invocation names for it. Write them
+space-separated behind one flag, repeat the flag, or mix the two — the reading
+is the same, so nothing a later occurrence names displaces what an earlier one
+did.
 
 `--not-level` and `--not-status` refuse a value outright. Where a value is both
 required and refused, the refusal decides.
@@ -60,12 +66,12 @@ A name selects exactly what the same scope stated in full selects. Flags given
 alongside `--scope` narrow it rather than replacing it.
 
 A declaration may also name the values a report states under it (`values = [
-...]`, see below), so one name answers for a whole audience. Because those are
-values, the reports that state none — `gaps`, `uncovered`, `untested`,
-`unvalidated`, `failing` and `analysis` — refuse a name that carries them
-rather than producing a listing with half the declaration honoured. Where one
-audience reads both a table and a gap listing, declare a values-free scope for
-the listing or state its requirements in full.
+...]`, see below), so one name answers for a whole audience — the table and the
+gap listing both. `summary` and `trace` state the named values as columns;
+`gaps` and its single-dimension commands list the shortfalls in those same
+dimensions. A report that states nothing about a requirement at all — `checks`
+and its narrowings, `changed`, `analysis` — passes the values half over and
+reads only the scope.
 
 ## What a scoped report tells you
 
@@ -145,7 +151,16 @@ reach the same report by narrowing either first. The value vocabulary is in
 elspais summary --format csv --values implemented,tested
 elspais summary --format csv --values uat_coverage.immediate_direct
 elspais summary --values verified --level prd
+elspais gaps --values implemented        # only what nothing implements
 ```
+
+A report either states a value about each requirement or lists the requirements
+one value has not credited — and both read the same dimension, so both take a
+selection. `summary --values implemented` states the Implemented column;
+`gaps --values implemented` lists what Implemented has not credited, which is
+what `uncovered` is. `gaps` offers the four dimension keys and nothing beneath
+them: a listing can be asked for or left out, but it cannot be narrowed to
+`implemented.immediate_direct.count`.
 
 `summary` aggregates, so its rows are levels rather than requirements. Its
 identity value is `level` — always stated, whatever the selection names — and

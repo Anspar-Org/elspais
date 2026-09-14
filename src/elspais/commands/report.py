@@ -24,7 +24,6 @@ COMPOSABLE_SECTIONS = (
     "untested",
     "unvalidated",
     "failing",
-    "no_assertions",
     "gaps",
     "unresolved",
     "uncited",
@@ -40,7 +39,6 @@ FORMAT_SUPPORT = {
     "untested": {"text", "markdown", "json"},
     "unvalidated": {"text", "markdown", "json"},
     "failing": {"text", "markdown", "json"},
-    "no_assertions": {"text", "markdown", "json"},
     "gaps": {"text", "markdown", "json"},
     "unresolved": {"text", "markdown", "json"},
     "uncited": {"text", "markdown", "json"},
@@ -55,7 +53,6 @@ EXIT_BIT: dict[str, int] = {
     "untested": 16,
     "unvalidated": 16,
     "failing": 16,
-    "no_assertions": 16,
     "gaps": 16,
     "unresolved": 32,
     "uncited": 64,
@@ -81,10 +78,15 @@ def parse_shared_args(argv: list[str]) -> argparse.Namespace:
     # A composed report is assembled differently from the same section asked for
     # alone, and this parser is where the difference would show: a selection it
     # does not register is a selection the composed report cannot honour.
-    parser.add_argument("--level", nargs="*", default=None)
-    parser.add_argument("--not-level", nargs="*", default=None, dest="not_level")
-    parser.add_argument("--status", nargs="*", default=None)
-    parser.add_argument("--not-status", nargs="*", default=None, dest="not_status")
+    # Implements: REQ-d00278-C
+    # `extend` rather than the default store: a property accumulates across
+    # repetitions of its flag here exactly as it does on the tyro side
+    # (`args.ScopeOptions`), so a composed report reads the same invocation the
+    # same way a section asked for alone does.
+    parser.add_argument("--level", nargs="*", action="extend", default=None)
+    parser.add_argument("--not-level", nargs="*", action="extend", default=None, dest="not_level")
+    parser.add_argument("--status", nargs="*", action="extend", default=None)
+    parser.add_argument("--not-status", nargs="*", action="extend", default=None, dest="not_status")
     parser.add_argument("--match-status-roles", action="store_true", dest="match_status_roles")
     parser.add_argument("--scope", default=None)
     # Implements: REQ-d00282-E
@@ -93,7 +95,9 @@ def parse_shared_args(argv: list[str]) -> argparse.Namespace:
     # honour, and a section composed with others would state different values
     # from the same section asked for alone.
     parser.add_argument("--values", default=None)
-    parser.add_argument("--treat-active", nargs="*", default=None, dest="treat_active")
+    parser.add_argument(
+        "--treat-active", nargs="*", action="extend", default=None, dest="treat_active"
+    )
     # Trace-specific shared flags
     parser.add_argument("--preset", choices=["minimal", "standard", "full"])
     parser.add_argument("--body", action="store_true")
@@ -104,17 +108,45 @@ def parse_shared_args(argv: list[str]) -> argparse.Namespace:
 
 # Implements: REQ-d00282-F
 # name: VALUE_SECTIONS
-# use:  which composable sections state facts about each requirement at all.
+# use:  which composable sections a values selection selects among, and where
+#       each one's offer is declared.
 # def:  section name -> the module owning the values it offers.
 #
-# The rest emit lists of what is missing rather than tables of facts about
-# requirements, so they have no values to select among. A selection reaching
-# one of them is a selection the composed report cannot honour, and F wants no
-# report produced under one honoured in part.
+# A section states facts about each requirement (`summary`, `trace`) or lists
+# the requirements one dimension has not credited (the four shortfall
+# listings). Both read a dimension, so both have values to select among: the
+# first decides which columns are stated, the second which listings appear.
+#
+# The sections left out state nothing about a requirement at all -- `checks`
+# and its narrowings report findings, `changed` reports files -- so a values
+# selection reaching one of them names nothing it offers and is refused.
 VALUE_SECTIONS: dict[str, str] = {
     "summary": "elspais.commands.summary",
     "trace": "elspais.commands.trace",
+    "gaps": "elspais.commands.gaps",
+    "uncovered": "elspais.commands.gaps",
+    "untested": "elspais.commands.gaps",
+    "unvalidated": "elspais.commands.gaps",
+    "failing": "elspais.commands.gaps",
 }
+
+
+# Implements: REQ-d00282-A
+def _offered_by(section: str) -> tuple[str, ...]:
+    """The values one composable section offers.
+
+    A module whose sections each offer a different set declares them in
+    ``COMMAND_VALUES`` keyed by section name -- a shorthand listing offers the
+    one dimension it IS, so `uncovered --values tested` is refused rather than
+    quietly becoming `untested`. Everything else offers one set.
+    """
+    from importlib import import_module
+
+    module = import_module(VALUE_SECTIONS[section])
+    per_section = getattr(module, "COMMAND_VALUES", None)
+    if per_section is not None and section in per_section:
+        return tuple(per_section[section])
+    return tuple(module.OFFERED_VALUES)
 
 
 # Implements: REQ-d00282-F
@@ -124,11 +156,9 @@ def _refuse_unhonourable_values(sections: list[str], args: argparse.Namespace) -
     Judged before anything is built and before anything is written, because a
     refusal that has already produced an artifact has produced the report it
     refused. A reader who names a value no section offers, and a reader who
-    names a section that states no values, are both asking for a report the
-    tool cannot assemble.
+    names a section that states nothing about a requirement, are both asking
+    for a report the tool cannot assemble.
     """
-    from importlib import import_module
-
     from elspais.commands._values import (
         UnofferedValues,
         value_silent_refusal,
@@ -137,9 +167,6 @@ def _refuse_unhonourable_values(sections: list[str], args: argparse.Namespace) -
     from elspais.config import get_config
     from elspais.graph.values import resolve_values
 
-    # Read against the project's own declarations too: a selection a named
-    # scope carries (REQ-d00280-C) is refused on the same terms as one written
-    # on the invocation.
     config = get_config(getattr(args, "config", None))
     silent = [s for s in sections if s not in VALUE_SECTIONS]
     if silent:
@@ -153,9 +180,10 @@ def _refuse_unhonourable_values(sections: list[str], args: argparse.Namespace) -
     if selection is None:
         return None
     for section in sections:
-        module = import_module(VALUE_SECTIONS[section])
+        if section not in VALUE_SECTIONS:
+            continue
         try:
-            resolve_values(selection, module.OFFERED_VALUES)
+            resolve_values(selection, _offered_by(section), identity_key="")
         except UnofferedValues as exc:
             return f"{section}: {exc}"
     return None
@@ -198,7 +226,6 @@ def run(
         "untested",
         "unvalidated",
         "failing",
-        "no_assertions",
         "gaps",
         "unresolved",
         "uncited",
@@ -260,14 +287,17 @@ def _render_section(
         return render_section(graph, args, config)
     elif name == "changed":
         return _render_changed(args)
-    elif name in ("uncovered", "untested", "unvalidated", "failing", "no_assertions"):
+    elif name in ("uncovered", "untested", "unvalidated", "failing", "gaps"):
+        # The section composed with others is the standalone command: it reads
+        # the same selection, offers the same values and refuses the same names
+        # (REQ-d00279-C).
+        from elspais.commands._values import UnofferedValues
         from elspais.commands.gaps import render_section as gap_render
 
-        return gap_render(graph, config, args, gap_types=[name])
-    elif name == "gaps":
-        from elspais.commands.gaps import render_section as gap_render
-
-        return gap_render(graph, config, args)
+        try:
+            return gap_render(graph, config, args, command=name)
+        except UnofferedValues as exc:
+            return f"Error: {name}: {exc}", 1
     elif name in ("unresolved", "uncited"):
         # The same narrowing the standalone command applies (REQ-d00285-C):
         # a section composed with others says what the command alone says.

@@ -1200,7 +1200,7 @@ def run(args: argparse.Namespace) -> int:
 
     fmt = getattr(args, "format", "markdown")
     spec_dir = getattr(args, "spec_dir", None)
-    # --targets/--groups mark provenance on the rendered graph; force a local
+    # --targets marks provenance on the rendered graph; force a local
     # build (bypassing any cached daemon graph) so the fresh set actually
     # threads into build_graph().
     from elspais.commands._targets import resolve_fresh_targets

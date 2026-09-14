@@ -15,7 +15,7 @@ Complete reference for all elspais commands.
 | `changed` | Reports | Detect git changes to spec files |
 | `pdf` | Reports | Compile spec files into a PDF document |
 | `search` | Reports | Search requirements by keyword |
-| `gaps` | Gaps & Issues | List all traceability gaps |
+| `gaps` | Gaps & Issues | List which requirements fall short of each coverage dimension |
 | `uncovered` | Gaps & Issues | List requirements without code coverage |
 | `untested` | Gaps & Issues | List requirements without test coverage |
 | `unvalidated` | Gaps & Issues | List requirements without UAT (journey) coverage |
@@ -124,12 +124,25 @@ Follow-up from `elspais checks` when `spec.format_rules` or `spec.no_assertions`
 
 ## gaps
 
-List all traceability gaps -- every requirement that misses a dimension of
-coverage, in one listing, with the gap type against each.
+List which requirements fall short of each dimension of coverage, one section
+per dimension, in a single listing.
 
-  $ elspais gaps                       # Every gap, by type
+  $ elspais gaps                       # Every dimension
+  $ elspais gaps --values implemented  # Only what nothing implements
   $ elspais gaps --level dev           # Only the dev level
   $ elspais gaps --format json         # JSON output
+
+Each section reads one dimension and lists what it has not credited, so
+`--values` says which sections appear. The four it offers are `implemented`
+(uncovered), `tested` (untested), `uat_coverage` (unvalidated) and `verified`
+(failing) -- the same keys `summary` and `trace` state as columns, which is why
+a `[scopes.NAME]` declaring values works on all three. The single-dimension
+commands below are this report under a fixed selection: `gaps --values
+implemented` and `uncovered` are the same report, and `uncovered --values
+tested` is refused rather than quietly becoming `untested`.
+
+A requirement with no assertions has no dimension to fall short of and is not
+listed here; `elspais checks` reports it as `spec.no_assertions`.
 
 Where a requirement declares `Integrates:`, the coverage inherited from the
 associate that provides it is credited, and the requirement is listed under
@@ -138,6 +151,8 @@ associate that provides it is credited, and the requirement is listed under
 **Options:**
 
   `--format {text,markdown,json}`  Output format (default: text)
+  `--values KEY,...`               List only these dimensions' shortfalls,
+                                   in this order (default: all four)
   `-o, --output PATH`              Write output to file instead of stdout
 
 **Scoping the listing** (see `elspais docs scoping`):
@@ -151,7 +166,7 @@ associate that provides it is credited, and the requirement is listed under
   `--treat-active ST ...`  Weigh these statuses as active ones
 
 Follow-up from `elspais checks` when a coverage check fails. The single-
-dimension commands below list one kind of gap each.
+dimension commands below are this report under a one-dimension selection.
 
 ## uncovered
 

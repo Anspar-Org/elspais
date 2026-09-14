@@ -594,3 +594,135 @@ def test_a_junit_finding_carries_its_location_and_remedy_however_it_is_reported(
     assert "spec/dev-cli.md:247" in body, "the place the reader must go was dropped"
     assert remedy_for(name) in body, "the action available to resolve it was dropped"
     assert "E_IDENTIFIER_WITH_TRAILING_TEXT" in body, "the code it reached was dropped"
+
+
+# ---------------------------------------------------------------------------
+# One invocation, read whole: a repeated selector accumulates
+# ---------------------------------------------------------------------------
+#
+# `checks` narrows the findings it presents by severity, category, check name,
+# diagnostic code and location; `--treat-active` widens which statuses count.
+# All six are spelled the way a scope over requirements is -- values
+# space-separated, the flag repeated, or both -- and a flag that kept only its
+# last occurrence would put a narrowing the vocabulary admits out of a reader's
+# reach while looking like the whole invocation had been read.
+#
+# NOTE: no assertion in spec/ governs the spelling of these six flags.
+# REQ-d00278-C states it for a SCOPE over requirements, which these are not,
+# and REQ-d00285-C -- the assertion `health.py` and `args.py` cite for this
+# change -- is about a finding carrying the same identity, severity, location
+# and remedy in every format. These tests therefore carry no `Verifies:` tag:
+# the behaviour is real and silent when broken, but it is not yet asserted.
+
+# The five selectors, under the name the invocation spells and the name the
+# filter holds them under.
+CHECKS_SELECTORS = [
+    ("severity", "severities"),
+    ("category", "categories"),
+    ("check", "names"),
+    ("code", "codes"),
+    ("file", "paths"),
+]
+
+
+@pytest.mark.parametrize("field,attr", CHECKS_SELECTORS)
+@pytest.mark.parametrize(
+    "raw,expected",
+    [
+        ([["error"], ["warning"]], ("error", "warning")),
+        ([["error", "warning"]], ("error", "warning")),
+        ([["error"], ["warning", "info"]], ("error", "warning", "info")),
+        (["error", "warning"], ("error", "warning")),
+    ],
+)
+def test_a_repeated_checks_selector_accumulates(field, attr, raw, expected) -> None:
+    """The values are asserted exactly rather than by count: a reading that
+    kept the inner lists whole would carry ``"['error']"`` -- a severity no
+    check can ever carry -- and a count would not notice."""
+    filt = FindingFilter.from_args(_args(**{field: raw}))
+    assert getattr(filt, attr) == expected
+
+
+@pytest.mark.parametrize("field,attr", CHECKS_SELECTORS)
+def test_a_selector_named_with_nothing_narrows_nothing(field, attr) -> None:
+    for raw in (None, [], [[]], [""], [[" "]]):
+        filt = FindingFilter.from_args(_args(**{field: raw}))
+        assert getattr(filt, attr) == (), raw
+        assert filt.active is False, raw
+
+
+def test_the_cli_reads_a_repeated_selector_as_one_narrowing() -> None:
+    """Through the real CLI path, not a hand-built namespace: the accumulation
+    lives in the dataclass annotation as much as in the reading."""
+    import tyro
+
+    from elspais.cli import _to_namespace
+    from elspais.commands.args import GlobalArgs
+
+    repeated = _to_namespace(
+        tyro.cli(
+            GlobalArgs,
+            args=[
+                "checks",
+                "--check",
+                "references.malformed",
+                "--check",
+                "tests.unmatched_results",
+            ],
+        )
+    )
+    spaced = _to_namespace(
+        tyro.cli(
+            GlobalArgs,
+            args=["checks", "--check", "references.malformed", "tests.unmatched_results"],
+        )
+    )
+    expected = ("references.malformed", "tests.unmatched_results")
+    assert FindingFilter.from_args(repeated).names == expected
+    assert FindingFilter.from_args(spaced).names == expected
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        [["draft"], ["review", "active"]],
+        [["draft", "review", "active"]],
+        ["draft", "review", "active"],
+    ],
+)
+def test_treat_active_accumulates_into_the_counted_statuses(raw) -> None:
+    """``_status_flags`` title-cases what it gathers, so a nested list that
+    survived unflattened would arrive as ``"['draft']"`` -- a status no
+    requirement carries, and one a count of three would not tell apart."""
+    from elspais.commands.health import _status_flags
+
+    assert _status_flags(argparse.Namespace(treat_active=raw)) == {"Draft", "Review", "Active"}
+
+
+def test_treat_active_is_disclosed_as_the_reader_spelled_it() -> None:
+    """The report says which flags produced it. A disclosure naming one of two
+    statuses describes a run that did not happen."""
+    out = _format_report(_report(), _args(treat_active=[["Draft"], ["Review"]]))
+    assert "--treat-active Draft Review" in out
+
+
+@pytest.mark.parametrize("command", ["checks", "gaps", "uncovered"])
+def test_the_cli_reads_a_repeated_treat_active_as_one_widening(command) -> None:
+    """Through the real CLI path: the accumulation lives in each command's
+    dataclass annotation as much as in the reading, and the flag is declared
+    once per command -- so an annotation missed on one of them would widen the
+    counted set differently depending on which report was asked for."""
+    import tyro
+
+    from elspais.cli import _to_namespace
+    from elspais.commands.args import GlobalArgs
+    from elspais.commands.health import _status_flags
+
+    repeated = _to_namespace(
+        tyro.cli(GlobalArgs, args=[command, "--treat-active", "Draft", "--treat-active", "Review"])
+    )
+    spaced = _to_namespace(
+        tyro.cli(GlobalArgs, args=[command, "--treat-active", "Draft", "Review"])
+    )
+    assert _status_flags(repeated) == {"Draft", "Review"}
+    assert _status_flags(spaced) == {"Draft", "Review"}

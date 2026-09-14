@@ -794,6 +794,8 @@ M. A value a report does not state for a row SHALL be distinguishable from one i
 
 N. For a figure measured in lines, a report SHALL admit selecting the lines covered, the lines measured, and their proportion, each in its own right.
 
+O. A report listing which requirements a value has not credited SHALL offer that value, and SHALL list only those the selection names.
+
 ### Rationale
 
 B is what the coverage vocabulary already makes possible, taken down to the scalar. A coverage figure is computed on four measures with a total taken from them (REQ-d00069-L+N), and each of those is itself a credit counted over a population -- so a reader may want the credit, the population it was counted over, their proportion, or any combination. Offering only the composite makes a reader who wants one number take three, and makes a program parse a sentence to recover what was a number before it was rendered. Naming each separately is also what keeps a proportion honest: it is derived from the other two, and a report stating all three states the same fact three ways rather than three facts. It names the dimensions of REQ-d00277 rather than coverage at large because line coverage is measured in lines and has no four measures to select among (REQ-d00254-B); a rule written over every coverage figure would oblige a surface to offer what that one cannot.
@@ -814,13 +816,16 @@ K and L are what make a stated selection a stated shape. A committed artifact is
 
 N reaches the one figure B cannot. Line coverage is measured in lines and confers no assertion credit (REQ-d00254-B), so it has none of the four measures B decomposes and was left whole -- but whole is not the same as indivisible. It is a count of lines covered out of lines measured, and a reader wanting the proportion should not have to take a rendering and read the numbers back out of it. A further reading of the same lines, how many of them a verifying test can be named for, is a different question again: it is named for that attribution rather than for the figure at large (C), and where the tooling records no test contexts it is not stated at all rather than stated as none (REQ-d00258-E). What that suppression must not do is take the lines covered with it -- they were measured, and a report that has them and says nothing has withheld an answer it holds.
 
+O settles which reports this axis reaches, and it is wider than it first looks. A report either states a value about each of its rows or lists the rows a value has not credited, and the second reads exactly the dimension the first states: what is missing is the complement of what was counted. So the choice a selection makes is the same choice in both -- which values are stated, which shortfalls are listed -- and a report of the second kind that took no selection would be the one report in the estate a reader could not narrow, for no reason a reader could see. The alternative reading, that such a report offers nothing and so must refuse a selection outright under F, mistakes a fixed value for an absent one: the named listings are this report under a single-dimension selection, and a name they do not offer is refused by F for the ordinary reason, not because the report has nothing to be asked for. What O does not reach is a report stating nothing about a requirement at all -- findings about the project, or the files that changed -- and F still governs a value named to one of those.
+
 M is the distinction between having nothing to say and saying nothing. Not every value a report offers exists for every row -- a coverage figure has none for a group whose requirements confer none. Where those two look alike a reader reads absence as zero and concludes work is undone that was never owed, which is the same defect REQ-d00258-E keeps out of line coverage by recording whether a measurement was taken rather than letting an absent one read as none.
 
 ### Changelog
 
+- 2026-09-13 | bf98248c | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-09-12 | 70ab39ac | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: add missing changelog section
 
-*End* *Report Value Selection* | **Hash**: 70ab39ac
+*End* *Report Value Selection* | **Hash**: bf98248c
 
 ---
 
@@ -838,10 +843,14 @@ B. A scope referred to by name SHALL select the requirements that the scope decl
 
 C. A project SHALL be able to declare, under one name, both the scope a report is produced under and the values it states.
 
+D. A value a declaration names that a report does not offer SHALL pass over that report, leaving the rest of the declaration to select as it otherwise would.
+
 ### Rationale
 
 A, B and C are what REQ-p00084-F asks for in a form a project can commit and a reader can check. A is where the scope comes to rest — in the project, beside the requirements it selects over, versioned with them — and B is what keeps the name honest: a name is a reference to a scope, never a second selection that happens to share a spelling. An author reading a declaration then knows what a report produced under it contains without running it; once the two can differ, a committed report is evidence of a scope nobody can reconstruct.
 
 C is what makes a declaration answer for a whole audience rather than half of one. An audience is defined by the requirements it reads and by the facts it reads about them, and a project able to commit only the first carries the second in whatever invoked the report, which is the drift a declaration exists to end. One name for both does not join the two choices: they remain independent everywhere REQ-d00282-H and REQ-d00282-I say they are, a declaration naming no columns constrains none, and a selection stated on an invocation stands without a declaration to belong to. What the name buys is that an audience can be referred to once.
 
-*End* *Named Report Declarations* | **Hash**: ab0a70bb
+D is what makes C usable, and it takes the opposite disposition from REQ-d00282-F for the same reason REQ-d00278-K takes it against a member's vocabulary. A value a reader writes is written for the report in front of them, so a name that report does not offer is a mistake and F wants no report produced under it. A declared value is written once for an audience and read against every report that audience takes -- a table of facts, a listing of what is missing, a ranking -- and those reports offer different values because they answer different questions. Refusing a name one of them does not offer would make the declaration a name the audience could use with some of its own reports and not others, which is the drift C exists to end, arriving by the other door: a project would keep one declaration per report and they would fall out of step. Passing the name over is what keeps one name answering for the audience, and it costs no honesty, because a value a report does not offer is one a reader can see is absent -- unlike a requirement a scope silently dropped. A declaration none of whose values a report offers narrows nothing, and the report states what it would have anyway.
+
+*End* *Named Report Declarations* | **Hash**: 321c6f4f

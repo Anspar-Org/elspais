@@ -21,7 +21,7 @@ import tyro
 from elspais.utilities.docs_loader import DOCS_TOPICS
 
 
-# Implements: REQ-d00278-A+B+C, REQ-p00084-A, REQ-d00279-C
+# Implements: REQ-d00278-A+B+C, REQ-p00084-A+H, REQ-d00279-C
 @dataclasses.dataclass
 class ScopeOptions:
     """Selection shared by every surface that reports over a set of requirements.
@@ -29,18 +29,35 @@ class ScopeOptions:
     One definition rather than a copy per command: REQ-d00279-C obliges every
     path producing a report to yield the same scoped set, and flags duplicated
     per command are how two paths start disagreeing.
+
+    Each property accumulates: a reader may write its values space-separated,
+    repeat the flag, or mix the two, and every value named reaches the scope.
+    REQ-d00278-C admits any combination of the values a property admits, so a
+    spelling that kept only the last occurrence would put a combination the
+    vocabulary admits out of a reader's reach while looking like it had been
+    read. `UseAppendAction` is what carries the repetitions through as separate
+    lists; `_scope._values` flattens them at the one place an invocation's scope
+    is read.
     """
 
-    level: list[str] | None = None
+    level: Annotated[list[list[str]], tyro.conf.UseAppendAction] = dataclasses.field(
+        default_factory=list
+    )
     """Report only requirements at these levels (space-separated)."""
 
-    not_level: list[str] | None = None
+    not_level: Annotated[list[list[str]], tyro.conf.UseAppendAction] = dataclasses.field(
+        default_factory=list
+    )
     """Report no requirement at these levels."""
 
-    status: list[str] | None = None
+    status: Annotated[list[list[str]], tyro.conf.UseAppendAction] = dataclasses.field(
+        default_factory=list
+    )
     """Report only requirements carrying these statuses (space-separated)."""
 
-    not_status: list[str] | None = None
+    not_status: Annotated[list[list[str]], tyro.conf.UseAppendAction] = dataclasses.field(
+        default_factory=list
+    )
     """Report no requirement carrying these statuses."""
 
     match_status_roles: bool = False
@@ -76,25 +93,48 @@ class ChecksArgs:
     terms_only: Annotated[bool, tyro.conf.arg(name="terms")] = False
     """Run defined-term checks only."""
 
-    severity: list[str] | None = None
+    # Implements: REQ-p00084-H
+    # A selection holds every name the caller gave it, whatever road the caller
+    # reached this report by -- so these five accumulate exactly as a scope's
+    # properties do (see `ScopeOptions`).
+    #
+    # What they do: a reader may write the values space-separated, repeat the
+    # flag, or mix the two, and every value named narrows the report. The parity
+    # is the point -- this narrowing is read the same way a scope over
+    # requirements is (REQ-d00278-E+D), so a reader who has narrowed one report
+    # knows how to narrow the other, and a spelling that accumulated in one and
+    # kept only the last occurrence in the other would make that claim false.
+    # `FindingFilter.from_args` reads them through the one gatherer,
+    # `_scope.flag_values`.
+    severity: Annotated[list[list[str]], tyro.conf.UseAppendAction] = dataclasses.field(
+        default_factory=list
+    )
     """Report only findings whose check carries these severities
     (error, warning, info; space-separated)."""
 
-    category: list[str] | None = None
+    category: Annotated[list[list[str]], tyro.conf.UseAppendAction] = dataclasses.field(
+        default_factory=list
+    )
     """Report only findings in these categories (config, spec, references,
     code, tests, uat, terms; space-separated)."""
 
-    check: list[str] | None = None
+    check: Annotated[list[list[str]], tyro.conf.UseAppendAction] = dataclasses.field(
+        default_factory=list
+    )
     """Report only these checks by name, e.g. references.malformed
     (space-separated). This is what the `unresolved`, `errors` and `uncited`
     listings are: this report narrowed to one set of checks."""
 
-    code: list[str] | None = None
+    code: Annotated[list[list[str]], tyro.conf.UseAppendAction] = dataclasses.field(
+        default_factory=list
+    )
     """Report only findings carrying these diagnostic codes, e.g.
     E_IDENTIFIER_WITH_TRAILING_TEXT (space-separated). Selects findings, not
     checks: use --code-checks to run the code checks alone."""
 
-    file: list[str] | None = None
+    file: Annotated[list[list[str]], tyro.conf.UseAppendAction] = dataclasses.field(
+        default_factory=list
+    )
     """Report only findings located in files matching these glob patterns
     (space-separated), e.g. 'spec/*.md'. Named `--file` rather than `--path`
     because `--path` already names the repository root to work from."""
@@ -105,7 +145,10 @@ class ChecksArgs:
     lenient: bool = False
     """Allow warnings without affecting exit code."""
 
-    treat_active: list[str] | None = None
+    # Implements: REQ-d00258-Q
+    treat_active: Annotated[list[list[str]], tyro.conf.UseAppendAction] = dataclasses.field(
+        default_factory=list
+    )
     """Treat these statuses as committed, counting them alongside Active."""
 
     include_passing_details: bool = False
@@ -118,16 +161,14 @@ class ChecksArgs:
     fail_fast: bool = False
     """Stop at the first target failure and skip the checks pass. Requires --run-tests."""
 
-    targets: list[str] | None = None
-    """Run/mark only these [[scanning.test.targets]] by name (space-separated).
-    Default: the targets of the `default` group. With --run-tests, executes only
-    this subset; on summary/trace, marks the rest as carried baselines."""
-
-    groups: list[str] | None = None
-    """Run/mark only the [[scanning.test.targets]] in these groups (space-separated).
-    `all` names every target, `default` the ones a run with no selection executes,
-    and a project declares the rest in [scanning.test.groups]. Narrows alongside
-    --targets rather than adding to it."""
+    targets: Annotated[list[list[str]], tyro.conf.UseAppendAction] = dataclasses.field(
+        default_factory=list
+    )
+    """Run/mark only these [[scanning.test.targets]], by target name or by the
+    name of a group they claim (space-separated, repeatable). A group is an
+    alias for the targets in it, so both are named here. Default: the targets of
+    the `default` group. With --run-tests, executes only this subset; on
+    summary/trace, marks the rest as carried baselines."""
 
     output: Annotated[Path | None, tyro.conf.arg(aliases=["-o"])] = None
     """Write output to file instead of stdout."""
@@ -138,12 +179,28 @@ class ChecksArgs:
 # ---------------------------------------------------------------------------
 @dataclasses.dataclass
 class GapsArgs(ScopeOptions):
-    """List all traceability gaps."""
+    """List which requirements fall short of each coverage dimension.
+
+    One section per dimension, each listing what that dimension has not
+    credited. `--values` says which sections appear; the shorthand commands
+    (`uncovered`, `untested`, `unvalidated`, `failing`) are this report under
+    a fixed single-dimension selection.
+    """
 
     format: Literal["text", "markdown", "json"] = "text"
     """Output format."""
 
-    treat_active: list[str] | None = None
+    # Implements: REQ-d00282-A
+    values: str | None = None
+    """List only the shortfalls in these dimensions, in this order
+    (comma-separated value keys). Offers: implemented, tested, uat_coverage,
+    verified. Keys are stable names, never the words a project displays them
+    under."""
+
+    # Implements: REQ-d00258-Q
+    treat_active: Annotated[list[list[str]], tyro.conf.UseAppendAction] = dataclasses.field(
+        default_factory=list
+    )
     """Treat these statuses as committed, counting them alongside Active."""
 
     output: Annotated[Path | None, tyro.conf.arg(aliases=["-o"])] = None
@@ -152,12 +209,24 @@ class GapsArgs(ScopeOptions):
 
 @dataclasses.dataclass
 class UncoveredArgs(ScopeOptions):
-    """List requirements without code coverage."""
+    """List requirements without code coverage.
+
+    `gaps --values implemented` asked for alone.
+    """
 
     format: Literal["text", "markdown", "json"] = "text"
     """Output format."""
 
-    treat_active: list[str] | None = None
+    # Implements: REQ-d00282-A
+    values: str | None = None
+    """List only the shortfalls in these dimensions, in this order
+    (comma-separated value keys). Offers: implemented. Keys are stable names,
+    never the words a project displays them under."""
+
+    # Implements: REQ-d00258-Q
+    treat_active: Annotated[list[list[str]], tyro.conf.UseAppendAction] = dataclasses.field(
+        default_factory=list
+    )
     """Treat these statuses as committed, counting them alongside Active."""
 
     output: Annotated[Path | None, tyro.conf.arg(aliases=["-o"])] = None
@@ -166,12 +235,24 @@ class UncoveredArgs(ScopeOptions):
 
 @dataclasses.dataclass
 class UntestedArgs(ScopeOptions):
-    """List requirements without test coverage."""
+    """List requirements without test coverage.
+
+    `gaps --values tested` asked for alone.
+    """
 
     format: Literal["text", "markdown", "json"] = "text"
     """Output format."""
 
-    treat_active: list[str] | None = None
+    # Implements: REQ-d00282-A
+    values: str | None = None
+    """List only the shortfalls in these dimensions, in this order
+    (comma-separated value keys). Offers: tested. Keys are stable names,
+    never the words a project displays them under."""
+
+    # Implements: REQ-d00258-Q
+    treat_active: Annotated[list[list[str]], tyro.conf.UseAppendAction] = dataclasses.field(
+        default_factory=list
+    )
     """Treat these statuses as committed, counting them alongside Active."""
 
     output: Annotated[Path | None, tyro.conf.arg(aliases=["-o"])] = None
@@ -180,12 +261,24 @@ class UntestedArgs(ScopeOptions):
 
 @dataclasses.dataclass
 class UnvalidatedArgs(ScopeOptions):
-    """List requirements without UAT (journey) coverage."""
+    """List requirements without UAT (journey) coverage.
+
+    `gaps --values uat_coverage` asked for alone.
+    """
 
     format: Literal["text", "markdown", "json"] = "text"
     """Output format."""
 
-    treat_active: list[str] | None = None
+    # Implements: REQ-d00282-A
+    values: str | None = None
+    """List only the shortfalls in these dimensions, in this order
+    (comma-separated value keys). Offers: uat_coverage. Keys are stable names,
+    never the words a project displays them under."""
+
+    # Implements: REQ-d00258-Q
+    treat_active: Annotated[list[list[str]], tyro.conf.UseAppendAction] = dataclasses.field(
+        default_factory=list
+    )
     """Treat these statuses as committed, counting them alongside Active."""
 
     output: Annotated[Path | None, tyro.conf.arg(aliases=["-o"])] = None
@@ -194,12 +287,24 @@ class UnvalidatedArgs(ScopeOptions):
 
 @dataclasses.dataclass
 class FailingArgs(ScopeOptions):
-    """List requirements with failing test or UAT results."""
+    """List requirements with failing test or UAT results.
+
+    `gaps --values verified` asked for alone.
+    """
 
     format: Literal["text", "markdown", "json"] = "text"
     """Output format."""
 
-    treat_active: list[str] | None = None
+    # Implements: REQ-d00282-A
+    values: str | None = None
+    """List only the shortfalls in these dimensions, in this order
+    (comma-separated value keys). Offers: verified. Keys are stable names,
+    never the words a project displays them under."""
+
+    # Implements: REQ-d00258-Q
+    treat_active: Annotated[list[list[str]], tyro.conf.UseAppendAction] = dataclasses.field(
+        default_factory=list
+    )
     """Treat these statuses as committed, counting them alongside Active."""
 
     output: Annotated[Path | None, tyro.conf.arg(aliases=["-o"])] = None
@@ -332,14 +437,12 @@ class TraceArgs(ScopeOptions):
     line-coverage figure, and selects no requirements -- every requirement is
     reported, including those no journey validates."""
 
-    targets: list[str] | None = None
-    """Mark only these [[scanning.test.targets]] as freshly-run; render the rest
-    as carried baselines."""
-
-    groups: list[str] | None = None
-    """Mark only the [[scanning.test.targets]] in these groups as freshly-run;
-    render the rest as carried baselines. `all` names every target, `default` the
-    ones a run with no selection executes."""
+    targets: Annotated[list[list[str]], tyro.conf.UseAppendAction] = dataclasses.field(
+        default_factory=list
+    )
+    """Mark only these [[scanning.test.targets]] as freshly-run, by target name
+    or by the name of a group they claim; render the rest as carried
+    baselines."""
 
     output: Annotated[Path | None, tyro.conf.arg(aliases=["-o"])] = None
     """Write output to file instead of stdout."""
@@ -469,14 +572,12 @@ class SummaryArgs(ScopeOptions):
     proportion, and .attributed the lines a verifying test can be named for
     (absent where the coverage data carries no per-test contexts)."""
 
-    targets: list[str] | None = None
-    """Mark only these [[scanning.test.targets]] as freshly-run; render the rest
-    as carried baselines."""
-
-    groups: list[str] | None = None
-    """Mark only the [[scanning.test.targets]] in these groups as freshly-run;
-    render the rest as carried baselines. `all` names every target, `default` the
-    ones a run with no selection executes."""
+    targets: Annotated[list[list[str]], tyro.conf.UseAppendAction] = dataclasses.field(
+        default_factory=list
+    )
+    """Mark only these [[scanning.test.targets]] as freshly-run, by target name
+    or by the name of a group they claim; render the rest as carried
+    baselines."""
 
     output: Annotated[Path | None, tyro.conf.arg(aliases=["-o"])] = None
     """Write output to file instead of stdout."""

@@ -284,7 +284,8 @@ reference_keyword = "Verifies"
 # `default` (what a run selects nothing executes) and `all` (every target)
 # are reserved and cannot be declared. A target claiming no group belongs to
 # `default`, so declaring nothing here leaves every run as it was.
-# Select with `--groups NAME ...` wherever `--targets` is accepted.
+# A group is an alias for its targets: name it with `--targets NAME ...`.
+# A group may not share a name with a test target.
 # [scanning.test.groups]
 # uat = "End-to-end journeys needing a live stack"
 

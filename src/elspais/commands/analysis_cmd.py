@@ -184,9 +184,12 @@ def run(args: argparse.Namespace) -> int:
 
     # Implements: REQ-d00282-F
     # Judged before anything is built or asked of a serving process. This report
-    # offers no values to select among, so a selection reaching it -- from a
-    # named declaration carrying one (REQ-d00280-C) -- cannot be honoured even
-    # in part, and F wants no report produced under one honoured in part.
+    # states no coverage value about a requirement -- it ranks them against each
+    # other -- so a value WRITTEN to it names nothing it offers and F wants no
+    # report produced under it. The values half of a named declaration passes
+    # over, the way it does for any report that offers nothing to select among.
+    # Offering the scores themselves as values would make this refusal wrong,
+    # and is a change to what `analysis` offers rather than to this judgement.
     refusal = value_silent_refusal(
         args,
         get_config(getattr(args, "config", None)),

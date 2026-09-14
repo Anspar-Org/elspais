@@ -420,6 +420,12 @@ namespace = "REQ"
 
 [scanning.spec]
 directories = ["spec"]
+
+[[scanning.test.targets]]
+name = "a"
+
+[[scanning.test.targets]]
+name = "b"
 """,
             encoding="utf-8",
         )
@@ -527,6 +533,7 @@ directories = ["spec"]
 
 [scanning.test.groups]
 uat = "needs a live backend"
+slow = "runs for over a minute"
 
 [[scanning.test.targets]]
 name = "a"
@@ -534,18 +541,21 @@ name = "a"
 [[scanning.test.targets]]
 name = "b"
 groups = ["uat"]
+
+[[scanning.test.targets]]
+name = "c"
+groups = ["slow"]
 """,
             encoding="utf-8",
         )
         return config_path
 
     @staticmethod
-    def _trace_args(config_path, targets, groups):
+    def _trace_args(config_path, targets):
         import argparse
 
         return argparse.Namespace(
             targets=targets,
-            groups=groups,
             format="json",
             config=config_path,
             spec_dir=None,
@@ -559,18 +569,22 @@ groups = ["uat"]
 
     # Verifies: REQ-d00283-E+I
     @pytest.mark.parametrize(
-        "targets,groups,expected",
+        "targets,expected",
         [
-            (None, ["uat"], {"b"}),
-            # Each selector narrows: `a` is not in `uat`, so nothing is fresh.
-            (["a"], ["uat"], set()),
-            (["a", "b"], ["uat"], {"b"}),
+            (["uat"], {"b"}),
+            (["a"], {"a"}),
+            # One vocabulary, unioned: a target name beside a group name marks
+            # both, rather than narrowing the group to that target.
+            (["a", "uat"], {"a", "b"}),
+            (["uat", "slow"], {"b", "c"}),
+            # Repeated flags accumulate into the one list the selection reads.
+            ([["a"], ["uat"]], {"a", "b"}),
         ],
     )
-    def test_trace_groups_thread_resolved_set_into_build_graph(
-        self, tmp_path, monkeypatch, targets, groups, expected
+    def test_trace_targets_thread_the_resolved_set_into_build_graph(
+        self, tmp_path, monkeypatch, targets, expected
     ):
-        """--groups resolves through the group model before reaching the graph."""
+        """--targets resolves through the group model before reaching the graph."""
         import elspais.graph.factory as factory_mod
         from elspais.commands import trace
 
@@ -585,14 +599,14 @@ groups = ["uat"]
 
         monkeypatch.setattr(factory_mod, "build_graph", spy)
 
-        result = trace.run(self._trace_args(config_path, targets, groups))
+        result = trace.run(self._trace_args(config_path, targets))
 
         assert result is None or result == 0
         assert captured["fresh_targets"] == expected
 
     # Verifies: REQ-d00254-I
     def test_trace_with_no_selection_marks_nothing_fresh(self, tmp_path, monkeypatch):
-        """Naming neither selector marks nothing -- even with groups declared.
+        """Naming nothing marks nothing -- even with groups declared.
 
         `trace` executes no target; it reads whatever results are already on
         disk. The `default` group of REQ-d00283-D belongs to a run that
@@ -622,7 +636,7 @@ groups = ["uat"]
 
         monkeypatch.setattr("elspais.commands._engine.call", fake_engine_call)
 
-        result = trace.run(self._trace_args(config_path, None, None))
+        result = trace.run(self._trace_args(config_path, None))
 
         assert result is None or result == 0
         assert called["endpoint"] == "/api/run/trace", (
@@ -631,8 +645,11 @@ groups = ["uat"]
         assert not built, "an absent selector marks no fresh subset"
 
     # Verifies: REQ-d00283-H
-    def test_trace_unknown_group_is_refused(self, tmp_path, monkeypatch, capsys):
-        """A selection naming an undefined group renders nothing at all."""
+    def test_trace_unknown_name_is_refused(self, tmp_path, monkeypatch, capsys):
+        """A selection naming neither a configured target nor a group the
+        project admits renders nothing at all -- refused rather than resolved
+        to nothing, because a report marking a target that does not exist as
+        freshly-run cannot be told from one that is honest."""
         import elspais.graph.factory as factory_mod
         from elspais.commands import trace
 
@@ -647,7 +664,7 @@ groups = ["uat"]
 
         monkeypatch.setattr(factory_mod, "build_graph", spy)
 
-        result = trace.run(self._trace_args(config_path, None, ["uta"]))
+        result = trace.run(self._trace_args(config_path, ["uta"]))
 
         assert result == 2
         assert "uta" in capsys.readouterr().err

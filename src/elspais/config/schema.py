@@ -761,6 +761,23 @@ class TestScanningConfig(ScanningKindConfig):
                         f'test target "{target.name}" claims undeclared group "{claimed}"; '
                         f"declared groups are {', '.join(sorted(known))}"
                     )
+
+        # Implements: REQ-d00283-G
+        # A group is an alias for a set of targets and is named where a target
+        # is named, so the two share one namespace: a name meaning a target to
+        # one reader and a group to another cannot be resolved, and a run would
+        # execute a different set according to which the tool looked up first.
+        # Refused here rather than resolved by precedence -- a precedence rule
+        # is a thing every reader of the configuration would have to know.
+        for target in self.targets:
+            key = target.name.strip().lower()
+            if key in known:
+                kind = "reserved" if key in RESERVED_GROUPS else "declared"
+                raise ValueError(
+                    f'test target "{target.name}" has the same name as a {kind} test '
+                    f"group; a run names targets and groups alike, so one name cannot "
+                    f"mean both. Rename the target or the group."
+                )
         return self
 
 

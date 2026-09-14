@@ -628,9 +628,19 @@ class UnofferedValues(ValueError):
 
 @dataclass(frozen=True)
 class ValueSelection:
-    """The values a reader asked for, in the order they asked for them."""
+    """The values a reader asked for, in the order they asked for them.
+
+    ``written`` records whether a reader wrote this selection for this report or
+    a project declared it under a name (REQ-d00280-C+E). The two are read
+    differently and nothing but their provenance tells them apart: a name
+    written here is about this report, so a value it does not offer is a
+    mistake; a declared name is read against every report an audience takes, so
+    a value one of them does not offer is an ordinary difference between
+    reports.
+    """
 
     keys: tuple[str, ...]
+    written: bool = True
 
     def __bool__(self) -> bool:
         return bool(self.keys)
@@ -673,7 +683,7 @@ def parse_value_selection(raw: str | Sequence[str] | None) -> ValueSelection | N
 
 
 # Implements: REQ-d00282-G+J
-# Implements: REQ-d00282-A+F+K+L
+# Implements: REQ-d00282-A+F+K+L, REQ-d00280-D
 def resolve_values(
     selection: ValueSelection | None,
     offered: Sequence[str],
@@ -682,10 +692,19 @@ def resolve_values(
     """The values a report states, given what it offers and what was asked.
 
     Honours the order the selection names (REQ-d00282-K) and keeps the value
-    saying what each row is about whatever was named (REQ-d00282-L). Refuses
-    outright where any named value is not offered (REQ-d00282-F), so a reader
-    never receives a report narrower than the one they asked for while it looks
-    exactly like the one they wanted.
+    saying what each row is about whatever was named (REQ-d00282-L).
+
+    What becomes of a name this report does not offer turns on where the
+    selection came from. A name a reader WROTE for this report is a mistake,
+    and F wants no report produced under it: honouring the rest would hand back
+    a narrower report than they asked for while looking exactly like the one
+    they wanted. A name a project DECLARED (REQ-d00280-C) is read against every
+    report the audience takes, so a report that does not offer it is an
+    ordinary difference between reports rather than an error -- it passes over,
+    leaving the rest of the declaration to select, which is the disposition
+    REQ-d00278-K takes for the other axis and for the same reason. A
+    declaration none of whose values this report offers narrows nothing, so the
+    report states what it would have anyway.
     """
     if selection is None:
         return tuple(offered)
@@ -693,7 +712,12 @@ def resolve_values(
     offered_lower = {k.lower(): k for k in offered}
     unoffered = [k for k in selection.keys if k not in offered_lower]
     if unoffered:
-        raise UnofferedValues(unoffered, offered)
+        if selection.written:
+            raise UnofferedValues(unoffered, offered)
+        kept = [k for k in selection.keys if k in offered_lower]
+        if not kept:
+            return tuple(offered)
+        selection = ValueSelection(keys=tuple(kept), written=False)
 
     chosen = [offered_lower[k] for k in selection.keys]
     if identity_key and identity_key in offered and identity_key not in chosen:

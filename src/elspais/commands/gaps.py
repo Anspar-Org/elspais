@@ -54,7 +54,6 @@ class GapData:
     untested: list[GapEntry] = field(default_factory=list)
     unvalidated: list[GapEntry] = field(default_factory=list)
     failing: list[tuple[str, str, str]] = field(default_factory=list)  # (req_id, title, source)
-    no_assertions: list[GapEntry] = field(default_factory=list)
     # REQ-d00252-F: requirements covered via an external associate (INTEGRATES),
     # grouped by owning associate name -> sorted list of consumer requirement IDs.
     integrated: dict[str, list[str]] = field(default_factory=dict)
@@ -215,10 +214,6 @@ def collect_gaps(
                 if uncov:
                     data.unvalidated.append(GapEntry(req_id, title, uncov))
 
-        # No assertions: not testable
-        if not assertion_nodes:
-            data.no_assertions.append(GapEntry(req_id, title))
-
         # Failing: test or UAT failures. Read through the Passing dimension,
         # so a failure line coverage carries is seen too (REQ-d00277-C).
         if metrics is not None:
@@ -262,7 +257,6 @@ _LABELS = {
     "untested": "UNTESTED (implemented, not tested)",
     "unvalidated": "UNVALIDATED (no UAT coverage)",
     "failing": "FAILING",
-    "no_assertions": "NOT TESTABLE (no assertions)",
 }
 
 
@@ -358,17 +352,83 @@ def render_gap_markdown(gap_type: str, data: GapData) -> str:
 # Composable section
 # =============================================================================
 
-_ALL_GAP_TYPES = ["uncovered", "untested", "unvalidated", "failing", "no_assertions"]
+# Implements: REQ-d00282-A
+# name: GAP_SECTION_FOR_VALUE
+# use:  the ONE map between a coverage dimension and the listing of what falls
+#       short of it.
+# def:  value key -> the name of the section listing that dimension's shortfall.
+#
+# Each of these sections reads one dimension and lists what it has not credited:
+# `uncovered` reads Implemented, `untested` reads Tested, `unvalidated` reads
+# UAT Covered, `failing` reads Passing. So a values selection is not
+# inapplicable to a report that lists shortfalls -- it says WHICH shortfalls the
+# report lists -- and the shorthand commands are this one report under a fixed
+# single-dimension selection rather than five separate reports.
+GAP_SECTION_FOR_VALUE: dict[str, str] = {
+    "implemented": "uncovered",
+    "tested": "untested",
+    "uat_coverage": "unvalidated",
+    "verified": "failing",
+}
+
+# What this report offers a reader to select among (REQ-d00282-A). The four
+# dimension keys and nothing beneath them: a section lists the requirements a
+# dimension has not credited, so it can be asked for or left out, but it cannot
+# be narrowed to `implemented.immediate_direct.count`. `resolve_values` refuses
+# a name this does not hold, which is that assertion working rather than a
+# special case.
+OFFERED_VALUES: tuple[str, ...] = tuple(GAP_SECTION_FOR_VALUE)
+
+VALUE_FOR_GAP_SECTION: dict[str, str] = {v: k for k, v in GAP_SECTION_FOR_VALUE.items()}
+
+# Implements: REQ-d00282-A
+# What each command offers. A shorthand offers the one dimension it IS, so
+# `uncovered --values tested` names a value `uncovered` does not offer and is
+# refused, rather than quietly turning into `untested`.
+COMMAND_VALUES: dict[str, tuple[str, ...]] = {
+    "gaps": OFFERED_VALUES,
+    **{section: (key,) for key, section in GAP_SECTION_FOR_VALUE.items()},
+}
+
+_ALL_GAP_TYPES = list(GAP_SECTION_FOR_VALUE.values())
 
 
-# Implements: REQ-p00084-A+B
+# Implements: REQ-d00282-A, REQ-d00279-C
+def gap_sections(
+    args_or_params: Any,
+    command: str = "gaps",
+    config: dict[str, Any] | None = None,
+) -> list[str]:
+    """The sections this invocation asks for, in the order it named them.
+
+    The ONE place a value selection becomes a set of sections. Every path
+    producing this report reaches it -- the standalone command, the section
+    composed with others, and the serving process handed parameters -- because
+    REQ-d00279-C obliges them to yield the same report and a selection read
+    separately by each is how they start disagreeing. Raises ``UnofferedValues``
+    where a name is not one this command offers.
+    """
+    from elspais.commands._values import resolve_report_values
+
+    offered = COMMAND_VALUES.get(command, OFFERED_VALUES)
+    keys = resolve_report_values(args_or_params, offered, offered, config, identity_key="")
+    return [GAP_SECTION_FOR_VALUE[key] for key in keys]
+
+
+# Implements: REQ-p00084-A+B, REQ-d00282-A
 def render_section(
     graph: FederatedGraph,
     config: dict[str, Any] | None,
     args: argparse.Namespace,
+    command: str = "gaps",
     gap_types: list[str] | None = None,
 ) -> tuple[str, int]:
-    """Render gap sections for the given gap types.
+    """Render this report's shortfall sections.
+
+    ``command`` names which shorthand is being composed, so a section asked for
+    alone and the same section composed with others offer the same values and
+    refuse the same names (REQ-d00279-C). An explicit ``gap_types`` is for a
+    caller that has already resolved the selection.
 
     Returns:
         Tuple of (rendered output string, exit code).
@@ -377,7 +437,7 @@ def render_section(
     from elspais.commands.health import _resolve_exclude_status
 
     if gap_types is None:
-        gap_types = _ALL_GAP_TYPES
+        gap_types = gap_sections(args, command, config)
 
     exclude_status = _resolve_exclude_status(args, config=config or {})
     from elspais.commands._scope import resolve_scope_for_report, scope_disclosure
@@ -428,15 +488,6 @@ def render_section(
 # Standalone run
 # =============================================================================
 
-_GAP_TYPE_MAP: dict[str, str | None] = {
-    "gaps": None,  # None = all gap types
-    "uncovered": "uncovered",
-    "untested": "untested",
-    "unvalidated": "unvalidated",
-    "failing": "failing",
-    "no_assertions": "no_assertions",
-}
-
 
 def _gap_entry_to_list(entry: GapEntry) -> list:
     """Serialize GapEntry for JSON.
@@ -462,7 +513,7 @@ def _gap_entry_to_list(entry: GapEntry) -> list:
 def _gap_data_from_dict(data: dict[str, Any]) -> GapData:
     """Reconstruct GapData from a JSON dict returned by the daemon."""
     gd = GapData()
-    for gt in ("uncovered", "untested", "unvalidated", "no_assertions"):
+    for gt in ("uncovered", "untested", "unvalidated"):
         for item in data.get(gt, []):
             raw_assertions = item[2] if len(item) > 2 else []
             # A payload that carries no label falls back to the full id
@@ -511,26 +562,17 @@ def compute_gaps(graph: FederatedGraph, config: dict, params: dict[str, str]) ->
 
     integrated = {k: sorted(v) for k, v in data.integrated.items()}
 
-    gap_type = params.get("type", None)
-    if gap_type and gap_type in (
-        "uncovered",
-        "untested",
-        "unvalidated",
-        "failing",
-        "no_assertions",
-    ):
-        out = {gap_type: _serialize_gap_list(gap_type)}
-        if gap_type == "uncovered" and integrated:
-            out["integrated"] = integrated  # type: ignore[assignment]
-        # Implements: REQ-p00084-D
-        if scope_lines:
-            out["scope"] = scope_lines  # type: ignore[assignment]
-        return out
+    # Implements: REQ-d00279-C
+    # The sections come from the selection the invocation carried here, read by
+    # the same function the local paths read it with -- a serving process that
+    # decided for itself which sections a report holds is how a daemon-served
+    # report starts differing from a locally computed one.
+    sections = gap_sections(params, params.get("command", "gaps"), config)
 
     result: dict[str, Any] = {}
-    for gt in ("uncovered", "untested", "unvalidated", "failing", "no_assertions"):
+    for gt in sections:
         result[gt] = _serialize_gap_list(gt)
-    if integrated:
+    if integrated and "uncovered" in sections:
         result["integrated"] = integrated
     # Implements: REQ-p00084-D
     if scope_lines:
@@ -546,40 +588,50 @@ def run(args: argparse.Namespace) -> int:
     falls back to local graph build.
     """
     from elspais.commands._engine import call as engine_call
-    from elspais.commands._values import value_silent_refusal
+    from elspais.commands._values import UnofferedValues, values_to_params
     from elspais.config import get_config
+    from elspais.graph.values import ValueSelection
 
     command = getattr(args, "command", "gaps")
+    config = get_config(getattr(args, "config", None))
 
-    # Implements: REQ-d00282-F
-    # Judged before anything is built or asked of a serving process: this report
-    # lists what is missing and states no values, so a selection reaching it --
-    # from a named declaration carrying one (REQ-d00280-C) -- cannot be honoured
-    # even in part, and F wants no report produced under it. The composed path
-    # (report.py) refuses the same input in the same words.
-    refusal = value_silent_refusal(args, get_config(getattr(args, "config", None)), command)
-    if refusal is not None:
-        print(f"Error: {refusal}", file=sys.stderr)
+    # Implements: REQ-d00282-A+F
+    # Resolved before anything is built or asked of a serving process. A name
+    # this command does not offer is refused outright rather than dropped, which
+    # is what keeps a reader from receiving a narrower report than they asked
+    # for while it looks exactly like the one they wanted.
+    try:
+        gap_types: list[str] | None = gap_sections(args, command, config)
+    except UnofferedValues as exc:
+        print(f"Error: {command}: {exc}", file=sys.stderr)
         return 1
 
-    gap_type = _GAP_TYPE_MAP.get(command)
-    gap_types: list[str] | None = [gap_type] if gap_type else None
     fmt = getattr(args, "format", "text")
     spec_dir = getattr(args, "spec_dir", None)
 
-    params: dict[str, str] = {}
-    if gap_type:
-        params["type"] = gap_type
+    # Implements: REQ-d00282-E
+    # What travels is the selection AS RESOLVED here, not as it was written: a
+    # declaration's values are read against what each report offers
+    # (REQ-d00280-E), and a compute path handed the raw declaration would judge
+    # it a second time with no way to know a project had declared it.
+    params: dict[str, str] = {"command": command}
+    params.update(
+        values_to_params(
+            ValueSelection(keys=tuple(VALUE_FOR_GAP_SECTION[gt] for gt in gap_types or []))
+        )
+    )
     # Status selection has to reach the compute path: this command reaches it
     # through the engine, so a selection left out of params is silently lost.
-    treat_active = getattr(args, "treat_active", None)
+    from elspais.commands._scope import flag_values
+
+    treat_active = flag_values(args, "treat_active")
     if treat_active:
         params["treat_active"] = ",".join(treat_active)
 
     # The scope reaches the compute path the same way and for the same reason.
     from elspais.commands._scope import scope_params_from_args
 
-    params.update(scope_params_from_args(args, get_config(getattr(args, "config", None))))
+    params.update(scope_params_from_args(args, config))
 
     data = engine_call(
         "/api/run/gaps",

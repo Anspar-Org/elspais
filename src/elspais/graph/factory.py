@@ -789,7 +789,7 @@ def build_graph(
         captured_results: Optional mapping of target name -> captured stdout/results
             text, bypassing the on-disk results glob for that target.
         fresh_targets: Optional set of [[scanning.test.targets]] names considered
-            "freshly run" (e.g. via ``--targets``/``--groups``). When set, every RESULT node
+            "freshly run" (e.g. via ``--targets``). When set, every RESULT node
             ingested for a target NOT in this set is tagged ``carried=True``.
             When None (the default), no target is considered carried. Stashed
             on the returned FederatedGraph as ``render_fresh_targets``.

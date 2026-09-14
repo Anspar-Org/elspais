@@ -754,7 +754,11 @@ O. Tested SHALL be reported with a breakdown of the assertions it counts into th
 
 P. A coverage figure a surface states for a group of requirements SHALL be the credit and the assertions of that group each summed, so that a group is measured over the same assertions its members are.
 
+Q. A caller SHALL be able to name statuses to be weighed as active ones for the duration of a run, and every status so named SHALL be weighed.
+
 ### Rationale
+
+Q is what L leaves a project no way to say. L fixes whether a status expects implementation from the role the project assigned it, which is right as a standing answer and wrong as the only one: a project mid-migration, or a reader asking what the estate would look like if the work now in review were counted, needs a status weighed as active for one run without changing what the project says that status means. It is stated as an obligation on the naming rather than on any way of naming, because the same question reaches a serving process as a parameter and a program as an argument. Every status named is weighed: weighing some of them would answer a question the caller did not ask, under the figures they asked for, and a coverage figure carries nothing that would let a reader see which statuses had reached it.
 
 P settles what a figure over many requirements means, because there is more than one defensible answer and they disagree. Summing the credit and the assertions weights each requirement by how much it obliges; averaging the members' own proportions weights each requirement equally, and answers how far along the typical requirement is rather than how far along the work is. Both are worth knowing and only one can be the figure a surface states unasked, or two surfaces answer the same question differently -- which is the divergence this requirement exists to prevent. Summing is the one chosen because it is what a per-*Assertion* credit already is: REQ-d00069-M makes coverage a real number so that partial evidence counts in proportion, and summing those proportions keeps a group's figure made of the same evidence as its members'. A surface that later offers the other has to name which it states, since the two share a shape and not a meaning.
 
@@ -772,6 +776,7 @@ A reports how the estate is doing and M reports what is left to do; the two ques
 
 ### Changelog
 
+- 2026-09-13 | a12fe185 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-24 | 15129897 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-21 | 6c978321 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-21 | 24015cbc | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -797,7 +802,7 @@ A reports how the estate is doing and M reports what is left to do; the two ques
 - 2026-07-03 | c843c727 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-02 | be97c170 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: add missing changelog section
 
-*End* *Reporting Surface Consistency* | **Hash**: 15129897
+*End* *Reporting Surface Consistency* | **Hash**: a12fe185
 
 ---
 
@@ -934,17 +939,17 @@ B. Every test target SHALL belong to the group `all`.
 
 C. A test target that claims no other group SHALL belong to the group `default`.
 
-D. A run that selects no group SHALL execute the targets of the group `default`.
+D. A run that names nothing SHALL execute the targets of the group `default`.
 
-E. A run that selects one or more groups SHALL execute only targets belonging to those groups.
+E. A run SHALL name a group wherever it names a target, and a group so named SHALL stand for every target belonging to it.
 
 F. A test target SHALL be able to claim any declared group, and SHALL NOT claim a name no declaration and no reservation defines.
 
-G. A project SHALL be able to declare any number of groups, each declared with a keyword unique among every group name, the reserved names included, and a description of what the group is for.
+G. A project SHALL be able to declare any number of groups, each declared with a keyword unique among every group name and every test target name, the reserved names included, and a description of what the group is for.
 
-H. A run selecting a name no declaration and no reservation defines SHALL be refused rather than resolved to no targets.
+H. A run naming something that is neither a configured target nor a group the project admits SHALL be refused rather than resolved to no targets.
 
-I. Each selector a run states SHALL narrow the targets it executes.
+I. A run SHALL execute every target it names.
 
 ### Rationale
 
@@ -958,9 +963,11 @@ F and H are the same discipline reached from the two directions a name arrives f
 
 G requires uniqueness across every group name rather than across the declared ones, which is what bars a project from declaring `all` or `default`. Their meanings are fixed by B, C and D; a project able to attach its own description to either could describe something the tool does not do, and a reader would have no way to tell which was true.
 
-I settles what two selectors mean together. Both name what a run is to execute, so a run stating both is describing its subject twice, and the targets it executes are those both descriptions admit. The alternative — each selector adding to the set — would make naming a target *widen* a run that named a group, so a caller narrowing their invocation would watch it grow.
+E and I are one idea stated from both ends, and the idea is that a group is an ALIAS. A group is a name several targets claim so a run can refer to them at once — not a second dimension targets are classified on, and not a second way of selecting to be reconciled with the first. So a run has ONE thing it does: it names targets, some of them by a name standing for several, and it executes what it named. There is no rule about what two selectors mean together because there are not two selectors. The alternative, a separate group selector narrowing a target selector, has to answer a question this does not raise — what a run naming a target outside a group it also named should do — and every answer to it honours one name while disobeying the other. A reader wanting a narrower set has the exact instrument already: name the targets.
 
-*End* *Test Target Groups* | **Hash**: bc95d36b
+G carries the cost of that aliasing, and it is the whole cost. One namespace means a name cannot be a target's and a group's at once, so a configuration holding both is refused when it is read rather than resolved by a precedence rule — a precedence rule being a thing every reader of that configuration would afterwards have to know. What makes the aliasing safe beyond that is that a run says which targets it executed, so what an invocation resolved to is answerable by looking at the run rather than by knowing any of this.
+
+*End* *Test Target Groups* | **Hash**: edcd4d69
 
 ## REQ-d00284: How a Result Names Its Test
 

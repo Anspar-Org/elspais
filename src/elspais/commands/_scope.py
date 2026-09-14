@@ -23,6 +23,7 @@ from elspais.graph.scope import (
 )
 
 __all__ = [
+    "flag_values",
     "scope_from_args",
     "scope_params_from_args",
     "scope_from_params",
@@ -32,13 +33,38 @@ __all__ = [
 ]
 
 
-def _values(args: Any, name: str) -> tuple[str, ...]:
+# Implements: REQ-d00278-C, REQ-p00084-H
+def flag_values(args: Any, name: str) -> tuple[str, ...]:
+    """Every value this invocation named for one list-valued flag.
+
+    The ONE place a repeated flag is gathered back into the one list it names.
+    A reader may write the values space-separated behind a single flag, repeat
+    the flag, or mix the two; a repetition arrives as its own inner list and is
+    flattened here rather than letting the last occurrence stand for the whole.
+    REQ-d00278-C admits any combination of the values a property admits, and
+    keeping only the last occurrence would put some of those combinations out of
+    a reader's reach while looking like the whole invocation had been read.
+
+    Serves the scope properties and every other accumulating flag (``--treat-
+    active``) so one spelling rule holds across them: a reader who has learned
+    how one flag reads has learned how they all do. It also accepts the flat
+    shape, which is what the composed report's argparse parser produces and what
+    a caller assembling a namespace by hand hands over.
+    """
     raw = getattr(args, name, None)
     if not raw:
         return ()
     if isinstance(raw, str):
         raw = [raw]
-    return tuple(str(v) for v in raw if str(v).strip())
+    flat: list[Any] = []
+    for item in raw:
+        if isinstance(item, str):
+            flat.append(item)
+        elif isinstance(item, (list, tuple)):
+            flat.extend(item)
+        else:
+            flat.append(item)
+    return tuple(str(v) for v in flat if str(v).strip())
 
 
 def scope_from_args(args: Any, config: dict[str, Any] | None = None) -> ReportScope | None:
@@ -50,9 +76,9 @@ def scope_from_args(args: Any, config: dict[str, Any] | None = None) -> ReportSc
     include: dict[str, tuple[str, ...]] = {}
     exclude: dict[str, tuple[str, ...]] = {}
     for prop in ("level", "status"):
-        if wanted := _values(args, prop):
+        if wanted := flag_values(args, prop):
             include[prop] = wanted
-        if refused := _values(args, f"not_{prop}"):
+        if refused := flag_values(args, f"not_{prop}"):
             exclude[prop] = refused
     match_roles = bool(getattr(args, "match_status_roles", False))
 

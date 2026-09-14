@@ -1238,14 +1238,17 @@ def targets_in_groups(config: Any, selected: list[str] | None) -> set[str]:
     return {t.name for t in test_cfg.targets if target_groups(t) & wanted}
 
 
-# Implements: REQ-d00283-D+E+I, REQ-d00254-I+J
-def selected_targets(
-    config: Any, targets: list[str] | None, groups: list[str] | None
-) -> set[str] | None:
-    """The test targets a run naming *targets* and *groups* covers.
+# Implements: REQ-d00283-D+E+H+I, REQ-d00254-I+J
+def selected_targets(config: Any, named: list[str] | None) -> set[str] | None:
+    """The test targets a run naming *named* covers.
 
-    Each selector narrows (REQ-d00283-I), and naming neither selects the
-    ``default`` group (REQ-d00283-D).
+    ONE selector. A group is an alias for a set of targets rather than a second
+    dimension they are classified on, so a run names targets, some of them by a
+    name that stands for several, and covers everything it named
+    (REQ-d00283-I). Naming nothing selects the ``default`` group
+    (REQ-d00283-D), and the two namespaces cannot collide because a
+    configuration holding a target and a group of one name is refused
+    (REQ-d00283-G).
 
     ``None`` is returned where the selection covers every configured target,
     which is what makes a run full rather than selective (REQ-d00254-J). That
@@ -1253,19 +1256,44 @@ def selected_targets(
     project declaring no groups has every target in ``default``, so its bare
     run covers everything and renders exactly as it did before groups existed.
 
-    Raises:
-        ValueError: If a named group is neither declared nor reserved.
+    A name that is neither a configured target nor a known group is CARRIED
+    rather than dropped: the caller that runs targets reports it as unknown
+    (REQ-d00283-H), and resolving it away here would turn that report into
+    silence.
     """
     configured = {t.name for t in config.scanning.test.targets}
-    if targets is None and groups is None:
-        selection = targets_in_groups(config, None)
-    elif groups is None:
-        # A named target is taken as named. Whether it is configured is a
-        # question for the caller that runs targets, which reports an unknown
-        # name; narrowing it away here would turn that report into silence.
-        selection = set(targets or ())
-    elif targets is None:
-        selection = targets_in_groups(config, groups)
-    else:
-        selection = set(targets) & targets_in_groups(config, groups)
+    if named is None:
+        return None if (sel := targets_in_groups(config, None)) == configured else sel
+
+    wanted = [n for n in (x.strip() for x in named) if n]
+    known_groups = known_group_names(config)
+    as_groups = [n for n in wanted if n.lower() in known_groups]
+    selection = {n for n in wanted if n.lower() not in known_groups}
+    if as_groups:
+        selection |= targets_in_groups(config, as_groups)
     return None if selection == configured else selection
+
+
+def known_group_names(config: Any) -> set[str]:
+    """Every group name this project admits, declared or reserved."""
+    from elspais.config.schema import RESERVED_GROUPS
+
+    return {str(name).strip().lower() for name in config.scanning.test.groups} | RESERVED_GROUPS
+
+
+# Implements: REQ-d00283-H
+def unknown_target_names(config: Any, named: list[str] | None) -> list[str]:
+    """The names in *named* that are neither a configured target nor a group.
+
+    The ONE place that question is answered, so every surface taking a
+    selection refuses the same names. ``selected_targets`` deliberately carries
+    an unknown name through rather than resolving it away -- a selection that
+    quietly selects nothing renders exactly like one whose targets all passed
+    (REQ-d00283-H) -- which leaves this as the check each caller makes before
+    it renders anything.
+    """
+    if not named:
+        return []
+    configured = {t.name for t in config.scanning.test.targets}
+    groups = known_group_names(config)
+    return sorted({n for n in named if n not in configured and n.strip().lower() not in groups})

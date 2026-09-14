@@ -1,7 +1,7 @@
 """Resolving a command's test-target selection.
 
-The reporting commands take the same two selectors ``elspais checks --run-tests``
-takes, and mean something adjacent by them: which targets a run covered, rather
+The reporting commands take the same selector ``elspais checks --run-tests``
+takes, and mean something adjacent by it: which targets a run covered, rather
 than which it is to execute. Both questions have one answer, so both reach
 :func:`elspais.config.selected_targets` through here.
 """
@@ -25,14 +25,26 @@ def resolve_fresh_targets(args: Any, config: dict[str, Any]) -> set[str] | None:
     than a fact about what happened.
 
     Raises:
-        ValueError: If a named group is neither declared nor reserved. The
-            caller reports it; a selection resolving to nothing is refused
-            rather than rendered (REQ-d00283-H).
+        ValueError: If a name is neither a configured target nor a group the
+            project admits. The caller reports it; a selection resolving to
+            nothing is refused rather than rendered (REQ-d00283-H). Refused
+            HERE rather than deeper because ``selected_targets`` carries an
+            unknown name through on purpose, so nothing below this raises.
     """
-    from elspais.config import selected_targets, validate_config
+    from elspais.commands._scope import flag_values
+    from elspais.config import selected_targets, unknown_target_names, validate_config
 
-    targets = getattr(args, "targets", None) or None
-    groups = getattr(args, "groups", None) or None
-    if targets is None and groups is None:
+    named = list(flag_values(args, "targets")) or None
+    if named is None:
         return None
-    return selected_targets(validate_config(config), targets, groups)
+    cfg = validate_config(config)
+    if unknown := unknown_target_names(cfg, named):
+        configured = sorted(t.name for t in cfg.scanning.test.targets)
+        from elspais.config import known_group_names
+
+        raise ValueError(
+            f"unknown --targets: {', '.join(unknown)}. "
+            f"Configured targets: {', '.join(configured)}. "
+            f"Known groups: {', '.join(sorted(known_group_names(cfg)))}."
+        )
+    return selected_targets(cfg, named)

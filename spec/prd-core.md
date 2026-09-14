@@ -490,9 +490,13 @@ F. The selections determining which requirements a report emits and which facts 
 
 G. A surface that states facts about each requirement it emits SHALL accept a selection naming which of those facts its audience needs.
 
+H. A selection a caller states SHALL hold every name the caller gave it.
+
 ## Rationale
 
 Withholding content from a report is ordinarily a defect: a reader cannot tell a report narrowed on purpose from one that lost requirements on the way. REQ-p00015-A settles that question for content the tool never admits; a scope admits everything and narrows what is emitted, which is the same hazard reached by another route. D resolves it — a report that names its scope is an answer to a stated question, and a reader who wanted a different question asked can see that they got the wrong one. D is also how this requirement concretizes the REQ-p00019 anti-pattern template it declares `Satisfies:` against: a scoped report omits requirements from its answer and delivers a part of the estate where the whole was available, so the silent-omission and undisclosed-substitution classes are the ones it is most exposed to, and naming the scope answers both in a single act. The template's remaining classes bind to this subsystem through the instance without a subsystem-specific strengthening.
+
+H is about the selection itself rather than about any way of stating one. A caller reaches these surfaces by more than one road — an invocation, the parameters a serving process is handed, a call from a program — and the roads differ in what it even means to state a name twice: a command line repeats a flag as a matter of course, where a call passing one argument twice is not a thing a caller does. What has to hold across all of them is the same and is about the answer, not the spelling: a selection is the set of names the caller gave it, and a reading that kept some of those names and dropped others would answer a narrower question than the one asked while producing exactly the report the caller expected to see. That is the silent-omission hazard D exists to resolve, arriving before the report is composed rather than after, and no disclosure reaches it — the report discloses the selection it was produced under, which is the reduced one.
 
 A names the surfaces this obligation falls on by what they do rather than by listing them: the sections of a composed report, the compiled review document, the read surfaces the tool offers a program, and the view a reader browses the estate through are all answers computed over a set of requirements for somebody. Generating a file that mirrors the estate's own structure — an index of what exists, a glossary of the terms it uses — is not reporting over a set of requirements for an audience, and carries no scope.
 
@@ -504,7 +508,7 @@ F is what makes a selection survive contact with a project. A selection that exi
 
 G is the second axis, and it is separate from A because the two are separate questions a reader answers independently. Which requirements a report is about and which facts it states about them are decided for different reasons and by different readers -- a compliance pack wants few requirements described fully, a status review wants many described briefly -- so a reader answering one says nothing about the other. What is common to them is everything else this requirement asks: an answer is honoured, disclosed where its absence would otherwise be invisible, and does not vary by the format it is rendered in. REQ-d00282 fixes the vocabulary the second answer is written in, as REQ-d00278 does for the first.
 
-*End* *Audience-Scoped Reporting* | **Hash**: 199562bd
+*End* *Audience-Scoped Reporting* | **Hash**: 168b514c
 
 ---
 

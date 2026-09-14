@@ -178,8 +178,10 @@ it untraceable at the assertion level.
 - **Default severity**: warning (does not cause a non-zero exit by itself)
 - **Always on**: this check runs unconditionally, unlike `require_assertions` (which
   is opt-in and produces an error when enabled)
-- **Gaps report**: requirements flagged by this check appear in `elspais gaps` with
-  the label `NOT TESTABLE (no assertions)` under the `no_assertions` gap type
+- **Not a gap**: `elspais gaps` lists what each coverage dimension has not
+  credited, and a requirement with no assertions has no dimension to fall short
+  of — it is a defect in the spec rather than a shortfall in coverage, and this
+  check is where it is reported, with the severity configured below
 
 **Configuration** — adjust severity via `[rules.format]` in `.elspais.toml`:
 
@@ -867,6 +869,12 @@ scope flags above.
 Values named for one flag are alternatives; values named for different flags
 are conditions met at once. So `--category references --file 'spec/*.md'`
 selects the reference findings that are in a spec file, and nothing else.
+
+Each flag accumulates every value the invocation names for it: write them
+space-separated, repeat the flag, or mix the two. `--check a --check b` and
+`--check a b` narrow to the same two checks. This is the same reading a scope
+over requirements takes (`elspais docs scoping`), so a reader who has narrowed
+one report knows how to narrow the other.
 
 `--check`, `--code` and `--file` select findings by name, so the findings they
 select are rendered whether or not `-v` was given.

@@ -12,6 +12,8 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from elspais.commands import report
 from elspais.commands.report import (
     COMPOSABLE_SECTIONS,
@@ -180,6 +182,52 @@ class TestSharedFlagsApplyGlobally:
         assert args.format == "text"
         assert args.quiet is False
         assert args.lenient is False
+
+    # A composed report's parser is where a selection the report cannot honour
+    # would go unregistered. REQ-d00278-C admits any combination of the values a
+    # scope property admits, and REQ-d00279-C obliges this parser to read an
+    # invocation the way the tyro path reads it -- so a repeated flag has to
+    # accumulate here too, not keep its last occurrence.
+    # Verifies: REQ-d00278-C, REQ-d00279-C
+    @pytest.mark.parametrize(
+        "flag,dest",
+        [
+            ("--level", "level"),
+            ("--not-level", "not_level"),
+            ("--status", "status"),
+            ("--not-status", "not_status"),
+        ],
+    )
+    def test_a_repeated_scope_flag_accumulates(self, flag, dest):
+        repeated = parse_shared_args([flag, "Draft", flag, "Active"])
+        spaced = parse_shared_args([flag, "Draft", "Active"])
+        assert getattr(repeated, dest) == ["Draft", "Active"], (
+            f"{flag} repeated kept only its last occurrence: {getattr(repeated, dest)}"
+        )
+        assert getattr(repeated, dest) == getattr(spaced, dest)
+
+    # `--treat-active` is not a scope property -- it widens which statuses
+    # COUNT rather than which requirements are reported -- but a reader spells
+    # it the same way, and a flag that kept only its last occurrence beside
+    # flags that accumulate reads the invocation two ways. No assertion governs
+    # this flag's spelling; it is held here because the divergence is silent.
+    def test_a_repeated_treat_active_accumulates(self):
+        repeated = parse_shared_args(["--treat-active", "Draft", "--treat-active", "Review"])
+        spaced = parse_shared_args(["--treat-active", "Draft", "Review"])
+        assert repeated.treat_active == ["Draft", "Review"], (
+            f"--treat-active repeated kept only its last occurrence: {repeated.treat_active}"
+        )
+        assert repeated.treat_active == spaced.treat_active
+        assert parse_shared_args([]).treat_active is None
+
+    # Verifies: REQ-d00278-C
+    def test_repeated_scope_flags_on_different_properties_all_register(self):
+        """The reported invocation, read whole: one level and two refused statuses."""
+        args = parse_shared_args(
+            ["--level", "dev", "--not-status", "Draft", "--not-status", "Active"]
+        )
+        assert args.level == ["dev"]
+        assert args.not_status == ["Draft", "Active"]
 
     # Verifies: REQ-d00085-B
     def test_REQ_d00085_B_format_passed_to_all_sections(self):

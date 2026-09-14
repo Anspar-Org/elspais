@@ -5,9 +5,16 @@ Three authorities are exercised here, all reached from `elspais.config`:
 
 * `target_groups()` -- which groups one target belongs to (A, B, C).
 * `targets_in_groups()` -- which targets a group selection names (D, E, H).
-* `selected_targets()` -- what a run covers given both selectors, normalised
-  to `None` where the selection covers every configured target, which is what
-  makes a run full rather than selective (I, and REQ-d00254-J).
+* `selected_targets()` -- what a run covers given the ONE list of names it
+  states, normalised to `None` where the selection covers every configured
+  target, which is what makes a run full rather than selective (I, and
+  REQ-d00254-J).
+
+A group is an ALIAS for a set of targets (E), not a second selector: a run
+names targets, some of them by a name standing for several, and covers
+everything it named (I). So there is one list, its names are unioned, and a
+name that is neither a target nor a group is CARRIED for the caller that runs
+targets to refuse (H).
 
 Declaration-time refusals (F, G) are exercised through `TestScanningConfig`,
 which is where the model validator that enforces them lives.
@@ -109,7 +116,7 @@ def test_no_selection_names_only_the_default_group():
     cfg = _cfg(_DECLARED, _CLAIMS)
     assert targets_in_groups(cfg, None) == {"a"}
     # A proper subset of the configured targets, so the run is selective.
-    assert selected_targets(cfg, None, None) == {"a"}
+    assert selected_targets(cfg, None) == {"a"}
 
 
 # Verifies: REQ-d00283-C+D
@@ -118,7 +125,7 @@ def test_no_selection_with_no_groups_declared_covers_every_target():
     cfg = _cfg(None, {"a": [], "b": []})
     assert targets_in_groups(cfg, None) == {"a", "b"}
     # Covering every configured target is a full run, not a selective one.
-    assert selected_targets(cfg, None, None) is None
+    assert selected_targets(cfg, None) is None
 
 
 # ---------------------------------------------------------------------------
@@ -148,9 +155,9 @@ def test_group_selection_names_exactly_its_targets(selection, expected):
 # Verifies: REQ-d00283-E
 def test_selecting_all_normalises_to_a_full_run():
     cfg = _cfg(_DECLARED, _CLAIMS)
-    assert selected_targets(cfg, None, [GROUP_ALL]) is None
+    assert selected_targets(cfg, [GROUP_ALL]) is None
     # A group naming fewer than every target stays a selective run.
-    assert selected_targets(cfg, None, ["uat"]) == {"b", "d"}
+    assert selected_targets(cfg, ["uat"]) == {"b", "d"}
 
 
 # ---------------------------------------------------------------------------
@@ -228,6 +235,48 @@ def test_bad_group_declarations_are_refused(declared, culprit):
     assert culprit in str(excinfo.value)
 
 
+# Verifies: REQ-d00283-G
+@pytest.mark.parametrize(
+    "declared,target_name,kind",
+    [
+        # A declared group and a target of the same name.
+        ({"uat": "needs a live backend"}, "uat", "declared"),
+        # The same collision reached case-insensitively: selection lowercases,
+        # so `UAT` and `uat` are one name and neither reader could be answered.
+        ({"uat": "needs a live backend"}, "UAT", "declared"),
+        ({"slow": "runs for over a minute"}, " slow ", "declared"),
+        # A reservation defines a name as surely as a declaration does, and
+        # `all`/`default` cannot be declared away, so the target must move.
+        ({}, "all", "reserved"),
+        ({}, "default", "reserved"),
+        ({}, "ALL", "reserved"),
+    ],
+)
+def test_a_target_named_like_a_group_is_refused(declared, target_name, kind):
+    """One namespace: a run names targets and groups alike, so a name meaning
+    both is refused when the configuration is read rather than resolved by a
+    precedence rule every reader would afterwards have to know."""
+    with pytest.raises(ValidationError) as excinfo:
+        TestScanningConfig(
+            groups=dict(declared),
+            targets=[TestTargetConfig(name="unit"), TestTargetConfig(name=target_name)],
+        )
+    message = str(excinfo.value)
+    assert target_name in message, "the refusal must name the target it could not admit"
+    assert kind in message, f"the refusal must say the colliding group is {kind}"
+
+
+# Verifies: REQ-d00283-G
+def test_a_target_may_share_a_name_with_nothing_declared():
+    """The refusal is about a collision, not about the spelling of a name:
+    a group named `uat` and a target named `uat-api` sit together."""
+    cfg = TestScanningConfig(
+        groups={"uat": "needs a live backend"},
+        targets=[TestTargetConfig(name="uat-api", groups=["uat"])],
+    )
+    assert [t.name for t in cfg.targets] == ["uat-api"]
+
+
 # ---------------------------------------------------------------------------
 # H -- an undefined name in a selection
 # ---------------------------------------------------------------------------
@@ -238,10 +287,8 @@ def test_bad_group_declarations_are_refused(declared, culprit):
     "resolve",
     [
         lambda cfg: targets_in_groups(cfg, ["uta"]),
-        lambda cfg: selected_targets(cfg, None, ["uta"]),
         # An undefined name among defined ones is still refused.
         lambda cfg: targets_in_groups(cfg, ["uat", "uta"]),
-        lambda cfg: selected_targets(cfg, ["b"], ["uta"]),
     ],
 )
 def test_selecting_an_undefined_group_is_refused(resolve):
@@ -253,30 +300,101 @@ def test_selecting_an_undefined_group_is_refused(resolve):
     assert "uta" in str(excinfo.value), "the refusal must name the group it could not resolve"
 
 
+# Verifies: REQ-d00283-H
+@pytest.mark.parametrize(
+    "named,expected",
+    [
+        # Nothing here can resolve it, so it survives to be reported.
+        (["uta"], {"uta"}),
+        # Carried BESIDE the names that did resolve: the caller sees both what
+        # was asked for and what it could not account for.
+        (["b", "uta"], {"b", "uta"}),
+        (["uat", "uta"], {"b", "d", "uta"}),
+    ],
+)
+def test_an_unresolvable_name_is_carried_rather_than_dropped(named, expected):
+    """`selected_targets` does not refuse: it hands the name on. The caller
+    that runs targets is the one that knows the target vocabulary, and
+    resolving the name away here would turn its refusal into silence."""
+    assert selected_targets(_cfg(_DECLARED, _CLAIMS), named) == expected
+
+
 # ---------------------------------------------------------------------------
-# I -- two selectors together
+# E + I -- one list of names, unioned
 # ---------------------------------------------------------------------------
+
+
+# The shape the group model is really about: four targets across two groups,
+# one of them (`stress`) claiming nothing and so standing alone in `default`.
+_ALIAS_DECLARED = {"fast": "seconds, run on every change", "slow": "minutes"}
+_ALIAS_CLAIMS = {
+    "unit": ["fast"],
+    "e2e": ["slow"],
+    "browser": ["slow"],
+    "stress": [],
+}
+
+
+# Verifies: REQ-d00283-D+E+I
+@pytest.mark.parametrize(
+    "named,expected",
+    [
+        # D: naming nothing is the `default` group.
+        (None, {"stress"}),
+        # A bare target name still names one target.
+        (["unit"], {"unit"}),
+        # E: a group name stands for every target belonging to it.
+        (["slow"], {"browser", "e2e"}),
+        # I: a run executes everything it named. A target name beside a group
+        # name WIDENS -- the two are one vocabulary, not two filters.
+        (["unit", "slow"], {"browser", "e2e", "unit"}),
+        (["stress", "fast"], {"stress", "unit"}),
+        # `all` covers every configured target, which is a full run.
+        (["all"], None),
+    ],
+)
+def test_one_list_of_names_unions_targets_and_groups(named, expected):
+    assert selected_targets(_cfg(_ALIAS_DECLARED, _ALIAS_CLAIMS), named) == expected
 
 
 # Verifies: REQ-d00283-I
-def test_each_selector_narrows_the_other():
-    cfg = _cfg(_DECLARED, _CLAIMS)
-    by_target = {"a", "b"}
-    by_group = targets_in_groups(cfg, ["uat"])
-    assert by_group == {"b", "d"}
+def test_naming_a_target_already_inside_a_named_group_changes_nothing():
+    """A group is an alias, so naming one of its members alongside it is a
+    restatement -- not a narrowing of the group to that member."""
+    cfg = _cfg(_ALIAS_DECLARED, _ALIAS_CLAIMS)
 
-    both = selected_targets(cfg, sorted(by_target), ["uat"])
-
-    assert both == {"b"}
-    assert both < by_target and both < by_group, "stating both selectors must not widen either"
+    assert selected_targets(cfg, ["slow", "e2e"]) == selected_targets(cfg, ["slow"])
 
 
-# Verifies: REQ-d00283-I
-def test_selectors_that_share_no_target_name_nothing():
-    """An empty intersection is an empty selection -- not a full run."""
-    cfg = _cfg(_DECLARED, _CLAIMS)
+# Verifies: REQ-d00283-E
+def test_a_group_no_target_claims_selects_nothing_rather_than_everything():
+    """An empty selection must not read as `run everything`: a report over no
+    targets is not one whose targets all passed."""
+    cfg = _cfg(dict(_DECLARED, device="the device farm"), _CLAIMS)
 
-    both = selected_targets(cfg, ["a"], ["uat"])
+    selection = selected_targets(cfg, ["device"])
 
-    assert both == set()
-    assert both is not None, "an empty selection must not read as `run everything`"
+    assert selection == set()
+    assert selection is not None
+
+
+# ---------------------------------------------------------------------------
+# The group vocabulary a project admits
+# ---------------------------------------------------------------------------
+
+
+# Verifies: REQ-d00283-F+G
+def test_known_group_names_are_the_declared_ones_and_the_reserved_ones():
+    from elspais.config import known_group_names
+
+    cfg = _cfg(_ALIAS_DECLARED, _ALIAS_CLAIMS)
+
+    assert known_group_names(cfg) == {"fast", "slow"} | set(RESERVED_GROUPS)
+    # A project declaring nothing still admits the two reservations, which is
+    # what lets a bare project say `--targets all`.
+    assert known_group_names(_cfg(None, {"a": []})) == set(RESERVED_GROUPS)
+    # Published in the one spelling a selection is matched in: a declaration
+    # differing only in case is the same name, which is why G refuses two of
+    # them and why a run may write either.
+    declared_loudly = _cfg({" Slow ": "runs for over a minute"}, {"a": []})
+    assert known_group_names(declared_loudly) == {"slow"} | set(RESERVED_GROUPS)

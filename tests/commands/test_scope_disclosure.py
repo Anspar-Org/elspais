@@ -21,13 +21,18 @@ import io
 import json
 
 import pytest
+import tyro
 
+from elspais.cli import _to_namespace
 from elspais.commands import analysis_cmd, summary, trace
 from elspais.commands._scope import (
     resolve_scope_for_report,
     scope_disclosure,
+    scope_from_args,
     scope_params_from_args,
 )
+from elspais.commands.args import GlobalArgs
+from elspais.commands.report import parse_shared_args
 from elspais.commands.trace import REPORT_PRESETS, ReportPreset
 
 TABLE_FORMATS = ["markdown", "text", "csv", "html"]
@@ -339,3 +344,230 @@ class TestSummaryCsvDisclosesItsScope:
         assert not data["scope"]
         rows = list(csv.reader(io.StringIO(summary._render_csv(data, canonical_config))))
         assert rows[0][0] == "Level"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# A scope property accumulates across the ways a reader may spell it
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# Per REQ-d00278-C a scope admits any combination of the properties it selects
+# on and the values each property admits. A flag that kept only its last occurrence put
+# some of those combinations out of a reader's reach while looking like the whole
+# invocation had been read -- `--not-status Draft --not-status Active` selected
+# as though only `Active` had been named. REQ-d00279-C is the other half: the
+# tyro path (a section asked for alone) and the argparse path (a composed
+# report) must read ONE invocation into one scope.
+
+
+def _flat_args(**overrides) -> argparse.Namespace:
+    """An invocation carrying nothing, for one property to be named on."""
+    fields = {
+        "level": None,
+        "not_level": None,
+        "status": None,
+        "not_status": None,
+        "match_status_roles": False,
+        "scope": None,
+    }
+    fields.update(overrides)
+    return argparse.Namespace(**fields)
+
+
+# The four properties, each with the side of the scope it lands on and the name
+# the scope authority knows it by.
+SCOPE_FLAGS = [
+    ("level", "include", "level"),
+    ("not_level", "exclude", "level"),
+    ("status", "include", "status"),
+    ("not_status", "exclude", "status"),
+]
+
+
+def _selected(scope, side: str, prop: str):
+    assert scope is not None
+    return getattr(scope, side).get(prop)
+
+
+class TestAScopePropertyAccumulates:
+    """Reading one invocation's scope, whichever parser handed it over."""
+
+    # Verifies: REQ-d00278-C
+    @pytest.mark.parametrize("field,side,prop", SCOPE_FLAGS)
+    @pytest.mark.parametrize(
+        "raw,expected",
+        [
+            # The flag repeated: each occurrence arrives as its own list.
+            ([["Draft"], ["Active"]], ("Draft", "Active")),
+            # The values space-separated behind one flag.
+            ([["Draft", "Active"]], ("Draft", "Active")),
+            # Both at once.
+            ([["Draft"], ["Active", "Review"]], ("Draft", "Active", "Review")),
+            # The flat shape older callers and the argparse parser hand over.
+            (["Draft", "Active"], ("Draft", "Active")),
+            # A single value, however nested.
+            ([["Draft"]], ("Draft",)),
+            (["Draft"], ("Draft",)),
+        ],
+    )
+    def test_every_value_named_reaches_the_scope(self, field, side, prop, raw, expected):
+        """Each spelling of the same selection reaches the authority as one thing.
+
+        The values are asserted exactly rather than by count: a reading that
+        kept the inner lists whole would carry ``"['Draft']"`` -- a value no
+        requirement can ever carry -- and a count would not notice.
+        """
+        scope = scope_from_args(_flat_args(**{field: raw}))
+        assert _selected(scope, side, prop) == expected
+
+    # Verifies: REQ-d00278-C
+    @pytest.mark.parametrize("field,_side,_prop", SCOPE_FLAGS)
+    @pytest.mark.parametrize("raw", [None, [], [[]], [""], [[" "]]])
+    def test_a_property_named_with_nothing_selects_nothing(self, field, _side, _prop, raw):
+        assert scope_from_args(_flat_args(**{field: raw})) is None
+
+    # Verifies: REQ-d00278-C, REQ-d00279-C
+    @pytest.mark.parametrize("field,side,prop", SCOPE_FLAGS)
+    def test_the_two_parsers_read_one_invocation_alike(self, field, side, prop):
+        """The tyro path and the composed-report path, on the same argv.
+
+        This is the REQ-d00279-C parity point at the level of the scope itself:
+        one invocation, two parsers, and one selection.
+        """
+        flag = "--" + field.replace("_", "-")
+        repeated = [flag, "Draft", flag, "Active"]
+        spaced = [flag, "Draft", "Active"]
+
+        for argv in (repeated, spaced):
+            tyro_scope = scope_from_args(_to_namespace(tyro.cli(GlobalArgs, args=["gaps", *argv])))
+            argparse_scope = scope_from_args(parse_shared_args(argv))
+            assert _selected(tyro_scope, side, prop) == ("Draft", "Active"), argv
+            assert tyro_scope == argparse_scope, argv
+
+    # Verifies: REQ-d00278-C
+    @pytest.mark.parametrize("field,side,prop", SCOPE_FLAGS)
+    def test_the_repeated_and_the_space_separated_spelling_agree(self, field, side, prop):
+        """Two spellings of one selection, read through the real CLI path.
+
+        ``_to_namespace`` is what production hands ``scope_from_args``, so the
+        conversion is inside the test rather than assumed transparent.
+        """
+        flag = "--" + field.replace("_", "-")
+        repeated = _to_namespace(tyro.cli(GlobalArgs, args=["gaps", flag, "Draft", flag, "Active"]))
+        spaced = _to_namespace(tyro.cli(GlobalArgs, args=["gaps", flag, "Draft", "Active"]))
+        assert scope_from_args(repeated) == scope_from_args(spaced)
+        assert _selected(scope_from_args(repeated), side, prop) == ("Draft", "Active")
+
+
+class TestOneGathererReadsEveryRepeatedFlag:
+    """``flag_values`` is the one place a repeated flag becomes the one list it
+    names, and it serves every accumulating flag rather than the scope
+    properties alone -- so a reader who has learned how one flag reads has
+    learned how they all do. Reading it per flag is how ``--not-status`` came
+    to accumulate while ``--treat-active`` kept its last occurrence.
+    """
+
+    # Verifies: REQ-d00278-C
+    @pytest.mark.parametrize(
+        "raw,expected",
+        [
+            # The flag repeated: each occurrence arrives as its own list.
+            ([["Draft"], ["Active"]], ("Draft", "Active")),
+            # The values space-separated behind one flag.
+            ([["Draft", "Active"]], ("Draft", "Active")),
+            # Both at once, in the order the invocation named them.
+            ([["Draft"], ["Active", "Review"]], ("Draft", "Active", "Review")),
+            # The flat shape the composed report's argparse parser produces.
+            (["Draft", "Active"], ("Draft", "Active")),
+            # A bare string, which a caller assembling a namespace may hand
+            # over -- read as one value, never as its characters.
+            ("Draft", ("Draft",)),
+        ],
+    )
+    def test_every_value_named_is_gathered_whatever_the_shape(self, raw, expected):
+        from elspais.commands._scope import flag_values
+
+        assert flag_values(argparse.Namespace(anything=raw), "anything") == expected
+
+    # Verifies: REQ-d00278-C
+    @pytest.mark.parametrize("raw", [None, [], [[]], [""], [[" "]], ""])
+    def test_a_flag_named_with_nothing_gathers_nothing(self, raw):
+        """An empty value is not a value: gathered, it would select on a status
+        no requirement carries and quietly empty the report."""
+        from elspais.commands._scope import flag_values
+
+        assert flag_values(argparse.Namespace(anything=raw), "anything") == ()
+
+    # Verifies: REQ-d00278-C
+    def test_a_flag_the_invocation_never_named_gathers_nothing(self):
+        from elspais.commands._scope import flag_values
+
+        assert flag_values(argparse.Namespace(), "absent") == ()
+
+
+class TestAccumulationIsObservableInTheSelection:
+    """The defect stated as the reader met it: a set of requirements.
+
+    The canonical estate carries PRD, OPS and DEV requirements and no status
+    other than Active, so ``--not-level`` is where the two spellings can be told
+    apart by what they select.
+    """
+
+    def _ids(self, graph, config, argv):
+        return resolve_scope_for_report(
+            graph, _to_namespace(tyro.cli(GlobalArgs, args=["gaps", *argv])), config
+        ).ids
+
+    # Verifies: REQ-d00278-C
+    def test_repeating_an_exclusion_excludes_both_levels(
+        self, canonical_federated_graph, canonical_config
+    ):
+        """Naming a second level to refuse must narrow the set, not replace the
+        refusal with it -- the shape of the reported defect."""
+        both = self._ids(
+            canonical_federated_graph,
+            canonical_config,
+            ["--not-level", "ops", "--not-level", "dev"],
+        )
+        last_only = self._ids(canonical_federated_graph, canonical_config, ["--not-level", "dev"])
+        assert both < last_only, (
+            "the repeated exclusion selected as though only its last occurrence "
+            f"had been read: {sorted(both)} vs {sorted(last_only)}"
+        )
+
+    # Verifies: REQ-d00279-C
+    def test_both_spellings_select_the_same_requirements(
+        self, canonical_federated_graph, canonical_config
+    ):
+        repeated = self._ids(
+            canonical_federated_graph,
+            canonical_config,
+            ["--not-level", "ops", "--not-level", "dev"],
+        )
+        spaced = self._ids(
+            canonical_federated_graph, canonical_config, ["--not-level", "ops", "dev"]
+        )
+        assert repeated == spaced
+
+    # Verifies: REQ-d00278-C
+    def test_repeating_an_inclusion_widens_the_set(
+        self, canonical_federated_graph, canonical_config
+    ):
+        both = self._ids(
+            canonical_federated_graph, canonical_config, ["--level", "prd", "--level", "ops"]
+        )
+        last_only = self._ids(canonical_federated_graph, canonical_config, ["--level", "ops"])
+        assert last_only < both
+        assert both == self._ids(
+            canonical_federated_graph, canonical_config, ["--level", "prd", "ops"]
+        )
+
+    # Verifies: REQ-d00279-C
+    def test_the_composed_report_path_selects_the_same_requirements(
+        self, canonical_federated_graph, canonical_config
+    ):
+        """A composed report reads the repeated flag the way a lone section does."""
+        argv = ["--not-level", "ops", "--not-level", "dev"]
+        composed = resolve_scope_for_report(
+            canonical_federated_graph, parse_shared_args(argv), canonical_config
+        ).ids
+        assert composed == self._ids(canonical_federated_graph, canonical_config, argv)

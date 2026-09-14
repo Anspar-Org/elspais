@@ -2719,10 +2719,12 @@ def run_spec_checks(
 # =============================================================================
 
 
+# Implements: REQ-d00258-Q
 def _status_flags(args: argparse.Namespace) -> set[str]:
     """Title-cased set of statuses named via ``--treat-active`` (empty when unset)."""
-    raw: list[str] | None = getattr(args, "treat_active", None)
-    return {s.title() for s in raw} if raw else set()
+    from elspais.commands._scope import flag_values
+
+    return {s.title() for s in flag_values(args, "treat_active")}
 
 
 def _config_with_status_overlay(
@@ -4854,14 +4856,24 @@ def run(args: argparse.Namespace) -> int:
             return 2
         # _validate_config is defined in this module (health.py near line 35).
         cfg = _validate_config(cfg_dict)
-        selected = getattr(args, "targets", None)
+        from elspais.commands._scope import flag_values
+
+        selected = list(flag_values(args, "targets"))
         target_names = {t.name for t in cfg.scanning.test.targets}
         if selected:
-            unknown = sorted(set(selected) - target_names)
+            # Implements: REQ-d00283-H
+            # A name is a target's or a group's -- one namespace, kept apart at
+            # config-read time (REQ-d00283-G) -- and a name that is neither is
+            # refused rather than resolved to nothing.
+            from elspais.config import known_group_names, unknown_target_names
+
+            groups = known_group_names(cfg)
+            unknown = unknown_target_names(cfg, selected)
             if unknown:
                 print(
                     f"error: unknown --targets: {', '.join(unknown)}. "
-                    f"Configured targets: {', '.join(sorted(target_names))}.",
+                    f"Configured targets: {', '.join(sorted(target_names))}. "
+                    f"Known groups: {', '.join(sorted(groups))}.",
                     file=sys.stderr,
                 )
                 return 2
@@ -4871,7 +4883,7 @@ def run(args: argparse.Namespace) -> int:
         from elspais.config import selected_targets
 
         try:
-            only = selected_targets(cfg, selected or None, getattr(args, "groups", None) or None)
+            only = selected_targets(cfg, selected or None)
         except ValueError as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 2
@@ -4882,7 +4894,7 @@ def run(args: argparse.Namespace) -> int:
             print(
                 "error: --run-tests requires at least one "
                 "[[scanning.test.targets]] entry with a command field "
-                "(within the selected --targets/--groups when given; a run "
+                "(within the selected --targets when given; a run "
                 "naming neither executes the `default` group). "
                 "See docs/cli/test-targets.md for configuration examples.",
                 file=sys.stderr,
@@ -4918,7 +4930,9 @@ def run(args: argparse.Namespace) -> int:
         params["terms_only"] = "true"
     if getattr(args, "lenient", False):
         params["lenient"] = "true"
-    treat_active = getattr(args, "treat_active", None)
+    from elspais.commands._scope import flag_values
+
+    treat_active = flag_values(args, "treat_active")
     if treat_active:
         params["treat_active"] = ",".join(treat_active)
 
@@ -5133,9 +5147,14 @@ class FindingFilter:
 
     @classmethod
     def from_args(cls, args: argparse.Namespace) -> FindingFilter:
+        # A field repeated across occurrences of its flag is gathered by the one
+        # gatherer (`_scope.flag_values`), not re-flattened here: one spelling
+        # rule holds across every accumulating flag, and a second implementation
+        # is how two of them start disagreeing.
+        from elspais.commands._scope import flag_values
+
         def _get(name: str) -> tuple[str, ...]:
-            value = getattr(args, name, None)
-            return tuple(value) if value else ()
+            return flag_values(args, name)
 
         return cls(
             severities=_get("severity"),
@@ -5377,7 +5396,9 @@ def _format_report(
 
     # Build active flags summary from args
     flag_parts: list[str] = []
-    treat_active_list = getattr(args, "treat_active", None)
+    from elspais.commands._scope import flag_values
+
+    treat_active_list = flag_values(args, "treat_active")
     if treat_active_list:
         flag_parts.append("--treat-active " + " ".join(treat_active_list))
     if getattr(args, "lenient", False):

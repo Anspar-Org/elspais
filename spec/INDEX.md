@@ -30,7 +30,7 @@
 | REQ-p00081 | Org-Wide Requirement Visibility                  | prd-features.md | 17fa4417 |
 | REQ-p00082 | Federated Authority and Verdict Scoping          | prd-features.md | b511fcfd |
 | REQ-p00083 | Durability of Uncommitted Work                   | prd-core.md     | 80cf3ca1 |
-| REQ-p00084 | Audience-Scoped Reporting                        | prd-core.md     | 199562bd |
+| REQ-p00084 | Audience-Scoped Reporting                        | prd-core.md     | 168b514c |
 
 ### elspais
 
@@ -174,7 +174,7 @@
 | REQ-d00255 | Test-to-Journey UAT Verification                              | dev-graph-core.md       | ab5cb648 |
 | REQ-d00256 | Step-Level UAT Verification                                   | dev-graph-core.md       | 8bf40a7c |
 | REQ-d00257 | UAT-Scoped Traceability Report                                | dev-graph-core.md       | 1ea68210 |
-| REQ-d00258 | Reporting Surface Consistency                                 | dev-graph-core.md       | 15129897 |
+| REQ-d00258 | Reporting Surface Consistency                                 | dev-graph-core.md       | a12fe185 |
 | REQ-d00259 | Requirement Format Reference Command                          | dev-cli.md              | c3b67490 |
 | REQ-d00260 | Workspace Registry and Federated View Assembly                | dev-graph-federation.md | 510a0f67 |
 | REQ-d00261 | Federation Role Model                                         | dev-graph-federation.md | fb8db8a9 |
@@ -195,10 +195,10 @@
 | REQ-d00277 | Coverage Dimensions                                           | dev-graph-core.md       | b097dcd7 |
 | REQ-d00278 | Report Scope Selection Vocabulary                             | dev-cli.md              | ef2221cc |
 | REQ-d00279 | One Authority for Report Scope Membership                     | dev-cli.md              | 2b755b50 |
-| REQ-d00280 | Named Report Declarations                                     | dev-cli.md              | ab0a70bb |
+| REQ-d00280 | Named Report Declarations                                     | dev-cli.md              | 321c6f4f |
 | REQ-d00281 | Level Vocabulary of a Reported Graph                          | dev-graph-core.md       | 4bde246d |
-| REQ-d00282 | Report Value Selection                                        | dev-cli.md              | 70ab39ac |
-| REQ-d00283 | Test Target Groups                                            | dev-graph-core.md       | bc95d36b |
+| REQ-d00282 | Report Value Selection                                        | dev-cli.md              | bf98248c |
+| REQ-d00283 | Test Target Groups                                            | dev-graph-core.md       | edcd4d69 |
 | REQ-d00284 | How a Result Names Its Test                                   | dev-graph-core.md       | 7baae0b0 |
 | REQ-d00285 | The Shape of a Finding                                        | dev-cli.md              | bedec247 |
 | REQ-d00286 | Built-In User Documentation                                   | dev-cli.md              | d246f21a |

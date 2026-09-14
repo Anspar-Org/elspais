@@ -918,6 +918,12 @@ namespace = "REQ"
 
 [scanning.spec]
 directories = ["spec"]
+
+[[scanning.test.targets]]
+name = "a"
+
+[[scanning.test.targets]]
+name = "b"
 """,
             encoding="utf-8",
         )
@@ -1009,6 +1015,7 @@ directories = ["spec"]
 
 [scanning.test.groups]
 uat = "needs a live backend"
+slow = "runs for over a minute"
 
 [[scanning.test.targets]]
 name = "a"
@@ -1016,6 +1023,10 @@ name = "a"
 [[scanning.test.targets]]
 name = "b"
 groups = ["uat"]
+
+[[scanning.test.targets]]
+name = "c"
+groups = ["slow"]
 """,
             encoding="utf-8",
         )
@@ -1037,19 +1048,24 @@ groups = ["uat"]
 
     # Verifies: REQ-d00283-E+I
     @pytest.mark.parametrize(
-        "targets,groups,expected",
+        "targets,expected",
         [
-            # A group selection resolves to the targets claiming it.
-            (None, ["uat"], {"b"}),
-            # Each selector narrows: `a` is not in `uat`, so nothing is fresh.
-            (["a"], ["uat"], set()),
-            (["a", "b"], ["uat"], {"b"}),
+            # A group name resolves to the targets claiming it.
+            (["uat"], {"b"}),
+            # A bare target name still names one target.
+            (["a"], {"a"}),
+            # One vocabulary, unioned: a target name beside a group name marks
+            # both, rather than narrowing the group to that target.
+            (["a", "uat"], {"a", "b"}),
+            (["uat", "slow"], {"b", "c"}),
+            # Repeated flags accumulate into the one list the selection reads.
+            ([["a"], ["uat"]], {"a", "b"}),
         ],
     )
-    def test_summary_groups_thread_resolved_set_into_build_graph(
-        self, tmp_path, monkeypatch, targets, groups, expected
+    def test_summary_targets_thread_the_resolved_set_into_build_graph(
+        self, tmp_path, monkeypatch, targets, expected
     ):
-        """--groups resolves through the group model before reaching the graph."""
+        """--targets resolves through the group model before reaching the graph."""
         import argparse
 
         from elspais.commands import summary
@@ -1059,7 +1075,6 @@ groups = ["uat"]
 
         args = argparse.Namespace(
             targets=targets,
-            groups=groups,
             format="json",
             config=config_path,
             spec_dir=None,
@@ -1096,7 +1111,6 @@ groups = ["uat"]
 
         args = argparse.Namespace(
             targets=None,
-            groups=None,
             format="json",
             config=config_path,
             spec_dir=None,
@@ -1126,8 +1140,7 @@ groups = ["uat"]
         monkeypatch.setattr("elspais.commands._engine.call", fake_engine_call)
 
         args = argparse.Namespace(
-            targets=None,
-            groups=["all"],
+            targets=["all"],
             format="json",
             config=config_path,
             spec_dir=None,
@@ -1138,8 +1151,11 @@ groups = ["uat"]
         assert "fresh_targets" not in built, "a full run marks no fresh subset"
 
     # Verifies: REQ-d00283-H
-    def test_summary_unknown_group_is_refused(self, tmp_path, monkeypatch, capsys):
-        """A selection naming an undefined group produces no report at all."""
+    def test_summary_unknown_name_is_refused(self, tmp_path, monkeypatch, capsys):
+        """A selection naming neither a configured target nor a group the
+        project admits produces no report at all -- refused rather than
+        resolved to nothing, because a report marking a target that does not
+        exist as freshly-run cannot be told from one that is honest."""
         import argparse
 
         from elspais.commands import summary
@@ -1148,8 +1164,7 @@ groups = ["uat"]
         captured = self._spy_build_graph(monkeypatch)
 
         args = argparse.Namespace(
-            targets=None,
-            groups=["uta"],
+            targets=["uta"],
             format="json",
             config=config_path,
             spec_dir=None,

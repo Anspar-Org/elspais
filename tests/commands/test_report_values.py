@@ -421,13 +421,41 @@ class TestARefusedReportProducesNothing:
 
     # Verifies: REQ-d00282-F
     def test_a_composed_report_refuses_a_section_that_states_no_values(self, tmp_path, capsys):
-        """`gaps` lists what is missing rather than tabulating facts, so a
-        selection reaching it is one the composed report cannot honour."""
+        """`checks` reports findings about the project rather than anything
+        about a requirement, so a selection reaching it is one the composed
+        report cannot honour even in part."""
         out = tmp_path / "report.txt"
-        code = report_cmd.run(["summary", "gaps"], ["--values", "tested", "-o", str(out)])
+        assert "checks" not in report_cmd.VALUE_SECTIONS
+        code = report_cmd.run(["summary", "checks"], ["--values", "tested", "-o", str(out)])
         assert code != 0
         assert not out.exists()
-        assert "gaps" in capsys.readouterr().err
+        assert "checks" in capsys.readouterr().err
+
+    # Verifies: REQ-d00282-O
+    def test_a_composed_shortfall_listing_is_narrowed_rather_than_refused(self, tmp_path):
+        """A shortfall listing reads a dimension, so it offers that dimension:
+        the selection says which listings appear rather than making the
+        composition unassemblable."""
+        out = tmp_path / "report.txt"
+        report_cmd.run(["summary", "gaps"], ["--values", "tested", "-o", str(out)])
+        assert out.exists(), "a selection a section OFFERS stopped the report"
+        text = out.read_text()
+        assert "UNTESTED" in text
+        assert "UNCOVERED" not in text
+        assert "UNVALIDATED" not in text
+        assert "FAILING" not in text
+
+    # Verifies: REQ-d00282-F, REQ-d00282-O
+    def test_a_composed_shorthand_refuses_a_value_it_does_not_offer(self, tmp_path, capsys):
+        """`uncovered` offers the one dimension it IS, composed exactly as it
+        does alone."""
+        out = tmp_path / "report.txt"
+        code = report_cmd.run(["summary", "uncovered"], ["--values", "tested", "-o", str(out)])
+        assert code != 0
+        assert not out.exists()
+        err = capsys.readouterr().err
+        assert "uncovered" in err, err
+        assert "implemented" in err, err
 
     # Verifies: REQ-d00282-F
     def test_a_composed_report_is_produced_when_every_section_honours_it(self, tmp_path):
@@ -451,28 +479,49 @@ class TestARefusedReportProducesNothing:
 
 
 class TestOnlyReportsThatStateValuesOfferTheFlag:
-    # Verifies: REQ-d00282-A+F
+    # Verifies: REQ-d00282-O
     @pytest.mark.parametrize(
         "args_class",
-        (
-            "GapsArgs",
-            "UncoveredArgs",
-            "UntestedArgs",
-            "UnvalidatedArgs",
-            "FailingArgs",
-            "AnalysisArgs",
-        ),
+        ("GapsArgs", "UncoveredArgs", "UntestedArgs", "UnvalidatedArgs", "FailingArgs"),
     )
-    def test_a_gap_listing_does_not_accept_a_value_selection(self, args_class):
-        """These emit lists of what is missing, not tables of facts about
-        requirements. They share the SCOPE vocabulary and not this one."""
+    def test_a_shortfall_listing_accepts_a_value_selection(self, args_class):
+        """Each of these lists what one dimension has not credited, so it
+        offers that dimension: the selection says which listings appear."""
         import dataclasses
 
         from elspais.commands import args as args_mod
 
         fields = {f.name for f in dataclasses.fields(getattr(args_mod, args_class))}
+        assert "values" in fields
+        assert "level" in fields, "the scope axis is shared and stays shared"
+
+    # Verifies: REQ-d00282-A+F
+    def test_a_report_stating_nothing_about_a_requirement_does_not_offer_the_flag(self):
+        """`analysis` ranks requirements against each other rather than
+        stating a value about any one of them, so there is nothing to select
+        among. It shares the SCOPE vocabulary and not this one."""
+        import dataclasses
+
+        from elspais.commands import args as args_mod
+
+        fields = {f.name for f in dataclasses.fields(args_mod.AnalysisArgs)}
         assert "values" not in fields
         assert "level" in fields, "the scope axis is shared and stays shared"
+
+    # Verifies: REQ-d00282-O
+    def test_a_shorthand_offers_its_one_dimension_and_the_whole_report_offers_four(self):
+        """Where a section's offer is declared, so `uncovered --values tested`
+        is refused rather than quietly becoming `untested`."""
+        assert report_cmd._offered_by("uncovered") == ("implemented",)
+        assert report_cmd._offered_by("untested") == ("tested",)
+        assert report_cmd._offered_by("unvalidated") == ("uat_coverage",)
+        assert report_cmd._offered_by("failing") == ("verified",)
+        assert report_cmd._offered_by("gaps") == (
+            "implemented",
+            "tested",
+            "uat_coverage",
+            "verified",
+        )
 
     # Verifies: REQ-d00282-A
     @pytest.mark.parametrize("args_class", ("TraceArgs", "SummaryArgs"))
@@ -1289,6 +1338,87 @@ class TestADeclaredScopeCarriesItsValues:
 
 
 # ---------------------------------------------------------------------------
+# REQ-d00280-D: where a name a report does not offer came from decides its fate
+# ---------------------------------------------------------------------------
+
+
+class TestAnUnofferedNameIsReadByWhereItCameFrom:
+    """Nothing but provenance tells the two selections apart.
+
+    A reader WRITES a selection for the report in front of them, so a name that
+    report does not offer is a mistake and REQ-d00282-F wants no report
+    produced under it. A project DECLARES one for a whole audience and every
+    report that audience takes -- and those reports offer different values
+    because they answer different questions -- so a name one of them does not
+    offer passes over. The two arrive at ``resolve_values`` as the same keys in
+    the same order; only ``written`` separates them.
+    """
+
+    # The offer of a report that states facts about each requirement, and a
+    # selection naming two of them with one it does not offer in between.
+    OFFERED = ("implemented", "tested", "verified")
+    ASKED = ("tested", "code_tested", "implemented")
+
+    # Verifies: REQ-d00280-D, REQ-d00282-K
+    def test_a_declared_name_passes_over_and_the_rest_still_selects(self):
+        """The order is the selection's own, not the offer's: `tested` was
+        named first and is stated first, so the pass-over cannot have been
+        implemented by intersecting with the offer."""
+        from elspais.graph.values import ValueSelection, resolve_values
+
+        stated = resolve_values(
+            ValueSelection(keys=self.ASKED, written=False), self.OFFERED, identity_key=""
+        )
+        assert stated == ("tested", "implemented")
+
+    # Verifies: REQ-d00280-D, REQ-d00282-F
+    def test_the_same_selection_written_by_a_reader_is_refused(self):
+        """Same keys, same order, same offer -- and no report at all."""
+        from elspais.graph.values import UnofferedValues, ValueSelection, resolve_values
+
+        with pytest.raises(UnofferedValues) as excinfo:
+            resolve_values(
+                ValueSelection(keys=self.ASKED, written=True), self.OFFERED, identity_key=""
+            )
+        assert excinfo.value.unoffered == ("code_tested",)
+
+    # Verifies: REQ-d00280-D
+    def test_a_declaration_this_report_offers_nothing_of_narrows_nothing(self):
+        """An empty intersection is not an empty report: a declaration none of
+        whose values this report offers leaves it stating what it would have
+        anyway. Returning nothing would make a name usable beside one report
+        and blanking beside another."""
+        from elspais.graph.values import ValueSelection, resolve_values
+
+        stated = resolve_values(
+            ValueSelection(keys=("code_tested",), written=False), self.OFFERED, identity_key=""
+        )
+        assert stated == self.OFFERED
+
+    # Verifies: REQ-d00280-D, REQ-d00282-I
+    @pytest.mark.parametrize(
+        ("values", "scope", "keys", "written"),
+        (
+            # Declared under a name: the project's, read against every report.
+            pytest.param(None, "overview", ("tested",), False, id="declared"),
+            # Written on the invocation: the reader's, about this report.
+            pytest.param("implemented", None, ("implemented",), True, id="written"),
+            # Written alongside a declaration: it REPLACES the declaration, and
+            # what replaces it is still the reader's.
+            pytest.param("implemented", "overview", ("implemented",), True, id="written-over"),
+        ),
+    )
+    def test_the_selection_records_which_route_it_arrived_by(self, values, scope, keys, written):
+        from elspais.commands._values import values_from_args
+
+        config = {"scopes": {"overview": {"level": ["prd"], "values": ["tested"]}}}
+        selection = values_from_args(argparse.Namespace(values=values, scope=scope), config)
+        assert selection is not None
+        assert selection.keys == keys
+        assert selection.written is written
+
+
+# ---------------------------------------------------------------------------
 # REQ-d00282-N: a figure measured in lines decomposes too
 # ---------------------------------------------------------------------------
 
@@ -1570,14 +1700,14 @@ class TestALineFigureSurvivesAnAssertionLessGroup:
 
 
 # ---------------------------------------------------------------------------
-# REQ-d00282-F: a report that states no values is not produced under a
-# selection of values either
+# REQ-d00282-F+O: which reports a selection reaches, and what it does there
 # ---------------------------------------------------------------------------
 
 
 # One declaration carries both halves of what an audience reads (REQ-d00280-C),
-# so a name carrying values reaches the listings that state none. The two names
-# differ in that half alone: the requirements they select are identical.
+# so a name carrying values reaches every report that has values to select
+# among. The two names differ in that half alone: the requirements they select
+# are identical.
 _SCOPED_PROJECT = """\
 version = 5
 
@@ -1591,6 +1721,14 @@ values = ["tested", "implemented"]
 
 [scopes.plain]
 level = ["prd"]
+
+[scopes.partial]
+level = ["prd"]
+values = ["code_tested", "tested"]
+
+[scopes.lines]
+level = ["prd"]
+values = ["code_tested"]
 """
 
 
@@ -1606,85 +1744,217 @@ class _Computed(Exception):
     """Raised in place of computing a report, so reaching the compute path is
     an observation rather than a slow build."""
 
+    def __init__(self, params):
+        super().__init__("compute reached")
+        self.params = params
+
 
 @pytest.fixture
 def no_compute(monkeypatch):
-    """Nothing is built or asked of a serving process behind this fixture."""
+    """Nothing is built or asked of a serving process behind this fixture.
 
-    def refuse(*_args, **_kwargs):
-        raise _Computed
+    The parameters the command was about to compute with are carried out on
+    the exception, so a test can read what a selection actually became without
+    building a graph.
+    """
+
+    def refuse(_endpoint, params, *_args, **_kwargs):
+        raise _Computed(dict(params))
 
     monkeypatch.setattr("elspais.commands._engine.call", refuse)
 
 
-def _run_listing(command: str, config, scope: str) -> int:
-    """One of the value-silent reports, asked for alone under a declared name."""
+def _run_listing(command: str, config, scope=None, values=None) -> int:
+    """One of these reports, asked for alone under a declared name or a
+    written selection."""
     from elspais.commands import analysis_cmd
     from elspais.commands import gaps as gaps_cmd
 
     if command == "analysis":
         return analysis_cmd.run(
-            argparse.Namespace(config=config, scope=scope, format="table", show="all", top=10)
+            argparse.Namespace(
+                config=config,
+                scope=scope,
+                values=values,
+                format="table",
+                show="all",
+                top=10,
+            )
         )
     return gaps_cmd.run(
-        argparse.Namespace(command=command, config=config, scope=scope, format="text")
+        argparse.Namespace(
+            command=command, config=config, scope=scope, values=values, format="text"
+        )
     )
 
 
-class TestAValueSilentReportIsNotProducedUnderAValueSelection:
-    """These reports list which requirements are missing something; they state
-    no facts about each one. A selection of values reaching one of them names
-    nothing it offers, so there is no part of it the report could honour -- and
-    REQ-d00282-F's disposition for a selection honoured in part is that no
+class TestAReportStatingNothingIsNotProducedUnderAWrittenSelection:
+    """A report either states a value about each requirement, or lists the
+    requirements one dimension has not credited -- and both read a dimension,
+    so both have values to select among (REQ-d00282-O). A few report neither.
+    A value WRITTEN to one of those names nothing it offers, and REQ-d00282-F's
+    disposition for a selection that cannot be honoured at all is that no
     report is produced, not that one is produced with a caveat beside it.
     """
 
-    # Verifies: REQ-d00282-F, REQ-d00280-C
-    @pytest.mark.parametrize(
-        "command", ("gaps", "uncovered", "untested", "unvalidated", "failing", "analysis")
-    )
-    def test_a_declaration_naming_values_stops_the_listing(
-        self, command, scoped_project, no_compute, capsys
+    # Verifies: REQ-d00282-F
+    def test_a_written_selection_stops_a_report_that_states_nothing(
+        self, scoped_project, no_compute, capsys
     ):
-        """The values half of the declaration is refused, and the refusal lands
-        before anything is computed: a report already assembled has been
-        produced under the selection whatever is printed afterwards.
-
-        The same invocation under the declaration that names no values is NOT
-        refused -- it reaches the compute path -- so the refusal is answering
-        the values and not the name.
-        """
+        """The refusal lands before anything is computed: a report already
+        assembled has been produced under the selection whatever is printed
+        afterwards. The same invocation without the selection is NOT refused --
+        it reaches the compute path -- so the refusal answers the values."""
         try:
-            code = _run_listing(command, scoped_project, "overview")
+            code = _run_listing("analysis", scoped_project, values="implemented")
         except _Computed:
-            pytest.fail(f"'{command}' computed a report under a selection it cannot honour")
+            pytest.fail("'analysis' computed a report under a selection it cannot honour")
         assert code == 1
         err = capsys.readouterr().err
-        assert "overview" in err, err
-        assert command in err, err
+        assert "analysis" in err, err
+        assert "--values" in err, err
 
         with pytest.raises(_Computed):
-            _run_listing(command, scoped_project, "plain")
+            _run_listing("analysis", scoped_project)
 
-    # Verifies: REQ-d00282-F, REQ-d00279-C, REQ-d00085-D
-    def test_composing_the_section_and_asking_for_it_alone_refuse_alike(
-        self, scoped_project, tmp_path, no_compute, capsys
+    # Verifies: REQ-d00282-F, REQ-d00280-C
+    def test_a_declaration_passes_over_a_report_with_nothing_to_select(
+        self, scoped_project, no_compute, capsys
     ):
+        """One name carries what a whole audience reads, so the values half of
+        a declaration constrains the reports that have values to select among
+        and passes over the ones that do not. A declaration usable with `trace`
+        but not beside `analysis` would be unusable for the audience it
+        describes."""
+        with pytest.raises(_Computed):
+            _run_listing("analysis", scoped_project, scope="overview")
+        assert "overview" not in capsys.readouterr().err
+
+
+class TestADeclarationNarrowsAShortfallListing:
+    """A shortfall listing reads a coverage dimension, so a declaration naming
+    dimensions says which listings appear rather than stopping the report
+    (REQ-d00282-O).
+    """
+
+    # Verifies: REQ-d00282-O, REQ-d00280-C
+    def test_the_declared_values_choose_the_listings_and_their_order(
+        self, scoped_project, no_compute
+    ):
+        """`overview` declares tested then implemented, so the untested
+        listing comes before the uncovered one (REQ-d00282-K)."""
+        from elspais.commands.gaps import gap_sections
+
+        with pytest.raises(_Computed):
+            _run_listing("gaps", scoped_project, scope="overview")
+
+        args = argparse.Namespace(values=None, scope="overview")
+        config = {"scopes": {"overview": {"level": ["prd"], "values": ["tested", "implemented"]}}}
+        assert gap_sections(args, "gaps", config) == ["untested", "uncovered"]
+
+    # Verifies: REQ-d00282-E, REQ-d00280-C
+    def test_the_declared_values_travel_to_the_compute_path(self, scoped_project, no_compute):
+        """A selection that did not survive the trip makes a daemon-served
+        report hold different listings from a locally computed one."""
+        from elspais.commands.gaps import gap_sections
+
+        with pytest.raises(_Computed) as excinfo:
+            _run_listing("gaps", scoped_project, scope="overview")
+        params = excinfo.value.params
+        assert params["values"] == "tested,implemented"
+        assert params["command"] == "gaps"
+        assert gap_sections(params, params["command"], {}) == ["untested", "uncovered"]
+
+    # Verifies: REQ-d00280-D, REQ-d00282-O
+    @pytest.mark.parametrize(
+        ("command", "passed_over", "stated"),
+        (
+            # Part of the declaration is offered here: the rest passes over and
+            # what remains still chooses the listing.
+            pytest.param("uncovered", "tested", "implemented", id="uncovered-keeps-implemented"),
+            pytest.param("untested", "implemented", "tested", id="untested-keeps-tested"),
+            # None of it is offered here, so the declaration narrows nothing
+            # and the report states what it would have anyway.
+            pytest.param("unvalidated", "tested", "uat_coverage", id="unvalidated-falls-back"),
+            pytest.param("failing", "tested", "verified", id="failing-falls-back"),
+        ),
+    )
+    def test_a_declaration_naming_a_value_a_shorthand_does_not_offer_passes_it_over(
+        self, scoped_project, no_compute, capsys, command, passed_over, stated
+    ):
+        """One name answers for a whole audience, so a value one of that
+        audience's reports does not offer is an ordinary difference between
+        reports rather than a mistake (REQ-d00280-D).
+
+        `overview` names tested and implemented; each shorthand offers the one
+        dimension it IS. Refusing would have made the declaration usable beside
+        `gaps` and not beside `uncovered` -- a name a project cannot commit for
+        its audience, which is the drift a declaration exists to end. The
+        report is observed at the compute path rather than by its exit code: a
+        command that refused would never reach it.
+        """
+        with pytest.raises(_Computed) as excinfo:
+            _run_listing(command, scoped_project, scope="overview")
+
+        # What survived is the one value this report offers, whether the rest
+        # of the declaration passed over it or none of it applied at all.
+        assert excinfo.value.params["values"] == stated
+        assert passed_over not in excinfo.value.params["values"]
+        assert capsys.readouterr().err == ""
+
+    # Verifies: REQ-d00280-D, REQ-d00282-F
+    def test_a_value_the_reader_wrote_is_still_refused(self, scoped_project, no_compute, capsys):
+        """The provenance is the whole of the difference. The same name a
+        declaration passes over is, written here for this report, a mistake --
+        so the pass-over must not have retired F's refusal along with it."""
+        try:
+            code = _run_listing("uncovered", scoped_project, values="tested")
+        except _Computed:
+            pytest.fail("'uncovered' computed a report under a value it does not offer")
+        assert code == 1
+        err = capsys.readouterr().err
+        assert "tested" in err and "implemented" in err, err
+
+    # Verifies: REQ-d00280-D, REQ-d00282-E
+    @pytest.mark.parametrize(
+        ("scope", "expected"),
+        (
+            # `partial` names one value `gaps` offers and one it does not.
+            pytest.param("partial", "tested", id="partly-offered"),
+            # `lines` names nothing `gaps` offers, so it narrows nothing.
+            pytest.param(
+                "lines", "implemented,tested,uat_coverage,verified", id="wholly-unoffered"
+            ),
+        ),
+    )
+    def test_what_travels_is_the_selection_as_resolved_not_as_declared(
+        self, scoped_project, no_compute, scope, expected
+    ):
+        """A compute path handed the raw declaration would judge it a second
+        time, with no way to know a project had declared it -- and `code_tested`
+        is a value `gaps` does not offer, so it would refuse there what it
+        honoured here. What travels is therefore the resolved keys."""
+        with pytest.raises(_Computed) as excinfo:
+            _run_listing("gaps", scoped_project, scope=scope)
+        assert excinfo.value.params["values"] == expected
+        assert "code_tested" not in excinfo.value.params["values"]
+
+
+class TestComposingASectionAndAskingForItAloneAgree:
+    # Verifies: REQ-d00279-C, REQ-d00085-D, REQ-d00282-F
+    def test_a_refusal_reads_the_same_both_ways(self, tmp_path, no_compute, capsys):
         """One report, two ways of asking for it. A composition that refused
-        what the standalone command produced -- or refused it in words naming a
-        flag the reader never wrote -- would be two answers to one question.
+        what the standalone command produced -- or refused it in different
+        words -- would be two answers to one question.
         """
         try:
-            standalone = _run_listing("gaps", scoped_project, "overview")
+            standalone = _run_listing("uncovered", None, values="tested")
         except _Computed:
             pytest.fail("the standalone listing computed a report it cannot honour")
         alone_err = capsys.readouterr().err
 
         out = tmp_path / "report.txt"
-        composed = report_cmd.run(
-            ["gaps"],
-            ["--scope", "overview", "--config", str(scoped_project), "-o", str(out)],
-        )
+        composed = report_cmd.run(["uncovered"], ["--values", "tested", "-o", str(out)])
         composed_err = capsys.readouterr().err
 
         assert standalone == 1
