@@ -108,3 +108,29 @@ def test_engine_call_with_a_request_hands_compute_fn_the_request_object(monkeypa
 
     assert received == [request]
     assert isinstance(received[0], SummaryRequest)
+
+
+def test_engine_call_with_a_request_sends_its_to_params_to_the_daemon(monkeypatch):
+    """The daemon path is fed ``request.to_params()``, never the ``params``
+    argument passed alongside a ``request=`` -- a regression that shipped
+    ``params`` instead would still satisfy every other test here, since a
+    default-constructed request's ``to_params()`` can coincide with an empty
+    dict. Passing a deliberately different, non-empty ``params`` makes the two
+    distinguishable, so a typo swapping them back in is caught."""
+    from elspais.commands import _engine
+    from elspais.commands._requests import SummaryRequest
+
+    request = SummaryRequest(values=("level",))
+    observed: list[dict[str, str]] = []
+
+    def fake_try_daemon(endpoint, params):
+        observed.append(params)
+        return ({}, {"type": "daemon"})
+
+    monkeypatch.setattr(_engine, "_try_daemon", fake_try_daemon)
+
+    stale_params = {"this": "must-not-travel"}
+    _engine.call("/api/run/summary", stale_params, lambda g, c, r: {}, request=request)
+
+    assert observed == [request.to_params()]
+    assert observed != [stale_params]
