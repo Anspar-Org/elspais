@@ -26,9 +26,11 @@ _local_config: dict[str, Any] | None = None
 def call(
     endpoint: str,
     params: dict[str, str],
-    compute_fn: Callable[[Any, dict[str, Any], dict[str, str]], dict],
+    compute_fn: Callable[[Any, dict[str, Any], Any], dict],
     skip_daemon: bool = False,
     config_path: str | None = None,
+    *,
+    request: Any = None,
 ) -> dict:
     """Run a command via daemon or locally, returning the same dict shape.
 
@@ -36,17 +38,27 @@ def call(
 
     Args:
         endpoint: REST path (e.g., "/api/run/checks").
-        params: Query parameters as string dict.
+        params: Query parameters as string dict. Ignored when ``request`` is given.
         compute_fn: Function(graph, config, params) -> dict for local path.
         skip_daemon: If True, skip daemon entirely (e.g., custom spec_dir).
         config_path: Explicit config file path (local fallback only).
+        request: Migration scaffolding for TOOL-82 -- a frozen request object
+            (``ReportInputs`` or one of its subclasses) already carrying final
+            values. When given, its ``to_params()`` is what travels to a daemon
+            and ``compute_fn`` is called with the request object itself rather
+            than a params dict, so a migrated command's ``compute_*`` receives
+            the same shape locally and when served. Task 7 deletes this
+            parameter once every command has migrated, so ``_engine.call``
+            speaks one shape again.
 
     Returns:
         Result dict from daemon HTTP response or local compute_fn,
         always including a ``graph_source`` key.
     """
+    effective_params = request.to_params() if request is not None else params
+
     if not skip_daemon:
-        daemon_result = _try_daemon(endpoint, params)
+        daemon_result = _try_daemon(endpoint, effective_params)
         if daemon_result is not None:
             result, source = daemon_result
             if isinstance(result, dict):
@@ -55,7 +67,7 @@ def call(
 
     # Local fallback: build graph (cached) and compute
     graph, config = _ensure_local_graph(config_path=config_path)
-    result = compute_fn(graph, config, params)
+    result = compute_fn(graph, config, request if request is not None else params)
     result["graph_source"] = {"type": "local"}
     return result
 
