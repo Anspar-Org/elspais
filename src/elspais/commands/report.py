@@ -14,10 +14,6 @@ import io
 import sys
 from contextlib import redirect_stdout
 from pathlib import Path
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from elspais.commands._requests import ReportInputs
 
 COMPOSABLE_SECTIONS = (
     "checks",
@@ -168,10 +164,10 @@ def _identity_key_for(section: str) -> str:
 
 
 # Implements: REQ-d00282-F, REQ-d00279-C
-def _section_inputs(
+def _unhonourable_selection(
     sections: list[str], args: argparse.Namespace, config: dict | None
-) -> dict[str, ReportInputs] | str:
-    """Each section's derived inputs, or the refusal to print instead.
+) -> str | None:
+    """The reason this composition cannot honour its selection, or None.
 
     Judged before anything is built and before anything is written, because a
     refusal that has already produced an artifact has produced the report it
@@ -179,9 +175,14 @@ def _section_inputs(
     names a section that states nothing about a requirement, are both asking
     for a report the tool cannot assemble.
 
-    Derived ONCE per section through the one edge a standalone invocation
-    uses (``report_inputs_from_args``), so a composed report refuses -- and
-    states -- exactly what asking for the section alone would.
+    Judged through the one edge a standalone invocation uses
+    (``report_inputs_from_args``) rather than a second, hand-rolled check, so
+    a composed report refuses exactly what asking for the section alone
+    would. Each section's own ``ReportInputs`` is derived and discarded here
+    on purpose: nothing downstream needs the resolved scope or selection this
+    early, only whether resolving it raises -- each section's renderer
+    derives its own copy later, from the same deterministic edge, at the
+    point it actually renders.
     """
     from elspais.commands._edges import report_inputs_from_args
     from elspais.commands._values import UnofferedValues, value_silent_refusal
@@ -194,17 +195,14 @@ def _section_inputs(
         refusal = value_silent_refusal(args, config, ", ".join(sorted(set(silent))))
         if refusal is not None:
             return refusal
-    out: dict[str, ReportInputs] = {}
     for section in sections:
         if section not in VALUE_SECTIONS:
             continue
         try:
-            out[section] = report_inputs_from_args(
-                args, config, _offered_by(section), _identity_key_for(section)
-            )
+            report_inputs_from_args(args, config, _offered_by(section), _identity_key_for(section))
         except UnofferedValues as exc:
             return f"{section}: {exc}"
-    return out
+    return None
 
 
 # Implements: REQ-d00085-A+B+C
@@ -232,17 +230,17 @@ def run(
     config = get_config(getattr(args, "config", None))
 
     # Implements: REQ-d00282-F
-    # `section_inputs` is judged here rather than discarded: a name no section
-    # offers is refused before anything is built, using the same edge each
-    # standalone invocation resolves its own inputs through. Each section's
-    # renderer below re-derives its own inputs from `args` -- the values are
-    # identical because both calls reach the same deterministic edge, and
-    # `_render_section`'s dispatch shape (name, graph, config, args) is a
-    # standalone command's own signature, not a composition-only interface a
-    # second value could be threaded through.
-    section_inputs = _section_inputs(sections, args, config)
-    if isinstance(section_inputs, str):
-        print(f"Error: {section_inputs}", file=sys.stderr)
+    # Refused before anything is built, using the same edge each standalone
+    # invocation resolves its own inputs through. Each section's renderer
+    # below re-derives its own inputs from `args` rather than being handed
+    # what was resolved here -- the values are identical because both calls
+    # reach the same deterministic edge, and `_render_section`'s dispatch
+    # shape (name, graph, config, args) is a standalone command's own
+    # signature, not a composition-only interface a derived value could be
+    # threaded through.
+    refusal = _unhonourable_selection(sections, args, config)
+    if refusal is not None:
+        print(f"Error: {refusal}", file=sys.stderr)
         return 1
 
     # Build graph once for sections that need it
