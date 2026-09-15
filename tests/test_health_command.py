@@ -391,7 +391,9 @@ directories = ["spec"]
         _captured_results=None,
         _fresh_targets={"a"},
     )
-    result = health._run_local_checks(args, {})
+    from elspais.commands._requests import ChecksRequest
+
+    result = health._run_local_checks(args, ChecksRequest())
 
     assert "healthy" in result
     assert captured["fresh_targets"] == {"a"}

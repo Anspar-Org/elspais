@@ -435,8 +435,9 @@ def render_section(
         inputs = report_inputs_from_args(args, config, offered, identity_key="")
         gap_types = gap_sections(inputs.values, command)
 
-    exclude_status = _resolve_exclude_status(args, config=config or {})
-    from elspais.commands._scope import resolve_scope_for_report, scope_disclosure
+    from elspais.commands._scope import flag_values, resolve_scope_for_report, scope_disclosure
+
+    exclude_status = _resolve_exclude_status(flag_values(args, "treat_active"), config=config or {})
 
     scope_result = resolve_scope_for_report(graph, args, config)
     scope_ids = None if len(scope_result.ids) == scope_result.population else scope_result.ids
@@ -535,13 +536,9 @@ def compute_gaps(graph: FederatedGraph, config: dict, request: GapsRequest) -> d
     edge that was invoked, which is the only place that could tell a project's
     declaration from a reader's own words (REQ-d00280-D).
     """
-    import argparse as _argparse
-
     from elspais.commands.health import _resolve_exclude_status
 
-    fake_args = _argparse.Namespace()
-    fake_args.treat_active = list(request.treat_active) if request.treat_active else None
-    exclude_status = _resolve_exclude_status(fake_args, config=config)
+    exclude_status = _resolve_exclude_status(request.treat_active, config=config)
     from elspais.commands._scope import scope_disclosure
     from elspais.graph.scope import scoped_requirements
 

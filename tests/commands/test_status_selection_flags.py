@@ -149,13 +149,14 @@ def built(project):
         os.chdir(old_cwd)
 
 
-def _implemented_counts(graph, config, params: dict[str, str]) -> tuple[int, float]:
+def _implemented_counts(graph, config, treat_active: tuple[str, ...] = ()) -> tuple[int, float]:
     """Run the checks compute path and return the Implemented dimension's
     (requirement count, assertion count) — the counted denominator.
     """
+    from elspais.commands._requests import ChecksRequest
     from elspais.commands.health import compute_checks
 
-    report = compute_checks(graph, config, params)
+    report = compute_checks(graph, config, ChecksRequest(treat_active=treat_active))
     for check in report["checks"]:
         if check["name"] == "code.implemented":
             details = check["details"]
@@ -309,8 +310,8 @@ class TestCoverageStatusSelector:
         """
         graph, config = built
 
-        baseline = _implemented_counts(graph, config, {})
-        widened = _implemented_counts(graph, config, {"treat_active": "Draft"})
+        baseline = _implemented_counts(graph, config)
+        widened = _implemented_counts(graph, config, ("Draft",))
 
         assert baseline == (1, 1), (
             "Default coverage footing must count the Active requirement only "

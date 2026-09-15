@@ -705,16 +705,18 @@ async def api_hierarchy(request: Request) -> JSONResponse:
 
 async def api_search(request: Request) -> JSONResponse:
     """GET /api/search?q=<query>&field=<field>&limit=<n>&regex=<bool>."""
+    from elspais.commands._requests import SearchRequest
     from elspais.commands.search_cmd import compute_search
 
     state = _st(request)
-    params = {
-        "q": request.query_params.get("q", ""),
-        "field": request.query_params.get("field", "all"),
-        "regex": request.query_params.get("regex", "false"),
-        "limit": request.query_params.get("limit", "50"),
-    }
-    return JSONResponse(compute_search(state.graph, state.config, params))
+    params = dict(request.query_params)
+    search_request = SearchRequest(
+        q=params.get("q", ""),
+        field=params.get("field", "all"),
+        limit=int(params.get("limit", "50")),
+        regex=params.get("regex", "false").lower() == "true",
+    )
+    return JSONResponse(compute_search(state.graph, state.config, search_request))
 
 
 async def api_test_coverage(request: Request) -> JSONResponse:
@@ -1283,11 +1285,21 @@ async def api_check_freshness(request: Request) -> JSONResponse:
 
 async def api_run_checks(request: Request) -> JSONResponse:
     """GET /api/run/checks - Run health checks and return structured report."""
+    from elspais.commands._requests import ChecksRequest
     from elspais.commands.health import compute_checks
 
     state = _st(request)
     params = dict(request.query_params)
-    result = compute_checks(state.graph, state.config, params)
+    treat_str = params.get("treat_active")
+    checks_request = ChecksRequest(
+        spec_only=params.get("spec_only") == "true",
+        code_only=params.get("code_only") == "true",
+        tests_only=params.get("tests_only") == "true",
+        terms_only=params.get("terms_only") == "true",
+        lenient=params.get("lenient") == "true",
+        treat_active=tuple(treat_str.split(",")) if treat_str else (),
+    )
+    result = compute_checks(state.graph, state.config, checks_request)
     return JSONResponse(result)
 
 

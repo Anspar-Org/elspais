@@ -699,6 +699,8 @@ class TestEveryBranchAsksTheAuthority:
 
         monkeypatch.setattr(factory, "build_graph", unbuildable)
 
+        from elspais.commands._requests import ChecksRequest
+
         result = health._run_local_checks(
             argparse.Namespace(
                 spec_dir=None,
@@ -706,7 +708,7 @@ class TestEveryBranchAsksTheAuthority:
                 _captured_results=None,
                 _fresh_targets=None,
             ),
-            {},
+            ChecksRequest(),
         )
 
         build = next(c for c in result["checks"] if c["name"] == "graph.build")
@@ -736,6 +738,8 @@ class TestEveryBranchAsksTheAuthority:
 
         monkeypatch.setattr(factory, "build_graph", unbuildable)
 
+        from elspais.commands._requests import ChecksRequest
+
         result = health._run_local_checks(
             argparse.Namespace(
                 spec_dir=None,
@@ -743,7 +747,7 @@ class TestEveryBranchAsksTheAuthority:
                 _captured_results=None,
                 _fresh_targets=None,
             ),
-            {},
+            ChecksRequest(),
         )
 
         build = next(c for c in result["checks"] if c["name"] == "graph.build")

@@ -134,3 +134,13 @@ def test_engine_call_with_a_request_sends_its_to_params_to_the_daemon(monkeypatc
 
     assert observed == [request.to_params()]
     assert observed != [stale_params]
+
+
+# Verifies: REQ-d00258-C
+def test_status_flags_reads_a_tuple_not_a_namespace():
+    """`--treat-active Draft` promotes Draft to active-like. The helper needs
+    the names and nothing else, so an API caller has no reason to build an
+    argparse.Namespace to reach it."""
+    from elspais.commands.health import _status_flags
+
+    assert _status_flags(("draft", "review")) == {"Draft", "Review"}

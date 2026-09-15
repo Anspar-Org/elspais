@@ -38,6 +38,7 @@ from elspais.utilities.findings import (
 )
 
 if TYPE_CHECKING:
+    from elspais.commands._requests import ChecksRequest
     from elspais.graph.federated import FederatedGraph
     from elspais.graph.GraphNode import GraphNode
     from elspais.utilities.patterns import IdResolver
@@ -2720,11 +2721,9 @@ def run_spec_checks(
 
 
 # Implements: REQ-d00258-Q
-def _status_flags(args: argparse.Namespace) -> set[str]:
+def _status_flags(treat_active: tuple[str, ...]) -> set[str]:
     """Title-cased set of statuses named via ``--treat-active`` (empty when unset)."""
-    from elspais.commands._scope import flag_values
-
-    return {s.title() for s in flag_values(args, "treat_active")}
+    return {s.title() for s in treat_active}
 
 
 def _config_with_status_overlay(
@@ -2764,7 +2763,7 @@ def _config_with_status_overlay(
 
 
 def _resolve_exclude_status(
-    args: argparse.Namespace,
+    treat_active: tuple[str, ...],
     config: dict[str, Any] | None = None,
 ) -> set[str]:
     """Statuses treated as coverage-EXCLUDED for the reference-status checks.
@@ -2781,7 +2780,7 @@ def _resolve_exclude_status(
 
     roles = get_status_roles(config or {})
     default_excluded = roles.coverage_excluded_statuses()
-    return default_excluded - _status_flags(args)
+    return default_excluded - _status_flags(treat_active)
 
 
 def _excluded_note(
@@ -4686,11 +4685,14 @@ def render_section(
         for check in run_spec_checks(graph, config, spec_dirs=resolved_spec_dirs):
             report.add(check)
     if graph:
+        from elspais.commands._scope import flag_values
+
         raw_config = config if config else {}
-        exclude_status = _resolve_exclude_status(args, config=raw_config)
+        treat_active = flag_values(args, "treat_active")
+        exclude_status = _resolve_exclude_status(treat_active, config=raw_config)
         # REQ-d00258-C: --treat-active becomes a coverage-config overlay so
         # dimension counts AND the excluded-note agree (both read this overlay).
-        cov_config = _config_with_status_overlay(raw_config, _status_flags(args))
+        cov_config = _config_with_status_overlay(raw_config, _status_flags(treat_active))
         for check in run_code_checks(graph, exclude_status=exclude_status, config=cov_config):
             report.add(check)
         for check in run_test_checks(graph, exclude_status=exclude_status, config=cov_config):
@@ -4716,27 +4718,21 @@ def render_section(
 def compute_checks(
     graph: FederatedGraph,
     config: dict[str, Any],
-    params: dict[str, str],
+    request: ChecksRequest,
 ) -> dict[str, Any]:
     """Compute health checks for engine.call.  Returns HealthReport.to_dict()."""
-    import argparse
-
-    spec_only = params.get("spec_only", "false") == "true"
-    code_only = params.get("code_only", "false") == "true"
-    tests_only = params.get("tests_only", "false") == "true"
-    terms_only = params.get("terms_only", "false") == "true"
-    lenient = params.get("lenient", "false") == "true"
+    spec_only = request.spec_only
+    code_only = request.code_only
+    tests_only = request.tests_only
+    terms_only = request.terms_only
+    lenient = request.lenient
 
     report = HealthReport()
-    run_all = not any([spec_only, code_only, tests_only, terms_only])
+    run_all = request.run_all
 
-    # Build a minimal args namespace for _resolve_exclude_status
-    fake_args = argparse.Namespace()
-    treat_str = params.get("treat_active", None)
-    fake_args.treat_active = treat_str.split(",") if treat_str else None
-    exclude_status = _resolve_exclude_status(fake_args, config=config)
+    exclude_status = _resolve_exclude_status(request.treat_active, config=config)
     # REQ-d00258-C: --treat-active overlay drives coverage counts + note consistently.
-    cov_config = _config_with_status_overlay(config, _status_flags(fake_args))
+    cov_config = _config_with_status_overlay(config, _status_flags(request.treat_active))
 
     # Config checks
     if run_all:
@@ -4918,36 +4914,31 @@ def run(args: argparse.Namespace) -> int:
         )
         return 1
 
-    # Build params from args
-    params: dict[str, str] = {}
-    if getattr(args, "spec_only", False):
-        params["spec_only"] = "true"
-    if getattr(args, "code_only", False):
-        params["code_only"] = "true"
-    if getattr(args, "tests_only", False):
-        params["tests_only"] = "true"
-    if getattr(args, "terms_only", False):
-        params["terms_only"] = "true"
-    if getattr(args, "lenient", False):
-        params["lenient"] = "true"
+    from elspais.commands._requests import ChecksRequest
     from elspais.commands._scope import flag_values
 
-    treat_active = flag_values(args, "treat_active")
-    if treat_active:
-        params["treat_active"] = ",".join(treat_active)
+    request = ChecksRequest(
+        spec_only=bool(getattr(args, "spec_only", False)),
+        code_only=bool(getattr(args, "code_only", False)),
+        tests_only=bool(getattr(args, "tests_only", False)),
+        terms_only=bool(getattr(args, "terms_only", False)),
+        lenient=bool(getattr(args, "lenient", False)),
+        treat_active=flag_values(args, "treat_active"),
+    )
 
     spec_dir = getattr(args, "spec_dir", None)
     # Force fresh build when runners just produced new result files.
     skip_daemon = bool(spec_dir) or run_tests
 
     if skip_daemon:
-        data = _run_local_checks(args, params)
+        data = _run_local_checks(args, request)
     else:
         data = _engine.call(
             "/api/run/checks",
-            params,
+            request.to_params(),
             compute_checks,
             config_path=getattr(args, "config", None),
+            request=request,
         )
 
     healthy = data.get("healthy", False)
@@ -4976,19 +4967,21 @@ def run_preset(args: argparse.Namespace, preset: str) -> int:
     its exit code.
     """
     from elspais.commands import _engine
+    from elspais.commands._requests import ChecksRequest
 
     filt = FindingFilter.for_preset(preset)
-    params: dict[str, str] = {}
+    request = ChecksRequest()
     spec_dir = getattr(args, "spec_dir", None)
 
     if spec_dir:
-        data = _run_local_checks(args, params)
+        data = _run_local_checks(args, request)
     else:
         data = _engine.call(
             "/api/run/checks",
-            params,
+            request.to_params(),
             compute_checks,
             config_path=getattr(args, "config", None),
+            request=request,
         )
 
     report = _report_from_dict(data)
@@ -5013,7 +5006,7 @@ def run_preset(args: argparse.Namespace, preset: str) -> int:
     return 0 if healthy else 1
 
 
-def _run_local_checks(args: argparse.Namespace, params: dict[str, str]) -> dict[str, Any]:
+def _run_local_checks(args: argparse.Namespace, request: ChecksRequest) -> dict[str, Any]:
     """Build graph from args and run checks locally.
 
     Handles spec_dir, config_path and graceful error recovery
@@ -5025,20 +5018,13 @@ def _run_local_checks(args: argparse.Namespace, params: dict[str, str]) -> dict[
     spec_dir = getattr(args, "spec_dir", None)
     config_path = getattr(args, "config", None)
     start_path = Path.cwd()
-    lenient = params.get("lenient", "false") == "true"
+    lenient = request.lenient
     captured = getattr(args, "_captured_results", None)
     fresh_targets = getattr(args, "_fresh_targets", None)
 
     report = HealthReport()
 
-    run_all = not any(
-        [
-            params.get("spec_only") == "true",
-            params.get("code_only") == "true",
-            params.get("tests_only") == "true",
-            params.get("terms_only") == "true",
-        ]
-    )
+    run_all = request.run_all
 
     # Config checks can run without building the graph
     config = None
@@ -5088,7 +5074,7 @@ def _run_local_checks(args: argparse.Namespace, params: dict[str, str]) -> dict[
 
     if graph is not None and config is not None:
         # Delegate to compute_checks for the actual check logic
-        return compute_checks(graph, config, params)
+        return compute_checks(graph, config, request)
 
     return report.to_dict(lenient=lenient)
 
