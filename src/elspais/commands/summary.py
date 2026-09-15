@@ -29,6 +29,7 @@ import sys
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    from elspais.commands._requests import SummaryRequest
     from elspais.graph.federated import FederatedGraph
 
 from elspais.graph.aggregation import (
@@ -229,37 +230,16 @@ def _stated_values(data: dict) -> tuple[str, ...]:
     return tuple(stated) if stated else DEFAULT_VALUES
 
 
-# Implements: REQ-d00282-A
-def _resolve_values_for(args_or_params: Any, config: dict | None) -> tuple[str, ...]:
-    from elspais.commands._values import resolve_report_values
-
-    return resolve_report_values(
-        args_or_params,
-        OFFERED_VALUES,
-        DEFAULT_VALUES,
-        config,
-        identity_key=IDENTITY_VALUE,
-    )
-
-
 # Implements: REQ-d00282-E
-def _stamp_values(data: dict, args_or_params: Any, config: dict | None) -> None:
+def _stamp_values(data: dict, values: tuple[str, ...] | None) -> None:
     """Record the stated values on the payload, where a selection named any.
 
     Stamped only when something was named: an unstamped payload is the default
     report, and stamping the default would make a consumer unable to tell a
     reader who asked for everything from one who asked for nothing.
     """
-    from elspais.commands._values import values_from_args, values_from_params
-
-    named = (
-        values_from_params(args_or_params)
-        if isinstance(args_or_params, dict)
-        else values_from_args(args_or_params, config)
-    )
-    resolved = _resolve_values_for(args_or_params, config)
-    if named is not None:
-        data["values"] = list(resolved)
+    if values is not None:
+        data["values"] = list(values)
 
 
 # Implements: REQ-d00085-A, REQ-d00086-A+B+C+D
@@ -274,46 +254,34 @@ def render_section(
     """
     fmt = getattr(args, "format", "text") or "text"
     # Implements: REQ-p00084-A+D, REQ-d00279-C
-    from elspais.commands._scope import resolve_scope_for_report, scope_disclosure
+    from elspais.commands._edges import report_inputs_from_args
+    from elspais.commands._requests import SummaryRequest
     from elspais.commands._values import UnofferedValues
 
-    result = resolve_scope_for_report(graph, args, config)
-    ids = None if len(result.ids) == result.population else result.ids
-    data = collect_coverage(graph, config=config, node_ids=ids)
-    data["scope"] = scope_disclosure(result)
-    # Implements: REQ-d00282-F
-    # A section composed with others honours the same selection it honours
-    # alone, and refuses on the same terms: a report produced under a selection
-    # honoured in part looks exactly like the one the reader asked for.
     try:
-        _stamp_values(data, args, config)
+        inputs = report_inputs_from_args(args, config, OFFERED_VALUES, IDENTITY_VALUE)
     except UnofferedValues as exc:
         return f"Coverage Summary\nerror: {exc}", 1
-    content = _render(data, fmt, config)
-    return content.rstrip("\n"), 0
+    data = compute_summary(graph, config, SummaryRequest(inputs.scope, inputs.values))
+    return _render(data, fmt, config).rstrip("\n"), 0
 
 
 # Implements: REQ-d00279-C
-def compute_summary(graph: FederatedGraph, config: dict, params: dict[str, str]) -> dict:
-    """Engine-compatible wrapper around the shared coverage collector.
+def compute_summary(graph: FederatedGraph, config: dict, request: SummaryRequest) -> dict:
+    """The coverage summary this request asks for.
 
-    Reads both the scope and the value selection from ``params``: this is the
-    path a summary takes when a serving process answers it, and either axis
-    failing to survive the trip would make that answer differ from a locally
-    computed one (REQ-d00279-C, REQ-d00282-E).
+    Resolves nothing: the scope was expanded and the selection resolved at the
+    edge that was invoked, which is the only place that could tell a project's
+    declaration from a reader's own words (REQ-d00280-D).
     """
-    from elspais.commands._scope import resolve_scope_for_report, scope_disclosure
+    from elspais.commands._scope import scope_disclosure
+    from elspais.graph.scope import scoped_requirements
 
-    result = resolve_scope_for_report(graph, params, config)
+    result = scoped_requirements(graph, request.scope, config)
     ids = None if len(result.ids) == result.population else result.ids
     data = collect_coverage(graph, config=config, node_ids=ids)
     data["scope"] = scope_disclosure(result)
-    # Implements: REQ-d00282-E
-    # The selection travels in ``params`` for the same reason the scope does: a
-    # report answered by a serving process states the values the reader asked
-    # for, or a daemon-served report and a locally computed one disagree about
-    # the same estate.
-    _stamp_values(data, params, config)
+    _stamp_values(data, request.values)
     return data
 
 
@@ -326,9 +294,10 @@ def run(args: argparse.Namespace) -> int:
     fresh set threads into build_graph() (a cached daemon graph can't know
     which targets this invocation considers fresh).
     """
+    from elspais.commands._edges import report_inputs_from_args
     from elspais.commands._engine import call as engine_call
-    from elspais.commands._scope import scope_params_from_args
-    from elspais.commands._values import UnofferedValues, value_params_from_args
+    from elspais.commands._requests import SummaryRequest
+    from elspais.commands._values import UnofferedValues
     from elspais.config import get_config
 
     fmt = getattr(args, "format", "text") or "text"
@@ -344,17 +313,17 @@ def run(args: argparse.Namespace) -> int:
         return 2
 
     # Implements: REQ-d00282-F
-    # Judged before anything is built or asked of a serving process: a report is
-    # not produced under a selection the tool cannot honour in full, and a
-    # reader told so before the work starts is told the same thing however the
-    # report would have been answered.
+    # Derived before anything is built or asked of a serving process: a report
+    # is not produced under a selection the tool cannot honour, and a reader
+    # told so before the work starts is told the same thing however the report
+    # would have been answered.
     try:
-        _resolve_values_for(args, config)
+        inputs = report_inputs_from_args(args, config, OFFERED_VALUES, IDENTITY_VALUE)
     except UnofferedValues as exc:
         sys.stderr.write(f"error: {exc}\n")
         return 2
 
-    params = {**scope_params_from_args(args, config), **value_params_from_args(args, config)}
+    request = SummaryRequest(scope=inputs.scope, values=inputs.values)
 
     if fresh_targets is not None:
         from elspais.graph.factory import build_graph
@@ -364,22 +333,23 @@ def run(args: argparse.Namespace) -> int:
             config_path=config_path,
             fresh_targets=fresh_targets,
         )
-        data = compute_summary(graph, config, params)
+        data = compute_summary(graph, config, request)
         data["graph_source"] = {"type": "local"}
     else:
         data = engine_call(
             "/api/run/summary",
-            params,
+            request.to_params(),
             compute_summary,
             skip_daemon=bool(spec_dir),
             config_path=config_path,
+            request=request,
         )
 
     # Stamped again from the invocation, so the values stated are the ones this
     # reader asked for even where the payload was computed by another process
     # (REQ-d00282-E+F). The figures are untouched: a selection decides which
     # facts are stated, never what they are (REQ-d00282-D).
-    _stamp_values(data, args, config)
+    _stamp_values(data, request.values)
 
     content = _render(data, fmt, config)
     sys.stdout.write(content)

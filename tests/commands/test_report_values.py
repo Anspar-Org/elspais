@@ -263,10 +263,15 @@ class TestOneSelectionOneValueSet:
     def test_the_identity_value_is_stated_whatever_was_named(self):
         """A row that cannot be attributed to what it is a fact about is not a
         report about anything."""
-        values = summary_cmd._resolve_values_for(
-            argparse.Namespace(values="tested", scope=None), None
+        from elspais.commands._edges import report_inputs_from_args
+
+        inputs = report_inputs_from_args(
+            argparse.Namespace(values="tested", scope=None),
+            None,
+            summary_cmd.OFFERED_VALUES,
+            summary_cmd.IDENTITY_VALUE,
         )
-        assert values[0] == "level"
+        assert inputs.values[0] == "level"
 
 
 # ---------------------------------------------------------------------------
@@ -776,9 +781,14 @@ class TestCountsOnlyValues:
 
         assert f"tested.{part}" in VALUE_SPECS
         assert f"tested.{part}.ratio" not in VALUE_SPECS
+        from elspais.commands._edges import report_inputs_from_args
+
         with pytest.raises(trace_cmd.UnofferedValues):
-            summary_cmd._resolve_values_for(
-                argparse.Namespace(values=f"tested.{part}.ratio", scope=None), None
+            report_inputs_from_args(
+                argparse.Namespace(values=f"tested.{part}.ratio", scope=None),
+                None,
+                summary_cmd.OFFERED_VALUES,
+                summary_cmd.IDENTITY_VALUE,
             )
         message, code = trace_cmd.render_section(
             _thirds_graph(),
@@ -1204,11 +1214,15 @@ class TestTheProvenanceBitIsSelectable:
         """A level is a group of requirements, and an `or` over their bits
         would answer a different question under the same name. Refused rather
         than answered wrongly (REQ-d00282-F)."""
+        from elspais.commands._edges import report_inputs_from_args
         from elspais.graph.values import UnofferedValues
 
         with pytest.raises(UnofferedValues):
-            summary_cmd._resolve_values_for(
-                argparse.Namespace(values="verified.carried", scope=None), None
+            report_inputs_from_args(
+                argparse.Namespace(values="verified.carried", scope=None),
+                None,
+                summary_cmd.OFFERED_VALUES,
+                summary_cmd.IDENTITY_VALUE,
             )
         out = tmp_path / "report.txt"
         code = report_cmd.run(["summary"], ["--values", "verified.carried", "-o", str(out)])
@@ -1729,6 +1743,10 @@ values = ["code_tested", "tested"]
 [scopes.lines]
 level = ["prd"]
 values = ["code_tested"]
+
+[scopes.board]
+level = ["prd"]
+values = ["id", "requirements", "tested"]
 """
 
 
@@ -1779,6 +1797,36 @@ def _run_listing(command: str, config, scope=None, values=None) -> int:
                 format="table",
                 show="all",
                 top=10,
+            )
+        )
+    if command == "summary":
+        from elspais.commands import summary as summary_cmd
+
+        return summary_cmd.run(
+            argparse.Namespace(
+                config=config,
+                scope=scope,
+                values=values,
+                format="text",
+                spec_dir=None,
+                output=None,
+                quiet=False,
+                verbose=False,
+            )
+        )
+    if command == "trace":
+        from elspais.commands import trace as trace_cmd
+
+        return trace_cmd.run(
+            argparse.Namespace(
+                config=config,
+                scope=scope,
+                values=values,
+                format="text",
+                spec_dir=None,
+                output=None,
+                quiet=False,
+                verbose=False,
             )
         )
     return gaps_cmd.run(
@@ -1938,6 +1986,36 @@ class TestADeclarationNarrowsAShortfallListing:
             _run_listing("gaps", scoped_project, scope=scope)
         assert excinfo.value.params["values"] == expected
         assert "code_tested" not in excinfo.value.params["values"]
+
+
+# REQ-d00280-D: a declaration reaches the reports that state facts, too
+class TestADeclarationNarrowsAFactStatingReport:
+    """`gaps` resolves its selection before sending it; `summary` and `trace`
+    sent the declaration raw and let the compute path judge it a second time,
+    where nothing could know a project had declared it. The three reports a
+    declared name spans have to agree about what the name means."""
+
+    # Verifies: REQ-d00280-D, REQ-d00282-E
+    def test_summary_passes_over_the_value_it_does_not_offer(self, scoped_project, no_compute):
+        """`board` names id, which states what a ROW is about in a
+        per-requirement report; summary's rows are levels, so it passes over
+        and the identity value `level` takes its place."""
+        with pytest.raises(_Computed) as excinfo:
+            _run_listing("summary", scoped_project, scope="board")
+        assert excinfo.value.params["values"] == "level,requirements,tested"
+
+    # Verifies: REQ-d00280-D, REQ-d00282-F
+    def test_a_value_the_reader_wrote_is_still_refused_by_summary(
+        self, scoped_project, no_compute, capsys
+    ):
+        """Provenance is the whole of the difference: the same name a
+        declaration passes over is, written here, a mistake."""
+        try:
+            code = _run_listing("summary", scoped_project, values="id")
+        except _Computed:
+            pytest.fail("'summary' computed a report under a value it does not offer")
+        assert code == 2
+        assert "id" in capsys.readouterr().err
 
 
 class TestComposingASectionAndAskingForItAloneAgree:

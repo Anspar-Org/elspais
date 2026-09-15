@@ -306,10 +306,20 @@ class TestAnalysisDisclosesItsScope:
             assert json.loads(captured.out)["scope"] == data["scope"]
 
 
+def _summary_request(params: dict):
+    from elspais.commands._edges import report_inputs_from_params
+    from elspais.commands._requests import SummaryRequest
+
+    inputs = report_inputs_from_params(params, summary.OFFERED_VALUES, summary.IDENTITY_VALUE)
+    return SummaryRequest(scope=inputs.scope, values=inputs.values)
+
+
 @pytest.fixture(scope="module")
 def scoped_summary(canonical_federated_graph, canonical_config, scope_params) -> dict:
     """A coverage summary computed under the same narrowing."""
-    return summary.compute_summary(canonical_federated_graph, canonical_config, scope_params)
+    return summary.compute_summary(
+        canonical_federated_graph, canonical_config, _summary_request(scope_params)
+    )
 
 
 class TestSummaryCsvDisclosesItsScope:
@@ -340,7 +350,9 @@ class TestSummaryCsvDisclosesItsScope:
 
     # Verifies: REQ-p00084-D
     def test_an_unscoped_csv_declares_nothing(self, canonical_federated_graph, canonical_config):
-        data = summary.compute_summary(canonical_federated_graph, canonical_config, {})
+        data = summary.compute_summary(
+            canonical_federated_graph, canonical_config, _summary_request({})
+        )
         assert not data["scope"]
         rows = list(csv.reader(io.StringIO(summary._render_csv(data, canonical_config))))
         assert rows[0][0] == "Level"

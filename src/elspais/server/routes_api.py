@@ -1294,13 +1294,17 @@ async def api_run_checks(request: Request) -> JSONResponse:
 # Implements: REQ-d00282-F
 async def api_run_summary(request: Request) -> JSONResponse:
     """GET /api/run/summary - Coverage summary data."""
+    from elspais.commands._edges import report_inputs_from_params
+    from elspais.commands._requests import SummaryRequest
     from elspais.commands._values import UnofferedValues
-    from elspais.commands.summary import compute_summary
+    from elspais.commands.summary import IDENTITY_VALUE, OFFERED_VALUES, compute_summary
 
     state = _st(request)
     params = dict(request.query_params)
     try:
-        return JSONResponse(compute_summary(state.graph, state.config, params))
+        inputs = report_inputs_from_params(params, OFFERED_VALUES, IDENTITY_VALUE)
+        summary_request = SummaryRequest(scope=inputs.scope, values=inputs.values)
+        return JSONResponse(compute_summary(state.graph, state.config, summary_request))
     except UnofferedValues as exc:
         # A report is not produced under a selection honoured in part, and a
         # caller asking for a value this report does not offer is told so

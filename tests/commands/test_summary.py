@@ -968,7 +968,9 @@ name = "b"
 
         captured: dict = {}
 
-        def fake_engine_call(endpoint, params, compute_fn, skip_daemon=False, config_path=None):
+        def fake_engine_call(
+            endpoint, params, compute_fn, skip_daemon=False, config_path=None, **kwargs
+        ):
             captured["skip_daemon"] = skip_daemon
             return {"levels": [], "graph_source": {"type": "local"}}
 
@@ -1103,7 +1105,9 @@ groups = ["slow"]
 
         called: dict = {}
 
-        def fake_engine_call(endpoint, params, compute_fn, skip_daemon=False, config_path=None):
+        def fake_engine_call(
+            endpoint, params, compute_fn, skip_daemon=False, config_path=None, **kwargs
+        ):
             called["skip_daemon"] = skip_daemon
             return {"levels": [], "graph_source": {"type": "local"}}
 
@@ -1133,7 +1137,9 @@ groups = ["slow"]
 
         called: dict = {}
 
-        def fake_engine_call(endpoint, params, compute_fn, skip_daemon=False, config_path=None):
+        def fake_engine_call(
+            endpoint, params, compute_fn, skip_daemon=False, config_path=None, **kwargs
+        ):
             called["skip_daemon"] = skip_daemon
             return {"levels": [], "graph_source": {"type": "local"}}
 
