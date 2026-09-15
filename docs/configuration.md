@@ -407,12 +407,20 @@ dir = ""
 #     baseline; offered by `trace`, which reports per requirement, and not by
 #     `summary`, which reports per level)
 #   code_tested, lcov_tested   (measured in lines, so they carry no measures)
-# A name the report being produced does not offer is refused rather than
-# skipped: a report is never produced under a selection honoured in part.
-# For the same reason, a declaration carrying `values` is refused by the
-# reports that state no values at all -- `gaps`, `uncovered`, `untested`,
-# `unvalidated`, `failing` and `analysis`. Declare a second, values-free scope
-# where one audience reads both a table and a gap listing.
+# A name a reader TYPES with --values and this report does not offer is
+# refused: honouring the rest would hand back a narrower report than they
+# asked for while looking exactly like the one they wanted. A name this
+# declaration carries and this report does not offer is different -- it is
+# read against every report the audience takes, so a report that does not
+# offer it passes that value over and states what it would have anyway,
+# rather than refusing the name.
+# A values-carrying declaration is refused outright only by a report that
+# states no values at all -- `checks` and its narrowings, `changed`. `gaps`
+# and its single-dimension listings (`uncovered`, `untested`, `unvalidated`,
+# `failing`) DO have values to select among -- which shortfalls appear -- so
+# a declared `values` list constrains those the same way it constrains
+# `summary` and `trace`; `analysis` ranks requirements rather than stating a
+# dimension, so it offers none either.
 #──────────────────────────────────────────────────────────────────────────────
 
 [scopes.sponsor]

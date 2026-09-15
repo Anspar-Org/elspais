@@ -222,6 +222,14 @@ A project can declare a value set under a name beside the scope it belongs to
 the requirements it reads and the facts it reads about them. `--values` on the
 invocation replaces a declared set rather than narrowing it.
 
+A declared name this report does not offer is not refused the way a typed
+`--values` would be: it is passed over, and the rest of the declaration still
+selects. That is what lets one name span reports whose offers differ --
+`summary`'s rows are levels and its identity value is `level`, `trace`'s are
+requirements and its identity value is `id` -- each states whichever of the
+declared values it has, and no report is refused for what a different report
+in the same declaration happens to offer.
+
 ## UAT Dimension
 
   $ elspais trace --dimension uat

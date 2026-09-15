@@ -271,14 +271,20 @@ test references but no result record at all has taken no verdict, so its
 `trace` cell reads `—` and its `verified.count`, `verified.ratio` and
 `verified.carried` are `null` rather than `0`.
 
-`--values` is offered by `trace` and `summary`, the two reports that state
-facts about each row. The gap listings (`gaps`, `uncovered`, `untested`,
-`unvalidated`, `failing`) and `analysis` do not offer it: they list what is
-missing rather than tabulating facts about requirements, and a flag a command
-cannot honour is worse than its absence. A report is refused outright where a
-selection reaches a section that states no values — `--values` on a composed
-report, and equally the values half of a named declaration on one of those
-commands asked for alone.
+`--values` is offered by `trace` and `summary`, which state facts about each
+row, and by `gaps` and its single-dimension listings (`uncovered`, `untested`,
+`unvalidated`, `failing`), which read a selection as which shortfalls to list
+rather than which facts to show. `analysis` and `checks` (and its narrowings,
+and `changed`) do not offer it: they report findings or files rather than a
+dimension, and a flag a command cannot honour is worse than its absence.
+
+A `--values` a reader TYPED for one of those, or for a composed report
+reaching a section that offers none, is refused outright — a report is never
+produced under a selection it cannot honour. The values half of a named
+declaration is different: one name is read against every report the audience
+takes, so it constrains whichever of those reports has values to select among
+and passes over the ones that do not, leaving them to state what they would
+have anyway.
 
 ## Not the same as `--treat-active`
 
