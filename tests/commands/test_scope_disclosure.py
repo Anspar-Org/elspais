@@ -227,7 +227,9 @@ class TestTraceReachesTheArtifactNotTheTerminal:
     ):
         """The payload a serving process returns already carries the scope; the
         rendering of it has to agree."""
-        data = trace.compute_trace(canonical_federated_graph, canonical_config, scope_params)
+        data = trace.compute_trace(
+            canonical_federated_graph, canonical_config, _trace_request(scope_params)
+        )
         assert data["scope"], "the computed payload must carry a disclosure to render"
         trace._render_json_from_data(data, standard_preset)
         captured = capsys.readouterr()
@@ -254,7 +256,9 @@ class TestTraceReachesTheArtifactNotTheTerminal:
         monkeypatch.setattr(
             _engine,
             "call",
-            lambda path, params, fn, **kw: fn(canonical_federated_graph, canonical_config, params),
+            lambda path, params, fn, **kw: fn(
+                canonical_federated_graph, canonical_config, kw.get("request") or params
+            ),
         )
         monkeypatch.setattr(_engine, "get_graph", lambda: canonical_federated_graph)
 
@@ -304,6 +308,14 @@ class TestAnalysisDisclosesItsScope:
             assert line not in captured.err
         if fmt == "json":
             assert json.loads(captured.out)["scope"] == data["scope"]
+
+
+def _trace_request(params: dict):
+    from elspais.commands._edges import report_inputs_from_params
+    from elspais.commands._requests import TraceRequest
+
+    inputs = report_inputs_from_params(params, trace.OFFERED_VALUES, identity_key="id")
+    return TraceRequest(scope=inputs.scope, values=inputs.values)
 
 
 def _summary_request(params: dict):

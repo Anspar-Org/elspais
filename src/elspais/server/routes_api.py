@@ -1334,13 +1334,17 @@ async def api_run_analysis(request: Request) -> JSONResponse:
 # Implements: REQ-d00282-F
 async def api_run_trace(request: Request) -> JSONResponse:
     """GET /api/run/trace - Traceability matrix data as JSON."""
+    from elspais.commands._edges import report_inputs_from_params
+    from elspais.commands._requests import TraceRequest
     from elspais.commands._values import UnofferedValues
-    from elspais.commands.trace import compute_trace
+    from elspais.commands.trace import OFFERED_VALUES, compute_trace
 
     state = _st(request)
     params = dict(request.query_params)
     try:
-        return JSONResponse(compute_trace(state.graph, state.config, params))
+        inputs = report_inputs_from_params(params, OFFERED_VALUES, identity_key="id")
+        trace_request = TraceRequest(scope=inputs.scope, values=inputs.values)
+        return JSONResponse(compute_trace(state.graph, state.config, trace_request))
     except UnofferedValues as exc:
         # A report is not produced under a selection honoured in part, and a
         # caller asking for a value this report does not offer is told so

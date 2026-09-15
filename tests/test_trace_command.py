@@ -12,6 +12,7 @@ import json
 
 import pytest
 
+from elspais.commands._requests import TraceRequest
 from elspais.commands.trace import (
     ABSENT_FIGURE,
     REPORT_PRESETS,
@@ -56,7 +57,7 @@ class TestTraceCommand:
     # Verifies: REQ-d00084-A
     def test_trace_json_format_output(self, canonical_federated_graph, capsys):
         """Test trace command produces correct JSON output."""
-        data = compute_trace(canonical_federated_graph, {}, {})
+        data = compute_trace(canonical_federated_graph, {}, TraceRequest())
         preset = ReportPreset(
             name="standard",
             values=list(REPORT_PRESETS["standard"].values),
@@ -78,7 +79,7 @@ class TestTraceCommand:
         states depend on the format it was rendered in, which REQ-d00282-E
         forbids: the same report read as a table stated fewer facts than the
         same report read as JSON."""
-        data = compute_trace(canonical_federated_graph, {}, {})
+        data = compute_trace(canonical_federated_graph, {}, TraceRequest())
         preset = ReportPreset(
             name="standard",
             values=list(REPORT_PRESETS["standard"].values),
@@ -118,7 +119,8 @@ class TestTraceCommand:
         chosen = ["id", "tested.rolled_direct", "implemented.immediate_indirect"]
 
         live = json.loads("".join(format_json(canonical_federated_graph, preset, None, chosen)))
-        _render_json_from_data(compute_trace(canonical_federated_graph, {}, {}), preset, chosen)
+        data = compute_trace(canonical_federated_graph, {}, TraceRequest())
+        _render_json_from_data(data, preset, chosen)
         served = json.loads(capsys.readouterr().out)
 
         live_item = next(i for i in live if i["id"] == "REQ-p00001")
@@ -181,7 +183,7 @@ class TestTraceReportPresets:
     @pytest.fixture(scope="class")
     def trace_data(self, canonical_federated_graph):
         """Compute trace data once for the class."""
-        return compute_trace(canonical_federated_graph, {}, {})
+        return compute_trace(canonical_federated_graph, {}, TraceRequest())
 
     def _make_preset(self, preset_name):
         return ReportPreset(

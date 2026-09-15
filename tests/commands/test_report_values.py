@@ -2017,6 +2017,17 @@ class TestADeclarationNarrowsAFactStatingReport:
         assert code == 2
         assert "id" in capsys.readouterr().err
 
+    # Verifies: REQ-d00280-D, REQ-d00282-E
+    def test_trace_passes_over_a_different_value_of_the_same_declaration(
+        self, scoped_project, no_compute
+    ):
+        """The same name against a report offering a different set: `trace`
+        states facts per requirement, so `requirements` -- a count OF
+        requirements -- is what passes over here."""
+        with pytest.raises(_Computed) as excinfo:
+            _run_listing("trace", scoped_project, scope="board")
+        assert excinfo.value.params["values"] == "id,tested"
+
 
 class TestComposingASectionAndAskingForItAloneAgree:
     # Verifies: REQ-d00279-C, REQ-d00085-D, REQ-d00282-F

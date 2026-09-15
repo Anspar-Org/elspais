@@ -33,6 +33,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from elspais.commands._requests import ReportInputs, TraceRequest
     from elspais.graph.federated import FederatedGraph
 
 from elspais.graph import NodeKind
@@ -192,34 +193,23 @@ def _get_uat_journeys(req_node) -> list[dict]:
 def compute_trace(
     graph: FederatedGraph,
     config: dict,
-    params: dict[str, str],
+    request: TraceRequest,
 ) -> dict:
     """Compute trace data for engine.call.  Returns {"nodes": [...], "scope": [...]}.
 
-    Reads the scope AND the value selection out of ``params`` because this is
-    the path a report takes when a serving process answers it: a selection that
-    did not survive the trip would make a daemon-served report disagree with a
-    locally computed one, about which requirements it is about (REQ-d00279-C)
-    or about which facts it states (REQ-d00282-E).
+    Resolves nothing: the scope was expanded and the selection resolved at the
+    edge that was invoked, which is the only place that could tell a project's
+    declaration from a reader's own words (REQ-d00280-D).
     """
-    from elspais.commands._scope import resolve_scope_for_report, scope_disclosure
-    from elspais.commands._values import values_from_params
-    from elspais.graph.values import resolve_values
+    from elspais.commands._scope import scope_disclosure
+    from elspais.graph.scope import scoped_requirements
 
-    result = resolve_scope_for_report(graph, params, config)
+    result = scoped_requirements(graph, request.scope, config)
     scope_ids = None if len(result.ids) == result.population else result.ids
     nodes = [_get_node_data(node, graph) for node in _scoped_requirements(graph, scope_ids)]
     payload: dict = {"nodes": nodes, "scope": scope_disclosure(result)}
-    # Implements: REQ-d00282-A+F
-    # Resolved here as well as where the report is rendered, so a serving
-    # process refuses a selection it cannot honour in full rather than
-    # answering with a report nobody asked for. Carried back so any consumer
-    # of this payload states the values the selection named; where no
-    # selection was made the named default set decides and is not this
-    # process's to choose.
-    selection = values_from_params(params)
-    if selection is not None:
-        payload["values"] = list(resolve_values(selection, OFFERED_VALUES))
+    if request.values is not None:
+        payload["values"] = list(request.values)
     return payload
 
 
@@ -1167,26 +1157,26 @@ def _render_table_from_graph(
     return 0
 
 
-# Implements: REQ-d00282-F
-def _resolve_values_or_report(
+# Implements: REQ-d00282-A+F
+def _resolve_inputs_or_report(
     args: argparse.Namespace,
     preset: ReportPreset,
     config: dict | None,
-) -> tuple[tuple[str, ...], dict[str, str]] | None:
-    """The values this invocation states and the params carrying them onward.
+) -> ReportInputs | None:
+    """This invocation's scope and values as final values, or None once the
+    reader has been told why the selection was refused.
 
-    Returns None once it has told the reader why the selection was refused:
-    REQ-d00282-F wants no report produced under a selection honoured in part,
-    and the refusal reaches the reader as a message rather than a traceback.
+    One derivation, not two: the values the report renders and the values it
+    asks a serving process for are the same tuple, because a second derivation
+    is where they start disagreeing (REQ-d00282-E).
     """
-    from elspais.commands._values import resolve_report_values, value_params_from_args
+    from elspais.commands._edges import report_inputs_from_args
 
     try:
-        values = resolve_report_values(args, OFFERED_VALUES, _default_values(preset), config)
+        return report_inputs_from_args(args, config, OFFERED_VALUES, identity_key="id")
     except UnofferedValues as err:
         print(f"Error: {err}", file=sys.stderr)
         return None
-    return values, value_params_from_args(args, config)
 
 
 # Implements: REQ-d00254-I, REQ-d00283-D+E+I
@@ -1246,22 +1236,25 @@ def run(args: argparse.Namespace) -> int:
         )
 
     # Implements: REQ-d00282-A+E+F
-    # Resolved before anything is built or asked of a serving process, and
-    # carried in the same parameters the scope travels in.
-    resolved = _resolve_values_or_report(args, preset, config)
-    if resolved is None:
+    # Resolved before anything is built or asked of a serving process: a report
+    # is not produced under a selection the tool cannot honour, and a reader
+    # told so before the work starts is told the same thing however the report
+    # would have been answered.
+    inputs = _resolve_inputs_or_report(args, preset, config)
+    if inputs is None:
         return 1
-    values, value_params = resolved
+    from elspais.commands._requests import TraceRequest
+
+    request = TraceRequest(scope=inputs.scope, values=inputs.values)
+    # Implements: REQ-d00282-E
+    # The preset default is this caller's to apply, not the request's to carry:
+    # `inputs.values` stays None where nothing was named, so a serving process
+    # can still tell "asked for nothing" from "asked for everything".
+    values = inputs.values or _default_values(preset)
 
     # Implements: REQ-p00084-A+D, REQ-d00279-C
-    from elspais.commands._scope import (
-        resolve_scope_for_report,
-        scope_disclosure,
-        scope_params_from_args,
-    )
-
-    params = dict(scope_params_from_args(args, config))
-    params.update(value_params)
+    from elspais.commands._scope import scope_disclosure
+    from elspais.graph.scope import scoped_requirements
 
     if skip_daemon:
         # Custom spec_dir (or a target selection): build graph directly
@@ -1273,10 +1266,10 @@ def run(args: argparse.Namespace) -> int:
             fresh_targets=fresh_targets,
         )
         if fmt == "json" and dimension != "uat":
-            data = compute_trace(graph, config, params)
+            data = compute_trace(graph, config, request)
             _render_json_from_data(data, preset, values)
         else:
-            result = resolve_scope_for_report(graph, params, config)
+            result = scoped_requirements(graph, request.scope, config)
             ids = None if len(result.ids) == result.population else result.ids
             return _render_table_from_graph(
                 graph, fmt, preset, ids, values, config, scope_disclosure(result)
@@ -1284,9 +1277,10 @@ def run(args: argparse.Namespace) -> int:
     else:
         data = _engine.call(
             "/api/run/trace",
-            params,
+            request.to_params(),
             compute_trace,
             config_path=config_path,
+            request=request,
         )
 
         # Implements: REQ-d00084-A
@@ -1295,7 +1289,7 @@ def run(args: argparse.Namespace) -> int:
         else:
             # For non-JSON formats we need the graph to stream through formatters.
             graph = _engine.get_graph()
-            result = resolve_scope_for_report(graph, params, config)
+            result = scoped_requirements(graph, request.scope, config)
             ids = None if len(result.ids) == result.population else result.ids
             return _render_table_from_graph(
                 graph, fmt, preset, ids, values, config, scope_disclosure(result)
