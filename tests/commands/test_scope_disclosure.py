@@ -26,14 +26,15 @@ import tyro
 from elspais.cli import _to_namespace
 from elspais.commands import analysis_cmd, summary, trace
 from elspais.commands._scope import (
-    resolve_scope_for_report,
     scope_disclosure,
     scope_from_args,
+    scope_from_params,
     scope_params_from_args,
 )
 from elspais.commands.args import GlobalArgs
 from elspais.commands.report import parse_shared_args
 from elspais.commands.trace import REPORT_PRESETS, ReportPreset
+from elspais.graph.scope import scoped_requirements
 
 TABLE_FORMATS = ["markdown", "text", "csv", "html"]
 
@@ -55,7 +56,11 @@ def _scope_args(**overrides) -> argparse.Namespace:
 @pytest.fixture(scope="module")
 def scoped(canonical_federated_graph, canonical_config):
     """The membership and the disclosure a level-scoped report is produced under."""
-    result = resolve_scope_for_report(canonical_federated_graph, _scope_args(), canonical_config)
+    result = scoped_requirements(
+        canonical_federated_graph,
+        scope_from_args(_scope_args(), canonical_config),
+        canonical_config,
+    )
     lines = scope_disclosure(result)
     assert lines, "the fixture must actually narrow something for these tests to mean anything"
     ids = None if len(result.ids) == result.population else result.ids
@@ -283,7 +288,9 @@ class TestAnalysisDisclosesItsScope:
         )
         assert data["scope"], "a ranking narrowed to one level must say so"
         ranked = {ns["node_id"] for ns in data["ranked_nodes"]}
-        result = resolve_scope_for_report(canonical_federated_graph, scope_params, canonical_config)
+        result = scoped_requirements(
+            canonical_federated_graph, scope_from_params(scope_params), canonical_config
+        )
         assert ranked <= set(result.ids)
 
     # Verifies: REQ-p00084-D
@@ -559,9 +566,8 @@ class TestAccumulationIsObservableInTheSelection:
     """
 
     def _ids(self, graph, config, argv):
-        return resolve_scope_for_report(
-            graph, _to_namespace(tyro.cli(GlobalArgs, args=["gaps", *argv])), config
-        ).ids
+        args = _to_namespace(tyro.cli(GlobalArgs, args=["gaps", *argv]))
+        return scoped_requirements(graph, scope_from_args(args, config), config).ids
 
     # Verifies: REQ-d00278-C
     def test_repeating_an_exclusion_excludes_both_levels(
@@ -613,7 +619,9 @@ class TestAccumulationIsObservableInTheSelection:
     ):
         """A composed report reads the repeated flag the way a lone section does."""
         argv = ["--not-level", "ops", "--not-level", "dev"]
-        composed = resolve_scope_for_report(
-            canonical_federated_graph, parse_shared_args(argv), canonical_config
+        composed = scoped_requirements(
+            canonical_federated_graph,
+            scope_from_args(parse_shared_args(argv), canonical_config),
+            canonical_config,
         ).ids
         assert composed == self._ids(canonical_federated_graph, canonical_config, argv)

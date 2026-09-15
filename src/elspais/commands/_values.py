@@ -15,7 +15,7 @@ value under (REQ-d00282-J), so nothing here consults the display vocabulary.
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from dataclasses import replace
 from typing import Any
 
@@ -24,7 +24,6 @@ from elspais.graph.values import (
     UnofferedValues,
     ValueSelection,
     parse_value_selection,
-    resolve_values,
 )
 
 __all__ = [
@@ -35,7 +34,6 @@ __all__ = [
     "values_from_params",
     "values_to_params",
     "value_params_from_args",
-    "resolve_report_values",
 ]
 
 # The query parameter a selection travels to a serving process under.
@@ -135,29 +133,3 @@ def values_from_params(params: Mapping[str, str]) -> ValueSelection | None:
 def value_params_from_args(args: Any, config: Mapping[str, Any] | None = None) -> dict[str, str]:
     """The query parameters carrying this invocation's selection onward."""
     return values_to_params(values_from_args(args, config))
-
-
-# Implements: REQ-d00282-E
-def resolve_report_values(
-    args_or_params: Any,
-    offered: Sequence[str],
-    default: Sequence[str],
-    config: Mapping[str, Any] | None = None,
-    identity_key: str = "id",
-) -> tuple[str, ...]:
-    """The values a report states, from either an invocation or params.
-
-    Accepts both shapes because a report reaches this point two ways and both
-    have to arrive at the same values. Where nothing was named the report
-    states its named default set (REQ-d00084-B); where something was named the
-    selection replaces that set entirely and is judged against everything the
-    report offers, refusing outright if any name is not among them
-    (REQ-d00282-F).
-    """
-    if isinstance(args_or_params, Mapping):
-        selection = values_from_params(args_or_params)
-    else:
-        selection = values_from_args(args_or_params, config)
-    if selection is None:
-        return tuple(default)
-    return resolve_values(selection, offered, identity_key)

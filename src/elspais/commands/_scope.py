@@ -19,7 +19,6 @@ from elspais.graph.scope import (
     describe_scope,
     scope_from_params,
     scope_to_params,
-    scoped_requirements,
 )
 
 __all__ = [
@@ -28,7 +27,6 @@ __all__ = [
     "scope_params_from_args",
     "scope_from_params",
     "scope_to_params",
-    "resolve_scope_for_report",
     "scope_disclosure",
 ]
 
@@ -108,24 +106,6 @@ def scope_from_args(args: Any, config: dict[str, Any] | None = None) -> ReportSc
 def scope_params_from_args(args: Any, config: dict[str, Any] | None = None) -> dict[str, str]:
     """The query parameters carrying this invocation's scope to a serving process."""
     return scope_to_params(scope_from_args(args, config))
-
-
-def resolve_scope_for_report(
-    graph: Any,
-    args_or_params: Any,
-    config: dict[str, Any] | None = None,
-) -> ScopeResult:
-    """The membership a report should emit, from either an invocation or params.
-
-    Accepts both shapes because a report reaches this point two ways -- computed
-    where it was asked for, or computed by a process that received the scope as
-    parameters -- and both have to arrive at the same set.
-    """
-    if isinstance(args_or_params, dict):
-        scope = scope_from_params(args_or_params)
-    else:
-        scope = scope_from_args(args_or_params, config)
-    return scoped_requirements(graph, scope, config)
 
 
 # Implements: REQ-d00278-L

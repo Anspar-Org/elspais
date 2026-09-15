@@ -338,11 +338,10 @@ def run(args: argparse.Namespace) -> int:
     else:
         data = engine_call(
             "/api/run/summary",
-            request.to_params(),
+            request,
             compute_summary,
             skip_daemon=bool(spec_dir),
             config_path=config_path,
-            request=request,
         )
 
     # Stamped again from the invocation, so the values stated are the ones this

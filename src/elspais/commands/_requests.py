@@ -120,6 +120,25 @@ class ChecksRequest:
 
 
 @dataclass(frozen=True)
+class GlossaryRequest:
+    """A glossary or term-index render.
+
+    Reads no scope and no value selection: it renders the term dictionary
+    whole rather than reporting about requirements (REQ-d00225-A).
+    """
+
+    command: str = "glossary"
+    format: str = "markdown"
+    output_dir: str | None = None
+
+    def to_params(self) -> dict[str, str]:
+        params = {"command": self.command, "format": self.format}
+        if self.output_dir:
+            params["output_dir"] = self.output_dir
+        return params
+
+
+@dataclass(frozen=True)
 class SearchRequest:
     """A multi-term query over the graph."""
 

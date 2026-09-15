@@ -426,20 +426,24 @@ def render_section(
         Tuple of (rendered output string, exit code).
         Exit code is always 0 (gap sections are informational).
     """
+    from elspais.commands._edges import report_inputs_from_args
     from elspais.commands.health import _resolve_exclude_status
 
+    # Implements: REQ-p00084-A+D, REQ-d00279-C
+    # Derived once here rather than resolved twice for scope and values
+    # separately: a section composed with others reaches the same scope and
+    # the same listing a standalone invocation would.
+    offered = COMMAND_VALUES.get(command, OFFERED_VALUES)
+    inputs = report_inputs_from_args(args, config, offered, identity_key="")
     if gap_types is None:
-        from elspais.commands._edges import report_inputs_from_args
-
-        offered = COMMAND_VALUES.get(command, OFFERED_VALUES)
-        inputs = report_inputs_from_args(args, config, offered, identity_key="")
         gap_types = gap_sections(inputs.values, command)
 
-    from elspais.commands._scope import flag_values, resolve_scope_for_report, scope_disclosure
+    from elspais.commands._scope import flag_values, scope_disclosure
+    from elspais.graph.scope import scoped_requirements
 
     exclude_status = _resolve_exclude_status(flag_values(args, "treat_active"), config=config or {})
 
-    scope_result = resolve_scope_for_report(graph, args, config)
+    scope_result = scoped_requirements(graph, inputs.scope, config)
     scope_ids = None if len(scope_result.ids) == scope_result.population else scope_result.ids
     data = collect_gaps(graph, exclude_status, config=config, node_ids=scope_ids)
     scope_lines = scope_disclosure(scope_result)
@@ -615,11 +619,10 @@ def run(args: argparse.Namespace) -> int:
 
     data = engine_call(
         "/api/run/gaps",
-        request.to_params(),
+        request,
         compute_gaps,
         config_path=getattr(args, "config", None),
         skip_daemon=bool(spec_dir),
-        request=request,
     )
 
     # Implements: REQ-d00282-E

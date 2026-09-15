@@ -294,8 +294,9 @@ def write_term_outputs(
 def run(args: argparse.Namespace) -> int:
     """Run glossary or term-index CLI command."""
     from elspais.commands import _engine
+    from elspais.commands._requests import GlossaryRequest
 
-    def _compute(graph, config, params):  # type: ignore
+    def _compute(graph, config, request):  # type: ignore
         td = graph.terms if hasattr(graph, "terms") else None
         if not td:
             # Try root repo graph
@@ -306,9 +307,9 @@ def run(args: argparse.Namespace) -> int:
         if td is None:
             return {"error": "No terms found in graph"}
 
-        fmt = params.get("format", "markdown")
+        fmt = request.format
 
-        if params.get("command") == "glossary":
+        if request.command == "glossary":
             content = generate_glossary(td, format=fmt)
             print(content)
         else:
@@ -317,17 +318,15 @@ def run(args: argparse.Namespace) -> int:
 
         return {"success": True}
 
-    params: dict[str, str] = {
-        "command": getattr(args, "command", "glossary"),
-        "format": getattr(args, "format", "markdown"),
-    }
-    output_dir = getattr(args, "output_dir", None)
-    if output_dir:
-        params["output_dir"] = output_dir
+    request = GlossaryRequest(
+        command=getattr(args, "command", "glossary"),
+        format=getattr(args, "format", "markdown"),
+        output_dir=getattr(args, "output_dir", None),
+    )
 
     _engine.call(
-        f"/api/run/{params['command']}",
-        params,
+        f"/api/run/{request.command}",
+        request,
         _compute,
         config_path=getattr(args, "config", None),
     )

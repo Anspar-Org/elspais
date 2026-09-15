@@ -243,10 +243,9 @@ def run(args: argparse.Namespace) -> int:
 
     data = engine_call(
         "/api/run/analysis",
-        request.to_params(),
+        request,
         compute_analysis,
         config_path=getattr(args, "config", None),
-        request=request,
     )
     report = _report_from_dict(data)
     scope_lines = data.get("scope") or []

@@ -14,6 +14,10 @@ import io
 import sys
 from contextlib import redirect_stdout
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from elspais.commands._requests import ReportInputs
 
 COMPOSABLE_SECTIONS = (
     "checks",
@@ -149,25 +153,39 @@ def _offered_by(section: str) -> tuple[str, ...]:
     return tuple(module.OFFERED_VALUES)
 
 
-# Implements: REQ-d00282-F
-def _refuse_unhonourable_values(sections: list[str], args: argparse.Namespace) -> str | None:
-    """The reason this composition cannot honour its selection, or None.
+# Implements: REQ-d00282-A
+def _identity_key_for(section: str) -> str:
+    """What a row of this section is about, for the values it offers.
+
+    Read off the owning module the same way ``_offered_by`` reads its offer --
+    a module whose rows are not one requirement each (``summary``) names its
+    own; everything else states nothing beyond a value (REQ-d00282-A).
+    """
+    from importlib import import_module
+
+    module = import_module(VALUE_SECTIONS[section])
+    return getattr(module, "IDENTITY_VALUE", "")
+
+
+# Implements: REQ-d00282-F, REQ-d00279-C
+def _section_inputs(
+    sections: list[str], args: argparse.Namespace, config: dict | None
+) -> dict[str, ReportInputs] | str:
+    """Each section's derived inputs, or the refusal to print instead.
 
     Judged before anything is built and before anything is written, because a
     refusal that has already produced an artifact has produced the report it
     refused. A reader who names a value no section offers, and a reader who
     names a section that states nothing about a requirement, are both asking
     for a report the tool cannot assemble.
-    """
-    from elspais.commands._values import (
-        UnofferedValues,
-        value_silent_refusal,
-        values_from_args,
-    )
-    from elspais.config import get_config
-    from elspais.graph.values import resolve_values
 
-    config = get_config(getattr(args, "config", None))
+    Derived ONCE per section through the one edge a standalone invocation
+    uses (``report_inputs_from_args``), so a composed report refuses -- and
+    states -- exactly what asking for the section alone would.
+    """
+    from elspais.commands._edges import report_inputs_from_args
+    from elspais.commands._values import UnofferedValues, value_silent_refusal
+
     silent = [s for s in sections if s not in VALUE_SECTIONS]
     if silent:
         # The same helper the standalone invocation of such a section uses, so
@@ -176,17 +194,17 @@ def _refuse_unhonourable_values(sections: list[str], args: argparse.Namespace) -
         refusal = value_silent_refusal(args, config, ", ".join(sorted(set(silent))))
         if refusal is not None:
             return refusal
-    selection = values_from_args(args, config)
-    if selection is None:
-        return None
+    out: dict[str, ReportInputs] = {}
     for section in sections:
         if section not in VALUE_SECTIONS:
             continue
         try:
-            resolve_values(selection, _offered_by(section), identity_key="")
+            out[section] = report_inputs_from_args(
+                args, config, _offered_by(section), _identity_key_for(section)
+            )
         except UnofferedValues as exc:
             return f"{section}: {exc}"
-    return None
+    return out
 
 
 # Implements: REQ-d00085-A+B+C
@@ -209,15 +227,26 @@ def run(
             )
             return 1
 
+    from elspais.config import get_config
+
+    config = get_config(getattr(args, "config", None))
+
     # Implements: REQ-d00282-F
-    refusal = _refuse_unhonourable_values(sections, args)
-    if refusal is not None:
-        print(f"Error: {refusal}", file=sys.stderr)
+    # `section_inputs` is judged here rather than discarded: a name no section
+    # offers is refused before anything is built, using the same edge each
+    # standalone invocation resolves its own inputs through. Each section's
+    # renderer below re-derives its own inputs from `args` -- the values are
+    # identical because both calls reach the same deterministic edge, and
+    # `_render_section`'s dispatch shape (name, graph, config, args) is a
+    # standalone command's own signature, not a composition-only interface a
+    # second value could be threaded through.
+    section_inputs = _section_inputs(sections, args, config)
+    if isinstance(section_inputs, str):
+        print(f"Error: {section_inputs}", file=sys.stderr)
         return 1
 
     # Build graph once for sections that need it
     graph = None
-    config = None
     graph_sections = {
         "checks",
         "summary",
@@ -231,17 +260,14 @@ def run(
         "uncited",
     }
     if set(sections) & graph_sections:
-        from elspais.config import get_config
         from elspais.graph.factory import build_graph
 
         spec_dir = getattr(args, "spec_dir", None)
-        config_path = getattr(args, "config", None)
 
         graph = build_graph(
             spec_dirs=[spec_dir] if spec_dir else None,
-            config_path=config_path,
+            config_path=getattr(args, "config", None),
         )
-        config = get_config(config_path)
 
     outputs: list[str] = []
     combined_exit = 0

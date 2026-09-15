@@ -4935,10 +4935,9 @@ def run(args: argparse.Namespace) -> int:
     else:
         data = _engine.call(
             "/api/run/checks",
-            request.to_params(),
+            request,
             compute_checks,
             config_path=getattr(args, "config", None),
-            request=request,
         )
 
     healthy = data.get("healthy", False)
@@ -4978,10 +4977,9 @@ def run_preset(args: argparse.Namespace, preset: str) -> int:
     else:
         data = _engine.call(
             "/api/run/checks",
-            request.to_params(),
+            request,
             compute_checks,
             config_path=getattr(args, "config", None),
-            request=request,
         )
 
     report = _report_from_dict(data)

@@ -1308,16 +1308,16 @@ class TestADeclaredScopeCarriesItsValues:
         """A selection spelled at the moment a report is run is known only to
         whoever spelled it; declared beside the requirements it selects over it
         is versioned with them."""
-        from elspais.commands._values import resolve_report_values
+        from elspais.commands._edges import report_inputs_from_args
 
         config = {"scopes": {"Overview": {"level": ["prd"], "values": ["tested", "implemented"]}}}
-        stated = resolve_report_values(
+        inputs = report_inputs_from_args(
             argparse.Namespace(values=None, scope="overview"),
-            summary_cmd.OFFERED_VALUES,
-            summary_cmd.DEFAULT_VALUES,
             config,
+            summary_cmd.OFFERED_VALUES,
             identity_key=summary_cmd.IDENTITY_VALUE,
         )
+        stated = inputs.values or summary_cmd.DEFAULT_VALUES
         # Read case-insensitively, in the order declared, under the identity
         # value the report keeps whatever was named (REQ-d00282-K+L).
         assert stated == ("level", "tested", "implemented")
@@ -1326,16 +1326,19 @@ class TestADeclaredScopeCarriesItsValues:
     def test_a_declaration_naming_no_values_constrains_none(self):
         """The two halves stay independent: a scope that selects requirements
         and names no facts leaves the report stating the facts it would have."""
-        from elspais.commands._values import resolve_report_values
+        from elspais.commands._edges import report_inputs_from_args
 
         config = {"scopes": {"overview": {"level": ["prd"]}}}
-        stated = resolve_report_values(
+        inputs = report_inputs_from_args(
             argparse.Namespace(values=None, scope="overview"),
-            summary_cmd.OFFERED_VALUES,
-            summary_cmd.DEFAULT_VALUES,
             config,
+            summary_cmd.OFFERED_VALUES,
+            identity_key=summary_cmd.IDENTITY_VALUE,
         )
-        assert stated == tuple(summary_cmd.DEFAULT_VALUES)
+        # An unstamped payload IS the default report (REQ-d00282-E): nothing
+        # named leaves `values` unset rather than widened to the default set.
+        assert inputs.values is None
+        assert (inputs.values or summary_cmd.DEFAULT_VALUES) == tuple(summary_cmd.DEFAULT_VALUES)
 
     # Verifies: REQ-d00280-C, REQ-d00282-J
     def test_the_declaration_is_written_in_value_keys(self):
@@ -1776,8 +1779,8 @@ def no_compute(monkeypatch):
     building a graph.
     """
 
-    def refuse(_endpoint, params, *_args, **_kwargs):
-        raise _Computed(dict(params))
+    def refuse(_endpoint, request, *_args, **_kwargs):
+        raise _Computed(dict(request.to_params()))
 
     monkeypatch.setattr("elspais.commands._engine.call", refuse)
 

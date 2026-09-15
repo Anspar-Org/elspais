@@ -69,6 +69,9 @@ OFFERED_VALUES: tuple[str, ...] = tuple(
     key for key, spec in VALUE_SPECS.items() if not spec.group_only
 )
 
+# Every row here is one requirement, identified by its own id.
+IDENTITY_VALUE = "id"
+
 
 # Implements: REQ-d00282-B
 # Selecting a measure or a scalar part of a dimension reaches its number
@@ -1080,7 +1083,7 @@ def render_section(
     from elspais.commands._edges import report_inputs_from_args
 
     try:
-        inputs = report_inputs_from_args(args, config, OFFERED_VALUES, identity_key="id")
+        inputs = report_inputs_from_args(args, config, OFFERED_VALUES, identity_key=IDENTITY_VALUE)
     except UnofferedValues as err:
         return f"Error: {err}", 1
     # Implements: REQ-d00282-E
@@ -1178,7 +1181,7 @@ def _resolve_inputs_or_report(
     from elspais.commands._edges import report_inputs_from_args
 
     try:
-        return report_inputs_from_args(args, config, OFFERED_VALUES, identity_key="id")
+        return report_inputs_from_args(args, config, OFFERED_VALUES, identity_key=IDENTITY_VALUE)
     except UnofferedValues as err:
         print(f"Error: {err}", file=sys.stderr)
         return None
@@ -1282,10 +1285,9 @@ def run(args: argparse.Namespace) -> int:
     else:
         data = _engine.call(
             "/api/run/trace",
-            request.to_params(),
+            request,
             compute_trace,
             config_path=config_path,
-            request=request,
         )
 
         # Implements: REQ-d00084-A

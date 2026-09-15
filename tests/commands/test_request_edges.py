@@ -85,11 +85,10 @@ def test_nothing_named_stays_None_so_the_default_report_is_distinguishable():
     assert report_inputs_from_args(args, None, OFFERED, identity_key="level").values is None
 
 
-def test_engine_call_with_a_request_hands_compute_fn_the_request_object(monkeypatch):
-    """Migration scaffolding (deleted in Task 7): a ``request=`` call reaches
-    ``compute_fn`` with the request object itself, not a re-serialized dict --
-    the whole point of the request types is that a derived value survives the
-    trip through the local path unchanged."""
+def test_engine_call_hands_compute_fn_the_request_object(monkeypatch):
+    """``_engine.call`` reaches ``compute_fn`` with the request object itself,
+    not a re-serialized dict -- the whole point of the request types is that a
+    derived value survives the trip through the local path unchanged."""
     from elspais.commands import _engine
     from elspais.commands._requests import SummaryRequest
 
@@ -104,19 +103,14 @@ def test_engine_call_with_a_request_hands_compute_fn_the_request_object(monkeypa
         received.append(received_request)
         return {}
 
-    _engine.call("/api/run/summary", {}, compute_fn, request=request)
+    _engine.call("/api/run/summary", request, compute_fn)
 
     assert received == [request]
     assert isinstance(received[0], SummaryRequest)
 
 
-def test_engine_call_with_a_request_sends_its_to_params_to_the_daemon(monkeypatch):
-    """The daemon path is fed ``request.to_params()``, never the ``params``
-    argument passed alongside a ``request=`` -- a regression that shipped
-    ``params`` instead would still satisfy every other test here, since a
-    default-constructed request's ``to_params()`` can coincide with an empty
-    dict. Passing a deliberately different, non-empty ``params`` makes the two
-    distinguishable, so a typo swapping them back in is caught."""
+def test_engine_call_sends_request_to_params_to_the_daemon(monkeypatch):
+    """The daemon path is fed ``request.to_params()``."""
     from elspais.commands import _engine
     from elspais.commands._requests import SummaryRequest
 
@@ -129,11 +123,9 @@ def test_engine_call_with_a_request_sends_its_to_params_to_the_daemon(monkeypatc
 
     monkeypatch.setattr(_engine, "_try_daemon", fake_try_daemon)
 
-    stale_params = {"this": "must-not-travel"}
-    _engine.call("/api/run/summary", stale_params, lambda g, c, r: {}, request=request)
+    _engine.call("/api/run/summary", request, lambda g, c, r: {})
 
     assert observed == [request.to_params()]
-    assert observed != [stale_params]
 
 
 # Verifies: REQ-d00258-C

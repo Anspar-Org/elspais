@@ -8,15 +8,16 @@ from unittest.mock import patch
 def test_engine_call_local_includes_graph_source():
     """Local fallback should tag result with graph_source='local'."""
     from elspais.commands._engine import call
+    from elspais.commands._requests import ChecksRequest
 
-    def fake_compute(graph, config, params):
+    def fake_compute(graph, config, request):
         return {"healthy": True, "checks": []}
 
     with patch(
         "elspais.commands._engine._ensure_local_graph",
         return_value=(object(), {}),
     ):
-        result = call("/api/run/checks", {}, fake_compute, skip_daemon=True)
+        result = call("/api/run/checks", ChecksRequest(), fake_compute, skip_daemon=True)
 
     assert "graph_source" in result
     assert result["graph_source"]["type"] == "local"
@@ -25,6 +26,7 @@ def test_engine_call_local_includes_graph_source():
 def test_engine_call_daemon_includes_graph_source():
     """Daemon path should tag result with graph_source including port."""
     from elspais.commands._engine import call
+    from elspais.commands._requests import ChecksRequest
 
     daemon_result = {"healthy": True, "checks": []}
 
@@ -32,7 +34,7 @@ def test_engine_call_daemon_includes_graph_source():
         "elspais.commands._engine._try_daemon",
         return_value=(daemon_result, {"type": "daemon", "port": 35121}),
     ):
-        result = call("/api/run/checks", {}, lambda g, c, p: {}, skip_daemon=False)
+        result = call("/api/run/checks", ChecksRequest(), lambda g, c, r: {}, skip_daemon=False)
 
     assert "graph_source" in result
     assert result["graph_source"]["type"] == "daemon"
@@ -42,6 +44,7 @@ def test_engine_call_daemon_includes_graph_source():
 def test_engine_call_viewer_includes_graph_source():
     """Viewer path should tag result with graph_source type='viewer'."""
     from elspais.commands._engine import call
+    from elspais.commands._requests import ChecksRequest
 
     viewer_result = {"healthy": True, "checks": []}
 
@@ -51,6 +54,6 @@ def test_engine_call_viewer_includes_graph_source():
         "elspais.commands._engine._try_daemon",
         return_value=(viewer_result, {"type": "viewer", "port": 5001}),
     ):
-        result = call("/api/run/checks", {}, lambda g, c, p: {}, skip_daemon=False)
+        result = call("/api/run/checks", ChecksRequest(), lambda g, c, r: {}, skip_daemon=False)
 
     assert result["graph_source"]["type"] == "viewer"

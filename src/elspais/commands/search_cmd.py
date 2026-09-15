@@ -55,11 +55,10 @@ def run(args: argparse.Namespace) -> int:
 
     data = engine_call(
         "/api/search",
-        request.to_params(),
+        request,
         compute_search,
         skip_daemon=no_daemon,
         config_path=getattr(args, "config", None),
-        request=request,
     )
 
     results = data.get("results", [])
