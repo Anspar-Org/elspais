@@ -1891,27 +1891,35 @@ class TestADeclarationNarrowsAShortfallListing:
     ):
         """`overview` declares tested then implemented, so the untested
         listing comes before the uncovered one (REQ-d00282-K)."""
-        from elspais.commands.gaps import gap_sections
+        from elspais.commands._edges import report_inputs_from_args
+        from elspais.commands.gaps import COMMAND_VALUES, OFFERED_VALUES, gap_sections
 
         with pytest.raises(_Computed):
             _run_listing("gaps", scoped_project, scope="overview")
 
         args = argparse.Namespace(values=None, scope="overview")
         config = {"scopes": {"overview": {"level": ["prd"], "values": ["tested", "implemented"]}}}
-        assert gap_sections(args, "gaps", config) == ["untested", "uncovered"]
+        inputs = report_inputs_from_args(
+            args, config, COMMAND_VALUES.get("gaps", OFFERED_VALUES), identity_key=""
+        )
+        assert gap_sections(inputs.values, "gaps") == ["untested", "uncovered"]
 
     # Verifies: REQ-d00282-E, REQ-d00280-C
     def test_the_declared_values_travel_to_the_compute_path(self, scoped_project, no_compute):
         """A selection that did not survive the trip makes a daemon-served
         report hold different listings from a locally computed one."""
-        from elspais.commands.gaps import gap_sections
+        from elspais.commands._edges import report_inputs_from_params
+        from elspais.commands.gaps import COMMAND_VALUES, OFFERED_VALUES, gap_sections
 
         with pytest.raises(_Computed) as excinfo:
             _run_listing("gaps", scoped_project, scope="overview")
         params = excinfo.value.params
         assert params["values"] == "tested,implemented"
         assert params["command"] == "gaps"
-        assert gap_sections(params, params["command"], {}) == ["untested", "uncovered"]
+        inputs = report_inputs_from_params(
+            params, COMMAND_VALUES.get(params["command"], OFFERED_VALUES), identity_key=""
+        )
+        assert gap_sections(inputs.values, params["command"]) == ["untested", "uncovered"]
 
     # Verifies: REQ-d00280-D, REQ-d00282-O
     @pytest.mark.parametrize(

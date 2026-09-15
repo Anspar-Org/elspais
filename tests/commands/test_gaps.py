@@ -874,10 +874,14 @@ class TestAShortfallListingOffersTheDimensionItReads:
     ) -> None:
         import argparse
 
-        from elspais.commands.gaps import gap_sections
+        from elspais.commands._edges import report_inputs_from_args
+        from elspais.commands.gaps import COMMAND_VALUES, OFFERED_VALUES, gap_sections
 
         args = argparse.Namespace(values=value, scope=None)
-        assert gap_sections(args, "gaps", {}) == [section]
+        inputs = report_inputs_from_args(
+            args, {}, COMMAND_VALUES.get("gaps", OFFERED_VALUES), identity_key=""
+        )
+        assert gap_sections(inputs.values, "gaps") == [section]
 
     # Verifies: REQ-d00282-K, REQ-d00282-O
     @pytest.mark.parametrize(
@@ -899,19 +903,27 @@ class TestAShortfallListingOffersTheDimensionItReads:
         """
         import argparse
 
-        from elspais.commands.gaps import gap_sections
+        from elspais.commands._edges import report_inputs_from_args
+        from elspais.commands.gaps import COMMAND_VALUES, OFFERED_VALUES, gap_sections
 
         args = argparse.Namespace(values=selection, scope=None)
-        assert gap_sections(args, "gaps", {}) == expected
+        inputs = report_inputs_from_args(
+            args, {}, COMMAND_VALUES.get("gaps", OFFERED_VALUES), identity_key=""
+        )
+        assert gap_sections(inputs.values, "gaps") == expected
 
     # Verifies: REQ-d00282-O
     def test_naming_no_values_lists_every_shortfall(self) -> None:
         import argparse
 
-        from elspais.commands.gaps import gap_sections
+        from elspais.commands._edges import report_inputs_from_args
+        from elspais.commands.gaps import COMMAND_VALUES, OFFERED_VALUES, gap_sections
 
         args = argparse.Namespace(values=None, scope=None)
-        assert gap_sections(args, "gaps", {}) == [
+        inputs = report_inputs_from_args(
+            args, {}, COMMAND_VALUES.get("gaps", OFFERED_VALUES), identity_key=""
+        )
+        assert gap_sections(inputs.values, "gaps") == [
             "uncovered",
             "untested",
             "unvalidated",
@@ -935,10 +947,18 @@ class TestAShortfallListingOffersTheDimensionItReads:
         shorthand yields the one listing it IS."""
         import argparse
 
-        from elspais.commands.gaps import gap_sections
+        from elspais.commands._edges import report_inputs_from_args
+        from elspais.commands.gaps import COMMAND_VALUES, OFFERED_VALUES, gap_sections
 
-        bare = gap_sections(argparse.Namespace(values=None, scope=None), command, {})
-        named = gap_sections(argparse.Namespace(values=value, scope=None), command, {})
+        offered = COMMAND_VALUES.get(command, OFFERED_VALUES)
+        bare_inputs = report_inputs_from_args(
+            argparse.Namespace(values=None, scope=None), {}, offered, identity_key=""
+        )
+        named_inputs = report_inputs_from_args(
+            argparse.Namespace(values=value, scope=None), {}, offered, identity_key=""
+        )
+        bare = gap_sections(bare_inputs.values, command)
+        named = gap_sections(named_inputs.values, command)
         assert bare == named == [command]
 
     # Verifies: REQ-d00282-F, REQ-d00282-O
@@ -949,12 +969,15 @@ class TestAShortfallListingOffersTheDimensionItReads:
         for."""
         import argparse
 
+        from elspais.commands._edges import report_inputs_from_args
         from elspais.commands._values import UnofferedValues
-        from elspais.commands.gaps import gap_sections
+        from elspais.commands.gaps import COMMAND_VALUES, OFFERED_VALUES
 
         args = argparse.Namespace(values="tested", scope=None)
         with pytest.raises(UnofferedValues) as excinfo:
-            gap_sections(args, "uncovered", {})
+            report_inputs_from_args(
+                args, {}, COMMAND_VALUES.get("uncovered", OFFERED_VALUES), identity_key=""
+            )
         assert excinfo.value.unoffered == ("tested",)
         message = str(excinfo.value)
         assert "tested" in message
@@ -981,15 +1004,21 @@ class TestAShortfallListingOffersTheDimensionItReads:
         import argparse
         import json as _json
 
-        from elspais.commands.gaps import compute_gaps, gap_sections
+        from elspais.commands._edges import report_inputs_from_args, report_inputs_from_params
+        from elspais.commands._requests import GapsRequest
+        from elspais.commands.gaps import COMMAND_VALUES, OFFERED_VALUES, compute_gaps, gap_sections
         from elspais.commands.report import _render_section
 
         args = argparse.Namespace(
             values=selection, scope=None, format="json", command="gaps", status=None
         )
 
-        from_args = gap_sections(args, "gaps", {})
-        from_params = list(compute_gaps(canonical_federated_graph, {}, {"values": selection}))
+        offered = COMMAND_VALUES.get("gaps", OFFERED_VALUES)
+        arg_inputs = report_inputs_from_args(args, {}, offered, identity_key="")
+        from_args = gap_sections(arg_inputs.values, "gaps")
+        param_inputs = report_inputs_from_params({"values": selection}, offered, identity_key="")
+        request = GapsRequest(scope=param_inputs.scope, values=param_inputs.values)
+        from_params = list(compute_gaps(canonical_federated_graph, {}, request))
         composed, _code = _render_section("gaps", canonical_federated_graph, {}, args)
         from_composition = [k for k in _json.loads(composed) if k not in ("integrated", "scope")]
 

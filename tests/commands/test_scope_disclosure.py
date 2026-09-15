@@ -277,7 +277,9 @@ class TestAnalysisDisclosesItsScope:
         self, canonical_federated_graph, canonical_config, scope_params
     ):
         data = analysis_cmd.compute_analysis(
-            canonical_federated_graph, canonical_config, {**scope_params, "top": "5"}
+            canonical_federated_graph,
+            canonical_config,
+            _analysis_request({**scope_params, "top": "5"}),
         )
         assert data["scope"], "a ranking narrowed to one level must say so"
         ranked = {ns["node_id"] for ns in data["ranked_nodes"]}
@@ -286,7 +288,9 @@ class TestAnalysisDisclosesItsScope:
 
     # Verifies: REQ-p00084-D
     def test_an_unranked_scope_declares_nothing(self, canonical_federated_graph, canonical_config):
-        data = analysis_cmd.compute_analysis(canonical_federated_graph, canonical_config, {})
+        data = analysis_cmd.compute_analysis(
+            canonical_federated_graph, canonical_config, _analysis_request({})
+        )
         assert "scope" not in data
 
     # Verifies: REQ-p00084-C+D
@@ -295,7 +299,9 @@ class TestAnalysisDisclosesItsScope:
         self, canonical_federated_graph, canonical_config, scope_params, capsys, fmt
     ):
         data = analysis_cmd.compute_analysis(
-            canonical_federated_graph, canonical_config, {**scope_params, "top": "5"}
+            canonical_federated_graph,
+            canonical_config,
+            _analysis_request({**scope_params, "top": "5"}),
         )
         report = analysis_cmd._report_from_dict(data)
         if fmt == "json":
@@ -324,6 +330,22 @@ def _summary_request(params: dict):
 
     inputs = report_inputs_from_params(params, summary.OFFERED_VALUES, summary.IDENTITY_VALUE)
     return SummaryRequest(scope=inputs.scope, values=inputs.values)
+
+
+def _analysis_request(params: dict):
+    """`analysis` offers no values, so it is always resolved against an empty
+    offer -- there is nothing a declaration could narrow for it."""
+    from elspais.commands._edges import report_inputs_from_params
+    from elspais.commands._requests import AnalysisRequest
+
+    inputs = report_inputs_from_params(params, (), identity_key="")
+    return AnalysisRequest(
+        scope=inputs.scope,
+        values=inputs.values,
+        top=int(params.get("top", "10")),
+        include_code=params.get("include_code", "false") == "true",
+        weights=params.get("weights"),
+    )
 
 
 @pytest.fixture(scope="module")

@@ -1315,20 +1315,57 @@ async def api_run_summary(request: Request) -> JSONResponse:
 
 async def api_run_gaps(request: Request) -> JSONResponse:
     """GET /api/run/gaps - Traceability coverage gaps."""
-    from elspais.commands.gaps import compute_gaps
+    from elspais.commands._edges import report_inputs_from_params
+    from elspais.commands._requests import GapsRequest
+    from elspais.commands._values import UnofferedValues
+    from elspais.commands.gaps import COMMAND_VALUES, OFFERED_VALUES, compute_gaps
 
     state = _st(request)
     params = dict(request.query_params)
-    return JSONResponse(compute_gaps(state.graph, state.config, params))
+    command = params.get("command", "gaps")
+    try:
+        inputs = report_inputs_from_params(
+            params, COMMAND_VALUES.get(command, OFFERED_VALUES), identity_key=""
+        )
+        treat_str = params.get("treat_active")
+        gaps_request = GapsRequest(
+            scope=inputs.scope,
+            values=inputs.values,
+            command=command,
+            treat_active=tuple(treat_str.split(",")) if treat_str else (),
+        )
+        return JSONResponse(compute_gaps(state.graph, state.config, gaps_request))
+    except UnofferedValues as exc:
+        # A report is not produced under a selection honoured in part, and a
+        # caller asking for a value this report does not offer is told so
+        # rather than handed a narrower report that looks like the one asked
+        # for.
+        return JSONResponse({"error": "unoffered_values", "message": str(exc)}, status_code=400)
 
 
 async def api_run_analysis(request: Request) -> JSONResponse:
     """GET /api/run/analysis - Foundation analysis report."""
+    from elspais.commands._edges import report_inputs_from_params
+    from elspais.commands._requests import AnalysisRequest
+    from elspais.commands._values import UnofferedValues
     from elspais.commands.analysis_cmd import compute_analysis
 
     state = _st(request)
     params = dict(request.query_params)
-    return JSONResponse(compute_analysis(state.graph, state.config, params))
+    try:
+        # This report offers no values -- a caller who wrote one is refused
+        # rather than handed a report the selection could not narrow.
+        inputs = report_inputs_from_params(params, (), identity_key="")
+        analysis_request = AnalysisRequest(
+            scope=inputs.scope,
+            values=inputs.values,
+            top=int(params.get("top", "10")),
+            include_code=params.get("include_code", "false") == "true",
+            weights=params.get("weights"),
+        )
+        return JSONResponse(compute_analysis(state.graph, state.config, analysis_request))
+    except UnofferedValues as exc:
+        return JSONResponse({"error": "unoffered_values", "message": str(exc)}, status_code=400)
 
 
 # Implements: REQ-d00282-F

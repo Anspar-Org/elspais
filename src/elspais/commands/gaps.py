@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    from elspais.commands._requests import GapsRequest
     from elspais.graph.federated import FederatedGraph
 
 from elspais.graph import NodeKind
@@ -379,8 +380,6 @@ GAP_SECTION_FOR_VALUE: dict[str, str] = {
 # special case.
 OFFERED_VALUES: tuple[str, ...] = tuple(GAP_SECTION_FOR_VALUE)
 
-VALUE_FOR_GAP_SECTION: dict[str, str] = {v: k for k, v in GAP_SECTION_FOR_VALUE.items()}
-
 # Implements: REQ-d00282-A
 # What each command offers. A shorthand offers the one dimension it IS, so
 # `uncovered --values tested` names a value `uncovered` does not offer and is
@@ -393,25 +392,18 @@ COMMAND_VALUES: dict[str, tuple[str, ...]] = {
 _ALL_GAP_TYPES = list(GAP_SECTION_FOR_VALUE.values())
 
 
-# Implements: REQ-d00282-A, REQ-d00279-C
-def gap_sections(
-    args_or_params: Any,
-    command: str = "gaps",
-    config: dict[str, Any] | None = None,
-) -> list[str]:
-    """The sections this invocation asks for, in the order it named them.
+# Implements: REQ-d00282-O
+def gap_sections(values: tuple[str, ...] | None, command: str = "gaps") -> list[str]:
+    """The sections this request asks for, in the order it named them.
 
-    The ONE place a value selection becomes a set of sections. Every path
-    producing this report reaches it -- the standalone command, the section
-    composed with others, and the serving process handed parameters -- because
-    REQ-d00279-C obliges them to yield the same report and a selection read
-    separately by each is how they start disagreeing. Raises ``UnofferedValues``
-    where a name is not one this command offers.
+    Takes values already resolved against this command's offer -- by
+    ``report_inputs_from_args``/``report_inputs_from_params`` at whichever edge
+    was invoked -- so composing a section and asking for it alone choose
+    listings the same way (REQ-d00279-C). ``None`` states this command's
+    default offer, matching every other report's ``values`` contract.
     """
-    from elspais.commands._values import resolve_report_values
-
     offered = COMMAND_VALUES.get(command, OFFERED_VALUES)
-    keys = resolve_report_values(args_or_params, offered, offered, config, identity_key="")
+    keys = offered if values is None else values
     return [GAP_SECTION_FOR_VALUE[key] for key in keys]
 
 
@@ -437,7 +429,11 @@ def render_section(
     from elspais.commands.health import _resolve_exclude_status
 
     if gap_types is None:
-        gap_types = gap_sections(args, command, config)
+        from elspais.commands._edges import report_inputs_from_args
+
+        offered = COMMAND_VALUES.get(command, OFFERED_VALUES)
+        inputs = report_inputs_from_args(args, config, offered, identity_key="")
+        gap_types = gap_sections(inputs.values, command)
 
     exclude_status = _resolve_exclude_status(args, config=config or {})
     from elspais.commands._scope import resolve_scope_for_report, scope_disclosure
@@ -532,24 +528,24 @@ def _gap_data_from_dict(data: dict[str, Any]) -> GapData:
 
 
 # Implements: REQ-d00279-C
-def compute_gaps(graph: FederatedGraph, config: dict, params: dict[str, str]) -> dict:
-    """Engine-compatible wrapper around collect_gaps.
+def compute_gaps(graph: FederatedGraph, config: dict, request: GapsRequest) -> dict:
+    """The gap listing this request asks for.
 
-    Params:
-        type: Optional gap type filter (uncovered, untested, unvalidated, failing).
-        treat_active: Optional comma-separated statuses to treat as committed.
+    Resolves nothing: the scope was expanded and the selection resolved at the
+    edge that was invoked, which is the only place that could tell a project's
+    declaration from a reader's own words (REQ-d00280-D).
     """
     import argparse as _argparse
 
     from elspais.commands.health import _resolve_exclude_status
 
     fake_args = _argparse.Namespace()
-    treat_str = params.get("treat_active", None)
-    fake_args.treat_active = treat_str.split(",") if treat_str else None
+    fake_args.treat_active = list(request.treat_active) if request.treat_active else None
     exclude_status = _resolve_exclude_status(fake_args, config=config)
-    from elspais.commands._scope import resolve_scope_for_report, scope_disclosure
+    from elspais.commands._scope import scope_disclosure
+    from elspais.graph.scope import scoped_requirements
 
-    scope_result = resolve_scope_for_report(graph, params, config)
+    scope_result = scoped_requirements(graph, request.scope, config)
     ids = None if len(scope_result.ids) == scope_result.population else scope_result.ids
     data = collect_gaps(graph, exclude_status, config=config, node_ids=ids)
     scope_lines = scope_disclosure(scope_result)
@@ -567,7 +563,7 @@ def compute_gaps(graph: FederatedGraph, config: dict, params: dict[str, str]) ->
     # the same function the local paths read it with -- a serving process that
     # decided for itself which sections a report holds is how a daemon-served
     # report starts differing from a locally computed one.
-    sections = gap_sections(params, params.get("command", "gaps"), config)
+    sections = gap_sections(request.values, request.command)
 
     result: dict[str, Any] = {}
     for gt in sections:
@@ -587,10 +583,12 @@ def run(args: argparse.Namespace) -> int:
     Tries a running daemon/viewer first for fast results,
     falls back to local graph build.
     """
+    from elspais.commands._edges import report_inputs_from_args
     from elspais.commands._engine import call as engine_call
-    from elspais.commands._values import UnofferedValues, values_to_params
+    from elspais.commands._requests import GapsRequest
+    from elspais.commands._scope import flag_values
+    from elspais.commands._values import UnofferedValues
     from elspais.config import get_config
-    from elspais.graph.values import ValueSelection
 
     command = getattr(args, "command", "gaps")
     config = get_config(getattr(args, "config", None))
@@ -601,45 +599,37 @@ def run(args: argparse.Namespace) -> int:
     # is what keeps a reader from receiving a narrower report than they asked
     # for while it looks exactly like the one they wanted.
     try:
-        gap_types: list[str] | None = gap_sections(args, command, config)
+        inputs = report_inputs_from_args(
+            args, config, COMMAND_VALUES.get(command, OFFERED_VALUES), identity_key=""
+        )
     except UnofferedValues as exc:
         print(f"Error: {command}: {exc}", file=sys.stderr)
         return 1
 
+    request = GapsRequest(
+        scope=inputs.scope,
+        values=inputs.values,
+        command=command,
+        treat_active=flag_values(args, "treat_active"),
+    )
+
     fmt = getattr(args, "format", "text")
     spec_dir = getattr(args, "spec_dir", None)
 
-    # Implements: REQ-d00282-E
-    # What travels is the selection AS RESOLVED here, not as it was written: a
-    # declaration's values are read against what each report offers
-    # (REQ-d00280-E), and a compute path handed the raw declaration would judge
-    # it a second time with no way to know a project had declared it.
-    params: dict[str, str] = {"command": command}
-    params.update(
-        values_to_params(
-            ValueSelection(keys=tuple(VALUE_FOR_GAP_SECTION[gt] for gt in gap_types or []))
-        )
-    )
-    # Status selection has to reach the compute path: this command reaches it
-    # through the engine, so a selection left out of params is silently lost.
-    from elspais.commands._scope import flag_values
-
-    treat_active = flag_values(args, "treat_active")
-    if treat_active:
-        params["treat_active"] = ",".join(treat_active)
-
-    # The scope reaches the compute path the same way and for the same reason.
-    from elspais.commands._scope import scope_params_from_args
-
-    params.update(scope_params_from_args(args, config))
-
     data = engine_call(
         "/api/run/gaps",
-        params,
+        request.to_params(),
         compute_gaps,
         config_path=getattr(args, "config", None),
         skip_daemon=bool(spec_dir),
+        request=request,
     )
+
+    # Implements: REQ-d00282-E
+    # Resolved again from the request AS RESOLVED here, not re-derived from the
+    # payload: rendering states the sections this reader asked for whether the
+    # payload was computed locally or by a serving process.
+    gap_types: list[str] | None = gap_sections(inputs.values, command)
 
     scope_lines = data.get("scope") or []
     if fmt == "json":
