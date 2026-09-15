@@ -20,7 +20,6 @@ from dataclasses import replace
 from typing import Any
 
 from elspais.graph.values import (
-    VALUE_LIST_SEPARATOR,
     UnofferedValues,
     ValueSelection,
     parse_value_selection,
@@ -32,8 +31,6 @@ __all__ = [
     "values_from_args",
     "value_silent_refusal",
     "values_from_params",
-    "values_to_params",
-    "value_params_from_args",
 ]
 
 # The query parameter a selection travels to a serving process under.
@@ -118,18 +115,6 @@ def value_silent_refusal(
     )
 
 
-def values_to_params(selection: ValueSelection | None) -> dict[str, str]:
-    """Serialize a selection for a report computed by a serving process."""
-    if selection is None or not selection:
-        return {}
-    return {VALUES_PARAM: VALUE_LIST_SEPARATOR.join(selection.keys)}
-
-
 def values_from_params(params: Mapping[str, str]) -> ValueSelection | None:
-    """Rebuild a selection a serving process was handed. Inverse of the above."""
+    """Rebuild a selection a serving process was handed. Inverse of ``ReportInputs.to_params``."""
     return parse_value_selection(params.get(VALUES_PARAM))
-
-
-def value_params_from_args(args: Any, config: Mapping[str, Any] | None = None) -> dict[str, str]:
-    """The query parameters carrying this invocation's selection onward."""
-    return values_to_params(values_from_args(args, config))

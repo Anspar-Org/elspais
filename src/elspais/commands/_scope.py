@@ -24,7 +24,6 @@ from elspais.graph.scope import (
 __all__ = [
     "flag_values",
     "scope_from_args",
-    "scope_params_from_args",
     "scope_from_params",
     "scope_to_params",
     "scope_disclosure",
@@ -101,11 +100,6 @@ def scope_from_args(args: Any, config: dict[str, Any] | None = None) -> ReportSc
     if not include and not exclude:
         return None
     return ReportScope(include=include, exclude=exclude, match_status_roles=match_roles)
-
-
-def scope_params_from_args(args: Any, config: dict[str, Any] | None = None) -> dict[str, str]:
-    """The query parameters carrying this invocation's scope to a serving process."""
-    return scope_to_params(scope_from_args(args, config))
 
 
 # Implements: REQ-d00278-L

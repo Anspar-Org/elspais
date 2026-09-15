@@ -25,11 +25,11 @@ import tyro
 
 from elspais.cli import _to_namespace
 from elspais.commands import analysis_cmd, summary, trace
+from elspais.commands._requests import ReportInputs
 from elspais.commands._scope import (
     scope_disclosure,
     scope_from_args,
     scope_from_params,
-    scope_params_from_args,
 )
 from elspais.commands.args import GlobalArgs
 from elspais.commands.report import parse_shared_args
@@ -70,8 +70,13 @@ def scoped(canonical_federated_graph, canonical_config):
 
 @pytest.fixture(scope="module")
 def scope_params(canonical_config) -> dict:
-    """The same scope, in the shape a serving process is handed it."""
-    return scope_params_from_args(_scope_args(), canonical_config)
+    """The same scope, in the shape a serving process is handed it.
+
+    Carried through ``ReportInputs.to_params()`` -- the one place a scope is
+    serialized for a serving process (REQ-d00279-C) -- rather than the deleted
+    ``scope_params_from_args`` bridge, which had no production caller left.
+    """
+    return ReportInputs(scope=scope_from_args(_scope_args(), canonical_config)).to_params()
 
 
 @pytest.fixture(scope="module")

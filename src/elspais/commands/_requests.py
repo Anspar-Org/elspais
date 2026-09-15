@@ -27,6 +27,27 @@ class ReportInputs:
     scope: ReportScope | None = None
     values: tuple[str, ...] | None = None
 
+    def __post_init__(self) -> None:
+        # ``values=()`` and ``values=None`` are NOT the same thing -- None is
+        # "nothing named" (the default report) and a resolved selection is
+        # never empty (``resolve_values`` returns the offered set rather than
+        # producing one). An empty tuple has no legitimate meaning, and one
+        # that reached a consumer would be dangerous rather than merely
+        # useless: ``to_params()`` serializes it as no ``values`` key at all,
+        # so it round-trips into "nothing named" and silently widens to the
+        # default report; a direct construction (the MCP path) that read it
+        # straight would do the same wherever a caller writes
+        # ``values or default``. Refusing it here, at construction, closes
+        # that off for every ``ReportInputs`` subclass and every consumer at
+        # once rather than only at the params edge.
+        if self.values is not None and not self.values:
+            raise ValueError(
+                "ReportInputs.values must be None (nothing named) or a "
+                "non-empty tuple of value keys -- an empty tuple round-trips "
+                "through to_params() as 'nothing named' and would silently "
+                "widen to the default report."
+            )
+
     def to_params(self) -> dict[str, str]:
         """Serialize for a serving process. The mirror of ``report_inputs_from_params``."""
         from elspais.commands._scope import scope_to_params
