@@ -13,6 +13,7 @@ from __future__ import annotations
 import functools
 import json
 import time
+from collections.abc import Callable
 from datetime import date as date_type
 from pathlib import Path
 from typing import Any
@@ -1283,6 +1284,22 @@ async def api_check_freshness(request: Request) -> JSONResponse:
 # ─────────────────────────────────────────────────────────────────
 
 
+# Implements: REQ-d00282-F, REQ-o00062-O
+def _request_or_400(build: Callable[[], Any]) -> Any | JSONResponse:
+    """Build a request from this query, or the one refusal every route gives.
+
+    ONE place, not one per route: a guard each handler writes for itself is a
+    guard a handler can be written without, which is how `/api/run/gaps` came
+    to answer 500 where its siblings answered 400.
+    """
+    from elspais.commands._values import UnofferedValues
+
+    try:
+        return build()
+    except UnofferedValues as exc:
+        return JSONResponse({"error": "unoffered_values", "message": str(exc)}, status_code=400)
+
+
 async def api_run_checks(request: Request) -> JSONResponse:
     """GET /api/run/checks - Run health checks and return structured report."""
     from elspais.commands._requests import ChecksRequest
@@ -1308,76 +1325,74 @@ async def api_run_summary(request: Request) -> JSONResponse:
     """GET /api/run/summary - Coverage summary data."""
     from elspais.commands._edges import report_inputs_from_params
     from elspais.commands._requests import SummaryRequest
-    from elspais.commands._values import UnofferedValues
     from elspais.commands.summary import IDENTITY_VALUE, OFFERED_VALUES, compute_summary
 
     state = _st(request)
     params = dict(request.query_params)
-    try:
+
+    def _build() -> SummaryRequest:
         inputs = report_inputs_from_params(params, OFFERED_VALUES, IDENTITY_VALUE)
-        summary_request = SummaryRequest(scope=inputs.scope, values=inputs.values)
-        return JSONResponse(compute_summary(state.graph, state.config, summary_request))
-    except UnofferedValues as exc:
-        # A report is not produced under a selection honoured in part, and a
-        # caller asking for a value this report does not offer is told so
-        # rather than handed a narrower report that looks like the one asked
-        # for.
-        return JSONResponse({"error": "unoffered_values", "message": str(exc)}, status_code=400)
+        return SummaryRequest(scope=inputs.scope, values=inputs.values)
+
+    built = _request_or_400(_build)
+    if isinstance(built, JSONResponse):
+        return built
+    return JSONResponse(compute_summary(state.graph, state.config, built))
 
 
 async def api_run_gaps(request: Request) -> JSONResponse:
     """GET /api/run/gaps - Traceability coverage gaps."""
     from elspais.commands._edges import report_inputs_from_params
     from elspais.commands._requests import GapsRequest
-    from elspais.commands._values import UnofferedValues
     from elspais.commands.gaps import COMMAND_VALUES, OFFERED_VALUES, compute_gaps
 
     state = _st(request)
     params = dict(request.query_params)
     command = params.get("command", "gaps")
-    try:
+
+    def _build() -> GapsRequest:
         inputs = report_inputs_from_params(
             params, COMMAND_VALUES.get(command, OFFERED_VALUES), identity_key=""
         )
         treat_str = params.get("treat_active")
-        gaps_request = GapsRequest(
+        return GapsRequest(
             scope=inputs.scope,
             values=inputs.values,
             command=command,
             treat_active=tuple(treat_str.split(",")) if treat_str else (),
         )
-        return JSONResponse(compute_gaps(state.graph, state.config, gaps_request))
-    except UnofferedValues as exc:
-        # A report is not produced under a selection honoured in part, and a
-        # caller asking for a value this report does not offer is told so
-        # rather than handed a narrower report that looks like the one asked
-        # for.
-        return JSONResponse({"error": "unoffered_values", "message": str(exc)}, status_code=400)
+
+    built = _request_or_400(_build)
+    if isinstance(built, JSONResponse):
+        return built
+    return JSONResponse(compute_gaps(state.graph, state.config, built))
 
 
 async def api_run_analysis(request: Request) -> JSONResponse:
     """GET /api/run/analysis - Foundation analysis report."""
     from elspais.commands._edges import report_inputs_from_params
     from elspais.commands._requests import AnalysisRequest
-    from elspais.commands._values import UnofferedValues
     from elspais.commands.analysis_cmd import compute_analysis
 
     state = _st(request)
     params = dict(request.query_params)
-    try:
+
+    def _build() -> AnalysisRequest:
         # This report offers no values -- a caller who wrote one is refused
         # rather than handed a report the selection could not narrow.
         inputs = report_inputs_from_params(params, (), identity_key="")
-        analysis_request = AnalysisRequest(
+        return AnalysisRequest(
             scope=inputs.scope,
             values=inputs.values,
             top=int(params.get("top", "10")),
             include_code=params.get("include_code", "false") == "true",
             weights=params.get("weights"),
         )
-        return JSONResponse(compute_analysis(state.graph, state.config, analysis_request))
-    except UnofferedValues as exc:
-        return JSONResponse({"error": "unoffered_values", "message": str(exc)}, status_code=400)
+
+    built = _request_or_400(_build)
+    if isinstance(built, JSONResponse):
+        return built
+    return JSONResponse(compute_analysis(state.graph, state.config, built))
 
 
 # Implements: REQ-d00282-F
@@ -1385,21 +1400,19 @@ async def api_run_trace(request: Request) -> JSONResponse:
     """GET /api/run/trace - Traceability matrix data as JSON."""
     from elspais.commands._edges import report_inputs_from_params
     from elspais.commands._requests import TraceRequest
-    from elspais.commands._values import UnofferedValues
     from elspais.commands.trace import OFFERED_VALUES, compute_trace
 
     state = _st(request)
     params = dict(request.query_params)
-    try:
+
+    def _build() -> TraceRequest:
         inputs = report_inputs_from_params(params, OFFERED_VALUES, identity_key="id")
-        trace_request = TraceRequest(scope=inputs.scope, values=inputs.values)
-        return JSONResponse(compute_trace(state.graph, state.config, trace_request))
-    except UnofferedValues as exc:
-        # A report is not produced under a selection honoured in part, and a
-        # caller asking for a value this report does not offer is told so
-        # rather than handed a narrower report that looks like the one asked
-        # for.
-        return JSONResponse({"error": "unoffered_values", "message": str(exc)}, status_code=400)
+        return TraceRequest(scope=inputs.scope, values=inputs.values)
+
+    built = _request_or_400(_build)
+    if isinstance(built, JSONResponse):
+        return built
+    return JSONResponse(compute_trace(state.graph, state.config, built))
 
 
 # ─────────────────────────────────────────────────────────────────
