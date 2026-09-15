@@ -1077,18 +1077,23 @@ def render_section(
     # A section composed with others states the same values it states alone,
     # and refuses the same selections -- a report is never produced under a
     # selection honoured in part.
-    from elspais.commands._values import resolve_report_values
+    from elspais.commands._edges import report_inputs_from_args
 
     try:
-        values = resolve_report_values(args, OFFERED_VALUES, _default_values(preset), config)
+        inputs = report_inputs_from_args(args, config, OFFERED_VALUES, identity_key="id")
     except UnofferedValues as err:
         return f"Error: {err}", 1
+    # Implements: REQ-d00282-E
+    # The preset default is applied here at render time; the request-shaped
+    # `None` (nothing named) is never widened before this point.
+    values = inputs.values or _default_values(preset)
 
     # Implements: REQ-p00084-A+B+D, REQ-d00279-C
     # A section composed with others honours the same scope it honours alone.
-    from elspais.commands._scope import resolve_scope_for_report, scope_disclosure
+    from elspais.commands._scope import scope_disclosure
+    from elspais.graph.scope import scoped_requirements
 
-    result = resolve_scope_for_report(graph, args, config)
+    result = scoped_requirements(graph, inputs.scope, config)
     scope_ids = None if len(result.ids) == result.population else result.ids
     # Implements: REQ-p00084-C+D
     # The disclosure goes THROUGH the formatter rather than ahead of it, so a
