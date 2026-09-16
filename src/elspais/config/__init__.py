@@ -51,7 +51,7 @@ def default_level_keys() -> list[str]:
     return [k for k, _r in ranked]
 
 
-# Implements: REQ-d00288-A
+# Implements: REQ-d00291-A
 def level_expects_validation(config: dict[str, Any], level_key: str | None) -> bool:
     """Return whether a level is expected to have UAT validation.
 
@@ -82,7 +82,7 @@ def level_expects_validation(config: dict[str, Any], level_key: str | None) -> b
     return False
 
 
-# Implements: REQ-d00288-D+E
+# Implements: REQ-d00291-D+E
 def status_expects_implementation(config: dict[str, Any], status: str | None) -> bool:
     """Whether a requirement's STATUS expects implementation (design §3).
 

@@ -55,7 +55,7 @@ class TestVariableLengthIds:
         result = run_elspais("checks", "--lenient", cwd=project)
         assert result.returncode == 0, f"health failed: {result.stderr}"
 
-    # Verifies: REQ-d00086-A, REQ-d00281-A, REQ-d00281-B, REQ-d00288-E+F+I
+    # Verifies: REQ-d00086-A, REQ-d00281-A, REQ-d00281-B, REQ-d00291-E+F+I
     def test_level_groups_account_for_every_reported_requirement(self, project):
         """The single level this project defines forms one group, and that
         group plus the status disclosure account for all 6 reported.
@@ -72,7 +72,7 @@ class TestVariableLengthIds:
         groups = {lv["level"]: lv["requirements"] for lv in data["levels"]}
         assert groups == {"REQ": 3}
 
-        # REQ-d00288-I: each withheld status is named with its count.
+        # REQ-d00291-I: each withheld status is named with its count.
         assert data["excluded"] == {"Draft": 1, "Deprecated": 1, "Proposed": 1}
 
         # REQ-d00281-B: 3 counted plus 3 withheld are the 6 reported.
@@ -268,7 +268,7 @@ class TestTestingConfig:
 class TestComplexDirectoryStructure:
     """spec/active + spec/approved with drafts/ and archive/ excluded."""
 
-    # Verifies: REQ-d00086-A, REQ-d00288-E+F+I
+    # Verifies: REQ-d00086-A, REQ-d00291-E+F+I
     def test_nested_structure(self, project):
         """Requirements spread across nested spec directories are counted by
         status role, whichever directory they were found in.
@@ -290,7 +290,7 @@ class TestComplexDirectoryStructure:
         data = json.loads(summary.stdout)
         total = sum(lv["requirements"] for lv in data["levels"])
         assert total == 3, f"Expected 3 active-role reqs, got {total}"
-        # REQ-d00288-I: the three withheld statuses are named, not dropped.
+        # REQ-d00291-I: the three withheld statuses are named, not dropped.
         assert data["excluded"] == {"Draft": 1, "Deprecated": 1, "Proposed": 1}
 
 
@@ -364,7 +364,7 @@ class TestAllowStructuralOrphansConfig:
 class TestStatusRolesConfig:
     """Config: status_roles controls coverage exclusion."""
 
-    # Verifies: REQ-d00288-E+F
+    # Verifies: REQ-d00291-E+F
     def test_provisional_excluded_from_summary(self, project):
         """Draft and Proposed (provisional role) should be excluded from summary counts."""
         result = run_elspais("summary", "--format", "json", cwd=project)

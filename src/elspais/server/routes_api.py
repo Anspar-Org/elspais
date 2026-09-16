@@ -624,7 +624,7 @@ async def api_node(request: Request) -> JSONResponse:
                 }
                 # UAT dims carry the per-level expectation so the viewer can
                 # render a (red) UAT badge on a journey-less expects_validation
-                # requirement (REQ-d00288-A, REQ-d00289-G).
+                # requirement (REQ-d00291-A, REQ-d00292-G).
                 if dim_key in ("uat_coverage", "uat_verified"):
                     entry["expects_validation"] = expects_validation
                 dims[dim_key] = entry
@@ -634,7 +634,7 @@ async def api_node(request: Request) -> JSONResponse:
             result["assertion_links"], result["req_level_links"] = _compute_link_data(node)
 
             # Per-assertion coverage states (full/partial/failing/none) projected
-            # from the SAME rollup metrics as the header badges (REQ-d00289-B),
+            # from the SAME rollup metrics as the header badges (REQ-d00292-B),
             # so the tiny per-assertion badges color consistently on initial
             # render rather than waiting for a lazy prefetch.
             result["assertion_coverage_states"] = compute_assertion_coverage_states(
@@ -642,7 +642,7 @@ async def api_node(request: Request) -> JSONResponse:
             )
             # The measures behind each per-assertion standing (REQ-d00069-L),
             # phrased server-side so the pill can show what produced its
-            # standing instead of a caveat marker (REQ-d00289-E, REQ-d00258-J).
+            # standing instead of a caveat marker (REQ-d00292-E, REQ-d00258-J).
             result["assertion_coverage_measures"] = compute_assertion_coverage_measures(node)
 
             # Reverse-traceability: what points AT this requirement (REQ-p00006-A)
@@ -904,7 +904,7 @@ async def api_tree_data(request: Request) -> JSONResponse:
         # Comment presence: direct comments on this node or its sub-elements
         _has_direct_comments = any(True for _ in g.iter_comments_for_card(node.id))
         tiers = compute_coverage_tiers(node, state.config)
-        # REQ-d00289-A: coverage filter bucket comes from the severity-aware
+        # REQ-d00292-A: coverage filter bucket comes from the severity-aware
         # combined_bucket (Task 6), not a naive combined_color check -- this
         # correctly classifies e.g. a fully-but-indirectly-covered requirement
         # as "full" instead of dropping it into "missing".

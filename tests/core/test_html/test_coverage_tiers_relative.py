@@ -101,7 +101,7 @@ def test_tested_reads_full_over_the_single_implemented_label():
     result = compute_coverage_tiers(node)
 
     assert result["impl_tier"] == "partial"
-    # Badge color resolves from the STANDING (REQ-d00289-F), not severity.
+    # Badge color resolves from the STANDING (REQ-d00292-F), not severity.
     assert result["impl_color"] == _standing_color("partial")
 
     # 1 of 1 implemented label is tested -> full green (RELATIVE, not 1/5).
@@ -203,7 +203,7 @@ def test_all_zero_implemented_makes_tested_not_applicable_and_neutral():
     assert result["tested_color"] != _severity_color("off")
 
 
-# Verifies: REQ-d00258-S, REQ-d00288-H
+# Verifies: REQ-d00258-S, REQ-d00291-H
 def test_expects_validation_reds_empty_uat_coverage_but_not_uat_passed():
     """expects_validation level: empty UAT-Covered is a real red gap, not neutral.
 
@@ -218,7 +218,7 @@ def test_expects_validation_reds_empty_uat_coverage_but_not_uat_passed():
     result = compute_coverage_tiers(node, config)
 
     assert result["expects_validation"] is True
-    # Empty UAT coverage, expects_validation -> red (REQ-d00288-H preserved).
+    # Empty UAT coverage, expects_validation -> red (REQ-d00291-H preserved).
     assert result["uat_cov_tier"] == "missing"
     assert result["uat_cov_color"] == _severity_color("error")
     # UAT-Passed relative to empty UAT-Covered denom -> neutral N/A grey.

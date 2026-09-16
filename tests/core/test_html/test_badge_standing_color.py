@@ -1,5 +1,5 @@
-# Verifies: REQ-d00289-F+G
-# Verifies: REQ-d00289-H
+# Verifies: REQ-d00292-F+G
+# Verifies: REQ-d00292-H
 """Badge COLOR decoupled from severity (CUR-1568).
 
 Coverage severity is overloaded to drive three things: the requirement-badge
@@ -9,7 +9,7 @@ COLOR from severity let a project set ``[rules.coverage.uat_verified] partial =
 yellow-green (job 1) -- inconsistent with the per-*Assertion* ``partial``
 standing, which renders yellow.
 
-This module pins the decoupled contract (REQ-d00289-F/G/H):
+This module pins the decoupled contract (REQ-d00292-F/G/H):
 
   - Badge COLOR comes from the coverage STANDING via the theme catalog, the same
     for the requirement dimension badge and the per-*Assertion* badge, so a given
@@ -74,7 +74,7 @@ def _all_full_rollup():
 # ── Scenario (a): uat_verified partial with partial="info" ────────────────────
 
 
-# Verifies: REQ-d00289-F
+# Verifies: REQ-d00292-F
 def test_info_severity_partial_badge_is_yellow_not_yellow_green():
     """A partial uat_verified dimension configured ``partial="info"`` (purely to
     keep CI non-failing) must STILL badge YELLOW (the honest partial standing),
@@ -96,7 +96,7 @@ def test_info_severity_partial_badge_is_yellow_not_yellow_green():
     assert tiers["uat_ver_color"] != YELLOW_GREEN
 
 
-# Verifies: REQ-d00289-H
+# Verifies: REQ-d00292-H
 def test_info_severity_partial_stays_non_dragging_on_the_bucket():
     """The SAME info-partial dimension must keep its two real severity jobs:
     ``info`` does not drag the combined bucket below ``full`` (job 2). Color is
@@ -112,7 +112,7 @@ def test_info_severity_partial_stays_non_dragging_on_the_bucket():
     assert tiers["combined_bucket"] == "full"
 
 
-# Verifies: REQ-d00289-F
+# Verifies: REQ-d00292-F
 def test_requirement_partial_badge_matches_assertion_partial_color():
     """The requirement uat_verified partial badge and the per-*Assertion* partial
     standing resolve to the SAME color (a standing is one color everywhere)."""
@@ -133,7 +133,7 @@ def test_requirement_partial_badge_matches_assertion_partial_color():
 # ── Scenario (b): implemented missing on an expecting status -> RED ───────────
 
 
-# Verifies: REQ-d00289-G
+# Verifies: REQ-d00292-G
 def test_missing_implemented_on_an_expecting_status_is_red():
     r = RollupMetrics(total_assertions=2)
     r.implemented = _dim({}, total=2)  # nothing implemented
@@ -150,7 +150,7 @@ def test_missing_implemented_on_an_expecting_status_is_red():
 # ── Scenario (c): implemented missing on a non-expecting status -> GREY ───────
 
 
-# Verifies: REQ-d00288-E, REQ-d00289-G
+# Verifies: REQ-d00291-E, REQ-d00292-G
 def test_missing_implemented_on_a_draft_status_is_grey():
     r = RollupMetrics(total_assertions=2)
     r.implemented = _dim({}, total=2)
@@ -168,7 +168,7 @@ def test_missing_implemented_on_a_draft_status_is_grey():
 # ── Scenario (d): empty relative denominator -> GREY ─────────────────────────
 
 
-# Verifies: REQ-d00258-S, REQ-d00289-G
+# Verifies: REQ-d00258-S, REQ-d00292-G
 def test_missing_tested_from_an_empty_denominator_is_grey():
     """0 implemented -> Tested relative denominator empty -> N/A missing -> grey
     (neutral), never yellow-green."""
@@ -188,7 +188,7 @@ def test_missing_tested_from_an_empty_denominator_is_grey():
 # ── Scenario (e): no badge is ever yellow-green ──────────────────────────────
 
 
-# Verifies: REQ-d00289-F
+# Verifies: REQ-d00292-F
 def test_no_badge_is_ever_yellow_green():
     """Across a representative matrix of dimension states and severity configs,
     NO requirement badge color is yellow-green. Badge colors are drawn from the

@@ -177,7 +177,7 @@ def test_untested_step_credits_partial_uat(graph_untested_step):
     assert frac == pytest.approx(2 / 3)
 
 
-# Verifies: REQ-d00255-C, REQ-d00289-A+B
+# Verifies: REQ-d00255-C, REQ-d00292-A+B
 def test_partial_journey_consistency_standing_and_tier(graph_untested_step):
     """The SINGLE uat_verified metric change flows to BOTH levels: the
     per-assertion UAT Passed standing (compute_assertion_coverage_states) reads

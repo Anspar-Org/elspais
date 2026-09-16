@@ -80,7 +80,7 @@ class TestNamedComponentIds:
         result = run_elspais("checks", "--lenient", cwd=project)
         assert result.returncode == 0, f"health failed: {result.stderr}"
 
-    # Verifies: REQ-d00086-A, REQ-d00281-A, REQ-d00281-B, REQ-d00288-E
+    # Verifies: REQ-d00086-A, REQ-d00281-A, REQ-d00281-B, REQ-d00291-E
     def test_level_groups_account_for_every_reported_requirement(self, project):
         """Named-component IDs group by the level their ID names, and the
         groups account for all 5 reported requirements.

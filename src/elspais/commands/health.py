@@ -2720,7 +2720,7 @@ def run_spec_checks(
 # =============================================================================
 
 
-# Implements: REQ-d00288-G
+# Implements: REQ-d00291-G
 def _status_flags(treat_active: tuple[str, ...]) -> set[str]:
     """Title-cased set of statuses named via ``--treat-active`` (empty when unset)."""
     return {s.title() for s in treat_active}
@@ -3900,7 +3900,7 @@ def check_test_coverage(
     return check_dimension_coverage(graph, "tested", exclude_status=exclude_status, config=config)
 
 
-# Implements: REQ-d00288-C
+# Implements: REQ-d00291-C
 def check_uat_coverage(
     graph: FederatedGraph,
     exclude_status: set[str] | None = None,
@@ -3942,7 +3942,7 @@ def check_uat_coverage(
     )
 
 
-# Implements: REQ-d00288-A
+# Implements: REQ-d00291-A
 def _any_level_expects_validation(cfg: dict[str, Any] | Any) -> bool:
     """Whether any configured level sets ``expects_validation``."""
     from elspais.config import level_expects_validation
@@ -3951,7 +3951,7 @@ def _any_level_expects_validation(cfg: dict[str, Any] | Any) -> bool:
     return isinstance(levels, dict) and any(level_expects_validation(cfg, key) for key in levels)
 
 
-# Implements: REQ-d00288-C
+# Implements: REQ-d00291-C
 def _validation_level_filter(cfg: dict[str, Any] | Any) -> Any:
     """A predicate selecting the levels that expect validation."""
     from elspais.config import level_expects_validation
@@ -3962,7 +3962,7 @@ def _validation_level_filter(cfg: dict[str, Any] | Any) -> Any:
     return level_filter
 
 
-# Implements: REQ-d00288-B, REQ-d00285-F
+# Implements: REQ-d00291-B, REQ-d00285-F
 def check_unvalidated_requirements(
     graph: FederatedGraph, config: dict[str, Any] | None = None
 ) -> HealthCheck:

@@ -29,7 +29,7 @@ from elspais.graph.factory import build_graph
 _JOURNEY_UAT_FIX = Path(__file__).parents[1] / "fixtures" / "journey-uat"
 
 # A project whose `prd` level expects validation, so the UAT branch of both
-# surfaces is live (REQ-d00288-A).
+# surfaces is live (REQ-d00291-A).
 _UAT_CONFIG = """
 version = 5
 
@@ -138,11 +138,11 @@ def uat_project(tmp_path_factory: pytest.TempPathFactory):
     return graph, load_config(root / ".elspais.toml")
 
 
-# Verifies: REQ-d00258-C, REQ-d00288-B, REQ-d00258-M
+# Verifies: REQ-d00258-C, REQ-d00291-B, REQ-d00258-M
 def test_gaps_and_health_agree_about_a_blanket_journey(uat_project) -> None:
     """Both surfaces report the SAME assertions for a blanket `Validates:`.
 
-    REQ-d00288-B obliges a requirement at an expecting level that no journey
+    REQ-d00291-B obliges a requirement at an expecting level that no journey
     validates to be reported as a gap; `gaps unvalidated` and the health
     `uat.coverage` check both report it, and REQ-d00258-C requires one verdict
     behind both. A journey naming only the requirement leaves

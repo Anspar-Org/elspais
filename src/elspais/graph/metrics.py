@@ -880,7 +880,7 @@ def tested_and_passing(metrics: RollupMetrics) -> CoverageDimension:
 
     A failing *Assertion* contributes to no measure here, and the record that
     it failed survives in ``failing_labels`` -- which is what a per-*Assertion*
-    standing reads first (REQ-d00289-D), so it still renders under its own
+    standing reads first (REQ-d00292-D), so it still renders under its own
     standing rather than disappearing.
 
     The name is kept because every reporting surface reaches Passing through
@@ -895,7 +895,7 @@ def tested_and_passing(metrics: RollupMetrics) -> CoverageDimension:
     # figures now, and an *Assertion* whose declared test returned a failure
     # does not pass (REQ-d00277-C). The failure itself is not lost -- it is
     # carried in ``failing_labels``, which is what a standing reads first
-    # (REQ-d00289-D).
+    # (REQ-d00292-D).
     def _passing_only(by_label: dict[str, float]) -> dict[str, float]:
         return {lbl: frac for lbl, frac in by_label.items() if lbl not in failing}
 

@@ -235,7 +235,7 @@ class TestSummaryCounts:
     Draft or Deprecated, whose roles do not expect implementation.
     """
 
-    # Verifies: REQ-d00086-A, REQ-d00281-A, REQ-d00281-B, REQ-d00288-E+F+I
+    # Verifies: REQ-d00086-A, REQ-d00281-A, REQ-d00281-B, REQ-d00291-E+F+I
     def test_level_groups_account_for_every_reported_requirement(self, project):
         """Every level the reported requirements carry forms one group, and the
         groups plus the status disclosure account for all 11 of them."""
@@ -248,7 +248,7 @@ class TestSummaryCounts:
         groups = {lv["level"]: lv["requirements"] for lv in data["levels"]}
         assert groups == {"PRD": 3, "OPS": 2, "DEV": 3}
 
-        # REQ-d00288-E+F+I: Draft and Deprecated carry roles that do not expect
+        # REQ-d00291-E+F+I: Draft and Deprecated carry roles that do not expect
         # implementation, so they are not counted -- and the report names them
         # rather than letting them disappear from the arithmetic.
         assert data["excluded"] == {"Draft": 2, "Deprecated": 1}

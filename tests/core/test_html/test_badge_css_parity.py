@@ -5,7 +5,7 @@ Regression test for the bug where `.status-badge.active.val-grey` was missing, s
 a `missing`/N-A requirement dimension badge fell through to the base
 `.status-badge.active` green instead of rendering grey. Server-side the color
 string was correct ("grey"); only the rendered CSS was wrong — which no
-color-string test could catch (REQ-d00289-F).
+color-string test could catch (REQ-d00292-F).
 
 The per-assertion badges (`.assertion-*-btn.val-*`) already had all four rules;
 this asserts the requirement header badges (`.status-badge.active.val-*`) do too.
@@ -32,7 +32,7 @@ _CSS_DIR = (
 _STANDING_VAL_COLORS = ["green", "yellow", "red", "grey"]
 
 
-# Verifies: REQ-d00289-A+F
+# Verifies: REQ-d00292-A+F
 @pytest.mark.parametrize("val_color", _STANDING_VAL_COLORS)
 def test_status_badge_has_fill_rule_for_each_standing_color(val_color):
     css = (_CSS_DIR / "_status-badges.css.j2").read_text()
@@ -44,7 +44,7 @@ def test_status_badge_has_fill_rule_for_each_standing_color(val_color):
     )
 
 
-# Verifies: REQ-d00289-F
+# Verifies: REQ-d00292-F
 @pytest.mark.parametrize("val_color", _STANDING_VAL_COLORS)
 def test_assertion_badge_has_fill_rule_for_each_standing_color(val_color):
     # The per-assertion badges must stay in parity with the requirement badges so

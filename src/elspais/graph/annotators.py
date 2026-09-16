@@ -653,9 +653,9 @@ def count_by_git_status(graph: FederatedGraph) -> dict[str, int]:
     return counts
 
 
-# Implements: REQ-d00289-D
+# Implements: REQ-d00292-D
 def _failing_targets(targets: list[str] | None, assertion_labels: list[str]) -> set[str]:
-    """Labels a failing verified/UAT signal is attributed to (REQ-d00289-D).
+    """Labels a failing verified/UAT signal is attributed to (REQ-d00292-D).
 
     An assertion-targeted failure blames only its named labels (scoped to the
     requirement's own assertions); a blanket/whole-requirement failure blames
@@ -1443,7 +1443,7 @@ def annotate_coverage(
         tested_indirect_labels: set[str] = set()  # Assertions with whole-req TEST coverage
         validated_labels: set[str] = set()  # Assertions with passing tests
         has_failures = False
-        # REQ-d00289-D: per-assertion failure attribution. has_failures is the
+        # REQ-d00292-D: per-assertion failure attribution. has_failures is the
         # requirement-wide flag (drives the requirement badge); this set records
         # WHICH assertions actually failed, so a partial sibling covered by a
         # different (non-failing) test does not inherit the red standing.
@@ -1676,7 +1676,7 @@ def annotate_coverage(
             # distinction REQ-d00258-U reports: a deselected tier, an unbuilt
             # target and a crashed runner all read as passing. Its failing half
             # blamed an *Assertion* for a sibling test's failure, which
-            # REQ-d00289-D forbids one level down.
+            # REQ-d00292-D forbids one level down.
 
         # Implements: REQ-d00069-A, REQ-d00255-C, REQ-d00256
         # UAT roll-up: source each validating journey's verdict from its
@@ -1696,7 +1696,7 @@ def annotate_coverage(
         uat_direct_pct: dict[str, float] = {}
         uat_indirect_pct: dict[str, float] = {}
         uat_has_failures = False
-        # REQ-d00289-D: per-assertion UAT failure attribution. A failing journey
+        # REQ-d00292-D: per-assertion UAT failure attribution. A failing journey
         # legitimately blames every assertion THAT journey validates (its
         # assertion_targets, or all labels when it validates the whole REQ); the
         # bug being fixed is a DIFFERENT, non-failing journey's assertions

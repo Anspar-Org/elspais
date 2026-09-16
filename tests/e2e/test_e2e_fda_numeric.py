@@ -65,7 +65,7 @@ class TestFDAHealth:
         result = run_elspais("checks", "--lenient", cwd=project)
         assert result.returncode == 0, f"health failed: {result.stderr}"
 
-    # Verifies: REQ-d00086-A, REQ-d00281-A, REQ-d00281-B, REQ-d00288-E+F+I
+    # Verifies: REQ-d00086-A, REQ-d00281-A, REQ-d00281-B, REQ-d00291-E+F+I
     def test_level_groups_account_for_every_reported_requirement(self, project):
         """Every level the reported requirements carry forms one group, and the
         groups plus the status disclosure account for all 5 of them.
@@ -85,7 +85,7 @@ class TestFDAHealth:
         groups = {lv["level"]: lv["requirements"] for lv in data["levels"]}
         assert groups == {"PRD": 2, "OPS": 1, "DEV": 0}
 
-        # REQ-d00288-I: the two statuses whose roles do not expect
+        # REQ-d00291-I: the two statuses whose roles do not expect
         # implementation are named rather than silently dropped.
         assert data["excluded"] == {"Review": 1, "Archived": 1}
 
@@ -185,11 +185,11 @@ class TestCustomStatuses:
             "DEV": 0,
         }
 
-    # Verifies: REQ-d00278-B, REQ-d00288-E+F+I, REQ-p00084-B, REQ-p00084-E
+    # Verifies: REQ-d00278-B, REQ-d00291-E+F+I, REQ-p00084-B, REQ-p00084-E
     def test_provisional_status_scope_emits_what_it_does_not_count(self, project):
         """A Review scope selects PRD-00002 and still counts nothing.
 
-        Review carries the provisional role, so REQ-d00288-E+F keeps the
+        Review carries the provisional role, so REQ-d00291-E+F keeps the
         requirement out of the coverage aggregation -- and asking for it by
         name does not move that line (REQ-p00084-E). Emission selected it;
         measurement did not.
@@ -236,7 +236,7 @@ class TestStatusFiltering:
 
         Widening emission is the other direction from the narrowing
         TestCustomStatuses covers, and REQ-p00084-E binds both: the coverage
-        gate of REQ-d00288-F decides what is measured, and no scope may move
+        gate of REQ-d00291-F decides what is measured, and no scope may move
         it. The disclosure is also where a scanning leak would surface -- "5 of
         5" is the size of the reported estate, not of the counted population.
         """

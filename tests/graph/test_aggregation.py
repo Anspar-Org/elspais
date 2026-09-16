@@ -928,7 +928,7 @@ class TestNumeratorDimension:
 
     def test_verified_numerator_drops_a_failing_assertion_from_the_figures(self):
         """Still not the raw `.verified` dimension: an assertion a declared
-        test reported failing keeps its per-label credit (REQ-d00289-D) but is
+        test reported failing keeps its per-label credit (REQ-d00292-D) but is
         excluded from the Passing figures, which raw `.verified` is not."""
         rollup = RollupMetrics(
             total_assertions=2,

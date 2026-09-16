@@ -35,7 +35,7 @@ from elspais.graph.metrics import (
     tested_partition,
 )
 
-# Implements: REQ-d00289-A
+# Implements: REQ-d00292-A
 # Unified coverage-state vocabulary: the requirement tier, per-assertion standing,
 # and viewer filter bucket all draw from this single {full,partial,failing,missing}
 # set (identity map -- no separate direct/indirect tier states).
@@ -863,7 +863,7 @@ def level_group_keys(
     return configured + [undefined[k] for k in sorted(undefined)]
 
 
-# Implements: REQ-d00288-F
+# Implements: REQ-d00291-F
 def _counts_for_coverage(config: dict[str, Any] | None, status: str | None) -> bool:
     """Whether a requirement STATUS is INCLUDED in coverage aggregation.
 
@@ -964,7 +964,7 @@ def aggregate_dimension(
     When given, only requirements whose level satisfies it are counted (both
     numerator and denominator). Used by the UAT coverage check so that
     non-``expects_validation`` levels neither count toward nor drag the gap
-    (REQ-d00288-C).
+    (REQ-d00291-C).
 
     REQ-d00252-F: an INTEGRATES-delegating requirement has no local
     ``rollup_metrics`` but is still covered for the 'implemented' dimension
@@ -1158,7 +1158,7 @@ def _measure_fields(prefix: str, sums: DimensionSums) -> dict[str, float]:
     }
 
 
-# Implements: REQ-d00086-A, REQ-d00258-C, REQ-d00288-I
+# Implements: REQ-d00086-A, REQ-d00258-C, REQ-d00291-I
 def collect_coverage(
     graph: Any,
     config: dict[str, Any] | None = None,

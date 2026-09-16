@@ -946,7 +946,7 @@ css_class = "assertion-validation-btn validation-unknown"
 # and bucket now share ONE vocabulary -- see `coverage_standing` below
 # (full / partial / failing / missing). The four measures behind a standing are
 # named in the hover text, and introduce no tier color of their own
-# (REQ-d00289-A).
+# (REQ-d00292-A).
 
 [severity.off]
 css_class = "val-green"
@@ -968,7 +968,7 @@ color_key = "red"
 css_class = "val-maroon"
 color_key = "maroon"
 
-# Neutral / not-applicable severity (REQ-d00289-G). Used ONLY by the forced
+# Neutral / not-applicable severity (REQ-d00292-G). Used ONLY by the forced
 # NEUTRAL override in the badge projection (an N/A relative dimension, or a
 # `missing` Implemented tier on a status that does not expect implementation).
 # It mirrors [coverage_standing.missing] GREY so the requirement-level "N/A"
@@ -981,11 +981,11 @@ color_key = "maroon"
 css_class = "val-grey"
 color_key = "grey"
 
-# Per-assertion coverage standings (REQ-d00289-B). A "standing" is the semantic
+# Per-assertion coverage standings (REQ-d00292-B). A "standing" is the semantic
 # state of one assertion on one coverage dimension; the viewer emits the standing
 # token and resolves its color HERE via the catalog, so the color association is
 # configurable (e.g. remappable for color-impaired users) and never baked into
-# the JS/Python badge logic -- the same decoupling severity uses (REQ-d00290-A).
+# the JS/Python badge logic -- the same decoupling severity uses (REQ-d00293-A).
 [coverage_standing.full]
 css_class = "val-green"
 color_key = "green"

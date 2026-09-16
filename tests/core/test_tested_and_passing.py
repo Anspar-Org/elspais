@@ -110,11 +110,11 @@ def test_exclusion_is_per_assertion_not_requirement_wide():
     assert u.covered == 0.5
 
 
-# Verifies: REQ-d00277-C, REQ-d00289-D
+# Verifies: REQ-d00277-C, REQ-d00292-D
 def test_excluded_assertion_keeps_its_failing_standing():
     """A failing assertion contributes to no measure of Passing, and the record
     that it failed survives in ``failing_labels`` -- which is what a
-    per-*Assertion* standing reads first (REQ-d00289-D), so the assertion still
+    per-*Assertion* standing reads first (REQ-d00292-D), so the assertion still
     renders under its own standing rather than disappearing."""
     m = RollupMetrics(total_assertions=1)
     m.verified = _credited("A", has_failures=True, failing_labels={"A"})
