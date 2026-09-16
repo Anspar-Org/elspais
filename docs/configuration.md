@@ -308,6 +308,13 @@ coverage = "coverage/lcov.info"     # optional; lcov or coverage.py JSON
 #                                   # "python-module" (pytest) | "source-file"
 #                                   # (a spec basename, e.g. Playwright).
 #                                   # Default: whatever the reporter declares.
+# environment = "results-path"      # where the environment a result was
+#                                   # recorded in is read from:
+#                                   # "results-path" (the one wildcard segment
+#                                   # of the glob above) | "suite-hostname"
+#                                   # (the <testsuite> hostname attribute).
+#                                   # Default: none, so results carry no
+#                                   # environment.
 
 # User journey file scanning
 [scanning.journey]

@@ -372,7 +372,11 @@ _DESCRIPTIONS: dict[str, str] = {
         "not flagged). Not the same population as the unlinked NODES the graph API and the MCP "
         "`get_unlinked_nodes` tool answer about"
     ),
-    "tests.results": "Test pass/fail status from JUnit XML or pytest JSON results",
+    "tests.results": (
+        "The pass/fail status of every ingested result. One test that runs in "
+        "several environments writes one result in each of them, so the count "
+        "is a count of results, not of tests"
+    ),
     "tests.results_stale": "Test results older than the code they cover",
     "tests.unmatched_results": "Results matching no known test",
     "tests.tested": "The `tested` coverage dimension (TEST nodes linked to assertions)",

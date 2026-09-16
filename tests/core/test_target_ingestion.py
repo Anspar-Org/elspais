@@ -72,7 +72,9 @@ def test_ingest_target_results_flutter_machine(tmp_path: Path):
 
     builder = GraphBuilder(repo_root=tmp_path, namespace="REQ", resolver=grammar_for("REQ"))
     target = TestTargetConfig(name="flutter", reporter="flutter-machine", match="source")
-    count = _ingest_target_results(builder, target, _FLUTTER_MACHINE_SAMPLE, tmp_path)
+    count = _ingest_target_results(
+        builder, target, _FLUTTER_MACHINE_SAMPLE, tmp_path, namespace="REQ"
+    )
     assert count == 1
 
     graph = builder.build()
@@ -92,7 +94,9 @@ def test_ingest_target_results_returns_zero_for_coverage_reporter(tmp_path: Path
 
     builder = GraphBuilder(repo_root=tmp_path, namespace="REQ", resolver=grammar_for("REQ"))
     target = TestTargetConfig(name="cov", reporter="lcov", match="aggregate")
-    count = _ingest_target_results(builder, target, "SF:src/foo.dart\nend_of_record\n", tmp_path)
+    count = _ingest_target_results(
+        builder, target, "SF:src/foo.dart\nend_of_record\n", tmp_path, namespace="REQ"
+    )
     assert count == 0
     graph = builder.build()
     assert list(graph.iter_by_kind(NodeKind.RESULT)) == []
@@ -112,7 +116,7 @@ def test_ingest_target_results_source_file_repo_relative(tmp_path: Path):
     )
     builder = GraphBuilder(repo_root=tmp_path, namespace="REQ", resolver=grammar_for("REQ"))
     target = TestTargetConfig(name="flutter", reporter="flutter-machine", match="source")
-    _ingest_target_results(builder, target, sample, tmp_path)
+    _ingest_target_results(builder, target, sample, tmp_path, namespace="REQ")
     graph = builder.build()
     node = next(iter(graph.iter_by_kind(NodeKind.RESULT)))
     # source_file should be repo-relative, not absolute

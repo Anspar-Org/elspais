@@ -42,6 +42,16 @@ class ReporterSpec:
     # among the producers that write it, and a producer departing from that
     # says so on its target.
     classname: str = "python-module"
+    # Implements: REQ-d00294-C
+    # Where this format usually writes the environment a result was recorded
+    # in, and overridable per target -- the same arrangement `classname`
+    # makes above. No builtin format declares one, because no builtin format
+    # has a field that means the environment in every producer that writes
+    # it: the JUnit `hostname` attribute holds the machine that ran the tests
+    # for pytest and the project under test for Playwright. A label naming
+    # the wrong thing is worse than no label, so a project says which of the
+    # two its producer writes.
+    environment: str = ""
     # Implements: REQ-d00286-E
     # What this format is, in the one sentence the published table of reporters
     # prints. It is declared beside the registration so the table and the

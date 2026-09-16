@@ -46,6 +46,7 @@ This is the correct pattern for CI.
 | `coverage` | string | `""` | Path to an lcov.info or coverage.py JSON file (format auto-detected), relative to `cwd` |
 | `match` | string | `"source"` | `"source"` or `"aggregate"` -- matching strategy |
 | `classname` | string | `""` (the reporter's own) | `"python-module"` or `"source-file"` -- how this target's results name the test that produced them |
+| `environment` | string | `""` (the reporter's own) | `"results-path"` or `"suite-hostname"` -- where the environment a result was recorded in is read from |
 | `groups` | list | `[]` (the `default` group) | Which groups this target belongs to |
 | `credit_coverage` | string | `"off"` | `"off"`, `"tested"`, or `"verified"` -- lcov_tested credit |
 | `min_coverage_fraction` | float | `0.0` | Fraction of impl lines that must be covered (0.0-1.0) |
@@ -573,3 +574,66 @@ elspais checks --run-tests
 ```
 
 See also: `elspais docs checks`
+
+## The Environment a Result Was Recorded In
+
+One test suite run across several devices or browsers writes one result for
+each of them. Each of those results is held on its own, and it may also carry
+the environment it was recorded in.
+
+A result carries an environment only where the target declares where to read
+one. There is no default, because the same field means different things in
+different producers: the JUnit `hostname` attribute holds the machine that ran
+the tests when pytest writes it, and the project under test when Playwright
+does. A label naming the wrong thing is worse than no label, so the project
+says which it has.
+
+Two sources are available:
+
+| Source | Reads |
+|--------|-------|
+| `results-path` | The one wildcard segment of this target's `results` glob |
+| `suite-hostname` | The `hostname` attribute of the `<testsuite>` holding the record |
+
+Use `results-path` where each environment writes its own artifact:
+
+```toml
+[[scanning.test.targets]]
+name        = "devices"
+reporter    = "junit"
+results     = "evidence/*/journey-results.xml"
+environment = "results-path"            # evidence/pixel-8/... -> "pixel-8"
+```
+
+Use `suite-hostname` where one artifact holds every environment and the
+producer writes the environment into the suite:
+
+```toml
+[[scanning.test.targets]]
+name        = "browsers"
+reporter    = "junit"
+results     = "test-results/junit.xml"
+environment = "suite-hostname"          # <testsuite hostname="firefox">
+```
+
+A declared source does not always give an answer. A `results` glob holding
+`**`, or holding more than one wildcard segment, does not say which part of
+the path is the environment, and a record may hold no hostname at all. In
+each of these the result carries no environment and `elspais checks` reports
+that none was derived. The tool does not guess a segment, because a guess
+reads exactly like a reading in every figure that follows.
+
+### Where the Environment Is Shown
+
+An environment belongs to the result that carries it, and it is shown
+there. The trace viewer prints it beside the result in the results panel,
+`elspais -v checks --tests` names it in each failing-result finding, and the MCP
+tools that read or list results carry it as a key of its own. A result
+that carries none is presented exactly as it was before.
+
+The name of the test does not change. One test is one test wherever it
+ran, so the environment is never added to its name.
+
+`elspais checks` counts RESULTS, not tests. One test run in ten
+environments gives ten results, and the tally says ten. A result that
+errored counts as a failure, because the test did not pass.

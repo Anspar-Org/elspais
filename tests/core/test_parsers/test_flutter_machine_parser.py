@@ -16,7 +16,7 @@ def test_real_path_from_suite():
     recs = FlutterMachineParser().parse(SAMPLE, "stdout")
     assert all(r["source_path"] == "/repo/provenance/test/provenance_entry_test.dart" for r in recs)
     assert set(recs[0]) == {
-        "id",
+        "ordinal",
         "name",
         "classname",
         "status",

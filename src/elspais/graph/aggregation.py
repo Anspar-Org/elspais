@@ -556,8 +556,12 @@ def _evidence_sources_for(
     return tuple(found)
 
 
-_PASSING_STATUSES = frozenset({"passed", "pass", "success"})
-_FAILING_STATUSES = frozenset({"failed", "fail", "failure", "error"})
+# Implements: REQ-d00294-E
+# The status words a result may carry, in one spelling. A surface that reads
+# a verdict off results reads these, so a test that failed anywhere reads as
+# failing everywhere. `error` is a failure: the test did not return a pass.
+PASSING_STATUSES = frozenset({"passed", "pass", "success"})
+FAILING_STATUSES = frozenset({"failed", "fail", "failure", "error"})
 
 
 class EvidenceResult(str, Enum):
@@ -610,9 +614,9 @@ def _evidence_result(graph: Any, source_ids: tuple[str, ...]) -> tuple[EvidenceR
             if child.kind != NodeKind.RESULT:
                 continue
             status = (child.get_field("status", "") or "").lower()
-            if status in _FAILING_STATUSES:
+            if status in FAILING_STATUSES:
                 return EvidenceResult.FAILED, source_id
-            if status in _PASSING_STATUSES and passed_at is None:
+            if status in PASSING_STATUSES and passed_at is None:
                 passed_at = source_id
     if passed_at is not None:
         return EvidenceResult.PASSED, passed_at

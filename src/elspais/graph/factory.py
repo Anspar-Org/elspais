@@ -14,7 +14,7 @@ import os
 import re
 from dataclasses import dataclass, field
 from glob import glob
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 from elspais.config import (
@@ -37,7 +37,13 @@ from elspais.graph.federation_plan import (
     plan_federation,
     refuse_unreadable,
 )
-from elspais.graph.GraphNode import FileType, GraphNode, NodeKind, make_file_id
+from elspais.graph.GraphNode import (
+    FileType,
+    GraphNode,
+    NodeKind,
+    make_file_id,
+    make_result_id,
+)
 from elspais.graph.parsers import ParserRegistry
 from elspais.graph.parsers.journey import JourneyParser
 from elspais.graph.parsers.lark import FileDispatcher
@@ -151,6 +157,49 @@ def _record_parser_diagnostics(
         )
 
 
+_WILDCARD_CHARS = "*?["
+
+
+# Implements: REQ-d00294-C+D
+def _environment_from_path(pattern: str, base: Path, path: str) -> tuple[str | None, str, bool]:
+    """The environment a results file sits under, read from its own path.
+
+    One grid writes one artifact for each device, under a directory named
+    for it, and the glob that finds them holds one wildcard. That wildcard
+    segment is the environment, so the answer is the part of the real path
+    the wildcard stood for.
+
+    Returns the environment, the reason there is none, and whether that
+    reason is about the pattern alone. A pattern the tool cannot read is
+    one condition however many files it matched, so the caller reports it
+    against the pattern rather than against each of them.
+    """
+    pattern_parts = [p for p in PurePosixPath(pattern.replace(os.sep, "/")).parts if p != "."]
+    if any("**" in part for part in pattern_parts):
+        return None, "the pattern holds `**`, which stands for any number of directories", True
+    wildcards = [
+        i for i, part in enumerate(pattern_parts) if any(c in part for c in _WILDCARD_CHARS)
+    ]
+    if len(wildcards) != 1:
+        return (
+            None,
+            f"the pattern holds {len(wildcards)} wildcard segments, "
+            f"so no one segment names the environment",
+            True,
+        )
+    try:
+        path_parts = Path(path).relative_to(base).parts
+    except ValueError:
+        return None, "the results file lies outside the directory the pattern is read from", False
+    if len(path_parts) != len(pattern_parts):
+        return (
+            None,
+            "the results file has a different number of path segments from the pattern",
+            False,
+        )
+    return path_parts[wildcards[0]], "", False
+
+
 # Implements: REQ-d00285-G
 def _ingest_target_results(
     builder,
@@ -159,8 +208,11 @@ def _ingest_target_results(
     repo_root: Path,
     source_path: str = "",
     *,
+    namespace: str,
     carried: bool = False,
     scanned_tests: frozenset[str] = frozenset(),
+    results_pattern: str = "",
+    results_base: Path | None = None,
 ) -> int:
     """Parse a target's reporter output and add RESULT ParsedContent.
 
@@ -237,6 +289,43 @@ def _ingest_target_results(
             rec["name_match"] = "ambiguous" if matches else "unmatched"
             rec["name_candidates"] = matches
 
+    # Implements: REQ-d00294-C+D
+    # The environment is read only from the source the target declares, or
+    # the one its reporter declares where the target says nothing. Where a
+    # declared source yields nothing, the results keep no environment and
+    # the build says it derived none, because a guess reads exactly like a
+    # reading in every figure afterwards.
+    env_source = target.environment or spec.environment
+    path_environment: str | None = None
+    if env_source == "results-path":
+        about_pattern = False
+        if source_path and results_pattern and results_base is not None:
+            path_environment, reason, about_pattern = _environment_from_path(
+                results_pattern, results_base, source_path
+            )
+        else:
+            path_environment, reason = (
+                None,
+                (
+                    "this target's results were read from a runner's output, "
+                    "so there is no results path to read an environment from"
+                ),
+            )
+        if path_environment is None:
+            # A pattern the tool cannot read is one condition however many
+            # files it matched, so it is reported against the pattern. Every
+            # other reason is about the one file, and names it.
+            if about_pattern and results_base is not None:
+                where = _repo_relative(results_base / results_pattern, repo_root)
+            else:
+                where = _repo_relative(source_path, repo_root) if source_path else ""
+            builder.record_ingestion_fault(
+                path=where,
+                stage="results",
+                cause=(f"no environment was derived from the results path: {reason}"),
+                target=target.name,
+            )
+
     repo_root_resolved = Path(repo_root).resolve()
     count = 0
     for rec in records:
@@ -280,8 +369,49 @@ def _ingest_target_results(
             result_file = raw_result_file
         result_line = rec.get("result_line")
 
+        # Implements: REQ-d00294-A+B
+        # The id is spelled here, where the repository root and the
+        # namespace are known, so the place of record is repo-relative and
+        # the same run reads the same way in any checkout. A record an
+        # artifact holds is placed by that artifact; a record read from a
+        # runner's output has no artifact and is placed by its target.
+        ordinal = rec.get("ordinal")
+        if ordinal is None:
+            raise ValueError(
+                f"reporter {target.reporter!r} produced a result carrying no "
+                f"ordinal, so the record cannot be told from the other records "
+                f"of the same test. Every results reporter numbers its records."
+            )
+        result_id = make_result_id(namespace, result_file or target.name, ordinal)
+
+        # Implements: REQ-d00294-C+D
+        if env_source == "results-path":
+            environment = path_environment
+        elif env_source == "suite-hostname":
+            environment = rec.get("suite_hostname") or None
+            if environment is None:
+                # A format that records no suite hostname at all and a suite
+                # that left the attribute out are two conditions, and an
+                # author fixes them differently: one by declaring another
+                # source, the other by mending the producer.
+                if "suite_hostname" in rec:
+                    reason = "the suite that holds this record names no hostname"
+                else:
+                    reason = (
+                        f"reporter {target.reporter!r} reads a format whose "
+                        f"records carry no suite hostname"
+                    )
+                builder.record_ingestion_fault(
+                    path=_repo_relative(source_path, repo_root) if source_path else "",
+                    stage="results",
+                    cause=f"no environment was derived from the suite hostname: {reason}",
+                    target=target.name,
+                )
+        else:
+            environment = None
+
         parsed_data = {
-            "id": rec["id"],
+            "id": result_id,
             "status": rec.get("status"),
             "name": rec.get("name", ""),
             "classname": rec.get("classname", ""),
@@ -298,6 +428,8 @@ def _ingest_target_results(
             "root_file": root_file,
             "result_file": result_file,
             "result_line": result_line,
+            # Implements: REQ-d00294-C
+            "environment": environment,
             # Implements: REQ-d00284-C
             "name_match": rec.get("name_match"),
             "name_candidates": rec.get("name_candidates"),
@@ -1136,6 +1268,7 @@ def build_graph(
                         _captured[target.name],
                         repo_root,
                         "",
+                        namespace=typed_config.project.namespace,
                         carried=carried,
                         scanned_tests=target_tests,
                     )
@@ -1152,8 +1285,16 @@ def build_graph(
                                     Path(f).read_text(encoding="utf-8", errors="replace"),
                                     repo_root,
                                     str(Path(f)),
+                                    namespace=typed_config.project.namespace,
                                     carried=carried,
                                     scanned_tests=target_tests,
+                                    # Implements: REQ-d00294-C
+                                    # The pattern and the directory it was
+                                    # read from, so a target declaring
+                                    # `results-path` can read back the part
+                                    # of the path its wildcard stood for.
+                                    results_pattern=target.results,
+                                    results_base=cwd_path,
                                 )
                     else:
                         # Implements: REQ-d00285-G

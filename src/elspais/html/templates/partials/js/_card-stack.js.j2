@@ -1336,6 +1336,13 @@ function buildJourneyCardHtml(nodeId, data, collapsed) {
                 } else {
                     html += '<span class="journey-step-test-link" style="font-family:monospace;">' + escapeHtml(rText) + '</span>';
                 }
+                {# Implements: REQ-d00294-F #}
+                // The environment stands beside the result, because one test
+                // run in several places writes one result in each of them and
+                // the rows read alike without it.
+                if (r.environment) {
+                    html += '<span class="result-environment" title="Environment this result was recorded in">' + escapeHtml(r.environment) + '</span>';
+                }
                 html += '</div>';
             });
             html += '</div>';
@@ -1794,6 +1801,12 @@ function renderAssertionResults(panel, reqId, label, data) {
                 escapeHtml(tLabel) + ' [' + escapeHtml(r.status) + ']</a>';
         } else {
             html += '<span class="assertion-test-link">' + escapeHtml(tLabel) + ' [' + escapeHtml(r.status) + ']</span>';
+        }
+        {# Implements: REQ-d00294-F #}
+        // The environment is shown against the result that carries one. A
+        // result with none is drawn exactly as it was drawn before.
+        if (r.environment) {
+            html += '<span class="result-environment" title="Environment this result was recorded in">' + escapeHtml(r.environment) + '</span>';
         }
         html += '</div>';
     }

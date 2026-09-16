@@ -229,6 +229,7 @@ def _serialize_test_info(test_node: Any, graph: FederatedGraph) -> dict[str, Any
     }
 
 
+# Implements: REQ-d00294-F
 def _serialize_result_entry(result_node: Any, graph: FederatedGraph) -> dict[str, Any]:
     """Serialize one RESULT node for a results list.
 
@@ -236,8 +237,12 @@ def _serialize_result_entry(result_node: Any, graph: FederatedGraph) -> dict[str
     junit.xml:<testcase> line); file/line keep pointing at the test's
     source. Fall back to file/line so reporters without a results file
     (e.g. stdout streams) still render a link.
+
+    The environment is a key of its own, and it is there only where the
+    result carries one. A project that declares no source for it reads
+    the same envelope as before.
     """
-    return {
+    entry = {
         "id": result_node.id,
         "status": result_node.get_field("status", "unknown"),
         "duration": result_node.get_field("duration", 0.0),
@@ -249,6 +254,10 @@ def _serialize_result_entry(result_node: Any, graph: FederatedGraph) -> dict[str
         or result_node.get_field("parse_line")
         or 0,
     }
+    environment = result_node.get_field("environment")
+    if environment:
+        entry["environment"] = environment
+    return entry
 
 
 # Implements: REQ-d00255-D, REQ-d00256-E
@@ -585,12 +594,20 @@ def _serialize_node_generic(node: Any, graph: FederatedGraph | None = None) -> d
             "class_name": node.get_field("class_name", ""),
         }
     elif kind == NodeKind.RESULT:
+        # Implements: REQ-d00294-F
+        # Where the record was written, and the environment where one was
+        # read, so a reader can tell apart the several results of one test.
+        # Each is there only where the result carries it.
         properties = {
             "status": node.get_field("status", ""),
             "duration": node.get_field("duration", 0.0),
             "message": node.get_field("message", ""),
             "classname": node.get_field("classname", ""),
         }
+        for field_name in ("result_file", "result_line", "environment"):
+            value = node.get_field(field_name)
+            if value:
+                properties[field_name] = value
     elif kind == NodeKind.CODE:
         properties = {
             "function_name": node.get_field("function_name", ""),
@@ -672,6 +689,12 @@ def _serialize_node_summary(node: Any) -> dict[str, Any]:
         summary["goal"] = node.get_field("goal", "")
     elif kind == NodeKind.RESULT:
         summary["status"] = node.get_field("status", "")
+        # Implements: REQ-d00294-F
+        # A list of results holds several records of one test, which the
+        # titles alone do not tell apart.
+        environment = node.get_field("environment")
+        if environment:
+            summary["environment"] = environment
     elif kind == NodeKind.TEST:
         summary["function_name"] = node.get_field("function_name", "")
 

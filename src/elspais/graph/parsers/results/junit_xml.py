@@ -28,12 +28,10 @@ from __future__ import annotations
 
 import re
 import xml.etree.ElementTree as ET
-from collections.abc import Iterator
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from xml.sax.saxutils import unescape
 
-from elspais.graph.parsers import ParseContext, ParsedContent
 from elspais.graph.parsers.results.diagnostics import DiagnosticRecorder
 from elspais.utilities.test_identity import build_test_id_from_result
 
@@ -86,12 +84,7 @@ class JUnitXMLParser(DiagnosticRecorder):
 
     Matches a result to its test by recorded identity, not by reading
     requirement references out of a reported test name.
-
-    Also implements the LineClaimingParser protocol via ``claim_and_parse()``
-    so it can be used in the standard ParserRegistry pipeline.
     """
-
-    priority = 90
 
     def __init__(
         self,
@@ -134,7 +127,7 @@ class JUnitXMLParser(DiagnosticRecorder):
 
         Returns:
             List of test result dictionaries with keys:
-            - id: Unique test ID
+            - ordinal: Position of the record in this artifact
             - name: Test name
             - classname: Test class name
             - status: passed, failed, skipped, or error
@@ -180,6 +173,12 @@ class JUnitXMLParser(DiagnosticRecorder):
             )
 
         for testsuite in testsuites:
+            # Implements: REQ-d00294-C
+            # The `hostname` attribute of the suite that holds the record.
+            # It is carried, never read as an environment here: what it
+            # means depends on the producer, and only a target that declares
+            # `environment = "suite-hostname"` says it means one.
+            suite_hostname = testsuite.get("hostname") or None
             for testcase in testsuite.findall("testcase"):
                 name = testcase.get("name", "")
                 classname = testcase.get("classname", "")
@@ -230,7 +229,12 @@ class JUnitXMLParser(DiagnosticRecorder):
                 test_id = None if file_attr else build_test_id_from_result(classname, name)
 
                 result = {
-                    "id": f"{result_source}:{classname}::{name}",
+                    # Implements: REQ-d00294-A
+                    # The position of this record among the records read from
+                    # this artifact. Ingestion builds the result id from it.
+                    # Two runs of one test in two environments write two
+                    # records that agree about everything else.
+                    "ordinal": len(results) + 1,
                     "name": name,
                     "classname": classname,
                     "status": status,
@@ -241,53 +245,12 @@ class JUnitXMLParser(DiagnosticRecorder):
                     "line": line_no,
                     "result_file": source_path or None,
                     "result_line": tc_lines.get((classname, name)),
+                    "suite_hostname": suite_hostname,
                 }
 
                 results.append(result)
 
         return results
-
-    # Implements: REQ-d00054-A
-    def claim_and_parse(
-        self,
-        lines: list[tuple[int, str]],
-        context: ParseContext,
-    ) -> Iterator[ParsedContent]:
-        """Claim and parse JUnit XML content via the standard pipeline.
-
-        Reassembles lines into full XML content, delegates to ``parse()``,
-        and yields ``ParsedContent`` for each test result.
-
-        When the XML is pretty-printed (one ``<testcase`` per line), each
-        result gets the line number of its ``<testcase`` element.  When the
-        XML is minified (single line), all results share line 1.
-
-        Args:
-            lines: List of (line_number, content) tuples.
-            context: Parsing context with file info.
-
-        Yields:
-            ParsedContent for each test result found.
-        """
-        content = "\n".join(text for _, text in lines)
-        results = self.parse(content, context.file_path)
-
-        # parse() computes result_line relative to the reassembled content
-        # (1-based); shift by the first claimed line so start_line matches
-        # the real file position.
-        base_line = lines[0][0] if lines else 1
-
-        for result in results:
-            rl = result.get("result_line")
-            start = (rl + base_line - 1) if rl else base_line
-            result["result_line"] = start
-            yield ParsedContent(
-                content_type="test_result",
-                start_line=start,
-                end_line=start,
-                raw_text="",
-                parsed_data=result,
-            )
 
     # Implements: REQ-d00054-A
     def can_parse(self, file_path: Path) -> bool:
