@@ -286,6 +286,11 @@ def compute_summary(graph: FederatedGraph, config: dict, request: SummaryRequest
     result = scoped_requirements(graph, request.scope, cfg)
     ids = None if len(result.ids) == result.population else result.ids
     data = collect_coverage(graph, config=cfg, node_ids=ids)
+    # Implements: REQ-p00085-B
+    # The disclosure enters the PAYLOAD here, once, and each rendering reads it
+    # from there. That is what makes it independent of the format: a rendering
+    # cannot state a disclosure its neighbour does not, because none of them
+    # composes one.
     data["scope"] = scope_disclosure(result) + active_overlay_disclosure(request.treat_active)
     _stamp_values(data, request.values)
     return data

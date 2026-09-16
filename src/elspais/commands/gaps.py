@@ -458,6 +458,11 @@ def render_section(
     scope_result = scoped_requirements(graph, inputs.scope, config)
     scope_ids = None if len(scope_result.ids) == scope_result.population else scope_result.ids
     data = collect_gaps(graph, exclude_status, config=config, node_ids=scope_ids)
+    # Implements: REQ-p00085-B
+    # The disclosure enters the PAYLOAD here, once, and each rendering reads it
+    # from there. That is what makes it independent of the format: a rendering
+    # cannot state a disclosure its neighbour does not, because none of them
+    # composes one.
     scope_lines = scope_disclosure(scope_result) + active_overlay_disclosure(inputs.treat_active)
 
     fmt = getattr(args, "format", "text")
@@ -474,9 +479,12 @@ def render_section(
                 result[gt] = [_gap_entry_to_list(entry) for entry in items]
         if show_integrated and data.integrated:
             result["integrated"] = {k: sorted(v) for k, v in data.integrated.items()}
-        # Implements: REQ-p00084-D
-        if scope_lines:
-            result["scope"] = scope_lines
+        # Implements: REQ-p00084-D, REQ-p00085-B
+        # Always present, empty where there is nothing to state. A reader asks
+        # one question of one field: a field that is absent here and empty in a
+        # neighbouring report makes that reader probe two shapes to learn the
+        # same thing.
+        result["scope"] = scope_lines
         return json.dumps(result, indent=2), 0
 
     if fmt == "markdown":
@@ -561,6 +569,11 @@ def compute_gaps(graph: FederatedGraph, config: dict, request: GapsRequest) -> d
     scope_result = scoped_requirements(graph, request.scope, config)
     ids = None if len(scope_result.ids) == scope_result.population else scope_result.ids
     data = collect_gaps(graph, exclude_status, config=config, node_ids=ids)
+    # Implements: REQ-p00085-B
+    # The disclosure enters the PAYLOAD here, once, and each rendering reads it
+    # from there. That is what makes it independent of the format: a rendering
+    # cannot state a disclosure its neighbour does not, because none of them
+    # composes one.
     scope_lines = scope_disclosure(scope_result) + active_overlay_disclosure(request.treat_active)
 
     def _serialize_gap_list(gt: str) -> list:
@@ -583,9 +596,10 @@ def compute_gaps(graph: FederatedGraph, config: dict, request: GapsRequest) -> d
         result[gt] = _serialize_gap_list(gt)
     if integrated and "uncovered" in sections:
         result["integrated"] = integrated
-    # Implements: REQ-p00084-D
-    if scope_lines:
-        result["scope"] = scope_lines
+    # Implements: REQ-p00084-D, REQ-p00085-B
+    # Always present, for the reason the rendering path states: one field, one
+    # shape, whichever report answered.
+    result["scope"] = scope_lines
     return result
 
 

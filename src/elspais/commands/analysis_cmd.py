@@ -74,13 +74,14 @@ def compute_analysis(graph: Any, config: dict[str, Any], request: AnalysisReques
         report.actionable_leaves = [ns for ns in report.actionable_leaves if ns.node_id in keep]
 
     payload = asdict(report)
-    # Implements: REQ-p00084-D
+    # Implements: REQ-p00084-D, REQ-p00085-B
     # A ranking narrowed to part of the estate reads exactly like a ranking of
     # the whole of it unless the narrowing travels with it, so the disclosure
     # rides on the payload and every surface rendering it states it.
-    scope_lines = scope_disclosure(result)
-    if scope_lines:
-        payload["scope"] = scope_lines
+    # Always present, empty where there is nothing to state. A reader asks one
+    # question of one field, so the field keeps one shape whichever report
+    # answered (REQ-p00085-B).
+    payload["scope"] = scope_disclosure(result)
     return payload
 
 
@@ -145,8 +146,8 @@ def _render_json(report: FoundationReport, scope_lines: Sequence[str] | None = N
     """Render the report as JSON."""
     # The same disclosure the table states, in the document a reader files.
     payload = asdict(report)
-    if scope_lines:
-        payload["scope"] = list(scope_lines)
+    # One shape, for the reason the computed payload states.
+    payload["scope"] = list(scope_lines or ())
     print(json.dumps(payload, indent=2))
 
 

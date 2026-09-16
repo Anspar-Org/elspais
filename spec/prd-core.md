@@ -512,6 +512,41 @@ G is the second axis, and it is separate from A because the two are separate que
 
 ---
 
+# REQ-p00085: Report Configuration Disclosure
+
+**Level**: prd | **Status**: Active | **Implements**: REQ-p00003
+
+A report states figures taken over a population of requirements, and configuration decides which requirements that population holds. Two reports of one estate can therefore state different figures and both be correct. This requirement states what a report owes its reader about the choices that decided its population, so that a reader can tell one question's answer from another's, and either from a defect.
+
+## Assertions
+
+A. Where a report states a figure taken over a population of requirements, the report SHALL disclose each configured or caller-supplied choice that decided that population.
+
+B. The disclosure a report makes of the choices that decided its population SHALL NOT depend on the format the report is rendered in.
+
+## Rationale
+
+A figure does not describe itself. A count of requirements is a true number and an unaccountable answer, because nothing in it tells a reader which requirements it was taken over or why those. The reader is left unable to do three things: reproduce the figure, compare it with another report of the same estate, or tell a population narrowed on purpose from one narrowed by a defect. Naming the choices that decided the population is what restores all three at once.
+
+A is scoped to a report that states such a figure rather than to every report, because that is where the hazard lives. A report stating facts about each requirement it emits, one row each, takes nothing over a population, so no choice about the population decides what it says and there is nothing for it to disclose. Scoping A by what the report states, rather than by whether a choice happened to change the output, is also what keeps it decidable: whether a report states a population figure is readable from the report, where whether a choice altered it is answerable only by producing the report twice.
+
+B is separate because it fails separately. A disclosure carried in the rendering a reader checks and dropped from the one they file leaves the filed report making an unaccountable claim, and the disagreement is invisible in either output taken alone. This is the same hazard REQ-p00084-C answers for the requirements a report emits, reached by the other half of the report.
+
+This obligation is stated once, generically, rather than per configurable. Several requirements already concretize it at their own altitude -- the disclosure a scoped report owes its scope, the statuses a coverage figure held out and how many requirements each held, and the governed settings a federation member would have decided differently. Those are what make this parent earn its keep under the "why" stopping rule: it groups siblings that ladder to it, and the seam where future children attach is visible, since every configurable that decides a population reaches it. Whether those existing requirements declare the relation explicitly is left open here; stating the obligation once is what stops the next such configurable acquiring an assertion of its own.
+
+It is deliberately not authored as a class of the REQ-p00019 anti-pattern template, and does not declare `Satisfies:` against it. That template prohibits performing a degradation silently -- omitting content, serving a stale value, substituting a default -- and a choice that ADMITS requirements to a population, or reweighs which of them count, degrades nothing. Neither the omission class nor the substitution class reaches it. Declaring the template would also oblige this requirement to answer all eleven of its classes, most of which it never reaches, and would clone a template subtree carrying coverage of its own.
+
+The rules by which a finding is judged, scored or reported are a neighbouring question and are not covered here. REQ-d00275 settles which configuration governs those across a federation and obliges the difference to be disclosed; that disclosure is about a rule, where this one is about a population.
+
+## Changelog
+
+- 2026-09-16 | 35994055 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-09-16 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-82: author the generic obligation to disclose the choices that decided a report's population, so that no further configurable acquires a disclosure assertion of its own
+
+*End* *Report Configuration Disclosure* | **Hash**: 35994055
+
+---
+
 ## REQ-d00220: TermDictionary Data Model
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-p00002

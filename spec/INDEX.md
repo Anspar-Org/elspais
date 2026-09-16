@@ -31,6 +31,7 @@
 | REQ-p00082 | Federated Authority and Verdict Scoping          | prd-features.md | b511fcfd |
 | REQ-p00083 | Durability of Uncommitted Work                   | prd-core.md     | 80cf3ca1 |
 | REQ-p00084 | Audience-Scoped Reporting                        | prd-core.md     | 168b514c |
+| REQ-p00085 | Report Configuration Disclosure                  | prd-core.md     | 35994055 |
 
 ### elspais
 

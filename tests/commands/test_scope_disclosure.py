@@ -303,7 +303,11 @@ class TestAnalysisDisclosesItsScope:
         data = analysis_cmd.compute_analysis(
             canonical_federated_graph, canonical_config, _analysis_request({})
         )
-        assert "scope" not in data
+        # The exact mirror of the assertion above: one field, read the same way
+        # both times -- carrying the disclosure where the ranking was narrowed
+        # and empty where it was not. The field's PRESENCE says nothing either
+        # way, because it is present in both payloads (REQ-p00085-B).
+        assert not data["scope"], "a ranking of the whole estate must declare nothing"
 
     # Verifies: REQ-p00084-C+D
     @pytest.mark.parametrize("fmt", ["table", "json"])

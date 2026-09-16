@@ -22,7 +22,10 @@ The engine-compatible compute functions carry the same surface in their
 
 from __future__ import annotations
 
+import csv
 import dataclasses
+import io
+import json
 import os
 from pathlib import Path
 
@@ -497,6 +500,178 @@ class TestTheReportStatesWhatItWeighed:
     def test_it_reaches_the_gap_listing_a_reader_is_handed(self, built):
         graph, config = built
         assert self.DISCLOSURE in _gaps(graph, config, ("Draft",))["scope"]
-        # `compute_gaps` omits the key entirely when there is nothing to
-        # state, so an unpromoted listing declares nothing at all.
-        assert "scope" not in _gaps(graph, config)
+        # Stated exactly as the summary assertion above states it: one field,
+        # present in both payloads and empty where the run weighed nothing, so
+        # a reader asks one question of one field whichever report answered.
+        assert not _gaps(graph, config)["scope"]
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# The disclosure does not depend on the rendering
+# ─────────────────────────────────────────────────────────────────────────────
+
+SUMMARY_FORMATS = ["text", "markdown", "csv", "json"]
+# `gaps` renders three of the four. There is no csv gap listing, so a csv
+# rendering cannot disagree with the others and there is nothing to pin.
+GAPS_FORMATS = ["text", "markdown", "json"]
+TRACE_FORMATS = ["text", "markdown", "csv", "html", "json"]
+
+
+def _disclosures(rendered: str, fmt: str) -> list[str]:
+    """The disclosure lines recoverable from one rendering, unwrapped.
+
+    Each format spells a disclosure line in its own idiom -- a bare line, an
+    italicised line, a leading comment row, a member of a list. Unwrapping
+    each one here is what lets a single assertion ask the question
+    REQ-p00085-B asks: is the SAME disclosure recoverable whichever rendering
+    a reader is handed. Asserting byte-identical output instead would assert
+    the idioms are identical, which they are not and must not be.
+    """
+    if fmt == "json":
+        return list(json.loads(rendered).get("scope") or [])
+    if fmt == "csv":
+        rows = list(csv.reader(io.StringIO(rendered)))
+        return [row[0][2:] for row in rows if len(row) == 1 and row[0].startswith("# ")]
+    if fmt == "markdown":
+        return [
+            line[1:-1]
+            for line in rendered.splitlines()
+            if len(line) > 2 and line.startswith("*") and line.endswith("*")
+        ]
+    return [line for line in rendered.splitlines() if line]
+
+
+class TestTheDisclosureSurvivesEveryRendering:
+    """One run's disclosure, read back out of each of the four renderings.
+
+    ``--treat-active`` decides which requirements the coverage figures are
+    taken over, so it is one of the choices REQ-p00085-A obliges the report to
+    disclose. REQ-p00085-B is the separate obligation that the disclosure not
+    depend on the rendering: a disclosure carried in the format a reader
+    checks and dropped from the one they file leaves the filed report making
+    an unaccountable claim, and neither output taken alone shows the
+    disagreement.
+    """
+
+    DISCLOSURE = "Weighed as active: Draft (--treat-active)"
+
+    @staticmethod
+    def _rendered(graph, config, fmt: str, treat_active: tuple[str, ...]) -> str:
+        from elspais.commands.summary import _render
+
+        return _render(_summary(graph, config, treat_active), fmt, config)
+
+    @pytest.mark.parametrize("fmt", SUMMARY_FORMATS)
+    # Verifies: REQ-p00085-B
+    def test_every_rendering_of_a_promoted_run_carries_the_disclosure(self, built, fmt):
+        graph, config = built
+        rendered = self._rendered(graph, config, fmt, ("Draft",))
+        assert self.DISCLOSURE in _disclosures(rendered, fmt), (
+            f"the {fmt} rendering dropped the disclosure the other renderings carry; "
+            f"recovered {_disclosures(rendered, fmt)!r} from\n{rendered}"
+        )
+
+    @pytest.mark.parametrize("fmt", SUMMARY_FORMATS)
+    # Verifies: REQ-p00085-A
+    def test_no_rendering_discloses_a_choice_the_run_did_not_make(self, built, fmt):
+        """A report that always printed the line would disclose nothing: the
+        disclosure has to be the report stating THIS run's choices."""
+        graph, config = built
+        rendered = self._rendered(graph, config, fmt, ())
+        # The rendering is a real report, not an empty string that would pass
+        # the absence check for the wrong reason.
+        assert "DEV" in rendered, f"the {fmt} rendering states no level row:\n{rendered}"
+        assert "Weighed as active" not in rendered, (
+            f"the {fmt} rendering declares a status weighed as active when the run "
+            f"weighed none:\n{rendered}"
+        )
+
+
+class TestTheGapListingDisclosesInEveryRendering:
+    """The same obligation, on the other surface that produces a disclosure.
+
+    REQ-p00085-B is a property of a report, not of one command: it is only
+    answered once every rendering that CAN carry a disclosure is known to
+    carry it. ``gaps`` states a figure over the same population ``summary``
+    counts -- its sections are the requirements that population holds and one
+    dimension has not credited -- and it renders through its own text,
+    markdown and json paths, which read ``scope_lines`` separately from
+    ``summary``'s. A disclosure could therefore lapse here while every
+    ``summary`` rendering still carried it.
+    """
+
+    DISCLOSURE = "Weighed as active: Draft (--treat-active)"
+
+    @staticmethod
+    def _rendered(graph, config, fmt: str, treat_active: list[str]) -> str:
+        import argparse
+
+        from elspais.commands import gaps as gaps_cmd
+
+        args = argparse.Namespace(format=fmt, treat_active=treat_active)
+        rendered, code = gaps_cmd.render_section(graph, config, args, command="gaps")
+        assert code == 0, f"the gap listing refused the {fmt} rendering:\n{rendered}"
+        return rendered
+
+    @pytest.mark.parametrize("fmt", GAPS_FORMATS)
+    # Verifies: REQ-p00085-B
+    def test_every_rendering_of_a_promoted_run_carries_the_disclosure(self, built, fmt):
+        graph, config = built
+        rendered = self._rendered(graph, config, fmt, ["Draft"])
+        assert self.DISCLOSURE in _disclosures(rendered, fmt), (
+            f"the {fmt} gap listing dropped the disclosure the other renderings carry; "
+            f"recovered {_disclosures(rendered, fmt)!r} from\n{rendered}"
+        )
+
+    @pytest.mark.parametrize("fmt", GAPS_FORMATS)
+    # Verifies: REQ-p00085-A
+    def test_no_rendering_discloses_a_choice_the_run_did_not_make(self, built, fmt):
+        graph, config = built
+        rendered = self._rendered(graph, config, fmt, [])
+        # A real listing, not an empty string that would pass the absence
+        # check for the wrong reason: the unpromoted run still has a gap.
+        assert ACTIVE_ID in rendered, f"the {fmt} gap listing names no requirement:\n{rendered}"
+        assert "Weighed as active" not in rendered, (
+            f"the {fmt} gap listing declares a status weighed as active when the run "
+            f"weighed none:\n{rendered}"
+        )
+
+
+class TestTraceStatesNoPopulationAndDisclosesNone:
+    """``trace`` is exempt from REQ-p00085-A, and the exemption is deliberate.
+
+    A report stating facts about each requirement it emits, one row each,
+    takes no figure over a population; no choice about the population decides
+    what it says, so it has nothing to disclose (REQ-p00085 Rationale). This
+    is pinned so that teaching ``trace`` to disclose reads as the change it is
+    rather than as an improvement in conformance -- ``trace`` accepts
+    ``--treat-active`` (it inherits ``ScopeOptions``) and states it nowhere.
+    """
+
+    @pytest.mark.parametrize("fmt", TRACE_FORMATS)
+    # Verifies: REQ-p00085-A
+    def test_a_promoted_run_of_trace_discloses_nothing(self, built, fmt):
+        import argparse
+
+        from elspais.commands import trace as trace_cmd
+
+        graph, config = built
+        args = argparse.Namespace(format=fmt, treat_active=["Draft"])
+        rendered, code = trace_cmd.render_section(graph, args, config)
+        assert code == 0, f"trace refused the {fmt} rendering:\n{rendered}"
+        assert ACTIVE_ID in rendered, f"the {fmt} rendering emits no requirement:\n{rendered}"
+        assert "Weighed as active" not in rendered, (
+            f"the {fmt} rendering of trace discloses a population choice, but trace "
+            f"states no figure over a population:\n{rendered}"
+        )
+
+    # Verifies: REQ-p00085-A
+    def test_the_computed_trace_payload_carries_no_disclosure(self, built):
+        """The same answer on the path a serving process answers on, so the
+        exemption cannot hold in one place and lapse in the other."""
+        from elspais.commands._requests import TraceRequest
+        from elspais.commands.trace import compute_trace
+
+        graph, config = built
+        payload = compute_trace(graph, config, TraceRequest(treat_active=("Draft",)))
+        assert payload["scope"] == []

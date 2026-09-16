@@ -1018,9 +1018,19 @@ class TestAShortfallListingOffersTheDimensionItReads:
         from_args = gap_sections(arg_inputs.values, "gaps")
         param_inputs = report_inputs_from_params({"values": selection}, offered, identity_key="")
         request = GapsRequest(scope=param_inputs.scope, values=param_inputs.values)
-        from_params = list(compute_gaps(canonical_federated_graph, {}, request))
+        # The subject is which LISTINGS each route resolves, so each route's
+        # payload is read the same way: the keys that name a listing, less the
+        # two fields every gap payload carries whatever was selected. `scope`
+        # is one of those (always present, empty where there is nothing to
+        # state) and says nothing about the selection.
+        _NOT_A_LISTING = ("integrated", "scope")
+        from_params = [
+            k
+            for k in compute_gaps(canonical_federated_graph, {}, request)
+            if k not in _NOT_A_LISTING
+        ]
         composed, _code = _render_section("gaps", canonical_federated_graph, {}, args)
-        from_composition = [k for k in _json.loads(composed) if k not in ("integrated", "scope")]
+        from_composition = [k for k in _json.loads(composed) if k not in _NOT_A_LISTING]
 
         assert from_args == expected
         assert from_params == expected
