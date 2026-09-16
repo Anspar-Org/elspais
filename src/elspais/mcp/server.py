@@ -1929,17 +1929,14 @@ def _build_coverage_stats(graph: FederatedGraph | None, config: dict[str, Any]) 
     if graph is None:
         return {"error": "graph not available"}
 
-    from elspais.config import get_status_roles
-
-    # count_with_code_refs is NOT one of the three coverage-aggregation
-    # functions (aggregate_by_level/aggregate_dimension/tier_buckets); it keeps
-    # the role-based exclude set (REQ-d00258-C scope). count_by_coverage is a
-    # thin delegate to tier_buckets and now gates via config.
-    exclude = get_status_roles(config).coverage_excluded_statuses()
+    # Each figure here reads one configuration. REQ-d00291-F speaks about the
+    # population of every coverage figure, and the reference coverage of the
+    # code is such a figure. Therefore it gates through the configuration, and
+    # not through a set that comes from the status roles.
     return {
         "by_coverage": count_by_coverage(graph, config=config),
         "by_level": count_by_level(graph, config=config),
-        "code_reference_coverage": count_with_code_refs(graph, exclude_status=exclude),
+        "code_reference_coverage": count_with_code_refs(graph, config=config),
     }
 
 

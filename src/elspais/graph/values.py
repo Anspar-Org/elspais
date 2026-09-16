@@ -244,7 +244,15 @@ _IDENTITY_VALUES: tuple[ValueSpec, ...] = (
     # the denominator every coverage figure in the row is taken over
     # (REQ-d00258-P), which is why each figure states its own denominator
     # inside itself rather than leaning on a neighbouring value.
-    ValueSpec(key="requirements", header="Requirements", group_only=True),
+    # "Active" names the role of the status that this figure counts. It does
+    # not name the word of the status. The count includes each requirement
+    # whose status expects implementation. That is each status with an active
+    # role. It also includes each status that a project declares or a run
+    # promotes (REQ-d00291-D+E). The key for selection is still
+    # ``requirements``. The name that a reader selects is independent of the
+    # words that a report shows (REQ-d00282-J). Therefore each selection
+    # continues to work, and no reader must spell a selection again.
+    ValueSpec(key="requirements", header="Active Requirements", group_only=True),
     ValueSpec(key="assertions", header="Assertions", group_only=True),
 )
 

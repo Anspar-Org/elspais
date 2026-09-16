@@ -1180,10 +1180,6 @@ def collect_coverage(
     level whose requirements are all excluded -- the one case the tally exists
     to report.
     """
-    from elspais.config import get_status_roles
-
-    roles = get_status_roles(config or {})
-    exclude_status = roles.coverage_excluded_statuses()
     # REQ-d00281-C: the same groups aggregate_by_level forms, so a requirement an
     # excluded status keeps out of the sums is still counted as excluded rather
     # than vanishing. Deliberately over every requirement, not the covered set --
@@ -1196,7 +1192,16 @@ def collect_coverage(
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
         if node_ids is not None and node.id not in node_ids:
             continue
-        if (node.level or "").lower() in known_levels and node.status in exclude_status:
+        # A coverage gate holds a requirement out of the sums. That is the
+        # reason this tally counts it. Therefore the tally must ask that gate.
+        # It must not calculate the answer again from the status roles. A
+        # project can declare a status, or a run can promote it. A read of the
+        # roles then counted such a status two times. It counted the status in
+        # the row of its level and also here. The report gave a total of more
+        # requirements than it holds (REQ-d00281-B, REQ-d00258-C).
+        if (node.level or "").lower() in known_levels and not _counts_for_coverage(
+            config, node.status
+        ):
             excluded_counts[node.status] = excluded_counts.get(node.status, 0) + 1
 
     levels = []

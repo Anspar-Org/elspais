@@ -66,6 +66,19 @@ class ScopeOptions:
     scope: str | None = None
     """Report under a scope the project declares by this name."""
 
+    # Implements: REQ-d00291-G
+    # This field is here, and not in each command, for the reason that this
+    # class is present. The statuses that a run weighs as active decide the
+    # population of every figure in the report. A command that cannot receive
+    # this field answers a different question from the other commands. The
+    # field is valid for one run. It overlays the configuration of this
+    # invocation. It never changes the built graph. One serving process shares
+    # that graph between readers, and those readers ask different questions.
+    treat_active: Annotated[list[list[str]], tyro.conf.UseAppendAction] = dataclasses.field(
+        default_factory=list
+    )
+    """Weigh these statuses as active ones for this run, counting them alongside Active."""
+
 
 # ---------------------------------------------------------------------------
 # Health command
@@ -149,7 +162,7 @@ class ChecksArgs:
     treat_active: Annotated[list[list[str]], tyro.conf.UseAppendAction] = dataclasses.field(
         default_factory=list
     )
-    """Treat these statuses as committed, counting them alongside Active."""
+    """Weigh these statuses as active ones for this run, counting them alongside Active."""
 
     include_passing_details: bool = False
     """Show full details for passing checks."""
@@ -197,12 +210,6 @@ class GapsArgs(ScopeOptions):
     verified. Keys are stable names, never the words a project displays them
     under."""
 
-    # Implements: REQ-d00291-G
-    treat_active: Annotated[list[list[str]], tyro.conf.UseAppendAction] = dataclasses.field(
-        default_factory=list
-    )
-    """Treat these statuses as committed, counting them alongside Active."""
-
     output: Annotated[Path | None, tyro.conf.arg(aliases=["-o"])] = None
     """Write output to file instead of stdout."""
 
@@ -222,12 +229,6 @@ class UncoveredArgs(ScopeOptions):
     """List only the shortfalls in these dimensions, in this order
     (comma-separated value keys). Offers: implemented. Keys are stable names,
     never the words a project displays them under."""
-
-    # Implements: REQ-d00291-G
-    treat_active: Annotated[list[list[str]], tyro.conf.UseAppendAction] = dataclasses.field(
-        default_factory=list
-    )
-    """Treat these statuses as committed, counting them alongside Active."""
 
     output: Annotated[Path | None, tyro.conf.arg(aliases=["-o"])] = None
     """Write output to file instead of stdout."""
@@ -249,12 +250,6 @@ class UntestedArgs(ScopeOptions):
     (comma-separated value keys). Offers: tested. Keys are stable names,
     never the words a project displays them under."""
 
-    # Implements: REQ-d00291-G
-    treat_active: Annotated[list[list[str]], tyro.conf.UseAppendAction] = dataclasses.field(
-        default_factory=list
-    )
-    """Treat these statuses as committed, counting them alongside Active."""
-
     output: Annotated[Path | None, tyro.conf.arg(aliases=["-o"])] = None
     """Write output to file instead of stdout."""
 
@@ -275,12 +270,6 @@ class UnvalidatedArgs(ScopeOptions):
     (comma-separated value keys). Offers: uat_coverage. Keys are stable names,
     never the words a project displays them under."""
 
-    # Implements: REQ-d00291-G
-    treat_active: Annotated[list[list[str]], tyro.conf.UseAppendAction] = dataclasses.field(
-        default_factory=list
-    )
-    """Treat these statuses as committed, counting them alongside Active."""
-
     output: Annotated[Path | None, tyro.conf.arg(aliases=["-o"])] = None
     """Write output to file instead of stdout."""
 
@@ -300,12 +289,6 @@ class FailingArgs(ScopeOptions):
     """List only the shortfalls in these dimensions, in this order
     (comma-separated value keys). Offers: verified. Keys are stable names,
     never the words a project displays them under."""
-
-    # Implements: REQ-d00291-G
-    treat_active: Annotated[list[list[str]], tyro.conf.UseAppendAction] = dataclasses.field(
-        default_factory=list
-    )
-    """Treat these statuses as committed, counting them alongside Active."""
 
     output: Annotated[Path | None, tyro.conf.arg(aliases=["-o"])] = None
     """Write output to file instead of stdout."""

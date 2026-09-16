@@ -19,13 +19,24 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from elspais.graph.scope import ReportScope
 
+# The key that carries the statuses of a run to a serving process. One name
+# here and in ``report_inputs_from_params``. A request and the process that
+# answers it must use one spelling. The values are divided by a comma.
+TREAT_ACTIVE_PARAM = "treat_active"
+TREAT_ACTIVE_SEPARATOR = ","
+
 
 @dataclass(frozen=True)
 class ReportInputs:
-    """The two axes every report over a set of requirements reads."""
+    """The axes every report over a set of requirements reads."""
 
     scope: ReportScope | None = None
     values: tuple[str, ...] | None = None
+    # Implements: REQ-d00291-G
+    # The statuses that this run weighs as active. The request carries the
+    # names as data. It does not carry a configuration that already holds
+    # them. A serving process must apply the names to its own configuration.
+    treat_active: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         # ``values=()`` and ``values=None`` are NOT the same thing -- None is
@@ -57,6 +68,8 @@ class ReportInputs:
         params = dict(scope_to_params(self.scope))
         if self.values is not None:
             params[VALUES_PARAM] = VALUE_LIST_SEPARATOR.join(self.values)
+        if self.treat_active:
+            params[TREAT_ACTIVE_PARAM] = TREAT_ACTIVE_SEPARATOR.join(self.treat_active)
         return params
 
 
@@ -80,15 +93,12 @@ class GapsRequest(ReportInputs):
     """
 
     command: str = "gaps"
-    treat_active: tuple[str, ...] = ()
 
     def to_params(self) -> dict[str, str]:
-        """Every field, not only the inherited two: a field left out of this
+        """Every field, not only the inherited ones: a field left out of this
         map is a field a daemon-served report is computed without."""
         params = super().to_params()
         params["command"] = self.command
-        if self.treat_active:
-            params["treat_active"] = ",".join(self.treat_active)
         return params
 
 

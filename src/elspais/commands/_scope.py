@@ -11,6 +11,7 @@ assembled separately by each command is how those paths start disagreeing.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from typing import Any
 
 from elspais.graph.scope import (
@@ -100,6 +101,27 @@ def scope_from_args(args: Any, config: dict[str, Any] | None = None) -> ReportSc
     if not include and not exclude:
         return None
     return ReportScope(include=include, exclude=exclude, match_status_roles=match_roles)
+
+
+# Implements: REQ-d00291-G, REQ-p00084-D
+def active_overlay_disclosure(treat_active: Iterable[str] | None) -> list[str]:
+    """What a report owes its reader about the statuses it weighed as active.
+
+    A run can weigh a status as active. The counts in the report then include
+    the requirements in that status. The text of those requirements still
+    gives the original status. A reader who cannot see the request cannot see
+    the reason for the difference. Therefore the report states the request.
+    This is the same obligation REQ-p00084-D puts on a narrowed report.
+
+    The result is empty if the run weighs no status as active. There is then
+    nothing to state.
+    """
+    from elspais.config import statuses_weighed_active
+
+    names = sorted(statuses_weighed_active(treat_active))
+    if not names:
+        return []
+    return [f"Weighed as active: {', '.join(names)} (--treat-active)"]
 
 
 # Implements: REQ-d00278-L

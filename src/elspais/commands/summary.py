@@ -262,7 +262,9 @@ def render_section(
         inputs = report_inputs_from_args(args, config, OFFERED_VALUES, IDENTITY_VALUE)
     except UnofferedValues as exc:
         return f"Coverage Summary\nerror: {exc}", 1
-    data = compute_summary(graph, config, SummaryRequest(inputs.scope, inputs.values))
+    data = compute_summary(
+        graph, config, SummaryRequest(inputs.scope, inputs.values, inputs.treat_active)
+    )
     return _render(data, fmt, config).rstrip("\n"), 0
 
 
@@ -274,13 +276,17 @@ def compute_summary(graph: FederatedGraph, config: dict, request: SummaryRequest
     edge that was invoked, which is the only place that could tell a project's
     declaration from a reader's own words (REQ-d00280-D).
     """
-    from elspais.commands._scope import scope_disclosure
+    from elspais.commands._scope import active_overlay_disclosure, scope_disclosure
+    from elspais.config import config_with_active_overlay
     from elspais.graph.scope import scoped_requirements
 
-    result = scoped_requirements(graph, request.scope, config)
+    # Apply the statuses of this run one time, at the top. Each figure below
+    # then reads one configuration (REQ-d00291-G).
+    cfg = config_with_active_overlay(config, request.treat_active)
+    result = scoped_requirements(graph, request.scope, cfg)
     ids = None if len(result.ids) == result.population else result.ids
-    data = collect_coverage(graph, config=config, node_ids=ids)
-    data["scope"] = scope_disclosure(result)
+    data = collect_coverage(graph, config=cfg, node_ids=ids)
+    data["scope"] = scope_disclosure(result) + active_overlay_disclosure(request.treat_active)
     _stamp_values(data, request.values)
     return data
 
@@ -323,7 +329,9 @@ def run(args: argparse.Namespace) -> int:
         sys.stderr.write(f"error: {exc}\n")
         return 2
 
-    request = SummaryRequest(scope=inputs.scope, values=inputs.values)
+    request = SummaryRequest(
+        scope=inputs.scope, values=inputs.values, treat_active=inputs.treat_active
+    )
 
     if fresh_targets is not None:
         from elspais.graph.factory import build_graph
@@ -445,8 +453,8 @@ def _value_groups(keys: tuple[str, ...]) -> list[tuple[str, str, tuple[str, ...]
         spec = VALUE_SPECS[keys[index]]
         # A value stating no figure is laid out on the line that names the
         # group, and a consecutive run of them shares that one line -- which is
-        # what lets the default selection read as "PRD: 24 requirements, 189
-        # assertions". Gathered only while they are ADJACENT in the selection,
+        # what lets the default selection read as "PRD: 24 active requirements,
+        # 189 assertions". Gathered only while they are ADJACENT in the selection,
         # so one named after a figure is stated after that figure
         # (REQ-d00282-K).
         if not spec.states_a_figure:
@@ -520,7 +528,11 @@ def _tested_breakdown(lv: dict) -> str:
 # (REQ-d00282-E).
 _IDENTITY_TEXT: dict[str, Any] = {
     "level": lambda lv: str(lv["level"]),
-    "requirements": lambda lv: f"{lv['total']} requirements",
+    # "active" names the role of the status that this figure counts. It does
+    # not name the word of the status. The table gives the same figure the
+    # heading "Active Requirements". This text gives that figure in prose.
+    # Both forms of one value then tell the reader one thing.
+    "requirements": lambda lv: f"{lv['total']} active requirements",
     "assertions": lambda lv: f"{lv['total_assertions']} assertions",
 }
 

@@ -2668,69 +2668,6 @@ def run_spec_checks(
 # =============================================================================
 
 
-# Implements: REQ-d00291-G
-def _status_flags(treat_active: tuple[str, ...]) -> set[str]:
-    """Title-cased set of statuses named via ``--treat-active`` (empty when unset)."""
-    return {s.title() for s in treat_active}
-
-
-def _config_with_status_overlay(
-    config: dict[str, Any] | None,
-    status_flags: set[str],
-) -> dict[str, Any] | None:
-    """Config overlay forcing ``expects_implementation=True`` for --treat-active names.
-
-    ``--treat-active Draft`` makes Draft count toward coverage (the documented
-    capability, ``docs/cli/checks.md``). Rather than a second coverage-inclusion
-    predicate, ``--treat-active`` is expressed as a per-call CONFIG overlay so the ONE
-    resolver (``status_expects_implementation``) drives both the dimension
-    COUNTS (``aggregate_dimension``) and the excluded-NOTE from the same source
-    -- they can no longer disagree (REQ-d00258-C).
-
-    Empty ``status_flags`` returns ``config`` unchanged (byte-identical default
-    behaviour). Otherwise a shallow copy whose ``statuses`` table gains
-    ``expects_implementation=True`` for each named status, preserving any other
-    per-status fields (and composing with an existing
-    ``[statuses.<S>].expects_implementation``). The input config is never
-    mutated.
-    """
-    if not status_flags:
-        return config
-    overlaid = dict(config or {})
-    statuses = dict(overlaid.get("statuses") or {})
-    # Merge into an existing entry (case-insensitively) rather than shadowing it
-    # with a second, differently-cased key that the resolver might reach first.
-    existing_by_lower = {k.lower(): k for k in statuses if isinstance(k, str)}
-    for flag in status_flags:
-        key = existing_by_lower.get(flag.lower(), flag)
-        entry = dict(statuses.get(key) or {})
-        entry["expects_implementation"] = True
-        statuses[key] = entry
-    overlaid["statuses"] = statuses
-    return overlaid
-
-
-def _resolve_exclude_status(
-    treat_active: tuple[str, ...],
-    config: dict[str, Any] | None = None,
-) -> set[str]:
-    """Statuses treated as coverage-EXCLUDED for the reference-status checks.
-
-    This drives ``_check_status_references`` (retired/provisional/aspirational
-    reference flagging): ``--treat-active Draft`` promotes Draft to active-like, so it
-    is removed from this set and Draft references stop being flagged. Coverage
-    COUNTS and the excluded-note no longer read this set -- they route through
-    ``_config_with_status_overlay`` + ``status_expects_implementation`` so a
-    single resolver keeps them consistent (REQ-d00258-C). Without ``--treat-active``,
-    the role system supplies the default exclusion set.
-    """
-    from elspais.config import get_status_roles
-
-    roles = get_status_roles(config or {})
-    default_excluded = roles.coverage_excluded_statuses()
-    return default_excluded - _status_flags(treat_active)
-
-
 def _excluded_note(
     graph: FederatedGraph,
     config: dict[str, Any] | None = None,
@@ -3333,9 +3270,11 @@ def _check_status_references(
 ) -> HealthCheck:
     """Check for source nodes referencing requirements of a given status role.
 
-    When --status promotes a status to active-like, it's removed from
-    exclude_status. We mirror that: statuses NOT in exclude_status are
-    treated as active and skip this check.
+    ``exclude_status`` comes from ``reference_excluded_statuses``. That set
+    holds the roles of the project, less each status that this run weighs as
+    active. A status that is not in the set is active, and this check passes
+    over it. Thus ``--treat-active Draft`` stops the reports about the
+    citations of Draft.
 
     Args:
         graph: The federated traceability graph.
@@ -3349,7 +3288,12 @@ def _check_status_references(
     from elspais.graph import NodeKind
     from elspais.graph.edge_sets import REACHABILITY_TRACEABILITY_EDGES
 
-    roles_cfg = get_status_roles({})
+    # Use the roles of the project. Do not use the default roles. A project
+    # that declares ``[status_roles]`` tells you which of its statuses are
+    # retired and which are provisional. A read of the default map here
+    # reports the citations of the project against roles that the project
+    # never declared.
+    roles_cfg = get_status_roles(config or {})
     category = "code" if source_kind == NodeKind.CODE else "tests"
     check_name = f"{category}.{role.value}_references"
     severity = severity or severity_for(check_name, config)
@@ -4861,13 +4805,14 @@ def render_section(
             report.add(check)
     if graph:
         from elspais.commands._scope import flag_values
+        from elspais.config import config_with_active_overlay, reference_excluded_statuses
 
         raw_config = config if config else {}
         treat_active = flag_values(args, "treat_active")
-        exclude_status = _resolve_exclude_status(treat_active, config=raw_config)
+        exclude_status = reference_excluded_statuses(raw_config, treat_active)
         # REQ-d00258-C: --treat-active becomes a coverage-config overlay so
         # dimension counts AND the excluded-note agree (both read this overlay).
-        cov_config = _config_with_status_overlay(raw_config, _status_flags(treat_active))
+        cov_config = config_with_active_overlay(raw_config, treat_active)
         for check in run_code_checks(graph, exclude_status=exclude_status, config=cov_config):
             report.add(check)
         for check in run_test_checks(graph, exclude_status=exclude_status, config=cov_config):
@@ -4905,9 +4850,11 @@ def compute_checks(
     report = HealthReport()
     run_all = request.run_all
 
-    exclude_status = _resolve_exclude_status(request.treat_active, config=config)
+    from elspais.config import config_with_active_overlay, reference_excluded_statuses
+
+    exclude_status = reference_excluded_statuses(config, request.treat_active)
     # REQ-d00258-C: --treat-active overlay drives coverage counts + note consistently.
-    cov_config = _config_with_status_overlay(config, _status_flags(request.treat_active))
+    cov_config = config_with_active_overlay(config, request.treat_active)
 
     # Config checks
     if run_all:

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import fnmatch
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -110,6 +111,117 @@ def status_expects_implementation(config: dict[str, Any], status: str | None) ->
     from elspais.config.status_roles import StatusRole
 
     return get_status_roles(config or {}).role_of(status) == StatusRole.ACTIVE
+
+
+# Implements: REQ-d00291-G
+def statuses_weighed_active(treat_active: Iterable[str] | None) -> frozenset[str]:
+    """The statuses that a run weighs as active (``--treat-active``).
+
+    This function normalizes the names one time. All users of the names then
+    spell them in the same way. The function puts each name into title case. A
+    ``[statuses.<Name>]`` table uses title case also. The result is empty if
+    the run weighs no status as active.
+    """
+    return frozenset(s.title() for s in (treat_active or ()))
+
+
+# Implements: REQ-d00291-G
+def config_with_active_overlay(
+    config: dict[str, Any] | None,
+    treat_active: Iterable[str] | None,
+) -> dict[str, Any] | None:
+    """``config`` with the statuses of a run added to its ``[statuses]`` table.
+
+    ``--treat-active`` is an overlay on the configuration. The overlay is valid
+    for one run. It is not a parameter that each user of the configuration
+    receives. Therefore one function, :func:`status_expects_implementation`,
+    answers for the status in all places. The coverage counts, the tally of
+    held-out requirements and the reference checks cannot disagree
+    (REQ-d00258-C). A project can also declare ``expects_implementation``. Such
+    a declaration uses the same function. Thus a declaration and a run-time
+    promotion are one mechanism, not two.
+
+    A command applies the overlay at its edge. The build does not apply it. The
+    statuses that a reader weighs as active are a property of the request of
+    that reader. One graph can serve more than one reader. Therefore the graph
+    must not hold the answer of one reader.
+
+    The function returns ``config`` without a change if the run weighs no
+    status as active. The behavior is then the default behavior. The function
+    does not change the configuration that it receives.
+    """
+    flags = statuses_weighed_active(treat_active)
+    if not flags:
+        return config
+    overlaid = dict(config or {})
+    statuses = dict(overlaid.get("statuses") or {})
+    # Put the value into the entry that is present. Ignore a difference of
+    # case. Do not add a second key that has a different case. The function
+    # that reads the table can find such a key first.
+    existing_by_lower = {k.lower(): k for k in statuses if isinstance(k, str)}
+    for flag in flags:
+        key = existing_by_lower.get(flag.lower(), flag)
+        entry = dict(statuses.get(key) or {})
+        entry["expects_implementation"] = True
+        statuses[key] = entry
+    overlaid["statuses"] = statuses
+    return overlaid
+
+
+# Implements: REQ-d00291-F+G
+def statuses_withheld_from_coverage(
+    config: dict[str, Any] | None,
+    treat_active: Iterable[str] | None = None,
+) -> set[str]:
+    """The statuses whose requirements no coverage figure and no work list counts.
+
+    This function gives the result of
+    :func:`status_expects_implementation` as a set. Some users of the result
+    need a set of status names. They do not ask the question for each
+    requirement. This function asks that function about each status in the
+    vocabulary. Therefore this function holds out a status exactly when the
+    counts hold it out. REQ-d00291-F speaks about the population of every
+    coverage figure. A work list names the requirements that still need
+    implementation. That list uses the same population.
+
+    Do not use ``StatusRolesConfig.coverage_excluded_statuses()`` here. That
+    function uses only the roles, and it cannot see a declaration. A read of
+    the roles caused one surface to count a requirement and a different
+    surface to hold the same requirement out.
+
+    A status that is not in the vocabulary expects implementation. ``role_of``
+    makes such a status active. Therefore this function never holds it out,
+    and the vocabulary is sufficient.
+    """
+    overlaid = config_with_active_overlay(config, treat_active)
+    roles = get_status_roles(config or {})
+    vocabulary = set(roles.known_statuses())
+    declared = (config or {}).get("statuses")
+    if isinstance(declared, dict):
+        vocabulary |= {k for k in declared if isinstance(k, str)}
+    return {s for s in vocabulary if not status_expects_implementation(overlaid, s)}
+
+
+# Implements: REQ-d00291-G
+def reference_excluded_statuses(
+    config: dict[str, Any] | None,
+    treat_active: Iterable[str] | None = None,
+) -> set[str]:
+    """The statuses that cause a report if code or a test cites them.
+
+    This question is not the question that
+    :func:`status_expects_implementation` answers. That function asks if a
+    status still needs implementation. This function asks if a citation of the
+    status is worth a report. A project can declare
+    ``expects_implementation = true`` for a status that has a retired role.
+    The project then tells you that those requirements still need work. The
+    project does not tell you to stop the report about a citation. Therefore
+    the declaration does not change this function. A ``--treat-active``
+    promotion does change this function. A request to weigh a status as active
+    applies to all of the reading of that status in the run.
+    """
+    roles = get_status_roles(config or {})
+    return set(roles.coverage_excluded_statuses()) - statuses_weighed_active(treat_active)
 
 
 def _declaration(config: dict[str, Any], name: str) -> Any:

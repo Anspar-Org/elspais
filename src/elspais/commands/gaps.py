@@ -113,7 +113,14 @@ def collect_gaps(
 
     Args:
         graph: The federated traceability graph.
-        exclude_status: Set of status values to skip (e.g. {"Retired"}).
+        exclude_status: The status values to pass over. A caller gets this set
+            from ``statuses_withheld_from_coverage``. A caller must not get it
+            from the status roles. A work list names the requirements that
+            still need implementation. Therefore the list uses the same
+            population that the coverage figures use (REQ-d00291-F). A set
+            from the roles held out a requirement that a project declared to
+            expect implementation. Each coverage figure counted that same
+            requirement.
         config: Project config dict. Used to resolve per-level
             ``expects_validation`` so only levels that expect UAT validation
             produce ``unvalidated`` gaps (REQ-d00291-B+C).
@@ -427,7 +434,7 @@ def render_section(
         Exit code is always 0 (gap sections are informational).
     """
     from elspais.commands._edges import report_inputs_from_args
-    from elspais.commands.health import _resolve_exclude_status
+    from elspais.config import statuses_withheld_from_coverage
 
     # Implements: REQ-p00084-A+D, REQ-d00279-C
     # Derived once here rather than resolved twice for scope and values
@@ -438,15 +445,23 @@ def render_section(
     if gap_types is None:
         gap_types = gap_sections(inputs.values, command)
 
-    from elspais.commands._scope import flag_values, scope_disclosure
+    from elspais.commands._scope import (
+        active_overlay_disclosure,
+        flag_values,
+        scope_disclosure,
+    )
     from elspais.graph.scope import scoped_requirements
 
-    exclude_status = _resolve_exclude_status(flag_values(args, "treat_active"), config=config or {})
+    exclude_status = statuses_withheld_from_coverage(
+        config or {}, flag_values(args, "treat_active")
+    )
 
     scope_result = scoped_requirements(graph, inputs.scope, config)
     scope_ids = None if len(scope_result.ids) == scope_result.population else scope_result.ids
     data = collect_gaps(graph, exclude_status, config=config, node_ids=scope_ids)
-    scope_lines = scope_disclosure(scope_result)
+    scope_lines = scope_disclosure(scope_result) + active_overlay_disclosure(
+        flag_values(args, "treat_active")
+    )
 
     fmt = getattr(args, "format", "text")
 
@@ -540,16 +555,16 @@ def compute_gaps(graph: FederatedGraph, config: dict, request: GapsRequest) -> d
     edge that was invoked, which is the only place that could tell a project's
     declaration from a reader's own words (REQ-d00280-D).
     """
-    from elspais.commands.health import _resolve_exclude_status
+    from elspais.config import statuses_withheld_from_coverage
 
-    exclude_status = _resolve_exclude_status(request.treat_active, config=config)
-    from elspais.commands._scope import scope_disclosure
+    exclude_status = statuses_withheld_from_coverage(config, request.treat_active)
+    from elspais.commands._scope import active_overlay_disclosure, scope_disclosure
     from elspais.graph.scope import scoped_requirements
 
     scope_result = scoped_requirements(graph, request.scope, config)
     ids = None if len(scope_result.ids) == scope_result.population else scope_result.ids
     data = collect_gaps(graph, exclude_status, config=config, node_ids=ids)
-    scope_lines = scope_disclosure(scope_result)
+    scope_lines = scope_disclosure(scope_result) + active_overlay_disclosure(request.treat_active)
 
     def _serialize_gap_list(gt: str) -> list:
         items = getattr(data, gt)
@@ -587,7 +602,6 @@ def run(args: argparse.Namespace) -> int:
     from elspais.commands._edges import report_inputs_from_args
     from elspais.commands._engine import call as engine_call
     from elspais.commands._requests import GapsRequest
-    from elspais.commands._scope import flag_values
     from elspais.commands._values import UnofferedValues
     from elspais.config import get_config
 
@@ -611,7 +625,7 @@ def run(args: argparse.Namespace) -> int:
         scope=inputs.scope,
         values=inputs.values,
         command=command,
-        treat_active=flag_values(args, "treat_active"),
+        treat_active=inputs.treat_active,
     )
 
     fmt = getattr(args, "format", "text")

@@ -468,7 +468,7 @@ class TestMarkdownFormat:
         cells = [c.strip() for c in header.strip("|").split("|")]
         assert cells[:6] == [
             "Level",
-            "Requirements",
+            "Active Requirements",
             "Assertions",
             "Implemented",
             "Implemented (cited by name here)",
@@ -588,7 +588,7 @@ class TestCsvFormat:
             "conducted direct",
             "conducted indirect",
         ]
-        expected_headers = ["Level", "Requirements", "Assertions"]
+        expected_headers = ["Level", "Active Requirements", "Assertions"]
         for dimension in ("Implemented", "Tested", "Passing", "UAT Covered", "UAT Passed"):
             expected_headers.append(dimension)
             expected_headers.extend(f"{dimension} ({m})" for m in measure_headers)
@@ -634,7 +634,7 @@ class TestCsvFormat:
         # TOTAL (REQ-d00069-N); this fixture credits everything as immediate
         # direct evidence, so it equals the legacy figure (REQ-d00258-A).
         assert row["Level"] == "PRD"
-        assert row["Requirements"] == "1"
+        assert row["Active Requirements"] == "1"
         assert row["Assertions"] == "4"
         # A figure, the assertions it was taken over and its proportion are one
         # fact and so one cell (REQ-d00282-E).
@@ -660,7 +660,7 @@ class TestCsvFormat:
 
         assert len(rows) == 3  # 3 levels
         for row in rows:
-            int(row["Requirements"])
+            int(row["Active Requirements"])
             total = int(row["Assertions"])
             # Coverage counts are fractional sums (REQ-d00069-J), stated over
             # the assertions of the group they were summed across

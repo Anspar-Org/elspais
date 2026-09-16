@@ -332,6 +332,34 @@ class TestLevelGroupKeys:
         graph = _make_graph(_make_req("REQ-x00001", level="arch", status="Deprecated"))
         assert collect_coverage(graph, self.CONFIG)["excluded"] == {"Deprecated": 1}
 
+    # Verifies: REQ-d00281-B, REQ-d00258-C
+    @pytest.mark.parametrize("promoted_status", ["Draft", "Proposed"])
+    def test_promoted_status_is_counted_once_not_both_counted_and_excluded(self, promoted_status):
+        # `[statuses.<Name>] expects_implementation = true` promotes a status
+        # whose ROLE is coverage-excluded, so `aggregate_by_level` counts its
+        # requirement in a level row. The `excluded` tally must follow the same
+        # resolver (REQ-d00258-C) or that requirement is reported twice, and a
+        # reader adding the rows to the exclusions gets back more than the
+        # graph holds (REQ-d00281-B).
+        config = {
+            **self.CONFIG,
+            "statuses": {promoted_status: {"expects_implementation": True}},
+        }
+        graph = _make_graph(
+            _make_req("REQ-x00001", level="dev", status="Active"),
+            _make_req("REQ-x00002", level="dev", status=promoted_status),
+            # Not promoted: the exclusions stay genuinely non-empty, so a fix
+            # that merely emptied the tally would still fail the second assert.
+            _make_req("REQ-x00003", level="prd", status="Deprecated"),
+        )
+        data = collect_coverage(graph, config)
+        rows = sum(row["total"] for row in data["levels"])
+        excluded = sum(data["excluded"].values())
+        # REQ-d00281-B: every requirement in a known level counted exactly once.
+        assert rows + excluded == 3
+        assert promoted_status not in data["excluded"]
+        assert data["excluded"] == {"Deprecated": 1}
+
 
 class TestAggregateDimension:
     """REQ-d00258-C: the single whole-graph per-dimension walk health.py's

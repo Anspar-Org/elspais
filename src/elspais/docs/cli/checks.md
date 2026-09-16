@@ -1080,10 +1080,25 @@ or UAT validation.
 
 A promoted status is counted in the coverage numerator and denominator and is
 correspondingly absent from the trailing `[... excluded]` note — the counts and
-the note always agree. Under the hood `--treat-active <S>` is an overlay that
-forces `expects_implementation = true` for `<S>`, so it is exactly equivalent to
-setting `[statuses.<S>] expects_implementation = true` in `.elspais.toml` for the
-duration of the run (and composes with any such config already present).
+the note always agree, because both ask the one resolver rather than deriving
+the answer separately. Under the hood `--treat-active <S>` is a run-scoped
+overlay that forces `expects_implementation = true` for `<S>`, composing with
+any such config already present.
+
+For the coverage figures that is the same thing as setting
+`[statuses.<S>] expects_implementation = true` in `.elspais.toml`. The two
+differ in one respect, deliberately: `--treat-active <S>` ALSO stops
+`code.provisional_references` / `tests.provisional_references` flagging
+references to `<S>`, whereas the config declaration does not. Declaring
+`expects_implementation` says those requirements still owe implementation; it
+does not say that citing them has stopped being worth reporting. Asking for a
+status to be weighed as active is a statement about the whole of one run's
+reading of it, so it reaches both questions.
+
+`--treat-active` is not specific to `checks`: it is declared beside the scope
+flags and is available on every report that takes a scope. See
+`elspais docs scoping` for where it applies, what it discloses, and why it is
+scoped to one run.
 
 `--treat-active` accepts any configured status name (case-insensitive; the name
 is title-cased before matching). See `elspais docs config` for how status roles

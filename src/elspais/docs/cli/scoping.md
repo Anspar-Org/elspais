@@ -292,3 +292,33 @@ have anyway.
 carrying it are measured alongside active ones. Scoping selects what is EMITTED:
 which requirements the report is about at all. They compose, and neither
 substitutes for the other.
+
+`--treat-active` is available on every report that takes a scope — `summary`,
+`trace`, `gaps` and its shorthands (`uncovered`, `untested`, `unvalidated`,
+`failing`), `analysis` — and on `checks`. It is declared once, beside the scope
+flags, for the reason those are: a report a reader cannot ask would answer a
+different question from its neighbours.
+
+It is **run-scoped**. It overlays this invocation's configuration and never the
+built graph, so one serving process can answer readers who weigh different
+statuses as active without one reader's question changing another's answer. For
+the coverage figures it is the same thing as setting
+`[statuses.<S>] expects_implementation = true` in `.elspais.toml`, for the
+duration of the run.
+
+Any report it changes **discloses it**, in every format, on the same line the
+scope is disclosed on:
+
+```
+Weighed as active: Review (--treat-active)
+```
+
+That disclosure is what keeps the figures honest. The requirements still read
+`Status: Review` in the spec, so a reader who cannot see the invocation cannot
+otherwise tell why they were counted. `checks` states the same fact in its
+trailing `Flags:` line.
+
+A report that states no figure taken over a population — `trace` states facts
+about each requirement, one row each — accepts the flag and reads the same
+either way. Nothing in such a report depends on which statuses a run weighs as
+active.

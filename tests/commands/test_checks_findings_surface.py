@@ -691,16 +691,17 @@ def test_the_cli_reads_a_repeated_selector_as_one_narrowing() -> None:
     ],
 )
 def test_treat_active_accumulates_into_the_counted_statuses(raw) -> None:
-    """``_status_flags`` title-cases what it gathers, so a nested list that
-    survived unflattened would arrive as ``"['draft']"`` -- a status no
+    """``statuses_weighed_active`` title-cases what it gathers, so a nested list
+    that survived unflattened would arrive as ``"['draft']"`` -- a status no
     requirement carries, and one a count of three would not tell apart.
     Flattening a repeated/spaced flag is ``flag_values``'s job at the edge;
-    ``_status_flags`` itself only title-cases the flat tuple it is handed."""
+    ``statuses_weighed_active`` itself only title-cases the flat tuple it is
+    handed."""
     from elspais.commands._scope import flag_values
-    from elspais.commands.health import _status_flags
+    from elspais.config import statuses_weighed_active
 
     treat_active = flag_values(argparse.Namespace(treat_active=raw), "treat_active")
-    assert _status_flags(treat_active) == {"Draft", "Review", "Active"}
+    assert statuses_weighed_active(treat_active) == {"Draft", "Review", "Active"}
 
 
 def test_treat_active_is_disclosed_as_the_reader_spelled_it() -> None:
@@ -721,7 +722,7 @@ def test_the_cli_reads_a_repeated_treat_active_as_one_widening(command) -> None:
     from elspais.cli import _to_namespace
     from elspais.commands._scope import flag_values
     from elspais.commands.args import GlobalArgs
-    from elspais.commands.health import _status_flags
+    from elspais.config import statuses_weighed_active
 
     repeated = _to_namespace(
         tyro.cli(GlobalArgs, args=[command, "--treat-active", "Draft", "--treat-active", "Review"])
@@ -729,5 +730,5 @@ def test_the_cli_reads_a_repeated_treat_active_as_one_widening(command) -> None:
     spaced = _to_namespace(
         tyro.cli(GlobalArgs, args=[command, "--treat-active", "Draft", "Review"])
     )
-    assert _status_flags(flag_values(repeated, "treat_active")) == {"Draft", "Review"}
-    assert _status_flags(flag_values(spaced, "treat_active")) == {"Draft", "Review"}
+    assert statuses_weighed_active(flag_values(repeated, "treat_active")) == {"Draft", "Review"}
+    assert statuses_weighed_active(flag_values(spaced, "treat_active")) == {"Draft", "Review"}

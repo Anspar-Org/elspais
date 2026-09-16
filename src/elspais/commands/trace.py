@@ -1253,7 +1253,9 @@ def run(args: argparse.Namespace) -> int:
         return 1
     from elspais.commands._requests import TraceRequest
 
-    request = TraceRequest(scope=inputs.scope, values=inputs.values)
+    request = TraceRequest(
+        scope=inputs.scope, values=inputs.values, treat_active=inputs.treat_active
+    )
     # Implements: REQ-d00282-E
     # The preset default is this caller's to apply, not the request's to carry:
     # `inputs.values` stays None where nothing was named, so a serving process

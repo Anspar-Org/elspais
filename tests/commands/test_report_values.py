@@ -292,7 +292,7 @@ ORDERINGS = (
 # rendering lays them out -- only about the order a reader meets them in.
 _TEXT_TOKEN = {
     "level": "PRD",
-    "requirements": "2 requirements",
+    "requirements": "2 active requirements",
     "assertions": "4 assertions",
     "implemented": "Implemented:",
 }

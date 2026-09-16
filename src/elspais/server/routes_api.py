@@ -1326,7 +1326,9 @@ async def api_run_summary(request: Request) -> JSONResponse:
 
     def _build() -> SummaryRequest:
         inputs = report_inputs_from_params(params, OFFERED_VALUES, IDENTITY_VALUE)
-        return SummaryRequest(scope=inputs.scope, values=inputs.values)
+        return SummaryRequest(
+            scope=inputs.scope, values=inputs.values, treat_active=inputs.treat_active
+        )
 
     built = _request_or_400(_build)
     if isinstance(built, JSONResponse):
@@ -1348,12 +1350,11 @@ async def api_run_gaps(request: Request) -> JSONResponse:
         inputs = report_inputs_from_params(
             params, COMMAND_VALUES.get(command, OFFERED_VALUES), identity_key=""
         )
-        treat_str = params.get("treat_active")
         return GapsRequest(
             scope=inputs.scope,
             values=inputs.values,
             command=command,
-            treat_active=tuple(treat_str.split(",")) if treat_str else (),
+            treat_active=inputs.treat_active,
         )
 
     built = _request_or_400(_build)
@@ -1401,7 +1402,9 @@ async def api_run_trace(request: Request) -> JSONResponse:
 
     def _build() -> TraceRequest:
         inputs = report_inputs_from_params(params, OFFERED_VALUES, identity_key="id")
-        return TraceRequest(scope=inputs.scope, values=inputs.values)
+        return TraceRequest(
+            scope=inputs.scope, values=inputs.values, treat_active=inputs.treat_active
+        )
 
     built = _request_or_400(_build)
     if isinstance(built, JSONResponse):

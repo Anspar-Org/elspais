@@ -526,9 +526,10 @@ def count_by_coverage(
     }
 
 
+# Implements: REQ-d00291-F
 def count_with_code_refs(
     graph: FederatedGraph,
-    exclude_status: set[str] | None = None,
+    config: dict[str, Any] | None = None,
 ) -> dict[str, int]:
     """Count requirements that have at least one CODE reference.
 
@@ -536,22 +537,30 @@ def count_with_code_refs(
     - It has a CODE child directly, OR
     - One of its ASSERTION children has a CODE child
 
+    This is a coverage figure. Therefore it is taken over the population that
+    each coverage figure uses (REQ-d00291-F). The function asks
+    ``status_expects_implementation`` about each requirement. It does not read
+    the status roles. A project can declare ``expects_implementation`` for a
+    status, or a run can weigh that status as active. A read of the roles then
+    held such a requirement out of this figure. Each other coverage figure
+    counted the same requirement.
+
     Args:
         graph: The TraceGraph to query.
-        exclude_status: Status values to exclude from both numerator and
-            denominator (e.g. ``{"Draft"}``).
+        config: The project configuration. It decides which statuses expect
+            implementation. Pass the configuration of the run, with the
+            overlay of the statuses that the run weighs as active.
 
     Returns:
         Dict with 'total_requirements', 'with_code_refs', 'coverage_percent'.
     """
+    from elspais.config import status_expects_implementation
     from elspais.graph import NodeKind
 
-    # Build set of excluded requirement IDs
     excluded_ids: set[str] = set()
-    if exclude_status:
-        for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
-            if node.status in exclude_status:
-                excluded_ids.add(node.id)
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+        if not status_expects_implementation(config or {}, node.status):
+            excluded_ids.add(node.id)
 
     total = 0
     covered_req_ids: set[str] = set()

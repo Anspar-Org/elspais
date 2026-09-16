@@ -152,13 +152,13 @@ def test_engine_call_sends_request_to_params_to_the_daemon(monkeypatch):
 
 
 # Verifies: REQ-d00258-C
-def test_status_flags_reads_a_tuple_not_a_namespace():
-    """`--treat-active Draft` promotes Draft to active-like. The helper needs
-    the names and nothing else, so an API caller has no reason to build an
+def test_statuses_weighed_active_reads_a_tuple_not_a_namespace():
+    """`--treat-active Draft` promotes Draft to active-like. ``statuses_weighed_active``
+    needs the names and nothing else, so an API caller has no reason to build an
     argparse.Namespace to reach it."""
-    from elspais.commands.health import _status_flags
+    from elspais.config import statuses_weighed_active
 
-    assert _status_flags(("draft", "review")) == {"Draft", "Review"}
+    assert statuses_weighed_active(("draft", "review")) == {"Draft", "Review"}
 
 
 def _scoped_args(**overrides) -> argparse.Namespace:

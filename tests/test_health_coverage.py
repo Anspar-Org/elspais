@@ -7,7 +7,6 @@ from pathlib import Path
 import pytest
 
 from elspais.commands.health import (
-    _config_with_status_overlay,
     _excluded_note,
     check_code_coverage,
     check_dimension_coverage,
@@ -20,6 +19,7 @@ from elspais.commands.health import (
     run_code_checks,
     run_uat_checks,
 )
+from elspais.config import config_with_active_overlay
 from elspais.graph.builder import TraceGraph
 from elspais.graph.federated import FederatedGraph
 from elspais.graph.GraphNode import GraphNode, NodeKind  # noqa: N817
@@ -784,14 +784,14 @@ class TestStatusOverlayCoverageConsistency:
         """Empty flag set returns the input config object unchanged (default is
         byte-identical)."""
         cfg = {"statuses": {"Draft": {"color": "#abc"}}}
-        assert _config_with_status_overlay(cfg, set()) is cfg
+        assert config_with_active_overlay(cfg, ()) is cfg
 
     # Verifies: REQ-d00258-C
     def test_overlay_forces_expects_implementation_preserving_fields(self):
         """The overlay only forces ``expects_implementation=True``; other
         per-status fields survive and the input config is not mutated."""
         cfg = {"statuses": {"Draft": {"color": "#abc"}}}
-        overlay = _config_with_status_overlay(cfg, {"Draft"})
+        overlay = config_with_active_overlay(cfg, ("Draft",))
         assert overlay["statuses"]["Draft"]["expects_implementation"] is True
         assert overlay["statuses"]["Draft"]["color"] == "#abc"
         # input untouched
@@ -812,7 +812,7 @@ class TestStatusOverlayCoverageConsistency:
         """--status Draft (as an overlay) counts Draft in numerator+denominator
         AND drops Draft from the excluded-note -- counts and note AGREE."""
         graph = self._active_plus_draft()
-        overlay = _config_with_status_overlay({}, {"Draft"})
+        overlay = config_with_active_overlay({}, ("Draft",))
         check = check_dimension_coverage(graph, "implemented", config=overlay)
         # Draft now counted (denominator = both reqs).
         assert check.details["total_requirements"] == 2
@@ -826,7 +826,7 @@ class TestStatusOverlayCoverageConsistency:
         the caller that previously dropped ``config`` (counts excluded Draft
         while the note implied inclusion)."""
         graph = self._active_plus_draft()
-        overlay = _config_with_status_overlay({}, {"Draft"})
+        overlay = config_with_active_overlay({}, ("Draft",))
         checks = run_code_checks(graph, exclude_status=set(), config=overlay)
         implemented = next(c for c in checks if c.name == "code.implemented")
         assert implemented.details["total_requirements"] == 2
@@ -849,7 +849,7 @@ class TestStatusOverlayCoverageConsistency:
         counts use, so a promoted status is absent from the note."""
         graph = self._active_plus_draft()
         assert "draft" in _excluded_note(graph, config={}).lower()
-        overlay = _config_with_status_overlay({}, {"Draft"})
+        overlay = config_with_active_overlay({}, ("Draft",))
         assert _excluded_note(graph, config=overlay) == ""
 
 
