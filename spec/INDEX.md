@@ -38,6 +38,7 @@
 | ---------------------- | --------------------------------------- | ---- | -------- |
 | REQ-d00272::REQ-p00019 | Truthful Reporting and Error Discipline |      | 946a0e4c |
 | REQ-d00285::REQ-p00019 | Truthful Reporting and Error Discipline |      | 946a0e4c |
+| REQ-o00078::REQ-p00019 | Truthful Reporting and Error Discipline |      | 946a0e4c |
 | REQ-p00015::REQ-p00019 | Truthful Reporting and Error Discipline |      | 946a0e4c |
 | REQ-p00080::REQ-p00019 | Truthful Reporting and Error Discipline |      | 946a0e4c |
 | REQ-p00081::REQ-p00019 | Truthful Reporting and Error Discipline |      | 946a0e4c |
@@ -46,28 +47,29 @@
 
 ## OPERATIONS
 
-| ID         | Title                               | File                | Hash     |
-| ---------- | ----------------------------------- | ------------------- | -------- |
-| REQ-o00050 | Graph Builder as Single Entry Point | ops-architecture.md | 33e0f3ec |
-| REQ-o00051 | Composable Annotation Design        | ops-architecture.md | 2fabd3d4 |
-| REQ-o00060 | MCP Core Query Tools                | ops-mcp.md          | 3a9ae713 |
-| REQ-o00061 | MCP Workspace Context Tools         | ops-mcp.md          | 3306c687 |
-| REQ-o00062 | MCP Graph Mutation Tools            | ops-mcp.md          | 31e8183f |
-| REQ-o00063 | MCP File Mutation Tools             | ops-mcp.md          | 05c1e9c4 |
-| REQ-o00064 | MCP Test Coverage Analysis Tools    | ops-mcp.md          | a97fc5c4 |
-| REQ-o00065 | Agent-Assisted Link Suggestion      | ops-mcp.md          | 06f8e1ac |
-| REQ-o00066 | CI/CD Pipeline Enforcement          | ops-architecture.md | 67d7ec07 |
-| REQ-o00067 | MCP Subtree Extraction Tool         | ops-mcp.md          | ea2ba371 |
-| REQ-o00068 | MCP Cursor Protocol                 | ops-mcp.md          | f876db43 |
-| REQ-o00069 | MCP Minimize Requirement Set Tool   | ops-mcp.md          | 68c20489 |
-| REQ-o00070 | MCP Scoped Search Tool              | ops-mcp.md          | c79f263d |
-| REQ-o00071 | MCP Discover Requirements Tool      | ops-mcp.md          | 128366d2 |
-| REQ-o00072 | Domain Deserialization Layer        | ops-architecture.md | 53789928 |
-| REQ-o00073 | MCP Org-Wide Context                | ops-mcp.md          | 346f3031 |
-| REQ-o00074 | Background Daemon Lifetime          | ops-mcp.md          | fb36047e |
-| REQ-o00075 | Shared Graph Daemon                 | ops-mcp.md          | 2598192d |
-| REQ-o00076 | Reaching the Serving Process        | ops-mcp.md          | 7505310d |
-| REQ-o00077 | Serving From the Installed Program  | ops-mcp.md          | 3488ba9c |
+| ID         | Title                                             | File                | Hash     |
+| ---------- | ------------------------------------------------- | ------------------- | -------- |
+| REQ-o00050 | Graph Builder as Single Entry Point               | ops-architecture.md | 33e0f3ec |
+| REQ-o00051 | Composable Annotation Design                      | ops-architecture.md | 2fabd3d4 |
+| REQ-o00060 | MCP Core Query Tools                              | ops-mcp.md          | 3a9ae713 |
+| REQ-o00061 | MCP Workspace Context Tools                       | ops-mcp.md          | 3306c687 |
+| REQ-o00062 | MCP Graph Mutation Tools                          | ops-mcp.md          | 31e8183f |
+| REQ-o00063 | MCP File Mutation Tools                           | ops-mcp.md          | 05c1e9c4 |
+| REQ-o00064 | MCP Test Coverage Analysis Tools                  | ops-mcp.md          | a97fc5c4 |
+| REQ-o00065 | Agent-Assisted Link Suggestion                    | ops-mcp.md          | 06f8e1ac |
+| REQ-o00066 | CI/CD Pipeline Enforcement                        | ops-architecture.md | 133e2f0d |
+| REQ-o00067 | MCP Subtree Extraction Tool                       | ops-mcp.md          | ea2ba371 |
+| REQ-o00068 | MCP Cursor Protocol                               | ops-mcp.md          | f876db43 |
+| REQ-o00069 | MCP Minimize Requirement Set Tool                 | ops-mcp.md          | 68c20489 |
+| REQ-o00070 | MCP Scoped Search Tool                            | ops-mcp.md          | c79f263d |
+| REQ-o00071 | MCP Discover Requirements Tool                    | ops-mcp.md          | 128366d2 |
+| REQ-o00072 | Domain Deserialization Layer                      | ops-architecture.md | 53789928 |
+| REQ-o00073 | MCP Org-Wide Context                              | ops-mcp.md          | 346f3031 |
+| REQ-o00074 | Background Daemon Lifetime                        | ops-mcp.md          | fb36047e |
+| REQ-o00075 | Shared Graph Daemon                               | ops-mcp.md          | 2598192d |
+| REQ-o00076 | Reaching the Serving Process                      | ops-mcp.md          | 7505310d |
+| REQ-o00077 | Serving From the Installed Program                | ops-mcp.md          | 3488ba9c |
+| REQ-o00078 | Release Completeness Across Distribution Channels | ops-architecture.md | 3f2d4577 |
 
 ## DEVELOPMENT
 
@@ -116,19 +118,19 @@
 | REQ-d00132 | Render-Based Save Operation                                   | dev-graph-file-nodes.md | f5a4193c |
 | REQ-d00133 | MCP FILE Node Integration                                     | dev-mcp-tools.md        | 08e2973f |
 | REQ-d00134 | Mutation Round-Trip Fidelity                                  | dev-graph-file-nodes.md | 19cb065b |
-| REQ-d00200 | FederatedGraph Read-Only Delegation                           | dev-graph-federation.md | ed077a7c |
+| REQ-d00200 | FederatedGraph Read-Only Delegation                           | dev-graph-federation.md | a634ab59 |
 | REQ-d00201 | FederatedGraph Mutation Delegation                            | dev-graph-federation.md | c51794b3 |
-| REQ-d00202 | Associates Config Loading                                     | dev-graph-federation.md | 0522f86c |
-| REQ-d00203 | Multi-Repo Build Pipeline                                     | dev-graph-federation.md | 957568b6 |
-| REQ-d00204 | Per-Repo Health Check Delegation                              | dev-graph-federation.md | 15c6ff55 |
-| REQ-d00205 | MCP Federation Support                                        | dev-mcp-tools.md        | 42c7a840 |
-| REQ-d00206 | Server Federation and Staleness                               | dev-traceview-review.md | ddd6dc73 |
+| REQ-d00202 | Associates Config Loading                                     | dev-graph-federation.md | faadf2aa |
+| REQ-d00203 | Multi-Repo Build Pipeline                                     | dev-graph-federation.md | f3cbca11 |
+| REQ-d00204 | Per-Repo Health Check Delegation                              | dev-graph-federation.md | f3afb6e4 |
+| REQ-d00205 | MCP Federation Support                                        | dev-mcp-tools.md        | 31c8b0c5 |
+| REQ-d00206 | Server Federation and Staleness                               | dev-traceview-review.md | a8300f60 |
 | REQ-d00207 | Declarative Config Schema Cleanup                             | dev-graph-config.md     | 6dfbf578 |
 | REQ-d00208 | JSON Schema Export for IDE Autocomplete                       | dev-graph-config.md     | 27ca773c |
 | REQ-d00209 | Schema-Driven Init Template Generation                        | dev-graph-config.md     | b25e4468 |
 | REQ-d00210 | Documentation Drift Detection                                 | dev-graph-config.md     | 59023724 |
 | REQ-d00211 | Config-Driven Viewer UI Values                                | dev-graph-config.md     | 254fcba9 |
-| REQ-d00212 | Config Schema v3 Models                                       | dev-graph-config.md     | 277219e9 |
+| REQ-d00212 | Configuration Schema                                          | dev-graph-config.md     | 492083b5 |
 | REQ-d00213 | Version Check and Update Notification                         | dev-cli.md              | cedd398b |
 | REQ-d00214 | MCP Server Install/Uninstall CLI Commands                     | dev-mcp-tools.md        | 5f372b62 |
 | REQ-d00215 | Keyword Extraction Annotator                                  | dev-graph-core.md       | db477d99 |
@@ -202,7 +204,10 @@
 | REQ-d00284 | How a Result Names Its Test                                   | dev-graph-core.md       | 7baae0b0 |
 | REQ-d00285 | The Shape of a Finding                                        | dev-cli.md              | bedec247 |
 | REQ-d00286 | Built-In User Documentation                                   | dev-cli.md              | d246f21a |
-| REQ-d00287 | Reading a Reference                                           | dev-graph-core.md       | 0803d023 |
+| REQ-d00287 | Reading a Reference                                           | dev-graph-core.md       | 02eb02ff |
+| REQ-d00288 | Journeys That Validate Nothing                                | dev-graph-core.md       | 184a67af |
+| REQ-d00289 | Associate Registration Outcome                                | dev-cli.md              | 008983e5 |
+| REQ-d00290 | Machine-Local Configuration Overlay                           | dev-graph-config.md     | 9019f766 |
 | REQ-d00291 | Coverage Inclusion                                            | dev-graph-core.md       | 13bc6949 |
 | REQ-d00292 | Viewer Coverage Presentation                                  | dev-graph-core.md       | db9415cd |
 | REQ-d00293 | Configurable Viewer Presentation                              | dev-graph-core.md       | 31848b5c |

@@ -1,4 +1,4 @@
-# Implements: REQ-d00202-D+E+F+G+I+J+K+L, REQ-d00203-B
+# Implements: REQ-d00202-D+E+F+G+I+K+L, REQ-d00203-B
 """Resolve a federation's membership from declared associates.
 
 Planning is separated from building: this module answers "which
@@ -6,18 +6,27 @@ repositories are in this federation, and what is each one's
 configuration?" without constructing a single graph.  ``build_graph()``
 turns the answer into ``RepoEntry`` objects.
 
-Declarations are walked depth-first from the root repository.  A
-repository is identified by its git origin, so the same repository
-reached down two different chains -- or reached once by its main
-checkout and once by a worktree -- converges on one entry rather than
-being federated twice.  A repository with no origin falls back to its
-resolved filesystem path, which keeps two unrelated originless
-directories distinct.
+Declarations are walked depth-first from the root repository.  A member
+is identified by the namespace its declaration names (REQ-d00202-G):
+one namespace names one member, REQ-d00202-L binds that namespace to
+what the repository at that path declares of itself, and two directories
+claiming one namespace are a collision to report rather than one member
+to guess at.  Two directories declaring different namespaces are two
+members, however closely related the directories are -- their
+identifiers cannot be confused.
 
-That identity rule is what separates a diamond from a cycle.  A repo
-already resolved somewhere else in the walk is convergence and is
-skipped; a repo already on the current declaration path is a cycle and
-is an error, because dependency direction is what orders resolution.
+Whether the walk has been somewhere before is asked of the DIRECTORY,
+which is answerable before the repository there has been read: the same
+directory reached again up the chain in hand is a cycle, and reached
+again across the walk it is a diamond converging on one member.  The
+namespace is what identifies a member once it HAS been read -- one
+namespace found at two directories is the collision of REQ-d00202-K --
+and a declaration that could not be read claims none at all
+(REQ-d00202-M).
+
+This module is the one authority on what enters a federation.  A surface
+recording a declaration asks it the same question the build asks, so a
+registration is admitted exactly when a build would admit it.
 """
 
 from __future__ import annotations
@@ -32,11 +41,13 @@ from elspais.graph.federated import FederationError
 
 __all__ = [
     "FederationCycleError",
+    "NamespaceConflict",
     "PlannedRepo",
     "declared_associates",
     "repository_origin",
     "plan_federation",
     "plan_federation_or_error",
+    "refuse_unreadable",
 ]
 
 
@@ -59,6 +70,34 @@ class FederationCycleError(FederationError):
     """Raised when associate declarations form a directed cycle."""
 
 
+class NamespaceConflict(FederationError):
+    """Raised when two directories of one federation claim one namespace.
+
+    Implements: REQ-d00202-K
+
+    Carries the two sides so a surface that can act on one of them --
+    a registration about to record the second, say -- can tell which is
+    which instead of parsing the message.
+    """
+
+    def __init__(
+        self,
+        namespace: str,
+        first: tuple[Path, tuple[str, ...]],
+        second: tuple[Path, tuple[str, ...]],
+    ) -> None:
+        self.namespace = namespace
+        self.first_root, self.first_declaration = first
+        self.second_root, self.second_declaration = second
+        super().__init__(
+            f"Two directories are federated under the namespace '{namespace}': "
+            f"{self.first_root} (declared via {' -> '.join(self.first_declaration)}) "
+            f"and {self.second_root} (declared via "
+            f"{' -> '.join(self.second_declaration)}). A namespace identifies one "
+            f"member's identifiers, so give each member its own."
+        )
+
+
 @dataclass(frozen=True)
 class PlannedRepo:
     """One repository's place in a federation, before its graph is built.
@@ -74,6 +113,8 @@ class PlannedRepo:
         error: Why ``config`` is None. None when the repo loaded.
         declaration_path: Repository names from the root to this
             repository inclusive, along the chain that first reached it.
+        locally_overridden: Whether a machine-local overlay took part in
+            assembling this repository's configuration.
     """
 
     name: str
@@ -82,14 +123,16 @@ class PlannedRepo:
     git_origin: str | None
     error: str | None
     declaration_path: tuple[str, ...]
+    locally_overridden: bool = False
 
 
 def _normalize_origin(url: str) -> str:
-    """Reduce an origin URL to a comparable identity.
+    """Reduce an origin URL to a comparable form.
 
     The same repository is routinely addressed as ``git@host:org/repo.git``
-    and ``https://host/org/repo``; both name one repository and must
-    compare equal, or a diamond through two remotes would federate twice.
+    and ``https://host/org/repo``; both name one repository, so a surface
+    comparing what two members were cloned from needs one spelling. This
+    decides no membership -- a member is its namespace (REQ-d00202-G).
     """
     url = url.strip().rstrip("/")
     if url.endswith(".git"):
@@ -112,11 +155,12 @@ def _normalize_origin(url: str) -> str:
 def repository_origin(repo_root: Path) -> str | None:
     """Return the normalized origin of the repository rooted at ``repo_root``.
 
-    Answers only for a directory that *is* a repository root.  Git
-    answers from the enclosing repository for any subdirectory, so a
-    federation whose members are directories inside one repository --
-    every on-disk test fixture, among others -- would otherwise see one
-    origin shared by all of them and read the second member as a cycle.
+    Recorded on each member and published by reporting surfaces; it
+    settles nothing about membership. Answers only for a directory that
+    *is* a repository root, because git answers from the enclosing
+    repository for any subdirectory -- so every directory inside one
+    repository would otherwise report that repository's origin as its
+    own.
     """
     from elspais.utilities.git import _clean_git_env
 
@@ -143,27 +187,73 @@ def repository_origin(repo_root: Path) -> str | None:
     return _normalize_origin(origin) if origin else None
 
 
-def _identity(repo_root: Path, git_origin: str | None) -> tuple[str, str]:
-    """Identify a repository for convergence and cycle detection."""
-    if git_origin:
-        return ("origin", git_origin)
-    return ("path", str(repo_root))
+def _unreadable(declaration: tuple[str, ...], reason: str) -> str:
+    """Say that a declaration's repository could not be read, and whose it is.
+
+    Implements: REQ-d00202-M
+
+    The chain is carried, not just the declaration's own name: a
+    repository reached through an associate is declared in THAT
+    repository's configuration, and a reader told only the last name has
+    no way to tell which file to open.
+    """
+    chain = " -> ".join(declaration)
+    return f"Associate '{declaration[-1]}' (declared via {chain}): {reason}"
+
+
+def _assert_declared_namespace(
+    name: str, assoc_path: Path, declared_ns: str, found_ns: str
+) -> None:
+    """Hold a declaration to the namespace the repository there declares.
+
+    Implements: REQ-d00202-L
+
+    Asked wherever a declaration meets a repository that has been read --
+    on loading it, and on converging onto one already loaded -- because a
+    mismatch is a property of the declaration, and which of two
+    declarations reached the directory first must not decide whether it is
+    reported.
+    """
+    if declared_ns != found_ns:
+        raise FederationError(
+            f"Associate '{name}' at {assoc_path} declares the namespace "
+            f"'{declared_ns}', but the repository there declares "
+            f"'{found_ns}'. Point the declaration at the repository it "
+            f"means, or correct the namespace it names."
+        )
+
+
+def uses_local_overlay(repo_root: Path) -> bool:
+    """Whether a machine-local overlay contributes to this repository's config.
+
+    Implements: REQ-d00290-B
+
+    Reported per repository rather than per value: which arrangement
+    produced a configuration is a fact about the machine, and an operator
+    comparing an answer here against one from elsewhere needs to know a
+    local file took part. What it contributed is deliberately not carried,
+    since that would put the overlay's shape back into the answers.
+    """
+    return (repo_root / ".elspais.local.toml").is_file()
 
 
 def plan_federation(
     root_config: dict[str, Any],
     root_repo_root: Path,
     *,
-    strict: bool = False,
     config_loader: Callable[..., dict[str, Any]] | None = None,
 ) -> list[PlannedRepo]:
     """Resolve every repository reachable from ``root_config``.
 
+    Every declaration the walk reaches is carried, including one whose
+    repository could not be read: collecting the faults is what lets a
+    reporting surface name all of them in one run.  A caller that needs a
+    federation rather than a report asks ``refuse_unreadable()`` of the
+    answer.
+
     Args:
         root_config: The invoking repository's configuration.
         root_repo_root: The invoking repository's root directory.
-        strict: Raise on a repository that cannot be loaded instead of
-            recording it as an error entry.
         config_loader: Override for config loading, for tests.
 
     Returns:
@@ -173,106 +263,69 @@ def plan_federation(
 
     Raises:
         FederationCycleError: Declarations form a directed cycle.
-        FederationError: A repository could not be loaded and
-            ``strict`` is set.
+        NamespaceConflict: Two directories claim one namespace.
+        FederationError: A declaration names no namespace, or names one
+            other than the repository at its path declares.
     """
     from elspais.config import get_config
 
     loader = config_loader or get_config
 
     planned: list[PlannedRepo] = []
-    resolved: dict[tuple[str, str], PlannedRepo] = {}
-    by_name: dict[str, PlannedRepo] = {}
-    by_namespace: dict[str, PlannedRepo] = {}
+    resolved: dict[str, PlannedRepo] = {}
+    by_root: dict[Path, PlannedRepo] = {}
 
-    # One answer per directory per walk.  Identity decides diamond from
-    # cycle, so a directory that answered with an origin once and with
-    # None a moment later would be two repositories to this walk and a
-    # cycle would go unseen.  Probing git is also the walk's dominant
-    # cost, and a chain re-reaches the same directory often.
-    origins: dict[Path, str | None] = {}
-
-    def _origin_of(path: Path) -> str | None:
-        if path not in origins:
-            origins[path] = repository_origin(path) if path.is_dir() else None
-        return origins[path]
-
-    def _declared_namespace(config: dict[str, Any] | None) -> str:
-        return (config or {}).get("project", {}).get("namespace", "") or ""
+    def _declared_namespace(config: dict[str, Any]) -> str:
+        return config.get("project", {}).get("namespace", "") or ""
 
     root_root = Path(root_repo_root).resolve()
     root_name = root_config.get("project", {}).get("name", "") or str(root_root.name)
-    root_origin = _origin_of(root_root)
     root_entry = PlannedRepo(
         name=root_name,
         repo_root=root_root,
         config=root_config,
-        git_origin=root_origin,
+        git_origin=repository_origin(root_root),
         error=None,
         declaration_path=(root_name,),
+        locally_overridden=uses_local_overlay(root_root),
     )
     planned.append(root_entry)
-    resolved[_identity(root_root, root_origin)] = root_entry
-    by_name[root_name] = root_entry
-    if _declared_namespace(root_config):
-        by_namespace[_declared_namespace(root_config)] = root_entry
+    resolved[_declared_namespace(root_config)] = root_entry
+    by_root[root_root] = root_entry
 
-    # Implements: REQ-d00202-K
-    def _record(entry: PlannedRepo, identity: tuple[str, str]) -> None:
-        # A federation keys repositories by name, so two repositories
-        # arriving under one name would leave only the later of them
-        # reachable -- the earlier repo's requirements would resolve
-        # against the wrong config and its graph would never be read.
-        # One declaration table cannot collide with itself, so this can
-        # only happen once declarations from several repos are combined.
-        clash = by_name.get(entry.name)
-        if clash is not None:
-            raise FederationError(
-                f"Two repositories are federated under the name '{entry.name}': "
-                f"{clash.repo_root} (declared via {' -> '.join(clash.declaration_path)}) "
-                f"and {entry.repo_root} (declared via "
-                f"{' -> '.join(entry.declaration_path)}). Rename one declaration."
-            )
-        by_name[entry.name] = entry
-
-        # A namespace answers whose identifiers these are, so two
-        # repositories claiming one namespace leave the question
-        # unanswerable -- the same argument disjoint requirement IDs rest
-        # on.  A repository that failed to load declares nothing and is
-        # not a claimant.
-        namespace = _declared_namespace(entry.config)
-        if namespace:
-            ns_clash = by_namespace.get(namespace)
-            if ns_clash is not None:
-                raise FederationError(
-                    f"Two repositories are federated under the namespace "
-                    f"'{namespace}': {ns_clash.repo_root} (declared via "
-                    f"{' -> '.join(ns_clash.declaration_path)}) and "
-                    f"{entry.repo_root} (declared via "
-                    f"{' -> '.join(entry.declaration_path)}). A namespace "
-                    f"identifies one repository's identifiers, so give each "
-                    f"repository its own."
-                )
-            by_namespace[namespace] = entry
-
+    def _record(entry: PlannedRepo, identity: str) -> None:
+        by_root[entry.repo_root] = entry
         planned.append(entry)
         resolved[identity] = entry
 
-    # Implements: REQ-d00202-E
+    def _fault(
+        name: str, assoc_path: Path, origin: str | None, reason: str, chain: tuple[str, ...]
+    ) -> None:
+        # Implements: REQ-d00202-M, REQ-d00202-N
+        # A fault is carried in the plan but placed nowhere: it claims no
+        # namespace, and it does not stand for its directory, so a second
+        # declaration pointing at that same path is reported in its own
+        # right rather than converging on the first and going unfixed.
+        planned.append(PlannedRepo(name, assoc_path, None, origin, reason, chain))
+
     def _visit(
         parent_config: dict[str, Any],
         parent_root: Path,
         declaration_path: tuple[str, ...],
-        on_path: dict[tuple[str, str], str],
+        on_path: dict[Path, str],
     ) -> None:
         associates = declared_associates(parent_config, parent_root)
         for name, info in associates.items():
             assoc_path = Path(parent_root, info["path"]).resolve()
             child_path = declaration_path + (name,)
-            origin = _origin_of(assoc_path)
-            identity = _identity(assoc_path, origin)
 
-            if identity in on_path:
+            # Implements: REQ-d00202-E
+            # A cycle is the same directory reached again up the chain in
+            # hand.  Asked of the directory rather than of the namespace,
+            # it is answerable before the repository there has been read --
+            # which it must be, since reaching it again is the reason the
+            # walk would not terminate.
+            if assoc_path in on_path:
                 chain = " -> ".join(list(on_path.values()) + [name])
                 raise FederationCycleError(
                     f"Associate declarations form a cycle: {chain}. "
@@ -281,17 +334,31 @@ def plan_federation(
                 )
 
             # Implements: REQ-d00202-F
-            if identity in resolved:
+            # One directory reached by two chains is one member: the
+            # diamond converges here, before anything is read a second
+            # time.  The declaration is still held to the namespace that
+            # member declares -- the config is already in hand, and
+            # skipping the check would let the order declarations are
+            # reached in decide whether a mismatch is reported.
+            converged = by_root.get(assoc_path)
+            if converged is not None:
+                _assert_declared_namespace(
+                    name,
+                    assoc_path,
+                    info["namespace"],
+                    _declared_namespace(converged.config),
+                )
                 continue
 
+            # Implements: REQ-d00202-M
+            # Whether the repository can be read is settled before it is
+            # allowed to claim a namespace.  A declaration pointing at
+            # nothing has said nothing about a namespace, and reporting it
+            # as a claimant would name a collision with a directory that
+            # is not there instead of the declaration that points nowhere.
             if not assoc_path.exists():
-                reason = f"Path does not exist: {assoc_path}"
-                if strict:
-                    raise FederationError(f"Associate '{name}' path does not exist: {assoc_path}")
-                _record(
-                    PlannedRepo(name, assoc_path, None, origin, reason, child_path),
-                    identity,
-                )
+                # Nothing is there to have an origin.
+                _fault(name, assoc_path, None, f"Path does not exist: {assoc_path}", child_path)
                 continue
 
             # Implements: REQ-d00203-B
@@ -301,23 +368,23 @@ def plan_federation(
             # join as a member configured by something above it -- and then
             # report the namespace it inherited as one it declared.
             if not (assoc_path / ".elspais.toml").exists():
-                reason = f"No .elspais.toml at {assoc_path}"
-                if strict:
-                    raise FederationError(f"Associate '{name}': {reason}")
-                _record(
-                    PlannedRepo(name, assoc_path, None, origin, reason, child_path),
-                    identity,
+                _fault(
+                    name,
+                    assoc_path,
+                    repository_origin(assoc_path),
+                    f"No .elspais.toml at {assoc_path}",
+                    child_path,
                 )
                 continue
             try:
                 assoc_config = loader(None, assoc_path, quiet=True)
             except Exception as exc:  # noqa: BLE001 - reported, never swallowed
-                reason = f"Configuration at {assoc_path} could not be loaded: {exc}"
-                if strict:
-                    raise FederationError(f"Associate '{name}': {reason}") from exc
-                _record(
-                    PlannedRepo(name, assoc_path, None, origin, reason, child_path),
-                    identity,
+                _fault(
+                    name,
+                    assoc_path,
+                    repository_origin(assoc_path),
+                    f"Configuration at {assoc_path} could not be loaded: {exc}",
+                    child_path,
                 )
                 continue
 
@@ -327,29 +394,72 @@ def plan_federation(
             # find there.  A mismatch means the declaration points
             # somewhere its author did not intend, which is a mistake to
             # report rather than a preference to reconcile.
-            declared_ns = info.get("namespace") or ""
-            found_ns = _declared_namespace(assoc_config)
-            if declared_ns and found_ns and declared_ns != found_ns:
-                raise FederationError(
-                    f"Associate '{name}' at {assoc_path} declares the namespace "
-                    f"'{declared_ns}', but the repository there declares "
-                    f"'{found_ns}'. Point the declaration at the repository it "
-                    f"means, or correct the namespace it names."
+            _assert_declared_namespace(
+                name,
+                assoc_path,
+                info["namespace"],
+                _declared_namespace(assoc_config),
+            )
+
+            # Implements: REQ-d00202-K
+            # The repository has been read, so the namespace its
+            # declaration names is a claim it can be held to.  The same
+            # namespace already resolved at another directory is the
+            # second claimant K reports; at this same directory the walk
+            # converged above and never arrived here.
+            identity = info["namespace"]
+            seen = resolved.get(identity)
+            if seen is not None and seen.repo_root != assoc_path:
+                raise NamespaceConflict(
+                    identity,
+                    (seen.repo_root, seen.declaration_path),
+                    (assoc_path, child_path),
                 )
 
             _record(
-                PlannedRepo(name, assoc_path, assoc_config, origin, None, child_path),
+                PlannedRepo(
+                    name,
+                    assoc_path,
+                    assoc_config,
+                    repository_origin(assoc_path),
+                    None,
+                    child_path,
+                    uses_local_overlay(assoc_path),
+                ),
                 identity,
             )
             _visit(
                 assoc_config,
                 assoc_path,
                 child_path,
-                {**on_path, identity: name},
+                {**on_path, assoc_path: name},
             )
 
-    _visit(root_config, root_root, (root_name,), {_identity(root_root, root_origin): root_name})
+    _visit(root_config, root_root, (root_name,), {root_root: root_name})
     return planned
+
+
+def refuse_unreadable(plan: list[PlannedRepo]) -> None:
+    """Refuse a plan holding a declaration whose repository could not be read.
+
+    Implements: REQ-d00202-M
+
+    A member is identified by the namespace it declares (REQ-d00202-G), and
+    a declaration that could not be read declares none, so a caller wanting
+    a federation rather than a report has nothing to place.  Every such
+    declaration is named: an operator who fixed the first and re-ran would
+    otherwise meet the second.
+
+    Raises:
+        FederationError: One or more declarations could not be read.
+    """
+    faults = [
+        _unreadable(member.declaration_path, member.error)
+        for member in plan
+        if member.error is not None
+    ]
+    if faults:
+        raise FederationError("\n".join(faults))
 
 
 def plan_federation_or_error(

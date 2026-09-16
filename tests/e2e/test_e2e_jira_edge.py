@@ -92,7 +92,7 @@ class TestVariableLengthIds:
 class TestSkipDirsMultiSegment:
     """Config: skip_dirs = ['drafts', 'archive'] excludes nested dirs."""
 
-    # Verifies: REQ-d00212-B
+    # Verifies: REQ-d00212-Q
     def test_health_finds_only_included(self, project):
         """A skipped directory is matched by name beneath either configured
         spec directory: ``drafts`` under spec/active and ``archive`` under
@@ -163,7 +163,7 @@ class TestIgnorePatterns:
         trace = run_elspais("trace", "--format", "json", cwd=project)
         assert "node_modules" not in trace.stdout
 
-    # Verifies: REQ-d00212-B, REQ-d00281-B
+    # Verifies: REQ-d00212-Q, REQ-d00281-B
     def test_spec_skip_dirs_excludes_the_requirements_beneath_them(self, project):
         """``skip_dirs = ["drafts", "archive"]`` keeps PROJ-99 and PROJ-98 out
         of the report entirely -- not merely out of its counts.

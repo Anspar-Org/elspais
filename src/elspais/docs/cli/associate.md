@@ -6,6 +6,7 @@ Manage links to associated repositories.
 
 ```
 elspais associate <path>              # Link a specific associate
+elspais associate <path> -f           # Replace the path recorded for it
 elspais associate --all               # Auto-discover and link all
 elspais associate --list              # Show linked associates
 elspais associate --unlink <name>     # Remove a link
@@ -24,7 +25,115 @@ elspais associate /path/to/callisto
 
 Validates the target has a `.elspais.toml` that loads successfully under the standard config schema. There is no `project.type` marker to opt in or out -- any directory with a loadable config is accepted.
 
-The link records the namespace the target declares for itself, and that namespace has to be the target's alone: a namespace says whose identifiers a given identifier is, so a federation in which two repositories claim one namespace can answer nothing and fails to build rather than guessing. If the repository you are linking declares the same namespace as one already in the federation, change one of them in `[project].namespace` before linking. The same applies to a repository reached indirectly -- membership follows each associate's own declarations, so a namespace can collide with a repository you never named yourself.
+The link records the namespace the target declares for itself, and that namespace has to be the target's alone: a namespace says whose identifiers a given identifier is, so a federation in which two repositories claim one namespace can answer nothing. The rules a federation is built under are checked here, at the moment the registration is made, and a registration that would break the build is refused with the reason the build would give:
+
+```bash
+elspais associate ../other
+# Refused: other at /home/user/repos/other would not federate, and nothing was changed.
+#   Two repositories are federated under the namespace 'CAL': ... give each repository its own.
+```
+
+This covers a repository reached indirectly too -- membership follows each associate's own declarations, so a namespace can collide with a repository you never named yourself.
+
+### What a run reports
+
+Every run states the entry and the path the configuration holds when the
+command returns, never the path you typed. A run that recorded nothing says
+so, so an operator -- or a compile script whose only record is this output --
+can tell a registration that happened from one that did not:
+
+```bash
+elspais associate /path/to/callisto
+# No change: callisto (CAL) stays registered at /path/to/callisto
+```
+
+### Registering a name that is already recorded
+
+Registration is keyed by the name the target repository declares for itself.
+Pointing it at a different directory that declares the same name is refused,
+and nothing is written:
+
+```bash
+elspais associate /path/to/callisto-copy
+# Refused: callisto is already registered at /path/to/callisto, and nothing was changed.
+# Use -f to replace that path with /path/to/callisto-copy.
+# Run 'elspais associate --list' to see the current registrations.
+```
+
+Refusal is the default because the recorded path is a fact your invocation
+does not know it is contradicting -- a copy registered silently means every
+later run reads the original while you believe it reads the copy. Pass `-f`
+(`--force`) when replacing it is what you meant; the report then names both
+paths:
+
+```bash
+elspais associate /path/to/callisto-copy -f
+# Repointed callisto (CAL): was /path/to/callisto, now registered at /path/to/callisto-copy
+```
+
+A refusal exits non-zero, so a script that registers as a build step fails
+rather than continuing against a repository it did not intend.
+
+### One namespace, two directories
+
+A namespace is what a reference resolves through, so one namespace names one
+member. A second directory declaring a namespace that is already registered is
+a second answer to a question that admits one, and it is refused whatever the
+two entries are called:
+
+```bash
+elspais associate ../callisto-copy
+# Refused: the namespace CAL is already registered to callisto at
+#   /home/user/repos/callisto, and nothing was changed.
+# Use -f to record /home/user/repos/callisto-copy instead, replacing that entry.
+```
+
+`-f` leaves one entry, recorded at the directory you named, and the report says
+which entry it replaced:
+
+```bash
+elspais associate ../callisto-copy -f
+# Replaced callisto at /home/user/repos/callisto with clone (CAL) at /home/user/repos/callisto-copy
+```
+
+Changing a recorded path works wherever the entry is declared: the change is
+written to `.elspais.local.toml`, and the configuration a later run assembles
+holds the value you gave. Retiring an entry is the case an overlay cannot do.
+Where the entry holding the namespace is declared in `.elspais.toml` -- the
+shared configuration, committed and read by everyone -- there is nothing `-f`
+could do: removing a local entry would leave that declaration standing and the
+next run would read it again. That case is refused naming the file to edit,
+with no offer to force it:
+
+```bash
+elspais associate ../callisto-copy
+# Refused: the namespace CAL is already registered to callisto at ../callisto,
+#   and nothing was changed.
+# That entry is declared in /home/user/repos/core/.elspais.toml, which this
+#   command does not write, so -f cannot replace it.
+# Edit ... to point callisto elsewhere, or give this repository a namespace of its own.
+```
+
+A copy that declares its own namespace is a different matter and registers
+normally: its identifiers cannot be confused with the original's, so holding
+both is unambiguous. Nothing here consults git -- the question is answered from
+the declarations alone.
+
+### A configuration that already will not federate
+
+The membership rules are checked against the configuration as a whole, so a
+configuration that would not federate before your registration refuses it too.
+The report says so, and names the entries actually at fault rather than the one
+you were registering:
+
+```bash
+elspais associate ../gamma
+# Refused: this configuration does not federate as it stands, before gamma at
+#   /home/user/repos/gamma is considered. Nothing was changed.
+#   Two repositories are federated under the namespace 'AAA': ... alpha ... beta ...
+```
+
+Unlink one of the two named entries and the registration goes through.
 
 ### Linking by name
 
@@ -39,8 +148,8 @@ Searches sibling directories of your main repository for a matching name.
 
 ```bash
 elspais associate --all
-# Found: /home/user/repos/callisto (CAL)
-# Linked 1 associate
+# Linked callisto (CAL) at /home/user/repos/callisto
+# Linked 1 associate(s), 0 unchanged, 0 refused
 ```
 
 Scans sibling directories for any repository whose `.elspais.toml` loads successfully (excluding the current repo itself).
@@ -49,35 +158,70 @@ Sibling directories without a `.elspais.toml` are silently ignored (they are not
 
 ```bash
 elspais associate --all
-# Found: /home/user/repos/callisto (CAL)
 #   Skipping: Cannot load associate config in /home/user/repos/old-proj: <reason>
-# Linked 1 associate
+#   Linked callisto (CAL) at /home/user/repos/callisto
+# Linked 1 associate(s), 0 unchanged, 0 refused
 ```
+
+Auto-discovery reports and refuses on the same terms as a single
+registration. A candidate that would be refused is reported and the scan
+carries on to the ones after it, so the state of every candidate is on the
+screen together; the run exits non-zero if any was refused. Two candidates
+of one scan standing for one entry are settled before anything is written:
+neither is recorded, and each is reported naming the other, so which the scan
+reached first decides nothing. `--all -f`
+repoints each candidate whose recorded path differs.
+
+Two candidates of one scan that stand for the same entry -- they declare one
+name, or one namespace -- are a case `-f` cannot
+settle, since it was given about neither of them. Neither is recorded, and
+each is reported naming the others, so which one the scan reached first
+decides nothing. Register the one you meant by path.
 
 ### Listing links
 
 ```bash
 elspais associate --list
-# Name                 Prefix     Status       Path
-# callisto             CAL        OK           /home/user/repos/callisto
+# Name                 Prefix     Status       Local   Path
+# callisto             CAL        OK           -       /home/user/repos/callisto
+# titan                TTN        OK           yes     /home/user/repos/titan
 ```
+
+`Local` says whether that repository's own configuration was assembled with a
+`.elspais.local.toml` of its own. It answers one question -- was a machine-local
+file involved -- and deliberately not which values it contributed: an overlay
+changes nothing about the graph, so what it holds is a fact about this machine
+rather than about the federation. Read the file when you need the detail.
 
 ### Unlinking
 
 ```bash
 elspais associate --unlink callisto
-# Unlinked callisto
+# Unlinked callisto (was callisto: /path/to/callisto)
 ```
 
-The `--unlink` argument matches by (in order): exact path, directory name, path component substring, project name, or prefix code. This means all of these work:
+The name addresses an entry of the assembled configuration by its entry key, by the namespace it declares, or by the last segment of the path it records. Key and namespace are matched without regard to case:
 
 ```bash
-elspais associate --unlink ../callisto                    # exact path
-elspais associate --unlink callisto                       # directory name or project name
-elspais associate --unlink CAL                            # prefix code
+elspais associate --unlink callisto                       # entry key, or the directory it records
+elspais associate --unlink CAL                            # the namespace it declares
 ```
 
-Even when the linked path is a worktree (e.g., `callisto-worktrees/some-branch`), `--unlink callisto` still matches via path component substring.
+Which file declares the entry decides what a run can do about it, because only `.elspais.local.toml` is written:
+
+```bash
+elspais associate --unlink beta
+# Refused: beta is declared in .elspais.toml at ../beta, and nothing was changed.
+# Remove it there; a machine-local write cannot retire a committed declaration.
+```
+
+An entry declared in both files is overridden locally rather than created locally, so removing the local entry withdraws the override and leaves the committed declaration standing:
+
+```bash
+elspais associate --unlink beta
+# Removed the local override for beta (was /home/user/moved/beta)
+# beta remains declared in .elspais.toml at ../beta. Remove it there to retire it.
+```
 
 ## Who is in the federation
 
@@ -87,11 +231,16 @@ depth-first from the repository the command was run in — so a repository you
 never named joins the federation because something you did name declares it,
 and the tool answers the same way from any repository in the chain.
 
-Repositories are identified by git origin rather than by path or declared
-name. Two chains reaching the same repository converge on one member rather
-than federating it twice, so declaring something a sibling already declares
-is harmless. A repository reached through itself is a cycle, and the build
-reports it as an error naming the declaration chain that formed it.
+A member is identified by the namespace its declaration names, not by where
+it sits or what the entry is called. Two chains reaching one namespace at one
+directory converge on a single member, so declaring something a sibling
+already declares is harmless; two directories claiming one namespace are a
+collision the build reports, naming both. A member reached through itself is
+a cycle, reported as an error naming the declaration chain that formed it.
+
+Because that is one rule with one authority, `elspais associate` admits a
+declaration exactly when a build would admit it -- a registration that
+succeeds cannot produce a federation that then refuses to build.
 
 `elspais checks` and `elspais doctor` report on every member, including the
 ones reached indirectly.
@@ -102,7 +251,8 @@ ones reached indirectly.
 |------|-------------|
 | `--all` | Auto-discover and link all associates |
 | `--list` | Show status of linked associates |
-| `--unlink NAME` | Remove a linked associate by name, path, or prefix code |
+| `--unlink NAME` | Retire an associate recorded in `.elspais.local.toml`, addressed by entry key, namespace, or recorded directory |
+| `-f`, `--force` | Replace the path recorded for an associate that is already registered |
 
 ## Referencing an associate's requirements
 

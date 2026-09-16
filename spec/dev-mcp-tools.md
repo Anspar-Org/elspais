@@ -541,7 +541,7 @@ The MCP server SHALL leverage FederatedGraph's per-repo config access for federa
 
 ### Assertions
 
-A. `get_workspace_info()` SHALL include federation details when multiple repos are present: repo names, paths, error states, and git origins from `iter_repos()`.
+A. `get_workspace_info()` SHALL include federation details when multiple repos are present: each member's name, path, and git origin.
 
 B. `refresh_graph()` SHALL sync `_state["config"]` with the rebuilt federation's root repo config to prevent config staleness.
 
@@ -555,11 +555,12 @@ Without federation-aware config access, all MCP operations use the root repo's c
 
 ### Changelog
 
+- 2026-09-12 | 31c8b0c5 | - | Michael Lewis (<michael@anspar.org>) | A drops error states; no member can carry one
 - 2026-07-31 | 42c7a840 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 4f16dfc7 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | 4f16dfc7 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *MCP Federation Support* | **Hash**: 42c7a840
+*End* *MCP Federation Support* | **Hash**: 31c8b0c5
 ---
 
 ## REQ-d00214: MCP Server Install/Uninstall CLI Commands

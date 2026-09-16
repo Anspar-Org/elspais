@@ -36,6 +36,7 @@ from elspais.graph.federation_plan import (
     PlannedRepo,
     declared_associates,
     plan_federation,
+    refuse_unreadable,
 )
 from elspais.graph.GraphNode import FileType, GraphNode, NodeKind, make_file_id
 from elspais.graph.parsers import ParserRegistry
@@ -752,7 +753,7 @@ def _resolve_spec_dir_config(
     )
 
 
-# Implements: REQ-p00005-B, REQ-d00203-A+B+C+D+E
+# Implements: REQ-p00005-B, REQ-d00203-A+B+E
 def build_graph(
     config: dict[str, Any] | None = None,
     spec_dirs: list[Path] | None = None,
@@ -760,7 +761,6 @@ def build_graph(
     repo_root: Path | None = None,
     scan_code: bool = True,
     scan_tests: bool = True,
-    strict: bool = False,
     _build_associates: bool = True,
     captured_results: dict[str, str] | None = None,
     fresh_targets: set[str] | None = None,
@@ -784,7 +784,6 @@ def build_graph(
         repo_root: Repository root for relative paths (defaults to cwd).
         scan_code: Whether to scan code directories from traceability.scan_patterns.
         scan_tests: Whether to scan test directories from testing.test_dirs.
-        strict: If True, raise on missing associate paths instead of soft-failing.
         _build_associates: Internal flag to prevent recursive associate building.
         captured_results: Optional mapping of target name -> captured stdout/results
             text, bypassing the on-disk results glob for that target.
@@ -837,10 +836,16 @@ def build_graph(
     if federation_resolvers is None:
         federation_resolvers = [default_resolver]
         if _build_associates and declared_associates(config, repo_root):
-            plan = plan_federation(config, repo_root, strict=strict)
-            federation_resolvers.extend(
-                build_resolver(member.config) for member in plan[1:] if member.config is not None
-            )
+            # Implements: REQ-d00202-G, REQ-d00202-M
+            # A declaration whose repository cannot be read names no
+            # namespace, and a member without one cannot be placed.
+            # Building around it would answer questions about a corpus
+            # nobody chose, so the build stops and says which
+            # declarations are at fault. Surfaces that exist to REPORT
+            # the faults use plan_federation_or_error instead.
+            plan = plan_federation(config, repo_root)
+            refuse_unreadable(plan)
+            federation_resolvers.extend(build_resolver(member.config) for member in plan[1:])
     own_namespace = default_resolver.config.namespace
     member_resolvers = [r for r in federation_resolvers if r.config.namespace != own_namespace]
 
@@ -1297,7 +1302,7 @@ def build_graph(
         link_tests_to_code(graph, repo_root, source_roots)
 
     # Annotate keywords on all nodes so keyword search tools work
-    # Annotate coverage metrics so all consumers (MCP, HTML, Flask) get coverage data
+    # Annotate coverage metrics so all consumers (MCP, HTML, viewer) get coverage data
     from elspais.graph.annotators import (
         DEFAULT_STOPWORDS,
         KeywordsConfig,
@@ -1338,11 +1343,10 @@ def build_graph(
     # A member build is always part of such a federation: it happens only
     # because a host is assembling one, and the host's graph is live beside
     # it, so the recompute is certain to run and this pass would be
-    # discarded. A host build cannot know yet -- its members are built
-    # below, and any of them may fail to load -- so it annotates once that
-    # is settled, and only where the recompute will not happen.
+    # discarded. A host build annotates once its own members are built
+    # below, and only where the recompute will not happen.
 
-    # Implements: REQ-d00203-A+B+C+D+E
+    # Implements: REQ-d00203-A+B+E
     # Build every repository the declarations reach, not only those the
     # root names directly (REQ-d00202-D).
     if _build_associates:
@@ -1365,20 +1369,6 @@ def build_graph(
                 )
             ]
             for member in plan[1:]:
-                if member.config is None:
-                    # Implements: REQ-d00202-I, REQ-d00203-C, REQ-d00203-D
-                    entries.append(
-                        RepoEntry(
-                            name=member.name,
-                            graph=None,
-                            config=None,
-                            repo_root=member.repo_root,
-                            git_origin=member.git_origin,
-                            error=member.error,
-                        )
-                    )
-                    continue
-
                 # The plan already resolved this member's own declarations,
                 # so each graph is built for itself alone.
                 member_fg = build_graph(
@@ -1399,11 +1389,16 @@ def build_graph(
                     )
                 )
 
-            if len([e for e in entries if e.graph is not None]) < 2:
-                # Every member failed to load, so no recompute will run and
-                # this graph is the only one there is.
+            if len(entries) < 2:
+                # This repository declares no member that joined, so no
+                # recompute will run and this graph is the only one there
+                # is. A member that could not be read raised long before
+                # here, so every entry present carries a graph.
                 _annotate_coverage_here()
-            federated = FederatedGraph(entries, root_repo=host_name)
+            # The host is entries[0]; FederatedGraph identifies it the way it
+            # identifies every member, so naming it here would be a second
+            # answer to that question.
+            federated = FederatedGraph(entries)
             # Implements: REQ-d00254-I
             federated.render_fresh_targets = fresh_targets
             return federated

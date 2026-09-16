@@ -1084,7 +1084,7 @@ def test_REQ_d00239_A_rewrapping_keeps_the_cross_repo_reference():
         repo_root=Path("/tmp/repo-b"),
     )
 
-    federated = FederatedGraph(repos=[entry_a, entry_b], root_repo="repo-a")
+    federated = FederatedGraph(repos=[entry_a, entry_b])
     found = {(r.namespace, r.node_id) for r in federated._terms.lookup("widget").references}
     assert found == {("REPOA", "REQ-A01"), ("REPOB", "REQ-B01")}
 

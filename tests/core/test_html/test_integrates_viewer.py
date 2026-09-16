@@ -201,7 +201,7 @@ class TestIntegratesRollupSerialized:
         has_failures=True for the viewer to flag the partly-red suite."""
         from elspais.graph.metrics import CoverageDimension, RollupMetrics
 
-        lib_req = federation._repos["library"].graph._index["LIB-p00001"]
+        lib_req = federation.repo_for("LIB-p00001").graph._index["LIB-p00001"]
         lib_req.set_metric(
             "rollup_metrics",
             RollupMetrics(

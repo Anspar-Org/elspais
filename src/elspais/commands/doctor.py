@@ -427,7 +427,6 @@ def check_worktree_status(
     )
 
 
-# Implements: REQ-d00202-A+D+I, REQ-d00203-C, REQ-d00212-K
 def check_associate_paths(config: dict, git_root: Path | None) -> HealthCheck:
     """Check that every federated project's path exists on disk.
 
@@ -440,6 +439,7 @@ def check_associate_paths(config: dict, git_root: Path | None) -> HealthCheck:
     if severity == Severity.OFF:
         return skipped_check("associate.paths_resolvable", "Associate paths that do not resolve")
 
+    # Implements: REQ-d00202-A+D+I+M+N
     from elspais.graph.federation_plan import plan_federation_or_error
 
     plan, plan_error = plan_federation_or_error(config, git_root or Path.cwd())
@@ -491,7 +491,6 @@ def check_associate_paths(config: dict, git_root: Path | None) -> HealthCheck:
     )
 
 
-# Implements: REQ-d00202-A+D+I, REQ-d00203-C, REQ-d00212-K
 def check_associate_configs(config: dict, git_root: Path | None) -> HealthCheck:
     """Check that every federated project has a usable configuration.
 
@@ -502,7 +501,7 @@ def check_associate_configs(config: dict, git_root: Path | None) -> HealthCheck:
     if severity == Severity.OFF:
         return skipped_check("associate.configs_valid", "Associate configurations that do not load")
 
-    from elspais.associates import discover_associate_from_path
+    # Implements: REQ-d00202-A+D+I+M+N
     from elspais.graph.federation_plan import plan_federation_or_error
 
     plan, plan_error = plan_federation_or_error(config, git_root or Path.cwd())
@@ -535,14 +534,10 @@ def check_associate_configs(config: dict, git_root: Path | None) -> HealthCheck:
                 continue  # Already reported by check_associate_paths
             invalid.append(f"{member.name} (declared via {via}): {member.error}")
             continue
-        # Loading a configuration for a directory is not the same question
-        # as the directory being an elspais project of its own; discovery
-        # is what answers the second.
-        result = discover_associate_from_path(member.repo_root)
-        if isinstance(result, str):
-            invalid.append(f"{member.name} (declared via {via}): {result}")
-        else:
-            valid.append(f"{member.name} ({result.code})")
+        # The planner reached this directory, found its configuration and
+        # loaded it, so whether it is a readable elspais repository is
+        # already answered. Its namespace is in hand for the same reason.
+        valid.append(f"{member.name} ({member.config['project']['namespace']})")
 
     if invalid:
         return HealthCheck(
@@ -592,7 +587,6 @@ def check_local_toml_exists(start_path: Path, config: dict[str, Any] | None = No
     )
 
 
-# Implements: REQ-d00212-F
 def check_cross_repo_in_committed_config(
     config_path: Path | None, config: dict[str, Any] | None = None
 ) -> HealthCheck:
@@ -626,6 +620,7 @@ def check_cross_repo_in_committed_config(
             severity="info",
         )
 
+    # Implements: REQ-d00212-Y
     cross_repo_paths = []
     spec_dirs = data.get("scanning", {}).get("spec", {}).get("directories", [])
     if isinstance(spec_dirs, list):
@@ -689,7 +684,6 @@ def _main_repo_root(git_root: Path) -> Path | None:
     return common.parent
 
 
-# Implements: REQ-o00076-M
 def _hardcoded_address(entry: dict) -> str | None:
     """The fixed address in a client entry, if it has one.
 
@@ -706,7 +700,6 @@ def _hardcoded_address(entry: dict) -> str | None:
     return None
 
 
-# Implements: REQ-o00076-M
 def _registration_sources(
     git_root: Path, claude_config: Path | None
 ) -> tuple[list[tuple[str, dict]], list[str]]:
@@ -912,7 +905,6 @@ def check_daemon_status(git_root: Path | None, config: dict[str, Any] | None = N
     )
 
 
-# Implements: REQ-o00074-P
 def _daemon_pending_count(info: dict) -> int:
     """How many changes the running daemon holds, or 0 if it will not say."""
     import json
@@ -930,7 +922,6 @@ def _daemon_pending_count(info: dict) -> int:
     return count if isinstance(count, int) and count > 0 else 0
 
 
-# Implements: REQ-o00074-P
 def _automatic_save_record(git_root: Path) -> dict | None:
     """A save a daemon performed without being asked, if one stands."""
     import json

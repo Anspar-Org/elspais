@@ -674,19 +674,28 @@ class TestCheckUatResults:
 class TestRunUatChecks:
     """Tests for the run_uat_checks aggregation function."""
 
-    # Verifies: REQ-d00219-A, REQ-d00285-F
-    def test_returns_coverage_verified_and_results(self):
-        """run_uat_checks returns the dimension checks, the unvalidated-
-        requirement check and the results check -- each under its own name."""
+    # Verifies: REQ-d00219-A, REQ-d00285-F, REQ-d00288-A
+    def test_returns_one_check_per_uat_condition(self):
+        """run_uat_checks reports each UAT condition under its own name.
+
+        Named rather than counted: one name identifies one condition
+        (REQ-d00285-F), so what matters is that every condition is present
+        and none shares a name with another. A count says neither, and goes
+        stale the moment a condition is added.
+        """
         graph = _make_graph()
         checks = run_uat_checks(graph, exclude_status=set(), config={})
 
-        assert len(checks) == 4
-        names = {c.name for c in checks}
-        assert "uat.uat_coverage" in names
-        assert "uat.unvalidated" in names
-        assert "uat.uat_verified" in names
-        assert "uat.results" in names
+        names = [c.name for c in checks]
+        assert set(names) == {
+            "uat.uat_coverage",
+            "uat.unvalidated",
+            "uat.uat_verified",
+            "uat.results",
+            "uat.inert_journey",
+            "uat.journey_scope",
+        }
+        assert len(names) == len(set(names))
 
     # Verifies: REQ-d00219-A
     def test_passes_exclude_status_to_coverage(self):

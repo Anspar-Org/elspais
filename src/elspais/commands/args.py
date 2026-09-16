@@ -912,7 +912,10 @@ class AssociateArgs:
     """Show current associate links and status."""
 
     unlink: str | None = None
-    """Remove a linked associate (matches name, path, or prefix code)."""
+    """Retire an associate (matches entry key, namespace, or recorded directory)."""
+
+    force: Annotated[bool, tyro.conf.arg(aliases=["-f"])] = False
+    """Replace the path recorded for an associate that is already registered."""
 
 
 # ---------------------------------------------------------------------------

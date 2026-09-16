@@ -133,39 +133,39 @@ D. Statuses presented in order SHALL run active first, then provisional, then as
 *End* *Config-Driven Viewer UI Values* | **Hash**: 254fcba9
 ---
 
-## REQ-d00212: Config Schema v3 Models
+## REQ-d00212: Configuration Schema
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-p00002
 
-The `ElspaisConfig` Pydantic schema SHALL be restructured to v3 shape with first-class level definitions, unified scanning configuration, simplified references, and cleaner changelog sub-models. New models SHALL be strict (`extra="forbid"`) and frozen by default.
+A repository's configuration is read against a schema that defines every setting the configuration may carry, together with the shape and the default of each. The schema is the one authority on what a configuration may contain, and it is published in a form a reader and an editor can both consult.
 
 ### Assertions
 
-A. A `LevelConfig` model SHALL define per-level properties: `rank` (int), `letter` (str), `display_name` (str, optional), `implements` (list[str]), and `expects_validation` (bool, default false). Unknown fields SHALL be rejected.
+A. <RETIRED> inventoried the fields a level definition is written in. A field list restates the schema rather than constraining it; that a configuration is admitted only for the settings the schema defines is Y.
 
-B. A `ScanningKindConfig` base model SHALL define common scanning fields: `directories` (list[str]), `file_patterns` (list[str]), `skip_files` (list[str]), `skip_dirs` (list[str]). Per-kind subclasses SHALL add kind-specific extras (e.g., `SpecScanningConfig` adds `index_file`, `TestScanningConfig` adds `enabled`, `prescan_command`, `reference_keyword`, `reference_patterns`).
+B. <RETIRED> inventoried the fields a scanning kind is written in. What the tool must hold true of scanning configuration is W, which gives a kind's declared patterns one meaning, and Q, which keeps one surface deciding whether a file is scanned.
 
-C. A `ScanningConfig` composite model SHALL contain all scanning kinds (`spec`, `code`, `test`, `result`, `journey`, `docs`) plus a global `skip` list that applies to all kinds.
+C. <RETIRED> inventoried how scanning configuration composes, including the second file-selection surface Q forbids. Which kinds exist and how they nest is the schema's shape; what that shape must satisfy is Q and W.
 
-D. An `OutputConfig` model SHALL define output configuration: `formats` (list[str], default empty) and `dir` (str, default empty).
+D. <RETIRED> inventoried the fields output configuration is written in. A field list restates the schema rather than constraining it; that a configuration is admitted only for the settings the schema defines is Y.
 
-E. A `ChangelogRequireConfig` sub-model SHALL group changelog requirement booleans: `reason`, `author_name`, `author_id`, `change_order`. `ChangelogConfig` SHALL use renamed fields (`hash_current` for `enforce`, `present` for `require_present`) and a `require` sub-model of type `ChangelogRequireConfig`.
+E. <RETIRED> inventoried the changelog sub-models and the names of their fields. Field names and their groupings are the schema's shape rather than an obligation; that only settings the schema defines are admitted is Y.
 
-F. `ElspaisConfig` SHALL have `levels` (dict[str, LevelConfig]), `scanning` (ScanningConfig), and `output` (OutputConfig) fields. The `directories`, `spec`, `testing`, `ignore`, `graph`, `traceability`, `core`, and `associated` fields SHALL be removed. Version SHALL default to 3.
+F. <RETIRED> named the fields the top-level configuration gains and loses at one schema version. A setting this version does not read is refused under X, and only settings the schema defines are admitted under Y, so a version-by-version field list obliges nothing further.
 
 G. A repository's identifier configuration SHALL admit exactly one spelling of any given identifier, up to case. Two elements of an identifier configuration that differ only in case SHALL be rejected at configuration-validation time, naming both and the element they collide in.
 
-H. `HierarchyConfig` SHALL contain only boolean flags (`allow_circular`, `allow_structural_orphans`, `allow_orphans`, `cross_repo_implements`). Per-level implement rules SHALL be defined in `LevelConfig.implements` instead. The model SHALL be strict (`extra="forbid"`).
+H. <RETIRED> inventoried the fields hierarchy configuration is written in. Which concern a rule setting sits under is O, and that only settings the schema defines are admitted is Y.
 
 I. <RETIRED> named a references section of the configuration that does not exist. Identifier grammar is configured under identifier patterns, and an identifier is admitted in one spelling only, per REQ-d00212-G.
 
-J. `ProjectConfig` SHALL contain only `namespace` and `name`. The `version` and `type` fields SHALL be removed.
+J. <RETIRED> inventoried the fields project configuration is written in. The one setting there that carries an obligation is the namespace, and what it must answer for is REQ-d00202-G and REQ-d00202-L; the rest of the list is schema shape, admitted under Y.
 
-K. `AssociateEntryConfig` SHALL define the fields an associate declaration is written in: `path` (str) and `namespace` (str), both required, together with the optional `git` remote and `color`. A declaration SHALL be admitted only where every field it carries is one this model defines.
+K. <RETIRED> inventoried the fields an associate declaration is written in. That a declaration requires both a path and a namespace, with the git remote optional and serving clone assistance alone, is REQ-d00202-B; that only fields the schema defines are admitted is Y.
 
-L. A `TermsConfig` model SHALL define defined-terms configuration: `output_dir` (str, default "spec/_generated"), `markup_styles` (list[str], default ["*", "**"]), `exclude_files` (list[str], default []), and a nested `severity` field of type `TermsSeverityConfig`. `TermsSeverityConfig` SHALL define 6 severity fields: `duplicate` (default "error"), `undefined` (default "warning"), `unmarked` (default "warning"), `unused` (default "warning"), `bad_definition` (default "error"), `collection_empty` (default "warning"). `ElspaisConfig` SHALL include a `terms` field of type `TermsConfig` with factory default.
+L. <RETIRED> inventoried the defined-terms settings and the severity each defaults to. That every health check's severity is configurable under one convention is P, and that the values a severity admits are fixed by the schema and an unadmitted one refused is U and V.
 
-M. `FormatConfig` SHALL include a `no_traceability_severity` field (str | None, default None) to configure the severity of code/test files lacking *Traceability* markers.
+M. <RETIRED> named one severity setting and its type. Health-check severity is configurable under one convention per P, and the values that setting admits are fixed by the schema per U.
 
 N. <RETIRED> Backwards compatibility is not a goal of this project, so a configuration is not upgraded in place. An out-of-date setting is refused and named, per X.
 
@@ -177,7 +177,7 @@ Q. The configuration schema SHALL express file selection for scanning through a 
 
 R. An identifier SHALL resolve to a requirement only where it is spelled as the configuration of the repository owning that requirement admits. Neither case nor, for a numeric component, the number of leading zeros SHALL decide whether it resolves, except where a component's configured style makes its case part of the pattern it must match. An identifier SHALL be rendered in the one form that configuration names, on every surface.
 
-S. Reading an identifier without regard to case and padding SHALL NOT extend to any other difference. A spelling that differs from what the configuration admits in anything else SHALL resolve to nothing, and SHALL NOT be repaired into one that resolves.
+S. A spelling that differs from what the configuration admits in anything other than case or the digit-padding of a numeric component SHALL resolve to nothing.
 
 T. Where a component is configured as numeric, its value SHALL be its identity, and the configured digit count SHALL bound that value rather than the number of characters written. A component whose value exceeds what the configuration admits SHALL resolve to nothing.
 
@@ -189,11 +189,11 @@ W. The patterns declared for a scanning kind SHALL select among the files within
 
 X. A configuration carrying a setting this version does not read SHALL be refused with a message naming each setting to change and what to write instead.
 
+Y. A configuration SHALL be admitted only where every setting it carries is one this version's schema defines.
+
 ### Rationale
 
-Most lettered entries inventory the v3/v4 model shapes; G and O–R state the organising invariants those shapes must converge on.
-
-K carries the remote because a federation member is a git repository, and a member declared but absent from this machine is an ordinary situation rather than an error to be merely reported: the declaration is the one place that knows where the repository can be obtained. The remote never identifies a member — the path and the namespace do that, which is why it stays optional and why a declaration without one is complete. What a declaration may contain and what it must contain are one question, so the field list and the strictness that enforces it belong together rather than in separate assertions that could drift.
+This requirement holds the invariants a configuration schema must satisfy, whatever shape it takes: what an identifier configuration may admit, which concern a rule setting sits under, how severity and file selection are expressed, and what becomes of a setting the schema does not define.
 
 G, R and S hold within a single repository, not only where several meet. G fixes what the configuration admits; R fixes what an inadmissible spelling may do; S bounds how far R's tolerance reaches. The failure R forbids is not silence but a wrong answer: a spelling nobody wrote being repaired into one that resolves, so a reference lands on a requirement its author did not name. That is invisible in every report, because the reference looks satisfied.
 
@@ -207,10 +207,13 @@ The two obligations are therefore a pair rather than a compromise: matching rela
 
 Reporting is deliberately absent from R. Once an inadmissible spelling resolves to nothing, it is an unresolved reference like any other, and the existing obligations to record it and to report it at a project-chosen severity carry it the rest of the way. Stating the reporting again here would duplicate them and invite the two statements to drift apart.
 
-R is a condition on resolving, never on writing, which is what keeps a reference authored ahead of its target legitimate. A requirement may be named before the repository owning it is declared, or before that requirement exists; the reference simply finds nothing yet, and how loudly that is reported is the project's decision. R also judges a spelling against the configuration of the repository owning the named requirement, not the one doing the writing — otherwise no reference could ever cross a repository boundary, since a neighbour's identifiers are foreign to the local grammar by construction. Rule settings have drifted into a layout where a setting's location no longer predicts what it governs, some check severities are configurable while others are hardcoded with no stated principle distinguishing them, and "why was this file (not) scanned" can have more than one configuration answer (per-kind skip lists alongside a global skip list, plus pattern lists). O–Q close those gaps as invariants only: candidate mechanisms discussed during design — splitting rules into concern sections such as `[rules.changelog]` and `[rules.status]`, or collapsing file selection into a unified `patterns` list — are proposals, not obligations, and deliberately absent from the assertions. Which existing semantics survive, and how existing configs migrate, is decided at implementation. Current schema shapes that contradict O–Q (including the dual file-selection surfaces described alongside B and C) are conformance-defect territory for later implementation tickets.
+R is a condition on resolving, never on writing, which is what keeps a reference authored ahead of its target legitimate. A requirement may be named before the repository owning it is declared, or before that requirement exists; the reference simply finds nothing yet, and how loudly that is reported is the project's decision. R also judges a spelling against the configuration of the repository owning the named requirement, not the one doing the writing — otherwise no reference could ever cross a repository boundary, since a neighbour's identifiers are foreign to the local grammar by construction. Rule settings have drifted into a layout where a setting's location no longer predicts what it governs, some check severities are configurable while others are hardcoded with no stated principle distinguishing them, and "why was this file (not) scanned" can have more than one configuration answer (per-kind skip lists alongside a global skip list, plus pattern lists). O–Q close those gaps as invariants only: candidate mechanisms discussed during design — splitting rules into concern sections such as `[rules.changelog]` and `[rules.status]`, or collapsing file selection into a unified `patterns` list — are proposals, not obligations, and deliberately absent from the assertions. Which existing semantics survive is decided at implementation. A current schema shape that contradicts O–Q is a conformance defect to be corrected, not a reading of the invariant.
 
 ### Changelog
 
+- 2026-09-12 | 492083b5 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-09-12 | 1816c146 | - | Michael Lewis (<michael@anspar.org>) | Retire the model inventory rather than delete it, so every label stays allocated
+- 2026-09-12 | dfcf9d49 | - | Michael Lewis (<michael@anspar.org>) | Retitled; model inventory replaced by the invariants the schema holds
 - 2026-08-24 | 277219e9 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-24 | 22e31e30 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-24 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-66: N retired -- a configuration is refused and named rather than upgraded in place; X states the refusal
@@ -241,7 +244,7 @@ R is a condition on resolving, never on writing, which is what keeps a reference
 - 2026-03-30 | db4ad28c | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 - 2026-03-29 | c75b87f8 | - | Michael Lewis (<michael@anspar.org>) | Add assertion N for config migration v3 to v4
 
-*End* *Config Schema v3 Models* | **Hash**: 277219e9
+*End* *Configuration Schema* | **Hash**: 492083b5
 ---
 
 ## REQ-d00251: A Repository's Identifier Grammar
@@ -349,3 +352,31 @@ G. <RETIRED> carried by REQ-d00212-R, which admits one spelling and lets any oth
 
 *End* *Single-Authority Identifier Grammar Derivation* | **Hash**: fe29efc0
 ---
+
+---
+
+## REQ-d00290: Machine-Local Configuration Overlay
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00002
+
+A repository's configuration may be assembled from a committed file and a machine-local file layered over it, so that a path or a setting that differs per machine can be held outside the shared configuration. This requirement governs what that layering may change.
+
+### Assertions
+
+A. A configuration assembled with a machine-local overlay SHALL produce the same graph, and the same relationships, as a configuration holding the assembled result in its committed file alone.
+
+B. Where a repository's configuration was assembled using a machine-local overlay, the tool SHALL report that repository as locally overridden.
+
+### Rationale
+
+An overlay exists so that one machine can point a declaration somewhere else without that pointing being committed. It is a way of writing the configuration, not a second kind of configuration, so the assembled result is the whole of what anything downstream may see: a question answered one way when a value sits in the committed file and another way when the same value arrives through the overlay has found a distinction that is not supposed to exist. A is that property stated as an obligation, and it is decidable by construction -- move the overlay's content into the committed file, and every answer must be identical.
+
+The failure it forecloses is not hypothetical. Code that reaches for the file it is about to write, rather than for the configuration, sees a declaration that is present in one arrangement and absent in the other, and the operator is told a registration changed nothing when in truth the tool was looking in the wrong place. Two readings of "what is already recorded" are then live at once, and which one a given line of code gets depends on what happened to be in scope.
+
+B is the single exception, and it is a disclosure rather than a difference: which arrangement produced a configuration is a fact about the machine, and an operator comparing an answer here against an answer elsewhere needs to know that a local file took part. It is deliberately coarse -- a repository was overridden, or it was not. Reporting which values an overlay contributed would put the shape of the overlay back into the answers, which is the thing A exists to keep out, and an operator who needs that detail can read the file.
+
+### Changelog
+
+- 2026-09-12 | 9019f766 | - | Michael Lewis (<michael@anspar.org>) | Active; an overlay changes how a value is written, nothing else
+
+*End* *Machine-Local Configuration Overlay* | **Hash**: 9019f766

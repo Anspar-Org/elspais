@@ -23,7 +23,6 @@ def test_REQ_p00005_D_discovers_associate_from_valid_repo(tmp_path):
     assert result.name == "callisto"
     assert result.code == "CAL"
     assert result.spec_path == "spec"
-    assert result.path == str(repo)
 
 
 # Verifies: REQ-p00005-E

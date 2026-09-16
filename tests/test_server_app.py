@@ -1193,7 +1193,7 @@ class TestGetFileContent:
 
         # Write a .elspais.toml that marks this as an associated repo
         (assoc_repo / ".elspais.toml").write_text(
-            'version = 5\n[project]\nname = "assoc"\nnamespace = "REQ"\n\n'
+            'version = 5\n[project]\nname = "assoc"\nnamespace = "A"\n\n'
             '[scanning.spec]\ndirectories = ["spec"]\n'
         )
 
@@ -1220,20 +1220,19 @@ class TestGetFileContent:
         graph._roots.append(node)
 
         # The federation itself is the authority on which roots may be served,
-        # so the associate is a member of it. A member whose graph could not be
-        # built still owns the directory its files live in.
+        # so the associate is a member of it and owns the directory its files
+        # live in, whatever its own graph happens to hold.
+        assoc_graph = TraceGraph(repo_root=assoc_repo, _resolver=grammar_for("A"))
         federated = FederatedGraph(
             [
                 RepoEntry(name="test", graph=graph, config=config, repo_root=main_repo),
                 RepoEntry(
                     name="assoc",
-                    graph=None,
-                    config=None,
+                    graph=assoc_graph,
+                    config={"project": {"name": "assoc", "namespace": "A"}},
                     repo_root=assoc_repo,
-                    error="graph not built in this fixture",
                 ),
             ],
-            root_repo="test",
         )
         state = AppState(
             graph=federated,

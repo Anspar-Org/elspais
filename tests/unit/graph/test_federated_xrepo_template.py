@@ -482,7 +482,6 @@ class TestCrossRepoCloneShape:
                     repo_root=library,
                 ),
             ],
-            root_repo="app",
         )
 
         app_clone = fed2.find_by_id("APP-p00001::LIB-p00001")
@@ -542,7 +541,7 @@ class TestClaimForResolverProbe:
         assert "LIB-p1" not in fed._ownership
 
         claim = fed._claim_for("LIB-p1")
-        assert claim == ("library", "LIB-p00001")
+        assert claim == ("LIB", "LIB-p00001")
 
     def test_claim_for_resolves_short_padded_to_canonical(self, tmp_path: Path) -> None:
         """Partial zero-padding (``LIB-p001``) is also normalised.
@@ -556,7 +555,7 @@ class TestClaimForResolverProbe:
         fed = build_graph(repo_root=app, scan_code=False, scan_tests=False)
 
         assert "LIB-p001" not in fed._ownership
-        assert fed._claim_for("LIB-p001") == ("library", "LIB-p00001")
+        assert fed._claim_for("LIB-p001") == ("LIB", "LIB-p00001")
 
     def test_claim_for_caches_resolvers(self, tmp_path: Path) -> None:
         """``_claim_for`` must not rebuild ``IdResolver`` on every call.
@@ -584,8 +583,8 @@ class TestClaimForResolverProbe:
         pre_call = dict(fed._resolver_cache)
         # The library was probed during cross-repo Satisfies instantiation,
         # so it must already be cached.
-        assert "library" in pre_call, (
-            f"expected 'library' resolver to be cached after build; "
+        assert "LIB" in pre_call, (
+            f"expected the 'LIB' resolver to be cached after build; "
             f"cache keys: {sorted(pre_call.keys())}"
         )
 
@@ -722,8 +721,9 @@ class TestFederatedDiagnostics:
 
         The library is declared as an associate. The app's Satisfies points
         at a DIFFERENT namespace (``EVS``) that no associate covers, so the
-        diagnostic must still fire — but now list ``library`` as an
-        available associate to clarify what IS declared.
+        diagnostic must still fire — but now list the ``LIB`` namespace as
+        available to clarify what IS declared. A member is named by its
+        namespace (REQ-d00202-G), so that is what the diagnostic offers.
         """
         library = _make_library(tmp_path)
         del library  # only the side-effect (writing the library repo) matters
@@ -783,7 +783,7 @@ class TestFederatedDiagnostics:
         )
         diag = brs[0].diagnostic
         assert "EVS-p00001" in diag, f"target ID missing from diagnostic: {diag!r}"
-        assert "library" in diag, f"available associate name missing: {diag!r}"
+        assert "LIB" in diag, f"available associate namespace missing: {diag!r}"
         assert "[associates" in diag, f"[associates hint missing: {diag!r}"
         assert ".elspais.toml" in diag, f".elspais.toml hint missing: {diag!r}"
 
@@ -902,7 +902,6 @@ class TestFederatedDiagnostics:
                     repo_root=b,
                 ),
             ],
-            root_repo="repo_a",
         )
 
         brs = list(fed.unresolved_references())

@@ -1,4 +1,4 @@
-# Verifies: REQ-d00212-F
+# Verifies: REQ-d00212-Y
 """Tests that doctor.py and index.py consume v3 config paths.
 
 These tests verify that functions in doctor.py and index.py use the v3
@@ -6,8 +6,8 @@ config schema (typed ElspaisConfig, get_associates_config(), scanning.spec)
 rather than legacy v2 dict paths (spec.directories, associates.paths).
 
 Validates REQ-d00202-A: associate config uses get_associates_config().
-Validates REQ-d00212-K: associate entries use named [associates.<name>] format.
-Validates REQ-d00212-F: config consumers use v3 scanning paths.
+Validates REQ-d00212-Y: associate entries use named [associates.<name>] format.
+Validates REQ-d00212-Y: config consumers use v3 scanning paths.
 Validates REQ-d00207-C: typed config internally via ElspaisConfig.
 """
 
@@ -26,7 +26,7 @@ class TestCheckAssociatePathsV3:
         result = check_associate_paths(config, None)
         assert result.passed is True
 
-    # Verifies: REQ-d00212-K
+    # Verifies: REQ-d00212-Y
     def test_REQ_d00212_K_named_associates_resolved(self, tmp_path):
         """v3 named [associates.myrepo] sections should be resolved by check_associate_paths."""
         from elspais.commands.doctor import check_associate_paths
@@ -54,7 +54,7 @@ class TestCheckAssociatePathsV3:
         assert result.details is not None
         assert str(assoc_dir) in str(result.details.get("found", []))
 
-    # Verifies: REQ-d00212-K
+    # Verifies: REQ-d00212-Y
     def test_REQ_d00212_K_named_associate_missing_path(self, tmp_path):
         """v3 named associate with nonexistent path should fail."""
         from elspais.commands.doctor import check_associate_paths
@@ -104,7 +104,7 @@ class TestCheckAssociateConfigsV3:
         result = check_associate_configs(config, None)
         assert result.passed is True
 
-    # Verifies: REQ-d00212-K
+    # Verifies: REQ-d00212-Y
     def test_REQ_d00212_K_named_associates_validated(self, tmp_path):
         """v3 named associates should be validated by check_associate_configs."""
         from elspais.commands.doctor import check_associate_configs
@@ -130,7 +130,7 @@ class TestCheckAssociateConfigsV3:
 
 
 class TestCrossRepoInCommittedConfigV3:
-    """Validates REQ-d00212-F: cross_repo check uses v3 scanning paths."""
+    """Validates REQ-d00212-Y: cross_repo check uses v3 scanning paths."""
 
     def test_REQ_d00212_F_cross_repo_uses_v3_scanning_paths(self, tmp_path):
         """Should detect cross-repo paths in [scanning.spec] directories."""

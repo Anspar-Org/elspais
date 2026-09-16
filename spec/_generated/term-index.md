@@ -31,8 +31,6 @@
 - REQ-d00082-H
 - REQ-d00209-E
 - REQ-d00209-F
-- REQ-d00212-F
-- REQ-d00212-M
 - REQ-d00272-G
 - REQ-d00272-H
 - REQ-d00272-J
@@ -68,7 +66,7 @@
 - REQ-d00241-E
 - REQ-d00241-F
 - REQ-p00005-B
-- rem:REQ:spec/AI-AGENT.md:20
+- rem:REQ:spec/AI-AGENT.md:19
 - REQ-d00084:section:0
 - REQ-d00084:section:1
 - REQ-d00069:section:1
@@ -77,6 +75,7 @@
 - REQ-d00254:section:0
 - REQ-d00254:section:1
 - REQ-d00258:section:1
+- REQ-d00288:section:1
 - REQ-d00261:section:1
 - REQ-d00269:section:0
 - REQ-d00269:section:1
@@ -113,6 +112,7 @@
 **REQ:**
 
 - REQ-p00003
+- REQ-d00288:section:0
 - JNY-CEO-Sponsor-01
 - JNY-CEO-Audit-01
 - JNY-PM-MultiRepo-01

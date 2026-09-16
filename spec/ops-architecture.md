@@ -111,6 +111,8 @@ The pipeline validates at three levels:
 
 These checks are required status checks on the main branch, preventing merges that do not meet the standards.
 
+H is stated apart from B because formatting and linting are enforced by the same tool and were not enforced in the same places. A local hook cannot be the only gate for a standard: it is absent from a fresh clone until configured, a contributor may bypass it, and it never runs at all for a commit created on the forge -- an automated version bump, or an edit accepted through the web. A standard enforced only there reaches main unenforced, and is then inherited by whoever next touches the tree.
+
 ## Assertions
 
 A. The CI pipeline SHALL run the full test suite across supported Python versions on every push to main and every pull request targeting main.
@@ -127,12 +129,44 @@ F. The PR validation pipeline SHALL require a Linear ticket reference in PR titl
 
 G. The PR validation pipeline SHALL require both a ticket reference (uppercase team prefix and issue number) and a requirement reference (REQ-XXXXX) in commit messages.
 
+H. The CI pipeline SHALL enforce the project's code formatting.
+
 ## Changelog
 
+- 2026-09-10 | 133e2f0d | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | 67d7ec07 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | 84723bf6 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-37: F/G accept any Linear team prefix, not only CUR — the repo's team moved to TOOL; matches the commit-msg hook's existing pattern
 - 2026-03-30 | 315accce | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *CI/CD Pipeline Enforcement* | **Hash**: 67d7ec07
+*End* *CI/CD Pipeline Enforcement* | **Hash**: 133e2f0d
+---
+
+# REQ-o00078: Release Completeness Across Distribution Channels
+
+**Level**: ops | **Status**: Active | **Implements**: -
+**Satisfies**: REQ-p00019
+
+## Rationale
+
+A release publishes the tool through more than one channel — the package index and the Homebrew tap — and the two complete on different timescales through different repositories. The index accepts the upload during the release run; the tap raises a formula change that a bottle build must pass before anything merges. A release that treats its own dispatch as the end of the tap's story reports success while an installer on that channel still receives the previous version.
+
+The defect classes are the ones REQ-p00019 already names, concretized here for release. Reporting a version released while a channel does not carry it is that template's phantom-success class: the effect is absent at the destination the claim names. A channel that never completes and is never mentioned is its unreported-non-performance class. A green verdict standing over an undisclosed outcome is its verdict-integrity class. The template's actionable-failure class binds through the instance without restatement, so the report obligation here says what a release failure must identify without respecifying the general form.
+
+What makes this hard to notice is that no single run observes the whole outcome. The release run finishes before the tap does and cannot wait for it; the tap knows its own result but not who asked for it. Nothing in the assertions requires the release run itself to do the observing, only that the claim a channel carries a version is not made ahead of the fact and that a channel left behind is reported to the person who released it. Where that reporting happens is an implementation choice.
+
+## Assertions
+
+A. The release process SHALL NOT represent a version as available through a distribution channel until that channel carries that version.
+
+B. When a distribution channel does not come to carry a released version, the release process SHALL report the channel, the cause, and the action available, to the person who cut the release.
+
+C. The release process SHALL NOT report a release complete while the outcome of any distribution channel it publishes to is undisclosed.
+
+## Changelog
+
+- 2026-09-10 | 3f2d4577 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-09-10 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-92: govern release completeness across distribution channels — a released version is carried by every channel, or the channel it did not reach is reported to whoever released it
+
+*End* *Release Completeness Across Distribution Channels* | **Hash**: 3f2d4577
 ---

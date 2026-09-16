@@ -107,7 +107,7 @@ class AssemblyDiagnostic:
 
     kind: str
     """What was omitted or could not be analysed: ``image``, ``diagram``,
-    ``source-file``, ``repository``, or ``code-fence``."""
+    ``source-file``, or ``code-fence``."""
 
     reference: str
     """The reference exactly as written in the source, or the file path."""
@@ -247,8 +247,6 @@ class MarkdownAssembler:
             Structured Markdown string ready for Pandoc.
         """
         parts: list[str] = []
-
-        self._record_unloadable_repos()
 
         # YAML metadata header for Pandoc
         from elspais.utilities.report_meta import report_metadata
@@ -570,37 +568,6 @@ class MarkdownAssembler:
         )
 
     # Implements: REQ-p00080-J
-    def _record_unloadable_repos(self) -> None:
-        """Record configured repositories that contributed nothing.
-
-        A federated repository whose configured path does not resolve
-        loads no graph at all, so none of its requirements reach the
-        document and no per-file check can notice: there are no files to
-        fail on. The absent repository is the omission, and it is
-        reported as one.
-        """
-        root_name = self._graph.root_repo_name
-        for entry in self._graph.iter_repos():
-            if entry.name == root_name or entry.graph is not None:
-                continue
-            self._record_diagnostic(
-                AssemblyDiagnostic(
-                    kind="repository",
-                    reference=entry.name,
-                    source_file="",
-                    repo=entry.name,
-                    searched=(str(entry.repo_root),),
-                    cause=(
-                        "Associate repository could not be loaded; none of "
-                        "its requirements are in the document."
-                    ),
-                    remedy=(
-                        "Correct the associate's configured path, or remove "
-                        "the associate from the configuration."
-                    ),
-                )
-            )
-
     # ------------------------------------------------------------------
     # Mermaid diagram resolution
     # ------------------------------------------------------------------

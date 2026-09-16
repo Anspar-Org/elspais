@@ -134,28 +134,21 @@ class _SpecDirInfo:
     level_names: dict[str, str]  # e.g. {"PRD": "Product", "OPS": "Operations"}
 
 
-# Implements: REQ-d00212-F, REQ-d00207-C
 def _resolve_spec_dir_info(spec_dir: Path) -> _SpecDirInfo:
     """Resolve label and level ordering for a spec directory.
 
     Finds the nearest ``.elspais.toml`` above *spec_dir* and reads
     the project name and level definitions via typed config.
     """
-    from elspais.config import get_config
-    from elspais.config.schema import ElspaisConfig
+    # Implements: REQ-d00207-C
+    from elspais.config import get_config, validate_config
 
     resolved = spec_dir.resolve()
     current = resolved
     while current != current.parent:
         config_file = current / ".elspais.toml"
         if config_file.exists():
-            cfg = get_config(config_file, current)
-            # Use typed config for validated access
-            schema_fields = {
-                f.alias or name for name, f in ElspaisConfig.model_fields.items()
-            } | set(ElspaisConfig.model_fields.keys())
-            filtered = {k: v for k, v in cfg.items() if k in schema_fields}
-            typed_config = ElspaisConfig.model_validate(filtered)
+            typed_config = validate_config(get_config(config_file, current))
             project_name = typed_config.project.name or current.name
             try:
                 spec_subpath = str(resolved.relative_to(current))
@@ -197,7 +190,6 @@ def _repo_name_for(graph: FederatedGraph, node_id: str) -> str | None:
         return None
 
 
-# Implements: REQ-d00253-C
 def _indexed_node_ids(
     graph: FederatedGraph, kind: NodeKind, include_associates: bool = False
 ) -> set[str]:
@@ -222,11 +214,10 @@ def _repo_spec_dirs(graph: FederatedGraph, repo_name: str, fallback: list[Path])
     """Return the absolute spec directory paths for a repo.
 
     Reads ``[scanning.spec].directories`` from the repo's config; falls
-    back to ``fallback`` only when the repo is unknown to the graph or
-    its entry has no config.
+    back to ``fallback`` only when the repo is unknown to the graph.
     """
     for entry in graph.iter_repos():
-        if entry.name != repo_name or entry.config is None:
+        if entry.name != repo_name:
             continue
         scanning = entry.config.get("scanning", {})
         spec_cfg = scanning.get("spec", {}) if isinstance(scanning, dict) else {}
@@ -261,7 +252,6 @@ def _classify_node(node: object, spec_dirs: list[Path]) -> Path | None:
     return None
 
 
-# Implements: REQ-d00217-A
 def _resolve_repo_info(
     graph: FederatedGraph, repo_name: str, fallback_dir: Path | None = None
 ) -> _SpecDirInfo:
@@ -279,7 +269,7 @@ def _resolve_repo_info(
 
     config = None
     for entry in graph.iter_repos():
-        if entry.name == repo_name and entry.config is not None:
+        if entry.name == repo_name:
             config = entry.config
             break
 
@@ -316,7 +306,6 @@ def _resolve_repo_info(
     return _SpecDirInfo(label=label, level_order=level_order, level_names=level_names)
 
 
-# Implements: REQ-d00217-B
 def _build_index_content(
     graph: FederatedGraph, spec_dirs: list[Path], include_associates: bool = False
 ) -> tuple[Path, str, int, int]:
@@ -330,6 +319,7 @@ def _build_index_content(
     subsections for projects with multiple spec dirs in a single repo).
     Nodes whose repo cannot be determined bucket under ``(UNATTRIBUTED, None)``.
     """
+    # Implements: REQ-d00217-B
     from collections import defaultdict
 
     UNATTRIBUTED = "__unattributed__"

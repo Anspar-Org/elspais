@@ -85,7 +85,17 @@ def _project_dir(tmp_path_factory, repo_root):
         "## Assertions\n\n"
         "A. The system SHALL do a thing.\n\n"
         "B. The system SHALL do another.\n\n"
-        "*End* *Thing* | **Hash**: 00000000\n"
+        "*End* *Thing* | **Hash**: 00000000\n\n"
+        # A requirement whose targets its author has not chosen yet, under
+        # two keywords. Nothing here is malformed, so it belongs to none of
+        # the fault classes above -- which is what the partition and
+        # one-check-only tests in this file then hold it to.
+        "# REQ-d00002: Awaited Thing\n\n"
+        "**Level**: dev | **Status**: Active | **Implements**: <TBD>\n"
+        "**Refines**: <the requirement for step 3>\n\n"
+        "## Assertions\n\n"
+        "A. The system SHALL do an awaited thing.\n\n"
+        "*End* *Awaited Thing* | **Hash**: 00000000\n"
     )
     src = tmp_path / "src"
     src.mkdir()
@@ -277,3 +287,64 @@ def test_the_identifier_form_check_carries_its_own_severity(faulted_graph, confi
     config["rules"]["references"]["identifier_form"] = "info"
     checks = run_checks(faulted_graph, config)
     assert next(c for c in checks if c.name == "references.identifier_form").severity == "info"
+
+
+# Verifies: REQ-d00287-I
+@pytest.mark.parametrize(
+    ("keyword", "declared"),
+    [("implements", "<TBD>"), ("refines", "<the requirement for step 3>")],
+)
+def test_a_metadata_placeholder_is_reported_under_the_requirement_that_wrote_it(
+    faulted_graph, config, keyword, declared
+):
+    """A blank an author left on purpose in a requirement's own metadata is
+    still a blank, and it is reported against the requirement rather than
+    the file so a reader is sent to the line that has to change. Both
+    keywords a metadata line may introduce a list with are asked, because
+    each is read separately."""
+    checks = run_checks(faulted_graph, config)
+    placeholder = next(c for c in checks if c.name == "references.placeholder")
+
+    hit = next(
+        (f for f in placeholder.findings if declared in f.message and keyword in f.message),
+        None,
+    )
+    assert hit is not None, (
+        f"{declared} declared under {keyword} was not reported; "
+        f"got {[f.message for f in placeholder.findings]}"
+    )
+    assert hit.node_id == "REQ-d00002"
+    assert hit.file_path and hit.file_path.endswith("r.md")
+
+
+# Verifies: REQ-d00287-H, REQ-p00019-K
+def test_a_metadata_placeholder_joins_no_bucket_counting_references_that_failed(faulted_graph):
+    """Reading a placeholder succeeded. Counting it among the references
+    that did not would charge an author with a typo they did not make, and
+    would make the fault-class partition asserted above disagree with the
+    unresolved references it sums."""
+    broken = [br.target_id for br in faulted_graph.unresolved_references()]
+
+    assert not any(target.startswith("<") for target in broken), (
+        f"a placeholder must reach no broken-reference report; got {broken}"
+    )
+
+
+# Verifies: REQ-d00287-H
+def test_a_metadata_placeholder_produces_no_relationship(faulted_graph):
+    """The control is REQ-d00001, which the same file's code annotations do
+    reach: a requirement whose only declared targets are placeholders must
+    end up citing nothing, while citation itself demonstrably works."""
+    from elspais.graph import EdgeKind
+
+    def cited_by(req_id: str) -> list[str]:
+        node = faulted_graph.find_by_id(req_id)
+        assert node is not None
+        return [e.source.id for e in node.iter_incoming_edges() if e.kind == EdgeKind.IMPLEMENTS]
+
+    assert cited_by("REQ-d00002") == [], (
+        f"a placeholder names nothing, so it binds nothing; got {cited_by('REQ-d00002')}"
+    )
+    assert list(faulted_graph.find_by_id("REQ-d00001").iter_edges_by_kind(EdgeKind.IMPLEMENTS)), (
+        "the fixture must still wire real citations, or the assertion above is vacuous"
+    )

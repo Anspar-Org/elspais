@@ -50,7 +50,7 @@ class _StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
 
-# Implements: REQ-d00212-J
+# Implements: REQ-d00212-Y
 class ProjectConfig(_StrictModel):
     # Defaults below are sentinels for the no-config-file path (used by the
     # MCP server in degraded mode when invoked outside any elspais project).
@@ -349,7 +349,7 @@ class IdPatternsConfig(_StrictModel):
         return self
 
 
-# Implements: REQ-d00212-H
+# Implements: REQ-d00212-Y
 class HierarchyConfig(_StrictModel):
     cross_repo_implements: bool = False
     allow_structural_orphans: bool = False
@@ -357,7 +357,7 @@ class HierarchyConfig(_StrictModel):
     allow_orphans: bool = False
 
 
-# Implements: REQ-d00212-M
+# Implements: REQ-d00212-Y
 class FormatConfig(_StrictModel):
     require_hash: bool = False
     require_assertions: bool = False
@@ -523,7 +523,7 @@ class ValidationConfig(_StrictModel):
     strict_hierarchy: bool = False
 
 
-# Implements: REQ-d00212-A
+# Implements: REQ-d00212-Y
 class LevelConfig(_StrictModel):
     rank: int
     letter: str = Field(pattern=_NO_COLON)
@@ -605,7 +605,7 @@ DEFAULT_CODE_PATTERNS = [
 ]
 
 
-# Implements: REQ-d00212-B
+# Implements: REQ-d00212-Y
 class ScanningKindConfig(_StrictModel):
     directories: list[str] = Field(default_factory=list)
     file_patterns: list[str] = Field(default_factory=list)
@@ -796,7 +796,7 @@ class DocsScanningConfig(ScanningKindConfig):
     file_patterns: list[str] = Field(default_factory=lambda: list(DEFAULT_DOCS_PATTERNS))
 
 
-# Implements: REQ-d00212-C
+# Implements: REQ-d00212-Y
 class ScanningConfig(_StrictModel):
     skip: list[str] = Field(default_factory=list)
     spec: SpecScanningConfig = Field(default_factory=SpecScanningConfig)
@@ -806,13 +806,13 @@ class ScanningConfig(_StrictModel):
     docs: DocsScanningConfig = Field(default_factory=DocsScanningConfig)
 
 
-# Implements: REQ-d00212-D
+# Implements: REQ-d00212-Y
 class OutputConfig(_StrictModel):
     formats: list[str] = Field(default_factory=list)
     dir: str = ""
 
 
-# Implements: REQ-d00212-E
+# Implements: REQ-d00212-Y
 class ChangelogRequireConfig(_StrictModel):
     reason: bool = True
     author_name: bool = True
@@ -830,7 +830,7 @@ class ChangelogConfig(_StrictModel):
     require: ChangelogRequireConfig = Field(default_factory=ChangelogRequireConfig)
 
 
-# Implements: REQ-d00212-K
+# Implements: REQ-d00212-Y
 class AssociateEntryConfig(_StrictModel):
     path: str
     namespace: str
@@ -891,7 +891,7 @@ class StatusConfig(_StrictModel):
         return _validate_hex_color(v)
 
 
-# Implements: REQ-d00212-L
+# Implements: REQ-d00212-Y
 class TermsSeverityConfig(_StrictModel):
     """Severity levels for defined-terms health checks."""
 
@@ -904,7 +904,7 @@ class TermsSeverityConfig(_StrictModel):
     canonical_form: SeverityValue = "warning"
 
 
-# Implements: REQ-d00212-L
+# Implements: REQ-d00212-Y
 class TermsConfig(_StrictModel):
     """Configuration for defined terms feature."""
 
@@ -926,7 +926,7 @@ class FederationConfig(_StrictModel):
     index_associates: bool = False
 
 
-# Implements: REQ-d00212-F
+# Implements: REQ-d00212-Y
 class ElspaisConfig(_StrictModel):
     version: int = 5
     project: ProjectConfig = Field(default_factory=ProjectConfig)

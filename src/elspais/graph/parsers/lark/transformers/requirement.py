@@ -32,7 +32,11 @@ from elspais.graph.parsers.patterns import (
 from elspais.graph.parsers.patterns import (
     VALIDATES_PATTERN as _VALIDATES_RE,
 )
-from elspais.graph.reference_faults import FaultClass, refs_and_verdicts
+from elspais.graph.reference_faults import (
+    FaultClass,
+    placeholders_of,
+    refs_and_verdicts,
+)
 from elspais.graph.render import parse_end_marker
 from elspais.utilities.markdown import strip_emphasis
 
@@ -235,6 +239,7 @@ class RequirementTransformer:
 
         # Implements: REQ-d00269-H
         meta_continuations, folded_lines = self._fold_metadata_continuations(node.children[1:])
+        reference_placeholders: list[tuple[str, str]] = []
 
         for child in node.children[1:]:
             if not isinstance(child, Tree):
@@ -286,6 +291,11 @@ class RequirementTransformer:
                         meta.get("integrates_verdicts", {}),
                     ):
                         has_redundant_refs = True
+                # Implements: REQ-d00287-I
+                # A metadata line is extracted on its own, so what it
+                # declared as not yet chosen is gathered across the lines
+                # rather than read off the last one.
+                reference_placeholders.extend(meta.get("reference_placeholders", ()))
                 # Implements: REQ-p00014-E
                 if meta.get("template"):
                     is_template = True
@@ -373,6 +383,8 @@ class RequirementTransformer:
             "changelog_heading_level": changelog_depth,
             # Implements: REQ-d00272-K
             "reference_verdicts": reference_verdicts,
+            # Implements: REQ-d00287-I
+            "reference_placeholders": reference_placeholders,
         }
         if has_redundant_refs:
             parsed_data["has_redundant_refs"] = True
@@ -412,23 +424,35 @@ class RequirementTransformer:
                 elif child.type == "STATUS_FIELD":
                     result["status"] = val
                 elif child.type == "IMPLEMENTS_FIELD":
-                    result["implements"], result["implements_verdicts"] = self._parse_ref_list(
-                        val, "implements"
+                    items = self._ref_list_items(val)
+                    result["implements"], result["implements_verdicts"] = self._from_ref_items(
+                        items, "implements"
                     )
+                    # Implements: REQ-d00287-I
+                    self._note_placeholders(result, items, "implements")
                 elif child.type == "REFINES_FIELD":
-                    result["refines"], result["refines_verdicts"] = self._parse_ref_list(
-                        val, "refines"
+                    items = self._ref_list_items(val)
+                    result["refines"], result["refines_verdicts"] = self._from_ref_items(
+                        items, "refines"
                     )
+                    # Implements: REQ-d00287-I
+                    self._note_placeholders(result, items, "refines")
                 # Implements: REQ-p00014-A
                 elif child.type == "SATISFIES_FIELD":
-                    result["satisfies"], result["satisfies_verdicts"] = self._parse_ref_list(
-                        val, "satisfies"
+                    items = self._ref_list_items(val)
+                    result["satisfies"], result["satisfies_verdicts"] = self._from_ref_items(
+                        items, "satisfies"
                     )
+                    # Implements: REQ-d00287-I
+                    self._note_placeholders(result, items, "satisfies")
                 # Implements: REQ-d00252-A
                 elif child.type == "INTEGRATES_FIELD":
-                    result["integrates"], result["integrates_verdicts"] = self._parse_ref_list(
-                        val, "integrates"
+                    items = self._ref_list_items(val)
+                    result["integrates"], result["integrates_verdicts"] = self._from_ref_items(
+                        items, "integrates"
                     )
+                    # Implements: REQ-d00287-I
+                    self._note_placeholders(result, items, "integrates")
                 # Implements: REQ-p00014-E
                 elif child.type == "TEMPLATE_FIELD":
                     result["template"] = True
@@ -700,6 +724,9 @@ class RequirementTransformer:
             "goal": None,
             "context": None,
             "validates": [],
+            # Implements: REQ-d00288-C, REQ-d00288-D
+            "validates_declared": False,
+            "validates_placeholders": [],
             "misplaced_validates": [],
             "body_lines": [],
             "sections": [],
@@ -735,9 +762,18 @@ class RequirementTransformer:
                 token = child.children[0]
                 text = str(token)
                 val = re.sub(r"^[Vv]alidates[:=\s]\s*", "", text).strip()
-                parsed_data["validates"], parsed_data["reference_verdicts"] = self._parse_ref_list(
-                    val, "validates"
+                # Implements: REQ-d00272-K
+                items = self._ref_list_items(val)
+                parsed_data["validates"], parsed_data["reference_verdicts"] = self._from_ref_items(
+                    items, "validates"
                 )
+                # Implements: REQ-d00288-C, REQ-d00288-D
+                # A line with nothing after it, or one whose value says
+                # "no reference", declares no target -- the same state as no
+                # line at all, and reported as that rather than as targets
+                # that failed to resolve.
+                parsed_data["validates_declared"] = bool(items)
+                parsed_data["validates_placeholders"] = placeholders_of(items)
 
             elif child.data == "jny_body_line":
                 # Preamble body text (after metadata, before sections)
@@ -1035,11 +1071,36 @@ class RequirementTransformer:
         ``refs_and_verdicts`` conversion -- so the builder consults the same
         shape regardless of which surface divided the list.
         """
-        if not refs_str:
+        return self._from_ref_items(self._ref_list_items(refs_str), keyword)
+
+    # Implements: REQ-d00287-I
+    @staticmethod
+    def _note_placeholders(result: dict[str, Any], items: list[Any], keyword: str) -> None:
+        """Record every target *items* declared as not yet chosen."""
+        declared = [(item.raw, keyword) for item in items if item.placeholder]
+        if declared:
+            result.setdefault("reference_placeholders", []).extend(declared)
+
+    def _ref_list_items(self, refs_str: str) -> list[Any]:
+        """The items *refs_str* spells, read through the one reader.
+
+        Kept apart from the conversion so a caller needing what the reader
+        saw -- a placeholder binds nothing and so survives in no list of
+        references (REQ-d00287-H) -- asks the reader rather than re-reading
+        the same text under its own rules.
+        """
+        if not refs_str or refs_str.strip() in _NO_REF_VALUES:
+            return []
+        return self.reader.parse_ref_list(refs_str)
+
+    @staticmethod
+    def _from_ref_items(
+        items: list[Any],
+        keyword: str,
+    ) -> tuple[list[str], dict[tuple[str, str], tuple[FaultClass, tuple[str, ...]]]]:
+        """The references and verdicts *items* carries."""
+        if not items:
             return [], {}
-        if refs_str.strip() in _NO_REF_VALUES:
-            return [], {}
-        items = self.reader.parse_ref_list(refs_str)
         refs, verdicts = refs_and_verdicts(items, keyword)
         refs = [ref for ref in refs if ref not in _NO_REF_VALUES]
         verdicts = {key: v for key, v in verdicts.items() if key[1] not in _NO_REF_VALUES}

@@ -356,8 +356,20 @@ def _render_requirement(node: GraphNode, resolver: Any | None = None) -> str:
     # Derive implements refs from live graph edges, falling back to stored field
     implements_refs = _derive_implements_refs(node, resolver=resolver)
     refines_refs = _derive_refines_refs(node, resolver=resolver)
-    satisfies_refs = node.get_field("satisfies_refs") or []
-    integrates_refs = node.get_field("integrates_refs") or []
+    satisfies_refs = list(node.get_field("satisfies_refs") or [])
+    integrates_refs = list(node.get_field("integrates_refs") or [])
+    # Implements: REQ-d00287-I
+    # A placeholder binds nothing, so no edge carries it and no stored
+    # leftover holds it. Re-rendering without it would delete a target its
+    # author deliberately left open -- the same silent loss the stored-field
+    # union above exists to prevent for an unresolved reference.
+    for declared, keyword in node.get_field("reference_placeholders") or []:
+        {
+            "implements": implements_refs,
+            "refines": refines_refs,
+            "satisfies": satisfies_refs,
+            "integrates": integrates_refs,
+        }.get(keyword, []).append(declared)
 
     lines: list[str] = []
 

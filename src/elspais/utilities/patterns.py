@@ -40,6 +40,51 @@ INSTANCE_SEPARATOR = "::"
 # metadata line and a code annotation admit exactly the same target.
 REF_LIST_SEPARATOR = ","
 
+# Implements: REQ-d00287-H
+# A placeholder is a target its author has not chosen yet, written in a form
+# no identifier can take. The enclosing characters are what put it out of the
+# identifier grammar's reach: no configuration admits them in a component or
+# an assertion label, so a placeholder can never be read as an identifier and
+# a mistyped identifier can never be excused as a placeholder.
+PLACEHOLDER_PATTERN = re.compile(r"<[^<>]*>|\[[^\[\]]*\]")
+
+
+def _is_placeholder(item: str) -> bool:
+    """Whether *item* is wholly a placeholder."""
+    return PLACEHOLDER_PATTERN.fullmatch(item) is not None
+
+
+# Implements: REQ-d00287-B
+def split_ref_list(text: str) -> list[str]:
+    """Divide *text* into the items it spells, enclosures kept whole.
+
+    A placeholder is one item of the list however it is spelled inside, so
+    the enclosure is recognised before the separator is honoured. Dividing
+    first would shred ``<TBD, see the ticket>`` into two items that read as
+    two broken references, which is the defect REQ-d00251-M guards against
+    for assertion separators, reached by the other route.
+    """
+    parts: list[str] = []
+    depth = 0
+    current: list[str] = []
+    closing = {"<": ">", "[": "]"}
+    opened: list[str] = []
+    for ch in text:
+        if ch in closing:
+            depth += 1
+            opened.append(closing[ch])
+        elif opened and ch == opened[-1]:
+            depth -= 1
+            opened.pop()
+        elif ch == REF_LIST_SEPARATOR and depth == 0:
+            parts.append("".join(current))
+            current = []
+            continue
+        current.append(ch)
+    parts.append("".join(current))
+    return parts
+
+
 # Implements: REQ-p00014-S, REQ-d00287-A
 # The characters no identifier configuration may produce. `:` separates the
 # parts of a node identifier, so configuration validation refuses any pattern
@@ -1388,7 +1433,7 @@ class FederatedIdReader:
         if not stripped:
             return []
         extras = self._extra_patterns(extra_items)
-        parts = stripped.split(REF_LIST_SEPARATOR)
+        parts = split_ref_list(stripped)
         last_index = len(parts) - 1
         results: list[RefItem] = []
         for index, part in enumerate(parts):
@@ -1414,6 +1459,13 @@ class FederatedIdReader:
             # a mis-cased label is still recognised), and ``_classify`` is
             # anchored both ends throughout, so this is exactly the match a
             # single identifier gets, never a search inside a larger string.
+            # Implements: REQ-d00287-H
+            # Asked before the grammar, because a placeholder is not a
+            # reference the grammar failed to read -- it is the author
+            # saying no target is chosen yet.
+            if _is_placeholder(candidate):
+                results.append(RefItem(raw=candidate, index=index, placeholder=True))
+                continue
             ref, matched = self._classify(candidate)
             if not matched and any(extra.fullmatch(candidate) for extra in extras):
                 ref = candidate

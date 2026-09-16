@@ -189,6 +189,36 @@ Works wherever a keyword introduces a reference list.
 > `.elspais.toml`. It is exactly one character; there is no value of it that
 > turns the compact form off.
 
+## A Target Not Yet Chosen
+
+Where the target is not yet written, say so in place of naming it. A target
+enclosed in `<...>` or `[...]` is a **placeholder**: it binds nothing, and it
+is reported so the blank stays visible.
+
+```markdown
+Validates: <the sponsor-overlay data-sync requirement, not yet written>
+```
+
+The enclosure is what keeps a placeholder out of the identifier grammar's
+reach, so it can never be read as a reference and a mistyped reference can
+never be excused as a placeholder. What goes inside is yours; it is kept as
+written until you replace it, and a comma inside the enclosure does not
+divide the list.
+
+A placeholder may sit beside real references, and the rest of the list is
+read normally:
+
+```markdown
+Validates: REQ-p00014-A, <the escalation-tier requirement>
+```
+
+Placeholders appear under `references.placeholder`, at `info` by default.
+This is the difference between a journey awaiting its requirement and one
+whose author forgot the line: the first is reported as awaiting, the second
+under `uat.inert_journey`.
+
+> Placeholders work under any *Traceability* keyword, not only `Validates:`.
+
 ## Indirect Coverage
 
 When a test validates a requirement that is implemented by code with an `Implements:` comment, coverage rolls up through the graph edges:

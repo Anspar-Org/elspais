@@ -45,6 +45,7 @@ from elspais.graph.reference_faults import (
     FaultClass,
     FaultCode,
     IdentifierFormFinding,
+    PlaceholderFinding,
     ReferenceFault,
     StyleFinding,
     UndeclaredRelationship,
@@ -390,6 +391,12 @@ class TraceGraph:
     _identifier_form_findings: list[IdentifierFormFinding] = field(
         default_factory=list, init=False, repr=False
     )
+    # Implements: REQ-d00287-I
+    # Targets an author declared as not yet chosen. Not faults: reading one
+    # succeeded, and what it says is that no target is chosen.
+    _placeholder_findings: list[PlaceholderFinding] = field(
+        default_factory=list, init=False, repr=False
+    )
     # Implements: REQ-d00241-F
     # Files a scan reached, declined to read, and that carry a *Traceability*
     # keyword regardless. Not a reference fault: no reference was read, so
@@ -614,6 +621,11 @@ class TraceGraph:
     def identifier_form_findings(self) -> list[IdentifierFormFinding]:
         """Get every reference spelled in a non-canonical admitted form."""
         return list(self._identifier_form_findings)
+
+    # Implements: REQ-d00287-I
+    def placeholder_findings(self) -> list[PlaceholderFinding]:
+        """Get every target declared as not yet chosen."""
+        return list(self._placeholder_findings)
 
     # Implements: REQ-d00241-F
     def unscanned_keyword_files(self) -> list[UnscannedKeywordFile]:
@@ -3167,6 +3179,11 @@ class TraceGraph:
                 # a journey citing an assertion writes the same boundary
                 # characters a spec file's metadata line writes.
                 validates_refs.append(self.resolver.make_assertion_ref(src, sorted(labels)))
+        # Implements: REQ-d00287-I
+        # A placeholder produces no edge, so re-rendering from edges alone
+        # would delete it -- turning a target its author deliberately left
+        # open into a journey that validates nothing and never said why.
+        validates_refs.extend(node.get_field("validates_placeholders") or [])
         if validates_refs:
             lines.append(f"Validates: {', '.join(validates_refs)}")
         preamble = node.get_field("body_lines", [])
@@ -4052,6 +4069,7 @@ class GraphBuilder:
         self._undeclared_relationships: list[UndeclaredRelationship] = []
         # Implements: REQ-d00272-N
         self._identifier_form_findings: list[IdentifierFormFinding] = []
+        self._placeholder_findings: list[PlaceholderFinding] = []
         # Implements: REQ-d00241-F
         self._unscanned_keyword_files: list[UnscannedKeywordFile] = []
         # Implements: REQ-d00274-G
@@ -4242,6 +4260,20 @@ class GraphBuilder:
                     source_id=source_id,
                     text=data["text"],
                     codes=tuple(data["codes"]),
+                    line=content.start_line,
+                )
+            )
+        elif content.content_type == "placeholder_declaration":
+            # Implements: REQ-d00287-I
+            # No relationship was named, so nothing is wired; the declaration
+            # is carried so a blank deliberately left stays visible.
+            data = content.parsed_data
+            source_id = file_node.id if file_node is not None else data.get("source_id", "")
+            self._placeholder_findings.append(
+                PlaceholderFinding(
+                    source_id=source_id,
+                    text=data["text"],
+                    keyword=data["keyword"],
                     line=content.start_line,
                 )
             )
@@ -4585,6 +4617,21 @@ class GraphBuilder:
                 )
             )
 
+        # Implements: REQ-d00287-I
+        # Kept on the node as well as reported: a placeholder produces no
+        # edge, and a metadata line re-rendered from edges alone would
+        # delete the author's declared blank.
+        node.set_field("reference_placeholders", list(data.get("reference_placeholders") or []))
+        for declared, keyword in data.get("reference_placeholders") or []:
+            self._placeholder_findings.append(
+                PlaceholderFinding(
+                    source_id=node.id,
+                    text=declared,
+                    keyword=keyword,
+                    line=content.start_line,
+                )
+            )
+
         # Implements: REQ-p00014-E
         # Author-declared TEMPLATE marker: stamp the REQ and its assertions
         # so the parser-only Stereotype is correct before subtree-cloning runs.
@@ -4616,11 +4663,29 @@ class GraphBuilder:
             # node that did not carry it is re-rendered at a fixed depth, so
             # saving a journey moved its heading.
             "heading_level": data.get("heading_level"),
+            # Implements: REQ-d00288-C, REQ-d00288-D
+            # What the author wrote where the validation targets go. An
+            # absent line and one whose targets name nothing this estate
+            # holds both leave no edge, and only these say which happened.
+            "validates_declared": data.get("validates_declared", False),
+            "validates_placeholders": list(data.get("validates_placeholders") or []),
             "parse_line": content.start_line,
             "parse_end_line": content.end_line,
         }
         self._nodes[journey_id] = node
 
+        # Implements: REQ-d00287-I
+        for declared in node.get_field("validates_placeholders") or []:
+            self._placeholder_findings.append(
+                PlaceholderFinding(
+                    source_id=journey_id,
+                    text=declared,
+                    keyword="validates",
+                    line=content.start_line,
+                )
+            )
+
+        # Implements: REQ-d00256-A
         # Create one STEP node per numbered step in the ## Steps section,
         # linked from the journey via STRUCTURES edges (read-only; never rendered).
         step_children: list[tuple[int, GraphNode]] = []
@@ -5847,6 +5912,7 @@ class GraphBuilder:
         graph._style_findings = list(self._style_findings)
         graph._undeclared_relationships = list(self._undeclared_relationships)
         graph._identifier_form_findings = list(self._identifier_form_findings)
+        graph._placeholder_findings = list(self._placeholder_findings)
         graph._unscanned_keyword_files = list(self._unscanned_keyword_files)
         graph._unbound_citations = list(self._unbound_citations)
         graph._duplicate_req_ids = {k: list(v) for k, v in self._duplicate_req_ids.items()}

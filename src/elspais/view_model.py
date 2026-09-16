@@ -62,7 +62,7 @@ def _associate_namespaces(typed, federation) -> list[tuple[str, str, str | None]
         if entry.name == root_name:
             continue
         declared = typed.associates.get(entry.name)
-        project = (entry.config or {}).get("project", {})
+        project = entry.config.get("project", {})
         code = (declared.namespace if declared else "") or project.get("namespace", "")
         if not code:
             # Only a member that failed to load reaches here: it has no

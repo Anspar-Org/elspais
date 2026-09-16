@@ -596,7 +596,7 @@ class TestSkipFiles:
             "REQ-d00299",
         }
 
-    # Verifies: REQ-d00212-B, REQ-d00281-B
+    # Verifies: REQ-d00212-Q, REQ-d00281-B
     def test_skip_dirs_excludes_the_requirement_beneath_them(self, project):
         """``skip_dirs = ["drafts"]`` keeps spec/drafts/wip-ideas.md unscanned,
         so REQ-p99999 is in no part of the report.

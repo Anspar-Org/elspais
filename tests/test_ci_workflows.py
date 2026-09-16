@@ -39,6 +39,13 @@ def _step_runs(job: dict) -> str:
     return "\n".join(s.get("run", "") for s in job.get("steps", []))
 
 
+def _step_run_containing(job: dict, needle: str) -> str:
+    """Return the run command of the one step whose command contains needle."""
+    matches = [s["run"] for s in job.get("steps", []) if needle in s.get("run", "")]
+    assert len(matches) == 1, f"expected one step running {needle!r}, found {len(matches)}"
+    return matches[0]
+
+
 # --- Assertion A: full test suite across Python versions on push/PR ---
 
 
@@ -160,6 +167,23 @@ class TestCommitMessageValidation:
         run_text = _step_runs(pr_config["jobs"]["validate-commit-messages"])
         assert "[A-Z]{2,10}-[0-9]+" in run_text
         assert "REQ-" in run_text
+
+
+# --- Assertion H: code formatting ---
+
+
+class TestCIFormatting:
+    # Verifies: REQ-o00066-H
+    def test_REQ_o00066_H_lint_checks_formatting(self, ci_config):
+        """A job that only lints does not satisfy H -- the formatter must run."""
+        run_text = _step_runs(ci_config["jobs"]["lint"])
+        assert "ruff format --check" in run_text
+
+    # Verifies: REQ-o00066-H
+    @pytest.mark.parametrize("tree", ["src/", "tests/"])
+    def test_REQ_o00066_H_formatting_covers_tree(self, ci_config, tree):
+        run = _step_run_containing(ci_config["jobs"]["lint"], "ruff format --check")
+        assert tree in run
 
 
 # --- act -l validation (workflow syntax) ---

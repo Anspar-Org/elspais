@@ -574,9 +574,18 @@ class TestFileContentCrossRepo:
 class TestAssociatedMutations:
     """Sequential mutations on the associated fixture."""
 
+    # Verifies: REQ-d00289-A, REQ-d00289-B, REQ-d00290-A
     def test_01_unlink_associate(self, project):
+        """`beta` is declared in the committed `.elspais.toml`, which the
+        command reads but never writes, so retiring it from here is refused
+        naming that file and the shared configuration is left alone."""
+        committed = (project / ".elspais.toml").read_bytes()
         result = run_elspais("associate", "--unlink", "beta", cwd=project)
-        assert result.returncode in (0, 1)
+        assert result.returncode == 1, result.stdout + result.stderr
+        assert "beta is declared in .elspais.toml" in result.stderr, result.stderr
+        assert "../beta" in result.stderr, result.stderr
+        assert (project / ".elspais.toml").read_bytes() == committed
+        assert not (project / ".elspais.local.toml").exists()
 
 
 # ---------------------------------------------------------------------------

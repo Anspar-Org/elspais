@@ -28,7 +28,7 @@ def test_default_config_preserves_legacy_values():
     assert not errors, "Schema/legacy mismatches:\n" + "\n".join(errors)
 
 
-# Verifies: REQ-d00212-F
+# Verifies: REQ-d00212-Y
 def test_unknown_key_rejected():
     """Unknown keys in TOML must raise ValidationError."""
     from pydantic import ValidationError
@@ -39,7 +39,7 @@ def test_unknown_key_rejected():
         ElspaisConfig.model_validate({"bogus_key": "value"})
 
 
-# Verifies: REQ-d00212-C
+# Verifies: REQ-d00212-Y
 def test_unknown_nested_key_rejected():
     """Unknown nested keys must raise ValidationError with field path."""
     from pydantic import ValidationError
@@ -50,7 +50,7 @@ def test_unknown_nested_key_rejected():
         ElspaisConfig.model_validate({"scanning": {"bogus_nested": True}})
 
 
-# Verifies: REQ-d00212-F
+# Verifies: REQ-d00212-Y
 def test_hyphenated_keys_accepted():
     """TOML hyphenated keys (e.g. 'id-patterns') accepted via aliases."""
     from elspais.config.schema import ElspaisConfig
@@ -61,7 +61,7 @@ def test_hyphenated_keys_accepted():
     assert config.id_patterns.canonical == "CUSTOM-{type.letter}{component}"
 
 
-# Verifies: REQ-d00212-F
+# Verifies: REQ-d00212-Y
 def test_type_mismatch_rejected():
     """Wrong types must raise ValidationError."""
     from pydantic import ValidationError
@@ -72,7 +72,7 @@ def test_type_mismatch_rejected():
         ElspaisConfig.model_validate({"version": "not-an-int"})
 
 
-# Verifies: REQ-d00212-F
+# Verifies: REQ-d00212-Y
 def test_unknown_top_level_key_rejected():
     """Unknown top-level keys like 'core' must fail."""
     from pydantic import ValidationError
@@ -87,7 +87,7 @@ def test_unknown_top_level_key_rejected():
         )
 
 
-# Verifies: REQ-d00212-J
+# Verifies: REQ-d00212-Y
 def test_project_namespace_accepted():
     """project.namespace is a valid field."""
     from elspais.config.schema import ElspaisConfig
@@ -100,7 +100,7 @@ def test_project_namespace_accepted():
     assert config.project.namespace == "MYNS"
 
 
-# Verifies: REQ-d00212-F
+# Verifies: REQ-d00212-Y
 def test_status_roles_custom_values():
     """status_roles with custom values should validate."""
     from elspais.config.schema import ElspaisConfig
