@@ -272,8 +272,8 @@ class TestFullProjectLifecycle:
         summary = run_elspais("summary", "--format", "json", cwd=tmp_path)
         assert summary.returncode == 0
         data = json.loads(summary.stdout)
-        levels = data.get("levels", [])
-        prd_count = next((lv["total"] for lv in levels if lv["level"] == "PRD"), 0)
+        levels = data["levels"]
+        prd_count = next((lv["requirements"] for lv in levels if lv["level"] == "PRD"), 0)
         assert prd_count == 1
 
         # 7. Trace should include the requirement

@@ -14,7 +14,7 @@ from elspais.config import (
 )
 
 
-# Verifies: REQ-d00258-F
+# Verifies: REQ-d00288-A
 class TestLevelExpectsValidation:
     """Tests for the level_expects_validation resolver."""
 

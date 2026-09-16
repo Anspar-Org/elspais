@@ -127,7 +127,7 @@ _PAYLOAD_PREFIX: dict[str, str] = {
 }
 
 
-# Implements: REQ-d00254-B, REQ-d00258-E, REQ-d00282-M+N
+# Implements: REQ-d00254-B, REQ-d00258-W, REQ-d00282-M+N
 def _lines_measured(level_row: dict) -> bool:
     """Whether a coverage run measured this level's implementation lines.
 
@@ -192,7 +192,7 @@ def _scalar(level_row: dict, key: str) -> float | None:
     if spec.dimension in LINE_DIMENSIONS:
         if not _lines_measured(level_row):
             return None
-        # Implements: REQ-d00258-E, REQ-d00282-N
+        # Implements: REQ-d00258-W, REQ-d00282-N
         # Absent where the tooling recorded no per-test contexts, and absent
         # ALONE: the lines covered and the lines measured stand, because they
         # were measured.
@@ -208,7 +208,7 @@ def _scalar(level_row: dict, key: str) -> float | None:
     if not level_row.get("total_assertions"):
         return None
     if spec.part in COUNT_PARTS:
-        # Implements: REQ-d00258-O
+        # Implements: REQ-d00258-U
         # Counts of what came back, with no proportion of their own.
         return level_row.get(f"tested_{spec.part}")
     figure = _figure(level_row, key)
@@ -417,10 +417,10 @@ def _cell(level_row: dict, key: str, carry: str = "") -> str:
         return cell
     if spec.dimension == "verified":
         cell += carry
-    # Implements: REQ-d00258-O
+    # Implements: REQ-d00258-U+V
     # The breakdown QUALIFIES the Tested figure, so it rides inside that
     # figure's cell in every format. Given cells of its own it read as three
-    # further values, which is a display term of its own -- the thing O
+    # further values, which is a display term of its own -- the thing V
     # forbids -- and made the Tested selection state four columns in CSV and
     # one in markdown.
     if spec.dimension == "tested":
@@ -488,7 +488,7 @@ def _measures_line(lv: dict, run: tuple[str, ...]) -> str:
     return ", ".join(f"{MEASURE_WORDS[VALUE_SPECS[k].measure]}: {_cell(lv, k)}" for k in run)
 
 
-# Implements: REQ-d00258-O
+# Implements: REQ-d00258-U
 def _tested_breakdown(lv: dict) -> str:
     """The tested assertions of one level, by what came back.
 
@@ -503,7 +503,7 @@ def _tested_breakdown(lv: dict) -> str:
         return ""
     # Rendered through the shared assertion-count formatter: the breakdown is
     # in the same fractional units as the Tested figure it qualifies
-    # (REQ-d00258-O), and a whole number still reads whole.
+    # (REQ-d00258-U), and a whole number still reads whole.
     return (
         f" [{fmt_assertion_count(passed)} passed, {fmt_assertion_count(failed)} failed, "
         f"{fmt_assertion_count(awaiting)} awaiting a result]"
@@ -714,7 +714,7 @@ def _tabular_headers(keys: tuple[str, ...], config: dict | None) -> list[str]:
 
     One header per stated value and no cell that rides along beside it: the
     figure's denominator and its proportion live inside its own cell, and the
-    Tested breakdown (REQ-d00258-O) qualifies the Tested cell rather than
+    Tested breakdown (REQ-d00258-V) qualifies the Tested cell rather than
     standing beside it. Every heading is read through ``header_for``, so a
     project that renames a dimension renames it here too (REQ-d00258-K).
     """

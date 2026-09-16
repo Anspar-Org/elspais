@@ -4499,7 +4499,7 @@ def _get_test_coverage(graph: FederatedGraph, req_id: str) -> dict[str, Any]:
                 measure_total(uat_verified, WORK_LIST_MEASURE) / uat_verified.total * 100
             )
 
-    # Implements: REQ-d00258-O
+    # Implements: REQ-d00258-U
     tested_breakdown: dict[str, int] | None = None
     if rollup is not None:
         from elspais.graph.metrics import tested_partition
@@ -4521,7 +4521,7 @@ def _get_test_coverage(graph: FederatedGraph, req_id: str) -> dict[str, Any]:
         "total_assertions": total,
         "covered_count": covered_count,
         "referenced_pct": round(referenced_pct, 1),
-        # Implements: REQ-d00258-O
+        # Implements: REQ-d00258-U+V
         # What came back from the tests this requirement has: a breakdown of
         # its tested assertions, not a further coverage dimension.
         "tested_breakdown": tested_breakdown,
@@ -4923,17 +4923,17 @@ def _get_uncovered_assertions(
                 )
         return covered
 
-    # Implements: REQ-d00258-I, REQ-d00258-M
+    # Implements: REQ-d00258-R, REQ-d00258-M
     def _implemented_labels(req_node: Any) -> set[str]:
         """Return labels with any implementation evidence naming them.
 
         Reads the existing ``implemented`` projection -- no re-derivation. The
-        RELATIVE denominator (REQ-d00258-I): a *testing* gap is scoped to
+        RELATIVE denominator (REQ-d00258-R): a *testing* gap is scoped to
         assertions that are IMPLEMENTED, mirroring gaps.py's
         ``restrict_to_dimension="implemented"``. An unimplemented assertion has
         nothing built to test yet and is therefore not a testing gap.
 
-        Read on the SAME measure as the numerator (REQ-d00258-I/M), so the
+        Read on the SAME measure as the numerator (REQ-d00258-R/M), so the
         figure and its denominator are made of the same kind of evidence.
         """
         rollup = req_node.get_metric("rollup_metrics")

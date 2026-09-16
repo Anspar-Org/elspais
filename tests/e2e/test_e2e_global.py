@@ -524,12 +524,12 @@ class TestSummarySelfValidation:
     # Verifies: REQ-d00086-A
     def test_REQ_d00086_A_summary_nonzero_counts(self, summary_data):
         for entry in summary_data["levels"]:
-            assert entry["total"] > 0, f"Level {entry['level']} has total=0"
+            assert entry["requirements"] > 0, f"Level {entry['level']} has requirements=0"
 
     # Verifies: REQ-d00086-A
     def test_REQ_d00086_A_summary_has_assertions(self, summary_data):
         for entry in summary_data["levels"]:
-            assert entry["total_assertions"] > 0, f"Level {entry['level']} has total_assertions=0"
+            assert entry["assertions"] > 0, f"Level {entry['level']} has assertions=0"
 
 
 class TestTraceSelfValidation:
@@ -599,16 +599,16 @@ class TestHealthSummaryConsistency:
         assert isinstance(summary_data, dict)
 
         # Summary should report a positive total
-        levels = summary_data.get("levels", [])
-        summary_total = sum(lvl.get("total", 0) for lvl in levels)
+        levels = summary_data["levels"]
+        summary_total = sum(lvl["requirements"] for lvl in levels)
         assert summary_total > 0, "Expected at least one requirement in summary"
 
         # Run summary again - should be identical
         summary_result2 = run_elspais("summary", "--format", "json")
         assert summary_result2.returncode == 0
         summary_data2 = json.loads(summary_result2.stdout)
-        levels2 = summary_data2.get("levels", [])
-        summary_total2 = sum(lvl.get("total", 0) for lvl in levels2)
+        levels2 = summary_data2["levels"]
+        summary_total2 = sum(lvl["requirements"] for lvl in levels2)
         assert summary_total == summary_total2, (
             f"Summary totals differ between runs: {summary_total} vs {summary_total2}"
         )
@@ -627,10 +627,10 @@ class TestSummaryIdempotent:
         assert result2.returncode == 0, f"summary run 2 failed: {result2.stderr}"
         data2 = json.loads(result2.stdout)
 
-        levels1 = data1.get("levels", [])
-        levels2 = data2.get("levels", [])
-        total1 = sum(lvl.get("total", 0) for lvl in levels1)
-        total2 = sum(lvl.get("total", 0) for lvl in levels2)
+        levels1 = data1["levels"]
+        levels2 = data2["levels"]
+        total1 = sum(lvl["requirements"] for lvl in levels1)
+        total2 = sum(lvl["requirements"] for lvl in levels2)
 
         assert total1 > 0, "Expected at least one requirement"
         assert total1 == total2, f"Summary totals differ between runs: {total1} vs {total2}"

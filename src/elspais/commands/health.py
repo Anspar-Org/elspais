@@ -2720,7 +2720,7 @@ def run_spec_checks(
 # =============================================================================
 
 
-# Implements: REQ-d00258-Q
+# Implements: REQ-d00288-G
 def _status_flags(treat_active: tuple[str, ...]) -> set[str]:
     """Title-cased set of statuses named via ``--treat-active`` (empty when unset)."""
     return {s.title() for s in treat_active}
@@ -2933,7 +2933,7 @@ def check_dimension_coverage(
     # per *Assertion*). "of which" claimed a partition none of that supports,
     # so the figures are introduced as the separate readings they are.
     msg_parts.append("by measure: " + ", ".join(measure_parts))
-    # Implements: REQ-d00258-O
+    # Implements: REQ-d00258-U
     if dimension == "tested" and (agg.tested_passed + agg.tested_failed + agg.tested_awaiting):
         msg_parts.append(
             f"{fmt_assertion_count(agg.tested_passed)} passed / "
@@ -2973,7 +2973,7 @@ def check_dimension_coverage(
     )
 
 
-# Implements: REQ-d00254-B, REQ-d00258-E
+# Implements: REQ-d00254-B, REQ-d00258-W
 def check_line_coverage(graph, config=None, level_filter=None) -> HealthCheck:
     """INFO: how much of the attributed implementation a test run executed.
 
@@ -2987,7 +2987,7 @@ def check_line_coverage(graph, config=None, level_filter=None) -> HealthCheck:
     covered" would read as "the tests reached none of this". Where coverage
     arrives aggregate-only there is no context to attribute a line to a test,
     and a zero would read as "no test exercises this" rather than "the question
-    was not asked" (REQ-d00258-E).
+    was not asked" (REQ-d00258-W).
     """
     severity = severity_for("code.code_tested", config)
     if severity == Severity.OFF:
@@ -3005,7 +3005,7 @@ def check_line_coverage(graph, config=None, level_filter=None) -> HealthCheck:
         "has_contexts": agg.has_contexts,
         "total_requirements": agg.req_count,
     }
-    # Implements: REQ-d00258-E
+    # Implements: REQ-d00254-B
     # An unmeasured estate and a measured-but-unexecuted one are opposite
     # facts, so they are reported in different words rather than through the
     # same zero.
@@ -3576,7 +3576,7 @@ def check_unscanned_keyword_files(
     )
 
 
-# Implements: REQ-d00258-E
+# Implements: REQ-d00258-W
 def run_code_checks(
     graph: FederatedGraph,
     exclude_status: set[str] | None = None,
@@ -3900,7 +3900,7 @@ def check_test_coverage(
     return check_dimension_coverage(graph, "tested", exclude_status=exclude_status, config=config)
 
 
-# Implements: REQ-d00258-F
+# Implements: REQ-d00288-C
 def check_uat_coverage(
     graph: FederatedGraph,
     exclude_status: set[str] | None = None,
@@ -3942,7 +3942,7 @@ def check_uat_coverage(
     )
 
 
-# Implements: REQ-d00258-F
+# Implements: REQ-d00288-A
 def _any_level_expects_validation(cfg: dict[str, Any] | Any) -> bool:
     """Whether any configured level sets ``expects_validation``."""
     from elspais.config import level_expects_validation
@@ -3951,7 +3951,7 @@ def _any_level_expects_validation(cfg: dict[str, Any] | Any) -> bool:
     return isinstance(levels, dict) and any(level_expects_validation(cfg, key) for key in levels)
 
 
-# Implements: REQ-d00258-F
+# Implements: REQ-d00288-C
 def _validation_level_filter(cfg: dict[str, Any] | Any) -> Any:
     """A predicate selecting the levels that expect validation."""
     from elspais.config import level_expects_validation
@@ -3962,7 +3962,7 @@ def _validation_level_filter(cfg: dict[str, Any] | Any) -> Any:
     return level_filter
 
 
-# Implements: REQ-d00258-F, REQ-d00285-F
+# Implements: REQ-d00288-B, REQ-d00285-F
 def check_unvalidated_requirements(
     graph: FederatedGraph, config: dict[str, Any] | None = None
 ) -> HealthCheck:

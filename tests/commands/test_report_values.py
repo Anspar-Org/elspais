@@ -246,7 +246,7 @@ class TestOneSelectionOneValueSet:
         # collector happened to carry.
         assert set(stated["json"]) <= set(summary_cmd.OFFERED_VALUES), stated["json"]
 
-    # Verifies: REQ-d00282-E, REQ-d00258-O+P
+    # Verifies: REQ-d00282-E, REQ-d00258-P+U
     def test_a_figure_states_its_own_denominator_and_proportion(self, coverage_payload):
         """One named value produces one cell carrying the whole fact.
 
@@ -373,7 +373,7 @@ class TestAbsenceIsNotZero:
         assert "no coverage figure is stated" in ops
         assert "0/" not in ops
 
-    # Verifies: REQ-d00282-M, REQ-d00258-O
+    # Verifies: REQ-d00282-M, REQ-d00258-U+V
     def test_json_states_null_where_there_is_no_figure(self, coverage_payload):
         """Including the counts qualifying Tested: a breakdown of a figure that
         was never taken is not three zeros."""
@@ -390,7 +390,7 @@ class TestAbsenceIsNotZero:
         # stated as the numbers it is made of.
         assert levels["PRD"]["implemented"] == {"count": 0.0, "total": 4.0, "ratio": 0.0}
 
-    # Verifies: REQ-d00282-M, REQ-d00258-O
+    # Verifies: REQ-d00282-M, REQ-d00258-U+V
     def test_the_report_under_no_selection_keeps_the_distinction_too(self, coverage_payload):
         """A reader who named no values receives the report's default set, and
         it answers the same question the same way.
@@ -751,12 +751,12 @@ class TestAFigureDecomposesIntoItsScalars:
 
 
 # ---------------------------------------------------------------------------
-# REQ-d00258-O + REQ-d00282-B: some values are counts and nothing else
+# REQ-d00258-U + REQ-d00282-B: some values are counts and nothing else
 # ---------------------------------------------------------------------------
 
 
 class TestCountsOnlyValues:
-    # Verifies: REQ-d00258-O, REQ-d00282-B
+    # Verifies: REQ-d00258-U, REQ-d00282-B
     @pytest.mark.parametrize("part", ("passed", "failed", "awaiting"))
     def test_each_count_of_the_breakdown_is_selectable_on_its_own(self, part):
         """Though the three sum to the tested count, a reader wanting only the
@@ -766,12 +766,12 @@ class TestCountsOnlyValues:
         assert set(row["tested"]) == {part}
         assert isinstance(row["tested"][part], (int, float))
 
-    # Verifies: REQ-d00258-O, REQ-d00282-B
+    # Verifies: REQ-d00258-U, REQ-d00282-B
     def test_the_summary_states_one_count_of_the_breakdown_alone(self):
         row = _summary_json(_thirds_level(), ["level", "tested.failed"])
         assert row == {"level": "PRD", "tested": {"failed": 2}}
 
-    # Verifies: REQ-d00258-O, REQ-d00282-B+F
+    # Verifies: REQ-d00258-U+V, REQ-d00282-B+F
     @pytest.mark.parametrize("part", ("passed", "failed", "awaiting"))
     def test_a_count_has_no_proportion_to_ask_for(self, part):
         """A count of what came back is not a credit taken over a population,
@@ -807,7 +807,7 @@ class TestCountsOnlyValues:
         assert code == 1
         assert f"tested.{part}.ratio" in message
 
-    # Verifies: REQ-d00258-O, REQ-d00282-B
+    # Verifies: REQ-d00258-V, REQ-d00282-B
     def test_only_the_tested_figure_carries_a_breakdown(self):
         """The breakdown is of what came back for a tested assertion. No other
         dimension has one, so no other dimension offers its counts."""
@@ -992,7 +992,7 @@ class TestAValueIsStatedAtThePathItsKeySpells:
         assert "tested.immediate_direct.count" in VALUE_SPECS
         assert "tested.immediate_direct.count.ratio" not in VALUE_SPECS
 
-    # Verifies: REQ-d00258-O, REQ-d00282-B+E
+    # Verifies: REQ-d00258-V, REQ-d00282-B+E
     def test_the_tested_figure_carries_its_breakdown_and_a_measure_of_it_does_not(self):
         """The counts are what came back for the tested assertions OVERALL, so
         they qualify the dimension's own figure. A measure of Tested counts a
@@ -1548,14 +1548,14 @@ class TestALineFigureDecomposesIntoItsLines:
 
 
 class TestMeasuredLinesSurviveTheAttributionSuppression:
-    """REQ-d00258-E suppresses the attribution; it must take nothing with it.
+    """REQ-d00258-W suppresses the attribution; it must take nothing with it.
 
     This is the boundary the defect lived on, so it is checked by MOVING it:
     one estate, rendered twice, differing only in whether the tooling recorded
     per-test contexts.
     """
 
-    # Verifies: REQ-d00258-E, REQ-d00282-M+N
+    # Verifies: REQ-d00258-W, REQ-d00282-M+N
     def test_without_contexts_the_lines_are_stated_and_only_attribution_is_absent(self):
         row = _trace_json(_lines_graph(has_contexts=False, attributed=0.0), ["code_tested"])
         assert row["code_tested"]["count"] == 16.0
@@ -1563,7 +1563,7 @@ class TestMeasuredLinesSurviveTheAttributionSuppression:
         assert row["code_tested"]["ratio"] == 0.8
         assert row["code_tested"]["attributed"] is None
 
-    # Verifies: REQ-d00258-E, REQ-d00282-M+N
+    # Verifies: REQ-d00258-W, REQ-d00282-M+N
     def test_flipping_the_context_bit_moves_the_attribution_and_nothing_else(self):
         """The falsifiable half: with contexts a zero attribution is STATED as
         zero, without them it is absent, and the three line values are byte
@@ -1582,7 +1582,7 @@ class TestMeasuredLinesSurviveTheAttributionSuppression:
         for path in LINE_PARTS:
             assert _at(with_ctx, path) == _at(without, path)
 
-    # Verifies: REQ-d00258-E, REQ-d00282-M+N
+    # Verifies: REQ-d00258-W, REQ-d00282-M+N
     def test_summary_suppresses_the_attribution_on_the_same_terms(self):
         values = ["code_tested", *LINE_PARTS, "code_tested.attributed"]
         with_ctx = _summary_json(_lines_level(has_contexts=True, attributed=0.0), values)

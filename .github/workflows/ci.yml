@@ -132,9 +132,61 @@ jobs:
         if: steps.filter.outputs.concurrency != 'true'
         run: echo "No concurrency-relevant files changed; stress battery not required."
 
+  browser-test:
+    # Playwright viewer tier (pytest -m browser). Kept off the main test job
+    # because it needs a browser binary the CI image does not carry, and only
+    # required when the change can reach what the viewer renders.
+    #
+    # This tier reported green for its whole life without running: the module
+    # opens with `pytest.importorskip("playwright")`, no install path reached
+    # the `browser` extra (it is deliberately absent from `all`, which is a
+    # user-facing feature set, not a test one), and nothing invoked the marker.
+    # tests/conftest.py now errors when the marker is asked for and the extra
+    # is missing, so a run that cannot honour the request says so.
+    name: Viewer Browser Tier
+    needs: [compute-hash, prepare-image]
+    runs-on: ubuntu-latest
+    container: ghcr.io/anspar-org/elspais-ci:py3.12-sha-${{ needs.compute-hash.outputs.hash }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Mark workspace safe for git
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Detect viewer-relevant changes
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            viewer:
+              - 'src/elspais/html/**'
+              - 'src/elspais/server/**'
+              - 'src/elspais/commands/viewer*.py'
+              - 'tests/e2e/test_viewer_browser.py'
+              - 'tests/conftest.py'
+              - 'pyproject.toml'
+              - '.github/workflows/ci.yml'
+
+      - name: Install package with browser test dependencies
+        if: steps.filter.outputs.viewer == 'true'
+        run: pip install -e ".[dev,all,browser]"
+
+      - name: Install chromium
+        if: steps.filter.outputs.viewer == 'true'
+        run: playwright install --with-deps chromium
+
+      - name: Run viewer browser tier
+        if: steps.filter.outputs.viewer == 'true'
+        run: pytest -m browser --tb=short -q
+
+      - name: Skipped (no viewer-relevant changes)
+        if: steps.filter.outputs.viewer != 'true'
+        run: echo "No viewer-relevant files changed; browser tier not required."
+
   promote-image:
     name: Promote CI Image (Python ${{ matrix.python-version }})
-    needs: [compute-hash, test, stress-test]
+    needs: [compute-hash, test, stress-test, browser-test]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:

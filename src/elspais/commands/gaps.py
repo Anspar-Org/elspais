@@ -116,7 +116,7 @@ def collect_gaps(
         exclude_status: Set of status values to skip (e.g. {"Retired"}).
         config: Project config dict. Used to resolve per-level
             ``expects_validation`` so only levels that expect UAT validation
-            produce ``unvalidated`` gaps (REQ-d00258-F).
+            produce ``unvalidated`` gaps (REQ-d00288-B+C).
 
     Returns:
         GapData with all gap lists populated.
@@ -199,7 +199,7 @@ def collect_gaps(
 
         # Unvalidated: no UAT coverage. Only levels that expect_validation can
         # be "unvalidated" -- an internal level that never gets a journey is not
-        # a gap (REQ-d00258-F). The whole-requirement verdict reads the
+        # a gap (REQ-d00288-B+C). The whole-requirement verdict reads the
         # IMMEDIATE measures: a journey validating the requirement is evidence
         # attached here, whether or not it named an *Assertion*, while coverage
         # conducted from a refining requirement is not and must not rescue an

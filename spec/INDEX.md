@@ -89,7 +89,7 @@
 | REQ-d00067 | Uncovered Assertions Tool Implementation                      | dev-mcp-tools.md        | c838e24d |
 | REQ-d00068 | Assertion Keyword Search Tool Implementation                  | dev-mcp-tools.md        | d552fda6 |
 | REQ-d00069 | Indirect Coverage Source                                      | dev-graph-core.md       | 665b798a |
-| REQ-d00070 | Indirect Coverage Toggle Display                              | dev-graph-core.md       | eda3f31c |
+| REQ-d00070 | Indirect Coverage Toggle Display                              | dev-graph-core.md       | e5591024 |
 | REQ-d00071 | Unified Root vs Orphan Classification                         | dev-graph-core.md       | f2cb5f45 |
 | REQ-d00072 | Link Suggestion Core Engine                                   | dev-graph-core.md       | 9d57c2ad |
 | REQ-d00073 | Link Suggestion CLI Command                                   | dev-cli.md              | 975970c4 |
@@ -174,7 +174,7 @@
 | REQ-d00255 | Test-to-Journey UAT Verification                              | dev-graph-core.md       | ab5cb648 |
 | REQ-d00256 | Step-Level UAT Verification                                   | dev-graph-core.md       | 8bf40a7c |
 | REQ-d00257 | UAT-Scoped Traceability Report                                | dev-graph-core.md       | 1ea68210 |
-| REQ-d00258 | Reporting Surface Consistency                                 | dev-graph-core.md       | a12fe185 |
+| REQ-d00258 | Reporting Surface Consistency                                 | dev-graph-core.md       | ba3e3b0b |
 | REQ-d00259 | Requirement Format Reference Command                          | dev-cli.md              | c3b67490 |
 | REQ-d00260 | Workspace Registry and Federated View Assembly                | dev-graph-federation.md | 510a0f67 |
 | REQ-d00261 | Federation Role Model                                         | dev-graph-federation.md | fb8db8a9 |
@@ -203,6 +203,9 @@
 | REQ-d00285 | The Shape of a Finding                                        | dev-cli.md              | bedec247 |
 | REQ-d00286 | Built-In User Documentation                                   | dev-cli.md              | d246f21a |
 | REQ-d00287 | Reading a Reference                                           | dev-graph-core.md       | 0803d023 |
+| REQ-d00288 | Coverage Inclusion                                            | dev-graph-core.md       | 13bc6949 |
+| REQ-d00289 | Viewer Coverage Presentation                                  | dev-graph-core.md       | db9415cd |
+| REQ-d00290 | Configurable Viewer Presentation                              | dev-graph-core.md       | 31848b5c |
 
 ## User Journeys
 

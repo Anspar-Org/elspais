@@ -145,7 +145,7 @@ class ChecksArgs:
     lenient: bool = False
     """Allow warnings without affecting exit code."""
 
-    # Implements: REQ-d00258-Q
+    # Implements: REQ-d00288-G
     treat_active: Annotated[list[list[str]], tyro.conf.UseAppendAction] = dataclasses.field(
         default_factory=list
     )
@@ -197,7 +197,7 @@ class GapsArgs(ScopeOptions):
     verified. Keys are stable names, never the words a project displays them
     under."""
 
-    # Implements: REQ-d00258-Q
+    # Implements: REQ-d00288-G
     treat_active: Annotated[list[list[str]], tyro.conf.UseAppendAction] = dataclasses.field(
         default_factory=list
     )
@@ -223,7 +223,7 @@ class UncoveredArgs(ScopeOptions):
     (comma-separated value keys). Offers: implemented. Keys are stable names,
     never the words a project displays them under."""
 
-    # Implements: REQ-d00258-Q
+    # Implements: REQ-d00288-G
     treat_active: Annotated[list[list[str]], tyro.conf.UseAppendAction] = dataclasses.field(
         default_factory=list
     )
@@ -249,7 +249,7 @@ class UntestedArgs(ScopeOptions):
     (comma-separated value keys). Offers: tested. Keys are stable names,
     never the words a project displays them under."""
 
-    # Implements: REQ-d00258-Q
+    # Implements: REQ-d00288-G
     treat_active: Annotated[list[list[str]], tyro.conf.UseAppendAction] = dataclasses.field(
         default_factory=list
     )
@@ -275,7 +275,7 @@ class UnvalidatedArgs(ScopeOptions):
     (comma-separated value keys). Offers: uat_coverage. Keys are stable names,
     never the words a project displays them under."""
 
-    # Implements: REQ-d00258-Q
+    # Implements: REQ-d00288-G
     treat_active: Annotated[list[list[str]], tyro.conf.UseAppendAction] = dataclasses.field(
         default_factory=list
     )
@@ -301,7 +301,7 @@ class FailingArgs(ScopeOptions):
     (comma-separated value keys). Offers: verified. Keys are stable names,
     never the words a project displays them under."""
 
-    # Implements: REQ-d00258-Q
+    # Implements: REQ-d00288-G
     treat_active: Annotated[list[list[str]], tyro.conf.UseAppendAction] = dataclasses.field(
         default_factory=list
     )

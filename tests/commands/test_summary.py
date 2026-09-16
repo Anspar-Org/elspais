@@ -181,11 +181,18 @@ def _build_mixed_graph() -> TraceGraph:
 
 
 class TestCollectCoverage:
-    """Validates REQ-d00086-D: Uses existing graph aggregate functions."""
+    """The shared coverage payload: its shape, and the level groups it forms."""
 
     # Verifies: REQ-d00086-D
-    def test_REQ_d00086_D_returns_levels_and_excluded_keys(self):
-        """collect_coverage returns dict with 'levels' list and 'excluded' dict."""
+    def test_collect_coverage_returns_level_rows_and_exclusion_tally(self):
+        """The report reads its figures from the shared aggregate rather than
+        computing its own: ``collect_coverage`` is that function, and it
+        answers with the level rows and the withheld-status tally.
+
+        An empty graph still yields the configured level rows at zero and an
+        empty exclusion tally, so a caller gets the same payload shape whether
+        or not there is anything to report.
+        """
         graph = _make_graph()
         data = collect_coverage(graph)
 
@@ -193,23 +200,31 @@ class TestCollectCoverage:
         assert "excluded" in data
         assert isinstance(data["levels"], list)
         assert isinstance(data["excluded"], dict)
-        # Empty graph has 3 zero-count levels and no exclusions
         assert len(data["levels"]) == 3
+        # Internal payload field: `total` here, published as `requirements`.
         assert all(lv["total"] == 0 for lv in data["levels"])
         assert data["excluded"] == {}
 
-    # Verifies: REQ-d00086-D
-    def test_REQ_d00086_D_levels_always_three(self):
-        """There are always exactly 3 level entries (PRD, OPS, DEV)."""
+    # Verifies: REQ-d00281-A, REQ-d00281-E
+    def test_configured_levels_form_groups_in_rank_order_when_unused(self):
+        """The configured ``[levels]`` keys each form a group, in rank order,
+        even where no requirement carries them.
+
+        REQ-d00281-A is a floor — every level a reported requirement carries
+        SHALL form a group — and ``level_group_keys()`` satisfies it with a
+        union of the configured keys and the carried ones, so the configured
+        three survive an empty graph. The order is REQ-d00281-E's: configured
+        keys in the rank order the config gave them. This is NOT a claim that a
+        report has exactly three groups; a requirement carrying an undefined
+        level adds a fourth, ordered after these.
+        """
         graph = _make_graph()
         data = collect_coverage(graph)
 
-        assert len(data["levels"]) == 3
-        level_names = [lv["level"] for lv in data["levels"]]
-        assert level_names == ["PRD", "OPS", "DEV"]
+        assert [lv["level"] for lv in data["levels"]] == ["PRD", "OPS", "DEV"]
 
-    # Verifies: REQ-d00086-D
-    def test_REQ_d00086_D_no_requirements_key(self):
+    # Verifies: REQ-d00086-A
+    def test_collect_coverage_carries_no_per_requirement_rows(self):
         """Coverage data no longer includes per-requirement rows."""
         graph = _make_graph()
         _add_requirement(graph, "REQ-p00001", "Test", level="prd")
@@ -553,7 +568,7 @@ class TestJsonFormat:
 class TestCsvFormat:
     """Validates REQ-d00086-C: CSV format output."""
 
-    # Verifies: REQ-d00258-O, REQ-d00069-L, REQ-d00258-A
+    # Verifies: REQ-d00258-V, REQ-d00069-L, REQ-d00258-A
     # Verifies: REQ-d00086-C
     def test_REQ_d00086_C_csv_has_correct_headers(self):
         """CSV output has the expected column headers."""
@@ -591,7 +606,7 @@ class TestCsvFormat:
         # 1 header + 3 levels (PRD, OPS, DEV)
         assert len(rows) == 4
 
-    # Verifies: REQ-d00258-O, REQ-d00069-N, REQ-d00258-A
+    # Verifies: REQ-d00258-U+V, REQ-d00069-N, REQ-d00258-A
     # Verifies: REQ-d00086-C
     def test_REQ_d00086_C_csv_row_values(self):
         """CSV data rows contain correct level summary values.
@@ -625,7 +640,7 @@ class TestCsvFormat:
         assert row["Implemented"] == "3/4 (75.0%)"
         assert row["Implemented (cited by name here)"] == "3/4 (75.0%)"
         # The breakdown qualifies the Tested figure, so it rides inside the
-        # Tested cell (REQ-d00258-O). Two assertions are tested; one of them
+        # Tested cell (REQ-d00258-V). Two assertions are tested; one of them
         # also has a passing result, the other is still awaiting one.
         assert row["Tested"] == "2/4 (50.0%) [1 passed, 0 failed, 1 awaiting a result]"
         assert row["Tested (cited by name here)"] == "2/4 (50.0%)"
@@ -1530,7 +1545,7 @@ class TestMeasuresArePublished:
 
 
 class TestTestedBreakdown:
-    """REQ-d00258-O: the summary reports Tested with its three-way breakdown."""
+    """REQ-d00258-U: the summary reports Tested with its three-way breakdown."""
 
     def _graph_with_breakdown(self) -> TraceGraph:
         """One PRD requirement: A passed, B failed, C awaiting a result."""
@@ -1565,7 +1580,7 @@ class TestTestedBreakdown:
         )
         return graph
 
-    # Verifies: REQ-d00258-O
+    # Verifies: REQ-d00258-U+V
     def test_text_tested_line_carries_the_breakdown(self):
         """The breakdown qualifies Tested, so it rides on the Tested line and
         introduces no coverage term of its own."""
@@ -1578,7 +1593,7 @@ class TestTestedBreakdown:
         assert "Awaiting:" not in output
         assert "Failed:" not in output
 
-    # Verifies: REQ-d00258-O
+    # Verifies: REQ-d00258-U
     def test_text_breakdown_silent_when_nothing_is_tested(self):
         """There is no breakdown of an empty set: a level with no tested
         assertion says nothing rather than reporting three zeros."""
@@ -1591,20 +1606,20 @@ class TestTestedBreakdown:
         tested_line = next(ln for ln in output.splitlines() if "Tested:" in ln)
         assert "awaiting" not in tested_line
 
-    # Verifies: REQ-d00258-O
+    # Verifies: REQ-d00258-U
     def test_markdown_tested_cell_carries_the_breakdown(self):
         data = collect_coverage(self._graph_with_breakdown())
         output = _render(data, "markdown")
 
         assert "[1 passed, 1 failed, 1 awaiting a result]" in output
 
-    # Verifies: REQ-d00258-O, REQ-d00282-E
+    # Verifies: REQ-d00258-U+V, REQ-d00282-E
     def test_csv_states_the_breakdown_inside_the_tested_cell(self):
         """The breakdown qualifies the Tested figure and so rides in its cell
         here exactly as it does in markdown and in text.
 
-        Cells of its own would be three further columns -- a display term of
-        its own, which REQ-d00258-O forbids -- and would make selecting
+        Cells of its own would be three further columns -- a coverage dimension of
+        its own, which REQ-d00258-V forbids -- and would make selecting
         `tested` state four columns in CSV and one in markdown."""
         data = collect_coverage(self._graph_with_breakdown())
         output = _render(data, "csv")

@@ -233,8 +233,8 @@ class TestGetTestCoverage:
         assert result["referenced_pct"] == 0
         assert result["uncovered_assertions"] == ["REQ-p00002-A"]
 
-    # Verifies: REQ-d00258-O
-    def test_REQ_d00258_O_reports_the_tested_breakdown(self, coverage_graph):
+    # Verifies: REQ-d00258-U
+    def test_tested_breakdown_accounts_for_every_tested_assertion(self, coverage_graph):
         """The tool reports what came back from the tests it counts: A is
         tested and its result passed, B fails, and C is tested with no verdict
         -- so the three account for the whole tested set."""

@@ -220,7 +220,7 @@ class TestCollectGaps:
         data = collect_gaps(graph, exclude_status=set())
         assert any(item[0] == "REQ-p00001" and item[2] == "uat" for item in data.failing)
 
-    # Verifies: REQ-d00258-F
+    # Verifies: REQ-d00288-A+B+C
     def test_unvalidated_only_for_expects_validation_levels(self) -> None:
         """An expects_validation req with no UAT coverage is 'unvalidated'; a
         req at a non-expecting level is not, even with zero UAT coverage."""

@@ -9,7 +9,7 @@ named (direct/indirect) crossed with where the evidence sits (immediate/
 rolled-up) -- plus the per-*Assertion* total of REQ-d00069-N. Every helper
 here that scores coverage takes the measure it is scoring by name, so a
 figure and its denominator are always made of the same kind of evidence
-(REQ-d00258-I) and no surface can read a number without saying which one it
+(REQ-d00258-R) and no surface can read a number without saying which one it
 asked for. A surface reporting what still needs doing reads
 ``WORK_LIST_MEASURE`` (REQ-d00258-M); a surface reporting how far along the
 estate is headlines ``"total"`` (REQ-d00258-A).
@@ -35,7 +35,7 @@ from elspais.graph.metrics import (
     tested_partition,
 )
 
-# Implements: REQ-d00258-H
+# Implements: REQ-d00289-A
 # Unified coverage-state vocabulary: the requirement tier, per-assertion standing,
 # and viewer filter bucket all draw from this single {full,partial,failing,missing}
 # set (identity map -- no separate direct/indirect tier states).
@@ -204,7 +204,7 @@ def covered_labels(dim: CoverageDimension, measure: str) -> set[str]:
 
     Read from the fractions rather than the dict keys: conduction seeds a 0.0
     entry for every *Assertion* label, so a set built from the keys would count
-    an uncovered *Assertion* as covered (REQ-d00258-I).
+    an uncovered *Assertion* as covered (REQ-d00258-R).
     """
     return {lbl for lbl, frac in measure_by_label(dim, measure).items() if frac > 0}
 
@@ -253,7 +253,7 @@ def is_covered(fraction: float) -> bool:
     return fraction >= 1.0 - _COVERED_EPS
 
 
-# Implements: REQ-d00258-I
+# Implements: REQ-d00258-R+S+T
 def relative_tier(
     num_dim: CoverageDimension,
     denom_labels: set[str],
@@ -269,7 +269,7 @@ def relative_tier(
     ``measure`` names which per-*Assertion* map is scored, and the caller is
     required to say: the denominator was built from one measure, and scoring a
     different one here would report a figure over a denominator made of another
-    kind of evidence (REQ-d00258-I).
+    kind of evidence (REQ-d00258-R).
 
     Single home for the relative-tier logic (REQ-d00258-C): both the badge
     projection (html/generator.py) and the requirement-level tier buckets read
@@ -363,7 +363,7 @@ def work_verdict(
     ``labels`` are the requirement's *Assertion* labels; an *Assertion* with
     no entry in the fraction map is uncovered, not absent, so the caller has
     to say which exist. ``restrict_to_dimension`` applies the relative
-    denominator of REQ-d00258-I, read on the same measure as the numerator.
+    denominator of REQ-d00258-R, read on the same measure as the numerator.
     """
     if rollup is None:
         return WorkVerdict(attached=False, uncovered=dict.fromkeys(labels, 0.0))
@@ -388,7 +388,7 @@ def work_verdict(
     )
 
 
-# Implements: REQ-d00258-I
+# Implements: REQ-d00258-R
 def denominator_labels(rollup: RollupMetrics, dimension: str, *, measure: str) -> set[str] | None:
     """The label set a chained dimension is measured over; None if absolute.
 
@@ -400,7 +400,7 @@ def denominator_labels(rollup: RollupMetrics, dimension: str, *, measure: str) -
     gaps/MCP surfaces (which filter frac > 0).
 
     The caller names the measure because the chain is measured WITHIN one
-    measure (REQ-d00258-I): Tested read on the immediate direct measure is the
+    measure (REQ-d00258-R): Tested read on the immediate direct measure is the
     coverage of the assertions immediately-directly implemented, so that a
     figure and its denominator are made of the same kind of evidence.
 
@@ -441,7 +441,7 @@ def authored_dimension(rollup: RollupMetrics, dimension: str) -> CoverageDimensi
     return getattr(rollup, dimension)
 
 
-# Implements: REQ-d00258-I
+# Implements: REQ-d00258-R
 def relative_tier_for(
     rollup: RollupMetrics,
     dimension: str,
@@ -453,7 +453,7 @@ def relative_tier_for(
     For a chained dimension (in ``DENOMINATOR_DIMENSION``) the tier is measured
     RELATIVELY over the label-set that qualified at the prior link, and the
     SAME ``measure`` is used on both sides of that ratio so the figure and its
-    denominator are made of the same kind of evidence (REQ-d00258-I). The
+    denominator are made of the same kind of evidence (REQ-d00258-R). The
     'verified' numerator is ``tested_and_passing``, matching the badge
     projection. An absolute dimension (implemented, uat_coverage) is measured
     over all its assertions and is never N/A.
@@ -737,7 +737,7 @@ class LevelAggregate:
     passing: DimensionSums = field(default_factory=DimensionSums)
     uat_covered: DimensionSums = field(default_factory=DimensionSums)
     uat_passed: DimensionSums = field(default_factory=DimensionSums)
-    # The Tested breakdown (REQ-d00258-O): every tested assertion in this
+    # The Tested breakdown (REQ-d00258-U): every tested assertion in this
     # level is in exactly one of the three, so they sum to the tested count.
     tested_passed: int = 0
     tested_failed: int = 0
@@ -782,7 +782,7 @@ class DimensionAggregate:
     req_with_any: int = 0
     req_with_direct: int = 0
     has_failures: bool = False
-    # The Tested breakdown (REQ-d00258-O). Populated only for the 'tested'
+    # The Tested breakdown (REQ-d00258-U). Populated only for the 'tested'
     # dimension: it breaks Tested down, and means nothing beside another.
     tested_passed: int = 0
     tested_failed: int = 0
@@ -863,7 +863,7 @@ def level_group_keys(
     return configured + [undefined[k] for k in sorted(undefined)]
 
 
-# Implements: REQ-d00258-L
+# Implements: REQ-d00288-F
 def _counts_for_coverage(config: dict[str, Any] | None, status: str | None) -> bool:
     """Whether a requirement STATUS is INCLUDED in coverage aggregation.
 
@@ -927,7 +927,7 @@ def aggregate_by_level(
             agg.with_test_refs += 1
         if passing_dim.covered > 0:
             agg.with_passing += 1
-        # Implements: REQ-d00258-O
+        # Implements: REQ-d00258-U
         part = tested_partition(rollup)
         agg.tested_passed += part.passed
         agg.tested_failed += part.failed
@@ -964,7 +964,7 @@ def aggregate_dimension(
     When given, only requirements whose level satisfies it are counted (both
     numerator and denominator). Used by the UAT coverage check so that
     non-``expects_validation`` levels neither count toward nor drag the gap
-    (REQ-d00258-F).
+    (REQ-d00288-C).
 
     REQ-d00252-F: an INTEGRATES-delegating requirement has no local
     ``rollup_metrics`` but is still covered for the 'implemented' dimension
@@ -1008,7 +1008,7 @@ def aggregate_dimension(
             agg.req_with_direct += 1
         if dim.has_failures:
             agg.has_failures = True
-        # Implements: REQ-d00258-O
+        # Implements: REQ-d00258-U
         if dimension == "tested":
             part = tested_partition(rollup)
             agg.tested_passed += part.passed
@@ -1017,7 +1017,7 @@ def aggregate_dimension(
     return agg
 
 
-# Implements: REQ-d00254-B, REQ-d00258-E
+# Implements: REQ-d00254-B, REQ-d00258-W
 @dataclass
 class LineAggregate:
     """Whole-graph line-coverage sums, plus the per-REQ counts health reports.
@@ -1041,7 +1041,7 @@ class LineAggregate:
         """Whether the ingested coverage can produce an attribution figure.
 
         Mirrors :attr:`LineCoverage.has_attribution` so the whole-graph answer
-        and the per-requirement one are the same question (REQ-d00258-E): the
+        and the per-requirement one are the same question (REQ-d00258-W): the
         suppression keys on whether the tooling recorded per-test contexts at
         all, not on whether the resulting count came out above zero.
         """
@@ -1095,7 +1095,7 @@ def aggregate_line_coverage(
         rollup: RollupMetrics | None = node.get_metric("rollup_metrics")
         if rollup is None:
             continue
-        # Implements: REQ-d00258-E
+        # Implements: REQ-d00258-W
         # What the tooling provided is an OR across the estate: one target
         # measured, or one carrying contexts, means the question was asked.
         _accumulate_lines(agg, rollup.code_tested)
@@ -1158,7 +1158,7 @@ def _measure_fields(prefix: str, sums: DimensionSums) -> dict[str, float]:
     }
 
 
-# Implements: REQ-d00086-A, REQ-d00258-C
+# Implements: REQ-d00086-A, REQ-d00258-C, REQ-d00288-I
 def collect_coverage(
     graph: Any,
     config: dict[str, Any] | None = None,
@@ -1216,7 +1216,7 @@ def collect_coverage(
                 # The line figure of this group, kept in lines and named for
                 # lines. The two ingestion bits travel with it: without them a
                 # zero says both "measured and never reached" and "never
-                # measured", which is the confusion REQ-d00258-E exists to end.
+                # measured", which is the confusion REQ-d00282-M exists to end.
                 "code_tested_covered": agg.lines.covered_lines,
                 "code_tested_total": agg.lines.total_lines,
                 "code_tested_attributed": agg.lines.attributed_lines,

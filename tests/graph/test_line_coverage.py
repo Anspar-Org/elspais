@@ -1,6 +1,6 @@
 # Verifies: REQ-d00254-B
 # Verifies: REQ-d00258-C
-# Verifies: REQ-d00258-E
+# Verifies: REQ-d00258-W
 """Line coverage is measured, aggregated and reported apart from the
 *Traceability* dimensions.
 
@@ -12,7 +12,7 @@ type (:class:`LineCoverage`), its own aggregation
 (:func:`check_line_coverage`) -- REQ-d00254-B keeps it beside the traceability
 dimensions and never folded into them.
 
-The other rule these pin is REQ-d00258-E: coverage tooling that reports only
+The other rule these pin is REQ-d00258-W: coverage tooling that reports only
 aggregate hit counts records no per-test context, so it cannot say which test
 reached a line. A surface must then render nothing rather than a ``0`` that
 would read as "no test exercises this".
@@ -163,7 +163,7 @@ class TestAggregateLineCoverage:
         assert aggregate_line_coverage(graph, level_filter=lambda lv: lv == "DEV").req_count == 0
         assert aggregate_line_coverage(graph, level_filter=lambda lv: lv == "PRD").req_count == 1
 
-    # Verifies: REQ-d00258-E
+    # Verifies: REQ-d00258-W
     @pytest.mark.parametrize(
         "contexts,expected_attributed,expected_has",
         [(None, 0.0, False), (_CONTEXTS, 1.0, True)],
@@ -205,7 +205,7 @@ class TestCheckLineCoverage:
         assert details["total_requirements"] == 1
         assert details["reqs_with_covered_lines"] == 1
 
-    # Verifies: REQ-d00258-E
+    # Verifies: REQ-d00258-W
     def test_attribution_is_reported_when_the_tooling_produced_it(self):
         check = check_line_coverage(
             _graph(line_coverage=_PARTIAL_COVERAGE, line_contexts=_CONTEXTS)
@@ -214,7 +214,7 @@ class TestCheckLineCoverage:
         assert check.details["attributed_lines"] == 1
         assert check.details["attributed_pct"] == pytest.approx(33.3, abs=0.1)
 
-    # Verifies: REQ-d00258-E
+    # Verifies: REQ-d00258-W
     def test_absent_attribution_is_said_rather_than_shown_as_zero(self):
         """Aggregate-only coverage must produce no attribution figure at all:
         a "0/3 attributed" would read as a finding about the tests rather than
@@ -225,7 +225,7 @@ class TestCheckLineCoverage:
         assert "attributed_lines" not in check.details
         assert "attributed_pct" not in check.details
 
-    # Verifies: REQ-d00258-E
+    # Verifies: REQ-d00254-B
     def test_unmeasured_implementation_is_said_rather_than_shown_as_zero(self):
         """No coverage run ingested at all is not the same fact as a run that
         reached nothing, so it must not be reported through the same zero:

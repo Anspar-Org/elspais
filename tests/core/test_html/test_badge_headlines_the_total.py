@@ -1,7 +1,7 @@
 # Verifies: REQ-d00069-L
 # Verifies: REQ-d00069-N
 # Verifies: REQ-d00258-A
-# Verifies: REQ-d00258-G
+# Verifies: REQ-d00289-C
 """The viewer's badges headline the total, whatever measure produced it.
 
 A badge headlines the TOTAL measure -- each *Assertion* counted once at the
@@ -12,7 +12,7 @@ see for themselves.
 
 These tests pin that whole-requirement and conducted evidence both reach the
 headline, and that the requirement badge and the per-*Assertion* pill answer
-the question the same way (REQ-d00258-G).
+the question the same way (REQ-d00289-C).
 """
 
 import pytest
@@ -81,8 +81,8 @@ def test_REQ_d00258_A_badge_tier_reads_the_total(rollup_fn):
     assert result["tested_tier"] == "full"
 
 
-# Verifies: REQ-d00258-G
-def test_REQ_d00258_G_pill_and_badge_agree():
+# Verifies: REQ-d00289-C
+def test_pill_and_badge_agree_on_the_same_measure():
     """The pill and the badge beside it answer on the same measure."""
     from tests.core.graph_test_helpers import build_graph, make_requirement
 

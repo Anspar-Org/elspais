@@ -80,14 +80,37 @@ class TestNamedComponentIds:
         result = run_elspais("checks", "--lenient", cwd=project)
         assert result.returncode == 0, f"health failed: {result.stderr}"
 
-    def test_summary_counts_requirements(self, project):
+    # Verifies: REQ-d00086-A, REQ-d00281-A, REQ-d00281-B, REQ-d00288-E
+    def test_level_groups_account_for_every_reported_requirement(self, project):
+        """Named-component IDs group by the level their ID names, and the
+        groups account for all 5 reported requirements.
+
+        `canonical = "{namespace}-{level.letter}{component}"` puts the level in
+        the identifier rather than in a numeric block, so the grouping has to
+        follow the requirement's declared level either way. All 5 carry Active,
+        so nothing is withheld from the counts and the groups sum to the whole
+        reported set with no disclosure left over.
+        """
         result = run_elspais("summary", "--format", "json", cwd=project)
         assert result.returncode == 0, f"summary failed: {result.stderr}"
         data = json.loads(result.stdout)
-        levels = data.get("levels", [])
-        total = sum(lv.get("total", 0) for lv in levels)
-        # 5 requirements total (2 PRD + 1 OPS + 2 DEV)
-        assert total == 5, f"Expected 5 requirements, got {total}"
+
+        groups = {lv["level"]: lv["requirements"] for lv in data["levels"]}
+        assert groups == {"PRD": 2, "OPS": 1, "DEV": 2}
+        assert data["excluded"] == {}
+
+        # REQ-d00281-B: exactly one group each, over the whole reported set.
+        trace = run_elspais("trace", "--format", "json", cwd=project)
+        assert trace.returncode == 0
+        ids = {r["id"] for r in json.loads(trace.stdout)}
+        assert ids == {
+            "REQ-pUserAuth",
+            "REQ-pSearchEngine",
+            "REQ-oDeployPipeline",
+            "REQ-dAuthModule",
+            "REQ-dSearchIndex",
+        }
+        assert sum(groups.values()) == len(ids) == 5
 
     def test_trace_contains_named_ids(self, project):
         result = run_elspais("trace", "--format", "json", cwd=project)
@@ -181,14 +204,32 @@ class TestRequireShallDisabled:
         result = run_elspais("checks", "--lenient", cwd=project)
         assert result.returncode == 0
 
-    def test_summary_with_no_shall_assertions(self, project):
-        """Fixture has require_shall=False and non-SHALL text — passes."""
+    # Verifies: REQ-d00282-B
+    def test_non_shall_assertions_are_still_counted(self, project):
+        """With ``require_shall = false`` the report's *Assertion* counts are
+        made up entirely of non-SHALL assertions.
+
+        Cited to REQ-d00282-B, which obliges the report to offer the assertion
+        population this asserts on. ``require_shall`` itself appears nowhere in
+        spec/ -- no assertion states that non-SHALL text is admitted as an
+        *Assertion* when it is false -- so this test deliberately cites the
+        figure it reads and not a surrogate for the unwritten admission rule.
+
+        Every one of the fixture's 7 assertions is phrased with "must" and not
+        one says "SHALL" (verified on disk), so these counts are the whole
+        measure of whether non-SHALL text is read as an assertion at all: were
+        it skipped, all three would be 0 rather than merely smaller. Asserting
+        the requirement counts here would not show it -- they stay 2/1/2
+        whatever becomes of the assertion text.
+        """
         result = run_elspais("summary", "--format", "json", cwd=project)
-        assert result.returncode == 0
+        assert result.returncode == 0, f"summary failed: {result.stderr}"
         data = json.loads(result.stdout)
-        levels = data.get("levels", [])
-        total = sum(lv.get("total", 0) for lv in levels)
-        assert total > 0, "Expected at least one requirement"
+        assert {lv["level"]: lv["assertions"] for lv in data["levels"]} == {
+            "PRD": 3,
+            "OPS": 1,
+            "DEV": 3,
+        }
 
 
 # ---------------------------------------------------------------------------

@@ -52,7 +52,7 @@ class TestLevelConfig:
         lc = LevelConfig(rank=2, letter="o", implements=["prd"])
         assert lc.display_name == ""
 
-    # Verifies: REQ-d00212-A, REQ-d00258-F
+    # Verifies: REQ-d00212-A, REQ-d00288-A
     def test_REQ_d00212_A_expects_validation_defaults_false(self):
         """expects_validation defaults False and is accepted when set."""
         lc = LevelConfig(rank=1, letter="p", implements=["prd"])

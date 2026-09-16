@@ -55,14 +55,32 @@ class TestVariableLengthIds:
         result = run_elspais("checks", "--lenient", cwd=project)
         assert result.returncode == 0, f"health failed: {result.stderr}"
 
-    def test_summary_counts_active_requirements(self, project):
+    # Verifies: REQ-d00086-A, REQ-d00281-A, REQ-d00281-B, REQ-d00288-E+F+I
+    def test_level_groups_account_for_every_reported_requirement(self, project):
+        """The single level this project defines forms one group, and that
+        group plus the status disclosure account for all 6 reported.
+
+        `[levels.req]` is the whole vocabulary, so REQ is the only group
+        REQ-d00281-A forms. PROJ-1, PROJ-3 and PROJ-6 carry Active; PROJ-2
+        (Draft), PROJ-4 (Deprecated) and PROJ-5 (Proposed) carry statuses whose
+        roles do not expect implementation.
+        """
         result = run_elspais("summary", "--format", "json", cwd=project)
         assert result.returncode == 0, f"summary failed: {result.stderr}"
         data = json.loads(result.stdout)
-        levels = data.get("levels", [])
-        total = sum(lv.get("total", 0) for lv in levels)
-        # Active requirements: PROJ-1, PROJ-3, PROJ-6 = 3
-        assert total >= 1, f"Expected at least 1 active requirement, got {total}"
+
+        groups = {lv["level"]: lv["requirements"] for lv in data["levels"]}
+        assert groups == {"REQ": 3}
+
+        # REQ-d00288-I: each withheld status is named with its count.
+        assert data["excluded"] == {"Draft": 1, "Deprecated": 1, "Proposed": 1}
+
+        # REQ-d00281-B: 3 counted plus 3 withheld are the 6 reported.
+        trace = run_elspais("trace", "--format", "json", cwd=project)
+        assert trace.returncode == 0
+        reported = len(json.loads(trace.stdout))
+        assert reported == 6
+        assert sum(groups.values()) + sum(data["excluded"].values()) == reported
 
 
 # ---------------------------------------------------------------------------
@@ -74,7 +92,11 @@ class TestVariableLengthIds:
 class TestSkipDirsMultiSegment:
     """Config: skip_dirs = ['drafts', 'archive'] excludes nested dirs."""
 
+    # Verifies: REQ-d00212-B
     def test_health_finds_only_included(self, project):
+        """A skipped directory is matched by name beneath either configured
+        spec directory: ``drafts`` under spec/active and ``archive`` under
+        spec/approved are both excluded."""
         result = run_elspais("summary", "--format", "json", cwd=project)
         assert result.returncode == 0, f"summary failed: {result.stderr}"
         json.loads(result.stdout)  # validate JSON
@@ -141,15 +163,31 @@ class TestIgnorePatterns:
         trace = run_elspais("trace", "--format", "json", cwd=project)
         assert "node_modules" not in trace.stdout
 
-    def test_spec_skip_dirs_excludes_pattern(self, project):
-        """drafts/ and archive/ subdirs should be excluded from scan."""
+    # Verifies: REQ-d00212-B, REQ-d00281-B
+    def test_spec_skip_dirs_excludes_the_requirements_beneath_them(self, project):
+        """``skip_dirs = ["drafts", "archive"]`` keeps PROJ-99 and PROJ-98 out
+        of the report entirely -- not merely out of its counts.
+
+        The counted total cannot show this. PROJ-99 is Draft and PROJ-98 is
+        Deprecated, so both are outside the coverage aggregation anyway and the
+        total stays 3 either way -- measured by dropping ``skip_dirs``, which
+        left the total at 3 while moving the reported set from 6 to 8 and the
+        disclosure from {Draft 1, Deprecated 1, Proposed 1} to {Draft 2,
+        Deprecated 2, Proposed 1}. Those are the probes, as they are for the
+        ``node_modules`` case above.
+        """
+        trace = run_elspais("trace", "--format", "json", cwd=project)
+        assert trace.returncode == 0
+        ids = {r["id"] for r in json.loads(trace.stdout)}
+        assert ids == {"PROJ-1", "PROJ-2", "PROJ-3", "PROJ-4", "PROJ-5", "PROJ-6"}
+
         summary = run_elspais("summary", "--format", "json", cwd=project)
         assert summary.returncode == 0
         data = json.loads(summary.stdout)
-        total = sum(lv.get("total", 0) for lv in data.get("levels", []))
-        # PROJ-1,2,3,4,5 (active dir) + PROJ-6 (approved dir) = 6 scanned
-        # PROJ-99 (drafts) and PROJ-98 (archive) must be excluded
-        assert total <= 6, f"Expected at most 6 (excluded skipped dirs), got {total}"
+        # A leak would add a second Draft (PROJ-99) and a second Deprecated
+        # (PROJ-98) here, while leaving the counted total at 3.
+        assert data["excluded"] == {"Draft": 1, "Deprecated": 1, "Proposed": 1}
+        assert sum(lv["requirements"] for lv in data["levels"]) == 3
 
 
 # ---------------------------------------------------------------------------
@@ -176,15 +214,27 @@ class TestReferencesOverrides:
 class TestLargeHierarchy:
     """Multiple requirements across spec/active and spec/approved."""
 
-    def test_large_project_health(self, project):
+    # Verifies: REQ-d00086-A, REQ-d00281-B
+    def test_both_configured_spec_directories_contribute(self, project):
+        """`directories = ["spec/active", "spec/approved"]` -- the report counts
+        requirements from both, not from whichever is scanned first.
+
+        PROJ-1 and PROJ-3 come from spec/active and PROJ-6 from spec/approved.
+        The counted total of 3 is therefore only reachable with both
+        directories scanned: either one alone would give 2 or 1.
+        """
         health = run_elspais("checks", "--lenient", cwd=project)
         assert health.returncode == 0, f"health failed: {health.stderr}"
 
         summary = run_elspais("summary", "--format", "json", cwd=project)
+        assert summary.returncode == 0, f"summary failed: {summary.stderr}"
         data = json.loads(summary.stdout)
-        levels = data.get("levels", [])
-        total = sum(lv.get("total", 0) for lv in levels)
-        assert total >= 1
+        assert sum(lv["requirements"] for lv in data["levels"]) == 3
+
+        trace = run_elspais("trace", "--format", "json", cwd=project)
+        assert trace.returncode == 0
+        active = {r["id"] for r in json.loads(trace.stdout) if r["status"] == "Active"}
+        assert active == {"PROJ-1", "PROJ-3", "PROJ-6"}
 
     def test_large_project_analysis(self, project):
         result = run_elspais("analysis", "--format", "json", "-n", "3", cwd=project)
@@ -218,17 +268,30 @@ class TestTestingConfig:
 class TestComplexDirectoryStructure:
     """spec/active + spec/approved with drafts/ and archive/ excluded."""
 
+    # Verifies: REQ-d00086-A, REQ-d00288-E+F+I
     def test_nested_structure(self, project):
+        """Requirements spread across nested spec directories are counted by
+        status role, whichever directory they were found in.
+
+        PROJ-1 and PROJ-3 sit in spec/active and PROJ-6 in spec/approved; all
+        three carry Active, so the count is 3 wherever they were read from.
+        PROJ-2 (Draft), PROJ-4 (Deprecated) and PROJ-5 (Proposed) carry statuses
+        whose roles do not expect implementation, and are disclosed instead.
+
+        This test says nothing about ``skip_dirs``: the requirements that
+        setting withholds are non-Active anyway, so this total is invariant to
+        it. That axis is covered by
+        ``TestSkipDirsMultiSegment::test_health_finds_only_included`` and
+        ``TestIgnorePatterns::test_spec_skip_dirs_excludes_the_requirements_beneath_them``,
+        both of which probe the reported ID set rather than the count.
+        """
         summary = run_elspais("summary", "--format", "json", cwd=project)
         assert summary.returncode == 0, f"summary failed: {summary.stderr}"
         data = json.loads(summary.stdout)
-        total = sum(lv.get("total", 0) for lv in data.get("levels", []))
-        # Summary counts Active-status requirements only:
-        #   PROJ-1 (Active, spec/active), PROJ-3 (Active, spec/active),
-        #   PROJ-6 (Active, spec/approved) = 3
-        # PROJ-2 (Draft), PROJ-4 (Deprecated), PROJ-5 (Proposed) excluded by status_roles
-        # PROJ-99 (drafts/), PROJ-98 (archive/) excluded by skip_dirs
-        assert total == 3, f"Expected 3 active reqs (skip_dirs + non-active excluded), got {total}"
+        total = sum(lv["requirements"] for lv in data["levels"])
+        assert total == 3, f"Expected 3 active-role reqs, got {total}"
+        # REQ-d00288-I: the three withheld statuses are named, not dropped.
+        assert data["excluded"] == {"Draft": 1, "Deprecated": 1, "Proposed": 1}
 
 
 # ---------------------------------------------------------------------------
@@ -301,11 +364,12 @@ class TestAllowStructuralOrphansConfig:
 class TestStatusRolesConfig:
     """Config: status_roles controls coverage exclusion."""
 
+    # Verifies: REQ-d00288-E+F
     def test_provisional_excluded_from_summary(self, project):
         """Draft and Proposed (provisional role) should be excluded from summary counts."""
         result = run_elspais("summary", "--format", "json", cwd=project)
         assert result.returncode == 0, f"summary failed: {result.stderr}"
         data = json.loads(result.stdout)
-        total = sum(lv.get("total", 0) for lv in data.get("levels", []))
+        total = sum(lv["requirements"] for lv in data["levels"])
         # Active only: PROJ-1, PROJ-3, PROJ-6 = 3 (Draft/Proposed/Deprecated excluded)
         assert total == 3, f"Expected 3 active requirements, got {total}"

@@ -60,6 +60,26 @@ def pytest_configure(config):
         "incremental: mark test class for sequential execution with xfail on prior failure",
     )
 
+    # A tier asked for by name must run or say why it did not. The browser
+    # tier's module opens with `pytest.importorskip("playwright")`, so without
+    # the `browser` extra installed the module never imports, pytest records a
+    # single skip, and `pytest -m browser` exits 0 having run nothing — a run
+    # that looks exactly like a passing one. CUR-1829 declared the extra to
+    # answer that, but declaring it installs nothing, so the tier went on
+    # reporting green. Asking for the marker explicitly is an unambiguous
+    # statement of intent, and an intent the run cannot honour is an error
+    # rather than a silence.
+    selected = config.getoption("-m", default="") or ""
+    if "browser" in selected:
+        try:
+            import playwright  # noqa: F401
+        except ImportError:
+            raise pytest.UsageError(
+                "pytest -m browser was requested but playwright is not installed, "
+                "so the browser tier would report success having run nothing. "
+                'Install it with: pip install -e ".[browser]" && playwright install chromium'
+            ) from None
+
 
 # Fixtures directory
 FIXTURES_DIR = Path(__file__).parent / "fixtures"

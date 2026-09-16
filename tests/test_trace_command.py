@@ -1136,7 +1136,7 @@ def code_tested_no_attribution_project(tmp_path):
     """On-disk project: REQ-d00001's implementation has aggregate (lcov)
     line-coverage data but no per-test attribution -- `code_tested.immediate_direct`
     stays 0 while `.covered` is > 0 (per-test attribution is not derivable
-    from aggregate tooling). REQ-d00258-E: the trace 'code_tested' cell must
+    from aggregate tooling). REQ-d00258-W: the trace 'code_tested' cell must
     render `n/a`, never a misleading `0/N (0%)`.
     """
     project = tmp_path / "project"
@@ -1164,7 +1164,7 @@ def code_tested_context_carrying_project(tmp_path):
     no context names a test verifying REQ-d00001.
 
     The sibling of ``code_tested_no_attribution_project``: identical shape,
-    context-carrying tooling instead of aggregate-only. Under REQ-d00258-E the
+    context-carrying tooling instead of aggregate-only. Under REQ-d00258-W the
     suppression keys on what the tooling provided, so here the attribution
     question WAS asked and its answer is zero -- the trace cell must render
     ``0/N``, not ``n/a``.
@@ -1245,7 +1245,7 @@ def marker_carried_project(tmp_path):
 
 
 class TestTraceFooting:
-    """Verifies REQ-d00258-A, REQ-d00258-K, REQ-d00258-E, REQ-d00258-J:
+    """Verifies REQ-d00258-A, REQ-d00258-K, REQ-d00258-W, REQ-d00258-J:
     dimensions headline the per-*Assertion* TOTAL (REQ-d00069-N) with the
     four measures behind it published as their own values rather than a
     caveat marker, the reporting vocabulary reads Passing/UAT Covered/UAT
@@ -1285,14 +1285,14 @@ class TestTraceFooting:
         assert h["uat_verified"] == "UAT Passed"
         assert "Validated" not in h.values()
 
-    # Verifies: REQ-d00258-E, REQ-d00282-C+N
+    # Verifies: REQ-d00258-W, REQ-d00282-C+N
     def test_only_the_attribution_is_suppressed_without_contexts(
         self, code_tested_no_attribution_project
     ):
         """Aggregate-only coverage states its lines and withholds only the
         attribution.
 
-        The suppression REQ-d00258-E requires is of the ATTRIBUTION figure --
+        The suppression REQ-d00258-W requires is of the ATTRIBUTION figure --
         how many lines a verifying test can be named for. The lines a run
         covered were measured, so a report holding them states them
         (REQ-d00282-N), and the value named for the figure states the figure
@@ -1317,7 +1317,7 @@ class TestTraceFooting:
         assert _format_row(data, ["code_tested.attributed"]) == [ABSENT_FIGURE]
         assert ABSENT_FIGURE == "n/a"
 
-    # Verifies: REQ-d00258-E, REQ-d00282-E+N
+    # Verifies: REQ-d00258-W, REQ-d00282-E+N
     def test_the_line_figure_is_unmoved_by_the_assertion_label_flag(
         self, code_tested_no_attribution_project
     ):
@@ -1335,14 +1335,14 @@ class TestTraceFooting:
             assert labelled[key] == plain[key]
         assert labelled["code_tested_attributed"] is None
 
-    # Verifies: REQ-d00258-E, REQ-d00282-M+N
+    # Verifies: REQ-d00258-W, REQ-d00282-M+N
     def test_a_zero_attribution_is_stated_where_contexts_were_recorded(
         self, code_tested_context_carrying_project
     ):
         """Where the tooling DID record per-test contexts, a zero attribution
         count is a real answer and is stated as zero.
 
-        This is the other half of REQ-d00258-E: the suppression is about what
+        This is the boundary REQ-d00258-W leaves: the suppression is about what
         the tooling provides, not about how the count came out. Withholding it
         here would hide implementation no verifying test reaches, which is
         exactly the fact worth surfacing."""
@@ -1362,7 +1362,7 @@ class TestTraceFooting:
                 rollup.code_tested.covered_lines, rollup.code_tested.total_lines
             )
 
-    # Verifies: REQ-d00258-E
+    # Verifies: REQ-d00258-W
     def test_lcov_tested_empty_label_set_renders_zero_of_total(
         self, code_tested_no_attribution_project
     ):
@@ -1500,7 +1500,7 @@ def tested_breakdown_project(tmp_path):
 
     Assertion A is verified by a passing test, B by a failing one, and C by a
     test whose result never arrived -- so the Tested breakdown reads 1P 1F 1A
-    (REQ-d00258-O). A journey validates A, so the requirement also has a row to
+    (REQ-d00258-U). A journey validates A, so the requirement also has a row to
     render under the UAT preset (which shows no Tested column).
 
     Each `<testcase>` carries the line of its own `def` in the JUnit reporter's
@@ -1529,7 +1529,7 @@ def tested_breakdown_project(tmp_path):
 
 
 class TestTraceTestedBreakdown:
-    """REQ-d00258-O: the trace Tested cell carries the three-way breakdown."""
+    """REQ-d00258-U: the trace Tested cell carries the three-way breakdown."""
 
     def _tested_cell(self, markdown_text, req_id):
         lines = markdown_text.splitlines()
@@ -1539,7 +1539,7 @@ class TestTraceTestedBreakdown:
         row = next(line for line in lines if line.startswith("|") and req_id in line)
         return [c.strip() for c in row.strip("|").split("|")][idx]
 
-    # Verifies: REQ-d00258-O
+    # Verifies: REQ-d00258-U+V
     def test_tested_cell_carries_the_breakdown(self, tested_breakdown_project):
         """The breakdown qualifies Tested, so it rides in the Tested cell and
         adds no column of its own."""
@@ -1553,7 +1553,7 @@ class TestTraceTestedBreakdown:
         header_line = next(line for line in out.splitlines() if line.startswith("| ID"))
         assert "Awaiting" not in header_line
 
-    # Verifies: REQ-d00258-O
+    # Verifies: REQ-d00258-U
     def test_legend_emitted_when_a_row_carried_a_breakdown(self, tested_breakdown_project):
         """The compact form is unreadable without its key."""
         from elspais.commands.trace import format_markdown
@@ -1563,7 +1563,7 @@ class TestTraceTestedBreakdown:
 
         assert "> Tested breakdown:" in out
 
-    # Verifies: REQ-d00258-O
+    # Verifies: REQ-d00258-U
     def test_legend_absent_when_nothing_is_tested(self, code_tested_no_attribution_project):
         """No row carried a breakdown, so no key is offered: there is no
         breakdown of an empty set."""
@@ -1574,7 +1574,7 @@ class TestTraceTestedBreakdown:
 
         assert "> Tested breakdown:" not in out
 
-    # Verifies: REQ-d00258-O, REQ-d00257-C
+    # Verifies: REQ-d00258-V, REQ-d00257-C
     @pytest.mark.parametrize("preset_name", ["uat", "minimal"])
     def test_breakdown_absent_from_presets_without_a_tested_column(
         self, tested_breakdown_project, preset_name
@@ -1605,13 +1605,13 @@ class TestTraceTestedBreakdown:
         assert "> Tested breakdown:" not in out
         assert "1P" not in out
 
-    # Verifies: REQ-d00258-O, REQ-d00282-E
+    # Verifies: REQ-d00258-V, REQ-d00282-E
     def test_csv_states_the_breakdown_inside_the_one_tested_column(self, tested_breakdown_project):
         """The breakdown qualifies the Tested figure, so it rides in that
         figure's cell here exactly as it does in markdown.
 
         Given cells of its own it would be three further columns -- a display
-        term of its own, which REQ-d00258-O forbids -- and selecting `tested`
+        term of its own, which REQ-d00258-V forbids -- and selecting `tested`
         would state four columns in CSV and one in markdown."""
         import csv as csv_module
         import io as io_module

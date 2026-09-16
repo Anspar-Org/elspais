@@ -361,7 +361,7 @@ def _get_node_data(node, graph: FederatedGraph, *, assertion_labels: bool = Fals
             return ABSENT_FIGURE
         return figure_cell(num, total)
 
-    # Implements: REQ-d00254-B, REQ-d00258-E, REQ-d00282-C+M+N
+    # Implements: REQ-d00254-B, REQ-d00258-W, REQ-d00282-C+M+N
     def _lines_measured(lines: LineCoverage) -> bool:
         """Whether a coverage run measured these lines at all.
 
@@ -380,7 +380,7 @@ def _get_node_data(node, graph: FederatedGraph, *, assertion_labels: bool = Fals
         Named for the figure, so it states the figure (REQ-d00282-C). The
         attribution -- how many of those lines a verifying test can be named
         for -- is a different question with its own name and its own
-        suppression (REQ-d00258-E); it used to be what this cell showed, which
+        suppression (REQ-d00258-W); it used to be what this cell showed, which
         took the measured lines down with it whenever the tooling recorded no
         per-test contexts.
         """
@@ -505,15 +505,15 @@ def _get_node_data(node, graph: FederatedGraph, *, assertion_labels: bool = Fals
                 data[f"{key}_{FLAG_CARRIED}"] = (
                     bool(dim.carried) if taken and dim.total > 0 else None
                 )
-        # Implements: REQ-d00258-O, REQ-d00282-E
+        # Implements: REQ-d00258-U+V, REQ-d00282-E
         # The breakdown QUALIFIES the Tested figure, so it is put inside that
         # figure's value once, here, and every format states the one cell.
         # Given cells of its own in one format and a bracket in another, the
         # Tested value produced four columns in CSV and one in markdown --
-        # and three of them were a display term of its own, which O forbids.
+        # and three of them were a display term of its own, which V forbids.
         # Empty when nothing is tested: there is no breakdown of an empty set.
         part = tested_partition(rollup)
-        # Implements: REQ-d00258-O, REQ-d00282-B
+        # Implements: REQ-d00258-U, REQ-d00282-B
         # The same three counts the breakdown states in prose, each selectable
         # on its own. Read from the partition rather than parsed back out of
         # the sentence below it -- which is the defect the scalars exist to
@@ -539,7 +539,7 @@ def _get_node_data(node, graph: FederatedGraph, *, assertion_labels: bool = Fals
         _store_scalars(
             data, "code_tested", ct.covered_lines, ct.total_lines, present=ct.has_measurement
         )
-        # Implements: REQ-d00258-E, REQ-d00282-M+N
+        # Implements: REQ-d00258-W, REQ-d00282-M+N
         # Suppressed where the tooling recorded no per-test contexts: with
         # nothing to attribute a line to a test with, a count would answer a
         # question never asked. Absent rather than zero, and absent ALONE --
@@ -754,7 +754,7 @@ def format_markdown(
     # marker in its verified cell, so the legend is only emitted when it's
     # relevant (and full-run output stays byte-identical to before).
     has_carry_marker = False
-    # Implements: REQ-d00258-O
+    # Implements: REQ-d00258-U
     has_tested_breakdown = False
 
     for node in _scoped_requirements(graph, scope_ids):
@@ -764,7 +764,7 @@ def format_markdown(
             verified_cell = data.get("verified", "")
             if "(baseline)" in verified_cell or "—" in verified_cell:
                 has_carry_marker = True
-        # Implements: REQ-d00258-O
+        # Implements: REQ-d00258-U
         # The breakdown is already inside the Tested cell (one cell in every
         # format); this only decides whether the key explaining it is worth
         # printing. Only where the Tested value is stated: a legend pointing
@@ -812,7 +812,7 @@ def format_markdown(
             "(skipped, not a regression)."
         )
 
-    # Implements: REQ-d00258-O
+    # Implements: REQ-d00258-U
     # The breakdown is unreadable without its key, so the key appears whenever
     # a row carried one.
     if has_tested_breakdown:

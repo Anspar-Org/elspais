@@ -461,7 +461,8 @@ def _dim(labels, *, direct=None, failing=(), total=0):
 
 
 # Verifies: REQ-d00258-C
-# Verifies: REQ-d00258-E
+# Verifies: REQ-d00258-R
+# Verifies: REQ-d00258-S
 class TestRelativeTierFor:
     """``relative_tier_for`` picks the relative denominator per dimension."""
 
@@ -489,7 +490,7 @@ class TestRelativeTierFor:
 
     def test_tested_empty_denominator_is_na(self):
         """Nothing implemented -> tested has an empty denominator -> N/A
-        ('missing', is_na=True), a neutral non-gap (REQ-d00258-E)."""
+        ('missing', is_na=True), a neutral non-gap (REQ-d00258-S)."""
         rollup = RollupMetrics(
             total_assertions=2,
             implemented=_dim(set(), total=2),
@@ -524,7 +525,8 @@ class TestRelativeTierFor:
 
 
 # Verifies: REQ-d00258-C
-# Verifies: REQ-d00258-E
+# Verifies: REQ-d00258-R
+# Verifies: REQ-d00258-S
 class TestTierBucketsRelative:
     """``tier_buckets`` honors the relative denominators for chained dims."""
 
@@ -587,7 +589,7 @@ def _dim_with_zeros(covered, zeros, *, total=0, failing=()):
     Mirrors ``_conduct_refines_coverage`` (annotators.py), which seeds a
     per-label entry for EVERY assertion label -- 0.0 for the ones not covered
     in that dimension. A denominator built from the dict KEYS would therefore
-    wrongly include those unimplemented labels (REQ-d00258-I).
+    wrongly include those unimplemented labels (REQ-d00258-R).
     """
     covered = set(covered)
     zeros = set(zeros)
@@ -600,9 +602,9 @@ def _dim_with_zeros(covered, zeros, *, total=0, failing=()):
     )
 
 
-# Verifies: REQ-d00258-I
+# Verifies: REQ-d00258-R
 class TestDenominatorExcludesUnimplementedLabels:
-    """REGRESSION (REQ-d00258-I): the relative denominator is the set of labels
+    """REGRESSION (REQ-d00258-R): the relative denominator is the set of labels
     ACTUALLY covered in the prior dimension (fraction > 0), NOT every label
     present in the measure's per-label map.
 
@@ -903,7 +905,7 @@ class TestDenominatorLabelsAbsoluteDimensions:
         assert denominator_labels(rollup, dimension, measure="total") == {"A"}
 
 
-# Verifies: REQ-d00258-I
+# Verifies: REQ-d00258-R
 class TestNumeratorDimension:
     """The dimension the tier figures measure for a chained link -- 'verified'
     reads ``tested_and_passing``, not the raw verified dimension."""
@@ -926,7 +928,7 @@ class TestNumeratorDimension:
 
     def test_verified_numerator_drops_a_failing_assertion_from_the_figures(self):
         """Still not the raw `.verified` dimension: an assertion a declared
-        test reported failing keeps its per-label credit (REQ-d00258-G) but is
+        test reported failing keeps its per-label credit (REQ-d00289-D) but is
         excluded from the Passing figures, which raw `.verified` is not."""
         rollup = RollupMetrics(
             total_assertions=2,

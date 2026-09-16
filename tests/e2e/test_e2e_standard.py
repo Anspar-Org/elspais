@@ -227,25 +227,40 @@ class TestHealthScopeFlags:
 
 
 class TestSummaryCounts:
-    """Summary command counts requirements correctly."""
+    """Summary groups requirements by level and accounts for every one.
 
-    def test_summary_json_total(self, project):
-        result = run_elspais("summary", "--format", "json", cwd=project)
-        assert result.returncode == 0
-        data = json.loads(result.stdout)
-        levels = data.get("levels", [])
-        total = sum(lv.get("total", 0) for lv in levels)
-        # Default summary filters to Active status:
-        # 3 PRD Active (p00001, p00002, p00005), 2 OPS, 3 DEV = 8
-        assert total == 8, f"Expected 8 Active requirements, got {total}"
+    The fixture holds 12 requirements on disk. REQ-p99999 sits under the
+    skipped ``drafts/`` directory, so the report is over the other 11: 8 carry
+    Active, the one status this project gives the active role, and 3 carry
+    Draft or Deprecated, whose roles do not expect implementation.
+    """
 
-    def test_summary_level_breakdown(self, project):
+    # Verifies: REQ-d00086-A, REQ-d00281-A, REQ-d00281-B, REQ-d00288-E+F+I
+    def test_level_groups_account_for_every_reported_requirement(self, project):
+        """Every level the reported requirements carry forms one group, and the
+        groups plus the status disclosure account for all 11 of them."""
         result = run_elspais("summary", "--format", "json", cwd=project)
+        assert result.returncode == 0, f"summary failed: {result.stderr}"
         data = json.loads(result.stdout)
-        levels = {lv["level"].lower(): lv["total"] for lv in data.get("levels", [])}
-        assert levels.get("prd", 0) == 3  # p00001, p00002, p00005 (Active)
-        assert levels.get("ops", 0) == 2
-        assert levels.get("dev", 0) == 3
+
+        # REQ-d00281-A: each of the three levels the requirements carry is a
+        # group; REQ-d00086-A: the counts this project's levels produce.
+        groups = {lv["level"]: lv["requirements"] for lv in data["levels"]}
+        assert groups == {"PRD": 3, "OPS": 2, "DEV": 3}
+
+        # REQ-d00288-E+F+I: Draft and Deprecated carry roles that do not expect
+        # implementation, so they are not counted -- and the report names them
+        # rather than letting them disappear from the arithmetic.
+        assert data["excluded"] == {"Draft": 2, "Deprecated": 1}
+
+        # REQ-d00281-B: exactly one group per reported requirement. The 8
+        # counted plus the 3 the coverage gate withheld are the 11 the report
+        # is over, so nothing is counted twice and nothing is lost.
+        trace = run_elspais("trace", "--format", "json", cwd=project)
+        assert trace.returncode == 0
+        reported = len(json.loads(trace.stdout))
+        assert reported == 11
+        assert sum(groups.values()) + sum(data["excluded"].values()) == reported
 
 
 class TestSummaryFormats:
@@ -293,7 +308,7 @@ class TestSummaryStatusFilter:
         # emits them and does report them there (asserted below).
         assert data["excluded"] == {}
 
-        scoped_totals = {lv["level"]: lv["total"] for lv in data["levels"]}
+        scoped_totals = {lv["level"]: lv["requirements"] for lv in data["levels"]}
         assert sum(scoped_totals.values()) == 8
 
         # REQ-p00084-E: the coverage figures for an emitted requirement are
@@ -304,7 +319,7 @@ class TestSummaryStatusFilter:
         unscoped_data = json.loads(unscoped.stdout)
         assert unscoped_data["scope"] == []
         assert unscoped_data["excluded"] == {"Draft": 2, "Deprecated": 1}
-        assert {lv["level"]: lv["total"] for lv in unscoped_data["levels"]} == scoped_totals
+        assert {lv["level"]: lv["requirements"] for lv in unscoped_data["levels"]} == scoped_totals
 
     # Verifies: REQ-p00084-B, REQ-p00084-E
     def test_status_scope_draft_emits_requirements_that_are_not_counted(self, project):
@@ -323,7 +338,7 @@ class TestSummaryStatusFilter:
         # requirements are outside the coverage measurement — exactly as they
         # are in an unscoped report. Emission selected them; measurement did
         # not, and the scope did not move that line.
-        assert sum(lv["total"] for lv in data["levels"]) == 0
+        assert sum(lv["requirements"] for lv in data["levels"]) == 0
 
 
 class TestTraceOutput:
@@ -534,7 +549,7 @@ class TestCrossCommandConsistency:
         summary = run_elspais("summary", "--format", "json", cwd=project)
         assert summary.returncode == 0
         summary_data = json.loads(summary.stdout)
-        summary_total = sum(lv["total"] for lv in summary_data["levels"])
+        summary_total = sum(lv["requirements"] for lv in summary_data["levels"])
 
         trace = run_elspais("trace", "--format", "json", cwd=project)
         assert trace.returncode == 0
@@ -548,21 +563,62 @@ class TestCrossCommandConsistency:
 
 
 class TestSkipFiles:
-    """Skip files and dirs are excluded from scanning."""
+    """Scanning exclusions keep content out of the report."""
 
-    def test_skip_files_not_in_health(self, project):
-        """INDEX.md and NOTES.md should be skipped."""
-        result = run_elspais("checks", "--format", "json", "--lenient", cwd=project)
-        assert result.returncode == 0
-        # These skip files should not cause errors or be counted
+    # Verifies: REQ-d00281-B
+    def test_skip_files_contribute_no_requirement(self, project):
+        """The report's requirement set is exactly what the requirement-bearing
+        spec files declare -- the two ``skip_files`` entries add nothing.
 
-    def test_skip_dirs_not_counted(self, project):
-        """drafts/ directory should be skipped; REQ-p99999 not counted."""
-        result = run_elspais("summary", "--format", "json", cwd=project)
-        data = json.loads(result.stdout)
-        total = sum(lv.get("total", 0) for lv in data.get("levels", []))
-        # REQ-p99999 in drafts/ should not be counted; Active only = 8
-        assert total == 8
+        ``skip_files = ["INDEX.md", "NOTES.md"]`` and both files hold only a
+        heading, so removing the setting changes no observable output (measured:
+        ``checks --format json`` and ``trace --format json`` are identical
+        either way). This assertion therefore does not discriminate
+        ``skip_files`` itself; it pins the requirement set, which a leak from
+        any excluded file or directory would break.
+        """
+        checks = run_elspais("checks", "--format", "json", "--lenient", cwd=project)
+        assert checks.returncode == 0, f"checks failed: {checks.stderr}"
+
+        trace = run_elspais("trace", "--format", "json", cwd=project)
+        assert trace.returncode == 0
+        assert {r["id"] for r in json.loads(trace.stdout)} == {
+            "REQ-p00001",
+            "REQ-p00002",
+            "REQ-p00003",
+            "REQ-p00004",
+            "REQ-p00005",
+            "REQ-o00001",
+            "REQ-o00002",
+            "REQ-d00001",
+            "REQ-d00002",
+            "REQ-d00003",
+            "REQ-d00299",
+        }
+
+    # Verifies: REQ-d00212-B, REQ-d00281-B
+    def test_skip_dirs_excludes_the_requirement_beneath_them(self, project):
+        """``skip_dirs = ["drafts"]`` keeps spec/drafts/wip-ideas.md unscanned,
+        so REQ-p99999 is in no part of the report.
+
+        The counted total cannot show this. REQ-p99999 carries Draft, which the
+        coverage gate withholds anyway, so that total is 8 whether or not the
+        directory is skipped -- measured by dropping ``skip_dirs``, which moved
+        the reported set from 11 to 12 and the Draft disclosure from 2 to 3
+        while leaving the total at 8. Those two are the probes.
+        """
+        trace = run_elspais("trace", "--format", "json", cwd=project)
+        assert trace.returncode == 0
+        ids = {r["id"] for r in json.loads(trace.stdout)}
+        assert "REQ-p99999" not in ids, "a requirement under drafts/ reached the report"
+        assert len(ids) == 11
+
+        summary = run_elspais("summary", "--format", "json", cwd=project)
+        assert summary.returncode == 0
+        data = json.loads(summary.stdout)
+        # A leaked REQ-p99999 would show here as a third Draft.
+        assert data["excluded"] == {"Draft": 2, "Deprecated": 1}
+        assert sum(lv["requirements"] for lv in data["levels"]) == 8
 
 
 class TestManyAssertions:
@@ -612,7 +668,7 @@ class TestMultipleSpecFilesPerLevel:
     def test_all_files_counted(self, project):
         result = run_elspais("summary", "--format", "json", cwd=project)
         data = json.loads(result.stdout)
-        levels = {lv["level"].lower(): lv["total"] for lv in data.get("levels", [])}
+        levels = {lv["level"].lower(): lv["requirements"] for lv in data["levels"]}
         # Active only: 3 PRD (p00003=Draft, p00004=Deprecated excluded)
         assert levels.get("prd", 0) == 3
         assert levels.get("dev", 0) == 3

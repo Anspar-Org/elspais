@@ -28,7 +28,7 @@ PARTS beneath it, which each state one number. A proportion is derived from the
 other two rather than being a third fact, so it is carried unrounded and only a
 rendering rounds it. Some values have only the one form: the assertions a
 dimension counted as passed, failed or awaiting a result are counts with no
-proportion of their own (REQ-d00258-O), and though the three sum to the tested
+proportion of their own (REQ-d00258-U), and though the three sum to the tested
 count a reader wanting only the failures is owed only the failures.
 """
 
@@ -59,7 +59,7 @@ PART_TOTAL = "total"
 PART_RATIO = "ratio"
 SCALAR_PARTS: tuple[str, ...] = (PART_COUNT, PART_TOTAL, PART_RATIO)
 
-# Implements: REQ-d00258-O, REQ-d00282-B
+# Implements: REQ-d00258-U, REQ-d00282-B
 # name: COUNT_PARTS
 # use:  the parts of the Tested figure that are counts and nothing else.
 # def:  what came back for the assertions a dimension counted as tested.
@@ -70,7 +70,8 @@ SCALAR_PARTS: tuple[str, ...] = (PART_COUNT, PART_TOTAL, PART_RATIO)
 # counts that happen to sum with them.
 COUNT_PARTS: tuple[str, ...] = ("passed", "failed", "awaiting")
 
-# The dimension whose figure carries the breakdown of REQ-d00258-O.
+# The one dimension whose figure carries the Tested breakdown, which qualifies
+# that figure rather than standing as a dimension of its own (REQ-d00258-V).
 BREAKDOWN_DIMENSION = "tested"
 
 # Implements: REQ-d00254-B, REQ-d00282-N
@@ -88,7 +89,7 @@ BREAKDOWN_DIMENSION = "tested"
 # REQ-d00282-N gives it the same three scalars every figure has.
 LINE_DIMENSIONS: frozenset[str] = frozenset({"code_tested"})
 
-# Implements: REQ-d00258-E, REQ-d00282-N
+# Implements: REQ-d00258-W, REQ-d00282-N
 # name: PART_ATTRIBUTED
 # use:  the READING of a line figure that says how many of its lines a
 #       verifying test can be named for.
@@ -97,7 +98,7 @@ LINE_DIMENSIONS: frozenset[str] = frozenset({"code_tested"})
 #
 # A different question from the figure itself, so it is named for the
 # attribution rather than for the figure at large (REQ-d00282-C) and carries
-# its own absence: REQ-d00258-E suppresses it where no context was recorded,
+# its own absence: REQ-d00258-W suppresses it where no context was recorded,
 # and that suppression must not take the lines COVERED with it -- those were
 # measured, and a report holding them and saying nothing has withheld an
 # answer it has.
@@ -326,7 +327,7 @@ def _build_specs() -> dict[str, ValueSpec]:
         head = _DIMENSION_HEADERS.get(dim, dim.replace("_", " ").title())
         for spec in _figure_specs(dim, head, ""):
             specs[spec.key] = spec
-        # Implements: REQ-d00258-O, REQ-d00282-B
+        # Implements: REQ-d00258-U, REQ-d00282-B
         # Counts, and only counts: what came back for the tested assertions
         # takes no proportion of its own, so no `.ratio` is offered beneath
         # one and asking for it is refused like any other name the report does
@@ -361,7 +362,7 @@ def _build_specs() -> dict[str, ValueSpec]:
     # population, so it takes the same three scalars every figure takes. The
     # attribution is a FOURTH reading of the same lines rather than a part of
     # the figure, so it is offered beside them and carries its own absence
-    # (REQ-d00258-E).
+    # (REQ-d00258-W).
     for dim in sorted(LINE_DIMENSIONS):
         head = _DIMENSION_HEADERS[dim]
         for spec in _figure_specs(dim, head, "", words=_LINE_PART_WORDS):
@@ -464,7 +465,7 @@ def flag_cell(value: bool) -> str:
 # name: figure_object
 # use:  the ONE shape a coverage figure takes in a format that has numbers.
 # def:  the credit, the assertions it was counted over and their proportion --
-#       and, for a figure carrying the breakdown of REQ-d00258-O, its counts --
+#       and, for a figure carrying the breakdown of REQ-d00258-U, its counts --
 #       under the very keys a selection names them by.
 #
 # The mirror of ``figure_cell``: one value, stated in each format's own kind. A
@@ -579,7 +580,7 @@ def structured_row(
         elif spec.is_scalar or spec.is_flag:
             items.append((path, part_value(key)))
         else:
-            # Implements: REQ-d00254-I, REQ-d00258-O
+            # Implements: REQ-d00254-I, REQ-d00258-U
             # What a table bundles into a figure's cell -- the Tested breakdown,
             # and the provenance the Passing cell discloses as "(baseline)" --
             # is stated inside that figure's object too, so one selection states
@@ -592,7 +593,7 @@ def structured_row(
                 candidates = COUNT_PARTS if spec.dimension == BREAKDOWN_DIMENSION else ()
                 if spec.dimension == CARRIED_DIMENSION:
                     candidates = (*candidates, FLAG_CARRIED)
-                # Implements: REQ-d00258-E, REQ-d00282-N
+                # Implements: REQ-d00258-W, REQ-d00282-N
                 # The attribution reading rides inside the line figure's object
                 # for the same reason: a reader naming the figure is stated
                 # what naming its parts would have stated. Its suppression is

@@ -2619,7 +2619,7 @@ class TestBrowserFileMutations:
 
 
 # ---------------------------------------------------------------------------
-# Per-*Assertion* pill: the measures behind its standing (REQ-d00258-G)
+# Per-*Assertion* pill: the measures behind its standing (REQ-d00289-E)
 # ---------------------------------------------------------------------------
 
 
@@ -2632,10 +2632,8 @@ class TestAssertionPillMeasures:
     or start showing a caveat again -- and nothing would go red.
     """
 
-    # Verifies: REQ-d00258-G, REQ-d00258-J
-    def test_REQ_d00258_G_pill_title_names_the_measures_and_carries_no_caveat(
-        self, page, viewer_url
-    ):
+    # Verifies: REQ-d00289-E, REQ-d00258-J
+    def test_pill_title_names_the_measures_and_carries_no_caveat(self, page, viewer_url):
         """Open a covered requirement; read its per-*Assertion* pills.
 
         REQ-d00258 is opened because it is covered on several dimensions in

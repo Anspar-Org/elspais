@@ -171,7 +171,7 @@ class TestTreeData:
 
 
 class TestTreeCoverageBucket:
-    """REQ-d00258-E: /api/tree-data coverage field uses severity-aware tier bucket."""
+    """REQ-d00289-A: /api/tree-data coverage field uses severity-aware tier bucket."""
 
     _SPEC_WITH_ASSERTIONS_HEADING = (
         "# REQ-p00001: Test Requirement\n"
@@ -212,12 +212,12 @@ match = "source"
 
         The worst-severity dimension is the journey-less UAT (uat_coverage/
         uat_verified default to a "missing" tier at info severity). Its badge
-        color now resolves from the STANDING (missing -> grey, REQ-d00258-D),
+        color now resolves from the STANDING (missing -> grey, REQ-d00289-G),
         NOT the retired yellow-green info-severity color, so combined
         validation_color is "grey". The severity-aware tier bucket must STILL
         classify the requirement as "full": info severity is non-dragging, so the
         coverage bucket is drawn from tier semantics (combined_bucket), never from
-        the color string (REQ-d00258-E).
+        the color string (REQ-d00289-A).
         """
         from elspais.server.app import create_app
         from elspais.server.state import AppState
@@ -246,7 +246,7 @@ match = "source"
         app = create_app(state=state, mount_mcp=False)
         return TestClient(app)
 
-    # Verifies: REQ-d00258-E
+    # Verifies: REQ-d00289-A+H
     def test_tree_coverage_field_uses_tier_bucket(self, full_indirect_client: TestClient):
         """coverage field is drawn from combined_bucket, not a naive color check."""
         resp = full_indirect_client.get("/api/tree-data")
@@ -257,7 +257,7 @@ match = "source"
         assert all(r["coverage"] in ("full", "partial", "missing", "failing") for r in req_rows)
 
         row = next(r for r in req_rows if r["id"] == "REQ-p00001")
-        # Color decoupled from severity (REQ-d00258-D): the journey-less UAT
+        # Color decoupled from severity (REQ-d00289-G): the journey-less UAT
         # missing standing is grey, not the retired yellow-green.
         assert row["validation_color"] == "grey"
         assert row["validation_color"] != "yellow-green"

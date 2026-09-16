@@ -1,4 +1,4 @@
-# Verifies: REQ-d00258-L
+# Verifies: REQ-d00288-D+E, REQ-d00289-G
 """Coverage badges always render; `Implemented` gap severity gated by
 ``status_expects_implementation`` (REQ-d00258).
 
@@ -38,7 +38,7 @@ def _uncovered_rollup(n=2):
 
 
 # The color a NEUTRAL (grey) badge resolves to: the `neutral` severity that the
-# N/A / not-expected-implementation override renders (REQ-d00258-H). Semantic,
+# N/A / not-expected-implementation override renders (REQ-d00289-G). Semantic,
 # not a hard-coded hue.
 GREY = _severity_color("neutral")
 RED = _severity_color("error")

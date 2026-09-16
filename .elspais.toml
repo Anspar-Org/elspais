@@ -142,12 +142,63 @@ reference_patterns = []
 # writes both artifacts, and `command` reproduces that run for
 # `elspais checks --run-tests`. `Verifies:` wiring for Python tests comes
 # from source-scanned `# Verifies:` comments, independent of this target.
+# Test target groups (REQ-d00283). A group says which targets a run is about,
+# because the targets are not alike in what they cost. A description is
+# required: a keyword alone does not tell a newcomer whether their change
+# should have run it.
+#
+# `all` and `default` are reserved and cannot be declared. A target claiming no
+# group falls in `default`, so `elspais-unit` claims `default` EXPLICITLY
+# alongside `commit` — otherwise grouping it would empty the set a bare
+# `elspais checks --run-tests` executes.
+[scanning.test.groups]
+commit = "Fast enough to gate a commit (~6m). What .githooks/pre-commit runs."
+push = "Subprocess and browser tiers, for before a push (~15m). Needs the browser extra."
+stress = "Concurrency battery racing live daemon surfaces. Run when mcp/, server/ or graph mutation code changes."
+
 [[scanning.test.targets]]
 name = "elspais-unit"
 command = "pytest tests/ -q --junitxml=.results/junit.xml -o junit_family=xunit1"
 reporter = "junit"
 results = ".results/junit.xml"
 coverage = ".coverage"
+groups = ["commit", "default"]
+
+# The slower tiers, so their PASS/FAIL reaches a coverage figure. Their
+# `Verifies:` citations were always source-scanned and so always counted toward
+# Tested; without a target their results never were, leaving an assertion tested
+# only by an e2e test reading as awaiting-a-result rather than passing.
+#
+# Each carries `--no-cov` deliberately. `addopts` in pyproject.toml turns on
+# `--cov=src/elspais`, so without it every one of these runs would rewrite the
+# `.coverage` database that `elspais-unit` reads its per-test line attribution
+# from, and the last tier to finish would decide what the whole repo's line
+# coverage looked like. Results only here; line attribution stays the unit
+# target's job.
+[[scanning.test.targets]]
+name = "elspais-e2e"
+command = "pytest -m e2e -q --no-cov --junitxml=.results/junit-e2e.xml -o junit_family=xunit1"
+reporter = "junit"
+results = ".results/junit-e2e.xml"
+groups = ["push"]
+
+# 34 of the browser tier's 41 tests also carry `e2e`, so this target and
+# `elspais-e2e` overlap by design. Both belong to `push`, and a result matched
+# twice is the same result; what matters is that the 7 browser-only tests reach
+# a figure at all.
+[[scanning.test.targets]]
+name = "elspais-browser"
+command = "pytest -m browser -q --no-cov --junitxml=.results/junit-browser.xml -o junit_family=xunit1"
+reporter = "junit"
+results = ".results/junit-browser.xml"
+groups = ["push"]
+
+[[scanning.test.targets]]
+name = "elspais-stress"
+command = "pytest tests/stress -m stress -q --no-cov --junitxml=.results/junit-stress.xml -o junit_family=xunit1"
+reporter = "junit"
+results = ".results/junit-stress.xml"
+groups = ["stress"]
 
 # User journey file scanning
 [scanning.journey]
