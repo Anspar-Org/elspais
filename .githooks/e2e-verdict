@@ -30,41 +30,51 @@ E2E_CACHE="$CACHE_DIR/.test-cache-e2e"
 CONTENT_HASH=$(git write-tree | head -c 40)
 mkdir -p "$CACHE_DIR"
 
-# The e2e tier spawns `elspais` as a subprocess from PATH, so its verdict
-# describes whichever binary that resolved to -- not necessarily this tree.
-# Identify the environment by where the on-PATH CLI's code actually lives,
-# and make that part of the cache key. A verdict earned elsewhere is a miss,
-# not a failure -- it has nothing to say about this tree, so we re-run.
-e2e_cli_src() {
-    _bin=$(command -v elspais 2>/dev/null) || return 1
+# The tier re-enters a fresh interpreter -- `sys.executable`, a spawned
+# daemon -- and such a child inherits no sys.path from pytest, so the
+# environment that decides the verdict is the interpreter pytest runs
+# under, NOT the `elspais` launcher. Those two are separate installs and
+# routinely disagree. Identify the environment by where THAT interpreter
+# finds elspais, and make it the cache key.
+e2e_env_src() {
+    _bin=$(command -v pytest 2>/dev/null) || return 1
     _py=$(head -1 "$_bin" 2>/dev/null | sed 's|^#!||')
     [ -x "$_py" ] || return 1
     "$_py" -c 'import elspais,os;print(os.path.realpath(os.path.dirname(elspais.__file__)))' 2>/dev/null
 }
 E2E_REPO_SRC=$(python3 -c 'import os,sys;print(os.path.realpath(sys.argv[1]))' "src/elspais") \
     || E2E_REPO_SRC="$REPO_ROOT/src/elspais"
-E2E_ENV_SRC=$(e2e_cli_src) || E2E_ENV_SRC=""
 
-# The venv in the worktree is the binary this tree's e2e tests mean. Prefer
-# it automatically rather than making every developer remember the PATH dance.
-if [ "$E2E_ENV_SRC" != "$E2E_REPO_SRC" ] && [ -x "$REPO_ROOT/.venv/bin/elspais" ]; then
-    _saved_path="$PATH"
+# The worktree's venv is the environment this tree's tier means -- its
+# pytest, its interpreter, its elspais. No worktree's own tier means some
+# other installation, so prefer it always rather than only on a mismatch:
+# the probe below is what says whether it worked.
+if [ -d "$REPO_ROOT/.venv/bin" ]; then
     PATH="$REPO_ROOT/.venv/bin:$PATH"
     export PATH
-    if [ "$(e2e_cli_src)" = "$E2E_REPO_SRC" ]; then
-        E2E_ENV_SRC="$E2E_REPO_SRC"
-        echo -e "${YELLOW}E2E: using $REPO_ROOT/.venv/bin for elspais (PATH resolved elsewhere)${NC}"
-    else
-        PATH="$_saved_path"
-        export PATH
-    fi
 fi
+E2E_ENV_SRC=$(e2e_env_src) || E2E_ENV_SRC=""
 
+# A run under the wrong interpreter says nothing about this tree, so it must
+# not reach the cache: a recorded FAIL is keyed on the tree and blocks every
+# later push of it, which turns an environment fault into a durable verdict
+# about the code. Refuse before running instead.
 if [ "$E2E_ENV_SRC" != "$E2E_REPO_SRC" ]; then
-    echo -e "${YELLOW}E2E: on-PATH elspais is ${E2E_ENV_SRC:-<not found>},${NC}"
-    echo -e "${YELLOW}     not this tree ($E2E_REPO_SRC). Results describe that${NC}"
-    echo -e "${YELLOW}     install, not this branch. Fix with:${NC}"
-    echo -e "${YELLOW}       export PATH=\"$REPO_ROOT/.venv/bin:\$PATH\"${NC}"
+    echo ""
+    echo -e "${RED}======================================${NC}"
+    echo -e "${RED}  E2E cannot run against this tree${NC}"
+    echo -e "${RED}======================================${NC}"
+    echo ""
+    echo "pytest's interpreter gets elspais from:"
+    echo "  ${E2E_ENV_SRC:-<nowhere: it cannot import elspais>}"
+    echo "This tree is:"
+    echo "  $E2E_REPO_SRC"
+    echo ""
+    echo "A run here would describe that install, not this branch."
+    echo "Build this worktree's venv:"
+    echo "  python3 -m venv .venv && .venv/bin/pip install -e \".[all,mcp,dev]\""
+    echo ""
+    exit 1
 fi
 
 # Honor a verdict already recorded for this tree in this environment. The

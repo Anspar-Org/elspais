@@ -31,3 +31,8 @@ first; the push then hits the cache.
    `--no-verify`, and never write the cache file by hand — a verdict is
    earned by a run, not asserted. `ELSPAIS_E2E_FORCE=1 .githooks/e2e-verdict`
    re-runs a recorded verdict.
+6. A refusal is not a FAIL. Where pytest's interpreter cannot reach this
+   tree's elspais, the script says so and stops without running the tier
+   and without writing a verdict. Build the worktree's venv as the message
+   says, then run it again. The tier cannot report on this tree from
+   another installation, so there is nothing to bypass here.
