@@ -168,9 +168,14 @@ Run `elspais <command> --help` for detailed usage. See [src/elspais/docs/cli/com
 ```bash
 git clone https://github.com/anspar/elspais.git
 cd elspais
-pip install -e ".[dev]"
-pytest
+make setup
+make test
 ```
+
+`make setup` builds `.venv`, installs elspais into it, and installs the git
+hooks. The hooks and the test targets both run the tools from that
+directory, so what they report describes this checkout and not some other
+installation of elspais.
 
 ## License
 
