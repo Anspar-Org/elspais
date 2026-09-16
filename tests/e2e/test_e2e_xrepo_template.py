@@ -45,7 +45,7 @@ from .conftest import (
     load_xrepo_template_fixture,
     run_elspais,
 )
-from .helpers import resolve_elspais
+from .helpers import resolve_elspais, trace_rows
 
 pytestmark = [
     pytest.mark.e2e,
@@ -86,7 +86,7 @@ class TestHealthOnCrossRepoTemplate:
         """Phase A clones must appear with composite IDs in the trace matrix."""
         result = run_elspais("trace", "--format", "json", cwd=project)
         assert result.returncode == 0, result.stderr
-        rows = json.loads(result.stdout)
+        rows = trace_rows(result.stdout)
         ids = {row["id"] for row in rows}
         # Phase A composite root
         assert "APP-p00001::LIB-p00001" in ids, (
@@ -184,7 +184,7 @@ class TestInheritedCoverageEndToEnd:
         keeps the template node reachable to evidence."""
         result = run_elspais("trace", "--format", "json", cwd=project)
         assert result.returncode == 0, result.stderr
-        rows = {row["id"]: row for row in json.loads(result.stdout)}
+        rows = {row["id"]: row for row in trace_rows(result.stdout)}
         template = rows.get("LIB-p00001")
         assert template is not None, f"LIB-p00001 not present in trace; saw {sorted(rows)}"
         # The library implements LIB-p00001-A in src/library.py — coverage

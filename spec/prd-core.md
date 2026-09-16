@@ -322,6 +322,8 @@ This requirement declares `Satisfies:` against the REQ-p00019 anti-pattern templ
 
 Interplay with existing requirements: REQ-p00004-J obliges the tool to re-read configuration from disk when reloading the graph; this requirement complements it by covering the interval between reloads — divergence must be disclosed, not silently served. REQ-p00005-E covers the configuration-time error for an invalid associate path; assertion C here covers the answer-time consequence of any load failure. REQ-p00081-D applies the same principle to workspace discovery specifically. Other spec units cite this requirement rather than restating these invariants.
 
+H is the boundary of A. A obliges the tool to report content it met and declined to admit, which is what stops a silent omission. An exclusion the reader configured is not such a case: they have said the content is none of the tool's business, so there is nothing to disclose and no absence to account for. H states the stronger half of that -- the content is not read at all -- because the weaker half, that it contributes to no answer, is satisfiable by a tool that reads content and then discards it. A reader who excludes a file holding secrets is owed the stronger promise, and the tool's own documentation already makes it.
+
 ## Assertions
 
 A. When the tool encounters content that matches a requirement form but does not admit it into the graph, the tool SHALL report the excluded content and the cause of its exclusion.
@@ -338,14 +340,19 @@ F. The tool SHALL record a change as applied only when the change is present at 
 
 G. While the tool serves answers computed from a configuration that no longer matches the configuration on disk, the tool SHALL disclose that the answers reflect a superseded configuration.
 
+H. The tool SHALL NOT read content the ignore configuration excludes.
+
 ## Changelog
 
+- 2026-09-16 | 1ad561d2 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-09-16 | dc7033bf | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-09-16 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-82: state the boundary of A -- content the ignore configuration excludes is not read, so its absence is not an omission A obliges the tool to report
 - 2026-08-01 | 9aa9a8aa | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: sync changelog hash
 - 2026-08-01 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-47: declare satisfaction of the REQ-p00019 anti-pattern template; rationale maps assertions to template classes
 - 2026-07-31 | 9aa9a8aa | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms, update hash
 - 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-10: author completeness/freshness invariant (merges GI-1 silent omission and GI-2 silent staleness)
 
-*End* *Complete and Current Reporting* | **Hash**: 9aa9a8aa
+*End* *Complete and Current Reporting* | **Hash**: 1ad561d2
 ---
 
 # REQ-p00017: Reference Integrity Under Mutation

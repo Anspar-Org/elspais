@@ -36,8 +36,13 @@ The command produces two ranked lists:
 | `--weights W1,W2,W3[,W4]` | Centrality, fan-in, neighborhood, uncovered weights (default: 0.3,0.2,0.2,0.3). With 3 values, neighborhood weight is 0. |
 | `--format` | Output format: `table`, `json` (default: table) |
 | `--show` | Which sections to show: `foundations`, `leaves`, `all` (default: all) |
-| `--level` | Filter results by requirement level: `prd`, `ops`, `dev` |
 | `--include-code` | Include CODE nodes in the analysis graph |
+| `-o, --output PATH` | Write output to file instead of stdout |
+
+`analysis` takes the same scope as the other reports — `--level`,
+`--not-level`, `--status`, `--not-status`, `--match-status-roles`, `--scope`
+and `--treat-active`. The levels a project declares in `[levels]` are the ones
+`--level` names. See `elspais docs scoping`.
 
 ## Examples
 

@@ -11,11 +11,14 @@ directories it declared. Also verifies that build_graph() annotates coverage
 metrics on requirement nodes.
 """
 
+import builtins
+import os
 from pathlib import Path
 
 import pytest
 
 from elspais.graph import NodeKind
+from elspais.graph.deserializer import SourceReadError
 from elspais.graph.factory import build_graph
 from elspais.graph.GraphNode import make_file_id
 from elspais.graph.relations import EdgeKind
@@ -762,6 +765,8 @@ def _write_selection_config(
     tmp_path: Path,
     *,
     global_skip=(),
+    spec_skip_files=(),
+    spec_skip_dirs=(),
     code_dirs=("src",),
     code_patterns=("*.py",),
     code_skip_files=(),
@@ -771,10 +776,10 @@ def _write_selection_config(
     test_skip_files=(),
     test_skip_dirs=(),
 ) -> Path:
-    """Write a project whose two scanning kinds are configured the same way.
+    """Write a project whose scanning kinds are configured the same way.
 
-    The code and test kinds are given the same shape of configuration so a
-    test can vary one setting and compare the two kinds' answers.
+    The spec, code and test kinds are given the same shape of configuration so
+    a test can vary one setting and compare the kinds' answers.
     """
     config_file = tmp_path / ".elspais.toml"
     config_file.write_text(
@@ -788,6 +793,8 @@ skip = {_toml_list(global_skip)}
 
 [scanning.spec]
 directories = ["spec"]
+skip_files = {_toml_list(spec_skip_files)}
+skip_dirs = {_toml_list(spec_skip_dirs)}
 
 [scanning.code]
 directories = {_toml_list(code_dirs)}
@@ -1039,3 +1046,296 @@ class TestOneSelectionMechanism:
         graph = build_graph(config_path=config_file, repo_root=tmp_path)
 
         assert graph.unscanned_keyword_files() == []
+
+
+# --- Excluded content is not read at all ----------------------------------- #
+
+
+def _write_excludable_spec(tmp_path: Path, relative: str, req_id: str) -> None:
+    """Write a valid spec file holding one requirement at *relative*."""
+    target = tmp_path / relative
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(
+        f"""\
+### {req_id}: Excludable Req
+
+**Level**: PRD | **Status**: Active
+
+The system SHALL do something testable.
+
+*End* *Excludable Req* | **Hash**: ________
+""",
+        encoding="utf-8",
+    )
+
+
+def _write_for_kind(tmp_path: Path, kind: str, relative: str, req_id: str) -> None:
+    """Write a file the *kind* being configured would read if it reached it."""
+    if kind == "spec":
+        _write_excludable_spec(tmp_path, relative, req_id)
+    else:
+        _write_annotated(tmp_path, relative, "Implements" if kind == "code" else "Verifies")
+
+
+# Every route by which a project excludes content, for every scanning kind:
+# the global list, the kind's own file list, and the kind's own directory list.
+_EXCLUSION_ROUTES = [
+    pytest.param("spec", "spec/secret.md", "spec/reqs.md", {"global_skip": ["secret.md"]}),
+    pytest.param("spec", "spec/secret.md", "spec/reqs.md", {"spec_skip_files": ["secret.md"]}),
+    pytest.param("spec", "spec/drafts/draft.md", "spec/reqs.md", {"spec_skip_dirs": ["drafts"]}),
+    pytest.param("code", "src/legacy.py", "src/kept.py", {"global_skip": ["legacy.py"]}),
+    pytest.param("code", "src/legacy.py", "src/kept.py", {"code_skip_files": ["legacy.py"]}),
+    pytest.param("code", "src/legacy/thing.py", "src/kept.py", {"code_skip_dirs": ["legacy"]}),
+    pytest.param(
+        "test",
+        "tests/test_legacy.py",
+        "tests/test_kept.py",
+        {"global_skip": ["test_legacy.py"]},
+    ),
+    pytest.param(
+        "test",
+        "tests/test_legacy.py",
+        "tests/test_kept.py",
+        {"test_skip_files": ["test_legacy.py"]},
+    ),
+    pytest.param(
+        "test",
+        "tests/legacy/test_legacy.py",
+        "tests/test_kept.py",
+        {"test_skip_dirs": ["legacy"]},
+    ),
+]
+
+_ROUTE_IDS = [
+    "spec-global-skip",
+    "spec-skip-files",
+    "spec-skip-dirs",
+    "code-global-skip",
+    "code-skip-files",
+    "code-skip-dirs",
+    "test-global-skip",
+    "test-skip-files",
+    "test-skip-dirs",
+]
+
+
+class TestExcludedContentIsNotRead:
+    """A reader who excludes content is promised the content is not opened.
+
+    The weaker promise -- that excluded content contributes to no answer --
+    is satisfiable by a tool that reads a file and then throws the content
+    away, and that is not what a reader excluding a file of secrets is owed.
+    These tests therefore watch the read itself rather than the answer: an
+    excluded path is never opened, and an excluded directory is never
+    descended into.
+    """
+
+    @staticmethod
+    def _project(tmp_path: Path, kind: str, excluded: str, kept: str, settings: dict) -> Path:
+        """Lay out a project holding *kept* and *excluded*, excluding the latter."""
+        # The config helper writes the project's own spec file, which for the
+        # spec kind IS this case's kept file -- so the kept file is written
+        # through the helper and the excluded one beside it afterwards, leaving
+        # the two differing only in which is excluded.
+        config_file = _write_selection_config(tmp_path, **settings)
+        _write_for_kind(tmp_path, kind, kept, "REQ-p00001")
+        _write_for_kind(tmp_path, kind, excluded, "REQ-p00009")
+        return config_file
+
+    # Verifies: REQ-p00015-H
+    @pytest.mark.parametrize(
+        ("kind", "excluded", "kept", "settings"),
+        _EXCLUSION_ROUTES,
+        ids=_ROUTE_IDS,
+    )
+    def test_an_excluded_path_is_never_opened(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        kind: str,
+        excluded: str,
+        kept: str,
+        settings: dict,
+    ) -> None:
+        """No route to exclusion leaves the excluded file's content ever opened.
+
+        Watching the open is what separates the obligation from its weaker
+        cousin: a build that read the file and discarded what it found would
+        report nothing about it either, and would be caught only here.
+        """
+        config_file = self._project(tmp_path, kind, excluded, kept, settings)
+        excluded_path = str((tmp_path / excluded).resolve())
+        kept_path = str((tmp_path / kept).resolve())
+
+        opened: set[str] = set()
+        real_path_open = Path.open
+        real_builtin_open = builtins.open
+
+        def record_path_open(self, *args, **kwargs):  # noqa: ANN001, ANN002, ANN003, ANN202
+            opened.add(str(Path(self).resolve()))
+            return real_path_open(self, *args, **kwargs)
+
+        def record_builtin_open(file, *args, **kwargs):  # noqa: ANN001, ANN002, ANN003, ANN202
+            if isinstance(file, (str, Path)):
+                opened.add(str(Path(file).resolve()))
+            return real_builtin_open(file, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "open", record_path_open)
+        monkeypatch.setattr(builtins, "open", record_builtin_open)
+        try:
+            build_graph(config_path=config_file, repo_root=tmp_path)
+        finally:
+            monkeypatch.undo()
+
+        assert kept_path in opened, (
+            f"The {kind} kind reads {kept}, so the recorder is watching the reads "
+            f"this build actually makes"
+        )
+        assert excluded_path not in opened, (
+            f"An excluded path must never be opened: {excluded} was read by the build"
+        )
+
+    # Verifies: REQ-p00015-H
+    @pytest.mark.parametrize(
+        ("kind", "root_dir", "excluded_dir", "decoy", "kept", "settings"),
+        [
+            pytest.param(
+                "spec",
+                "spec",
+                "spec/drafts",
+                "spec/drafts/draft.md",
+                "spec/reqs.md",
+                {"spec_skip_dirs": ["drafts"]},
+            ),
+            pytest.param(
+                "code",
+                "src",
+                "src/legacy",
+                "src/legacy/thing.py",
+                "src/kept.py",
+                {"code_skip_dirs": ["legacy"]},
+            ),
+            pytest.param(
+                "test",
+                "tests",
+                "tests/legacy",
+                "tests/legacy/test_thing.py",
+                "tests/test_kept.py",
+                {"test_skip_dirs": ["legacy"]},
+            ),
+            pytest.param(
+                "spec",
+                "spec",
+                "spec/drafts",
+                "spec/drafts/draft.md",
+                "spec/reqs.md",
+                {"global_skip": ["drafts"]},
+            ),
+            pytest.param(
+                "code",
+                "src",
+                "src/legacy",
+                "src/legacy/thing.py",
+                "src/kept.py",
+                {"global_skip": ["legacy"]},
+            ),
+            pytest.param(
+                "test",
+                "tests",
+                "tests/legacy",
+                "tests/legacy/test_thing.py",
+                "tests/test_kept.py",
+                {"global_skip": ["legacy"]},
+            ),
+        ],
+        ids=[
+            "spec-skip-dirs",
+            "code-skip-dirs",
+            "test-skip-dirs",
+            "spec-global-skip",
+            "code-global-skip",
+            "test-global-skip",
+        ],
+    )
+    def test_an_excluded_directory_is_never_descended_into(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        kind: str,
+        root_dir: str,
+        excluded_dir: str,
+        decoy: str,
+        kept: str,
+        settings: dict,
+    ) -> None:
+        """The directory itself is not listed, so its contents are never known.
+
+        A walk that descended and then dropped what it found would leave no
+        trace in any answer, so the directory listing is where the promise is
+        observable. The excluded directory holds a decoy the kind would
+        otherwise read, which is what makes not descending the only way to
+        stay silent about it.
+        """
+        config_file = self._project(tmp_path, kind, decoy, kept, settings)
+        excluded_abs = str((tmp_path / excluded_dir).resolve())
+        root_abs = str((tmp_path / root_dir).resolve())
+
+        listed: set[str] = set()
+        real_scandir = os.scandir
+
+        def record_scandir(path=".", *args, **kwargs):  # noqa: ANN001, ANN002, ANN003, ANN202
+            try:
+                listed.add(str(Path(path).resolve()))
+            except (TypeError, ValueError):
+                pass
+            return real_scandir(path, *args, **kwargs)
+
+        monkeypatch.setattr(os, "scandir", record_scandir)
+        try:
+            build_graph(config_path=config_file, repo_root=tmp_path)
+        finally:
+            monkeypatch.undo()
+
+        assert root_abs in listed, (
+            f"The {kind} kind walks {root_dir}, so the recorder is watching this walk"
+        )
+        assert excluded_abs not in listed, (
+            f"An excluded directory must not be descended into: {excluded_dir} was listed"
+        )
+
+    # Verifies: REQ-p00015-H
+    @pytest.mark.parametrize(
+        ("kind", "excluded", "kept", "settings"),
+        _EXCLUSION_ROUTES,
+        ids=_ROUTE_IDS,
+    )
+    def test_undecodable_bytes_in_an_excluded_file_never_reach_the_decoder(
+        self,
+        tmp_path: Path,
+        kind: str,
+        excluded: str,
+        kept: str,
+        settings: dict,
+    ) -> None:
+        """Content that cannot be decoded is harmless while it is excluded.
+
+        Reading this file raises, so the same tree built without the exclusion
+        fails -- which is what establishes that the excluded build's success
+        comes from never having read the file rather than from the file being
+        uninteresting. No instrumentation is involved: the file itself is the
+        detector.
+        """
+        config_file = self._project(tmp_path, kind, excluded, kept, settings)
+        (tmp_path / excluded).write_bytes(b"\xff\xfe# Implements: REQ-p00001\n\x80\x81")
+
+        graph = build_graph(config_path=config_file, repo_root=tmp_path)
+        assert graph.find_by_id("REQ-p00001") is not None, (
+            "The rest of the project still built while the excluded file sat there"
+        )
+
+        # Control: the same undecodable file, no longer excluded, is read.
+        unexcluded = _write_selection_config(tmp_path)
+        if kind == "spec":
+            _write_for_kind(tmp_path, kind, kept, "REQ-p00001")
+        with pytest.raises(SourceReadError):
+            build_graph(config_path=unexcluded, repo_root=tmp_path)

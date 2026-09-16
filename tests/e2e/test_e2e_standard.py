@@ -26,7 +26,7 @@ from .conftest import (
     load_fixture,
     run_elspais,
 )
-from .helpers import resolve_elspais
+from .helpers import resolve_elspais, trace_rows
 
 pytestmark = [
     pytest.mark.e2e,
@@ -258,7 +258,7 @@ class TestSummaryCounts:
         # is over, so nothing is counted twice and nothing is lost.
         trace = run_elspais("trace", "--format", "json", cwd=project)
         assert trace.returncode == 0
-        reported = len(json.loads(trace.stdout))
+        reported = len(trace_rows(trace.stdout))
         assert reported == 11
         assert sum(groups.values()) + sum(data["excluded"].values()) == reported
 
@@ -347,8 +347,7 @@ class TestTraceOutput:
     def test_trace_json(self, project):
         result = run_elspais("trace", "--format", "json", cwd=project)
         assert result.returncode == 0
-        data = json.loads(result.stdout)
-        assert isinstance(data, list)
+        data = trace_rows(result.stdout)
         assert len(data) == 11
 
     def test_trace_csv(self, project):
@@ -374,15 +373,16 @@ class TestTraceOptions:
     def test_trace_assertions(self, project):
         result = run_elspais("trace", "--format", "json", "--assertions", cwd=project)
         assert result.returncode == 0
-        data = json.loads(result.stdout)
+        data = trace_rows(result.stdout)
         output_str = json.dumps(data)
         assert "REQ-p00001" in output_str
 
     def test_trace_body(self, project):
         result = run_elspais("trace", "--format", "json", "--body", cwd=project)
         assert result.returncode == 0
-        data = json.loads(result.stdout)
-        assert isinstance(data, list)
+        data = trace_rows(result.stdout)
+        # Asked for the bodies, so the rows must actually carry one.
+        assert data and all("body" in row for row in data)
 
     def test_trace_output_to_file(self, project, tmp_path):
         out = tmp_path / "trace-output.json"
@@ -398,8 +398,10 @@ class TestTraceOptions:
         candidates = [out, out.with_suffix(".json")]
         found = [p for p in candidates if p.exists()]
         assert found, f"No output file found: {candidates}"
-        data = json.loads(found[0].read_text())
-        assert isinstance(data, list)
+        # The artifact on disk states the same document the terminal states,
+        # so its rows are read the same way.
+        data = trace_rows(found[0].read_text())
+        assert data, "the report written to the file states no rows"
 
 
 class TestTracePresets:
@@ -553,7 +555,7 @@ class TestCrossCommandConsistency:
 
         trace = run_elspais("trace", "--format", "json", cwd=project)
         assert trace.returncode == 0
-        trace_data = json.loads(trace.stdout)
+        trace_data = trace_rows(trace.stdout)
         trace_total = len(trace_data)
 
         # Summary defaults to Active only (8), trace shows all (11)
@@ -582,7 +584,7 @@ class TestSkipFiles:
 
         trace = run_elspais("trace", "--format", "json", cwd=project)
         assert trace.returncode == 0
-        assert {r["id"] for r in json.loads(trace.stdout)} == {
+        assert {r["id"] for r in trace_rows(trace.stdout)} == {
             "REQ-p00001",
             "REQ-p00002",
             "REQ-p00003",
@@ -609,7 +611,7 @@ class TestSkipFiles:
         """
         trace = run_elspais("trace", "--format", "json", cwd=project)
         assert trace.returncode == 0
-        ids = {r["id"] for r in json.loads(trace.stdout)}
+        ids = {r["id"] for r in trace_rows(trace.stdout)}
         assert "REQ-p99999" not in ids, "a requirement under drafts/ reached the report"
         assert len(ids) == 11
 
@@ -636,7 +638,7 @@ class TestDeepHierarchy:
     def test_trace_includes_refines(self, project):
         result = run_elspais("trace", "--format", "json", cwd=project)
         assert result.returncode == 0
-        data = json.loads(result.stdout)
+        data = trace_rows(result.stdout)
         ids = {r["id"] for r in data}
         assert "REQ-d00003" in ids, "Refining requirement should appear in trace"
 
@@ -657,7 +659,7 @@ class TestDraftStatus:
     def test_draft_in_trace(self, project):
         result = run_elspais("trace", "--format", "json", cwd=project)
         assert result.returncode == 0
-        data = json.loads(result.stdout)
+        data = trace_rows(result.stdout)
         ids = {r["id"] for r in data}
         assert "REQ-p00003" in ids
 

@@ -607,7 +607,9 @@ file_patterns = ["test_*.py"]
             include_test_refs=True,
         )
         raw = "\n".join(format_json(graph, preset))
-        return json.loads(raw)
+        # The document states ``scope`` beside ``nodes``; these tests are about
+        # the rows, so they ask for the rows by name.
+        return json.loads(raw)["nodes"]
 
     def test_json_test_refs_is_dict(self, project_dir: Path):
         """test_refs in JSON output is a dict with '*', 'A', 'B' keys."""

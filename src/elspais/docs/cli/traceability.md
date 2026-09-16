@@ -119,6 +119,10 @@ this requires.
   `--output PATH`         Output file path
   `--dimension uat`       UAT-scoped value set: UAT Covered, UAT Passed and the validating journeys with their verdicts; excludes the code values
 
+The scope flags -- `--level`, `--not-level`, `--status`, `--not-status`,
+`--match-status-roles`, `--scope` and `--treat-active` -- are the ones shared
+with `summary`, `gaps` and `analysis`; see `elspais docs scoping`.
+
 ## Choosing Values
 
   $ elspais trace --values id,title,tested,tested.immediate_direct

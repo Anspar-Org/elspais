@@ -789,10 +789,13 @@ namespace = "PHX"
 ```
 
 **Whose configuration decides what.** In a federation the repository you invoke
-from governs how findings are judged, scored and reported — reference
-severities, the coverage rules, and how a status is read. Two things stay with
-the member: an identifier is always read under the grammar of the repository
-that owns it, and a setting that states a fact about a repository rather than a
+from governs how findings are judged, scored and reported — `[rules.coverage]`,
+`[rules.references]`, the general `[rules.severity]` table, the
+`[rules.format.status_roles]` classification, and the per-status declarations
+under `[statuses]` (a status's `expects_implementation` decides whether the
+requirements carrying it are counted, which is a rule for scoring). Two things
+stay with the member: an identifier is always read under the grammar of the
+repository that owns it, and a setting that states a fact about a repository rather than a
 rule for judging one — where its spec directories are, its namespace, where its
 test results are written — is read from that repository's own config. Where a
 member configures a governed setting differently from you, the

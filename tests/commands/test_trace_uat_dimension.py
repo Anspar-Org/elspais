@@ -15,6 +15,18 @@ _JOURNEY_UAT_FIX = Path(__file__).parents[1] / "fixtures" / "journey-uat"
 _CODE_VALUES = {"implemented", "tested", "verified", "code_tested", "lcov_tested"}
 
 
+def _trace_rows(out: str) -> list[dict]:
+    """The rows of a trace JSON report.
+
+    Trace's JSON document has ONE shape -- an object stating ``scope`` beside
+    ``nodes`` -- so a reader wanting the rows asks for them by name. Reading
+    the root as the rows would iterate the document's FIELD NAMES here, and a
+    loop asserting a key is absent from a row would then be checking a
+    substring of ``"scope"`` and passing having tested nothing.
+    """
+    return json.loads(out)["nodes"]
+
+
 def _build_uat_graph(tmp_path: Path, slug: str):
     """Copy a journey-uat fixture to tmp_path and return the FederatedGraph."""
     from elspais.graph.factory import build_graph
@@ -180,7 +192,7 @@ class TestUATStatesEveryRequirement:
     def test_json_states_the_requirement_no_journey_validates(self, mixed_graph, uat_preset):
         from elspais.commands.trace import format_json
 
-        rows = json.loads("\n".join(format_json(mixed_graph, uat_preset)))
+        rows = _trace_rows("\n".join(format_json(mixed_graph, uat_preset)))
         ids = {r["id"] for r in rows}
         assert ids == {"REQ-d00001", "REQ-d00002"}, (
             f"Every requirement is reported whatever validates it; got {ids}"
@@ -191,7 +203,7 @@ class TestUATStatesEveryRequirement:
         """The unvalidated row states the absence rather than being removed."""
         from elspais.commands.trace import format_json
 
-        rows = {r["id"]: r for r in json.loads("\n".join(format_json(mixed_graph, uat_preset)))}
+        rows = {r["id"]: r for r in _trace_rows("\n".join(format_json(mixed_graph, uat_preset)))}
         assert rows["REQ-d00002"]["journeys"] == [], (
             f"Expected no journeys for REQ-d00002; got {rows['REQ-d00002']['journeys']}"
         )
@@ -216,7 +228,7 @@ class TestUATStatesEveryRequirement:
         """
         from elspais.commands.trace import format_json
 
-        rows = json.loads("\n".join(format_json(mixed_graph, uat_preset)))
+        rows = _trace_rows("\n".join(format_json(mixed_graph, uat_preset)))
         assert rows, "Expected at least one row"
         for row in rows:
             assert "uat_coverage" in row and "uat_verified" in row, row
@@ -237,7 +249,7 @@ class TestUATValues:
         """UAT JSON rows must include 'uat_coverage' field."""
         from elspais.commands.trace import format_json
 
-        rows = json.loads("\n".join(format_json(mixed_graph, uat_preset)))
+        rows = _trace_rows("\n".join(format_json(mixed_graph, uat_preset)))
         assert rows, "Expected at least one row"
         for row in rows:
             assert "uat_coverage" in row, f"Missing uat_coverage in {row.get('id')}"
@@ -246,7 +258,7 @@ class TestUATValues:
         """UAT JSON rows must include 'uat_verified' field."""
         from elspais.commands.trace import format_json
 
-        rows = json.loads("\n".join(format_json(mixed_graph, uat_preset)))
+        rows = _trace_rows("\n".join(format_json(mixed_graph, uat_preset)))
         assert rows, "Expected at least one row"
         for row in rows:
             assert "uat_verified" in row, f"Missing uat_verified in {row.get('id')}"
@@ -255,7 +267,7 @@ class TestUATValues:
         """Code-dimension values must be absent from UAT JSON output."""
         from elspais.commands.trace import format_json
 
-        rows = json.loads("\n".join(format_json(mixed_graph, uat_preset)))
+        rows = _trace_rows("\n".join(format_json(mixed_graph, uat_preset)))
         assert rows, "Expected at least one row"
         for row in rows:
             for key in _CODE_VALUES:
@@ -322,7 +334,7 @@ class TestUATJourneyVerdicts:
         """
         from elspais.commands.trace import format_json
 
-        rows = json.loads("\n".join(format_json(mixed_graph, uat_preset)))
+        rows = _trace_rows("\n".join(format_json(mixed_graph, uat_preset)))
         assert rows, "Expected at least one row"
         for row in rows:
             assert "journeys" in row, f"Missing 'journeys' key in {row.get('id')}"
@@ -334,7 +346,7 @@ class TestUATJourneyVerdicts:
         """Each journey entry in JSON must have 'id' and 'verdict' fields."""
         from elspais.commands.trace import format_json
 
-        rows = json.loads("\n".join(format_json(mixed_graph, uat_preset)))
+        rows = _trace_rows("\n".join(format_json(mixed_graph, uat_preset)))
         for row in rows:
             for j in row["journeys"]:
                 assert "id" in j, f"Journey entry missing 'id': {j}"
@@ -365,7 +377,7 @@ class TestUATJourneyVerdicts:
         """In the steps-all-pass fixture, every validating journey has verdict 'pass'."""
         from elspais.commands.trace import format_json
 
-        rows = json.loads("\n".join(format_json(steps_all_pass_graph, uat_preset)))
+        rows = _trace_rows("\n".join(format_json(steps_all_pass_graph, uat_preset)))
         assert rows, "Expected at least one UAT row in steps-all-pass graph"
         for row in rows:
             for j in row["journeys"]:
@@ -392,7 +404,7 @@ class TestUATJourneyVerdicts:
 
         graph = _build_uat_graph(tmp_path, "one-step-fails")
         preset = ReportPreset(name="uat", values=list(_UAT_VALUES), dimension="uat")
-        rows = json.loads("\n".join(format_json(graph, preset)))
+        rows = _trace_rows("\n".join(format_json(graph, preset)))
         assert rows, "Expected at least one UAT row in one-step-fails graph"
         for row in rows:
             for j in row["journeys"]:

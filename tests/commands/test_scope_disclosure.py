@@ -195,12 +195,17 @@ class TestTraceRenderingCarriesTheScope:
         assert payload["scope"] == list(scoped[1])
         assert isinstance(payload["nodes"], list)
 
-    # Verifies: REQ-p00084-D
-    def test_an_unscoped_json_report_declares_nothing_and_stays_an_array(
+    # Verifies: REQ-p00084-D, REQ-p00085-B
+    def test_an_unscoped_json_report_declares_nothing_in_the_same_shape(
         self, canonical_federated_graph, canonical_config, standard_preset
     ):
-        """D binds a *scoped* report. A report that narrowed nothing has nothing
-        to declare, and its document keeps the shape every consumer reads."""
+        """D binds a *scoped* report, so one that narrowed nothing declares
+        nothing -- but it declares it in the document every other report uses.
+        The mirror of the assertion above: the same two fields, read the same
+        way, with ``scope`` empty rather than the root changing type. A reader
+        that had to test the root before reading the field could not ask one
+        question of one field (REQ-p00085-B).
+        """
         payload = json.loads(
             "\n".join(
                 trace.format_json(
@@ -208,7 +213,9 @@ class TestTraceRenderingCarriesTheScope:
                 )
             )
         )
-        assert isinstance(payload, list)
+        assert payload["scope"] == []
+        assert isinstance(payload["nodes"], list)
+        assert payload["nodes"], "the unscoped report states every requirement"
 
 
 class TestTraceReachesTheArtifactNotTheTerminal:

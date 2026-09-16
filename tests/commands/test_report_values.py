@@ -37,6 +37,17 @@ SELECTIONS = ("tested", "implemented,uat_coverage", "status,id,implemented")
 # ---------------------------------------------------------------------------
 
 
+def _trace_rows(out: str) -> list[dict]:
+    """The rows of a trace JSON report.
+
+    Trace's JSON document has ONE shape -- an object stating ``scope`` beside
+    ``nodes``. These tests are about the values a row states, so they ask for
+    the rows by name; the document's shape is pinned in
+    ``tests/commands/test_scope_disclosure.py``.
+    """
+    return json.loads(out)["nodes"]
+
+
 def _trace_stated(graph, fmt: str, values: list[str]) -> list[str]:
     """What one trace rendering states, as the reader meets it.
 
@@ -62,7 +73,7 @@ def _trace_stated(graph, fmt: str, values: list[str]) -> list[str]:
     if fmt == "html":
         row = out.split("<tr>")[1]
         return [c.split("</th>")[0] for c in row.split("<th>")[1:]]
-    return list(json.loads(out)[0].keys())
+    return list(_trace_rows(out)[0].keys())
 
 
 # The renderings whose stated values can be read back as value keys: two
@@ -569,7 +580,7 @@ class TestSelectingValuesChangesNothingElse:
     def test_a_figure_reads_the_same_however_few_values_were_asked_for(self, selection):
         graph = _requirement_graph()
         narrow = _trace_stated(graph, "json", selection)
-        rows = json.loads("\n".join(trace_cmd.format_json(graph, None, None, selection, None)))
+        rows = _trace_rows("\n".join(trace_cmd.format_json(graph, None, None, selection, None)))
         assert "tested" in narrow
         # The breakdown qualifying it rides inside the same object; the FIGURE
         # is what a narrower selection may not move.
@@ -580,14 +591,14 @@ class TestSelectingValuesChangesNothingElse:
     def test_selecting_values_does_not_change_which_requirements_are_reported(
         self, canonical_federated_graph
     ):
-        wide = json.loads(
+        wide = _trace_rows(
             "\n".join(
                 trace_cmd.format_json(
                     canonical_federated_graph, None, None, ["id", "title", "tested"], None
                 )
             )
         )
-        narrow = json.loads(
+        narrow = _trace_rows(
             "\n".join(trace_cmd.format_json(canonical_federated_graph, None, None, ["id"], None))
         )
         assert [r["id"] for r in wide] == [r["id"] for r in narrow]
@@ -645,7 +656,7 @@ def _at(row: dict, path: str):
 
 
 def _trace_json(graph, values: list[str]) -> dict:
-    return json.loads("\n".join(trace_cmd.format_json(graph, None, None, values, None)))[0]
+    return _trace_rows("\n".join(trace_cmd.format_json(graph, None, None, values, None)))[0]
 
 
 def _summary_json(row: dict, values: list[str]) -> dict:
@@ -1093,7 +1104,7 @@ def _selective_graph(carried: bool = False) -> TraceGraph:
 
 
 def _selective_rows(values: list[str], carried: bool = False) -> dict[str, dict]:
-    rows = json.loads(
+    rows = _trace_rows(
         "\n".join(trace_cmd.format_json(_selective_graph(carried), None, None, values, None))
     )
     return {row["id"]: row for row in rows}

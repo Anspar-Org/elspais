@@ -1056,8 +1056,16 @@ class IgnoreConfig:
     code_patterns: list[str]
     test_patterns: list[str]
 
+    # Implements: REQ-p00015-H
     def should_ignore(self, path: str | Path, scope: str = "global") -> bool:
         """Check if a path should be ignored based on patterns.
+
+        This is the ONE decision that answers whether the tool reads a path.
+        A caller asks before it opens a file and before it walks into a
+        directory, so an excluded path is never read (REQ-p00015-H). A caller
+        that reads a path first and asks after would satisfy no part of that
+        obligation, because the content it must not read is already in hand.
+
 
         Matches against:
         1. Global patterns (always checked)

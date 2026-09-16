@@ -87,9 +87,20 @@ To see unresolved references, use: `elspais unresolved`
   `--file GLOB...`   Report only findings located in matching files
   `--format {text,markdown,json,junit,sarif}`  Output format (default: text)
   `--lenient`      Allow warnings without affecting exit code
-  `--skip-passing-details`     Hide details for passing checks (default)
-  `--include-passing-details`  Show full details for passing checks
-  `-v, --verbose`  Show additional details
+  `--treat-active ST ...`  Weigh these statuses as active ones
+  `--no-include-passing-details`  Hide details for passing checks (default)
+  `--include-passing-details`     Show full details for passing checks
+  `--run-tests`    Execute each `[[scanning.test.targets]]` entry that carries a
+                   command before evaluating checks, so coverage runs against
+                   fresh result files. Exits 2 if no target has a command.
+  `--fail-fast`    Stop at the first target failure and skip the checks pass.
+                   Requires `--run-tests`.
+  `--targets T...` Run and ingest only these test targets rather than the
+                   `default` group
+  `-o, --output PATH`  Write output to file instead of stdout
+
+`-v, --verbose` is a global option (see Global Options above) and reports each
+check individually rather than only the summary.
 
 ## errors
 
@@ -398,6 +409,7 @@ Generate traceability matrix and reports.
   `--not-status ST ...`    Report no requirement carrying these statuses
   `--match-status-roles`   Read each named status as every status sharing its role
   `--scope NAME`           Report under a scope declared in `[scopes.NAME]`
+  `--treat-active ST ...`  Weigh these statuses as active ones
 
 ## search
 
@@ -545,6 +557,7 @@ uncovered.
   `--not-status ST ...`    Report no requirement carrying these statuses
   `--match-status-roles`   Read each named status as every status sharing its role
   `--scope NAME`           Report under a scope declared in `[scopes.NAME]`
+  `--treat-active ST ...`  Weigh these statuses as active ones
 
 ## changed
 
@@ -580,8 +593,18 @@ Analyze foundational requirement importance using graph metrics.
   `--weights W1,W2,W3,W4`  Centrality, fan-in, neighborhood, uncovered weights
   `--format {table,json}`  Output format (default: table)
   `--show {foundations,leaves,all}`  Which sections (default: all)
-  `--level {prd,ops,dev}`  Filter by requirement level
   `--include-code`      Include CODE nodes in analysis graph
+  `-o, --output PATH`   Write output to file instead of stdout
+
+**Scoping the report** (see `elspais docs scoping`):
+
+  `--level LVL ...`        Report only requirements at these levels
+  `--not-level LVL ...`    Report no requirement at these levels
+  `--status ST ...`        Report only requirements carrying these statuses
+  `--not-status ST ...`    Report no requirement carrying these statuses
+  `--match-status-roles`   Read each named status as every status sharing its role
+  `--scope NAME`           Report under a scope declared in `[scopes.NAME]`
+  `--treat-active ST ...`  Weigh these statuses as active ones
 
 ## edit
 

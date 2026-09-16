@@ -116,8 +116,12 @@ produced it was closed:
 - html — a subtitle beneath the heading
 - json — a `scope` array beside the report's own content
 
-A report narrowed by nothing declares nothing, and its JSON stays the bare array
-of requirements it has always been.
+A report narrowed by nothing declares nothing, and its text, markdown, csv and
+html renders carry no scope line at all. JSON is the exception: the `scope`
+array is always there, empty when there is nothing to state, so a consumer
+reads one shape whether the report was narrowed or not.
+`trace --format json` is accordingly always the object
+`{"scope": [...], "nodes": [...]}`, never a bare array of requirements.
 
 ## What scoping does not change
 
@@ -165,8 +169,9 @@ them: a listing can be asked for or left out, but it cannot be narrowed to
 `summary` aggregates, so its rows are levels rather than requirements. Its
 identity value is `level` — always stated, whatever the selection names — and
 it offers the five coverage dimensions with their four measures each, plus
-`requirements` and `assertions`: the count of requirements in the group and the
-count of assertions they confer. It does not offer the per-requirement identity
+`requirements` and `assertions`: the count of requirements in the group the run
+weighs as active — the column is headed *Active Requirements* — and the count
+of assertions they confer. It does not offer the per-requirement identity
 values (`id`, `title`, ...), nor `verified.carried` (a level has no
 per-requirement provenance bit), nor the line-coverage values, which are
 measured in lines and have no level figure.
@@ -306,8 +311,8 @@ the coverage figures it is the same thing as setting
 `[statuses.<S>] expects_implementation = true` in `.elspais.toml`, for the
 duration of the run.
 
-Any report it changes **discloses it**, in every format, on the same line the
-scope is disclosed on:
+Any report it changes **discloses it**, in every format, alongside the scope
+and in the same place:
 
 ```
 Weighed as active: Review (--treat-active)
@@ -318,7 +323,11 @@ That disclosure is what keeps the figures honest. The requirements still read
 otherwise tell why they were counted. `checks` states the same fact in its
 trailing `Flags:` line.
 
-A report that states no figure taken over a population — `trace` states facts
-about each requirement, one row each — accepts the flag and reads the same
-either way. Nothing in such a report depends on which statuses a run weighs as
-active.
+Two reports accept the flag and read the same either way, for different
+reasons. `trace` states facts about each requirement, one row each, and takes
+nothing over a population, so no choice about the population decides what it
+says. `analysis` ranks requirements against each other and withholds the
+statuses excluded from *analysis*, which is a different question from whether a
+status expects implementation — weighing a status as active does not change
+which statuses are scored. Neither report discloses the flag, because in
+neither did it decide anything.

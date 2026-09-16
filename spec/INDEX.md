@@ -18,7 +18,7 @@
 | REQ-p00006 | Interactive Traceability Viewer                  | prd-features.md | 185217a3 |
 | REQ-p00013 | End-to-End Tests Exercise the Installed Command  | prd-core.md     | 1b5c65b2 |
 | REQ-p00014 | Satisfies Relationship                           | prd-features.md | ca4892c1 |
-| REQ-p00015 | Complete and Current Reporting                   | prd-core.md     | 9aa9a8aa |
+| REQ-p00015 | Complete and Current Reporting                   | prd-core.md     | 1ad561d2 |
 | REQ-p00016 | NOT APPLICABLE Status                            | prd-features.md | 2211802a |
 | REQ-p00017 | Reference Integrity Under Mutation               | prd-core.md     | 3e4c9ddb |
 | REQ-p00018 | Compiled Risk Register                           | prd-core.md     | 0f0438e9 |
@@ -107,7 +107,7 @@
 | REQ-d00082 | Unified Reference Configuration                               | dev-cli.md              | edbd5d9a |
 | REQ-d00084 | Trace Command                                                 | dev-cli.md              | 5728e809 |
 | REQ-d00085 | Unified Report Composition                                    | dev-cli.md              | ee68f8ee |
-| REQ-d00086 | Coverage Report Section                                       | dev-cli.md              | 8e02f52d |
+| REQ-d00086 | Coverage Report Section                                       | dev-cli.md              | 515f0165 |
 | REQ-d00124 | Graph Analysis Engine                                         | dev-cli.md              | b153d5f6 |
 | REQ-d00125 | Analysis CLI Command                                          | dev-cli.md              | 474fa8af |
 | REQ-d00126 | FILE Node Data Model                                          | dev-graph-file-nodes.md | 070e173b |

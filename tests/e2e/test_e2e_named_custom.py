@@ -32,7 +32,7 @@ from .conftest import (
     load_fixture,
     run_elspais,
 )
-from .helpers import resolve_elspais
+from .helpers import resolve_elspais, trace_rows
 
 pytestmark = [
     pytest.mark.e2e,
@@ -102,7 +102,7 @@ class TestNamedComponentIds:
         # REQ-d00281-B: exactly one group each, over the whole reported set.
         trace = run_elspais("trace", "--format", "json", cwd=project)
         assert trace.returncode == 0
-        ids = {r["id"] for r in json.loads(trace.stdout)}
+        ids = {r["id"] for r in trace_rows(trace.stdout)}
         assert ids == {
             "REQ-pUserAuth",
             "REQ-pSearchEngine",
@@ -168,7 +168,9 @@ class TestNumeric1BasedAssertionLabels:
     def test_trace_json_valid(self, project):
         result = run_elspais("trace", "--format", "json", cwd=project)
         assert result.returncode == 0
-        data = json.loads(result.stdout)
+        # The ROWS must be non-empty. Read as the whole document this would be
+        # true of any object the report emitted, including an empty report.
+        data = trace_rows(result.stdout)
         assert data  # Non-empty
 
 

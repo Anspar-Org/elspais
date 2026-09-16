@@ -684,6 +684,20 @@ if _ELSPAIS is not None and not ELSPAIS_IS_LOCAL:
     )
 
 
+def trace_rows(stdout: str) -> list[dict]:
+    """The rows of a ``trace --format json`` report.
+
+    Trace's JSON document has ONE shape -- an object stating ``scope`` beside
+    ``nodes`` -- so a reader wanting the rows asks for them by name. Reading
+    the root as the rows is the hazard this helper exists to remove: iterating
+    the document yields its FIELD NAMES, and a test that only looked for a
+    substring in the dumped output would pass having checked nothing at all.
+    The document's shape is pinned in
+    ``tests/commands/test_scope_disclosure.py``.
+    """
+    return json.loads(stdout)["nodes"]
+
+
 def run_elspais(
     *args: str,
     cwd: str | Path | None = None,

@@ -973,23 +973,27 @@ def format_json(
     config: dict | None = None,
     scope_lines: Sequence[str] | None = None,
 ) -> Iterator[str]:
-    """Generate JSON array, or an object carrying the scope beside it.
+    """Generate the report as ``{"scope": [...], "nodes": [...]}``.
 
-    A report narrowed by a scope answers with ``{"scope": [...], "nodes": [...]}``
-    so the document states what selected its rows (REQ-p00084-D); one narrowed by
-    nothing has nothing to declare and stays the bare array it has always been.
+    The document keeps ONE shape. The ``scope`` field states what selected the
+    rows (REQ-p00084-D). The field is empty where a scope selected nothing,
+    and the shape does not change.
+
+    The report was once a bare array, and an object only where a scope had
+    narrowed it. A reader then had to test the type of the root before it could
+    read the document at all. A missing field a reader can ask for and get
+    nothing; a different root is a different document. The other reports this
+    tool writes all state an object with a ``scope`` field, so one of them
+    varying made a reader hold two rules for one format.
     """
     if preset is None:
         preset = REPORT_PRESETS[DEFAULT_PRESET]
 
     cols = _report_values(preset, values)
 
-    if scope_lines:
-        yield "{"
-        yield f'"scope": {json.dumps(list(scope_lines), indent=2)},'
-        yield '"nodes": ['
-    else:
-        yield "["
+    yield "{"
+    yield f'"scope": {json.dumps(list(scope_lines or ()), indent=2)},'
+    yield '"nodes": ['
     first = True
     for node in _scoped_requirements(graph, scope_ids):
         if not first:
@@ -1007,8 +1011,7 @@ def format_json(
 
         yield json.dumps(node_dict, indent=2)
     yield "]"
-    if scope_lines:
-        yield "}"
+    yield "}"
 
 
 # Implements: REQ-p00006-A
@@ -1133,7 +1136,8 @@ def _render_json_from_data(
         if preset.include_test_refs:
             node_dict["test_refs"] = node_data.get("test_refs_grouped", {})
         nodes.append(node_dict)
-    payload = {"scope": scope_lines, "nodes": nodes} if scope_lines else nodes
+    # One shape, for the reason ``format_json`` states.
+    payload = {"scope": list(scope_lines or ()), "nodes": nodes}
     print(json.dumps(payload, indent=2))
 
 

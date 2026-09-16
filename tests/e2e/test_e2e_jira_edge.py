@@ -17,7 +17,7 @@ from .conftest import (
     load_fixture,
     run_elspais,
 )
-from .helpers import resolve_elspais
+from .helpers import resolve_elspais, trace_rows
 
 pytestmark = [
     pytest.mark.e2e,
@@ -78,7 +78,7 @@ class TestVariableLengthIds:
         # REQ-d00281-B: 3 counted plus 3 withheld are the 6 reported.
         trace = run_elspais("trace", "--format", "json", cwd=project)
         assert trace.returncode == 0
-        reported = len(json.loads(trace.stdout))
+        reported = len(trace_rows(trace.stdout))
         assert reported == 6
         assert sum(groups.values()) + sum(data["excluded"].values()) == reported
 
@@ -178,7 +178,7 @@ class TestIgnorePatterns:
         """
         trace = run_elspais("trace", "--format", "json", cwd=project)
         assert trace.returncode == 0
-        ids = {r["id"] for r in json.loads(trace.stdout)}
+        ids = {r["id"] for r in trace_rows(trace.stdout)}
         assert ids == {"PROJ-1", "PROJ-2", "PROJ-3", "PROJ-4", "PROJ-5", "PROJ-6"}
 
         summary = run_elspais("summary", "--format", "json", cwd=project)
@@ -233,7 +233,7 @@ class TestLargeHierarchy:
 
         trace = run_elspais("trace", "--format", "json", cwd=project)
         assert trace.returncode == 0
-        active = {r["id"] for r in json.loads(trace.stdout) if r["status"] == "Active"}
+        active = {r["id"] for r in trace_rows(trace.stdout) if r["status"] == "Active"}
         assert active == {"PROJ-1", "PROJ-3", "PROJ-6"}
 
     def test_large_project_analysis(self, project):

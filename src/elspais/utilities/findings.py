@@ -241,7 +241,8 @@ _DESCRIPTIONS: dict[str, str] = {
     ),
     "config.no_requirements": "Flags when no requirements are found (likely config issue)",
     "config.governed_rules": (
-        "Discloses each governed setting (coverage rules, reference severities, status roles) a "
+        "Discloses each governed setting (`[rules.coverage]`, `[rules.references]`, "
+        "`[rules.severity]`, `[rules.format.status_roles]`, `[statuses]`) a "
         "federated member would judge by differently from the repository the run was invoked from "
         "— whether the member declared it or kept a default the invoking project overrode — naming "
         "the setting, both values and the member; never fails a run"

@@ -36,6 +36,7 @@ from .helpers import (
     build_associate,
     build_project,
     resolve_elspais,
+    trace_rows,
 )
 
 pytestmark = [
@@ -116,7 +117,7 @@ class TestCoreWithOneAssociate:
         # REQ-d00281-B: one group each, over the whole federated set.
         trace = run_elspais("trace", "--format", "json", cwd=project)
         assert trace.returncode == 0
-        ids = {r["id"] for r in json.loads(trace.stdout)}
+        ids = {r["id"] for r in trace_rows(trace.stdout)}
         assert ids == {
             "REQ-p00001",
             "REQ-p00002",

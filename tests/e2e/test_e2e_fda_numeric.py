@@ -27,7 +27,7 @@ from .conftest import (
     load_fixture,
     run_elspais,
 )
-from .helpers import resolve_elspais
+from .helpers import resolve_elspais, trace_rows
 
 pytestmark = [
     pytest.mark.e2e,
@@ -93,7 +93,7 @@ class TestFDAHealth:
         # plus the 2 withheld are the 5 the report is over.
         trace = run_elspais("trace", "--format", "json", cwd=project)
         assert trace.returncode == 0
-        reported = len(json.loads(trace.stdout))
+        reported = len(trace_rows(trace.stdout))
         assert reported == 5
         assert sum(groups.values()) + sum(data["excluded"].values()) == reported
 

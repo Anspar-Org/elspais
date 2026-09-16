@@ -21,6 +21,7 @@ from tests.e2e.conftest import (
     requires_xelatex,
     run_elspais,
 )
+from tests.e2e.helpers import trace_rows
 
 pytestmark = [
     pytest.mark.e2e,
@@ -543,7 +544,10 @@ class TestTraceSelfValidation:
         candidates = [out, out.with_suffix(".json"), Path(f"{out}.json")]
         found = [p for p in candidates if p.exists()]
         assert found, f"No trace output file found among {candidates}"
-        return json.loads(found[0].read_text())
+        # The rows, by name. Read as the whole document, the assertions below
+        # would search the dumped text of an object and pass on its field
+        # names alone.
+        return trace_rows(found[0].read_text())
 
     # Verifies: REQ-p00003-B
     def test_REQ_p00003_B_trace_json_has_requirements(self, trace_data):

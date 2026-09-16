@@ -26,6 +26,18 @@ from elspais.graph.aggregation import MEASURES
 from elspais.graph.values import figure_cell
 
 
+def _trace_rows(content: str) -> list[dict]:
+    """The rows of a trace JSON report.
+
+    Trace's JSON document has ONE shape -- an object stating ``scope`` beside
+    ``nodes`` -- so a reader wanting the rows asks for them by name. These
+    tests are about the rows; the document's shape is pinned once, in
+    ``tests/commands/test_scope_disclosure.py``, rather than restated by every
+    test that happens to read a row.
+    """
+    return json.loads(content)["nodes"]
+
+
 class TestTraceCommand:
     """Tests for basic trace command functionality."""
 
@@ -65,8 +77,7 @@ class TestTraceCommand:
         _render_json_from_data(data, preset)
 
         content = capsys.readouterr().out
-        parsed = json.loads(content)
-        assert isinstance(parsed, list)
+        parsed = _trace_rows(content)
         assert any(item["id"] == "REQ-p00001" for item in parsed)
 
     # Verifies: REQ-d00069-L, REQ-d00282-B+E
@@ -87,7 +98,7 @@ class TestTraceCommand:
 
         _render_json_from_data(data, preset)
         default_item = next(
-            i for i in json.loads(capsys.readouterr().out) if i["id"] == "REQ-p00001"
+            i for i in _trace_rows(capsys.readouterr().out) if i["id"] == "REQ-p00001"
         )
         assert "tested" in default_item
         assert not set(default_item["tested"]) & set(MEASURES), (
@@ -96,7 +107,7 @@ class TestTraceCommand:
 
         chosen = ["id", "tested.immediate_direct", "implemented.rolled_indirect"]
         _render_json_from_data(data, preset, chosen)
-        item = next(i for i in json.loads(capsys.readouterr().out) if i["id"] == "REQ-p00001")
+        item = next(i for i in _trace_rows(capsys.readouterr().out) if i["id"] == "REQ-p00001")
         # The key a selection names is a PATH, and the object mirrors it: a
         # measure of a dimension is stated INSIDE that dimension (REQ-d00282-B).
         assert list(item.keys()) == ["id", "tested", "implemented"]
@@ -118,10 +129,10 @@ class TestTraceCommand:
         )
         chosen = ["id", "tested.rolled_direct", "implemented.immediate_indirect"]
 
-        live = json.loads("".join(format_json(canonical_federated_graph, preset, None, chosen)))
+        live = _trace_rows("".join(format_json(canonical_federated_graph, preset, None, chosen)))
         data = compute_trace(canonical_federated_graph, {}, TraceRequest())
         _render_json_from_data(data, preset, chosen)
-        served = json.loads(capsys.readouterr().out)
+        served = _trace_rows(capsys.readouterr().out)
 
         live_item = next(i for i in live if i["id"] == "REQ-p00001")
         served_item = next(i for i in served if i["id"] == "REQ-p00001")
@@ -287,8 +298,7 @@ class TestTraceReportPresets:
         _render_json_from_data(trace_data, p)
 
         content = capsys.readouterr().out
-        data = json.loads(content)
-        assert isinstance(data, list)
+        data = _trace_rows(content)
         parent = next((r for r in data if r.get("id") == "REQ-p00001"), None)
         assert parent is not None
         for field in should_have_fields:
@@ -1661,7 +1671,7 @@ class TestTraceTestedBreakdown:
         # REQ-d00282-C: the heading names the dimension AND the measure.
         assert header == ["ID", "Tested", "Tested (cited by name here)"]
 
-        rows = json_module.loads("".join(format_json(graph, preset, None, chosen)))
+        rows = json_module.loads("".join(format_json(graph, preset, None, chosen)))["nodes"]
         # Two cells in a table, one nested object in a format that has numbers:
         # naming the figure AND a measure of it names one place twice, and the
         # measure lands inside the figure rather than beside it (REQ-d00282-D).
