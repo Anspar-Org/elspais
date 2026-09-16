@@ -447,21 +447,18 @@ def render_section(
 
     from elspais.commands._scope import (
         active_overlay_disclosure,
-        flag_values,
         scope_disclosure,
     )
     from elspais.graph.scope import scoped_requirements
 
-    exclude_status = statuses_withheld_from_coverage(
-        config or {}, flag_values(args, "treat_active")
-    )
+    # Read what the edge already derived. Two reads of one value at one edge
+    # are two chances for the gate and the disclosure to disagree.
+    exclude_status = statuses_withheld_from_coverage(config or {}, inputs.treat_active)
 
     scope_result = scoped_requirements(graph, inputs.scope, config)
     scope_ids = None if len(scope_result.ids) == scope_result.population else scope_result.ids
     data = collect_gaps(graph, exclude_status, config=config, node_ids=scope_ids)
-    scope_lines = scope_disclosure(scope_result) + active_overlay_disclosure(
-        flag_values(args, "treat_active")
-    )
+    scope_lines = scope_disclosure(scope_result) + active_overlay_disclosure(inputs.treat_active)
 
     fmt = getattr(args, "format", "text")
 

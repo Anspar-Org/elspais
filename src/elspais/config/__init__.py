@@ -221,7 +221,13 @@ def reference_excluded_statuses(
     applies to all of the reading of that status in the run.
     """
     roles = get_status_roles(config or {})
-    return set(roles.coverage_excluded_statuses()) - statuses_weighed_active(treat_active)
+    # Compare without case. A role table holds the spelling the project wrote,
+    # and ``statuses_weighed_active`` gives the title case of what the caller
+    # wrote. A subtraction of one set from the other kept a status that the
+    # caller did name. REQ-d00291-G weighs EVERY status that a caller names,
+    # and identifier matching admits a difference of case (REQ-d00212-S).
+    weighed = {s.lower() for s in statuses_weighed_active(treat_active)}
+    return {s for s in roles.coverage_excluded_statuses() if s.lower() not in weighed}
 
 
 def _declaration(config: dict[str, Any], name: str) -> Any:

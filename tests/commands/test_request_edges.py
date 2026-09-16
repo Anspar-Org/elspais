@@ -285,3 +285,76 @@ class TestSurfaceParity:
         local = compute_analysis(canonical_federated_graph, canonical_config, local_request)
         served = compute_analysis(canonical_federated_graph, canonical_config, served_request)
         assert local == served
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# The statuses a run weighs as active travel with the request
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+# Verifies: REQ-d00291-G, REQ-d00258-C
+class TestTreatActiveSurvivesTheWire:
+    """``--treat-active`` is a run-scoped overlay, so the names have to reach
+    whichever process computes the report.
+
+    REQ-d00291-G states the obligation on the NAMING rather than on a way of
+    naming, precisely because the same question arrives as a program's argument
+    and as a serving process's parameter. A name dropped on the way is the worst
+    available failure: the daemon computes as though the flag were absent, the
+    figures come back on the default footing, and the disclosure line that would
+    have told the reader which statuses were weighed is absent too -- so the
+    report is indistinguishable from the one they asked for.
+    """
+
+    @pytest.mark.parametrize("request_name", ("SummaryRequest", "TraceRequest", "GapsRequest"))
+    def test_the_names_a_run_weighs_reach_a_serving_process(self, request_name):
+        from elspais.commands import _requests
+        from elspais.commands._edges import report_inputs_from_params
+
+        request = getattr(_requests, request_name)(treat_active=("draft", "in-review"))
+        served = report_inputs_from_params(request.to_params(), OFFERED)
+        # Every name, in order, in the spelling the caller gave: normalizing
+        # is `statuses_weighed_active`'s job, done once where the config is
+        # read, and a wire that title-cased on its own would be a second
+        # authority on the spelling.
+        assert served.treat_active == ("draft", "in-review")
+
+    @pytest.mark.parametrize("request_name", ("SummaryRequest", "TraceRequest", "GapsRequest"))
+    def test_a_payload_naming_nothing_weighs_nothing(self, request_name):
+        """An absent key is the default footing, and it must read back as the
+        empty tuple rather than as ``None`` -- every consumer passes this value
+        straight to ``config_with_active_overlay``."""
+        from elspais.commands import _requests
+        from elspais.commands._edges import report_inputs_from_params
+
+        request = getattr(_requests, request_name)()
+        assert request.to_params().get("treat_active") is None
+        assert report_inputs_from_params(request.to_params(), OFFERED).treat_active == ()
+        assert report_inputs_from_params({}, OFFERED).treat_active == ()
+
+    def test_a_repeated_flag_accumulates_at_the_args_edge(self):
+        """What tyro's ``UseAppendAction`` hands over is a list of lists -- one
+        inner list per occurrence of the flag. REQ-d00291-G weighs EVERY status
+        named, so the occurrences are flattened rather than the last one
+        standing for the whole invocation."""
+        from elspais.commands._edges import report_inputs_from_args
+
+        args = argparse.Namespace(
+            scope=None, values=None, treat_active=[["draft", "proposed"], ["in-review"]]
+        )
+        inputs = report_inputs_from_args(args, None, OFFERED, identity_key="level")
+        assert inputs.treat_active == ("draft", "proposed", "in-review")
+
+    def test_the_args_edge_and_the_params_edge_agree(self):
+        """The round trip the daemon actually performs: CLI edge -> request ->
+        params -> params edge."""
+        from elspais.commands._edges import report_inputs_from_args, report_inputs_from_params
+        from elspais.commands._requests import SummaryRequest
+
+        args = argparse.Namespace(scope=None, values=None, treat_active=[["draft"], ["proposed"]])
+        local = report_inputs_from_args(args, None, OFFERED, identity_key="level")
+        request = SummaryRequest(
+            scope=local.scope, values=local.values, treat_active=local.treat_active
+        )
+        served = report_inputs_from_params(request.to_params(), OFFERED, identity_key="level")
+        assert served.treat_active == local.treat_active == ("draft", "proposed")

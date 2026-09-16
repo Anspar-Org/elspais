@@ -103,7 +103,7 @@ def scope_from_args(args: Any, config: dict[str, Any] | None = None) -> ReportSc
     return ReportScope(include=include, exclude=exclude, match_status_roles=match_roles)
 
 
-# Implements: REQ-d00291-G, REQ-p00084-D
+# Implements: REQ-d00291-G
 def active_overlay_disclosure(treat_active: Iterable[str] | None) -> list[str]:
     """What a report owes its reader about the statuses it weighed as active.
 
@@ -111,10 +111,18 @@ def active_overlay_disclosure(treat_active: Iterable[str] | None) -> list[str]:
     the requirements in that status. The text of those requirements still
     gives the original status. A reader who cannot see the request cannot see
     the reason for the difference. Therefore the report states the request.
-    This is the same obligation REQ-p00084-D puts on a narrowed report.
 
     The result is empty if the run weighs no status as active. There is then
     nothing to state.
+
+    NOTE: no assertion mandates this line. REQ-d00291-G obliges the weighing.
+    REQ-d00291-I obliges a report to state what it HELD OUT by status, which
+    is the opposite disclosure. REQ-p00084-D obliges a SCOPED report to
+    disclose its scope, and a status weighed as active is not a scope: a scope
+    narrows which requirements a report emits, and this changes the population
+    a figure is taken over. The line is written because a figure that counts a
+    requirement whose text reads ``Status: Review`` is otherwise unaccountable
+    to its reader. The obligation belongs in the spec.
     """
     from elspais.config import statuses_weighed_active
 

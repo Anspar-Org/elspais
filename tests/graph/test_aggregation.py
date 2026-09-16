@@ -360,6 +360,34 @@ class TestLevelGroupKeys:
         assert promoted_status not in data["excluded"]
         assert data["excluded"] == {"Deprecated": 1}
 
+    # Verifies: REQ-d00291-F+G, REQ-d00281-B, REQ-d00258-C
+    @pytest.mark.parametrize("named", ["Draft", "draft", "DRAFT"])
+    def test_a_run_scoped_promotion_reaches_the_same_rows_a_declaration_does(self, named):
+        # The sibling above promotes through `[statuses.Draft]`; this promotes
+        # through `--treat-active` on a config that declares NOTHING. Both
+        # reach `collect_coverage` as one overlaid config, so the level rows
+        # and the withheld tally cannot disagree (REQ-d00258-C) -- and every
+        # spelling of the name reaches it, since REQ-d00291-G weighs every
+        # status named however the caller wrote it.
+        from elspais.config import config_with_active_overlay
+
+        graph = _make_graph(
+            _make_req("REQ-x00001", level="dev", status="Active"),
+            _make_req("REQ-x00002", level="dev", status="Draft"),
+            _make_req("REQ-x00003", level="prd", status="Deprecated"),
+        )
+        overlaid = config_with_active_overlay(self.CONFIG, (named,))
+        data = collect_coverage(graph, overlaid)
+
+        assert {row["level"]: row["total"] for row in data["levels"]}["DEV"] == 2
+        assert data["excluded"] == {"Deprecated": 1}
+        # REQ-d00281-B: counted once, whichever side of the sum it fell on.
+        assert sum(row["total"] for row in data["levels"]) + sum(data["excluded"].values()) == 3
+        # Unpromoted, the same graph and config hold it out -- so the assert
+        # above is the promotion's effect, not the default.
+        baseline = collect_coverage(graph, self.CONFIG)
+        assert baseline["excluded"] == {"Draft": 1, "Deprecated": 1}
+
 
 class TestAggregateDimension:
     """REQ-d00258-C: the single whole-graph per-dimension walk health.py's

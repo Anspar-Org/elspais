@@ -321,3 +321,182 @@ class TestCoverageStatusSelector:
             "treat_active=Draft must add the Draft requirement to the counted set "
             f"(2 REQs, 1+2 assertions) and nothing else; got {widened}"
         )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Surface: --treat-active reaches every report taken over a set of requirements
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _scope_option_subclasses() -> list[type]:
+    """Every command whose arguments are built on ``ScopeOptions``."""
+    from elspais.commands.args import ScopeOptions
+
+    subclasses = ScopeOptions.__subclasses__()
+    assert subclasses, "ScopeOptions has no subclasses -- this test would assert nothing"
+    return subclasses
+
+
+def _checks_args() -> type:
+    """``checks`` honours no scope, so it declares the field itself."""
+    from elspais.commands.args import ChecksArgs
+
+    return ChecksArgs
+
+
+class TestEveryScopedReportCanWeighAStatus:
+    """The field lives on ``ScopeOptions`` rather than on each command.
+
+    The statuses a run weighs as active decide the POPULATION every figure in
+    the report is taken over (REQ-d00291-F), so a command that cannot receive
+    them answers a different question from its siblings about the same graph --
+    which is exactly the disagreement REQ-d00258-C forbids. Derived from
+    ``__subclasses__()`` rather than from a list of names so that a command
+    added later is covered without anyone remembering to add it here.
+
+    Scope note: this pins that each command ACCEPTS the names, not that each
+    compute path HONOURS them. What a report does with them is pinned below
+    for summary and gaps.
+    """
+
+    # Verifies: REQ-d00291-F+G, REQ-d00258-C
+    @pytest.mark.parametrize(
+        "cls",
+        [*_scope_option_subclasses(), _checks_args()],
+        ids=lambda c: c.__name__,
+    )
+    def test_the_command_can_be_told_which_statuses_to_weigh(self, cls):
+        field = {f.name: f for f in dataclasses.fields(cls)}.get("treat_active")
+        assert field is not None, (
+            f"{cls.__name__} reports over a set of requirements but cannot be told which "
+            "statuses to weigh as active, so its population differs from its siblings'"
+        )
+        # An accumulating list, not a scalar: REQ-d00291-G weighs EVERY status
+        # named, and `_scope.flag_values` flattens the repeated occurrences
+        # tyro's UseAppendAction produces. Redeclared as `str | None`, the flag
+        # would keep the last occurrence and silently narrow the promotion.
+        assert field.default_factory is list, (
+            f"{cls.__name__}.treat_active must default to an empty list so repeated "
+            f"occurrences accumulate; got default_factory={field.default_factory!r}"
+        )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Semantics: the promotion reaches the report AND the work list, together
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _summary(graph, config, treat_active: tuple[str, ...] = ()) -> dict:
+    from elspais.commands._requests import SummaryRequest
+    from elspais.commands.summary import compute_summary
+
+    return compute_summary(graph, config, SummaryRequest(treat_active=treat_active))
+
+
+def _gaps(graph, config, treat_active: tuple[str, ...] = ()) -> dict:
+    from elspais.commands._requests import GapsRequest
+    from elspais.commands.gaps import compute_gaps
+
+    return compute_gaps(graph, config, GapsRequest(treat_active=treat_active, command="gaps"))
+
+
+class TestPromotionReachesSummaryAndGapsAlike:
+    """``summary`` counts a requirement and ``gaps`` lists it, or neither does.
+
+    This was a live defect: ``gaps`` derived its population gate from the
+    status ROLES while ``summary`` asked the resolver, so a promoted
+    requirement was counted in a level row and refused a place in the work
+    list -- a reader was told work existed and never told where. Both now read
+    ``statuses_withheld_from_coverage`` (REQ-d00291-F), which is the one
+    resolver in set form (REQ-d00258-C).
+    """
+
+    # Verifies: REQ-d00291-F+G+I, REQ-d00281-B
+    def test_a_promoted_requirement_is_counted_and_not_also_excluded(self, built):
+        graph, config = built
+        baseline = _summary(graph, config)
+        widened = _summary(graph, config, ("Draft",))
+
+        dev = {row["level"]: row["total"] for row in widened["levels"]}["DEV"]
+        assert dev == 2, (
+            "the promoted Draft requirement must join the Active one in its level row; "
+            f"got DEV total {dev}"
+        )
+        assert "Draft" not in widened["excluded"], (
+            "a requirement counted in a level row must not also be reported as withheld "
+            f"by its status; excluded was {widened['excluded']}"
+        )
+        # Still genuinely non-empty, so emptying the tally would not pass.
+        assert widened["excluded"] == {"Deprecated": 1}
+        assert baseline["excluded"] == {"Draft": 1, "Deprecated": 1}
+
+    # Verifies: REQ-d00281-B, REQ-d00291-I
+    @pytest.mark.parametrize("treat_active", [(), ("Draft",)])
+    def test_every_requirement_is_accounted_for_exactly_once(self, built, treat_active):
+        """A reader can add the level rows to the withheld counts and get the
+        estate back. Whether a status was promoted changes which side of the
+        sum a requirement falls on, never how many times it appears."""
+        graph, config = built
+        data = _summary(graph, config, treat_active)
+        counted = sum(row["total"] for row in data["levels"])
+        withheld = sum(data["excluded"].values())
+        assert counted + withheld == 3, (
+            f"levels={[(r['level'], r['total']) for r in data['levels']]} "
+            f"excluded={data['excluded']}"
+        )
+
+    # Verifies: REQ-d00291-F+G
+    def test_the_work_list_names_the_requirement_the_summary_counted(self, built):
+        graph, config = built
+        listed = {entry[0] for entry in _gaps(graph, config, ("Draft",))["uncovered"]}
+        assert DRAFT_ID in listed, (
+            "the promoted requirement is counted in the coverage figures, so the work "
+            f"list must say where the work is; uncovered was {sorted(listed)}"
+        )
+        assert ACTIVE_ID in listed
+        assert DEPRECATED_ID not in listed, (
+            "naming Draft must not promote the still-retired Deprecated requirement"
+        )
+
+    # Verifies: REQ-d00291-F
+    def test_an_unpromoted_requirement_is_in_neither(self, built):
+        graph, config = built
+        listed = {entry[0] for entry in _gaps(graph, config)["uncovered"]}
+        assert listed == {ACTIVE_ID}, (
+            "a status that expects no implementation is held out of the work list as it "
+            f"is held out of the figures; uncovered was {sorted(listed)}"
+        )
+
+
+class TestTheReportStatesWhatItWeighed:
+    """A promoted run's figures include requirements whose own text still reads
+    ``Status: Draft``. A reader who cannot see the invocation cannot account for
+    the difference, so the report states the request (REQ-d00291-G)."""
+
+    DISCLOSURE = "Weighed as active: Draft (--treat-active)"
+
+    # Verifies: REQ-d00291-G
+    def test_the_disclosure_is_one_line_naming_the_statuses_and_the_flag(self):
+        from elspais.commands._scope import active_overlay_disclosure
+
+        assert active_overlay_disclosure(("draft",)) == [self.DISCLOSURE]
+        # Sorted and normalized once, so two spellings of one invocation
+        # produce one artifact.
+        assert active_overlay_disclosure(("review", "DRAFT")) == [
+            "Weighed as active: Draft, Review (--treat-active)"
+        ]
+        assert active_overlay_disclosure(()) == []
+
+    # Verifies: REQ-d00291-G
+    def test_it_reaches_the_summary_a_reader_is_handed(self, built):
+        graph, config = built
+        assert self.DISCLOSURE in _summary(graph, config, ("Draft",))["scope"]
+        assert not _summary(graph, config)["scope"]
+
+    # Verifies: REQ-d00291-G
+    def test_it_reaches_the_gap_listing_a_reader_is_handed(self, built):
+        graph, config = built
+        assert self.DISCLOSURE in _gaps(graph, config, ("Draft",))["scope"]
+        # `compute_gaps` omits the key entirely when there is nothing to
+        # state, so an unpromoted listing declares nothing at all.
+        assert "scope" not in _gaps(graph, config)

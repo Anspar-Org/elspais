@@ -146,7 +146,7 @@ class ChecksRequest:
             if getattr(self, name)
         }
         if self.treat_active:
-            params["treat_active"] = ",".join(self.treat_active)
+            params[TREAT_ACTIVE_PARAM] = TREAT_ACTIVE_SEPARATOR.join(self.treat_active)
         return params
 
 

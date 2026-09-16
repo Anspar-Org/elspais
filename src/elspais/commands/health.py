@@ -2378,6 +2378,14 @@ _GOVERNED_SETTING_ROOTS: tuple[str, ...] = (
     # the two roots above answer for the checks that do have one.
     "rules.severity",
     "rules.format.status_roles",
+    # A per-status declaration decides whether requirements in that status are
+    # counted (REQ-d00291-D). That is a rule for scoring, so the invoking
+    # repository governs it (REQ-d00275-A). It is governed through this root
+    # and not through the roles: a member can reach a different answer by
+    # either mechanism, and only the roles were listed here. A member that
+    # declared ``expects_implementation`` was then overridden with no
+    # disclosure (REQ-d00275-D).
+    "statuses",
 )
 
 
