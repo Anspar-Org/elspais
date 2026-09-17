@@ -350,6 +350,40 @@ one name.  Post-processing the XML to inject `file="<repo-relative path>"` into
 each `<testcase>` still works and takes precedence, since a producer that names
 the source file leaves nothing to resolve.
 
+### A reporter that names each test's source
+
+Playwright holds each test's location and uses it only in the message of a
+failure. elspais ships a reporter that writes the same report and adds the
+location as attributes, so a result binds to the test that produced it rather
+than to every test in its file. The reporter is at
+`recipes/playwright-junit-reporter.mjs` in the installed package. Copy it into
+the repository that runs the tests.
+
+```ts
+// playwright.config.ts
+reporter: [['./elspais-junit-reporter.mjs', { outputFile: 'junit.xml' }]]
+```
+
+```toml
+[[scanning.test.targets]]
+name        = "e2e"
+reporter    = "junit"
+results     = "junit.xml"
+match       = "source"
+environment = "suite-hostname"
+line_base   = 1
+```
+
+`line_base` is required and is the part most easily missed. The `junit`
+reporter declares that its producers count lines from zero, because that is
+what pytest writes. This reporter counts from one, as Playwright does, so the
+target says so. Without it every line arrives one too high and no result finds
+its test.
+
+The reporter keeps `hostname` on each suite, so one report serves both
+readings: each project's records are told apart, and each result names the
+project it came from.
+
 Because JUnit `line` values are not true source lines, binding is
 **file-granular**: a passing spec credits all of its `// Verifies:` step-edges;
 any failing case flags them.  The journey verdict is all-or-nothing -- `full`
