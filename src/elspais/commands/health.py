@@ -2334,6 +2334,80 @@ def check_no_cycles(graph: FederatedGraph, config: dict[str, Any] | None = None)
 
 
 # Implements: REQ-d00080-B
+# Implements: REQ-p00019-A
+def check_unmatched_file_pattern(
+    graph: FederatedGraph, config: dict[str, Any] | None = None
+) -> HealthCheck:
+    """Report a NAMED file the scan selected nothing for.
+
+    A glob that skips some of its matches is ordinary. Writing a file's whole
+    name into ``file_patterns`` -- no wildcard -- is a request for that one
+    file, and receiving nothing back is the silent omission REQ-p00019-A
+    prohibits: nothing in the answer says the file was excluded rather than
+    absent, so a reader audits the wrong thing.
+
+    Where a skip pattern names the same file the cause is stated outright.
+    Where a skipped DIRECTORY is the cause it is not, deliberately: finding
+    out would mean listing a directory the configuration said not to enter,
+    which is the read REQ-p00015-H forbids. The finding reports what it knows
+    and does not go looking.
+
+    This reports a contradiction between two of a project's own declarations.
+    It is not a finding about the file, so REQ-d00241-G -- which forbids
+    reporting a file the configuration excludes -- is not reached.
+    """
+    check = "config.unmatched_file_pattern"
+    severity = severity_for(check, config)
+    if severity == Severity.OFF:
+        return skipped_check(check, "A named file pattern that selected nothing")
+
+    from elspais.config import scan_exclusions
+    from elspais.graph.file_selection import file_is_skipped
+
+    cfg = config or {}
+    scanning = cfg.get("scanning") or {}
+    findings: list[HealthFinding] = []
+
+    for kind in ("spec", "code", "test"):
+        kind_cfg = scanning.get(kind) or {}
+        if not isinstance(kind_cfg, dict):
+            continue
+        patterns = [p for p in (kind_cfg.get("file_patterns") or []) if isinstance(p, str)]
+        _, skip_files = scan_exclusions(cfg, kind)
+        for pattern in patterns:
+            # A wildcard means the entry describes a class of files, and some
+            # of them being skipped is what a class is for.
+            if any(ch in pattern for ch in "*?["):
+                continue
+            if file_is_skipped(pattern, skip_files):
+                findings.append(
+                    HealthFinding(
+                        message=(
+                            f"[scanning.{kind}] file_patterns names '{pattern}', and a skip "
+                            f"pattern excludes it. The file is not read. Remove it from one "
+                            f"of the two lists."
+                        ),
+                    )
+                )
+
+    if findings:
+        return HealthCheck(
+            name=check,
+            passed=False,
+            message=f"{len(findings)} named file pattern(s) that a skip pattern excludes",
+            category="spec",
+            severity=severity,
+            findings=findings,
+        )
+    return HealthCheck(
+        name=check,
+        passed=True,
+        message="No named file pattern is excluded by a skip pattern",
+        category="spec",
+        severity=severity,
+    )
+
+
 def check_no_requirements(
     graph: FederatedGraph, config: dict[str, Any] | None = None
 ) -> HealthCheck:
@@ -2542,6 +2616,7 @@ def run_spec_checks(
 
     checks: list[HealthCheck] = [
         check_no_requirements(graph, config),
+        check_unmatched_file_pattern(graph, config),
         check_governed_rule_divergence(graph, config),
         check_associate_paths(config, _repo_root),
         check_spec_files_parseable(graph, config),

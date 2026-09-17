@@ -917,12 +917,20 @@ Body text.
 
 
 def _excluding_project(tmp_path: Path) -> tuple[Path, object, object]:
-    """A project holding a kept and an excluded spec file.
+    """A project holding a kept spec file and two excluded ones.
 
-    Returns the spec directory, this project's resolver, and the ignore
-    configuration `run()` builds from the same config and hands down.
+    One file is excluded by NAME and one by the DIRECTORY holding it, because
+    the two are judged by different rules in different frames: a file pattern
+    is a glob over a name, a directory pattern is a path from the repository
+    root. A project exercising only the first left the second unread by the
+    build and still read by `edit`.
+
+    Returns the spec directory, this project's resolver, and the
+    `(repo_root, skip_dirs, skip_files)` exclusions `run()` derives from the
+    same config and hands down. The root travels with the patterns because a
+    directory pattern cannot be judged without it.
     """
-    from elspais.config import get_ignore_config, load_config
+    from elspais.config import load_config, scan_exclusions
     from elspais.utilities.patterns import build_resolver
 
     config_path = tmp_path / ".elspais.toml"
@@ -939,14 +947,17 @@ skip = ["secret.md"]
 
 [scanning.spec]
 directories = ["spec"]
+skip_dirs = ["spec/archive"]
 """
     )
     spec_dir = tmp_path / "spec"
     _write_excludable_spec(spec_dir / "reqs.md", "REQ-p00001")
     _write_excludable_spec(spec_dir / "secret.md", "REQ-p00009")
+    _write_excludable_spec(spec_dir / "archive" / "old.md", "REQ-p00010")
 
     config = load_config(config_path)
-    return spec_dir, build_resolver(config), get_ignore_config(config)
+    skip_dirs, skip_files = scan_exclusions(config, "spec")
+    return spec_dir, build_resolver(config), (tmp_path, skip_dirs, skip_files)
 
 
 def _record_opens(monkeypatch) -> set:
@@ -981,30 +992,45 @@ class TestEditDoesNotReadExcludedSpecFiles:
 
     # Verifies: REQ-p00015-H
     @pytest.mark.parametrize("surface", ["find_requirement_in_files", "collect_all_req_ids"])
+    @pytest.mark.parametrize(
+        ("excluded_file", "excluded_id"),
+        [
+            pytest.param("secret.md", "REQ-p00009", id="excluded-by-name"),
+            pytest.param("archive/old.md", "REQ-p00010", id="excluded-by-directory"),
+        ],
+    )
     def test_an_excluded_spec_file_is_never_opened(
-        self, tmp_path: Path, monkeypatch, surface: str
+        self, tmp_path: Path, monkeypatch, surface: str, excluded_file: str, excluded_id: str
     ) -> None:
-        """Neither surface opens a file the reader excluded.
+        """Neither surface opens a file the reader excluded, either way.
 
         The excluded file declares an id declared nowhere else, so a surface
         that opened it would both read it and answer with what it found.
         Reading the kept file is what shows the walk happened at all.
+
+        Both exclusion kinds are asked, because they are judged by different
+        rules: a name against a glob, a directory against a path from the
+        REPOSITORY root. Judged against a path relative to the spec directory
+        instead, the repo-relative form `spec/archive` matched nothing here
+        while the build pruned it -- so `edit` read a file the build would
+        never open.
         """
         from elspais.commands.edit import collect_all_req_ids, find_requirement_in_files
 
-        spec_dir, resolver, ignore_config = _excluding_project(tmp_path)
+        spec_dir, resolver, exclusions = _excluding_project(tmp_path)
+        short_id = excluded_id.split("-")[-1]
 
         opened = _record_opens(monkeypatch)
         try:
             if surface == "find_requirement_in_files":
-                answer = find_requirement_in_files(spec_dir, "REQ-p00009", ignore_config)
+                answer = find_requirement_in_files(spec_dir, excluded_id, exclusions)
                 assert answer is None, (
                     "A requirement declared only in an excluded file is not found"
                 )
             else:
-                ids = collect_all_req_ids(spec_dir, resolver, ignore_config)
+                ids = collect_all_req_ids(spec_dir, resolver, exclusions)
                 assert "REQ-p00001" in ids, "The kept file's requirement is collected"
-                assert not any("p00009" in known for known in ids), (
+                assert not any(short_id in known for known in ids), (
                     "An excluded file's requirement is not a valid reference target"
                 )
         finally:
@@ -1013,8 +1039,8 @@ class TestEditDoesNotReadExcludedSpecFiles:
         assert str((spec_dir / "reqs.md").resolve()) in opened, (
             f"{surface} read the kept spec file, so the recorder saw its reads"
         )
-        assert str((spec_dir / "secret.md").resolve()) not in opened, (
-            f"{surface} must never open an excluded spec file"
+        assert str((spec_dir / excluded_file).resolve()) not in opened, (
+            f"{surface} must never open the spec file excluded by {excluded_file}"
         )
 
     # Verifies: REQ-p00015-H
@@ -1022,7 +1048,7 @@ class TestEditDoesNotReadExcludedSpecFiles:
     def test_a_caller_holding_no_configuration_excludes_nothing(
         self, tmp_path: Path, surface: str
     ) -> None:
-        """Absent an ignore configuration, every spec file is still read.
+        """Absent any exclusions, every spec file is still read.
 
         The parameter defaults to excluding nothing rather than everything: a
         caller that holds no configuration has expressed no exclusion, and a
@@ -1030,12 +1056,16 @@ class TestEditDoesNotReadExcludedSpecFiles:
         """
         from elspais.commands.edit import collect_all_req_ids, find_requirement_in_files
 
-        spec_dir, resolver, _ignore_config = _excluding_project(tmp_path)
+        spec_dir, resolver, _exclusions = _excluding_project(tmp_path)
 
         if surface == "find_requirement_in_files":
             assert find_requirement_in_files(spec_dir, "REQ-p00009") is not None
         else:
-            assert collect_all_req_ids(spec_dir, resolver) >= {"REQ-p00001", "REQ-p00009"}
+            assert collect_all_req_ids(spec_dir, resolver) >= {
+                "REQ-p00001",
+                "REQ-p00009",
+                "REQ-p00010",
+            }
 
     # Verifies: REQ-p00015-H
     def test_the_command_threads_its_exclusions_down_to_the_walk(
@@ -1044,12 +1074,12 @@ class TestEditDoesNotReadExcludedSpecFiles:
         """An edit entered at the command layer reaches no excluded file.
 
         The helpers are only as excluded as their caller makes them, so this
-        enters where `run()` leaves off -- with the ignore configuration the
-        command built -- and pins that it arrives at the walk.
+        enters where `run()` leaves off -- with the exclusions the command
+        built -- and pins that it arrives at the walk.
         """
         from elspais.commands.edit import run_single_edit
 
-        spec_dir, resolver, ignore_config = _excluding_project(tmp_path)
+        spec_dir, resolver, exclusions = _excluding_project(tmp_path)
         args = argparse.Namespace(req_id="REQ-p00009", status="Draft")
 
         opened = _record_opens(monkeypatch)
@@ -1060,7 +1090,7 @@ class TestEditDoesNotReadExcludedSpecFiles:
                 dry_run=False,
                 validate_refs=True,
                 resolver=resolver,
-                ignore_config=ignore_config,
+                exclusions=exclusions,
             )
         finally:
             monkeypatch.undo()
@@ -1068,9 +1098,10 @@ class TestEditDoesNotReadExcludedSpecFiles:
         assert exit_code != 0, "An excluded requirement cannot be edited: it was never read"
         assert "not found" in capsys.readouterr().err.lower()
         assert str((spec_dir / "reqs.md").resolve()) in opened
-        assert str((spec_dir / "secret.md").resolve()) not in opened, (
-            "The command's exclusions must reach the walk that opens the files"
-        )
+        for excluded in ("secret.md", "archive/old.md"):
+            assert str((spec_dir / excluded).resolve()) not in opened, (
+                "The command's exclusions must reach the walk that opens the files"
+            )
 
     # Verifies: REQ-p00015-H
     def test_batch_validation_does_not_learn_ids_from_excluded_files(
@@ -1084,7 +1115,7 @@ class TestEditDoesNotReadExcludedSpecFiles:
         """
         from elspais.commands.edit import batch_edit
 
-        spec_dir, resolver, ignore_config = _excluding_project(tmp_path)
+        spec_dir, resolver, exclusions = _excluding_project(tmp_path)
 
         opened = _record_opens(monkeypatch)
         try:
@@ -1093,7 +1124,7 @@ class TestEditDoesNotReadExcludedSpecFiles:
                 [{"req_id": "REQ-p00001", "implements": "REQ-p00009"}],
                 validate_refs=True,
                 resolver=resolver,
-                ignore_config=ignore_config,
+                exclusions=exclusions,
             )
         finally:
             monkeypatch.undo()
@@ -1102,9 +1133,10 @@ class TestEditDoesNotReadExcludedSpecFiles:
             "A reference declared only in an excluded file is not a known id"
         )
         assert str((spec_dir / "reqs.md").resolve()) in opened
-        assert str((spec_dir / "secret.md").resolve()) not in opened, (
-            "Collecting reference targets must not open an excluded spec file"
-        )
+        for excluded in ("secret.md", "archive/old.md"):
+            assert str((spec_dir / excluded).resolve()) not in opened, (
+                "Collecting reference targets must not open an excluded spec file"
+            )
 
 
 def _write_editable_req(path: Path, req_id: str, title: str) -> None:

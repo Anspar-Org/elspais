@@ -90,7 +90,7 @@ class TestVariableLengthIds:
 
 @pytest.mark.e2e
 class TestSkipDirsMultiSegment:
-    """Config: skip_dirs = ['drafts', 'archive'] excludes nested dirs."""
+    """Config: skip_dirs names spec/active/drafts and spec/approved/archive."""
 
     # Verifies: REQ-d00212-Q
     def test_health_finds_only_included(self, project):
@@ -165,7 +165,8 @@ class TestIgnorePatterns:
 
     # Verifies: REQ-d00212-Q, REQ-d00281-B
     def test_spec_skip_dirs_excludes_the_requirements_beneath_them(self, project):
-        """``skip_dirs = ["drafts", "archive"]`` keeps PROJ-99 and PROJ-98 out
+        """``skip_dirs = ["spec/active/drafts", "spec/approved/archive"]`` keeps
+        PROJ-99 and PROJ-98 out
         of the report entirely -- not merely out of its counts.
 
         The counted total cannot show this. PROJ-99 is Draft and PROJ-98 is

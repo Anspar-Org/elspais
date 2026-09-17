@@ -221,7 +221,7 @@ directories = ["spec"]
 
 [scanning.code]
 directories = ["src"]
-skip_dirs = ["vendor"]
+skip_dirs = ["src/vendor"]
 """,
             encoding="utf-8",
         )
@@ -942,7 +942,7 @@ class TestOneSelectionMechanism:
                 "Verifies",
                 "tests/legacy/test_legacy.py",
                 "tests/test_kept.py",
-                {"test_skip_dirs": ["legacy"]},
+                {"test_skip_dirs": ["tests/legacy"]},
                 id="test-skip-dirs",
             ),
             pytest.param(
@@ -966,7 +966,7 @@ class TestOneSelectionMechanism:
                 "Implements",
                 "src/legacy/thing.py",
                 "src/kept.py",
-                {"code_skip_dirs": ["legacy"]},
+                {"code_skip_dirs": ["src/legacy"]},
                 id="code-skip-dirs",
             ),
         ],
@@ -1083,10 +1083,12 @@ def _write_for_kind(tmp_path: Path, kind: str, relative: str, req_id: str) -> No
 _EXCLUSION_ROUTES = [
     pytest.param("spec", "spec/secret.md", "spec/reqs.md", {"global_skip": ["secret.md"]}),
     pytest.param("spec", "spec/secret.md", "spec/reqs.md", {"spec_skip_files": ["secret.md"]}),
-    pytest.param("spec", "spec/drafts/draft.md", "spec/reqs.md", {"spec_skip_dirs": ["drafts"]}),
+    pytest.param(
+        "spec", "spec/drafts/draft.md", "spec/reqs.md", {"spec_skip_dirs": ["spec/drafts"]}
+    ),
     pytest.param("code", "src/legacy.py", "src/kept.py", {"global_skip": ["legacy.py"]}),
     pytest.param("code", "src/legacy.py", "src/kept.py", {"code_skip_files": ["legacy.py"]}),
-    pytest.param("code", "src/legacy/thing.py", "src/kept.py", {"code_skip_dirs": ["legacy"]}),
+    pytest.param("code", "src/legacy/thing.py", "src/kept.py", {"code_skip_dirs": ["src/legacy"]}),
     pytest.param(
         "test",
         "tests/test_legacy.py",
@@ -1103,7 +1105,7 @@ _EXCLUSION_ROUTES = [
         "test",
         "tests/legacy/test_legacy.py",
         "tests/test_kept.py",
-        {"test_skip_dirs": ["legacy"]},
+        {"test_skip_dirs": ["tests/legacy"]},
     ),
 ]
 
@@ -1206,7 +1208,7 @@ class TestExcludedContentIsNotRead:
                 "spec/drafts",
                 "spec/drafts/draft.md",
                 "spec/reqs.md",
-                {"spec_skip_dirs": ["drafts"]},
+                {"spec_skip_dirs": ["spec/drafts"]},
             ),
             pytest.param(
                 "code",
@@ -1214,7 +1216,7 @@ class TestExcludedContentIsNotRead:
                 "src/legacy",
                 "src/legacy/thing.py",
                 "src/kept.py",
-                {"code_skip_dirs": ["legacy"]},
+                {"code_skip_dirs": ["src/legacy"]},
             ),
             pytest.param(
                 "test",
@@ -1222,7 +1224,7 @@ class TestExcludedContentIsNotRead:
                 "tests/legacy",
                 "tests/legacy/test_thing.py",
                 "tests/test_kept.py",
-                {"test_skip_dirs": ["legacy"]},
+                {"test_skip_dirs": ["tests/legacy"]},
             ),
             pytest.param(
                 "spec",
@@ -1230,7 +1232,7 @@ class TestExcludedContentIsNotRead:
                 "spec/drafts",
                 "spec/drafts/draft.md",
                 "spec/reqs.md",
-                {"global_skip": ["drafts"]},
+                {"global_skip": ["spec/drafts"]},
             ),
             pytest.param(
                 "code",
@@ -1238,7 +1240,7 @@ class TestExcludedContentIsNotRead:
                 "src/legacy",
                 "src/legacy/thing.py",
                 "src/kept.py",
-                {"global_skip": ["legacy"]},
+                {"global_skip": ["src/legacy"]},
             ),
             pytest.param(
                 "test",
@@ -1246,7 +1248,7 @@ class TestExcludedContentIsNotRead:
                 "tests/legacy",
                 "tests/legacy/test_thing.py",
                 "tests/test_kept.py",
-                {"global_skip": ["legacy"]},
+                {"global_skip": ["tests/legacy"]},
             ),
         ],
         ids=[
@@ -1342,9 +1344,19 @@ class TestExcludedContentIsNotRead:
             build_graph(config_path=unexcluded, repo_root=tmp_path)
 
 
-# The skip list `elspais init` writes into a new project's configuration. Every
-# entry names something a repository may sit *under* as easily as hold.
-_INIT_TEMPLATE_SKIP = ["node_modules", ".git", "__pycache__", "*.pyc", ".venv", ".env"]
+# The skip list `elspais init` writes into a new project's configuration, spelled
+# exactly as it writes it. Every entry names something a repository may sit
+# *under* as easily as hold, and the `**/` entries are the dangerous ones: they
+# name a directory at any depth INSIDE the repository, so nothing but reading the
+# path from the repository root keeps them off an ancestor of the checkout.
+_INIT_TEMPLATE_SKIP = [
+    "**/node_modules",
+    "**/.git",
+    "**/__pycache__",
+    "*.pyc",
+    "**/.venv",
+    ".env",
+]
 
 
 def _repo_under(parent: Path) -> Path:
@@ -1390,7 +1402,7 @@ class TestWhereARepositorySitsDecidesNothing:
     ) -> None:
         """Two identical checkouts, differing only in the name above them."""
         assert not any(
-            fnmatch.fnmatch(part, pattern)
+            fnmatch.fnmatch(part, pattern.rsplit("/", 1)[-1])
             for part in tmp_path.parts
             for pattern in _INIT_TEMPLATE_SKIP
         ), (

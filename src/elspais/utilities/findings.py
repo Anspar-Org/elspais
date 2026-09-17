@@ -132,6 +132,7 @@ _REMEDIES: dict[str, str] = {
     "mcp.registration": "elspais mcp install",
     "daemon.status": "elspais daemon restart --persist",
     "config.no_requirements": "elspais example",
+    "config.unmatched_file_pattern": "no command resolves this; resolve it by hand",
     "associate.paths_resolvable": "elspais associate list",
     "associate.configs_valid": "elspais associate list",
     # -- spec ------------------------------------------------------------
@@ -240,6 +241,12 @@ _DESCRIPTIONS: dict[str, str] = {
         "each failure with its path and reason"
     ),
     "config.no_requirements": "Flags when no requirements are found (likely config issue)",
+    "config.unmatched_file_pattern": (
+        "Reports a `file_patterns` entry that names one file outright — no wildcard — and "
+        "selected nothing, naming the skip pattern that excluded it where that is the cause. "
+        "Asking for a named file and receiving nothing is otherwise indistinguishable from "
+        "the file not existing"
+    ),
     "config.governed_rules": (
         "Discloses each governed setting (`[rules.coverage]`, `[rules.references]`, "
         "`[rules.severity]`, `[rules.format.status_roles]`, `[statuses]`) a "
@@ -463,6 +470,7 @@ def _registry() -> dict[str, CheckRule]:
         _general("config.associated_section", "config", Severity.ERROR),
         _general("config.associate_paths", "spec", Severity.ERROR),
         _general("config.no_requirements", "spec", Severity.WARNING),
+        _general("config.unmatched_file_pattern", "spec", Severity.WARNING),
         _general("config.governed_rules", "spec", Severity.INFO),
         _general("local_toml.exists", "environment", Severity.ERROR),
         _general("cross_repo.in_committed", "environment", Severity.WARNING),

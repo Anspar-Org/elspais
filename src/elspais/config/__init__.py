@@ -8,10 +8,8 @@ Exports:
 
 from __future__ import annotations
 
-import fnmatch
 import re
 from collections.abc import Iterable
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -1037,121 +1035,6 @@ def get_docs_directories(
 parse_toml = _parse_toml
 
 
-@dataclass
-class IgnoreConfig:
-    """Unified configuration for ignoring files and directories.
-
-    Supports glob patterns (fnmatch) for flexible matching.
-    Patterns can be scoped to specific contexts (spec, code, test).
-
-    Attributes:
-        global_patterns: Patterns applied everywhere
-        spec_patterns: Additional patterns for spec file scanning
-        code_patterns: Additional patterns for code scanning
-        test_patterns: Additional patterns for test scanning
-    """
-
-    global_patterns: list[str]
-    spec_patterns: list[str]
-    code_patterns: list[str]
-    test_patterns: list[str]
-
-    # Implements: REQ-p00015-H
-    def should_ignore(
-        self, path: str | Path, scope: str = "global", base: str | Path | None = None
-    ) -> bool:
-        """Check if a path should be ignored based on patterns.
-
-        This is the ONE decision that answers whether the tool reads a path.
-        A caller asks before it opens a file and before it walks into a
-        directory, so an excluded path is never read (REQ-p00015-H). A caller
-        that reads a path first and asks after would satisfy no part of that
-        obligation, because the content it must not read is already in hand.
-
-
-        Matches against:
-        1. Global patterns (always checked)
-        2. Scope-specific patterns (if scope is provided)
-
-        Supports glob patterns via fnmatch:
-        - "*" matches any characters within a path component
-        - "**" matches across directory separators (when using pathlib)
-        - "?" matches a single character
-
-        Args:
-            path: Path to check (can be file or directory)
-            scope: Context scope ("global", "spec", "code", "test")
-            base: The root of the tree being scanned. A caller holding an
-                absolute path passes it, so a pattern is matched against the
-                part of the path that lies inside that tree.
-
-        Returns:
-            True if path should be ignored
-        """
-        path_obj = path if isinstance(path, Path) else Path(path)
-
-        # A pattern names something INSIDE the tree being scanned. Read the
-        # path relative to that tree, so an ancestor of the tree cannot match.
-        # Without this a checkout under a directory named `node_modules`, or
-        # any other name the default skip list carries, excluded every file in
-        # the repository -- the same repository answered differently depending
-        # only on where it was cloned.
-        if base is not None:
-            try:
-                path_obj = path_obj.relative_to(Path(base))
-            except ValueError:
-                # Not under *base*: judge it as given rather than silently
-                # widening the match back to the whole absolute path.
-                pass
-
-        path_str = str(path_obj)
-        path_name = path_obj.name
-        path_parts = path_obj.parts
-
-        # Collect all applicable patterns
-        patterns = list(self.global_patterns)
-        if scope == "spec":
-            patterns.extend(self.spec_patterns)
-        elif scope == "code":
-            patterns.extend(self.code_patterns)
-        elif scope == "test":
-            patterns.extend(self.test_patterns)
-
-        for pattern in patterns:
-            # Check if pattern matches the file/dir name directly
-            if fnmatch.fnmatch(path_name, pattern):
-                return True
-
-            # Check if pattern matches any path component
-            for part in path_parts:
-                if fnmatch.fnmatch(part, pattern):
-                    return True
-
-            # Check if pattern matches the full relative path
-            if fnmatch.fnmatch(path_str, pattern):
-                return True
-
-        return False
-
-    def get_patterns_for_scope(self, scope: str) -> list[str]:
-        """Get all patterns applicable to a scope (global + scope-specific).
-
-        Args:
-            scope: Context scope ("global", "spec", "code", "test")
-
-        Returns:
-            Combined list of patterns
-        """
-        patterns = list(self.global_patterns)
-        if scope == "spec":
-            patterns.extend(self.spec_patterns)
-        elif scope == "code":
-            patterns.extend(self.code_patterns)
-        elif scope == "test":
-            patterns.extend(self.test_patterns)
-        return patterns
-
-
 def get_test_directories(
     config: dict[str, Any],
     base_path: Path | None = None,
@@ -1191,40 +1074,32 @@ def get_test_directories(
     return result
 
 
-def get_ignore_config(config: dict[str, Any]) -> IgnoreConfig:
-    """Get IgnoreConfig from configuration dictionary.
+# Implements: REQ-d00212-Q+W, REQ-p00015-H
+def scan_exclusions(config: dict[str, Any], kind: str) -> tuple[list[str], list[str]]:
+    """What one scanning kind does not enter, and does not read.
 
-    The IgnoreConfig provides a unified way to check if paths should be ignored
-    during file scanning. It supports glob patterns and scope-specific rules.
+    Returns ``(skip_dirs, skip_files)``. ONE derivation, so every kind's walk
+    is handed the same two lists in the same way.
 
-    Args:
-        config: Configuration dictionary from get_config() or load_config()
-
-    Returns:
-        IgnoreConfig instance with patterns from [scanning] section or defaults.
+    The global ``[scanning].skip`` list feeds BOTH, because it is written as
+    one list of things a project never wants scanned, and the two rules then
+    sort it out: a directory pattern names a path from the repository root and
+    can only match a directory, a file pattern is a glob over a name and can
+    only match a file. Nothing has to declare which kind of thing it meant.
     """
-    scanning = config.get("scanning", {})
-
-    # Global skip patterns
-    global_patterns = list(scanning.get("skip", []))
-
-    # Per-kind skip patterns (skip_files + skip_dirs merged)
-    def _kind_patterns(kind: str) -> list[str]:
-        kind_cfg = scanning.get(kind, {})
-        patterns = list(kind_cfg.get("skip_files", []))
-        patterns.extend(kind_cfg.get("skip_dirs", []))
-        return patterns
-
-    return IgnoreConfig(
-        global_patterns=global_patterns,
-        spec_patterns=_kind_patterns("spec"),
-        code_patterns=_kind_patterns("code"),
-        test_patterns=_kind_patterns("test"),
-    )
+    scanning = (config or {}).get("scanning") or {}
+    if not isinstance(scanning, dict):
+        return [], []
+    everywhere = [p for p in (scanning.get("skip") or []) if isinstance(p, str)]
+    kind_cfg = scanning.get(kind) or {}
+    if not isinstance(kind_cfg, dict):
+        kind_cfg = {}
+    dirs = [p for p in (kind_cfg.get("skip_dirs") or []) if isinstance(p, str)]
+    files = [p for p in (kind_cfg.get("skip_files") or []) if isinstance(p, str)]
+    return dirs + everywhere, files + everywhere
 
 
 __all__ = [
-    "IgnoreConfig",
     "config_defaults",
     "default_level_keys",
     "level_expects_validation",
@@ -1238,7 +1113,6 @@ __all__ = [
     "get_code_directories",
     "get_docs_directories",
     "get_test_directories",
-    "get_ignore_config",
     "parse_toml",
     "parse_toml_document",
     "get_status_roles",

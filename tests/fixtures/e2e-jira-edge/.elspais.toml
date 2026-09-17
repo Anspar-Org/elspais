@@ -12,7 +12,7 @@ implements = ["req"]
 
 [scanning.spec]
 directories = ["spec/active", "spec/approved"]
-skip_dirs = ["drafts", "archive"]
+skip_dirs = ["spec/active/drafts", "spec/approved/archive"]
 
 [scanning.code]
 directories = ["src"]

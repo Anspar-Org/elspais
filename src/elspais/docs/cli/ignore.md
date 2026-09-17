@@ -14,9 +14,13 @@ Three lists make up the ignore configuration:
 
 `<kind>` is `spec`, `code`, or `test`. The global `skip` list is checked for
 every kind; a kind's `skip_files`/`skip_dirs` are checked only when scanning
-that kind. `skip_files` and `skip_dirs` are matched identically (both are just
-glob patterns) -- the two names are a readability convention, not different
-matching rules.
+that kind.
+
+`skip_files` and `skip_dirs` are **not** interchangeable. They name different
+things and are matched by different rules:
+
+- a **directory** pattern is a path from the **repository root**
+- a **file** pattern is a glob over a file's **name**
 
 ## Ignoring and selecting are different questions
 
@@ -38,12 +42,12 @@ silence it.
 ```toml
 [scanning]
 # Global skip patterns (applied to all scan kinds)
-skip = ["node_modules", ".git", "__pycache__", "*.pyc", ".venv", ".env"]
+skip = ["**/node_modules", "**/.git", "**/__pycache__", "*.pyc", "**/.venv", ".env"]
 
 [scanning.spec]
 directories = ["spec"]
 skip_files  = ["README.md", "INDEX.md"]
-skip_dirs   = ["roadmap", "_generated"]
+skip_dirs   = ["**/roadmap", "spec/_generated"]
 
 [scanning.code]
 directories = ["src", "apps", "packages"]
@@ -52,32 +56,56 @@ skip_files  = ["conftest.py"]
 [scanning.test]
 enabled    = true
 directories = ["tests"]
-skip_dirs   = ["fixtures", "__snapshots__"]
+skip_dirs   = ["**/fixtures", "**/__snapshots__"]
 ```
 
 ## Pattern Syntax
 
-Patterns use Python's `fnmatch` module (similar to shell globs).
+### Directory patterns (`skip_dirs`, and `[scanning].skip` where it names a directory)
 
-**Important**: Each pattern is matched against three things: the file/dir
-basename, each individual path component, and the full path. A pattern like
-`README.md` matches any file named `README.md` at any depth; a pattern like
-`roadmap` matches any path component named `roadmap`.
+A directory pattern is a **path, read from the repository root**. It is not a
+name matched at any depth.
+
+| pattern | names |
+|---------|-------|
+| `stuff/things/junk` | that one directory |
+| `junk` | `junk` at the repository root -- nothing else |
+| `**/junk` | a directory called `junk` at any depth, the root included |
+| `stuff/**` | everything under `stuff`, and `stuff` itself |
+
+`**` stands for **zero or more** directories, which is why `**/junk` is a
+strict superset of `junk` and never narrower.
+
+A directory a pattern names is **not entered**. Nothing inside it is opened or
+even listed, so its sub-directories go with it and nothing downstream can
+report on any of it.
+
+A directory that is both scanned and skipped contributes nothing.
+
+### File patterns (`skip_files`, `file_patterns`)
+
+A file pattern is a glob over a file's **name**, so it applies at any depth. It
+says nothing about where the file sits -- the directory rules say that.
+`file_patterns` additionally matches the path *within* the directory being
+scanned, so `api/*.py` selects inside a subdirectory of a scanned directory.
 
 ## Pattern Characters
 
 - `*` matches any characters within a path component
-- `**` matches across directory separators
+- `**` matches zero or more directories (directory patterns)
 - `?` matches a single character
 
 ## Common Patterns
 
 | Goal | Where | Pattern | Example Match |
 |------|-------|---------|---------------|
-| Skip everywhere (all kinds) | `[scanning].skip` | `*.pyc` | `src/__pycache__/foo.pyc` |
-| Skip a directory by name | `[scanning.<kind>].skip_dirs` | `roadmap` | `spec/roadmap/plan.md` |
-| Skip a directory at a path | `[scanning.<kind>].skip_dirs` | `spec/archive/**` | `spec/archive/old.md` |
+| Skip a file everywhere | `[scanning].skip` | `*.pyc` | `src/__pycache__/foo.pyc` |
+| Skip a directory at any depth | `[scanning.<kind>].skip_dirs` | `**/roadmap` | `spec/roadmap/plan.md` |
+| Skip one directory exactly | `[scanning.<kind>].skip_dirs` | `spec/archive` | `spec/archive/old.md` |
 | Skip a file by name | `[scanning.<kind>].skip_files` | `README.md` | `spec/README.md` |
+
+A bare `roadmap` in `skip_dirs` names `roadmap` at the repository root. If you
+mean "wherever it appears", write `**/roadmap`.
 
 ## Recipe: keep test files out of the code scan
 
@@ -93,7 +121,7 @@ test nodes:
 ```toml
 [scanning.code]
 directories = ["src", "apps", "packages"]
-skip_dirs   = ["e2e"]          # keep the code scan out of e2e test dirs
+skip_dirs   = ["**/e2e"]       # keep the code scan out of e2e test dirs
 ```
 
 Or exclude Python test modules from the code scan:

@@ -87,7 +87,7 @@ implements = ["dev", "ops", "prd"]
 # File scanning configuration
 [scanning]
 # Global skip patterns (applied to all scan kinds)
-skip = ["node_modules", ".git", "__pycache__", "*.pyc", ".venv", ".env"]
+skip = ["**/node_modules", "**/.git", "**/__pycache__", "*.pyc", "**/.venv", ".env"]
 
 # Spec file scanning
 [scanning.spec]
@@ -98,7 +98,7 @@ file_patterns = ["*.md"]
 # Filenames to skip in spec directories
 skip_files = ["README.md", "requirements-format.md", "INDEX.md"]
 # Subdirectories to skip in spec directories
-skip_dirs = ["_generated"]
+skip_dirs = ["**/_generated"]
 # Index file for ordering (empty = no index)
 index_file = ""
 
@@ -126,7 +126,7 @@ file_patterns = ["test_*.py", "*_test.py"]
 # Filenames to skip in test directories
 skip_files = []
 # Subdirectories to skip in test directories
-skip_dirs = ["fixtures"]
+skip_dirs = ["**/fixtures"]
 # External command for function detection (receives paths on stdin, outputs JSON)
 prescan_command = ""
 # Additional regex patterns for reference detection
