@@ -592,7 +592,7 @@ Two sources are available:
 
 | Source | Reads |
 |--------|-------|
-| `results-path` | The one wildcard segment of this target's `results` glob |
+| `results-path` | The part of the path that the wildcard in this target's `results` glob matched |
 | `suite-hostname` | The `hostname` attribute of the `<testsuite>` holding the record |
 
 Use `results-path` where each environment writes its own artifact:
@@ -603,6 +603,14 @@ name        = "devices"
 reporter    = "junit"
 results     = "evidence/*/journey-results.xml"
 environment = "results-path"            # evidence/pixel-8/... -> "pixel-8"
+```
+
+The environment is what the wildcard stood for, and not the whole path
+segment it sits in. A pattern names the environment inside a segment as
+readily as it names a whole one:
+
+```toml
+results     = "evidence/junit-*.xml"    # evidence/junit-pixel-8.xml -> "pixel-8"
 ```
 
 Use `suite-hostname` where one artifact holds every environment and the
@@ -617,11 +625,12 @@ environment = "suite-hostname"          # <testsuite hostname="firefox">
 ```
 
 A declared source does not always give an answer. A `results` glob holding
-`**`, or holding more than one wildcard segment, does not say which part of
-the path is the environment, and a record may hold no hostname at all. In
-each of these the result carries no environment and `elspais checks` reports
-that none was derived. The tool does not guess a segment, because a guess
-reads exactly like a reading in every figure that follows.
+`**`, holding more than one wildcard segment, or holding more than one
+wildcard within its wildcard segment, does not say which part of the path is
+the environment. A record may also hold no hostname at all. In each of these
+the result carries no environment and `elspais checks` reports that none was
+derived. The tool does not guess, because a guess reads exactly like a
+reading in every figure that follows.
 
 ### Where the Environment Is Shown
 

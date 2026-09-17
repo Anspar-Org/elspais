@@ -642,9 +642,9 @@ CLASSNAME_FORMS = ("python-module", "source-file")
 
 # Implements: REQ-d00294-C
 # The sources a target may declare for the environment a result was recorded
-# in. "results-path" reads the one wildcard segment of the target's results
-# glob; "suite-hostname" reads the `hostname` attribute of the `<testsuite>`
-# that holds the record.
+# in. "results-path" reads the part of the path that the wildcard in the
+# target's results glob matched; "suite-hostname" reads the `hostname`
+# attribute of the `<testsuite>` that holds the record.
 ENVIRONMENT_SOURCES = ("results-path", "suite-hostname")
 
 
