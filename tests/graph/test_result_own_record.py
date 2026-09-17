@@ -356,3 +356,94 @@ def test_an_unknown_environment_source_is_refused():
     """A target may only declare a source the tool reads."""
     with pytest.raises(ValidationError):
         TestTargetConfig(name="devices", reporter="junit", environment="hostname")
+
+
+# A flutter suite saved to one file for each device, then read back by a
+# pattern. The format usually arrives on a runner's output, and a target that
+# saves it still has one artifact for each device.
+_FLUTTER_ONE_RECORD = (
+    '{"type":"suite","suite":{"id":0,"platform":"vm","path":"test/widget_test.dart"}}\n'
+    '{"type":"testStart","test":{"id":1,"name":"renders","suiteID":0,'
+    '"line":10,"column":5,"metadata":{},"root_line":10,"root_column":5}}\n'
+    '{"type":"testDone","testID":1,"result":"%s","hidden":false,"time":42}\n'
+)
+
+
+# Verifies: REQ-d00294-A
+def test_a_saved_stream_is_placed_by_its_artifact(tmp_path: Path):
+    """Records saved to one file for each device do not take each other's place.
+
+    The format carries no artifact when it arrives on a runner's output. Read
+    back from files, each file is what separates its records from the next
+    file's: every file counts its records from one, so without the artifact
+    every device writes the same identity and one verdict survives.
+    """
+    builder = _builder(tmp_path)
+    target = TestTargetConfig(
+        name="widgets",
+        reporter="flutter-machine",
+        results="evidence/*/machine.json",
+        match="source",
+    )
+    for device, verdict in (("pixel6", "success"), ("pixel8", "failure")):
+        artifact = _write(
+            tmp_path, f"evidence/{device}/machine.json", _FLUTTER_ONE_RECORD % verdict
+        )
+        _ingest_target_results(
+            builder,
+            target,
+            artifact.read_text(encoding="utf-8"),
+            tmp_path,
+            str(artifact),
+            namespace="REQ",
+        )
+
+    graph = builder.build()
+    results = sorted(graph.iter_by_kind(NodeKind.RESULT), key=lambda n: n.id)
+    assert [n.id for n in results] == [
+        "result:REQ:evidence/pixel6/machine.json:1",
+        "result:REQ:evidence/pixel8/machine.json:1",
+    ]
+    assert {n.get_field("status") for n in results} == {"passed", "failed"}
+
+
+# Verifies: REQ-d00294-C
+@pytest.mark.parametrize(
+    ("pattern", "relative", "expected"),
+    [
+        ("evidence/*/junit.xml", "evidence/pixel6/junit.xml", "pixel6"),
+        ("evidence/junit-*.xml", "evidence/junit-pixel6.xml", "pixel6"),
+        ("evidence/*.xml", "evidence/pixel6.xml", "pixel6"),
+    ],
+)
+def test_the_environment_is_what_the_wildcard_stood_for(
+    tmp_path: Path, pattern: str, relative: str, expected: str
+):
+    """The environment is the matched part of the segment, not the whole segment.
+
+    A pattern names the environment in the middle of a segment as readily as
+    it names a whole one. Reading the whole segment would call the environment
+    `junit-pixel6.xml` where the project means `pixel6`, and a name that
+    reports the wrong thing is worse than no name at all.
+    """
+    builder = _builder(tmp_path)
+    target = TestTargetConfig(
+        name="devices",
+        reporter="junit",
+        results=pattern,
+        environment="results-path",
+        match="source",
+    )
+    artifact = _write(tmp_path, relative, _ONE_RECORD)
+    _ingest_target_results(
+        builder,
+        target,
+        _ONE_RECORD,
+        tmp_path,
+        str(artifact),
+        namespace="REQ",
+        results_pattern=pattern,
+        results_base=tmp_path,
+    )
+
+    assert _environments(builder) == [expected]

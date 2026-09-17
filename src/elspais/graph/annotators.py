@@ -31,6 +31,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from elspais.config.schema import ElspaisConfig
+from elspais.graph.aggregation import FAILING_STATUSES, PASSING_STATUSES
 from elspais.graph.parsers.directives import counted_assertion_labels
 from elspais.utilities.test_identity import build_test_id_from_nodeid
 
@@ -157,7 +158,7 @@ def _compute_app_status_by_owner(graph, policy: CreditPolicy) -> dict[str | None
         if app is None:
             continue
         status = (r.get_field("status") or "").lower()
-        is_fail = status in ("failed", "fail", "failure", "error")
+        is_fail = status in FAILING_STATUSES
         failed[(owner, app)] = failed.get((owner, app), False) or is_fail
     result: dict[str | None, dict[str, str]] = {}
     for (owner, app), is_fail in failed.items():
@@ -1291,10 +1292,6 @@ class JourneyVerification:
         return "unverified"
 
 
-_UAT_PASS = ("passed", "pass", "success")
-_UAT_FAIL = ("failed", "fail", "failure", "error")
-
-
 # Implements: REQ-d00255-B
 def _node_verifying_status(node) -> tuple[bool, bool]:
     """Return ``(passed, failed)`` over the tests this node directly VERIFIES.
@@ -1314,9 +1311,9 @@ def _node_verifying_status(node) -> tuple[bool, bool]:
             if result.kind != NodeKind.RESULT:
                 continue
             status = (result.get_field("status", "") or "").lower()
-            if status in _UAT_PASS:
+            if status in PASSING_STATUSES:
                 passed = True
-            elif status in _UAT_FAIL:
+            elif status in FAILING_STATUSES:
                 failed = True
     return passed, failed
 
@@ -1658,7 +1655,7 @@ def annotate_coverage(
                 ):
                     continue
                 status = (result.get_field("status", "") or "").lower()
-                if status in ("passed", "pass", "success"):
+                if status in PASSING_STATUSES:
                     if assertion_targets:
                         for label in assertion_targets:
                             if label in assertion_labels:
@@ -1669,7 +1666,7 @@ def annotate_coverage(
                     verified_saw_signal = True
                     if not (result.get_field("carried") or False):
                         verified_all_carried = False
-                elif status in ("failed", "fail", "failure", "error"):
+                elif status in FAILING_STATUSES:
                     has_failures = True
                     verified_failing_labels |= _failing_targets(assertion_targets, assertion_labels)
                     verified_saw_signal = True

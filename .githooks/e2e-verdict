@@ -36,9 +36,47 @@ mkdir -p "$CACHE_DIR"
 # under, NOT the `elspais` launcher. Those two are separate installs and
 # routinely disagree. Identify the environment by where THAT interpreter
 # finds elspais, and make it the cache key.
+# A console-script shebang is not reliably `#!<absolute-path-to-python>`: some
+# layouts write `#!/usr/bin/env python3`, and options may follow the
+# interpreter. So walk the shebang's words, step over the `env` trampoline and
+# any flags, and resolve a bare name through PATH as `env` itself would. This
+# is the reading the commit hook already uses, and it matters more here,
+# because an interpreter this cannot identify is refused rather than warned
+# about. An interpreter that cannot be identified yields no answer rather than
+# a wrong one.
 e2e_env_src() {
     _bin=$(command -v pytest 2>/dev/null) || return 1
-    _py=$(head -1 "$_bin" 2>/dev/null | sed 's|^#!||')
+    _shebang=$(head -1 "$_bin" 2>/dev/null) || return 1
+    case "$_shebang" in
+        '#!'*) ;;
+        *) return 1 ;;
+    esac
+
+    _py=""
+    # A path may hold a space, and the word walk below would cut it in half.
+    # The whole remainder is the interpreter wherever it names one, so try
+    # that first and walk only for the `env` and option forms.
+    _rest=$(printf '%s' "${_shebang#\#!}" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+    if [ -x "$_rest" ]; then
+        "$_rest" -c 'import elspais,os;print(os.path.realpath(os.path.dirname(elspais.__file__)))' 2>/dev/null
+        return
+    fi
+
+    for _word in ${_shebang#\#!}; do
+        case "$_word" in
+            -*) continue ;;
+        esac
+        case "$(basename "$_word")" in
+            env) continue ;;
+        esac
+        case "$_word" in
+            /*) _py="$_word" ;;
+            *)  _py=$(command -v "$_word" 2>/dev/null) || _py="" ;;
+        esac
+        if [ -n "$_py" ]; then break; fi
+    done
+
+    [ -n "$_py" ] || return 1
     [ -x "$_py" ] || return 1
     "$_py" -c 'import elspais,os;print(os.path.realpath(os.path.dirname(elspais.__file__)))' 2>/dev/null
 }

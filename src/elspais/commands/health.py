@@ -3790,12 +3790,18 @@ def check_test_results(graph: FederatedGraph, config: dict | None = None) -> Hea
                 continue
             environment = node.get_field("environment")
             where = f" [{environment}]" if environment else ""
+            # The recorded line counts lines in the results artifact, so it
+            # belongs to that artifact and to nothing else. Where the result
+            # came from a runner's output there is no artifact, and carrying
+            # the line over to the test's own source would point a reader at
+            # a line that means nothing there.
+            result_file = node.get_field("result_file")
             findings.append(
                 HealthFinding(
                     message=f"Failed: {node.get_label() or node.id}{where}",
                     node_id=node.id,
-                    file_path=node.get_field("result_file") or node.get_field("source_file", None),
-                    line=node.get_field("result_line"),
+                    file_path=result_file or node.get_field("source_file", None),
+                    line=node.get_field("result_line") if result_file else None,
                 )
             )
         return HealthCheck(

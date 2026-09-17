@@ -105,9 +105,13 @@ class FlutterMachineParser(DiagnosticRecorder):
                         "root_line": meta["root_line"],
                         "root_path": meta["root_path"],
                         "test_id": None,
-                        # stdout-stream reporter: there is no results file to
-                        # point provenance at.
-                        "result_file": None,
+                        # This format usually arrives on a runner's output,
+                        # where there is no artifact to name. It is also saved
+                        # to files and read back by a pattern, and then the
+                        # artifact is what separates one run's records from
+                        # another's: without it every file's records start
+                        # their count again and collide (REQ-d00294-A).
+                        "result_file": source_path or None,
                         "result_line": None,
                     }
                 )

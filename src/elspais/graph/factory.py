@@ -197,7 +197,53 @@ def _environment_from_path(pattern: str, base: Path, path: str) -> tuple[str | N
             "the results file has a different number of path segments from the pattern",
             False,
         )
-    return path_parts[wildcards[0]], "", False
+    environment, reason = _wildcard_stood_for(pattern_parts[wildcards[0]], path_parts[wildcards[0]])
+    return environment, reason, False
+
+
+def _wildcard_stood_for(pattern_segment: str, path_segment: str) -> tuple[str | None, str]:
+    """The part of *path_segment* that the wildcard in *pattern_segment* matched.
+
+    A segment is not always all wildcard: `junit-*.xml` names the environment
+    in the middle of it, and returning the whole segment would give
+    `junit-pixel6.xml` where the project means `pixel6`. Reading the literal
+    text around the wildcard is what tells the two apart.
+
+    Several wildcards in one segment name no single part, so this reports
+    rather than picks one (REQ-d00294-D).
+    """
+    expression = ""
+    wildcards = 0
+    index = 0
+    while index < len(pattern_segment):
+        char = pattern_segment[index]
+        if char == "*":
+            expression += "(.*)"
+            wildcards += 1
+        elif char == "?":
+            expression += "(.)"
+            wildcards += 1
+        elif char == "[":
+            close = pattern_segment.find("]", index + 1)
+            if close == -1:
+                expression += re.escape(char)
+            else:
+                expression += "(" + pattern_segment[index : close + 1] + ")"
+                wildcards += 1
+                index = close
+        else:
+            expression += re.escape(char)
+        index += 1
+
+    if wildcards != 1:
+        return None, (
+            f"the pattern's wildcard segment holds {wildcards} wildcards, "
+            "so no one part of it names the environment"
+        )
+    match = re.fullmatch(expression, path_segment)
+    if match is None:
+        return None, "the results file name does not read as the pattern's wildcard segment"
+    return match.group(1), ""
 
 
 # Implements: REQ-d00285-G
@@ -375,6 +421,10 @@ def _ingest_target_results(
         # the same run reads the same way in any checkout. A record an
         # artifact holds is placed by that artifact; a record read from a
         # runner's output has no artifact and is placed by its target.
+        # An artifact outside the repository keeps the path it has, because
+        # it has no repo-relative form to take. Such an id holds a path from
+        # the machine that read it, and two checkouts reading one artifact
+        # from different places do not agree about it.
         ordinal = rec.get("ordinal")
         if ordinal is None:
             raise ValueError(
