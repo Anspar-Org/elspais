@@ -408,3 +408,103 @@ def test_a_test_is_named_the_same_whether_or_not_its_results_say_where(tmp_path)
         named.append((relative, test_node.get_label(), test_node.get_field("function_name")))
 
     assert named[0] == named[1]
+
+
+# One journey whose step is checked by the same test the requirement cites.
+_JOURNEY = """\
+### JNY-CHECKOUT-01: Checkout Flow
+
+**Actor**: Shopper
+**Goal**: Pay for a basket
+Validates: REQ-p00001-A
+
+## Steps
+
+1. Shopper enters card details
+
+*End* *JNY-CHECKOUT-01*
+"""
+
+_JOURNEY_TEST = """\
+# Verifies: REQ-p00001-A, JNY-CHECKOUT-01/1
+def test_logs_in():
+    pass
+"""
+
+_TWO_PROJECTS = """\
+<?xml version="1.0" encoding="utf-8"?>
+<testsuites>
+  <testsuite name="checkout" hostname="chromium" tests="1">
+    <testcase classname="checkout.spec" name="pays" file="tests/e2e/test_login.py" time="0.5"/>
+  </testsuite>
+  <testsuite name="checkout" hostname="firefox" tests="1">
+    <testcase classname="checkout.spec" name="pays" file="tests/e2e/test_login.py" time="0.7"/>
+  </testsuite>
+</testsuites>
+"""
+
+
+# Verifies: REQ-d00294-A, REQ-d00294-F
+def test_a_journey_step_holds_one_result_for_each_environment(tmp_path: Path):
+    """A journey reaches its results through the tests that check its steps.
+
+    A journey does not hold results of its own, so it reads them along
+    `journey -> step -> test -> result`. Every result the test holds reaches
+    the journey, and each one names the environment it was recorded in, so a
+    reader of a journey sees what a reader of the requirement sees.
+    """
+    from elspais.mcp.server import _serialize_journey_info
+
+    project = _project(
+        tmp_path,
+        target_body=(
+            'results = "reports/junit.xml"\nenvironment = "suite-hostname"\nmatch = "source"\n'
+        ),
+        artifacts={"reports/junit.xml": _TWO_PROJECTS},
+        test_source=_JOURNEY_TEST,
+    )
+    (project / "spec" / "journeys.md").write_text(_JOURNEY, encoding="utf-8")
+    (project / ".elspais.toml").write_text(
+        (project / ".elspais.toml").read_text(encoding="utf-8")
+        + '\n[scanning.journey]\ndirectories = ["spec"]\n',
+        encoding="utf-8",
+    )
+
+    graph = _build(project)
+    primary = getattr(graph, "primary", graph)
+    journeys = list(primary.iter_by_kind(NodeKind.USER_JOURNEY))
+    assert [j.id for j in journeys] == ["JNY-CHECKOUT-01"]
+
+    results = _serialize_journey_info(journeys[0], graph)["results"]
+    assert sorted(r["environment"] for r in results) == ["chromium", "firefox"]
+    assert {r["step"] for r in results} == {"1"}
+    assert len({r["id"] for r in results}) == len(results), "each result is its own"
+
+
+# Verifies: REQ-d00294-A, REQ-d00294-F
+def test_the_graph_export_carries_each_result_and_its_environment(tmp_path: Path):
+    """The exported graph names every result and the environment it carries.
+
+    The export is what a consumer downstream reads, so a result that reaches
+    the viewer and no further reaches nobody outside this tool. It is built
+    here from a real scan, so the export is held to what the build produced
+    rather than to fields a test set by hand.
+    """
+    from elspais.graph.serialize import serialize_graph
+
+    project = _project(
+        tmp_path,
+        target_body=(
+            'results = "reports/junit.xml"\nenvironment = "suite-hostname"\nmatch = "source"\n'
+        ),
+        artifacts={"reports/junit.xml": _TWO_PROJECTS},
+    )
+
+    exported = serialize_graph(_build(project))["nodes"]
+
+    results = {
+        node_id: node["content"] for node_id, node in exported.items() if node["kind"] == "RESULT"
+    }
+    assert len(results) == 2, f"expected a result for each project, got {sorted(results)}"
+    assert sorted(c["environment"] for c in results.values()) == ["chromium", "firefox"]
+    assert {c["result_file"] for c in results.values()} == {"reports/junit.xml"}

@@ -2881,3 +2881,149 @@ class TestScopeMembershipAgreesWithAuthority:
             f"scope_level={level} selects {len(narrowed)} of {len(whole)}: "
             "these cases must divide the estate to decide anything"
         )
+
+
+# ---------------------------------------------------------------------------
+# Environment-tag rendering fixture + browser test
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(scope="session")
+def viewer_url_environments(tmp_path_factory):
+    """Start a viewer against the viewer-environments fixture.
+
+    The fixture holds one test reported once for each of two browser
+    projects, in one artifact, with the project in each suite's `hostname`.
+    Yields the base URL.
+    """
+    elspais_bin = resolve_elspais()
+    if elspais_bin is None:
+        pytest.skip("elspais CLI not found on PATH")
+
+    src = REPO_ROOT / "tests" / "fixtures" / "viewer-environments"
+    if not src.exists():
+        pytest.skip(f"viewer-environments fixture not present at {src}")
+
+    dest = tmp_path_factory.mktemp("viewer-environments-run")
+    for item in src.iterdir():
+        if item.is_dir():
+            shutil.copytree(item, dest / item.name)
+        else:
+            shutil.copy2(item, dest / item.name)
+
+    env = {
+        **os.environ,
+        "GIT_AUTHOR_NAME": "test",
+        "GIT_AUTHOR_EMAIL": "t@t",
+        "GIT_COMMITTER_NAME": "test",
+        "GIT_COMMITTER_EMAIL": "t@t",
+    }
+    subprocess.run(["git", "init"], cwd=dest, capture_output=True, env=env)
+    subprocess.run(["git", "add", "."], cwd=dest, capture_output=True, env=env)
+    subprocess.run(["git", "commit", "-m", "init"], cwd=dest, capture_output=True, env=env)
+
+    port = _find_free_port()
+    base_url = f"http://127.0.0.1:{port}"
+
+    proc, log_path = _spawn_viewer(
+        [elspais_bin, "viewer", "--server", "--port", str(port), "--path", str(dest)],
+        cwd=str(dest),
+    )
+
+    try:
+        _wait_for_server(base_url, proc=proc, log_path=log_path)
+        yield base_url
+    finally:
+        try:
+            import urllib.request
+
+            req = urllib.request.Request(f"{base_url}/api/shutdown", method="POST")
+            urllib.request.urlopen(req, timeout=5)
+        except Exception:
+            pass
+
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+                proc.wait(timeout=5)
+
+
+@pytest.fixture()
+def page_environments(viewer_url_environments):
+    """Launch headless Chromium against the environments-fixture viewer."""
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        context = browser.new_context()
+        pg = context.new_page()
+        pg.set_default_timeout(10_000)
+        yield pg
+        browser.close()
+
+
+def _open_results_panel(page, req_id: str, label: str):
+    """Open a requirement's card and the Passing panel for one assertion.
+
+    The card has two panels over the same data. Tested draws one row for each
+    TEST, with the verdict of that test's results rolled into it. Passing
+    draws one row for each RESULT, which is where an environment belongs: it
+    is a fact about one run, not about the test.
+    """
+    page.evaluate(f"() => window.openCard('{req_id}')")
+    panel = page.locator(f"#assertion-results-{req_id}-{label}")
+    panel.wait_for(state="attached", timeout=10_000)
+    page.locator("[onclick*=toggleAssertionResults]").first.click()
+    return panel
+
+
+class TestEnvironmentTagRendering:
+    """The environment a result was recorded in is drawn beside that result."""
+
+    # Verifies: REQ-d00294-F
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    def test_REQ_d00294_F_each_result_shows_its_environment(
+        self, page_environments, viewer_url_environments
+    ):
+        """One test reported in two projects draws one row for each, and the
+        project that wrote each row stands beside it.
+
+        The rows are alike in every other way -- same test, same class, same
+        recorded line -- so without the environment a reader cannot tell which
+        project a row came from.
+        """
+        page_environments.goto(viewer_url_environments, wait_until="networkidle")
+        panel = _open_results_panel(page_environments, "REQ-d00001", "A")
+
+        tags = panel.locator(".result-environment")
+        tags.first.wait_for(state="visible", timeout=10_000)
+
+        found = sorted(tags.nth(i).inner_text().strip() for i in range(tags.count()))
+        assert found == ["chromium", "firefox"], f"expected both projects, got {found}"
+
+        rows = panel.locator(".assertion-test-item")
+        assert rows.count() == tags.count(), (
+            f"every result row should carry an environment: "
+            f"{rows.count()} rows, {tags.count()} tags"
+        )
+
+    # Verifies: REQ-d00294-F
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    def test_REQ_d00294_F_a_result_without_an_environment_draws_no_tag(
+        self, page_tables, viewer_url_tables
+    ):
+        """A project declaring no environment source draws no tag at all.
+
+        The element is absent rather than empty, which is what keeps a card
+        in a single-environment project reading as it read before.
+        """
+        page_tables.goto(viewer_url_tables, wait_until="networkidle")
+        page_tables.evaluate("() => window.openCard('REQ-p00001')")
+        page_tables.locator("#card-stack-body").wait_for(state="visible", timeout=10_000)
+
+        assert page_tables.locator("#card-stack-body .result-environment").count() == 0

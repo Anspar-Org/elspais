@@ -4,7 +4,7 @@ build-backend = "flit_core.buildapi"
 
 [project]
 name = "elspais"
-version = "0.124.6"
+version = "0.124.7"
 description = "Requirements validation and traceability tools - L-Space connects all libraries"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -41,9 +41,11 @@ dev = [
     "mypy>=1.0",
     "pyyaml>=6.0",
 ]
-# CUR-1829: the `browser` test tier (`pytest -m browser`) was undeclared, so a
-# fresh venv silently deselected all 13 of its tests and still reported green.
-# Requires `playwright install chromium` once for the browser binaries.
+# The browser test tier (`pytest -m browser`). Kept out of `all`, which is the
+# feature set a user installs; playwright is a test dependency. `make setup`
+# installs it by name and fetches the browser binaries, because a tier whose
+# package is absent is deselected rather than failed, and a run that covered
+# none of it still reports green.
 browser = [
     "playwright>=1.40",
     "pytest-playwright>=0.4",

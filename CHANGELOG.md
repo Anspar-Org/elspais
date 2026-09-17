@@ -6,7 +6,7 @@ All notable changes to elspais will be documented in this file.
 
 ### Changed
 
-- **Breaking: every recorded test result is now a result of its own (REQ-d00294-A+B)** — each reporter spelled its own result identifier out of the test name alone, so the records for one test collapsed into a single node and every verdict but one was lost with nothing reported. A suite run across twenty devices kept one verdict of the twenty.
+- **Breaking: every recorded test result is now a result of its own (REQ-d00294-A+B)** — each reporter spelled its own result identifier out of the test name alone, so the records for one test collapsed into a single node and every verdict but one was lost with nothing reported. A suite run across a fleet of devices kept a single verdict, however many devices ran it.
 
   A result is now identified by the place it was recorded in and by its position among the records in that place. `make_result_id()` is the one place such an identifier is spelled and `parse_structural_id()` the one place it is read; the factory spells it, because only the factory knows the repository root that keeps the path relative. A result read from a runner's output, which no artifact holds, is placed by the target it was read from.
 

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites>
+  <testsuite name="checkout" hostname="chromium" tests="1">
+    <testcase name="pays" classname="checkout.spec" file="tests/test_checkout.py" time="0.5"/>
+  </testsuite>
+  <testsuite name="checkout" hostname="firefox" tests="1">
+    <testcase name="pays" classname="checkout.spec" file="tests/test_checkout.py" time="0.7"/>
+  </testsuite>
+</testsuites>

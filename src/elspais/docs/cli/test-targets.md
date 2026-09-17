@@ -643,6 +643,7 @@ that carries none is presented exactly as it was before.
 The name of the test does not change. One test is one test wherever it
 ran, so the environment is never added to its name.
 
-`elspais checks` counts RESULTS, not tests. One test run in ten
-environments gives ten results, and the tally says ten. A result that
-errored counts as a failure, because the test did not pass.
+`elspais checks` counts RESULTS, not tests. One test run in several
+environments gives one result for each of them, and the tally counts them
+all. A result that errored counts as a failure, because the test did not
+pass.
