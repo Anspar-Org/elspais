@@ -321,8 +321,13 @@ Three things must be true:
 
 1. **Specs are scanned as TEST nodes.**  elspais cannot parse TypeScript
    natively, so point `[scanning.test].prescan_command` at an external scanner
-   that emits `test_`-prefixed functions for each `test(...)` call, and add the
-   spec directories / `*.spec.ts` to the test `directories` / `file_patterns`.
+   that reports each `test(...)` call, and add the spec directories /
+   `*.spec.ts` to the test `directories` / `file_patterns`.  Each record
+   carries `file`, `function`, `line`, an optional `class` and an optional
+   `end_line`.  The name is the test's own -- a record names one test, so its
+   spelling decides nothing -- and `line` is the line the test is declared
+   on.  A citation written above that line belongs to the test below it, as
+   it does in every language elspais scans itself.
 2. **elspais knows what the recorded name means.**  Playwright's JUnit reporter
    omits the per-`<testcase>` `file` attribute and writes the spec's basename
    into `classname`.  Left to itself elspais reads a `classname` as a Python

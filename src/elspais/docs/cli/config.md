@@ -254,7 +254,12 @@ reference_keyword = "Verifies"   # Keyword for test-to-req references
 reference_patterns = []          # Additional reference patterns
 prescan_command = ""             # External test discovery command
 # prescan_command receives file paths on stdin, outputs JSON on stdout:
-#   [{"file": "path", "function": "name", "class": "Name|null", "line": N}]
+#   [{"file": "path", "function": "name", "class": "Name|null", "line": N,
+#     "end_line": M}]
+# `line` is the line the test is declared on, counted from one. `end_line`
+# is optional; without it the test reaches to the next one. A record names
+# one test, so the name may be the test's own and need not be spelled any
+# particular way.
 #
 # A test is linked by a comment above it and by nothing else. A requirement
 # ID spelled into the function name references nothing, whatever separators

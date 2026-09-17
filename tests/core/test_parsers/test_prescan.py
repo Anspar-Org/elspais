@@ -221,6 +221,73 @@ class TestExternalPrescan:
         assert line_context[15][0] == "test_beta"
         assert line_context[15][1] == "TestSuite"
 
+    # Verifies: REQ-d00254-K, REQ-d00254-M
+    def test_REQ_d00254_K_a_record_is_a_test_whatever_it_is_named(self):
+        """A record names one test, so its spelling decides nothing.
+
+        A naming convention read here asked every framework to spell its
+        tests the way pytest does. A test named otherwise reached no node,
+        and the citation above it then declared no relationship at all.
+        """
+        entries = [
+            {"function": "pays with a card", "class": None, "line": 5},
+            {"function": "shouldRejectAnExpiredCard", "class": None, "line": 15},
+        ]
+        lines = [(i, f"line {i}") for i in range(1, 21)]
+
+        _context, all_test_funcs, _first = external_prescan(entries, lines)
+
+        assert [name for _line, name, _cls in all_test_funcs] == [
+            "pays with a card",
+            "shouldRejectAnExpiredCard",
+        ]
+
+    # Verifies: REQ-d00254-D, REQ-d00254-N
+    def test_REQ_d00254_D_a_citation_above_a_test_belongs_to_it(self):
+        """A citation written above a test binds to the test below it.
+
+        Every built-in route reads a comment block as belonging to the
+        declaration it sits above. Reading this route differently bound a
+        citation to its own line, which attributes worse than the built-in
+        attribution this route takes precedence over.
+        """
+        entries = [{"function": "pays with a card", "class": None, "line": 4}]
+        lines = [
+            (1, "// a file comment"),
+            (2, "// Verifies: REQ-d00001-A"),
+            (3, "// and a word about the test"),
+            (4, 'test("pays with a card", async () => {'),
+            (5, "});"),
+        ]
+
+        line_context, _funcs, _first = external_prescan(entries, lines)
+
+        assert line_context[2][0] == "pays with a card", (
+            "the citation above the test belongs to that test"
+        )
+        assert line_context[2][2] == 4, "and is anchored at the test's own line"
+
+    # Verifies: REQ-d00254-D
+    def test_REQ_d00254_D_a_comment_owned_already_is_left_alone(self):
+        """A comment already inside a test's range keeps the range it had.
+
+        A producer may report the top of a comment block as the start of its
+        test. Binding forward must not move what such a record already
+        claimed.
+        """
+        entries = [{"function": "pays", "class": None, "line": 2, "end_line": 6}]
+        lines = [
+            (1, "// prose above"),
+            (2, "// Verifies: REQ-d00001-A"),
+            (3, 'test("pays", async () => {'),
+            (4, "});"),
+        ]
+
+        line_context, _funcs, _first = external_prescan(entries, lines)
+
+        assert line_context[2][2] == 2, "the record's own start is kept"
+        assert line_context[1][0] == "pays", "prose above binds forward to it"
+
 
 class TestPrescanFuncEndLine:
     """Tests that prescan functions return 4-tuples with func_end_line."""
