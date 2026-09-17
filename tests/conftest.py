@@ -14,6 +14,31 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 
+def _selects_marker(markexpr: str, name: str) -> bool:
+    """Whether a marker expression SELECTS tests carrying *name*.
+
+    Answered by evaluating the expression the way pytest's own selection does,
+    against an item carrying *name* and nothing else. A substring test cannot
+    answer it at all: `not browser` and `browser` both contain the word, and
+    they mean opposite things.
+
+    An expression pytest itself would reject compiles to nothing here and reads
+    as selecting nothing; pytest reports the syntax error on its own terms.
+    """
+    if not markexpr:
+        return False
+    try:
+        from _pytest.mark.expression import Expression
+    except ImportError:  # pragma: no cover - private module, stable since 5.4
+        # If it ever moves, keep the guard's narrow job rather than guessing:
+        # the bare marker name is the one spelling that cannot be a negation.
+        return markexpr.strip() == name
+    try:
+        return bool(Expression.compile(markexpr).evaluate(lambda n: n == name))
+    except Exception:
+        return False
+
+
 def pytest_configure(config):
     """Strip git env vars before any test collection or coverage forking.
 
@@ -60,7 +85,13 @@ def pytest_configure(config):
         "incremental: mark test class for sequential execution with xfail on prior failure",
     )
 
-    # A tier asked for by name must run or say why it did not. The browser
+    # A tier asked for by NAME must run or say why it did not -- and asking for
+    # it is what the marker expression SELECTS, never what it mentions. The
+    # default `addopts` expression names the browser tier precisely in order to
+    # deselect it (`not e2e and not browser and not stress`), so a substring
+    # test reads every ordinary run as a request for the tier and refuses it.
+    #
+    # The browser
     # tier's module opens with `pytest.importorskip("playwright")`, so without
     # the `browser` extra installed the module never imports, pytest records a
     # single skip, and `pytest -m browser` exits 0 having run nothing — a run
@@ -69,8 +100,7 @@ def pytest_configure(config):
     # reporting green. Asking for the marker explicitly is an unambiguous
     # statement of intent, and an intent the run cannot honour is an error
     # rather than a silence.
-    selected = config.getoption("-m", default="") or ""
-    if "browser" in selected:
+    if _selects_marker(config.getoption("markexpr", default="") or "", "browser"):
         try:
             import playwright  # noqa: F401
         except ImportError:
