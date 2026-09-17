@@ -10,46 +10,15 @@ from typing import Any
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
-from elspais.view_model import build_levels, build_namespaces, build_statuses
+from elspais.html.generator import levels_with_carried
+from elspais.view_model import build_namespaces, build_statuses
 
-# Implements: REQ-d00211
+# Implements: REQ-d00211-B
 # User-selectable relationship kinds for the edit UI.
 _USER_RELATIONSHIP_KINDS = ["implements", "refines", "satisfies"]
 
 
-# Implements: REQ-d00279-B, REQ-d00281-A
-def _levels_with_carried(typed, graph) -> list[dict[str, Any]]:
-    """The level catalog the viewer filters by, including levels only carried.
-
-    A view that judges membership for itself has to be able to judge every
-    requirement it displays. Building the catalog from the configuration alone
-    leaves a requirement whose level only its own repository declares matching no
-    button at all, so the view would exclude it under any selection while the
-    authority admits it -- a second semantics rather than a second evaluator.
-    """
-    catalog = build_levels(typed)
-    known = {str(entry.get("key", "")).lower() for entry in catalog}
-    if graph is None or not hasattr(graph, "nodes_by_kind"):
-        return catalog
-    from elspais.graph.aggregation import level_group_keys
-
-    for key in level_group_keys(graph, None):
-        if key.lower() in known:
-            continue
-        known.add(key.lower())
-        catalog.append(
-            {
-                "key": key,
-                "label": key,
-                "rank": 9999,
-                "letter": "",
-                "bg": "",
-                "text": "",
-            }
-        )
-    return catalog
-
-
+# Implements: REQ-d00211-A, REQ-d00211-B, REQ-d00211-C
 def _extract_viewer_config(config: dict[str, Any], federation: Any = None) -> dict[str, Any]:
     """Extract viewer-relevant values from the config dict.
 
@@ -89,11 +58,15 @@ def _extract_viewer_config(config: dict[str, Any], federation: Any = None) -> di
         "config_types": config_types,
         "config_relationship_kinds": list(_USER_RELATIONSHIP_KINDS),
         "config_statuses": config_statuses,
-        "levels": _levels_with_carried(typed, federation),
+        # Implements: REQ-d00279-B, REQ-d00281-A
+        # The one level catalog every rendering of this view filters by; the
+        # static export reads the same builder.
+        "levels": levels_with_carried(typed, federation),
         "namespaces": build_namespaces(typed, federation),
     }
 
 
+# Implements: REQ-d00279-B
 async def index(request: Request):
     """Serve the trace-edit UI template with enriched context."""
     from starlette.templating import Jinja2Templates
@@ -137,7 +110,6 @@ async def index(request: Request):
             "statuses": statuses,
             "topics": topics,
             "default_hidden_statuses": sorted(default_hidden),
-            # Implements: REQ-d00279-B
             # The role a project assigns each status, so a view evaluating
             # membership for itself can widen a status to its role the way the
             # authority does. Without it the browser knows only which statuses

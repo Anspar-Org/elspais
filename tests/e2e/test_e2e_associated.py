@@ -36,6 +36,7 @@ from .helpers import (
     build_associate,
     build_project,
     resolve_elspais,
+    trace_rows,
 )
 
 pytestmark = [
@@ -78,20 +79,56 @@ def mcp_server(project):
 
 
 class TestCoreWithOneAssociate:
-    """Core project with one associated repo."""
+    """Core project with its associated repos.
+
+    MISNAMED — a consolidation artifact. The ``project`` fixture is the shared
+    e2e-associated one, in which core declares BOTH alpha and beta, so these
+    tests run against two associates and not one. The name survives only
+    because renaming a class relocates every test in it in CI history.
+    If you are already editing this file, rename it (``TestCoreWithAssociates``)
+    and delete this note.
+    """
 
     def test_health_passes(self, project):
         result = run_elspais("checks", "--lenient", cwd=project)
         assert result.returncode == 0, f"health failed: {result.stderr}\n{result.stdout}"
 
-    def test_summary_includes_associate_reqs(self, project):
+    # Verifies: REQ-d00281-A, REQ-d00281-B, REQ-d00086-A
+    def test_summary_counts_the_federated_graph_not_the_invoking_repo(self, project):
+        """The report's subject is the assembled graph, so the associates'
+        requirements are in its groups.
+
+        Core declares 4 requirements; alpha adds 2 and beta 2. Every one is
+        Active, so all 8 are counted and none is disclosed as excluded. A bound
+        of "at least 4" would hold whether or not the federation contributed
+        anything -- measured by removing core's `[associates]` table, which took
+        the total to 4 and the level groups to PRD 2 / DEV 2.
+        """
         result = run_elspais("summary", "--format", "json", cwd=project)
-        assert result.returncode == 0
+        assert result.returncode == 0, f"summary failed: {result.stderr}"
         data = json.loads(result.stdout)
-        levels = data.get("levels", [])
-        total = sum(lv.get("total", 0) for lv in levels)
-        # Core has 4 reqs (p00001, p00002, d00001, d00002)
-        assert total >= 4, f"Expected at least 4 requirements (core), got {total}"
+
+        # REQ-d00086-A: core's 2 PRD + beta's 1 PRD; core's 2 DEV + alpha's 2
+        # + beta's 1 DEV. No requirement carries ops.
+        groups = {lv["level"]: lv["requirements"] for lv in data["levels"]}
+        assert groups == {"PRD": 3, "OPS": 0, "DEV": 5}
+        assert data["excluded"] == {}
+
+        # REQ-d00281-B: one group each, over the whole federated set.
+        trace = run_elspais("trace", "--format", "json", cwd=project)
+        assert trace.returncode == 0
+        ids = {r["id"] for r in trace_rows(trace.stdout)}
+        assert ids == {
+            "REQ-p00001",
+            "REQ-p00002",
+            "REQ-d00001",
+            "REQ-d00002",
+            "REQ-ALP-d00001",
+            "REQ-ALP-d00002",
+            "REQ-BET-p00001",
+            "REQ-BET-d00001",
+        }
+        assert sum(groups.values()) == len(ids) == 8
 
     def test_trace_includes_core_ids(self, project):
         result = run_elspais("trace", "--format", "json", cwd=project)
@@ -113,14 +150,37 @@ class TestCoreWithTwoAssociates:
         result = run_elspais("checks", "--lenient", cwd=project)
         assert result.returncode == 0, f"health failed: {result.stderr}\n{result.stdout}"
 
-    def test_summary_counts_all(self, project):
-        result = run_elspais("summary", "--format", "json", cwd=project)
-        assert result.returncode == 0
-        data = json.loads(result.stdout)
-        levels = data.get("levels", [])
-        total = sum(lv.get("total", 0) for lv in levels)
-        # Core: 2 PRD + 2 DEV, Alpha: 2 DEV, Beta: 1 PRD + 1 DEV = at least 1 total
-        assert total >= 1
+    # Verifies: REQ-d00278-A, REQ-p00084-B, REQ-p00084-D, REQ-p00084-E
+    def test_a_level_scope_reaches_into_every_member(self, project):
+        """A level scope selects the associates' requirements at that level and
+        states the same figures the unscoped report states for them.
+
+        The dev group holds 5 requirements, only 2 of which core declares, so a
+        scope that stopped at the invoking repo would select 2 and the
+        disclosure would read "2 of 4". Both halves are asserted because
+        REQ-p00084-B and REQ-p00084-E fail separately: the scope must select
+        across the federation, and selecting must not change what is measured.
+        """
+        scoped = run_elspais("summary", "--format", "json", "--level", "dev", cwd=project)
+        assert scoped.returncode == 0, f"summary failed: {scoped.stderr}"
+        scoped_data = json.loads(scoped.stdout)
+
+        # REQ-p00084-D: the scope discloses itself, over the federated set.
+        disclosure = " ".join(scoped_data["scope"])
+        assert "level dev" in disclosure
+        assert "5 of 8" in disclosure
+
+        # REQ-p00084-B: only dev requirements are emitted.
+        scoped_groups = {lv["level"]: lv["requirements"] for lv in scoped_data["levels"]}
+        assert scoped_groups == {"PRD": 0, "OPS": 0, "DEV": 5}
+
+        # REQ-p00084-E: the dev row is what an unscoped report states for it,
+        # assertion count included.
+        unscoped = run_elspais("summary", "--format", "json", cwd=project)
+        assert unscoped.returncode == 0
+        unscoped_rows = {lv["level"]: lv for lv in json.loads(unscoped.stdout)["levels"]}
+        scoped_rows = {lv["level"]: lv for lv in scoped_data["levels"]}
+        assert scoped_rows["DEV"] == unscoped_rows["DEV"]
 
 
 # ---------------------------------------------------------------------------

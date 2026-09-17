@@ -18,7 +18,7 @@ import pytest
 
 from tests.e2e.conftest import run_elspais
 
-from .helpers import resolve_elspais
+from .helpers import resolve_elspais, trace_rows
 
 pytestmark = [
     pytest.mark.e2e,
@@ -157,7 +157,9 @@ class TestTraceFormatConsistency:
         json_candidates = [json_out, json_out.with_suffix(".json"), Path(f"{json_out}.json")]
         json_found = [p for p in json_candidates if p.exists()]
         assert json_found, f"No JSON trace file found among {json_candidates}"
-        json_data = json.loads(json_found[0].read_text())
+        # The ROWS. Read as the whole document, this assertion would hold of
+        # any object the report emitted, including one carrying no rows.
+        json_data = trace_rows(json_found[0].read_text())
         assert json_data, "JSON trace output is empty"
 
         # Find the CSV output file
@@ -272,14 +274,14 @@ class TestFullProjectLifecycle:
         summary = run_elspais("summary", "--format", "json", cwd=tmp_path)
         assert summary.returncode == 0
         data = json.loads(summary.stdout)
-        levels = data.get("levels", [])
-        prd_count = next((lv["total"] for lv in levels if lv["level"] == "PRD"), 0)
+        levels = data["levels"]
+        prd_count = next((lv["requirements"] for lv in levels if lv["level"] == "PRD"), 0)
         assert prd_count == 1
 
         # 7. Trace should include the requirement
         trace = run_elspais("trace", "--format", "json", cwd=tmp_path)
         assert trace.returncode == 0
-        trace_data = json.loads(trace.stdout)
+        trace_data = trace_rows(trace.stdout)
         assert len(trace_data) == 1
         assert trace_data[0]["id"] == "REQ-p00001"
 
@@ -594,7 +596,7 @@ class TestDaemonConfigStaleRestart:
         # First CLI call auto-starts a daemon (cli_ttl=2 in base_config)
         trace1 = run_elspais("trace", "--format", "json", cwd=tmp_path)
         assert trace1.returncode == 0, trace1.stderr
-        assert {r["id"] for r in json.loads(trace1.stdout)} == {"REQ-p00001"}
+        assert {r["id"] for r in trace_rows(trace1.stdout)} == {"REQ-p00001"}
 
         daemon_json = tmp_path / ".elspais" / "daemon.json"
         assert daemon_json.exists(), "daemon should have auto-started"
@@ -619,7 +621,7 @@ class TestDaemonConfigStaleRestart:
         # Next CLI call must not silently serve the pre-change graph.
         trace2 = run_elspais("trace", "--format", "json", cwd=tmp_path)
         assert trace2.returncode == 0, trace2.stderr
-        ids = {r["id"] for r in json.loads(trace2.stdout)}
+        ids = {r["id"] for r in trace_rows(trace2.stdout)}
         assert ids == {
             "REQ-p00001",
             "REQ-p00002",

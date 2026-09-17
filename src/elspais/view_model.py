@@ -1,4 +1,4 @@
-# Implements: REQ-d00211
+# Implements: REQ-d00211-A, REQ-d00211-C
 """Pure view-model builders for the traceability viewer.
 
 Level / namespace / status entries (with resolved colors) derived from typed
@@ -136,6 +136,7 @@ def build_namespaces(typed, federation=None) -> list[dict[str, Any]]:
     return items
 
 
+# Implements: REQ-d00279-B
 def build_statuses(typed, candidates: list[str] | None = None) -> list[dict[str, Any]]:
     """List of statuses with resolved colors.
 

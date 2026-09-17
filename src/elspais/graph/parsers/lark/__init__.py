@@ -65,6 +65,7 @@ class GrammarFactory:
     # Token builders (derive regex fragments from IdResolver / config)
     # ------------------------------------------------------------------
 
+    # Implements: REQ-d00269-K
     def _build_tokens(
         self,
         federated: bool = False,
@@ -102,7 +103,6 @@ class GrammarFactory:
 
         # Reference grammar tokens (comment styles + keywords).
         #
-        # Implements: REQ-d00269-K
         # The marker comes from the one association between a file type and
         # its comment pattern, so a keyword is recognised only where the
         # language of the file actually opens a comment: `--` introduces a
@@ -175,6 +175,7 @@ class GrammarFactory:
             )
         return self._cache[key]
 
+    # Implements: REQ-d00269-K, REQ-d00269-C
     def get_reference_parser(self, comment_markers: Sequence[str]) -> Lark:
         """Compile (or retrieve cached) reference grammar parser.
 
@@ -222,6 +223,7 @@ class FileDispatcher:
             member that claims it (REQ-d00269-C).
     """
 
+    # Implements: REQ-d00269-K
     def __init__(
         self,
         resolver: IdResolver,
@@ -233,7 +235,6 @@ class FileDispatcher:
         self._reader = FederatedIdReader(resolver, member_resolvers)
         self._factory = GrammarFactory(resolver, member_resolvers)
         self._req_parser: Lark | None = None
-        # Implements: REQ-d00269-K
         # One parser per comment pattern, not one per dispatcher: the marker
         # a reference may be written behind differs between the files this
         # dispatcher reads, so a single cached parser would serve one
@@ -245,6 +246,7 @@ class FileDispatcher:
             self._req_parser = self._factory.get_requirement_parser()
         return self._req_parser
 
+    # Implements: REQ-d00269-K
     def _get_ref_parser(self, file_path: str) -> Lark:
         """The reference parser for the language *file_path* is written in."""
         markers = comment_markers_for_path(file_path)
@@ -254,6 +256,7 @@ class FileDispatcher:
             self._ref_parsers[markers] = parser
         return parser
 
+    # Implements: REQ-d00247-A
     @staticmethod
     def _neutralize_fenced_blocks(content: str) -> str:
         """Replace content inside fenced code blocks with neutral text.
@@ -273,6 +276,7 @@ class FileDispatcher:
                 result.append(line)
         return "\n".join(result)
 
+    # Implements: REQ-d00269-E
     @staticmethod
     def _fenced_line_numbers(content: str) -> set[int]:
         """The 1-based line numbers that sit inside a fenced code block.
@@ -291,6 +295,7 @@ class FileDispatcher:
                 fenced.add(number)
         return fenced
 
+    # Implements: REQ-d00269-E
     @staticmethod
     def _quoted_line_numbers(content: str, file_path: str) -> set[int]:
         """Line numbers a *Traceability* keyword must not bind on (REQ-d00269-E).
@@ -308,6 +313,7 @@ class FileDispatcher:
             quoted |= ast_string_literal_lines(content)
         return quoted
 
+    # Implements: REQ-d00247-A
     def dispatch_spec(
         self,
         content: str,
@@ -318,7 +324,6 @@ class FileDispatcher:
 
         if not content.endswith("\n"):
             content += "\n"
-        # Implements: REQ-d00247-A
         # Neutralize fenced code blocks for grammar matching only; the
         # neutralized buffer must NOT escape the parser. Pass the original
         # content as `source` so REMAINDER nodes capture the original text.
@@ -364,6 +369,7 @@ class FileDispatcher:
         results.extend(_fault_and_style_content(transformer))
         return results
 
+    # Implements: REQ-d00254-K
     def dispatch_test(
         self,
         content: str,
@@ -388,7 +394,6 @@ class FileDispatcher:
         lines = [(i + 1, line) for i, line in enumerate(content.split("\n"))]
 
         # Pre-scan for function/class context
-        # Implements: REQ-d00254-K
         is_python = file_path.endswith(".py")
         is_dart = file_path.endswith(".dart")
 

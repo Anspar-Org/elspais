@@ -119,6 +119,10 @@ this requires.
   `--output PATH`         Output file path
   `--dimension uat`       UAT-scoped value set: UAT Covered, UAT Passed and the validating journeys with their verdicts; excludes the code values
 
+The scope flags -- `--level`, `--not-level`, `--status`, `--not-status`,
+`--match-status-roles`, `--scope` and `--treat-active` -- are the ones shared
+with `summary`, `gaps` and `analysis`; see `elspais docs scoping`.
+
 ## Choosing Values
 
   $ elspais trace --values id,title,tested,tested.immediate_direct
@@ -222,6 +226,14 @@ A project can declare a value set under a name beside the scope it belongs to
 the requirements it reads and the facts it reads about them. `--values` on the
 invocation replaces a declared set rather than narrowing it.
 
+A declared name this report does not offer is not refused the way a typed
+`--values` would be: it is passed over, and the rest of the declaration still
+selects. That is what lets one name span reports whose offers differ --
+`summary`'s rows are levels and its identity value is `level`, `trace`'s are
+requirements and its identity value is `id` -- each states whichever of the
+declared values it has, and no report is refused for what a different report
+in the same declaration happens to offer.
+
 ## UAT Dimension
 
   $ elspais trace --dimension uat
@@ -270,9 +282,24 @@ def hash_password(plain: str) -> str: ...
 
 Or:
 ```javascript
-// Implements: REQ-d00001
+// Implements: REQ-d00001-A
 function hashPassword(plain) { ... }
 ```
+
+The citation attributes the lines of the function it is written above. Decorators
+and a class header do not break that: write it above the decorators, or between
+the last decorator and the `def` -- both name the same function.
+
+```python
+# Implements: REQ-d00001-A
+@app.route("/hash")
+def hash_password(plain: str) -> str: ...
+```
+
+A citation above a `class` binds to the first function inside it, and to nothing
+at all if the class opens with a docstring, a field, or an enum member -- a class
+is not itself an extent. Where a citation names no function, it instead speaks for
+the executable lines following it, up to the next citation or the end of the file.
 
 ## Marking Tests as Validating
 

@@ -220,7 +220,7 @@ class TestCollectGaps:
         data = collect_gaps(graph, exclude_status=set())
         assert any(item[0] == "REQ-p00001" and item[2] == "uat" for item in data.failing)
 
-    # Verifies: REQ-d00258-F
+    # Verifies: REQ-d00291-A+B+C
     def test_unvalidated_only_for_expects_validation_levels(self) -> None:
         """An expects_validation req with no UAT coverage is 'unvalidated'; a
         req at a non-expecting level is not, even with zero UAT coverage."""
@@ -260,22 +260,6 @@ class TestCollectGaps:
         # Without config, no level expects validation -> no unvalidated gaps.
         data_no_cfg = collect_gaps(graph, exclude_status=set())
         assert len(data_no_cfg.unvalidated) == 0
-
-    def test_collect_gaps_includes_no_assertions(self) -> None:
-        # Verifies: REQ-d00204
-        """A REQ with no ASSERTION children appears in no_assertions."""
-        from elspais.graph import EdgeKind
-
-        req_no_assert = _make_req("REQ-p00001", "No Assertions")
-        req_with_assert = _make_req("REQ-p00002", "Has Assertions")
-        assertion = GraphNode(id="REQ-p00002-A", kind=NodeKind.ASSERTION, label="Assertion A")
-        req_with_assert.link(assertion, EdgeKind.STRUCTURES)
-        graph = _make_graph(req_no_assert, req_with_assert)
-
-        data = collect_gaps(graph, exclude_status=set())
-        ids = {e.req_id for e in data.no_assertions}
-        assert "REQ-p00001" in ids
-        assert "REQ-p00002" not in ids
 
 
 # ===========================================================================
@@ -456,15 +440,6 @@ class TestRenderGapText:
         output = render_gap_text("unvalidated", data)
         assert "UNVALIDATED (no UAT coverage)" in output
 
-    def test_no_assertions_section(self) -> None:
-        # Verifies: REQ-d00204
-        """no_assertions gap type renders with NOT TESTABLE label."""
-        data = GapData(no_assertions=[GapEntry("REQ-p00005", "No Asserts")])
-        output = render_gap_text("no_assertions", data)
-        assert "NOT TESTABLE (no assertions)" in output
-        assert "(1)" in output
-        assert "REQ-p00005" in output
-
     def test_sorted_output(self) -> None:
         data = GapData(uncovered=[GapEntry("REQ-p00002", "B"), GapEntry("REQ-p00001", "A")])
         output = render_gap_text("uncovered", data)
@@ -594,7 +569,6 @@ class TestGapEntrySerialization:
             "untested": [],
             "unvalidated": [],
             "failing": [],
-            "no_assertions": [],
         }
         gd = _gap_data_from_dict(d)
         assert gd.uncovered[0].assertions == [("REQ-p00001-C", "C", 0.4)]
@@ -662,13 +636,17 @@ class TestGapComposability:
     def test_gap_sections_registered(self) -> None:
         from elspais.commands.report import COMPOSABLE_SECTIONS
 
-        for name in ("uncovered", "untested", "unvalidated", "failing", "no_assertions", "gaps"):
+        for name in ("uncovered", "untested", "unvalidated", "failing", "gaps"):
             assert name in COMPOSABLE_SECTIONS
+        assert "no_assertions" not in COMPOSABLE_SECTIONS, (
+            "a requirement with no assertions is reported by the spec.no_assertions "
+            "check, not by a shortfall listing"
+        )
 
     def test_gap_format_support(self) -> None:
         from elspais.commands.report import FORMAT_SUPPORT
 
-        for name in ("uncovered", "untested", "unvalidated", "failing", "no_assertions", "gaps"):
+        for name in ("uncovered", "untested", "unvalidated", "failing", "gaps"):
             assert "text" in FORMAT_SUPPORT[name]
             assert "markdown" in FORMAT_SUPPORT[name]
             assert "json" in FORMAT_SUPPORT[name]
@@ -743,7 +721,6 @@ class TestGapsIntegrates:
             "untested": [],
             "unvalidated": [],
             "failing": [],
-            "no_assertions": [],
             "integrated": {"lib": ["APP-d00001", "APP-d00002"]},
         }
         gd = _gap_data_from_dict(d)
@@ -759,7 +736,6 @@ class TestGapsIntegrates:
             "untested": [],
             "unvalidated": [],
             "failing": [],
-            "no_assertions": [],
         }
         gd = _gap_data_from_dict(d)
         assert gd.integrated == {}
@@ -867,3 +843,195 @@ class TestStrictFootingGaps:
         by name, tested only by a whole-requirement test) IS."""
         data = collect_gaps(blanket_evidence_graph, exclude_status=set(), config={})
         assert self._gap_labels(data, "untested") == {"B"}
+
+
+# ===========================================================================
+# REQ-d00282-O: a shortfall listing reads a coverage dimension, so it OFFERS
+# that dimension as a value and lists only the shortfalls the selection names.
+# ===========================================================================
+
+
+class TestAShortfallListingOffersTheDimensionItReads:
+    """One section per dimension; a selection says which sections appear.
+
+    These properties fail SILENTLY: a report that quietly listed a dimension
+    the reader did not ask for, or listed them in an order of its own, still
+    looks exactly like the report that was asked for.
+    """
+
+    # Verifies: REQ-d00282-O
+    @pytest.mark.parametrize(
+        ("value", "section"),
+        (
+            ("implemented", "uncovered"),
+            ("tested", "untested"),
+            ("uat_coverage", "unvalidated"),
+            ("verified", "failing"),
+        ),
+    )
+    def test_each_dimension_names_the_listing_of_what_it_has_not_credited(
+        self, value: str, section: str
+    ) -> None:
+        import argparse
+
+        from elspais.commands._edges import report_inputs_from_args
+        from elspais.commands.gaps import COMMAND_VALUES, OFFERED_VALUES, gap_sections
+
+        args = argparse.Namespace(values=value, scope=None)
+        inputs = report_inputs_from_args(
+            args, {}, COMMAND_VALUES.get("gaps", OFFERED_VALUES), identity_key=""
+        )
+        assert gap_sections(inputs.values, "gaps") == [section]
+
+    # Verifies: REQ-d00282-K, REQ-d00282-O
+    @pytest.mark.parametrize(
+        ("selection", "expected"),
+        (
+            ("verified,implemented", ["failing", "uncovered"]),
+            ("implemented,verified", ["uncovered", "failing"]),
+            ("tested,uat_coverage,implemented", ["untested", "unvalidated", "uncovered"]),
+        ),
+    )
+    def test_the_listings_come_in_the_order_the_selection_named(
+        self, selection: str, expected: list[str]
+    ) -> None:
+        """The order is the reader's, not the report's own.
+
+        A report that filtered its own fixed order by membership would answer
+        `verified,implemented` with the uncovered listing first -- the same
+        sections, in an order nobody asked for.
+        """
+        import argparse
+
+        from elspais.commands._edges import report_inputs_from_args
+        from elspais.commands.gaps import COMMAND_VALUES, OFFERED_VALUES, gap_sections
+
+        args = argparse.Namespace(values=selection, scope=None)
+        inputs = report_inputs_from_args(
+            args, {}, COMMAND_VALUES.get("gaps", OFFERED_VALUES), identity_key=""
+        )
+        assert gap_sections(inputs.values, "gaps") == expected
+
+    # Verifies: REQ-d00282-O
+    def test_naming_no_values_lists_every_shortfall(self) -> None:
+        import argparse
+
+        from elspais.commands._edges import report_inputs_from_args
+        from elspais.commands.gaps import COMMAND_VALUES, OFFERED_VALUES, gap_sections
+
+        args = argparse.Namespace(values=None, scope=None)
+        inputs = report_inputs_from_args(
+            args, {}, COMMAND_VALUES.get("gaps", OFFERED_VALUES), identity_key=""
+        )
+        assert gap_sections(inputs.values, "gaps") == [
+            "uncovered",
+            "untested",
+            "unvalidated",
+            "failing",
+        ]
+
+    # Verifies: REQ-d00282-O
+    @pytest.mark.parametrize(
+        ("command", "value"),
+        (
+            ("uncovered", "implemented"),
+            ("untested", "tested"),
+            ("unvalidated", "uat_coverage"),
+            ("failing", "verified"),
+        ),
+    )
+    def test_a_shorthand_is_this_report_under_its_one_dimension(
+        self, command: str, value: str
+    ) -> None:
+        """Asked for with no selection and asked for by its own dimension, a
+        shorthand yields the one listing it IS."""
+        import argparse
+
+        from elspais.commands._edges import report_inputs_from_args
+        from elspais.commands.gaps import COMMAND_VALUES, OFFERED_VALUES, gap_sections
+
+        offered = COMMAND_VALUES.get(command, OFFERED_VALUES)
+        bare_inputs = report_inputs_from_args(
+            argparse.Namespace(values=None, scope=None), {}, offered, identity_key=""
+        )
+        named_inputs = report_inputs_from_args(
+            argparse.Namespace(values=value, scope=None), {}, offered, identity_key=""
+        )
+        bare = gap_sections(bare_inputs.values, command)
+        named = gap_sections(named_inputs.values, command)
+        assert bare == named == [command]
+
+    # Verifies: REQ-d00282-F, REQ-d00282-O
+    def test_a_shorthand_refuses_a_dimension_it_does_not_offer(self) -> None:
+        """`uncovered --values tested` names a value `uncovered` does not
+        offer. It is refused rather than quietly becoming `untested`, which
+        would hand a reader a different report wearing the name they asked
+        for."""
+        import argparse
+
+        from elspais.commands._edges import report_inputs_from_args
+        from elspais.commands._values import UnofferedValues
+        from elspais.commands.gaps import COMMAND_VALUES, OFFERED_VALUES
+
+        args = argparse.Namespace(values="tested", scope=None)
+        with pytest.raises(UnofferedValues) as excinfo:
+            report_inputs_from_args(
+                args, {}, COMMAND_VALUES.get("uncovered", OFFERED_VALUES), identity_key=""
+            )
+        assert excinfo.value.unoffered == ("tested",)
+        message = str(excinfo.value)
+        assert "tested" in message
+        assert "implemented" in message, message
+
+    # Verifies: REQ-d00279-C, REQ-d00282-E, REQ-d00282-O
+    @pytest.mark.parametrize(
+        ("selection", "expected"),
+        (
+            ("tested", ["untested"]),
+            ("verified,implemented", ["failing", "uncovered"]),
+        ),
+    )
+    def test_every_path_to_the_report_resolves_the_same_listings(
+        self, canonical_federated_graph, selection: str, expected: list[str]
+    ) -> None:
+        """One selection, three routes: the invocation, the parameters a
+        serving process is handed, and the section composed with others.
+
+        REQ-d00279-C obliges them to yield the same report; a selection each
+        read for itself is how a daemon-served report starts differing from a
+        locally computed one.
+        """
+        import argparse
+        import json as _json
+
+        from elspais.commands._edges import report_inputs_from_args, report_inputs_from_params
+        from elspais.commands._requests import GapsRequest
+        from elspais.commands.gaps import COMMAND_VALUES, OFFERED_VALUES, compute_gaps, gap_sections
+        from elspais.commands.report import _render_section
+
+        args = argparse.Namespace(
+            values=selection, scope=None, format="json", command="gaps", status=None
+        )
+
+        offered = COMMAND_VALUES.get("gaps", OFFERED_VALUES)
+        arg_inputs = report_inputs_from_args(args, {}, offered, identity_key="")
+        from_args = gap_sections(arg_inputs.values, "gaps")
+        param_inputs = report_inputs_from_params({"values": selection}, offered, identity_key="")
+        request = GapsRequest(scope=param_inputs.scope, values=param_inputs.values)
+        # The subject is which LISTINGS each route resolves, so each route's
+        # payload is read the same way: the keys that name a listing, less the
+        # two fields every gap payload carries whatever was selected. `scope`
+        # is one of those (always present, empty where there is nothing to
+        # state) and says nothing about the selection.
+        _NOT_A_LISTING = ("integrated", "scope")
+        from_params = [
+            k
+            for k in compute_gaps(canonical_federated_graph, {}, request)
+            if k not in _NOT_A_LISTING
+        ]
+        composed, _code = _render_section("gaps", canonical_federated_graph, {}, args)
+        from_composition = [k for k in _json.loads(composed) if k not in _NOT_A_LISTING]
+
+        assert from_args == expected
+        assert from_params == expected
+        assert from_composition == expected

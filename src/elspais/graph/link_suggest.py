@@ -359,6 +359,7 @@ def keyword_for_file(file_path: Path, config: dict[str, Any]) -> str:
     return "Implements"
 
 
+# Implements: REQ-d00269-K
 def apply_link_to_file(
     file_path: Path,
     line: int,
@@ -386,7 +387,6 @@ def apply_link_to_file(
         ``None`` also where *file_path* is written in a language associated
         with no comment pattern -- see below.
     """
-    # Implements: REQ-d00269-K
     # The marker comes from the same association the reader uses, so a link
     # this tool writes is a link the next scan reads. Spelling `#` into a
     # JavaScript file would write a citation that is neither valid there nor

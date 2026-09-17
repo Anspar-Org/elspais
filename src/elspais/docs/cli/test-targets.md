@@ -72,7 +72,10 @@ this table does not name.
 <!-- /generated: reporters -->
 
 A **stdout-channel** reporter captures output directly from the running
-`command`; the `results` field is not used.
+`command`; the `results` field is not used.  Capturing it does not hide it: each
+line is echoed to elspais's stderr as it arrives, so the run is visible live
+while the text itself is kept for the parser.  The command's own stderr is never
+captured and passes straight through.
 
 A **file-channel** reporter reads files from disk -- those matched by the
 `results` glob for a results-kind reporter, and the `coverage` path for a
@@ -445,19 +448,25 @@ command = "./scripts/run-enroll-e2e.sh"
 
 Two names are reserved and cannot be declared:
 
-- **`default`** — what a run executes when it selects no group. A target that
+- **`default`** — what a run executes when it names nothing. A target that
   claims no group belongs here, so a project that declares no groups has every
   target in `default` and a bare run does exactly what it always did.
 - **`all`** — every target. Every target belongs to it whether it says so or
-  not, so selecting `all` selects everything.
+  not, so naming `all` names everything.
 
-Select with `--groups`, accepted wherever `--targets` is:
+A group is an **alias for a set of targets**, so it is named where a target is
+named — there is no separate flag:
 
 ```text
-elspais checks --run-tests                 # the `default` group
-elspais checks --run-tests --groups uat    # only the UAT targets
-elspais checks --run-tests --groups all    # everything
+elspais checks --run-tests                  # the `default` group
+elspais checks --run-tests --targets uat    # every target in the `uat` group
+elspais checks --run-tests --targets all    # everything
+elspais checks --run-tests --targets uat elspais-unit   # the group, plus one more
+elspais checks --run-tests --targets uat --targets elspais-unit   # the same
 ```
+
+A run executes every target it names, whether it named it directly or through a
+group. To run a narrower set, name the targets.
 
 A description is required with each declaration: a group named `slow` tells a
 newcomer nothing about whether their change should have run it, and this is the
@@ -466,8 +475,10 @@ reserved is refused — whether a target claims it or a run selects it — becau
 selection that quietly selects nothing produces a report that reads exactly like
 one whose targets all passed.
 
-`--groups` and `--targets` each narrow: naming both runs the targets that are in
-the named groups **and** named individually.
+Because targets and groups are named in one place, they share one namespace: a
+configuration declaring a group with the same name as a test target is refused
+when it is read, rather than resolved by a precedence rule every reader of that
+configuration would then have to know.
 
 ## Per-PR selectivity
 

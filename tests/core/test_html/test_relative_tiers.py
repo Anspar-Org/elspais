@@ -1,4 +1,4 @@
-# Verifies: REQ-d00258-I
+# Verifies: REQ-d00258-R+S+T
 """Relative-denominator tier projection helper (REQ-d00258, Phase-2 chain).
 
 ``relative_tier`` (in ``graph.aggregation``) measures one ``CoverageDimension`` against a RELATIVE

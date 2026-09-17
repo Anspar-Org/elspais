@@ -21,14 +21,20 @@ import io
 import json
 
 import pytest
+import tyro
 
+from elspais.cli import _to_namespace
 from elspais.commands import analysis_cmd, summary, trace
+from elspais.commands._requests import ReportInputs
 from elspais.commands._scope import (
-    resolve_scope_for_report,
     scope_disclosure,
-    scope_params_from_args,
+    scope_from_args,
+    scope_from_params,
 )
+from elspais.commands.args import GlobalArgs
+from elspais.commands.report import parse_shared_args
 from elspais.commands.trace import REPORT_PRESETS, ReportPreset
+from elspais.graph.scope import scoped_requirements
 
 TABLE_FORMATS = ["markdown", "text", "csv", "html"]
 
@@ -50,7 +56,11 @@ def _scope_args(**overrides) -> argparse.Namespace:
 @pytest.fixture(scope="module")
 def scoped(canonical_federated_graph, canonical_config):
     """The membership and the disclosure a level-scoped report is produced under."""
-    result = resolve_scope_for_report(canonical_federated_graph, _scope_args(), canonical_config)
+    result = scoped_requirements(
+        canonical_federated_graph,
+        scope_from_args(_scope_args(), canonical_config),
+        canonical_config,
+    )
     lines = scope_disclosure(result)
     assert lines, "the fixture must actually narrow something for these tests to mean anything"
     ids = None if len(result.ids) == result.population else result.ids
@@ -60,8 +70,13 @@ def scoped(canonical_federated_graph, canonical_config):
 
 @pytest.fixture(scope="module")
 def scope_params(canonical_config) -> dict:
-    """The same scope, in the shape a serving process is handed it."""
-    return scope_params_from_args(_scope_args(), canonical_config)
+    """The same scope, in the shape a serving process is handed it.
+
+    Carried through ``ReportInputs.to_params()`` -- the one place a scope is
+    serialized for a serving process (REQ-d00279-C) -- rather than the deleted
+    ``scope_params_from_args`` bridge, which had no production caller left.
+    """
+    return ReportInputs(scope=scope_from_args(_scope_args(), canonical_config)).to_params()
 
 
 @pytest.fixture(scope="module")
@@ -180,12 +195,17 @@ class TestTraceRenderingCarriesTheScope:
         assert payload["scope"] == list(scoped[1])
         assert isinstance(payload["nodes"], list)
 
-    # Verifies: REQ-p00084-D
-    def test_an_unscoped_json_report_declares_nothing_and_stays_an_array(
+    # Verifies: REQ-p00084-D, REQ-p00085-B
+    def test_an_unscoped_json_report_declares_nothing_in_the_same_shape(
         self, canonical_federated_graph, canonical_config, standard_preset
     ):
-        """D binds a *scoped* report. A report that narrowed nothing has nothing
-        to declare, and its document keeps the shape every consumer reads."""
+        """D binds a *scoped* report, so one that narrowed nothing declares
+        nothing -- but it declares it in the document every other report uses.
+        The mirror of the assertion above: the same two fields, read the same
+        way, with ``scope`` empty rather than the root changing type. A reader
+        that had to test the root before reading the field could not ask one
+        question of one field (REQ-p00085-B).
+        """
         payload = json.loads(
             "\n".join(
                 trace.format_json(
@@ -193,7 +213,9 @@ class TestTraceRenderingCarriesTheScope:
                 )
             )
         )
-        assert isinstance(payload, list)
+        assert payload["scope"] == []
+        assert isinstance(payload["nodes"], list)
+        assert payload["nodes"], "the unscoped report states every requirement"
 
 
 class TestTraceReachesTheArtifactNotTheTerminal:
@@ -222,7 +244,9 @@ class TestTraceReachesTheArtifactNotTheTerminal:
     ):
         """The payload a serving process returns already carries the scope; the
         rendering of it has to agree."""
-        data = trace.compute_trace(canonical_federated_graph, canonical_config, scope_params)
+        data = trace.compute_trace(
+            canonical_federated_graph, canonical_config, _trace_request(scope_params)
+        )
         assert data["scope"], "the computed payload must carry a disclosure to render"
         trace._render_json_from_data(data, standard_preset)
         captured = capsys.readouterr()
@@ -249,7 +273,9 @@ class TestTraceReachesTheArtifactNotTheTerminal:
         monkeypatch.setattr(
             _engine,
             "call",
-            lambda path, params, fn, **kw: fn(canonical_federated_graph, canonical_config, params),
+            lambda path, params, fn, **kw: fn(
+                canonical_federated_graph, canonical_config, kw.get("request") or params
+            ),
         )
         monkeypatch.setattr(_engine, "get_graph", lambda: canonical_federated_graph)
 
@@ -268,17 +294,27 @@ class TestAnalysisDisclosesItsScope:
         self, canonical_federated_graph, canonical_config, scope_params
     ):
         data = analysis_cmd.compute_analysis(
-            canonical_federated_graph, canonical_config, {**scope_params, "top": "5"}
+            canonical_federated_graph,
+            canonical_config,
+            _analysis_request({**scope_params, "top": "5"}),
         )
         assert data["scope"], "a ranking narrowed to one level must say so"
         ranked = {ns["node_id"] for ns in data["ranked_nodes"]}
-        result = resolve_scope_for_report(canonical_federated_graph, scope_params, canonical_config)
+        result = scoped_requirements(
+            canonical_federated_graph, scope_from_params(scope_params), canonical_config
+        )
         assert ranked <= set(result.ids)
 
     # Verifies: REQ-p00084-D
     def test_an_unranked_scope_declares_nothing(self, canonical_federated_graph, canonical_config):
-        data = analysis_cmd.compute_analysis(canonical_federated_graph, canonical_config, {})
-        assert "scope" not in data
+        data = analysis_cmd.compute_analysis(
+            canonical_federated_graph, canonical_config, _analysis_request({})
+        )
+        # The exact mirror of the assertion above: one field, read the same way
+        # both times -- carrying the disclosure where the ranking was narrowed
+        # and empty where it was not. The field's PRESENCE says nothing either
+        # way, because it is present in both payloads (REQ-p00085-B).
+        assert not data["scope"], "a ranking of the whole estate must declare nothing"
 
     # Verifies: REQ-p00084-C+D
     @pytest.mark.parametrize("fmt", ["table", "json"])
@@ -286,7 +322,9 @@ class TestAnalysisDisclosesItsScope:
         self, canonical_federated_graph, canonical_config, scope_params, capsys, fmt
     ):
         data = analysis_cmd.compute_analysis(
-            canonical_federated_graph, canonical_config, {**scope_params, "top": "5"}
+            canonical_federated_graph,
+            canonical_config,
+            _analysis_request({**scope_params, "top": "5"}),
         )
         report = analysis_cmd._report_from_dict(data)
         if fmt == "json":
@@ -301,10 +339,44 @@ class TestAnalysisDisclosesItsScope:
             assert json.loads(captured.out)["scope"] == data["scope"]
 
 
+def _trace_request(params: dict):
+    from elspais.commands._edges import report_inputs_from_params
+    from elspais.commands._requests import TraceRequest
+
+    inputs = report_inputs_from_params(params, trace.OFFERED_VALUES, identity_key="id")
+    return TraceRequest(scope=inputs.scope, values=inputs.values)
+
+
+def _summary_request(params: dict):
+    from elspais.commands._edges import report_inputs_from_params
+    from elspais.commands._requests import SummaryRequest
+
+    inputs = report_inputs_from_params(params, summary.OFFERED_VALUES, summary.IDENTITY_VALUE)
+    return SummaryRequest(scope=inputs.scope, values=inputs.values)
+
+
+def _analysis_request(params: dict):
+    """`analysis` offers no values, so it is always resolved against an empty
+    offer -- there is nothing a declaration could narrow for it."""
+    from elspais.commands._edges import report_inputs_from_params
+    from elspais.commands._requests import AnalysisRequest
+
+    inputs = report_inputs_from_params(params, (), identity_key="")
+    return AnalysisRequest(
+        scope=inputs.scope,
+        values=inputs.values,
+        top=int(params.get("top", "10")),
+        include_code=params.get("include_code", "false") == "true",
+        weights=params.get("weights"),
+    )
+
+
 @pytest.fixture(scope="module")
 def scoped_summary(canonical_federated_graph, canonical_config, scope_params) -> dict:
     """A coverage summary computed under the same narrowing."""
-    return summary.compute_summary(canonical_federated_graph, canonical_config, scope_params)
+    return summary.compute_summary(
+        canonical_federated_graph, canonical_config, _summary_request(scope_params)
+    )
 
 
 class TestSummaryCsvDisclosesItsScope:
@@ -335,7 +407,237 @@ class TestSummaryCsvDisclosesItsScope:
 
     # Verifies: REQ-p00084-D
     def test_an_unscoped_csv_declares_nothing(self, canonical_federated_graph, canonical_config):
-        data = summary.compute_summary(canonical_federated_graph, canonical_config, {})
+        data = summary.compute_summary(
+            canonical_federated_graph, canonical_config, _summary_request({})
+        )
         assert not data["scope"]
         rows = list(csv.reader(io.StringIO(summary._render_csv(data, canonical_config))))
         assert rows[0][0] == "Level"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# A scope property accumulates across the ways a reader may spell it
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# Per REQ-d00278-C a scope admits any combination of the properties it selects
+# on and the values each property admits. A flag that kept only its last occurrence put
+# some of those combinations out of a reader's reach while looking like the whole
+# invocation had been read -- `--not-status Draft --not-status Active` selected
+# as though only `Active` had been named. REQ-d00279-C is the other half: the
+# tyro path (a section asked for alone) and the argparse path (a composed
+# report) must read ONE invocation into one scope.
+
+
+def _flat_args(**overrides) -> argparse.Namespace:
+    """An invocation carrying nothing, for one property to be named on."""
+    fields = {
+        "level": None,
+        "not_level": None,
+        "status": None,
+        "not_status": None,
+        "match_status_roles": False,
+        "scope": None,
+    }
+    fields.update(overrides)
+    return argparse.Namespace(**fields)
+
+
+# The four properties, each with the side of the scope it lands on and the name
+# the scope authority knows it by.
+SCOPE_FLAGS = [
+    ("level", "include", "level"),
+    ("not_level", "exclude", "level"),
+    ("status", "include", "status"),
+    ("not_status", "exclude", "status"),
+]
+
+
+def _selected(scope, side: str, prop: str):
+    assert scope is not None
+    return getattr(scope, side).get(prop)
+
+
+class TestAScopePropertyAccumulates:
+    """Reading one invocation's scope, whichever parser handed it over."""
+
+    # Verifies: REQ-d00278-C
+    @pytest.mark.parametrize("field,side,prop", SCOPE_FLAGS)
+    @pytest.mark.parametrize(
+        "raw,expected",
+        [
+            # The flag repeated: each occurrence arrives as its own list.
+            ([["Draft"], ["Active"]], ("Draft", "Active")),
+            # The values space-separated behind one flag.
+            ([["Draft", "Active"]], ("Draft", "Active")),
+            # Both at once.
+            ([["Draft"], ["Active", "Review"]], ("Draft", "Active", "Review")),
+            # The flat shape older callers and the argparse parser hand over.
+            (["Draft", "Active"], ("Draft", "Active")),
+            # A single value, however nested.
+            ([["Draft"]], ("Draft",)),
+            (["Draft"], ("Draft",)),
+        ],
+    )
+    def test_every_value_named_reaches_the_scope(self, field, side, prop, raw, expected):
+        """Each spelling of the same selection reaches the authority as one thing.
+
+        The values are asserted exactly rather than by count: a reading that
+        kept the inner lists whole would carry ``"['Draft']"`` -- a value no
+        requirement can ever carry -- and a count would not notice.
+        """
+        scope = scope_from_args(_flat_args(**{field: raw}))
+        assert _selected(scope, side, prop) == expected
+
+    # Verifies: REQ-d00278-C
+    @pytest.mark.parametrize("field,_side,_prop", SCOPE_FLAGS)
+    @pytest.mark.parametrize("raw", [None, [], [[]], [""], [[" "]]])
+    def test_a_property_named_with_nothing_selects_nothing(self, field, _side, _prop, raw):
+        assert scope_from_args(_flat_args(**{field: raw})) is None
+
+    # Verifies: REQ-d00278-C, REQ-d00279-C
+    @pytest.mark.parametrize("field,side,prop", SCOPE_FLAGS)
+    def test_the_two_parsers_read_one_invocation_alike(self, field, side, prop):
+        """The tyro path and the composed-report path, on the same argv.
+
+        This is the REQ-d00279-C parity point at the level of the scope itself:
+        one invocation, two parsers, and one selection.
+        """
+        flag = "--" + field.replace("_", "-")
+        repeated = [flag, "Draft", flag, "Active"]
+        spaced = [flag, "Draft", "Active"]
+
+        for argv in (repeated, spaced):
+            tyro_scope = scope_from_args(_to_namespace(tyro.cli(GlobalArgs, args=["gaps", *argv])))
+            argparse_scope = scope_from_args(parse_shared_args(argv))
+            assert _selected(tyro_scope, side, prop) == ("Draft", "Active"), argv
+            assert tyro_scope == argparse_scope, argv
+
+    # Verifies: REQ-d00278-C
+    @pytest.mark.parametrize("field,side,prop", SCOPE_FLAGS)
+    def test_the_repeated_and_the_space_separated_spelling_agree(self, field, side, prop):
+        """Two spellings of one selection, read through the real CLI path.
+
+        ``_to_namespace`` is what production hands ``scope_from_args``, so the
+        conversion is inside the test rather than assumed transparent.
+        """
+        flag = "--" + field.replace("_", "-")
+        repeated = _to_namespace(tyro.cli(GlobalArgs, args=["gaps", flag, "Draft", flag, "Active"]))
+        spaced = _to_namespace(tyro.cli(GlobalArgs, args=["gaps", flag, "Draft", "Active"]))
+        assert scope_from_args(repeated) == scope_from_args(spaced)
+        assert _selected(scope_from_args(repeated), side, prop) == ("Draft", "Active")
+
+
+class TestOneGathererReadsEveryRepeatedFlag:
+    """``flag_values`` is the one place a repeated flag becomes the one list it
+    names, and it serves every accumulating flag rather than the scope
+    properties alone -- so a reader who has learned how one flag reads has
+    learned how they all do. Reading it per flag is how ``--not-status`` came
+    to accumulate while ``--treat-active`` kept its last occurrence.
+    """
+
+    # Verifies: REQ-d00278-C
+    @pytest.mark.parametrize(
+        "raw,expected",
+        [
+            # The flag repeated: each occurrence arrives as its own list.
+            ([["Draft"], ["Active"]], ("Draft", "Active")),
+            # The values space-separated behind one flag.
+            ([["Draft", "Active"]], ("Draft", "Active")),
+            # Both at once, in the order the invocation named them.
+            ([["Draft"], ["Active", "Review"]], ("Draft", "Active", "Review")),
+            # The flat shape the composed report's argparse parser produces.
+            (["Draft", "Active"], ("Draft", "Active")),
+            # A bare string, which a caller assembling a namespace may hand
+            # over -- read as one value, never as its characters.
+            ("Draft", ("Draft",)),
+        ],
+    )
+    def test_every_value_named_is_gathered_whatever_the_shape(self, raw, expected):
+        from elspais.commands._scope import flag_values
+
+        assert flag_values(argparse.Namespace(anything=raw), "anything") == expected
+
+    # Verifies: REQ-d00278-C
+    @pytest.mark.parametrize("raw", [None, [], [[]], [""], [[" "]], ""])
+    def test_a_flag_named_with_nothing_gathers_nothing(self, raw):
+        """An empty value is not a value: gathered, it would select on a status
+        no requirement carries and quietly empty the report."""
+        from elspais.commands._scope import flag_values
+
+        assert flag_values(argparse.Namespace(anything=raw), "anything") == ()
+
+    # Verifies: REQ-d00278-C
+    def test_a_flag_the_invocation_never_named_gathers_nothing(self):
+        from elspais.commands._scope import flag_values
+
+        assert flag_values(argparse.Namespace(), "absent") == ()
+
+
+class TestAccumulationIsObservableInTheSelection:
+    """The defect stated as the reader met it: a set of requirements.
+
+    The canonical estate carries PRD, OPS and DEV requirements and no status
+    other than Active, so ``--not-level`` is where the two spellings can be told
+    apart by what they select.
+    """
+
+    def _ids(self, graph, config, argv):
+        args = _to_namespace(tyro.cli(GlobalArgs, args=["gaps", *argv]))
+        return scoped_requirements(graph, scope_from_args(args, config), config).ids
+
+    # Verifies: REQ-d00278-C
+    def test_repeating_an_exclusion_excludes_both_levels(
+        self, canonical_federated_graph, canonical_config
+    ):
+        """Naming a second level to refuse must narrow the set, not replace the
+        refusal with it -- the shape of the reported defect."""
+        both = self._ids(
+            canonical_federated_graph,
+            canonical_config,
+            ["--not-level", "ops", "--not-level", "dev"],
+        )
+        last_only = self._ids(canonical_federated_graph, canonical_config, ["--not-level", "dev"])
+        assert both < last_only, (
+            "the repeated exclusion selected as though only its last occurrence "
+            f"had been read: {sorted(both)} vs {sorted(last_only)}"
+        )
+
+    # Verifies: REQ-d00279-C
+    def test_both_spellings_select_the_same_requirements(
+        self, canonical_federated_graph, canonical_config
+    ):
+        repeated = self._ids(
+            canonical_federated_graph,
+            canonical_config,
+            ["--not-level", "ops", "--not-level", "dev"],
+        )
+        spaced = self._ids(
+            canonical_federated_graph, canonical_config, ["--not-level", "ops", "dev"]
+        )
+        assert repeated == spaced
+
+    # Verifies: REQ-d00278-C
+    def test_repeating_an_inclusion_widens_the_set(
+        self, canonical_federated_graph, canonical_config
+    ):
+        both = self._ids(
+            canonical_federated_graph, canonical_config, ["--level", "prd", "--level", "ops"]
+        )
+        last_only = self._ids(canonical_federated_graph, canonical_config, ["--level", "ops"])
+        assert last_only < both
+        assert both == self._ids(
+            canonical_federated_graph, canonical_config, ["--level", "prd", "ops"]
+        )
+
+    # Verifies: REQ-d00279-C
+    def test_the_composed_report_path_selects_the_same_requirements(
+        self, canonical_federated_graph, canonical_config
+    ):
+        """A composed report reads the repeated flag the way a lone section does."""
+        argv = ["--not-level", "ops", "--not-level", "dev"]
+        composed = scoped_requirements(
+            canonical_federated_graph,
+            scope_from_args(parse_shared_args(argv), canonical_config),
+            canonical_config,
+        ).ids
+        assert composed == self._ids(canonical_federated_graph, canonical_config, argv)

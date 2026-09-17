@@ -10,54 +10,52 @@ import argparse
 import json
 import re
 import sys
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from elspais.graph import NodeKind
 
+if TYPE_CHECKING:
+    from elspais.commands._requests import SearchRequest
 
-def compute_search(graph: Any, config: dict[str, Any], params: dict[str, str]) -> dict:
+
+def compute_search(graph: Any, config: dict[str, Any], request: SearchRequest) -> dict:
     """Pure compute function: search requirements on a graph.
 
     Called by engine.call (local path) and by routes_api (server path).
     Returns {"results": [...]}.
     """
-    query = params.get("q", "")
-    field = params.get("field", "all")
-    use_regex = params.get("regex", "false").lower() == "true"
-    limit = int(params.get("limit", "50"))
-
-    if not query:
+    if not request.q:
         return {"results": []}
 
-    results = _search(graph, query, field=field, regex=use_regex, limit=limit)
+    results = _search(
+        graph, request.q, field=request.field, regex=request.regex, limit=request.limit
+    )
     return {"results": results}
 
 
 def run(args: argparse.Namespace) -> int:
     """Run the search command."""
     from elspais.commands._engine import call as engine_call
+    from elspais.commands._requests import SearchRequest
 
     query = getattr(args, "query", "") or ""
     if not query:
         print("Usage: elspais search 'search terms'", file=sys.stderr)
         return 1
 
-    field = getattr(args, "field", "all")
-    use_regex = getattr(args, "regex", False)
-    limit = getattr(args, "limit", 50)
     fmt = getattr(args, "format", "text")
     no_daemon = getattr(args, "no_daemon", False)
 
-    params: dict[str, str] = {
-        "q": query,
-        "field": field,
-        "regex": "true" if use_regex else "false",
-        "limit": str(limit),
-    }
+    request = SearchRequest(
+        q=query,
+        field=getattr(args, "field", "all") or "all",
+        limit=int(getattr(args, "limit", 50) or 50),
+        regex=bool(getattr(args, "regex", False)),
+    )
 
     data = engine_call(
         "/api/search",
-        params,
+        request,
         compute_search,
         skip_daemon=no_daemon,
         config_path=getattr(args, "config", None),

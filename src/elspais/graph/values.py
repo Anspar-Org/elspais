@@ -28,7 +28,7 @@ PARTS beneath it, which each state one number. A proportion is derived from the
 other two rather than being a third fact, so it is carried unrounded and only a
 rendering rounds it. Some values have only the one form: the assertions a
 dimension counted as passed, failed or awaiting a result are counts with no
-proportion of their own (REQ-d00258-O), and though the three sum to the tested
+proportion of their own (REQ-d00258-U), and though the three sum to the tested
 count a reader wanting only the failures is owed only the failures.
 """
 
@@ -59,7 +59,7 @@ PART_TOTAL = "total"
 PART_RATIO = "ratio"
 SCALAR_PARTS: tuple[str, ...] = (PART_COUNT, PART_TOTAL, PART_RATIO)
 
-# Implements: REQ-d00258-O, REQ-d00282-B
+# Implements: REQ-d00258-U, REQ-d00282-B
 # name: COUNT_PARTS
 # use:  the parts of the Tested figure that are counts and nothing else.
 # def:  what came back for the assertions a dimension counted as tested.
@@ -70,7 +70,8 @@ SCALAR_PARTS: tuple[str, ...] = (PART_COUNT, PART_TOTAL, PART_RATIO)
 # counts that happen to sum with them.
 COUNT_PARTS: tuple[str, ...] = ("passed", "failed", "awaiting")
 
-# The dimension whose figure carries the breakdown of REQ-d00258-O.
+# The one dimension whose figure carries the Tested breakdown, which qualifies
+# that figure rather than standing as a dimension of its own (REQ-d00258-V).
 BREAKDOWN_DIMENSION = "tested"
 
 # Implements: REQ-d00254-B, REQ-d00282-N
@@ -88,7 +89,7 @@ BREAKDOWN_DIMENSION = "tested"
 # REQ-d00282-N gives it the same three scalars every figure has.
 LINE_DIMENSIONS: frozenset[str] = frozenset({"code_tested"})
 
-# Implements: REQ-d00258-E, REQ-d00282-N
+# Implements: REQ-d00258-W, REQ-d00282-N
 # name: PART_ATTRIBUTED
 # use:  the READING of a line figure that says how many of its lines a
 #       verifying test can be named for.
@@ -97,7 +98,7 @@ LINE_DIMENSIONS: frozenset[str] = frozenset({"code_tested"})
 #
 # A different question from the figure itself, so it is named for the
 # attribution rather than for the figure at large (REQ-d00282-C) and carries
-# its own absence: REQ-d00258-E suppresses it where no context was recorded,
+# its own absence: REQ-d00258-W suppresses it where no context was recorded,
 # and that suppression must not take the lines COVERED with it -- those were
 # measured, and a report holding them and saying nothing has withheld an
 # answer it has.
@@ -243,7 +244,15 @@ _IDENTITY_VALUES: tuple[ValueSpec, ...] = (
     # the denominator every coverage figure in the row is taken over
     # (REQ-d00258-P), which is why each figure states its own denominator
     # inside itself rather than leaning on a neighbouring value.
-    ValueSpec(key="requirements", header="Requirements", group_only=True),
+    # "Active" names the role of the status that this figure counts. It does
+    # not name the word of the status. The count includes each requirement
+    # whose status expects implementation. That is each status with an active
+    # role. It also includes each status that a project declares or a run
+    # promotes (REQ-d00291-D+E). The key for selection is still
+    # ``requirements``. The name that a reader selects is independent of the
+    # words that a report shows (REQ-d00282-J). Therefore each selection
+    # continues to work, and no reader must spell a selection again.
+    ValueSpec(key="requirements", header="Active Requirements", group_only=True),
     ValueSpec(key="assertions", header="Assertions", group_only=True),
 )
 
@@ -262,6 +271,7 @@ _DIMENSION_HEADERS: dict[str, str] = {
 }
 
 
+# Implements: REQ-d00282-C
 def _qualified_header(
     head: str,
     measure: str,
@@ -286,6 +296,7 @@ def _qualified_header(
     return f"{head} ({', '.join(qualifiers)})" if qualifiers else head
 
 
+# Implements: REQ-d00282-C
 def _figure_specs(
     dim: str, head: str, measure: str, words: Mapping[str, str] | None = None
 ) -> list[ValueSpec]:
@@ -317,13 +328,14 @@ def _figure_specs(
     return specs
 
 
+# Implements: REQ-d00282-J
 def _build_specs() -> dict[str, ValueSpec]:
     specs: dict[str, ValueSpec] = {c.key: c for c in _IDENTITY_VALUES}
     for dim in COVERAGE_DIMENSIONS:
         head = _DIMENSION_HEADERS.get(dim, dim.replace("_", " ").title())
         for spec in _figure_specs(dim, head, ""):
             specs[spec.key] = spec
-        # Implements: REQ-d00258-O, REQ-d00282-B
+        # Implements: REQ-d00258-U, REQ-d00282-B
         # Counts, and only counts: what came back for the tested assertions
         # takes no proportion of its own, so no `.ratio` is offered beneath
         # one and asking for it is refused like any other name the report does
@@ -358,7 +370,7 @@ def _build_specs() -> dict[str, ValueSpec]:
     # population, so it takes the same three scalars every figure takes. The
     # attribution is a FOURTH reading of the same lines rather than a part of
     # the figure, so it is offered beside them and carries its own absence
-    # (REQ-d00258-E).
+    # (REQ-d00258-W).
     for dim in sorted(LINE_DIMENSIONS):
         head = _DIMENSION_HEADERS[dim]
         for spec in _figure_specs(dim, head, "", words=_LINE_PART_WORDS):
@@ -461,7 +473,7 @@ def flag_cell(value: bool) -> str:
 # name: figure_object
 # use:  the ONE shape a coverage figure takes in a format that has numbers.
 # def:  the credit, the assertions it was counted over and their proportion --
-#       and, for a figure carrying the breakdown of REQ-d00258-O, its counts --
+#       and, for a figure carrying the breakdown of REQ-d00258-U, its counts --
 #       under the very keys a selection names them by.
 #
 # The mirror of ``figure_cell``: one value, stated in each format's own kind. A
@@ -533,6 +545,7 @@ def nest_values(items: Iterable[tuple[str, Any]]) -> dict[str, Any]:
     return out
 
 
+# Implements: REQ-d00282-D
 # Implements: REQ-d00282-B+E+K+M
 # name: structured_row
 # use:  the ONE place a report's row becomes the object a format with numbers
@@ -575,7 +588,7 @@ def structured_row(
         elif spec.is_scalar or spec.is_flag:
             items.append((path, part_value(key)))
         else:
-            # Implements: REQ-d00254-I, REQ-d00258-O
+            # Implements: REQ-d00254-I, REQ-d00258-U
             # What a table bundles into a figure's cell -- the Tested breakdown,
             # and the provenance the Passing cell discloses as "(baseline)" --
             # is stated inside that figure's object too, so one selection states
@@ -588,7 +601,7 @@ def structured_row(
                 candidates = COUNT_PARTS if spec.dimension == BREAKDOWN_DIMENSION else ()
                 if spec.dimension == CARRIED_DIMENSION:
                     candidates = (*candidates, FLAG_CARRIED)
-                # Implements: REQ-d00258-E, REQ-d00282-N
+                # Implements: REQ-d00258-W, REQ-d00282-N
                 # The attribution reading rides inside the line figure's object
                 # for the same reason: a reader naming the figure is stated
                 # what naming its parts would have stated. Its suppression is
@@ -624,9 +637,19 @@ class UnofferedValues(ValueError):
 
 @dataclass(frozen=True)
 class ValueSelection:
-    """The values a reader asked for, in the order they asked for them."""
+    """The values a reader asked for, in the order they asked for them.
+
+    ``written`` records whether a reader wrote this selection for this report or
+    a project declared it under a name (REQ-d00280-C+E). The two are read
+    differently and nothing but their provenance tells them apart: a name
+    written here is about this report, so a value it does not offer is a
+    mistake; a declared name is read against every report an audience takes, so
+    a value one of them does not offer is an ordinary difference between
+    reports.
+    """
 
     keys: tuple[str, ...]
+    written: bool = True
 
     def __bool__(self) -> bool:
         return bool(self.keys)
@@ -635,6 +658,8 @@ class ValueSelection:
         return tuple(VALUE_SPECS[k] for k in self.keys)
 
 
+# Implements: REQ-d00282-G
+# Implements: REQ-d00282-A
 def parse_value_selection(raw: str | Sequence[str] | None) -> ValueSelection | None:
     """Read a selection as written, without judging it against any report.
 
@@ -666,7 +691,8 @@ def parse_value_selection(raw: str | Sequence[str] | None) -> ValueSelection | N
     return ValueSelection(keys=tuple(ordered))
 
 
-# Implements: REQ-d00282-A+F+K+L
+# Implements: REQ-d00282-G+J
+# Implements: REQ-d00282-A+F+K+L, REQ-d00280-D
 def resolve_values(
     selection: ValueSelection | None,
     offered: Sequence[str],
@@ -675,10 +701,19 @@ def resolve_values(
     """The values a report states, given what it offers and what was asked.
 
     Honours the order the selection names (REQ-d00282-K) and keeps the value
-    saying what each row is about whatever was named (REQ-d00282-L). Refuses
-    outright where any named value is not offered (REQ-d00282-F), so a reader
-    never receives a report narrower than the one they asked for while it looks
-    exactly like the one they wanted.
+    saying what each row is about whatever was named (REQ-d00282-L).
+
+    What becomes of a name this report does not offer turns on where the
+    selection came from. A name a reader WROTE for this report is a mistake,
+    and F wants no report produced under it: honouring the rest would hand back
+    a narrower report than they asked for while looking exactly like the one
+    they wanted. A name a project DECLARED (REQ-d00280-C) is read against every
+    report the audience takes, so a report that does not offer it is an
+    ordinary difference between reports rather than an error -- it passes over,
+    leaving the rest of the declaration to select, which is the disposition
+    REQ-d00278-K takes for the other axis and for the same reason. A
+    declaration none of whose values this report offers narrows nothing, so the
+    report states what it would have anyway.
     """
     if selection is None:
         return tuple(offered)
@@ -686,7 +721,12 @@ def resolve_values(
     offered_lower = {k.lower(): k for k in offered}
     unoffered = [k for k in selection.keys if k not in offered_lower]
     if unoffered:
-        raise UnofferedValues(unoffered, offered)
+        if selection.written:
+            raise UnofferedValues(unoffered, offered)
+        kept = [k for k in selection.keys if k in offered_lower]
+        if not kept:
+            return tuple(offered)
+        selection = ValueSelection(keys=tuple(kept), written=False)
 
     chosen = [offered_lower[k] for k in selection.keys]
     if identity_key and identity_key in offered and identity_key not in chosen:
@@ -694,6 +734,8 @@ def resolve_values(
     return tuple(chosen)
 
 
+# Implements: REQ-d00282-C+J
+# Implements: REQ-d00258-K
 def header_for(key: str, config: Mapping[str, Any] | None = None) -> str:
     """The words a value is displayed under.
 

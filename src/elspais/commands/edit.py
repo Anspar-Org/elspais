@@ -56,13 +56,40 @@ def run(args: argparse.Namespace) -> int:
 
     resolver = build_resolver(config)
 
+    # Implements: REQ-p00015-H
+    # Derived once, from this repository's configuration, and handed down. The
+    # edit surfaces read spec files directly rather than through the scan, so
+    # without these they read files the reader excluded.
+    from elspais.config import find_git_root, scan_exclusions
+
+    skip_dirs, skip_files = scan_exclusions(config, "spec")
+    # The root the directory patterns are read from travels with them, so no
+    # consumer has to guess the frame. It is the directory the configuration
+    # was READ from, which is the root those patterns were written against by
+    # construction -- the working directory is not, and a spec directory
+    # resolving outside it would have lost every directory skip while the file
+    # skips went on working. That is the by-name-only shape that hid this bug
+    # the first time, and it fails silently.
+    config_root = config_path.parent if config_path else (find_git_root(Path.cwd()) or Path.cwd())
+    exclusions = (config_root, skip_dirs, skip_files)
+
     # Handle batch mode
     if hasattr(args, "from_json") and args.from_json:
-        return run_batch_edit(args.from_json, base_spec_dir, dry_run, validate_refs, resolver)
+        return run_batch_edit(
+            args.from_json,
+            base_spec_dir,
+            dry_run,
+            validate_refs,
+            resolver,
+            exclusions,
+            spec_dirs,
+        )
 
     # Handle single edit mode
     if hasattr(args, "req_id") and args.req_id:
-        return run_single_edit(args, base_spec_dir, dry_run, validate_refs, resolver)
+        return run_single_edit(
+            args, base_spec_dir, dry_run, validate_refs, resolver, exclusions, spec_dirs
+        )
 
     print("Error: Must specify REQ_ID or --from-json", file=sys.stderr)
     return 1
@@ -74,6 +101,8 @@ def run_batch_edit(
     dry_run: bool,
     validate_refs: bool = False,
     resolver: Any | None = None,
+    exclusions: Any = None,
+    search_dirs: Any = None,
 ) -> int:
     """Run batch edit from JSON file or stdin."""
     # Load JSON
@@ -91,7 +120,13 @@ def run_batch_edit(
         return 1
 
     results = batch_edit(
-        spec_dir, changes, dry_run=dry_run, validate_refs=validate_refs, resolver=resolver
+        spec_dir,
+        changes,
+        dry_run=dry_run,
+        validate_refs=validate_refs,
+        resolver=resolver,
+        exclusions=exclusions,
+        search_dirs=search_dirs,
     )
 
     # Report results
@@ -119,12 +154,14 @@ def run_single_edit(
     dry_run: bool,
     validate_refs: bool = False,
     resolver: Any | None = None,
+    exclusions: Any = None,
+    search_dirs: Any = None,
 ) -> int:
     """Run single requirement edit."""
     req_id = args.req_id
 
     # Find the requirement
-    location = find_requirement_in_files(spec_dir, req_id)
+    location = find_requirement_in_files(search_dirs or spec_dir, req_id, exclusions)
     if not location:
         print(f"Error: Requirement {req_id} not found", file=sys.stderr)
         return 1
@@ -135,7 +172,7 @@ def run_single_edit(
     # Collect valid refs if validation is enabled
     valid_refs: set | None = None
     if validate_refs:
-        valid_refs = collect_all_req_ids(spec_dir, resolver)
+        valid_refs = collect_all_req_ids(search_dirs or spec_dir, resolver, exclusions)
 
     # Apply implements change
     if hasattr(args, "implements") and args.implements is not None:
@@ -227,9 +264,44 @@ def run_single_edit(
     return 0
 
 
+# Implements: REQ-p00015-H, REQ-d00275-C, REQ-d00212-Q
+def _spec_files(spec_dir: Any, exclusions: Any = None) -> list[Path]:
+    """The spec files these directories hold, excluded files already gone.
+
+    ``exclusions`` is the ``(repo_root, skip_dirs, skip_files)`` triple. The
+    repository root is part of it because a directory pattern is a path FROM
+    that root: judging it against a path relative to the spec directory
+    instead reads the pattern in the wrong frame, so the build pruned a
+    directory that ``edit`` went on reading. REQ-d00212-Q asks for one answer
+    to "is this file scanned", and two frames are two answers.
+
+    ``None`` excludes nothing, which is what a caller holding no project
+    configuration means.
+    """
+    from elspais.graph.file_selection import file_is_skipped, within_skipped_dir
+
+    dirs = [Path(d) for d in (spec_dir if isinstance(spec_dir, (list, tuple)) else [spec_dir])]
+    repo_root, skip_dirs, skip_files = exclusions if exclusions else (None, [], [])
+
+    found: list[Path] = []
+    for one_dir in dirs:
+        base = Path(repo_root) if repo_root is not None else one_dir
+        for md_file in sorted(one_dir.rglob("*.md")):
+            try:
+                relative = md_file.resolve().relative_to(base.resolve()).as_posix()
+            except ValueError:
+                relative = md_file.name
+            # Implements: REQ-p00015-H -- asked BEFORE the read.
+            if file_is_skipped(md_file.name, skip_files) or within_skipped_dir(relative, skip_dirs):
+                continue
+            found.append(md_file)
+    return found
+
+
 def find_requirement_in_files(
-    spec_dir: Path,
+    spec_dir: Any,
     req_id: str,
+    exclusions: Any = None,
 ) -> dict[str, Any] | None:
     """
     Find a requirement in spec files.
@@ -243,11 +315,10 @@ def find_requirement_in_files(
     """
     from elspais.utilities.patterns import find_req_header
 
-    for md_file in spec_dir.rglob("*.md"):
+    for md_file in _spec_files(spec_dir, exclusions):
         content = md_file.read_text()
         match = find_req_header(content, req_id)
         if match:
-            # Count line number
             line_number = content[: match.start()].count("\n") + 1
             return {
                 "file_path": md_file,
@@ -258,7 +329,7 @@ def find_requirement_in_files(
     return None
 
 
-def collect_all_req_ids(spec_dir: Path, resolver: Any | None = None) -> set:
+def collect_all_req_ids(spec_dir: Any, resolver: Any | None = None, exclusions: Any = None) -> set:
     """
     Collect all requirement IDs from spec directory.
 
@@ -287,7 +358,7 @@ def collect_all_req_ids(spec_dir: Path, resolver: Any | None = None) -> set:
     req_ids: set[str] = set()
     pattern = re.compile(rf"^#+\s*({resolver.grammar().identifier}):", re.MULTILINE)
 
-    for md_file in spec_dir.rglob("*.md"):
+    for md_file in _spec_files(spec_dir, exclusions):
         content = md_file.read_text()
         for match in pattern.finditer(content):
             full_id = match.group(1)
@@ -311,6 +382,8 @@ def batch_edit(
     dry_run: bool = False,
     validate_refs: bool = False,
     resolver: Any | None = None,
+    exclusions: Any = None,
+    search_dirs: Any = None,
 ) -> list[dict[str, Any]]:
     """
     Apply batch edits from a list of change specifications.
@@ -333,7 +406,7 @@ def batch_edit(
     # Collect all req IDs if validation is enabled
     valid_refs: set | None = None
     if validate_refs:
-        valid_refs = collect_all_req_ids(spec_dir, resolver)
+        valid_refs = collect_all_req_ids(search_dirs or spec_dir, resolver, exclusions)
 
     for change in changes:
         req_id = change.get("req_id")
@@ -342,7 +415,7 @@ def batch_edit(
             continue
 
         # Find the requirement
-        location = find_requirement_in_files(spec_dir, req_id)
+        location = find_requirement_in_files(search_dirs or spec_dir, req_id, exclusions)
         if not location:
             results.append(
                 {

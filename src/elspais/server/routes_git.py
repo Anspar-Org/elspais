@@ -30,8 +30,8 @@ def _resolve_repo_root(state: Any, repo_name: str | None) -> Path:
     raise ValueError(f"Unknown repo: {repo_name!r}")
 
 
+# Implements: REQ-p00004-I
 async def api_git_repo_status(request: Request) -> JSONResponse:
-    # Implements: REQ-p00004-I
     """GET /api/git/repo-status - Per-repo branch/status for multi-repo UI."""
     from elspais.utilities.git import (
         _clean_git_env,
@@ -69,8 +69,8 @@ async def api_git_repo_status(request: Request) -> JSONResponse:
     return JSONResponse({"repos": repos, "protected_branches": protected})
 
 
+# Implements: REQ-p00004-I
 async def api_git_monorepo_eligible(request: Request) -> JSONResponse:
-    # Implements: REQ-p00004-I
     """GET /api/git/monorepo-eligible - Check monorepo mode eligibility."""
     from elspais.utilities.git import check_monorepo_eligible
 
@@ -81,8 +81,8 @@ async def api_git_monorepo_eligible(request: Request) -> JSONResponse:
     return JSONResponse({"eligible": eligible, "reasons": reasons})
 
 
+# Implements: REQ-p00004-C
 async def api_git_status(request: Request) -> JSONResponse:
-    # Implements: REQ-p00004-C
     """GET /api/git/status - Git status summary for the viewer UI."""
     from elspais.utilities.git import git_status_summary
 
@@ -121,8 +121,8 @@ async def api_git_status(request: Request) -> JSONResponse:
     return JSONResponse(result)
 
 
+# Implements: REQ-p00004-D
 async def api_git_branch(request: Request) -> JSONResponse:
-    # Implements: REQ-p00004-D
     """POST /api/git/branch - Create and switch to a new branch."""
     from elspais.utilities.git import create_and_switch_branch, invalidate_ancestor_cache
 
@@ -151,8 +151,8 @@ async def api_git_branch(request: Request) -> JSONResponse:
         return JSONResponse(result, status_code=status_code)
 
 
+# Implements: REQ-p00004-E
 async def api_git_push(request: Request) -> JSONResponse:
-    # Implements: REQ-p00004-E
     """POST /api/git/push - Push local commits to remote."""
     from elspais.utilities.git import get_current_branch, push_branch
 
@@ -190,8 +190,8 @@ async def api_git_push(request: Request) -> JSONResponse:
         return JSONResponse(rv, status_code=status_code)
 
 
+# Implements: REQ-p00004-F
 async def api_git_pull(request: Request) -> JSONResponse:
-    # Implements: REQ-p00004-F
     """POST /api/git/pull - Sync branch with remote and main."""
     from elspais.utilities.git import invalidate_ancestor_cache, sync_branch
 
@@ -220,8 +220,8 @@ async def api_git_pull(request: Request) -> JSONResponse:
         return JSONResponse(result, status_code=status_code)
 
 
+# Implements: REQ-p00004-H
 async def api_git_branches(request: Request) -> JSONResponse:
-    # Implements: REQ-p00004-H
     """GET /api/git/branches - List local and remote git branches."""
     from elspais.utilities.git import list_branches
 
@@ -232,6 +232,7 @@ async def api_git_branches(request: Request) -> JSONResponse:
     return JSONResponse(result)
 
 
+# Implements: REQ-p00004-I
 def _checkout_single_repo(repo: Path, branch: str, is_remote: bool) -> dict:
     """Checkout a branch in a single repo.
 
@@ -243,8 +244,8 @@ def _checkout_single_repo(repo: Path, branch: str, is_remote: bool) -> dict:
     return checkout_branch(repo, branch, from_remote=is_remote)
 
 
+# Implements: REQ-p00004-I
 async def api_git_checkout(request: Request) -> JSONResponse:
-    # Implements: REQ-p00004-I
     """POST /api/git/checkout - Switch to an existing git branch (single or multi-repo)."""
     from elspais.utilities.git import check_dirty_repos, invalidate_ancestor_cache
 
@@ -315,6 +316,7 @@ async def api_git_commits(request: Request) -> JSONResponse:
     return JSONResponse(result)
 
 
+# Implements: REQ-p00004-E
 async def api_git_commit(request: Request) -> JSONResponse:
     """POST /api/git/commit - Commit spec files locally (checkpoint)."""
     from elspais.utilities.git import (

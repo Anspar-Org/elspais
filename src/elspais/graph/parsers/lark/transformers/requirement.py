@@ -126,6 +126,7 @@ class RequirementTransformer:
             reader = FederatedIdReader(resolver)
         self.reader = reader
 
+    # Implements: REQ-d00247-A
     def transform(self, tree: Tree, source: str = "") -> list[ParsedContent]:
         """Transform the full parse tree into a list of ParsedContent.
 
@@ -154,7 +155,6 @@ class RequirementTransformer:
                     results.append(self._transform_definition_block(child))
                 elif child.data == "remainder_line":
                     token = child.children[0]  # TEXT token
-                    # Implements: REQ-d00247-A
                     # Token text comes from the neutralized parse buffer; pull
                     # from _source_lines (original) so fence content survives.
                     line_no = token.line  # type: ignore[attr-defined]
@@ -213,7 +213,7 @@ class RequirementTransformer:
         implements: list[str] = []
         refines: list[str] = []
         satisfies: list[str] = []
-        # Implements: REQ-d00252
+        # Implements: REQ-d00252-A
         integrates: list[str] = []
         # Implements: REQ-d00272-K
         # Keyed by the *Traceability* keyword the item was written under
@@ -282,7 +282,7 @@ class RequirementTransformer:
                         meta.get("satisfies_verdicts", {}),
                     ):
                         has_redundant_refs = True
-                # Implements: REQ-d00252
+                # Implements: REQ-d00252-A
                 if meta.get("integrates"):
                     if self._merge_ref_field(
                         integrates,
@@ -369,7 +369,7 @@ class RequirementTransformer:
             "implements": implements,
             "refines": refines,
             "satisfies": satisfies,
-            # Implements: REQ-d00252
+            # Implements: REQ-d00252-A
             "integrates": integrates,
             # Implements: REQ-p00014-E
             "template": is_template,
@@ -401,6 +401,7 @@ class RequirementTransformer:
     # Metadata extraction from pre-classified tokens
     # ------------------------------------------------------------------
 
+    # Implements: REQ-d00269-H
     def _extract_metadata(
         self, node: Tree, continuations: dict[int, str] | None = None
     ) -> dict[str, Any]:
@@ -414,7 +415,6 @@ class RequirementTransformer:
         for child in node.children:
             if isinstance(child, Token):
                 text = str(child).strip()
-                # Implements: REQ-d00269-H
                 # A list continued onto the lines below reads as the joined
                 # text, so the reader divides one list rather than seeing a
                 # separator with nothing after it.
@@ -445,7 +445,7 @@ class RequirementTransformer:
                     )
                     # Implements: REQ-d00287-I
                     self._note_placeholders(result, items, "satisfies")
-                # Implements: REQ-d00252
+                # Implements: REQ-d00252-A
                 elif child.type == "INTEGRATES_FIELD":
                     items = self._ref_list_items(val)
                     result["integrates"], result["integrates_verdicts"] = self._from_ref_items(
@@ -487,6 +487,7 @@ class RequirementTransformer:
     # Assertion extraction from pre-classified tokens
     # ------------------------------------------------------------------
 
+    # Implements: REQ-d00250-A
     def _extract_assertions(
         self, node: Tree, req_start_line: int
     ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], int]:
@@ -600,6 +601,7 @@ class RequirementTransformer:
     # Named section extraction
     # ------------------------------------------------------------------
 
+    # Implements: REQ-d00250-A
     def _extract_named_section(self, node: Tree) -> dict[str, Any] | None:
         """Extract a named section (## Heading + content)."""
         header_token = node.children[0]  # SECTION_HDR
@@ -647,6 +649,7 @@ class RequirementTransformer:
     # Changelog extraction
     # ------------------------------------------------------------------
 
+    # Implements: REQ-d00250-A
     def _extract_changelog(self, node: Tree) -> tuple[list[dict[str, str]], int]:
         """Extract changelog entries and the depth of the Changelog header.
 
@@ -687,6 +690,7 @@ class RequirementTransformer:
     # Journey transformation
     # ------------------------------------------------------------------
 
+    # Implements: REQ-d00272-K
     def _transform_journey(self, node: Tree) -> ParsedContent:
         """Transform a journey tree node into ParsedContent.
 
@@ -942,6 +946,7 @@ class RequirementTransformer:
             "reference_source": reference_source,
         }
 
+    # Implements: REQ-d00221-B
     def _transform_definition_block(self, node: Tree) -> ParsedContent:
         """Transform a file-level definition_block into ParsedContent."""
         data = self._extract_definition_block(node)
@@ -1101,6 +1106,7 @@ class RequirementTransformer:
         verdicts = {key: v for key, v in verdicts.items() if key[1] not in _NO_REF_VALUES}
         return refs, verdicts
 
+    # Implements: REQ-d00272-K
     @staticmethod
     def _merge_ref_field(
         accumulator: list[str],

@@ -131,7 +131,9 @@ class TestCliArgsDataclasses:
         assert h.tests_only is False
         assert h.format == "text"
         assert h.lenient is False
-        assert h.treat_active is None
+        # A list flag that accumulates (REQ-p00084-H) defaults to no names
+        # rather than to None; `_scope.flag_values` reads both as none named.
+        assert h.treat_active == []
         assert h.include_passing_details is False
         assert h.output is None
 

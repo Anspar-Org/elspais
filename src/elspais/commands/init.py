@@ -140,7 +140,7 @@ def create_template_requirement(args: argparse.Namespace) -> int:
     return 0
 
 
-# Implements: REQ-d00209
+# Implements: REQ-d00209-C+D
 # Per-field comments for generated TOML.  Keyed by dotted TOML path.
 # Section-level comments use the bare section name (e.g. "project").
 # Field-level comments use the full path (e.g. "project.namespace").
@@ -486,7 +486,10 @@ _CORE_OVERRIDES: dict[str, Any] = {
         },
     },
     "scanning": {
-        "skip": ["node_modules", ".git", "__pycache__", "*.pyc", ".venv", ".env"],
+        # A directory pattern is a path from the repository root, so "**/" is
+        # what says "at any depth". A file pattern is a glob over a name and
+        # needs none. See `elspais docs ignore`.
+        "skip": ["**/node_modules", "**/.git", "**/__pycache__", "*.pyc", "**/.venv", ".env"],
         "spec": {
             "directories": ["spec"],
             "file_patterns": ["*.md"],
@@ -671,6 +674,7 @@ def _add_table(
     doc.add(key, tbl)
 
 
+# Implements: REQ-d00209-A, REQ-d00209-B
 def generate_config(
     project_type: str,
     associated_prefix: str | None = None,
@@ -829,7 +833,7 @@ def generate_config(
         "#   specs scanned as TEST nodes. See: elspais docs test-targets",
         "# Tip: add skip_dirs to [scanning.spec] if journeys share the spec/ dir:",
         "#   [scanning.spec]",
-        '#   skip_dirs = ["user-journeys"]',
+        '#   skip_dirs = ["**/user-journeys"]  # or "spec/user-journeys" for that one',
     ]
     for line in _targets_example_lines:
         doc.add(tomlkit.comment(line))

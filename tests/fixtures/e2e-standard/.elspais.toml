@@ -23,7 +23,7 @@ implements = ["dev", "ops", "prd"]
 [scanning.spec]
 directories = ["spec"]
 skip_files = ["INDEX.md", "NOTES.md"]
-skip_dirs = ["drafts"]
+skip_dirs = ["spec/drafts"]
 
 [scanning.code]
 directories = ["src"]

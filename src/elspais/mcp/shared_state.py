@@ -120,6 +120,7 @@ class SharedServerState(dict):
                 flush=True,
             )
 
+    # Implements: REQ-p00083-B
     def request_discard(self) -> None:
         """Record an instruction to drop the work this process holds.
 
@@ -301,6 +302,7 @@ def attach_dirty_sentinel(state: SharedServerState) -> bool:
     return inherited
 
 
+# Implements: REQ-p00083-D
 def report_shutdown_outcome(outcome: dict[str, Any], trigger: str) -> None:
     """Print what the shutdown routine did, for whoever is watching stderr."""
     pending = outcome.get("pending")

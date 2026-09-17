@@ -12,6 +12,7 @@ import json
 
 import pytest
 
+from elspais.commands._requests import TraceRequest
 from elspais.commands.trace import (
     ABSENT_FIGURE,
     REPORT_PRESETS,
@@ -23,6 +24,18 @@ from elspais.commands.trace import (
 )
 from elspais.graph.aggregation import MEASURES
 from elspais.graph.values import figure_cell
+
+
+def _trace_rows(content: str) -> list[dict]:
+    """The rows of a trace JSON report.
+
+    Trace's JSON document has ONE shape -- an object stating ``scope`` beside
+    ``nodes`` -- so a reader wanting the rows asks for them by name. These
+    tests are about the rows; the document's shape is pinned once, in
+    ``tests/commands/test_scope_disclosure.py``, rather than restated by every
+    test that happens to read a row.
+    """
+    return json.loads(content)["nodes"]
 
 
 class TestTraceCommand:
@@ -56,7 +69,7 @@ class TestTraceCommand:
     # Verifies: REQ-d00084-A
     def test_trace_json_format_output(self, canonical_federated_graph, capsys):
         """Test trace command produces correct JSON output."""
-        data = compute_trace(canonical_federated_graph, {}, {})
+        data = compute_trace(canonical_federated_graph, {}, TraceRequest())
         preset = ReportPreset(
             name="standard",
             values=list(REPORT_PRESETS["standard"].values),
@@ -64,8 +77,7 @@ class TestTraceCommand:
         _render_json_from_data(data, preset)
 
         content = capsys.readouterr().out
-        parsed = json.loads(content)
-        assert isinstance(parsed, list)
+        parsed = _trace_rows(content)
         assert any(item["id"] == "REQ-p00001" for item in parsed)
 
     # Verifies: REQ-d00069-L, REQ-d00282-B+E
@@ -78,7 +90,7 @@ class TestTraceCommand:
         states depend on the format it was rendered in, which REQ-d00282-E
         forbids: the same report read as a table stated fewer facts than the
         same report read as JSON."""
-        data = compute_trace(canonical_federated_graph, {}, {})
+        data = compute_trace(canonical_federated_graph, {}, TraceRequest())
         preset = ReportPreset(
             name="standard",
             values=list(REPORT_PRESETS["standard"].values),
@@ -86,7 +98,7 @@ class TestTraceCommand:
 
         _render_json_from_data(data, preset)
         default_item = next(
-            i for i in json.loads(capsys.readouterr().out) if i["id"] == "REQ-p00001"
+            i for i in _trace_rows(capsys.readouterr().out) if i["id"] == "REQ-p00001"
         )
         assert "tested" in default_item
         assert not set(default_item["tested"]) & set(MEASURES), (
@@ -95,7 +107,7 @@ class TestTraceCommand:
 
         chosen = ["id", "tested.immediate_direct", "implemented.rolled_indirect"]
         _render_json_from_data(data, preset, chosen)
-        item = next(i for i in json.loads(capsys.readouterr().out) if i["id"] == "REQ-p00001")
+        item = next(i for i in _trace_rows(capsys.readouterr().out) if i["id"] == "REQ-p00001")
         # The key a selection names is a PATH, and the object mirrors it: a
         # measure of a dimension is stated INSIDE that dimension (REQ-d00282-B).
         assert list(item.keys()) == ["id", "tested", "implemented"]
@@ -117,9 +129,10 @@ class TestTraceCommand:
         )
         chosen = ["id", "tested.rolled_direct", "implemented.immediate_indirect"]
 
-        live = json.loads("".join(format_json(canonical_federated_graph, preset, None, chosen)))
-        _render_json_from_data(compute_trace(canonical_federated_graph, {}, {}), preset, chosen)
-        served = json.loads(capsys.readouterr().out)
+        live = _trace_rows("".join(format_json(canonical_federated_graph, preset, None, chosen)))
+        data = compute_trace(canonical_federated_graph, {}, TraceRequest())
+        _render_json_from_data(data, preset, chosen)
+        served = _trace_rows(capsys.readouterr().out)
 
         live_item = next(i for i in live if i["id"] == "REQ-p00001")
         served_item = next(i for i in served if i["id"] == "REQ-p00001")
@@ -181,7 +194,7 @@ class TestTraceReportPresets:
     @pytest.fixture(scope="class")
     def trace_data(self, canonical_federated_graph):
         """Compute trace data once for the class."""
-        return compute_trace(canonical_federated_graph, {}, {})
+        return compute_trace(canonical_federated_graph, {}, TraceRequest())
 
     def _make_preset(self, preset_name):
         return ReportPreset(
@@ -285,8 +298,7 @@ class TestTraceReportPresets:
         _render_json_from_data(trace_data, p)
 
         content = capsys.readouterr().out
-        data = json.loads(content)
-        assert isinstance(data, list)
+        data = _trace_rows(content)
         parent = next((r for r in data if r.get("id") == "REQ-p00001"), None)
         assert parent is not None
         for field in should_have_fields:
@@ -420,6 +432,12 @@ namespace = "REQ"
 
 [scanning.spec]
 directories = ["spec"]
+
+[[scanning.test.targets]]
+name = "a"
+
+[[scanning.test.targets]]
+name = "b"
 """,
             encoding="utf-8",
         )
@@ -527,6 +545,7 @@ directories = ["spec"]
 
 [scanning.test.groups]
 uat = "needs a live backend"
+slow = "runs for over a minute"
 
 [[scanning.test.targets]]
 name = "a"
@@ -534,18 +553,21 @@ name = "a"
 [[scanning.test.targets]]
 name = "b"
 groups = ["uat"]
+
+[[scanning.test.targets]]
+name = "c"
+groups = ["slow"]
 """,
             encoding="utf-8",
         )
         return config_path
 
     @staticmethod
-    def _trace_args(config_path, targets, groups):
+    def _trace_args(config_path, targets):
         import argparse
 
         return argparse.Namespace(
             targets=targets,
-            groups=groups,
             format="json",
             config=config_path,
             spec_dir=None,
@@ -559,18 +581,22 @@ groups = ["uat"]
 
     # Verifies: REQ-d00283-E+I
     @pytest.mark.parametrize(
-        "targets,groups,expected",
+        "targets,expected",
         [
-            (None, ["uat"], {"b"}),
-            # Each selector narrows: `a` is not in `uat`, so nothing is fresh.
-            (["a"], ["uat"], set()),
-            (["a", "b"], ["uat"], {"b"}),
+            (["uat"], {"b"}),
+            (["a"], {"a"}),
+            # One vocabulary, unioned: a target name beside a group name marks
+            # both, rather than narrowing the group to that target.
+            (["a", "uat"], {"a", "b"}),
+            (["uat", "slow"], {"b", "c"}),
+            # Repeated flags accumulate into the one list the selection reads.
+            ([["a"], ["uat"]], {"a", "b"}),
         ],
     )
-    def test_trace_groups_thread_resolved_set_into_build_graph(
-        self, tmp_path, monkeypatch, targets, groups, expected
+    def test_trace_targets_thread_the_resolved_set_into_build_graph(
+        self, tmp_path, monkeypatch, targets, expected
     ):
-        """--groups resolves through the group model before reaching the graph."""
+        """--targets resolves through the group model before reaching the graph."""
         import elspais.graph.factory as factory_mod
         from elspais.commands import trace
 
@@ -585,14 +611,14 @@ groups = ["uat"]
 
         monkeypatch.setattr(factory_mod, "build_graph", spy)
 
-        result = trace.run(self._trace_args(config_path, targets, groups))
+        result = trace.run(self._trace_args(config_path, targets))
 
         assert result is None or result == 0
         assert captured["fresh_targets"] == expected
 
     # Verifies: REQ-d00254-I
     def test_trace_with_no_selection_marks_nothing_fresh(self, tmp_path, monkeypatch):
-        """Naming neither selector marks nothing -- even with groups declared.
+        """Naming nothing marks nothing -- even with groups declared.
 
         `trace` executes no target; it reads whatever results are already on
         disk. The `default` group of REQ-d00283-D belongs to a run that
@@ -622,7 +648,7 @@ groups = ["uat"]
 
         monkeypatch.setattr("elspais.commands._engine.call", fake_engine_call)
 
-        result = trace.run(self._trace_args(config_path, None, None))
+        result = trace.run(self._trace_args(config_path, None))
 
         assert result is None or result == 0
         assert called["endpoint"] == "/api/run/trace", (
@@ -631,8 +657,11 @@ groups = ["uat"]
         assert not built, "an absent selector marks no fresh subset"
 
     # Verifies: REQ-d00283-H
-    def test_trace_unknown_group_is_refused(self, tmp_path, monkeypatch, capsys):
-        """A selection naming an undefined group renders nothing at all."""
+    def test_trace_unknown_name_is_refused(self, tmp_path, monkeypatch, capsys):
+        """A selection naming neither a configured target nor a group the
+        project admits renders nothing at all -- refused rather than resolved
+        to nothing, because a report marking a target that does not exist as
+        freshly-run cannot be told from one that is honest."""
         import elspais.graph.factory as factory_mod
         from elspais.commands import trace
 
@@ -647,7 +676,7 @@ groups = ["uat"]
 
         monkeypatch.setattr(factory_mod, "build_graph", spy)
 
-        result = trace.run(self._trace_args(config_path, None, ["uta"]))
+        result = trace.run(self._trace_args(config_path, ["uta"]))
 
         assert result == 2
         assert "uta" in capsys.readouterr().err
@@ -1117,7 +1146,7 @@ def code_tested_no_attribution_project(tmp_path):
     """On-disk project: REQ-d00001's implementation has aggregate (lcov)
     line-coverage data but no per-test attribution -- `code_tested.immediate_direct`
     stays 0 while `.covered` is > 0 (per-test attribution is not derivable
-    from aggregate tooling). REQ-d00258-E: the trace 'code_tested' cell must
+    from aggregate tooling). REQ-d00258-W: the trace 'code_tested' cell must
     render `n/a`, never a misleading `0/N (0%)`.
     """
     project = tmp_path / "project"
@@ -1145,7 +1174,7 @@ def code_tested_context_carrying_project(tmp_path):
     no context names a test verifying REQ-d00001.
 
     The sibling of ``code_tested_no_attribution_project``: identical shape,
-    context-carrying tooling instead of aggregate-only. Under REQ-d00258-E the
+    context-carrying tooling instead of aggregate-only. Under REQ-d00258-W the
     suppression keys on what the tooling provided, so here the attribution
     question WAS asked and its answer is zero -- the trace cell must render
     ``0/N``, not ``n/a``.
@@ -1226,7 +1255,7 @@ def marker_carried_project(tmp_path):
 
 
 class TestTraceFooting:
-    """Verifies REQ-d00258-A, REQ-d00258-K, REQ-d00258-E, REQ-d00258-J:
+    """Verifies REQ-d00258-A, REQ-d00258-K, REQ-d00258-W, REQ-d00258-J:
     dimensions headline the per-*Assertion* TOTAL (REQ-d00069-N) with the
     four measures behind it published as their own values rather than a
     caveat marker, the reporting vocabulary reads Passing/UAT Covered/UAT
@@ -1266,14 +1295,14 @@ class TestTraceFooting:
         assert h["uat_verified"] == "UAT Passed"
         assert "Validated" not in h.values()
 
-    # Verifies: REQ-d00258-E, REQ-d00282-C+N
+    # Verifies: REQ-d00258-W, REQ-d00282-C+N
     def test_only_the_attribution_is_suppressed_without_contexts(
         self, code_tested_no_attribution_project
     ):
         """Aggregate-only coverage states its lines and withholds only the
         attribution.
 
-        The suppression REQ-d00258-E requires is of the ATTRIBUTION figure --
+        The suppression REQ-d00258-W requires is of the ATTRIBUTION figure --
         how many lines a verifying test can be named for. The lines a run
         covered were measured, so a report holding them states them
         (REQ-d00282-N), and the value named for the figure states the figure
@@ -1298,7 +1327,7 @@ class TestTraceFooting:
         assert _format_row(data, ["code_tested.attributed"]) == [ABSENT_FIGURE]
         assert ABSENT_FIGURE == "n/a"
 
-    # Verifies: REQ-d00258-E, REQ-d00282-E+N
+    # Verifies: REQ-d00258-W, REQ-d00282-E+N
     def test_the_line_figure_is_unmoved_by_the_assertion_label_flag(
         self, code_tested_no_attribution_project
     ):
@@ -1316,14 +1345,14 @@ class TestTraceFooting:
             assert labelled[key] == plain[key]
         assert labelled["code_tested_attributed"] is None
 
-    # Verifies: REQ-d00258-E, REQ-d00282-M+N
+    # Verifies: REQ-d00258-W, REQ-d00282-M+N
     def test_a_zero_attribution_is_stated_where_contexts_were_recorded(
         self, code_tested_context_carrying_project
     ):
         """Where the tooling DID record per-test contexts, a zero attribution
         count is a real answer and is stated as zero.
 
-        This is the other half of REQ-d00258-E: the suppression is about what
+        This is the boundary REQ-d00258-W leaves: the suppression is about what
         the tooling provides, not about how the count came out. Withholding it
         here would hide implementation no verifying test reaches, which is
         exactly the fact worth surfacing."""
@@ -1343,7 +1372,7 @@ class TestTraceFooting:
                 rollup.code_tested.covered_lines, rollup.code_tested.total_lines
             )
 
-    # Verifies: REQ-d00258-E
+    # Verifies: REQ-d00258-W
     def test_lcov_tested_empty_label_set_renders_zero_of_total(
         self, code_tested_no_attribution_project
     ):
@@ -1481,7 +1510,7 @@ def tested_breakdown_project(tmp_path):
 
     Assertion A is verified by a passing test, B by a failing one, and C by a
     test whose result never arrived -- so the Tested breakdown reads 1P 1F 1A
-    (REQ-d00258-O). A journey validates A, so the requirement also has a row to
+    (REQ-d00258-U). A journey validates A, so the requirement also has a row to
     render under the UAT preset (which shows no Tested column).
 
     Each `<testcase>` carries the line of its own `def` in the JUnit reporter's
@@ -1510,7 +1539,7 @@ def tested_breakdown_project(tmp_path):
 
 
 class TestTraceTestedBreakdown:
-    """REQ-d00258-O: the trace Tested cell carries the three-way breakdown."""
+    """REQ-d00258-U: the trace Tested cell carries the three-way breakdown."""
 
     def _tested_cell(self, markdown_text, req_id):
         lines = markdown_text.splitlines()
@@ -1520,7 +1549,7 @@ class TestTraceTestedBreakdown:
         row = next(line for line in lines if line.startswith("|") and req_id in line)
         return [c.strip() for c in row.strip("|").split("|")][idx]
 
-    # Verifies: REQ-d00258-O
+    # Verifies: REQ-d00258-U+V
     def test_tested_cell_carries_the_breakdown(self, tested_breakdown_project):
         """The breakdown qualifies Tested, so it rides in the Tested cell and
         adds no column of its own."""
@@ -1534,7 +1563,7 @@ class TestTraceTestedBreakdown:
         header_line = next(line for line in out.splitlines() if line.startswith("| ID"))
         assert "Awaiting" not in header_line
 
-    # Verifies: REQ-d00258-O
+    # Verifies: REQ-d00258-U
     def test_legend_emitted_when_a_row_carried_a_breakdown(self, tested_breakdown_project):
         """The compact form is unreadable without its key."""
         from elspais.commands.trace import format_markdown
@@ -1544,7 +1573,7 @@ class TestTraceTestedBreakdown:
 
         assert "> Tested breakdown:" in out
 
-    # Verifies: REQ-d00258-O
+    # Verifies: REQ-d00258-U
     def test_legend_absent_when_nothing_is_tested(self, code_tested_no_attribution_project):
         """No row carried a breakdown, so no key is offered: there is no
         breakdown of an empty set."""
@@ -1555,7 +1584,7 @@ class TestTraceTestedBreakdown:
 
         assert "> Tested breakdown:" not in out
 
-    # Verifies: REQ-d00258-O, REQ-d00257-C
+    # Verifies: REQ-d00258-V, REQ-d00257-C
     @pytest.mark.parametrize("preset_name", ["uat", "minimal"])
     def test_breakdown_absent_from_presets_without_a_tested_column(
         self, tested_breakdown_project, preset_name
@@ -1586,13 +1615,13 @@ class TestTraceTestedBreakdown:
         assert "> Tested breakdown:" not in out
         assert "1P" not in out
 
-    # Verifies: REQ-d00258-O, REQ-d00282-E
+    # Verifies: REQ-d00258-V, REQ-d00282-E
     def test_csv_states_the_breakdown_inside_the_one_tested_column(self, tested_breakdown_project):
         """The breakdown qualifies the Tested figure, so it rides in that
         figure's cell here exactly as it does in markdown.
 
         Given cells of its own it would be three further columns -- a display
-        term of its own, which REQ-d00258-O forbids -- and selecting `tested`
+        term of its own, which REQ-d00258-V forbids -- and selecting `tested`
         would state four columns in CSV and one in markdown."""
         import csv as csv_module
         import io as io_module
@@ -1642,7 +1671,7 @@ class TestTraceTestedBreakdown:
         # REQ-d00282-C: the heading names the dimension AND the measure.
         assert header == ["ID", "Tested", "Tested (cited by name here)"]
 
-        rows = json_module.loads("".join(format_json(graph, preset, None, chosen)))
+        rows = json_module.loads("".join(format_json(graph, preset, None, chosen)))["nodes"]
         # Two cells in a table, one nested object in a format that has numbers:
         # naming the figure AND a measure of it names one place twice, and the
         # measure lands inside the figure rather than beside it (REQ-d00282-D).

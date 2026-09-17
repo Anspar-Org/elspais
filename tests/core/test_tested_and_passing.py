@@ -110,11 +110,11 @@ def test_exclusion_is_per_assertion_not_requirement_wide():
     assert u.covered == 0.5
 
 
-# Verifies: REQ-d00277-C, REQ-d00258-G
+# Verifies: REQ-d00277-C, REQ-d00292-D
 def test_excluded_assertion_keeps_its_failing_standing():
     """A failing assertion contributes to no measure of Passing, and the record
     that it failed survives in ``failing_labels`` -- which is what a
-    per-*Assertion* standing reads first (REQ-d00258-G), so the assertion still
+    per-*Assertion* standing reads first (REQ-d00292-D), so the assertion still
     renders under its own standing rather than disappearing."""
     m = RollupMetrics(total_assertions=1)
     m.verified = _credited("A", has_failures=True, failing_labels={"A"})
@@ -130,7 +130,7 @@ def test_excluded_assertion_keeps_its_failing_standing():
 
 
 # ---------------------------------------------------------------------------
-# The Tested breakdown (REQ-d00258-O)
+# The Tested breakdown (REQ-d00258-U)
 # ---------------------------------------------------------------------------
 
 
@@ -143,7 +143,7 @@ def _dim(fractions: dict[str, float], *, total: int, **kwargs) -> CoverageDimens
     )
 
 
-# Verifies: REQ-d00258-O
+# Verifies: REQ-d00258-U
 def test_partition_counts_a_failed_assertion_as_failed_not_passed():
     """An assertion whose declared test failed is failed, however many of its
     implementing lines a run happened to execute."""
@@ -156,7 +156,7 @@ def test_partition_counts_a_failed_assertion_as_failed_not_passed():
     assert (part.passed, part.failed, part.awaiting) == (0, 1, 0)
 
 
-# Verifies: REQ-d00258-O
+# Verifies: REQ-d00258-U
 def test_partition_counts_a_tested_assertion_with_no_verdict_as_awaiting():
     """Tested with no passing evidence and no failure is awaiting a result --
     the test was declared and nothing came back."""
@@ -167,7 +167,7 @@ def test_partition_counts_a_tested_assertion_with_no_verdict_as_awaiting():
     assert (part.passed, part.failed, part.awaiting) == (0, 0, 1)
 
 
-# Verifies: REQ-d00258-O
+# Verifies: REQ-d00258-U
 def test_partition_accounts_for_every_tested_assertion():
     """Four tested assertions in four different conditions land in exactly one
     state each, so the three counts account for the whole tested set.
@@ -194,7 +194,7 @@ def test_partition_accounts_for_every_tested_assertion():
     assert part.tested == 4
 
 
-# Verifies: REQ-d00258-O
+# Verifies: REQ-d00258-U
 def test_partition_ignores_an_assertion_outside_the_tested_set():
     """The breakdown breaks Tested down, so an assertion Tested does not count
     is in none of the three -- even one carrying a failing result."""
@@ -212,7 +212,7 @@ def test_partition_ignores_an_assertion_outside_the_tested_set():
     assert part.tested == 1
 
 
-# Verifies: REQ-d00258-O
+# Verifies: REQ-d00258-U
 @pytest.mark.parametrize("fraction", [0.25, 0.5, 1.0])
 def test_partition_carries_a_partly_credited_assertion_at_its_credit(fraction):
     """The breakdown is in the SAME units as the figure it qualifies.
@@ -231,7 +231,7 @@ def test_partition_carries_a_partly_credited_assertion_at_its_credit(fraction):
     assert part.passed + part.failed + part.awaiting == m.tested.covered
 
 
-# Verifies: REQ-d00258-O
+# Verifies: REQ-d00258-U
 def test_partition_matches_the_tested_set_of_a_built_graph(canonical_graph):
     """Against rollups the annotators actually produced, the breakdown accounts
     for exactly the assertions Tested counts -- no more, and none dropped."""

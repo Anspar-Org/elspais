@@ -18,7 +18,7 @@
 | REQ-p00006 | Interactive Traceability Viewer                  | prd-features.md | 185217a3 |
 | REQ-p00013 | End-to-End Tests Exercise the Installed Command  | prd-core.md     | 1b5c65b2 |
 | REQ-p00014 | Satisfies Relationship                           | prd-features.md | ca4892c1 |
-| REQ-p00015 | Complete and Current Reporting                   | prd-core.md     | 9aa9a8aa |
+| REQ-p00015 | Complete and Current Reporting                   | prd-core.md     | 1ad561d2 |
 | REQ-p00016 | NOT APPLICABLE Status                            | prd-features.md | 2211802a |
 | REQ-p00017 | Reference Integrity Under Mutation               | prd-core.md     | 3e4c9ddb |
 | REQ-p00018 | Compiled Risk Register                           | prd-core.md     | 0f0438e9 |
@@ -30,7 +30,8 @@
 | REQ-p00081 | Org-Wide Requirement Visibility                  | prd-features.md | 17fa4417 |
 | REQ-p00082 | Federated Authority and Verdict Scoping          | prd-features.md | b511fcfd |
 | REQ-p00083 | Durability of Uncommitted Work                   | prd-core.md     | 80cf3ca1 |
-| REQ-p00084 | Audience-Scoped Reporting                        | prd-core.md     | 199562bd |
+| REQ-p00084 | Audience-Scoped Reporting                        | prd-core.md     | 168b514c |
+| REQ-p00085 | Report Configuration Disclosure                  | prd-core.md     | 35994055 |
 
 ### elspais
 
@@ -91,7 +92,7 @@
 | REQ-d00067 | Uncovered Assertions Tool Implementation                      | dev-mcp-tools.md        | c838e24d |
 | REQ-d00068 | Assertion Keyword Search Tool Implementation                  | dev-mcp-tools.md        | d552fda6 |
 | REQ-d00069 | Indirect Coverage Source                                      | dev-graph-core.md       | 665b798a |
-| REQ-d00070 | Indirect Coverage Toggle Display                              | dev-graph-core.md       | eda3f31c |
+| REQ-d00070 | Indirect Coverage Toggle Display                              | dev-graph-core.md       | 85dafee0 |
 | REQ-d00071 | Unified Root vs Orphan Classification                         | dev-graph-core.md       | f2cb5f45 |
 | REQ-d00072 | Link Suggestion Core Engine                                   | dev-graph-core.md       | 9d57c2ad |
 | REQ-d00073 | Link Suggestion CLI Command                                   | dev-cli.md              | 975970c4 |
@@ -106,7 +107,7 @@
 | REQ-d00082 | Unified Reference Configuration                               | dev-cli.md              | edbd5d9a |
 | REQ-d00084 | Trace Command                                                 | dev-cli.md              | 5728e809 |
 | REQ-d00085 | Unified Report Composition                                    | dev-cli.md              | ee68f8ee |
-| REQ-d00086 | Coverage Report Section                                       | dev-cli.md              | 8e02f52d |
+| REQ-d00086 | Coverage Report Section                                       | dev-cli.md              | 515f0165 |
 | REQ-d00124 | Graph Analysis Engine                                         | dev-cli.md              | b153d5f6 |
 | REQ-d00125 | Analysis CLI Command                                          | dev-cli.md              | 474fa8af |
 | REQ-d00126 | FILE Node Data Model                                          | dev-graph-file-nodes.md | 070e173b |
@@ -167,16 +168,16 @@
 | REQ-d00246 | Markdown Emphasis Normalization Utility                       | prd-core.md             | 6db4d559 |
 | REQ-d00247 | Fenced Code Block Preservation                                | prd-core.md             | 499a4ce4 |
 | REQ-d00248 | Fix Command Idempotency                                       | prd-core.md             | 99bb6d77 |
-| REQ-d00249 | Configured test runner execution                              | dev-cli.md              | 784f8350 |
+| REQ-d00249 | Configured test runner execution                              | dev-cli.md              | 36cbd540 |
 | REQ-d00250 | Section Header Depth Canonicalization                         | dev-graph-core.md       | 48fc2f11 |
 | REQ-d00251 | A Repository's Identifier Grammar                             | dev-graph-config.md     | b49bd5ee |
 | REQ-d00252 | External Library Integration via Integrates Keyword           | dev-graph-federation.md | 1de716cb |
 | REQ-d00253 | Federation Write/Generation Scope                             | dev-graph-federation.md | f454041e |
-| REQ-d00254 | Test Evidence: Attribution, Ingestion, and Coverage Crediting | dev-graph-core.md       | 4ec40251 |
+| REQ-d00254 | Test Evidence: Attribution, Ingestion, and Coverage Crediting | dev-graph-core.md       | 2de47895 |
 | REQ-d00255 | Test-to-Journey UAT Verification                              | dev-graph-core.md       | ab5cb648 |
 | REQ-d00256 | Step-Level UAT Verification                                   | dev-graph-core.md       | 8bf40a7c |
 | REQ-d00257 | UAT-Scoped Traceability Report                                | dev-graph-core.md       | 1ea68210 |
-| REQ-d00258 | Reporting Surface Consistency                                 | dev-graph-core.md       | 15129897 |
+| REQ-d00258 | Reporting Surface Consistency                                 | dev-graph-core.md       | a14e1373 |
 | REQ-d00259 | Requirement Format Reference Command                          | dev-cli.md              | c3b67490 |
 | REQ-d00260 | Workspace Registry and Federated View Assembly                | dev-graph-federation.md | 510a0f67 |
 | REQ-d00261 | Federation Role Model                                         | dev-graph-federation.md | fb8db8a9 |
@@ -197,10 +198,10 @@
 | REQ-d00277 | Coverage Dimensions                                           | dev-graph-core.md       | b097dcd7 |
 | REQ-d00278 | Report Scope Selection Vocabulary                             | dev-cli.md              | ef2221cc |
 | REQ-d00279 | One Authority for Report Scope Membership                     | dev-cli.md              | 2b755b50 |
-| REQ-d00280 | Named Report Declarations                                     | dev-cli.md              | ab0a70bb |
+| REQ-d00280 | Named Report Declarations                                     | dev-cli.md              | 321c6f4f |
 | REQ-d00281 | Level Vocabulary of a Reported Graph                          | dev-graph-core.md       | 4bde246d |
-| REQ-d00282 | Report Value Selection                                        | dev-cli.md              | 70ab39ac |
-| REQ-d00283 | Test Target Groups                                            | dev-graph-core.md       | bc95d36b |
+| REQ-d00282 | Report Value Selection                                        | dev-cli.md              | bf98248c |
+| REQ-d00283 | Test Target Groups                                            | dev-graph-core.md       | edcd4d69 |
 | REQ-d00284 | How a Result Names Its Test                                   | dev-graph-core.md       | 7baae0b0 |
 | REQ-d00285 | The Shape of a Finding                                        | dev-cli.md              | bedec247 |
 | REQ-d00286 | Built-In User Documentation                                   | dev-cli.md              | d246f21a |
@@ -208,6 +209,9 @@
 | REQ-d00288 | Journeys That Validate Nothing                                | dev-graph-core.md       | 184a67af |
 | REQ-d00289 | Associate Registration Outcome                                | dev-cli.md              | 008983e5 |
 | REQ-d00290 | Machine-Local Configuration Overlay                           | dev-graph-config.md     | 9019f766 |
+| REQ-d00291 | Coverage Inclusion                                            | dev-graph-core.md       | 13bc6949 |
+| REQ-d00292 | Viewer Coverage Presentation                                  | dev-graph-core.md       | db9415cd |
+| REQ-d00293 | Configurable Viewer Presentation                              | dev-graph-core.md       | 31848b5c |
 
 ## User Journeys
 

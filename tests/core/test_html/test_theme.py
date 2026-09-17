@@ -154,7 +154,7 @@ class TestComputeValidationColorCatalog:
 
         catalog = get_catalog()
         # Badge COLOR resolves from the coverage STANDING, not severity
-        # (REQ-d00258-D): the `full` standing -> green.
+        # (REQ-d00292-F): the `full` standing -> green.
         expected_entry = catalog.by_key("coverage_standing.full")
 
         rollup = RollupMetrics(
@@ -176,12 +176,12 @@ class TestComputeValidationColorCatalog:
         from elspais.html.theme import get_catalog
 
         catalog = get_catalog()
-        # A failing tier badges from the `failing` STANDING -> red (REQ-d00258-D),
+        # A failing tier badges from the `failing` STANDING -> red (REQ-d00292-F),
         # independent of the dimension's configured severity.
         expected_entry = catalog.by_key("coverage_standing.failing")
 
         # A/B both implemented and tested; the Passing dim FAILS on A (within the
-        # tested denominator) -> relative 'failing' tier -> red (REQ-d00258-D).
+        # tested denominator) -> relative 'failing' tier -> red (REQ-d00292-F).
         rollup = RollupMetrics(
             total_assertions=2,
             implemented=CoverageDimension(
@@ -217,7 +217,7 @@ class TestComputeValidationColorCatalog:
 
         catalog = get_catalog()
         # A partial tier badges from the `partial` STANDING -> yellow
-        # (REQ-d00258-D), never the severity's yellow-green.
+        # (REQ-d00292-F), never the severity's yellow-green.
         expected_entry = catalog.by_key("coverage_standing.partial")
 
         rollup = RollupMetrics(
@@ -298,9 +298,9 @@ class TestComputeValidationColorCatalog:
 
 
 class TestSeverityCatalog:
-    """Test severity colors resolved through the theme catalog (REQ-d00258-D)."""
+    """Test severity colors resolved through the theme catalog (REQ-d00293-A)."""
 
-    # Verifies: REQ-d00258-D
+    # Verifies: REQ-d00293-A
     def test_severity_entries_in_catalog(self):
         """Every severity resolves in the catalog with its own distinct color.
 
@@ -318,7 +318,7 @@ class TestSeverityCatalog:
             colors[sev] = entry.color_key
         assert len(set(colors.values())) == len(colors), f"severity colors collide: {colors}"
 
-    # Verifies: REQ-d00258-D
+    # Verifies: REQ-d00293-A
     def test_failing_severity_has_own_color_distinct_from_error(self):
         """The toolbar's "failing" coverage chip resolves through the theme
         catalog like the other severities (CUR-1568), with its own color_key
@@ -333,7 +333,7 @@ class TestSeverityCatalog:
         assert failing.css_class == f"val-{failing.color_key}"
         assert failing.label == "Failing"
 
-    # Verifies: REQ-d00258-D
+    # Verifies: REQ-d00293-A
     def test_failing_color_tokens_defined_for_both_themes(self):
         """The failing color's `--val-<color>-bg` token must exist in both
         themes.light.tokens and themes.dark.tokens so the toolbar chip stays
@@ -349,13 +349,13 @@ class TestSeverityCatalog:
             assert token in theme.tokens
             assert theme.tokens[token].startswith("#")
 
-    # Verifies: REQ-d00258-D
+    # Verifies: REQ-d00293-A
     def test_no_hardcoded_severity_dict(self):
         import elspais.html.generator as g
 
         assert not hasattr(g, "SEVERITY_TO_COLOR")
 
-    # Verifies: REQ-d00258-D
+    # Verifies: REQ-d00292-A
     def test_tiers_payload_has_bucket(self, canonical_graph, canonical_config):
         from elspais.graph.GraphNode import NodeKind
         from elspais.html.generator import compute_coverage_tiers
@@ -380,7 +380,7 @@ class TestSeverityCatalog:
         node.set_metric("rollup_metrics", rollup)
         return node
 
-    # Verifies: REQ-d00258-D, REQ-d00258-E
+    # Verifies: REQ-d00292-A+H
     def test_bucket_full_despite_uat_none(self):
         """No-journey project: uat tiers 'none' map to info severity (default
         config) and must NOT drag the bucket below 'full' (design section 2.3)."""
@@ -401,7 +401,7 @@ class TestSeverityCatalog:
         assert tiers["uat_cov_tier"] == "missing"
         assert tiers["combined_bucket"] == "full"
 
-    # Verifies: REQ-d00258-D, REQ-d00258-E
+    # Verifies: REQ-d00292-A+F+H
     def test_uat_partial_maps_to_warning_not_info(self):
         """A journey that PARTIALLY validates a requirement must surface a real
         'partial' state: uat 'partial' tier maps to severity 'warning' (yellow),
@@ -428,7 +428,7 @@ class TestSeverityCatalog:
         # warning drags the severity-aware bucket to 'partial'
         assert tiers["combined_bucket"] == "partial"
 
-    # Verifies: REQ-d00258-D, REQ-d00258-E
+    # Verifies: REQ-d00292-A+H
     def test_bucket_none_when_implemented_none(self):
         """implemented tier 'none' maps to error severity -> bucket 'none'."""
         from elspais.graph.metrics import CoverageDimension, RollupMetrics
@@ -446,7 +446,7 @@ class TestSeverityCatalog:
         assert tiers["impl_tier"] == "missing"
         assert tiers["combined_bucket"] == "missing"
 
-    # Verifies: REQ-d00258-D, REQ-d00258-E
+    # Verifies: REQ-d00258-T, REQ-d00292-A
     def test_bucket_failing_when_any_dim_fails(self):
         """has_failures on any dimension -> bucket 'failing' (overlay)."""
         from elspais.graph.metrics import CoverageDimension, RollupMetrics
@@ -521,7 +521,7 @@ class TestSeverityCatalog:
         assert tiers["verified_tier"] == "missing"
         assert tiers["combined_bucket"] == "partial"
 
-    # Verifies: REQ-d00258-F
+    # Verifies: REQ-d00291-A+H, REQ-d00292-H
     def test_expects_validation_uat_none_is_red_and_drags(self):
         """When the requirement's level expects_validation, a UAT 'none' tier
         resolves to error severity (red) and drags combined_bucket to 'none';
@@ -547,7 +547,7 @@ class TestSeverityCatalog:
         # error severity on a UAT dim drags the combined bucket to 'none'.
         assert tiers["combined_bucket"] == "missing"
 
-    # Verifies: REQ-d00258-F
+    # Verifies: REQ-d00291-A, REQ-d00292-H
     def test_non_expecting_level_uat_none_stays_soft(self):
         """A level that does NOT expect_validation keeps the soft UAT 'none'
         (info, does not drag) -- preserves test_bucket_full_despite_uat_none."""

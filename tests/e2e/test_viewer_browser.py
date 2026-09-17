@@ -22,8 +22,10 @@ import signal
 import socket
 import subprocess
 import sys
+import tempfile
 import time
 from datetime import datetime
+from pathlib import Path
 
 import pytest
 
@@ -64,13 +66,75 @@ def _find_free_port() -> int:
     pytest.skip("No free port found in range 15000-15050")
 
 
-def _wait_for_server(base_url: str, *, timeout: float = 30.0) -> None:
-    """Poll /api/status until the server is ready or timeout."""
+# A viewer serving this repository builds the whole elspais graph before it
+# binds, which is ~17s on a warm developer machine. The 30s this replaced left
+# no room for a cold CI container, where the same fixture timed out while a
+# viewer over a small tmp_path project in the SAME container came up fine. A
+# server that dies is now noticed the moment it dies, so the only thing a
+# generous deadline costs is the wait on a genuine hang.
+_STARTUP_TIMEOUT = 120.0
+
+# Binding the port is not the end of the work: the first page over this
+# repository's own graph renders a tree of every requirement in it, and a cold
+# CI container exceeded 30s reaching DOMContentLoaded alone. Milliseconds, the
+# unit Playwright takes.
+_PAGE_LOAD_TIMEOUT = 90_000
+
+
+def _spawn_viewer(argv: list[str], **popen_kwargs) -> tuple[subprocess.Popen, Path]:
+    """Start a viewer, capturing its output to a file, and return both.
+
+    A FILE rather than a pipe, for two reasons. Nothing reads the pipe while
+    the server runs, so a child that filled the 64KB buffer during startup
+    would block there forever. And on failure the pipe's contents went
+    unread, which is why a viewer that never came up could report only that
+    it never came up.
+    """
+    fd, name = tempfile.mkstemp(prefix="elspais-viewer-", suffix=".log")
+    os.close(fd)
+    log_path = Path(name)
+    with open(log_path, "wb") as sink:
+        proc = subprocess.Popen(
+            argv,
+            stdout=sink,
+            stderr=subprocess.STDOUT,
+            start_new_session=True,
+            **popen_kwargs,
+        )
+    return proc, log_path
+
+
+def _server_output(log_path: Path | None, limit: int = 4000) -> str:
+    """The tail of what the server said, for a failure message."""
+    if log_path is None:
+        return "<not captured>"
+    try:
+        text = log_path.read_text(errors="replace").strip()
+    except OSError as exc:
+        return f"<could not read {log_path}: {exc}>"
+    if not text:
+        return "<no output>"
+    return text[-limit:]
+
+
+def _wait_for_server(
+    base_url: str,
+    *,
+    proc: subprocess.Popen | None = None,
+    log_path: Path | None = None,
+    timeout: float = _STARTUP_TIMEOUT,
+) -> None:
+    """Poll /api/status until the server is ready, dies, or the deadline passes."""
     import urllib.error
     import urllib.request
 
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
+        if proc is not None and proc.poll() is not None:
+            pytest.fail(
+                f"Server at {base_url} exited with code {proc.returncode} "
+                f"before becoming ready. Its output:\n{_server_output(log_path)}"
+            )
         try:
             resp = urllib.request.urlopen(f"{base_url}/api/status", timeout=2)
             if resp.status == 200:
@@ -78,7 +142,11 @@ def _wait_for_server(base_url: str, *, timeout: float = 30.0) -> None:
         except (urllib.error.URLError, OSError, ConnectionRefusedError):
             pass
         time.sleep(0.5)
-    pytest.fail(f"Server at {base_url} did not become ready within {timeout}s")
+    pytest.fail(
+        f"Server at {base_url} did not become ready within {timeout}s "
+        f"(still running: {proc is None or proc.poll() is None}). "
+        f"Its output:\n{_server_output(log_path)}"
+    )
 
 
 @pytest.fixture(scope="session")
@@ -91,16 +159,13 @@ def viewer_url():
     port = _find_free_port()
     base_url = f"http://127.0.0.1:{port}"
 
-    proc = subprocess.Popen(
+    proc, log_path = _spawn_viewer(
         [elspais_bin, "viewer", "--server", "--port", str(port)],
         cwd=REPO_ROOT,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        start_new_session=True,
     )
 
     try:
-        _wait_for_server(base_url)
+        _wait_for_server(base_url, proc=proc, log_path=log_path)
         yield base_url
     finally:
         # Graceful shutdown via API
@@ -270,16 +335,13 @@ def viewer_url_tables(tmp_path_factory):
     port = _find_free_port()
     base_url = f"http://127.0.0.1:{port}"
 
-    proc = subprocess.Popen(
+    proc, log_path = _spawn_viewer(
         [elspais_bin, "viewer", "--server", "--port", str(port), "--path", str(dest)],
         cwd=str(dest),
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        start_new_session=True,
     )
 
     try:
-        _wait_for_server(base_url)
+        _wait_for_server(base_url, proc=proc, log_path=log_path)
         yield base_url
     finally:
         # Graceful shutdown via API
@@ -407,7 +469,7 @@ def failing_journey_viewer_url():
     existing = env.get("PYTHONPATH", "")
     env["PYTHONPATH"] = f"{worktree_src}:{existing}" if existing else worktree_src
 
-    proc = subprocess.Popen(
+    proc, log_path = _spawn_viewer(
         [
             sys.executable,
             "-m",
@@ -420,13 +482,10 @@ def failing_journey_viewer_url():
             str(_JOURNEY_FIXTURE),
         ],
         env=env,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        start_new_session=True,
     )
 
     try:
-        _wait_for_server(base_url)
+        _wait_for_server(base_url, proc=proc, log_path=log_path)
         yield base_url
     finally:
         try:
@@ -796,7 +855,7 @@ def step_binding_viewer_url():
     existing = env.get("PYTHONPATH", "")
     env["PYTHONPATH"] = f"{worktree_src}:{existing}" if existing else worktree_src
 
-    proc = subprocess.Popen(
+    proc, log_path = _spawn_viewer(
         [
             sys.executable,
             "-m",
@@ -809,13 +868,10 @@ def step_binding_viewer_url():
             str(_STEP_BINDING_FIXTURE),
         ],
         env=env,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        start_new_session=True,
     )
 
     try:
-        _wait_for_server(base_url)
+        _wait_for_server(base_url, proc=proc, log_path=log_path)
         yield base_url
     finally:
         try:
@@ -980,16 +1036,13 @@ def concurrency_viewer_url(tmp_path_factory):
     port = _find_free_port()
     base_url = f"http://127.0.0.1:{port}"
 
-    proc = subprocess.Popen(
+    proc, log_path = _spawn_viewer(
         [elspais_bin, "viewer", "--server", "--port", str(port), "--path", str(dest)],
         cwd=str(dest),
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        start_new_session=True,
     )
 
     try:
-        _wait_for_server(base_url)
+        _wait_for_server(base_url, proc=proc, log_path=log_path)
         yield base_url
     finally:
         try:
@@ -1212,16 +1265,13 @@ def badge_viewer_url(tmp_path_factory):
     port = _find_free_port()
     base_url = f"http://127.0.0.1:{port}"
 
-    proc = subprocess.Popen(
+    proc, log_path = _spawn_viewer(
         [elspais_bin, "viewer", "--server", "--port", str(port), "--path", str(dest)],
         cwd=str(dest),
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        start_new_session=True,
     )
 
     try:
-        _wait_for_server(base_url)
+        _wait_for_server(base_url, proc=proc, log_path=log_path)
         yield base_url
     finally:
         try:
@@ -2394,7 +2444,7 @@ def file_mutation_viewer_url(tmp_path_factory):
     existing = env.get("PYTHONPATH", "")
     env["PYTHONPATH"] = f"{worktree_src}:{existing}" if existing else worktree_src
 
-    proc = subprocess.Popen(
+    proc, log_path = _spawn_viewer(
         [
             sys.executable,
             "-m",
@@ -2408,13 +2458,10 @@ def file_mutation_viewer_url(tmp_path_factory):
         ],
         cwd=str(dest),
         env=env,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        start_new_session=True,
     )
 
     try:
-        _wait_for_server(base_url)
+        _wait_for_server(base_url, proc=proc, log_path=log_path)
         yield base_url
     finally:
         try:
@@ -2619,7 +2666,7 @@ class TestBrowserFileMutations:
 
 
 # ---------------------------------------------------------------------------
-# Per-*Assertion* pill: the measures behind its standing (REQ-d00258-G)
+# Per-*Assertion* pill: the measures behind its standing (REQ-d00292-E)
 # ---------------------------------------------------------------------------
 
 
@@ -2632,10 +2679,8 @@ class TestAssertionPillMeasures:
     or start showing a caveat again -- and nothing would go red.
     """
 
-    # Verifies: REQ-d00258-G, REQ-d00258-J
-    def test_REQ_d00258_G_pill_title_names_the_measures_and_carries_no_caveat(
-        self, page, viewer_url
-    ):
+    # Verifies: REQ-d00292-E, REQ-d00258-J
+    def test_pill_title_names_the_measures_and_carries_no_caveat(self, page, viewer_url):
         """Open a covered requirement; read its per-*Assertion* pills.
 
         REQ-d00258 is opened because it is covered on several dimensions in
@@ -2648,8 +2693,10 @@ class TestAssertionPillMeasures:
         # long-lived session viewer the network never goes quiet and the wait
         # times out. Waiting for the entry point the test actually calls is
         # both stricter and stable.
-        page.goto(viewer_url, wait_until="domcontentloaded", timeout=30_000)
-        page.wait_for_function("() => typeof window.openCard === 'function'", timeout=30_000)
+        page.goto(viewer_url, wait_until="domcontentloaded", timeout=_PAGE_LOAD_TIMEOUT)
+        page.wait_for_function(
+            "() => typeof window.openCard === 'function'", timeout=_PAGE_LOAD_TIMEOUT
+        )
         page.evaluate("() => window.openCard('REQ-d00258')")
 
         page.locator("#card-stack-body .card-assertion-wrapper").first.wait_for(

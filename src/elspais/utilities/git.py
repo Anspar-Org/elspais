@@ -1202,6 +1202,7 @@ def delete_safety_branch(
 # ─────────────────────────────────────────────────────────────────────────────
 
 
+# Implements: REQ-d00231-E
 def get_author_info(id_source: str = "gh") -> dict[str, str]:
     """Resolve author name and identity for changelog entries.
 
@@ -1346,6 +1347,7 @@ def checkout_commit(repo_root: Path, commit_hash: str) -> dict[str, Any]:
     return {"success": True}
 
 
+# Implements: REQ-p00004-I
 def checkout_branch(
     repo_root: Path,
     branch: str,
@@ -1479,6 +1481,7 @@ def count_commits_between(
         return 0
 
 
+# Implements: REQ-p00004-E
 def commit_spec_files(
     repo_root: Path,
     message: str,

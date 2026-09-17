@@ -1,4 +1,4 @@
-# Verifies: REQ-d00069-B, REQ-d00069-J, REQ-d00069-N, REQ-d00258-G
+# Verifies: REQ-d00069-B, REQ-d00069-J, REQ-d00069-N, REQ-d00292-C
 """End-to-end: header badge and per-assertion standings AGREE for a
 whole-requirement-covered requirement (the DIARY-PRD-linking-code-lifecycle
 class of bug: blanket Implements + blanket Verifies rendered '12% implemented,
@@ -37,8 +37,8 @@ def _prd_like():
     return graph.find_by_id("REQ-P")
 
 
-# Verifies: REQ-d00258-G
-def test_REQ_d00258_G_header_and_pills_agree_on_blanket_coverage():
+# Verifies: REQ-d00292-C
+def test_header_and_pills_agree_on_blanket_coverage():
     node = _prd_like()
     tiers = compute_coverage_tiers(node)
     states = compute_assertion_coverage_states(node, None)

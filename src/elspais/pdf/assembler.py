@@ -229,6 +229,7 @@ class MarkdownAssembler:
         decoded = unquote(reference)
         return any((root / decoded).exists() for root in self.resource_roots())
 
+    # Implements: REQ-p00080-J
     def _repo_name_for_root(self, repo_root: Path | None) -> str:
         """Name the federated repo owning ``repo_root``, best effort."""
         if repo_root is None:
@@ -238,6 +239,7 @@ class MarkdownAssembler:
                 return entry.name
         return self._graph.root_repo_name
 
+    # Implements: REQ-p00080-B, REQ-p00080-C, REQ-p00080-D
     def assemble(self) -> str:
         """Assemble the complete Markdown document.
 
@@ -308,6 +310,7 @@ class MarkdownAssembler:
     # File rendering — reads source files directly
     # ------------------------------------------------------------------
 
+    # Implements: REQ-p00080-I
     def _render_file(self, file_path: str, owning_repo_root: Path | None = None) -> list[str]:
         """Render a spec file's content with adjusted heading levels.
 
@@ -435,7 +438,6 @@ class MarkdownAssembler:
             # requirement headings and end markers past that point were
             # never processed. The document is degraded in a way no
             # reference-level check can see; say so.
-            # Implements: REQ-p00080-I
             self._record_diagnostic(
                 AssemblyDiagnostic(
                     kind="code-fence",
@@ -472,6 +474,7 @@ class MarkdownAssembler:
                 return len(m.group(1))
         return 1
 
+    # Implements: REQ-p00080-H
     def _repo_root_for_owner(self, owner_name: str | None) -> Path | None:
         """Look up the on-disk root for a named federated repo, if any."""
         if not owner_name:
@@ -495,6 +498,7 @@ class MarkdownAssembler:
         )
         return resolved
 
+    # Implements: REQ-p00080-H
     def _resolve_path_candidates(
         self,
         file_path: str,
@@ -740,6 +744,7 @@ class MarkdownAssembler:
 
         return _IMAGE_REF_RE.sub(_replace, line)
 
+    # Implements: REQ-p00080-I
     def _record_unresolved_reference(
         self,
         *,
@@ -770,6 +775,7 @@ class MarkdownAssembler:
             )
         )
 
+    # Implements: REQ-p00080-G
     @staticmethod
     def _generate_mermaid_png(mmd_path: Path, png_path: Path) -> Path | None:
         """Generate a PNG from a Mermaid .mmd file using mmdc.
@@ -821,6 +827,7 @@ class MarkdownAssembler:
     # Level partitioning
     # ------------------------------------------------------------------
 
+    # Implements: REQ-p00080-B
     def _partition_by_level(self, file_groups: dict[str, list[GraphNode]]) -> dict[str, list[str]]:
         """Partition file paths into level buckets (PRD/OPS/DEV).
 
@@ -837,6 +844,7 @@ class MarkdownAssembler:
                 buckets[min_level].append(path)
         return dict(buckets)
 
+    # Implements: REQ-p00080-B
     def _min_level_for_nodes(self, nodes: list[GraphNode]) -> str | None:
         """Return the highest-priority level name among nodes.
 
@@ -860,6 +868,7 @@ class MarkdownAssembler:
     # Graph-depth ordering
     # ------------------------------------------------------------------
 
+    # Implements: REQ-p00080-B
     def _sort_files_by_depth(
         self,
         file_paths: list[str],
@@ -884,6 +893,7 @@ class MarkdownAssembler:
 
         return sorted(file_paths, key=file_sort_key)
 
+    # Implements: REQ-p00080-B
     @staticmethod
     def _node_depth(node: GraphNode) -> int:
         """Compute the graph depth of a node via BFS on parents.
@@ -915,6 +925,7 @@ class MarkdownAssembler:
     # Topic index
     # ------------------------------------------------------------------
 
+    # Implements: REQ-p00080-D
     def _build_topic_index(
         self,
         file_groups: dict[str, list[GraphNode]],
@@ -987,6 +998,7 @@ class MarkdownAssembler:
 
         return lines
 
+    # Implements: REQ-p00080-D
     def _topics_from_filename(self, file_path: str) -> list[str]:
         """Extract topics from a filename by stripping level prefix and splitting on '-'.
 
@@ -1002,6 +1014,7 @@ class MarkdownAssembler:
         words = [w for w in cleaned.split("-") if w]
         return words
 
+    # Implements: REQ-p00080-D
     def _topics_from_file(self, file_path: str, owning_repo_root: Path | None = None) -> list[str]:
         """Extract Topics: lines from the pre-requirement section of a file."""
         resolved, searched = self._resolve_path_candidates(
@@ -1027,6 +1040,7 @@ class MarkdownAssembler:
                         topics.append(t)
         return topics
 
+    # Implements: REQ-p00080-D
     @staticmethod
     def _topics_from_requirement_remainders(req_node: GraphNode) -> list[str]:
         """Extract topics from REMAINDER children of a requirement node."""

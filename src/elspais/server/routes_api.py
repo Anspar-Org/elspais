@@ -13,6 +13,7 @@ from __future__ import annotations
 import functools
 import json
 import time
+from collections.abc import Callable
 from datetime import date as date_type
 from pathlib import Path
 from typing import Any
@@ -128,6 +129,7 @@ def _get_result_status(test_or_jny_node: Any) -> str | None:
     return "mixed"
 
 
+# Implements: REQ-p00017-G
 def _compute_link_data(
     node: Any,
 ) -> tuple[dict[str, dict[str, bool]], dict[str, list[dict[str, str]]]]:
@@ -142,7 +144,6 @@ def _compute_link_data(
     from elspais.graph.relations import EdgeKind
 
     # Collect assertion labels.
-    # Implements: REQ-p00017-G
     # A retired *Assertion* carries no coverage flags, because it is excluded
     # from the calculation that would produce them.
     assertion_labels: list[str] = counted_assertion_labels(node)
@@ -486,6 +487,7 @@ def _compute_incoming_links(node: Any) -> list[dict[str, Any]]:
 # ─────────────────────────────────────────────────────────────────
 
 
+# Implements: REQ-d00206-C
 async def api_status(request: Request) -> JSONResponse:
     """GET /api/status - Graph status with federation repo info."""
     from elspais import __version__
@@ -493,7 +495,6 @@ async def api_status(request: Request) -> JSONResponse:
     state = _st(request)
     result = _get_graph_status(state.graph, state.repo_root)
     result["version"] = __version__
-    # Implements: REQ-d00206-C
     # Include federation repo metadata from iter_repos().
     graph = state.graph
     repos_info = []
@@ -617,7 +618,7 @@ async def api_node(request: Request) -> JSONResponse:
                 }
                 # UAT dims carry the per-level expectation so the viewer can
                 # render a (red) UAT badge on a journey-less expects_validation
-                # requirement (REQ-d00258-F).
+                # requirement (REQ-d00291-A, REQ-d00292-G).
                 if dim_key in ("uat_coverage", "uat_verified"):
                     entry["expects_validation"] = expects_validation
                 dims[dim_key] = entry
@@ -627,15 +628,15 @@ async def api_node(request: Request) -> JSONResponse:
             result["assertion_links"], result["req_level_links"] = _compute_link_data(node)
 
             # Per-assertion coverage states (full/partial/failing/none) projected
-            # from the SAME rollup metrics as the header badges, so the tiny
-            # per-assertion badges color consistently on initial render without
-            # waiting for a lazy prefetch (REQ-d00258-G).
+            # from the SAME rollup metrics as the header badges (REQ-d00292-B),
+            # so the tiny per-assertion badges color consistently on initial
+            # render rather than waiting for a lazy prefetch.
             result["assertion_coverage_states"] = compute_assertion_coverage_states(
                 node, state.config
             )
             # The measures behind each per-assertion standing (REQ-d00069-L),
             # phrased server-side so the pill can show what produced its
-            # standing instead of a caveat marker (REQ-d00258-G/J).
+            # standing instead of a caveat marker (REQ-d00292-E, REQ-d00258-J).
             result["assertion_coverage_measures"] = compute_assertion_coverage_measures(node)
 
             # Reverse-traceability: what points AT this requirement (REQ-p00006-A)
@@ -699,16 +700,18 @@ async def api_hierarchy(request: Request) -> JSONResponse:
 
 async def api_search(request: Request) -> JSONResponse:
     """GET /api/search?q=<query>&field=<field>&limit=<n>&regex=<bool>."""
+    from elspais.commands._requests import SearchRequest
     from elspais.commands.search_cmd import compute_search
 
     state = _st(request)
-    params = {
-        "q": request.query_params.get("q", ""),
-        "field": request.query_params.get("field", "all"),
-        "regex": request.query_params.get("regex", "false"),
-        "limit": request.query_params.get("limit", "50"),
-    }
-    return JSONResponse(compute_search(state.graph, state.config, params))
+    params = dict(request.query_params)
+    search_request = SearchRequest(
+        q=params.get("q", ""),
+        field=params.get("field", "all"),
+        limit=int(params.get("limit", "50")),
+        regex=params.get("regex", "false").lower() == "true",
+    )
+    return JSONResponse(compute_search(state.graph, state.config, search_request))
 
 
 async def api_test_coverage(request: Request) -> JSONResponse:
@@ -895,7 +898,7 @@ async def api_tree_data(request: Request) -> JSONResponse:
         # Comment presence: direct comments on this node or its sub-elements
         _has_direct_comments = any(True for _ in g.iter_comments_for_card(node.id))
         tiers = compute_coverage_tiers(node, state.config)
-        # REQ-d00258-E: coverage filter bucket comes from the severity-aware
+        # REQ-d00292-A: coverage filter bucket comes from the severity-aware
         # combined_bucket (Task 6), not a naive combined_color check -- this
         # correctly classifies e.g. a fully-but-indirectly-covered requirement
         # as "full" instead of dropping it into "missing".
@@ -1188,6 +1191,7 @@ async def api_attach_client(request: Request) -> JSONResponse:
     return JSONResponse({"attached": attached, "clients": clients, "held_sessions": held})
 
 
+# Implements: REQ-p00083-C
 async def api_dirty(request: Request) -> JSONResponse:
     """GET /api/dirty - Check if graph has unsaved mutations."""
     state = _st(request)
@@ -1202,7 +1206,6 @@ async def api_dirty(request: Request) -> JSONResponse:
         "mutation_count": len(entries),
         "tip": entries[-1].id if entries else None,
     }
-    # Implements: REQ-p00083-C
     record = _automatic_save_record(state.repo_root)
     if record is not None:
         body["automatic_save"] = record
@@ -1217,8 +1220,8 @@ async def api_dirty(request: Request) -> JSONResponse:
     return JSONResponse(body)
 
 
+# Implements: REQ-p00006-A
 async def api_check_freshness(request: Request) -> JSONResponse:
-    # Implements: REQ-p00006-A
     """GET /api/check-freshness - Check if spec files changed since last build."""
     import os
 
@@ -1275,68 +1278,139 @@ async def api_check_freshness(request: Request) -> JSONResponse:
 # ─────────────────────────────────────────────────────────────────
 
 
+# Implements: REQ-d00282-F, REQ-o00062-O
+def _request_or_400(build: Callable[[], Any]) -> Any | JSONResponse:
+    """Build a request from this query, or the one refusal every route gives.
+
+    ONE place, not one per route: a guard each handler writes for itself is a
+    guard a handler can be written without, which is how `/api/run/gaps` came
+    to answer 500 where its siblings answered 400.
+    """
+    from elspais.commands._values import UnofferedValues
+
+    try:
+        return build()
+    except UnofferedValues as exc:
+        return JSONResponse({"error": "unoffered_values", "message": str(exc)}, status_code=400)
+
+
 async def api_run_checks(request: Request) -> JSONResponse:
     """GET /api/run/checks - Run health checks and return structured report."""
+    from elspais.commands._requests import ChecksRequest
     from elspais.commands.health import compute_checks
 
     state = _st(request)
+    from elspais.commands._requests import treat_active_from_params
+
     params = dict(request.query_params)
-    result = compute_checks(state.graph, state.config, params)
+    checks_request = ChecksRequest(
+        spec_only=params.get("spec_only") == "true",
+        code_only=params.get("code_only") == "true",
+        tests_only=params.get("tests_only") == "true",
+        terms_only=params.get("terms_only") == "true",
+        lenient=params.get("lenient") == "true",
+        treat_active=treat_active_from_params(params),
+    )
+    result = compute_checks(state.graph, state.config, checks_request)
     return JSONResponse(result)
 
 
+# Implements: REQ-d00282-F
 async def api_run_summary(request: Request) -> JSONResponse:
     """GET /api/run/summary - Coverage summary data."""
-    from elspais.commands._values import UnofferedValues
-    from elspais.commands.summary import compute_summary
+    from elspais.commands._edges import report_inputs_from_params
+    from elspais.commands._requests import SummaryRequest
+    from elspais.commands.summary import IDENTITY_VALUE, OFFERED_VALUES, compute_summary
 
     state = _st(request)
     params = dict(request.query_params)
-    try:
-        return JSONResponse(compute_summary(state.graph, state.config, params))
-    except UnofferedValues as exc:
-        # Implements: REQ-d00282-F
-        # A report is not produced under a selection honoured in part, and a
-        # caller asking for a value this report does not offer is told so
-        # rather than handed a narrower report that looks like the one asked
-        # for.
-        return JSONResponse({"error": "unoffered_values", "message": str(exc)}, status_code=400)
+
+    def _build() -> SummaryRequest:
+        inputs = report_inputs_from_params(params, OFFERED_VALUES, IDENTITY_VALUE)
+        return SummaryRequest(
+            scope=inputs.scope, values=inputs.values, treat_active=inputs.treat_active
+        )
+
+    built = _request_or_400(_build)
+    if isinstance(built, JSONResponse):
+        return built
+    return JSONResponse(compute_summary(state.graph, state.config, built))
 
 
 async def api_run_gaps(request: Request) -> JSONResponse:
     """GET /api/run/gaps - Traceability coverage gaps."""
-    from elspais.commands.gaps import compute_gaps
+    from elspais.commands._edges import report_inputs_from_params
+    from elspais.commands._requests import GapsRequest
+    from elspais.commands.gaps import COMMAND_VALUES, OFFERED_VALUES, compute_gaps
 
     state = _st(request)
     params = dict(request.query_params)
-    return JSONResponse(compute_gaps(state.graph, state.config, params))
+    command = params.get("command", "gaps")
+
+    def _build() -> GapsRequest:
+        inputs = report_inputs_from_params(
+            params, COMMAND_VALUES.get(command, OFFERED_VALUES), identity_key=""
+        )
+        return GapsRequest(
+            scope=inputs.scope,
+            values=inputs.values,
+            command=command,
+            treat_active=inputs.treat_active,
+        )
+
+    built = _request_or_400(_build)
+    if isinstance(built, JSONResponse):
+        return built
+    return JSONResponse(compute_gaps(state.graph, state.config, built))
 
 
 async def api_run_analysis(request: Request) -> JSONResponse:
     """GET /api/run/analysis - Foundation analysis report."""
+    from elspais.commands._edges import report_inputs_from_params
+    from elspais.commands._requests import AnalysisRequest
     from elspais.commands.analysis_cmd import compute_analysis
 
     state = _st(request)
     params = dict(request.query_params)
-    return JSONResponse(compute_analysis(state.graph, state.config, params))
+
+    def _build() -> AnalysisRequest:
+        # This report offers no values -- a caller who wrote one is refused
+        # rather than handed a report the selection could not narrow.
+        inputs = report_inputs_from_params(params, (), identity_key="")
+        return AnalysisRequest(
+            scope=inputs.scope,
+            values=inputs.values,
+            top=int(params.get("top", "10")),
+            include_code=params.get("include_code", "false") == "true",
+            weights=params.get("weights"),
+        )
+
+    built = _request_or_400(_build)
+    if isinstance(built, JSONResponse):
+        return built
+    return JSONResponse(compute_analysis(state.graph, state.config, built))
 
 
+# Implements: REQ-d00282-F
 async def api_run_trace(request: Request) -> JSONResponse:
     """GET /api/run/trace - Traceability matrix data as JSON."""
-    from elspais.commands._values import UnofferedValues
-    from elspais.commands.trace import compute_trace
+    from elspais.commands._edges import report_inputs_from_params
+    from elspais.commands._requests import TraceRequest
+    from elspais.commands.trace import OFFERED_VALUES, compute_trace
 
     state = _st(request)
     params = dict(request.query_params)
-    try:
-        return JSONResponse(compute_trace(state.graph, state.config, params))
-    except UnofferedValues as exc:
-        # Implements: REQ-d00282-F
-        # A report is not produced under a selection honoured in part, and a
-        # caller asking for a value this report does not offer is told so
-        # rather than handed a narrower report that looks like the one asked
-        # for.
-        return JSONResponse({"error": "unoffered_values", "message": str(exc)}, status_code=400)
+
+    def _build() -> TraceRequest:
+        inputs = report_inputs_from_params(params, OFFERED_VALUES, identity_key="id")
+        return TraceRequest(
+            scope=inputs.scope, values=inputs.values, treat_active=inputs.treat_active
+        )
+
+    built = _request_or_400(_build)
+    if isinstance(built, JSONResponse):
+        return built
+    return JSONResponse(compute_trace(state.graph, state.config, built))
 
 
 # ─────────────────────────────────────────────────────────────────
@@ -1360,6 +1434,7 @@ def _version_conflict(state: Any, data: dict, node_id: str, field: str = "if_ver
     return JSONResponse(conflict, status_code=status)
 
 
+# Implements: REQ-o00062-N, REQ-o00062-O
 def _tip_conflict(state: Any, data: dict, field: str = "if_mutation_id"):
     """Return a 409 response if the caller's mutation-log tip is stale."""
     conflict = _guard_mutation_tip(state.graph, data.get(field) or "")
@@ -1368,6 +1443,7 @@ def _tip_conflict(state: Any, data: dict, field: str = "if_mutation_id"):
     return JSONResponse(conflict, status_code=409)
 
 
+# Implements: REQ-o00062-K
 def _with_version(state: Any, result: dict, node_id: str) -> dict:
     """Attach the resulting version, resolving the node after the mutation."""
     node = state.graph.find_by_id(node_id)
@@ -1496,9 +1572,9 @@ async def api_mutate_assertion_add(request: Request) -> JSONResponse:
     return JSONResponse(result, status_code=status_code)
 
 
+# Implements: REQ-d00010-A
 @_serialized_write
 async def api_mutate_assertion_delete(request: Request) -> JSONResponse:
-    # Implements: REQ-d00010-A
     """POST /api/mutate/assertion/delete - Delete an assertion."""
     state = _st(request)
     data = await request.json()
@@ -1564,6 +1640,7 @@ async def api_mutate_remainder_add(request: Request) -> JSONResponse:
 
 
 @_serialized_write
+# Implements: REQ-o00062-H, REQ-o00062-O
 async def api_mutate_remainder_delete(request: Request) -> JSONResponse:
     """POST /api/mutate/remainder/delete - Delete a remainder section."""
     state = _st(request)
@@ -1699,9 +1776,9 @@ async def api_mutate_requirement_add(request: Request) -> JSONResponse:
     return JSONResponse(result, status_code=status_code)
 
 
+# Implements: REQ-d00010-A
 @_serialized_write
 async def api_mutate_requirement_delete(request: Request) -> JSONResponse:
-    # Implements: REQ-d00010-A
     """POST /api/mutate/requirement/delete - Delete a requirement."""
     state = _st(request)
     data = await request.json()
@@ -1719,6 +1796,7 @@ async def api_mutate_requirement_delete(request: Request) -> JSONResponse:
     return JSONResponse(result, status_code=status_code)
 
 
+# Implements: REQ-o00062-M
 @_serialized_write
 async def api_mutate_edge(request: Request) -> JSONResponse:
     """POST /api/mutate/edge - Edge mutations (add/change_kind/change_targets/delete)."""
@@ -1734,7 +1812,6 @@ async def api_mutate_edge(request: Request) -> JSONResponse:
         return JSONResponse(
             {"success": False, "error": "source_id and target_id required"}, status_code=400
         )
-    # Implements: REQ-o00062-M
     # Only the source's rendered reference line changes.
     conflict = _version_conflict(state, data, source_id)
     if conflict is not None:
@@ -1941,6 +2018,7 @@ async def api_journey_files(request: Request) -> JSONResponse:
     return JSONResponse({"files": files})
 
 
+# Implements: REQ-o00062-M
 @_serialized_write
 async def api_mutate_move_to_file(request: Request) -> JSONResponse:
     """POST /api/mutate/move-to-file - Move node to a different file.
@@ -1984,7 +2062,6 @@ async def api_mutate_move_to_file(request: Request) -> JSONResponse:
             status_code=400,
         )
 
-    # Implements: REQ-o00062-M
     # The node, the file it leaves and the file it joins all change, so all
     # three are guarded.
     #
@@ -2042,6 +2119,7 @@ async def api_mutate_move_to_file(request: Request) -> JSONResponse:
     return JSONResponse(result, status_code=status_code)
 
 
+# Implements: REQ-o00062-O
 def _validate_new_spec_path(relative_path: str, config: dict[str, Any]) -> str | None:
     """Single home: utilities/spec_paths.validate_new_spec_path (REQ-o00062-O)."""
     from elspais.utilities.spec_paths import validate_new_spec_path
@@ -2081,6 +2159,7 @@ async def api_mutate_rename_file(request: Request) -> JSONResponse:
 
 
 @_serialized_write
+# Implements: REQ-o00062-G, REQ-o00062-N, REQ-o00062-O
 async def api_mutate_undo(request: Request) -> JSONResponse:
     """POST /api/mutate/undo - Undo the most recent mutation."""
     state = _st(request)
@@ -2206,6 +2285,7 @@ async def api_shutdown(request: Request) -> JSONResponse:
 # ─────────────────────────────────────────────────────────────────
 
 
+# Implements: REQ-o00062-N
 async def _history_json(request: Request) -> dict:
     """Parse the JSON body of a history route, tolerating an empty body.
 
@@ -2218,6 +2298,7 @@ async def _history_json(request: Request) -> dict:
         return {}
 
 
+# Implements: REQ-d00132-A, REQ-p00083-H
 @_serialized_write
 async def api_save(request: Request) -> JSONResponse:
     """POST /api/save - Persist mutations to spec files on disk.
@@ -2235,7 +2316,6 @@ async def api_save(request: Request) -> JSONResponse:
     because the caller has to supply something, and a write that failed
     is 500, because retrying the same request is not the answer.
     """
-    # Implements: REQ-d00132-A, REQ-p00083-H
     from elspais.mcp.shared_state import persist_pending
 
     state = _st(request)
@@ -2257,9 +2337,9 @@ async def api_save(request: Request) -> JSONResponse:
     return JSONResponse(result, status_code=status_code)
 
 
+# Implements: REQ-p00004-J, REQ-p00004-O
 @_serialized_write
 async def api_revert(request: Request) -> JSONResponse:
-    # Implements: REQ-p00004-J, REQ-p00004-O
     """POST /api/revert - Revert all unsaved mutations by rebuilding from disk."""
     from elspais.mcp.shared_state import rebuild_shared_graph
 
@@ -2281,9 +2361,9 @@ async def api_revert(request: Request) -> JSONResponse:
         return JSONResponse({"success": False, "error": str(e)}, status_code=500)
 
 
+# Implements: REQ-p00004-J, REQ-p00004-O
 @_serialized_write
 async def api_reload(request: Request) -> JSONResponse:
-    # Implements: REQ-p00004-J, REQ-p00004-O
     """POST /api/reload - Reload graph from disk with fresh config."""
     from elspais.mcp.shared_state import rebuild_shared_graph
 
@@ -2309,6 +2389,7 @@ async def api_reload(request: Request) -> JSONResponse:
 # ─────────────────────────────────────────────────────────────────────────────
 
 
+# Implements: REQ-d00231-D
 def _thread_to_dict(thread: CommentThread) -> dict:
     """Serialize a CommentThread for JSON response."""
     return {
@@ -2341,6 +2422,7 @@ def _thread_to_dict(thread: CommentThread) -> dict:
     }
 
 
+# Implements: REQ-d00231-A, REQ-d00231-B
 def _event_to_response_dict(evt: CommentEvent) -> dict:
     """Serialize a CommentEvent for write-endpoint response."""
     d: dict[str, str] = {
@@ -2357,11 +2439,13 @@ def _event_to_response_dict(evt: CommentEvent) -> dict:
     return d
 
 
+# Implements: REQ-d00231-E
 def _resolve_author(state: Any) -> dict[str, str]:
     """Resolve author identity from config (REQ-d00231-E)."""
     return get_author_info(state.config.get("changelog", {}).get("id_source", "gh"))
 
 
+# Implements: REQ-d00231-A, REQ-d00231-B, REQ-d00231-C
 def _resolve_jsonl_path(state: Any, node_id: str) -> Path | None:
     """Resolve the JSONL file path for a node's comments."""
     graph = state.graph

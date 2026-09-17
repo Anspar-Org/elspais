@@ -7,7 +7,7 @@ from __future__ import annotations
 import pytest
 
 from elspais.config.schema import ElspaisConfig
-from elspais.server.routes_ui import build_levels, build_namespaces, build_statuses
+from elspais.view_model import build_levels, build_namespaces, build_statuses
 
 
 @pytest.fixture
@@ -125,7 +125,7 @@ def test_nav_tree_status_filtergroup_emits_valid_js(jinja_env, typed_5_level_con
     """Regression: the status FilterGroup must emit `{key: '<lower>', label: '<title>'}`
     objects, not the Python repr of the status dict (which crashes the page with
     `SyntaxError: Unexpected identifier 'key'`)."""
-    from elspais.server.routes_ui import build_levels, build_statuses
+    from elspais.view_model import build_levels, build_statuses
 
     levels = build_levels(typed_5_level_config)
     statuses = build_statuses(typed_5_level_config)

@@ -153,20 +153,22 @@ is prose.
 >         ...
 > ```
 
-A comment placed before any function definition applies to the entire file:
+A citation speaks for the declaration it is written above, and for nothing
+further down the file. There is no file-level form: a comment at the top of a
+file does not reach the declarations below it, so each test carries its own.
 
 ```python
-# Verifies: REQ-d00001
-# All tests in this file validate password security
-
-
+# Verifies: REQ-d00001-A
 def test_bcrypt_cost(): ...
 
 
+# Verifies: REQ-d00001-B
 def test_no_plaintext_storage(): ...
 ```
 
-Both tests inherit the file-level `REQ-d00001` link.
+A citation written where no declaration follows it -- at module level, above
+statements rather than a `def` -- speaks for the executable lines after it, and
+stops at the next citation or the next declaration, whichever comes first.
 
 ## Multi-Assertion Syntax
 

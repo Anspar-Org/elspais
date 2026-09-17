@@ -37,6 +37,17 @@ SELECTIONS = ("tested", "implemented,uat_coverage", "status,id,implemented")
 # ---------------------------------------------------------------------------
 
 
+def _trace_rows(out: str) -> list[dict]:
+    """The rows of a trace JSON report.
+
+    Trace's JSON document has ONE shape -- an object stating ``scope`` beside
+    ``nodes``. These tests are about the values a row states, so they ask for
+    the rows by name; the document's shape is pinned in
+    ``tests/commands/test_scope_disclosure.py``.
+    """
+    return json.loads(out)["nodes"]
+
+
 def _trace_stated(graph, fmt: str, values: list[str]) -> list[str]:
     """What one trace rendering states, as the reader meets it.
 
@@ -62,7 +73,23 @@ def _trace_stated(graph, fmt: str, values: list[str]) -> list[str]:
     if fmt == "html":
         row = out.split("<tr>")[1]
         return [c.split("</th>")[0] for c in row.split("<th>")[1:]]
-    return list(json.loads(out)[0].keys())
+    return list(_trace_rows(out)[0].keys())
+
+
+# The renderings whose stated values can be read back as value keys: two
+# tables and one structured document.
+FORMATS_WITH_KEYS = ("csv", "markdown", "json")
+
+
+def _numbers_under(figure) -> list[float]:
+    """Every number a figure states, however deeply it is nested.
+
+    A figure a row has nothing to state for states none of them -- which is
+    what keeps it distinguishable from one whose numbers are genuinely zero.
+    """
+    if isinstance(figure, dict):
+        return [n for value in figure.values() for n in _numbers_under(value)]
+    return [] if figure is None else [figure]
 
 
 def _summary_stated(data: dict, fmt: str) -> list[str]:
@@ -74,6 +101,45 @@ def _summary_stated(data: dict, fmt: str) -> list[str]:
         header = next(ln for ln in out.splitlines() if ln.startswith("| "))
         return [c.strip() for c in header.strip("|").split("|")]
     return list(json.loads(out)["levels"][0].keys())
+
+
+# The numbers a figure is spelled as, rather than values of their own: they are
+# how a structured format renders the value standing at the path above them.
+_FIGURE_PARTS = ("count", "total", "ratio", "attributed", "passed", "failed", "awaiting")
+
+
+def _stated_paths(row: dict) -> list[str]:
+    """Every value KEY one structured row states, in the order it states them.
+
+    A value keyed by a path is nested under that path, and a figure is spelled
+    as the object of its numbers -- so the path an object stands at is a stated
+    value, the numbers inside it are that value's spelling, and a nested object
+    is a value of its own.
+    """
+    stated: list[str] = []
+
+    def walk(obj: dict, prefix: str) -> None:
+        for key, value in obj.items():
+            if isinstance(value, dict):
+                stated.append(f"{prefix}{key}")
+                walk(value, f"{prefix}{key}.")
+            elif not (prefix and key in _FIGURE_PARTS):
+                stated.append(f"{prefix}{key}")
+
+    walk(row, "")
+    return stated
+
+
+# The display words a value is stated under are the project's to rename
+# (REQ-d00282-J), so a tabular rendering is read back through the same
+# ``header_for`` that wrote it -- the comparison is between value SETS, never
+# between spellings.
+def _summary_stated_keys(data: dict, fmt: str) -> list[str]:
+    """The value keys one summary rendering states, however it spells them."""
+    if fmt == "json":
+        return _stated_paths(json.loads(summary_cmd._render(dict(data), fmt, None))["levels"][0])
+    by_word = {summary_cmd.header_for(key, None): key for key in summary_cmd.OFFERED_VALUES}
+    return [by_word[word] for word in _summary_stated(data, fmt)]
 
 
 # ---------------------------------------------------------------------------
@@ -172,7 +238,26 @@ class TestOneSelectionOneValueSet:
         for fmt in ("csv", "markdown"):
             assert _summary_stated(payload, fmt) == expected, fmt
 
-    # Verifies: REQ-d00282-E, REQ-d00258-O+P
+    # Verifies: REQ-d00282-E
+    def test_a_report_under_no_selection_states_one_value_set_in_every_format(
+        self, coverage_payload
+    ):
+        """A reader who names nothing is answered with the report's default set
+        -- and with the SAME set whichever format they render it in.
+
+        The failure this ends was silent: the structured rendering stated the
+        collector's own figures, which included values the table renderings
+        never stated and omitted nothing they did, so the same report answered
+        two different questions depending on which artifact you opened.
+        """
+        stated = {fmt: _summary_stated_keys(coverage_payload, fmt) for fmt in FORMATS_WITH_KEYS}
+        assert stated["csv"] == stated["json"], stated
+        assert stated["markdown"] == stated["json"], stated
+        # And it is a set the report offers as values, rather than whatever the
+        # collector happened to carry.
+        assert set(stated["json"]) <= set(summary_cmd.OFFERED_VALUES), stated["json"]
+
+    # Verifies: REQ-d00282-E, REQ-d00258-P+U
     def test_a_figure_states_its_own_denominator_and_proportion(self, coverage_payload):
         """One named value produces one cell carrying the whole fact.
 
@@ -189,10 +274,82 @@ class TestOneSelectionOneValueSet:
     def test_the_identity_value_is_stated_whatever_was_named(self):
         """A row that cannot be attributed to what it is a fact about is not a
         report about anything."""
-        values = summary_cmd._resolve_values_for(
-            argparse.Namespace(values="tested", scope=None), None
+        from elspais.commands._edges import report_inputs_from_args
+
+        inputs = report_inputs_from_args(
+            argparse.Namespace(values="tested", scope=None),
+            None,
+            summary_cmd.OFFERED_VALUES,
+            summary_cmd.IDENTITY_VALUE,
         )
-        assert values[0] == "level"
+        assert inputs.values[0] == "level"
+
+
+# ---------------------------------------------------------------------------
+# REQ-d00282-K: the selection decides the order, in every format
+# ---------------------------------------------------------------------------
+
+
+# Each selection names the values that identify and count a group out of the
+# place a report used to put them: after a figure, in the middle, and last.
+ORDERINGS = (
+    ("level", "implemented", "requirements", "assertions"),
+    ("requirements", "level", "assertions"),
+    ("assertions", "implemented", "level"),
+)
+
+# How the text rendering spells each of the values these selections name. Read
+# as positions rather than as lines, so the test says nothing about how the
+# rendering lays them out -- only about the order a reader meets them in.
+_TEXT_TOKEN = {
+    "level": "PRD",
+    "requirements": "2 active requirements",
+    "assertions": "4 assertions",
+    "implemented": "Implemented:",
+}
+
+
+@pytest.fixture()
+def one_group() -> dict:
+    """One group with assertions, so every selected value has something to
+    state and position is the only thing under test."""
+    return {"levels": [_level_row("PRD", 2, 4)], "excluded": {}, "integrations": []}
+
+
+class TestValuesAreStatedInTheOrderNamed:
+    # Verifies: REQ-d00282-K
+    @pytest.mark.parametrize("values", ORDERINGS)
+    @pytest.mark.parametrize("fmt", FORMATS_WITH_KEYS)
+    def test_a_tabular_or_structured_report_states_them_in_the_named_order(
+        self, one_group, values, fmt
+    ):
+        payload = {**one_group, "values": list(values)}
+        assert _summary_stated_keys(payload, fmt) == list(values)
+
+    # Verifies: REQ-d00282-K+L
+    @pytest.mark.parametrize("values", ORDERINGS)
+    def test_the_text_report_states_them_in_the_named_order(self, one_group, values):
+        """A consumer reads a committed artifact where it left the values, so a
+        rendering that decided the order for itself broke it exactly as a
+        changed set would. The values naming and counting the group are values
+        like any other: stated where the selection named them, not gathered
+        into a fixed opening.
+        """
+        payload = {**one_group, "values": list(values)}
+        out = summary_cmd._render(payload, "text", None)
+        for value in values:
+            assert _TEXT_TOKEN[value] in out, f"{value} not stated: {out}"
+        positions = [out.index(_TEXT_TOKEN[value]) for value in values]
+        assert positions == sorted(positions), out
+
+    # Verifies: REQ-d00282-L
+    @pytest.mark.parametrize("values", ORDERINGS)
+    def test_every_rendering_still_says_what_the_row_is_about(self, one_group, values):
+        """Wherever the selection puts it, the group is named: a row that
+        cannot be attributed to what it is a fact about is not a report."""
+        payload = {**one_group, "values": list(values)}
+        for fmt in ("text", "csv", "markdown", "json"):
+            assert "PRD" in summary_cmd._render(dict(payload), fmt, None), fmt
 
 
 # ---------------------------------------------------------------------------
@@ -227,7 +384,7 @@ class TestAbsenceIsNotZero:
         assert "no coverage figure is stated" in ops
         assert "0/" not in ops
 
-    # Verifies: REQ-d00282-M, REQ-d00258-O
+    # Verifies: REQ-d00282-M, REQ-d00258-U+V
     def test_json_states_null_where_there_is_no_figure(self, coverage_payload):
         """Including the counts qualifying Tested: a breakdown of a figure that
         was never taken is not three zeros."""
@@ -244,19 +401,24 @@ class TestAbsenceIsNotZero:
         # stated as the numbers it is made of.
         assert levels["PRD"]["implemented"] == {"count": 0.0, "total": 4.0, "ratio": 0.0}
 
-    # Verifies: REQ-d00282-M, REQ-d00258-O
-    def test_the_unselected_payload_keeps_the_distinction_too(self, coverage_payload):
-        """A reader who named no values receives the whole payload, and it
-        answers the same question the same way."""
+    # Verifies: REQ-d00282-M, REQ-d00258-U+V
+    def test_the_report_under_no_selection_keeps_the_distinction_too(self, coverage_payload):
+        """A reader who named no values receives the report's default set, and
+        it answers the same question the same way.
+
+        Read as numbers rather than as keys: a group owed no coverage states no
+        number anywhere beneath the figure, and a group whose evidence is
+        genuinely absent states the zero it computed.
+        """
         levels = {
             lv["level"]: lv
             for lv in json.loads(summary_cmd._render(coverage_payload, "json", None))["levels"]
         }
-        assert levels["OPS"]["implemented_total_covered"] is None
-        assert levels["OPS"]["tested_awaiting"] is None
+        assert _numbers_under(levels["OPS"]["implemented"]) == [], levels["OPS"]["implemented"]
         # A real group's zeros are real answers and stay as computed.
-        assert levels["PRD"]["implemented_total_covered"] == 0.0
-        assert levels["PRD"]["tested_awaiting"] == 0
+        assert levels["PRD"]["implemented"]["count"] == 0.0
+        assert levels["PRD"]["implemented"]["total"] == 4.0
+        assert levels["PRD"]["implemented"]["immediate_direct"]["count"] == 0.0
 
 
 # ---------------------------------------------------------------------------
@@ -275,13 +437,41 @@ class TestARefusedReportProducesNothing:
 
     # Verifies: REQ-d00282-F
     def test_a_composed_report_refuses_a_section_that_states_no_values(self, tmp_path, capsys):
-        """`gaps` lists what is missing rather than tabulating facts, so a
-        selection reaching it is one the composed report cannot honour."""
+        """`checks` reports findings about the project rather than anything
+        about a requirement, so a selection reaching it is one the composed
+        report cannot honour even in part."""
         out = tmp_path / "report.txt"
-        code = report_cmd.run(["summary", "gaps"], ["--values", "tested", "-o", str(out)])
+        assert "checks" not in report_cmd.VALUE_SECTIONS
+        code = report_cmd.run(["summary", "checks"], ["--values", "tested", "-o", str(out)])
         assert code != 0
         assert not out.exists()
-        assert "gaps" in capsys.readouterr().err
+        assert "checks" in capsys.readouterr().err
+
+    # Verifies: REQ-d00282-O
+    def test_a_composed_shortfall_listing_is_narrowed_rather_than_refused(self, tmp_path):
+        """A shortfall listing reads a dimension, so it offers that dimension:
+        the selection says which listings appear rather than making the
+        composition unassemblable."""
+        out = tmp_path / "report.txt"
+        report_cmd.run(["summary", "gaps"], ["--values", "tested", "-o", str(out)])
+        assert out.exists(), "a selection a section OFFERS stopped the report"
+        text = out.read_text()
+        assert "UNTESTED" in text
+        assert "UNCOVERED" not in text
+        assert "UNVALIDATED" not in text
+        assert "FAILING" not in text
+
+    # Verifies: REQ-d00282-F, REQ-d00282-O
+    def test_a_composed_shorthand_refuses_a_value_it_does_not_offer(self, tmp_path, capsys):
+        """`uncovered` offers the one dimension it IS, composed exactly as it
+        does alone."""
+        out = tmp_path / "report.txt"
+        code = report_cmd.run(["summary", "uncovered"], ["--values", "tested", "-o", str(out)])
+        assert code != 0
+        assert not out.exists()
+        err = capsys.readouterr().err
+        assert "uncovered" in err, err
+        assert "implemented" in err, err
 
     # Verifies: REQ-d00282-F
     def test_a_composed_report_is_produced_when_every_section_honours_it(self, tmp_path):
@@ -305,28 +495,49 @@ class TestARefusedReportProducesNothing:
 
 
 class TestOnlyReportsThatStateValuesOfferTheFlag:
-    # Verifies: REQ-d00282-A+F
+    # Verifies: REQ-d00282-O
     @pytest.mark.parametrize(
         "args_class",
-        (
-            "GapsArgs",
-            "UncoveredArgs",
-            "UntestedArgs",
-            "UnvalidatedArgs",
-            "FailingArgs",
-            "AnalysisArgs",
-        ),
+        ("GapsArgs", "UncoveredArgs", "UntestedArgs", "UnvalidatedArgs", "FailingArgs"),
     )
-    def test_a_gap_listing_does_not_accept_a_value_selection(self, args_class):
-        """These emit lists of what is missing, not tables of facts about
-        requirements. They share the SCOPE vocabulary and not this one."""
+    def test_a_shortfall_listing_accepts_a_value_selection(self, args_class):
+        """Each of these lists what one dimension has not credited, so it
+        offers that dimension: the selection says which listings appear."""
         import dataclasses
 
         from elspais.commands import args as args_mod
 
         fields = {f.name for f in dataclasses.fields(getattr(args_mod, args_class))}
+        assert "values" in fields
+        assert "level" in fields, "the scope axis is shared and stays shared"
+
+    # Verifies: REQ-d00282-A+F
+    def test_a_report_stating_nothing_about_a_requirement_does_not_offer_the_flag(self):
+        """`analysis` ranks requirements against each other rather than
+        stating a value about any one of them, so there is nothing to select
+        among. It shares the SCOPE vocabulary and not this one."""
+        import dataclasses
+
+        from elspais.commands import args as args_mod
+
+        fields = {f.name for f in dataclasses.fields(args_mod.AnalysisArgs)}
         assert "values" not in fields
         assert "level" in fields, "the scope axis is shared and stays shared"
+
+    # Verifies: REQ-d00282-O
+    def test_a_shorthand_offers_its_one_dimension_and_the_whole_report_offers_four(self):
+        """Where a section's offer is declared, so `uncovered --values tested`
+        is refused rather than quietly becoming `untested`."""
+        assert report_cmd._offered_by("uncovered") == ("implemented",)
+        assert report_cmd._offered_by("untested") == ("tested",)
+        assert report_cmd._offered_by("unvalidated") == ("uat_coverage",)
+        assert report_cmd._offered_by("failing") == ("verified",)
+        assert report_cmd._offered_by("gaps") == (
+            "implemented",
+            "tested",
+            "uat_coverage",
+            "verified",
+        )
 
     # Verifies: REQ-d00282-A
     @pytest.mark.parametrize("args_class", ("TraceArgs", "SummaryArgs"))
@@ -369,7 +580,7 @@ class TestSelectingValuesChangesNothingElse:
     def test_a_figure_reads_the_same_however_few_values_were_asked_for(self, selection):
         graph = _requirement_graph()
         narrow = _trace_stated(graph, "json", selection)
-        rows = json.loads("\n".join(trace_cmd.format_json(graph, None, None, selection, None)))
+        rows = _trace_rows("\n".join(trace_cmd.format_json(graph, None, None, selection, None)))
         assert "tested" in narrow
         # The breakdown qualifying it rides inside the same object; the FIGURE
         # is what a narrower selection may not move.
@@ -380,14 +591,14 @@ class TestSelectingValuesChangesNothingElse:
     def test_selecting_values_does_not_change_which_requirements_are_reported(
         self, canonical_federated_graph
     ):
-        wide = json.loads(
+        wide = _trace_rows(
             "\n".join(
                 trace_cmd.format_json(
                     canonical_federated_graph, None, None, ["id", "title", "tested"], None
                 )
             )
         )
-        narrow = json.loads(
+        narrow = _trace_rows(
             "\n".join(trace_cmd.format_json(canonical_federated_graph, None, None, ["id"], None))
         )
         assert [r["id"] for r in wide] == [r["id"] for r in narrow]
@@ -445,7 +656,7 @@ def _at(row: dict, path: str):
 
 
 def _trace_json(graph, values: list[str]) -> dict:
-    return json.loads("\n".join(trace_cmd.format_json(graph, None, None, values, None)))[0]
+    return _trace_rows("\n".join(trace_cmd.format_json(graph, None, None, values, None)))[0]
 
 
 def _summary_json(row: dict, values: list[str]) -> dict:
@@ -551,12 +762,12 @@ class TestAFigureDecomposesIntoItsScalars:
 
 
 # ---------------------------------------------------------------------------
-# REQ-d00258-O + REQ-d00282-B: some values are counts and nothing else
+# REQ-d00258-U + REQ-d00282-B: some values are counts and nothing else
 # ---------------------------------------------------------------------------
 
 
 class TestCountsOnlyValues:
-    # Verifies: REQ-d00258-O, REQ-d00282-B
+    # Verifies: REQ-d00258-U, REQ-d00282-B
     @pytest.mark.parametrize("part", ("passed", "failed", "awaiting"))
     def test_each_count_of_the_breakdown_is_selectable_on_its_own(self, part):
         """Though the three sum to the tested count, a reader wanting only the
@@ -566,12 +777,12 @@ class TestCountsOnlyValues:
         assert set(row["tested"]) == {part}
         assert isinstance(row["tested"][part], (int, float))
 
-    # Verifies: REQ-d00258-O, REQ-d00282-B
+    # Verifies: REQ-d00258-U, REQ-d00282-B
     def test_the_summary_states_one_count_of_the_breakdown_alone(self):
         row = _summary_json(_thirds_level(), ["level", "tested.failed"])
         assert row == {"level": "PRD", "tested": {"failed": 2}}
 
-    # Verifies: REQ-d00258-O, REQ-d00282-B+F
+    # Verifies: REQ-d00258-U+V, REQ-d00282-B+F
     @pytest.mark.parametrize("part", ("passed", "failed", "awaiting"))
     def test_a_count_has_no_proportion_to_ask_for(self, part):
         """A count of what came back is not a credit taken over a population,
@@ -581,9 +792,14 @@ class TestCountsOnlyValues:
 
         assert f"tested.{part}" in VALUE_SPECS
         assert f"tested.{part}.ratio" not in VALUE_SPECS
+        from elspais.commands._edges import report_inputs_from_args
+
         with pytest.raises(trace_cmd.UnofferedValues):
-            summary_cmd._resolve_values_for(
-                argparse.Namespace(values=f"tested.{part}.ratio", scope=None), None
+            report_inputs_from_args(
+                argparse.Namespace(values=f"tested.{part}.ratio", scope=None),
+                None,
+                summary_cmd.OFFERED_VALUES,
+                summary_cmd.IDENTITY_VALUE,
             )
         message, code = trace_cmd.render_section(
             _thirds_graph(),
@@ -602,7 +818,7 @@ class TestCountsOnlyValues:
         assert code == 1
         assert f"tested.{part}.ratio" in message
 
-    # Verifies: REQ-d00258-O, REQ-d00282-B
+    # Verifies: REQ-d00258-V, REQ-d00282-B
     def test_only_the_tested_figure_carries_a_breakdown(self):
         """The breakdown is of what came back for a tested assertion. No other
         dimension has one, so no other dimension offers its counts."""
@@ -787,7 +1003,7 @@ class TestAValueIsStatedAtThePathItsKeySpells:
         assert "tested.immediate_direct.count" in VALUE_SPECS
         assert "tested.immediate_direct.count.ratio" not in VALUE_SPECS
 
-    # Verifies: REQ-d00258-O, REQ-d00282-B+E
+    # Verifies: REQ-d00258-V, REQ-d00282-B+E
     def test_the_tested_figure_carries_its_breakdown_and_a_measure_of_it_does_not(self):
         """The counts are what came back for the tested assertions OVERALL, so
         they qualify the dimension's own figure. A measure of Tested counts a
@@ -888,7 +1104,7 @@ def _selective_graph(carried: bool = False) -> TraceGraph:
 
 
 def _selective_rows(values: list[str], carried: bool = False) -> dict[str, dict]:
-    rows = json.loads(
+    rows = _trace_rows(
         "\n".join(trace_cmd.format_json(_selective_graph(carried), None, None, values, None))
     )
     return {row["id"]: row for row in rows}
@@ -1009,11 +1225,15 @@ class TestTheProvenanceBitIsSelectable:
         """A level is a group of requirements, and an `or` over their bits
         would answer a different question under the same name. Refused rather
         than answered wrongly (REQ-d00282-F)."""
+        from elspais.commands._edges import report_inputs_from_args
         from elspais.graph.values import UnofferedValues
 
         with pytest.raises(UnofferedValues):
-            summary_cmd._resolve_values_for(
-                argparse.Namespace(values="verified.carried", scope=None), None
+            report_inputs_from_args(
+                argparse.Namespace(values="verified.carried", scope=None),
+                None,
+                summary_cmd.OFFERED_VALUES,
+                summary_cmd.IDENTITY_VALUE,
             )
         out = tmp_path / "report.txt"
         code = report_cmd.run(["summary"], ["--values", "verified.carried", "-o", str(out)])
@@ -1099,16 +1319,16 @@ class TestADeclaredScopeCarriesItsValues:
         """A selection spelled at the moment a report is run is known only to
         whoever spelled it; declared beside the requirements it selects over it
         is versioned with them."""
-        from elspais.commands._values import resolve_report_values
+        from elspais.commands._edges import report_inputs_from_args
 
         config = {"scopes": {"Overview": {"level": ["prd"], "values": ["tested", "implemented"]}}}
-        stated = resolve_report_values(
+        inputs = report_inputs_from_args(
             argparse.Namespace(values=None, scope="overview"),
-            summary_cmd.OFFERED_VALUES,
-            summary_cmd.DEFAULT_VALUES,
             config,
+            summary_cmd.OFFERED_VALUES,
             identity_key=summary_cmd.IDENTITY_VALUE,
         )
+        stated = inputs.values or summary_cmd.DEFAULT_VALUES
         # Read case-insensitively, in the order declared, under the identity
         # value the report keeps whatever was named (REQ-d00282-K+L).
         assert stated == ("level", "tested", "implemented")
@@ -1117,16 +1337,19 @@ class TestADeclaredScopeCarriesItsValues:
     def test_a_declaration_naming_no_values_constrains_none(self):
         """The two halves stay independent: a scope that selects requirements
         and names no facts leaves the report stating the facts it would have."""
-        from elspais.commands._values import resolve_report_values
+        from elspais.commands._edges import report_inputs_from_args
 
         config = {"scopes": {"overview": {"level": ["prd"]}}}
-        stated = resolve_report_values(
+        inputs = report_inputs_from_args(
             argparse.Namespace(values=None, scope="overview"),
-            summary_cmd.OFFERED_VALUES,
-            summary_cmd.DEFAULT_VALUES,
             config,
+            summary_cmd.OFFERED_VALUES,
+            identity_key=summary_cmd.IDENTITY_VALUE,
         )
-        assert stated == tuple(summary_cmd.DEFAULT_VALUES)
+        # An unstamped payload IS the default report (REQ-d00282-E): nothing
+        # named leaves `values` unset rather than widened to the default set.
+        assert inputs.values is None
+        assert (inputs.values or summary_cmd.DEFAULT_VALUES) == tuple(summary_cmd.DEFAULT_VALUES)
 
     # Verifies: REQ-d00280-C, REQ-d00282-J
     def test_the_declaration_is_written_in_value_keys(self):
@@ -1140,6 +1363,87 @@ class TestADeclaredScopeCarriesItsValues:
         assert ReportScopeConfig(values=["tested"]).values == ["tested"]
         with pytest.raises(pydantic.ValidationError):
             ReportScopeConfig(columns=["tested"])
+
+
+# ---------------------------------------------------------------------------
+# REQ-d00280-D: where a name a report does not offer came from decides its fate
+# ---------------------------------------------------------------------------
+
+
+class TestAnUnofferedNameIsReadByWhereItCameFrom:
+    """Nothing but provenance tells the two selections apart.
+
+    A reader WRITES a selection for the report in front of them, so a name that
+    report does not offer is a mistake and REQ-d00282-F wants no report
+    produced under it. A project DECLARES one for a whole audience and every
+    report that audience takes -- and those reports offer different values
+    because they answer different questions -- so a name one of them does not
+    offer passes over. The two arrive at ``resolve_values`` as the same keys in
+    the same order; only ``written`` separates them.
+    """
+
+    # The offer of a report that states facts about each requirement, and a
+    # selection naming two of them with one it does not offer in between.
+    OFFERED = ("implemented", "tested", "verified")
+    ASKED = ("tested", "code_tested", "implemented")
+
+    # Verifies: REQ-d00280-D, REQ-d00282-K
+    def test_a_declared_name_passes_over_and_the_rest_still_selects(self):
+        """The order is the selection's own, not the offer's: `tested` was
+        named first and is stated first, so the pass-over cannot have been
+        implemented by intersecting with the offer."""
+        from elspais.graph.values import ValueSelection, resolve_values
+
+        stated = resolve_values(
+            ValueSelection(keys=self.ASKED, written=False), self.OFFERED, identity_key=""
+        )
+        assert stated == ("tested", "implemented")
+
+    # Verifies: REQ-d00280-D, REQ-d00282-F
+    def test_the_same_selection_written_by_a_reader_is_refused(self):
+        """Same keys, same order, same offer -- and no report at all."""
+        from elspais.graph.values import UnofferedValues, ValueSelection, resolve_values
+
+        with pytest.raises(UnofferedValues) as excinfo:
+            resolve_values(
+                ValueSelection(keys=self.ASKED, written=True), self.OFFERED, identity_key=""
+            )
+        assert excinfo.value.unoffered == ("code_tested",)
+
+    # Verifies: REQ-d00280-D
+    def test_a_declaration_this_report_offers_nothing_of_narrows_nothing(self):
+        """An empty intersection is not an empty report: a declaration none of
+        whose values this report offers leaves it stating what it would have
+        anyway. Returning nothing would make a name usable beside one report
+        and blanking beside another."""
+        from elspais.graph.values import ValueSelection, resolve_values
+
+        stated = resolve_values(
+            ValueSelection(keys=("code_tested",), written=False), self.OFFERED, identity_key=""
+        )
+        assert stated == self.OFFERED
+
+    # Verifies: REQ-d00280-D, REQ-d00282-I
+    @pytest.mark.parametrize(
+        ("values", "scope", "keys", "written"),
+        (
+            # Declared under a name: the project's, read against every report.
+            pytest.param(None, "overview", ("tested",), False, id="declared"),
+            # Written on the invocation: the reader's, about this report.
+            pytest.param("implemented", None, ("implemented",), True, id="written"),
+            # Written alongside a declaration: it REPLACES the declaration, and
+            # what replaces it is still the reader's.
+            pytest.param("implemented", "overview", ("implemented",), True, id="written-over"),
+        ),
+    )
+    def test_the_selection_records_which_route_it_arrived_by(self, values, scope, keys, written):
+        from elspais.commands._values import values_from_args
+
+        config = {"scopes": {"overview": {"level": ["prd"], "values": ["tested"]}}}
+        selection = values_from_args(argparse.Namespace(values=values, scope=scope), config)
+        assert selection is not None
+        assert selection.keys == keys
+        assert selection.written is written
 
 
 # ---------------------------------------------------------------------------
@@ -1255,14 +1559,14 @@ class TestALineFigureDecomposesIntoItsLines:
 
 
 class TestMeasuredLinesSurviveTheAttributionSuppression:
-    """REQ-d00258-E suppresses the attribution; it must take nothing with it.
+    """REQ-d00258-W suppresses the attribution; it must take nothing with it.
 
     This is the boundary the defect lived on, so it is checked by MOVING it:
     one estate, rendered twice, differing only in whether the tooling recorded
     per-test contexts.
     """
 
-    # Verifies: REQ-d00258-E, REQ-d00282-M+N
+    # Verifies: REQ-d00258-W, REQ-d00282-M+N
     def test_without_contexts_the_lines_are_stated_and_only_attribution_is_absent(self):
         row = _trace_json(_lines_graph(has_contexts=False, attributed=0.0), ["code_tested"])
         assert row["code_tested"]["count"] == 16.0
@@ -1270,7 +1574,7 @@ class TestMeasuredLinesSurviveTheAttributionSuppression:
         assert row["code_tested"]["ratio"] == 0.8
         assert row["code_tested"]["attributed"] is None
 
-    # Verifies: REQ-d00258-E, REQ-d00282-M+N
+    # Verifies: REQ-d00258-W, REQ-d00282-M+N
     def test_flipping_the_context_bit_moves_the_attribution_and_nothing_else(self):
         """The falsifiable half: with contexts a zero attribution is STATED as
         zero, without them it is absent, and the three line values are byte
@@ -1289,7 +1593,7 @@ class TestMeasuredLinesSurviveTheAttributionSuppression:
         for path in LINE_PARTS:
             assert _at(with_ctx, path) == _at(without, path)
 
-    # Verifies: REQ-d00258-E, REQ-d00282-M+N
+    # Verifies: REQ-d00258-W, REQ-d00282-M+N
     def test_summary_suppresses_the_attribution_on_the_same_terms(self):
         values = ["code_tested", *LINE_PARTS, "code_tested.attributed"]
         with_ctx = _summary_json(_lines_level(has_contexts=True, attributed=0.0), values)
@@ -1421,3 +1725,350 @@ class TestALineFigureSurvivesAnAssertionLessGroup:
         stated = _summary_json(row, ["implemented", "code_tested"])
         assert stated["implemented"] is None
         assert stated["code_tested"]["count"] == 16.0
+
+
+# ---------------------------------------------------------------------------
+# REQ-d00282-F+O: which reports a selection reaches, and what it does there
+# ---------------------------------------------------------------------------
+
+
+# One declaration carries both halves of what an audience reads (REQ-d00280-C),
+# so a name carrying values reaches every report that has values to select
+# among. The two names differ in that half alone: the requirements they select
+# are identical.
+_SCOPED_PROJECT = """\
+version = 5
+
+[project]
+name = "value-silent"
+namespace = "vs"
+
+[scopes.overview]
+level = ["prd"]
+values = ["tested", "implemented"]
+
+[scopes.plain]
+level = ["prd"]
+
+[scopes.partial]
+level = ["prd"]
+values = ["code_tested", "tested"]
+
+[scopes.lines]
+level = ["prd"]
+values = ["code_tested"]
+
+[scopes.board]
+level = ["prd"]
+values = ["id", "requirements", "tested"]
+"""
+
+
+@pytest.fixture(scope="module")
+def scoped_project(tmp_path_factory):
+    """A project declaring one scope that names values and one that does not."""
+    path = tmp_path_factory.mktemp("value-silent") / ".elspais.toml"
+    path.write_text(_SCOPED_PROJECT)
+    return path
+
+
+class _Computed(Exception):
+    """Raised in place of computing a report, so reaching the compute path is
+    an observation rather than a slow build."""
+
+    def __init__(self, params):
+        super().__init__("compute reached")
+        self.params = params
+
+
+@pytest.fixture
+def no_compute(monkeypatch):
+    """Nothing is built or asked of a serving process behind this fixture.
+
+    The parameters the command was about to compute with are carried out on
+    the exception, so a test can read what a selection actually became without
+    building a graph.
+    """
+
+    def refuse(_endpoint, request, *_args, **_kwargs):
+        raise _Computed(dict(request.to_params()))
+
+    monkeypatch.setattr("elspais.commands._engine.call", refuse)
+
+
+def _run_listing(command: str, config, scope=None, values=None) -> int:
+    """One of these reports, asked for alone under a declared name or a
+    written selection."""
+    from elspais.commands import analysis_cmd
+    from elspais.commands import gaps as gaps_cmd
+
+    if command == "analysis":
+        return analysis_cmd.run(
+            argparse.Namespace(
+                config=config,
+                scope=scope,
+                values=values,
+                format="table",
+                show="all",
+                top=10,
+            )
+        )
+    if command == "summary":
+        from elspais.commands import summary as summary_cmd
+
+        return summary_cmd.run(
+            argparse.Namespace(
+                config=config,
+                scope=scope,
+                values=values,
+                format="text",
+                spec_dir=None,
+                output=None,
+                quiet=False,
+                verbose=False,
+            )
+        )
+    if command == "trace":
+        from elspais.commands import trace as trace_cmd
+
+        return trace_cmd.run(
+            argparse.Namespace(
+                config=config,
+                scope=scope,
+                values=values,
+                format="text",
+                spec_dir=None,
+                output=None,
+                quiet=False,
+                verbose=False,
+            )
+        )
+    return gaps_cmd.run(
+        argparse.Namespace(
+            command=command, config=config, scope=scope, values=values, format="text"
+        )
+    )
+
+
+class TestAReportStatingNothingIsNotProducedUnderAWrittenSelection:
+    """A report either states a value about each requirement, or lists the
+    requirements one dimension has not credited -- and both read a dimension,
+    so both have values to select among (REQ-d00282-O). A few report neither.
+    A value WRITTEN to one of those names nothing it offers, and REQ-d00282-F's
+    disposition for a selection that cannot be honoured at all is that no
+    report is produced, not that one is produced with a caveat beside it.
+    """
+
+    # Verifies: REQ-d00282-F
+    def test_a_written_selection_stops_a_report_that_states_nothing(
+        self, scoped_project, no_compute, capsys
+    ):
+        """The refusal lands before anything is computed: a report already
+        assembled has been produced under the selection whatever is printed
+        afterwards. The same invocation without the selection is NOT refused --
+        it reaches the compute path -- so the refusal answers the values."""
+        try:
+            code = _run_listing("analysis", scoped_project, values="implemented")
+        except _Computed:
+            pytest.fail("'analysis' computed a report under a selection it cannot honour")
+        assert code == 1
+        err = capsys.readouterr().err
+        assert "analysis" in err, err
+        assert "--values" in err, err
+
+        with pytest.raises(_Computed):
+            _run_listing("analysis", scoped_project)
+
+    # Verifies: REQ-d00282-F, REQ-d00280-C
+    def test_a_declaration_passes_over_a_report_with_nothing_to_select(
+        self, scoped_project, no_compute, capsys
+    ):
+        """One name carries what a whole audience reads, so the values half of
+        a declaration constrains the reports that have values to select among
+        and passes over the ones that do not. A declaration usable with `trace`
+        but not beside `analysis` would be unusable for the audience it
+        describes."""
+        with pytest.raises(_Computed):
+            _run_listing("analysis", scoped_project, scope="overview")
+        assert "overview" not in capsys.readouterr().err
+
+
+class TestADeclarationNarrowsAShortfallListing:
+    """A shortfall listing reads a coverage dimension, so a declaration naming
+    dimensions says which listings appear rather than stopping the report
+    (REQ-d00282-O).
+    """
+
+    # Verifies: REQ-d00282-O, REQ-d00280-C
+    def test_the_declared_values_choose_the_listings_and_their_order(
+        self, scoped_project, no_compute
+    ):
+        """`overview` declares tested then implemented, so the untested
+        listing comes before the uncovered one (REQ-d00282-K)."""
+        from elspais.commands._edges import report_inputs_from_args
+        from elspais.commands.gaps import COMMAND_VALUES, OFFERED_VALUES, gap_sections
+
+        with pytest.raises(_Computed):
+            _run_listing("gaps", scoped_project, scope="overview")
+
+        args = argparse.Namespace(values=None, scope="overview")
+        config = {"scopes": {"overview": {"level": ["prd"], "values": ["tested", "implemented"]}}}
+        inputs = report_inputs_from_args(
+            args, config, COMMAND_VALUES.get("gaps", OFFERED_VALUES), identity_key=""
+        )
+        assert gap_sections(inputs.values, "gaps") == ["untested", "uncovered"]
+
+    # Verifies: REQ-d00282-E, REQ-d00280-C
+    def test_the_declared_values_travel_to_the_compute_path(self, scoped_project, no_compute):
+        """A selection that did not survive the trip makes a daemon-served
+        report hold different listings from a locally computed one."""
+        from elspais.commands._edges import report_inputs_from_params
+        from elspais.commands.gaps import COMMAND_VALUES, OFFERED_VALUES, gap_sections
+
+        with pytest.raises(_Computed) as excinfo:
+            _run_listing("gaps", scoped_project, scope="overview")
+        params = excinfo.value.params
+        assert params["values"] == "tested,implemented"
+        assert params["command"] == "gaps"
+        inputs = report_inputs_from_params(
+            params, COMMAND_VALUES.get(params["command"], OFFERED_VALUES), identity_key=""
+        )
+        assert gap_sections(inputs.values, params["command"]) == ["untested", "uncovered"]
+
+    # Verifies: REQ-d00280-D, REQ-d00282-O
+    @pytest.mark.parametrize(
+        ("command", "passed_over", "stated"),
+        (
+            # Part of the declaration is offered here: the rest passes over and
+            # what remains still chooses the listing.
+            pytest.param("uncovered", "tested", "implemented", id="uncovered-keeps-implemented"),
+            pytest.param("untested", "implemented", "tested", id="untested-keeps-tested"),
+            # None of it is offered here, so the declaration narrows nothing
+            # and the report states what it would have anyway.
+            pytest.param("unvalidated", "tested", "uat_coverage", id="unvalidated-falls-back"),
+            pytest.param("failing", "tested", "verified", id="failing-falls-back"),
+        ),
+    )
+    def test_a_declaration_naming_a_value_a_shorthand_does_not_offer_passes_it_over(
+        self, scoped_project, no_compute, capsys, command, passed_over, stated
+    ):
+        """One name answers for a whole audience, so a value one of that
+        audience's reports does not offer is an ordinary difference between
+        reports rather than a mistake (REQ-d00280-D).
+
+        `overview` names tested and implemented; each shorthand offers the one
+        dimension it IS. Refusing would have made the declaration usable beside
+        `gaps` and not beside `uncovered` -- a name a project cannot commit for
+        its audience, which is the drift a declaration exists to end. The
+        report is observed at the compute path rather than by its exit code: a
+        command that refused would never reach it.
+        """
+        with pytest.raises(_Computed) as excinfo:
+            _run_listing(command, scoped_project, scope="overview")
+
+        # What survived is the one value this report offers, whether the rest
+        # of the declaration passed over it or none of it applied at all.
+        assert excinfo.value.params["values"] == stated
+        assert passed_over not in excinfo.value.params["values"]
+        assert capsys.readouterr().err == ""
+
+    # Verifies: REQ-d00280-D, REQ-d00282-F
+    def test_a_value_the_reader_wrote_is_still_refused(self, scoped_project, no_compute, capsys):
+        """The provenance is the whole of the difference. The same name a
+        declaration passes over is, written here for this report, a mistake --
+        so the pass-over must not have retired F's refusal along with it."""
+        try:
+            code = _run_listing("uncovered", scoped_project, values="tested")
+        except _Computed:
+            pytest.fail("'uncovered' computed a report under a value it does not offer")
+        assert code == 1
+        err = capsys.readouterr().err
+        assert "tested" in err and "implemented" in err, err
+
+    # Verifies: REQ-d00280-D, REQ-d00282-E
+    @pytest.mark.parametrize(
+        ("scope", "expected"),
+        (
+            # `partial` names one value `gaps` offers and one it does not.
+            pytest.param("partial", "tested", id="partly-offered"),
+            # `lines` names nothing `gaps` offers, so it narrows nothing.
+            pytest.param(
+                "lines", "implemented,tested,uat_coverage,verified", id="wholly-unoffered"
+            ),
+        ),
+    )
+    def test_what_travels_is_the_selection_as_resolved_not_as_declared(
+        self, scoped_project, no_compute, scope, expected
+    ):
+        """A compute path handed the raw declaration would judge it a second
+        time, with no way to know a project had declared it -- and `code_tested`
+        is a value `gaps` does not offer, so it would refuse there what it
+        honoured here. What travels is therefore the resolved keys."""
+        with pytest.raises(_Computed) as excinfo:
+            _run_listing("gaps", scoped_project, scope=scope)
+        assert excinfo.value.params["values"] == expected
+        assert "code_tested" not in excinfo.value.params["values"]
+
+
+# REQ-d00280-D: a declaration reaches the reports that state facts, too
+class TestADeclarationNarrowsAFactStatingReport:
+    """`gaps` resolves its selection before sending it; `summary` and `trace`
+    sent the declaration raw and let the compute path judge it a second time,
+    where nothing could know a project had declared it. The three reports a
+    declared name spans have to agree about what the name means."""
+
+    # Verifies: REQ-d00280-D, REQ-d00282-E
+    def test_summary_passes_over_the_value_it_does_not_offer(self, scoped_project, no_compute):
+        """`board` names id, which states what a ROW is about in a
+        per-requirement report; summary's rows are levels, so it passes over
+        and the identity value `level` takes its place."""
+        with pytest.raises(_Computed) as excinfo:
+            _run_listing("summary", scoped_project, scope="board")
+        assert excinfo.value.params["values"] == "level,requirements,tested"
+
+    # Verifies: REQ-d00280-D, REQ-d00282-F
+    def test_a_value_the_reader_wrote_is_still_refused_by_summary(
+        self, scoped_project, no_compute, capsys
+    ):
+        """Provenance is the whole of the difference: the same name a
+        declaration passes over is, written here, a mistake."""
+        try:
+            code = _run_listing("summary", scoped_project, values="id")
+        except _Computed:
+            pytest.fail("'summary' computed a report under a value it does not offer")
+        assert code == 2
+        assert "id" in capsys.readouterr().err
+
+    # Verifies: REQ-d00280-D, REQ-d00282-E
+    def test_trace_passes_over_a_different_value_of_the_same_declaration(
+        self, scoped_project, no_compute
+    ):
+        """The same name against a report offering a different set: `trace`
+        states facts per requirement, so `requirements` -- a count OF
+        requirements -- is what passes over here."""
+        with pytest.raises(_Computed) as excinfo:
+            _run_listing("trace", scoped_project, scope="board")
+        assert excinfo.value.params["values"] == "id,tested"
+
+
+class TestComposingASectionAndAskingForItAloneAgree:
+    # Verifies: REQ-d00279-C, REQ-d00085-D, REQ-d00282-F
+    def test_a_refusal_reads_the_same_both_ways(self, tmp_path, no_compute, capsys):
+        """One report, two ways of asking for it. A composition that refused
+        what the standalone command produced -- or refused it in different
+        words -- would be two answers to one question.
+        """
+        try:
+            standalone = _run_listing("uncovered", None, values="tested")
+        except _Computed:
+            pytest.fail("the standalone listing computed a report it cannot honour")
+        alone_err = capsys.readouterr().err
+
+        out = tmp_path / "report.txt"
+        composed = report_cmd.run(["uncovered"], ["--values", "tested", "-o", str(out)])
+        composed_err = capsys.readouterr().err
+
+        assert standalone == 1
+        assert composed == 1
+        assert not out.exists(), "a refused report produced the artifact it refused"
+        assert composed_err == alone_err, (composed_err, alone_err)

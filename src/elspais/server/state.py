@@ -1,4 +1,4 @@
-# Implements: REQ-d00010
+# Implements: REQ-d00010-A
 """Shared application state with auto-refresh.
 
 Holds the in-memory FederatedGraph, config, and file mtime snapshot.
@@ -248,6 +248,7 @@ class AppState:
 
         return dirs
 
+    # Implements: REQ-p00015-E
     def is_stale(self) -> bool:
         """Check if any scanned files changed since last snapshot."""
         for path_str, old_mtime in self._mtimes.items():

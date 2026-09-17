@@ -20,6 +20,7 @@ def _check_tool(name: str) -> str | None:
     return shutil.which(name)
 
 
+# Implements: REQ-p00080-I, REQ-p00080-J
 def run(args: argparse.Namespace) -> int:
     """Run the pdf command.
 
@@ -75,7 +76,6 @@ def run(args: argparse.Namespace) -> int:
 
     # Content the assembler could not place. Reported before the verdict
     # so the operator reads the cause ahead of the qualified success line.
-    # Implements: REQ-p00080-I, REQ-p00080-J
     diagnostics = list(assembler.iter_diagnostics())
     _report_omissions(len(diagnostics), (d.format() for d in diagnostics))
 

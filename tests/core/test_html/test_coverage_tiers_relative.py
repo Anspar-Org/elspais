@@ -1,4 +1,4 @@
-# Verifies: REQ-d00258-I
+# Verifies: REQ-d00258-R+S
 """Relative-denominator wiring in ``compute_coverage_tiers`` (REQ-d00258, Phase-2).
 
 Phase 2 wires ``relative_tier`` into the badge projection so the chained
@@ -60,7 +60,7 @@ def _node(rollup, *, status="Active", level="PRD"):
 # ── Scenario A: DIARY-GUI — 0 implemented, empty relative denominators ──
 
 
-def test_REQ_d00258_I_empty_denominator_tested_is_neutral_not_yellow():
+def test_empty_relative_denominator_makes_tested_neutral_not_yellow():
     """0 implemented -> Tested denom empty -> N/A -> neutral grey, NOT yellow/red."""
     node = _node(_rollup(implemented=(), tested=(), passing=()))
     result = compute_coverage_tiers(node)
@@ -83,7 +83,7 @@ def test_REQ_d00258_I_empty_denominator_tested_is_neutral_not_yellow():
     assert result["verified_color"] == _severity_color("neutral")
 
 
-def test_REQ_d00258_I_empty_denominator_does_not_drag_bucket_below_implemented():
+def test_neutral_relative_dimensions_do_not_drag_the_combined_bucket():
     """The neutral N/A Tested/Passing dims must not worsen combined_bucket."""
     node = _node(_rollup(implemented=(), tested=(), passing=()))
     result = compute_coverage_tiers(node)
@@ -95,13 +95,13 @@ def test_REQ_d00258_I_empty_denominator_does_not_drag_bucket_below_implemented()
 # ── Scenario B: 1-of-5 implemented, that one tested & passing ──
 
 
-def test_REQ_d00258_I_relative_full_when_the_one_implemented_is_covered():
+def test_tested_reads_full_over_the_single_implemented_label():
     """1/5 implemented -> impl partial (yellow); Tested/Passing full over that 1."""
     node = _node(_rollup(implemented={"A"}, tested={"A"}, passing={"A"}))
     result = compute_coverage_tiers(node)
 
     assert result["impl_tier"] == "partial"
-    # Badge color resolves from the STANDING (REQ-d00258-D), not severity.
+    # Badge color resolves from the STANDING (REQ-d00292-F), not severity.
     assert result["impl_color"] == _standing_color("partial")
 
     # 1 of 1 implemented label is tested -> full green (RELATIVE, not 1/5).
@@ -113,7 +113,7 @@ def test_REQ_d00258_I_relative_full_when_the_one_implemented_is_covered():
     assert result["verified_color"] == _standing_color("full")
 
 
-def test_REQ_d00258_I_green_relatives_do_not_drag_bucket_up_or_down():
+def test_full_relative_dimensions_leave_the_bucket_at_the_worst_applicable():
     """combined_bucket = worst APPLICABLE (Implemented partial), not the greens."""
     node = _node(_rollup(implemented={"A"}, tested={"A"}, passing={"A"}))
     result = compute_coverage_tiers(node)
@@ -125,7 +125,7 @@ def test_REQ_d00258_I_green_relatives_do_not_drag_bucket_up_or_down():
 # ── Scenario C: some implemented, none tested — a REAL relative gap ──
 
 
-def test_REQ_d00258_I_nonempty_denominator_uncovered_is_real_gap():
+def test_nonempty_denominator_with_no_coverage_is_a_real_red_gap():
     """Implemented labels exist but none tested -> Tested missing, is_na FALSE.
 
     A non-empty denominator with zero coverage is a genuine gap and must use
@@ -142,7 +142,7 @@ def test_REQ_d00258_I_nonempty_denominator_uncovered_is_real_gap():
     assert result["combined_bucket"] == "missing"
 
 
-def test_REQ_d00258_I_partial_relative_when_some_denom_covered():
+def test_one_of_two_implemented_labels_tested_reads_partial():
     """2 implemented, 1 tested -> Tested partial (relative), yellow."""
     node = _node(_rollup(implemented={"A", "B"}, tested={"A"}, passing={"A"}))
     result = compute_coverage_tiers(node)
@@ -160,7 +160,7 @@ def _dim_with_zeros(covered=(), zeros=(), *, total=5, failing=()):
     Mirrors ``_conduct_refines_coverage``, which rebuilds
     ``indirect_pct_by_label`` with a 0.0 entry for every unimplemented
     assertion label. The relative denominator must EXCLUDE those 0.0 labels
-    (REQ-d00258-I).
+    (REQ-d00258-R).
     """
     covered = set(covered)
     zeros = set(zeros)
@@ -174,7 +174,7 @@ def _dim_with_zeros(covered=(), zeros=(), *, total=5, failing=()):
     )
 
 
-def test_REQ_d00258_I_zero_conducted_label_excluded_from_tested_denominator():
+def test_zero_credited_label_is_excluded_from_the_relative_denominator():
     """REGRESSION: implemented seeds a 0.0 entry for unimplemented label B; the
     Tested denominator must exclude B so the single implemented+tested label A
     reads FULL/green, not partial over {A, B}."""
@@ -188,7 +188,7 @@ def test_REQ_d00258_I_zero_conducted_label_excluded_from_tested_denominator():
     assert result["tested_color"] == _standing_color("full")
 
 
-def test_REQ_d00258_I_all_zero_implemented_makes_tested_na_neutral():
+def test_all_zero_implemented_makes_tested_not_applicable_and_neutral():
     """REGRESSION: implemented all-0.0 (nothing implemented) but every label has
     a test edge -> Tested denominator is EMPTY -> N/A neutral grey, NOT
     full/green. (Self-repo REQ-d00125.)"""
@@ -203,8 +203,8 @@ def test_REQ_d00258_I_all_zero_implemented_makes_tested_na_neutral():
     assert result["tested_color"] != _severity_color("off")
 
 
-# Verifies: REQ-d00258-F
-def test_REQ_d00258_F_expects_validation_still_reds_empty_uat_coverage():
+# Verifies: REQ-d00258-S, REQ-d00291-H
+def test_expects_validation_reds_empty_uat_coverage_but_not_uat_passed():
     """expects_validation level: empty UAT-Covered is a real red gap, not neutral.
 
     UAT-Covered is ABSOLUTE; the expects_validation override makes its `missing`
@@ -218,7 +218,7 @@ def test_REQ_d00258_F_expects_validation_still_reds_empty_uat_coverage():
     result = compute_coverage_tiers(node, config)
 
     assert result["expects_validation"] is True
-    # Empty UAT coverage, expects_validation -> red (REQ-d00258-F preserved).
+    # Empty UAT coverage, expects_validation -> red (REQ-d00291-H preserved).
     assert result["uat_cov_tier"] == "missing"
     assert result["uat_cov_color"] == _severity_color("error")
     # UAT-Passed relative to empty UAT-Covered denom -> neutral N/A grey.

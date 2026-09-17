@@ -15,25 +15,22 @@ value under (REQ-d00282-J), so nothing here consults the display vocabulary.
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
+from dataclasses import replace
 from typing import Any
 
 from elspais.graph.values import (
-    VALUE_LIST_SEPARATOR,
     UnofferedValues,
     ValueSelection,
     parse_value_selection,
-    resolve_values,
 )
 
 __all__ = [
     "VALUES_PARAM",
     "UnofferedValues",
     "values_from_args",
+    "value_silent_refusal",
     "values_from_params",
-    "values_to_params",
-    "value_params_from_args",
-    "resolve_report_values",
 ]
 
 # The query parameter a selection travels to a serving process under.
@@ -59,6 +56,7 @@ def _declared_values(config: Mapping[str, Any] | None, name: str) -> tuple[str, 
     return ()
 
 
+# Implements: REQ-d00282-I, REQ-d00280-D
 def values_from_args(args: Any, config: Mapping[str, Any] | None = None) -> ValueSelection | None:
     """The values this invocation asks for, or None where it asks for none.
 
@@ -71,47 +69,52 @@ def values_from_args(args: Any, config: Mapping[str, Any] | None = None) -> Valu
         return stated
     named = getattr(args, "scope", None)
     if named:
-        return parse_value_selection(_declared_values(config, str(named)))
+        declared = parse_value_selection(_declared_values(config, str(named)))
+        # Marked as the project's rather than the reader's: a declaration is one
+        # name read against every report an audience takes, so a report that
+        # does not offer one of its values passes that value over instead of
+        # refusing the name (REQ-d00280-D).
+        return None if declared is None else replace(declared, written=False)
     return None
 
 
-def values_to_params(selection: ValueSelection | None) -> dict[str, str]:
-    """Serialize a selection for a report computed by a serving process."""
-    if selection is None or not selection:
-        return {}
-    return {VALUES_PARAM: VALUE_LIST_SEPARATOR.join(selection.keys)}
+# Implements: REQ-d00282-F
+def value_silent_refusal(
+    args: Any,
+    config: Mapping[str, Any] | None,
+    report: str,
+    does: str = "it reports findings rather than facts about each requirement",
+) -> str | None:
+    """Why a report that states nothing about a requirement has nothing to select.
+
+    A report either states facts about each requirement, or lists the
+    requirements one dimension has not credited -- and both read a dimension,
+    so both have values to select among. A few report neither: findings about
+    the project, or the files that changed. A value named to one of those names
+    nothing it offers, and F's disposition for a selection that cannot be
+    honoured at all is non-production rather than a caveat printed beside a
+    report.
+
+    Only a selection the reader WROTE is refused. The values half of a named
+    declaration (REQ-d00280-C) constrains the reports that have values to
+    select among and passes over the ones that do not: one name carries what an
+    audience reads, and a declaration usable with `trace` but not beside
+    `checks` would make that name unusable for the audience it describes.
+
+    ``does`` says what the report does instead, so the refusal tells a reader
+    why this report has nothing to select among rather than only that it has
+    not.
+    """
+    stated = parse_value_selection(getattr(args, "values", None))
+    if stated is None:
+        return None
+    return (
+        f"--values states which facts a report gives about each requirement, "
+        f"and '{report}' states none: {does}. "
+        "Ask for it without --values, or compose only sections that state values."
+    )
 
 
 def values_from_params(params: Mapping[str, str]) -> ValueSelection | None:
-    """Rebuild a selection a serving process was handed. Inverse of the above."""
+    """Rebuild a selection a serving process was handed. Inverse of ``ReportInputs.to_params``."""
     return parse_value_selection(params.get(VALUES_PARAM))
-
-
-def value_params_from_args(args: Any, config: Mapping[str, Any] | None = None) -> dict[str, str]:
-    """The query parameters carrying this invocation's selection onward."""
-    return values_to_params(values_from_args(args, config))
-
-
-def resolve_report_values(
-    args_or_params: Any,
-    offered: Sequence[str],
-    default: Sequence[str],
-    config: Mapping[str, Any] | None = None,
-    identity_key: str = "id",
-) -> tuple[str, ...]:
-    """The values a report states, from either an invocation or params.
-
-    Accepts both shapes because a report reaches this point two ways and both
-    have to arrive at the same values. Where nothing was named the report
-    states its named default set (REQ-d00084-B); where something was named the
-    selection replaces that set entirely and is judged against everything the
-    report offers, refusing outright if any name is not among them
-    (REQ-d00282-F).
-    """
-    if isinstance(args_or_params, Mapping):
-        selection = values_from_params(args_or_params)
-    else:
-        selection = values_from_args(args_or_params, config)
-    if selection is None:
-        return tuple(default)
-    return resolve_values(selection, offered, identity_key)

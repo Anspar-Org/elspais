@@ -322,6 +322,8 @@ This requirement declares `Satisfies:` against the REQ-p00019 anti-pattern templ
 
 Interplay with existing requirements: REQ-p00004-J obliges the tool to re-read configuration from disk when reloading the graph; this requirement complements it by covering the interval between reloads — divergence must be disclosed, not silently served. REQ-p00005-E covers the configuration-time error for an invalid associate path; assertion C here covers the answer-time consequence of any load failure. REQ-p00081-D applies the same principle to workspace discovery specifically. Other spec units cite this requirement rather than restating these invariants.
 
+H is the boundary of A. A obliges the tool to report content it met and declined to admit, which is what stops a silent omission. An exclusion the reader configured is not such a case: they have said the content is none of the tool's business, so there is nothing to disclose and no absence to account for. H states the stronger half of that -- the content is not read at all -- because the weaker half, that it contributes to no answer, is satisfiable by a tool that reads content and then discards it. A reader who excludes a file holding secrets is owed the stronger promise, and the tool's own documentation already makes it.
+
 ## Assertions
 
 A. When the tool encounters content that matches a requirement form but does not admit it into the graph, the tool SHALL report the excluded content and the cause of its exclusion.
@@ -338,14 +340,19 @@ F. The tool SHALL record a change as applied only when the change is present at 
 
 G. While the tool serves answers computed from a configuration that no longer matches the configuration on disk, the tool SHALL disclose that the answers reflect a superseded configuration.
 
+H. The tool SHALL NOT read content the ignore configuration excludes.
+
 ## Changelog
 
+- 2026-09-16 | 1ad561d2 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-09-16 | dc7033bf | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-09-16 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-82: state the boundary of A -- content the ignore configuration excludes is not read, so its absence is not an omission A obliges the tool to report
 - 2026-08-01 | 9aa9a8aa | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: sync changelog hash
 - 2026-08-01 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-47: declare satisfaction of the REQ-p00019 anti-pattern template; rationale maps assertions to template classes
 - 2026-07-31 | 9aa9a8aa | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms, update hash
 - 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-10: author completeness/freshness invariant (merges GI-1 silent omission and GI-2 silent staleness)
 
-*End* *Complete and Current Reporting* | **Hash**: 9aa9a8aa
+*End* *Complete and Current Reporting* | **Hash**: 1ad561d2
 ---
 
 # REQ-p00017: Reference Integrity Under Mutation
@@ -490,9 +497,13 @@ F. The selections determining which requirements a report emits and which facts 
 
 G. A surface that states facts about each requirement it emits SHALL accept a selection naming which of those facts its audience needs.
 
+H. A selection a caller states SHALL hold every name the caller gave it.
+
 ## Rationale
 
 Withholding content from a report is ordinarily a defect: a reader cannot tell a report narrowed on purpose from one that lost requirements on the way. REQ-p00015-A settles that question for content the tool never admits; a scope admits everything and narrows what is emitted, which is the same hazard reached by another route. D resolves it — a report that names its scope is an answer to a stated question, and a reader who wanted a different question asked can see that they got the wrong one. D is also how this requirement concretizes the REQ-p00019 anti-pattern template it declares `Satisfies:` against: a scoped report omits requirements from its answer and delivers a part of the estate where the whole was available, so the silent-omission and undisclosed-substitution classes are the ones it is most exposed to, and naming the scope answers both in a single act. The template's remaining classes bind to this subsystem through the instance without a subsystem-specific strengthening.
+
+H is about the selection itself rather than about any way of stating one. A caller reaches these surfaces by more than one road — an invocation, the parameters a serving process is handed, a call from a program — and the roads differ in what it even means to state a name twice: a command line repeats a flag as a matter of course, where a call passing one argument twice is not a thing a caller does. What has to hold across all of them is the same and is about the answer, not the spelling: a selection is the set of names the caller gave it, and a reading that kept some of those names and dropped others would answer a narrower question than the one asked while producing exactly the report the caller expected to see. That is the silent-omission hazard D exists to resolve, arriving before the report is composed rather than after, and no disclosure reaches it — the report discloses the selection it was produced under, which is the reduced one.
 
 A names the surfaces this obligation falls on by what they do rather than by listing them: the sections of a composed report, the compiled review document, the read surfaces the tool offers a program, and the view a reader browses the estate through are all answers computed over a set of requirements for somebody. Generating a file that mirrors the estate's own structure — an index of what exists, a glossary of the terms it uses — is not reporting over a set of requirements for an audience, and carries no scope.
 
@@ -504,7 +515,42 @@ F is what makes a selection survive contact with a project. A selection that exi
 
 G is the second axis, and it is separate from A because the two are separate questions a reader answers independently. Which requirements a report is about and which facts it states about them are decided for different reasons and by different readers -- a compliance pack wants few requirements described fully, a status review wants many described briefly -- so a reader answering one says nothing about the other. What is common to them is everything else this requirement asks: an answer is honoured, disclosed where its absence would otherwise be invisible, and does not vary by the format it is rendered in. REQ-d00282 fixes the vocabulary the second answer is written in, as REQ-d00278 does for the first.
 
-*End* *Audience-Scoped Reporting* | **Hash**: 199562bd
+*End* *Audience-Scoped Reporting* | **Hash**: 168b514c
+
+---
+
+# REQ-p00085: Report Configuration Disclosure
+
+**Level**: prd | **Status**: Active | **Implements**: REQ-p00003
+
+A report states figures taken over a population of requirements, and configuration decides which requirements that population holds. Two reports of one estate can therefore state different figures and both be correct. This requirement states what a report owes its reader about the choices that decided its population, so that a reader can tell one question's answer from another's, and either from a defect.
+
+## Assertions
+
+A. Where a report states a figure taken over a population of requirements, the report SHALL disclose each configured or caller-supplied choice that decided that population.
+
+B. The disclosure a report makes of the choices that decided its population SHALL NOT depend on the format the report is rendered in.
+
+## Rationale
+
+A figure does not describe itself. A count of requirements is a true number and an unaccountable answer, because nothing in it tells a reader which requirements it was taken over or why those. The reader is left unable to do three things: reproduce the figure, compare it with another report of the same estate, or tell a population narrowed on purpose from one narrowed by a defect. Naming the choices that decided the population is what restores all three at once.
+
+A is scoped to a report that states such a figure rather than to every report, because that is where the hazard lives. A report stating facts about each requirement it emits, one row each, takes nothing over a population, so no choice about the population decides what it says and there is nothing for it to disclose. Scoping A by what the report states, rather than by whether a choice happened to change the output, is also what keeps it decidable: whether a report states a population figure is readable from the report, where whether a choice altered it is answerable only by producing the report twice.
+
+B is separate because it fails separately. A disclosure carried in the rendering a reader checks and dropped from the one they file leaves the filed report making an unaccountable claim, and the disagreement is invisible in either output taken alone. This is the same hazard REQ-p00084-C answers for the requirements a report emits, reached by the other half of the report.
+
+This obligation is stated once, generically, rather than per configurable. Several requirements already concretize it at their own altitude -- the disclosure a scoped report owes its scope, the statuses a coverage figure held out and how many requirements each held, and the governed settings a federation member would have decided differently. Those are what make this parent earn its keep under the "why" stopping rule: it groups siblings that ladder to it, and the seam where future children attach is visible, since every configurable that decides a population reaches it. Whether those existing requirements declare the relation explicitly is left open here; stating the obligation once is what stops the next such configurable acquiring an assertion of its own.
+
+It is deliberately not authored as a class of the REQ-p00019 anti-pattern template, and does not declare `Satisfies:` against it. That template prohibits performing a degradation silently -- omitting content, serving a stale value, substituting a default -- and a choice that ADMITS requirements to a population, or reweighs which of them count, degrades nothing. Neither the omission class nor the substitution class reaches it. Declaring the template would also oblige this requirement to answer all eleven of its classes, most of which it never reaches, and would clone a template subtree carrying coverage of its own.
+
+The rules by which a finding is judged, scored or reported are a neighbouring question and are not covered here. REQ-d00275 settles which configuration governs those across a federation and obliges the difference to be disclosed; that disclosure is about a rule, where this one is about a population.
+
+## Changelog
+
+- 2026-09-16 | 35994055 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-09-16 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-82: author the generic obligation to disclose the choices that decided a report's population, so that no further configurable acquires a disclosure assertion of its own
+
+*End* *Report Configuration Disclosure* | **Hash**: 35994055
 
 ---
 

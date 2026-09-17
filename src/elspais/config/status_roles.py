@@ -74,6 +74,19 @@ class StatusRolesConfig:
         role = self.role_of(status)
         return role in (StatusRole.ASPIRATIONAL, StatusRole.RETIRED)
 
+    def known_statuses(self) -> set[str]:
+        """Each status name in this role map, in its original case.
+
+        This function gives the vocabulary. It gives no result about the
+        vocabulary. A caller can then ask a question that the roles do not
+        answer. One such question is if a status expects implementation. The
+        declaration of that status can change the answer. The caller asks the
+        question about each status. The caller does not calculate the set again
+        from the roles. A status that is absent from this result has the ACTIVE
+        default. See ``role_of``.
+        """
+        return {self._original_case.get(k, k.title()) for k in self._mapping}
+
     def coverage_excluded_statuses(self) -> set[str]:
         """Return the set of original-case status names excluded from coverage."""
         result: set[str] = set()
@@ -98,6 +111,7 @@ class StatusRolesConfig:
                 result.add(self._original_case.get(name_lower, name_lower.title()))
         return result
 
+    # Implements: REQ-d00211-D
     def sort_by_role(self, statuses: list[str]) -> list[str]:
         """Sort statuses by role order: active, provisional, aspirational, retired.
 

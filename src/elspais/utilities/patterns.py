@@ -479,6 +479,7 @@ class IdResolver:
         """
         return self._assertion_label_regex_str()
 
+    # Implements: REQ-d00251-H
     def _assertion_label_regex_str(self) -> str:
         """Get regex for a single assertion label."""
         af = self.config.assertions
@@ -826,6 +827,7 @@ class IdResolver:
         value = component.lstrip("0") or "0"
         return value.zfill(comp.digits) if comp.leading_zeros else value
 
+    # Implements: REQ-d00082-G
     def _match_to_parsed_id(self, m: re.Match, alias_used: str | None) -> ParsedId:
         """Convert regex match to ParsedId."""
         groups = m.groupdict()
@@ -937,6 +939,7 @@ class IdResolver:
         """render(parsed_id, output_form(context))."""
         return self.render(parsed_id, self.output_form(context))
 
+    # Implements: REQ-d00081-D, REQ-d00081-G
     def expand(self, parsed_id: ParsedId) -> list[ParsedId]:
         """Expand multi-assertion into individual ParsedIds."""
         if len(parsed_id.assertions) <= 1:
@@ -952,11 +955,13 @@ class IdResolver:
             for label in parsed_id.assertions
         ]
 
+    # Implements: REQ-d00251-H
     def is_valid_assertion_label(self, label: str) -> bool:
         """True if label matches configured assertion format."""
         pat = self._assertion_label_regex_str()
         return re.match(f"^{pat}$", label) is not None
 
+    # Implements: REQ-d00251-H
     def format_assertion_label(self, index: int) -> str:
         """Convert zero-based index to label string."""
         af = self.config.assertions
@@ -980,6 +985,7 @@ class IdResolver:
             return f"{index + 1:02d}" if zero_pad else str(index + 1)
         return chr(ord("A") + index)
 
+    # Implements: REQ-d00251-H
     def parse_assertion_label_index(self, label: str) -> int:
         """Convert label string to zero-based index."""
         af = self.config.assertions
@@ -1024,6 +1030,7 @@ class IdResolver:
 
     # --- DRY convenience methods ---
 
+    # Implements: REQ-d00082-G
     def split_assertion_ref(self, raw_id: str) -> tuple[str, str] | None:
         """Split an assertion reference into (parent_fqn, assertion_labels_str).
 
@@ -1036,6 +1043,7 @@ class IdResolver:
             return None
         return (parsed.fqn, self.config.assertions.multi_separator.join(parsed.assertions))
 
+    # Implements: REQ-p00014-U
     def make_assertion_id(self, req_id: str, label: str) -> str:
         """Compose an assertion node ID from a requirement ID and label.
 
@@ -1045,6 +1053,7 @@ class IdResolver:
         """
         return f"{req_id}{self.config.assertions.separator}{label}"
 
+    # Implements: REQ-p00014-U
     def make_assertion_ref(self, req_id: str, labels: list[str]) -> str:
         """Compose a multi-assertion reference like ``REQ-X-A+B+C``.
 
@@ -1070,6 +1079,7 @@ class IdResolver:
                 values.add(code)
         return sorted(values)
 
+    # Implements: REQ-d00212-R
     def _case_insensitive_forms(self) -> list[tuple[str, re.Pattern, str | None]]:
         """The compiled forms again, ignoring case. Built once, on demand."""
         if self._ci_forms is None:
@@ -1286,6 +1296,7 @@ class FederatedIdReader:
                 return candidate, True
         return self.own.normalize_ref(raw_ref), False
 
+    # Implements: REQ-p00014-Q
     def normalize(self, raw_ref: str) -> str:
         """Normalize *raw_ref* under the grammar of the member that claims it.
 

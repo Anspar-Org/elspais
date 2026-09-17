@@ -8,9 +8,8 @@ Exports:
 
 from __future__ import annotations
 
-import fnmatch
 import re
-from dataclasses import dataclass
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
@@ -51,6 +50,7 @@ def default_level_keys() -> list[str]:
     return [k for k, _r in ranked]
 
 
+# Implements: REQ-d00291-A
 def level_expects_validation(config: dict[str, Any], level_key: str | None) -> bool:
     """Return whether a level is expected to have UAT validation.
 
@@ -81,7 +81,7 @@ def level_expects_validation(config: dict[str, Any], level_key: str | None) -> b
     return False
 
 
-# Implements: REQ-d00258-L
+# Implements: REQ-d00291-D+E
 def status_expects_implementation(config: dict[str, Any], status: str | None) -> bool:
     """Whether a requirement's STATUS expects implementation (design §3).
 
@@ -109,6 +109,123 @@ def status_expects_implementation(config: dict[str, Any], status: str | None) ->
     from elspais.config.status_roles import StatusRole
 
     return get_status_roles(config or {}).role_of(status) == StatusRole.ACTIVE
+
+
+# Implements: REQ-d00291-G
+def statuses_weighed_active(treat_active: Iterable[str] | None) -> frozenset[str]:
+    """The statuses that a run weighs as active (``--treat-active``).
+
+    This function normalizes the names one time. All users of the names then
+    spell them in the same way. The function puts each name into title case. A
+    ``[statuses.<Name>]`` table uses title case also. The result is empty if
+    the run weighs no status as active.
+    """
+    return frozenset(s.title() for s in (treat_active or ()))
+
+
+# Implements: REQ-d00291-G
+def config_with_active_overlay(
+    config: dict[str, Any] | None,
+    treat_active: Iterable[str] | None,
+) -> dict[str, Any] | None:
+    """``config`` with the statuses of a run added to its ``[statuses]`` table.
+
+    ``--treat-active`` is an overlay on the configuration. The overlay is valid
+    for one run. It is not a parameter that each user of the configuration
+    receives. Therefore one function, :func:`status_expects_implementation`,
+    answers for the status in all places. The coverage counts, the tally of
+    held-out requirements and the reference checks cannot disagree
+    (REQ-d00258-C). A project can also declare ``expects_implementation``. Such
+    a declaration uses the same function. Thus a declaration and a run-time
+    promotion are one mechanism, not two.
+
+    A command applies the overlay at its edge. The build does not apply it. The
+    statuses that a reader weighs as active are a property of the request of
+    that reader. One graph can serve more than one reader. Therefore the graph
+    must not hold the answer of one reader.
+
+    The function returns ``config`` without a change if the run weighs no
+    status as active. The behavior is then the default behavior. The function
+    does not change the configuration that it receives.
+    """
+    flags = statuses_weighed_active(treat_active)
+    if not flags:
+        return config
+    overlaid = dict(config or {})
+    statuses = dict(overlaid.get("statuses") or {})
+    # Put the value into the entry that is present. Ignore a difference of
+    # case. Do not add a second key that has a different case. The function
+    # that reads the table can find such a key first.
+    existing_by_lower = {k.lower(): k for k in statuses if isinstance(k, str)}
+    for flag in flags:
+        key = existing_by_lower.get(flag.lower(), flag)
+        entry = dict(statuses.get(key) or {})
+        entry["expects_implementation"] = True
+        statuses[key] = entry
+    overlaid["statuses"] = statuses
+    return overlaid
+
+
+# Implements: REQ-d00291-F+G
+def statuses_withheld_from_coverage(
+    config: dict[str, Any] | None,
+    treat_active: Iterable[str] | None = None,
+) -> set[str]:
+    """The statuses whose requirements no coverage figure and no work list counts.
+
+    This function gives the result of
+    :func:`status_expects_implementation` as a set. Some users of the result
+    need a set of status names. They do not ask the question for each
+    requirement. This function asks that function about each status in the
+    vocabulary. Therefore this function holds out a status exactly when the
+    counts hold it out. REQ-d00291-F speaks about the population of every
+    coverage figure. A work list names the requirements that still need
+    implementation. That list uses the same population.
+
+    Do not use ``StatusRolesConfig.coverage_excluded_statuses()`` here. That
+    function uses only the roles, and it cannot see a declaration. A read of
+    the roles caused one surface to count a requirement and a different
+    surface to hold the same requirement out.
+
+    A status that is not in the vocabulary expects implementation. ``role_of``
+    makes such a status active. Therefore this function never holds it out,
+    and the vocabulary is sufficient.
+    """
+    overlaid = config_with_active_overlay(config, treat_active)
+    roles = get_status_roles(config or {})
+    vocabulary = set(roles.known_statuses())
+    declared = (config or {}).get("statuses")
+    if isinstance(declared, dict):
+        vocabulary |= {k for k in declared if isinstance(k, str)}
+    return {s for s in vocabulary if not status_expects_implementation(overlaid, s)}
+
+
+# Implements: REQ-d00291-G
+def reference_excluded_statuses(
+    config: dict[str, Any] | None,
+    treat_active: Iterable[str] | None = None,
+) -> set[str]:
+    """The statuses that cause a report if code or a test cites them.
+
+    This question is not the question that
+    :func:`status_expects_implementation` answers. That function asks if a
+    status still needs implementation. This function asks if a citation of the
+    status is worth a report. A project can declare
+    ``expects_implementation = true`` for a status that has a retired role.
+    The project then tells you that those requirements still need work. The
+    project does not tell you to stop the report about a citation. Therefore
+    the declaration does not change this function. A ``--treat-active``
+    promotion does change this function. A request to weigh a status as active
+    applies to all of the reading of that status in the run.
+    """
+    roles = get_status_roles(config or {})
+    # Compare without case. A role table holds the spelling the project wrote,
+    # and ``statuses_weighed_active`` gives the title case of what the caller
+    # wrote. A subtraction of one set from the other kept a status that the
+    # caller did name. REQ-d00291-G weighs EVERY status that a caller names,
+    # and identifier matching admits a difference of case (REQ-d00212-S).
+    weighed = {s.lower() for s in statuses_weighed_active(treat_active)}
+    return {s for s in roles.coverage_excluded_statuses() if s.lower() not in weighed}
 
 
 def _declaration(config: dict[str, Any], name: str) -> Any:
@@ -349,6 +466,7 @@ def _declared_version_of(config: dict[str, Any], source: Path) -> int | None:
         ) from None
 
 
+# Implements: REQ-d00212-X
 def _outdated_config_message(
     config_path: Path,
     declared_version: int | None,
@@ -402,6 +520,7 @@ def _outdated_config_message(
 
 
 # Implements: REQ-d00207-B
+# Implements: REQ-d00212-V, REQ-d00212-X
 def load_config(config_path: Path) -> dict[str, Any]:
     """Load configuration from a TOML file.
 
@@ -557,6 +676,7 @@ def find_git_root(start_path: Path | None = None) -> Path | None:
     return None
 
 
+# Implements: REQ-p00005-F
 def find_canonical_root(start_path: Path | None = None) -> Path | None:
     """Find the canonical (non-worktree) git repository root.
 
@@ -570,7 +690,6 @@ def find_canonical_root(start_path: Path | None = None) -> Path | None:
     Returns:
         Path to canonical git repository root, or None if not in a git repo.
     """
-    # Implements: REQ-p00005-F
     import subprocess
 
     git_root = find_git_root(start_path)
@@ -686,6 +805,7 @@ def _set_nested(data: dict[str, Any], key: str, value: Any) -> None:
     current[parts[-1]] = value
 
 
+# Implements: REQ-p00002-A
 def _parse_toml(content: str) -> dict[str, Any]:
     """Parse TOML content into a plain dictionary.
 
@@ -698,11 +818,11 @@ def _parse_toml(content: str) -> dict[str, Any]:
     Returns:
         Parsed dictionary.
     """
-    # Implements: REQ-p00002-A
     doc = tomlkit.parse(content)
     return doc.unwrap()
 
 
+# Implements: REQ-p00002-A
 def parse_toml_document(content: str) -> tomlkit.TOMLDocument:
     """Parse TOML content into a TOMLDocument for round-trip editing.
 
@@ -715,7 +835,6 @@ def parse_toml_document(content: str) -> tomlkit.TOMLDocument:
     Returns:
         TOMLDocument that preserves formatting on dumps().
     """
-    # Implements: REQ-p00002-A
     return tomlkit.parse(content)
 
 
@@ -916,98 +1035,6 @@ def get_docs_directories(
 parse_toml = _parse_toml
 
 
-@dataclass
-class IgnoreConfig:
-    """Unified configuration for ignoring files and directories.
-
-    Supports glob patterns (fnmatch) for flexible matching.
-    Patterns can be scoped to specific contexts (spec, code, test).
-
-    Attributes:
-        global_patterns: Patterns applied everywhere
-        spec_patterns: Additional patterns for spec file scanning
-        code_patterns: Additional patterns for code scanning
-        test_patterns: Additional patterns for test scanning
-    """
-
-    global_patterns: list[str]
-    spec_patterns: list[str]
-    code_patterns: list[str]
-    test_patterns: list[str]
-
-    def should_ignore(self, path: str | Path, scope: str = "global") -> bool:
-        """Check if a path should be ignored based on patterns.
-
-        Matches against:
-        1. Global patterns (always checked)
-        2. Scope-specific patterns (if scope is provided)
-
-        Supports glob patterns via fnmatch:
-        - "*" matches any characters within a path component
-        - "**" matches across directory separators (when using pathlib)
-        - "?" matches a single character
-
-        Args:
-            path: Path to check (can be file or directory)
-            scope: Context scope ("global", "spec", "code", "test")
-
-        Returns:
-            True if path should be ignored
-        """
-        if isinstance(path, Path):
-            path_str = str(path)
-            path_name = path.name
-            path_parts = path.parts
-        else:
-            path_str = path
-            path_obj = Path(path)
-            path_name = path_obj.name
-            path_parts = path_obj.parts
-
-        # Collect all applicable patterns
-        patterns = list(self.global_patterns)
-        if scope == "spec":
-            patterns.extend(self.spec_patterns)
-        elif scope == "code":
-            patterns.extend(self.code_patterns)
-        elif scope == "test":
-            patterns.extend(self.test_patterns)
-
-        for pattern in patterns:
-            # Check if pattern matches the file/dir name directly
-            if fnmatch.fnmatch(path_name, pattern):
-                return True
-
-            # Check if pattern matches any path component
-            for part in path_parts:
-                if fnmatch.fnmatch(part, pattern):
-                    return True
-
-            # Check if pattern matches the full relative path
-            if fnmatch.fnmatch(path_str, pattern):
-                return True
-
-        return False
-
-    def get_patterns_for_scope(self, scope: str) -> list[str]:
-        """Get all patterns applicable to a scope (global + scope-specific).
-
-        Args:
-            scope: Context scope ("global", "spec", "code", "test")
-
-        Returns:
-            Combined list of patterns
-        """
-        patterns = list(self.global_patterns)
-        if scope == "spec":
-            patterns.extend(self.spec_patterns)
-        elif scope == "code":
-            patterns.extend(self.code_patterns)
-        elif scope == "test":
-            patterns.extend(self.test_patterns)
-        return patterns
-
-
 def get_test_directories(
     config: dict[str, Any],
     base_path: Path | None = None,
@@ -1047,40 +1074,32 @@ def get_test_directories(
     return result
 
 
-def get_ignore_config(config: dict[str, Any]) -> IgnoreConfig:
-    """Get IgnoreConfig from configuration dictionary.
+# Implements: REQ-d00212-Q+W, REQ-p00015-H
+def scan_exclusions(config: dict[str, Any], kind: str) -> tuple[list[str], list[str]]:
+    """What one scanning kind does not enter, and does not read.
 
-    The IgnoreConfig provides a unified way to check if paths should be ignored
-    during file scanning. It supports glob patterns and scope-specific rules.
+    Returns ``(skip_dirs, skip_files)``. ONE derivation, so every kind's walk
+    is handed the same two lists in the same way.
 
-    Args:
-        config: Configuration dictionary from get_config() or load_config()
-
-    Returns:
-        IgnoreConfig instance with patterns from [scanning] section or defaults.
+    The global ``[scanning].skip`` list feeds BOTH, because it is written as
+    one list of things a project never wants scanned, and the two rules then
+    sort it out: a directory pattern names a path from the repository root and
+    can only match a directory, a file pattern is a glob over a name and can
+    only match a file. Nothing has to declare which kind of thing it meant.
     """
-    scanning = config.get("scanning", {})
-
-    # Global skip patterns
-    global_patterns = list(scanning.get("skip", []))
-
-    # Per-kind skip patterns (skip_files + skip_dirs merged)
-    def _kind_patterns(kind: str) -> list[str]:
-        kind_cfg = scanning.get(kind, {})
-        patterns = list(kind_cfg.get("skip_files", []))
-        patterns.extend(kind_cfg.get("skip_dirs", []))
-        return patterns
-
-    return IgnoreConfig(
-        global_patterns=global_patterns,
-        spec_patterns=_kind_patterns("spec"),
-        code_patterns=_kind_patterns("code"),
-        test_patterns=_kind_patterns("test"),
-    )
+    scanning = (config or {}).get("scanning") or {}
+    if not isinstance(scanning, dict):
+        return [], []
+    everywhere = [p for p in (scanning.get("skip") or []) if isinstance(p, str)]
+    kind_cfg = scanning.get(kind) or {}
+    if not isinstance(kind_cfg, dict):
+        kind_cfg = {}
+    dirs = [p for p in (kind_cfg.get("skip_dirs") or []) if isinstance(p, str)]
+    files = [p for p in (kind_cfg.get("skip_files") or []) if isinstance(p, str)]
+    return dirs + everywhere, files + everywhere
 
 
 __all__ = [
-    "IgnoreConfig",
     "config_defaults",
     "default_level_keys",
     "level_expects_validation",
@@ -1094,7 +1113,6 @@ __all__ = [
     "get_code_directories",
     "get_docs_directories",
     "get_test_directories",
-    "get_ignore_config",
     "parse_toml",
     "parse_toml_document",
     "get_status_roles",
@@ -1121,6 +1139,7 @@ def validate_config(config: dict[str, Any]) -> Any:
     return ElspaisConfig.model_validate(config)
 
 
+# Implements: REQ-d00202-A, REQ-d00202-B, REQ-d00202-C
 def get_associates_config(
     config: dict[str, Any],
     repo_root: Path | None = None,
@@ -1234,14 +1253,17 @@ def targets_in_groups(config: Any, selected: list[str] | None) -> set[str]:
     return {t.name for t in test_cfg.targets if target_groups(t) & wanted}
 
 
-# Implements: REQ-d00283-D+E+I, REQ-d00254-I+J
-def selected_targets(
-    config: Any, targets: list[str] | None, groups: list[str] | None
-) -> set[str] | None:
-    """The test targets a run naming *targets* and *groups* covers.
+# Implements: REQ-d00283-D+E+H+I, REQ-d00254-I+J
+def selected_targets(config: Any, named: list[str] | None) -> set[str] | None:
+    """The test targets a run naming *named* covers.
 
-    Each selector narrows (REQ-d00283-I), and naming neither selects the
-    ``default`` group (REQ-d00283-D).
+    ONE selector. A group is an alias for a set of targets rather than a second
+    dimension they are classified on, so a run names targets, some of them by a
+    name that stands for several, and covers everything it named
+    (REQ-d00283-I). Naming nothing selects the ``default`` group
+    (REQ-d00283-D), and the two namespaces cannot collide because a
+    configuration holding a target and a group of one name is refused
+    (REQ-d00283-G).
 
     ``None`` is returned where the selection covers every configured target,
     which is what makes a run full rather than selective (REQ-d00254-J). That
@@ -1249,19 +1271,44 @@ def selected_targets(
     project declaring no groups has every target in ``default``, so its bare
     run covers everything and renders exactly as it did before groups existed.
 
-    Raises:
-        ValueError: If a named group is neither declared nor reserved.
+    A name that is neither a configured target nor a known group is CARRIED
+    rather than dropped: the caller that runs targets reports it as unknown
+    (REQ-d00283-H), and resolving it away here would turn that report into
+    silence.
     """
     configured = {t.name for t in config.scanning.test.targets}
-    if targets is None and groups is None:
-        selection = targets_in_groups(config, None)
-    elif groups is None:
-        # A named target is taken as named. Whether it is configured is a
-        # question for the caller that runs targets, which reports an unknown
-        # name; narrowing it away here would turn that report into silence.
-        selection = set(targets or ())
-    elif targets is None:
-        selection = targets_in_groups(config, groups)
-    else:
-        selection = set(targets) & targets_in_groups(config, groups)
+    if named is None:
+        return None if (sel := targets_in_groups(config, None)) == configured else sel
+
+    wanted = [n for n in (x.strip() for x in named) if n]
+    known_groups = known_group_names(config)
+    as_groups = [n for n in wanted if n.lower() in known_groups]
+    selection = {n for n in wanted if n.lower() not in known_groups}
+    if as_groups:
+        selection |= targets_in_groups(config, as_groups)
     return None if selection == configured else selection
+
+
+def known_group_names(config: Any) -> set[str]:
+    """Every group name this project admits, declared or reserved."""
+    from elspais.config.schema import RESERVED_GROUPS
+
+    return {str(name).strip().lower() for name in config.scanning.test.groups} | RESERVED_GROUPS
+
+
+# Implements: REQ-d00283-H
+def unknown_target_names(config: Any, named: list[str] | None) -> list[str]:
+    """The names in *named* that are neither a configured target nor a group.
+
+    The ONE place that question is answered, so every surface taking a
+    selection refuses the same names. ``selected_targets`` deliberately carries
+    an unknown name through rather than resolving it away -- a selection that
+    quietly selects nothing renders exactly like one whose targets all passed
+    (REQ-d00283-H) -- which leaves this as the check each caller makes before
+    it renders anything.
+    """
+    if not named:
+        return []
+    configured = {t.name for t in config.scanning.test.targets}
+    groups = known_group_names(config)
+    return sorted({n for n in named if n not in configured and n.strip().lower() not in groups})

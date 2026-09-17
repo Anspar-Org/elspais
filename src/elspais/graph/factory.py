@@ -18,11 +18,10 @@ from pathlib import Path
 from typing import Any
 
 from elspais.config import (
-    IgnoreConfig,
     get_code_directories,
     get_config,
-    get_ignore_config,
     get_spec_directories,
+    scan_exclusions,
 )
 from elspais.config.schema import (
     DEFAULT_CODE_PATTERNS,
@@ -152,6 +151,7 @@ def _record_parser_diagnostics(
         )
 
 
+# Implements: REQ-d00285-G
 def _ingest_target_results(
     builder,
     target,
@@ -176,7 +176,6 @@ def _ingest_target_results(
     try:
         spec = get_reporter(target.reporter)
     except KeyError:
-        # Implements: REQ-d00285-G
         # A misspelled reporter name produces no results anywhere, and a
         # target that ingested nothing looks exactly like a suite that
         # reported nothing. Record the name that matched no reporter.
@@ -404,6 +403,7 @@ def _run_prescan_command(
     test_patterns: list[str],
     skip_dirs: list[str],
     repo_root: Path,
+    skip_files: list[str] | None = None,
 ) -> dict[str, list[dict]] | None:
     """Run an external prescan command to discover test structure.
 
@@ -424,6 +424,11 @@ def _run_prescan_command(
         test_patterns: File patterns to match.
         skip_dirs: Directories to skip.
         repo_root: Repository root for resolving paths.
+        skip_files: Globs over a file's name that the configuration excludes.
+            Together with *skip_dirs* this is the whole exclusion; the walk
+            needs nothing else. Without them this function read a file the
+            reader had excluded and put its path on the stdin of an external
+            program (REQ-p00015-H).
 
     Returns:
         Dict mapping file path -> list of function entries, or None on failure.
@@ -439,15 +444,28 @@ def _run_prescan_command(
         for dir_path in matched_dirs:
             p = Path(dir_path)
             if p.is_dir():
+                # Implements: REQ-p00015-H
+                # The same exclusions the test scan itself walks under. Two of
+                # the three ignore lists reached this walk through neither
+                # argument before, so a file the reader excluded was read here.
                 domain_file = DomainFile(
-                    p, patterns=test_patterns, recursive=True, skip_dirs=skip_dirs
+                    p,
+                    patterns=test_patterns,
+                    recursive=True,
+                    skip_dirs=skip_dirs,
+                    skip_files=list(skip_files or ()),
+                    repo_root=repo_root,
                 )
-                for ctx, _content in domain_file.iterate_sources():
-                    source_path = ctx.metadata.get("path", ctx.source_id)
+                # ``iter_selected`` gives the path and reads no content. The
+                # command receives a path, so nothing here needs to open the
+                # file. Reading one and discarding it is what REQ-p00015-H
+                # forbids, and it also put an excluded path on the stdin of an
+                # external program.
+                for file_path in domain_file.iter_selected():
                     try:
-                        rel = str(Path(source_path).resolve().relative_to(repo_root.resolve()))
+                        rel = str(file_path.resolve().relative_to(repo_root.resolve()))
                     except ValueError:
-                        rel = source_path
+                        rel = str(file_path)
                     test_files.append(rel)
 
     if not test_files:
@@ -635,7 +653,6 @@ class SpecDirConfig:
     file_patterns: list[str] = field(default_factory=lambda: ["*.md"])
     skip_dirs: list[str] = field(default_factory=list)
     skip_files: list[str] = field(default_factory=list)
-    ignore_config: IgnoreConfig | None = None
 
 
 # Implements: REQ-d00254-A+B+F
@@ -691,6 +708,7 @@ def _find_repo_root(spec_dir: Path) -> Path | None:
     return None
 
 
+# Implements: REQ-d00128-G
 def _resolve_spec_dir_config(
     spec_dir: Path,
 ) -> SpecDirConfig:
@@ -736,20 +754,19 @@ def _resolve_spec_dir_config(
     registry = ParserRegistry()
     # RequirementParser removed — Lark dispatcher handles spec files
     registry.register(JourneyParser(FederatedIdReader(resolver)))
-    # Implements: REQ-d00128-G
     registry.register(RemainderParser())
 
     patterns = typed_repo_config.scanning.spec.file_patterns
     # patterns can be list[str] or dict — extract list if needed
     # Fall back to ["*.md"] if patterns is empty or not a list
     file_patterns = patterns if isinstance(patterns, list) and patterns else ["*.md"]
+    _spec_skips = scan_exclusions(repo_config, "spec")
     return SpecDirConfig(
         registry=registry,
         dispatcher=dispatcher,
         file_patterns=file_patterns,
-        skip_dirs=list(typed_repo_config.scanning.spec.skip_dirs),
-        skip_files=list(typed_repo_config.scanning.spec.skip_files),
-        ignore_config=get_ignore_config(repo_config),
+        skip_dirs=_spec_skips[0],
+        skip_files=_spec_skips[1],
     )
 
 
@@ -788,7 +805,7 @@ def build_graph(
         captured_results: Optional mapping of target name -> captured stdout/results
             text, bypassing the on-disk results glob for that target.
         fresh_targets: Optional set of [[scanning.test.targets]] names considered
-            "freshly run" (e.g. via ``--targets``/``--groups``). When set, every RESULT node
+            "freshly run" (e.g. via ``--targets``). When set, every RESULT node
             ingested for a target NOT in this set is tagged ``carried=True``.
             When None (the default), no target is considered carried. Stashed
             on the returned FederatedGraph as ``render_fresh_targets``.
@@ -869,9 +886,6 @@ def build_graph(
         link_results_to_tests=True,
     )
 
-    # Get ignore configuration for code/test scanning (main project only)
-    default_ignore_config = get_ignore_config(config)
-
     # Implements: REQ-d00128-C
     # Capture git info once per repo
     git_branch, git_commit = _capture_git_info(repo_root)
@@ -925,8 +939,7 @@ def build_graph(
             recursive=True,
             skip_dirs=dir_config.skip_dirs,
             skip_files=dir_config.skip_files,
-            ignore_config=dir_config.ignore_config,
-            scope="spec",
+            repo_root=repo_root,
         )
 
         # Use Lark FileDispatcher for spec file parsing
@@ -950,8 +963,7 @@ def build_graph(
         code_patterns = _patterns_for_kind(
             typed_config.scanning.code.file_patterns, DEFAULT_CODE_PATTERNS
         )
-        ignore_dirs = list(typed_config.scanning.code.skip_dirs) + list(typed_config.scanning.skip)
-        code_skip_files = list(typed_config.scanning.code.skip_files)
+        ignore_dirs, code_skip_files = scan_exclusions(config, "code")
 
         for code_dir in code_dirs:
             domain_file = DomainFile(
@@ -960,8 +972,7 @@ def build_graph(
                 recursive=True,
                 skip_dirs=ignore_dirs,
                 skip_files=code_skip_files,
-                ignore_config=default_ignore_config,
-                scope="code",
+                repo_root=repo_root,
             )
             # One file is scanned once, however many declared directories
             # happen to contain it.
@@ -988,14 +999,19 @@ def build_graph(
             test_dirs = list(testing_cfg.directories)
             # Implements: REQ-d00212-Q+W
             test_patterns = _patterns_for_kind(testing_cfg.file_patterns, DEFAULT_TEST_PATTERNS)
-            test_skip_dirs = list(testing_cfg.skip_dirs) + list(typed_config.scanning.skip)
+            test_skip_dirs, test_skip_files = scan_exclusions(config, "test")
 
             # Run external prescan command if configured
             prescan_command = testing_cfg.prescan_command
             prescan_data: dict[str, list[dict]] | None = None
             if prescan_command:
                 prescan_data = _run_prescan_command(
-                    prescan_command, test_dirs, test_patterns, test_skip_dirs, repo_root
+                    prescan_command,
+                    test_dirs,
+                    test_patterns,
+                    test_skip_dirs,
+                    repo_root,
+                    skip_files=test_skip_files,
                 )
                 # Paths go out on stdin repo-relative, so a conforming command
                 # answers with those, while scanning dispatches absolute paths.
@@ -1031,9 +1047,8 @@ def build_graph(
                             patterns=test_patterns,
                             recursive=True,
                             skip_dirs=test_skip_dirs,
-                            skip_files=list(testing_cfg.skip_files),
-                            ignore_config=default_ignore_config,
-                            scope="test",
+                            skip_files=test_skip_files,
+                            repo_root=repo_root,
                         )
                         for parsed_content in domain_file.dispatch(_dispatch_test):
                             # Implements: REQ-d00128-A

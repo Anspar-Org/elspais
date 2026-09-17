@@ -5,30 +5,35 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from collections.abc import Sequence
 from dataclasses import asdict
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    from elspais.commands._requests import AnalysisRequest
     from elspais.graph.analysis import FoundationReport
 
 
-def compute_analysis(graph: Any, config: dict[str, Any], params: dict[str, str]) -> dict:
-    """Pure compute function: run foundation analysis on a graph.
+# Implements: REQ-d00279-A, REQ-d00279-C
+def compute_analysis(graph: Any, config: dict[str, Any], request: AnalysisRequest) -> dict:
+    """The foundation ranking this request asks for.
 
-    Called by engine.call (local path) and by routes_api (server path).
-    Params are always string-valued; parsing happens here.
+    Resolves nothing: the scope was expanded at the edge that was invoked,
+    which is the only place that could tell a project's declaration from a
+    reader's own words (REQ-d00280-D). Called by engine.call (local path) and
+    by routes_api (server path).
     """
     from elspais.graph.analysis import NodeKind as NK
     from elspais.graph.analysis import analyze_foundations
 
     include_kinds = {NK.REQUIREMENT, NK.ASSERTION}
-    if params.get("include_code", "false") == "true":
+    if request.include_code:
         include_kinds.add(NK.CODE)
 
-    top_n = int(params.get("top", "10"))
+    top_n = request.top
 
-    weights_str = params.get("weights", None)
+    weights_str = request.weights
     weights = (0.3, 0.2, 0.2, 0.3)
     if weights_str:
         try:
@@ -55,13 +60,13 @@ def compute_analysis(graph: Any, config: dict[str, Any], params: dict[str, str])
         top_n=top_n,
     )
 
-    # Implements: REQ-d00279-A
     # Membership comes from the one authority rather than a comparison of this
     # command's own; a second reading is how two surfaces answering the same
     # question start giving different answers.
-    from elspais.commands._scope import resolve_scope_for_report, scope_disclosure
+    from elspais.commands._scope import scope_disclosure
+    from elspais.graph.scope import scoped_requirements
 
-    result = resolve_scope_for_report(graph, params, config)
+    result = scoped_requirements(graph, request.scope, config)
     if len(result.ids) != result.population:
         keep = result.ids
         report.ranked_nodes = [ns for ns in report.ranked_nodes if ns.node_id in keep]
@@ -69,23 +74,24 @@ def compute_analysis(graph: Any, config: dict[str, Any], params: dict[str, str])
         report.actionable_leaves = [ns for ns in report.actionable_leaves if ns.node_id in keep]
 
     payload = asdict(report)
-    # Implements: REQ-p00084-D
+    # Implements: REQ-p00084-D, REQ-p00085-B
     # A ranking narrowed to part of the estate reads exactly like a ranking of
     # the whole of it unless the narrowing travels with it, so the disclosure
     # rides on the payload and every surface rendering it states it.
-    scope_lines = scope_disclosure(result)
-    if scope_lines:
-        payload["scope"] = scope_lines
+    # Always present, empty where there is nothing to state. A reader asks one
+    # question of one field, so the field keeps one shape whichever report
+    # answered (REQ-p00085-B).
+    payload["scope"] = scope_disclosure(result)
     return payload
 
 
+# Implements: REQ-p00084-C+D
 def _render_table(
     report: FoundationReport,
     show: str,
     scope_lines: Sequence[str] | None = None,
 ) -> None:
     """Render the report as a formatted table."""
-    # Implements: REQ-p00084-C+D
     for line in scope_lines or []:
         print(line)
     if scope_lines:
@@ -135,13 +141,13 @@ def _render_table(
         print("No requirements found for analysis.")
 
 
+# Implements: REQ-p00084-C+D
 def _render_json(report: FoundationReport, scope_lines: Sequence[str] | None = None) -> None:
     """Render the report as JSON."""
-    # Implements: REQ-p00084-C+D
     # The same disclosure the table states, in the document a reader files.
     payload = asdict(report)
-    if scope_lines:
-        payload["scope"] = list(scope_lines)
+    # One shape, for the reason the computed payload states.
+    payload["scope"] = list(scope_lines or ())
     print(json.dumps(payload, indent=2))
 
 
@@ -170,6 +176,7 @@ def _report_from_dict(data: dict) -> FoundationReport:
     )
 
 
+# Implements: REQ-d00279-C
 def run(args: argparse.Namespace) -> int:
     """Run the analysis command.
 
@@ -177,23 +184,33 @@ def run(args: argparse.Namespace) -> int:
     falls back to local graph build.
     """
     from elspais.commands._engine import call as engine_call
+    from elspais.commands._requests import AnalysisRequest
+    from elspais.commands._scope import scope_from_args
+    from elspais.commands._values import value_silent_refusal
+    from elspais.config import get_config
+
+    # Implements: REQ-d00282-F
+    # Judged before anything is built or asked of a serving process. This report
+    # states no coverage value about a requirement -- it ranks them against each
+    # other -- so a value WRITTEN to it names nothing it offers and F wants no
+    # report produced under it. The values half of a named declaration passes
+    # over, the way it does for any report that offers nothing to select among.
+    # Offering the scores themselves as values would make this refusal wrong,
+    # and is a change to what `analysis` offers rather than to this judgement.
+    refusal = value_silent_refusal(
+        args,
+        get_config(getattr(args, "config", None)),
+        "analysis",
+        does="it ranks requirements by how much the estate rests on them",
+    )
+    if refusal is not None:
+        print(f"Error: {refusal}", file=sys.stderr)
+        return 1
 
     output_format = getattr(args, "format", "table")
     show = getattr(args, "show", "all")
-    # Build params dict from args
-    params: dict[str, str] = {}
-    top_n = getattr(args, "top", 10)
-    params["top"] = str(top_n)
-    if getattr(args, "include_code", False):
-        params["include_code"] = "true"
+    config = get_config(getattr(args, "config", None))
     weights_str = getattr(args, "weights", None)
-    if weights_str:
-        params["weights"] = weights_str
-    # Implements: REQ-d00279-C
-    from elspais.commands._scope import scope_params_from_args
-    from elspais.config import get_config
-
-    params.update(scope_params_from_args(args, get_config(getattr(args, "config", None))))
 
     # Validated here as well as in compute_analysis, so a daemon-served run
     # refuses a malformed selection the same way a local one does.
@@ -215,9 +232,19 @@ def run(args: argparse.Namespace) -> int:
             )
             return 1
 
+    # Implements: REQ-d00282-F
+    # This report offers no values (refused above), so the request's ``values``
+    # stays None -- there is nothing a declaration could have narrowed for it.
+    request = AnalysisRequest(
+        scope=scope_from_args(args, config),
+        top=getattr(args, "top", 10),
+        include_code=bool(getattr(args, "include_code", False)),
+        weights=weights_str,
+    )
+
     data = engine_call(
         "/api/run/analysis",
-        params,
+        request,
         compute_analysis,
         config_path=getattr(args, "config", None),
     )

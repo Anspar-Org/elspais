@@ -1,4 +1,4 @@
-"""Per-assertion coverage-state projection for the viewer (REQ-d00258-G).
+"""Per-assertion coverage-state projection for the viewer (REQ-d00292-B).
 
 The requirement-level dimension badges are colored by ``compute_coverage_tiers``.
 These tests exercise ``compute_assertion_coverage_states``, which projects the
@@ -84,10 +84,10 @@ def _spread_rollup():
 
 
 class TestAssertionCoverageStates:
-    """REQ-d00258-G: per-assertion state projection."""
+    """REQ-d00292-B: per-assertion state projection."""
 
-    # Verifies: REQ-d00258-G
-    def test_REQ_d00258_G_spread_of_states(self):
+    # Verifies: REQ-d00292-B
+    def test_spread_rollup_projects_each_assertion_to_its_own_standing(self):
         node = _req_with_rollup(_spread_rollup())
         states = compute_assertion_coverage_states(node)
 
@@ -112,7 +112,7 @@ class TestAssertionCoverageStates:
         # E: uncovered on every dimension.
         assert set(states["E"].values()) == {"missing"}
 
-    # Verifies: REQ-d00258-G
+    # Verifies: REQ-d00292-B
     @pytest.mark.parametrize(
         "frac,failing,expected",
         [
@@ -122,7 +122,7 @@ class TestAssertionCoverageStates:
             (0.0, False, "missing"),  # no evidence -> grey
         ],
     )
-    def test_REQ_d00258_G_passing_state_machinery(self, frac, failing, expected):
+    def test_passing_standing_resolves_from_fraction_and_own_failure(self, frac, failing, expected):
         """Pin the Passing/verified state->color machinery with synthetic metrics,
         decoupled from any test/journey-crediting policy. RED requires THIS
         assertion to be in the dimension's failing_labels."""
@@ -139,12 +139,12 @@ class TestAssertionCoverageStates:
         node = _req_with_rollup(rollup, labels=("A",))
         assert compute_assertion_coverage_states(node)["A"]["verified"] == expected
 
-    # Verifies: REQ-d00258-G
+    # Verifies: REQ-d00292-B
     @pytest.mark.parametrize(
         "frac,expected",
         [(1.0, "full"), (0.5, "partial"), (0.0, "missing")],
     )
-    def test_REQ_d00258_G_uat_verified_partial_is_yellow(self, frac, expected):
+    def test_partial_uat_verified_fraction_reads_partial_not_missing(self, frac, expected):
         """A partial uat_verified fraction (e.g. once a partial journey credits
         fractionally) must read PARTIAL/yellow, not grey/none."""
         rollup = RollupMetrics(
@@ -159,8 +159,8 @@ class TestAssertionCoverageStates:
         node = _req_with_rollup(rollup, labels=("A",))
         assert compute_assertion_coverage_states(node)["A"]["uat_verified"] == expected
 
-    # Verifies: REQ-d00258-G
-    def test_REQ_d00258_G_partial_implemented_via_blanket_refine(self):
+    # Verifies: REQ-d00292-B
+    def test_fractional_implemented_value_reads_partial(self):
         """A fractional per-assertion implemented value reads as 'partial'."""
         rollup = RollupMetrics(
             total_assertions=2,
@@ -192,8 +192,8 @@ class TestAssertionCoverageStates:
         assert states["A"]["verified"] == "missing"
         assert states["A"]["tested"] == "full"
 
-    # Verifies: REQ-d00258-G
-    def test_REQ_d00258_G_failing_sibling_does_not_redden_partial(self):
+    # Verifies: REQ-d00292-D
+    def test_failing_assertion_does_not_redden_partial_sibling(self):
         """A failing assertion A must not push a partial (non-failing) sibling B
         to 'failing'. B keeps its own standing; only A (in failing_labels) is red.
         Failing-first guard for the sibling-attribution bug."""
@@ -218,8 +218,8 @@ class TestAssertionCoverageStates:
         assert states["A"]["verified"] == "failing"
         assert states["B"]["verified"] == "partial"  # NOT failing
 
-    # Verifies: REQ-d00258-G
-    def test_REQ_d00258_G_uat_failing_sibling_does_not_redden_full(self):
+    # Verifies: REQ-d00292-D
+    def test_failing_assertion_does_not_redden_fully_uat_verified_sibling(self):
         """uat_verified: a failing assertion A must not redden a fully-verified
         sibling B validated by a different, non-failing journey."""
         rollup = RollupMetrics(
@@ -251,8 +251,8 @@ class TestAssertionCoverageStates:
         assert states["A"]["implemented"] == "full"
         assert states["B"]["verified"] == "failing"
 
-    # Verifies: REQ-d00258-G
-    def test_REQ_d00258_G_no_rollup_returns_empty(self):
+    # Verifies: REQ-d00292-B
+    def test_requirement_without_rollup_projects_no_standings(self):
         from tests.core.graph_test_helpers import build_graph, make_requirement
 
         graph = build_graph(make_requirement("REQ-p00001", status="Active"))
@@ -261,10 +261,10 @@ class TestAssertionCoverageStates:
 
 
 class TestRequirementAssertionConsistency:
-    """REQ-d00258-G: per-assertion states cannot drift from the requirement badge."""
+    """Per-*Assertion* standings cannot drift from the requirement badge."""
 
-    # Verifies: REQ-d00258-G
-    def test_REQ_d00258_G_all_full_assertions_imply_full_requirement(self):
+    # Verifies: REQ-d00292-C
+    def test_all_full_assertion_standings_imply_a_full_requirement_tier(self):
         rollup = RollupMetrics(
             total_assertions=3,
             implemented=CoverageDimension(
@@ -282,8 +282,8 @@ class TestRequirementAssertionConsistency:
         # ... and the requirement dimension therefore reads a full tier.
         assert tiers["impl_tier"] == "full"
 
-    # Verifies: REQ-d00258-G
-    def test_REQ_d00258_G_failing_assertion_implies_requirement_failing(self):
+    # Verifies: REQ-d00258-T
+    def test_failing_assertion_standing_implies_a_failing_requirement_tier(self):
         rollup = _spread_rollup()
         node = _req_with_rollup(rollup)
         states = compute_assertion_coverage_states(node)
@@ -294,11 +294,11 @@ class TestRequirementAssertionConsistency:
         # ... corresponds to the requirement Passing badge reading 'failing'.
         assert tiers["verified_tier"] == "failing"
 
-    # Verifies: REQ-d00258-G
-    def test_REQ_d00258_G_full_standing_shares_requirement_full_color(self):
+    # Verifies: REQ-d00292-F
+    def test_full_standing_shares_the_requirement_full_badge_color(self):
         """A 'full' standing resolves (through the catalog) to the same color the
         requirement full badge uses (severity 'off'/green) -- the same decoupling
-        REQ-d00258-D established for severity, extended to standings."""
+        REQ-d00292-F established for severity, extended to standings."""
         assert _standing_color("full") == _severity_color("off")  # both green
         # failing -> red, missing -> a distinct neutral key (not a coverage color).
         assert _standing_color("failing") == _severity_color("error")
@@ -310,11 +310,11 @@ class TestRequirementAssertionConsistency:
 
 
 class TestCoverageStandingCatalog:
-    """REQ-d00258-G/D: the standing->color association is catalog-driven, not
+    """REQ-d00293-A: the standing->color association is catalog-driven, not
     hard-coded in the badge logic."""
 
-    # Verifies: REQ-d00258-G
-    def test_REQ_d00258_G_catalog_maps_every_standing_to_a_color(self):
+    # Verifies: REQ-d00293-A
+    def test_catalog_maps_every_standing_to_a_color(self):
         from elspais.html.theme import get_catalog
 
         catalog = get_catalog()
@@ -323,8 +323,8 @@ class TestCoverageStandingCatalog:
             assert entry.color_key  # non-empty configured color
             assert entry.css_class
 
-    # Verifies: REQ-d00258-G
-    def test_REQ_d00258_G_standings_appear_in_legend(self):
+    # Verifies: REQ-d00292-I
+    def test_standings_appear_as_a_legend_group(self):
         from elspais.html.theme import get_catalog
 
         groups = dict(get_catalog().grouped_entries())
@@ -334,7 +334,7 @@ class TestCoverageStandingCatalog:
 
 
 class TestApiNodePayload:
-    """REQ-d00258-G: the /api/node payload carries assertion_coverage_states."""
+    """REQ-d00292-B: the /api/node payload carries assertion_coverage_states."""
 
     @pytest.fixture
     def client(self):
@@ -365,8 +365,8 @@ class TestApiNodePayload:
         )
         return TestClient(create_app(state, mount_mcp=False))
 
-    # Verifies: REQ-d00258-G
-    def test_REQ_d00258_G_payload_includes_assertion_states(self, client):
+    # Verifies: REQ-d00292-B
+    def test_node_payload_includes_assertion_coverage_states(self, client):
         resp = client.get("/api/node/REQ-p00001")
         assert resp.status_code == 200
         data = resp.json()
@@ -378,9 +378,9 @@ class TestApiNodePayload:
         assert acs["D"]["uat_verified"] == "partial"
         assert set(acs["E"].values()) == {"missing"}
 
-    # Verifies: REQ-d00258-G
-    def test_REQ_d00258_G_payload_carries_measures_not_caveats(self):
-        """REQ-d00258-G/J: the /api/node payload publishes the measures behind
+    # Verifies: REQ-d00292-E
+    def test_node_payload_carries_measures_and_no_caveats(self):
+        """REQ-d00292-E and REQ-d00258-J: the /api/node payload publishes the measures behind
         each per-assertion standing, and carries no caveat map standing in for
         a measure the pill does not show."""
         from starlette.testclient import TestClient
@@ -431,8 +431,8 @@ class TestApiNodePayload:
             assert "marker" not in dim
 
 
-# Verifies: REQ-d00069-L, REQ-d00069-N, REQ-d00258-G, REQ-d00258-J
-def test_REQ_d00258_G_pill_measures_name_what_produced_the_standing():
+# Verifies: REQ-d00069-L, REQ-d00069-N, REQ-d00292-E, REQ-d00258-J
+def test_pill_measures_name_what_produced_the_standing():
     """A blanket-only assertion stands full, and says which measure did it.
 
     The pill headlines the total standing; the phrase beside it names all four
@@ -468,7 +468,7 @@ def test_REQ_d00258_J_caveat_computation_is_gone():
     assert not hasattr(gen, "compute_assertion_coverage_caveats")
 
 
-# Verifies: REQ-d00069-N, REQ-d00258-G
+# Verifies: REQ-d00069-N, REQ-d00292-B
 def test_REQ_d00069_N_standing_reads_the_total_measure():
     """A standing is the greatest of the *Assertion*'s four measures.
 
@@ -488,8 +488,8 @@ def test_REQ_d00069_N_standing_reads_the_total_measure():
     assert states["B"]["implemented"] == "partial"
 
 
-# Verifies: REQ-d00258-G
-def test_REQ_d00258_G_standings_ignore_the_allow_indirect_setting():
+# Verifies: REQ-d00292-B
+def test_standings_ignore_the_allow_indirect_setting():
     """The standing is the total measure whatever `allow_indirect` says.
 
     Honoring that setting here made the pill answer a different question from

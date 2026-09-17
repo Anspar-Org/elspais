@@ -234,7 +234,7 @@ class TestCodeTestedCarriesNoVerdict:
         assert not hasattr(rollup.code_tested, "has_failures")
 
 
-# Verifies: REQ-d00254-G, REQ-d00258-E
+# Verifies: REQ-d00254-G, REQ-d00258-W
 def _build_req_code_test_with_contexts(
     *,
     line_coverage: dict[int, int],

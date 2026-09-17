@@ -127,6 +127,7 @@ class DetachedGuardMiddleware:
 __all__ = ["create_app", "_extract_viewer_config"]
 
 
+# Implements: REQ-o00074-A
 def create_app(state: AppState, mount_mcp: bool = True) -> Starlette:
     """Create the Starlette application with REST API routes.
 
@@ -247,7 +248,6 @@ def create_app(state: AppState, mount_mcp: bool = True) -> Starlette:
             # /mcp/mcp while the documented /mcp answered 404.
             mcp.settings.streamable_http_path = "/"
             mcp_app = mcp.streamable_http_app()
-            # Implements: REQ-o00074-A
             # A client that holds a server-to-client stream open is present
             # in a way the daemon can observe without its cooperation, which
             # is what a client handle has to be. Published on the holder so

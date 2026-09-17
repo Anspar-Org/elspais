@@ -129,9 +129,9 @@ class AssertionConfig(_StrictModel):
     separator: str = Field(default="-", min_length=1, max_length=1, pattern=_NO_COLON)
     multi_separator: str = Field(default="+", min_length=1, max_length=1, pattern=_NO_COLON)
 
+    # Implements: REQ-d00251-M
     @model_validator(mode="after")
     def _separators_do_not_divide_references(self):
-        # Implements: REQ-d00251-M
         # A list is divided before its items are read, so this character is
         # spent on the outer boundary first: what reaches the identifier
         # reader is a fragment cut short and a bare label with no
@@ -158,6 +158,7 @@ class AssociatedPatternConfig(_StrictModel):
 _PRINTABLE = frozenset(chr(code) for code in range(0x21, 0x7F))
 
 
+# Implements: REQ-d00251-F, REQ-d00251-J
 def _in_set_chars(items) -> set[str]:
     """The printable characters a parsed ``[...]`` set admits."""
     negated = False
@@ -179,6 +180,7 @@ def _in_set_chars(items) -> set[str]:
     return (_PRINTABLE - collected) if negated else collected
 
 
+# Implements: REQ-d00251-F, REQ-d00251-J
 def _category_chars(category: str) -> set[str]:
     digits = set("0123456789")
     word = digits | set("abcdefghijklmnopqrstuvwxyz") | set("ABCDEFGHIJKLMNOPQRSTUVWXYZ") | {"_"}
@@ -197,6 +199,7 @@ def _category_chars(category: str) -> set[str]:
     return set(_PRINTABLE)  # unknown category: assume it admits anything
 
 
+# Implements: REQ-d00251-F, REQ-d00251-J
 def _walk_pattern(parsed, legal: set[str]) -> None:
     for op, av in parsed:
         name = str(op)
@@ -227,6 +230,7 @@ def _walk_pattern(parsed, legal: set[str]) -> None:
         # repeats characters already collected -- none add to the alphabet.
 
 
+# Implements: REQ-d00251-F, REQ-d00251-J
 def _legal_chars(pattern: str) -> set[str]:
     """The printable characters ``pattern`` can match at some position.
 
@@ -266,9 +270,9 @@ class IdPatternsConfig(_StrictModel):
     assertions: AssertionConfig = Field(default_factory=AssertionConfig)
     associated: AssociatedPatternConfig = Field(default_factory=AssociatedPatternConfig)
 
+    # Implements: REQ-p00014-S
     @model_validator(mode="after")
     def _validate_style_pattern_and_separator(self):
-        # Implements: REQ-p00014-S
         # The two places a `:` can enter an identifier without any single
         # field spelling one: an alias template, whose values are a mapping
         # rather than a field, and a component pattern that ADMITS a colon
@@ -757,6 +761,23 @@ class TestScanningConfig(ScanningKindConfig):
                         f'test target "{target.name}" claims undeclared group "{claimed}"; '
                         f"declared groups are {', '.join(sorted(known))}"
                     )
+
+        # Implements: REQ-d00283-G
+        # A group is an alias for a set of targets and is named where a target
+        # is named, so the two share one namespace: a name meaning a target to
+        # one reader and a group to another cannot be resolved, and a run would
+        # execute a different set according to which the tool looked up first.
+        # Refused here rather than resolved by precedence -- a precedence rule
+        # is a thing every reader of the configuration would have to know.
+        for target in self.targets:
+            key = target.name.strip().lower()
+            if key in known:
+                kind = "reserved" if key in RESERVED_GROUPS else "declared"
+                raise ValueError(
+                    f'test target "{target.name}" has the same name as a {kind} test '
+                    f"group; a run names targets and groups alike, so one name cannot "
+                    f"mean both. Rename the target or the group."
+                )
         return self
 
 
@@ -947,9 +968,9 @@ class ElspaisConfig(_StrictModel):
             _validate_namespace(key)
         return v
 
+    # Implements: REQ-d00212-G
     @model_validator(mode="after")
     def _v_levels_letter_case_collision(self):
-        # Implements: REQ-d00212-G
         # An identifier's level code is matched case-insensitively
         # (REQ-d00212-R): two levels whose letter differs only in case would
         # make that tolerance ambiguous -- an identifier written in one

@@ -22,7 +22,10 @@ The engine-compatible compute functions carry the same surface in their
 
 from __future__ import annotations
 
+import csv
 import dataclasses
+import io
+import json
 import os
 from pathlib import Path
 
@@ -149,13 +152,14 @@ def built(project):
         os.chdir(old_cwd)
 
 
-def _implemented_counts(graph, config, params: dict[str, str]) -> tuple[int, float]:
+def _implemented_counts(graph, config, treat_active: tuple[str, ...] = ()) -> tuple[int, float]:
     """Run the checks compute path and return the Implemented dimension's
     (requirement count, assertion count) — the counted denominator.
     """
+    from elspais.commands._requests import ChecksRequest
     from elspais.commands.health import compute_checks
 
-    report = compute_checks(graph, config, params)
+    report = compute_checks(graph, config, ChecksRequest(treat_active=treat_active))
     for check in report["checks"]:
         if check["name"] == "code.implemented":
             details = check["details"]
@@ -309,8 +313,8 @@ class TestCoverageStatusSelector:
         """
         graph, config = built
 
-        baseline = _implemented_counts(graph, config, {})
-        widened = _implemented_counts(graph, config, {"treat_active": "Draft"})
+        baseline = _implemented_counts(graph, config)
+        widened = _implemented_counts(graph, config, ("Draft",))
 
         assert baseline == (1, 1), (
             "Default coverage footing must count the Active requirement only "
@@ -320,3 +324,354 @@ class TestCoverageStatusSelector:
             "treat_active=Draft must add the Draft requirement to the counted set "
             f"(2 REQs, 1+2 assertions) and nothing else; got {widened}"
         )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Surface: --treat-active reaches every report taken over a set of requirements
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _scope_option_subclasses() -> list[type]:
+    """Every command whose arguments are built on ``ScopeOptions``."""
+    from elspais.commands.args import ScopeOptions
+
+    subclasses = ScopeOptions.__subclasses__()
+    assert subclasses, "ScopeOptions has no subclasses -- this test would assert nothing"
+    return subclasses
+
+
+def _checks_args() -> type:
+    """``checks`` honours no scope, so it declares the field itself."""
+    from elspais.commands.args import ChecksArgs
+
+    return ChecksArgs
+
+
+class TestEveryScopedReportCanWeighAStatus:
+    """The field lives on ``ScopeOptions`` rather than on each command.
+
+    The statuses a run weighs as active decide the POPULATION every figure in
+    the report is taken over (REQ-d00291-F), so a command that cannot receive
+    them answers a different question from its siblings about the same graph --
+    which is exactly the disagreement REQ-d00258-C forbids. Derived from
+    ``__subclasses__()`` rather than from a list of names so that a command
+    added later is covered without anyone remembering to add it here.
+
+    Scope note: this pins that each command ACCEPTS the names, not that each
+    compute path HONOURS them. What a report does with them is pinned below
+    for summary and gaps.
+    """
+
+    # Verifies: REQ-d00291-F+G, REQ-d00258-C
+    @pytest.mark.parametrize(
+        "cls",
+        [*_scope_option_subclasses(), _checks_args()],
+        ids=lambda c: c.__name__,
+    )
+    def test_the_command_can_be_told_which_statuses_to_weigh(self, cls):
+        field = {f.name: f for f in dataclasses.fields(cls)}.get("treat_active")
+        assert field is not None, (
+            f"{cls.__name__} reports over a set of requirements but cannot be told which "
+            "statuses to weigh as active, so its population differs from its siblings'"
+        )
+        # An accumulating list, not a scalar: REQ-d00291-G weighs EVERY status
+        # named, and `_scope.flag_values` flattens the repeated occurrences
+        # tyro's UseAppendAction produces. Redeclared as `str | None`, the flag
+        # would keep the last occurrence and silently narrow the promotion.
+        assert field.default_factory is list, (
+            f"{cls.__name__}.treat_active must default to an empty list so repeated "
+            f"occurrences accumulate; got default_factory={field.default_factory!r}"
+        )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Semantics: the promotion reaches the report AND the work list, together
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _summary(graph, config, treat_active: tuple[str, ...] = ()) -> dict:
+    from elspais.commands._requests import SummaryRequest
+    from elspais.commands.summary import compute_summary
+
+    return compute_summary(graph, config, SummaryRequest(treat_active=treat_active))
+
+
+def _gaps(graph, config, treat_active: tuple[str, ...] = ()) -> dict:
+    from elspais.commands._requests import GapsRequest
+    from elspais.commands.gaps import compute_gaps
+
+    return compute_gaps(graph, config, GapsRequest(treat_active=treat_active, command="gaps"))
+
+
+class TestPromotionReachesSummaryAndGapsAlike:
+    """``summary`` counts a requirement and ``gaps`` lists it, or neither does.
+
+    This was a live defect: ``gaps`` derived its population gate from the
+    status ROLES while ``summary`` asked the resolver, so a promoted
+    requirement was counted in a level row and refused a place in the work
+    list -- a reader was told work existed and never told where. Both now read
+    ``statuses_withheld_from_coverage`` (REQ-d00291-F), which is the one
+    resolver in set form (REQ-d00258-C).
+    """
+
+    # Verifies: REQ-d00291-F+G+I, REQ-d00281-B
+    def test_a_promoted_requirement_is_counted_and_not_also_excluded(self, built):
+        graph, config = built
+        baseline = _summary(graph, config)
+        widened = _summary(graph, config, ("Draft",))
+
+        dev = {row["level"]: row["total"] for row in widened["levels"]}["DEV"]
+        assert dev == 2, (
+            "the promoted Draft requirement must join the Active one in its level row; "
+            f"got DEV total {dev}"
+        )
+        assert "Draft" not in widened["excluded"], (
+            "a requirement counted in a level row must not also be reported as withheld "
+            f"by its status; excluded was {widened['excluded']}"
+        )
+        # Still genuinely non-empty, so emptying the tally would not pass.
+        assert widened["excluded"] == {"Deprecated": 1}
+        assert baseline["excluded"] == {"Draft": 1, "Deprecated": 1}
+
+    # Verifies: REQ-d00281-B, REQ-d00291-I
+    @pytest.mark.parametrize("treat_active", [(), ("Draft",)])
+    def test_every_requirement_is_accounted_for_exactly_once(self, built, treat_active):
+        """A reader can add the level rows to the withheld counts and get the
+        estate back. Whether a status was promoted changes which side of the
+        sum a requirement falls on, never how many times it appears."""
+        graph, config = built
+        data = _summary(graph, config, treat_active)
+        counted = sum(row["total"] for row in data["levels"])
+        withheld = sum(data["excluded"].values())
+        assert counted + withheld == 3, (
+            f"levels={[(r['level'], r['total']) for r in data['levels']]} "
+            f"excluded={data['excluded']}"
+        )
+
+    # Verifies: REQ-d00291-F+G
+    def test_the_work_list_names_the_requirement_the_summary_counted(self, built):
+        graph, config = built
+        listed = {entry[0] for entry in _gaps(graph, config, ("Draft",))["uncovered"]}
+        assert DRAFT_ID in listed, (
+            "the promoted requirement is counted in the coverage figures, so the work "
+            f"list must say where the work is; uncovered was {sorted(listed)}"
+        )
+        assert ACTIVE_ID in listed
+        assert DEPRECATED_ID not in listed, (
+            "naming Draft must not promote the still-retired Deprecated requirement"
+        )
+
+    # Verifies: REQ-d00291-F
+    def test_an_unpromoted_requirement_is_in_neither(self, built):
+        graph, config = built
+        listed = {entry[0] for entry in _gaps(graph, config)["uncovered"]}
+        assert listed == {ACTIVE_ID}, (
+            "a status that expects no implementation is held out of the work list as it "
+            f"is held out of the figures; uncovered was {sorted(listed)}"
+        )
+
+
+class TestTheReportStatesWhatItWeighed:
+    """A promoted run's figures include requirements whose own text still reads
+    ``Status: Draft``. A reader who cannot see the invocation cannot account for
+    the difference, so the report states the request (REQ-d00291-G)."""
+
+    DISCLOSURE = "Weighed as active: Draft (--treat-active)"
+
+    # Verifies: REQ-d00291-G
+    def test_the_disclosure_is_one_line_naming_the_statuses_and_the_flag(self):
+        from elspais.commands._scope import active_overlay_disclosure
+
+        assert active_overlay_disclosure(("draft",)) == [self.DISCLOSURE]
+        # Sorted and normalized once, so two spellings of one invocation
+        # produce one artifact.
+        assert active_overlay_disclosure(("review", "DRAFT")) == [
+            "Weighed as active: Draft, Review (--treat-active)"
+        ]
+        assert active_overlay_disclosure(()) == []
+
+    # Verifies: REQ-d00291-G
+    def test_it_reaches_the_summary_a_reader_is_handed(self, built):
+        graph, config = built
+        assert self.DISCLOSURE in _summary(graph, config, ("Draft",))["scope"]
+        assert not _summary(graph, config)["scope"]
+
+    # Verifies: REQ-d00291-G
+    def test_it_reaches_the_gap_listing_a_reader_is_handed(self, built):
+        graph, config = built
+        assert self.DISCLOSURE in _gaps(graph, config, ("Draft",))["scope"]
+        # Stated exactly as the summary assertion above states it: one field,
+        # present in both payloads and empty where the run weighed nothing, so
+        # a reader asks one question of one field whichever report answered.
+        assert not _gaps(graph, config)["scope"]
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# The disclosure does not depend on the rendering
+# ─────────────────────────────────────────────────────────────────────────────
+
+SUMMARY_FORMATS = ["text", "markdown", "csv", "json"]
+# `gaps` renders three of the four. There is no csv gap listing, so a csv
+# rendering cannot disagree with the others and there is nothing to pin.
+GAPS_FORMATS = ["text", "markdown", "json"]
+TRACE_FORMATS = ["text", "markdown", "csv", "html", "json"]
+
+
+def _disclosures(rendered: str, fmt: str) -> list[str]:
+    """The disclosure lines recoverable from one rendering, unwrapped.
+
+    Each format spells a disclosure line in its own idiom -- a bare line, an
+    italicised line, a leading comment row, a member of a list. Unwrapping
+    each one here is what lets a single assertion ask the question
+    REQ-p00085-B asks: is the SAME disclosure recoverable whichever rendering
+    a reader is handed. Asserting byte-identical output instead would assert
+    the idioms are identical, which they are not and must not be.
+    """
+    if fmt == "json":
+        return list(json.loads(rendered).get("scope") or [])
+    if fmt == "csv":
+        rows = list(csv.reader(io.StringIO(rendered)))
+        return [row[0][2:] for row in rows if len(row) == 1 and row[0].startswith("# ")]
+    if fmt == "markdown":
+        return [
+            line[1:-1]
+            for line in rendered.splitlines()
+            if len(line) > 2 and line.startswith("*") and line.endswith("*")
+        ]
+    return [line for line in rendered.splitlines() if line]
+
+
+class TestTheDisclosureSurvivesEveryRendering:
+    """One run's disclosure, read back out of each of the four renderings.
+
+    ``--treat-active`` decides which requirements the coverage figures are
+    taken over, so it is one of the choices REQ-p00085-A obliges the report to
+    disclose. REQ-p00085-B is the separate obligation that the disclosure not
+    depend on the rendering: a disclosure carried in the format a reader
+    checks and dropped from the one they file leaves the filed report making
+    an unaccountable claim, and neither output taken alone shows the
+    disagreement.
+    """
+
+    DISCLOSURE = "Weighed as active: Draft (--treat-active)"
+
+    @staticmethod
+    def _rendered(graph, config, fmt: str, treat_active: tuple[str, ...]) -> str:
+        from elspais.commands.summary import _render
+
+        return _render(_summary(graph, config, treat_active), fmt, config)
+
+    @pytest.mark.parametrize("fmt", SUMMARY_FORMATS)
+    # Verifies: REQ-p00085-B
+    def test_every_rendering_of_a_promoted_run_carries_the_disclosure(self, built, fmt):
+        graph, config = built
+        rendered = self._rendered(graph, config, fmt, ("Draft",))
+        assert self.DISCLOSURE in _disclosures(rendered, fmt), (
+            f"the {fmt} rendering dropped the disclosure the other renderings carry; "
+            f"recovered {_disclosures(rendered, fmt)!r} from\n{rendered}"
+        )
+
+    @pytest.mark.parametrize("fmt", SUMMARY_FORMATS)
+    # Verifies: REQ-p00085-A
+    def test_no_rendering_discloses_a_choice_the_run_did_not_make(self, built, fmt):
+        """A report that always printed the line would disclose nothing: the
+        disclosure has to be the report stating THIS run's choices."""
+        graph, config = built
+        rendered = self._rendered(graph, config, fmt, ())
+        # The rendering is a real report, not an empty string that would pass
+        # the absence check for the wrong reason.
+        assert "DEV" in rendered, f"the {fmt} rendering states no level row:\n{rendered}"
+        assert "Weighed as active" not in rendered, (
+            f"the {fmt} rendering declares a status weighed as active when the run "
+            f"weighed none:\n{rendered}"
+        )
+
+
+class TestTheGapListingDisclosesInEveryRendering:
+    """The same obligation, on the other surface that produces a disclosure.
+
+    REQ-p00085-B is a property of a report, not of one command: it is only
+    answered once every rendering that CAN carry a disclosure is known to
+    carry it. ``gaps`` states a figure over the same population ``summary``
+    counts -- its sections are the requirements that population holds and one
+    dimension has not credited -- and it renders through its own text,
+    markdown and json paths, which read ``scope_lines`` separately from
+    ``summary``'s. A disclosure could therefore lapse here while every
+    ``summary`` rendering still carried it.
+    """
+
+    DISCLOSURE = "Weighed as active: Draft (--treat-active)"
+
+    @staticmethod
+    def _rendered(graph, config, fmt: str, treat_active: list[str]) -> str:
+        import argparse
+
+        from elspais.commands import gaps as gaps_cmd
+
+        args = argparse.Namespace(format=fmt, treat_active=treat_active)
+        rendered, code = gaps_cmd.render_section(graph, config, args, command="gaps")
+        assert code == 0, f"the gap listing refused the {fmt} rendering:\n{rendered}"
+        return rendered
+
+    @pytest.mark.parametrize("fmt", GAPS_FORMATS)
+    # Verifies: REQ-p00085-B
+    def test_every_rendering_of_a_promoted_run_carries_the_disclosure(self, built, fmt):
+        graph, config = built
+        rendered = self._rendered(graph, config, fmt, ["Draft"])
+        assert self.DISCLOSURE in _disclosures(rendered, fmt), (
+            f"the {fmt} gap listing dropped the disclosure the other renderings carry; "
+            f"recovered {_disclosures(rendered, fmt)!r} from\n{rendered}"
+        )
+
+    @pytest.mark.parametrize("fmt", GAPS_FORMATS)
+    # Verifies: REQ-p00085-A
+    def test_no_rendering_discloses_a_choice_the_run_did_not_make(self, built, fmt):
+        graph, config = built
+        rendered = self._rendered(graph, config, fmt, [])
+        # A real listing, not an empty string that would pass the absence
+        # check for the wrong reason: the unpromoted run still has a gap.
+        assert ACTIVE_ID in rendered, f"the {fmt} gap listing names no requirement:\n{rendered}"
+        assert "Weighed as active" not in rendered, (
+            f"the {fmt} gap listing declares a status weighed as active when the run "
+            f"weighed none:\n{rendered}"
+        )
+
+
+class TestTraceStatesNoPopulationAndDisclosesNone:
+    """``trace`` is exempt from REQ-p00085-A, and the exemption is deliberate.
+
+    A report stating facts about each requirement it emits, one row each,
+    takes no figure over a population; no choice about the population decides
+    what it says, so it has nothing to disclose (REQ-p00085 Rationale). This
+    is pinned so that teaching ``trace`` to disclose reads as the change it is
+    rather than as an improvement in conformance -- ``trace`` accepts
+    ``--treat-active`` (it inherits ``ScopeOptions``) and states it nowhere.
+    """
+
+    @pytest.mark.parametrize("fmt", TRACE_FORMATS)
+    # Verifies: REQ-p00085-A
+    def test_a_promoted_run_of_trace_discloses_nothing(self, built, fmt):
+        import argparse
+
+        from elspais.commands import trace as trace_cmd
+
+        graph, config = built
+        args = argparse.Namespace(format=fmt, treat_active=["Draft"])
+        rendered, code = trace_cmd.render_section(graph, args, config)
+        assert code == 0, f"trace refused the {fmt} rendering:\n{rendered}"
+        assert ACTIVE_ID in rendered, f"the {fmt} rendering emits no requirement:\n{rendered}"
+        assert "Weighed as active" not in rendered, (
+            f"the {fmt} rendering of trace discloses a population choice, but trace "
+            f"states no figure over a population:\n{rendered}"
+        )
+
+    # Verifies: REQ-p00085-A
+    def test_the_computed_trace_payload_carries_no_disclosure(self, built):
+        """The same answer on the path a serving process answers on, so the
+        exemption cannot hold in one place and lapse in the other."""
+        from elspais.commands._requests import TraceRequest
+        from elspais.commands.trace import compute_trace
+
+        graph, config = built
+        payload = compute_trace(graph, config, TraceRequest(treat_active=("Draft",)))
+        assert payload["scope"] == []

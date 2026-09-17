@@ -318,6 +318,7 @@ def comment_pattern_for_path(path: str) -> CommentPattern | None:
     return COMMENT_PATTERN_BY_EXTENSION.get("." + extension)
 
 
+# Implements: REQ-d00269-K
 def comment_markers_for_path(path: str) -> tuple[str, ...]:
     """The markers that open a comment in the language of *path*.
 

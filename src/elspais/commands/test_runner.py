@@ -2,9 +2,13 @@
 """Configured test-target dispatcher for the checks run-tests feature.
 
 Each entry in ``[[scanning.test.targets]]`` that has a ``command`` is executed
-in declaration order via ``subprocess.run(command, shell=True)``. stdout/stderr
-pass-through vs. capture depends on the reporter channel; this module
-captures timing, exit codes, and stdout for stdout-channel reporters.
+in declaration order. A runner's output always reaches the invoking terminal
+live: a file-channel target inherits the parent's file descriptors, and a
+stdout-channel target -- whose stdout must be captured for the reporter to
+parse (REQ-d00254-F) -- has that stdout piped, echoed line by line to stderr as
+it arrives, and accumulated for the parser. stderr is never piped, so it
+streams straight through in both cases. This module also records timing and
+exit codes.
 """
 
 from __future__ import annotations
@@ -32,6 +36,37 @@ class RunnerResult:
         return self.returncode == 0
 
 
+# Implements: REQ-d00249-B, REQ-d00254-F
+def _run_teeing_stdout(command: str, cwd: Path) -> subprocess.CompletedProcess[str]:
+    """Run ``command``, echoing its stdout live while also accumulating it.
+
+    A stdout-channel reporter's output IS the results artifact, so it has to be
+    captured for the parser (REQ-d00254-F) -- but capturing it must not cost the
+    developer sight of the run (REQ-d00249-B). stdout is therefore piped and
+    written back out line by line as it arrives, to stderr rather than stdout so
+    that machine-format output (e.g. ``flutter test --machine`` JSON lines)
+    cannot contaminate this process's own stdout, which may itself be a
+    machine-readable report. stderr is left unpiped, so the runner's own
+    diagnostics stream straight to the terminal and are never captured.
+    """
+    chunks: list[str] = []
+    with subprocess.Popen(
+        command,
+        shell=True,
+        cwd=cwd,
+        stdout=subprocess.PIPE,
+        text=True,
+        bufsize=1,
+    ) as proc:
+        assert proc.stdout is not None
+        for line in proc.stdout:
+            chunks.append(line)
+            sys.stderr.write(line)
+            sys.stderr.flush()
+        returncode = proc.wait()
+    return subprocess.CompletedProcess(command, returncode, "".join(chunks), None)
+
+
 # Implements: REQ-d00254-F+H
 def run_configured_targets(
     config: ElspaisConfig,
@@ -42,9 +77,11 @@ def run_configured_targets(
 ) -> tuple[list[RunnerResult], dict[str, str]]:
     """Execute each configured target's command in declaration order.
 
-    For targets whose reporter channel is ``"stdout"``, stdout is captured and
-    returned in the ``captured`` map keyed by ``target.name``; for file-channel
-    reporters stdout passes through to the parent process.
+    For targets whose reporter channel is ``"stdout"``, stdout is piped so it can
+    be returned in the ``captured`` map keyed by ``target.name``, and every line
+    read is echoed to this process's stderr as it arrives so the developer sees
+    the run live. For file-channel reporters stdout passes through to the parent
+    process untouched. stderr is inherited in both cases and never captured.
 
     Args:
         config: Loaded `ElspaisConfig`.
@@ -116,13 +153,7 @@ def run_configured_targets(
         start = time.monotonic()
         try:
             if is_stdout_channel:
-                completed = subprocess.run(
-                    target.command,
-                    shell=True,
-                    cwd=cwd,
-                    capture_output=True,
-                    text=True,
-                )
+                completed = _run_teeing_stdout(target.command, cwd)
                 captured[target.name] = completed.stdout
             else:
                 completed = subprocess.run(

@@ -178,6 +178,7 @@ def reader_refused(verdict: tuple[FaultClass, tuple[str, ...]] | None) -> bool:
     return verdict is not None and verdict[0] in _UNREAD_CLASSES
 
 
+# Implements: REQ-d00287-B
 def refs_and_verdicts(
     items: list[RefItem],
     keyword: str,
@@ -203,7 +204,6 @@ def refs_and_verdicts(
     that one: a repeated target under ``Refines:`` says nothing about a
     clean ``Implements:`` to the same target (REQ-d00272-K).
     """
-    # Implements: REQ-d00287-B
     # Residue is what the list ended at rather than an item of it, so it is
     # neither a reference nor a reference that failed. Passing it through as
     # either would have the builder try to bind a sentence, or report one as

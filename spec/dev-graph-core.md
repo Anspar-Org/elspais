@@ -245,7 +245,7 @@ C. <RETIRED> the toggle itself. With every measure published there is nothing to
 
 D. <RETIRED> the toggle's default. There is no toggle.
 
-E. <RETIRED> failures showing regardless of toggle state. That a failing *Assertion* reads failing whatever else credits it is REQ-d00258-G, which does not depend on a display mode.
+E. <RETIRED> failures showing regardless of toggle state. That a failing *Assertion* reads failing whatever else credits it is REQ-d00292-D, which does not depend on a display mode.
 
 ### Rationale
 
@@ -257,7 +257,7 @@ Retiring this cost no working behaviour. A alone was built -- a `TreeRow.coverag
 - 2026-05-11 | 3e5b1766 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | 3e5b1766 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *Indirect Coverage Toggle Display* | **Hash**: eda3f31c
+*End* *Indirect Coverage Toggle Display* | **Hash**: 85dafee0
 ---
 
 ## REQ-d00071: Unified Root vs Orphan Classification
@@ -578,7 +578,7 @@ B. The annotator SHALL compute a separate `lcov_tested` dimension by measuring t
 
 C. The configuration surface SHALL express test result and coverage ingestion via `[[scanning.test.targets]]` entries, each declaring how a target's results and coverage are produced (`command`, `groups`) and ingested (`reporter`, `results`, `coverage`, `match`, `classname`, `credit_coverage`, `min_coverage_fraction`). User documentation SHALL include a `test-targets` topic describing the target model, the available reporters, and a worked Flutter recipe.
 
-D. A run of citations with no executable line between them SHALL attribute the lines of the function it is written above, or else the executable lines following it up to the next citation, the end of its enclosing function, or the end of the file, whichever comes first.
+D. A run of citations with no executable line between them SHALL attribute the lines of the function it is written above, or else the executable lines following it up to the next citation, the end of its enclosing function or -- where no function encloses it -- the start of the next function declaration (its first decorator line, where it has decorators), or the end of the file, whichever comes first.
 
 E. A reporter registry SHALL map each `reporter` format name to a parser and an input channel (`stdout` or `file`). The registry SHALL include a native `flutter test --machine` reporter that parses the machine JSON event stream into result records carrying each test's real source-file path (from the suite path), pass/fail/skip status, and line -- without an external JUnit converter.
 
@@ -610,7 +610,7 @@ Q. A result derived from a partial read SHALL be distinguishable from one derive
 
 A line number means nothing without its origin, and producers disagree: the `line` attribute pytest writes into JUnit XML counts from zero, while the tool numbers source lines from one. Read as though they agreed, every such result missed the test it named by exactly one line and bound at file granularity instead -- which the file-granular inference then papered over, so the disagreement never surfaced as an error. Declaring the origin with the reporter puts the knowledge where the format is known rather than in each project's config, and the per-target override is for a producer that departs from its format's convention. Normalising once, at ingestion, is what keeps the rest of the system able to treat a line as a line -- to match on it, and to point a reader at it.
 
-A test that returned no result is awaiting one, and nothing else is known about it. The inference this replaces -- reading a verdict for one test off the results of its neighbours, in the same file or the same application -- was built to work around test files that supposedly could not carry their own `Verifies:` annotation. They can, in every language the tool reads tests in, so the workaround bought nothing and cost the distinction: a deselected tier, an unbuilt target and a crashed runner all left their assertions reported as passing on the strength of tests that say nothing about them. Its failing half was worse, blaming an *Assertion* for a sibling test's failure, which REQ-d00258-G forbids one level down. Aggregate results still say something real about an application, and that is where they are read: the line-coverage dimension, which measures the code rather than the *Traceability*.
+A test that returned no result is awaiting one, and nothing else is known about it. The inference this replaces -- reading a verdict for one test off the results of its neighbours, in the same file or the same application -- was built to work around test files that supposedly could not carry their own `Verifies:` annotation. They can, in every language the tool reads tests in, so the workaround bought nothing and cost the distinction: a deselected tier, an unbuilt target and a crashed runner all left their assertions reported as passing on the strength of tests that say nothing about them. Its failing half was worse, blaming an *Assertion* for a sibling test's failure, which REQ-d00292-D forbids one level down. Aggregate results still say something real about an application, and that is where they are read: the line-coverage dimension, which measures the code rather than the *Traceability*.
 
 K states the outcome the scanning side owes the crediting side: without per-test identity and extent, the line-level dimensions computed here have nothing to intersect implementation ranges against, and a framework's tests can only ever be credited at file granularity. The obligation is deliberately language-neutral — it fixes what attribution must yield, not whether a given language earns built-in support or is served through an external command.
 
@@ -626,6 +626,8 @@ Q is the half that bites. Evidence read in part yields a figure whose basis is n
 
 ### Changelog
 
+- 2026-09-12 | 2de47895 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-09-11 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-82: a citation no function encloses stops at the next function declaration, its first decorator line where decorated (D)
 - 2026-09-06 | 4ec40251 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-09-06 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-80: one rule for what a citation attributes, bounded by the run, the next citation and the enclosing function (D)
 - 2026-09-04 | 4374955e | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -655,7 +657,7 @@ Q is the half that bites. Evidence read in part yields a figure whose basis is n
 - 2026-06-20 | 98120740 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-06-20 | 00000000 | - | Michael Lewis (<michael@anspar.org>) | CUR-1533: initial
 
-*End* *Test Evidence: Attribution, Ingestion, and Coverage Crediting* | **Hash**: 4ec40251
+*End* *Test Evidence: Attribution, Ingestion, and Coverage Crediting* | **Hash**: 2de47895
 
 ---
 
@@ -723,7 +725,7 @@ The set states no implementation or test figure because those answer the other q
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-d00069
 
-Reporting surfaces (trace, summary, MCP project summary, HTML viewer) SHALL present coverage using a single consistent vocabulary, aggregation, and tier-derived color scheme so that identical underlying data yields identical answers across surfaces.
+Reporting surfaces (trace, summary, MCP project summary, HTML viewer) SHALL present coverage using a single consistent vocabulary and aggregation so that identical underlying data yields identical answers across surfaces. How the viewer presents a coverage state is REQ-d00292; which requirements a coverage figure is taken over is REQ-d00291.
 
 ### Assertions
 
@@ -733,31 +735,45 @@ B. <RETIRED> a fixed set of display words, which REQ-d00258-K had already made c
 
 C. A surface reporting a coverage figure or reaching a coverage verdict SHALL derive it from the one shared aggregation, so that two surfaces asked the same question give the same answer.
 
-D. Viewer coverage badge colors SHALL resolve from the coverage standing through the theme catalog by standing name — the same resolution for requirement dimension badges and per-*Assertion* badges — so a given standing is one color on every surface (full green, partial yellow, failing red), never through hard-coded color values and never recolored by the dimension's configured severity. A missing standing SHALL render red only when it is a required gap (its resolved severity is error) and grey otherwise. Severity SHALL govern combined-bucket dragging and the checks gate, not the badge color for the full, partial, and failing standings. The coverage standings SHALL appear in the viewer Legend.
+D. <RETIRED> set the viewer's coverage badge colors from the standing and kept a dimension's severity out of them. What decides a standing's presentation is REQ-d00292-F, what a missing standing is presented as is G, what severity governs instead is H, and where a standing's meaning is given is I.
 
-E. Viewer coverage filters SHALL bucket requirements by tier semantics using the unified state names (full, partial, failing, missing), never by color string. The requirement-level line coverage cell SHALL NOT render a direct-attribution count for targets whose tooling provides only aggregate coverage.
+E. <RETIRED> bucketed the viewer's coverage filters by state name, and withheld a direct-attribution count from a line coverage cell where the tooling provided none. The one set of state names is REQ-d00292-A, and the withheld count is REQ-d00258-W.
 
-F. A per-level `expects_validation` flag (default false) SHALL declare that requirements at that level are expected to have UAT validation (a USER_JOURNEY that `Validates:` them). When a level expects validation, a requirement of that level with no UAT coverage SHALL be a reported gap: flagged by the health `uat.coverage` check and listed under `gaps unvalidated`, and its viewer UAT badge SHALL render at error severity (red). When a level does not expect validation (the default), absent UAT SHALL be neither flagged by health, listed as a gap, nor badged in the viewer, and SHALL NOT drag the requirement's combined coverage bucket. The `uat.coverage` check SHALL count only requirements at expects_validation levels; when no level expects validation it SHALL pass trivially. All surfaces SHALL resolve this flag through a single shared helper rather than reading the level config independently.
+F. <RETIRED> declared per level whether requirements there were expected to be validated, and what followed either way. Coverage inclusion is now REQ-d00291: the declaration is A, the gap it creates is B, the severity that gap resolves at H, and what a level expecting nothing costs is C.
 
-G. The viewer SHALL assign each *Assertion* a semantic coverage *standing* (full, partial, failing, or missing) per coverage dimension, projected from the requirement's rollup metrics, so that if every *Assertion* is full on a dimension the requirement badge for that dimension reads full, and if any *Assertion* is failing the requirement dimension reports a failure. An *Assertion*'s standing SHALL read failing only when that *Assertion* itself has a failing result or verification for the dimension, not because a sibling *Assertion* covered by a different, non-failing test or journey failed; a failing test or journey attributes the failure to exactly the assertions it covers (its named targets, or every assertion when it covers the whole requirement). The standing SHALL be computed server-side and applied on initial render, without depending on a lazy client prefetch. Standing colors SHALL be resolved through the theme catalog by standing name (never hard-coded in the badge logic), the same decoupling severity colors use per D, so the standing-to-color association is configurable, and the standings SHALL appear in the viewer Legend. A per-*Assertion* pill SHALL make the measures behind its standing available to a reader, and SHALL NOT carry a caveat standing in for a measure it does not show (REQ-d00258-J). The distinction between the measures SHALL NOT introduce a separate *Assertion* badge tier color.
+G. <RETIRED> assigned each *Assertion* a coverage standing, said how one composed and how a failure attributed, and made the association between a standing and its presentation configurable. The standing is REQ-d00292-B, the composition C, the failure attribution D, the measures behind a standing E, and the configurable presentation J. That a failure carries the dimension as a whole is REQ-d00258-T.
 
-H. The requirement-level coverage tier, the per-*Assertion* coverage standing, and the viewer filter bucket SHALL be drawn from one shared set of coverage state names — full, partial, failing, and missing — so that a given coverage condition maps to the same state word on every surface. The prior split of the full state into separate direct and indirect states SHALL NOT reappear as distinct tier states.
+H. <RETIRED> drew the requirement tier, the *Assertion* standing and the viewer filter from one set of coverage state names. That set is REQ-d00292-A.
 
-I. A chained dimension (REQ-d00277) SHALL be measured within one measure, so that a figure and its denominator are made of the same kind of evidence. A chained dimension whose denominator is empty SHALL read missing at neutral severity -- neither a reported gap nor error-colored -- and SHALL NOT drag the requirement's combined coverage bucket. A failing result on any assertion within a dimension's denominator SHALL render that dimension failing regardless of the covered fraction.
+I. <RETIRED> measured a chained dimension within one measure and said how an empty denominator and a failure read. R, S and T each state one of those.
 
 J. A surface SHALL NOT annotate a coverage figure with a caveat standing in for a measure it did not show. Where the difference between measures matters, the measures themselves SHALL be reported (REQ-d00069-L).
 
 K. The coverage dimension labels and the labels of the measures behind them SHALL each be derived from a single configurable mapping — from each coverage-conferring relationship to its display word, and from each measure to its display word — and every surface SHALL render those labels through those mappings.
 
-L. A per-status `expects_implementation` flag SHALL declare whether a requirement in that status is expected to have implementation; its default SHALL be derived from the status's role, so that active-role statuses expect implementation and others do not. When a status does not expect implementation, absent implementation SHALL be neither flagged as a gap, nor error-colored, nor counted against aggregate implemented coverage. All surfaces SHALL resolve this flag through a single shared helper, and it SHALL supersede the coverage-exclusion role when determining coverage inclusion.
+L. <RETIRED> declared per status whether requirements there were expected to carry implementation, and what followed. The declaration is REQ-d00291-D, its default from the status's role E, what a status expecting nothing is held out of F, and how what is held out is disclosed I.
 
 M. A surface reporting which assertions need work SHALL read the immediate direct measure, so that an *Assertion* no citation names is reported however much whole-requirement evidence its requirement carries and however finished the requirements refining it are.
 
 N. <RETIRED> moved to REQ-d00277-C, where every coverage dimension is defined. Two authorities for what Passing counts is the duplication that split exists to remove.
 
-O. Tested SHALL be reported with a breakdown of the assertions it counts into those that passed, those that failed, and those awaiting a result, and the three counts SHALL together account for every tested *Assertion*. The breakdown qualifies the Tested figure and SHALL NOT introduce a coverage dimension of its own.
+O. <RETIRED> reported Tested with a breakdown into passed, failed and awaiting a result. U states the breakdown, and V that it is not a coverage dimension of its own.
 
 P. A coverage figure a surface states for a group of requirements SHALL be the credit and the assertions of that group each summed, so that a group is measured over the same assertions its members are.
+
+Q. <RETIRED> let a caller name statuses to be weighed as active ones for the duration of a run. It is REQ-d00291-G.
+
+R. A chained coverage dimension (REQ-d00277) SHALL take its figure and its denominator from one measure.
+
+S. A chained dimension whose denominator is empty SHALL read missing at neutral severity, and neither be reported as a gap nor drag the requirement's combined coverage bucket.
+
+T. A failing result on an *Assertion* a coverage dimension counts SHALL make that dimension read failing, whatever fraction of the dimension is covered.
+
+U. Tested SHALL be reported with a breakdown into the assertions that passed, those that failed and those awaiting a result, the three together accounting for every tested *Assertion*.
+
+V. The breakdown of Tested SHALL qualify that figure rather than stand as a coverage dimension of its own.
+
+W. A surface SHALL state no direct-attribution figure for a target whose tooling provides only aggregate coverage.
 
 ### Rationale
 
@@ -771,12 +787,18 @@ N draws the line between measuring a requirement's tests and measuring its code.
 
 Line coverage is kept and reported in its own right, because how much of the implementation a run exercised is worth knowing. It answers about lines, not about assertions, and REQ-d00254-B keeps it there: a dimension beside the *Traceability* ones, never folded into them. Correlating executable lines with the assertions they implement is a coherent thing to want, and would remain a separate dimension if it were ever built.
 
-O says a tested *Assertion* is always in exactly one of three states, and that a reader is told all three. Passing alone leaves the remainder ambiguous: an *Assertion* absent from it either failed or never returned a verdict, and those call for opposite actions -- one is a defect to fix, the other a run to complete or ingest. An estate can be entirely green on Passing while most of its tests never ran, and until the three are counted together nothing says so. They break Tested down rather than standing beside it, because each one is a tested *Assertion* seen from closer up, not a further dimension of coverage.
+R, S and T are three ways a chained dimension can be misread. R keeps a figure and its denominator made of the same kind of evidence, because a numerator counted one way against a denominator counted another is a ratio of two different questions and reads as coverage nobody has. S answers the case where the denominator is empty: a dimension that counts nothing has fallen short of nothing, and reporting that as a gap invents work out of a question that was never asked. T is the other polarity -- a failure inside a dimension is decisive for it however much of the dimension is covered, because a figure that stayed green while a test it counts was failing would be withholding the one thing a reader most needs to be told. REQ-d00277-C makes a single failure decisive for the *Assertion* it lands on and leaves this, the reporting half, here. W is the same discipline at the other end of a figure. How many covered lines a named test can be credited for is something some tooling does not record at all, and a zero in its place tells a reader the attribution was measured and came out empty -- so the figure is withheld rather than stated, and what the tooling did measure is stated beside it.
+
+U says a tested *Assertion* is always in exactly one of three states, and that a reader is told all three. Passing alone leaves the remainder ambiguous: an *Assertion* absent from it either failed or never returned a verdict, and those call for opposite actions -- one is a defect to fix, the other a run to complete or ingest. An estate can be entirely green on Passing while most of its tests never ran, and until the three are counted together nothing says so. V keeps them a breakdown of Tested rather than something standing beside it, because each one is a tested *Assertion* seen from closer up, not a further dimension of coverage.
 
 A reports how the estate is doing and M reports what is left to do; the two questions want different measures. Crediting whole-requirement evidence to every *Assertion* is defensible when summarising, because the evidence plausibly reaches them and the indirect measures are published beside the total, so a reader can see how much of it there is. It is not defensible when listing work, because an *Assertion* nobody has written evidence for is precisely what the list exists to surface — and on a measure that credits whole-requirement evidence it is the one thing the list can never show.
 
 ### Changelog
 
+- 2026-09-15 | a14e1373 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-09-15 | ba3e3b0b | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-09-15 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-82: move the coverage-inclusion and viewer-presentation assertions to REQ-d00291 and REQ-d00292, and decompose the chained-dimension and Tested-breakdown assertions in place as R to V, with the line-coverage attribution figure no tooling measured stated surface-generally as W (from E)
+- 2026-09-13 | a12fe185 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-24 | 15129897 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-21 | 6c978321 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-21 | 24015cbc | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -802,7 +824,131 @@ A reports how the estate is doing and M reports what is left to do; the two ques
 - 2026-07-03 | c843c727 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-02 | be97c170 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: add missing changelog section
 
-*End* *Reporting Surface Consistency* | **Hash**: 15129897
+*End* *Reporting Surface Consistency* | **Hash**: a14e1373
+
+---
+
+## REQ-d00291: Coverage Inclusion
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-d00069
+
+Not every requirement is owed implementation, and not every level is owed a journey. What a project expects is what decides which requirements a coverage figure is taken over and which absences are work. The rules are stated one at a time, so that what a project may declare, what follows from declaring it, and what follows from declaring nothing stay separable.
+
+### Assertions
+
+A. A project SHALL be able to declare, per level, that requirements at that level are expected to be validated by a journey, and no level expects that until the project declares it.
+
+B. Where a level expects validation, the tool SHALL report as a gap a requirement of that level that no journey validates.
+
+C. Where a level does not expect validation, the tool SHALL neither report a requirement of that level as an unvalidated gap nor count it toward the user-acceptance coverage verdict, which passes where no level expects validation.
+
+D. A status's own declaration SHALL decide whether requirements in that status are expected to carry implementation, whatever role the project assigned the status.
+
+E. A status that declares nothing SHALL expect implementation where its role is active, and SHALL NOT where its role is anything else.
+
+F. Where a status does not expect implementation, the tool SHALL hold requirements in that status out of the population every coverage figure is taken over, and report no gap for their absent implementation.
+
+G. A caller SHALL be able to name statuses to be weighed as active ones for the duration of a run, and every status so named SHALL be weighed.
+
+H. Where a level expects validation, a missing standing on a user-acceptance dimension of a requirement at that level SHALL resolve at error severity.
+
+I. Where requirements are held out of a coverage figure by status, the tool SHALL state each status so held and how many requirements it held.
+
+### Rationale
+
+An expectation is a declaration rather than an inference. Whether a requirement in review is owed implementation, or a requirement at some level owed a journey, is a judgement about how a project works, and nothing in the graph carries it. So the project says it — per status for implementation, per level for validation — and the tool honours what it said. The two defaults differ because the questions do: a status already carries a role saying whether its obligation is live, so implementation can be expected from that role without anyone declaring anything, while no level says anything at all about journeys, and a level that expected them undeclared would report every estate without user-acceptance testing as failing.
+
+F is stated over the population a figure is taken over rather than over one dimension, which corrects what REQ-d00258-L used to say. L named aggregate implemented coverage alone; the gate it described has always held a requirement out of every dimension and out of the requirements count as well, and it has to — a requirement not expected to be implemented is not expected to be tested either, and admitting it to the denominator of a dimension it cannot reach reports a shortfall nobody owes.
+
+C is what a level expecting nothing costs, and it is narrower than F. Its requirements are withheld from the gap -- from the naming of the requirements a reader must go and write a journey for, and from the population that verdict is taken over -- and not from the figures a reporting surface states: a reader asking how much of the estate a journey validates is asking about the whole estate, and the answer is lower where no journey validates anything. Where no level expects validation at all the verdict is taken over no requirements and so has nothing to fail. What C no longer says is how the absence looks or what it costs a requirement's combined standing. A dimension's severity governs the drag (REQ-d00292-H) and a missing standing's presentation follows from the severity it resolves at (REQ-d00292-G), so saying either here would be a second authority for a question already answered -- and saying that such an absence never drags would contradict a project's freedom to configure that severity at all.
+
+G is what D and E leave a project no way to say. They fix whether a status expects implementation from the role the project assigned it, which is right as a standing answer and wrong as the only one: a project mid-migration, or a reader asking what the estate would look like if the work now in review were counted, needs a status weighed as active for one run without changing what the project says that status means. It is stated as an obligation on the naming rather than on any way of naming, because the same question reaches a serving process as a parameter and a program as an argument. Every status named is weighed: weighing some of them would answer a question the caller did not ask, under the figures they asked for, and a coverage figure carries nothing that would let a reader see which statuses had reached it.
+
+H is what makes B's gap read as one. A missing user-acceptance standing is soft where nothing was declared, because most estates owe no journeys and a red badge on every requirement would report work nobody asked for. A level that declared the expectation has asked for it, so the absence there is a shortfall and resolves at the severity a shortfall carries; REQ-d00292-G is then what presents it as one, and REQ-d00258-S is the same move for a dimension that counts nothing.
+
+I is the disclosure F owes. A count taken over some of the requirements and reported as though it were taken over all of them is a true figure and a misleading answer, because nothing in it lets a reader see that anything was withheld, let alone why. Naming each withheld status with how many requirements it withheld is what lets them put the population back together. This is the shape REQ-p00019-A asks of a report that omits something, and it is stated here rather than by declaring `Satisfies: REQ-p00019`: declaring the template would oblige this requirement to answer all eleven of its classes, most of which it never reaches, and would clone a template subtree carrying coverage of its own -- an addition of obligation inside a change whose contract is to conserve.
+
+### Changelog
+
+- 2026-09-15 | 13bc6949 | - | Michael Lewis (<michael@anspar.org>) | TOOL-82: author the coverage inclusion rules moved out of REQ-d00258-F, L and Q, correcting L's scope from aggregate implemented coverage alone to the population every coverage figure is taken over, and stating the severity an expected absence resolves at (H, from F) and the disclosure of what a status withholds (I, from F's own population rule)
+
+*End* *Coverage Inclusion* | **Hash**: 13bc6949
+
+---
+
+## REQ-d00292: Viewer Coverage Presentation
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-d00069
+
+Most readers meet a coverage figure on a screen before they meet it in a report, so what the screen shows has to mean what the figure means. This requirement covers what the viewer presents a coverage state as, and how a state reached for one *Assertion* composes into the state shown for its requirement. The obligations are stated one at a time, so that a reader citing one of them can say which.
+
+### Assertions
+
+A. The requirement's coverage tier, the per-*Assertion* standing and the viewer's coverage filter SHALL name a given coverage condition with the same state word, drawn from one set holding full, partial, failing and missing alone.
+
+B. The viewer SHALL give every *Assertion* a coverage standing for each coverage dimension.
+
+C. The viewer SHALL read a requirement's standing for a dimension as full where every *Assertion* that dimension counts is full.
+
+D. A failing test or journey SHALL make failing the standing, for the dimension it counts toward, of exactly the assertions it covers, whether it named them or named the requirement as a whole.
+
+E. The viewer SHALL make the measures behind an *Assertion*'s standing available to a reader of that *Assertion*.
+
+F. The viewer SHALL present a coverage standing of full, partial or failing the same way on a requirement's dimension badge and on an *Assertion*'s badge, whatever severity the dimension carries.
+
+G. The viewer SHALL present a missing standing as an error where the dimension's resolved severity is error, and as neutral otherwise.
+
+H. A coverage dimension's configured severity SHALL govern whether a missing or partial dimension drags a requirement's combined coverage bucket.
+
+I. The viewer SHALL make the meaning of each coverage standing available to a reader.
+
+### Rationale
+
+A is the obligation the others are read through. Three surfaces ask the same question — what state is this in — and a state name is the answer all three give, so a condition cannot read partial in a filter and full on a badge. The set is closed for the same reason: the measures of REQ-d00069-L answer a different question, and a fifth state derived from them would put that question into a vocabulary that cannot hold it. The split of full into a direct and an indirect state, which this closure forbids, is what that fifth state looked like the last time it was tried.
+
+What the viewer shows is decided by the coverage and by nothing else. A state that presented differently depending on how severely a project treats the dimension would let two projects look at the same estate and read different answers off it — the divergence REQ-d00258 exists to prevent, arriving through the display rather than through the arithmetic. Severity has a job, and it is the one H names: how much a shortfall costs, not what it looks like. H reaches only the two standings severity can speak for -- a failing dimension drags whatever severity it carries, because REQ-d00258-T makes a failure decisive for the dimension it lands in.
+
+A missing state is the exception, and it is barely one. Nothing at all is a different fact depending on whether anything was owed, and a project that expects no user-acceptance testing is not looking at a gap when it sees no journeys. Presenting the absence as neutral says that; presenting it as an error says the opposite. G reads which of the two it is off the severity the dimension resolves at, because that is where the estate already keeps how much a condition costs: REQ-d00291-H raises it to error for a level that declared the expectation, REQ-d00258-S holds it neutral where the dimension counts nothing, and the project's own configuration answers the rest. It is deliberately not read off whether the condition is reported as a gap somewhere, because the two are set separately: a requirement awaiting a journey is reported at its own configurable severity, and a badge keyed to that would go red for a project that wanted only the finding raised. Presenting an unowed absence as neutral is also what licenses showing nothing for it at all, since nothing is what a reader is owed about an absence nobody expected.
+
+C and D divide a requirement's standing between them. C composes upward, and D settles where a failure lands. They are separate because the failure rule is the one that is easy to get wrong: a failing test says something about the assertions it covers and nothing about their siblings, and a requirement whose every *Assertion* reads failing because one test failed has reported four defects where there is one. REQ-d00277-C makes a single failure decisive for the *Assertion* it lands on; D is what keeps it from being decisive for the others. C states the full half of the composition and no more, because the other half is not about composition at all: REQ-d00258-T carries a failure to the dimension as a whole wherever that dimension is shown, in a figure and on a badge alike, so restating it here would be the second authority this split exists to remove.
+
+E is what replaced a caveat. A standing is a word, and a word cannot say how much of itself came from evidence naming this *Assertion* and how much from evidence naming its requirement. The measures can, and REQ-d00258-J bars annotating the word instead of publishing them, so a reader who wants the difference has to be able to reach it from the *Assertion* in front of them.
+
+I is about a reader who has only the screen. A state name is a term of art, and someone who has not read this document has to be able to find out what it means; where that is given is the viewer's business and a legend is only the obvious place. The other thing a screen owes such a reader -- that the presentation itself is the project's to choose -- holds over every presented state at once rather than over the standings this requirement forms, so it is stated on its own in REQ-d00293.
+
+REQ-p00019 is not declared here either. Nothing this requirement obliges is a report that omits or substitutes something -- what a standing cannot say for itself is answered by E and by REQ-d00258-J -- so declaring the template would oblige an answer to all eleven of its classes for the sake of none.
+
+### Changelog
+
+- 2026-09-15 | db9415cd | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-09-15 | affdd930 | - | Michael Lewis (<michael@anspar.org>) | TOOL-82: author the viewer coverage presentation obligations moved out of REQ-d00258-D, E, G and H; key a missing standing's presentation on the severity it resolves at (G, from D), bound severity's drag to the missing and partial standings (H, from D), and state where a standing's meaning is given rather than naming the legend (I, from D and G); the configurability of presentation itself is REQ-d00293
+
+*End* *Viewer Coverage Presentation* | **Hash**: db9415cd
+
+---
+
+## REQ-d00293: Configurable Viewer Presentation
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-d00069
+
+How a coverage standing or a severity looks on a screen is a project's choice rather than the tool's. The obligation is stated on its own because it holds over every state the viewer presents at once, whatever states there turn out to be.
+
+### Assertions
+
+A. A project SHALL be able to configure how the viewer presents each coverage standing and each severity.
+
+### Rationale
+
+A project reads its own estate, often through colors chosen to match something outside this tool, and a presentation fixed in the program would leave it nothing to say. This is the same settlement REQ-d00258-K reaches for the words a dimension is reported under, reached here for how a state looks; the two are separate because a project may want one without the other.
+
+It is one assertion and its own requirement rather than an assertion inside the requirement that forms the standings (REQ-d00292) or the one that fixes the vocabulary (REQ-d00258), because it is a property of the whole presented surface and not of any one set of states. Stating it where the standings are formed would tie it to those standings, and a severity is not one of them. A citation naming this requirement is then saying that presentation is configurable at that point, which is what the sites resolving a state to its presentation are doing, and nothing more.
+
+### Changelog
+
+- 2026-09-15 | 31848b5c | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-09-15 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-82: state the configurability of viewer presentation as a requirement of its own, holding over coverage standings and severities alike, moved out of the draft REQ-d00292-J
+
+*End* *Configurable Viewer Presentation* | **Hash**: 31848b5c
 
 ---
 
@@ -949,7 +1095,7 @@ A dimension is a question, not a label. Implemented asks whether anything was bu
 
 The denominator is part of the definition. Tested measured over every *Assertion* would report an estate as untested when it is merely unbuilt, and those two call for different work.
 
-A single failure is decisive for the *Assertion* it lands on: C requires that no declared test returned a failure, because a passing sibling test does not retract a failure a test reported. How a failure reaches the requirement as a whole is a reporting rule, not a definition, and stays with the surfaces (REQ-d00258-I).
+A single failure is decisive for the *Assertion* it lands on: C requires that no declared test returned a failure, because a passing sibling test does not retract a failure a test reported. How a failure reaches the requirement as a whole is a reporting rule, not a definition, and stays with the surfaces (REQ-d00258-T).
 
 The magnitude a dimension credits is governed by REQ-d00069-M, so a journey verified in part credits in proportion without any dimension restating the rule.
 
@@ -980,17 +1126,17 @@ B. Every test target SHALL belong to the group `all`.
 
 C. A test target that claims no other group SHALL belong to the group `default`.
 
-D. A run that selects no group SHALL execute the targets of the group `default`.
+D. A run that names nothing SHALL execute the targets of the group `default`.
 
-E. A run that selects one or more groups SHALL execute only targets belonging to those groups.
+E. A run SHALL name a group wherever it names a target, and a group so named SHALL stand for every target belonging to it.
 
 F. A test target SHALL be able to claim any declared group, and SHALL NOT claim a name no declaration and no reservation defines.
 
-G. A project SHALL be able to declare any number of groups, each declared with a keyword unique among every group name, the reserved names included, and a description of what the group is for.
+G. A project SHALL be able to declare any number of groups, each declared with a keyword unique among every group name and every test target name, the reserved names included, and a description of what the group is for.
 
-H. A run selecting a name no declaration and no reservation defines SHALL be refused rather than resolved to no targets.
+H. A run naming something that is neither a configured target nor a group the project admits SHALL be refused rather than resolved to no targets.
 
-I. Each selector a run states SHALL narrow the targets it executes.
+I. A run SHALL execute every target it names.
 
 ### Rationale
 
@@ -1004,9 +1150,11 @@ F and H are the same discipline reached from the two directions a name arrives f
 
 G requires uniqueness across every group name rather than across the declared ones, which is what bars a project from declaring `all` or `default`. Their meanings are fixed by B, C and D; a project able to attach its own description to either could describe something the tool does not do, and a reader would have no way to tell which was true.
 
-I settles what two selectors mean together. Both name what a run is to execute, so a run stating both is describing its subject twice, and the targets it executes are those both descriptions admit. The alternative — each selector adding to the set — would make naming a target *widen* a run that named a group, so a caller narrowing their invocation would watch it grow.
+E and I are one idea stated from both ends, and the idea is that a group is an ALIAS. A group is a name several targets claim so a run can refer to them at once — not a second dimension targets are classified on, and not a second way of selecting to be reconciled with the first. So a run has ONE thing it does: it names targets, some of them by a name standing for several, and it executes what it named. There is no rule about what two selectors mean together because there are not two selectors. The alternative, a separate group selector narrowing a target selector, has to answer a question this does not raise — what a run naming a target outside a group it also named should do — and every answer to it honours one name while disobeying the other. A reader wanting a narrower set has the exact instrument already: name the targets.
 
-*End* *Test Target Groups* | **Hash**: bc95d36b
+G carries the cost of that aliasing, and it is the whole cost. One namespace means a name cannot be a target's and a group's at once, so a configuration holding both is refused when it is read rather than resolved by a precedence rule — a precedence rule being a thing every reader of that configuration would afterwards have to know. What makes the aliasing safe beyond that is that a run says which targets it executed, so what an invocation resolved to is answerable by looking at the run rather than by knowing any of this.
+
+*End* *Test Target Groups* | **Hash**: edcd4d69
 
 ## REQ-d00284: How a Result Names Its Test
 

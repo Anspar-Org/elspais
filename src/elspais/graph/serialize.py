@@ -58,6 +58,7 @@ def serialize_assertion(node: GraphNode, *, extras: dict[str, Any] | None = None
     return base
 
 
+# Implements: REQ-d00129-D, REQ-d00129-E, REQ-d00129-F
 def serialize_node(node: GraphNode) -> dict[str, Any]:
     """Serialize a GraphNode to a JSON-compatible dict.
 
@@ -78,7 +79,6 @@ def serialize_node(node: GraphNode) -> dict[str, Any]:
         },
     }
 
-    # Implements: REQ-d00129-D, REQ-d00129-E, REQ-d00129-F
     # Include source location from FILE parent and parse_line fields
     _fn = node.file_node()
     _parse_line = node.get_field("parse_line")

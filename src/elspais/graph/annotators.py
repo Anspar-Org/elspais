@@ -173,6 +173,7 @@ if TYPE_CHECKING:
     from elspais.utilities.git import GitChangeInfo
 
 
+# Implements: REQ-d00129-D
 def annotate_git_state(node: GraphNode, git_info: GitChangeInfo | None) -> None:
     """Annotate a node with git state information.
 
@@ -196,7 +197,6 @@ def annotate_git_state(node: GraphNode, git_info: GitChangeInfo | None) -> None:
     if node.kind != NodeKind.REQUIREMENT:
         return
 
-    # Implements: REQ-d00129-D
     # Get file path relative to repo via FILE parent node
     fn = node.file_node()
     file_path = fn.get_field("relative_path") if fn else ""
@@ -236,6 +236,7 @@ def annotate_git_state(node: GraphNode, git_info: GitChangeInfo | None) -> None:
     node.set_metric("is_new", is_new)
 
 
+# Implements: REQ-d00129-D
 def annotate_display_info(node: GraphNode) -> None:
     """Annotate a node with display-friendly information.
 
@@ -259,7 +260,6 @@ def annotate_display_info(node: GraphNode) -> None:
     if node.kind != NodeKind.REQUIREMENT:
         return
 
-    # Implements: REQ-d00129-D
     # Get file path relative to repo via FILE parent node
     fn = node.file_node()
     file_path = fn.get_field("relative_path") if fn else ""
@@ -324,6 +324,7 @@ def annotate_graph_git_state(graph: FederatedGraph) -> None:
         annotate_git_state(node, git_info)
 
 
+# Implements: REQ-d00050-C, REQ-d00050-D
 def annotate_implementation_files(
     node: GraphNode,
     implementation_files: list[tuple[str, int]],
@@ -352,6 +353,7 @@ def annotate_implementation_files(
 # They follow the composable pattern: take a graph, return computed values.
 
 
+# Implements: REQ-d00281-A
 def count_by_level(
     graph: FederatedGraph,
     config: dict[str, Any] | None = None,
@@ -372,7 +374,6 @@ def count_by_level(
     from elspais.graph.aggregation import level_group_keys
 
     if config is not None:
-        # Implements: REQ-d00281-A
         # Groups come from the one derivation every reporting surface reads, so
         # this count and the per-level coverage rollup form the same groups.
         level_keys = level_group_keys(graph, config)
@@ -404,6 +405,7 @@ def count_by_level(
     return counts
 
 
+# Implements: REQ-d00051-B
 def count_by_repo(
     graph: FederatedGraph,
     config: dict[str, Any] | None = None,
@@ -449,6 +451,7 @@ def count_by_repo(
     return repo_counts
 
 
+# Implements: REQ-d00051-C
 def count_implementation_files(graph: FederatedGraph) -> int:
     """Count total implementation files across all requirements.
 
@@ -467,6 +470,7 @@ def count_implementation_files(graph: FederatedGraph) -> int:
     return total
 
 
+# Implements: REQ-d00129-D
 def collect_topics(graph: FederatedGraph) -> list[str]:
     """Collect unique topics from requirement file names.
 
@@ -479,7 +483,6 @@ def collect_topics(graph: FederatedGraph) -> list[str]:
     from elspais.graph import NodeKind
 
     all_topics: set[str] = set()
-    # Implements: REQ-d00129-D
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
         fn = node.file_node()
         rel_path = fn.get_field("relative_path") if fn else None
@@ -490,6 +493,7 @@ def collect_topics(graph: FederatedGraph) -> list[str]:
     return sorted(all_topics)
 
 
+# Implements: REQ-d00051-E
 def count_by_coverage(
     graph: FederatedGraph,
     config: dict | None = None,
@@ -522,9 +526,10 @@ def count_by_coverage(
     }
 
 
+# Implements: REQ-d00291-F
 def count_with_code_refs(
     graph: FederatedGraph,
-    exclude_status: set[str] | None = None,
+    config: dict[str, Any] | None = None,
 ) -> dict[str, int]:
     """Count requirements that have at least one CODE reference.
 
@@ -532,22 +537,30 @@ def count_with_code_refs(
     - It has a CODE child directly, OR
     - One of its ASSERTION children has a CODE child
 
+    This is a coverage figure. Therefore it is taken over the population that
+    each coverage figure uses (REQ-d00291-F). The function asks
+    ``status_expects_implementation`` about each requirement. It does not read
+    the status roles. A project can declare ``expects_implementation`` for a
+    status, or a run can weigh that status as active. A read of the roles then
+    held such a requirement out of this figure. Each other coverage figure
+    counted the same requirement.
+
     Args:
         graph: The TraceGraph to query.
-        exclude_status: Status values to exclude from both numerator and
-            denominator (e.g. ``{"Draft"}``).
+        config: The project configuration. It decides which statuses expect
+            implementation. Pass the configuration of the run, with the
+            overlay of the statuses that the run weighs as active.
 
     Returns:
         Dict with 'total_requirements', 'with_code_refs', 'coverage_percent'.
     """
+    from elspais.config import status_expects_implementation
     from elspais.graph import NodeKind
 
-    # Build set of excluded requirement IDs
     excluded_ids: set[str] = set()
-    if exclude_status:
-        for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
-            if node.status in exclude_status:
-                excluded_ids.add(node.id)
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+        if not status_expects_implementation(config or {}, node.status):
+            excluded_ids.add(node.id)
 
     total = 0
     covered_req_ids: set[str] = set()
@@ -577,6 +590,7 @@ def count_with_code_refs(
     }
 
 
+# Implements: REQ-d00254-Q
 def count_code_coverage(graph: FederatedGraph) -> dict[str, int]:
     """Compute project-wide code coverage statistics.
 
@@ -595,7 +609,6 @@ def count_code_coverage(graph: FederatedGraph) -> dict[str, int]:
     unmeasured_files = 0
 
     for node in graph.iter_by_kind(NodeKind.FILE):
-        # Implements: REQ-d00254-Q
         # A file whose source could not be re-analysed has no known total.
         # Both sums are skipped, not just the denominator: counting its
         # executed lines against everyone else's total would raise the
@@ -649,9 +662,9 @@ def count_by_git_status(graph: FederatedGraph) -> dict[str, int]:
     return counts
 
 
-# Implements: REQ-d00258-G
+# Implements: REQ-d00292-D
 def _failing_targets(targets: list[str] | None, assertion_labels: list[str]) -> set[str]:
-    """Labels a failing verified/UAT signal is attributed to (REQ-d00258-G).
+    """Labels a failing verified/UAT signal is attributed to (REQ-d00292-D).
 
     An assertion-targeted failure blames only its named labels (scoped to the
     requirement's own assertions); a blanket/whole-requirement failure blames
@@ -664,6 +677,7 @@ def _failing_targets(targets: list[str] | None, assertion_labels: list[str]) -> 
     return set(assertion_labels)
 
 
+# Implements: REQ-d00069-B
 def _compute_coverage_from_source(
     req_node,
     assertion_labels: list,
@@ -714,6 +728,7 @@ def _compute_coverage_from_source(
     return contributions, source_nodes
 
 
+# Implements: REQ-d00258-W
 def _compute_code_tested(
     node: GraphNode, metrics: RollupMetrics, region_cache: dict | None = None
 ) -> None:
@@ -785,7 +800,6 @@ def _compute_code_tested(
         has_any_coverage = True
         break  # Just checking existence
 
-    # Implements: REQ-d00258-E
     # Whether the ingested coverage carried per-test contexts is a fact about
     # the TOOLING, established at ingestion: the factory sets `line_contexts`
     # only when the parser returned a non-empty contexts map, and aggregate-only
@@ -944,6 +958,38 @@ def _under_dirs(rel_path: str, dirs: tuple[str, ...]) -> bool:
     return _match_app_dir(rel_path, dirs) is not None
 
 
+# Implements: REQ-d00254-D
+def _declaration_starts(file_node, cache: dict) -> list[int]:
+    """The lines a function declaration begins at in this file, ascending.
+
+    The pre-scan knows every declaration's extent while it parses, but keeps
+    only the one each citation bound to: a function nobody cites leaves no
+    trace on any node, and it is precisely those that a module-level citation
+    would otherwise speak for. So the file is read again here, once, and the
+    answer cached beside the extents it bounds. A file that cannot be read
+    yields no starts, and the bound is simply not imposed -- never a wrong one.
+    """
+    from elspais.graph.parsers.prescan import declaration_starts, detect_language
+
+    key = ("declarations", file_node.id)
+    if key in cache:
+        return cache[key]
+
+    starts: list[int] = []
+    abs_path = file_node.get_field("absolute_path")
+    if abs_path:
+        try:
+            text = Path(abs_path).read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            text = None
+        if text is not None:
+            lines = [(i + 1, line) for i, line in enumerate(text.split("\n"))]
+            starts = declaration_starts(lines, detect_language(str(abs_path)))
+
+    cache[key] = starts
+    return starts
+
+
 # Implements: REQ-d00254-D, REQ-d00269-M
 def _citation_extents(file_node, cache: dict) -> dict[int, set[int]]:
     """The lines every citation in a file attributes, keyed by its first line.
@@ -955,9 +1001,12 @@ def _citation_extents(file_node, cache: dict) -> dict[int, set[int]]:
       across lines, changes nothing it attributes (REQ-d00269-M).
     * A run written ABOVE a function attributes that function's executable lines.
     * Any other run attributes the executable lines that FOLLOW it, up to the
-      earliest of: the next citation, the end of its enclosing function, the end
-      of the file. That bound is what lets two citations inside one function
-      speak for different code.
+      earliest of: the next citation, the end of its enclosing function or --
+      where no function encloses it -- the start of the next function
+      declaration (its first decorator line, where it has decorators), the end
+      of the file. The enclosing bound is what lets two citations inside one
+      function speak for different code; the declaration bound is what stops a
+      citation written at module level speaking for every function below it.
     * A run above a function and the runs inside that function therefore
       overlap. That is the only overlap these rules admit.
 
@@ -1017,12 +1066,22 @@ def _citation_extents(file_node, cache: dict) -> dict[int, set[int]]:
             func_end = run[-1][3]
             later = [s for s in every_start if s > run_end]
             next_citation = min(later) if later else None
+            # "Where no function encloses it": a run's own function_line says
+            # whether one does. A function's END is not that question -- a
+            # text-scanned language reports no end line at all, and reading an
+            # absent end as an absent function would re-bound a citation
+            # written INSIDE a function at the next declaration below it.
+            next_decl = None
+            if not run[0][2]:
+                declared = [d for d in _declaration_starts(file_node, cache) if d > run_end]
+                next_decl = min(declared) if declared else None
             owned = {
                 line
                 for line in executable
                 if line > run_end
                 and (next_citation is None or line < next_citation)
                 and (not func_end or line <= func_end)
+                and (next_decl is None or line < next_decl)
             }
             for cit_start, *_rest in run:
                 result[cit_start] = owned
@@ -1036,9 +1095,10 @@ def attributed_lines(code_node, file_node, region_cache: dict) -> set[int]:
     """The implementation lines a citation speaks for. ONE authority.
 
     The rules live in ``_citation_extents``, which answers for a whole file at
-    once because three of the four bounds -- the run, the next citation, the
-    enclosing function -- are relationships between citations rather than
-    properties of any one of them.
+    once because no bound is a property of the citation alone: the run, the
+    next citation and the enclosing function are relationships between
+    citations, and the next declaration is a property of the file they are
+    written in.
     """
     return _citation_extents(file_node, region_cache).get(code_node.get_field("parse_line"), set())
 
@@ -1192,6 +1252,7 @@ class JourneyVerification:
     verified_steps: int = 0
     total_steps: int = 0
 
+    # Implements: REQ-d00255-C
     @property
     def fraction(self) -> float:
         """Verified-step ratio in [0, 1] used to credit ``uat_verified``.
@@ -1204,13 +1265,13 @@ class JourneyVerification:
         (REQ-d00255-C). Whole-journey (stepless) units have no ratio, so they
         credit full only when ``fully_verified`` (else 0.0).
         """
-        # Implements: REQ-d00255-C
         if self.fully_verified:
             return 1.0
         if self.total_steps > 0:
             return self.verified_steps / self.total_steps
         return 0.0
 
+    # Implements: REQ-d00255-D
     @property
     def verdict(self) -> str:
         """Simple display verdict for this journey.
@@ -1221,7 +1282,6 @@ class JourneyVerification:
             'partial'    if some steps pass but not all.
             'unverified' if no verifying tests are recorded.
         """
-        # Implements: REQ-d00255, REQ-d00256
         if self.has_failures:
             return "fail"
         if self.fully_verified:
@@ -1235,7 +1295,7 @@ _UAT_PASS = ("passed", "pass", "success")
 _UAT_FAIL = ("failed", "fail", "failure", "error")
 
 
-# Implements: REQ-d00255, REQ-d00256
+# Implements: REQ-d00255-B
 def _node_verifying_status(node) -> tuple[bool, bool]:
     """Return ``(passed, failed)`` over the tests this node directly VERIFIES.
 
@@ -1261,7 +1321,7 @@ def _node_verifying_status(node) -> tuple[bool, bool]:
     return passed, failed
 
 
-# Implements: REQ-d00255, REQ-d00256
+# Implements: REQ-d00255-B, REQ-d00256-C, REQ-d00256-D, REQ-d00256-E
 def annotate_journey_verification(graph: FederatedGraph) -> None:
     """Roll each journey's verifying tests up into a ``JourneyVerification``.
 
@@ -1392,7 +1452,7 @@ def annotate_coverage(
         tested_indirect_labels: set[str] = set()  # Assertions with whole-req TEST coverage
         validated_labels: set[str] = set()  # Assertions with passing tests
         has_failures = False
-        # REQ-d00258-G: per-assertion failure attribution. has_failures is the
+        # REQ-d00292-D: per-assertion failure attribution. has_failures is the
         # requirement-wide flag (drives the requirement badge); this set records
         # WHICH assertions actually failed, so a partial sibling covered by a
         # different (non-failing) test does not inherit the red standing.
@@ -1622,10 +1682,10 @@ def annotate_coverage(
             # in, and not from the application it belongs to. That inference
             # existed for test files that supposedly could not carry their own
             # `Verifies:`; they can, so it bought nothing and cost the
-            # distinction REQ-d00258-O reports: a deselected tier, an unbuilt
+            # distinction REQ-d00258-U reports: a deselected tier, an unbuilt
             # target and a crashed runner all read as passing. Its failing half
             # blamed an *Assertion* for a sibling test's failure, which
-            # REQ-d00258-G forbids one level down.
+            # REQ-d00292-D forbids one level down.
 
         # Implements: REQ-d00069-A, REQ-d00255-C, REQ-d00256
         # UAT roll-up: source each validating journey's verdict from its
@@ -1645,7 +1705,7 @@ def annotate_coverage(
         uat_direct_pct: dict[str, float] = {}
         uat_indirect_pct: dict[str, float] = {}
         uat_has_failures = False
-        # REQ-d00258-G: per-assertion UAT failure attribution. A failing journey
+        # REQ-d00292-D: per-assertion UAT failure attribution. A failing journey
         # legitimately blames every assertion THAT journey validates (its
         # assertion_targets, or all labels when it validates the whole REQ); the
         # bug being fixed is a DIFFERENT, non-failing journey's assertions
@@ -2013,6 +2073,7 @@ class KeywordsConfig:
     min_length: int = 3
 
 
+# Implements: REQ-d00215-A
 def extract_keywords(
     text: str,
     config: KeywordsConfig | None = None,
@@ -2075,6 +2136,7 @@ def extract_keywords(
     return keywords
 
 
+# Implements: REQ-d00215-B, REQ-d00215-C
 def annotate_keywords(
     graph: FederatedGraph,
     config: KeywordsConfig | None = None,
@@ -2132,6 +2194,7 @@ def annotate_keywords(
         node.set_field("keywords", keywords)
 
 
+# Implements: REQ-d00215-D
 def find_by_keywords(
     graph: FederatedGraph,
     keywords: list[str],
@@ -2176,6 +2239,7 @@ def find_by_keywords(
     return results
 
 
+# Implements: REQ-d00215-E
 def collect_all_keywords(
     graph: FederatedGraph,
     kind: NodeKind | None = None,

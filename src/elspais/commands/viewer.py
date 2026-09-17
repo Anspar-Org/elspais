@@ -95,6 +95,7 @@ def _find_free_port(start: int) -> int:
     raise RuntimeError(f"No free port found in range {start + 1}-{start + 50}")
 
 
+# Implements: REQ-p00083-E
 def _run_server(args: argparse.Namespace, open_browser: bool = False) -> int:
     """Start the Starlette trace-edit server.
 
@@ -246,7 +247,6 @@ def _run_server(args: argparse.Namespace, open_browser: bool = False) -> int:
 
     atexit.register(lambda: daemon_json.unlink(missing_ok=True))
 
-    # Implements: REQ-p00083-E
     # This process holds unwritten changes exactly as the daemon does,
     # and can be killed in exactly the same ways.
     from elspais.mcp.shared_state import attach_dirty_sentinel
@@ -347,6 +347,7 @@ def _run_server(args: argparse.Namespace, open_browser: bool = False) -> int:
     return 0
 
 
+# Implements: REQ-p00006-A
 def _run_static(args: argparse.Namespace) -> int:
     """Generate a static interactive HTML file."""
     from pathlib import Path

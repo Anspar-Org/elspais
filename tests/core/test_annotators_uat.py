@@ -98,14 +98,14 @@ class TestUatRollupThroughImplements:
 
 
 class TestUatPerAssertionFailureAttribution:
-    """REQ-d00258-G: uat_verified 'failing' is attributed to the assertion the
+    """REQ-d00292-D: uat_verified 'failing' is attributed to the assertion the
     failing journey validates, not to a sibling validated by a passing journey.
 
     The requirement-level dimension still reports failure via has_failures; only
     the per-assertion standing is scoped to failing_labels.
     """
 
-    # Verifies: REQ-d00258-G
+    # Verifies: REQ-d00258-T, REQ-d00292-D
     def test_uat_verified_failing_labels_only_failed_assertion(self):
         """A failing journey on A must not redden a sibling B verified by a
         different, fully-passing journey."""
@@ -147,7 +147,7 @@ class TestUatPerAssertionFailureAttribution:
         assert states["A"]["uat_verified"] == "failing"
         assert states["B"]["uat_verified"] == "full"
 
-    # Verifies: REQ-d00258-G
+    # Verifies: REQ-d00292-D
     def test_uat_single_failing_journey_blames_all_it_validates(self):
         """One journey with a failing step validating the whole REQ legitimately
         reddens every assertion it validates (this is NOT the bug)."""

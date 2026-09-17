@@ -114,7 +114,7 @@ class CoverageDimension:
         has_failures: True if ANY result is failed/error for this dimension.
             This is **requirement-wide** -- it drives the requirement-level
             badge/``tier`` (any assertion failing => the requirement dimension
-            reports a failure, REQ-d00258-G). Do NOT use it to decide a single
+            reports a failure, REQ-d00258-T). Do NOT use it to decide a single
             assertion's standing; use ``failing_labels`` for that.
         failing_labels: The assertion labels that have an actual failing
             result/verification for THIS dimension. This is **per-assertion**
@@ -266,7 +266,7 @@ class LineCoverage:
         attributed_lines: Lines a coverage run executed AND whose recorded
             context names a test that verifies this requirement. Requires
             per-test context data; aggregate-only coverage cannot produce it
-            and leaves this at 0 (REQ-d00258-E).
+            and leaves this at 0 (REQ-d00258-W).
         covered_lines: Lines any coverage run executed, whichever test did it.
         has_measurement: Whether a coverage run measured these lines at all.
             Recorded at ingestion, because a zero ``covered_lines`` otherwise
@@ -275,7 +275,7 @@ class LineCoverage:
         has_contexts: Whether the ingested coverage carried per-test contexts.
             Aggregate-only tooling records none, and without them no
             attribution figure can be computed for any requirement
-            (REQ-d00258-E).
+            (REQ-d00258-W).
     """
 
     total_lines: int = 0
@@ -288,7 +288,7 @@ class LineCoverage:
     def has_attribution(self) -> bool:
         """Whether the coverage data can produce an attribution figure at all.
 
-        REQ-d00258-E keys the suppression on what the TOOLING provided: where
+        REQ-d00258-W keys the suppression on what the TOOLING provided: where
         coverage arrives without per-test contexts there is nothing to
         attribute a line to a test with, and a figure would be an answer to a
         question never asked. Where contexts are present the figure is real
@@ -358,6 +358,7 @@ class RollupMetrics:
             self.assertion_coverage[label] = []
         self.assertion_coverage[label].append(contribution)
 
+    # Implements: REQ-d00069-B, REQ-d00069-M
     def finalize(self) -> None:
         """Compute aggregate counts after all contributions are added.
 
@@ -412,7 +413,6 @@ class RollupMetrics:
         # CODE_INDIRECT). The two are DISJOINT -- an *Assertion* cited by name
         # is not also whole-requirement evidence (REQ-d00069-L).
         impl_direct = direct_labels | explicit_labels
-        # Implements: REQ-d00069-B, REQ-d00069-M
         # Immediate credit here is whole -- Implemented evidence (DIRECT/
         # EXPLICIT/INFERRED sources) is all-or-nothing, unlike uat_verified
         # below, whose partially-verified journeys carry a genuine fraction.
@@ -437,6 +437,7 @@ class RollupMetrics:
         # after this method runs, because they need label-set data from the
         # annotator (tested_labels, validated_labels, etc.)
 
+    # Implements: REQ-d00069-L, REQ-d00069-M
     def populate_test_dimensions(
         self,
         *,
@@ -475,7 +476,6 @@ class RollupMetrics:
             immediate_indirect_by_label=dict.fromkeys(verified_indirect_labels, 1.0),
         )
         self.verified.carried = verified_carried
-        # Implements: REQ-d00069-L, REQ-d00069-M
         # The two measures record WHAT THE CITATION NAMED, and neither is
         # defined in terms of the other: a journey naming the *Assertion*
         # credits only the direct measure, a journey naming the requirement
@@ -702,7 +702,7 @@ class IntegratesRollup:
         return self.implemented_total > 0
 
 
-# Implements: REQ-d00252
+# Implements: REQ-d00252-F
 def has_integration(node: GraphNode) -> bool:
     """True if ``node`` delegates implementation via at least one INTEGRATES edge.
 
@@ -717,7 +717,7 @@ def has_integration(node: GraphNode) -> bool:
     return any(e.kind == EdgeKind.INTEGRATES for e in node.iter_outgoing_edges())
 
 
-# Implements: REQ-d00252
+# Implements: REQ-d00252-D
 def integrates_rollup(node: GraphNode) -> IntegratesRollup:
     """Inherit implemented/passing status from library nodes via INTEGRATES.
 
@@ -774,7 +774,7 @@ class AssociateIntegration:
     has_failures: bool = False
 
 
-# Implements: REQ-d00252
+# Implements: REQ-d00252-F
 def integrates_by_associate(graph) -> list[AssociateIntegration]:
     """Summarize Integrates inheritance grouped by owning associate (REQ-d00252-F).
 
@@ -844,7 +844,7 @@ def integrates_by_associate(graph) -> list[AssociateIntegration]:
     ]
 
 
-# Implements: REQ-d00252
+# Implements: REQ-d00252-F
 def integrates_total(items: list[AssociateIntegration]) -> AssociateIntegration:
     """Aggregate per-associate integration rows into a federation total.
 
@@ -880,7 +880,7 @@ def tested_and_passing(metrics: RollupMetrics) -> CoverageDimension:
 
     A failing *Assertion* contributes to no measure here, and the record that
     it failed survives in ``failing_labels`` -- which is what a per-*Assertion*
-    standing reads first (REQ-d00258-G), so it still renders under its own
+    standing reads first (REQ-d00292-D), so it still renders under its own
     standing rather than disappearing.
 
     The name is kept because every reporting surface reaches Passing through
@@ -895,7 +895,7 @@ def tested_and_passing(metrics: RollupMetrics) -> CoverageDimension:
     # figures now, and an *Assertion* whose declared test returned a failure
     # does not pass (REQ-d00277-C). The failure itself is not lost -- it is
     # carried in ``failing_labels``, which is what a standing reads first
-    # (REQ-d00258-G).
+    # (REQ-d00292-D).
     def _passing_only(by_label: dict[str, float]) -> dict[str, float]:
         return {lbl: frac for lbl, frac in by_label.items() if lbl not in failing}
 
@@ -911,7 +911,7 @@ def tested_and_passing(metrics: RollupMetrics) -> CoverageDimension:
     )
 
 
-# Implements: REQ-d00258-O
+# Implements: REQ-d00258-U
 @dataclass(frozen=True)
 class TestedPartition:
     """The tested assertions of one requirement, by what came back.
@@ -924,7 +924,7 @@ class TestedPartition:
     Measured in the SAME units as the figure it breaks down. Tested is a sum
     of per-*Assertion* fractions (REQ-d00069-M), so a breakdown counted in
     whole assertions could not "together account for every tested *Assertion*"
-    as REQ-d00258-O requires -- a headline of 2.5 against a breakdown summing
+    as REQ-d00258-U requires -- a headline of 2.5 against a breakdown summing
     to 3 accounts for nothing. Each tested *Assertion* contributes its TESTED
     credit to exactly one of the three.
 
@@ -944,7 +944,7 @@ class TestedPartition:
         return self.passed + self.failed + self.awaiting
 
 
-# Implements: REQ-d00258-O
+# Implements: REQ-d00258-U
 def tested_partition(metrics: RollupMetrics) -> TestedPartition:
     """Partition a requirement's tested assertions into the three states.
 

@@ -56,7 +56,7 @@ class EdgeKind(Enum):
     STRUCTURES = "structures"
     DEFINES = "defines"
     YIELDS = "yields"
-    # Implements: REQ-d00252
+    # Implements: REQ-d00252-D
     # Top-down external reference: consumer REQ is implemented by an associate
     # library node. Distinct from IMPLEMENTS so the library's Implements:
     # derivation (filtered on EdgeKind.IMPLEMENTS) never renders a consumer ID

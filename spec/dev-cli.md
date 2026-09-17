@@ -254,7 +254,7 @@ D is what keeps B from becoming guesswork. Reporting several respects in which a
 
 ## REQ-d00285: The Shape of a Finding
 
-**Level**: dev | **Status**: Draft | **Implements**: REQ-p00015
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00015
 **Satisfies**: REQ-p00019
 
 A finding is what the tool hands back when something is wrong with the content or the configuration it was given. REQ-d00271 governs the vocabulary a finding names its defect in. This governs what a finding must carry besides that name, so that a reader can act on it and so that two surfaces reporting the same condition cannot disagree about it.
@@ -299,6 +299,7 @@ D and E are where a finding's severity is settled, for every finding the tool pr
 
 ### Changelog
 
+- 2026-09-12 | bedec247 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: sync changelog hash
 - 2026-08-24 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-66: govern narrowing a report to selected findings — the verdict stays the run's, and the narrowing and the extent of what it withheld are disclosed
 - 2026-08-24 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-66: Initial authoring — a finding carries its location, its remedy and one severity decided in one place, and reads the same in every format
 
@@ -350,7 +351,7 @@ The `coverage` section SHALL produce a coverage report showing implemented, test
 
 ### Assertions
 
-A. The report SHALL group requirements by level as REQ-d00281 determines those groups, and show counts and percentages of requirements with code references, test references, and passing tests.
+A. The report SHALL group requirements by level as REQ-d00281 determines those groups, and show counts and percentages of requirements with code references, test references, and passing tests, each count taken over the population REQ-d00291-F determines.
 
 B. The report SHALL compute per-requirement *Assertion* coverage for Implemented, Tested and Passing as REQ-d00277 defines them, each on the total coverage of REQ-d00069-N.
 
@@ -364,6 +365,7 @@ Coverage data is already computed during graph construction but is only surfaced
 
 ### Changelog
 
+- 2026-09-16 | 515f0165 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-21 | 8e02f52d | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-20 | 067a62c4 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-20 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-74: level groups follow the requirements reported on rather than a fixed set named here
@@ -375,7 +377,7 @@ Coverage data is already computed during graph construction but is only surfaced
 - 2026-05-11 | 2fd4ab13 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | 2fd4ab13 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *Coverage Report Section* | **Hash**: 8e02f52d
+*End* *Coverage Report Section* | **Hash**: 515f0165
 ---
 
 ## REQ-d00073: Link Suggestion CLI Command
@@ -575,11 +577,11 @@ D. When no UAT results CSV file exists, the uat.results check SHALL report as sk
 
 ## REQ-d00249: Configured test runner execution
 
-**Level**: dev | **Status**: Draft | **Implements**: -
+**Level**: dev | **Status**: Active | **Implements**: -
 
 ### Assertions
 
-A. The system SHALL execute each entry in `[[scanning.test.runners]]` in declaration order when invoked with `elspais checks --run-tests`, resolving each entry's `cwd` relative to the repository root and rejecting any `cwd` that resolves outside the repository root.
+A. The system SHALL execute each entry in `[[scanning.test.targets]]` in declaration order when invoked with `elspais checks --run-tests`, resolving each entry's `cwd` relative to the repository root and rejecting any `cwd` that resolves outside the repository root.
 
 B. The system SHALL stream runner stdout and stderr live to the invoking terminal, emit a per-runner banner before invocation, and a tally line with elapsed seconds and the exit code after invocation.
 
@@ -589,7 +591,7 @@ D. When result file patterns are configured but no matching files exist on disk,
 
 E. When result files exist but the oldest result file mtime is earlier than the newest scanned spec, code, or test FILE-node mtime, the system SHALL return a separate `tests.results_stale` health check with `passed = false` and severity `warning`, flipping the exit code unless `--lenient` is passed.
 
-F. The system SHALL return exit code 2 and an error message pointing at `docs/cli/checks.md` when `elspais checks --run-tests` is invoked with no runners configured.
+F. The system SHALL return exit code 2 and an error message pointing at `docs/cli/test-targets.md` when `elspais checks --run-tests` is invoked with no runners configured.
 
 G. The system SHALL return a non-zero exit code if any runner failed OR any check failed, and 0 only if all succeeded.
 
@@ -603,7 +605,14 @@ both gaps: a single command can execute tests and re-evaluate checks,
 and the checks pass warns when results are out of date even without
 running tests.
 
-*End* *Configured test runner execution* | **Hash**: 784f8350
+### Changelog
+
+- 2026-09-13 | 36cbd540 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-09-13 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-82: name the test-target config table the tool actually reads (A)
+- 2026-09-13 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-82: point the no-runners error at the document carrying target configuration examples (F)
+- 2026-09-12 | 784f8350 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: add missing changelog section
+
+*End* *Configured test runner execution* | **Hash**: 36cbd540
 
 ## REQ-d00259: Requirement Format Reference Command
 
@@ -670,7 +679,7 @@ Agent-generated code routinely cannot reliably be constrained to generate assert
 
 ## REQ-d00278: Report Scope Selection Vocabulary
 
-**Level**: dev | **Status**: Draft | **Implements**: REQ-p00084
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00084
 
 A scope is written by a person and read by the tool, so it needs a vocabulary: which properties of a requirement can be selected on, which values those properties admit, what a requirement must and must not carry to satisfy them, whose configuration a name is read against, and what becomes of a name the vocabulary does not account for. This requirement fixes that vocabulary and leaves it open to properties not yet named.
 
@@ -714,13 +723,17 @@ J, K and L are the honesty group, separate because opposite situations produce t
 
 M is what allows the vocabulary to grow, and growth is owed. Selection axes beyond level and status are foreseeable: a compiled document offering its stakeholder audience the product-level requirements of every member of a federation, or a ranking narrowed to one level (REQ-d00125-E), are selections of this kind and are expressed in this vocabulary. The cost of admitting a property must fall on the scopes that use it and on nothing else — a project whose committed scopes shifted meaning because the tool learned a new property would have to re-audit every report it ever committed.
 
+### Changelog
+
+- 2026-09-12 | ef2221cc | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: add missing changelog section
+
 *End* *Report Scope Selection Vocabulary* | **Hash**: ef2221cc
 
 ---
 
 ## REQ-d00279: One Authority for Report Scope Membership
 
-**Level**: dev | **Status**: Draft | **Implements**: REQ-p00084
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00084
 
 Whether a requirement falls within a scope is a judgement, and a judgement made independently in several places drifts. This requirement fixes where that judgement is made and what is owed by a surface that answers it elsewhere.
 
@@ -736,7 +749,11 @@ C. Where a report is produced by composing sections rather than by emitting a se
 
 A is what makes the promises above this requirement hold everywhere at once instead of being re-established path by path, which is how paths that agreed at first stop agreeing later. The agreement REQ-p00084-C asks for between renderings is one instance; C names the seams that are not about rendering at all. A report composed of several sections is assembled differently from the same section asked for alone — REQ-d00085-D binds the single-section case to a standalone invocation, and C is what carries the same agreement into the composed one, where a reporting option lost in assembly costs a reader the requirements it selected. A report computed by a process serving several readers runs a different route again from one computed where it was asked for. A lost scope is worse than a lost option because the output still looks complete.
 
-B grants a second evaluator without granting a second semantics. A view that must answer immediately as a reader narrows it cannot wait on an authority elsewhere, and that responsiveness is worth having; what it is not worth is a reader seeing one set on screen and a different set in the report they then take away. Naming the authority's answer as the comparand is what makes the permission safe to grant: agreement is decided by comparison against a stated referent, so a second evaluator that is consistent with itself and wrong is not conforming. The estate elsewhere requires a shared decision to be computed once and read by every surface — the per-*Assertion* coverage standing of REQ-d00258-G is computed where the graph is and applied on first render rather than being re-derived by the reader's view. That is the right settlement where the decision is expensive and the inputs are not to hand. Scope membership is the opposite case on both counts: it is a comparison of properties the view already holds for every requirement it is displaying, and the reader is changing it continuously, so equivalence is the obligation that fits and derivation is not owed.
+B grants a second evaluator without granting a second semantics. A view that must answer immediately as a reader narrows it cannot wait on an authority elsewhere, and that responsiveness is worth having; what it is not worth is a reader seeing one set on screen and a different set in the report they then take away. Naming the authority's answer as the comparand is what makes the permission safe to grant: agreement is decided by comparison against a stated referent, so a second evaluator that is consistent with itself and wrong is not conforming. Derivation is the right settlement where a shared decision is expensive and its inputs are not to hand: the per-*Assertion* coverage standing the viewer shows (REQ-d00292-B) is computed where the graph is and read by the view rather than worked out there, because the view holds neither the metrics nor the configuration that would take. Scope membership is the opposite case on both counts: it is a comparison of properties the view already holds for every requirement it is displaying, and the reader is changing it continuously, so equivalence is the obligation that fits and derivation is not owed.
+
+### Changelog
+
+- 2026-09-12 | 2b755b50 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: add missing changelog section
 
 *End* *One Authority for Report Scope Membership* | **Hash**: 2b755b50
 
@@ -744,7 +761,7 @@ B grants a second evaluator without granting a second semantics. A view that mus
 
 ## REQ-d00282: Report Value Selection
 
-**Level**: dev | **Status**: Draft | **Implements**: REQ-p00084
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00084
 
 A report states values about each of its rows, whether a row is a requirement or a group of them. Which requirements a report is about is a scope; which values it states is this. The two are separate choices about one report, and a reader making one of them says nothing about the other.
 
@@ -778,6 +795,8 @@ M. A value a report does not state for a row SHALL be distinguishable from one i
 
 N. For a figure measured in lines, a report SHALL admit selecting the lines covered, the lines measured, and their proportion, each in its own right.
 
+O. A report listing which requirements a value has not credited SHALL offer that value, and SHALL list only those the selection names.
+
 ### Rationale
 
 B is what the coverage vocabulary already makes possible, taken down to the scalar. A coverage figure is computed on four measures with a total taken from them (REQ-d00069-L+N), and each of those is itself a credit counted over a population -- so a reader may want the credit, the population it was counted over, their proportion, or any combination. Offering only the composite makes a reader who wants one number take three, and makes a program parse a sentence to recover what was a number before it was rendered. Naming each separately is also what keeps a proportion honest: it is derived from the other two, and a report stating all three states the same fact three ways rather than three facts. It names the dimensions of REQ-d00277 rather than coverage at large because line coverage is measured in lines and has no four measures to select among (REQ-d00254-B); a rule written over every coverage figure would oblige a surface to offer what that one cannot.
@@ -796,11 +815,18 @@ G and J are what a committed selection is worth. G bounds what the tool may do: 
 
 K and L are what make a stated selection a stated shape. A committed artifact is read by something that expects its values where it left them, so an order decided differently on two runs breaks a consumer exactly as a changed set would. L is the floor beneath every selection: a row that cannot be attributed to what it is a fact about is not a report about anything, whatever else it states.
 
-N reaches the one figure B cannot. Line coverage is measured in lines and confers no assertion credit (REQ-d00254-B), so it has none of the four measures B decomposes and was left whole -- but whole is not the same as indivisible. It is a count of lines covered out of lines measured, and a reader wanting the proportion should not have to take a rendering and read the numbers back out of it. A further reading of the same lines, how many of them a verifying test can be named for, is a different question again: it is named for that attribution rather than for the figure at large (C), and where the tooling records no test contexts it is not stated at all rather than stated as none (REQ-d00258-E). What that suppression must not do is take the lines covered with it -- they were measured, and a report that has them and says nothing has withheld an answer it holds.
+N reaches the one figure B cannot. Line coverage is measured in lines and confers no assertion credit (REQ-d00254-B), so it has none of the four measures B decomposes and was left whole -- but whole is not the same as indivisible. It is a count of lines covered out of lines measured, and a reader wanting the proportion should not have to take a rendering and read the numbers back out of it. A further reading of the same lines, how many of them a verifying test can be named for, is a different question again: it is named for that attribution rather than for the figure at large (C), and where the tooling records no test contexts it is not stated at all rather than stated as none (REQ-d00258-W). What that suppression must not do is take the lines covered with it -- they were measured, and a report that has them and says nothing has withheld an answer it holds.
 
-M is the distinction between having nothing to say and saying nothing. Not every value a report offers exists for every row -- a coverage figure has none for a group whose requirements confer none. Where those two look alike a reader reads absence as zero and concludes work is undone that was never owed, which is the same defect REQ-d00258-E keeps out of line coverage by recording whether a measurement was taken rather than letting an absent one read as none.
+O settles which reports this axis reaches, and it is wider than it first looks. A report either states a value about each of its rows or lists the rows a value has not credited, and the second reads exactly the dimension the first states: what is missing is the complement of what was counted. So the choice a selection makes is the same choice in both -- which values are stated, which shortfalls are listed -- and a report of the second kind that took no selection would be the one report in the estate a reader could not narrow, for no reason a reader could see. The alternative reading, that such a report offers nothing and so must refuse a selection outright under F, mistakes a fixed value for an absent one: the named listings are this report under a single-dimension selection, and a name they do not offer is refused by F for the ordinary reason, not because the report has nothing to be asked for. What O does not reach is a report stating nothing about a requirement at all -- findings about the project, or the files that changed -- and F still governs a value named to one of those.
 
-*End* *Report Value Selection* | **Hash**: 70ab39ac
+M is the distinction between having nothing to say and saying nothing. Not every value a report offers exists for every row -- a coverage figure has none for a group whose requirements confer none. Where those two look alike a reader reads absence as zero and concludes work is undone that was never owed, which is the same defect REQ-d00258-W keeps out of line coverage's attribution figure by withholding it rather than letting an unmeasured one read as none.
+
+### Changelog
+
+- 2026-09-13 | bf98248c | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-09-12 | 70ab39ac | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: add missing changelog section
+
+*End* *Report Value Selection* | **Hash**: bf98248c
 
 ---
 
@@ -818,13 +844,17 @@ B. A scope referred to by name SHALL select the requirements that the scope decl
 
 C. A project SHALL be able to declare, under one name, both the scope a report is produced under and the values it states.
 
+D. A value a declaration names that a report does not offer SHALL pass over that report, leaving the rest of the declaration to select as it otherwise would.
+
 ### Rationale
 
 A, B and C are what REQ-p00084-F asks for in a form a project can commit and a reader can check. A is where the scope comes to rest — in the project, beside the requirements it selects over, versioned with them — and B is what keeps the name honest: a name is a reference to a scope, never a second selection that happens to share a spelling. An author reading a declaration then knows what a report produced under it contains without running it; once the two can differ, a committed report is evidence of a scope nobody can reconstruct.
 
 C is what makes a declaration answer for a whole audience rather than half of one. An audience is defined by the requirements it reads and by the facts it reads about them, and a project able to commit only the first carries the second in whatever invoked the report, which is the drift a declaration exists to end. One name for both does not join the two choices: they remain independent everywhere REQ-d00282-H and REQ-d00282-I say they are, a declaration naming no columns constrains none, and a selection stated on an invocation stands without a declaration to belong to. What the name buys is that an audience can be referred to once.
 
-*End* *Named Report Declarations* | **Hash**: ab0a70bb
+D is what makes C usable, and it takes the opposite disposition from REQ-d00282-F for the same reason REQ-d00278-K takes it against a member's vocabulary. A value a reader writes is written for the report in front of them, so a name that report does not offer is a mistake and F wants no report produced under it. A declared value is written once for an audience and read against every report that audience takes -- a table of facts, a listing of what is missing, a ranking -- and those reports offer different values because they answer different questions. Refusing a name one of them does not offer would make the declaration a name the audience could use with some of its own reports and not others, which is the drift C exists to end, arriving by the other door: a project would keep one declaration per report and they would fall out of step. Passing the name over is what keeps one name answering for the audience, and it costs no honesty, because a value a report does not offer is one a reader can see is absent -- unlike a requirement a scope silently dropped. A declaration none of whose values a report offers narrows nothing, and the report states what it would have anyway.
+
+*End* *Named Report Declarations* | **Hash**: 321c6f4f
 ---
 
 ## REQ-d00289: Associate Registration Outcome

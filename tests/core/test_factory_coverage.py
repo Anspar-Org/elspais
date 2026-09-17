@@ -249,7 +249,7 @@ coverage = "coverage.json"
         assert line_cov == {1: 1, 2: 1, 3: 0}
         assert file_node.get_field("executable_lines") == 3
 
-    # Verifies: REQ-d00254-G, REQ-d00258-E
+    # Verifies: REQ-d00254-G, REQ-d00258-W
     def test_coverage_json_contexts_annotate_line_contexts(self, tmp_path: Path) -> None:
         """A coverage.json with a per-line `contexts` map (coverage.py
         dynamic contexts, e.g. from `--cov-context=test` + `show_contexts`)
@@ -370,7 +370,7 @@ coverage = "coverage.json"
         assert file_node is not None
         assert file_node.get_field("line_contexts") is None
 
-    # Verifies: REQ-d00254-G, REQ-d00258-E
+    # Verifies: REQ-d00254-G, REQ-d00258-W
     def test_coverage_sqlite_annotates_file_node_and_contexts(self, tmp_path: Path) -> None:
         """A `.coverage` SQLite target (coverage.py's native data file)
         annotates FILE nodes with line_coverage AND line_contexts, restoring
@@ -440,7 +440,7 @@ coverage = ".coverage"
             f"expected test_work context on line 2, got {line_contexts}"
         )
 
-    # Verifies: REQ-d00254-G, REQ-d00258-E
+    # Verifies: REQ-d00254-G, REQ-d00258-W
     def test_coverage_sqlite_unresolvable_file_contexts_not_materialized(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:

@@ -97,13 +97,13 @@ class ViewStats:
 
 # ── Severity-driven coverage tiers ──
 
-# `neutral` (the forced N/A override, REQ-d00258-H) sits at the same low
+# `neutral` (the forced N/A override, REQ-d00292-H) sits at the same low
 # priority as `info` so it never out-ranks a real gap (error/warning) for the
 # combined worst-severity — a genuine gap still wins the combined badge/bucket.
 SEVERITY_PRIORITY: dict[str, int] = {"error": 0, "warning": 1, "info": 2, "neutral": 2, "off": 3}
 
 
-# Implements: REQ-d00258-D
+# Implements: REQ-d00293-A
 def _severity_color(severity: str) -> str:
     """Resolve a severity name to its theme-catalog color_key."""
     from elspais.html.theme import get_catalog
@@ -135,7 +135,7 @@ _SEVERITY_TO_BUCKET: dict[str, str] = {
     "error": "missing",
     "warning": "partial",
     "info": "full",
-    # `neutral` (N/A override, REQ-d00258-H) is non-dragging exactly like `info`:
+    # `neutral` (N/A override, REQ-d00292-H) is non-dragging exactly like `info`:
     # a not-applicable dimension must never pull the combined bucket below "full".
     "neutral": "full",
     # A tier the dimension says nothing about (REQ-d00212-U): never a gap.
@@ -166,6 +166,7 @@ def _tier_to_severity(tier: str, severity_config: Any) -> str:
     return getattr(severity_config, tier, "error")
 
 
+# Implements: REQ-d00069-L, REQ-d00258-A, REQ-d00258-J, REQ-d00291-H, REQ-d00292-G+H
 def compute_coverage_tiers(node: GraphNode, config: dict[str, Any] | None = None) -> dict[str, Any]:
     """Compute per-dimension severity colors and combined worst-of-all.
 
@@ -249,7 +250,7 @@ def compute_coverage_tiers(node: GraphNode, config: dict[str, Any] | None = None
         elif hasattr(rules, "coverage"):
             cov_config = rules.coverage
 
-    # Per-level UAT expectation (REQ-d00258-F). By default a UAT `missing` tier is
+    # Per-level UAT expectation (REQ-d00291-H). By default a UAT `missing` tier is
     # soft (config `_uat_severity` sets missing="info") so a journey-less
     # requirement is not dragged below "full". When the requirement's level
     # `expects_validation`, that absence is a REAL gap: override the UAT
@@ -264,7 +265,7 @@ def compute_coverage_tiers(node: GraphNode, config: dict[str, Any] | None = None
         uat_cov_cfg = uat_cov_cfg.model_copy(update={"missing": "error"})
         uat_ver_cfg = uat_ver_cfg.model_copy(update={"missing": "error"})
 
-    # The chain of relative denominators (REQ-d00258-I) is NOT derived here.
+    # The chain of relative denominators (REQ-d00258-R) is NOT derived here.
     # Coverage aggregation has ONE home (`graph/aggregation.py`), so which
     # label-set a chained dimension is measured over -- and whether it is
     # chained at all -- is answered by `relative_tier_for`, the same helper the
@@ -304,10 +305,10 @@ def compute_coverage_tiers(node: GraphNode, config: dict[str, Any] | None = None
     for dim_key, dim, sev_cfg, prefix in dim_map:
         tier, is_na = relative_tier_for(rollup, dim_key, measure=measure)
         # A `missing` tier that is N/A (empty relative denominator) is neutral:
-        # nothing to measure, so it resolves to the `neutral` severity (GREY,
-        # REQ-d00258-H) regardless of the dimension's configured `missing`
-        # severity. A non-N/A `missing` is a real gap and uses the configured
-        # severity.
+        # nothing to measure, so it resolves to the `neutral` severity (GREY --
+        # see REQ-d00258-S and REQ-d00292-G) regardless of the dimension's
+        # configured `missing` severity. A non-N/A `missing` is a real gap and
+        # uses the configured severity.
         neutral = tier == "missing" and is_na
         # The `Implemented` gap is only a REAL (red) gap when the requirement's
         # status expects implementation (REQ-d00258, Phase 3). For a status that
@@ -323,7 +324,7 @@ def compute_coverage_tiers(node: GraphNode, config: dict[str, Any] | None = None
         # The forced-neutral override renders GREY (`neutral` severity), matching
         # the per-assertion `missing` standing and the user's green/yellow/red/grey
         # palette -- NOT the yellow-green `info` severity, which is a real
-        # "fully-covered-including-indirect" state (REQ-d00258-H). This is a color
+        # "fully-covered-including-indirect" state (REQ-d00292-A). This is a color
         # change only: the tier stays `missing` and the dimension stays
         # non-dragging for combined-bucket purposes (neutral maps to "full").
         #
@@ -331,7 +332,7 @@ def compute_coverage_tiers(node: GraphNode, config: dict[str, Any] | None = None
         # `elspais checks` gate; it is computed exactly as before so those two
         # jobs are unchanged.
         severity = "neutral" if neutral else _tier_to_severity(tier, sev_cfg)
-        # COLOR is decoupled from severity (REQ-d00258-D): it resolves from the
+        # COLOR is decoupled from severity (REQ-d00292-F): it resolves from the
         # coverage STANDING through the theme catalog -- the SAME source the
         # per-*Assertion* badges use -- so a given standing is one color
         # everywhere (full->green, partial->yellow, failing->red), regardless of
@@ -348,13 +349,12 @@ def compute_coverage_tiers(node: GraphNode, config: dict[str, Any] | None = None
         label = status_words[dim_key]
         desc = _TIER_DESCRIPTIONS.get(tier, tier)
 
-        # Implements: REQ-d00069-L, REQ-d00258-A, REQ-d00258-J
         # The four measures behind the headline standing, published in the
         # hover text. A marker standing in for a measure the badge does not
         # show is retired (REQ-d00258-J): a reader who wants to know what
         # produced the figure reads the measures themselves.
         tip = f"{label}: {desc} — {measure_phrase(dimension_measures(dim))}"
-        # Implements: REQ-d00258-O
+        # Implements: REQ-d00258-U+V
         # The Tested badge is where the breakdown belongs on this surface: it
         # qualifies that figure and introduces no badge of its own.
         if prefix == "tested":
@@ -393,24 +393,24 @@ def compute_coverage_tiers(node: GraphNode, config: dict[str, Any] | None = None
 
     # Surface the per-level UAT expectation so the viewer can gate the two UAT
     # header badges: a journey-less expects_validation requirement still shows a
-    # (red) UAT badge; a non-expecting one shows none (REQ-d00258-F).
+    # (red) UAT badge; a non-expecting one shows none (REQ-d00291-A, REQ-d00292-G).
     result["expects_validation"] = expects_validation
 
     return result
 
 
-# The semantic per-assertion coverage "standings" (REQ-d00258-G). These are the
+# The semantic per-assertion coverage "standings" (REQ-d00292-B). These are the
 # tokens the server emits per assertion per dimension; their COLORS are NOT
 # defined here -- they live in the theme catalog ([coverage_standing.*] in
 # theme.toml) and are resolved through it, exactly as severity colors are
-# (REQ-d00258-D). This keeps the standing->color association configurable and
+# (REQ-d00293-A). This keeps the standing->color association configurable and
 # out of the badge logic.
 COVERAGE_STANDINGS = ("full", "partial", "failing", "missing")
 
 
-# Implements: REQ-d00258-D
+# Implements: REQ-d00292-F, REQ-d00293-A
 def _standing_color(standing: str) -> str:
-    """Resolve a coverage standing to its theme-catalog color_key (REQ-d00258-G).
+    """Resolve a coverage standing to its theme-catalog color_key (REQ-d00292-F).
 
     Mirrors ``_severity_color``: the association lives in the catalog
     (``[coverage_standing.*]``), never hard-coded here.
@@ -423,6 +423,7 @@ def _standing_color(standing: str) -> str:
         return ""
 
 
+# Implements: REQ-p00017-G, REQ-d00292-B+C
 def compute_assertion_coverage_states(
     node: GraphNode, config: dict[str, Any] | None = None
 ) -> dict[str, dict[str, str]]:
@@ -434,7 +435,7 @@ def compute_assertion_coverage_states(
     the viewer resolves the color through the theme catalog). The standings are
     read from the SAME ``rollup_metrics`` per-label fields that drive the
     requirement-level badges (``compute_coverage_tiers``), so the two levels can
-    never disagree (REQ-d00258-G): if every assertion is ``"full"`` the
+    never disagree (REQ-d00258-T, REQ-d00292-C): if every assertion is ``"full"`` the
     requirement dimension is a full tier; if any assertion is ``"failing"`` the
     dimension ``has_failures``.
 
@@ -451,7 +452,7 @@ def compute_assertion_coverage_states(
     Standing rule: ``full`` at ~100%, ``partial`` at 0<f<1 with no own failure,
     ``failing`` when this assertion itself failed (``label in failing_labels``),
     ``missing`` otherwise. An assertion is NEVER reddened by a failing SIBLING
-    (REQ-d00258-G).
+    (REQ-d00292-D).
     No coverage is recomputed here -- only the pre-computed per-label fractions
     are projected. Returns ``{}`` only for a node with no rollup / no assertions
     (same gate as ``compute_coverage_tiers``); standings compute for EVERY
@@ -466,7 +467,6 @@ def compute_assertion_coverage_states(
     if not rollup or rollup.total_assertions == 0:
         return {}
 
-    # Implements: REQ-p00017-G
     labels: list[str] = counted_assertion_labels(node)
 
     from elspais.graph.aggregation import measure_by_label
@@ -498,7 +498,7 @@ def compute_assertion_coverage_states(
         A failure lands on this assertion only when the assertion itself failed
         (``label in passing.failing_labels``) -- NOT merely because a sibling
         assertion, covered by a different (non-failing) test/journey, failed and
-        set the requirement-wide ``has_failures`` flag (REQ-d00258-G). The
+        set the requirement-wide ``has_failures`` flag (REQ-d00292-D). The
         requirement-level badge still goes red for any failing assertion via the
         dimension-wide ``has_failures`` in ``compute_coverage_tiers``.
 
@@ -507,7 +507,7 @@ def compute_assertion_coverage_states(
         lines were executed leaves this assertion at full credit and failing at
         once. Reading credit first would paint it green while the Passing
         figures beside it exclude it (REQ-d00277-C), which is the same
-        disagreement REQ-d00258-G exists to prevent.
+        disagreement REQ-d00258-T exists to prevent.
         """
         if label in passing.failing_labels:
             return "failing"
@@ -531,7 +531,7 @@ def compute_assertion_coverage_states(
     return states
 
 
-# Implements: REQ-d00069-L, REQ-d00258-A, REQ-d00258-G, REQ-d00258-J
+# Implements: REQ-d00069-L, REQ-d00258-A, REQ-d00258-J, REQ-d00292-E
 def compute_assertion_coverage_measures(node: GraphNode) -> dict[str, dict[str, str]]:
     """The measures behind each per-*Assertion* standing, ready to display.
 
@@ -541,7 +541,7 @@ def compute_assertion_coverage_measures(node: GraphNode) -> dict[str, dict[str, 
     evidence sits (attached here, or conducted up a `Refines:` chain).
 
     A pill headlines the TOTAL standing, and this is how a reader sees what
-    produced it (REQ-d00258-G). It replaces the retired ``~`` caveat, which
+    produced it (REQ-d00292-E). It replaces the retired ``~`` caveat, which
     stood in for a measure the pill did not show (REQ-d00258-J). The phrase is
     composed HERE, from the one shared vocabulary, so the viewer never spells a
     second wording for measures the CLI already names.
@@ -592,6 +592,45 @@ def compute_validation_color(
     """
     tiers = compute_coverage_tiers(node, config)
     return (tiers["combined_color"], tiers["combined_tip"])
+
+
+# Implements: REQ-d00279-B, REQ-d00281-A
+def levels_with_carried(typed, graph) -> list[dict[str, Any]]:
+    """The level catalog a rendered view filters by, including levels only carried.
+
+    A view that judges membership for itself has to be able to judge every
+    requirement it displays. Building the catalog from the configuration alone
+    leaves a requirement whose level only its own repository declares matching no
+    button at all, so the view would exclude it under any selection while the
+    authority admits it -- a second semantics rather than a second evaluator.
+
+    ONE catalog for every rendering of that view: the live viewer route and the
+    static export both read it, so the same declaration cannot resolve one way on
+    screen and another in the exported file.
+    """
+    from elspais.view_model import build_levels
+
+    catalog = build_levels(typed)
+    known = {str(entry.get("key", "")).lower() for entry in catalog}
+    if graph is None or not hasattr(graph, "nodes_by_kind"):
+        return catalog
+    from elspais.graph.aggregation import level_group_keys
+
+    for key in level_group_keys(graph, None):
+        if key.lower() in known:
+            continue
+        known.add(key.lower())
+        catalog.append(
+            {
+                "key": key,
+                "label": key,
+                "rank": 9999,
+                "letter": "",
+                "bg": "",
+                "text": "",
+            }
+        )
+    return catalog
 
 
 class HTMLGenerator:
@@ -684,13 +723,17 @@ class HTMLGenerator:
         # Build dynamic category catalogs (levels/namespaces/statuses with
         # resolved colors). Same shape used by the live viewer routes.
         from elspais.config.schema import ElspaisConfig
-        from elspais.view_model import build_levels, build_namespaces, build_statuses
+        from elspais.view_model import build_namespaces, build_statuses
 
         try:
             typed_cfg = ElspaisConfig.model_validate(self.config)
         except Exception:
             typed_cfg = ElspaisConfig.model_validate({})
-        levels_ctx = build_levels(typed_cfg)
+        # Implements: REQ-d00279-B
+        # The graph-aware catalog, not the configuration alone: the exported file
+        # runs the same client-side evaluator as the live route, so it has to be
+        # able to judge every level its own rows carry.
+        levels_ctx = levels_with_carried(typed_cfg, self.graph)
         namespaces_ctx = build_namespaces(typed_cfg, self.graph)
         statuses_ctx = build_statuses(typed_cfg, candidates=sorted(statuses))
 
@@ -739,6 +782,7 @@ class HTMLGenerator:
         for node in self.graph.nodes_by_kind(NodeKind.REQUIREMENT):
             annotate_display_info(node)
 
+    # Implements: REQ-d00129-D
     def _is_associated(self, node: GraphNode) -> bool:
         """Check if a node is from an associated/sponsor repository.
 
@@ -761,7 +805,6 @@ class HTMLGenerator:
             if re.match(r"^[A-Z]{2,}-[a-z]", after_prefix):
                 return True
 
-        # Implements: REQ-d00129-D
         _fn = node.file_node()
         if not _fn:
             return False
@@ -1373,6 +1416,7 @@ class HTMLGenerator:
 
         return result
 
+    # Implements: REQ-p00006-C
     def _get_pygments_css(self) -> str:
         """Generate Pygments CSS theme for syntax highlighting.
 
@@ -1383,6 +1427,7 @@ class HTMLGenerator:
 
         return get_pygments_css()
 
+    # Implements: REQ-p00006-C
     def _get_pygments_css_dark(self) -> str:
         """Generate dark-theme Pygments CSS for syntax highlighting.
 

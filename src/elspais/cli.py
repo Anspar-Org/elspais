@@ -240,6 +240,7 @@ def _to_namespace(global_args: GlobalArgs) -> argparse.Namespace:
     return ns
 
 
+# Implements: REQ-d00085-A+D
 def main(argv: list[str] | None = None) -> int:
     """
     Main entry point for the CLI.
@@ -272,7 +273,6 @@ def main(argv: list[str] | None = None) -> int:
         _print_help()
         return 0
 
-    # Implements: REQ-d00085-A+D
     # Detect multi-section composition before Tyro parsing
     from elspais.commands.report import COMPOSABLE_SECTIONS
 
@@ -745,6 +745,7 @@ def _mcp_install(global_scope: bool = False, transport: str = "http") -> int:
     return 0
 
 
+# Implements: REQ-d00214-E
 def _claude_desktop_config_path() -> Path | None:
     """Return the Claude Desktop config file path for the current platform.
 
@@ -769,6 +770,7 @@ def _claude_desktop_config_path() -> Path | None:
     return None
 
 
+# Implements: REQ-d00214-E, REQ-d00214-F
 def _mcp_install_desktop() -> int:
     """Register elspais MCP server in Claude Desktop config."""
     import json
@@ -801,6 +803,7 @@ def _mcp_install_desktop() -> int:
     return 0
 
 
+# Implements: REQ-d00214-F
 def _mcp_uninstall_desktop() -> int:
     """Remove elspais MCP server from Claude Desktop config."""
     import json
@@ -831,6 +834,7 @@ def _mcp_uninstall_desktop() -> int:
     return 0
 
 
+# Implements: REQ-d00214-B, REQ-d00214-C, REQ-d00214-G
 def _mcp_uninstall(global_scope: bool = False) -> int:
     """Remove elspais MCP server from Claude Code."""
     import shutil

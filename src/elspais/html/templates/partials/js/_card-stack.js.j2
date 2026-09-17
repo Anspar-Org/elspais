@@ -136,7 +136,7 @@ function renderCardStack() {
     body.appendChild(empty);
 
     // Per-assertion badge colors are baked into the rendered HTML from the
-    // server-computed assertion_coverage_states (REQ-d00258-G), so a DOM
+    // assertion_coverage_states (REQ-d00292-B) the server computes, so a DOM
     // rebuild already carries the correct colors — no re-color pass needed.
 
     // Re-apply edit mode state after DOM rebuild. In edit mode each
@@ -509,7 +509,7 @@ async function submitNewComment(btn, anchor) {
 }
 
 // Per-assertion coverage STANDING -> CSS class, resolved from the theme catalog
-// ([coverage_standing.*]) — NOT hard-coded here (REQ-d00258-G). The server emits
+// ([coverage_standing.*]) — NOT hard-coded here (REQ-d00293-A). The server emits
 // a semantic standing token (full/partial/failing/missing); this map is rendered
 // from the catalog so the standing->color association stays configurable (e.g.
 // remappable for color-impaired users), exactly like the severity colors. The
@@ -548,16 +548,16 @@ function buildAssertionHtml(nodeId, a, data) {
         'onblur="onAssertionBlur(this)" onkeydown="onEditableKeydown(event)">' +
         initialBody + '</span>';
     // 6 dimension badges — shown when a direct assertion-level link exists OR
-    // the assertion has a non-missing coverage state (REQ-d00258-G)
+    // the assertion has a non-missing coverage state (REQ-d00292-B)
     h += '<span class="assertion-badges-area">';
     var badgeMode = editState.assertionBadgeMode || 'abbrev';
     var aLinks = data.assertion_links ? data.assertion_links[label] : null;
     // Per-assertion coverage states, server-computed from the SAME rollup metrics
-    // as the requirement header badges (REQ-d00258-G). Color is applied on render
+    // as the requirement header badges (REQ-d00292-B). Color is applied on render
     // (no lazy prefetch): state -> the val-* class the requirement badge uses.
     var aStates = data.assertion_coverage_states ? data.assertion_coverage_states[label] : null;
     // The four measures behind each standing, phrased server-side under the one
-    // shared vocabulary (REQ-d00258-G/J) — shown on hover instead of a caveat
+    // shared vocabulary (REQ-d00292-E, REQ-d00258-J) — shown on hover instead of a caveat
     // marker standing in for a measure the pill does not show.
     var aMeasures = data.assertion_coverage_measures ? data.assertion_coverage_measures[label] : null;
     var dimDefs = [
@@ -586,7 +586,7 @@ function buildAssertionHtml(nodeId, a, data) {
             stateCls = assertionStateColorClass(aStates[dim.stateKey]);
         }
         // Data-driven tooltip: the coverage standing, the four measures behind
-        // it (REQ-d00258-G), then the direct-link count.
+        // it (REQ-d00292-E), then the direct-link count.
         var tipParts = [dim.tip];
         if (dim.stateKey && aStates && aStates[dim.stateKey]) {
             tipParts.push('standing: ' + aStates[dim.stateKey]);
@@ -1545,8 +1545,8 @@ document.addEventListener('DOMContentLoaded', function() {
 // =====================================================================
 //
 // Badge COLORS no longer depend on this prefetch: they are baked into the
-// rendered HTML from the server-computed assertion_coverage_states
-// (REQ-d00258-G). This prefetch now only warms the caches the expand-panels
+// rendered HTML from the assertion_coverage_states (REQ-d00292-B) the server
+// computes. This prefetch now only warms the caches the expand-panels
 // reuse, so opening a Tests/Code/UAT panel is instant.
 
 async function prefetchCoverage(nodeId) {
@@ -1800,9 +1800,9 @@ function renderAssertionResults(panel, reqId, label, data) {
     panel.innerHTML = html;
 }
 
-// Per-assertion Tested / Passing badge colors are server-computed
-// (assertion_coverage_states) and baked in at render time (REQ-d00258-G); no
-// client-side recolor pass is needed here anymore.
+// Per-assertion Tested / Passing badge colors come from the
+// assertion_coverage_states (REQ-d00292-B) the server computes, and are baked
+// in at render time; no client-side recolor pass is needed here anymore.
 
 // =====================================================================
 // Assertion Implementation — Code Coverage Buttons

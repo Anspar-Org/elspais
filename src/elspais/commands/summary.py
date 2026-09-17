@@ -29,6 +29,7 @@ import sys
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    from elspais.commands._requests import SummaryRequest
     from elspais.graph.federated import FederatedGraph
 
 from elspais.graph.aggregation import (
@@ -126,7 +127,7 @@ _PAYLOAD_PREFIX: dict[str, str] = {
 }
 
 
-# Implements: REQ-d00254-B, REQ-d00258-E, REQ-d00282-M+N
+# Implements: REQ-d00254-B, REQ-d00258-W, REQ-d00282-M+N
 def _lines_measured(level_row: dict) -> bool:
     """Whether a coverage run measured this level's implementation lines.
 
@@ -191,7 +192,7 @@ def _scalar(level_row: dict, key: str) -> float | None:
     if spec.dimension in LINE_DIMENSIONS:
         if not _lines_measured(level_row):
             return None
-        # Implements: REQ-d00258-E, REQ-d00282-N
+        # Implements: REQ-d00258-W, REQ-d00282-N
         # Absent where the tooling recorded no per-test contexts, and absent
         # ALONE: the lines covered and the lines measured stand, because they
         # were measured.
@@ -207,7 +208,7 @@ def _scalar(level_row: dict, key: str) -> float | None:
     if not level_row.get("total_assertions"):
         return None
     if spec.part in COUNT_PARTS:
-        # Implements: REQ-d00258-O
+        # Implements: REQ-d00258-U
         # Counts of what came back, with no proportion of their own.
         return level_row.get(f"tested_{spec.part}")
     figure = _figure(level_row, key)
@@ -216,6 +217,7 @@ def _scalar(level_row: dict, key: str) -> float | None:
     return scalar_value(figure, level_row["total_assertions"], spec.part)
 
 
+# Implements: REQ-d00282-E
 def _stated_values(data: dict) -> tuple[str, ...]:
     """The values this rendering states.
 
@@ -228,35 +230,16 @@ def _stated_values(data: dict) -> tuple[str, ...]:
     return tuple(stated) if stated else DEFAULT_VALUES
 
 
-def _resolve_values_for(args_or_params: Any, config: dict | None) -> tuple[str, ...]:
-    from elspais.commands._values import resolve_report_values
-
-    return resolve_report_values(
-        args_or_params,
-        OFFERED_VALUES,
-        DEFAULT_VALUES,
-        config,
-        identity_key=IDENTITY_VALUE,
-    )
-
-
-def _stamp_values(data: dict, args_or_params: Any, config: dict | None) -> None:
+# Implements: REQ-d00282-E
+def _stamp_values(data: dict, values: tuple[str, ...] | None) -> None:
     """Record the stated values on the payload, where a selection named any.
 
     Stamped only when something was named: an unstamped payload is the default
     report, and stamping the default would make a consumer unable to tell a
     reader who asked for everything from one who asked for nothing.
     """
-    from elspais.commands._values import values_from_args, values_from_params
-
-    named = (
-        values_from_params(args_or_params)
-        if isinstance(args_or_params, dict)
-        else values_from_args(args_or_params, config)
-    )
-    resolved = _resolve_values_for(args_or_params, config)
-    if named is not None:
-        data["values"] = list(resolved)
+    if values is not None:
+        data["values"] = list(values)
 
 
 # Implements: REQ-d00085-A, REQ-d00086-A+B+C+D
@@ -271,49 +254,49 @@ def render_section(
     """
     fmt = getattr(args, "format", "text") or "text"
     # Implements: REQ-p00084-A+D, REQ-d00279-C
-    from elspais.commands._scope import resolve_scope_for_report, scope_disclosure
+    from elspais.commands._edges import report_inputs_from_args
+    from elspais.commands._requests import SummaryRequest
     from elspais.commands._values import UnofferedValues
 
-    result = resolve_scope_for_report(graph, args, config)
-    ids = None if len(result.ids) == result.population else result.ids
-    data = collect_coverage(graph, config=config, node_ids=ids)
-    data["scope"] = scope_disclosure(result)
-    # Implements: REQ-d00282-F
-    # A section composed with others honours the same selection it honours
-    # alone, and refuses on the same terms: a report produced under a selection
-    # honoured in part looks exactly like the one the reader asked for.
     try:
-        _stamp_values(data, args, config)
+        inputs = report_inputs_from_args(args, config, OFFERED_VALUES, IDENTITY_VALUE)
     except UnofferedValues as exc:
         return f"Coverage Summary\nerror: {exc}", 1
-    content = _render(data, fmt, config)
-    return content.rstrip("\n"), 0
+    data = compute_summary(
+        graph, config, SummaryRequest(inputs.scope, inputs.values, inputs.treat_active)
+    )
+    return _render(data, fmt, config).rstrip("\n"), 0
 
 
 # Implements: REQ-d00279-C
-def compute_summary(graph: FederatedGraph, config: dict, params: dict[str, str]) -> dict:
-    """Engine-compatible wrapper around the shared coverage collector.
+def compute_summary(graph: FederatedGraph, config: dict, request: SummaryRequest) -> dict:
+    """The coverage summary this request asks for.
 
-    Reads both the scope and the value selection from ``params``: this is the
-    path a summary takes when a serving process answers it, and either axis
-    failing to survive the trip would make that answer differ from a locally
-    computed one (REQ-d00279-C, REQ-d00282-E).
+    Resolves nothing: the scope was expanded and the selection resolved at the
+    edge that was invoked, which is the only place that could tell a project's
+    declaration from a reader's own words (REQ-d00280-D).
     """
-    from elspais.commands._scope import resolve_scope_for_report, scope_disclosure
+    from elspais.commands._scope import active_overlay_disclosure, scope_disclosure
+    from elspais.config import config_with_active_overlay
+    from elspais.graph.scope import scoped_requirements
 
-    result = resolve_scope_for_report(graph, params, config)
+    # Apply the statuses of this run one time, at the top. Each figure below
+    # then reads one configuration (REQ-d00291-G).
+    cfg = config_with_active_overlay(config, request.treat_active)
+    result = scoped_requirements(graph, request.scope, cfg)
     ids = None if len(result.ids) == result.population else result.ids
-    data = collect_coverage(graph, config=config, node_ids=ids)
-    data["scope"] = scope_disclosure(result)
-    # Implements: REQ-d00282-E
-    # The selection travels in ``params`` for the same reason the scope does: a
-    # report answered by a serving process states the values the reader asked
-    # for, or a daemon-served report and a locally computed one disagree about
-    # the same estate.
-    _stamp_values(data, params, config)
+    data = collect_coverage(graph, config=cfg, node_ids=ids)
+    # Implements: REQ-p00085-B
+    # The disclosure enters the PAYLOAD here, once, and each rendering reads it
+    # from there. That is what makes it independent of the format: a rendering
+    # cannot state a disclosure its neighbour does not, because none of them
+    # composes one.
+    data["scope"] = scope_disclosure(result) + active_overlay_disclosure(request.treat_active)
+    _stamp_values(data, request.values)
     return data
 
 
+# Implements: REQ-d00254-I, REQ-d00283-D+E+I
 def run(args: argparse.Namespace) -> int:
     """Run the coverage command.
 
@@ -322,16 +305,16 @@ def run(args: argparse.Namespace) -> int:
     fresh set threads into build_graph() (a cached daemon graph can't know
     which targets this invocation considers fresh).
     """
+    from elspais.commands._edges import report_inputs_from_args
     from elspais.commands._engine import call as engine_call
-    from elspais.commands._scope import scope_params_from_args
-    from elspais.commands._values import UnofferedValues, value_params_from_args
+    from elspais.commands._requests import SummaryRequest
+    from elspais.commands._values import UnofferedValues
     from elspais.config import get_config
 
     fmt = getattr(args, "format", "text") or "text"
     spec_dir = getattr(args, "spec_dir", None)
     config_path = getattr(args, "config", None)
     config = get_config(config_path)
-    # Implements: REQ-d00254-I, REQ-d00283-D+E+I
     from elspais.commands._targets import resolve_fresh_targets
 
     try:
@@ -341,17 +324,19 @@ def run(args: argparse.Namespace) -> int:
         return 2
 
     # Implements: REQ-d00282-F
-    # Judged before anything is built or asked of a serving process: a report is
-    # not produced under a selection the tool cannot honour in full, and a
-    # reader told so before the work starts is told the same thing however the
-    # report would have been answered.
+    # Derived before anything is built or asked of a serving process: a report
+    # is not produced under a selection the tool cannot honour, and a reader
+    # told so before the work starts is told the same thing however the report
+    # would have been answered.
     try:
-        _resolve_values_for(args, config)
+        inputs = report_inputs_from_args(args, config, OFFERED_VALUES, IDENTITY_VALUE)
     except UnofferedValues as exc:
         sys.stderr.write(f"error: {exc}\n")
         return 2
 
-    params = {**scope_params_from_args(args, config), **value_params_from_args(args, config)}
+    request = SummaryRequest(
+        scope=inputs.scope, values=inputs.values, treat_active=inputs.treat_active
+    )
 
     if fresh_targets is not None:
         from elspais.graph.factory import build_graph
@@ -361,12 +346,12 @@ def run(args: argparse.Namespace) -> int:
             config_path=config_path,
             fresh_targets=fresh_targets,
         )
-        data = compute_summary(graph, config, params)
+        data = compute_summary(graph, config, request)
         data["graph_source"] = {"type": "local"}
     else:
         data = engine_call(
             "/api/run/summary",
-            params,
+            request,
             compute_summary,
             skip_daemon=bool(spec_dir),
             config_path=config_path,
@@ -376,7 +361,7 @@ def run(args: argparse.Namespace) -> int:
     # reader asked for even where the payload was computed by another process
     # (REQ-d00282-E+F). The figures are untouched: a selection decides which
     # facts are stated, never what they are (REQ-d00282-D).
-    _stamp_values(data, args, config)
+    _stamp_values(data, request.values)
 
     content = _render(data, fmt, config)
     sys.stdout.write(content)
@@ -445,10 +430,10 @@ def _cell(level_row: dict, key: str, carry: str = "") -> str:
         return cell
     if spec.dimension == "verified":
         cell += carry
-    # Implements: REQ-d00258-O
+    # Implements: REQ-d00258-U+V
     # The breakdown QUALIFIES the Tested figure, so it rides inside that
     # figure's cell in every format. Given cells of its own it read as three
-    # further values, which is a display term of its own -- the thing O
+    # further values, which is a display term of its own -- the thing V
     # forbids -- and made the Tested selection state four columns in CSV and
     # one in markdown.
     if spec.dimension == "tested":
@@ -458,17 +443,32 @@ def _cell(level_row: dict, key: str, carry: str = "") -> str:
 
 # Implements: REQ-d00282-K
 def _value_groups(keys: tuple[str, ...]) -> list[tuple[str, str, tuple[str, ...]]]:
-    """The stated values in the stated order, consecutive measures gathered.
+    """The stated values in the stated order, consecutive runs gathered.
 
-    Grouping decides only how a run of measures is LAID OUT; it never moves a
-    value past another, so a report still states its values in the order the
-    selection named them. Yields ``(kind, dimension, keys)`` where kind is
-    "measures" for a gathered run and "value" for anything else.
+    Grouping decides only how a run is LAID OUT; it never moves a value past
+    another, so a report still states its values in the order the selection
+    named them. Yields ``(kind, dimension, keys)`` where kind is "measures" for
+    a gathered run of one dimension's measures, "identity" for a gathered run
+    of the values naming what the group is and counting it, and "value" for
+    anything else.
     """
     groups: list[tuple[str, str, tuple[str, ...]]] = []
     index = 0
     while index < len(keys):
         spec = VALUE_SPECS[keys[index]]
+        # A value stating no figure is laid out on the line that names the
+        # group, and a consecutive run of them shares that one line -- which is
+        # what lets the default selection read as "PRD: 24 active requirements,
+        # 189 assertions". Gathered only while they are ADJACENT in the selection,
+        # so one named after a figure is stated after that figure
+        # (REQ-d00282-K).
+        if not spec.states_a_figure:
+            run = []
+            while index < len(keys) and not VALUE_SPECS[keys[index]].states_a_figure:
+                run.append(keys[index])
+                index += 1
+            groups.append(("identity", "", tuple(run)))
+            continue
         # A scalar part is laid out as a value of its own however it is keyed:
         # gathered into a measures run it would render as "cited by name here:
         # 3", indistinguishable from the composite that measure states
@@ -501,7 +501,7 @@ def _measures_line(lv: dict, run: tuple[str, ...]) -> str:
     return ", ".join(f"{MEASURE_WORDS[VALUE_SPECS[k].measure]}: {_cell(lv, k)}" for k in run)
 
 
-# Implements: REQ-d00258-O
+# Implements: REQ-d00258-U
 def _tested_breakdown(lv: dict) -> str:
     """The tested assertions of one level, by what came back.
 
@@ -516,35 +516,64 @@ def _tested_breakdown(lv: dict) -> str:
         return ""
     # Rendered through the shared assertion-count formatter: the breakdown is
     # in the same fractional units as the Tested figure it qualifies
-    # (REQ-d00258-O), and a whole number still reads whole.
+    # (REQ-d00258-U), and a whole number still reads whole.
     return (
         f" [{fmt_assertion_count(passed)} passed, {fmt_assertion_count(failed)} failed, "
         f"{fmt_assertion_count(awaiting)} awaiting a result]"
     )
 
 
+# Implements: REQ-d00282-E+K
+# name: _IDENTITY_TEXT
+# use:  how the text rendering spells each value that states no figure.
+# def:  value key -> the words one level states it in.
+#
+# One entry per value rather than a branch per position: the position is the
+# selection's to decide (REQ-d00282-K) and only the spelling is this format's
+# (REQ-d00282-E).
+_IDENTITY_TEXT: dict[str, Any] = {
+    "level": lambda lv: str(lv["level"]),
+    # "active" names the role of the status that this figure counts. It does
+    # not name the word of the status. The table gives the same figure the
+    # heading "Active Requirements". This text gives that figure in prose.
+    # Both forms of one value then tell the reader one thing.
+    "requirements": lambda lv: f"{lv['total']} active requirements",
+    "assertions": lambda lv: f"{lv['total_assertions']} assertions",
+}
+
+
 # Implements: REQ-d00282-E+K+L
-def _level_heading(lv: dict, keys: tuple[str, ...]) -> str:
-    """The line naming what a group of rows is about, and what else it counts.
+def _level_heading(lv: dict, run: tuple[str, ...]) -> str:
+    """One line stating a run of the values that name and count the group.
 
     The identity value is always stated (REQ-d00282-L), so a reader always
-    knows which level the figures beneath belong to. The two counts appear only
-    where the selection named them -- a text rendering that stated them
-    regardless would make the same selection state more here than in a table,
-    which is the format-dependence REQ-d00282-E forbids.
+    knows which level the figures beneath belong to -- but it is stated WHERE
+    the selection names it, and the counts beside it only where the selection
+    named them. A text rendering that stated the counts regardless would make
+    the same selection state more here than in a table, which is the
+    format-dependence REQ-d00282-E forbids; one that stated the three in a
+    fixed order would state them in an order the selection did not name, which
+    is what REQ-d00282-K forbids.
     """
-    counts = []
-    if "requirements" in keys:
-        counts.append(f"{lv['total']} requirements")
-    if "assertions" in keys:
-        counts.append(f"{lv['total_assertions']} assertions")
-    tail = f" {', '.join(counts)}" if counts else ""
-    return f"  {lv['level']}:{tail}"
+    spelled = [_IDENTITY_TEXT[key](lv) for key in run]
+    # The run the selection OPENS with names the group, so it reads as a
+    # heading: the level, a colon, and whatever the selection named next.
+    if run[0] == IDENTITY_VALUE:
+        tail = ", ".join(spelled[1:])
+        return f"  {lv[IDENTITY_VALUE]}:{f' {tail}' if tail else ''}"
+    indent = "  " if IDENTITY_VALUE in run else "    "
+    return indent + ", ".join(spelled)
 
 
-# Implements: REQ-d00282-A+C+K+M
-def _level_lines(lv: dict, keys: tuple[str, ...], config: dict | None, carry: str) -> list[str]:
-    """One level's stated figures, as text, in the order they were named.
+# Implements: REQ-d00282-A+C+K+L+M
+def _level_block(lv: dict, keys: tuple[str, ...], config: dict | None, carry: str) -> list[str]:
+    """One level's stated values, as text, in the order they were named.
+
+    ONE walk over the stated values, so every value is stated in its named
+    position -- the values that name and count the group included. Splitting
+    the walk in two (a heading built by membership test, then the figures)
+    stated those three in a fixed order whatever the selection said, which is
+    what REQ-d00282-K forbids.
 
     A group conferring no *Assertion* is owed no assertion coverage, and says so
     once rather than printing a row of zeros (REQ-d00282-M).
@@ -559,8 +588,7 @@ def _level_lines(lv: dict, keys: tuple[str, ...], config: dict | None, carry: st
     states_lines = _lines_measured(lv) and any(
         VALUE_SPECS[k].dimension in LINE_DIMENSIONS for k in keys
     )
-    if not total_assertions and not states_lines:
-        return ["    (no assertions in this group; no coverage figure is stated)"]
+    barren = not total_assertions and not states_lines
 
     width = max(
         (
@@ -573,7 +601,20 @@ def _level_lines(lv: dict, keys: tuple[str, ...], config: dict | None, carry: st
     )
     lines: list[str] = []
     headline_dimension = ""
+    said_nothing_to_state = False
     for kind, dimension, run in _value_groups(keys):
+        if kind == "identity":
+            lines.append(_level_heading(lv, run))
+            headline_dimension = ""
+            continue
+        if barren:
+            # Said once, and said WHERE the first figure was named, so the
+            # values named around it keep their places.
+            if not said_nothing_to_state:
+                lines.append("    (no assertions in this group; no coverage figure is stated)")
+                said_nothing_to_state = True
+            headline_dimension = ""
+            continue
         if kind == "measures":
             body = _measures_line(lv, run)
             if headline_dimension == dimension:
@@ -585,9 +626,6 @@ def _level_lines(lv: dict, keys: tuple[str, ...], config: dict | None, carry: st
             headline_dimension = ""
             continue
         spec = VALUE_SPECS[run[0]]
-        if not spec.states_a_figure:
-            headline_dimension = ""
-            continue
         label = f"{header_for(run[0], config)}:"
         lines.append(f"    {label:<{width}} {_cell(lv, run[0], carry)}")
         # Only a dimension's own headline can say what a run beneath it
@@ -597,8 +635,8 @@ def _level_lines(lv: dict, keys: tuple[str, ...], config: dict | None, carry: st
     return lines
 
 
+# Implements: REQ-d00254-I
 def _render_text(data: dict, config: dict | None = None) -> str:
-    # Implements: REQ-d00254-I
     carried = data.get("carried_result_targets", 0) or 0
     total_targets = data.get("total_result_targets", 0) or 0
     carry_marker = "*" if carried > 0 else ""
@@ -630,8 +668,7 @@ def _render_text(data: dict, config: dict | None = None) -> str:
     for lv in data["levels"]:
         if lv["total"] == 0:
             continue
-        lines.append(_level_heading(lv, keys))
-        lines.extend(_level_lines(lv, keys, config, carry_marker))
+        lines.extend(_level_block(lv, keys, config, carry_marker))
 
     excluded = data.get("excluded", {})
     if excluded:
@@ -694,15 +731,15 @@ def _tabular_headers(keys: tuple[str, ...], config: dict | None) -> list[str]:
 
     One header per stated value and no cell that rides along beside it: the
     figure's denominator and its proportion live inside its own cell, and the
-    Tested breakdown (REQ-d00258-O) qualifies the Tested cell rather than
+    Tested breakdown (REQ-d00258-V) qualifies the Tested cell rather than
     standing beside it. Every heading is read through ``header_for``, so a
     project that renames a dimension renames it here too (REQ-d00258-K).
     """
     return [header_for(key, config) for key in keys]
 
 
+# Implements: REQ-d00254-I
 def _render_markdown(data: dict, config: dict | None = None) -> str:
-    # Implements: REQ-d00254-I
     carried = data.get("carried_result_targets", 0) or 0
     total_targets = data.get("total_result_targets", 0) or 0
     carry_marker = "*" if carried > 0 else ""
@@ -821,54 +858,27 @@ def _project_level(lv: dict, keys: tuple[str, ...]) -> dict:
     return structured_row(keys, lambda key: _scalar(lv, key), plain_value, offers=OFFERED_VALUES)
 
 
+# Implements: REQ-d00282-E
 def _render_json(data: dict) -> str:
-    stated = data.get("values")
-    if stated:
-        # A report produced under a selection states that selection here too:
-        # the values a report states do not depend on the format it is
-        # rendered in (REQ-d00282-E). Absent a selection the payload is left
-        # whole -- it is a data document, and a reader who named nothing asked
-        # for nothing to be withheld.
-        keys = tuple(stated)
-        data = {**data, "levels": [_project_level(lv, keys) for lv in data["levels"]]}
-    else:
-        data = {**data, "levels": [_absent_figures_as_null(lv) for lv in data["levels"]]}
-    return json.dumps(data, indent=2) + "\n"
+    """The report as a structured document, stating the values it states.
 
-
-# Implements: REQ-d00282-M, REQ-d00258-O
-# name: _absent_figures_as_null
-# use:  keep a group with nothing to state distinguishable from one whose
-#       figures are genuinely zero, in the whole payload a reader who named no
-#       values receives.
-# def:  every coverage figure, every measure behind it and the three counts of
-#       the Tested breakdown, set to null for a group conferring no *Assertion*
-#       and left exactly as computed for every other group.
-#
-# A level whose requirements confer no *Assertion* is owed no coverage; a level
-# with assertions and no evidence is owed all of it. Reported as 0 the two read
-# alike, and a reader concludes work is undone that was never owed. The zeros a
-# real group reports are real answers and are untouched -- nothing tested and
-# nothing failing is a finding, not an absence.
-def _absent_figures_as_null(lv: dict) -> dict:
-    fields: set[str] = set()
-    if not lv.get("total_assertions"):
-        fields |= {"tested_passed", "tested_failed", "tested_awaiting"}
-        for prefix in _PAYLOAD_PREFIX.values():
-            fields.add(f"{prefix}_total_covered")
-            fields.update(f"{prefix}_{measure}" for measure in MEASURES)
-    # Implements: REQ-d00254-B, REQ-d00258-E, REQ-d00282-M+N
-    # The same distinction for the figure measured in lines, which reaches it
-    # by two routes: no run measured this group at all, and a run that recorded
-    # no per-test contexts. The first takes the whole figure; the second takes
-    # the attribution alone, because the lines covered WERE measured.
-    if not _lines_measured(lv):
-        fields |= {"code_tested_covered", "code_tested_total", "code_tested_attributed"}
-    elif not lv.get("code_tested_has_contexts"):
-        fields.add("code_tested_attributed")
-    if not fields:
-        return lv
-    return {k: (None if k in fields else v) for k, v in lv.items()}
+    Projected through ``_project_level`` whatever reached the payload, because
+    the values a report states do not depend on the format it is rendered in
+    (REQ-d00282-E). A payload carrying no stamp was produced under no selection
+    and states the report's default set -- the same set the text, markdown and
+    csv renderings state for it -- so this format states that set too rather
+    than the whole collector payload, which carries values none of the other
+    three state. What differs per format is how each value is SPELLED: a table
+    renders a figure as a cell, and here it is the object of its numbers.
+    """
+    keys = _stated_values(data)
+    return (
+        json.dumps(
+            {**data, "levels": [_project_level(lv, keys) for lv in data["levels"]]},
+            indent=2,
+        )
+        + "\n"
+    )
 
 
 # Implements: REQ-d00069-L, REQ-d00069-N, REQ-d00258-A, REQ-d00282-A+E+K

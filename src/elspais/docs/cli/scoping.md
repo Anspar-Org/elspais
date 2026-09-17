@@ -13,6 +13,7 @@ question agree.
 ```sh
 elspais trace --level prd
 elspais trace --level prd gui             # either level
+elspais trace --level prd --level gui     # the same thing, written twice
 elspais summary --not-status Deprecated   # everything except
 elspais gaps --level prd --status Active
 ```
@@ -20,6 +21,11 @@ elspais gaps --level prd --status Active
 Values named for one property are alternatives: `--level prd gui` selects
 requirements at either. Different properties are all required at once:
 `--level prd --status Active` selects requirements that are both.
+
+A property accumulates every value the invocation names for it. Write them
+space-separated behind one flag, repeat the flag, or mix the two — the reading
+is the same, so nothing a later occurrence names displaces what an earlier one
+did.
 
 `--not-level` and `--not-status` refuse a value outright. Where a value is both
 required and refused, the refusal decides.
@@ -58,6 +64,14 @@ elspais trace --scope sponsor --level prd ops   # narrows the named scope
 
 A name selects exactly what the same scope stated in full selects. Flags given
 alongside `--scope` narrow it rather than replacing it.
+
+A declaration may also name the values a report states under it (`values = [
+...]`, see below), so one name answers for a whole audience — the table and the
+gap listing both. `summary` and `trace` state the named values as columns;
+`gaps` and its single-dimension commands list the shortfalls in those same
+dimensions. A report that states nothing about a requirement at all — `checks`
+and its narrowings, `changed`, `analysis` — passes the values half over and
+reads only the scope.
 
 ## What a scoped report tells you
 
@@ -102,8 +116,12 @@ produced it was closed:
 - html — a subtitle beneath the heading
 - json — a `scope` array beside the report's own content
 
-A report narrowed by nothing declares nothing, and its JSON stays the bare array
-of requirements it has always been.
+A report narrowed by nothing declares nothing, and its text, markdown, csv and
+html renders carry no scope line at all. JSON is the exception: the `scope`
+array is always there, empty when there is nothing to state, so a consumer
+reads one shape whether the report was narrowed or not.
+`trace --format json` is accordingly always the object
+`{"scope": [...], "nodes": [...]}`, never a bare array of requirements.
 
 ## What scoping does not change
 
@@ -137,13 +155,23 @@ reach the same report by narrowing either first. The value vocabulary is in
 elspais summary --format csv --values implemented,tested
 elspais summary --format csv --values uat_coverage.immediate_direct
 elspais summary --values verified --level prd
+elspais gaps --values implemented        # only what nothing implements
 ```
+
+A report either states a value about each requirement or lists the requirements
+one value has not credited — and both read the same dimension, so both take a
+selection. `summary --values implemented` states the Implemented column;
+`gaps --values implemented` lists what Implemented has not credited, which is
+what `uncovered` is. `gaps` offers the four dimension keys and nothing beneath
+them: a listing can be asked for or left out, but it cannot be narrowed to
+`implemented.immediate_direct.count`.
 
 `summary` aggregates, so its rows are levels rather than requirements. Its
 identity value is `level` — always stated, whatever the selection names — and
 it offers the five coverage dimensions with their four measures each, plus
-`requirements` and `assertions`: the count of requirements in the group and the
-count of assertions they confer. It does not offer the per-requirement identity
+`requirements` and `assertions`: the count of requirements in the group the run
+weighs as active — the column is headed *Active Requirements* — and the count
+of assertions they confer. It does not offer the per-requirement identity
 values (`id`, `title`, ...), nor `verified.carried` (a level has no
 per-requirement provenance bit), nor the line-coverage values, which are
 measured in lines and have no level figure.
@@ -248,12 +276,20 @@ test references but no result record at all has taken no verdict, so its
 `trace` cell reads `—` and its `verified.count`, `verified.ratio` and
 `verified.carried` are `null` rather than `0`.
 
-`--values` is offered by `trace` and `summary`, the two reports that state
-facts about each row. The gap listings (`gaps`, `uncovered`, `untested`,
-`unvalidated`, `failing`) and `analysis` do not offer it: they list what is
-missing rather than tabulating facts about requirements, and a flag a command
-cannot honour is worse than its absence. A composed report is refused outright
-if `--values` reaches a section that states no values.
+`--values` is offered by `trace` and `summary`, which state facts about each
+row, and by `gaps` and its single-dimension listings (`uncovered`, `untested`,
+`unvalidated`, `failing`), which read a selection as which shortfalls to list
+rather than which facts to show. `analysis` and `checks` (and its narrowings,
+and `changed`) do not offer it: they report findings or files rather than a
+dimension, and a flag a command cannot honour is worse than its absence.
+
+A `--values` a reader TYPED for one of those, or for a composed report
+reaching a section that offers none, is refused outright — a report is never
+produced under a selection it cannot honour. The values half of a named
+declaration is different: one name is read against every report the audience
+takes, so it constrains whichever of those reports has values to select among
+and passes over the ones that do not, leaving them to state what they would
+have anyway.
 
 ## Not the same as `--treat-active`
 
@@ -261,3 +297,37 @@ if `--values` reaches a section that states no values.
 carrying it are measured alongside active ones. Scoping selects what is EMITTED:
 which requirements the report is about at all. They compose, and neither
 substitutes for the other.
+
+`--treat-active` is available on every report that takes a scope — `summary`,
+`trace`, `gaps` and its shorthands (`uncovered`, `untested`, `unvalidated`,
+`failing`), `analysis` — and on `checks`. It is declared once, beside the scope
+flags, for the reason those are: a report a reader cannot ask would answer a
+different question from its neighbours.
+
+It is **run-scoped**. It overlays this invocation's configuration and never the
+built graph, so one serving process can answer readers who weigh different
+statuses as active without one reader's question changing another's answer. For
+the coverage figures it is the same thing as setting
+`[statuses.<S>] expects_implementation = true` in `.elspais.toml`, for the
+duration of the run.
+
+Any report it changes **discloses it**, in every format, alongside the scope
+and in the same place:
+
+```
+Weighed as active: Review (--treat-active)
+```
+
+That disclosure is what keeps the figures honest. The requirements still read
+`Status: Review` in the spec, so a reader who cannot see the invocation cannot
+otherwise tell why they were counted. `checks` states the same fact in its
+trailing `Flags:` line.
+
+Two reports accept the flag and read the same either way, for different
+reasons. `trace` states facts about each requirement, one row each, and takes
+nothing over a population, so no choice about the population decides what it
+says. `analysis` ranks requirements against each other and withholds the
+statuses excluded from *analysis*, which is a different question from whether a
+status expects implementation — weighing a status as active does not change
+which statuses are scored. Neither report discloses the flag, because in
+neither did it decide anything.

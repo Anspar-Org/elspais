@@ -1,4 +1,4 @@
-# Verifies: REQ-d00254-G, REQ-d00258-E
+# Verifies: REQ-d00254-G, REQ-d00258-W
 """Tests for CoverageSqliteParser (coverage.py native `.coverage` DB, CUR-1568).
 
 Builds a tiny *real* `.coverage` SQLite data file by driving coverage.py's

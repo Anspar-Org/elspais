@@ -146,7 +146,8 @@ documentation says about it.
 | --- | --- | --- | --- | --- |
 | `config.associate_paths` | Validates that every federated repository — those declared here and those reached through an associate's own `[associates]` declarations — loads and contains spec files, reporting each failure with its path and reason | error | `[rules.severity]` | `elspais associate list` |
 | `config.no_requirements` | Flags when no requirements are found (likely config issue) | warning | `[rules.severity]` | `elspais example` |
-| `config.governed_rules` | Discloses each governed setting (coverage rules, reference severities, status roles) a federated member would judge by differently from the repository the run was invoked from — whether the member declared it or kept a default the invoking project overrode — naming the setting, both values and the member; never fails a run | info | `[rules.severity]` | no command resolves this; resolve it by hand |
+| `config.unmatched_file_pattern` | Reports a `file_patterns` entry that names one file outright — no wildcard — and selected nothing, naming the skip pattern that excluded it where that is the cause. Asking for a named file and receiving nothing is otherwise indistinguishable from the file not existing | warning | `[rules.severity]` | no command resolves this; resolve it by hand |
+| `config.governed_rules` | Discloses each governed setting (`[rules.coverage]`, `[rules.references]`, `[rules.severity]`, `[rules.format.status_roles]`, `[statuses]`) a federated member would judge by differently from the repository the run was invoked from — whether the member declared it or kept a default the invoking project overrode — naming the setting, both values and the member; never fails a run | info | `[rules.severity]` | no command resolves this; resolve it by hand |
 | `graph.build` | The traceability graph builds at all | error | `[rules.severity]` | no command resolves this; resolve it by hand |
 | `spec.parseable` | All spec files can be parsed | warning | `[rules.severity]` | `elspais errors` |
 | `spec.unknown_directive` | Assertions opening with a parsing directive the tool does not recognize | warning | `[rules.severity]` | no command resolves this; resolve it by hand |
@@ -178,8 +179,10 @@ it untraceable at the assertion level.
 - **Default severity**: warning (does not cause a non-zero exit by itself)
 - **Always on**: this check runs unconditionally, unlike `require_assertions` (which
   is opt-in and produces an error when enabled)
-- **Gaps report**: requirements flagged by this check appear in `elspais gaps` with
-  the label `NOT TESTABLE (no assertions)` under the `no_assertions` gap type
+- **Not a gap**: `elspais gaps` lists what each coverage dimension has not
+  credited, and a requirement with no assertions has no dimension to fall short
+  of — it is a defect in the spec rather than a shortfall in coverage, and this
+  check is where it is reported, with the severity configured below
 
 **Configuration** — adjust severity via `[rules.format]` in `.elspais.toml`:
 
@@ -752,6 +755,7 @@ Produces JUnit XML that CI systems (GitHub Actions, Jenkins, GitLab CI) can inge
 | Failed check (error severity) | `<testcase>` with `<failure>` element |
 | Failed check (warning severity) | `<testcase>` with `<system-err>` prefixed `WARNING:` |
 | Info message | `<testcase>` with `<system-out>` |
+| Narrowed report | extra `<testsuite name="elspais.report">` carrying the run's verdict and the narrowing |
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -802,6 +806,7 @@ Produces [SARIF v2.1.0](https://docs.oasis-open.org/sarif/sarif/v2.1.0/sarif-v2.
 | Finding with `file_path` | `physicalLocation` with `artifactLocation.uri` |
 | Finding with `line` | `region.startLine` |
 | Coverage stats | `run.properties` (`passed`, `failed`, `warnings`) |
+| Narrowed report | `run.properties.narrowing` (the sentence) and `run.properties.filter` (the values and the extent) |
 
 ```json
 {
@@ -921,6 +926,12 @@ Values named for one flag are alternatives; values named for different flags
 are conditions met at once. So `--category references --file 'spec/*.md'`
 selects the reference findings that are in a spec file, and nothing else.
 
+Each flag accumulates every value the invocation names for it: write them
+space-separated, repeat the flag, or mix the two. `--check a --check b` and
+`--check a b` narrow to the same two checks. This is the same reading a scope
+over requirements takes (`elspais docs scoping`), so a reader who has narrowed
+one report knows how to narrow the other.
+
 `--check`, `--code` and `--file` select findings by name, so the findings they
 select are rendered whether or not `-v` was given.
 
@@ -936,6 +947,18 @@ A narrowed report says what it withheld — `showing 2 of 47 checks, 3 of 310
 findings` — because a report that showed a reader some of what it found and
 did not say so reads exactly like a clean run. The exit code is the whole
 run's: narrowing chooses what to look at, never what the run found.
+
+Every format says both. `--format json` carries them in a `filter` block
+beside the whole run's `healthy` and `summary`. `--format sarif` carries them
+in `run.properties` as `narrowing` and `filter`, beside the run's counts.
+`--format junit` gains one extra `<testsuite name="elspais.report">`: its
+`<properties>` state the narrowing and the run's counts, and its
+`report.verdict` testcase FAILS when the run had errors, whichever checks the
+reader asked to see. Without it, a document filed to CI would be read as green
+whenever the narrowing happened to exclude the failing check — the exit code
+that says otherwise is not something a test reporter ever sees. The
+per-category `<testsuite failures=…>` counts still speak for the checks the
+document actually holds.
 
 A `--severity`, `--category` or `--check` naming something outside the tool's
 vocabulary is refused (exit code 2) rather than silently selecting nothing.
@@ -1038,7 +1061,7 @@ By default, `checks` and `gaps` only include requirements with **Active** status
 in coverage calculations. Requirements with Draft, Proposed, or other provisional
 statuses are excluded.
 
-Use `--treat-active` to count additional statuses as committed and see what
+Use `--treat-active` to weigh additional statuses as active ones and see what
 traceability gaps would exist if those requirements were promoted to Active:
 
 ```bash
@@ -1058,10 +1081,25 @@ or UAT validation.
 
 A promoted status is counted in the coverage numerator and denominator and is
 correspondingly absent from the trailing `[... excluded]` note — the counts and
-the note always agree. Under the hood `--treat-active <S>` is an overlay that
-forces `expects_implementation = true` for `<S>`, so it is exactly equivalent to
-setting `[statuses.<S>] expects_implementation = true` in `.elspais.toml` for the
-duration of the run (and composes with any such config already present).
+the note always agree, because both ask the one resolver rather than deriving
+the answer separately. Under the hood `--treat-active <S>` is a run-scoped
+overlay that forces `expects_implementation = true` for `<S>`, composing with
+any such config already present.
+
+For the coverage figures that is the same thing as setting
+`[statuses.<S>] expects_implementation = true` in `.elspais.toml`. The two
+differ in one respect, deliberately: `--treat-active <S>` ALSO stops
+`code.provisional_references` / `tests.provisional_references` flagging
+references to `<S>`, whereas the config declaration does not. Declaring
+`expects_implementation` says those requirements still owe implementation; it
+does not say that citing them has stopped being worth reporting. Asking for a
+status to be weighed as active is a statement about the whole of one run's
+reading of it, so it reaches both questions.
+
+`--treat-active` is not specific to `checks`: it is declared beside the scope
+flags and is available on every report that takes a scope. See
+`elspais docs scoping` for where it applies, what it discloses, and why it is
+scoped to one run.
 
 `--treat-active` accepts any configured status name (case-insensitive; the name
 is title-cased before matching). See `elspais docs config` for how status roles

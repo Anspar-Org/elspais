@@ -139,6 +139,7 @@ def reconstruct_body_text(node: GraphNode) -> str:
     return "\n".join(parts)
 
 
+# Implements: REQ-d00131-J
 def compute_hash_for_node(node: GraphNode, hash_mode: str) -> str | None:
     """Compute the content hash for a requirement node.
 
@@ -282,6 +283,7 @@ def node_version(node: GraphNode) -> str:
     return compute_version_hash(f"{kind}\x1d{text}\x1d{_canonical_edges(node)}")
 
 
+# Implements: REQ-d00131-A
 def render_node(node: GraphNode, resolver: Any | None = None) -> str:
     """Render a graph node back to its text representation.
 
@@ -300,7 +302,6 @@ def render_node(node: GraphNode, resolver: Any | None = None) -> str:
         ValueError: If the node kind cannot be rendered independently
             (ASSERTION, RESULT).
     """
-    # Implements: REQ-d00131-A
     kind = node.kind
 
     if kind == NodeKind.REQUIREMENT:
@@ -408,7 +409,7 @@ def _render_requirement(node: GraphNode, resolver: Any | None = None) -> str:
         lines.append(f"**Satisfies**: {sat_str}")
 
     # Integrates line (if present)
-    # Implements: REQ-d00252
+    # Implements: REQ-d00252-A
     # Rendered from the stored field (not derived from edges): targets are
     # external and may be absent from the build.
     if integrates_refs:
@@ -668,6 +669,7 @@ def render_file(node: GraphNode, resolver: Any | None = None) -> str:
 # ─────────────────────────────────────────────────────────────────────────
 
 
+# Implements: REQ-p00014-U
 def _derive_refs_for_edge_kind(
     node: GraphNode,
     edge_kind: EdgeKind,
@@ -710,7 +712,6 @@ def _derive_refs_for_edge_kind(
         if whole or not labels:
             refs.add(src)
         if labels:
-            # Implements: REQ-p00014-U
             if resolver is None:
                 raise GrammarUnavailable(
                     f"Cannot render {node.id!r}: citing assertions of {src!r} means "
@@ -727,11 +728,13 @@ def _derive_refs_for_edge_kind(
     return sorted(refs)
 
 
+# Implements: REQ-d00132-F
 def _derive_implements_refs(node: GraphNode, resolver: Any | None = None) -> list[str]:
     """Derive the implements reference list from live graph edges."""
     return _derive_refs_for_edge_kind(node, EdgeKind.IMPLEMENTS, "implements_refs", resolver)
 
 
+# Implements: REQ-d00132-F
 def _derive_refines_refs(node: GraphNode, resolver: Any | None = None) -> list[str]:
     """Derive the refines reference list from live graph edges."""
     return _derive_refs_for_edge_kind(node, EdgeKind.REFINES, "refines_refs", resolver)
@@ -768,6 +771,7 @@ def _find_dirty_files(graph: FederatedGraph) -> list[Any]:
         if node is not None and node.kind == NodeKind.FILE:
             dirty_files[id(node)] = node
 
+    # Implements: REQ-d00132-A
     def _mark_node_file(node_id: str) -> None:
         """Find the FILE ancestor of a node and mark it dirty."""
         node = graph.find_by_id(node_id)
@@ -778,6 +782,7 @@ def _find_dirty_files(graph: FederatedGraph) -> list[Any]:
         else:
             _mark(node.file_node())
 
+    # Implements: REQ-d00251-L
     def _mark_owning_file_of_assertion(assertion_id: str) -> None:
         """Mark the file holding a deleted assertion's requirement.
 
@@ -1118,6 +1123,7 @@ def render_save(
     return result
 
 
+# Implements: REQ-d00132-C
 def _run_consistency_check(
     original_graph: FederatedGraph,
     rebuild_fn: Any,
@@ -1138,7 +1144,6 @@ def _run_consistency_check(
         - details: str (if inconsistent)
         - checked: int (number of nodes compared)
     """
-    # Implements: REQ-d00132-C
     try:
         rebuild_result, new_graph = rebuild_fn()
     except Exception as e:
@@ -1194,6 +1199,7 @@ def _run_consistency_check(
     return {"consistent": True, "checked": checked}
 
 
+# Implements: REQ-d00134-D
 def _wire_new_requirements_to_files(graph: FederatedGraph) -> None:
     """Wire newly added requirements to their parent's FILE node.
 

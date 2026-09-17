@@ -332,6 +332,62 @@ class TestLevelGroupKeys:
         graph = _make_graph(_make_req("REQ-x00001", level="arch", status="Deprecated"))
         assert collect_coverage(graph, self.CONFIG)["excluded"] == {"Deprecated": 1}
 
+    # Verifies: REQ-d00281-B, REQ-d00258-C
+    @pytest.mark.parametrize("promoted_status", ["Draft", "Proposed"])
+    def test_promoted_status_is_counted_once_not_both_counted_and_excluded(self, promoted_status):
+        # `[statuses.<Name>] expects_implementation = true` promotes a status
+        # whose ROLE is coverage-excluded, so `aggregate_by_level` counts its
+        # requirement in a level row. The `excluded` tally must follow the same
+        # resolver (REQ-d00258-C) or that requirement is reported twice, and a
+        # reader adding the rows to the exclusions gets back more than the
+        # graph holds (REQ-d00281-B).
+        config = {
+            **self.CONFIG,
+            "statuses": {promoted_status: {"expects_implementation": True}},
+        }
+        graph = _make_graph(
+            _make_req("REQ-x00001", level="dev", status="Active"),
+            _make_req("REQ-x00002", level="dev", status=promoted_status),
+            # Not promoted: the exclusions stay genuinely non-empty, so a fix
+            # that merely emptied the tally would still fail the second assert.
+            _make_req("REQ-x00003", level="prd", status="Deprecated"),
+        )
+        data = collect_coverage(graph, config)
+        rows = sum(row["total"] for row in data["levels"])
+        excluded = sum(data["excluded"].values())
+        # REQ-d00281-B: every requirement in a known level counted exactly once.
+        assert rows + excluded == 3
+        assert promoted_status not in data["excluded"]
+        assert data["excluded"] == {"Deprecated": 1}
+
+    # Verifies: REQ-d00291-F+G, REQ-d00281-B, REQ-d00258-C
+    @pytest.mark.parametrize("named", ["Draft", "draft", "DRAFT"])
+    def test_a_run_scoped_promotion_reaches_the_same_rows_a_declaration_does(self, named):
+        # The sibling above promotes through `[statuses.Draft]`; this promotes
+        # through `--treat-active` on a config that declares NOTHING. Both
+        # reach `collect_coverage` as one overlaid config, so the level rows
+        # and the withheld tally cannot disagree (REQ-d00258-C) -- and every
+        # spelling of the name reaches it, since REQ-d00291-G weighs every
+        # status named however the caller wrote it.
+        from elspais.config import config_with_active_overlay
+
+        graph = _make_graph(
+            _make_req("REQ-x00001", level="dev", status="Active"),
+            _make_req("REQ-x00002", level="dev", status="Draft"),
+            _make_req("REQ-x00003", level="prd", status="Deprecated"),
+        )
+        overlaid = config_with_active_overlay(self.CONFIG, (named,))
+        data = collect_coverage(graph, overlaid)
+
+        assert {row["level"]: row["total"] for row in data["levels"]}["DEV"] == 2
+        assert data["excluded"] == {"Deprecated": 1}
+        # REQ-d00281-B: counted once, whichever side of the sum it fell on.
+        assert sum(row["total"] for row in data["levels"]) + sum(data["excluded"].values()) == 3
+        # Unpromoted, the same graph and config hold it out -- so the assert
+        # above is the promotion's effect, not the default.
+        baseline = collect_coverage(graph, self.CONFIG)
+        assert baseline["excluded"] == {"Draft": 1, "Deprecated": 1}
+
 
 class TestAggregateDimension:
     """REQ-d00258-C: the single whole-graph per-dimension walk health.py's
@@ -461,7 +517,8 @@ def _dim(labels, *, direct=None, failing=(), total=0):
 
 
 # Verifies: REQ-d00258-C
-# Verifies: REQ-d00258-E
+# Verifies: REQ-d00258-R
+# Verifies: REQ-d00258-S
 class TestRelativeTierFor:
     """``relative_tier_for`` picks the relative denominator per dimension."""
 
@@ -489,7 +546,7 @@ class TestRelativeTierFor:
 
     def test_tested_empty_denominator_is_na(self):
         """Nothing implemented -> tested has an empty denominator -> N/A
-        ('missing', is_na=True), a neutral non-gap (REQ-d00258-E)."""
+        ('missing', is_na=True), a neutral non-gap (REQ-d00258-S)."""
         rollup = RollupMetrics(
             total_assertions=2,
             implemented=_dim(set(), total=2),
@@ -524,7 +581,8 @@ class TestRelativeTierFor:
 
 
 # Verifies: REQ-d00258-C
-# Verifies: REQ-d00258-E
+# Verifies: REQ-d00258-R
+# Verifies: REQ-d00258-S
 class TestTierBucketsRelative:
     """``tier_buckets`` honors the relative denominators for chained dims."""
 
@@ -587,7 +645,7 @@ def _dim_with_zeros(covered, zeros, *, total=0, failing=()):
     Mirrors ``_conduct_refines_coverage`` (annotators.py), which seeds a
     per-label entry for EVERY assertion label -- 0.0 for the ones not covered
     in that dimension. A denominator built from the dict KEYS would therefore
-    wrongly include those unimplemented labels (REQ-d00258-I).
+    wrongly include those unimplemented labels (REQ-d00258-R).
     """
     covered = set(covered)
     zeros = set(zeros)
@@ -600,9 +658,9 @@ def _dim_with_zeros(covered, zeros, *, total=0, failing=()):
     )
 
 
-# Verifies: REQ-d00258-I
+# Verifies: REQ-d00258-R
 class TestDenominatorExcludesUnimplementedLabels:
-    """REGRESSION (REQ-d00258-I): the relative denominator is the set of labels
+    """REGRESSION (REQ-d00258-R): the relative denominator is the set of labels
     ACTUALLY covered in the prior dimension (fraction > 0), NOT every label
     present in the measure's per-label map.
 
@@ -903,7 +961,7 @@ class TestDenominatorLabelsAbsoluteDimensions:
         assert denominator_labels(rollup, dimension, measure="total") == {"A"}
 
 
-# Verifies: REQ-d00258-I
+# Verifies: REQ-d00258-R
 class TestNumeratorDimension:
     """The dimension the tier figures measure for a chained link -- 'verified'
     reads ``tested_and_passing``, not the raw verified dimension."""
@@ -926,7 +984,7 @@ class TestNumeratorDimension:
 
     def test_verified_numerator_drops_a_failing_assertion_from_the_figures(self):
         """Still not the raw `.verified` dimension: an assertion a declared
-        test reported failing keeps its per-label credit (REQ-d00258-G) but is
+        test reported failing keeps its per-label credit (REQ-d00292-D) but is
         excluded from the Passing figures, which raw `.verified` is not."""
         rollup = RollupMetrics(
             total_assertions=2,

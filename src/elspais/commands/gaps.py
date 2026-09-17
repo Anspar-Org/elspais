@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    from elspais.commands._requests import GapsRequest
     from elspais.graph.federated import FederatedGraph
 
 from elspais.graph import NodeKind
@@ -53,7 +55,6 @@ class GapData:
     untested: list[GapEntry] = field(default_factory=list)
     unvalidated: list[GapEntry] = field(default_factory=list)
     failing: list[tuple[str, str, str]] = field(default_factory=list)  # (req_id, title, source)
-    no_assertions: list[GapEntry] = field(default_factory=list)
     # REQ-d00252-F: requirements covered via an external associate (INTEGRATES),
     # grouped by owning associate name -> sorted list of consumer requirement IDs.
     integrated: dict[str, list[str]] = field(default_factory=dict)
@@ -76,7 +77,7 @@ def _reqs_with_code_refs(graph: FederatedGraph, excluded_ids: set[str]) -> set[s
     return covered
 
 
-# Implements: REQ-d00252
+# Implements: REQ-d00252-F
 def _integrates_associates(graph: FederatedGraph, node: Any) -> list[str]:
     """Return sorted owning-associate names for a requirement's INTEGRATES targets.
 
@@ -101,6 +102,7 @@ def _integrates_associates(graph: FederatedGraph, node: Any) -> list[str]:
     return sorted(owners)
 
 
+# Implements: REQ-p00084-B
 def collect_gaps(
     graph: FederatedGraph,
     exclude_status: set[str],
@@ -111,10 +113,17 @@ def collect_gaps(
 
     Args:
         graph: The federated traceability graph.
-        exclude_status: Set of status values to skip (e.g. {"Retired"}).
+        exclude_status: The status values to pass over. A caller gets this set
+            from ``statuses_withheld_from_coverage``. A caller must not get it
+            from the status roles. A work list names the requirements that
+            still need implementation. Therefore the list uses the same
+            population that the coverage figures use (REQ-d00291-F). A set
+            from the roles held out a requirement that a project declared to
+            expect implementation. Each coverage figure counted that same
+            requirement.
         config: Project config dict. Used to resolve per-level
             ``expects_validation`` so only levels that expect UAT validation
-            produce ``unvalidated`` gaps (REQ-d00258-F).
+            produce ``unvalidated`` gaps (REQ-d00291-B+C).
 
     Returns:
         GapData with all gap lists populated.
@@ -123,14 +132,19 @@ def collect_gaps(
 
     cfg = config or {}
     data = GapData()
+    _withheld_lower = {s.lower() for s in (exclude_status or ())}
 
     excluded_ids: set[str] = set()
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
-        # Implements: REQ-p00084-B
         # A requirement a scope does not select is not a gap in this report: the
         # reader asked a question about a set, and work outside it is not an
         # answer to that question.
-        if node.status in exclude_status or (node_ids is not None and node.id not in node_ids):
+        # Case is folded: the counts gate through a case-insensitive resolver,
+        # so a set compared exactly here withheld a requirement from the counts
+        # and still listed it as a gap (REQ-d00258-C).
+        if (node.status or "").lower() in _withheld_lower or (
+            node_ids is not None and node.id not in node_ids
+        ):
             excluded_ids.add(node.id)
 
     code_covered = _reqs_with_code_refs(graph, excluded_ids)
@@ -198,7 +212,7 @@ def collect_gaps(
 
         # Unvalidated: no UAT coverage. Only levels that expect_validation can
         # be "unvalidated" -- an internal level that never gets a journey is not
-        # a gap (REQ-d00258-F). The whole-requirement verdict reads the
+        # a gap (REQ-d00291-B+C). The whole-requirement verdict reads the
         # IMMEDIATE measures: a journey validating the requirement is evidence
         # attached here, whether or not it named an *Assertion*, while coverage
         # conducted from a refining requirement is not and must not rescue an
@@ -213,10 +227,6 @@ def collect_gaps(
                 uncov = _uncovered_assertions(verdict, assertion_nodes)
                 if uncov:
                     data.unvalidated.append(GapEntry(req_id, title, uncov))
-
-        # No assertions: not testable
-        if not assertion_nodes:
-            data.no_assertions.append(GapEntry(req_id, title))
 
         # Failing: test or UAT failures. Read through the Passing dimension,
         # so a failure line coverage carries is seen too (REQ-d00277-C).
@@ -261,7 +271,6 @@ _LABELS = {
     "untested": "UNTESTED (implemented, not tested)",
     "unvalidated": "UNVALIDATED (no UAT coverage)",
     "failing": "FAILING",
-    "no_assertions": "NOT TESTABLE (no assertions)",
 }
 
 
@@ -357,34 +366,110 @@ def render_gap_markdown(gap_type: str, data: GapData) -> str:
 # Composable section
 # =============================================================================
 
-_ALL_GAP_TYPES = ["uncovered", "untested", "unvalidated", "failing", "no_assertions"]
+# Implements: REQ-d00282-A
+# name: GAP_SECTION_FOR_VALUE
+# use:  the ONE map between a coverage dimension and the listing of what falls
+#       short of it.
+# def:  value key -> the name of the section listing that dimension's shortfall.
+#
+# Each of these sections reads one dimension and lists what it has not credited:
+# `uncovered` reads Implemented, `untested` reads Tested, `unvalidated` reads
+# UAT Covered, `failing` reads Passing. So a values selection is not
+# inapplicable to a report that lists shortfalls -- it says WHICH shortfalls the
+# report lists -- and the shorthand commands are this one report under a fixed
+# single-dimension selection rather than five separate reports.
+GAP_SECTION_FOR_VALUE: dict[str, str] = {
+    "implemented": "uncovered",
+    "tested": "untested",
+    "uat_coverage": "unvalidated",
+    "verified": "failing",
+}
+
+# What this report offers a reader to select among (REQ-d00282-A). The four
+# dimension keys and nothing beneath them: a section lists the requirements a
+# dimension has not credited, so it can be asked for or left out, but it cannot
+# be narrowed to `implemented.immediate_direct.count`. `resolve_values` refuses
+# a name this does not hold, which is that assertion working rather than a
+# special case.
+OFFERED_VALUES: tuple[str, ...] = tuple(GAP_SECTION_FOR_VALUE)
+
+# Implements: REQ-d00282-A
+# What each command offers. A shorthand offers the one dimension it IS, so
+# `uncovered --values tested` names a value `uncovered` does not offer and is
+# refused, rather than quietly turning into `untested`.
+COMMAND_VALUES: dict[str, tuple[str, ...]] = {
+    "gaps": OFFERED_VALUES,
+    **{section: (key,) for key, section in GAP_SECTION_FOR_VALUE.items()},
+}
+
+_ALL_GAP_TYPES = list(GAP_SECTION_FOR_VALUE.values())
 
 
+# Implements: REQ-d00282-O
+def gap_sections(values: tuple[str, ...] | None, command: str = "gaps") -> list[str]:
+    """The sections this request asks for, in the order it named them.
+
+    Takes values already resolved against this command's offer -- by
+    ``report_inputs_from_args``/``report_inputs_from_params`` at whichever edge
+    was invoked -- so composing a section and asking for it alone choose
+    listings the same way (REQ-d00279-C). ``None`` states this command's
+    default offer, matching every other report's ``values`` contract.
+    """
+    offered = COMMAND_VALUES.get(command, OFFERED_VALUES)
+    keys = offered if values is None else values
+    return [GAP_SECTION_FOR_VALUE[key] for key in keys]
+
+
+# Implements: REQ-p00084-A+B, REQ-d00282-A
 def render_section(
     graph: FederatedGraph,
     config: dict[str, Any] | None,
     args: argparse.Namespace,
+    command: str = "gaps",
     gap_types: list[str] | None = None,
 ) -> tuple[str, int]:
-    """Render gap sections for the given gap types.
+    """Render this report's shortfall sections.
+
+    ``command`` names which shorthand is being composed, so a section asked for
+    alone and the same section composed with others offer the same values and
+    refuse the same names (REQ-d00279-C). An explicit ``gap_types`` is for a
+    caller that has already resolved the selection.
 
     Returns:
         Tuple of (rendered output string, exit code).
         Exit code is always 0 (gap sections are informational).
     """
-    from elspais.commands.health import _resolve_exclude_status
+    from elspais.commands._edges import report_inputs_from_args
+    from elspais.config import statuses_withheld_from_coverage
 
+    # Implements: REQ-p00084-A+D, REQ-d00279-C
+    # Derived once here rather than resolved twice for scope and values
+    # separately: a section composed with others reaches the same scope and
+    # the same listing a standalone invocation would.
+    offered = COMMAND_VALUES.get(command, OFFERED_VALUES)
+    inputs = report_inputs_from_args(args, config, offered, identity_key="")
     if gap_types is None:
-        gap_types = _ALL_GAP_TYPES
+        gap_types = gap_sections(inputs.values, command)
 
-    exclude_status = _resolve_exclude_status(args, config=config or {})
-    # Implements: REQ-p00084-A+B
-    from elspais.commands._scope import resolve_scope_for_report, scope_disclosure
+    from elspais.commands._scope import (
+        active_overlay_disclosure,
+        scope_disclosure,
+    )
+    from elspais.graph.scope import scoped_requirements
 
-    scope_result = resolve_scope_for_report(graph, args, config)
+    # Read what the edge already derived. Two reads of one value at one edge
+    # are two chances for the gate and the disclosure to disagree.
+    exclude_status = statuses_withheld_from_coverage(config or {}, inputs.treat_active)
+
+    scope_result = scoped_requirements(graph, inputs.scope, config)
     scope_ids = None if len(scope_result.ids) == scope_result.population else scope_result.ids
     data = collect_gaps(graph, exclude_status, config=config, node_ids=scope_ids)
-    scope_lines = scope_disclosure(scope_result)
+    # Implements: REQ-p00085-B
+    # The disclosure enters the PAYLOAD here, once, and each rendering reads it
+    # from there. That is what makes it independent of the format: a rendering
+    # cannot state a disclosure its neighbour does not, because none of them
+    # composes one.
+    scope_lines = scope_disclosure(scope_result) + active_overlay_disclosure(inputs.treat_active)
 
     fmt = getattr(args, "format", "text")
 
@@ -400,9 +485,12 @@ def render_section(
                 result[gt] = [_gap_entry_to_list(entry) for entry in items]
         if show_integrated and data.integrated:
             result["integrated"] = {k: sorted(v) for k, v in data.integrated.items()}
-        # Implements: REQ-p00084-D
-        if scope_lines:
-            result["scope"] = scope_lines
+        # Implements: REQ-p00084-D, REQ-p00085-B
+        # Always present, empty where there is nothing to state. A reader asks
+        # one question of one field: a field that is absent here and empty in a
+        # neighbouring report makes that reader probe two shapes to learn the
+        # same thing.
+        result["scope"] = scope_lines
         return json.dumps(result, indent=2), 0
 
     if fmt == "markdown":
@@ -426,15 +514,6 @@ def render_section(
 # =============================================================================
 # Standalone run
 # =============================================================================
-
-_GAP_TYPE_MAP: dict[str, str | None] = {
-    "gaps": None,  # None = all gap types
-    "uncovered": "uncovered",
-    "untested": "untested",
-    "unvalidated": "unvalidated",
-    "failing": "failing",
-    "no_assertions": "no_assertions",
-}
 
 
 def _gap_entry_to_list(entry: GapEntry) -> list:
@@ -461,7 +540,7 @@ def _gap_entry_to_list(entry: GapEntry) -> list:
 def _gap_data_from_dict(data: dict[str, Any]) -> GapData:
     """Reconstruct GapData from a JSON dict returned by the daemon."""
     gd = GapData()
-    for gt in ("uncovered", "untested", "unvalidated", "no_assertions"):
+    for gt in ("uncovered", "untested", "unvalidated"):
         for item in data.get(gt, []):
             raw_assertions = item[2] if len(item) > 2 else []
             # A payload that carries no label falls back to the full id
@@ -479,28 +558,29 @@ def _gap_data_from_dict(data: dict[str, Any]) -> GapData:
     return gd
 
 
-def compute_gaps(graph: FederatedGraph, config: dict, params: dict[str, str]) -> dict:
-    """Engine-compatible wrapper around collect_gaps.
+# Implements: REQ-d00279-C
+def compute_gaps(graph: FederatedGraph, config: dict, request: GapsRequest) -> dict:
+    """The gap listing this request asks for.
 
-    Params:
-        type: Optional gap type filter (uncovered, untested, unvalidated, failing).
-        treat_active: Optional comma-separated statuses to treat as committed.
+    Resolves nothing: the scope was expanded and the selection resolved at the
+    edge that was invoked, which is the only place that could tell a project's
+    declaration from a reader's own words (REQ-d00280-D).
     """
-    import argparse as _argparse
+    from elspais.config import statuses_withheld_from_coverage
 
-    from elspais.commands.health import _resolve_exclude_status
+    exclude_status = statuses_withheld_from_coverage(config, request.treat_active)
+    from elspais.commands._scope import active_overlay_disclosure, scope_disclosure
+    from elspais.graph.scope import scoped_requirements
 
-    fake_args = _argparse.Namespace()
-    treat_str = params.get("treat_active", None)
-    fake_args.treat_active = treat_str.split(",") if treat_str else None
-    exclude_status = _resolve_exclude_status(fake_args, config=config)
-    # Implements: REQ-d00279-C
-    from elspais.commands._scope import resolve_scope_for_report, scope_disclosure
-
-    scope_result = resolve_scope_for_report(graph, params, config)
+    scope_result = scoped_requirements(graph, request.scope, config)
     ids = None if len(scope_result.ids) == scope_result.population else scope_result.ids
     data = collect_gaps(graph, exclude_status, config=config, node_ids=ids)
-    scope_lines = scope_disclosure(scope_result)
+    # Implements: REQ-p00085-B
+    # The disclosure enters the PAYLOAD here, once, and each rendering reads it
+    # from there. That is what makes it independent of the format: a rendering
+    # cannot state a disclosure its neighbour does not, because none of them
+    # composes one.
+    scope_lines = scope_disclosure(scope_result) + active_overlay_disclosure(request.treat_active)
 
     def _serialize_gap_list(gt: str) -> list:
         items = getattr(data, gt)
@@ -510,70 +590,77 @@ def compute_gaps(graph: FederatedGraph, config: dict, params: dict[str, str]) ->
 
     integrated = {k: sorted(v) for k, v in data.integrated.items()}
 
-    gap_type = params.get("type", None)
-    if gap_type and gap_type in (
-        "uncovered",
-        "untested",
-        "unvalidated",
-        "failing",
-        "no_assertions",
-    ):
-        out = {gap_type: _serialize_gap_list(gap_type)}
-        if gap_type == "uncovered" and integrated:
-            out["integrated"] = integrated  # type: ignore[assignment]
-        # Implements: REQ-p00084-D
-        if scope_lines:
-            out["scope"] = scope_lines  # type: ignore[assignment]
-        return out
+    # Implements: REQ-d00279-C
+    # The sections come from the selection the invocation carried here, read by
+    # the same function the local paths read it with -- a serving process that
+    # decided for itself which sections a report holds is how a daemon-served
+    # report starts differing from a locally computed one.
+    sections = gap_sections(request.values, request.command)
 
     result: dict[str, Any] = {}
-    for gt in ("uncovered", "untested", "unvalidated", "failing", "no_assertions"):
+    for gt in sections:
         result[gt] = _serialize_gap_list(gt)
-    if integrated:
+    if integrated and "uncovered" in sections:
         result["integrated"] = integrated
-    # Implements: REQ-p00084-D
-    if scope_lines:
-        result["scope"] = scope_lines
+    # Implements: REQ-p00084-D, REQ-p00085-B
+    # Always present, for the reason the rendering path states: one field, one
+    # shape, whichever report answered.
+    result["scope"] = scope_lines
     return result
 
 
+# Implements: REQ-d00279-C
 def run(args: argparse.Namespace) -> int:
     """Run a standalone gap listing command.
 
     Tries a running daemon/viewer first for fast results,
     falls back to local graph build.
     """
+    from elspais.commands._edges import report_inputs_from_args
     from elspais.commands._engine import call as engine_call
+    from elspais.commands._requests import GapsRequest
+    from elspais.commands._values import UnofferedValues
+    from elspais.config import get_config
 
     command = getattr(args, "command", "gaps")
-    gap_type = _GAP_TYPE_MAP.get(command)
-    gap_types: list[str] | None = [gap_type] if gap_type else None
+    config = get_config(getattr(args, "config", None))
+
+    # Implements: REQ-d00282-A+F
+    # Resolved before anything is built or asked of a serving process. A name
+    # this command does not offer is refused outright rather than dropped, which
+    # is what keeps a reader from receiving a narrower report than they asked
+    # for while it looks exactly like the one they wanted.
+    try:
+        inputs = report_inputs_from_args(
+            args, config, COMMAND_VALUES.get(command, OFFERED_VALUES), identity_key=""
+        )
+    except UnofferedValues as exc:
+        print(f"Error: {command}: {exc}", file=sys.stderr)
+        return 1
+
+    request = GapsRequest(
+        scope=inputs.scope,
+        values=inputs.values,
+        command=command,
+        treat_active=inputs.treat_active,
+    )
+
     fmt = getattr(args, "format", "text")
     spec_dir = getattr(args, "spec_dir", None)
 
-    params: dict[str, str] = {}
-    if gap_type:
-        params["type"] = gap_type
-    # Status selection has to reach the compute path: this command reaches it
-    # through the engine, so a selection left out of params is silently lost.
-    treat_active = getattr(args, "treat_active", None)
-    if treat_active:
-        params["treat_active"] = ",".join(treat_active)
-
-    # Implements: REQ-d00279-C
-    # The scope reaches the compute path the same way and for the same reason.
-    from elspais.commands._scope import scope_params_from_args
-    from elspais.config import get_config
-
-    params.update(scope_params_from_args(args, get_config(getattr(args, "config", None))))
-
     data = engine_call(
         "/api/run/gaps",
-        params,
+        request,
         compute_gaps,
         config_path=getattr(args, "config", None),
         skip_daemon=bool(spec_dir),
     )
+
+    # Implements: REQ-d00282-E
+    # Resolved again from the request AS RESOLVED here, not re-derived from the
+    # payload: rendering states the sections this reader asked for whether the
+    # payload was computed locally or by a serving process.
+    gap_types: list[str] | None = gap_sections(inputs.values, command)
 
     scope_lines = data.get("scope") or []
     if fmt == "json":

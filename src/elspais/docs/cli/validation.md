@@ -142,6 +142,12 @@ once:
 **Implements**: REQ-p00001-A+B, REQ-p00002
 ```
 
+An item naming no assertion claims the requirement as a whole, and is credited
+as the whole-requirement measure rather than the by-name one. It is a legal
+reference and the right one where the code answers a requirement entire; where
+it answers particular assertions, name them, because that is the measure a
+coverage gap is read from.
+
 The list ends at the first thing that is not a reference, a comma or
 whitespace. What the author wrote before that is read; what follows is left
 over and binds nothing. So a note needs no marker to be a note -- though a

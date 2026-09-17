@@ -11,6 +11,7 @@ assembled separately by each command is how those paths start disagreeing.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from typing import Any
 
 from elspais.graph.scope import (
@@ -19,26 +20,49 @@ from elspais.graph.scope import (
     describe_scope,
     scope_from_params,
     scope_to_params,
-    scoped_requirements,
 )
 
 __all__ = [
+    "flag_values",
     "scope_from_args",
-    "scope_params_from_args",
     "scope_from_params",
     "scope_to_params",
-    "resolve_scope_for_report",
     "scope_disclosure",
 ]
 
 
-def _values(args: Any, name: str) -> tuple[str, ...]:
+# Implements: REQ-d00278-C, REQ-p00084-H
+def flag_values(args: Any, name: str) -> tuple[str, ...]:
+    """Every value this invocation named for one list-valued flag.
+
+    The ONE place a repeated flag is gathered back into the one list it names.
+    A reader may write the values space-separated behind a single flag, repeat
+    the flag, or mix the two; a repetition arrives as its own inner list and is
+    flattened here rather than letting the last occurrence stand for the whole.
+    REQ-d00278-C admits any combination of the values a property admits, and
+    keeping only the last occurrence would put some of those combinations out of
+    a reader's reach while looking like the whole invocation had been read.
+
+    Serves the scope properties and every other accumulating flag (``--treat-
+    active``) so one spelling rule holds across them: a reader who has learned
+    how one flag reads has learned how they all do. It also accepts the flat
+    shape, which is what the composed report's argparse parser produces and what
+    a caller assembling a namespace by hand hands over.
+    """
     raw = getattr(args, name, None)
     if not raw:
         return ()
     if isinstance(raw, str):
         raw = [raw]
-    return tuple(str(v) for v in raw if str(v).strip())
+    flat: list[Any] = []
+    for item in raw:
+        if isinstance(item, str):
+            flat.append(item)
+        elif isinstance(item, (list, tuple)):
+            flat.extend(item)
+        else:
+            flat.append(item)
+    return tuple(str(v) for v in flat if str(v).strip())
 
 
 def scope_from_args(args: Any, config: dict[str, Any] | None = None) -> ReportScope | None:
@@ -50,9 +74,9 @@ def scope_from_args(args: Any, config: dict[str, Any] | None = None) -> ReportSc
     include: dict[str, tuple[str, ...]] = {}
     exclude: dict[str, tuple[str, ...]] = {}
     for prop in ("level", "status"):
-        if wanted := _values(args, prop):
+        if wanted := flag_values(args, prop):
             include[prop] = wanted
-        if refused := _values(args, f"not_{prop}"):
+        if refused := flag_values(args, f"not_{prop}"):
             exclude[prop] = refused
     match_roles = bool(getattr(args, "match_status_roles", False))
 
@@ -79,29 +103,32 @@ def scope_from_args(args: Any, config: dict[str, Any] | None = None) -> ReportSc
     return ReportScope(include=include, exclude=exclude, match_status_roles=match_roles)
 
 
-def scope_params_from_args(args: Any, config: dict[str, Any] | None = None) -> dict[str, str]:
-    """The query parameters carrying this invocation's scope to a serving process."""
-    return scope_to_params(scope_from_args(args, config))
+# Implements: REQ-d00291-G, REQ-p00085-A
+def active_overlay_disclosure(treat_active: Iterable[str] | None) -> list[str]:
+    """What a report owes its reader about the statuses it weighed as active.
 
+    A run can weigh a status as active. The counts in the report then include
+    the requirements in that status. The text of those requirements still
+    gives the original status. A reader who cannot see the request cannot see
+    the reason for the difference. Therefore the report states the request.
 
-def resolve_scope_for_report(
-    graph: Any,
-    args_or_params: Any,
-    config: dict[str, Any] | None = None,
-) -> ScopeResult:
-    """The membership a report should emit, from either an invocation or params.
+    A status weighed as active is one of the choices that decide the
+    population a figure is taken over, which is what REQ-p00085-A obliges a
+    report to disclose. It is NOT a scope: a scope decides which requirements
+    a report emits.
 
-    Accepts both shapes because a report reaches this point two ways -- computed
-    where it was asked for, or computed by a process that received the scope as
-    parameters -- and both have to arrive at the same set.
+    The result is empty if the run weighs no status as active. There is then
+    nothing to state.
     """
-    if isinstance(args_or_params, dict):
-        scope = scope_from_params(args_or_params)
-    else:
-        scope = scope_from_args(args_or_params, config)
-    return scoped_requirements(graph, scope, config)
+    from elspais.config import statuses_weighed_active
+
+    names = sorted(statuses_weighed_active(treat_active))
+    if not names:
+        return []
+    return [f"Weighed as active: {', '.join(names)} (--treat-active)"]
 
 
+# Implements: REQ-d00278-L
 def scope_disclosure(result: ScopeResult) -> list[str]:
     """What a scoped report owes its reader about the scope that produced it.
 

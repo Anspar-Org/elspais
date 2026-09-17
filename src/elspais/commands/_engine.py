@@ -25,19 +25,28 @@ _local_config: dict[str, Any] | None = None
 
 def call(
     endpoint: str,
-    params: dict[str, str],
-    compute_fn: Callable[[Any, dict[str, Any], dict[str, str]], dict],
+    request: Any,
+    compute_fn: Callable[[Any, dict[str, Any], Any], dict],
     skip_daemon: bool = False,
     config_path: str | None = None,
 ) -> dict:
-    """Run a command via daemon or locally, returning the same dict shape.
+    """Run an operation via daemon or locally, returning the same dict shape.
 
     Injects ``graph_source`` metadata into the result dict for traceability.
 
+    The request is the operation's input on both paths. Only the daemon path
+    serializes it, and it does so here -- a caller that had to produce query
+    parameters itself would be a caller deciding how its own inputs travel.
+
     Args:
         endpoint: REST path (e.g., "/api/run/checks").
-        params: Query parameters as string dict.
-        compute_fn: Function(graph, config, params) -> dict for local path.
+        request: The operation's input -- a frozen request object carrying
+            final values (a resolved scope, a resolved selection, and so on).
+            Its ``to_params()`` is what travels to a daemon; ``compute_fn`` is
+            called with the request object itself on the local path, so a
+            command's ``compute_*`` receives the same shape whether it was
+            served or computed here.
+        compute_fn: Function(graph, config, request) -> dict for local path.
         skip_daemon: If True, skip daemon entirely (e.g., custom spec_dir).
         config_path: Explicit config file path (local fallback only).
 
@@ -46,7 +55,7 @@ def call(
         always including a ``graph_source`` key.
     """
     if not skip_daemon:
-        daemon_result = _try_daemon(endpoint, params)
+        daemon_result = _try_daemon(endpoint, request.to_params())
         if daemon_result is not None:
             result, source = daemon_result
             if isinstance(result, dict):
@@ -55,7 +64,7 @@ def call(
 
     # Local fallback: build graph (cached) and compute
     graph, config = _ensure_local_graph(config_path=config_path)
-    result = compute_fn(graph, config, params)
+    result = compute_fn(graph, config, request)
     result["graph_source"] = {"type": "local"}
     return result
 
@@ -82,6 +91,7 @@ def _build_daemon_source(port: int) -> dict[str, Any]:
     return source
 
 
+# Implements: REQ-o00075-B, REQ-o00076-E
 def _try_daemon(
     endpoint: str,
     params: dict[str, str],
@@ -103,7 +113,6 @@ def _try_daemon(
     # 1. Try existing server (viewer or daemon — both use daemon.json)
     port = _get_daemon_port()
     if port:
-        # Implements: REQ-o00075-B, REQ-o00076-E
         # A server that has committed to stopping still answers and still
         # refuses everything, so it is replaced rather than reused — and
         # only once it has actually gone, since a second process for one

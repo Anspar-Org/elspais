@@ -7,7 +7,6 @@ from pathlib import Path
 import pytest
 
 from elspais.commands.health import (
-    _config_with_status_overlay,
     _excluded_note,
     check_code_coverage,
     check_dimension_coverage,
@@ -20,6 +19,7 @@ from elspais.commands.health import (
     run_code_checks,
     run_uat_checks,
 )
+from elspais.config import config_with_active_overlay
 from elspais.graph.builder import TraceGraph
 from elspais.graph.federated import FederatedGraph
 from elspais.graph.GraphNode import GraphNode, NodeKind  # noqa: N817
@@ -57,7 +57,7 @@ def _make_graph(*nodes: GraphNode, repo_root: Path | None = None) -> FederatedGr
 
 
 # A config whose `dev` level expects UAT validation, so the (dev-level) test
-# requirements exercise the expects_validation gap path (REQ-d00258-F).
+# requirements exercise the expects_validation gap path (REQ-d00291-A+B).
 _DEV_EXPECTS_CONFIG: dict = {"levels": {"dev": {"rank": 3, "expects_validation": True}}}
 
 
@@ -359,7 +359,7 @@ class TestCoverageCheckShowsTheMeasuresBehindItsFigures:
 class TestCheckUatCoverage:
     """Tests for check_uat_coverage health check."""
 
-    # Verifies: REQ-d00219-A, REQ-d00258-F
+    # Verifies: REQ-d00219-A, REQ-d00291-C
     def test_returns_info_severity(self):
         """Empty graph (no uncovered reqs) returns severity=info, passed."""
         graph = _make_graph()
@@ -368,7 +368,7 @@ class TestCheckUatCoverage:
         assert result.passed is True
         assert result.category == "uat"
 
-    # Verifies: REQ-d00219-A, REQ-d00258-F
+    # Verifies: REQ-d00219-A, REQ-d00291-C
     def test_no_requirements_zero_uat(self):
         """Empty graph reports 0/0 UAT coverage."""
         graph = _make_graph()
@@ -377,7 +377,7 @@ class TestCheckUatCoverage:
         assert result.details["total_requirements"] == 0
         assert result.details["reqs_with_any_coverage"] == 0
 
-    # Verifies: REQ-d00219-A, REQ-d00258-F
+    # Verifies: REQ-d00219-A, REQ-d00291-C
     def test_req_with_uat_covered_counted(self):
         """Requirement with uat_covered > 0 is counted and check passes."""
         req = _make_req("REQ-d00001")
@@ -400,11 +400,11 @@ class TestCheckUatCoverage:
         assert result.details["req_coverage_percent"] == 100.0
         assert result.passed is True
 
-    # Verifies: REQ-d00258-F, REQ-d00285-F
+    # Verifies: REQ-d00291-B+C, REQ-d00285-F
     def test_expects_validation_req_without_uat_is_gap(self):
         """An expects_validation req with no UAT coverage is named by
         `uat.unvalidated`, and the dimension check reports the figure it
-        produces (REQ-d00258-F). Two conditions, two names (REQ-d00285-F).
+        produces (REQ-d00291-B+C). Two conditions, two names (REQ-d00285-F).
         """
         req = _make_req("REQ-d00001")
         metrics = RollupMetrics(
@@ -422,10 +422,10 @@ class TestCheckUatCoverage:
         assert any(f.node_id == "REQ-d00001" for f in gaps.findings)
         assert gaps.details["uncovered_expects_validation"] == ["REQ-d00001"]
 
-    # Verifies: REQ-d00258-F
+    # Verifies: REQ-d00291-C
     def test_non_expecting_level_req_not_a_gap(self):
         """A req at a level that does NOT expect_validation is neither counted
-        nor flagged, even with zero UAT coverage (REQ-d00258-F)."""
+        nor flagged, even with zero UAT coverage (REQ-d00291-C)."""
         # Config: prd expects validation, dev does not. Requirement is dev-level.
         config = {
             "levels": {
@@ -448,7 +448,7 @@ class TestCheckUatCoverage:
         assert result.details["total_requirements"] == 0
         assert result.passed is True
 
-    # Verifies: REQ-d00258-F
+    # Verifies: REQ-d00291-C
     def test_no_level_expects_trivial_pass(self):
         """When no level expects validation, the check passes trivially."""
         req = _make_req("REQ-d00001")
@@ -466,7 +466,7 @@ class TestCheckUatCoverage:
         assert result.severity == "info"
         assert "expects_validation" in result.message
 
-    # Verifies: REQ-d00219-A, REQ-d00258-F
+    # Verifies: REQ-d00219-A, REQ-d00291-F
     def test_excluded_statuses_filter(self):
         """UAT coverage excludes requirements with excluded status."""
         active = _make_req("REQ-d00001", status="Active")
@@ -491,7 +491,7 @@ class TestCheckUatCoverage:
         assert result.details["total_requirements"] == 1
         assert result.details["reqs_with_any_coverage"] == 1
 
-    # Verifies: REQ-d00219-A, REQ-d00258-F, REQ-d00285-F
+    # Verifies: REQ-d00219-A, REQ-d00291-B+C, REQ-d00285-F
     def test_no_rollup_metrics_not_counted(self):
         """Requirement with no metrics is not UAT-covered, and the gap is
         named by the check whose condition it is."""
@@ -784,14 +784,14 @@ class TestStatusOverlayCoverageConsistency:
         """Empty flag set returns the input config object unchanged (default is
         byte-identical)."""
         cfg = {"statuses": {"Draft": {"color": "#abc"}}}
-        assert _config_with_status_overlay(cfg, set()) is cfg
+        assert config_with_active_overlay(cfg, ()) is cfg
 
     # Verifies: REQ-d00258-C
     def test_overlay_forces_expects_implementation_preserving_fields(self):
         """The overlay only forces ``expects_implementation=True``; other
         per-status fields survive and the input config is not mutated."""
         cfg = {"statuses": {"Draft": {"color": "#abc"}}}
-        overlay = _config_with_status_overlay(cfg, {"Draft"})
+        overlay = config_with_active_overlay(cfg, ("Draft",))
         assert overlay["statuses"]["Draft"]["expects_implementation"] is True
         assert overlay["statuses"]["Draft"]["color"] == "#abc"
         # input untouched
@@ -812,7 +812,7 @@ class TestStatusOverlayCoverageConsistency:
         """--status Draft (as an overlay) counts Draft in numerator+denominator
         AND drops Draft from the excluded-note -- counts and note AGREE."""
         graph = self._active_plus_draft()
-        overlay = _config_with_status_overlay({}, {"Draft"})
+        overlay = config_with_active_overlay({}, ("Draft",))
         check = check_dimension_coverage(graph, "implemented", config=overlay)
         # Draft now counted (denominator = both reqs).
         assert check.details["total_requirements"] == 2
@@ -826,7 +826,7 @@ class TestStatusOverlayCoverageConsistency:
         the caller that previously dropped ``config`` (counts excluded Draft
         while the note implied inclusion)."""
         graph = self._active_plus_draft()
-        overlay = _config_with_status_overlay({}, {"Draft"})
+        overlay = config_with_active_overlay({}, ("Draft",))
         checks = run_code_checks(graph, exclude_status=set(), config=overlay)
         implemented = next(c for c in checks if c.name == "code.implemented")
         assert implemented.details["total_requirements"] == 2
@@ -849,7 +849,7 @@ class TestStatusOverlayCoverageConsistency:
         counts use, so a promoted status is absent from the note."""
         graph = self._active_plus_draft()
         assert "draft" in _excluded_note(graph, config={}).lower()
-        overlay = _config_with_status_overlay({}, {"Draft"})
+        overlay = config_with_active_overlay({}, ("Draft",))
         assert _excluded_note(graph, config=overlay) == ""
 
 
@@ -1212,7 +1212,7 @@ class TestCheckUncreditedEvidence:
 
 
 class TestTestedBreakdownInHealth:
-    """REQ-d00258-O: the tests.tested finding reports what came back."""
+    """REQ-d00258-U: the tests.tested finding reports what came back."""
 
     def _graph(self) -> FederatedGraph:
         """One requirement: A passed, B failed, C awaiting a result."""
@@ -1240,7 +1240,7 @@ class TestTestedBreakdownInHealth:
         )
         return _make_graph(req)
 
-    # Verifies: REQ-d00258-O
+    # Verifies: REQ-d00258-U
     def test_message_breaks_the_tested_figure_down(self):
         check = check_dimension_coverage(self._graph(), "tested", config={})
 
@@ -1249,7 +1249,7 @@ class TestTestedBreakdownInHealth:
         assert check.details["tested_failed"] == 1
         assert check.details["tested_awaiting"] == 1
 
-    # Verifies: REQ-d00258-O
+    # Verifies: REQ-d00258-V
     def test_breakdown_belongs_to_tested_alone(self):
         """It breaks Tested down, so it means nothing beside another dimension
         and must not appear in one."""

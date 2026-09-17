@@ -38,6 +38,7 @@ from elspais.utilities.findings import (
 )
 
 if TYPE_CHECKING:
+    from elspais.commands._requests import ChecksRequest
     from elspais.graph.federated import FederatedGraph
     from elspais.graph.GraphNode import GraphNode
     from elspais.utilities.patterns import IdResolver
@@ -67,6 +68,7 @@ class HealthFinding:
     # and a structured format can carry it as a value.
     codes: list[str] = field(default_factory=list)
 
+    # Implements: REQ-d00285-A, REQ-d00285-C
     def to_dict(self) -> dict[str, Any]:
         d: dict[str, Any] = {
             "message": self.message,
@@ -82,6 +84,7 @@ class HealthFinding:
             d["codes"] = list(self.codes)
         return d
 
+    # Implements: REQ-d00285-A
     def location(self) -> str | None:
         """Where the finding is about, as `path:line` -- or None where it has none."""
         if not self.file_path:
@@ -189,6 +192,7 @@ class HealthReport:
             if check.category == category:
                 yield check
 
+    # Implements: REQ-d00285-B, REQ-d00285-C
     def to_dict(self, lenient: bool = False) -> dict[str, Any]:
         healthy = self.is_healthy_lenient if lenient else self.is_healthy
         return {
@@ -245,6 +249,7 @@ def __getattr__(name: str):  # noqa: N807
 # =============================================================================
 
 
+# Implements: REQ-d00080-B
 def check_spec_files_parseable(
     graph: FederatedGraph, config: dict[str, Any] | None = None
 ) -> HealthCheck:
@@ -838,6 +843,8 @@ def check_structural_orphans(
     )
 
 
+# Implements: REQ-d00285-A
+# Implements: REQ-d00252-K
 def _fault_location(
     graph: FederatedGraph, source_id: str, line: int | None
 ) -> tuple[str | None, int | None]:
@@ -1230,7 +1237,7 @@ def check_spec_format_rules(
             passed=True,
             message=f"{req_count} requirements pass format rules ({len(warnings)} warning(s))",
             category="spec",
-            severity="warning",
+            severity=severity,
             details={
                 "warnings": [
                     {"rule": v.rule, "message": v.message, "node": v.node_id} for v in warnings
@@ -1346,7 +1353,7 @@ def check_spec_unknown_directive(graph: FederatedGraph, config: dict[str, Any]) 
     )
 
 
-# Implements: REQ-p00004
+# Implements: REQ-p00004-K
 def check_spec_hash_integrity(
     graph: FederatedGraph, config: dict[str, Any] | None = None
 ) -> HealthCheck:
@@ -1718,6 +1725,7 @@ def check_spec_index_current(
     )
 
 
+# Implements: REQ-d00204-C
 def _annotate_findings(check: HealthCheck, repo_name: str) -> HealthCheck:
     """Annotate all findings in a HealthCheck with the source repo name."""
     for finding in check.findings:
@@ -1767,6 +1775,7 @@ def check_term_duplicates(
     duplicates: list[tuple],
     severity: str | None = None,
     config: dict[str, Any] | None = None,
+    graph: FederatedGraph | None = None,
 ) -> HealthCheck:
     """Check for duplicate term definitions."""
     severity = severity or severity_for("terms.duplicates", config)
@@ -1784,6 +1793,13 @@ def check_term_duplicates(
 
     findings = []
     for existing, incoming in duplicates:
+        # `defined_in` is a NODE id (the nearest REQUIREMENT or FILE ancestor),
+        # not a path, so the location is resolved the one way the estate
+        # resolves a node id into a file and a line.
+        file_path: str | None = None
+        line: int | None = existing.defined_at_line
+        if graph is not None and existing.defined_in:
+            file_path, line = _fault_location(graph, existing.defined_in, existing.defined_at_line)
         findings.append(
             HealthFinding(
                 message=(
@@ -1792,7 +1808,8 @@ def check_term_duplicates(
                     f"and {incoming.defined_in}:{incoming.defined_at_line}"
                 ),
                 node_id=existing.defined_in,
-                line=existing.defined_at_line,
+                file_path=file_path,
+                line=line,
             )
         )
 
@@ -2032,6 +2049,7 @@ def check_term_collection_empty(
     )
 
 
+# Implements: REQ-d00237-F
 def check_term_canonical_form(
     entries: list,
     severity: str | None = None,
@@ -2050,7 +2068,6 @@ def check_term_canonical_form(
                 continue
             if ref.is_canonical(canonical):
                 continue
-            # Implements: REQ-d00237-F
             # Embedded-in-identifier occurrences are
             # references, not non-canonical prose; leave them untouched.
             if ref.embedded:
@@ -2125,7 +2142,7 @@ def run_term_checks(
                 )
 
     return [
-        check_term_duplicates(duplicates, config=config),
+        check_term_duplicates(duplicates, config=config, graph=graph),
         check_undefined_terms(undefined, config=config),
         check_unmarked_usage(unmarked, config=config),
         check_term_unused(entries, config=config),
@@ -2316,6 +2333,81 @@ def check_no_cycles(graph: FederatedGraph, config: dict[str, Any] | None = None)
     )
 
 
+# Implements: REQ-d00080-B
+# Implements: REQ-p00019-A
+def check_unmatched_file_pattern(
+    graph: FederatedGraph, config: dict[str, Any] | None = None
+) -> HealthCheck:
+    """Report a NAMED file the scan selected nothing for.
+
+    A glob that skips some of its matches is ordinary. Writing a file's whole
+    name into ``file_patterns`` -- no wildcard -- is a request for that one
+    file, and receiving nothing back is the silent omission REQ-p00019-A
+    prohibits: nothing in the answer says the file was excluded rather than
+    absent, so a reader audits the wrong thing.
+
+    Where a skip pattern names the same file the cause is stated outright.
+    Where a skipped DIRECTORY is the cause it is not, deliberately: finding
+    out would mean listing a directory the configuration said not to enter,
+    which is the read REQ-p00015-H forbids. The finding reports what it knows
+    and does not go looking.
+
+    This reports a contradiction between two of a project's own declarations.
+    It is not a finding about the file, so REQ-d00241-G -- which forbids
+    reporting a file the configuration excludes -- is not reached.
+    """
+    check = "config.unmatched_file_pattern"
+    severity = severity_for(check, config)
+    if severity == Severity.OFF:
+        return skipped_check(check, "A named file pattern that selected nothing")
+
+    from elspais.config import scan_exclusions
+    from elspais.graph.file_selection import file_is_skipped
+
+    cfg = config or {}
+    scanning = cfg.get("scanning") or {}
+    findings: list[HealthFinding] = []
+
+    for kind in ("spec", "code", "test"):
+        kind_cfg = scanning.get(kind) or {}
+        if not isinstance(kind_cfg, dict):
+            continue
+        patterns = [p for p in (kind_cfg.get("file_patterns") or []) if isinstance(p, str)]
+        _, skip_files = scan_exclusions(cfg, kind)
+        for pattern in patterns:
+            # A wildcard means the entry describes a class of files, and some
+            # of them being skipped is what a class is for.
+            if any(ch in pattern for ch in "*?["):
+                continue
+            if file_is_skipped(pattern, skip_files):
+                findings.append(
+                    HealthFinding(
+                        message=(
+                            f"[scanning.{kind}] file_patterns names '{pattern}', and a skip "
+                            f"pattern excludes it. The file is not read. Remove it from one "
+                            f"of the two lists."
+                        ),
+                    )
+                )
+
+    if findings:
+        return HealthCheck(
+            name=check,
+            passed=False,
+            message=f"{len(findings)} named file pattern(s) that a skip pattern excludes",
+            category="spec",
+            severity=severity,
+            findings=findings,
+        )
+    return HealthCheck(
+        name=check,
+        passed=True,
+        message="No named file pattern is excluded by a skip pattern",
+        category="spec",
+        severity=severity,
+    )
+
+
 def check_no_requirements(
     graph: FederatedGraph, config: dict[str, Any] | None = None
 ) -> HealthCheck:
@@ -2360,6 +2452,14 @@ _GOVERNED_SETTING_ROOTS: tuple[str, ...] = (
     # the two roots above answer for the checks that do have one.
     "rules.severity",
     "rules.format.status_roles",
+    # A per-status declaration decides whether requirements in that status are
+    # counted (REQ-d00291-D). That is a rule for scoring, so the invoking
+    # repository governs it (REQ-d00275-A). It is governed through this root
+    # and not through the roles: a member can reach a different answer by
+    # either mechanism, and only the roles were listed here. A member that
+    # declared ``expects_implementation`` was then overridden with no
+    # disclosure (REQ-d00275-D).
+    "statuses",
 )
 
 
@@ -2379,6 +2479,7 @@ def _flatten_settings(value: Any, prefix: str) -> dict[str, Any]:
     return flat
 
 
+# Implements: REQ-d00275-D
 def _governed_settings(config: dict[str, Any] | None) -> dict[str, Any]:
     """The governed settings a config holds, as dotted keys.
 
@@ -2515,6 +2616,7 @@ def run_spec_checks(
 
     checks: list[HealthCheck] = [
         check_no_requirements(graph, config),
+        check_unmatched_file_pattern(graph, config),
         check_governed_rule_divergence(graph, config),
         check_associate_paths(config, _repo_root),
         check_spec_files_parseable(graph, config),
@@ -2649,69 +2751,6 @@ def run_spec_checks(
 # =============================================================================
 
 
-def _status_flags(args: argparse.Namespace) -> set[str]:
-    """Title-cased set of statuses named via ``--treat-active`` (empty when unset)."""
-    raw: list[str] | None = getattr(args, "treat_active", None)
-    return {s.title() for s in raw} if raw else set()
-
-
-def _config_with_status_overlay(
-    config: dict[str, Any] | None,
-    status_flags: set[str],
-) -> dict[str, Any] | None:
-    """Config overlay forcing ``expects_implementation=True`` for --treat-active names.
-
-    ``--treat-active Draft`` makes Draft count toward coverage (the documented
-    capability, ``docs/cli/checks.md``). Rather than a second coverage-inclusion
-    predicate, ``--treat-active`` is expressed as a per-call CONFIG overlay so the ONE
-    resolver (``status_expects_implementation``) drives both the dimension
-    COUNTS (``aggregate_dimension``) and the excluded-NOTE from the same source
-    -- they can no longer disagree (REQ-d00258-C).
-
-    Empty ``status_flags`` returns ``config`` unchanged (byte-identical default
-    behaviour). Otherwise a shallow copy whose ``statuses`` table gains
-    ``expects_implementation=True`` for each named status, preserving any other
-    per-status fields (and composing with an existing
-    ``[statuses.<S>].expects_implementation``). The input config is never
-    mutated.
-    """
-    if not status_flags:
-        return config
-    overlaid = dict(config or {})
-    statuses = dict(overlaid.get("statuses") or {})
-    # Merge into an existing entry (case-insensitively) rather than shadowing it
-    # with a second, differently-cased key that the resolver might reach first.
-    existing_by_lower = {k.lower(): k for k in statuses if isinstance(k, str)}
-    for flag in status_flags:
-        key = existing_by_lower.get(flag.lower(), flag)
-        entry = dict(statuses.get(key) or {})
-        entry["expects_implementation"] = True
-        statuses[key] = entry
-    overlaid["statuses"] = statuses
-    return overlaid
-
-
-def _resolve_exclude_status(
-    args: argparse.Namespace,
-    config: dict[str, Any] | None = None,
-) -> set[str]:
-    """Statuses treated as coverage-EXCLUDED for the reference-status checks.
-
-    This drives ``_check_status_references`` (retired/provisional/aspirational
-    reference flagging): ``--treat-active Draft`` promotes Draft to active-like, so it
-    is removed from this set and Draft references stop being flagged. Coverage
-    COUNTS and the excluded-note no longer read this set -- they route through
-    ``_config_with_status_overlay`` + ``status_expects_implementation`` so a
-    single resolver keeps them consistent (REQ-d00258-C). Without ``--treat-active``,
-    the role system supplies the default exclusion set.
-    """
-    from elspais.config import get_status_roles
-
-    roles = get_status_roles(config or {})
-    default_excluded = roles.coverage_excluded_statuses()
-    return default_excluded - _status_flags(args)
-
-
 def _excluded_note(
     graph: FederatedGraph,
     config: dict[str, Any] | None = None,
@@ -2738,6 +2777,7 @@ def _excluded_note(
     return f" [{', '.join(parts)} excluded]"
 
 
+# Implements: REQ-d00258-A, REQ-d00069-L, REQ-d00069-N
 def check_dimension_coverage(
     graph: FederatedGraph,
     dimension: str,
@@ -2807,7 +2847,6 @@ def check_dimension_coverage(
     total_assertions = agg.total
     has_any_failures = agg.has_failures
 
-    # Implements: REQ-d00258-A, REQ-d00069-L, REQ-d00069-N
     # The headline is the per-*Assertion* total -- the greatest of the four
     # measures per *Assertion*, so each *Assertion* is counted once however
     # many ways it is covered -- and the four measures behind it are reported
@@ -2862,7 +2901,7 @@ def check_dimension_coverage(
     # per *Assertion*). "of which" claimed a partition none of that supports,
     # so the figures are introduced as the separate readings they are.
     msg_parts.append("by measure: " + ", ".join(measure_parts))
-    # Implements: REQ-d00258-O
+    # Implements: REQ-d00258-U
     if dimension == "tested" and (agg.tested_passed + agg.tested_failed + agg.tested_awaiting):
         msg_parts.append(
             f"{fmt_assertion_count(agg.tested_passed)} passed / "
@@ -2902,7 +2941,7 @@ def check_dimension_coverage(
     )
 
 
-# Implements: REQ-d00254-B, REQ-d00258-E
+# Implements: REQ-d00254-B, REQ-d00258-W
 def check_line_coverage(graph, config=None, level_filter=None) -> HealthCheck:
     """INFO: how much of the attributed implementation a test run executed.
 
@@ -2916,7 +2955,7 @@ def check_line_coverage(graph, config=None, level_filter=None) -> HealthCheck:
     covered" would read as "the tests reached none of this". Where coverage
     arrives aggregate-only there is no context to attribute a line to a test,
     and a zero would read as "no test exercises this" rather than "the question
-    was not asked" (REQ-d00258-E).
+    was not asked" (REQ-d00258-W).
     """
     severity = severity_for("code.code_tested", config)
     if severity == Severity.OFF:
@@ -2934,7 +2973,7 @@ def check_line_coverage(graph, config=None, level_filter=None) -> HealthCheck:
         "has_contexts": agg.has_contexts,
         "total_requirements": agg.req_count,
     }
-    # Implements: REQ-d00258-E
+    # Implements: REQ-d00254-B
     # An unmeasured estate and a measured-but-unexecuted one are opposite
     # facts, so they are reported in different words rather than through the
     # same zero.
@@ -3314,9 +3353,11 @@ def _check_status_references(
 ) -> HealthCheck:
     """Check for source nodes referencing requirements of a given status role.
 
-    When --status promotes a status to active-like, it's removed from
-    exclude_status. We mirror that: statuses NOT in exclude_status are
-    treated as active and skip this check.
+    ``exclude_status`` comes from ``reference_excluded_statuses``. That set
+    holds the roles of the project, less each status that this run weighs as
+    active. A status that is not in the set is active, and this check passes
+    over it. Thus ``--treat-active Draft`` stops the reports about the
+    citations of Draft.
 
     Args:
         graph: The federated traceability graph.
@@ -3330,7 +3371,12 @@ def _check_status_references(
     from elspais.graph import NodeKind
     from elspais.graph.edge_sets import REACHABILITY_TRACEABILITY_EDGES
 
-    roles_cfg = get_status_roles({})
+    # Use the roles of the project. Do not use the default roles. A project
+    # that declares ``[status_roles]`` tells you which of its statuses are
+    # retired and which are provisional. A read of the default map here
+    # reports the citations of the project against roles that the project
+    # never declared.
+    roles_cfg = get_status_roles(config or {})
     category = "code" if source_kind == NodeKind.CODE else "tests"
     check_name = f"{category}.{role.value}_references"
     severity = severity or severity_for(check_name, config)
@@ -3354,9 +3400,17 @@ def _check_status_references(
             if req.kind != NodeKind.REQUIREMENT:
                 continue
             req_status = req.status
-            # If this status was promoted by --treat-active, skip it
-            if exclude_status and req_status and req_status not in exclude_status:
-                continue
+            # A status this run weighs as active is not reported here.
+            # ``None`` means the caller gave no set. An EMPTY set means the
+            # caller excluded nothing, which happens when the run promoted
+            # every status the roles withheld -- the two are different answers
+            # and a truth test read them as one, so the promotion was dropped
+            # in exactly the case where all of it applied (REQ-d00291-G).
+            # Case is folded because a project spells its roles and a caller
+            # spells the flag independently.
+            if exclude_status is not None and req_status:
+                if req_status.lower() not in {s.lower() for s in exclude_status}:
+                    continue
             if roles_cfg.role_of(req_status) != role:
                 continue
             fn = node.file_node()
@@ -3432,6 +3486,7 @@ def check_no_traceability(
     findings = [
         HealthFinding(
             message=f"No traceability markers in {path}",
+            file_path=path,
         )
         for path in unlinked_files
     ]
@@ -3504,6 +3559,7 @@ def check_unscanned_keyword_files(
     )
 
 
+# Implements: REQ-d00258-W
 def run_code_checks(
     graph: FederatedGraph,
     exclude_status: set[str] | None = None,
@@ -3537,7 +3593,6 @@ def run_code_checks(
         check_unscanned_keyword_files(graph, config),
     ]
 
-    # Implements: REQ-d00258-E
     # Asked whenever there is implementation to measure -- not only when a
     # measurement exists. Attributed lines are read from the coverage map, so
     # gating on a nonzero count would silence the check in exactly the case it
@@ -3595,6 +3650,7 @@ def _read_run_meta(config: dict | None) -> dict:
     return {"deselected_count": 0, "runner": ""}
 
 
+# Implements: REQ-d00249-E
 def _collect_file_mtimes(
     graph: FederatedGraph,
     file_types: set,
@@ -3755,6 +3811,7 @@ def check_test_results(graph: FederatedGraph, config: dict | None = None) -> Hea
     )
 
 
+# Implements: REQ-d00285-F
 # Implements: REQ-d00249-E
 def check_test_results_stale(
     graph: FederatedGraph, config: dict[str, Any] | None = None
@@ -3823,7 +3880,7 @@ def check_test_coverage(
     return check_dimension_coverage(graph, "tested", exclude_status=exclude_status, config=config)
 
 
-# Implements: REQ-d00258-F
+# Implements: REQ-d00291-C
 def check_uat_coverage(
     graph: FederatedGraph,
     exclude_status: set[str] | None = None,
@@ -3865,6 +3922,7 @@ def check_uat_coverage(
     )
 
 
+# Implements: REQ-d00291-A
 def _any_level_expects_validation(cfg: dict[str, Any] | Any) -> bool:
     """Whether any configured level sets ``expects_validation``."""
     from elspais.config import level_expects_validation
@@ -3873,6 +3931,7 @@ def _any_level_expects_validation(cfg: dict[str, Any] | Any) -> bool:
     return isinstance(levels, dict) and any(level_expects_validation(cfg, key) for key in levels)
 
 
+# Implements: REQ-d00291-C
 def _validation_level_filter(cfg: dict[str, Any] | Any) -> Any:
     """A predicate selecting the levels that expect validation."""
     from elspais.config import level_expects_validation
@@ -3883,7 +3942,7 @@ def _validation_level_filter(cfg: dict[str, Any] | Any) -> Any:
     return level_filter
 
 
-# Implements: REQ-d00258-F, REQ-d00285-F
+# Implements: REQ-d00291-B, REQ-d00285-F
 def check_unvalidated_requirements(
     graph: FederatedGraph, config: dict[str, Any] | None = None
 ) -> HealthCheck:
@@ -4437,6 +4496,7 @@ def check_unmatched_results(
     )
 
 
+# Implements: REQ-d00285-F
 # Implements: REQ-d00274-G
 def check_unbound_citations(
     graph: FederatedGraph, config: dict[str, Any] | None = None
@@ -4835,11 +4895,15 @@ def render_section(
         for check in run_spec_checks(graph, config, spec_dirs=resolved_spec_dirs):
             report.add(check)
     if graph:
+        from elspais.commands._scope import flag_values
+        from elspais.config import config_with_active_overlay, reference_excluded_statuses
+
         raw_config = config if config else {}
-        exclude_status = _resolve_exclude_status(args, config=raw_config)
+        treat_active = flag_values(args, "treat_active")
+        exclude_status = reference_excluded_statuses(raw_config, treat_active)
         # REQ-d00258-C: --treat-active becomes a coverage-config overlay so
         # dimension counts AND the excluded-note agree (both read this overlay).
-        cov_config = _config_with_status_overlay(raw_config, _status_flags(args))
+        cov_config = config_with_active_overlay(raw_config, treat_active)
         for check in run_code_checks(graph, exclude_status=exclude_status, config=cov_config):
             report.add(check)
         for check in run_test_checks(graph, exclude_status=exclude_status, config=cov_config):
@@ -4865,27 +4929,23 @@ def render_section(
 def compute_checks(
     graph: FederatedGraph,
     config: dict[str, Any],
-    params: dict[str, str],
+    request: ChecksRequest,
 ) -> dict[str, Any]:
     """Compute health checks for engine.call.  Returns HealthReport.to_dict()."""
-    import argparse
-
-    spec_only = params.get("spec_only", "false") == "true"
-    code_only = params.get("code_only", "false") == "true"
-    tests_only = params.get("tests_only", "false") == "true"
-    terms_only = params.get("terms_only", "false") == "true"
-    lenient = params.get("lenient", "false") == "true"
+    spec_only = request.spec_only
+    code_only = request.code_only
+    tests_only = request.tests_only
+    terms_only = request.terms_only
+    lenient = request.lenient
 
     report = HealthReport()
-    run_all = not any([spec_only, code_only, tests_only, terms_only])
+    run_all = request.run_all
 
-    # Build a minimal args namespace for _resolve_exclude_status
-    fake_args = argparse.Namespace()
-    treat_str = params.get("treat_active", None)
-    fake_args.treat_active = treat_str.split(",") if treat_str else None
-    exclude_status = _resolve_exclude_status(fake_args, config=config)
+    from elspais.config import config_with_active_overlay, reference_excluded_statuses
+
+    exclude_status = reference_excluded_statuses(config, request.treat_active)
     # REQ-d00258-C: --treat-active overlay drives coverage counts + note consistently.
-    cov_config = _config_with_status_overlay(config, _status_flags(fake_args))
+    cov_config = config_with_active_overlay(config, request.treat_active)
 
     # Config checks
     if run_all:
@@ -4967,6 +5027,8 @@ def _report_from_dict(data: dict[str, Any]) -> HealthReport:
     return report
 
 
+# Implements: REQ-d00249-A+F+G, REQ-d00285-H
+# Implements: REQ-d00283-D+E+H+I
 def run(args: argparse.Namespace) -> int:
     """Run the health command.
 
@@ -5003,25 +5065,34 @@ def run(args: argparse.Namespace) -> int:
             return 2
         # _validate_config is defined in this module (health.py near line 35).
         cfg = _validate_config(cfg_dict)
-        selected = getattr(args, "targets", None)
+        from elspais.commands._scope import flag_values
+
+        selected = list(flag_values(args, "targets"))
         target_names = {t.name for t in cfg.scanning.test.targets}
         if selected:
-            unknown = sorted(set(selected) - target_names)
+            # Implements: REQ-d00283-H
+            # A name is a target's or a group's -- one namespace, kept apart at
+            # config-read time (REQ-d00283-G) -- and a name that is neither is
+            # refused rather than resolved to nothing.
+            from elspais.config import known_group_names, unknown_target_names
+
+            groups = known_group_names(cfg)
+            unknown = unknown_target_names(cfg, selected)
             if unknown:
                 print(
                     f"error: unknown --targets: {', '.join(unknown)}. "
-                    f"Configured targets: {', '.join(sorted(target_names))}.",
+                    f"Configured targets: {', '.join(sorted(target_names))}. "
+                    f"Known groups: {', '.join(sorted(groups))}.",
                     file=sys.stderr,
                 )
                 return 2
-        # Implements: REQ-d00283-D+E+H+I
         # One authority resolves both selectors; None means every configured
         # target, which is what keeps a project declaring no groups rendering
         # exactly as it did before (REQ-d00254-J).
         from elspais.config import selected_targets
 
         try:
-            only = selected_targets(cfg, selected or None, getattr(args, "groups", None) or None)
+            only = selected_targets(cfg, selected or None)
         except ValueError as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 2
@@ -5032,7 +5103,7 @@ def run(args: argparse.Namespace) -> int:
             print(
                 "error: --run-tests requires at least one "
                 "[[scanning.test.targets]] entry with a command field "
-                "(within the selected --targets/--groups when given; a run "
+                "(within the selected --targets when given; a run "
                 "naming neither executes the `default` group). "
                 "See docs/cli/test-targets.md for configuration examples.",
                 file=sys.stderr,
@@ -5056,32 +5127,28 @@ def run(args: argparse.Namespace) -> int:
         )
         return 1
 
-    # Build params from args
-    params: dict[str, str] = {}
-    if getattr(args, "spec_only", False):
-        params["spec_only"] = "true"
-    if getattr(args, "code_only", False):
-        params["code_only"] = "true"
-    if getattr(args, "tests_only", False):
-        params["tests_only"] = "true"
-    if getattr(args, "terms_only", False):
-        params["terms_only"] = "true"
-    if getattr(args, "lenient", False):
-        params["lenient"] = "true"
-    treat_active = getattr(args, "treat_active", None)
-    if treat_active:
-        params["treat_active"] = ",".join(treat_active)
+    from elspais.commands._requests import ChecksRequest
+    from elspais.commands._scope import flag_values
+
+    request = ChecksRequest(
+        spec_only=bool(getattr(args, "spec_only", False)),
+        code_only=bool(getattr(args, "code_only", False)),
+        tests_only=bool(getattr(args, "tests_only", False)),
+        terms_only=bool(getattr(args, "terms_only", False)),
+        lenient=bool(getattr(args, "lenient", False)),
+        treat_active=flag_values(args, "treat_active"),
+    )
 
     spec_dir = getattr(args, "spec_dir", None)
     # Force fresh build when runners just produced new result files.
     skip_daemon = bool(spec_dir) or run_tests
 
     if skip_daemon:
-        data = _run_local_checks(args, params)
+        data = _run_local_checks(args, request)
     else:
         data = _engine.call(
             "/api/run/checks",
-            params,
+            request,
             compute_checks,
             config_path=getattr(args, "config", None),
         )
@@ -5112,17 +5179,18 @@ def run_preset(args: argparse.Namespace, preset: str) -> int:
     its exit code.
     """
     from elspais.commands import _engine
+    from elspais.commands._requests import ChecksRequest
 
     filt = FindingFilter.for_preset(preset)
-    params: dict[str, str] = {}
+    request = ChecksRequest()
     spec_dir = getattr(args, "spec_dir", None)
 
     if spec_dir:
-        data = _run_local_checks(args, params)
+        data = _run_local_checks(args, request)
     else:
         data = _engine.call(
             "/api/run/checks",
-            params,
+            request,
             compute_checks,
             config_path=getattr(args, "config", None),
         )
@@ -5149,7 +5217,7 @@ def run_preset(args: argparse.Namespace, preset: str) -> int:
     return 0 if healthy else 1
 
 
-def _run_local_checks(args: argparse.Namespace, params: dict[str, str]) -> dict[str, Any]:
+def _run_local_checks(args: argparse.Namespace, request: ChecksRequest) -> dict[str, Any]:
     """Build graph from args and run checks locally.
 
     Handles spec_dir, config_path and graceful error recovery
@@ -5161,20 +5229,13 @@ def _run_local_checks(args: argparse.Namespace, params: dict[str, str]) -> dict[
     spec_dir = getattr(args, "spec_dir", None)
     config_path = getattr(args, "config", None)
     start_path = Path.cwd()
-    lenient = params.get("lenient", "false") == "true"
+    lenient = request.lenient
     captured = getattr(args, "_captured_results", None)
     fresh_targets = getattr(args, "_fresh_targets", None)
 
     report = HealthReport()
 
-    run_all = not any(
-        [
-            params.get("spec_only") == "true",
-            params.get("code_only") == "true",
-            params.get("tests_only") == "true",
-            params.get("terms_only") == "true",
-        ]
-    )
+    run_all = request.run_all
 
     # Config checks can run without building the graph
     config = None
@@ -5182,12 +5243,16 @@ def _run_local_checks(args: argparse.Namespace, params: dict[str, str]) -> dict[
         try:
             config = get_config(config_path, start_path=start_path)
         except Exception as e:
+            # No config was read, so the authority necessarily answers with the
+            # registered default -- asked through the authority all the same,
+            # because a severity is never decided at a call site.
             report.add(
                 HealthCheck(
                     name="config.load",
                     passed=False,
                     message=f"Failed to load config: {e}",
                     category="config",
+                    severity=severity_for("config.load", config),
                 )
             )
 
@@ -5203,19 +5268,24 @@ def _run_local_checks(args: argparse.Namespace, params: dict[str, str]) -> dict[
         if config is None:
             config = get_config(config_path, start_path=start_path)
     except Exception as e:
-        report.add(
-            HealthCheck(
-                name="graph.build",
-                passed=False,
-                message=f"Failed to build graph: {e}",
-                category="spec",
+        build_severity = severity_for("graph.build", config)
+        if build_severity == Severity.OFF:
+            report.add(skipped_check("graph.build", "A graph that cannot be built"))
+        else:
+            report.add(
+                HealthCheck(
+                    name="graph.build",
+                    passed=False,
+                    message=f"Failed to build graph: {e}",
+                    category="spec",
+                    severity=build_severity,
+                )
             )
-        )
         return report.to_dict(lenient=lenient)
 
     if graph is not None and config is not None:
         # Delegate to compute_checks for the actual check logic
-        return compute_checks(graph, config, params)
+        return compute_checks(graph, config, request)
 
     return report.to_dict(lenient=lenient)
 
@@ -5274,9 +5344,14 @@ class FindingFilter:
 
     @classmethod
     def from_args(cls, args: argparse.Namespace) -> FindingFilter:
+        # A field repeated across occurrences of its flag is gathered by the one
+        # gatherer (`_scope.flag_values`), not re-flattened here: one spelling
+        # rule holds across every accumulating flag, and a second implementation
+        # is how two of them start disagreeing.
+        from elspais.commands._scope import flag_values
+
         def _get(name: str) -> tuple[str, ...]:
-            value = getattr(args, name, None)
-            return tuple(value) if value else ()
+            return flag_values(args, name)
 
         return cls(
             severities=_get("severity"),
@@ -5388,6 +5463,7 @@ class _FilterOutcome:
     findings_total: int
     filter: FindingFilter
 
+    # Implements: REQ-d00285-I
     def disclosure(self) -> str | None:
         if not self.filter.active:
             return None
@@ -5404,6 +5480,7 @@ class _FilterOutcome:
             )
         return f"Filtered by {self.filter.describe()}: {extent}"
 
+    # Implements: REQ-d00285-I
     def to_dict(self) -> dict[str, Any]:
         return {
             "preset": self.filter.label,
@@ -5419,6 +5496,7 @@ class _FilterOutcome:
         }
 
 
+# Implements: REQ-d00285-I
 # Implements: REQ-d00285-G
 def apply_finding_filter(report: HealthReport, filt: FindingFilter) -> _FilterOutcome:
     """Narrow a report to the checks and findings a filter admits.
@@ -5471,6 +5549,7 @@ def apply_finding_filter(report: HealthReport, filt: FindingFilter) -> _FilterOu
     )
 
 
+# Implements: REQ-d00285-I
 # Implements: REQ-d00085-E+F, REQ-d00285-C+H
 def _format_report(
     report: HealthReport,
@@ -5514,7 +5593,9 @@ def _format_report(
 
     # Build active flags summary from args
     flag_parts: list[str] = []
-    treat_active_list = getattr(args, "treat_active", None)
+    from elspais.commands._scope import flag_values
+
+    treat_active_list = flag_values(args, "treat_active")
     if treat_active_list:
         flag_parts.append("--treat-active " + " ".join(treat_active_list))
     if getattr(args, "lenient", False):
@@ -5561,9 +5642,25 @@ def _format_report(
         data.meta = meta
         return _render_markdown(data)
     elif fmt == "junit":
-        return _render_junit(report, include_passing_details=include_passing)
+        # The verdict and the narrowing travel into the filed document too: a
+        # CI consumer never sees the exit code, so a JUnit file whose verdict
+        # came from the surviving checks would read green for a run that
+        # failed (REQ-d00285-H), and one that named no narrowing could not be
+        # told from a run that found less (REQ-d00285-I).
+        return _render_junit(
+            report,
+            include_passing_details=include_passing,
+            verdict=whole_run,
+            disclosure=disclosure,
+            filter_info=outcome.to_dict() if outcome.filter.active else None,
+        )
     elif fmt == "sarif":
-        return _render_sarif(report, verdict=whole_run)
+        return _render_sarif(
+            report,
+            verdict=whole_run,
+            disclosure=disclosure,
+            filter_info=outcome.to_dict() if outcome.filter.active else None,
+        )
     else:
         if quiet:
             return _build_summary_line(whole_run)
@@ -5719,6 +5816,7 @@ def _build_summary_line(report: HealthReport) -> str:
         return f"UNHEALTHY: {report.failed} errors, {report.warnings} warnings{skip_suffix}"
 
 
+# Implements: REQ-d00285-H
 # Implements: REQ-d00085-K+M, REQ-d00285-A+B+C
 def _build_report_data(
     report: HealthReport,
@@ -5862,6 +5960,7 @@ def _finding_text_lines(finding: HealthFinding, indent: str) -> list[str]:
     return lines
 
 
+# Implements: REQ-d00285-B, REQ-d00285-C
 # Implements: REQ-d00085-E, REQ-d00285-I
 def _render_text(data: _ReportData) -> str:
     """Render _ReportData as plain text checklist."""
@@ -5928,9 +6027,16 @@ def _print_text_report(
     print(_render_text(data))
 
 
-# Implements: REQ-d00085-E
+# Implements: REQ-d00285-B, REQ-d00285-I
+# Implements: REQ-d00085-E, REQ-d00285-C
 def _render_markdown(data: _ReportData) -> str:
-    """Render _ReportData as markdown checklist."""
+    """Render _ReportData as markdown checklist.
+
+    A failing check states its severity token, because `- [ ]` alone says
+    only that the box is unticked: an error and a warning would render
+    identically, and a finding has to carry the severity it carries in the
+    other formats (REQ-d00285-C).
+    """
     lines: list[str] = []
 
     for i, section in enumerate(data.sections):
@@ -5940,12 +6046,14 @@ def _render_markdown(data: _ReportData) -> str:
         lines.append(f"## {section.icon} {section.name} ({section.stats})")
         lines.append("")
         for check in section.checks:
-            if check.icon == "~":
-                lines.append(f"- [ ] ~ {check.name}: {check.message}")
+            if check.severity == "info":
+                lines.append(f"- [ ] {check.icon} {check.name}: {check.message}")
             elif check.icon == "\u2713":
                 lines.append(f"- [x] {check.name}: {check.message}")
             else:
-                lines.append(f"- [ ] {check.name}: {check.message}")
+                # The icon IS the severity token `_build_report_data` chose
+                # (\u2717 error, \u26a0 warning); the box cannot tell them apart.
+                lines.append(f"- [ ] {check.icon} {check.name}: {check.message}")
             if check.findings:
                 # A command is code and reads as code; "no command resolves
                 # this" is a sentence and would read as one if it were not.
@@ -5981,16 +6089,35 @@ def _render_markdown(data: _ReportData) -> str:
     return "\n".join(lines)
 
 
-# Implements: REQ-d00085-H
+# Implements: REQ-d00085-H, REQ-d00285-H+I
 def _render_junit(
     report: HealthReport,
     include_passing_details: bool = False,
+    verdict: HealthReport | None = None,
+    disclosure: str | None = None,
+    filter_info: dict[str, Any] | None = None,
 ) -> str:
     """Render health report as JUnit XML.
 
     Maps categories to <testsuite> elements, checks to <testcase> elements.
     Failed checks with severity=error become <failure>, severity=warning become
     <system-err> with WARNING prefix, and severity=info become <system-out>.
+
+    Args:
+        report: The checks to render -- the narrowed ones, where the report
+            was narrowed.
+        include_passing_details: Also render the findings of passing checks.
+        verdict: The report the document's verdict speaks for. Each
+            <testsuite> counts the checks it actually holds, which is what is
+            presented; the VERDICT is this report's, so a narrowing cannot
+            move it (REQ-d00285-H). Defaults to *report*.
+        disclosure: What the narrowing withheld, where there was one. Its
+            presence is what says this document is a narrowed view, so the
+            verdict and the extent are stated in a <testsuite> of their own
+            (REQ-d00285-I) -- an unnarrowed run needs neither and gets
+            neither.
+        filter_info: The narrowing as values, for a consumer reading
+            properties rather than text.
     """
     import xml.etree.ElementTree as ET
 
@@ -6021,8 +6148,18 @@ def _render_junit(
             )
 
             if check.severity == "info":
+                # The element an info check reports through is <system-out>
+                # (REQ-d00085-H); what it carries is still everything the
+                # finding carries in the other formats (REQ-d00285-C), so a
+                # condition reported at info is not the one case whose
+                # locations, codes and remedy are dropped.
+                # Implements: REQ-d00285-C
                 sys_out = ET.SubElement(tc, "system-out")
-                sys_out.text = check.message
+                detail = not check.passed or (include_passing_details and check.findings)
+                if detail:
+                    sys_out.text = f"{check.message}\n{_failure_body(check)}"
+                else:
+                    sys_out.text = check.message
             elif not check.passed:
                 # The remedy and the findings travel here too, so a report
                 # filed to CI names what a report read on a terminal names.
@@ -6035,13 +6172,86 @@ def _render_junit(
                     sys_err = ET.SubElement(tc, "system-err")
                     sys_err.text = f"WARNING: {check.message}\n{body}"
             elif check.passed and include_passing_details and check.findings:
+                # The same body a failing check renders: a finding asked for
+                # by name carries its location, its codes and its remedy
+                # whichever check reported it (REQ-d00285-C).
+                # Implements: REQ-d00285-C
                 sys_out = ET.SubElement(tc, "system-out")
-                finding_lines = [f.message for f in check.findings]
-                sys_out.text = "\n".join(finding_lines)
+                sys_out.text = _failure_body(check)
+
+    if disclosure is not None:
+        _junit_verdict_suite(testsuites, verdict or report, disclosure, filter_info)
 
     return ET.tostring(testsuites, encoding="unicode", xml_declaration=True)
 
 
+# Implements: REQ-d00285-H, REQ-d00285-I
+def _junit_verdict_suite(
+    testsuites: Any,
+    verdict: HealthReport,
+    disclosure: str,
+    filter_info: dict[str, Any] | None,
+) -> None:
+    """Write the whole run's verdict, and the narrowing, into a JUnit document.
+
+    A narrowed document holds fewer checks than the run produced, so its own
+    <testsuite failures=> counts speak for what is presented and cannot speak
+    for the run. This testcase is where the verdict lives instead: it fails
+    when the run had errors, whichever checks the reader asked to see
+    (REQ-d00285-H), and it states the narrowing and the extent of what was
+    withheld for a consumer that never sees the terminal (REQ-d00285-I).
+    """
+    import xml.etree.ElementTree as ET
+
+    failed = verdict.failed
+    suite = ET.SubElement(
+        testsuites,
+        "testsuite",
+        name="elspais.report",
+        tests="1",
+        failures="1" if failed else "0",
+        errors="0",
+    )
+    props = ET.SubElement(suite, "properties")
+    recorded: list[tuple[str, str]] = [
+        ("narrowing", disclosure),
+        ("run.passed", str(verdict.passed)),
+        ("run.failed", str(failed)),
+        ("run.warnings", str(verdict.warnings)),
+        ("run.skipped", str(verdict.skipped)),
+    ]
+    for key, value in (filter_info or {}).items():
+        if isinstance(value, list):
+            if not value:
+                continue
+            recorded.append((f"filter.{key}", " ".join(str(v) for v in value)))
+        elif value not in (None, ""):
+            recorded.append((f"filter.{key}", str(value)))
+    for key, value in recorded:
+        ET.SubElement(props, "property", name=key, value=value)
+
+    tc = ET.SubElement(
+        suite,
+        "testcase",
+        name="report.verdict",
+        classname="elspais.health.report",
+    )
+    summary = _build_summary_line(verdict)
+    body = f"{summary}\n{disclosure}"
+    if failed:
+        failure = ET.SubElement(tc, "failure", message=summary)
+        failure.text = body
+    elif verdict.warnings:
+        # Warnings are reported here the way this renderer reports a warning
+        # check: stated, and not a failure.
+        sys_err = ET.SubElement(tc, "system-err")
+        sys_err.text = f"WARNING: {body}"
+    else:
+        sys_out = ET.SubElement(tc, "system-out")
+        sys_out.text = body
+
+
+# Implements: REQ-d00285-B, REQ-d00285-C
 def _failure_body(check: HealthCheck) -> str:
     """The body of a failing check: its remedy, its findings, then its details."""
     parts: list[str] = [f"remedy: {check.remedy}"]
@@ -6063,6 +6273,7 @@ def _format_details(details: dict[str, Any]) -> str:
     return "\n".join(parts)
 
 
+# Implements: REQ-d00285-B, REQ-d00285-C
 def _finding_properties(check: HealthCheck, finding: HealthFinding) -> dict[str, Any]:
     """The values a finding carries beyond its message and its location."""
     props: dict[str, Any] = {"remedy": check.remedy}
@@ -6077,13 +6288,24 @@ def _finding_properties(check: HealthCheck, finding: HealthFinding) -> dict[str,
     return props
 
 
-# Implements: REQ-d00085-J
-def _render_sarif(report: HealthReport, verdict: HealthReport | None = None) -> str:
+# Implements: REQ-d00285-H
+# Implements: REQ-d00085-J, REQ-d00285-I
+def _render_sarif(
+    report: HealthReport,
+    verdict: HealthReport | None = None,
+    disclosure: str | None = None,
+    filter_info: dict[str, Any] | None = None,
+) -> str:
     """Render health report as SARIF v2.1.0 JSON.
 
     One reportingDescriptor per unique failing check name, one result per
     HealthFinding with physical locations. Passing checks are omitted.
     Coverage stats go in run.properties.
+
+    Where the results were narrowed, run.properties also carries the
+    narrowing and the extent of what it withheld (REQ-d00285-I): a results
+    list holding fewer findings than the run produced, saying nothing, is one
+    a consumer cannot tell from a run that found fewer.
     """
     _SARIF_SEVERITY = {"error": "error", "warning": "warning", "info": "note"}
 
@@ -6141,6 +6363,18 @@ def _render_sarif(report: HealthReport, verdict: HealthReport | None = None) -> 
                 }
             )
 
+    run_properties: dict[str, Any] = {
+        # The run's counts, not the narrowed view's -- a filtered
+        # report states what the run found and lists a subset.
+        "passed": (verdict or report).passed,
+        "failed": (verdict or report).failed,
+        "warnings": (verdict or report).warnings,
+    }
+    if disclosure is not None:
+        run_properties["narrowing"] = disclosure
+        if filter_info is not None:
+            run_properties["filter"] = filter_info
+
     sarif = {
         "$schema": (
             "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/main/"
@@ -6156,13 +6390,7 @@ def _render_sarif(report: HealthReport, verdict: HealthReport | None = None) -> 
                     },
                 },
                 "results": results,
-                "properties": {
-                    # The run's counts, not the narrowed view's -- a filtered
-                    # report states what the run found and lists a subset.
-                    "passed": (verdict or report).passed,
-                    "failed": (verdict or report).failed,
-                    "warnings": (verdict or report).warnings,
-                },
+                "properties": run_properties,
             }
         ],
     }

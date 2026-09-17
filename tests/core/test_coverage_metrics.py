@@ -628,7 +628,7 @@ class TestUserExample:
 
 class TestCoverageDimensionTierVocabulary:
     """A dimension's tier uses the unified {full,partial,failing,missing}
-    vocabulary (REQ-d00258-H). What a citation named is not a tier -- a
+    vocabulary (REQ-d00292-A). What a citation named is not a tier -- a
     dimension fully covered on the total reads ``full`` whichever measure
     carried it; ``none`` is renamed ``missing``.
     """
@@ -883,7 +883,7 @@ class TestTestSpecificMetrics:
 
 
 class TestPerAssertionFailureAttribution:
-    """REQ-d00258-G: the per-assertion 'failing' standing is attributed to the
+    """REQ-d00292-D: the per-assertion 'failing' standing is attributed to the
     assertion that actually failed, not to a non-failing sibling.
 
     ``has_failures`` stays requirement-wide (drives the requirement badge/tier);
@@ -891,7 +891,7 @@ class TestPerAssertionFailureAttribution:
     standing (via ``compute_assertion_coverage_states``) reddens only them.
     """
 
-    # Verifies: REQ-d00258-G
+    # Verifies: REQ-d00258-T, REQ-d00292-D
     def test_verified_failing_labels_only_the_failed_assertion(self):
         """Failing test on B must not redden the passing sibling A."""
         from elspais.html.generator import compute_assertion_coverage_states
@@ -932,7 +932,7 @@ class TestPerAssertionFailureAttribution:
         assert states["A"]["verified"] == "full"
         assert states["B"]["verified"] == "failing"
 
-    # Verifies: REQ-d00258-G
+    # Verifies: REQ-d00292-D
     def test_blanket_failing_test_attributes_to_all_assertions(self):
         """A whole-requirement failing test blames every assertion it covers."""
         from tests.core.graph_test_helpers import make_test_result
@@ -1349,7 +1349,7 @@ class TestRefinesCoverageConduction:
         assertion, which is what the reporting surfaces headline. The work
         list answers the other question (REQ-d00258-M): no test names either
         assertion and none is attached to PARENT, so both remain *testing*
-        gaps -- they are IMPLEMENTED and untested (REQ-d00258-I's relative
+        gaps -- they are IMPLEMENTED and untested (REQ-d00258-R's relative
         denominator: a testing gap is implemented AND not tested).
 
         Exercises the real ``collect_gaps`` entry point, which passes assertion

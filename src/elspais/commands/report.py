@@ -24,7 +24,6 @@ COMPOSABLE_SECTIONS = (
     "untested",
     "unvalidated",
     "failing",
-    "no_assertions",
     "gaps",
     "unresolved",
     "uncited",
@@ -40,7 +39,6 @@ FORMAT_SUPPORT = {
     "untested": {"text", "markdown", "json"},
     "unvalidated": {"text", "markdown", "json"},
     "failing": {"text", "markdown", "json"},
-    "no_assertions": {"text", "markdown", "json"},
     "gaps": {"text", "markdown", "json"},
     "unresolved": {"text", "markdown", "json"},
     "uncited": {"text", "markdown", "json"},
@@ -55,13 +53,13 @@ EXIT_BIT: dict[str, int] = {
     "untested": 16,
     "unvalidated": 16,
     "failing": 16,
-    "no_assertions": 16,
     "gaps": 16,
     "unresolved": 32,
     "uncited": 64,
 }
 
 
+# Implements: REQ-d00279-C
 def parse_shared_args(argv: list[str]) -> argparse.Namespace:
     """Parse shared flags for composed reports."""
     parser = argparse.ArgumentParser(prog="elspais", add_help=False)
@@ -77,14 +75,18 @@ def parse_shared_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--mode", choices=["core", "combined"], default="core")
     parser.add_argument("--config", type=Path)
     parser.add_argument("--spec-dir", type=Path, dest="spec_dir")
-    # Implements: REQ-d00279-C
     # A composed report is assembled differently from the same section asked for
     # alone, and this parser is where the difference would show: a selection it
     # does not register is a selection the composed report cannot honour.
-    parser.add_argument("--level", nargs="*", default=None)
-    parser.add_argument("--not-level", nargs="*", default=None, dest="not_level")
-    parser.add_argument("--status", nargs="*", default=None)
-    parser.add_argument("--not-status", nargs="*", default=None, dest="not_status")
+    # Implements: REQ-d00278-C
+    # `extend` rather than the default store: a property accumulates across
+    # repetitions of its flag here exactly as it does on the tyro side
+    # (`args.ScopeOptions`), so a composed report reads the same invocation the
+    # same way a section asked for alone does.
+    parser.add_argument("--level", nargs="*", action="extend", default=None)
+    parser.add_argument("--not-level", nargs="*", action="extend", default=None, dest="not_level")
+    parser.add_argument("--status", nargs="*", action="extend", default=None)
+    parser.add_argument("--not-status", nargs="*", action="extend", default=None, dest="not_status")
     parser.add_argument("--match-status-roles", action="store_true", dest="match_status_roles")
     parser.add_argument("--scope", default=None)
     # Implements: REQ-d00282-E
@@ -93,7 +95,9 @@ def parse_shared_args(argv: list[str]) -> argparse.Namespace:
     # honour, and a section composed with others would state different values
     # from the same section asked for alone.
     parser.add_argument("--values", default=None)
-    parser.add_argument("--treat-active", nargs="*", default=None, dest="treat_active")
+    parser.add_argument(
+        "--treat-active", nargs="*", action="extend", default=None, dest="treat_active"
+    )
     # Trace-specific shared flags
     parser.add_argument("--preset", choices=["minimal", "standard", "full"])
     parser.add_argument("--body", action="store_true")
@@ -104,53 +108,98 @@ def parse_shared_args(argv: list[str]) -> argparse.Namespace:
 
 # Implements: REQ-d00282-F
 # name: VALUE_SECTIONS
-# use:  which composable sections state facts about each requirement at all.
+# use:  which composable sections a values selection selects among, and where
+#       each one's offer is declared.
 # def:  section name -> the module owning the values it offers.
 #
-# The rest emit lists of what is missing rather than tables of facts about
-# requirements, so they have no values to select among. A selection reaching
-# one of them is a selection the composed report cannot honour, and F wants no
-# report produced under one honoured in part.
+# A section states facts about each requirement (`summary`, `trace`) or lists
+# the requirements one dimension has not credited (the four shortfall
+# listings). Both read a dimension, so both have values to select among: the
+# first decides which columns are stated, the second which listings appear.
+#
+# The sections left out state nothing about a requirement at all -- `checks`
+# and its narrowings report findings, `changed` reports files -- so a values
+# selection reaching one of them names nothing it offers and is refused.
 VALUE_SECTIONS: dict[str, str] = {
     "summary": "elspais.commands.summary",
     "trace": "elspais.commands.trace",
+    "gaps": "elspais.commands.gaps",
+    "uncovered": "elspais.commands.gaps",
+    "untested": "elspais.commands.gaps",
+    "unvalidated": "elspais.commands.gaps",
+    "failing": "elspais.commands.gaps",
 }
 
 
-# Implements: REQ-d00282-F
-def _refuse_unhonourable_values(sections: list[str], args: argparse.Namespace) -> str | None:
+# Implements: REQ-d00282-A
+def _offered_by(section: str) -> tuple[str, ...]:
+    """The values one composable section offers.
+
+    A module whose sections each offer a different set declares them in
+    ``COMMAND_VALUES`` keyed by section name -- a shorthand listing offers the
+    one dimension it IS, so `uncovered --values tested` is refused rather than
+    quietly becoming `untested`. Everything else offers one set.
+    """
+    from importlib import import_module
+
+    module = import_module(VALUE_SECTIONS[section])
+    per_section = getattr(module, "COMMAND_VALUES", None)
+    if per_section is not None and section in per_section:
+        return tuple(per_section[section])
+    return tuple(module.OFFERED_VALUES)
+
+
+# Implements: REQ-d00282-A
+def _identity_key_for(section: str) -> str:
+    """What a row of this section is about, for the values it offers.
+
+    Read off the owning module the same way ``_offered_by`` reads its offer --
+    a module whose rows are not one requirement each (``summary``) names its
+    own; everything else states nothing beyond a value (REQ-d00282-A).
+    """
+    from importlib import import_module
+
+    module = import_module(VALUE_SECTIONS[section])
+    return getattr(module, "IDENTITY_VALUE", "")
+
+
+# Implements: REQ-d00282-F, REQ-d00279-C
+def _unhonourable_selection(
+    sections: list[str], args: argparse.Namespace, config: dict | None
+) -> str | None:
     """The reason this composition cannot honour its selection, or None.
 
     Judged before anything is built and before anything is written, because a
     refusal that has already produced an artifact has produced the report it
     refused. A reader who names a value no section offers, and a reader who
-    names a section that states no values, are both asking for a report the
-    tool cannot assemble.
+    names a section that states nothing about a requirement, are both asking
+    for a report the tool cannot assemble.
+
+    Judged through the one edge a standalone invocation uses
+    (``report_inputs_from_args``) rather than a second, hand-rolled check, so
+    a composed report refuses exactly what asking for the section alone
+    would. Each section's own ``ReportInputs`` is derived and discarded here
+    on purpose: nothing downstream needs the resolved scope or selection this
+    early, only whether resolving it raises -- each section's renderer
+    derives its own copy later, from the same deterministic edge, at the
+    point it actually renders.
     """
-    from importlib import import_module
+    from elspais.commands._edges import report_inputs_from_args
+    from elspais.commands._values import UnofferedValues, value_silent_refusal
 
-    from elspais.commands._values import UnofferedValues, values_from_args
-    from elspais.config import get_config
-    from elspais.graph.values import resolve_values
-
-    # Read against the project's own declarations too: a selection a named
-    # scope carries (REQ-d00280-C) is refused on the same terms as one written
-    # on the invocation.
-    selection = values_from_args(args, get_config(getattr(args, "config", None)))
-    if selection is None:
-        return None
     silent = [s for s in sections if s not in VALUE_SECTIONS]
     if silent:
-        named = ", ".join(sorted(set(silent)))
-        return (
-            f"--values states which facts a report gives about each requirement, "
-            f"and '{named}' states none: it lists what is missing. "
-            "Ask for it without --values, or compose only sections that state values."
-        )
+        # The same helper the standalone invocation of such a section uses, so
+        # composing it and asking for it alone refuse in the same words
+        # (REQ-d00279-C, REQ-d00085-D).
+        refusal = value_silent_refusal(args, config, ", ".join(sorted(set(silent))))
+        if refusal is not None:
+            return refusal
     for section in sections:
-        module = import_module(VALUE_SECTIONS[section])
+        if section not in VALUE_SECTIONS:
+            continue
         try:
-            resolve_values(selection, module.OFFERED_VALUES)
+            report_inputs_from_args(args, config, _offered_by(section), _identity_key_for(section))
         except UnofferedValues as exc:
             return f"{section}: {exc}"
     return None
@@ -176,15 +225,26 @@ def run(
             )
             return 1
 
+    from elspais.config import get_config
+
+    config = get_config(getattr(args, "config", None))
+
     # Implements: REQ-d00282-F
-    refusal = _refuse_unhonourable_values(sections, args)
+    # Refused before anything is built, using the same edge each standalone
+    # invocation resolves its own inputs through. Each section's renderer
+    # below re-derives its own inputs from `args` rather than being handed
+    # what was resolved here -- the values are identical because both calls
+    # reach the same deterministic edge, and `_render_section`'s dispatch
+    # shape (name, graph, config, args) is a standalone command's own
+    # signature, not a composition-only interface a derived value could be
+    # threaded through.
+    refusal = _unhonourable_selection(sections, args, config)
     if refusal is not None:
         print(f"Error: {refusal}", file=sys.stderr)
         return 1
 
     # Build graph once for sections that need it
     graph = None
-    config = None
     graph_sections = {
         "checks",
         "summary",
@@ -193,23 +253,19 @@ def run(
         "untested",
         "unvalidated",
         "failing",
-        "no_assertions",
         "gaps",
         "unresolved",
         "uncited",
     }
     if set(sections) & graph_sections:
-        from elspais.config import get_config
         from elspais.graph.factory import build_graph
 
         spec_dir = getattr(args, "spec_dir", None)
-        config_path = getattr(args, "config", None)
 
         graph = build_graph(
             spec_dirs=[spec_dir] if spec_dir else None,
-            config_path=config_path,
+            config_path=getattr(args, "config", None),
         )
-        config = get_config(config_path)
 
     outputs: list[str] = []
     combined_exit = 0
@@ -255,14 +311,17 @@ def _render_section(
         return render_section(graph, args, config)
     elif name == "changed":
         return _render_changed(args)
-    elif name in ("uncovered", "untested", "unvalidated", "failing", "no_assertions"):
+    elif name in ("uncovered", "untested", "unvalidated", "failing", "gaps"):
+        # The section composed with others is the standalone command: it reads
+        # the same selection, offers the same values and refuses the same names
+        # (REQ-d00279-C).
+        from elspais.commands._values import UnofferedValues
         from elspais.commands.gaps import render_section as gap_render
 
-        return gap_render(graph, config, args, gap_types=[name])
-    elif name == "gaps":
-        from elspais.commands.gaps import render_section as gap_render
-
-        return gap_render(graph, config, args)
+        try:
+            return gap_render(graph, config, args, command=name)
+        except UnofferedValues as exc:
+            return f"Error: {name}: {exc}", 1
     elif name in ("unresolved", "uncited"):
         # The same narrowing the standalone command applies (REQ-d00285-C):
         # a section composed with others says what the command alone says.
@@ -273,6 +332,7 @@ def _render_section(
         return f"Error: Unknown section '{name}'", 1
 
 
+# Implements: REQ-d00085-D
 def _render_changed(args: argparse.Namespace) -> tuple[str, int]:
     """Render changed section by capturing stdout from changed.run()."""
     from elspais.commands import changed

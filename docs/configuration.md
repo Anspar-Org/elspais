@@ -284,7 +284,8 @@ reference_keyword = "Verifies"
 # `default` (what a run selects nothing executes) and `all` (every target)
 # are reserved and cannot be declared. A target claiming no group belongs to
 # `default`, so declaring nothing here leaves every run as it was.
-# Select with `--groups NAME ...` wherever `--targets` is accepted.
+# A group is an alias for its targets: name it with `--targets NAME ...`.
+# A group may not share a name with a test target.
 # [scanning.test.groups]
 # uat = "End-to-end journeys needing a live stack"
 
@@ -406,8 +407,20 @@ dir = ""
 #     baseline; offered by `trace`, which reports per requirement, and not by
 #     `summary`, which reports per level)
 #   code_tested, lcov_tested   (measured in lines, so they carry no measures)
-# A name the report being produced does not offer is refused rather than
-# skipped: a report is never produced under a selection honoured in part.
+# A name a reader TYPES with --values and this report does not offer is
+# refused: honouring the rest would hand back a narrower report than they
+# asked for while looking exactly like the one they wanted. A name this
+# declaration carries and this report does not offer is different -- it is
+# read against every report the audience takes, so a report that does not
+# offer it passes that value over and states what it would have anyway,
+# rather than refusing the name.
+# A values-carrying declaration is refused outright only by a report that
+# states no values at all -- `checks` and its narrowings, `changed`. `gaps`
+# and its single-dimension listings (`uncovered`, `untested`, `unvalidated`,
+# `failing`) DO have values to select among -- which shortfalls appear -- so
+# a declared `values` list constrains those the same way it constrains
+# `summary` and `trace`; `analysis` ranks requirements rather than stating a
+# dimension, so it offers none either.
 #──────────────────────────────────────────────────────────────────────────────
 
 [scopes.sponsor]
@@ -776,10 +789,13 @@ namespace = "PHX"
 ```
 
 **Whose configuration decides what.** In a federation the repository you invoke
-from governs how findings are judged, scored and reported — reference
-severities, the coverage rules, and how a status is read. Two things stay with
-the member: an identifier is always read under the grammar of the repository
-that owns it, and a setting that states a fact about a repository rather than a
+from governs how findings are judged, scored and reported — `[rules.coverage]`,
+`[rules.references]`, the general `[rules.severity]` table, the
+`[rules.format.status_roles]` classification, and the per-status declarations
+under `[statuses]` (a status's `expects_implementation` decides whether the
+requirements carrying it are counted, which is a rule for scoring). Two things
+stay with the member: an identifier is always read under the grammar of the
+repository that owns it, and a setting that states a fact about a repository rather than a
 rule for judging one — where its spec directories are, its namespace, where its
 test results are written — is read from that repository's own config. Where a
 member configures a governed setting differently from you, the

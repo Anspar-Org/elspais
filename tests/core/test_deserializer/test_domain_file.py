@@ -2,7 +2,6 @@
 
 import pytest
 
-from elspais.config import IgnoreConfig
 from elspais.graph.deserializer import DomainFile
 from elspais.graph.parsers.lark import FileDispatcher
 
@@ -261,40 +260,35 @@ class TestDomainFileSelection:
         }
 
     # Verifies: REQ-d00241-G
-    def test_an_ignored_file_is_neither_selected_nor_declined(self, tmp_path):
-        """The ignore configuration removes a file from the walk entirely.
+    def test_an_excluded_file_is_neither_selected_nor_declined(self, tmp_path):
+        """A skip pattern removes a file from the walk entirely.
 
-        Declining a file is a thing the caller may report on; ignoring one is
+        Declining a file is a thing the caller may report on; skipping one is
         not. A file the project excluded must therefore be absent from both
         halves, whether or not the patterns would have selected it.
         """
         for rel in (
-            "kept.py",
-            "notes.txt",
-            "generated_thing.py",
-            "generated_thing.txt",
-            "vendor/lib.py",
+            "src/kept.py",
+            "src/notes.txt",
+            "src/generated_thing.py",
+            "src/generated_thing.txt",
+            "src/vendor/lib.py",
         ):
             target = tmp_path / rel
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text("pass\n")
 
-        ignore = IgnoreConfig(
-            global_patterns=["vendor"],
-            spec_patterns=[],
-            code_patterns=["generated_*"],
-            test_patterns=[],
-        )
         deserializer = DomainFile(
-            tmp_path,
+            tmp_path / "src",
             patterns=["*.py"],
             recursive=True,
-            ignore_config=ignore,
-            scope="code",
+            skip_dirs=["src/vendor"],
+            skip_files=["generated_*"],
+            repo_root=tmp_path,
         )
 
-        selected = self._names(deserializer.iter_selected(), tmp_path)
-        declined = self._names(deserializer.iter_declined(), tmp_path)
+        selected = self._names(deserializer.iter_selected(), tmp_path / "src")
+        declined = self._names(deserializer.iter_declined(), tmp_path / "src")
 
         assert selected == {"kept.py"}
         assert declined == {"notes.txt"}
@@ -302,29 +296,56 @@ class TestDomainFileSelection:
         assert "generated_thing.py" not in selected | declined
         assert "generated_thing.txt" not in selected | declined
 
+    # Verifies: REQ-d00212-Q
+    def test_a_directory_pattern_is_read_from_the_repository_root(self, tmp_path):
+        """``vendor`` names ``<repo>/vendor``, so it does not reach ``src/vendor``.
+
+        The two spellings are different statements, and this is what makes the
+        exact path above say what it means rather than happening to work.
+        """
+        for rel in ("src/kept.py", "src/vendor/lib.py"):
+            target = tmp_path / rel
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text("pass\n")
+
+        at_root = DomainFile(
+            tmp_path / "src",
+            patterns=["*.py"],
+            recursive=True,
+            skip_dirs=["vendor"],
+            repo_root=tmp_path,
+        )
+        assert self._names(at_root.iter_selected(), tmp_path / "src") == {
+            "kept.py",
+            "vendor/lib.py",
+        }
+
+        at_any_depth = DomainFile(
+            tmp_path / "src",
+            patterns=["*.py"],
+            recursive=True,
+            skip_dirs=["**/vendor"],
+            repo_root=tmp_path,
+        )
+        assert self._names(at_any_depth.iter_selected(), tmp_path / "src") == {"kept.py"}
+
     # Verifies: REQ-d00241-G
-    def test_an_ignored_file_is_not_read(self, tmp_path):
+    def test_an_excluded_file_is_not_read(self, tmp_path):
         """An excluded file never reaches ``iterate_sources`` either.
 
         The two halves come from one walk, so what the walk drops is dropped
-        for every caller -- there is no second path by which an ignored file
+        for every caller -- there is no second path by which a skipped file
         could still be parsed.
         """
         (tmp_path / "kept.py").write_text("# kept\n")
         (tmp_path / "secret.py").write_text("# secret\n")
 
-        ignore = IgnoreConfig(
-            global_patterns=["secret.py"],
-            spec_patterns=[],
-            code_patterns=[],
-            test_patterns=[],
-        )
         deserializer = DomainFile(
             tmp_path,
             patterns=["*.py"],
             recursive=True,
-            ignore_config=ignore,
-            scope="code",
+            skip_files=["secret.py"],
+            repo_root=tmp_path,
         )
 
         read = [ctx.source_id for ctx, _ in deserializer.iterate_sources()]

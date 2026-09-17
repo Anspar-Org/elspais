@@ -129,7 +129,7 @@ def project(tmp_path_factory):
         # Mirror the production self-config: exclude the generated output
         # directory from spec scanning so glossary/term-index regeneration
         # doesn't feed its own output back into the term dictionary.
-        skip_dirs=["_generated"],
+        skip_dirs=["spec/_generated"],
     )
     # Enable terms output so `elspais fix` exercises the glossary
     # generation pipeline as part of settling.

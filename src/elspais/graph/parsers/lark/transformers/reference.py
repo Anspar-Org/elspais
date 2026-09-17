@@ -69,6 +69,7 @@ if TYPE_CHECKING:
 _log = logging.getLogger(__name__)
 
 
+# Implements: REQ-d00269-G
 def reference_target(text: str) -> str:
     """The text a reference line names as its target, verbatim.
 
@@ -703,6 +704,7 @@ class ReferenceTransformer:
                     [opener_text] + [self._token_text(node) for node in folded]
                 )
 
+    # Implements: REQ-d00269-H
     def _comment_body_or_none(self, text: str) -> str | None:
         """The content after *text*'s comment marker, or None.
 
@@ -724,6 +726,7 @@ class ReferenceTransformer:
             if it.placeholder:
                 self.placeholders.append((line_num, it.raw, keyword))
 
+    # Implements: REQ-d00269-E
     def _detect_keyword(self, text: str) -> str:
         """Detect which reference keyword is used in *text*.
 

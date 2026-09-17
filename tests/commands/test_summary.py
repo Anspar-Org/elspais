@@ -182,11 +182,18 @@ def _build_mixed_graph() -> TraceGraph:
 
 
 class TestCollectCoverage:
-    """Validates REQ-d00086-D: Uses existing graph aggregate functions."""
+    """The shared coverage payload: its shape, and the level groups it forms."""
 
     # Verifies: REQ-d00086-D
-    def test_REQ_d00086_D_returns_levels_and_excluded_keys(self):
-        """collect_coverage returns dict with 'levels' list and 'excluded' dict."""
+    def test_collect_coverage_returns_level_rows_and_exclusion_tally(self):
+        """The report reads its figures from the shared aggregate rather than
+        computing its own: ``collect_coverage`` is that function, and it
+        answers with the level rows and the withheld-status tally.
+
+        An empty graph still yields the configured level rows at zero and an
+        empty exclusion tally, so a caller gets the same payload shape whether
+        or not there is anything to report.
+        """
         graph = _make_graph()
         data = collect_coverage(graph)
 
@@ -194,23 +201,31 @@ class TestCollectCoverage:
         assert "excluded" in data
         assert isinstance(data["levels"], list)
         assert isinstance(data["excluded"], dict)
-        # Empty graph has 3 zero-count levels and no exclusions
         assert len(data["levels"]) == 3
+        # Internal payload field: `total` here, published as `requirements`.
         assert all(lv["total"] == 0 for lv in data["levels"])
         assert data["excluded"] == {}
 
-    # Verifies: REQ-d00086-D
-    def test_REQ_d00086_D_levels_always_three(self):
-        """There are always exactly 3 level entries (PRD, OPS, DEV)."""
+    # Verifies: REQ-d00281-A, REQ-d00281-E
+    def test_configured_levels_form_groups_in_rank_order_when_unused(self):
+        """The configured ``[levels]`` keys each form a group, in rank order,
+        even where no requirement carries them.
+
+        REQ-d00281-A is a floor — every level a reported requirement carries
+        SHALL form a group — and ``level_group_keys()`` satisfies it with a
+        union of the configured keys and the carried ones, so the configured
+        three survive an empty graph. The order is REQ-d00281-E's: configured
+        keys in the rank order the config gave them. This is NOT a claim that a
+        report has exactly three groups; a requirement carrying an undefined
+        level adds a fourth, ordered after these.
+        """
         graph = _make_graph()
         data = collect_coverage(graph)
 
-        assert len(data["levels"]) == 3
-        level_names = [lv["level"] for lv in data["levels"]]
-        assert level_names == ["PRD", "OPS", "DEV"]
+        assert [lv["level"] for lv in data["levels"]] == ["PRD", "OPS", "DEV"]
 
-    # Verifies: REQ-d00086-D
-    def test_REQ_d00086_D_no_requirements_key(self):
+    # Verifies: REQ-d00086-A
+    def test_collect_coverage_carries_no_per_requirement_rows(self):
         """Coverage data no longer includes per-requirement rows."""
         graph = _make_graph()
         _add_requirement(graph, "REQ-p00001", "Test", level="prd")
@@ -453,7 +468,7 @@ class TestMarkdownFormat:
         cells = [c.strip() for c in header.strip("|").split("|")]
         assert cells[:6] == [
             "Level",
-            "Requirements",
+            "Active Requirements",
             "Assertions",
             "Implemented",
             "Implemented (cited by name here)",
@@ -524,12 +539,15 @@ class TestJsonFormat:
         parsed = json.loads(output)
 
         prd = parsed["levels"][0]
+        # Keyed by the value each figure is selected under, and a figure is the
+        # object of its numbers -- the format decides the spelling, never which
+        # values are stated (REQ-d00282-E).
         assert prd["level"] == "PRD"
-        assert prd["total"] == 1
-        assert prd["total_assertions"] == 3
-        assert prd["implemented_total_covered"] == 2
-        assert prd["tested_total_covered"] == 1
-        assert prd["passing_total_covered"] == 1
+        assert prd["requirements"] == 1
+        assert prd["assertions"] == 3
+        assert prd["implemented"]["count"] == 2
+        assert prd["tested"]["count"] == 1
+        assert prd["verified"]["count"] == 1
 
     # Verifies: REQ-d00086-C
     def test_REQ_d00086_C_json_excluded_counts(self):
@@ -551,7 +569,7 @@ class TestJsonFormat:
 class TestCsvFormat:
     """Validates REQ-d00086-C: CSV format output."""
 
-    # Verifies: REQ-d00258-O, REQ-d00069-L, REQ-d00258-A
+    # Verifies: REQ-d00258-V, REQ-d00069-L, REQ-d00258-A
     # Verifies: REQ-d00086-C
     def test_REQ_d00086_C_csv_has_correct_headers(self):
         """CSV output has the expected column headers."""
@@ -570,7 +588,7 @@ class TestCsvFormat:
             "conducted direct",
             "conducted indirect",
         ]
-        expected_headers = ["Level", "Requirements", "Assertions"]
+        expected_headers = ["Level", "Active Requirements", "Assertions"]
         for dimension in ("Implemented", "Tested", "Passing", "UAT Covered", "UAT Passed"):
             expected_headers.append(dimension)
             expected_headers.extend(f"{dimension} ({m})" for m in measure_headers)
@@ -589,7 +607,7 @@ class TestCsvFormat:
         # 1 header + 3 levels (PRD, OPS, DEV)
         assert len(rows) == 4
 
-    # Verifies: REQ-d00258-O, REQ-d00069-N, REQ-d00258-A
+    # Verifies: REQ-d00258-U+V, REQ-d00069-N, REQ-d00258-A
     # Verifies: REQ-d00086-C
     def test_REQ_d00086_C_csv_row_values(self):
         """CSV data rows contain correct level summary values.
@@ -616,14 +634,14 @@ class TestCsvFormat:
         # TOTAL (REQ-d00069-N); this fixture credits everything as immediate
         # direct evidence, so it equals the legacy figure (REQ-d00258-A).
         assert row["Level"] == "PRD"
-        assert row["Requirements"] == "1"
+        assert row["Active Requirements"] == "1"
         assert row["Assertions"] == "4"
         # A figure, the assertions it was taken over and its proportion are one
         # fact and so one cell (REQ-d00282-E).
         assert row["Implemented"] == "3/4 (75.0%)"
         assert row["Implemented (cited by name here)"] == "3/4 (75.0%)"
         # The breakdown qualifies the Tested figure, so it rides inside the
-        # Tested cell (REQ-d00258-O). Two assertions are tested; one of them
+        # Tested cell (REQ-d00258-V). Two assertions are tested; one of them
         # also has a passing result, the other is still awaiting one.
         assert row["Tested"] == "2/4 (50.0%) [1 passed, 0 failed, 1 awaiting a result]"
         assert row["Tested (cited by name here)"] == "2/4 (50.0%)"
@@ -642,7 +660,7 @@ class TestCsvFormat:
 
         assert len(rows) == 3  # 3 levels
         for row in rows:
-            int(row["Requirements"])
+            int(row["Active Requirements"])
             total = int(row["Assertions"])
             # Coverage counts are fractional sums (REQ-d00069-J), stated over
             # the assertions of the group they were summed across
@@ -916,6 +934,12 @@ namespace = "REQ"
 
 [scanning.spec]
 directories = ["spec"]
+
+[[scanning.test.targets]]
+name = "a"
+
+[[scanning.test.targets]]
+name = "b"
 """,
             encoding="utf-8",
         )
@@ -960,7 +984,9 @@ directories = ["spec"]
 
         captured: dict = {}
 
-        def fake_engine_call(endpoint, params, compute_fn, skip_daemon=False, config_path=None):
+        def fake_engine_call(
+            endpoint, params, compute_fn, skip_daemon=False, config_path=None, **kwargs
+        ):
             captured["skip_daemon"] = skip_daemon
             return {"levels": [], "graph_source": {"type": "local"}}
 
@@ -1007,6 +1033,7 @@ directories = ["spec"]
 
 [scanning.test.groups]
 uat = "needs a live backend"
+slow = "runs for over a minute"
 
 [[scanning.test.targets]]
 name = "a"
@@ -1014,6 +1041,10 @@ name = "a"
 [[scanning.test.targets]]
 name = "b"
 groups = ["uat"]
+
+[[scanning.test.targets]]
+name = "c"
+groups = ["slow"]
 """,
             encoding="utf-8",
         )
@@ -1035,19 +1066,24 @@ groups = ["uat"]
 
     # Verifies: REQ-d00283-E+I
     @pytest.mark.parametrize(
-        "targets,groups,expected",
+        "targets,expected",
         [
-            # A group selection resolves to the targets claiming it.
-            (None, ["uat"], {"b"}),
-            # Each selector narrows: `a` is not in `uat`, so nothing is fresh.
-            (["a"], ["uat"], set()),
-            (["a", "b"], ["uat"], {"b"}),
+            # A group name resolves to the targets claiming it.
+            (["uat"], {"b"}),
+            # A bare target name still names one target.
+            (["a"], {"a"}),
+            # One vocabulary, unioned: a target name beside a group name marks
+            # both, rather than narrowing the group to that target.
+            (["a", "uat"], {"a", "b"}),
+            (["uat", "slow"], {"b", "c"}),
+            # Repeated flags accumulate into the one list the selection reads.
+            ([["a"], ["uat"]], {"a", "b"}),
         ],
     )
-    def test_summary_groups_thread_resolved_set_into_build_graph(
-        self, tmp_path, monkeypatch, targets, groups, expected
+    def test_summary_targets_thread_the_resolved_set_into_build_graph(
+        self, tmp_path, monkeypatch, targets, expected
     ):
-        """--groups resolves through the group model before reaching the graph."""
+        """--targets resolves through the group model before reaching the graph."""
         import argparse
 
         from elspais.commands import summary
@@ -1057,7 +1093,6 @@ groups = ["uat"]
 
         args = argparse.Namespace(
             targets=targets,
-            groups=groups,
             format="json",
             config=config_path,
             spec_dir=None,
@@ -1086,7 +1121,9 @@ groups = ["uat"]
 
         called: dict = {}
 
-        def fake_engine_call(endpoint, params, compute_fn, skip_daemon=False, config_path=None):
+        def fake_engine_call(
+            endpoint, params, compute_fn, skip_daemon=False, config_path=None, **kwargs
+        ):
             called["skip_daemon"] = skip_daemon
             return {"levels": [], "graph_source": {"type": "local"}}
 
@@ -1094,7 +1131,6 @@ groups = ["uat"]
 
         args = argparse.Namespace(
             targets=None,
-            groups=None,
             format="json",
             config=config_path,
             spec_dir=None,
@@ -1117,15 +1153,16 @@ groups = ["uat"]
 
         called: dict = {}
 
-        def fake_engine_call(endpoint, params, compute_fn, skip_daemon=False, config_path=None):
+        def fake_engine_call(
+            endpoint, params, compute_fn, skip_daemon=False, config_path=None, **kwargs
+        ):
             called["skip_daemon"] = skip_daemon
             return {"levels": [], "graph_source": {"type": "local"}}
 
         monkeypatch.setattr("elspais.commands._engine.call", fake_engine_call)
 
         args = argparse.Namespace(
-            targets=None,
-            groups=["all"],
+            targets=["all"],
             format="json",
             config=config_path,
             spec_dir=None,
@@ -1136,8 +1173,11 @@ groups = ["uat"]
         assert "fresh_targets" not in built, "a full run marks no fresh subset"
 
     # Verifies: REQ-d00283-H
-    def test_summary_unknown_group_is_refused(self, tmp_path, monkeypatch, capsys):
-        """A selection naming an undefined group produces no report at all."""
+    def test_summary_unknown_name_is_refused(self, tmp_path, monkeypatch, capsys):
+        """A selection naming neither a configured target nor a group the
+        project admits produces no report at all -- refused rather than
+        resolved to nothing, because a report marking a target that does not
+        exist as freshly-run cannot be told from one that is honest."""
         import argparse
 
         from elspais.commands import summary
@@ -1146,8 +1186,7 @@ groups = ["uat"]
         captured = self._spy_build_graph(monkeypatch)
 
         args = argparse.Namespace(
-            targets=None,
-            groups=["uta"],
+            targets=["uta"],
             format="json",
             config=config_path,
             spec_dir=None,
@@ -1507,7 +1546,7 @@ class TestMeasuresArePublished:
 
 
 class TestTestedBreakdown:
-    """REQ-d00258-O: the summary reports Tested with its three-way breakdown."""
+    """REQ-d00258-U: the summary reports Tested with its three-way breakdown."""
 
     def _graph_with_breakdown(self) -> TraceGraph:
         """One PRD requirement: A passed, B failed, C awaiting a result."""
@@ -1542,7 +1581,7 @@ class TestTestedBreakdown:
         )
         return graph
 
-    # Verifies: REQ-d00258-O
+    # Verifies: REQ-d00258-U+V
     def test_text_tested_line_carries_the_breakdown(self):
         """The breakdown qualifies Tested, so it rides on the Tested line and
         introduces no coverage term of its own."""
@@ -1555,7 +1594,7 @@ class TestTestedBreakdown:
         assert "Awaiting:" not in output
         assert "Failed:" not in output
 
-    # Verifies: REQ-d00258-O
+    # Verifies: REQ-d00258-U
     def test_text_breakdown_silent_when_nothing_is_tested(self):
         """There is no breakdown of an empty set: a level with no tested
         assertion says nothing rather than reporting three zeros."""
@@ -1568,20 +1607,20 @@ class TestTestedBreakdown:
         tested_line = next(ln for ln in output.splitlines() if "Tested:" in ln)
         assert "awaiting" not in tested_line
 
-    # Verifies: REQ-d00258-O
+    # Verifies: REQ-d00258-U
     def test_markdown_tested_cell_carries_the_breakdown(self):
         data = collect_coverage(self._graph_with_breakdown())
         output = _render(data, "markdown")
 
         assert "[1 passed, 1 failed, 1 awaiting a result]" in output
 
-    # Verifies: REQ-d00258-O, REQ-d00282-E
+    # Verifies: REQ-d00258-U+V, REQ-d00282-E
     def test_csv_states_the_breakdown_inside_the_tested_cell(self):
         """The breakdown qualifies the Tested figure and so rides in its cell
         here exactly as it does in markdown and in text.
 
-        Cells of its own would be three further columns -- a display term of
-        its own, which REQ-d00258-O forbids -- and would make selecting
+        Cells of its own would be three further columns -- a coverage dimension of
+        its own, which REQ-d00258-V forbids -- and would make selecting
         `tested` state four columns in CSV and one in markdown."""
         data = collect_coverage(self._graph_with_breakdown())
         output = _render(data, "csv")

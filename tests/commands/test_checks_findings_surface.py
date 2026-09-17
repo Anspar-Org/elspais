@@ -1,4 +1,4 @@
-# Verifies: REQ-d00285-A+B+C+G, REQ-d00085-K+M
+# Verifies: REQ-d00285-A+B+C+G+H+I, REQ-d00085-K+M
 """`elspais checks` as the one findings surface.
 
 The report used to hand a reader a count and keep the names: findings reached
@@ -433,3 +433,302 @@ def test_an_info_check_that_reported_a_condition_shows_its_findings_under_verbos
 
     assert "spec/dev-cli.md:247" not in _format_report(report, _args())
     assert "spec/dev-cli.md:247" in _format_report(report, _args(verbose=True))
+
+
+# ---------------------------------------------------------------------------
+# The filed formats: the verdict, and the disclosure
+# ---------------------------------------------------------------------------
+
+
+def _narrowable() -> HealthReport:
+    """A failing run in one category and a clean check in another.
+
+    So a narrowing can be asked for that leaves the failure behind entirely.
+    """
+    return HealthReport(
+        checks=[
+            HealthCheck(
+                name="spec.hash_integrity",
+                passed=False,
+                message="1 requirement(s) have stale hashes",
+                category="spec",
+                severity="error",
+                findings=[HealthFinding(message="REQ-d00001 stale", file_path="spec/r.md", line=3)],
+            ),
+            HealthCheck(
+                name="code.orphans",
+                passed=True,
+                message="no orphaned code references",
+                category="code",
+                severity="warning",
+            ),
+        ]
+    )
+
+
+# Verifies: REQ-d00285-H
+def test_a_narrowed_junit_document_still_reaches_the_whole_runs_verdict() -> None:
+    """A CI consumer reads the document, never the exit code.
+
+    A JUnit file whose verdict came from the checks that survived the reader's
+    narrowing would report green for a run that failed -- and the narrower the
+    question, the greener the answer.
+    """
+    report = _narrowable()
+    assert report.failed == 1, "the run failed, whatever is asked to be shown"
+
+    narrowed = ET.fromstring(_format_report(report, _args(format="junit", category=["code"])))
+    assert narrowed.findall(".//failure"), (
+        "the failing check was narrowed away, but the run it belongs to still failed"
+    )
+
+    # And the same document over a run that did not fail stays green, so the
+    # verdict is the run's and not a constant.
+    clean = HealthReport(checks=[_narrowable().checks[1]])
+    green = ET.fromstring(_format_report(clean, _args(format="junit", category=["code"])))
+    assert green.findall(".//failure") == []
+
+
+# Verifies: REQ-d00285-I
+@pytest.mark.parametrize("fmt", ["junit", "sarif"])
+def test_a_narrowed_filed_report_discloses_the_narrowing_and_its_extent(fmt: str) -> None:
+    """A filed document holding fewer findings than the run produced, saying
+    nothing about it, cannot be told from a run that found fewer."""
+    report = _narrowable()
+    args = _args(format=fmt, category=["code"])
+    expected = apply_finding_filter(report, FindingFilter.from_args(args)).disclosure()
+    assert expected, "this narrowing is one that withholds something"
+
+    out = _format_report(report, args)
+    assert expected in out, f"{fmt} does not disclose the narrowing"
+    assert "--category code" in out, "nor how to ask for the same view again"
+
+    whole = _format_report(report, _args(format=fmt))
+    assert "of 2 checks" not in whole, "an unnarrowed run has no narrowing to disclose"
+
+
+# ---------------------------------------------------------------------------
+# The severity a finding carries, in the formats that had dropped it
+# ---------------------------------------------------------------------------
+
+
+def _one_failing(severity: str) -> HealthReport:
+    return HealthReport(
+        checks=[
+            HealthCheck(
+                name="spec.hash_integrity",
+                passed=False,
+                message="1 requirement(s) have stale hashes",
+                category="spec",
+                severity=severity,
+            )
+        ]
+    )
+
+
+# Verifies: REQ-d00285-C
+def test_a_markdown_report_tells_a_failing_error_from_a_failing_warning() -> None:
+    """An unticked box says the check did not pass, not how much it matters.
+
+    Rendered with the box alone, an error and a warning are the same line, so
+    a reader of the markdown cannot recover the severity every other format
+    carries.
+    """
+    name = "spec.hash_integrity"
+
+    def line(out: str) -> str:
+        return next(ln for ln in out.splitlines() if name in ln)
+
+    error_md = line(_format_report(_one_failing("error"), _args(format="markdown")))
+    warning_md = line(_format_report(_one_failing("warning"), _args(format="markdown")))
+
+    assert error_md != warning_md, "markdown renders both severities identically"
+
+    # And the severity it shows is the one the text report shows, so the two
+    # do not disagree about it either.
+    error_text = line(_format_report(_one_failing("error"), _args(format="text")))
+    warning_text = line(_format_report(_one_failing("warning"), _args(format="text")))
+    for md, text in ((error_md, error_text), (warning_md, warning_text)):
+        token = text.strip().split()[0]
+        assert token in md, f"the text report marks this check {token!r}; markdown does not"
+
+
+# Verifies: REQ-d00285-C
+@pytest.mark.parametrize(
+    "passed,flags",
+    [
+        (False, {}),
+        (True, {"include_passing_details": True}),
+    ],
+    ids=["a-condition-reported-at-info", "a-passing-checks-findings-on-request"],
+)
+def test_a_junit_finding_carries_its_location_and_remedy_however_it_is_reported(
+    passed: bool, flags: dict
+) -> None:
+    """The quiet element is still an element the reader acts from.
+
+    `<system-out>` is where an info-severity check and a passing check's
+    requested detail report, and a finding that reaches it stripped of its
+    location and its remedy is a finding the reader of this format cannot act
+    on -- while the reader of the text report can.
+    """
+    name = "references.undeclared"
+    report = HealthReport(
+        checks=[
+            HealthCheck(
+                name=name,
+                passed=passed,
+                message="3 comment(s) cite a requirement without declaring a relationship",
+                category="references",
+                severity="info",
+                findings=[LOCATED],
+            )
+        ]
+    )
+
+    root = ET.fromstring(_format_report(report, _args(format="junit", **flags)))
+    sys_out = root.find(f".//testcase[@name='{name}']/system-out")
+    assert sys_out is not None and sys_out.text
+    body = sys_out.text
+
+    assert "spec/dev-cli.md:247" in body, "the place the reader must go was dropped"
+    assert remedy_for(name) in body, "the action available to resolve it was dropped"
+    assert "E_IDENTIFIER_WITH_TRAILING_TEXT" in body, "the code it reached was dropped"
+
+
+# ---------------------------------------------------------------------------
+# One invocation, read whole: a repeated selector accumulates
+# ---------------------------------------------------------------------------
+#
+# `checks` narrows the findings it presents by severity, category, check name,
+# diagnostic code and location; `--treat-active` widens which statuses count.
+# All six are spelled the way a scope over requirements is -- values
+# space-separated, the flag repeated, or both -- and a flag that kept only its
+# last occurrence would put a narrowing the vocabulary admits out of a reader's
+# reach while looking like the whole invocation had been read.
+#
+# NOTE: no assertion in spec/ governs the spelling of these six flags.
+# REQ-d00278-C states it for a SCOPE over requirements, which these are not,
+# and REQ-d00285-C -- the assertion `health.py` and `args.py` cite for this
+# change -- is about a finding carrying the same identity, severity, location
+# and remedy in every format. These tests therefore carry no `Verifies:` tag:
+# the behaviour is real and silent when broken, but it is not yet asserted.
+
+# The five selectors, under the name the invocation spells and the name the
+# filter holds them under.
+CHECKS_SELECTORS = [
+    ("severity", "severities"),
+    ("category", "categories"),
+    ("check", "names"),
+    ("code", "codes"),
+    ("file", "paths"),
+]
+
+
+@pytest.mark.parametrize("field,attr", CHECKS_SELECTORS)
+@pytest.mark.parametrize(
+    "raw,expected",
+    [
+        ([["error"], ["warning"]], ("error", "warning")),
+        ([["error", "warning"]], ("error", "warning")),
+        ([["error"], ["warning", "info"]], ("error", "warning", "info")),
+        (["error", "warning"], ("error", "warning")),
+    ],
+)
+def test_a_repeated_checks_selector_accumulates(field, attr, raw, expected) -> None:
+    """The values are asserted exactly rather than by count: a reading that
+    kept the inner lists whole would carry ``"['error']"`` -- a severity no
+    check can ever carry -- and a count would not notice."""
+    filt = FindingFilter.from_args(_args(**{field: raw}))
+    assert getattr(filt, attr) == expected
+
+
+@pytest.mark.parametrize("field,attr", CHECKS_SELECTORS)
+def test_a_selector_named_with_nothing_narrows_nothing(field, attr) -> None:
+    for raw in (None, [], [[]], [""], [[" "]]):
+        filt = FindingFilter.from_args(_args(**{field: raw}))
+        assert getattr(filt, attr) == (), raw
+        assert filt.active is False, raw
+
+
+def test_the_cli_reads_a_repeated_selector_as_one_narrowing() -> None:
+    """Through the real CLI path, not a hand-built namespace: the accumulation
+    lives in the dataclass annotation as much as in the reading."""
+    import tyro
+
+    from elspais.cli import _to_namespace
+    from elspais.commands.args import GlobalArgs
+
+    repeated = _to_namespace(
+        tyro.cli(
+            GlobalArgs,
+            args=[
+                "checks",
+                "--check",
+                "references.malformed",
+                "--check",
+                "tests.unmatched_results",
+            ],
+        )
+    )
+    spaced = _to_namespace(
+        tyro.cli(
+            GlobalArgs,
+            args=["checks", "--check", "references.malformed", "tests.unmatched_results"],
+        )
+    )
+    expected = ("references.malformed", "tests.unmatched_results")
+    assert FindingFilter.from_args(repeated).names == expected
+    assert FindingFilter.from_args(spaced).names == expected
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        [["draft"], ["review", "active"]],
+        [["draft", "review", "active"]],
+        ["draft", "review", "active"],
+    ],
+)
+def test_treat_active_accumulates_into_the_counted_statuses(raw) -> None:
+    """``statuses_weighed_active`` title-cases what it gathers, so a nested list
+    that survived unflattened would arrive as ``"['draft']"`` -- a status no
+    requirement carries, and one a count of three would not tell apart.
+    Flattening a repeated/spaced flag is ``flag_values``'s job at the edge;
+    ``statuses_weighed_active`` itself only title-cases the flat tuple it is
+    handed."""
+    from elspais.commands._scope import flag_values
+    from elspais.config import statuses_weighed_active
+
+    treat_active = flag_values(argparse.Namespace(treat_active=raw), "treat_active")
+    assert statuses_weighed_active(treat_active) == {"Draft", "Review", "Active"}
+
+
+def test_treat_active_is_disclosed_as_the_reader_spelled_it() -> None:
+    """The report says which flags produced it. A disclosure naming one of two
+    statuses describes a run that did not happen."""
+    out = _format_report(_report(), _args(treat_active=[["Draft"], ["Review"]]))
+    assert "--treat-active Draft Review" in out
+
+
+@pytest.mark.parametrize("command", ["checks", "gaps", "uncovered"])
+def test_the_cli_reads_a_repeated_treat_active_as_one_widening(command) -> None:
+    """Through the real CLI path: the accumulation lives in each command's
+    dataclass annotation as much as in the reading, and the flag is declared
+    once per command -- so an annotation missed on one of them would widen the
+    counted set differently depending on which report was asked for."""
+    import tyro
+
+    from elspais.cli import _to_namespace
+    from elspais.commands._scope import flag_values
+    from elspais.commands.args import GlobalArgs
+    from elspais.config import statuses_weighed_active
+
+    repeated = _to_namespace(
+        tyro.cli(GlobalArgs, args=[command, "--treat-active", "Draft", "--treat-active", "Review"])
+    )
+    spaced = _to_namespace(
+        tyro.cli(GlobalArgs, args=[command, "--treat-active", "Draft", "Review"])
+    )
+    assert statuses_weighed_active(flag_values(repeated, "treat_active")) == {"Draft", "Review"}
+    assert statuses_weighed_active(flag_values(spaced, "treat_active")) == {"Draft", "Review"}

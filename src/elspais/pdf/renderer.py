@@ -23,6 +23,7 @@ def _find_bundled_template() -> Path:
     return Path(__file__).parent / "templates" / "elspais.latex"
 
 
+# Implements: REQ-p00080-K
 def render_pdf(
     markdown_content: str,
     output_path: Path,
@@ -116,7 +117,6 @@ def render_pdf(
 
         # Pandoc drops an unfetchable image and still exits 0, so the
         # omission is only visible here. Surface it to the caller.
-        # Implements: REQ-p00080-K
         if unfetched is not None:
             for match in _UNFETCHED_RE.finditer(stderr):
                 name = match.group(1).strip()

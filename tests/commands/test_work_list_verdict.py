@@ -29,7 +29,7 @@ from elspais.graph.factory import build_graph
 _JOURNEY_UAT_FIX = Path(__file__).parents[1] / "fixtures" / "journey-uat"
 
 # A project whose `prd` level expects validation, so the UAT branch of both
-# surfaces is live (REQ-d00258-F).
+# surfaces is live (REQ-d00291-A).
 _UAT_CONFIG = """
 version = 5
 
@@ -138,13 +138,14 @@ def uat_project(tmp_path_factory: pytest.TempPathFactory):
     return graph, load_config(root / ".elspais.toml")
 
 
-# Verifies: REQ-d00258-C, REQ-d00258-F, REQ-d00258-M
+# Verifies: REQ-d00258-C, REQ-d00291-B, REQ-d00258-M
 def test_gaps_and_health_agree_about_a_blanket_journey(uat_project) -> None:
     """Both surfaces report the SAME assertions for a blanket `Validates:`.
 
-    REQ-d00258-F names `gaps unvalidated` and the health `uat.coverage` check
-    together as the two ways a UAT gap is reported, and REQ-d00258-C requires
-    one verdict behind both. A journey naming only the requirement leaves
+    REQ-d00291-B obliges a requirement at an expecting level that no journey
+    validates to be reported as a gap; `gaps unvalidated` and the health
+    `uat.coverage` check both report it, and REQ-d00258-C requires one verdict
+    behind both. A journey naming only the requirement leaves
     every *Assertion* uncited on the immediate direct measure (REQ-d00258-M),
     so the two must name the same assertions -- the assertions are read out of
     the gap entry and looked for in the health finding rather than restated,
@@ -205,7 +206,7 @@ def test_attached_and_needs_work_are_independent_signals(
     assert verdict.needs_work is bool(uncovered)
 
 
-# Verifies: REQ-d00069-M, REQ-d00255-C, REQ-d00258-I, REQ-d00258-M
+# Verifies: REQ-d00069-M, REQ-d00255-C, REQ-d00258-R, REQ-d00258-M
 def test_partial_uat_verification_is_uncovered_and_keeps_its_fraction(
     tmp_path: Path,
 ) -> None:
@@ -217,7 +218,7 @@ def test_partial_uat_verification_is_uncovered_and_keeps_its_fraction(
     and the fraction is carried so a worklist can tell it from an *Assertion*
     with no evidence at all.
 
-    The same call exercises the relative denominator (REQ-d00258-I): the
+    The same call exercises the relative denominator (REQ-d00258-R): the
     fixture's journey names assertion A only, so B -- outside `uat_coverage`
     -- is not reported as a verification gap, though it is uncovered when the
     dimension is read absolutely.
@@ -292,9 +293,9 @@ B. Beta SHALL hold.
 """
 
 
-# Verifies: REQ-d00258-I, REQ-d00258-M
+# Verifies: REQ-d00258-R, REQ-d00258-M
 def test_unimplemented_assertion_is_not_a_testing_gap(tmp_path: Path) -> None:
-    """Testing gaps are measured over what is implemented (REQ-d00258-I).
+    """Testing gaps are measured over what is implemented (REQ-d00258-R).
 
     A is implemented and untested; B is not built at all. B is an
     implementation gap, and reporting it as a testing gap as well would

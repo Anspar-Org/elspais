@@ -15,7 +15,7 @@ Complete reference for all elspais commands.
 | `changed` | Reports | Detect git changes to spec files |
 | `pdf` | Reports | Compile spec files into a PDF document |
 | `search` | Reports | Search requirements by keyword |
-| `gaps` | Gaps & Issues | List all traceability gaps |
+| `gaps` | Gaps & Issues | List which requirements fall short of each coverage dimension |
 | `uncovered` | Gaps & Issues | List requirements without code coverage |
 | `untested` | Gaps & Issues | List requirements without test coverage |
 | `unvalidated` | Gaps & Issues | List requirements without UAT (journey) coverage |
@@ -87,9 +87,20 @@ To see unresolved references, use: `elspais unresolved`
   `--file GLOB...`   Report only findings located in matching files
   `--format {text,markdown,json,junit,sarif}`  Output format (default: text)
   `--lenient`      Allow warnings without affecting exit code
-  `--skip-passing-details`     Hide details for passing checks (default)
-  `--include-passing-details`  Show full details for passing checks
-  `-v, --verbose`  Show additional details
+  `--treat-active ST ...`  Weigh these statuses as active ones
+  `--no-include-passing-details`  Hide details for passing checks (default)
+  `--include-passing-details`     Show full details for passing checks
+  `--run-tests`    Execute each `[[scanning.test.targets]]` entry that carries a
+                   command before evaluating checks, so coverage runs against
+                   fresh result files. Exits 2 if no target has a command.
+  `--fail-fast`    Stop at the first target failure and skip the checks pass.
+                   Requires `--run-tests`.
+  `--targets T...` Run and ingest only these test targets rather than the
+                   `default` group
+  `-o, --output PATH`  Write output to file instead of stdout
+
+`-v, --verbose` is a global option (see Global Options above) and reports each
+check individually rather than only the summary.
 
 ## errors
 
@@ -124,12 +135,25 @@ Follow-up from `elspais checks` when `spec.format_rules` or `spec.no_assertions`
 
 ## gaps
 
-List all traceability gaps -- every requirement that misses a dimension of
-coverage, in one listing, with the gap type against each.
+List which requirements fall short of each dimension of coverage, one section
+per dimension, in a single listing.
 
-  $ elspais gaps                       # Every gap, by type
+  $ elspais gaps                       # Every dimension
+  $ elspais gaps --values implemented  # Only what nothing implements
   $ elspais gaps --level dev           # Only the dev level
   $ elspais gaps --format json         # JSON output
+
+Each section reads one dimension and lists what it has not credited, so
+`--values` says which sections appear. The four it offers are `implemented`
+(uncovered), `tested` (untested), `uat_coverage` (unvalidated) and `verified`
+(failing) -- the same keys `summary` and `trace` state as columns, which is why
+a `[scopes.NAME]` declaring values works on all three. The single-dimension
+commands below are this report under a fixed selection: `gaps --values
+implemented` and `uncovered` are the same report, and `uncovered --values
+tested` is refused rather than quietly becoming `untested`.
+
+A requirement with no assertions has no dimension to fall short of and is not
+listed here; `elspais checks` reports it as `spec.no_assertions`.
 
 Where a requirement declares `Integrates:`, the coverage inherited from the
 associate that provides it is credited, and the requirement is listed under
@@ -138,6 +162,8 @@ associate that provides it is credited, and the requirement is listed under
 **Options:**
 
   `--format {text,markdown,json}`  Output format (default: text)
+  `--values KEY,...`               List only these dimensions' shortfalls,
+                                   in this order (default: all four)
   `-o, --output PATH`              Write output to file instead of stdout
 
 **Scoping the listing** (see `elspais docs scoping`):
@@ -151,7 +177,7 @@ associate that provides it is credited, and the requirement is listed under
   `--treat-active ST ...`  Weigh these statuses as active ones
 
 Follow-up from `elspais checks` when a coverage check fails. The single-
-dimension commands below list one kind of gap each.
+dimension commands below are this report under a one-dimension selection.
 
 ## uncovered
 
@@ -383,6 +409,7 @@ Generate traceability matrix and reports.
   `--not-status ST ...`    Report no requirement carrying these statuses
   `--match-status-roles`   Read each named status as every status sharing its role
   `--scope NAME`           Report under a scope declared in `[scopes.NAME]`
+  `--treat-active ST ...`  Weigh these statuses as active ones
 
 ## search
 
@@ -530,6 +557,7 @@ uncovered.
   `--not-status ST ...`    Report no requirement carrying these statuses
   `--match-status-roles`   Read each named status as every status sharing its role
   `--scope NAME`           Report under a scope declared in `[scopes.NAME]`
+  `--treat-active ST ...`  Weigh these statuses as active ones
 
 ## changed
 
@@ -565,8 +593,18 @@ Analyze foundational requirement importance using graph metrics.
   `--weights W1,W2,W3,W4`  Centrality, fan-in, neighborhood, uncovered weights
   `--format {table,json}`  Output format (default: table)
   `--show {foundations,leaves,all}`  Which sections (default: all)
-  `--level {prd,ops,dev}`  Filter by requirement level
   `--include-code`      Include CODE nodes in analysis graph
+  `-o, --output PATH`   Write output to file instead of stdout
+
+**Scoping the report** (see `elspais docs scoping`):
+
+  `--level LVL ...`        Report only requirements at these levels
+  `--not-level LVL ...`    Report no requirement at these levels
+  `--status ST ...`        Report only requirements carrying these statuses
+  `--not-status ST ...`    Report no requirement carrying these statuses
+  `--match-status-roles`   Read each named status as every status sharing its role
+  `--scope NAME`           Report under a scope declared in `[scopes.NAME]`
+  `--treat-active ST ...`  Weigh these statuses as active ones
 
 ## edit
 

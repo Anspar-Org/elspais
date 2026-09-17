@@ -7,13 +7,16 @@ various sources (files, stdin, CLI args) into parsed content.
 
 from __future__ import annotations
 
-import fnmatch
-import os
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
+from elspais.graph.file_selection import (
+    file_is_skipped,
+    select_files,
+    within_skipped_dir,
+)
 from elspais.graph.parsers import ParseContext, ParsedContent, ParserRegistry
 
 
@@ -102,8 +105,7 @@ class DomainFile:
         recursive: bool = False,
         skip_dirs: list[str] | None = None,
         skip_files: list[str] | None = None,
-        ignore_config: Any = None,
-        scope: str = "global",
+        repo_root: Path | str | None = None,
     ) -> None:
         """Initialize file deserializer.
 
@@ -112,135 +114,85 @@ class DomainFile:
             patterns: Glob patterns selecting among the files under *path*
                 (default: ["*.md"]).
             recursive: Whether to search recursively.
-            skip_dirs: Directory names to skip (e.g., ["roadmap", "reference"]).
-            skip_files: File name patterns to skip (e.g., ["README.md", "*.pyc"]).
-            ignore_config: The project's ``IgnoreConfig``, when the caller has
-                one. It is the exclusion half of file selection and is asked
-                about every directory and every file before anything is read.
-            scope: Which scanning kind this walk is for ("spec", "code",
-                "test", "global"), naming the scope *ignore_config* answers in.
+            skip_dirs: Directories not to enter, named by their path from
+                *repo_root* (e.g. ["spec/_generated", "**/node_modules"]).
+                A bare name is a path: "junk" names ``junk`` at the repository
+                root, NOT a directory called junk at some depth -- write
+                "**/junk" for that.
+            skip_files: Globs over a file's NAME (e.g. ["README.md", "*.pyc"]).
+                A file pattern says nothing about where a file sits; the
+                directory rules say that. The two lists are not
+                interchangeable and are deliberately not spelled alike.
+            repo_root: The repository every directory pattern is read from.
+                Defaults to *path*, which is what a caller scanning one
+                directory in isolation means.
         """
         self.path = Path(path)
         self.patterns = patterns or ["*.md"]
         self.recursive = recursive
         self.skip_dirs = skip_dirs or []
         self.skip_files = skip_files or []
-        self.ignore_config = ignore_config
-        self.scope = scope
+        self.repo_root = Path(repo_root) if repo_root is not None else self.path
         self._walked: list[tuple[Path, bool]] | None = None
 
-    # Implements: REQ-d00212-Q+W
-    def _matches_patterns(self, file_path: Path) -> bool:
-        """Whether *file_path* is one of the files this kind's patterns select.
-
-        A pattern is matched against the file's name and against its path
-        relative to the scanned directory, so ``*.py`` selects at any depth and
-        ``api/*.py`` selects within a subdirectory. This is the ONE meaning
-        selection has, and it is the same for every scanning kind.
-        """
-        try:
-            rel = file_path.relative_to(self.path).as_posix()
-        except ValueError:
-            rel = file_path.name
-        name = file_path.name
-        for pattern in self.patterns:
-            if fnmatch.fnmatch(name, pattern) or fnmatch.fnmatch(rel, pattern):
-                return True
-        return False
-
-    def _ignored(self, path: Path) -> bool:
-        """Whether the ignore configuration excludes *path*."""
-        if self.ignore_config is None:
-            return False
-        return bool(self.ignore_config.should_ignore(path, scope=self.scope))
-
-    def _should_skip(self, file_path: Path) -> bool:
-        """Check if a file should be skipped based on skip_dirs and skip_files.
-
-        Args:
-            file_path: Path to check.
-
-        Returns:
-            True if the file should be skipped.
-        """
-        # Check if file name matches skip_files. Matched as a glob, the way
-        # every other exclusion pattern in the configuration is matched, so
-        # `*.pyc` excludes what it plainly says it excludes.
-        if any(fnmatch.fnmatch(file_path.name, pattern) for pattern in self.skip_files):
-            return True
-
-        # Check if any parent directory matches skip_dirs
-        # Supports both single-segment ("roadmap") and multi-segment
-        # ("regulations/fda") entries.
-        try:
-            rel_path = file_path.relative_to(self.path)
-        except ValueError:
-            rel_path = file_path
-
-        # Parent directory path (excluding the file name)
-        rel_dir = str(Path(*rel_path.parts[:-1])) if len(rel_path.parts) > 1 else ""
-        for skip in self.skip_dirs:
-            # Single-segment: match any component. Multi-segment: prefix match.
-            if "/" in skip or "\\" in skip:
-                if rel_dir == skip or rel_dir.startswith(skip + "/"):
-                    return True
-            else:
-                if skip in rel_path.parts[:-1]:
-                    return True
-
-        return self._ignored(file_path)
-
-    # Implements: REQ-d00212-Q+W, REQ-d00241-G
+    # Implements: REQ-d00212-Q+W, REQ-p00015-H, REQ-d00241-F+G
     def _walk(self) -> list[tuple[Path, bool]]:
-        """Every file under *path* the scan did not exclude, paired with
-        whether this kind's patterns select it.
+        """Every file this walk reached, paired with whether it is selected.
 
-        ONE traversal answers both halves of the question, and it answers them
-        in one order: a file the ignore configuration excludes never appears
-        here at all -- not as selected, and not as declined -- so nothing
-        downstream can report it. Cached, because the two callers ask about
-        the same walk.
+        ONE mechanism decides it: :func:`select_files`. A file a skip pattern
+        names appears here NOT AT ALL -- not as selected and not as declined --
+        so nothing downstream can report it (REQ-d00241-G). A file the walk
+        reached but the patterns did not select appears as ``False``, which is
+        what lets a *Traceability* keyword in it be reported (REQ-d00241-F).
+
+        Cached, because the two callers ask about the same walk.
         """
         if self._walked is not None:
             return self._walked
 
         found: list[tuple[Path, bool]] = []
+        root, relative = self._frame()
         if self.path.is_file():
             # A caller who names one file has already made the selection;
-            # patterns are for choosing among the files in a directory.
-            if not self._should_skip(self.path):
+            # patterns are for choosing among the files in a directory. The
+            # skip lists still answer, so naming a skipped file reads nothing.
+            if not file_is_skipped(self.path.name, self.skip_files) and not within_skipped_dir(
+                relative, self.skip_dirs
+            ):
                 found.append((self.path, True))
         elif self.path.is_dir():
-            files: list[Path] = []
-            for dir_path, dir_names, file_names in os.walk(self.path):
-                here = Path(dir_path)
-                # Prune excluded directories in place: their contents are not
-                # scanned, and are not read to be reported on either.
-                dir_names[:] = sorted(d for d in dir_names if not self._should_skip_dir(here / d))
-                files.extend(here / f for f in file_names)
-                if not self.recursive:
-                    dir_names[:] = []
-            for file_path in sorted(files):
-                if file_path.is_file() and not self._should_skip(file_path):
-                    found.append((file_path, self._matches_patterns(file_path)))
+            selection = select_files(
+                repo_root=root,
+                scan_dirs=[relative],
+                skip_dirs=self.skip_dirs,
+                skip_files=self.skip_files,
+                include_files=self.patterns,
+                recursive=self.recursive,
+            )
+            found = [(p, True) for p in sorted(selection.selected)]
+            found += [(p, False) for p in sorted(selection.declined)]
+            found.sort(key=lambda pair: pair[0])
 
         self._walked = found
         return found
 
-    def _should_skip_dir(self, dir_path: Path) -> bool:
-        """Whether a directory is excluded, and so not descended into."""
+    def _frame(self) -> tuple[Path, str]:
+        """The root the directory patterns are read from, and this path under it.
+
+        Normally the declared repository root, with the scanned path named
+        relative to it. Where the scanned path is NOT under that root, the root
+        is no frame for it and the path itself becomes the frame.
+
+        Falling back to the path's NAME instead was a wrong answer rather than
+        a degraded one: the name was resolved against the declared root, so a
+        caller asking for one repository's ``spec`` directory was handed a
+        same-named directory in another repository entirely.
+        """
+        root = Path(self.repo_root)
         try:
-            rel_path = dir_path.relative_to(self.path)
+            return root, self.path.resolve().relative_to(root.resolve()).as_posix()
         except ValueError:
-            rel_path = dir_path
-        rel = rel_path.as_posix()
-        for skip in self.skip_dirs:
-            if "/" in skip or "\\" in skip:
-                if rel == skip or rel.startswith(skip + "/"):
-                    return True
-            elif dir_path.name == skip:
-                return True
-        return self._ignored(dir_path)
+            return self.path, "."
 
     # Implements: REQ-d00212-W
     def iter_selected(self) -> Iterator[Path]:
@@ -332,6 +284,7 @@ class DomainFile:
                     source_context=ctx,
                 )
 
+    # Implements: REQ-o00072-A
     def dispatch(
         self,
         dispatch_fn: Any,

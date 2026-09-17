@@ -1,8 +1,9 @@
 # Verifies: REQ-d00254-H
 """Unit tests for `elspais checks --run-tests` target selection/validation.
 
-Covers both selectors: `--targets`, which names targets outright, and
-`--groups`, which names them through the group model of REQ-d00283.
+Covers `--targets`, the ONE selector: it names test targets, some of them by
+the name of a group they claim, a group being an alias for the set of targets
+in it (REQ-d00283-E+I). There is no second selector.
 
 `health.run()` imports `get_config`/`find_git_root` (from `elspais.config`)
 and `run_configured_targets` (from `elspais.commands.test_runner`) locally
@@ -36,12 +37,11 @@ def _cfg_with_targets(
     )
 
 
-def _base_args(targets: list[str] | None, groups: list[str] | None = None) -> argparse.Namespace:
+def _base_args(targets: list[str] | list[list[str]] | None) -> argparse.Namespace:
     return argparse.Namespace(
         run_tests=True,
         fail_fast=False,
         targets=targets,
-        groups=groups,
         config=None,
         format="text",
         lenient=True,
@@ -69,7 +69,29 @@ def test_unknown_target_name_errors(capsys, monkeypatch, tmp_path):
     err = capsys.readouterr().err
     assert rc == 2
     assert "unknown --targets: nope" in err
+    # Both vocabularies, because `--targets` reads from both: a reader who
+    # mistyped a group name learns the group names, not only the target ones.
     assert "Configured targets: a" in err
+    assert "Known groups: all, default" in err
+
+
+# Verifies: REQ-d00283-H
+def test_unknown_name_error_names_the_declared_groups_too(capsys, monkeypatch, tmp_path):
+    """A project that declares a group has that group in the vocabulary the
+    refusal publishes -- otherwise the message names a smaller set of legal
+    spellings than the flag actually admits."""
+    cfg = _cfg_with_targets(
+        [TestTargetConfig(name="a", command="true", reporter="junit")],
+        groups={"uat": "needs a live backend", "slow": "runs for over a minute"},
+    )
+    monkeypatch.setattr("elspais.config.get_config", lambda *a, **k: {})
+    monkeypatch.setattr(health, "_validate_config", lambda d: cfg)
+
+    rc = health.run(_base_args(["uta"]))
+
+    err = capsys.readouterr().err
+    assert rc == 2
+    assert "Known groups: all, default, slow, uat" in err
 
 
 # Verifies: REQ-d00254-H
@@ -183,7 +205,7 @@ def test_run_naming_every_configured_target_is_a_full_run(monkeypatch, tmp_path)
 
 
 # Verifies: REQ-d00283-E
-def test_groups_flag_executes_only_that_groups_targets(monkeypatch, tmp_path):
+def test_a_group_name_executes_only_that_groups_targets(monkeypatch, tmp_path):
     marker_a = tmp_path / "a.txt"
     marker_b = tmp_path / "b.txt"
     cfg = _cfg_with_targets(
@@ -195,7 +217,7 @@ def test_groups_flag_executes_only_that_groups_targets(monkeypatch, tmp_path):
     monkeypatch.setattr(health, "_validate_config", lambda d: cfg)
     captured_args = _capture_local_checks(monkeypatch)
 
-    rc = health.run(_base_args(None, groups=["uat"]))
+    rc = health.run(_base_args(["uat"]))
 
     assert rc == 0
     assert marker_b.exists(), "the selected group's target must run"
@@ -226,7 +248,7 @@ def test_no_selection_runs_the_default_group(monkeypatch, tmp_path):
 
 
 # Verifies: REQ-d00283-H
-def test_unknown_group_name_errors(capsys, monkeypatch, tmp_path):
+def test_unknown_name_errors(capsys, monkeypatch, tmp_path):
     cfg = _cfg_with_targets(
         _two_commandful_targets(tmp_path, groups_for_b=["uat"]),
         groups={"uat": "needs a live backend"},
@@ -238,13 +260,86 @@ def test_unknown_group_name_errors(capsys, monkeypatch, tmp_path):
         health, "_run_local_checks", lambda args, params: {"healthy": True, "checks": []}
     )
 
-    rc = health.run(_base_args(None, groups=["uta"]))
+    rc = health.run(_base_args(["uta"]))
 
     err = capsys.readouterr().err
     assert rc == 2
     assert "uta" in err, "the refusal must name the group it could not resolve"
     assert not (tmp_path / "a.txt").exists(), "a refused selection must execute nothing"
     assert not (tmp_path / "b.txt").exists()
+
+
+def _three_commandful_targets(tmp_path):
+    """`a` in `default`, `b` in `uat`, `c` in `slow` -- so a target name and a
+    group name can each reach a target the other does not."""
+    return [
+        TestTargetConfig(name="a", command=f"touch {tmp_path / 'a.txt'}", reporter="junit"),
+        TestTargetConfig(
+            name="b", command=f"touch {tmp_path / 'b.txt'}", reporter="junit", groups=["uat"]
+        ),
+        TestTargetConfig(
+            name="c", command=f"touch {tmp_path / 'c.txt'}", reporter="junit", groups=["slow"]
+        ),
+    ]
+
+
+_THREE_GROUPS = {"uat": "needs a live backend", "slow": "runs for over a minute"}
+
+
+def _grouped_run(monkeypatch, tmp_path, named):
+    cfg = _cfg_with_targets(_three_commandful_targets(tmp_path), groups=_THREE_GROUPS)
+    monkeypatch.setattr("elspais.config.get_config", lambda *a, **k: {})
+    monkeypatch.setattr("elspais.config.find_git_root", lambda *a, **k: tmp_path)
+    monkeypatch.setattr(health, "_validate_config", lambda d: cfg)
+    captured = _capture_local_checks(monkeypatch)
+
+    rc = health.run(_base_args(named))
+
+    ran = {n for n in "abc" if (tmp_path / f"{n}.txt").exists()}
+    return rc, ran, captured
+
+
+# Verifies: REQ-d00283-E+I
+def test_a_target_name_beside_a_group_name_runs_both(monkeypatch, tmp_path):
+    """A group is an alias, so naming one alongside a target WIDENS the run.
+    The retired reading -- each selector narrowing the other -- would have run
+    nothing here, `a` belonging to no group named."""
+    rc, ran, captured = _grouped_run(monkeypatch, tmp_path, ["a", "uat"])
+
+    assert rc == 0
+    assert ran == {"a", "b"}, "a run executes every target it named"
+    assert captured[0]._fresh_targets == {"a", "b"}
+
+
+# Verifies: REQ-d00283-E+I
+def test_two_group_names_run_the_union_of_their_targets(monkeypatch, tmp_path):
+    rc, ran, captured = _grouped_run(monkeypatch, tmp_path, ["uat", "slow"])
+
+    assert rc == 0
+    assert ran == {"b", "c"}
+    assert captured[0]._fresh_targets == {"b", "c"}
+
+
+# Verifies: REQ-d00283-E
+def test_targets_accumulate_across_repeated_flags(monkeypatch, tmp_path):
+    """The selection a repeated flag builds reaches target resolution whole.
+
+    The nested shape here is what the CLI parser actually produces for
+    `--targets a --targets uat`; letting the last occurrence stand for the
+    whole would have run `uat`'s targets alone.
+    """
+    import tyro
+
+    from elspais.commands.args import ChecksArgs
+
+    parsed = tyro.cli(ChecksArgs, args=["--run-tests", "--targets", "a", "--targets", "uat"])
+    assert parsed.targets == [["a"], ["uat"]], "the parser keeps each occurrence apart"
+
+    rc, ran, captured = _grouped_run(monkeypatch, tmp_path, parsed.targets)
+
+    assert rc == 0
+    assert ran == {"a", "b"}
+    assert captured[0]._fresh_targets == {"a", "b"}
 
 
 # Verifies: REQ-d00254-I
@@ -296,7 +391,9 @@ directories = ["spec"]
         _captured_results=None,
         _fresh_targets={"a"},
     )
-    result = health._run_local_checks(args, {})
+    from elspais.commands._requests import ChecksRequest
+
+    result = health._run_local_checks(args, ChecksRequest())
 
     assert "healthy" in result
     assert captured["fresh_targets"] == {"a"}
