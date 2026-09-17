@@ -2,46 +2,6 @@
 <!-- Do not edit manually; changes will be overwritten. -->
 # Term Index
 
-## ****************Assertion** *(not indexed)***************
-
-## **************Assertion** *(not indexed)*************
-
-## ************Assertion** *(not indexed)***********
-
-**REQ:**
-
-- rem:REQ:spec/_generated/term-index.md:5
-
-## **********Assertion** *(not indexed)*********
-
-**REQ:**
-
-- rem:REQ:spec/_generated/term-index.md:7
-
-## ********Assertion** *(not indexed)*******
-
-**REQ:**
-
-- rem:REQ:spec/_generated/term-index.md:9
-
-## ******Assertion** *(not indexed)*****
-
-**REQ:**
-
-- rem:REQ:spec/_generated/term-index.md:15
-
-## ****Assertion** *(not indexed)***
-
-**REQ:**
-
-- rem:REQ:spec/_generated/term-index.md:21
-
-## **Assertion** *(not indexed)*
-
-**REQ:**
-
-- rem:REQ:spec/_generated/term-index.md:27
-
 ## Defined Term
 
 **REQ:**
@@ -49,13 +9,11 @@
 - REQ-d00223-B
 - REQ-d00237-G
 - REQ-d00264-A
-- rem:REQ:spec/_generated/term-index.md:39
 
 ## Specification
 
 **REQ:**
 
-- rem:REQ:spec/_generated/term-index.md:48
 - REQ-d00259:section:1
 - rem:REQ:spec/requirements-spec.md:1
 - rem:REQ:spec/requirements-spec.md:7
@@ -109,9 +67,6 @@
 - REQ-d00241-F
 - REQ-p00005-B
 - rem:REQ:spec/AI-AGENT.md:19
-- rem:REQ:spec/INDEX.md:11
-- rem:REQ:spec/INDEX.md:77
-- rem:REQ:spec/_generated/term-index.md:59
 - REQ-d00084:section:0
 - REQ-d00084:section:1
 - REQ-d00069:section:1
@@ -157,8 +112,6 @@
 **REQ:**
 
 - REQ-p00003
-- rem:REQ:spec/INDEX.md:11
-- rem:REQ:spec/_generated/term-index.md:149
 - REQ-d00288:section:0
 - JNY-CEO-Sponsor-01
 - JNY-CEO-Audit-01
