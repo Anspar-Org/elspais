@@ -259,6 +259,7 @@ def check_config_hierarchy_rules(config: dict[str, Any]) -> HealthCheck:
     )
 
 
+# Implements: REQ-d00080-C
 def check_config_paths_exist(config: dict[str, Any], start_path: Path) -> HealthCheck:
     """Check that configured spec directories exist on disk."""
     severity = severity_for("config.paths_exist", config)
@@ -427,6 +428,7 @@ def check_worktree_status(
     )
 
 
+# Implements: REQ-p00005-E, REQ-d00080-C, REQ-d00202-M+N
 def check_associate_paths(config: dict, git_root: Path | None) -> HealthCheck:
     """Check that every federated project's path exists on disk.
 
@@ -491,6 +493,7 @@ def check_associate_paths(config: dict, git_root: Path | None) -> HealthCheck:
     )
 
 
+# Implements: REQ-p00005-E, REQ-d00202-M+N
 def check_associate_configs(config: dict, git_root: Path | None) -> HealthCheck:
     """Check that every federated project has a usable configuration.
 
@@ -658,6 +661,7 @@ def check_cross_repo_in_committed_config(
     )
 
 
+# Implements: REQ-o00076-M
 def _main_repo_root(git_root: Path) -> Path | None:
     """The main checkout a worktree belongs to.
 
@@ -684,6 +688,7 @@ def _main_repo_root(git_root: Path) -> Path | None:
     return common.parent
 
 
+# Implements: REQ-o00076-M
 def _hardcoded_address(entry: dict) -> str | None:
     """The fixed address in a client entry, if it has one.
 
@@ -700,6 +705,7 @@ def _hardcoded_address(entry: dict) -> str | None:
     return None
 
 
+# Implements: REQ-o00076-M
 def _registration_sources(
     git_root: Path, claude_config: Path | None
 ) -> tuple[list[tuple[str, dict]], list[str]]:
@@ -905,6 +911,7 @@ def check_daemon_status(git_root: Path | None, config: dict[str, Any] | None = N
     )
 
 
+# Implements: REQ-o00074-P
 def _daemon_pending_count(info: dict) -> int:
     """How many changes the running daemon holds, or 0 if it will not say."""
     import json
@@ -922,6 +929,7 @@ def _daemon_pending_count(info: dict) -> int:
     return count if isinstance(count, int) and count > 0 else 0
 
 
+# Implements: REQ-p00083-C
 def _automatic_save_record(git_root: Path) -> dict | None:
     """A save a daemon performed without being asked, if one stands."""
     import json
@@ -964,6 +972,7 @@ _CONDITIONAL_SECTIONS = {"associates"}
 _SCHEMA_SECTIONS: set[str] = set()
 
 
+# Implements: REQ-d00210-A
 def _get_schema_sections() -> set[str]:
     """Return the set of required schema section names (cached)."""
     global _SCHEMA_SECTIONS  # noqa: PLW0603
@@ -978,6 +987,7 @@ def _get_schema_sections() -> set[str]:
     return _SCHEMA_SECTIONS
 
 
+# Implements: REQ-d00210-A
 def _parse_docs_sections(docs_path: Path) -> set[str]:
     """Extract top-level TOML section headers from a docs markdown file.
 
@@ -1017,6 +1027,7 @@ def _parse_docs_sections(docs_path: Path) -> set[str]:
     return sections
 
 
+# Implements: REQ-d00210-A+B+C
 def check_docs_drift(docs_path: Path, config: dict[str, Any] | None = None) -> HealthCheck:
     """Check for drift between ElspaisConfig schema and docs/configuration.md."""
     severity = severity_for("docs.config_drift", config)
@@ -1109,6 +1120,7 @@ def _print_text_report(report: HealthReport, verbose: bool = False) -> None:
         print(f"{failed} issues found out of {total} checks. See above for details.")
 
 
+# Implements: REQ-d00080-A, REQ-d00210-A
 def run(args: argparse.Namespace) -> int:
     """Run the doctor command."""
     from elspais.config import find_config_file, find_git_root, get_config

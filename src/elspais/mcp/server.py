@@ -118,6 +118,7 @@ def _validate_config(config: dict[str, Any]) -> ElspaisConfig:
 # ─────────────────────────────────────────────────────────────────────────────
 
 
+# Implements: REQ-d00129-D
 def _relative_source_path(node: Any, graph: FederatedGraph | None) -> str:
     """Return the node's source file path, relative to repo root.
 
@@ -149,6 +150,7 @@ def _relative_source_path(node: Any, graph: FederatedGraph | None) -> str:
 # ─────────────────────────────────────────────────────────────────────────────
 
 
+# Implements: REQ-d00066-B, REQ-d00066-D
 def _iter_assertion_coverage(
     req_node: Any,
     kind_filter: NodeKind,
@@ -207,6 +209,7 @@ def _iter_assertion_coverage(
             yield target, [label]
 
 
+# Implements: REQ-d00064-C, REQ-d00064-D
 def _serialize_test_info(test_node: Any, graph: FederatedGraph) -> dict[str, Any]:
     """Unified TEST-node serializer (superset of all consumers).
 
@@ -229,7 +232,7 @@ def _serialize_test_info(test_node: Any, graph: FederatedGraph) -> dict[str, Any
     }
 
 
-# Implements: REQ-d00294-F
+# Implements: REQ-d00294-F, REQ-d00064-C, REQ-d00064-D
 def _serialize_result_entry(result_node: Any, graph: FederatedGraph) -> dict[str, Any]:
     """Serialize one RESULT node for a results list.
 
@@ -668,6 +671,7 @@ def _serialize_node_generic(node: Any, graph: FederatedGraph | None = None) -> d
     }
 
 
+# Implements: REQ-d00064-C
 def _serialize_node_summary(node: Any) -> dict[str, Any]:
     """Serialize any graph node to lightweight summary format.
 
@@ -1827,6 +1831,7 @@ def _executable_difference() -> dict[str, str] | None:
     return executable.difference()
 
 
+# Implements: REQ-p00083-C
 def _automatic_save_record(working_dir: Path | str | None) -> dict[str, Any] | None:
     """The outstanding record of a save the daemon performed, if any.
 
@@ -4892,6 +4897,7 @@ def _get_assertion_refines_map(graph: FederatedGraph, req_id: str) -> dict[str, 
     }
 
 
+# Implements: REQ-d00067-A, REQ-d00067-C, REQ-d00067-E, REQ-d00067-F
 def _get_uncovered_assertions(
     graph: FederatedGraph,
     req_id: str | None = None,
@@ -4969,6 +4975,7 @@ def _get_uncovered_assertions(
             return set()
         return covered_labels(dim, WORK_LIST_MEASURE)
 
+    # Implements: REQ-d00258-M
     def _uncovered_labels_for_req(req_node: Any, all_labels: list[str]) -> set[str]:
         """Union of per-axis gaps for the requested ``source`` (REQ-d00258).
 
@@ -6391,6 +6398,7 @@ identical body. Full details: docs("concurrency").
 # ─────────────────────────────────────────────────────────────────────────────
 
 
+# Implements: REQ-o00062-Q
 def create_server(
     graph: FederatedGraph | None = None,
     working_dir: Path | None = None,
@@ -6455,6 +6463,7 @@ def create_server(
     _state["working_dir"] = working_dir
     _state["config"] = config
 
+    # Implements: REQ-p00083-G
     def _locked(fn: Callable[..., Any]) -> Callable[..., Any]:
         """Serialize a write tool under the shared write lock.
 
@@ -6471,6 +6480,7 @@ def create_server(
         stopping (REQ-p00083-G).
         """
 
+        # Implements: REQ-p00083-G
         @functools.wraps(fn)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
             with _state.write_lock:
@@ -6485,6 +6495,7 @@ def create_server(
     # Register Tools
     # ─────────────────────────────────────────────────────────────────────
 
+    # Implements: REQ-o00060-A
     @mcp.tool()
     def get_graph_status() -> dict[str, Any]:
         """Quick health snapshot: requirement/assertion/test counts, plus the
@@ -6494,6 +6505,7 @@ def create_server(
         """
         return _get_graph_status(_state["graph"], _state.get("working_dir"))
 
+    # Implements: REQ-o00060-B, REQ-o00062-N
     @mcp.tool()
     @_locked
     def refresh_graph(
@@ -6555,6 +6567,7 @@ def create_server(
         result["working_dir"] = str(_state["working_dir"])
         return result
 
+    # Implements: REQ-o00060-C
     @mcp.tool()
     def search(
         query: str,
@@ -7258,6 +7271,7 @@ def create_server(
             _mutate_set_stereotype(_state["graph"], node_id, is_template, force), node
         )
 
+    # Implements: REQ-o00062-I, REQ-o00062-K
     @mcp.tool()
     @_locked
     def mutate_update_journey_field(
@@ -7279,6 +7293,7 @@ def create_server(
             _mutate_update_journey_field(_state["graph"], node_id, field_name, value), node
         )
 
+    # Implements: REQ-o00062-I, REQ-o00062-K
     @mcp.tool()
     @_locked
     def mutate_journey_section(
@@ -7307,6 +7322,7 @@ def create_server(
             node,
         )
 
+    # Implements: REQ-o00062-I, REQ-o00062-K
     @mcp.tool()
     @_locked
     def mutate_add_journey(
@@ -7330,6 +7346,7 @@ def create_server(
             _mutate_add_journey(_state["graph"], journey_id, title, file_id), node
         )
 
+    # Implements: REQ-o00062-I, REQ-o00062-K
     @mcp.tool()
     @_locked
     def mutate_delete_journey(
@@ -7357,6 +7374,7 @@ def create_server(
     # Edge Mutation Tools (REQ-o00062-C)
     # ─────────────────────────────────────────────────────────────────────
 
+    # Implements: REQ-o00062-C, REQ-o00062-I, REQ-o00062-K, REQ-o00062-M
     @mcp.tool()
     @_locked
     def mutate_add_edge(
@@ -7398,6 +7416,7 @@ def create_server(
             source,
         )
 
+    # Implements: REQ-o00062-C, REQ-o00062-I, REQ-o00062-K, REQ-o00062-M
     @mcp.tool()
     @_locked
     def mutate_change_edge_kind(
@@ -7423,6 +7442,7 @@ def create_server(
             _mutate_change_edge_kind(_state["graph"], source_id, target_id, new_kind), source
         )
 
+    # Implements: REQ-o00062-C, REQ-o00062-I, REQ-o00062-K, REQ-o00062-M
     @mcp.tool()
     @_locked
     def mutate_delete_edge(
@@ -7445,6 +7465,7 @@ def create_server(
             _mutate_delete_edge(_state["graph"], source_id, target_id, confirm), source
         )
 
+    # Implements: REQ-o00062-C, REQ-o00062-I, REQ-o00062-K, REQ-o00062-M
     @mcp.tool()
     @_locked
     def mutate_fix_broken_reference(
@@ -7468,6 +7489,7 @@ def create_server(
             source,
         )
 
+    # Implements: REQ-o00062-C, REQ-o00062-I, REQ-o00062-K, REQ-o00062-M
     @mcp.tool()
     @_locked
     def mutate_change_edge_targets(
@@ -7496,6 +7518,7 @@ def create_server(
             source,
         )
 
+    # Implements: REQ-o00062-M
     @mcp.tool()
     @_locked
     def mutate_move_node_to_file(
@@ -7593,6 +7616,7 @@ def create_server(
             _mutate_move_node_to_file(_state["graph"], node_id, target_file_id), node
         )
 
+    # Implements: REQ-o00062-I, REQ-o00062-K
     @mcp.tool()
     @_locked
     def mutate_rename_file(file_id: str, new_relative_path: str, if_version: str) -> dict[str, Any]:
@@ -7621,6 +7645,7 @@ def create_server(
     # Undo & Inspection Tools (REQ-o00062-G)
     # ─────────────────────────────────────────────────────────────────────
 
+    # Implements: REQ-o00062-G, REQ-o00062-N
     @mcp.tool()
     @_locked
     def undo_last_mutation(if_mutation_id: str) -> dict[str, Any]:
@@ -7637,6 +7662,7 @@ def create_server(
             return conflict
         return _undo_last_mutation(_state["graph"])
 
+    # Implements: REQ-o00062-G, REQ-o00062-N
     @mcp.tool()
     @_locked
     def undo_to_mutation(mutation_id: str, if_tip_mutation_id: str) -> dict[str, Any]:
@@ -7738,6 +7764,7 @@ def create_server(
     # Test Coverage Tools (REQ-o00064)
     # ─────────────────────────────────────────────────────────────────────
 
+    # Implements: REQ-o00064-A
     @mcp.tool()
     def get_test_coverage(req_id: str) -> dict[str, Any]:
         """Which tests validate a requirement and which assertions are covered/uncovered.
@@ -7754,6 +7781,7 @@ def create_server(
         """
         return _get_test_coverage(_state["graph"], req_id)
 
+    # Implements: REQ-o00064-B, REQ-o00064-E
     @mcp.tool()
     def get_uncovered_assertions(
         req_id: str | None = None,
@@ -7776,6 +7804,7 @@ def create_server(
         """
         return _get_uncovered_assertions(_state["graph"], req_id, source=source)
 
+    # Implements: REQ-o00064-C
     @mcp.tool()
     def find_assertions_by_keywords(
         keywords: list[str],
@@ -7792,6 +7821,7 @@ def create_server(
     # File Mutation Tools (REQ-o00063)
     # ─────────────────────────────────────────────────────────────────────
 
+    # Implements: REQ-o00063-A, REQ-o00063-F
     @mcp.tool()
     @_locked
     def change_reference_type(
@@ -7821,6 +7851,7 @@ def create_server(
             rebuild_shared_graph(_state)
         return _reattach_version_after_rebuild(_state["graph"], result, req_id)
 
+    # Implements: REQ-o00063-B, REQ-o00063-F
     @mcp.tool()
     @_locked
     def move_requirement(
