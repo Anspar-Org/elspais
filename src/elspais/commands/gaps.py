@@ -132,13 +132,19 @@ def collect_gaps(
 
     cfg = config or {}
     data = GapData()
+    _withheld_lower = {s.lower() for s in (exclude_status or ())}
 
     excluded_ids: set[str] = set()
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
         # A requirement a scope does not select is not a gap in this report: the
         # reader asked a question about a set, and work outside it is not an
         # answer to that question.
-        if node.status in exclude_status or (node_ids is not None and node.id not in node_ids):
+        # Case is folded: the counts gate through a case-insensitive resolver,
+        # so a set compared exactly here withheld a requirement from the counts
+        # and still listed it as a gap (REQ-d00258-C).
+        if (node.status or "").lower() in _withheld_lower or (
+            node_ids is not None and node.id not in node_ids
+        ):
             excluded_ids.add(node.id)
 
     code_covered = _reqs_with_code_refs(graph, excluded_ids)

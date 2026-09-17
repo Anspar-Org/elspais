@@ -3325,9 +3325,17 @@ def _check_status_references(
             if req.kind != NodeKind.REQUIREMENT:
                 continue
             req_status = req.status
-            # If this status was promoted by --treat-active, skip it
-            if exclude_status and req_status and req_status not in exclude_status:
-                continue
+            # A status this run weighs as active is not reported here.
+            # ``None`` means the caller gave no set. An EMPTY set means the
+            # caller excluded nothing, which happens when the run promoted
+            # every status the roles withheld -- the two are different answers
+            # and a truth test read them as one, so the promotion was dropped
+            # in exactly the case where all of it applied (REQ-d00291-G).
+            # Case is folded because a project spells its roles and a caller
+            # spells the flag independently.
+            if exclude_status is not None and req_status:
+                if req_status.lower() not in {s.lower() for s in exclude_status}:
+                    continue
             if roles_cfg.role_of(req_status) != role:
                 continue
             fn = node.file_node()

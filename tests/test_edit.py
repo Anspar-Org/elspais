@@ -3,7 +3,10 @@ Tests for the edit command.
 """
 
 import argparse
+import builtins
 from pathlib import Path
+
+import pytest
 
 # An identifier configuration whose namespace is not "REQ": FDA-style
 # `PRD-00001` / `DEV-00001` identifiers, as the e2e-fda-numeric fixture uses.
@@ -891,3 +894,396 @@ Body text.
 
         assert exit_code != 0
         assert "**Implements**: PRD-00001" not in (bare_dir / "notes.md").read_text()
+
+
+# --- Excluded spec files are not read by the edit surfaces ----------------- #
+
+
+def _write_excludable_spec(path: Path, req_id: str) -> None:
+    """Write a spec file declaring exactly *req_id*."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        f"""
+# {req_id}: Some Requirement
+
+**Level**: PRD | **Status**: Active
+
+Body text.
+
+*End* *Some Requirement* | **Hash**: test1234
+---
+"""
+    )
+
+
+def _excluding_project(tmp_path: Path) -> tuple[Path, object, object]:
+    """A project holding a kept and an excluded spec file.
+
+    Returns the spec directory, this project's resolver, and the ignore
+    configuration `run()` builds from the same config and hands down.
+    """
+    from elspais.config import get_ignore_config, load_config
+    from elspais.utilities.patterns import build_resolver
+
+    config_path = tmp_path / ".elspais.toml"
+    config_path.write_text(
+        """
+version = 5
+
+[project]
+name = "excluding"
+namespace = "REQ"
+
+[scanning]
+skip = ["secret.md"]
+
+[scanning.spec]
+directories = ["spec"]
+"""
+    )
+    spec_dir = tmp_path / "spec"
+    _write_excludable_spec(spec_dir / "reqs.md", "REQ-p00001")
+    _write_excludable_spec(spec_dir / "secret.md", "REQ-p00009")
+
+    config = load_config(config_path)
+    return spec_dir, build_resolver(config), get_ignore_config(config)
+
+
+def _record_opens(monkeypatch) -> set:
+    """Install a recorder of every path opened, returning the growing set."""
+    opened: set = set()
+    real_path_open = Path.open
+    real_builtin_open = builtins.open
+
+    def record_path_open(self, *args, **kwargs):  # noqa: ANN001, ANN002, ANN003, ANN202
+        opened.add(str(Path(self).resolve()))
+        return real_path_open(self, *args, **kwargs)
+
+    def record_builtin_open(file, *args, **kwargs):  # noqa: ANN001, ANN002, ANN003, ANN202
+        if isinstance(file, (str, Path)):
+            opened.add(str(Path(file).resolve()))
+        return real_builtin_open(file, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", record_path_open)
+    monkeypatch.setattr(builtins, "open", record_builtin_open)
+    return opened
+
+
+class TestEditDoesNotReadExcludedSpecFiles:
+    """The edit surfaces walk spec files themselves, so they must exclude too.
+
+    `elspais edit` reaches its files directly rather than through the scan, so
+    the reader's exclusions decide nothing unless these helpers ask. The weaker
+    promise -- that an excluded requirement is not edited -- would be satisfied
+    by a helper that read the file and declined to match, so these tests watch
+    the read itself (REQ-p00015-H).
+    """
+
+    # Verifies: REQ-p00015-H
+    @pytest.mark.parametrize("surface", ["find_requirement_in_files", "collect_all_req_ids"])
+    def test_an_excluded_spec_file_is_never_opened(
+        self, tmp_path: Path, monkeypatch, surface: str
+    ) -> None:
+        """Neither surface opens a file the reader excluded.
+
+        The excluded file declares an id declared nowhere else, so a surface
+        that opened it would both read it and answer with what it found.
+        Reading the kept file is what shows the walk happened at all.
+        """
+        from elspais.commands.edit import collect_all_req_ids, find_requirement_in_files
+
+        spec_dir, resolver, ignore_config = _excluding_project(tmp_path)
+
+        opened = _record_opens(monkeypatch)
+        try:
+            if surface == "find_requirement_in_files":
+                answer = find_requirement_in_files(spec_dir, "REQ-p00009", ignore_config)
+                assert answer is None, (
+                    "A requirement declared only in an excluded file is not found"
+                )
+            else:
+                ids = collect_all_req_ids(spec_dir, resolver, ignore_config)
+                assert "REQ-p00001" in ids, "The kept file's requirement is collected"
+                assert not any("p00009" in known for known in ids), (
+                    "An excluded file's requirement is not a valid reference target"
+                )
+        finally:
+            monkeypatch.undo()
+
+        assert str((spec_dir / "reqs.md").resolve()) in opened, (
+            f"{surface} read the kept spec file, so the recorder saw its reads"
+        )
+        assert str((spec_dir / "secret.md").resolve()) not in opened, (
+            f"{surface} must never open an excluded spec file"
+        )
+
+    # Verifies: REQ-p00015-H
+    @pytest.mark.parametrize("surface", ["find_requirement_in_files", "collect_all_req_ids"])
+    def test_a_caller_holding_no_configuration_excludes_nothing(
+        self, tmp_path: Path, surface: str
+    ) -> None:
+        """Absent an ignore configuration, every spec file is still read.
+
+        The parameter defaults to excluding nothing rather than everything: a
+        caller that holds no configuration has expressed no exclusion, and a
+        helper that silently withheld files from it would lose requirements.
+        """
+        from elspais.commands.edit import collect_all_req_ids, find_requirement_in_files
+
+        spec_dir, resolver, _ignore_config = _excluding_project(tmp_path)
+
+        if surface == "find_requirement_in_files":
+            assert find_requirement_in_files(spec_dir, "REQ-p00009") is not None
+        else:
+            assert collect_all_req_ids(spec_dir, resolver) >= {"REQ-p00001", "REQ-p00009"}
+
+    # Verifies: REQ-p00015-H
+    def test_the_command_threads_its_exclusions_down_to_the_walk(
+        self, tmp_path: Path, monkeypatch, capsys
+    ) -> None:
+        """An edit entered at the command layer reaches no excluded file.
+
+        The helpers are only as excluded as their caller makes them, so this
+        enters where `run()` leaves off -- with the ignore configuration the
+        command built -- and pins that it arrives at the walk.
+        """
+        from elspais.commands.edit import run_single_edit
+
+        spec_dir, resolver, ignore_config = _excluding_project(tmp_path)
+        args = argparse.Namespace(req_id="REQ-p00009", status="Draft")
+
+        opened = _record_opens(monkeypatch)
+        try:
+            exit_code = run_single_edit(
+                args,
+                spec_dir,
+                dry_run=False,
+                validate_refs=True,
+                resolver=resolver,
+                ignore_config=ignore_config,
+            )
+        finally:
+            monkeypatch.undo()
+
+        assert exit_code != 0, "An excluded requirement cannot be edited: it was never read"
+        assert "not found" in capsys.readouterr().err.lower()
+        assert str((spec_dir / "reqs.md").resolve()) in opened
+        assert str((spec_dir / "secret.md").resolve()) not in opened, (
+            "The command's exclusions must reach the walk that opens the files"
+        )
+
+    # Verifies: REQ-p00015-H
+    def test_batch_validation_does_not_learn_ids_from_excluded_files(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """A batch edit's reference check reads only the files not excluded.
+
+        Validation collects the ids a reference may name. Collecting them from
+        an excluded file both reads it and lets an edit depend on it, so the
+        reference below is refused: nothing the tool may read declares it.
+        """
+        from elspais.commands.edit import batch_edit
+
+        spec_dir, resolver, ignore_config = _excluding_project(tmp_path)
+
+        opened = _record_opens(monkeypatch)
+        try:
+            results = batch_edit(
+                spec_dir,
+                [{"req_id": "REQ-p00001", "implements": "REQ-p00009"}],
+                validate_refs=True,
+                resolver=resolver,
+                ignore_config=ignore_config,
+            )
+        finally:
+            monkeypatch.undo()
+
+        assert results[0]["success"] is False, (
+            "A reference declared only in an excluded file is not a known id"
+        )
+        assert str((spec_dir / "reqs.md").resolve()) in opened
+        assert str((spec_dir / "secret.md").resolve()) not in opened, (
+            "Collecting reference targets must not open an excluded spec file"
+        )
+
+
+def _write_editable_req(path: Path, req_id: str, title: str) -> None:
+    """Write a spec file holding exactly *req_id*."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        f"""
+# {req_id}: {title}
+
+**Level**: DEV | **Status**: Active
+
+Body text.
+
+*End* *{title}* | **Hash**: test1234
+---
+"""
+    )
+
+
+def _two_directory_project(tmp_path: Path) -> tuple[Path, Path, Path]:
+    """A project declaring two spec directories, the requirement in the second.
+
+    Returns the config path and the two declared directories in the order the
+    project declares them. Only the second holds `REQ-d00002`, so a search
+    that reads the first alone answers "not found".
+    """
+    config_path = tmp_path / ".elspais.toml"
+    config_path.write_text(
+        """
+version = 5
+
+[project]
+name = "two-directories"
+namespace = "REQ"
+
+[scanning.spec]
+directories = ["spec", "extra"]
+"""
+    )
+    _write_editable_req(tmp_path / "spec" / "first.md", "REQ-d00001", "In The First Directory")
+    _write_editable_req(tmp_path / "extra" / "second.md", "REQ-d00002", "In The Second Directory")
+    return config_path, tmp_path / "spec", tmp_path / "extra"
+
+
+class TestEditSearchesEveryDeclaredDirectory:
+    """A project may keep its requirements in more than one directory.
+
+    Where a repository's files are is a fact about that repository, so the
+    search reads every directory the project declares. Reading only the first
+    reported a requirement the project plainly holds as not found -- and the
+    report named the requirement, not the directory that was never looked in.
+    """
+
+    # Verifies: REQ-d00275-C
+    def test_a_requirement_in_a_later_declared_directory_is_edited(
+        self, tmp_path: Path, monkeypatch, capsys
+    ) -> None:
+        """Entered at the command, an edit reaches the second declared directory.
+
+        `run()` is where the narrowing was: it resolved every declared
+        directory and then handed the search only the first. So the test
+        enters there, and the sibling in the first directory is the liveness
+        arm -- an edit that reached nothing at all would fail both.
+        """
+        from elspais.commands.edit import run
+
+        config_path, _first, _second = _two_directory_project(tmp_path)
+        monkeypatch.chdir(tmp_path)
+
+        def _edit(req_id: str) -> int:
+            return run(
+                argparse.Namespace(
+                    config=config_path,
+                    spec_dir=None,
+                    req_id=req_id,
+                    status="Draft",
+                    dry_run=False,
+                )
+            )
+
+        assert _edit("REQ-d00001") == 0, "The first declared directory is searched"
+        assert "**Status**: Draft" in (tmp_path / "spec" / "first.md").read_text()
+
+        assert _edit("REQ-d00002") == 0, (
+            f"A requirement in the second declared directory was not found: "
+            f"{capsys.readouterr().err}"
+        )
+        assert "**Status**: Draft" in (tmp_path / "extra" / "second.md").read_text()
+
+    # Verifies: REQ-d00275-C
+    def test_a_move_still_resolves_against_the_base_directory(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """Only the search widened: a destination still means one directory.
+
+        `--move-to` names a path relative to the project's base spec
+        directory. The requirement being moved lives in the second declared
+        directory, so a destination resolved against whichever directory the
+        search happened to find it in would land somewhere else entirely.
+        """
+        from elspais.commands.edit import run
+
+        config_path, first, second = _two_directory_project(tmp_path)
+        monkeypatch.chdir(tmp_path)
+
+        exit_code = run(
+            argparse.Namespace(
+                config=config_path,
+                spec_dir=None,
+                req_id="REQ-d00002",
+                move_to="moved.md",
+                dry_run=False,
+            )
+        )
+
+        assert exit_code == 0
+        assert (first / "moved.md").exists(), (
+            "A move destination resolves against the base spec directory"
+        )
+        assert "REQ-d00002" in (first / "moved.md").read_text()
+        assert not (second / "moved.md").exists(), (
+            "The destination is not relative to the directory the search found the file in"
+        )
+        assert "REQ-d00002" not in (second / "second.md").read_text()
+
+    # Verifies: REQ-d00275-C
+    @pytest.mark.parametrize("shape", ["single-path", "one-element-sequence", "both-directories"])
+    def test_the_search_helpers_take_one_directory_or_several(
+        self, tmp_path: Path, shape: str
+    ) -> None:
+        """A caller holding a single directory still passes one.
+
+        The helpers are called with a bare `Path` from surfaces that resolved
+        exactly one directory, so widening them to a sequence must not have
+        cost that caller its answer.
+        """
+        from elspais.commands.edit import collect_all_req_ids, find_requirement_in_files
+        from elspais.utilities.patterns import build_resolver
+
+        config_path, first, second = _two_directory_project(tmp_path)
+        from elspais.config import load_config
+
+        resolver = build_resolver(load_config(config_path))
+
+        searched = {
+            "single-path": second,
+            "one-element-sequence": [second],
+            "both-directories": [first, second],
+        }[shape]
+        reachable = {
+            "single-path": {"REQ-d00002"},
+            "one-element-sequence": {"REQ-d00002"},
+            "both-directories": {"REQ-d00001", "REQ-d00002"},
+        }[shape]
+
+        for req_id in ("REQ-d00001", "REQ-d00002"):
+            found = find_requirement_in_files(searched, req_id)
+            assert (found is not None) is (req_id in reachable), (
+                f"{shape}: {req_id} should {'' if req_id in reachable else 'not '}be found"
+            )
+
+        assert collect_all_req_ids(searched, resolver) >= reachable
+        assert not (collect_all_req_ids(searched, resolver) & ({"REQ-d00001"} - reachable))
+
+    # Verifies: REQ-d00275-C
+    def test_a_batch_move_resolves_against_the_base_directory(self, tmp_path: Path) -> None:
+        """The batch surface draws the same line between searching and moving."""
+        from elspais.commands.edit import batch_edit
+
+        _config_path, first, second = _two_directory_project(tmp_path)
+
+        results = batch_edit(
+            first,
+            [{"req_id": "REQ-d00002", "move_to": "moved.md"}],
+            search_dirs=[first, second],
+        )
+
+        assert results[0]["success"] is True, results[0]
+        assert (first / "moved.md").exists(), (
+            "A batch move destination resolves against the base spec directory"
+        )
+        assert not (second / "moved.md").exists()

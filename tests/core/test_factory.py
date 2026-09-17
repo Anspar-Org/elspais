@@ -12,6 +12,7 @@ metrics on requirement nodes.
 """
 
 import builtins
+import fnmatch
 import os
 from pathlib import Path
 
@@ -1339,3 +1340,70 @@ class TestExcludedContentIsNotRead:
             _write_for_kind(tmp_path, kind, kept, "REQ-p00001")
         with pytest.raises(SourceReadError):
             build_graph(config_path=unexcluded, repo_root=tmp_path)
+
+
+# The skip list `elspais init` writes into a new project's configuration. Every
+# entry names something a repository may sit *under* as easily as hold.
+_INIT_TEMPLATE_SKIP = ["node_modules", ".git", "__pycache__", "*.pyc", ".venv", ".env"]
+
+
+def _repo_under(parent: Path) -> Path:
+    """Lay a one-requirement project out at *parent*/myrepo, skipping as `init` does."""
+    repo = parent / "myrepo"
+    (repo / "spec").mkdir(parents=True)
+    (repo / ".elspais.toml").write_text(
+        f"""\
+[project]
+name = "located-somewhere"
+namespace = "REQ"
+
+[scanning]
+skip = {_toml_list(_INIT_TEMPLATE_SKIP)}
+
+[scanning.spec]
+directories = ["spec"]
+""",
+        encoding="utf-8",
+    )
+    _write_spec(repo / "spec")
+    return repo
+
+
+def _requirements_found(repo: Path) -> list[str]:
+    """Every requirement id a build of the project at *repo* admits."""
+    graph = build_graph(config_path=repo / ".elspais.toml", repo_root=repo)
+    return sorted(node.id for node in graph.iter_by_kind(NodeKind.REQUIREMENT))
+
+
+class TestWhereARepositorySitsDecidesNothing:
+    """The same repository answers the same wherever it is checked out.
+
+    An exclusion pattern names content inside the repository. Matched against
+    the absolute path instead, a pattern also matched a directory the checkout
+    merely sits under, so a repository cloned beneath `node_modules` scanned
+    to nothing -- and said so as a blameless-looking configuration warning.
+    """
+
+    @pytest.mark.parametrize("parent_name", ["node_modules", ".venv", "__pycache__"])
+    def test_a_checkout_under_a_skipped_directory_name_finds_the_same_requirements(
+        self, tmp_path: Path, parent_name: str
+    ) -> None:
+        """Two identical checkouts, differing only in the name above them."""
+        assert not any(
+            fnmatch.fnmatch(part, pattern)
+            for part in tmp_path.parts
+            for pattern in _INIT_TEMPLATE_SKIP
+        ), (
+            f"The temporary directory {tmp_path} itself matches a skip pattern, so the "
+            f"control arm would be excluded too and the comparison would prove nothing"
+        )
+
+        control = _requirements_found(_repo_under(tmp_path / "plainbox"))
+        assert control, "The control checkout holds a requirement, so a build of it finds one"
+
+        located = _requirements_found(_repo_under(tmp_path / parent_name))
+
+        assert located == control, (
+            f"A checkout under a directory named {parent_name!r} found {located} where the "
+            f"same project under an ordinary directory found {control}"
+        )

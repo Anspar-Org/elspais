@@ -18,6 +18,7 @@ Covers:
 
 from __future__ import annotations
 
+import builtins
 import json
 import sys
 from pathlib import Path
@@ -441,3 +442,114 @@ def test_external_records_take_precedence_end_to_end_absolute_paths(tmp_path):
         f"test:{FILE_ONE}::Suite::scenario_two",
         f"test:{FILE_TWO}::test_gamma",
     }
+
+
+# ---------------------------------------------------------------------------
+# The prescan walk and excluded content (REQ-p00015-H)
+# ---------------------------------------------------------------------------
+
+
+def _record_opens(monkeypatch) -> set:
+    """Install a recorder of every path opened, returning the growing set."""
+    opened: set = set()
+    real_path_open = Path.open
+    real_builtin_open = builtins.open
+
+    def record_path_open(self, *args, **kwargs):  # noqa: ANN001, ANN002, ANN003, ANN202
+        opened.add(str(Path(self).resolve()))
+        return real_path_open(self, *args, **kwargs)
+
+    def record_builtin_open(file, *args, **kwargs):  # noqa: ANN001, ANN002, ANN003, ANN202
+        if isinstance(file, (str, Path)):
+            opened.add(str(Path(file).resolve()))
+        return real_builtin_open(file, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", record_path_open)
+    monkeypatch.setattr(builtins, "open", record_builtin_open)
+    return opened
+
+
+# Verifies: REQ-p00015-H
+def test_the_prescan_walk_opens_none_of_the_files_it_offers(tmp_path, monkeypatch):
+    """The prescan hands the command paths, so it opens nothing.
+
+    The command is given a path and reads the file itself; nothing here needs
+    its content. A walk that read each candidate and kept only its path would
+    produce the same stdin while having read every file the reader excluded,
+    which is what REQ-p00015-H forbids -- so the read itself is watched, and
+    the candidate paths arriving on stdin are what shows the walk ran.
+    """
+    from elspais.graph.factory import _run_prescan_command
+
+    project, command, capture = _make_project(tmp_path)
+
+    opened = _record_opens(monkeypatch)
+    try:
+        _run_prescan_command(command, ["tests"], ["test_*.py"], [], project)
+    finally:
+        monkeypatch.undo()
+
+    assert sorted(capture.read_text(encoding="utf-8").splitlines()) == [FILE_ONE, FILE_TWO], (
+        "the walk did not reach the candidate files, so nothing was watched"
+    )
+    read_here = {str((project / candidate).resolve()) for candidate in (FILE_ONE, FILE_TWO)}
+    assert read_here.isdisjoint(opened), (
+        f"the prescan opened files it only needed the paths of: {read_here & opened}"
+    )
+
+
+def _prescan_stdin_for(
+    project: Path, command: str, *, global_skip: str = "", test_skip_files: str = ""
+) -> list[str]:
+    """Build *project* with the prescan configured, returning the command's stdin."""
+    from elspais.graph.factory import build_graph
+
+    (project / "spec").mkdir(exist_ok=True)
+    (project / "spec" / "reqs.md").write_text(
+        "## REQ-p00001: Sample\n\n"
+        "**Level**: PRD | **Status**: Active\n\n"
+        "### Assertions\n\n"
+        "A. The system SHALL alpha.\n\n"
+        "B. The system SHALL beta.\n\n"
+        "C. The system SHALL gamma.\n\n"
+        "*End* *Sample* | **Hash**: ________\n",
+        encoding="utf-8",
+    )
+    (project / ".elspais.toml").write_text(
+        "version = 5\n\n"
+        '[project]\nname = "prescan-exclusion"\nnamespace = "REQ"\n\n'
+        f"[scanning]\nskip = {global_skip or '[]'}\n\n"
+        '[scanning.spec]\ndirectories = ["spec"]\n\n'
+        '[scanning.test]\nenabled = true\ndirectories = ["tests"]\n'
+        'file_patterns = ["test_*.py"]\n'
+        f"skip_files = {test_skip_files or '[]'}\n"
+        f"prescan_command = {json.dumps(command)}\n",
+        encoding="utf-8",
+    )
+    build_graph(config_path=project / ".elspais.toml", repo_root=project, scan_code=False)
+    capture = project / "stdin_capture.txt"
+    return [line for line in capture.read_text(encoding="utf-8").splitlines() if line.strip()]
+
+
+# Verifies: REQ-p00015-H
+@pytest.mark.parametrize(
+    "route",
+    [
+        pytest.param({"global_skip": '["test_two.py"]'}, id="global-skip"),
+        pytest.param({"test_skip_files": '["test_two.py"]'}, id="test-skip-files"),
+    ],
+)
+def test_an_excluded_path_is_not_handed_to_the_prescan_command(tmp_path, route):
+    """An excluded file's path never leaves the tool on an external stdin.
+
+    The prescan is the one scan that passes what it found to a program the
+    project configured. Naming an excluded file to that program discloses the
+    very content the reader removed from the tool's business, whether or not
+    the tool read it -- and the program is free to open what it is told about.
+    """
+    project, command, _capture = _make_project(tmp_path)
+
+    received = _prescan_stdin_for(project, command, **route)
+
+    assert FILE_ONE in received, "the kept test file is still offered to the command"
+    assert FILE_TWO not in received, f"an excluded path was handed to the command: {received}"

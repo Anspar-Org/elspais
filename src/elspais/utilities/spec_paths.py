@@ -86,3 +86,50 @@ def validate_new_spec_path(relative_path: str, config: dict[str, Any]) -> str | 
         return f"Path '{relative_path}' is ignored by ignore configuration"
 
     return None
+
+
+# Implements: REQ-p00015-H, REQ-d00275-C
+def find_spec_file_holding(req_id: str, repo_root: Any, config: dict[str, Any]) -> Any:
+    """The spec file that declares *req_id*, or ``None``.
+
+    ONE search, for every surface that must find a requirement's file without
+    a built graph. Two things were wrong where a surface wrote this loop for
+    itself, and both are why it is here.
+
+    The search reads the directories the project declares. A surface that
+    looks in a fixed directory named ``spec`` finds nothing in a project that
+    keeps its requirements elsewhere, and where its files are is a fact about
+    that repository (REQ-d00275-C).
+
+    The search asks the ignore configuration before it opens a file, so a file
+    the reader excluded is not read (REQ-p00015-H).
+    """
+    from pathlib import Path
+
+    from elspais.config import get_ignore_config, get_spec_directories
+    from elspais.utilities.patterns import find_req_header
+
+    root = Path(repo_root)
+    ignore_config = get_ignore_config(config)
+
+    # The files a spec scan selects are the ones the project declares, not a
+    # fixed ``*.md``. A project that writes its requirements under another
+    # extension is otherwise searched in part.
+    spec_cfg = (config.get("scanning") or {}).get("spec") or {}
+    patterns = [p for p in (spec_cfg.get("file_patterns") or []) if isinstance(p, str)]
+    if not patterns:
+        patterns = ["*.md"]
+
+    for spec_dir in get_spec_directories(None, config, base_path=root):
+        if not spec_dir.exists():
+            continue
+        candidates = sorted({f for pattern in patterns for f in spec_dir.rglob(pattern)})
+        for spec_file in candidates:
+            if ignore_config.should_ignore(spec_file, "spec", base=spec_dir):
+                continue
+            # ONE authority decides whether a file declares an identifier.
+            # A second regex spelled here would recognise a different set of
+            # headers than the rest of the tool does.
+            if find_req_header(spec_file.read_text(encoding="utf-8"), req_id):
+                return spec_file
+    return None

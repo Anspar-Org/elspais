@@ -153,7 +153,9 @@ class DomainFile:
         """Whether the ignore configuration excludes *path*."""
         if self.ignore_config is None:
             return False
-        return bool(self.ignore_config.should_ignore(path, scope=self.scope))
+        # Judged inside the tree this walk covers. Where the repository sits
+        # on disk is not part of what the reader excluded.
+        return bool(self.ignore_config.should_ignore(path, scope=self.scope, base=self.path))
 
     def _should_skip(self, file_path: Path) -> bool:
         """Check if a file should be skipped based on skip_dirs and skip_files.

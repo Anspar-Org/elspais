@@ -52,15 +52,14 @@ def report_inputs_from_params(
     arrives here is a finished list. Judging it again is validation, and a name
     this report does not offer is a caller's mistake (REQ-d00282-F).
     """
-    from elspais.commands._requests import TREAT_ACTIVE_PARAM, TREAT_ACTIVE_SEPARATOR
+    from elspais.commands._requests import treat_active_from_params
     from elspais.commands._scope import scope_from_params
     from elspais.commands._values import values_from_params
     from elspais.graph.values import resolve_values
 
     selection = values_from_params(params)
-    raw = params.get(TREAT_ACTIVE_PARAM)
     return ReportInputs(
         scope=scope_from_params(params),
         values=None if selection is None else resolve_values(selection, offered, identity_key),
-        treat_active=tuple(raw.split(TREAT_ACTIVE_SEPARATOR)) if raw else (),
+        treat_active=treat_active_from_params(params),
     )

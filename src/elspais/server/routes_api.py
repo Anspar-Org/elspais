@@ -1300,15 +1300,16 @@ async def api_run_checks(request: Request) -> JSONResponse:
     from elspais.commands.health import compute_checks
 
     state = _st(request)
+    from elspais.commands._requests import treat_active_from_params
+
     params = dict(request.query_params)
-    treat_str = params.get("treat_active")
     checks_request = ChecksRequest(
         spec_only=params.get("spec_only") == "true",
         code_only=params.get("code_only") == "true",
         tests_only=params.get("tests_only") == "true",
         terms_only=params.get("terms_only") == "true",
         lenient=params.get("lenient") == "true",
-        treat_active=tuple(treat_str.split(",")) if treat_str else (),
+        treat_active=treat_active_from_params(params),
     )
     result = compute_checks(state.graph, state.config, checks_request)
     return JSONResponse(result)

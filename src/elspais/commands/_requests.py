@@ -13,6 +13,7 @@ default set: an unstamped payload is the default report (REQ-d00282-E).
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -24,6 +25,21 @@ if TYPE_CHECKING:
 # answers it must use one spelling. The values are divided by a comma.
 TREAT_ACTIVE_PARAM = "treat_active"
 TREAT_ACTIVE_SEPARATOR = ","
+
+
+def treat_active_from_params(params: Mapping[str, str]) -> tuple[str, ...]:
+    """The statuses a serving process was asked to weigh as active.
+
+    ONE reader of the wire key, so a request and the process that answers it
+    cannot divide the list differently. Each item is stripped and an empty item
+    is dropped, which is what the CLI edge does. A trailing separator otherwise
+    produced an empty status name, and a padded item reached the resolver with
+    its spaces and matched nothing.
+    """
+    raw = (params or {}).get(TREAT_ACTIVE_PARAM)
+    if not raw:
+        return ()
+    return tuple(item.strip() for item in raw.split(TREAT_ACTIVE_SEPARATOR) if item.strip())
 
 
 @dataclass(frozen=True)

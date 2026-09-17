@@ -5148,6 +5148,7 @@ def _change_reference_type(
     target_id: str,
     new_type: str,
     save_branch: bool = False,
+    config: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Change a reference type in a spec file (Implements -> Refines or vice versa).
 
@@ -5165,19 +5166,20 @@ def _change_reference_type(
         Success status and optional safety_branch name.
     """
     from elspais.utilities.git import create_safety_branch
+
+    # Implements: REQ-p00015-H, REQ-d00275-C
+    # The one search. It reads the directories the project declares rather
+    # than a fixed ``spec``, and it asks the ignore configuration before it
+    # opens a file.
+    from elspais.utilities.spec_paths import find_spec_file_holding
     from elspais.utilities.spec_writer import change_reference_type as _crt
 
-    # Find the spec file containing req_id
-    spec_dir = repo_root / "spec"
-    if not spec_dir.exists():
-        return {"success": False, "error": "spec/ directory not found"}
-
-    target_file = None
-    for md_file in spec_dir.rglob("*.md"):
-        content = md_file.read_text(encoding="utf-8")
-        if re.search(rf"^#{{1,6}}\s+{re.escape(req_id)}:", content, re.MULTILINE):
-            target_file = md_file
-            break
+    # The config the server publishes, not a fresh disk read: the served graph
+    # was built from it, so a tool answering about that graph must look where
+    # it looked. ``quiet`` matches every other read in this module -- a stdio
+    # server must not put config parse warnings on its own stderr.
+    _cfg = config if config is not None else get_config(start_path=repo_root, quiet=True)
+    target_file = find_spec_file_holding(req_id, repo_root, _cfg)
 
     if target_file is None:
         return {"success": False, "error": f"Requirement {req_id} not found in spec files"}
@@ -5206,6 +5208,7 @@ def _move_requirement(
     req_id: str,
     target_file: str,
     save_branch: bool = False,
+    config: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Move a requirement from one spec file to another.
 
@@ -5224,21 +5227,15 @@ def _move_requirement(
     from elspais.utilities.git import create_safety_branch
     from elspais.utilities.spec_writer import move_requirement as _move_req
 
-    spec_dir = repo_root / "spec"
-    if not spec_dir.exists():
-        return {"success": False, "error": "spec/ directory not found"}
-
     target_path = repo_root / target_file
     if not target_path.exists():
         return {"success": False, "error": f"Target file {target_file} not found"}
 
-    # Find the source file containing req_id
-    source_file = None
-    for md_file in spec_dir.rglob("*.md"):
-        content = md_file.read_text(encoding="utf-8")
-        if re.search(rf"^#{{1,6}}\s+{re.escape(req_id)}:", content, re.MULTILINE):
-            source_file = md_file
-            break
+    # Implements: REQ-p00015-H, REQ-d00275-C
+    from elspais.utilities.spec_paths import find_spec_file_holding
+
+    _cfg = config if config is not None else get_config(start_path=repo_root, quiet=True)
+    source_file = find_spec_file_holding(req_id, repo_root, _cfg)
 
     if source_file is None:
         return {"success": False, "error": f"Requirement {req_id} not found in spec files"}
@@ -7794,7 +7791,7 @@ def create_server(
         if conflict:
             return conflict
         result = _change_reference_type(
-            _state["working_dir"], req_id, target_id, new_type, save_branch
+            _state["working_dir"], req_id, target_id, new_type, save_branch, _state["config"]
         )
         # REQ-o00063-F: Refresh graph after file mutations
         if result.get("success"):
@@ -7822,7 +7819,9 @@ def create_server(
         conflict = _guard_version(_state["graph"], req_id, if_version)
         if conflict:
             return conflict
-        result = _move_requirement(_state["working_dir"], req_id, target_file, save_branch)
+        result = _move_requirement(
+            _state["working_dir"], req_id, target_file, save_branch, _state["config"]
+        )
         # REQ-o00063-F: Refresh graph after file mutations
         if result.get("success"):
             rebuild_shared_graph(_state)

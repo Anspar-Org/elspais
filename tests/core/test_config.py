@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from elspais.config import (
+    IgnoreConfig,
     config_defaults,
     find_config_file,
     find_git_root,
@@ -424,3 +425,83 @@ class TestChangelogConfig:
         # Non-overridden defaults should still be present
         assert config["changelog"]["id_source"] == "gh"
         assert config["changelog"]["require"]["reason"] is True
+
+
+_SKIPPING_NODE_MODULES = IgnoreConfig(
+    global_patterns=["node_modules", ".venv", "__pycache__"],
+    spec_patterns=[],
+    code_patterns=[],
+    test_patterns=[],
+)
+
+
+class TestIgnorePatternsAreJudgedInsideTheScannedTree:
+    """An exclusion pattern names something inside the tree being scanned.
+
+    A caller holding an absolute path passes the root of the tree it is
+    walking, so where the repository happens to sit on disk decides nothing.
+    Without that root, a checkout under a directory named `node_modules` --
+    or any other name the pattern list carries -- excluded every file in the
+    repository, and the same repository answered differently depending only
+    on where it was cloned.
+    """
+
+    def test_an_ancestor_of_the_scanned_tree_does_not_exclude_what_is_inside_it(self) -> None:
+        """A parent directory matching a pattern excludes nothing below it.
+
+        The path is inside the scanned tree; the only component matching a
+        pattern is above that tree, and so is none of the reader's business.
+        """
+        scanned = Path("/srv/node_modules/myrepo/spec")
+        assert (
+            _SKIPPING_NODE_MODULES.should_ignore(scanned / "reqs.md", "spec", base=scanned) is False
+        )
+
+    # Verifies: REQ-p00015-H
+    def test_a_pattern_matching_inside_the_scanned_tree_still_excludes(self) -> None:
+        """Reading the path relative to the tree does not weaken a real match.
+
+        This is the arm the fix must not have broken: the same tree, the same
+        pattern list, and a match that genuinely lies below the scanned root.
+        """
+        scanned = Path("/srv/node_modules/myrepo/spec")
+        assert (
+            _SKIPPING_NODE_MODULES.should_ignore(
+                scanned / "node_modules" / "reqs.md", "spec", base=scanned
+            )
+            is True
+        )
+
+    # Verifies: REQ-p00015-H
+    @pytest.mark.parametrize(
+        ("relative", "excluded"),
+        [
+            pytest.param("node_modules/vendored.md", True, id="component-inside"),
+            pytest.param("__pycache__/cached.md", True, id="other-pattern-inside"),
+            pytest.param("reqs.md", False, id="nothing-matches"),
+        ],
+    )
+    def test_a_caller_passing_a_relative_path_needs_no_base(
+        self, relative: str, excluded: bool
+    ) -> None:
+        """Without a base the whole path is matched, as it always was.
+
+        A caller such as `validate_new_spec_path` already holds a path
+        relative to the repository root, so there is no ancestor to strip and
+        the default behaviour is the right one for it.
+        """
+        assert _SKIPPING_NODE_MODULES.should_ignore(relative, "spec") is excluded
+
+    # Verifies: REQ-p00015-H
+    def test_a_path_outside_the_named_tree_is_judged_as_it_was_given(self) -> None:
+        """A base the path does not lie under narrows nothing.
+
+        Silently widening the match back to the whole absolute path would be
+        the old behaviour by another route, so the path is judged as given.
+        """
+        assert (
+            _SKIPPING_NODE_MODULES.should_ignore(
+                Path("/srv/other/node_modules/reqs.md"), "spec", base=Path("/srv/myrepo/spec")
+            )
+            is True
+        )

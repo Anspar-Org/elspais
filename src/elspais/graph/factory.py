@@ -404,6 +404,8 @@ def _run_prescan_command(
     test_patterns: list[str],
     skip_dirs: list[str],
     repo_root: Path,
+    skip_files: list[str] | None = None,
+    ignore_config: Any = None,
 ) -> dict[str, list[dict]] | None:
     """Run an external prescan command to discover test structure.
 
@@ -424,6 +426,11 @@ def _run_prescan_command(
         test_patterns: File patterns to match.
         skip_dirs: Directories to skip.
         repo_root: Repository root for resolving paths.
+        skip_files: File names the configuration excludes.
+        ignore_config: The ignore configuration. The walk must receive it.
+            Without it the global ``[scanning].skip`` list and the kind's own
+            ``skip_files`` list decide nothing here, and this function reads a
+            file the reader excluded (REQ-p00015-H).
 
     Returns:
         Dict mapping file path -> list of function entries, or None on failure.
@@ -439,15 +446,29 @@ def _run_prescan_command(
         for dir_path in matched_dirs:
             p = Path(dir_path)
             if p.is_dir():
+                # Implements: REQ-p00015-H
+                # The same exclusions the test scan itself walks under. Two of
+                # the three ignore lists reached this walk through neither
+                # argument before, so a file the reader excluded was read here.
                 domain_file = DomainFile(
-                    p, patterns=test_patterns, recursive=True, skip_dirs=skip_dirs
+                    p,
+                    patterns=test_patterns,
+                    recursive=True,
+                    skip_dirs=skip_dirs,
+                    skip_files=list(skip_files or ()),
+                    ignore_config=ignore_config,
+                    scope="test",
                 )
-                for ctx, _content in domain_file.iterate_sources():
-                    source_path = ctx.metadata.get("path", ctx.source_id)
+                # ``iter_selected`` gives the path and reads no content. The
+                # command receives a path, so nothing here needs to open the
+                # file. Reading one and discarding it is what REQ-p00015-H
+                # forbids, and it also put an excluded path on the stdin of an
+                # external program.
+                for file_path in domain_file.iter_selected():
                     try:
-                        rel = str(Path(source_path).resolve().relative_to(repo_root.resolve()))
+                        rel = str(file_path.resolve().relative_to(repo_root.resolve()))
                     except ValueError:
-                        rel = source_path
+                        rel = str(file_path)
                     test_files.append(rel)
 
     if not test_files:
@@ -995,7 +1016,13 @@ def build_graph(
             prescan_data: dict[str, list[dict]] | None = None
             if prescan_command:
                 prescan_data = _run_prescan_command(
-                    prescan_command, test_dirs, test_patterns, test_skip_dirs, repo_root
+                    prescan_command,
+                    test_dirs,
+                    test_patterns,
+                    test_skip_dirs,
+                    repo_root,
+                    skip_files=list(testing_cfg.skip_files),
+                    ignore_config=default_ignore_config,
                 )
                 # Paths go out on stdin repo-relative, so a conforming command
                 # answers with those, while scanning dispatches absolute paths.

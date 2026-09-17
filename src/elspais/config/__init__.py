@@ -1057,7 +1057,9 @@ class IgnoreConfig:
     test_patterns: list[str]
 
     # Implements: REQ-p00015-H
-    def should_ignore(self, path: str | Path, scope: str = "global") -> bool:
+    def should_ignore(
+        self, path: str | Path, scope: str = "global", base: str | Path | None = None
+    ) -> bool:
         """Check if a path should be ignored based on patterns.
 
         This is the ONE decision that answers whether the tool reads a path.
@@ -1079,19 +1081,32 @@ class IgnoreConfig:
         Args:
             path: Path to check (can be file or directory)
             scope: Context scope ("global", "spec", "code", "test")
+            base: The root of the tree being scanned. A caller holding an
+                absolute path passes it, so a pattern is matched against the
+                part of the path that lies inside that tree.
 
         Returns:
             True if path should be ignored
         """
-        if isinstance(path, Path):
-            path_str = str(path)
-            path_name = path.name
-            path_parts = path.parts
-        else:
-            path_str = path
-            path_obj = Path(path)
-            path_name = path_obj.name
-            path_parts = path_obj.parts
+        path_obj = path if isinstance(path, Path) else Path(path)
+
+        # A pattern names something INSIDE the tree being scanned. Read the
+        # path relative to that tree, so an ancestor of the tree cannot match.
+        # Without this a checkout under a directory named `node_modules`, or
+        # any other name the default skip list carries, excluded every file in
+        # the repository -- the same repository answered differently depending
+        # only on where it was cloned.
+        if base is not None:
+            try:
+                path_obj = path_obj.relative_to(Path(base))
+            except ValueError:
+                # Not under *base*: judge it as given rather than silently
+                # widening the match back to the whole absolute path.
+                pass
+
+        path_str = str(path_obj)
+        path_name = path_obj.name
+        path_parts = path_obj.parts
 
         # Collect all applicable patterns
         patterns = list(self.global_patterns)

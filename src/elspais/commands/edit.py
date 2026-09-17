@@ -56,13 +56,31 @@ def run(args: argparse.Namespace) -> int:
 
     resolver = build_resolver(config)
 
+    # Implements: REQ-p00015-H
+    # Built once, from this repository's configuration, and handed down. The
+    # edit surfaces read spec files directly rather than through the scan, so
+    # without this they read files the reader excluded.
+    from elspais.config import get_ignore_config
+
+    ignore_config = get_ignore_config(config)
+
     # Handle batch mode
     if hasattr(args, "from_json") and args.from_json:
-        return run_batch_edit(args.from_json, base_spec_dir, dry_run, validate_refs, resolver)
+        return run_batch_edit(
+            args.from_json,
+            base_spec_dir,
+            dry_run,
+            validate_refs,
+            resolver,
+            ignore_config,
+            spec_dirs,
+        )
 
     # Handle single edit mode
     if hasattr(args, "req_id") and args.req_id:
-        return run_single_edit(args, base_spec_dir, dry_run, validate_refs, resolver)
+        return run_single_edit(
+            args, base_spec_dir, dry_run, validate_refs, resolver, ignore_config, spec_dirs
+        )
 
     print("Error: Must specify REQ_ID or --from-json", file=sys.stderr)
     return 1
@@ -74,6 +92,8 @@ def run_batch_edit(
     dry_run: bool,
     validate_refs: bool = False,
     resolver: Any | None = None,
+    ignore_config: Any = None,
+    search_dirs: Any = None,
 ) -> int:
     """Run batch edit from JSON file or stdin."""
     # Load JSON
@@ -91,7 +111,13 @@ def run_batch_edit(
         return 1
 
     results = batch_edit(
-        spec_dir, changes, dry_run=dry_run, validate_refs=validate_refs, resolver=resolver
+        spec_dir,
+        changes,
+        dry_run=dry_run,
+        validate_refs=validate_refs,
+        resolver=resolver,
+        ignore_config=ignore_config,
+        search_dirs=search_dirs,
     )
 
     # Report results
@@ -119,12 +145,14 @@ def run_single_edit(
     dry_run: bool,
     validate_refs: bool = False,
     resolver: Any | None = None,
+    ignore_config: Any = None,
+    search_dirs: Any = None,
 ) -> int:
     """Run single requirement edit."""
     req_id = args.req_id
 
     # Find the requirement
-    location = find_requirement_in_files(spec_dir, req_id)
+    location = find_requirement_in_files(search_dirs or spec_dir, req_id, ignore_config)
     if not location:
         print(f"Error: Requirement {req_id} not found", file=sys.stderr)
         return 1
@@ -135,7 +163,7 @@ def run_single_edit(
     # Collect valid refs if validation is enabled
     valid_refs: set | None = None
     if validate_refs:
-        valid_refs = collect_all_req_ids(spec_dir, resolver)
+        valid_refs = collect_all_req_ids(search_dirs or spec_dir, resolver, ignore_config)
 
     # Apply implements change
     if hasattr(args, "implements") and args.implements is not None:
@@ -227,9 +255,22 @@ def run_single_edit(
     return 0
 
 
+def _as_dirs(spec_dir: Any) -> list[Path]:
+    """One declared directory or several, as a list.
+
+    A project may declare more than one spec directory. A search that reads
+    only the first answers "not found" for a requirement the project holds
+    (REQ-d00275-C). Callers holding a single directory still pass one.
+    """
+    if isinstance(spec_dir, (list, tuple)):
+        return [Path(d) for d in spec_dir]
+    return [Path(spec_dir)]
+
+
 def find_requirement_in_files(
-    spec_dir: Path,
+    spec_dir: Any,
     req_id: str,
+    ignore_config: Any = None,
 ) -> dict[str, Any] | None:
     """
     Find a requirement in spec files.
@@ -243,22 +284,30 @@ def find_requirement_in_files(
     """
     from elspais.utilities.patterns import find_req_header
 
-    for md_file in spec_dir.rglob("*.md"):
-        content = md_file.read_text()
-        match = find_req_header(content, req_id)
-        if match:
-            # Count line number
-            line_number = content[: match.start()].count("\n") + 1
-            return {
-                "file_path": md_file,
-                "req_id": req_id,
-                "line_number": line_number,
-            }
+    for one_dir in _as_dirs(spec_dir):
+        for md_file in sorted(one_dir.rglob("*.md")):
+            # Implements: REQ-p00015-H
+            # Asked BEFORE the read. A file the reader excluded is not opened.
+            if ignore_config is not None and ignore_config.should_ignore(
+                md_file, "spec", base=one_dir
+            ):
+                continue
+            content = md_file.read_text()
+            match = find_req_header(content, req_id)
+            if match:
+                line_number = content[: match.start()].count("\n") + 1
+                return {
+                    "file_path": md_file,
+                    "req_id": req_id,
+                    "line_number": line_number,
+                }
 
     return None
 
 
-def collect_all_req_ids(spec_dir: Path, resolver: Any | None = None) -> set:
+def collect_all_req_ids(
+    spec_dir: Any, resolver: Any | None = None, ignore_config: Any = None
+) -> set:
     """
     Collect all requirement IDs from spec directory.
 
@@ -287,20 +336,26 @@ def collect_all_req_ids(spec_dir: Path, resolver: Any | None = None) -> set:
     req_ids: set[str] = set()
     pattern = re.compile(rf"^#+\s*({resolver.grammar().identifier}):", re.MULTILINE)
 
-    for md_file in spec_dir.rglob("*.md"):
-        content = md_file.read_text()
-        for match in pattern.finditer(content):
-            full_id = match.group(1)
-            req_ids.add(full_id)
-            parsed = resolver.parse(full_id)
-            if parsed is not None:
-                # Every spelling the configuration admits for this
-                # identifier, so a reference written in any of them
-                # validates. Which spellings those are is the
-                # configuration's business, not this command's -- the
-                # shipped default carries a short form, others may not.
-                for form in ("canonical", *resolver.config.aliases):
-                    req_ids.add(resolver.render(parsed, form))
+    for one_dir in _as_dirs(spec_dir):
+        for md_file in sorted(one_dir.rglob("*.md")):
+            # Implements: REQ-p00015-H
+            if ignore_config is not None and ignore_config.should_ignore(
+                md_file, "spec", base=one_dir
+            ):
+                continue
+            content = md_file.read_text()
+            for match in pattern.finditer(content):
+                full_id = match.group(1)
+                req_ids.add(full_id)
+                parsed = resolver.parse(full_id)
+                if parsed is not None:
+                    # Every spelling the configuration admits for this
+                    # identifier, so a reference written in any of them
+                    # validates. Which spellings those are is the
+                    # configuration's business, not this command's -- the
+                    # shipped default carries a short form, others may not.
+                    for form in ("canonical", *resolver.config.aliases):
+                        req_ids.add(resolver.render(parsed, form))
 
     return req_ids
 
@@ -311,6 +366,8 @@ def batch_edit(
     dry_run: bool = False,
     validate_refs: bool = False,
     resolver: Any | None = None,
+    ignore_config: Any = None,
+    search_dirs: Any = None,
 ) -> list[dict[str, Any]]:
     """
     Apply batch edits from a list of change specifications.
@@ -333,7 +390,7 @@ def batch_edit(
     # Collect all req IDs if validation is enabled
     valid_refs: set | None = None
     if validate_refs:
-        valid_refs = collect_all_req_ids(spec_dir, resolver)
+        valid_refs = collect_all_req_ids(search_dirs or spec_dir, resolver, ignore_config)
 
     for change in changes:
         req_id = change.get("req_id")
@@ -342,7 +399,7 @@ def batch_edit(
             continue
 
         # Find the requirement
-        location = find_requirement_in_files(spec_dir, req_id)
+        location = find_requirement_in_files(search_dirs or spec_dir, req_id, ignore_config)
         if not location:
             results.append(
                 {
