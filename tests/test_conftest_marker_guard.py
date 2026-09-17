@@ -13,7 +13,7 @@ import sys
 from pathlib import Path
 
 import pytest
-import tomllib
+import tomlkit
 
 from tests import conftest as tests_conftest
 
@@ -33,7 +33,9 @@ def _selects_marker(expr: str, name: str) -> bool:
 
 def _default_markexpr() -> str:
     """The `-m` expression pytest applies when the command line gives none."""
-    addopts = tomllib.loads(_PYPROJECT.read_text())["tool"]["pytest"]["ini_options"]["addopts"]
+    # tomlkit, not tomllib: this project supports Python 3.10, where the
+    # stdlib module does not exist. tomlkit is a core dependency.
+    addopts = tomlkit.parse(_PYPROJECT.read_text())["tool"]["pytest"]["ini_options"]["addopts"]
     tokens = shlex.split(addopts) if isinstance(addopts, str) else list(addopts)
     for index, token in enumerate(tokens):
         if token == "-m":

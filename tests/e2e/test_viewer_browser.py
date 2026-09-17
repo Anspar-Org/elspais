@@ -74,6 +74,12 @@ def _find_free_port() -> int:
 # generous deadline costs is the wait on a genuine hang.
 _STARTUP_TIMEOUT = 120.0
 
+# Binding the port is not the end of the work: the first page over this
+# repository's own graph renders a tree of every requirement in it, and a cold
+# CI container exceeded 30s reaching DOMContentLoaded alone. Milliseconds, the
+# unit Playwright takes.
+_PAGE_LOAD_TIMEOUT = 90_000
+
 
 def _spawn_viewer(argv: list[str], **popen_kwargs) -> tuple[subprocess.Popen, Path]:
     """Start a viewer, capturing its output to a file, and return both.
@@ -2687,8 +2693,10 @@ class TestAssertionPillMeasures:
         # long-lived session viewer the network never goes quiet and the wait
         # times out. Waiting for the entry point the test actually calls is
         # both stricter and stable.
-        page.goto(viewer_url, wait_until="domcontentloaded", timeout=30_000)
-        page.wait_for_function("() => typeof window.openCard === 'function'", timeout=30_000)
+        page.goto(viewer_url, wait_until="domcontentloaded", timeout=_PAGE_LOAD_TIMEOUT)
+        page.wait_for_function(
+            "() => typeof window.openCard === 'function'", timeout=_PAGE_LOAD_TIMEOUT
+        )
         page.evaluate("() => window.openCard('REQ-d00258')")
 
         page.locator("#card-stack-body .card-assertion-wrapper").first.wait_for(
