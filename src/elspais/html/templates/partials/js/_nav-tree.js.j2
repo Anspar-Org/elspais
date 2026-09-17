@@ -259,8 +259,12 @@ function updateHeaderStats() {
     apiFetch('/api/status').then(function(data) {
         if (!data) return;
         var nc = data.node_counts || {};
+        // The server names each count after the kind it counts, and the
+        // RESULT kind is named `result`. A different name here reads as no
+        // count at all, and the badge then hides itself on a graph that
+        // holds results.
         var testCount = nc.test || 0;
-        var resultCount = nc.test_result || 0;
+        var resultCount = nc.result || 0;
         var testBadge = document.getElementById('stat-tests');
         var resultBadge = document.getElementById('stat-results');
         if (testCount > 0) {

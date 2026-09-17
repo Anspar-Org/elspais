@@ -705,7 +705,7 @@ class HTMLGenerator:
         journeys = self._collect_journeys()
         statuses = self._collect_unique_values("status")
         topics = self._collect_unique_values("topic")
-        tree_data = self._build_tree_data() if embed_content else {}
+        tree_data = self._build_tree_data() if embed_content else []
 
         # Collect source files with syntax highlighting for inline viewer
         source_files = self._collect_source_files() if embed_content else {}
@@ -1295,30 +1295,18 @@ class HTMLGenerator:
         return filename
 
     # Implements: REQ-p00006-A
-    def _build_tree_data(self) -> dict[str, Any]:
-        """Build tree data structure for embedded JSON."""
-        from elspais.graph import NodeKind
+    # Implements: REQ-p00006-A
+    def _build_tree_data(self) -> list[dict[str, Any]]:
+        """The rows the navigation tree is drawn from.
 
-        data: dict[str, Any] = {}
-        for node in self.graph.nodes_by_kind(NodeKind.REQUIREMENT):
-            vc, vt = compute_validation_color(node)
-            data[node.id] = {
-                "id": node.id,
-                "label": node.get_label(),
-                "uuid": node.uuid,
-                "level": (node.level or "").upper(),
-                "status": node.status,
-                "hash": node.hash,
-                "validation_color": vc,
-                "validation_tip": vt,
-                "source": {
-                    "path": (
-                        node.file_node().get_field("relative_path") if node.file_node() else None
-                    ),
-                    "line": node.get_field("parse_line"),
-                },
-            }
-        return data
+        Delegates to the one builder the live route also calls, so an
+        embedded page and a served page draw the same tree. A second builder
+        here returned a map keyed by requirement where every reader expects
+        a list, and the tree drew nothing rather than saying so.
+        """
+        from elspais.view_model import build_tree_rows
+
+        return build_tree_rows(self.graph, self.config)
 
     # Implements: REQ-p00006-A
     def _build_node_index(self) -> dict[str, Any]:
