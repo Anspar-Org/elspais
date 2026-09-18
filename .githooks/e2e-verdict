@@ -136,17 +136,27 @@ if [ -z "$ELSPAIS_E2E_FORCE" ] && [ -f "$E2E_CACHE" ]; then
     fi
 fi
 
+# The path and the junit family the `elspais-e2e` target declares in
+# .elspais.toml. The configuration is the authority on what this project's e2e
+# results ARE; this hook is one way of producing them, so it produces them
+# where they are declared to be. Written under any other name, the artifact is
+# one `elspais checks` never opens -- and the tier reports as not having run to
+# the one person who just ran it. `junit_family=xunit1` is not cosmetic either:
+# it is what keeps the per-testcase file/line attributes the source matcher
+# binds on, which is the line-level linking the pretty-print below exists for.
+E2E_RESULTS="$CACHE_DIR/junit-e2e.xml"
+
 E2E_RC=0
 pytest tests/ -m "e2e" --tb=short -q \
-    --junitxml="$CACHE_DIR/test-results-e2e.xml" 2>&1 || E2E_RC=$?
+    --junitxml="$E2E_RESULTS" -o junit_family=xunit1 2>&1 || E2E_RC=$?
 
 # Pretty-print JUnit XML for elspais line-level linking. The XML is an
 # artifact and never gates the verdict.
 if ! python3 -c "
 import xml.etree.ElementTree as ET
-tree = ET.parse('$CACHE_DIR/test-results-e2e.xml')
+tree = ET.parse('$E2E_RESULTS')
 ET.indent(tree, space='  ')
-tree.write('$CACHE_DIR/test-results-e2e.xml', encoding='unicode', xml_declaration=True)
+tree.write('$E2E_RESULTS', encoding='unicode', xml_declaration=True)
 " 2>/dev/null; then
     echo "::warning::junit pretty-print failed (tolerated: artifact formatting only)"
 fi
