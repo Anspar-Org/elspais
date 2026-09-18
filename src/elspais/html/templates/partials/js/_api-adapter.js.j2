@@ -15,9 +15,23 @@ document.addEventListener('click', function(e) {
     if (btn) _lastClickedButton = btn;
 }, true);
 
+// This page's own writes, so that a change the server announces can be
+// told from another writer's. The server sees the mutation-log tip move
+// the instant a write lands; this page adopts the tip only once the
+// response and its count probe have come back, and judged in between,
+// its own edit would read as somebody else's. Read by the change stream.
+var _ownWritesInFlight = 0;
+var _lastOwnWriteAt = 0;
+{# Implements: REQ-o00079-C #}
+function ownWriteRecently(withinMs) {
+    return _ownWritesInFlight > 0 || (Date.now() - _lastOwnWriteAt) < withinMs;
+}
+
 async function apiFetch(url, options) {
     var busyBtn = _lastClickedButton;
     if (busyBtn) busyBtn.classList.add('busy');
+    var isWrite = !!(options && options.method && options.method.toUpperCase() !== 'GET');
+    if (isWrite) { _ownWritesInFlight += 1; _lastOwnWriteAt = Date.now(); }
     try {
         var resp = await fetch(url, options);
         var data = await resp.json();
@@ -39,6 +53,7 @@ async function apiFetch(url, options) {
         showToast('Network error: ' + err.message, 'error');
         return null;
     } finally {
+        if (isWrite) { _ownWritesInFlight -= 1; _lastOwnWriteAt = Date.now(); }
         if (busyBtn) busyBtn.classList.remove('busy');
         _lastClickedButton = null;
     }

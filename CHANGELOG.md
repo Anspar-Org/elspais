@@ -4,7 +4,13 @@ All notable changes to elspais will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- **A viewer's lifetime can follow the browser session holding it (REQ-o00079)** — `elspais viewer --session-lifetime` ends the server, saving whatever changes it holds, once no tab holds it open, including when no tab ever connects. The page holds a change stream (`GET /api/events`) for as long as it is open, and the server counts that stream as a client exactly as it counts an agent's MCP session — a tab that closes, or a browser that is killed, releases it without saying anything — so a viewer started on somebody's behalf, such as one a hub opens for a browser session, no longer lives by its idle timeout alone. Without the flag the viewer's lifetime is unchanged.
+
 ### Changed
+
+- **The viewer is told of changes instead of asking every half minute (REQ-o00079-C+D+E)** — the same stream carries what the page used to poll for: a `change` event within about a second of any mutation, undo or rebuild, and a `heartbeat` at a regular interval when nothing changed, each carrying the answer `/api/check-freshness` gives. Another writer's work now shows in an idle tab within a second rather than within half a minute. The pending count is still established only from the count endpoint, on every announcement and on silence past the promised interval alike, so a server that has gone still presents as `?`; and an announcement that outruns the page's own edit is judged only once that edit has settled, so the page is never told its own change was somebody else's.
 
 - **Breaking: every recorded test result is now a result of its own (REQ-d00294-A+B)** — each reporter spelled its own result identifier out of the test name alone, so the records for one test collapsed into a single node and every verdict but one was lost with nothing reported. A suite run across a fleet of devices kept a single verdict, however many devices ran it.
 

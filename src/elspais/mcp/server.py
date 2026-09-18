@@ -8324,73 +8324,19 @@ def run_server(
             _executable_watcher().start()
 
         if client_pid is not None:
-            from elspais.server.client_watch import (
-                DEFAULT_GRACE_SECONDS,
-                ClientWatchdog,
-                pending_snapshot,
-            )
+            from elspais.server.client_watch import build_client_watchdog
 
-            # Implements: REQ-o00074-G, REQ-o00074-H
-            # Dereference the holder on every check: the live graph is
-            # swapped on rebuild, so a cached object would count and
-            # fingerprint a log nobody is writing to any more.
-            def _pending() -> tuple[int, str | None]:
-                return pending_snapshot(state.graph)
-
-            # Implements: REQ-p00083-A
-            # The watchdog does not save or raise the shutdown flag
-            # itself; it decides *that* the daemon stops and hands over
-            # to the one routine every stop path runs.
-            def _stop() -> dict[str, Any]:
-                return finalize_shutdown(
-                    state.shared,
-                    trigger="no recorded client was running",
-                )
-
-            # Implements: REQ-o00074-A, REQ-o00074-E
-            # A client that supplies no process identifier can still be
-            # holding a stream open, and that is a handle of the same
-            # kind. Looked up on each check rather than captured, so the
-            # order in which the app and the watchdog are built does not
-            # decide whether the handle is seen at all.
-            def _sessions_held() -> int:
-                tracker = state.shared.get("session_tracker")
-                return tracker.held() if tracker is not None else 0
-
-            # Implements: REQ-o00074-B
-            # Published from the check that computes the composition, so a
-            # client present only as a held stream — which registers
-            # nothing — is still visible to whoever asks why this daemon
-            # is running.
-            def _publish_clients(pids: list[int], held: int) -> None:
-                from elspais.mcp.daemon import record_daemon_clients
-
-                # A process that has committed to stopping does not update
-                # its own advertisement. This is the rule that already
-                # refuses graph writes once `is_shutting_down` is raised,
-                # applied to the one write that escaped it: publishing
-                # read-modify-writes the record, so a mark landing between
-                # its read and its write was silently dropped, and nothing
-                # ever re-marks it.
-                if state.shared.is_shutting_down:
-                    return
-                record_daemon_clients(working_dir, pids, held)
-
-            interval = float(_os.environ.get("_ELSPAIS_CLIENT_CHECK_INTERVAL", "60"))
-            grace = float(_os.environ.get("_ELSPAIS_CLIENT_GRACE", str(int(DEFAULT_GRACE_SECONDS))))
-            watchdog = ClientWatchdog(
+            # Implements: REQ-o00074-A, REQ-o00074-B, REQ-o00074-E, REQ-o00074-G, REQ-o00074-H
+            # The one wiring a viewer serving browser sessions uses too;
+            # it publishes the watchdog on the holder so the adoption
+            # route can register the clients that pick this daemon up
+            # after its first one is gone.
+            watchdog = build_client_watchdog(
+                state.shared,
                 client_pid=client_pid,
-                pending_fn=_pending,
-                interval_seconds=interval,
-                grace_seconds=grace,
-                lock=state.shared.write_lock,
-                stop_fn=_stop,
-                extra_liveness_fn=_sessions_held,
-                publish_fn=_publish_clients,
+                repo_root=working_dir,
+                trigger="no recorded client was running",
             )
-            # Published so the adoption route can register the clients that
-            # pick this daemon up after its first one is gone.
-            state.shared["watchdog"] = watchdog
             watchdog.start()
 
         uvi_config = uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning")

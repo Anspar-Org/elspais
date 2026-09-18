@@ -458,14 +458,27 @@ also serves MCP tools at `/mcp` for AI agent integration.
   $ elspais viewer --static         # Generate static HTML file
   $ elspais viewer --server         # Start server without opening browser
   $ elspais viewer --path /my/repo  # Specify repository root
+  $ elspais viewer --server --session-lifetime   # Stop once no tab holds it
 
 **Options:**
 
-  `--static`          Generate static HTML file instead of live server
-  `--server`          Start server without opening browser
-  `--port PORT`       Server port (default: 5001)
-  `--embed-content`   Embed full markdown in HTML for offline viewing
-  `--path DIR`        Path to repository root (default: auto-detect)
+  `--static`             Generate static HTML file instead of live server
+  `--server`             Start server without opening browser
+  `--port PORT`          Server port (default: 5001)
+  `--embed-content`      Embed full markdown in HTML for offline viewing
+  `--path DIR`           Path to repository root (default: auto-detect)
+  `--session-lifetime`   Stop the server, saving held changes, once no
+                         browser tab holds it open
+
+**Session lifetime.** A viewer tab holds a stream open to the server for
+as long as it is open, and the server counts it as a client exactly as it
+counts an agent's MCP session (see `daemon`). With `--session-lifetime`
+that count is what ends the viewer: it keeps serving while any tab holds
+a stream, and once none does -- including when no tab ever connected --
+it persists whatever changes it holds and stops, by the same rule and
+the same grace as a daemon whose clients are gone. Meant for a viewer
+started on somebody's behalf, such as one a hub opens for a browser
+session. Without the flag the viewer's lifetime is unchanged.
 
 ## graph
 
@@ -965,12 +978,13 @@ Every `elspais` command that job runs afterward then inherits a daemon
 whose lifetime matches the job, rather than whichever of the three rungs
 below it happens to land on.
 
-**A held MCP session counts too.** An agent connected over streamable HTTP
+**A held session counts too.** An agent connected over streamable HTTP
 does not need a process id at all: holding the session's GET stream open
 for its lifetime is itself a handle the daemon can observe, so it is
-counted as a client for as long as the connection is held. A completed
-request is not — request traffic never keeps a daemon alive on its own,
-only presence does.
+counted as a client for as long as the connection is held. A viewer tab
+is counted the same way, through the change stream it holds at
+`/api/events`. A completed request is not — request traffic never keeps
+a daemon alive on its own, only presence does.
 
 **When nothing binds, you are told once.** If no handle can be derived —
 none of the three rungs resolves — or a declared `ELSPAIS_CLIENT_PID`
@@ -983,7 +997,9 @@ does not repeat for that daemon; the same daemon does not warn you twice.
 **Started deliberately (explicit).** `elspais daemon`, a manual
 `elspais mcp serve`, and the viewer record no session at all. Their
 lifetime is governed solely by `cli_ttl`, and `daemon.json` carries no
-`client_pid` key.
+`client_pid` key. The one exception is a viewer started with
+`--session-lifetime`, which records no process id either but is bound
+to the tabs holding it (see `viewer`).
 
 **Termination.** The check runs on the daemon's own clock, about once a
 minute, so a client-bound daemon with nothing pending shuts down at the
@@ -1101,7 +1117,7 @@ leaves nothing behind.
 client was seen gone counts as proof that a writer is present even when
 that writer could not register: the daemon keeps serving and the grace
 period starts again. Only applied changes count. Reading — search,
-queries, the viewer's polling — moves nothing and never postpones
+queries, the viewer's count probes — moves nothing and never postpones
 termination, so a client that merely polls cannot hold an orphaned daemon
 open.
 

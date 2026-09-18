@@ -1,5 +1,5 @@
-# Implements: REQ-o00074-A, REQ-o00074-E
-"""Held MCP streams as client handles.
+# Implements: REQ-o00074-A, REQ-o00074-E, REQ-o00079-A
+"""Held streams as client handles.
 
 A client holding a server-to-client stream open is present in a way a
 completed request never is: the transport reports the close, including
@@ -7,7 +7,8 @@ when the client is killed, and the daemon binds the loopback interface
 only, so a dead client's socket goes at once. That satisfies what a
 client handle must be — something whose disappearance the daemon observes
 without the client's cooperation — for a client that can supply no
-process identifier.
+process identifier. An agent's MCP session is one such stream; a browser
+page's change stream is another, and one tracker counts both.
 
 Only long-lived streams count. A request that completed is traffic, and
 counting traffic is the loophole that lets a polling client hold an
@@ -32,25 +33,43 @@ class HeldSessionTracker:
         with self._lock:
             return self._held
 
-    def asgi(self, app: Callable[..., Any]) -> Callable[..., Any]:
-        """Wrap an ASGI app so its held streams are counted."""
+    def asgi(self, app: Callable[..., Any]) -> _HeldStreams:
+        """Wrap an ASGI app so its held streams are counted.
 
-        async def _wrapped(scope: dict, receive: Any, send: Any) -> None:
-            # Anything that is not an HTTP GET passes straight through:
-            # lifespan messages cross this mount too, and a POST that has
-            # finished is traffic rather than presence.
-            if scope.get("type") != "http" or scope.get("method") != "GET":
-                await app(scope, receive, send)
-                return
-            with self._lock:
-                self._held += 1
-            try:
-                await app(scope, receive, send)
-            finally:
-                # Runs on a clean close, an error, and a cancellation, which
-                # is what makes the handle's disappearance observable
-                # without the client having to say anything.
-                with self._lock:
-                    self._held -= 1
+        The wrapper is an object rather than a function because a
+        Starlette ``Route`` treats a plain function as a request handler
+        and an object as the ASGI app it is; a ``Mount`` takes either.
+        """
+        return _HeldStreams(self, app)
 
-        return _wrapped
+    def _enter(self) -> None:
+        with self._lock:
+            self._held += 1
+
+    def _leave(self) -> None:
+        with self._lock:
+            self._held -= 1
+
+
+class _HeldStreams:
+    """ASGI app counting every GET it serves as held until it returns."""
+
+    def __init__(self, tracker: HeldSessionTracker, app: Callable[..., Any]) -> None:
+        self._tracker = tracker
+        self._app = app
+
+    async def __call__(self, scope: dict, receive: Any, send: Any) -> None:
+        # Anything that is not an HTTP GET passes straight through:
+        # lifespan messages cross this mount too, and a POST that has
+        # finished is traffic rather than presence.
+        if scope.get("type") != "http" or scope.get("method") != "GET":
+            await self._app(scope, receive, send)
+            return
+        self._tracker._enter()
+        try:
+            await self._app(scope, receive, send)
+        finally:
+            # Runs on a clean close, an error, and a cancellation, which
+            # is what makes the handle's disappearance observable
+            # without the client having to say anything.
+            self._tracker._leave()

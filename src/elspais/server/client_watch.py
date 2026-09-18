@@ -11,8 +11,11 @@ daemon down once every one of them is gone, so orphaned daemons cannot
 accumulate and keep serving answers no client is watching.
 
 Daemons started without client identity (manual ``elspais mcp serve``,
-the viewer, ``elspais daemon``) never get a watchdog and keep
-their TTL-only lifetime.
+``elspais daemon``, the viewer by default) never get a watchdog and keep
+their TTL-only lifetime. A viewer started to serve browser sessions is
+the one process watched with no pid at all: its clients are pages, each
+present only as the stream it holds open, so the watchdog reads them
+through the held-stream source and records no process (REQ-o00079-B).
 
 Shutdown decision matrix (``shutdown_decision``):
 
@@ -171,7 +174,7 @@ class ClientWatchdog:
 
     def __init__(
         self,
-        client_pid: int,
+        client_pid: int | None,
         pending_fn: Callable[[], tuple[int, object]],
         interval_seconds: float = DEFAULT_CHECK_INTERVAL_SECONDS,
         grace_seconds: float = DEFAULT_GRACE_SECONDS,
@@ -183,7 +186,12 @@ class ClientWatchdog:
         extra_liveness_fn: Callable[[], int] | None = None,
         publish_fn: Callable[[list[int], int], None] | None = None,
     ) -> None:
-        self._clients: set[int] = {client_pid}
+        # Implements: REQ-o00079-B
+        # No pid is a client set that starts empty, not a watchdog that
+        # never fires: a process serving browser pages has clients that
+        # are streams and nothing else, and the rule binds from the start,
+        # before the first page connects.
+        self._clients: set[int] = set() if client_pid is None else {client_pid}
         self._clients_lock = threading.Lock()
         self._pending_fn = pending_fn
         self._lock = lock if lock is not None else nullcontext()
@@ -524,3 +532,82 @@ class ClientWatchdog:
     def stop(self) -> None:
         """Stop the watchdog thread (used by tests)."""
         self._stop.set()
+
+
+# Implements: REQ-o00074-A, REQ-o00074-B, REQ-o00074-E, REQ-o00074-G, REQ-o00074-H, REQ-o00079-B
+def build_client_watchdog(
+    shared: Any,
+    *,
+    client_pid: int | None,
+    repo_root: Any,
+    trigger: str,
+    exit_fn: Callable[[], None] = _default_exit,
+) -> ClientWatchdog:
+    """Wire a watchdog to the process-wide holder and publish it there.
+
+    One wiring for the daemon and for a viewer serving browser sessions,
+    so the lifetime rule is the same rule wherever it applies: the
+    pending count and activity token are read from whatever graph the
+    holder currently publishes, the stop hands over to the process's one
+    shutdown routine, held streams are read from the tracker the app
+    published, and the client set is recorded in the state record. The
+    check interval and grace period come from the same environment knobs
+    in both processes.
+
+    ``shared`` is the ``SharedServerState`` holder. The watchdog is
+    published on it as ``"watchdog"`` so the adoption route and the idle
+    timeout can find it.
+    """
+    from elspais.mcp.shared_state import finalize_shutdown
+
+    # Dereference the holder on every check: the live graph is swapped on
+    # rebuild, so a cached object would count and fingerprint a log
+    # nobody is writing to any more.
+    def _pending() -> tuple[int, object]:
+        return pending_snapshot(shared["graph"])
+
+    # Implements: REQ-p00083-A
+    # The watchdog does not save or raise the shutdown flag itself; it
+    # decides *that* the process stops and hands over to the one routine
+    # every stop path runs.
+    def _stop() -> dict[str, Any]:
+        return finalize_shutdown(shared, trigger=trigger)
+
+    # A client that supplies no process identifier can still be holding a
+    # stream open, and that is a handle of the same kind. Looked up on
+    # each check rather than captured, so the order in which the app and
+    # the watchdog are built does not decide whether the handle is seen.
+    def _sessions_held() -> int:
+        tracker = shared.get("session_tracker")
+        return tracker.held() if tracker is not None else 0
+
+    # Published from the check that computes the composition, so a client
+    # present only as a held stream — which registers nothing — is still
+    # visible to whoever asks why this process is running.
+    def _publish_clients(pids: list[int], held: int) -> None:
+        from elspais.mcp.daemon import record_daemon_clients
+
+        # A process that has committed to stopping does not update its
+        # own advertisement: publishing read-modify-writes the record, so
+        # a mark landing between its read and its write would be dropped.
+        if shared.is_shutting_down:
+            return
+        record_daemon_clients(repo_root, pids, held)
+
+    interval = float(
+        os.environ.get("_ELSPAIS_CLIENT_CHECK_INTERVAL", str(int(DEFAULT_CHECK_INTERVAL_SECONDS)))
+    )
+    grace = float(os.environ.get("_ELSPAIS_CLIENT_GRACE", str(int(DEFAULT_GRACE_SECONDS))))
+    watchdog = ClientWatchdog(
+        client_pid=client_pid,
+        pending_fn=_pending,
+        interval_seconds=interval,
+        grace_seconds=grace,
+        lock=shared.write_lock,
+        stop_fn=_stop,
+        exit_fn=exit_fn,
+        extra_liveness_fn=_sessions_held,
+        publish_fn=_publish_clients,
+    )
+    shared["watchdog"] = watchdog
+    return watchdog
