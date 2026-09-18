@@ -2319,18 +2319,15 @@ function showStaleBanner(message) {
 // announcement would silently mark another writer's mutations as seen and
 // the banner below would never raise again. Implements: REQ-d00267-A, REQ-d00267-B
 
-// Every request the page makes goes through here, so a prefix under which
-// the page is mounted -- a hub serving several viewers under one host --
-// is applied in one place.
-function apiUrl(path) {
-    var prefix = (typeof window.URL_PREFIX === 'string') ? window.URL_PREFIX : '';
-    return prefix + path;
-}
-
 // How long after one of this page's own writes an announced tip is held
 // before it is judged to be another writer's. Long enough for the write's
 // response and the count probe that adopts the tip to come back.
 var OWN_WRITE_SETTLE_MS = 2000;
+// The one judgement of an announced tip still pending, if any. Every
+// announcement replaces it, so what is judged when it fires is the tip
+// last announced -- never one an earlier announcement captured, which the
+// page's own later edit may since have adopted.
+var _tipJudgement = null;
 var _eventSource = null;
 var _silenceTimer = null;
 var _heartbeatMs = 30000;
@@ -2355,19 +2352,28 @@ function applyServerEvent(data) {
         editState.lastSeenTip = tip;
         return;
     }
-    noteAnnouncedTip(tip);
+    noteAnnouncedTip();
 }
 
-function noteAnnouncedTip(tip) {
-    if (tip === editState.lastSeenTip) return;
+// Judge the tip last announced against the tip this page last saw.
+function noteAnnouncedTip() {
+    if (_tipJudgement !== null) {
+        clearTimeout(_tipJudgement);
+        _tipJudgement = null;
+    }
+    if (editState.lastAnnouncedTip === editState.lastSeenTip) return;
     // An announcement can outrun this page's own bookkeeping: the server
     // sees the tip move the instant a mutation lands, while the page adopts
     // it only once the response and the count probe have come back. Judged
     // now, this page's own edit would read as another writer's. So while a
-    // write of ours is in flight or has just finished, the comparison waits
-    // until it settles; a tip that still differs then is another writer's.
+    // write of ours is in flight or has just finished, the judgement waits
+    // until it settles, and judges whatever was announced last by then: a
+    // tip that still differs from the one this page saw is another writer's.
     if (ownWriteRecently(OWN_WRITE_SETTLE_MS)) {
-        setTimeout(function() { noteAnnouncedTip(tip); }, OWN_WRITE_SETTLE_MS);
+        _tipJudgement = setTimeout(function() {
+            _tipJudgement = null;
+            noteAnnouncedTip();
+        }, OWN_WRITE_SETTLE_MS);
         return;
     }
     showStaleBanner('Another writer changed the graph.');
@@ -2392,7 +2398,7 @@ function connectServerEvents() {
         armSilenceWatch();
         return;
     }
-    var source = new EventSource(apiUrl('/api/events'));
+    var source = new EventSource('/api/events');
     _eventSource = source;
     function onEvent(ev) {
         var data = null;

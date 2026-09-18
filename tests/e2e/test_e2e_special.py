@@ -1487,12 +1487,19 @@ def _free_port() -> int:
         return int(s.getsockname()[1])
 
 
+# The session-lifetime viewer's check interval. A first check that finds no
+# stream ends the viewer at once -- nothing is pending, so there is no grace
+# -- so the interval is the whole window a client has to connect after the
+# viewer is ready, and a fraction of a second gives a slow runner none.
+_SESSION_CHECK_SECONDS = 3.0
+
+
 def _spawn_session_viewer(tmp_path: Path) -> tuple[subprocess.Popen, Path, str]:
     """Start `elspais viewer --server --session-lifetime` on a fresh project.
 
-    Watched every fraction of a second with a one-second grace, so the test
-    observes the rule within its patience. Output goes to a file so a viewer
-    that never came up can say why.
+    Watched every few seconds with a one-second grace, so the test observes
+    the rule within its patience. Output goes to a file so a viewer that
+    never came up can say why.
     """
     import os
 
@@ -1520,7 +1527,7 @@ def _spawn_session_viewer(tmp_path: Path) -> tuple[subprocess.Popen, Path, str]:
             start_new_session=True,
             env={
                 **os.environ,
-                "_ELSPAIS_CLIENT_CHECK_INTERVAL": "0.5",
+                "_ELSPAIS_CLIENT_CHECK_INTERVAL": str(_SESSION_CHECK_SECONDS),
                 "_ELSPAIS_CLIENT_GRACE": "1",
             },
         )
@@ -1613,9 +1620,9 @@ class TestViewerSessionBoundLifetime:
             first = resp.readline().decode()
             assert first.startswith("event: hello"), first
 
-            # Held across several checks, with the viewer sending nothing but
-            # what the stream carries: the handle alone keeps it.
-            assert not _exited(proc, 3.0), (
+            # Held across at least one check, with the viewer sending nothing
+            # but what the stream carries: the handle alone keeps it.
+            assert not _exited(proc, _SESSION_CHECK_SECONDS + 1.0), (
                 f"the viewer ended while a stream was held:\n{log_path.read_text(errors='replace')}"
             )
             info = json.loads((tmp_path / ".elspais" / "daemon.json").read_text())
