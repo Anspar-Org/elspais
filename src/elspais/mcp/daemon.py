@@ -265,6 +265,7 @@ def write_daemon_json(
     port: int,
     server_type: str = "daemon",
     client_pid: int | None = None,
+    base_path: str = "",
 ) -> Path:
     """Write daemon.json state file for a running server.
 
@@ -279,6 +280,8 @@ def write_daemon_json(
         client_pid: PID of the session the daemon was implicitly
             spawned for, or None for explicitly started servers
             (TTL-only lifetime).
+        base_path: Prefix the server's routes are mounted under; empty
+            at the root.
 
     Returns:
         Path to the written daemon.json file.
@@ -308,6 +311,11 @@ def write_daemon_json(
         "config_hash": config_hash,
         "executable_hash": compute_executable_hash(),
         "type": server_type,
+        # Implements: REQ-o00076-E
+        # A port alone does not describe a server mounted under a prefix:
+        # at the root of that port it answers nothing. The prefix is part
+        # of the address, so it is part of the record.
+        "base_path": base_path,
     }
     # Implements: REQ-o00074-B, REQ-o00074-C, REQ-o00076-H
     # Recording the client is also what keeps the two origins apart: a
@@ -323,6 +331,18 @@ def write_daemon_json(
         info["clients"] = [{"kind": "pid", "id": client_pid}]
     _write_json_atomic(daemon_json, info)
     return daemon_json
+
+
+# Implements: REQ-o00076-C, REQ-o00076-E
+def daemon_url(info: dict, endpoint: str) -> str:
+    """The address at which the server ``info`` describes answers ``endpoint``.
+
+    The ONE place a record is turned into a URL. Every reader of the
+    record builds its address here, so a server mounted under a prefix is
+    reached under it by each of them, and none addresses the root of a
+    port where such a server answers nothing.
+    """
+    return f"http://127.0.0.1:{info['port']}{info.get('base_path', '')}{endpoint}"
 
 
 # Implements: REQ-o00074-B
@@ -991,6 +1011,7 @@ def start_daemon(
     # that the server actually responds to HTTP requests.
     deadline = time.time() + 15
     port = None
+    info = None
     while time.time() < deadline:
         info = get_daemon_info(repo_root)
         if info and "port" in info:
@@ -998,13 +1019,13 @@ def start_daemon(
             break
         time.sleep(0.2)
 
-    if port is None:
+    if port is None or info is None:
         raise RuntimeError("Daemon failed to start (timed out waiting for daemon.json)")
 
     # Now poll until the server is actually responding
     while time.time() < deadline:
         try:
-            with urlopen(f"http://127.0.0.1:{port}/api/check-freshness", timeout=2):
+            with urlopen(daemon_url(info, "/api/check-freshness"), timeout=2):
                 # Implements: REQ-o00076-K
                 # Recorded from what was actually bound rather than what
                 # was asked for, so a tree whose reservation was occupied
@@ -1243,7 +1264,7 @@ def get_daemon_mutation_count(info: dict) -> int | None:
     if not port:
         return None
     try:
-        with urlopen(f"http://127.0.0.1:{port}/api/dirty", timeout=3) as resp:
+        with urlopen(daemon_url(info, "/api/dirty"), timeout=3) as resp:
             data = _json.loads(resp.read().decode())
             count = data.get("mutation_count")
             if isinstance(count, int):
@@ -1283,7 +1304,7 @@ def attach_client(info: dict, pid: int | None) -> bool:
     if not port or not pid:
         return False
     req = _Request(
-        f"http://127.0.0.1:{port}/api/session/attach",
+        daemon_url(info, "/api/session/attach"),
         data=_json.dumps({"pid": pid}).encode(),
         method="POST",
         headers={"Content-Type": "application/json"},
@@ -1353,7 +1374,7 @@ def save_daemon_mutations(info: dict, message: str | None = None) -> dict:
     # current tip first; the guard rejects if it moves in between.
     tip = ""
     try:
-        with urlopen(f"http://127.0.0.1:{port}/api/dirty", timeout=5) as resp:
+        with urlopen(daemon_url(info, "/api/dirty"), timeout=5) as resp:
             tip = _json.loads(resp.read().decode()).get("tip") or ""
     except (URLError, OSError, ValueError):
         pass  # "" means "nothing pending"; the guard rejects it if not true
@@ -1362,7 +1383,7 @@ def save_daemon_mutations(info: dict, message: str | None = None) -> dict:
         payload["message"] = message
     body = _json.dumps(payload).encode()
     req = _Request(
-        f"http://127.0.0.1:{port}/api/save",
+        daemon_url(info, "/api/save"),
         data=body,
         method="POST",
         headers={"Content-Type": "application/json"},
@@ -1420,14 +1441,14 @@ def request_daemon_stop(info: dict, discard_changes: bool = False) -> dict:
     if discard_changes:
         tip = ""
         try:
-            with urlopen(f"http://127.0.0.1:{port}/api/dirty", timeout=5) as resp:
+            with urlopen(daemon_url(info, "/api/dirty"), timeout=5) as resp:
                 tip = _json.loads(resp.read().decode()).get("tip") or ""
         except (URLError, OSError, ValueError):
             pass  # "" means "nothing pending"; the guard rejects it if not true
         body = {"discard_changes": True, "if_tip_mutation_id": tip}
 
     req = _Request(
-        f"http://127.0.0.1:{port}/api/shutdown",
+        daemon_url(info, "/api/shutdown"),
         data=_json.dumps(body).encode(),
         method="POST",
         headers={"Content-Type": "application/json"},

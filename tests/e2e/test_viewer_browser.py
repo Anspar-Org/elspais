@@ -3058,7 +3058,8 @@ def _copy_project(src: Path, dest: Path) -> None:
 @pytest.fixture(scope="session")
 def prefixed_viewer(tmp_path_factory):
     """A viewer started with ``--base-path`` over its own copy of the
-    viewer-tables project. Yields ``(root_url, prefixed_url, log_path)``.
+    viewer-tables project. Yields ``(root_url, prefixed_url, log_path,
+    project_dir)``.
 
     Its own project, not this repository: a viewer serving a directory
     stops whichever daemon already serves it, and the session fixture over
@@ -3095,7 +3096,7 @@ def prefixed_viewer(tmp_path_factory):
 
     try:
         _wait_for_server(base_url, proc=proc, log_path=log_path)
-        yield root_url, base_url, log_path
+        yield root_url, base_url, log_path, dest
     finally:
         try:
             import urllib.request
@@ -3139,7 +3140,7 @@ class TestViewerUnderBasePath:
     def test_REQ_d00295_B_a_card_loads_with_every_request_under_the_prefix(
         self, page_prefixed, prefixed_viewer
     ):
-        root_url, base_url, _log = prefixed_viewer
+        root_url, base_url, _log, _dir = prefixed_viewer
         requested: list[str] = []
         page_prefixed.on(
             "request",
@@ -3168,7 +3169,7 @@ class TestViewerUnderBasePath:
         import urllib.error
         import urllib.request
 
-        root_url, base_url, log_path = prefixed_viewer
+        root_url, base_url, log_path, _dir = prefixed_viewer
         with pytest.raises(urllib.error.HTTPError) as refused:
             urllib.request.urlopen(f"{root_url}/api/status", timeout=5)
         assert refused.value.code == 404
@@ -3190,7 +3191,7 @@ class TestViewerUnderBasePath:
         from mcp import ClientSession
         from mcp.client.streamable_http import streamablehttp_client
 
-        _root, base_url, _log = prefixed_viewer
+        _root, base_url, _log, _dir = prefixed_viewer
 
         async def scenario() -> list[str]:
             async with streamablehttp_client(f"{base_url}/mcp") as (read, write, _sid):
@@ -3201,3 +3202,40 @@ class TestViewerUnderBasePath:
 
         names = asyncio.run(asyncio.wait_for(scenario(), 60))
         assert "get_requirement" in names, names
+
+    # Verifies: REQ-d00295-F
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    def test_REQ_d00295_F_the_page_keeps_its_state_under_the_prefix(
+        self, page_prefixed, prefixed_viewer
+    ):
+        """The state cookie is scoped to the prefix, so another workspace's
+        page on the same host, under another prefix, neither sends nor
+        reads it."""
+        _root, base_url, _log, _dir = prefixed_viewer
+        page_prefixed.goto(base_url, wait_until="networkidle")
+        page_prefixed.evaluate("() => window.openCard('REQ-p00001')")
+        card = page_prefixed.locator("#card-stack-body").filter(has_text="REQ-p00001")
+        card.wait_for(state="visible", timeout=10_000)
+
+        cookies = {c["name"]: c for c in page_prefixed.context.cookies()}
+        assert "elspais_trace_state" in cookies, sorted(cookies)
+        assert cookies["elspais_trace_state"]["path"] == _BASE_PATH
+
+    # Verifies: REQ-o00076-E
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    def test_REQ_o00076_E_a_command_locating_the_viewer_reaches_it_under_the_prefix(
+        self, prefixed_viewer
+    ):
+        """The record a prefixed viewer leaves names the prefix, and the
+        unsaved-work probe every command runs through it gets an answer
+        rather than the 404 of the root."""
+        from elspais.mcp.daemon import get_daemon_info, get_daemon_mutation_count
+
+        _root, _base, _log, project_dir = prefixed_viewer
+        info = get_daemon_info(project_dir)
+        assert info is not None, "the viewer left no record"
+        assert info["type"] == "viewer"
+        assert info["base_path"] == _BASE_PATH
+        assert get_daemon_mutation_count(info) == 0

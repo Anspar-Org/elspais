@@ -863,6 +863,8 @@ def check_daemon_status(git_root: Path | None, config: dict[str, Any] | None = N
         "version": info.get("version"),
         "clients": clients,
     }
+    if info.get("base_path"):
+        details["base_path"] = info["base_path"]
 
     pending = _daemon_pending_count(info)
     if pending:
@@ -911,11 +913,13 @@ def _daemon_pending_count(info: dict) -> int:
     import urllib.error
     import urllib.request
 
+    from elspais.mcp.daemon import daemon_url
+
     port = info.get("port")
     if not isinstance(port, int):
         return 0
     try:
-        with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/dirty", timeout=2) as response:
+        with urllib.request.urlopen(daemon_url(info, "/api/dirty"), timeout=2) as response:
             count = json.loads(response.read()).get("mutation_count")
     except (urllib.error.URLError, OSError, json.JSONDecodeError, ValueError):
         return 0

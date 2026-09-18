@@ -23,27 +23,42 @@ def _is_port_in_use(port: int) -> bool:
         return s.connect_ex(("127.0.0.1", port)) == 0
 
 
-def _is_elspais_server(port: int) -> bool:
-    """Check if an elspais server is running on the given port."""
+# Implements: REQ-o00076-E
+def _is_elspais_server(port: int, base_path: str = "") -> bool:
+    """Check if an elspais server is running on the given port.
+
+    Asked under ``base_path`` where one is known, because a server
+    mounted under a prefix answers nothing at the root of its port.
+    """
     import json
     from urllib.request import urlopen
 
+    from elspais.mcp.daemon import daemon_url
+
     try:
-        with urlopen(f"http://127.0.0.1:{port}/api/status", timeout=2) as resp:
+        status_url = daemon_url({"port": port, "base_path": base_path}, "/api/status")
+        with urlopen(status_url, timeout=2) as resp:
             data = json.loads(resp.read())
             return "node_counts" in data
     except Exception:
         return False
 
 
-def _shutdown_server(port: int) -> bool:
+# Implements: REQ-o00076-E
+def _shutdown_server(port: int, base_path: str = "") -> bool:
     """Shut down an elspais server, preferring the API then falling back to OS kill."""
     import time
     from urllib.request import Request, urlopen
 
-    # Try clean shutdown via API
+    from elspais.mcp.daemon import daemon_url
+
+    # Try clean shutdown via API, under the prefix the server answers at
     try:
-        req = Request(f"http://127.0.0.1:{port}/api/shutdown", method="POST", data=b"")
+        req = Request(
+            daemon_url({"port": port, "base_path": base_path}, "/api/shutdown"),
+            method="POST",
+            data=b"",
+        )
         urlopen(req, timeout=3)
     except Exception:
         pass  # Server may drop connection as it exits — that's fine
@@ -150,7 +165,20 @@ def _run_server(args: argparse.Namespace, open_browser: bool = False) -> int:
     quiet = getattr(args, "quiet", False)
 
     if _is_port_in_use(port) and not getattr(args, "port", None):
-        is_elspais = _is_elspais_server(port)
+        # The occupant is probed where it answers. When this working
+        # tree's record names the port, the record says where that is; a
+        # server for some other tree is asked at the root, and one mounted
+        # under a prefix there reads as another process, which is what it
+        # is to this tree.
+        from elspais.mcp.daemon import get_daemon_info as _recorded
+
+        recorded = _recorded(repo_root)
+        occupant_prefix = (
+            str(recorded.get("base_path", ""))
+            if recorded is not None and recorded.get("port") == port
+            else ""
+        )
+        is_elspais = _is_elspais_server(port, occupant_prefix)
 
         if sys.stdin.isatty():
             if is_elspais:
@@ -188,7 +216,7 @@ def _run_server(args: argparse.Namespace, open_browser: bool = False) -> int:
                         f"Shutting down existing server on port {port}...",
                         file=sys.stderr,
                     )
-                if not _shutdown_server(port):
+                if not _shutdown_server(port, occupant_prefix):
                     print(
                         "Could not stop existing server. Using new port.",
                         file=sys.stderr,
@@ -202,9 +230,11 @@ def _run_server(args: argparse.Namespace, open_browser: bool = False) -> int:
                 port = _find_free_port(port)
 
     # Implements: REQ-d00295-A
-    # The address a browser reaches the page at: under the prefix, the root
-    # answers nothing.
-    url = f"http://127.0.0.1:{port}{base_path}"
+    # The address a browser reaches the page at, built where every other
+    # address is: under the prefix, the root answers nothing.
+    from elspais.mcp.daemon import daemon_url
+
+    url = daemon_url({"port": port, "base_path": base_path}, "")
 
     if not quiet:
         print(f"Starting trace-edit server at {url}", file=sys.stderr)
@@ -248,11 +278,15 @@ def _run_server(args: argparse.Namespace, open_browser: bool = False) -> int:
             file=sys.stderr,
         )
         return 1
+    # Implements: REQ-o00076-E
+    # The record names the prefix, so a command that locates this viewer
+    # through it reaches the viewer where it answers.
     write_daemon_json(
         repo_root=repo_root,
         pid=os.getpid(),
         port=port,
         server_type="viewer",
+        base_path=base_path,
     )
     daemon_json = _daemon_json_path(repo_root)
 

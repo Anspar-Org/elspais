@@ -644,11 +644,19 @@ class TestMcpEnv:
         and nothing a shell would choke on -- a diagnostic on stdout would
         be executed as a command.
         """
+        from elspais.mcp.daemon import write_daemon_json
+
         args = argparse.Namespace(no_start=False)
+
+        # Starting a daemon leaves its record behind, and the record is
+        # what says where the server answers; the stub leaves one too.
+        def start(repo_root, **_kw):
+            write_daemon_json(repo_root, pid=os.getpid(), port=54321)
+            return 54321
 
         with (
             patch("elspais.commands.daemon_cmd.find_git_root", return_value=tmp_path),
-            patch("elspais.mcp.daemon.ensure_daemon", return_value=54321) as ensure,
+            patch("elspais.mcp.daemon.ensure_daemon", side_effect=start) as ensure,
         ):
             rc = run_env(args)
 

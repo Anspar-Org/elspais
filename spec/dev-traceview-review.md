@@ -106,13 +106,16 @@ D. The agent surface SHALL be reachable under the same prefix as the page.
 
 E. A prefix that is not empty and does not take the form of a path beginning with a slash and ending without one SHALL be refused with a message naming that form.
 
+F. State the page keeps in the browser SHALL be kept apart per configured prefix, so that pages served under different prefixes on one host do not read each other's.
+
 ### Rationale
 
 A hosted deployment runs one viewer per workspace behind a single router that tells them apart by the leading part of the path. A viewer that assumed it owned the root of the site would answer only the first workspace. The prefix is configured on the viewer rather than rewritten by the router, because the page builds URLs of its own and a rewriting router cannot reach into a script.
 
 ### Changelog
 
+- 2026-09-17 | c1ac9032 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-09-17 | cd69f63b | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
-- 2026-09-18 | - | - | Michael Lewis (<michael@anspar.org>) | Initial version
+- 2026-09-17 | - | - | Michael Lewis (<michael@anspar.org>) | Initial version
 
-*End* *Viewer Served Under a Configured Prefix* | **Hash**: cd69f63b
+*End* *Viewer Served Under a Configured Prefix* | **Hash**: c1ac9032

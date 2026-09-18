@@ -1960,16 +1960,21 @@ class TestStoppingDaemonIsReplacedNotReused:
 
         info = {"pid": 999, "port": 4321, "stopping": True}
         reached: list[int] = []
+        # The record moves when the successor starts, as it does on disk.
+        current = {"info": info}
+
+        def ensure(_root, **_kw):
+            current["info"] = {"pid": 1000, "port": 7777}
+            return 7777
 
         with (
             patch("elspais.config.find_git_root", return_value=tmp_path),
-            patch("elspais.commands._daemon_client._get_daemon_port", return_value=4321),
-            patch("elspais.mcp.daemon.get_daemon_info", return_value=info),
+            patch("elspais.mcp.daemon.get_daemon_info", side_effect=lambda _r: current["info"]),
             patch("elspais.mcp.daemon.wait_for_daemon_exit", return_value=True),
-            patch("elspais.mcp.daemon.ensure_daemon", return_value=7777),
+            patch("elspais.mcp.daemon.ensure_daemon", side_effect=ensure),
             patch(
-                "elspais.commands._daemon_client._try_port",
-                side_effect=lambda port, *a, **k: reached.append(port) or {"ok": True},
+                "elspais.commands._daemon_client._try_server",
+                side_effect=lambda record, *a, **k: reached.append(record["port"]) or {"ok": True},
             ),
         ):
             result = _engine._try_daemon("/api/run/checks", {})

@@ -475,6 +475,12 @@ viewer under a path of its own. The page builds every URL it requests under
 that prefix, and the address printed at startup carries it. The prefix is
 empty, or begins with `/` and does not end with one; anything else is
 refused. With no prefix the server is exactly what it is without the flag.
+The viewer's record in `.elspais/daemon.json` names the prefix as
+`base_path`, so every command that reaches a running server through the
+record — the CLI's graph queries, `elspais doctor`, `elspais mcp env`
+— reaches a prefixed viewer where it answers. The state the page keeps in
+the browser is scoped to the prefix too, so viewers under different
+prefixes on one host keep state of their own.
 
 ## graph
 
