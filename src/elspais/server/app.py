@@ -100,16 +100,17 @@ from elspais.server.routes_ui import _extract_viewer_config, index
 from elspais.server.state import AppState
 
 # One or more segments, each introduced by a single slash and made of
-# unreserved characters only. A slash-run, a query or fragment character,
-# a space or a percent-escape all pass through Mount unrefused and leave a
-# server that answers 404 at every path; a "." or ".." segment is
-# normalised away by the client before the request arrives, to the same
-# effect. The form is the one a mount actually answers at.
+# unreserved ASCII characters only: the form the page, a router and the
+# mount all spell identically. A space, a "?", a "#" or a "%" is spelt
+# differently by each (the mount matches it raw, the browser escapes or
+# cuts the path at it), so one such prefix would name a different path in
+# each; a "." or ".." segment is normalised away by the client before the
+# request arrives, to the same effect.
 _BASE_PATH_FORM = re.compile(r"^(?:/[A-Za-z0-9._~-]+)+$")
 _BASE_PATH_DESCRIPTION = (
     "empty, or one or more path segments each introduced by a single '/' and "
-    "made only of letters, digits, '-', '_', '.' and '~', with no segment "
-    "being '.' or '..' (for example '/w/abc')"
+    "made only of ASCII letters and digits, '-', '_', '.' and '~', with no "
+    "segment being '.' or '..' (for example '/w/abc')"
 )
 
 

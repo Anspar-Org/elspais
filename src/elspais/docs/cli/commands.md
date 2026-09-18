@@ -474,9 +474,11 @@ agent surface — under a prefix, for a router that places each workspace's
 viewer under a path of its own. The page builds every URL it requests under
 that prefix, and the address printed at startup carries it. The prefix is
 empty, or one or more path segments each introduced by a single `/` and made
-only of letters, digits, `-`, `_`, `.` and `~`; anything else — a doubled
-slash, a `?` or `#`, a space, a `.` or `..` segment — is refused naming that
-form, because a mount at such a path answers nothing. The flag applies to
+only of ASCII letters and digits, `-`, `_`, `.` and `~`, with no segment
+being `.` or `..`; anything else — a doubled slash, a `?` or `#`, a space, a
+`%`, a `.` or `..` segment — is refused naming that form, because the page,
+a router and the mount each spell such a prefix differently and so would
+name different paths under it. The flag applies to
 the server alone: with `--static` it is refused, since a generated file
 requests nothing under a prefix. With no prefix the server is exactly what
 it is without the flag.

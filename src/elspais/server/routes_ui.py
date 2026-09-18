@@ -117,7 +117,7 @@ async def index(request: Request):
             "status_roles": {s: roles.role_of(s).value for s in status_keys},
             "version": gen.version,
             "base_path": str(state.repo_root),
-            # Implements: REQ-d00295-B
+            # Implements: REQ-d00295-B, REQ-d00295-H
             # The prefix the page prepends to every URL it requests. Not
             # ``base_path``, which names the repository root above.
             "url_prefix": getattr(request.app.state, "url_prefix", ""),

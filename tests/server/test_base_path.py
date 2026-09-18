@@ -1,4 +1,4 @@
-# Verifies: REQ-d00295-A, REQ-d00295-B, REQ-d00295-C, REQ-d00295-D, REQ-d00295-E, REQ-d00295-G
+# Verifies: REQ-d00295-A+B+C+D+E+G+H
 """The viewer mounts its whole surface under a configured prefix.
 
 A hosted router places each workspace's viewer under a path of its own,
@@ -122,19 +122,27 @@ def test_the_served_page_carries_the_prefix_and_no_unprefixed_request_site(prefi
 
 
 # ---------------------------------------------------------------------------
-# C: no prefix serves what it always served
+# C, H: no prefix serves the routes it always served, and the page requests
+# the URLs it always requested
 # ---------------------------------------------------------------------------
 
 
 # Verifies: REQ-d00295-C
-def test_without_a_prefix_the_root_serves_the_page_and_the_api(unprefixed):
+def test_without_a_prefix_the_root_answers_the_page_and_the_api(unprefixed):
     page = unprefixed.get("/")
     assert page.status_code == 200
     assert page.text.lstrip().startswith("<!DOCTYPE html>"), page.text[:200]
-    assert 'URL_PREFIX = ""' in page.text
-    assert _REQUEST_SITE.findall(page.text) == []
     assert unprefixed.get("/api/status").status_code == 200
     assert unprefixed.get("/w/abc/api/status").status_code == 404
+
+
+# Verifies: REQ-d00295-H
+def test_without_a_prefix_the_page_requests_root_relative_urls(unprefixed):
+    """The page prepends its prefix at request time, so an empty prefix
+    leaves every request exactly the root-relative URL it always was."""
+    page = unprefixed.get("/")
+    assert 'URL_PREFIX = ""' in page.text
+    assert _REQUEST_SITE.findall(page.text) == []
 
 
 # ---------------------------------------------------------------------------
@@ -159,8 +167,8 @@ def test_the_mcp_mount_sits_under_the_prefix(canonical_federated_graph):
 # ---------------------------------------------------------------------------
 
 
-# The form a mount answers at, in the refusal's own words.
-_FORM = r"each introduced by a single '/' and made only of letters, digits"
+# The accepted form, in the refusal's own words.
+_FORM = r"each introduced by a single '/' and made only of ASCII letters and digits"
 
 
 # Verifies: REQ-d00295-E
@@ -200,8 +208,9 @@ _FORM = r"each introduced by a single '/' and made only of letters, digits"
     ],
 )
 def test_a_malformed_prefix_is_refused_naming_the_accepted_form(bad):
-    """Every shape here is one a Starlette mount takes without complaint
-    and then answers nothing at, so the refusal has to come first."""
+    """Every shape here is one the page, a router and the mount would
+    spell differently from one another, so it names no single path and
+    is refused before anything is mounted at it."""
     with pytest.raises(ValueError, match=_FORM):
         validate_base_path(bad)
 
@@ -214,10 +223,10 @@ def test_an_accepted_prefix_passes_through_unchanged(good):
 
 # Verifies: REQ-d00295-E
 @pytest.mark.parametrize("bad", ["//w", "/w?x"])
-def test_a_refused_prefix_is_one_a_mount_would_answer_nothing_at(canonical_federated_graph, bad):
-    """The factory refuses before building: a mount at this prefix would
-    start and 404 everywhere, which is the outcome the refusal exists to
-    forestall."""
+def test_the_factory_refuses_a_prefix_spelt_apart_by_page_and_mount(canonical_federated_graph, bad):
+    """The factory refuses before building: the mount would take this
+    prefix raw while the page requests its escaped or truncated spelling,
+    and the two would never meet at one path."""
     with pytest.raises(ValueError, match=_FORM):
         create_app(_state(canonical_federated_graph), mount_mcp=False, base_path=bad)
 
