@@ -162,9 +162,10 @@ function renderCardStack() {
 }
 
 // =====================================================================
-// Lost Comments Card (Implements: REQ-d00234-A)
+// Lost Comments Card
 // =====================================================================
 
+{# Implements: REQ-d00234-A #}
 function loadOrphanedComments() {
     apiFetch('/api/comments/orphaned').then(function(data) {
         if (data && data.success && data.threads.length > 0) {
