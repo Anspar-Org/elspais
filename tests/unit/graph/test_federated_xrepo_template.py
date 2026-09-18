@@ -1,14 +1,15 @@
 # Verifies: REQ-p00014-H
-"""Federated cross-repo Satisfies instantiation (CUR-1353 Phase A).
+"""Federated cross-repo Satisfies instantiation.
 
-Phase 3 of CUR-1353: at federation time, a per-repo broken-ref of
-``edge_kind == satisfies`` whose target lives in *another* federated
-repo causes ``FederatedGraph`` to clone the template REQ subtree
-(REQ + directly-attached assertions) into the declaring repo's
-``_index`` with composite IDs ``<declaring>::<original>``. The
-declaring repo gets intra-graph ``SATISFIES`` + ``STRUCTURES`` +
-``DEFINES`` edges, and each clone gets a cross-graph ``INSTANCE``
-edge back to its template original.
+At federation time, a per-repo broken-ref of ``edge_kind == satisfies``
+whose target lives in *another* federated repo causes ``FederatedGraph``
+to clone the template subtree rooted at the target — the REQ with its
+assertions, plus every template REQ refining a member, recursively —
+into the declaring repo's ``_index`` with composite IDs
+``<declaring>::<original>``. The declaring repo gets intra-graph
+``SATISFIES``, ``STRUCTURES``, ``REFINES`` and ``DEFINES`` edges, and
+each clone gets a cross-graph ``INSTANCE`` edge back to its template
+original.
 """
 
 from __future__ import annotations
@@ -17,9 +18,12 @@ import subprocess
 import textwrap
 from pathlib import Path
 
+import pytest
+
 from elspais.graph.factory import build_graph
 from elspais.graph.federated import FederatedGraph, RepoEntry
 from elspais.graph.GraphNode import NodeKind
+from elspais.graph.reference_faults import FaultClass
 from elspais.graph.relations import EdgeKind, Stereotype
 
 # ---------------------------------------------------------------------------
@@ -237,15 +241,14 @@ class TestCrossRepoCloneShape:
         assert clone is not None
         assert clone.file_node() is None
 
+    # Verifies: REQ-p00014-O
     def test_clone_records_template_repo_field(self, tmp_path: Path) -> None:
         """Every cross-repo clone (root + assertions) records the template's repo name.
 
-        Phase 5 (CUR-1353, REQ-p00014-K): viewers need provenance --
-        "Template defined in `{repo_name}`" -- without re-walking the
-        cross-graph INSTANCE edge for every render. The federated
+        Viewers show "Template defined in `{repo_name}`" without walking
+        the cross-graph INSTANCE edge for every render, so the federated
         builder writes ``template_repo`` on each clone at instantiation
-        time. This invariant ensures the field is set on both the
-        cloned root REQ and each cloned assertion.
+        time -- the cloned root REQ and each cloned assertion alike.
         """
         fed = _build_federation(tmp_path)
         for composite in (
@@ -910,3 +913,294 @@ class TestFederatedDiagnostics:
             f"expected a cycle diagnostic, got: "
             f"{[(b.source_id, b.target_id, b.diagnostic) for b in brs]}"
         )
+
+
+# ---------------------------------------------------------------------------
+# A template subtree owned by the library (REQ-p00014-H, -M)
+# ---------------------------------------------------------------------------
+
+
+def _make_library_with_subtree(tmp_path: Path) -> Path:
+    """Build a ``library`` repo whose template LIB-p00001 is refined by LIB-p00002."""
+    library = tmp_path / "library"
+    library.mkdir()
+    _write(
+        library,
+        ".elspais.toml",
+        """
+        version = 5
+        [project]
+        name = "library"
+        namespace = "LIB"
+        [levels.prd]
+        rank = 1
+        letter = "p"
+        implements = ["prd"]
+        [scanning.spec]
+        directories = ["spec"]
+        [scanning.code]
+        directories = []
+        [scanning.test]
+        enabled = false
+        directories = []
+        """,
+    )
+    _write(
+        library,
+        "spec/prd-library.md",
+        """
+        # LIB-p00001: Action Dispatch
+
+        **Level**: PRD | **Status**: Approved | **Template**
+
+        ### Assertions
+
+        A. SHALL parse.
+
+        *End* *Action Dispatch*
+
+        # LIB-p00002: Dispatch Authorization
+
+        **Level**: PRD | **Status**: Approved | **Template**
+        **Refines**: LIB-p00001
+
+        ### Assertions
+
+        A. SHALL authorize.
+
+        *End* *Dispatch Authorization*
+        """,
+    )
+    _git_init(library)
+    return library
+
+
+class TestCrossRepoSubtreeClone:
+    """A library template refined by a library template is cloned whole."""
+
+    @staticmethod
+    def _federation(tmp_path: Path) -> FederatedGraph:
+        _make_library_with_subtree(tmp_path)
+        app = _make_app(tmp_path)
+        return build_graph(repo_root=app, scan_code=False, scan_tests=False)
+
+    # Verifies: REQ-p00014-H
+    def test_library_refiner_is_cloned_with_its_assertions(self, tmp_path: Path) -> None:
+        fed = self._federation(tmp_path)
+        faults = [(b.source_id, b.target_id, b.edge_kind) for b in fed.unresolved_references()]
+        assert not faults, f"got broken refs: {faults}"
+        for composite in (
+            "APP-p00001::LIB-p00001",
+            "APP-p00001::LIB-p00001-A",
+            "APP-p00001::LIB-p00002",
+            "APP-p00001::LIB-p00002-A",
+        ):
+            node = fed.find_by_id(composite)
+            assert node is not None, f"expected {composite} in the app's index"
+            assert node.get_field("stereotype") == Stereotype.INSTANCE
+            assert node.get_field("template_repo") == "library"
+
+    # Verifies: REQ-p00014-H, REQ-p00014-M
+    def test_intra_subtree_refines_is_recreated_on_the_clones(self, tmp_path: Path) -> None:
+        fed = self._federation(tmp_path)
+        root_clone = fed.find_by_id("APP-p00001::LIB-p00001")
+        assert root_clone is not None
+        refines = [
+            e.target.id for e in root_clone.iter_outgoing_edges() if e.kind == EdgeKind.REFINES
+        ]
+        assert refines == ["APP-p00001::LIB-p00002"]
+        structures = [
+            e.target.id for e in root_clone.iter_outgoing_edges() if e.kind == EdgeKind.STRUCTURES
+        ]
+        assert structures == ["APP-p00001::LIB-p00001-A"], (
+            "one STRUCTURES edge per cloned assertion"
+        )
+
+    # Verifies: REQ-p00014-H
+    def test_refiner_clone_crosses_to_its_own_original(self, tmp_path: Path) -> None:
+        fed = self._federation(tmp_path)
+        refiner_clone = fed.find_by_id("APP-p00001::LIB-p00002")
+        assert refiner_clone is not None
+        assert not refiner_clone.get_field("refines_refs")
+        instance = [
+            e.target.id for e in refiner_clone.iter_outgoing_edges() if e.kind == EdgeKind.INSTANCE
+        ]
+        assert instance == ["LIB-p00002"]
+
+    # Verifies: REQ-p00014-H
+    def test_defines_reaches_every_clone_of_the_subtree(self, tmp_path: Path) -> None:
+        fed = self._federation(tmp_path)
+        declaring = fed.find_by_id("APP-p00001")
+        assert declaring is not None
+        declaring_file = declaring.file_node()
+        assert declaring_file is not None
+        defines = {
+            e.target.id for e in declaring_file.iter_outgoing_edges() if e.kind == EdgeKind.DEFINES
+        }
+        assert {
+            "APP-p00001::LIB-p00001",
+            "APP-p00001::LIB-p00001-A",
+            "APP-p00001::LIB-p00002",
+            "APP-p00001::LIB-p00002-A",
+        } <= defines
+
+
+# ---------------------------------------------------------------------------
+# A template subtree spanning repositories (REQ-p00014-G, -O)
+# ---------------------------------------------------------------------------
+
+_APP_CONFIG = """
+version = 5
+[project]
+name = "app"
+namespace = "APP"
+[levels.prd]
+rank = 1
+letter = "p"
+implements = ["prd"]
+[scanning.spec]
+directories = ["spec"]
+[scanning.code]
+directories = []
+[scanning.test]
+enabled = false
+directories = []
+[associates.library]
+path = "../library"
+namespace = "LIB"
+"""
+
+
+def _make_app_refining_library(tmp_path: Path, refiner_marker: str, reference: str) -> Path:
+    """Build an ``app`` repo where APP-p00001 satisfies LIB-p00001 and APP-p00002 refines it.
+
+    ``refiner_marker`` is the metadata tail of APP-p00002 (``| **Template**``
+    or nothing) and ``reference`` the spelling of its ``Refines:`` target.
+    """
+    app = tmp_path / "app"
+    app.mkdir()
+    _write(app, ".elspais.toml", _APP_CONFIG)
+    _write(
+        app,
+        "spec/prd-app.md",
+        f"""
+        # APP-p00001: Concrete Action
+
+        **Level**: PRD | **Status**: Approved
+        **Satisfies**: LIB-p00001
+
+        ### Assertions
+
+        A. SHALL be sponsor-specific.
+
+        *End* *Concrete Action*
+
+        # APP-p00002: App Provision
+
+        **Level**: PRD | **Status**: Approved{refiner_marker}
+        **Refines**: {reference}
+
+        ### Assertions
+
+        A. SHALL provide.
+
+        *End* *App Provision*
+        """,
+    )
+    _git_init(app)
+    return app
+
+
+class TestCrossRepoRefinesMatrix:
+    """The validation matrix judges a target in an associated repository."""
+
+    # Verifies: REQ-p00014-G, REQ-d00269-B
+    @pytest.mark.parametrize(
+        ("reference", "refused"),
+        [
+            ("LIB-p00001", ["LIB-p00001"]),
+            ("LIB-p00001-A+B", ["LIB-p00001-A", "LIB-p00001-B"]),
+        ],
+    )
+    def test_concrete_refiner_of_foreign_template_is_refused(
+        self, tmp_path: Path, reference: str, refused: list[str]
+    ) -> None:
+        """A refused reference is reported per expanded label, as the in-repo builder does."""
+        _make_library(tmp_path)
+        app = _make_app_refining_library(tmp_path, "", reference)
+        fed = build_graph(repo_root=app, scan_code=False, scan_tests=False)
+
+        faults = list(fed.unresolved_references())
+        assert [(b.source_id, b.target_id, b.edge_kind, b.fault_class) for b in faults] == [
+            ("APP-p00002", target, "refines", FaultClass.FORBIDDEN) for target in refused
+        ]
+        for fault in faults:
+            assert "Mark APP-p00002 **Template**" in fault.diagnostic
+            assert f"Satisfies: {fault.target_id}" in fault.diagnostic
+
+        template = fed.find_by_id("LIB-p00001")
+        assert template is not None
+        assert not [e for e in template.iter_outgoing_edges() if e.kind == EdgeKind.REFINES], (
+            "a refused reference never lands as an edge"
+        )
+
+    # Verifies: REQ-p00014-G, REQ-p00014-R
+    def test_refused_and_missing_labels_of_one_item_are_each_reported(self, tmp_path: Path) -> None:
+        """One item naming a refused label and a missing one keeps both faults.
+
+        Each label reaches its own failure class: the label the library holds
+        is refused by the matrix, the label it lacks is unknown -- not a
+        class further along than it reached -- and the two are reported in
+        the order the grammar expands them.
+        """
+        _make_library(tmp_path)
+        app = _make_app_refining_library(tmp_path, "", "LIB-p00001-A+Z")
+        fed = build_graph(repo_root=app, scan_code=False, scan_tests=False)
+
+        faults = list(fed.unresolved_references())
+        assert [(b.source_id, b.target_id, b.edge_kind, b.fault_class) for b in faults] == [
+            ("APP-p00002", "LIB-p00001-A", "refines", FaultClass.FORBIDDEN),
+            ("APP-p00002", "LIB-p00001-Z", "refines", FaultClass.UNKNOWN_ASSERTION),
+        ]
+        assert "Mark APP-p00002 **Template**" in faults[0].diagnostic
+        assert "LIB-p00001-A+Z" in faults[1].diagnostic
+
+        template = fed.find_by_id("LIB-p00001")
+        assert template is not None
+        assert not [e for e in template.iter_outgoing_edges() if e.kind == EdgeKind.REFINES], (
+            "a refused reference never lands as an edge"
+        )
+
+    # Verifies: REQ-p00014-G, REQ-p00014-O
+    def test_template_refiner_of_foreign_template_joins_its_subtree(self, tmp_path: Path) -> None:
+        """A template in one repository refining a template in another forms one subtree.
+
+        The clone of each member records the repository owning that member's
+        own original, not the root's.
+        """
+        _make_library(tmp_path)
+        app = _make_app_refining_library(tmp_path, " | **Template**", "LIB-p00001")
+        fed = build_graph(repo_root=app, scan_code=False, scan_tests=False)
+
+        assert not list(fed.unresolved_references())
+        template = fed.find_by_id("LIB-p00001")
+        assert template is not None
+        assert [
+            e.target.id for e in template.iter_outgoing_edges() if e.kind == EdgeKind.REFINES
+        ] == ["APP-p00002"]
+
+        provenance = {
+            composite: fed.find_by_id(composite).get_field("template_repo")
+            for composite in (
+                "APP-p00001::LIB-p00001",
+                "APP-p00001::LIB-p00001-A",
+                "APP-p00001::APP-p00002",
+                "APP-p00001::APP-p00002-A",
+            )
+        }
+        assert provenance == {
+            "APP-p00001::LIB-p00001": "library",
+            "APP-p00001::LIB-p00001-A": "library",
+            "APP-p00001::APP-p00002": "app",
+            "APP-p00001::APP-p00002-A": "app",
+        }
