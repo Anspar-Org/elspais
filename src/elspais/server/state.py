@@ -273,7 +273,7 @@ class AppState:
                 return True
         return False
 
-    # Implements: REQ-p00015-F, REQ-p00015-B
+    # Implements: REQ-p00015-F, REQ-p00015-B, REQ-p00019-B
     def ensure_fresh(self) -> bool:
         """Rebuild graph if files changed.
 

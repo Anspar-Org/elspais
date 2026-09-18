@@ -4295,7 +4295,7 @@ class GraphBuilder:
                 )
             )
 
-    # Implements: REQ-d00129-A, REQ-d00129-B
+    # Implements: REQ-d00129-A, REQ-d00129-B, REQ-p00050-E
     def _add_requirement(self, content: ParsedContent) -> None:
         """Add a requirement node and its assertions."""
         data = content.parsed_data
@@ -5247,7 +5247,7 @@ class GraphBuilder:
                 )
         return faults
 
-    # Implements: REQ-p00014-B, REQ-p00014-C, REQ-d00069-H
+    # Implements: REQ-p00014-B, REQ-p00014-C, REQ-d00069-H, REQ-p00014-L
     def _instantiate_satisfies_templates(self) -> None:
         """Clone template subtrees for each Satisfies declaration.
 

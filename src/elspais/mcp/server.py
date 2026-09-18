@@ -2973,7 +2973,7 @@ def _guard_version(graph: Any, node_id: str, if_version: str) -> dict[str, Any] 
     }
 
 
-# Implements: REQ-o00062-O, REQ-p00083-G
+# Implements: REQ-o00062-O, REQ-p00083-G, REQ-p00019-D
 def _guard_shutdown(state: Any) -> dict[str, Any] | None:
     """Return a rejection dict if this process is stopping; otherwise None.
 

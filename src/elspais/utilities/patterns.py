@@ -256,7 +256,7 @@ class IdPatternConfig:
     assertions: AssertionFormat
     output_forms: dict[str, str] = field(default_factory=dict)
 
-    # Implements: REQ-d00251-L
+    # Implements: REQ-d00251-L, REQ-d00081-A
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> IdPatternConfig:
         """Create IdPatternConfig from a full configuration dictionary.
@@ -1349,7 +1349,7 @@ class FederatedIdReader:
             self._extra_item_regexes[key] = compiled
         return compiled
 
-    # Implements: REQ-d00287-A, REQ-d00272-C, REQ-d00272-O
+    # Implements: REQ-d00287-A, REQ-d00272-C, REQ-d00272-O, REQ-d00269-J
     def classify_unmatched(self, candidate: str) -> tuple[FaultClass, tuple[FaultCode, ...]]:
         """How far reading *candidate* got, for an item no grammar accepted.
 

@@ -3448,7 +3448,7 @@ def _check_status_references(
     )
 
 
-# Implements: REQ-d00241-A, REQ-d00241-E
+# Implements: REQ-d00241-A, REQ-d00241-E, REQ-d00241-H
 def check_no_traceability(
     unlinked_files: list[str],
     severity: str | None = None,
@@ -5589,7 +5589,7 @@ def apply_finding_filter(report: HealthReport, filt: FindingFilter) -> _FilterOu
 
 
 # Implements: REQ-d00285-I
-# Implements: REQ-d00085-E+F, REQ-d00285-C+H
+# Implements: REQ-d00085-E+F, REQ-d00085-N, REQ-d00285-C+H
 def _format_report(
     report: HealthReport,
     args: argparse.Namespace,
