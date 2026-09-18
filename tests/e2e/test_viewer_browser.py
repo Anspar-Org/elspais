@@ -416,6 +416,13 @@ class TestViewerExport:
         unoffered one is put into the list by hand."""
         page.goto(viewer_url, wait_until="domcontentloaded", timeout=_PAGE_LOAD_TIMEOUT)
         page.wait_for_selector("#btn-export", timeout=_PAGE_LOAD_TIMEOUT)
+        # Let the page's own load-time requests over this estate finish first,
+        # so the refusal is measured on its own: clicked while they are still
+        # in flight, the fetch queues behind them on the server, and on a cold
+        # CI container that queue alone outran a short wait. The wait then
+        # gets the allowance the page gets, since the answer is bounded by the
+        # same load; the toast appears the moment the refusal arrives.
+        page.wait_for_load_state("networkidle", timeout=_PAGE_LOAD_TIMEOUT)
         page.select_option("#export-report", "gaps")
         page.evaluate(
             """() => {
@@ -428,7 +435,7 @@ class TestViewerExport:
         page.select_option("#export-format", "csv")
         assert page.evaluate("exportUrl()") == "/api/export/gaps?format=csv"
         page.click("#btn-export")
-        toast = page.wait_for_selector(".toast.error", timeout=5_000)
+        toast = page.wait_for_selector(".toast.error", timeout=_PAGE_LOAD_TIMEOUT)
         text = toast.text_content()
         assert "markdown" in text and "pdf" in text, text
         assert page.url.rstrip("/") == viewer_url.rstrip("/")
