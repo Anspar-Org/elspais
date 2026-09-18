@@ -3259,18 +3259,21 @@ class TestEnvironmentTagRendering:
 # ---------------------------------------------------------------------------
 
 
-# The session-lifetime viewer's check interval. A first check that finds
-# no stream ends the viewer at once -- nothing is pending, so there is no
-# grace -- so the interval is the whole window a tab has to connect after
-# the viewer is ready; a fraction of a second was lost on a slow runner.
-_SESSION_CHECK_SECONDS = 3.0
+# The session-lifetime viewer's grace and check interval. The grace is the
+# window a tab has to connect after the viewer starts, and the window a
+# lost stream has to come back: it is counted from the viewer's start, so
+# it is sized for a slow runner to become ready and load the page inside
+# it. The check runs many times within it, so the test observes the rule
+# holding the viewer open through checks that find nothing held.
+_SESSION_GRACE_SECONDS = 8.0
+_SESSION_CHECK_SECONDS = 0.5
 
 
 def _session_lifetime_viewer(tmp_path_factory):
     """A viewer started to serve browser sessions, checking every few seconds.
 
     Its clients are pages and nothing else, so it is watched with no pid;
-    the grace is one second, so the test observes both halves of the rule
+    the grace is a few seconds, so the test observes both halves of the rule
     within its patience.
     """
     elspais_bin = resolve_elspais()
@@ -3304,7 +3307,7 @@ def _session_lifetime_viewer(tmp_path_factory):
         env={
             **os.environ,
             "_ELSPAIS_CLIENT_CHECK_INTERVAL": str(_SESSION_CHECK_SECONDS),
-            "_ELSPAIS_CLIENT_GRACE": "1",
+            "_ELSPAIS_CLIENT_GRACE": str(_SESSION_GRACE_SECONDS),
             "_ELSPAIS_EVENTS_HEARTBEAT": "2",
         },
     )
@@ -3332,16 +3335,17 @@ def _end_viewer(proc: subprocess.Popen) -> None:
 class TestBrowserSessionBoundLifetime:
     """Validates REQ-o00079-A and REQ-o00079-B through a real tab: the page
     holds a handle for as long as it is open, the viewer keeps serving while
-    it does, and once the tab is gone the viewer ends on its own.
+    it does, and once the tab has been gone for the grace the viewer ends on
+    its own.
     """
 
     @pytest.mark.browser
     @pytest.mark.e2e
     def test_REQ_o00079_A_open_tab_keeps_the_viewer_and_closing_it_ends_it(self, tmp_path_factory):
         # Verifies: REQ-o00079-A, REQ-o00079-B
-        # The browser and its tab are up before the viewer is, so nothing
-        # but the tab's own request stands between the viewer becoming
-        # ready and its first check.
+        # The browser and its tab are up before the viewer is, so the grace
+        # -- counted from the viewer's start -- is spent on the viewer
+        # becoming ready and the page loading, and on nothing else.
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True)
             page = browser.new_page()
@@ -3354,12 +3358,13 @@ class TestBrowserSessionBoundLifetime:
                     page,
                     "() => editState.lastAnnouncedTip !== null",
                     "the page must hold the change stream and hear the server on it",
-                    timeout=10.0,
+                    timeout=_SESSION_GRACE_SECONDS - 2.0,
                 )
-                # At least one check passes with the tab open: the handle it
-                # holds is what the rule sees, and the rule is not the cause
-                # of an ending while one is held.
-                assert not _await_process_exit(proc, _SESSION_CHECK_SECONDS + 1.0), (
+                # The tab holds its stream for longer than the grace: the
+                # handle is what the rule sees, and the rule is not the
+                # cause of an ending while one is held -- the grace bounds
+                # an absence, not a lifetime.
+                assert not _await_process_exit(proc, _SESSION_GRACE_SECONDS + 1.0), (
                     f"the viewer ended while a tab held its stream:\n{_server_output(log_path)}"
                 )
                 # The tab is visible in the record an operator reads.
@@ -3367,7 +3372,13 @@ class TestBrowserSessionBoundLifetime:
                 assert {"kind": "session", "count": 1} in info.get("clients", []), info
                 browser.close()
 
-                assert _await_process_exit(proc, 15), (
+                # Losing the tab starts the grace rather than ending the
+                # viewer at the next check: a reload drops the stream the
+                # same way, and comes back.
+                assert not _await_process_exit(proc, _SESSION_CHECK_SECONDS * 3), (
+                    f"the viewer ended at a check inside the grace:\n{_server_output(log_path)}"
+                )
+                assert _await_process_exit(proc, _SESSION_GRACE_SECONDS + 10), (
                     f"the last tab closed, but the viewer went on serving:\n"
                     f"{_server_output(log_path)}"
                 )

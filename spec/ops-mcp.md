@@ -713,23 +713,27 @@ Where a process serves its working tree to a browser page, the page SHALL be a c
 
 A. A page served by the process SHALL hold a client handle for as long as it is open, of the kind whose disappearance the process observes without the page's cooperation.
 
-B. A process started to serve such sessions SHALL be bound by the client-liveness rule of REQ-o00074-E over the handles of assertion A, including in the interval before the first page connects: it ends, persisting the changes it holds, once no handle is held, and that rule is not the cause of its ending while one is.
+B. A process started to serve such sessions SHALL be bound by the client-liveness rule of REQ-o00074-E over the handles of assertion A: it ends, persisting the changes it holds, once no handle has been held for the grace interval — whether or not it holds changes, and counted from its start for the interval before the first page connects — and that rule is never the cause of its ending while a handle is held.
 
 C. A change to what the process serves — a change applied to the graph, or a rebuild of it — SHALL be announced to the page over the handle it holds rather than discovered by the page asking at intervals, and the process SHALL announce itself over that handle at a regular interval whether or not anything changed.
 
 D. The count of pending changes the page shows SHALL be established only from the process's answer to a request for that count (REQ-d00267), never from an announcement.
 
-E. Where the handle is lost, or no announcement arrives within the interval the process undertakes to announce itself, the page SHALL re-establish the count as it would after an announcement, so that a process which has stopped answering is presented as one.
+E. Where the handle is lost, or no announcement arrives within a small fixed multiple of the interval the process undertakes to announce itself, the page SHALL re-establish the count as it would after an announcement, so that a process which has stopped answering is presented as one.
 
 ### Rationale
 
 A process started to serve a browser page has no process identifier for its client: the page runs inside a browser the process did not start and cannot signal. What it can hold is a connection, and REQ-o00074 already admits a connection the client holds open as a handle, since the transport reports its close whether or not the client meant to close it. Assertion A makes the page hold one for its whole life, and B applies the existing lifetime rule to it rather than writing a second one — the same rule that spares a daemon while a client remains, and ends it once none does, decides when a process serving pages ends. It binds before the first page connects too, because a process started for a session that never arrives is otherwise a process nothing can end.
 
-A handle the page holds for its whole life is also the channel over which the process can speak first. A page that discovers changes by asking at intervals learns of them late, and every interval it does not ask is one in which a dead process still looks alive; the same handle, announced over at a regular interval, answers both. Assertion D keeps the count of pending changes where REQ-d00267 put it: an announcement says that something changed, and the count endpoint says how much is pending, and a page that read the count out of an announcement would present a number nobody was asked for. Assertion E is what keeps the count honest once the channel goes quiet — silence past the promised interval, or a lost handle, is treated as the failed request it would have been, so the page shows that it cannot ask rather than a number it can no longer confirm.
+B waits the grace interval even when nothing is pending, where a daemon whose recorded processes have all died may end at once, because the two handles disappear differently. A process that has died does not return, so its absence is the client leaving. A connection drops for reasons that end no session — a page reloaded, a machine put to sleep, a tunnel reconnecting — and the page opens another the moment it can, so the absence of every connection at one check says only that none is held now, not that the client has gone. Ending on that observation alone would end a hosted workspace under a person who pressed reload, and would end a process before a slow first page had finished loading. The grace is the interval over which no connection returning is taken to mean none will, and it is counted from the start so that the window before the first page connects is the same window as any other.
+
+A handle the page holds for its whole life is also the channel over which the process can speak first. A page that discovers changes by asking at intervals learns of them late, and every interval it does not ask is one in which a dead process still looks alive; the same handle, announced over at a regular interval, answers both. Assertion D keeps the count of pending changes where REQ-d00267 put it: an announcement says that something changed, and the count endpoint says how much is pending, and a page that read the count out of an announcement would present a number nobody was asked for. Assertion E is what keeps the count honest once the channel goes quiet — silence past the promised interval, or a lost handle, is treated as the failed request it would have been, so the page shows that it cannot ask rather than a number it can no longer confirm. The tolerance E allows is what tells silence from one late announcement: a process under load may announce itself a little after it undertook to, and a page that reacted to every such delay would present a working process as one that had stopped.
 
 ### Changelog
 
+- 2026-09-18 | abe6acb7 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-09-17 | 39871cb2 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-09-18 | - | - | Michael Lewis (<michael@anspar.org>) | State what a process serving a browser page owes the session holding it
+- 2026-09-18 | - | - | Michael Lewis (<michael@anspar.org>) | End only once no handle has been held for the grace interval; bound the silence tolerance
 
-*End* *Serving a Browser Session* | **Hash**: 39871cb2
+*End* *Serving a Browser Session* | **Hash**: abe6acb7

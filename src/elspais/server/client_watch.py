@@ -17,11 +17,23 @@ the one process watched with no pid at all: its clients are pages, each
 present only as the stream it holds open, so the watchdog reads them
 through the held-stream source and records no process (REQ-o00079-B).
 
+A stream is a transient handle where a pid is not. A process that has
+died does not come back, so its absence is the client leaving; a stream
+drops on a page reload, a machine going to sleep or a tunnel
+reconnecting, and the page opens another the moment it can, so no
+stream held at one check says only that none is held now. A watchdog
+whose handles are all streams therefore gates even its clean exit on
+the grace, counted from its start so the window before the first page
+connects is the same window as any other.
+
 Shutdown decision matrix (``shutdown_decision``):
 
     no client identity recorded        -> KEEP (TTL-only behavior)
     some recorded client alive         -> KEEP
     all clients gone, nothing unsaved  -> EXIT_CLEAN
+      ... unless the handles are transient, then
+        in grace                       -> WAIT_GRACE (disclose, extend)
+        grace over                     -> EXIT_CLEAN
     all gone, unsaved, in grace        -> WAIT_GRACE (warn, extend)
     all gone, unsaved, grace over      -> EXIT_SAVE (persist, then exit)
 
@@ -121,12 +133,13 @@ class Decision(enum.Enum):
     SAVE_FAILED = "save-failed"
 
 
-# Implements: REQ-o00074-E
+# Implements: REQ-o00074-E, REQ-o00079-B
 def shutdown_decision(
     has_clients: bool,
     any_client_alive: bool,
     mutation_count: int | None,
     grace_expired: bool,
+    transient_handles: bool,
 ) -> Decision:
     """Pure decision function for the client-liveness watchdog.
 
@@ -139,8 +152,12 @@ def shutdown_decision(
         mutation_count: Unsaved in-memory mutations. None means unknown,
             which is treated as dirty (conservative: never assume work
             we cannot see is absent).
-        grace_expired: Whether the bounded dirty-daemon grace period has
-            elapsed since the last client was seen gone.
+        grace_expired: Whether the bounded grace period has elapsed since
+            the last client was seen gone.
+        transient_handles: Whether the handles this watchdog reads are
+            streams alone, which drop and return without the client
+            leaving. Such a watchdog waits out the grace before a clean
+            exit too; a pid that has died is final and needs no grace.
     """
     if not has_clients:
         return Decision.KEEP
@@ -148,6 +165,8 @@ def shutdown_decision(
         return Decision.KEEP
     dirty = mutation_count is None or mutation_count > 0
     if not dirty:
+        if transient_handles and not grace_expired:
+            return Decision.WAIT_GRACE
         return Decision.EXIT_CLEAN
     if grace_expired:
         return Decision.EXIT_SAVE
@@ -189,9 +208,13 @@ class ClientWatchdog:
         # Implements: REQ-o00079-B
         # No pid is a client set that starts empty, not a watchdog that
         # never fires: a process serving browser pages has clients that
-        # are streams and nothing else, and the rule binds from the start,
-        # before the first page connects.
+        # are streams and nothing else. A stream drops and returns
+        # without its client leaving, so this watchdog's clean exit waits
+        # out the grace like a dirty one's, and the grace is counted from
+        # here, so the window before the first page connects is the same
+        # window as any other.
         self._clients: set[int] = set() if client_pid is None else {client_pid}
+        self._transient_handles = client_pid is None
         self._clients_lock = threading.Lock()
         self._pending_fn = pending_fn
         self._lock = lock if lock is not None else nullcontext()
@@ -204,7 +227,7 @@ class ClientWatchdog:
         self._publish_fn = publish_fn
         self._published: tuple[tuple[int, ...], int] | None = None
         self._clock = clock
-        self._dead_since: float | None = None
+        self._dead_since: float | None = self._clock() if self._transient_handles else None
         self._warned_grace = False
         self._last_token: object = _UNOBSERVED
         self._stop = threading.Event()
@@ -399,6 +422,7 @@ class ClientWatchdog:
                 any_client_alive=False,
                 mutation_count=count,
                 grace_expired=grace_expired,
+                transient_handles=self._transient_handles,
             )
             return self._act(decision, count)
 
@@ -431,16 +455,29 @@ class ClientWatchdog:
         elif decision is Decision.WAIT_GRACE:
             if not self._warned_grace:
                 self._warned_grace = True
-                print(
-                    "No recorded client is running. "
-                    f"{count if count is not None else 'An unknown number of'} "
-                    f"unsaved in-memory mutation(s) are pending. In {self._grace:.0f}s, "
-                    "if no client is running and nothing further is applied, the "
-                    "daemon will save them to disk and stop, and will record that "
-                    "it saved them itself.",
-                    file=sys.stderr,
-                    flush=True,
-                )
+                # Implements: REQ-o00074-M
+                # The disclosure states what is pending and the deadline.
+                # With nothing pending there is nothing to save, so it
+                # says so rather than promising to save a count of zero.
+                if count == 0:
+                    print(
+                        "No recorded client is running and nothing is pending. "
+                        f"In {self._grace:.0f}s, if no client is running, the "
+                        "process will stop.",
+                        file=sys.stderr,
+                        flush=True,
+                    )
+                else:
+                    print(
+                        "No recorded client is running. "
+                        f"{count if count is not None else 'An unknown number of'} "
+                        f"unsaved in-memory mutation(s) are pending. In {self._grace:.0f}s, "
+                        "if no client is running and nothing further is applied, the "
+                        "daemon will save them to disk and stop, and will record that "
+                        "it saved them itself.",
+                        file=sys.stderr,
+                        flush=True,
+                    )
         elif decision is Decision.EXIT_SAVE:
             outcome = self._run_stop_routine()
             if not outcome.get("success"):
@@ -552,7 +589,9 @@ def build_client_watchdog(
     shutdown routine, held streams are read from the tracker the app
     published, and the client set is recorded in the state record. The
     check interval and grace period come from the same environment knobs
-    in both processes.
+    in both processes. A viewer passes no pid, and a watchdog with no pid
+    reads streams alone, so it waits out the grace before a clean exit
+    as well as a saving one (REQ-o00079-B).
 
     ``shared`` is the ``SharedServerState`` holder. The watchdog is
     published on it as ``"watchdog"`` so the adoption route and the idle

@@ -258,7 +258,7 @@ The same answer is announced over `GET /api/events`, a server-sent-events
 stream a client holds open for as long as it is interested. The server
 speaks first: a `hello` event on connection carrying the current tip and
 the interval at which it undertakes to announce itself, a `change` event
-within about a second of any mutation, undo or rebuild, and a `heartbeat`
+promptly after any mutation, undo or rebuild, and a `heartbeat`
 at that interval when nothing changed, so a quiet server can be told from
 one that has gone. Every event carries the fields above. The interval
 defaults to half a minute; `_ELSPAIS_EVENTS_HEARTBEAT` (seconds) shortens
@@ -332,7 +332,7 @@ Two rules keep that probe honest:
 **This makes an idle tab reactive to other writers.** Because the cycle
 runs whether or not you touch the page, pending changes arriving through
 the shared daemon from someone else -- an MCP agent, a second viewer --
-show up in *this* tab's badge within about a second, and arm its
+show up in *this* tab's badge as soon as they are announced, and arm its
 before-navigation warning. That follows from the badge being server-truth
 rather than a tally of what this page did, but it is a real change in
 behaviour from a badge that moved only when this page acted: a tab you

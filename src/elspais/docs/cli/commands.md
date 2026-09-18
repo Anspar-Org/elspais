@@ -468,17 +468,23 @@ also serves MCP tools at `/mcp` for AI agent integration.
   `--embed-content`      Embed full markdown in HTML for offline viewing
   `--path DIR`           Path to repository root (default: auto-detect)
   `--session-lifetime`   Stop the server, saving held changes, once no
-                         browser tab holds it open
+                         browser tab has held it open for the grace
+                         interval
 
 **Session lifetime.** A viewer tab holds a stream open to the server for
 as long as it is open, and the server counts it as a client exactly as it
 counts an agent's MCP session (see `daemon`). With `--session-lifetime`
 that count is what ends the viewer: it keeps serving while any tab holds
-a stream, and once none does -- including when no tab ever connected --
-it persists whatever changes it holds and stops, by the same rule and
-the same grace as a daemon whose clients are gone. Meant for a viewer
-started on somebody's behalf, such as one a hub opens for a browser
-session. Without the flag the viewer's lifetime is unchanged.
+a stream, and once no tab has held one for the grace interval -- counted
+from its start, so a viewer no tab ever connects to ends by the same
+clock -- it persists whatever changes it holds and stops, by the same
+rule and the same grace as a daemon whose clients are gone. The grace
+applies whether or not changes are pending, unlike a daemon whose
+recorded processes have all died: a tab's stream drops on a reload, a
+laptop going to sleep or a tunnel reconnecting, and comes back, so no
+stream held at one check is not a session that has ended. Meant for a
+viewer started on somebody's behalf, such as one a hub opens for a
+browser session. Without the flag the viewer's lifetime is unchanged.
 
 ## graph
 
@@ -997,9 +1003,11 @@ does not repeat for that daemon; the same daemon does not warn you twice.
 **Started deliberately (explicit).** `elspais daemon`, a manual
 `elspais mcp serve`, and the viewer record no session at all. Their
 lifetime is governed solely by `cli_ttl`, and `daemon.json` carries no
-`client_pid` key. The one exception is a viewer started with
-`--session-lifetime`, which records no process id either but is bound
-to the tabs holding it (see `viewer`).
+`client_pid` key. A viewer started with `--session-lifetime` is not an
+explicit start in this sense: it is started on behalf of the browser
+sessions it serves, records no process id because a page has none, and
+is bound to the tabs holding it through the streams they hold (see
+`viewer`).
 
 **Termination.** The check runs on the daemon's own clock, about once a
 minute, so a client-bound daemon with nothing pending shuts down at the

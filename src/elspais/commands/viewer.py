@@ -258,9 +258,11 @@ def _run_server(args: argparse.Namespace, open_browser: bool = False) -> int:
     # pages, present only as the stream each holds open, so it is watched
     # with no pid at all and reads its clients through the tracker the
     # app published. The same watchdog, wired the same way, decides its
-    # ending as it decides a daemon's: once no handle is held — before the
-    # first page connects included — it persists what it holds and stops.
-    # Without the flag the viewer's lifetime is exactly what it was.
+    # ending as it decides a daemon's: once no handle has been held for
+    # the grace interval — counted from here, so the window before the
+    # first page connects is the same window as any other — it persists
+    # what it holds and stops. Without the flag the viewer's lifetime is
+    # exactly what it was.
     if getattr(args, "session_lifetime", False):
         from elspais.server.client_watch import build_client_watchdog
 

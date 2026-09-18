@@ -454,7 +454,7 @@ class ViewerArgs:
     """Path to repository root (default: auto-detect from cwd)."""
 
     session_lifetime: bool = False
-    """Stop the server, saving held changes, once no browser tab holds it open."""
+    """Stop the server, saving held changes, once no tab has held it for the grace interval."""
 
     output: Annotated[Path | None, tyro.conf.arg(aliases=["-o"])] = None
     """Write output to file instead of stdout."""
