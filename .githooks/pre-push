@@ -28,6 +28,20 @@ set -e
 unset GIT_DIR
 unset GIT_WORK_TREE
 
+# The worktree's venv is the environment this tree's stages mean -- its pytest
+# above all. Stage 5 invokes `pytest` by name, and this repository's own
+# instructions never install one globally, so without this the command is not
+# found, `! pytest ...` succeeds, and the stage reports "Documentation sync
+# tests failed" for a suite it never ran. A false failure is worse than a
+# missing check: it is indistinguishable from a real one, and on a branch with
+# an open PR it blocks the push. pre-commit and e2e-verdict already resolve the
+# venv this way; this is the same preamble.
+HOOK_ROOT=$(git rev-parse --show-toplevel)
+if [ -d "$HOOK_ROOT/.venv/bin" ]; then
+    PATH="$HOOK_ROOT/.venv/bin:$PATH"
+    export PATH
+fi
+
 # Colors
 RED='\033[0;31m'
 YELLOW='\033[1;33m'
