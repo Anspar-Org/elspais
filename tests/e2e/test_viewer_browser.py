@@ -2749,10 +2749,9 @@ class TestAssertionPillMeasures:
         a pill states its standing, names the four measures behind it, and
         carries no `~` and no caveat element (REQ-d00258-J).
         """
-        # Not `networkidle`: this page polls its own server every 30s, so on a
-        # long-lived session viewer the network never goes quiet and the wait
-        # times out. Waiting for the entry point the test actually calls is
-        # both stricter and stable.
+        # Not `networkidle`: this page holds a change stream open to its
+        # server for its whole life. Waiting for the entry point the test
+        # actually calls is both stricter and stable.
         page.goto(viewer_url, wait_until="domcontentloaded", timeout=_PAGE_LOAD_TIMEOUT)
         page.wait_for_function(
             "() => typeof window.openCard === 'function'", timeout=_PAGE_LOAD_TIMEOUT
