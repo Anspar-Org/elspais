@@ -459,6 +459,7 @@ def modify_status(
 # ---------------------------------------------------------------------------
 
 
+# Implements: REQ-o00063-G
 def modify_title(
     file_path: Path,
     req_id: str,
@@ -517,6 +518,7 @@ def modify_title(
     }
 
 
+# Implements: REQ-o00063-H
 def modify_assertion_text(
     file_path: Path,
     req_id: str,
@@ -633,6 +635,7 @@ def modify_assertion_text(
     }
 
 
+# Implements: REQ-o00063-I
 def add_assertion_to_file(
     file_path: Path,
     req_id: str,
@@ -886,6 +889,7 @@ def rename_assertion_in_file(
 # ---------------------------------------------------------------------------
 
 
+# Implements: REQ-o00063-B
 def move_requirement(
     source_file: Path,
     dest_file: Path,
@@ -957,6 +961,7 @@ def move_requirement(
 # ---------------------------------------------------------------------------
 
 
+# Implements: REQ-o00063-A
 def change_reference_type(
     file_path: Path,
     req_id: str,

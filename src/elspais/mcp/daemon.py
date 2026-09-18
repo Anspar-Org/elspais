@@ -897,7 +897,7 @@ def get_daemon_info(repo_root: Path) -> dict | None:
         return None
 
 
-# Implements: REQ-o00075-B
+# Implements: REQ-o00075-A, REQ-o00075-B
 def start_daemon(
     repo_root: Path,
     ttl_minutes: int = _DEFAULT_TTL,
