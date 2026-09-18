@@ -153,7 +153,8 @@ The builder enforces this matrix at build time, raising typed
 | `Refines: X` (from a **Template** REQ) | TEMPLATE | OK -- forms the template subtree |
 | `Refines: X` (from any other REQ) | TEMPLATE | Error (a template's refiners must be templates) |
 | `Refines: X`               | INSTANCE  | Error (instance is read-only)            |
-| `Refines: X`               | CONCRETE  | OK                                       |
+| `Refines: X` (from a **Template** REQ) | CONCRETE | Error (outside its template subtree) |
+| `Refines: X` (from any other REQ) | CONCRETE | OK                                     |
 | `Implements: X` (CODE)     | TEMPLATE  | OK -- applies to every satisfier         |
 | `Implements: X` (CODE)     | CONCRETE  | OK                                       |
 | `Implements: X` (CODE)     | INSTANCE  | Error (composite IDs not author syntax)  |

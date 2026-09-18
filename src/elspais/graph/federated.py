@@ -1675,7 +1675,10 @@ class FederatedGraph:
 
         The one matrix authority is ``stereotype_matrix_fault``; this reads
         the source node from the declaring repository and the target from
-        the owning one and reports the fault under the reference as written.
+        the owning one and reports the fault under ``target_id`` -- the node
+        it judged, which for a multi-label reference is one expanded label
+        rather than the item as written, the shape the same-repository
+        builder reports.
         """
         from elspais.graph.template_subtree import stereotype_matrix_fault
 
@@ -1684,7 +1687,7 @@ class FederatedGraph:
         if source is None or target is None:
             return None
         return stereotype_matrix_fault(
-            source, target, br.source_id, br.target_id, EdgeKind(br.edge_kind)
+            source, target, br.source_id, target_id, EdgeKind(br.edge_kind)
         )
 
     # Implements: REQ-d00269-B
@@ -1733,41 +1736,56 @@ class FederatedGraph:
                 if target_repo_name is None:
                     expansion = self._expand_foreign_multi_reference(br.target_id)
                     if expansion is not None and expansion[0] != source_entry.namespace:
-                        owner, present, missing = expansion
-                        # Implements: REQ-p00014-G
-                        # Every label of one item names one requirement, so
-                        # the item is judged once, against the first.
-                        matrix_fault = self._matrix_fault(
-                            source_entry, self._repos[owner], br, present[0]
-                        )
-                        if matrix_fault is not None:
-                            replacements[i] = [matrix_fault]
-                            continue
-                        wired = self._wire_expanded_labels(source_entry, br, owner, present)
+                        owner, canonical, present = expansion
+                        # Implements: REQ-p00014-G, REQ-p00014-R
+                        # Each expanded label is judged on its own, in the
+                        # order the grammar expands them, so the faults come
+                        # out in the shape and order the same-repository
+                        # builder produces (REQ-d00269-B): a label the
+                        # matrix refuses is one FORBIDDEN fault naming that
+                        # label, a label the owner does not hold is one
+                        # UNKNOWN_ASSERTION fault -- never a class further
+                        # along than the label reached -- and only the
+                        # labels no fault refused are wired.
+                        faults: list[ReferenceFault] = []
+                        admitted: list[str] = []
+                        for label_id in canonical:
+                            if label_id not in present:
+                                faults.append(
+                                    ReferenceFault(
+                                        source_id=br.source_id,
+                                        target_id=label_id,
+                                        edge_kind=br.edge_kind,
+                                        # At least one label of this same
+                                        # multi-assertion item resolved in
+                                        # `owner` (else `present` would be
+                                        # empty and this branch never
+                                        # reached), so the requirement
+                                        # itself is confirmed to exist there
+                                        # -- what is missing is only this
+                                        # label.
+                                        fault_class=FaultClass.UNKNOWN_ASSERTION,
+                                        diagnostic=(
+                                            f"repository '{owner}' owns {label_id} in the "
+                                            f"identifier grammar it declares, but has no such "
+                                            f"node; check the labels named in {br.target_id}."
+                                        ),
+                                    )
+                                )
+                                continue
+                            matrix_fault = self._matrix_fault(
+                                source_entry, self._repos[owner], br, label_id
+                            )
+                            if matrix_fault is not None:
+                                faults.append(matrix_fault)
+                                continue
+                            admitted.append(label_id)
+                        wired = self._wire_expanded_labels(source_entry, br, owner, admitted)
                         if wired and EdgeKind(br.edge_kind) in self._CONTENT_EDGE_KINDS:
                             wired_sources.setdefault(source_entry.namespace, set()).add(
                                 br.source_id
                             )
-                        replacements[i] = [
-                            ReferenceFault(
-                                source_id=br.source_id,
-                                target_id=missing_id,
-                                edge_kind=br.edge_kind,
-                                # At least one label of this same multi-
-                                # assertion item resolved in `owner` (else
-                                # `present` would be empty and this branch
-                                # never reached), so the requirement itself
-                                # is confirmed to exist there -- what is
-                                # missing is only this label.
-                                fault_class=FaultClass.UNKNOWN_ASSERTION,
-                                diagnostic=(
-                                    f"repository '{owner}' owns {missing_id} in the identifier "
-                                    f"grammar it declares, but has no such node; check the "
-                                    f"labels named in {br.target_id}."
-                                ),
-                            )
-                            for missing_id in missing
-                        ]
+                        replacements[i] = faults
                         continue
                 if target_repo_name and target_repo_name != source_entry.namespace:
                     target_entry = self._repos[target_repo_name]
@@ -1825,9 +1843,10 @@ class FederatedGraph:
     ) -> tuple[str, list[str], list[str]] | None:
         """Expand a multi-*Assertion* reference under its owner's grammar.
 
-        Returns ``(repo_name, present_ids, missing_ids)`` for the first
+        Returns ``(repo_name, canonical_ids, present_ids)`` for the first
         repository that claims ``target_id`` and holds at least one of the
-        nodes it expands to. Returns ``None`` when the reference names at
+        nodes it expands to: every label in the order the grammar expands
+        them, and the subset that repository holds. Returns ``None`` when the reference names at
         most one label (the single-target case the ownership index already
         answers) and when no repository holds any of the expansion -- a
         reference nothing in the federation can resolve keeps whatever
@@ -1847,8 +1866,7 @@ class FederatedGraph:
             present = [c for c in canonical if self._holds_live_target(entry.graph, c)]
             if not present:
                 continue
-            missing = [c for c in canonical if not self._holds_live_target(entry.graph, c)]
-            return entry.namespace, present, missing
+            return entry.namespace, canonical, present
         return None
 
     # Implements: REQ-d00269-B

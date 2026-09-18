@@ -1114,23 +1114,56 @@ def _make_app_refining_library(tmp_path: Path, refiner_marker: str, reference: s
 class TestCrossRepoRefinesMatrix:
     """The validation matrix judges a target in an associated repository."""
 
-    # Verifies: REQ-p00014-G
-    @pytest.mark.parametrize("reference", ["LIB-p00001", "LIB-p00001-A+B"])
+    # Verifies: REQ-p00014-G, REQ-d00269-B
+    @pytest.mark.parametrize(
+        ("reference", "refused"),
+        [
+            ("LIB-p00001", ["LIB-p00001"]),
+            ("LIB-p00001-A+B", ["LIB-p00001-A", "LIB-p00001-B"]),
+        ],
+    )
     def test_concrete_refiner_of_foreign_template_is_refused(
-        self, tmp_path: Path, reference: str
+        self, tmp_path: Path, reference: str, refused: list[str]
     ) -> None:
+        """A refused reference is reported per expanded label, as the in-repo builder does."""
         _make_library(tmp_path)
         app = _make_app_refining_library(tmp_path, "", reference)
         fed = build_graph(repo_root=app, scan_code=False, scan_tests=False)
 
         faults = list(fed.unresolved_references())
-        assert [(b.source_id, b.target_id, b.edge_kind) for b in faults] == [
-            ("APP-p00002", reference, "refines")
+        assert [(b.source_id, b.target_id, b.edge_kind, b.fault_class) for b in faults] == [
+            ("APP-p00002", target, "refines", FaultClass.FORBIDDEN) for target in refused
         ]
-        fault = faults[0]
-        assert fault.fault_class is FaultClass.FORBIDDEN
-        assert "Mark APP-p00002 **Template**" in fault.diagnostic
-        assert f"Satisfies: {reference}" in fault.diagnostic
+        for fault in faults:
+            assert "Mark APP-p00002 **Template**" in fault.diagnostic
+            assert f"Satisfies: {fault.target_id}" in fault.diagnostic
+
+        template = fed.find_by_id("LIB-p00001")
+        assert template is not None
+        assert not [e for e in template.iter_outgoing_edges() if e.kind == EdgeKind.REFINES], (
+            "a refused reference never lands as an edge"
+        )
+
+    # Verifies: REQ-p00014-G, REQ-p00014-R
+    def test_refused_and_missing_labels_of_one_item_are_each_reported(self, tmp_path: Path) -> None:
+        """One item naming a refused label and a missing one keeps both faults.
+
+        Each label reaches its own failure class: the label the library holds
+        is refused by the matrix, the label it lacks is unknown -- not a
+        class further along than it reached -- and the two are reported in
+        the order the grammar expands them.
+        """
+        _make_library(tmp_path)
+        app = _make_app_refining_library(tmp_path, "", "LIB-p00001-A+Z")
+        fed = build_graph(repo_root=app, scan_code=False, scan_tests=False)
+
+        faults = list(fed.unresolved_references())
+        assert [(b.source_id, b.target_id, b.edge_kind, b.fault_class) for b in faults] == [
+            ("APP-p00002", "LIB-p00001-A", "refines", FaultClass.FORBIDDEN),
+            ("APP-p00002", "LIB-p00001-Z", "refines", FaultClass.UNKNOWN_ASSERTION),
+        ]
+        assert "Mark APP-p00002 **Template**" in faults[0].diagnostic
+        assert "LIB-p00001-A+Z" in faults[1].diagnostic
 
         template = fed.find_by_id("LIB-p00001")
         assert template is not None
