@@ -111,11 +111,14 @@ def stereotype_matrix_fault(
 
     Returns the ``ReferenceFault`` for a reference whose source and target
     stereotypes the matrix forbids for ``edge_kind``, or None where the
-    matrix admits it. Every builder reads it before creating an edge — the
-    one-repository builder and the federation wiring a reference into an
-    associated repository alike — so the graph never holds an edge it also
-    reports as a fault, and a target owned by another repository is judged
-    by the rule a local one is.
+    matrix admits it. It is the one authority for the matrix's Refines,
+    Implements and Verifies rows: every builder reads it before creating
+    such an edge — the one-repository builder and the federation wiring a
+    reference into an associated repository alike — so the graph never
+    holds an edge it also reports as a fault, and a target owned by another
+    repository is judged by the rule a local one is. The Satisfies rows are
+    judged where a Satisfies: is instantiated, since there a refusal
+    withholds a clone rather than an edge.
     """
     target_stereotype = target.get_field("stereotype")
     source_is_template = (
