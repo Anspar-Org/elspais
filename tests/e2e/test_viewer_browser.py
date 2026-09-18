@@ -205,12 +205,18 @@ def page(viewer_url):
 class TestViewerPageLoad:
     """Validates REQ-d00010: viewer page loads correctly in a browser."""
 
+    # These are the first loads of the page over this repository's own estate,
+    # and a cold CI container has overrun the fixture's default deadline on
+    # that first render alone, so both get the allowance their neighbours get.
+    # The wait stays on networkidle: the page's scripts must have run for a
+    # script error to be observable.
+
     # Verifies: REQ-d00010-A
     def test_REQ_d00010_A_page_loads_without_js_errors(self, page, viewer_url):
         js_errors = []
         page.on("pageerror", lambda err: js_errors.append(str(err)))
 
-        page.goto(viewer_url, wait_until="networkidle")
+        page.goto(viewer_url, wait_until="networkidle", timeout=_PAGE_LOAD_TIMEOUT)
 
         assert not js_errors, f"JS errors on page load: {js_errors}"
         title = page.title()
@@ -221,7 +227,7 @@ class TestViewerPageLoad:
 
     # Verifies: REQ-d00010-A
     def test_REQ_d00010_A_page_has_content(self, page, viewer_url):
-        page.goto(viewer_url, wait_until="networkidle")
+        page.goto(viewer_url, wait_until="networkidle", timeout=_PAGE_LOAD_TIMEOUT)
 
         body_text = page.text_content("body") or ""
         assert len(body_text.strip()) > 50, (

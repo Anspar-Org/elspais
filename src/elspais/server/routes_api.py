@@ -1256,7 +1256,7 @@ async def api_export(request: Request) -> Response:
     try:
         text = export_document(state.graph, state.config, report, built, fmt)
         if fmt == PDF_FORMAT:
-            body = await run_in_threadpool(markdown_to_pdf, text)
+            body = await run_in_threadpool(markdown_to_pdf, text, report.capitalize())
         else:
             body = text.encode("utf-8")
     except UnofferedFormat as exc:

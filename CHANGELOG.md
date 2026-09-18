@@ -6,7 +6,7 @@ All notable changes to elspais will be documented in this file.
 
 ### Added
 
-- **A report is exported from the viewer (REQ-d00298)** -- `GET /api/export/{report}?format=markdown|csv|pdf` downloads `trace`, `summary`, `gaps` or `checks` as a document, and the served page's toolbar gains an Export control that fetches it. The route takes exactly the query the matching `/api/run/{report}` route takes, read by the same builder, so what downloads is what was shown; a markdown or CSV download is byte for byte what the command line renders for the same inputs, and a PDF is that markdown converted by pandoc.
+- **A report is exported from the viewer (REQ-d00298)** -- `GET /api/export/{report}?format=markdown|csv|pdf` downloads `trace`, `summary`, `gaps` or `checks` as a document, and the served page's toolbar gains an Export control that fetches it. The route takes exactly the query the matching `/api/run/{report}` route takes, read by the same builder, so what downloads is what was shown; a markdown or CSV download is byte for byte what the command line renders for the same inputs, and a PDF is that markdown converted by pandoc through the template `elspais pdf` typesets with.
 
   An export is refused rather than delivered short: a format the report does not offer is a 400 naming the offered set, a missing converter is a 409 naming what to install, and a conversion that fails is a 500 carrying its output. The attachment is named for its report and format.
 
@@ -187,6 +187,10 @@ All notable changes to elspais will be documented in this file.
   A link the tool WRITES is now spelled in the target file's own pattern too (`elspais link --apply`, MCP `apply_link`), rather than always `#`. Writing `#` into a JavaScript file left a line that was neither valid there nor read back — a relationship the author was told existed and that nothing recorded. A file whose language carries no pattern is refused rather than written to.
 
   Term scanning is unaffected in what it already read, and gains the extensions the named set adds. It continues to read block comments, which is a different question — finding a *Defined Term* in prose, not admitting a keyword.
+
+### Fixed
+
+- **A PDF whose table needs relative column widths no longer fails to typeset** -- pandoc lays out a table whose row outgrows the line with column widths it computes through the `calc` package and alignment commands from `array`, and the bundled template loaded neither, so `elspais pdf` stopped with an undefined control sequence on such a table. The template now loads both.
 
 ### Added
 

@@ -290,8 +290,9 @@ holds.
 
 A markdown or CSV download is byte for byte what `elspais <report> --format
 markdown` or `--format csv` renders for the same inputs. A PDF is that
-markdown converted by `pandoc --pdf-engine=xelatex`; when either tool is
-absent the export is refused with a 409 naming what to install, and a
+markdown converted by `pandoc --pdf-engine=xelatex` through the LaTeX
+template `elspais pdf` typesets with; when either tool is absent the
+export is refused with a 409 naming what to install, and a
 conversion that fails is a 500 carrying the converter's output -- never a
 short or empty file. A format the report does not offer (CSV for `gaps` or
 `checks`, which list findings rather than columns) is refused with a 400

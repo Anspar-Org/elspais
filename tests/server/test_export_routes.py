@@ -217,6 +217,7 @@ def test_missing_tooling_is_refused_naming_what_to_install(client, monkeypatch, 
 def test_a_converter_that_fails_is_reported_with_its_output_not_delivered_short(
     client, monkeypatch
 ):
+    import elspais.pdf.renderer as renderer
     import elspais.server.export as export
 
     monkeypatch.setattr(export.shutil, "which", lambda name: f"/usr/bin/{name}")
@@ -224,7 +225,7 @@ def test_a_converter_that_fails_is_reported_with_its_output_not_delivered_short(
     def failing_run(cmd, **kwargs):
         return subprocess.CompletedProcess(cmd, 43, stdout="", stderr="xelatex: font not found")
 
-    monkeypatch.setattr(export.subprocess, "run", failing_run)
+    monkeypatch.setattr(renderer.subprocess, "run", failing_run)
     response = client.get("/api/export/summary", params={"format": "pdf"})
     assert response.status_code == 500
     body = response.json()
@@ -235,6 +236,7 @@ def test_a_converter_that_fails_is_reported_with_its_output_not_delivered_short(
 
 # Verifies: REQ-d00298-D
 def test_a_converter_that_writes_nothing_is_a_failure_not_an_empty_download(client, monkeypatch):
+    import elspais.pdf.renderer as renderer
     import elspais.server.export as export
 
     monkeypatch.setattr(export.shutil, "which", lambda name: f"/usr/bin/{name}")
@@ -242,7 +244,7 @@ def test_a_converter_that_writes_nothing_is_a_failure_not_an_empty_download(clie
     def silent_run(cmd, **kwargs):
         return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
 
-    monkeypatch.setattr(export.subprocess, "run", silent_run)
+    monkeypatch.setattr(renderer.subprocess, "run", silent_run)
     response = client.get("/api/export/summary", params={"format": "pdf"})
     assert response.status_code == 500
     assert response.json()["error"] == "render_failed"

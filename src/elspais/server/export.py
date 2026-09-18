@@ -4,19 +4,22 @@
 The viewer shows a report; this module turns the same report into the file a
 reader files. It renders nothing of its own: a markdown or CSV export is the
 command's own formatter run over the command's own payload, and a PDF is that
-markdown handed to pandoc. What a report offers here is read off the table the
-command line reads, so the two surfaces offer one set.
+markdown put through the conversion `elspais pdf` performs. What a report
+offers here is read off the table the command line reads, so the two surfaces
+offer one set.
 """
 
 from __future__ import annotations
 
+import json
 import shutil
-import subprocess
 import tempfile
 from collections.abc import Iterable, Sequence
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+
+from elspais.pdf.renderer import render_pdf
 
 if TYPE_CHECKING:
     from elspais.graph.federated import FederatedGraph
@@ -141,37 +144,30 @@ def render_document(
 
 
 # Implements: REQ-d00298-D
-def markdown_to_pdf(markdown: str) -> bytes:
-    """Convert a rendered markdown document to PDF through pandoc.
+def markdown_to_pdf(markdown: str, title: str) -> bytes:
+    """Convert a rendered markdown document to PDF.
 
-    A missing tool is refused before anything runs, naming what to install; a
-    converter that ran and left no document, or an empty one, is a failure
-    carrying its own output -- never a short file that downloads as if it were
-    the report.
+    The conversion is the one `elspais pdf` performs -- pandoc over the
+    bundled template -- so the viewer's document and the command line's are
+    typeset alike. A missing tool is refused before anything runs, naming
+    what to install; a converter that ran and left no document, or an empty
+    one, is a failure carrying its own output -- never a short file that
+    downloads as if it were the report.
     """
     for tool in ("pandoc", PDF_ENGINE):
         if shutil.which(tool) is None:
             raise ToolingUnavailable(tool)
+    # The template's title page and running header read the document's
+    # title, which a report's markdown does not carry.
+    document = f"---\ntitle: {json.dumps(title)}\n---\n\n{markdown}"
     with tempfile.TemporaryDirectory(prefix="elspais-export-") as tmp:
-        source = Path(tmp) / "report.md"
         output = Path(tmp) / "report.pdf"
-        source.write_text(markdown, encoding="utf-8")
-        result = subprocess.run(
-            [
-                "pandoc",
-                str(source),
-                f"--pdf-engine={PDF_ENGINE}",
-                "--from=markdown",
-                "-o",
-                str(output),
-            ],
-            capture_output=True,
-            text=True,
+        converter_output: list[str] = []
+        rc = render_pdf(
+            document, output_path=output, engine=PDF_ENGINE, converter_output=converter_output
         )
-        if result.returncode != 0:
-            raise RenderFailed(
-                f"pandoc exited {result.returncode}: {(result.stderr or '').strip()}"
-            )
+        if rc != 0:
+            raise RenderFailed(f"pandoc exited {rc}: {''.join(converter_output).strip()}")
         if not output.exists():
             raise RenderFailed("pandoc exited 0 and wrote no document")
         body = output.read_bytes()
