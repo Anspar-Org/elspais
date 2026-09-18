@@ -335,14 +335,21 @@ def report_shutdown_outcome(outcome: dict[str, Any], trigger: str) -> None:
 
 
 # Implements: REQ-d00132-A, REQ-d00132-B, REQ-p00083-A, REQ-p00083-C, REQ-p00083-H
+# Implements: REQ-d00296-A, REQ-d00296-B
 def persist_pending(
     state: SharedServerState,
     message: str | None = None,
     save_branch: bool = False,
     automatic: bool = False,
     trigger: str = "",
+    author: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """Write pending in-memory mutations to the spec files. Never raises.
+
+    ``author`` is the identity already established for the request that
+    asked for the save, where a trusted proxy supplied one; a changelog
+    row written for this save then names that person rather than whoever
+    the process runs as. Left out, the process resolves its own author.
 
     Callers reach this either because a client asked for a save or
     because the daemon is stopping with no client left to ask. The two
@@ -375,11 +382,13 @@ def persist_pending(
     config = state.get("config", {})
 
     pending = len(graph.mutation_log.tail(0))
+    # Taken before the write: a successful write clears the mutation log,
+    # and the changelog rows owed to these requirements are written after it.
+    active_mutated = _get_active_mutated_reqs(graph)
 
     typed_config = _validate_config(config) if isinstance(config, dict) else config
     changelog_enforce = typed_config.changelog.hash_current
     if changelog_enforce and not message:
-        active_mutated = _get_active_mutated_reqs(graph)
         if active_mutated:
             if not automatic:
                 ids = ", ".join(sorted(active_mutated))
@@ -418,7 +427,9 @@ def persist_pending(
         return {"success": False, "code": "save_failed", "error": f"save failed: {exc!r}"}
 
     if result.get("success") and changelog_enforce and message:
-        cl_result = _add_changelog_for_active_mutations(graph, working_dir, config, message)
+        cl_result = _add_changelog_for_active_mutations(
+            graph, working_dir, config, message, active_ids=active_mutated, author=author
+        )
         if not cl_result.get("success", True):
             return {
                 "success": False,

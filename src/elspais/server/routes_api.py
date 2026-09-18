@@ -72,6 +72,7 @@ from elspais.mcp.server import (
     _query_nodes,
     _undo_last_mutation,
 )
+from elspais.server.proxy_trust import proxied_identity
 from elspais.utilities.git import get_author_info
 from elspais.utilities.spec_paths import file_id_for_reference
 from elspais.view_model import build_levels, build_namespaces, build_statuses
@@ -2048,7 +2049,7 @@ async def _history_json(request: Request) -> dict:
         return {}
 
 
-# Implements: REQ-d00132-A, REQ-p00083-H
+# Implements: REQ-d00132-A, REQ-p00083-H, REQ-d00296-A
 @_serialized_write
 async def api_save(request: Request) -> JSONResponse:
     """POST /api/save - Persist mutations to spec files on disk.
@@ -2075,10 +2076,13 @@ async def api_save(request: Request) -> JSONResponse:
     conflict = _tip_conflict(state, data, field="if_tip_mutation_id")
     if conflict is not None:
         return conflict
+    # REQ-d00296-A: a changelog row written for this save names the
+    # session's user where a trusted proxy supplied one with the request.
     result = persist_pending(
         state.shared,
         message=data.get("message"),
         save_branch=bool(data.get("save_branch")),
+        author=proxied_identity(request),
     )
     if result.get("success"):
         state.build_time = time.time()
@@ -2189,9 +2193,17 @@ def _event_to_response_dict(evt: CommentEvent) -> dict:
     return d
 
 
-# Implements: REQ-d00231-E
-def _resolve_author(state: Any) -> dict[str, str]:
-    """Resolve author identity from config (REQ-d00231-E)."""
+# Implements: REQ-d00231-E, REQ-d00296-A, REQ-d00296-B
+def _resolve_author(state: Any, request: Request) -> dict[str, str]:
+    """The author of an annotation made through this request.
+
+    The identity a trusted proxy supplied with the request, where there is
+    one; otherwise the identity the server establishes for itself, so a
+    local viewer names its own user as it always has.
+    """
+    proxied = proxied_identity(request)
+    if proxied is not None:
+        return proxied
     return get_author_info(state.config.get("changelog", {}).get("id_source", "gh"))
 
 
@@ -2220,7 +2232,7 @@ async def api_comment_add(request: Request) -> JSONResponse:
     if not anchor:
         return JSONResponse({"success": False, "error": "anchor required"}, status_code=400)
 
-    author_info = _resolve_author(state)
+    author_info = _resolve_author(state, request)
     today = date_type.today().isoformat()
     comment_id = generate_comment_id(anchor, author_info["id"], today, text)
     evt = CommentEvent(
@@ -2268,7 +2280,7 @@ async def api_comment_reply(request: Request) -> JSONResponse:
         return JSONResponse({"success": False, "error": "parent not found"}, status_code=404)
     parent_anchor, parent_thread = result
 
-    author_info = _resolve_author(state)
+    author_info = _resolve_author(state, request)
     today = date_type.today().isoformat()
     reply_id = generate_comment_id(parent_anchor, author_info["id"], today, text)
     evt = CommentEvent(
@@ -2310,7 +2322,7 @@ async def api_comment_resolve(request: Request) -> JSONResponse:
     if not found_anchor:
         return JSONResponse({"success": False, "error": "comment not found"}, status_code=404)
 
-    author_info = _resolve_author(state)
+    author_info = _resolve_author(state, request)
     today = date_type.today().isoformat()
     resolve_id = generate_comment_id(found_anchor, author_info["id"], today, "resolve")
     evt = CommentEvent(

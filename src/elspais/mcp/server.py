@@ -906,13 +906,25 @@ def _get_active_mutated_reqs(graph: FederatedGraph) -> set[str]:
     return mutated_ids
 
 
+# Implements: REQ-d00296-A, REQ-d00296-B
 def _add_changelog_for_active_mutations(
     graph: FederatedGraph,
     repo_root: Path,
     config: dict,
     message: str,
+    active_ids: set[str] | None = None,
+    author: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """Add changelog entries for mutated Active requirements after save.
+
+    ``active_ids`` names the Active requirements the save changed. A
+    caller that has already written the files passes the set it took
+    before writing, because a successful write clears the mutation log
+    this would otherwise be read from. Absent, it is read from the log.
+
+    ``author`` is an identity already established for the request that
+    asked for the save; given, it names the rows, and the process's own
+    author is not consulted. Absent, the author is resolved as configured.
 
     Returns a status dict: ``{"success": True, "added": N}`` on success,
     or ``{"success": False, "error": "..."}`` when the changelog author
@@ -928,15 +940,17 @@ def _add_changelog_for_active_mutations(
     )
     from elspais.utilities.spec_writer import add_changelog_entry
 
-    active_ids = _get_active_mutated_reqs(graph)
+    if active_ids is None:
+        active_ids = _get_active_mutated_reqs(graph)
     if not active_ids:
         return {"success": True, "added": 0}
 
-    typed_config = _validate_config(config) if isinstance(config, dict) else config
-    try:
-        author = resolve_changelog_author(typed_config.changelog)
-    except AuthorResolutionError as exc:
-        return {"success": False, "error": str(exc)}
+    if author is None:
+        typed_config = _validate_config(config) if isinstance(config, dict) else config
+        try:
+            author = resolve_changelog_author(typed_config.changelog)
+        except AuthorResolutionError as exc:
+            return {"success": False, "error": str(exc)}
 
     added = 0
     for req_id in active_ids:

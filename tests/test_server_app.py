@@ -3631,3 +3631,63 @@ class TestComputeLinkDataIntegrates:
 
         implemented_ids = {entry["id"] for entry in r_links["implemented"]}
         assert "LIB-d00001" in implemented_ids
+
+
+class TestSaveChangelogAuthorFromProxy:
+    """The changelog row a save writes names the identity a trusted proxy
+    supplied with the save request, else the process's own (REQ-d00296).
+    """
+
+    PROXY_SECRET = "shared-with-the-hub"
+    PROXIED = {
+        "X-Elspais-Proxy-Secret": PROXY_SECRET,
+        "X-Elspais-User-Name": "Bob Jones",
+        "X-Elspais-User-Email": "bob@co.org",
+    }
+
+    @staticmethod
+    def _mutate_and_save(client: TestClient, headers: dict[str, str]) -> None:
+        # A title change leaves the requirement Active, so the save owes it
+        # a changelog row.
+        resp = client.post(
+            "/api/mutate/title",
+            json={
+                "node_id": "REQ-t00001",
+                "new_title": "Retitled by the session",
+                "if_version": _version(client, "REQ-t00001"),
+            },
+        )
+        assert resp.status_code == 200, resp.text
+        resp = client.post(
+            "/api/save",
+            json={"if_tip_mutation_id": _tip(client), "message": "retitled by the session"},
+            headers=headers,
+        )
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["success"] is True
+
+    # Verifies: REQ-d00296-A
+    def test_REQ_d00296_A_changelog_row_names_the_session_user(self, disk_app, monkeypatch):
+        from elspais.server import proxy_trust
+
+        monkeypatch.setattr(proxy_trust, "_SECRET", self.PROXY_SECRET)
+        app, spec_file = disk_app
+        self._mutate_and_save(TestClient(app), self.PROXIED)
+        content = spec_file.read_text(encoding="utf-8")
+        assert "Bob Jones (<bob@co.org>) | retitled by the session" in content
+        assert "Test User" not in content
+
+    # Verifies: REQ-d00296-B, REQ-d00296-C
+    def test_REQ_d00296_B_changelog_row_names_the_process_without_proof(
+        self, disk_app, monkeypatch
+    ):
+        from elspais.server import proxy_trust
+
+        monkeypatch.setattr(proxy_trust, "_SECRET", self.PROXY_SECRET)
+        app, spec_file = disk_app
+        headers = {**self.PROXIED, "X-Elspais-Proxy-Secret": "wrong"}
+        self._mutate_and_save(TestClient(app), headers)
+        content = spec_file.read_text(encoding="utf-8")
+        # conftest pins the process identity through GIT_AUTHOR_NAME/EMAIL.
+        assert "Test User (<test@test.org>) | retitled by the session" in content
+        assert "Bob Jones" not in content

@@ -467,6 +467,32 @@ also serves MCP tools at `/mcp` for AI agent integration.
   `--embed-content`   Embed full markdown in HTML for offline viewing
   `--path DIR`        Path to repository root (default: auto-detect)
 
+**Serving behind a proxy.** A server that serves many people through an
+authenticating proxy cannot name the person from its own surroundings, so
+the proxy supplies the identity with each request and the server believes
+it only when the request also carries a secret the two share:
+
+    ELSPAIS_PROXY_SECRET    set in the server's environment before it starts;
+                            read once at start, never re-read
+
+    X-Elspais-Proxy-Secret  the same value, on every proxied request
+    X-Elspais-User-Name     the authenticated user's display name
+    X-Elspais-User-Email    the authenticated user's email, used as the
+                            author id in comments and changelog rows
+    X-Elspais-Git-Token     a credential for git operations on the
+                            user's behalf, under the same secret
+
+A comment, reply, resolution or save made through a request carrying the
+secret and both identity headers is attributed to that user. A request
+missing the secret, carrying the wrong one, or missing either identity
+header is attributed to the server's own identity, as a local viewer
+always is -- the headers are ignored, never refused. With no
+`ELSPAIS_PROXY_SECRET` in the environment nothing in the headers is
+believed, whatever they say. The secret is per process rather than a
+fixed value because the server listens on the local interface, and on a
+shared host every workspace process runs as the same OS user: a
+"trust the headers" switch would let any local caller speak as any user.
+
 ## graph
 
 Export the traceability graph structure as JSON.

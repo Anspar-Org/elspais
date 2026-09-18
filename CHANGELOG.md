@@ -4,6 +4,14 @@ All notable changes to elspais will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- **The author of a request is the identity its session established (REQ-d00296)** — a viewer server serving many people through an authenticating proxy named the machine, not the person, so every comment and every changelog row from every user carried one identity. The proxy now supplies the user with each request in `X-Elspais-User-Name` and `X-Elspais-User-Email`, and the server believes them only when the request also carries, in `X-Elspais-Proxy-Secret`, the value it was started with in `ELSPAIS_PROXY_SECRET`. A request without that proof is attributed to the server's own identity, exactly as before, so a local viewer is unchanged; with no secret in the environment the headers are never believed. The secret is per process rather than a switch because the server listens on the local interface and a shared host runs every workspace as one OS user. `X-Elspais-Git-Token` is read under the same proof for the git operations to come.
+
+### Fixed
+
+- **A save with a changelog reason wrote no changelog row** — the rows owed to the Active requirements a save changed were looked up after the files were written, and a successful write had already cleared the record they were looked up in. The set is now taken before the write.
+
 ### Changed
 
 - **Breaking: every recorded test result is now a result of its own (REQ-d00294-A+B)** — each reporter spelled its own result identifier out of the test name alone, so the records for one test collapsed into a single node and every verdict but one was lost with nothing reported. A suite run across a fleet of devices kept a single verdict, however many devices ran it.

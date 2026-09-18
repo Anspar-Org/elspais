@@ -466,7 +466,8 @@ a `$schema` self-reference for IDE autocompletion. A committed copy lives at
 
 Every setting comes from `.elspais.toml`, with `.elspais.local.toml` merged
 over it for values that differ per machine. The environment supplies no
-configuration: `ELSPAIS_VERSION` and `ELSPAIS_CLIENT_PID` are read directly
-by the code that wants them and are not settings.
+configuration: `ELSPAIS_VERSION`, `ELSPAIS_CLIENT_PID` and
+`ELSPAIS_PROXY_SECRET` are read directly by the code that wants them and are
+not settings.
 
 To register an associate without editing either file, use `elspais associate`.
