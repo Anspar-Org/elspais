@@ -723,9 +723,15 @@ process shares with its proxy and with nothing else, and where none has been
 arranged, a request supplies no identity at all — a local viewer behaves as
 it always has.
 
+The obligation reaches the viewer: the surface a person uses, and the one an
+authenticating proxy stands in front of. A tool call an agent makes over the
+process's own MCP mount is that agent's session, not a person's, and a save
+the process performs for itself has no request at all; both are attributed to
+the process, as they always were.
+
 ### Assertions
 
-A. The author recorded for an annotation or a save made through a request SHALL be the identity established for that request's session where a trusted source supplies one with the request.
+A. The author recorded for an annotation or a save made through the viewer SHALL be the identity established for that request's session where a trusted source supplies one with the request.
 
 B. Where no trusted source supplies an identity with a request, the author recorded SHALL be the identity the server establishes for itself.
 
@@ -737,6 +743,7 @@ E. A credential a request supplies for acting on the repository on the user's be
 
 ### Changelog
 
+- 2026-09-18 | fe4f3620 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-09-17 | 00ac07cf | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash, add missing changelog section
 
-*End* *Request Identity From a Trusted Proxy* | **Hash**: 00ac07cf
+*End* *Request Identity From a Trusted Proxy* | **Hash**: fe4f3620

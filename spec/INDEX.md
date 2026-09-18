@@ -213,7 +213,7 @@
 | REQ-d00292 | Viewer Coverage Presentation                                  | dev-graph-core.md       | db9415cd |
 | REQ-d00293 | Configurable Viewer Presentation                              | dev-graph-core.md       | 31848b5c |
 | REQ-d00294 | A Result Is Its Own Record                                    | dev-graph-core.md       | 66e2737b |
-| REQ-d00296 | Request Identity From a Trusted Proxy                         | prd-features.md         | 00ac07cf |
+| REQ-d00296 | Request Identity From a Trusted Proxy                         | prd-features.md         | fe4f3620 |
 
 ## User Journeys
 

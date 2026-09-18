@@ -493,6 +493,12 @@ fixed value because the server listens on the local interface, and on a
 shared host every workspace process runs as the same OS user: a
 "trust the headers" switch would let any local caller speak as any user.
 
+The rule reaches the viewer's own API. A tool call an agent makes over the
+`/mcp` mount is that agent's session rather than a person's, and a save the
+server performs for itself when its last client is gone has no request at
+all; both name the server's own identity, whatever headers reached the
+process.
+
 ## graph
 
 Export the traceability graph structure as JSON.

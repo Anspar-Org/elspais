@@ -10,7 +10,7 @@ All notable changes to elspais will be documented in this file.
 
 ### Fixed
 
-- **A save with a changelog reason wrote no changelog row** — the rows owed to the Active requirements a save changed were looked up after the files were written, and a successful write had already cleared the record they were looked up in. The set is now taken before the write.
+- **A save with a changelog reason wrote no changelog row** — the rows owed to the Active requirements a save changed were looked up after the files were written, and a successful write had already cleared the record they were looked up in. The set is now taken before the write, and so is the author who signs the rows: a save that cannot establish one is refused before the safety branch and the write, leaving the files and the pending mutations exactly as they were, where before it changed the tree, emptied the mutation log and then reported failure.
 
 ### Changed
 
