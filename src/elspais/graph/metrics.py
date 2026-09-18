@@ -624,9 +624,9 @@ def satisfier_rollup(node: GraphNode) -> SatisfierRollup:
     1. Own concrete-assertion coverage: every STRUCTURES child that is
        an ASSERTION with :func:`direct_coverage_for` > 0.
     2. Inherited template coverage: for each outbound ``SATISFIES`` edge
-       (declaring REQ -> cloned root), walk that clone's STRUCTURES
-       children (the instance assertions), and count each whose
-       :func:`inherited_coverage_for` is > 0.
+       (declaring REQ -> cloned root), walk the cloned subtree — the root
+       and every clone refining a member — and count each of their
+       instance assertions whose :func:`inherited_coverage_for` is > 0.
 
     The denominator is ``len(own_assertions) + len(template_assertions)``,
     so a satisfier that adds its own assertion *on top of* a fully
@@ -643,6 +643,7 @@ def satisfier_rollup(node: GraphNode) -> SatisfierRollup:
     from elspais.graph.GraphNode import NodeKind
     from elspais.graph.parsers.directives import assertion_is_retired, counted_assertions
     from elspais.graph.relations import EdgeKind
+    from elspais.graph.template_subtree import subtree_nodes
 
     # Implements: REQ-p00017-G
     # A retired *Assertion* leaves both halves of this footing: it is neither
@@ -655,13 +656,9 @@ def satisfier_rollup(node: GraphNode) -> SatisfierRollup:
     ]
     template_assertions: list[GraphNode] = []
     for clone in satisfied_clones:
-        for ce in clone.iter_outgoing_edges():
-            if (
-                ce.kind == EdgeKind.STRUCTURES
-                and ce.target.kind == NodeKind.ASSERTION
-                and not assertion_is_retired(ce.target)
-            ):
-                template_assertions.append(ce.target)
+        for member in subtree_nodes(clone):
+            if member.kind == NodeKind.ASSERTION and not assertion_is_retired(member):
+                template_assertions.append(member)
     template_covered = sum(1 for a in template_assertions if inherited_coverage_for(a) > 0)
 
     total = len(own_assertions) + len(template_assertions)

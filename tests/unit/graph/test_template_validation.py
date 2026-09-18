@@ -1,30 +1,32 @@
 # Verifies: REQ-p00014-G
-"""In-repo validation matrix for the ``**Template**`` marker (CUR-1353 Phase 2).
+"""In-repo validation matrix for the ``**Template**`` marker.
 
-Phase 2 of CUR-1353 enforces the static validation matrix from the
-cross-repo-template spec. Each invalid combination produces a typed
-``ReferenceFault`` with a ``diagnostic`` field that explains the rule
-and how the author can fix it.
+The builder enforces the static validation matrix of REQ-p00014-G at build
+time. Each invalid combination produces a typed ``ReferenceFault`` with a
+``diagnostic`` field that explains the rule and how the author can fix it,
+and the refused edge never lands in the graph.
 
 The matrix covered here:
 
 1. ``Satisfies: X`` where X exists but is NOT marked ``**Template**`` -> error.
 2. ``Satisfies: X`` where X is stereotype INSTANCE -> chained instantiation
    error.
-3. ``Refines: X`` where X is stereotype TEMPLATE -> compositing-templates
-   error.
+3. ``Refines: X`` where X is TEMPLATE, from a REQ not itself marked
+   ``**Template**`` -> error (a template's refiners must themselves be
+   templates).
 4. ``Refines: X`` where X is stereotype INSTANCE -> instance-content-readonly
    error.
 5. ``Implements: X`` (from CODE) where X is stereotype INSTANCE -> composite-
    IDs-not-authoring-syntax error.
 6. ``Verifies: X`` (from TEST) where X is stereotype INSTANCE -> same as 5.
-7. REQ marked ``**Template**`` that declares ``Refines:``/``Implements:``
-   metadata -> templates-are-pure-specs error.
-8. REQ marked ``**Template**`` that is targeted by inbound ``Refines:`` ->
-   templates-may-not-have-descendants error.
+7. REQ marked ``**Template**`` that declares ``Implements:`` metadata, or
+   ``Refines:`` metadata targeting a node outside its own template subtree
+   -> error.
 
 Explicitly OK (do NOT raise):
 
+- ``Refines: X`` where X is TEMPLATE, from a REQ marked ``**Template**``:
+  the subtree-forming edge (REQ-p00014-B, -M).
 - ``Implements: X`` (CODE) where X is TEMPLATE: cross-cutting evidence.
 - ``Verifies: X`` (TEST) where X is TEMPLATE: cross-cutting evidence.
 """
@@ -100,10 +102,10 @@ class TestSatisfiesAgainstUnmarkedRaises:
 
 
 class TestRefinesTemplateRaises:
-    """Rule 3: ``Refines: X`` where X is TEMPLATE."""
+    """Rule 3: ``Refines: X`` where X is TEMPLATE, from a REQ that is not one."""
 
     def test_refines_template_is_broken_ref(self) -> None:
-        """Compositing templates via Refines is not supported."""
+        """A concrete REQ refining a template joins no subtree and is refused."""
         template = make_requirement(
             "REQ-p00001",
             title="Template",
@@ -137,11 +139,10 @@ class TestRefinesTemplateRaises:
 
         This exercises a different level combination (OPS -> PRD) than
         ``test_refines_template_is_broken_ref`` (same-level PRD -> PRD) to
-        confirm the de-duplication of the source-perspective (rule 3) and
-        target-perspective (rule 8) diagnostics is independent of hierarchy
-        depth. The single surviving diagnostic must also direct the author to
-        ``Refines:`` a concrete REQ in their own repo, not just to use
-        ``Satisfies:``.
+        confirm one refused edge is one report whatever the hierarchy depth.
+        The diagnostic must name both things the author may have meant: mark
+        the refiner ``**Template**`` to decompose the template, or declare
+        ``Satisfies:`` to instantiate it.
         """
         prd_template = make_requirement(
             "REQ-p00001",
@@ -163,16 +164,16 @@ class TestRefinesTemplateRaises:
             for br in graph.unresolved_references()
             if br.source_id == "REQ-o00002" and br.edge_kind == "refines"
         ]
-        # Rules 3 (source-perspective) and 8 (target-perspective) describe the
-        # same edge: the merge must collapse them to a single broken-ref.
         assert len(brs) == 1, f"expected exactly one refines broken-ref, got {brs!r}"
         diag = brs[0].diagnostic
         assert "is a Template" in diag, f"diagnostic should name the template rule, got: {diag!r}"
-        # The remedy must mention BOTH Satisfies: the template AND Refines: a
-        # concrete REQ -- distinguishing this assertion from the existing test.
-        assert "Satisfies:" in diag and "Refines:" in diag and "concrete" in diag, (
-            f"diagnostic should sketch the Satisfies-template + Refines-concrete "
-            f"remedy, got: {diag!r}"
+        assert "Mark REQ-o00002 **Template**" in diag and "Satisfies: REQ-p00001" in diag, (
+            f"diagnostic should offer both remedies, marking the refiner **Template** "
+            f"and declaring Satisfies:, got: {diag!r}"
+        )
+        template_node = graph.find_by_id("REQ-p00001")
+        assert not any(e.kind == EdgeKind.REFINES for e in template_node.iter_outgoing_edges()), (
+            "a refused Refines: must not land as an edge"
         )
 
 
@@ -234,10 +235,15 @@ class TestRefinesInstanceRaises:
 
 
 class TestTemplateWithBehaviouralMetadataRaises:
-    """Rule 7: Templates are pure specs; they may not declare behavioural claims."""
+    """Rule 7: a template's Implements:/Refines: may not reach outside its subtree."""
 
     def test_template_with_implements_metadata_errors(self) -> None:
-        """A template with Implements: metadata produces a rule-7 broken-ref."""
+        """A template with Implements: metadata produces a rule-7 broken-ref.
+
+        Refines: is the one edge that forms a template subtree, so an
+        Implements: declared by a template reaches outside it whatever it
+        names.
+        """
         other = make_requirement(
             "REQ-p00002",
             title="Other",
@@ -258,8 +264,9 @@ class TestTemplateWithBehaviouralMetadataRaises:
             f"diagnostics: {[br.diagnostic for br in brs]!r}"
         )
 
-    def test_template_with_refines_metadata_errors(self) -> None:
-        """A template with Refines: metadata produces a rule-7 broken-ref."""
+    @pytest.mark.parametrize("target", ["REQ-p00002", "REQ-p00002-A"])
+    def test_template_refining_concrete_req_errors(self, target: str) -> None:
+        """A template refining a concrete REQ, or its *Assertion*, reaches outside its subtree."""
         other = make_requirement(
             "REQ-p00002",
             title="Other",
@@ -269,28 +276,38 @@ class TestTemplateWithBehaviouralMetadataRaises:
             "REQ-p00001",
             title="Template",
             template=True,
-            refines=["REQ-p00002"],
+            refines=[target],
             assertions=[{"label": "A", "text": "be templated"}],
         )
         graph = build_graph(other, template_with_refines)
 
-        brs = [br for br in graph.unresolved_references() if br.source_id == "REQ-p00001"]
-        assert brs, "expected at least one broken-ref on REQ-p00001"
-        assert any("Templates are pure specs" in br.diagnostic for br in brs), (
-            f"diagnostics: {[br.diagnostic for br in brs]!r}"
+        brs = [
+            br
+            for br in graph.unresolved_references()
+            if br.source_id == "REQ-p00001" and br.edge_kind == "refines"
+        ]
+        assert len(brs) == 1, f"expected exactly one refines broken-ref, got {brs!r}"
+        diag = brs[0].diagnostic
+        assert "own template subtree" in diag and f"Mark {target} **Template**" in diag, (
+            f"diagnostic should name the subtree rule and the remedy, got: {diag!r}"
+        )
+        other_node = graph.find_by_id("REQ-p00002")
+        assert not any(e.kind == EdgeKind.REFINES for e in other_node.iter_outgoing_edges()), (
+            "a refused Refines: must not land as an edge"
         )
 
 
 # ---------------------------------------------------------------------------
-# Rule 8: Template is target of inbound Refines
+# Inbound Refines against a template: refused from a concrete REQ, the
+# subtree-forming edge from another template
 # ---------------------------------------------------------------------------
 
 
-class TestTemplateInboundRefinesRaises:
-    """Rule 8: Templates may not have descendants via Refines."""
+class TestTemplateInboundRefines:
+    """A template's refiners must themselves be templates (REQ-p00014-G)."""
 
     def test_template_targeted_by_refines_errors(self) -> None:
-        """An inbound Refines against a template produces a rule-8 broken-ref."""
+        """An inbound Refines from a concrete REQ against a template is refused."""
         template = make_requirement(
             "REQ-p00001",
             title="Template",
@@ -317,13 +334,15 @@ class TestTemplateInboundRefinesRaises:
             f"got: {brs[0].diagnostic!r}"
         )
 
-    def test_template_targeted_by_refines_from_another_template_errors(self) -> None:
-        """Templates may not refine other templates either (single-REQ scope).
+    # Verifies: REQ-p00014-B, REQ-p00014-G, REQ-p00014-M
+    def test_template_refined_by_another_template_is_legal(self) -> None:
+        """Template-to-template Refines: is the subtree-forming edge.
 
-        CUR-1353 Phase 2 locks single-REQ scope: a template is one REQ root
-        plus its directly-attached assertions. ANY inbound REFINES against a
-        TEMPLATE is invalid, including from another TEMPLATE -- the
-        "within-subtree refinement" carve-out is removed.
+        A template is a subtree: template-marked REQs refine other
+        template-marked REQs to decompose one obligation into levels of
+        detail. The edge lands without a fault, and a Satisfies: against the
+        root clones the whole subtree with the intra-subtree REFINES edge
+        recreated on the clones.
         """
         template_root = make_requirement(
             "REQ-p00001",
@@ -331,7 +350,6 @@ class TestTemplateInboundRefinesRaises:
             template=True,
             assertions=[{"label": "A", "text": "root obligation"}],
         )
-        # A second template marked **Template** that refines the first.
         template_refiner = make_requirement(
             "REQ-p00002",
             title="Template Refiner",
@@ -340,44 +358,156 @@ class TestTemplateInboundRefinesRaises:
             refines=["REQ-p00001"],
             assertions=[{"label": "A", "text": "refine obligation"}],
         )
-        graph = build_graph(template_root, template_refiner)
+        satisfier = make_requirement(
+            "REQ-p00003",
+            title="Satisfier",
+            satisfies=["REQ-p00001"],
+            assertions=[{"label": "A", "text": "own obligation"}],
+        )
+        graph = build_graph(template_root, template_refiner, satisfier)
 
-        # Rule 8: an inbound Refines against the template target. The source-
-        # and target-perspective diagnostics are now merged into a single
-        # broken-ref naming the Satisfies: remedy. (A separate rule-7 broken-ref
-        # also targets REQ-p00001 here because the *source* is a mis-marked
-        # template; it carries a different "pure specs" diagnostic and is
-        # asserted below.)
-        rule8_brs = [
-            br
-            for br in graph.unresolved_references()
-            if br.target_id == "REQ-p00001"
-            and br.edge_kind == "refines"
-            and "is a Template" in br.diagnostic
+        faults = [
+            (br.source_id, br.target_id, br.diagnostic) for br in graph.unresolved_references()
         ]
-        assert len(rule8_brs) == 1, (
-            f"expected exactly one merged refines broken-ref against the "
-            f"template target, got {rule8_brs!r}"
-        )
-        assert "Satisfies:" in rule8_brs[0].diagnostic, (
-            f"rule-8 diagnostic should name the Satisfies: remedy, got: {rule8_brs[0].diagnostic!r}"
+        assert not faults, f"template refining a template must produce no fault, got: {faults!r}"
+        root = graph.find_by_id("REQ-p00001")
+        refines = [e for e in root.iter_outgoing_edges() if e.kind == EdgeKind.REFINES]
+        assert [e.target.id for e in refines] == ["REQ-p00002"], (
+            "the template root must hold the REFINES edge to its template refiner"
         )
 
-        # Rule 7: the refining template declared behavioural metadata
-        # (Refines:) -- this is also flagged because templates are pure specs.
-        rule7_brs = [
-            br
-            for br in graph.unresolved_references()
-            if br.source_id == "REQ-p00002" and br.edge_kind == "refines"
+        for composite in (
+            "REQ-p00003::REQ-p00001",
+            "REQ-p00003::REQ-p00001-A",
+            "REQ-p00003::REQ-p00002",
+            "REQ-p00003::REQ-p00002-A",
+        ):
+            clone = graph.find_by_id(composite)
+            assert clone is not None, f"expected {composite} in the cloned subtree"
+            assert clone.get_field("stereotype") == Stereotype.INSTANCE
+        cloned_root = graph.find_by_id("REQ-p00003::REQ-p00001")
+        cloned_refines = [
+            e for e in cloned_root.iter_outgoing_edges() if e.kind == EdgeKind.REFINES
         ]
-        assert rule7_brs, "expected a rule-7 refines broken-ref on the refining template"
-        assert any("Templates are pure specs" in br.diagnostic for br in rule7_brs), (
-            f"rule-7 diagnostics: {[br.diagnostic for br in rule7_brs]!r}"
+        assert [e.target.id for e in cloned_refines] == ["REQ-p00003::REQ-p00002"], (
+            "the intra-subtree REFINES edge must be recreated on the clones"
         )
+        refiner_clone = graph.find_by_id("REQ-p00003::REQ-p00002")
+        assert [
+            e.target.id for e in refiner_clone.iter_outgoing_edges() if e.kind == EdgeKind.INSTANCE
+        ] == ["REQ-p00002"]
 
-        # And no INSTANCE subtree should appear since both templates are
-        # invalid-target-perspectives; no Satisfies declaration here either.
-        assert graph.find_by_id("REQ-p00002::REQ-p00001") is None
+
+# ---------------------------------------------------------------------------
+# The shape of a cloned template subtree (REQ-p00014-B, -M)
+# ---------------------------------------------------------------------------
+
+
+def _subtree(root_id: str, *members: tuple[str, str | None]) -> list:
+    """Build a template subtree: ``root_id`` plus (id, refines-target) members."""
+    nodes = [
+        make_requirement(
+            root_id,
+            title=f"Template {root_id}",
+            template=True,
+            assertions=[{"label": "A", "text": f"{root_id} obligation"}],
+        )
+    ]
+    for member_id, target in members:
+        nodes.append(
+            make_requirement(
+                member_id,
+                title=f"Template {member_id}",
+                template=True,
+                refines=[target] if target else None,
+                assertions=[{"label": "A", "text": f"{member_id} obligation"}],
+            )
+        )
+    return nodes
+
+
+class TestClonedSubtreeShape:
+    """What a Satisfies: clones, and which edges the clones carry."""
+
+    # Verifies: REQ-p00014-B
+    def test_descendants_are_cloned_recursively(self) -> None:
+        """A three-level chain is cloned whole from a Satisfies: against the root."""
+        satisfier = make_requirement("REQ-p00009", title="Satisfier", satisfies=["REQ-p00001"])
+        graph = build_graph(
+            *_subtree("REQ-p00001", ("REQ-p00002", "REQ-p00001"), ("REQ-p00003", "REQ-p00002")),
+            satisfier,
+        )
+        assert not list(graph.unresolved_references())
+        for original in ("REQ-p00001", "REQ-p00002", "REQ-p00003"):
+            assert graph.find_by_id(f"REQ-p00009::{original}") is not None, original
+            assert graph.find_by_id(f"REQ-p00009::{original}-A") is not None, original
+        mid_clone = graph.find_by_id("REQ-p00009::REQ-p00002")
+        assert [
+            e.target.id for e in mid_clone.iter_outgoing_edges() if e.kind == EdgeKind.REFINES
+        ] == ["REQ-p00009::REQ-p00003"]
+
+    # Verifies: REQ-p00014-B
+    def test_satisfies_against_interior_member_clones_its_subtree_only(self) -> None:
+        """Declaring against an interior member is a narrower declaration."""
+        satisfier = make_requirement("REQ-p00009", title="Satisfier", satisfies=["REQ-p00002"])
+        graph = build_graph(
+            *_subtree("REQ-p00001", ("REQ-p00002", "REQ-p00001"), ("REQ-p00003", "REQ-p00002")),
+            satisfier,
+        )
+        assert not list(graph.unresolved_references())
+        assert graph.find_by_id("REQ-p00009::REQ-p00002") is not None
+        assert graph.find_by_id("REQ-p00009::REQ-p00003") is not None
+        assert graph.find_by_id("REQ-p00009::REQ-p00001") is None, (
+            "the member's own ancestor is not part of the subtree rooted at it"
+        )
+        declaring = graph.find_by_id("REQ-p00009")
+        assert [
+            e.target.id for e in declaring.iter_outgoing_edges() if e.kind == EdgeKind.SATISFIES
+        ] == ["REQ-p00009::REQ-p00002"]
+
+    # Verifies: REQ-p00014-M
+    def test_each_cloned_assertion_is_structured_once(self) -> None:
+        """A clone holds one STRUCTURES edge per cloned *Assertion*, not two."""
+        satisfier = make_requirement("REQ-p00009", title="Satisfier", satisfies=["REQ-p00001"])
+        graph = build_graph(*_subtree("REQ-p00001", ("REQ-p00002", "REQ-p00001")), satisfier)
+        for composite in ("REQ-p00009::REQ-p00001", "REQ-p00009::REQ-p00002"):
+            clone = graph.find_by_id(composite)
+            structures = [
+                e.target.id for e in clone.iter_outgoing_edges() if e.kind == EdgeKind.STRUCTURES
+            ]
+            assert structures == [f"{composite}-A"], (
+                f"{composite} should structure its one cloned assertion exactly once, "
+                f"got {structures!r}"
+            )
+
+    # Verifies: REQ-p00014-M
+    def test_assertion_targeted_refinement_keeps_its_labels_on_the_clone(self) -> None:
+        """A template refining a member's *Assertion* is cloned with the label it named."""
+        satisfier = make_requirement("REQ-p00009", title="Satisfier", satisfies=["REQ-p00001"])
+        graph = build_graph(*_subtree("REQ-p00001", ("REQ-p00002", "REQ-p00001-A")), satisfier)
+        assert not list(graph.unresolved_references())
+        root = graph.find_by_id("REQ-p00001")
+        (original_edge,) = [e for e in root.iter_outgoing_edges() if e.kind == EdgeKind.REFINES]
+        assert original_edge.assertion_targets == ["A"]
+        cloned_root = graph.find_by_id("REQ-p00009::REQ-p00001")
+        (cloned_edge,) = [
+            e for e in cloned_root.iter_outgoing_edges() if e.kind == EdgeKind.REFINES
+        ]
+        assert cloned_edge.target.id == "REQ-p00009::REQ-p00002"
+        assert cloned_edge.assertion_targets == ["A"]
+
+    # Verifies: REQ-p00014-M
+    def test_clone_carries_no_edge_the_subtree_does_not_own(self) -> None:
+        """Evidence on a template is reached through INSTANCE, never copied onto a clone."""
+        satisfier = make_requirement("REQ-p00009", title="Satisfier", satisfies=["REQ-p00001"])
+        code = make_code_ref(implements=["REQ-p00002-A"], source_path="src/lib.py", start_line=1)
+        graph = build_graph(*_subtree("REQ-p00001", ("REQ-p00002", "REQ-p00001")), satisfier, code)
+        refiner_clone = graph.find_by_id("REQ-p00009::REQ-p00002")
+        kinds = {e.kind for e in refiner_clone.iter_outgoing_edges()}
+        assert kinds == {EdgeKind.INSTANCE, EdgeKind.STRUCTURES}, kinds
+        assert not refiner_clone.get_field("refines_refs"), (
+            "the reference text the original declared is not a reference the clone declares"
+        )
 
 
 # ---------------------------------------------------------------------------

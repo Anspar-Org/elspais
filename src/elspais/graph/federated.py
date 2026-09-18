@@ -1875,18 +1875,23 @@ class FederatedGraph:
         """Phase A: clone cross-repo Satisfies templates into declaring repos.
 
         For each per-repo broken-ref with ``edge_kind == SATISFIES`` whose
-        target lives in another federated repo, clone the template REQ
-        plus its directly-attached assertions into the declaring repo's
-        ``_nodes`` / ``_index`` with composite IDs (``declaring::original``),
-        wire intra-graph SATISFIES + STRUCTURES + DEFINES edges, and wire
-        cross-graph INSTANCE edges back to the template originals.
-
-        Single-REQ scope (CUR-1353 Phase 2): only the template root REQ
-        and its STRUCTURES-children-that-are-assertions are cloned.
-        Templates may not have descendant REQs (rule 8).
+        target lives in another federated repo, clone the template subtree
+        rooted at the target — the target REQ with its *Assertions*, plus
+        every template REQ refining a member, recursively, with theirs —
+        into the declaring repo's ``_index`` with composite IDs
+        (``declaring::original``), wire intra-graph SATISFIES, STRUCTURES,
+        REFINES and DEFINES edges, and wire cross-graph INSTANCE edges back
+        to the template originals. The owning repository's graph is fully
+        built by now, so its template-to-template REFINES edges are there
+        to walk.
         """
         from elspais.graph.GraphNode import GraphNode
         from elspais.graph.relations import Stereotype
+        from elspais.graph.template_subtree import (
+            UNCLONED_FIELDS,
+            recreate_subtree_edges,
+            subtree_nodes,
+        )
 
         for source_entry in self._repos.values():
             resolver = self._resolver_for(source_entry)
@@ -1962,13 +1967,7 @@ class FederatedGraph:
                 if declaring_node is None:
                     continue
 
-                # CUR-1353 Phase 2: single-REQ scope.  A template is the
-                # one REQ root plus its directly-attached assertions
-                # (STRUCTURES children).  Do not walk further.
-                template_nodes: list[GraphNode] = [template_node]
-                for child in template_node.iter_children(edge_kinds={EdgeKind.STRUCTURES}):
-                    if child.kind == NodeKind.ASSERTION:
-                        template_nodes.append(child)
+                template_nodes = subtree_nodes(template_node)
 
                 clone_map: dict[str, GraphNode] = {}
                 for orig in template_nodes:
@@ -1979,7 +1978,7 @@ class FederatedGraph:
                         label=orig.get_label(),
                     )
                     for key, value in orig.get_all_content().items():
-                        if key != "stereotype":
+                        if key not in UNCLONED_FIELDS:
                             clone.set_field(key, value)
                     clone.set_field("stereotype", Stereotype.INSTANCE)
                     # Implements: REQ-p00014-K
@@ -2008,28 +2007,9 @@ class FederatedGraph:
                     # would invert the direction we want here).
                     clone.link(orig, EdgeKind.INSTANCE)
 
-                # Intra-graph STRUCTURES edges: cloned REQ -> cloned assertions.
-                #
-                # Note: unlike the in-repo path in builder.py
-                # (`_instantiate_satisfies_templates`), we DO NOT generically copy
-                # `orig.iter_outgoing_edges()` here. Under the Phase-2 single-REQ
-                # scope, the only outgoing edges from a template REQ are
-                # STRUCTURES edges to its directly-attached assertions, and the
-                # cloned assertions themselves have no outgoing edges between
-                # cloned nodes. The parent-loop below is therefore sufficient.
-                # If a future phase widens the template scope (e.g. allow
-                # cloned cross-REQ refinements or assertion-to-assertion edges),
-                # this omission must be revisited to avoid losing those edges --
-                # or, conversely, re-introducing the generic outgoing-edge pass
-                # without removing this loop would double-link STRUCTURES.
-                for orig in template_nodes:
-                    if orig.kind != NodeKind.ASSERTION:
-                        continue
-                    clone_assertion = clone_map[orig.id]
-                    for parent in orig.iter_parents():
-                        parent_clone = clone_map.get(parent.id)
-                        if parent_clone is not None:
-                            parent_clone.link(clone_assertion, EdgeKind.STRUCTURES)
+                # Intra-graph STRUCTURES and REFINES edges among the clones,
+                # the same way the in-repo path recreates them.
+                recreate_subtree_edges(template_nodes, clone_map)
 
                 # Intra-graph SATISFIES edge: declaring REQ -> cloned root.
                 cloned_root = clone_map.get(template_node.id)
