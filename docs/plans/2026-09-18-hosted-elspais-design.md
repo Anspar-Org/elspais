@@ -28,7 +28,7 @@ result.
 | Store between sessions | The server's persistent disk |
 | Isolation | One operating-system process per workspace |
 | Deployment | A single small GCE VM in the existing GCP project |
-| Packaging | A separate hub package depending on elspais |
+| Packaging | A separate hub package in the Cure-HHT organization, depending on elspais |
 
 ## Workspaces
 
@@ -75,6 +75,9 @@ header, holds the GitHub tokens, and supplies a short-lived credential for each
 git operation rather than placing one in a workspace's environment. Each
 workspace process carries a memory and CPU limit. Target cost is tens of
 dollars a month.
+
+The hub lives in the Cure-HHT organization, alongside the repositories it
+serves and the existing Terraform that controls deployment.
 
 ## Changes in elspais
 
