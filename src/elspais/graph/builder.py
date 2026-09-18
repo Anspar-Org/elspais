@@ -53,6 +53,14 @@ from elspais.graph.reference_faults import (
 )
 from elspais.graph.relations import EdgeKind, Stereotype
 from elspais.graph.render import format_definition_block, render_end_marker
+from elspais.graph.template_subtree import (
+    UNCLONED_FIELDS as _UNCLONED_FIELDS,
+)
+from elspais.graph.template_subtree import (
+    recreate_subtree_edges,
+    stereotype_matrix_fault,
+    subtree_nodes,
+)
 from elspais.graph.terms import TermDictionary, TermEntry, compute_definition_hash
 from elspais.utilities.patterns import INSTANCE_SEPARATOR, GrammarUnavailable
 from elspais.utilities.test_identity import build_test_id
@@ -5294,11 +5302,6 @@ class GraphBuilder:
                 )
             )
 
-        # CUR-1353 Phase 2 (single-REQ scope): a template is one REQ root plus
-        # its directly-attached assertions. We do NOT pre-resolve REFINES into
-        # templates — any such inbound REFINES is invalid (rule 8) and will be
-        # rejected when pending links are resolved later in ``build()``.
-
         # Sub-pass 1: Validate template-marker on each Satisfies target.
         # Implements: REQ-p00014-F, REQ-p00014-G
         # Composite targets (containing INSTANCE_SEPARATOR) are deferred to
@@ -5400,14 +5403,11 @@ class GraphBuilder:
                 )
                 continue
 
-            # CUR-1353 Phase 2: single-REQ scope. A template is one REQ root
-            # plus its directly-attached assertions (STRUCTURES children).
-            # No transitive walk -- child REQs cannot be part of the template
-            # (rule 8 forbids inbound REFINES against a template).
-            template_nodes: list[GraphNode] = [template_node]
-            for child in template_node.iter_children(edge_kinds={EdgeKind.STRUCTURES}):
-                if child.kind == NodeKind.ASSERTION:
-                    template_nodes.append(child)
+            # The clone is the subtree rooted at the target: the target with
+            # its *Assertions*, plus every template that refines a member,
+            # recursively, with theirs. Declaring against an interior member
+            # is simply a narrower declaration.
+            template_nodes = subtree_nodes(template_node)
 
             # Map original IDs to cloned nodes
             clone_map: dict[str, GraphNode] = {}
@@ -5419,9 +5419,13 @@ class GraphBuilder:
                     kind=orig.kind,
                     label=orig.get_label(),
                 )
-                # Copy content fields and set INSTANCE stereotype
+                # Copy content fields and set INSTANCE stereotype. A clone's
+                # relationships are the edges recreated among the clones, so
+                # the reference text the original declared is not copied:
+                # left in place it would read as a reference the clone
+                # declared and never resolved.
                 for key, value in orig.get_all_content().items():
-                    if key != "stereotype":
+                    if key not in _UNCLONED_FIELDS:
                         clone.set_field(key, value)
                 clone.set_field("stereotype", Stereotype.INSTANCE)
                 # CUR-1353 Phase 11: tag in-repo clones with the current
@@ -5446,25 +5450,11 @@ class GraphBuilder:
                 # INSTANCE edge from clone to original
                 clone.link(orig, EdgeKind.INSTANCE)
 
-            # Implements: REQ-d00128-K
-            # Recreate internal edges in cloned subtree
-            for orig in template_nodes:
-                clone = clone_map.get(orig.id)
-                if not clone:
-                    continue
-                for edge in orig.iter_outgoing_edges():
-                    target_clone = clone_map.get(edge.target.id)
-                    if target_clone:
-                        clone.link(target_clone, edge.kind)
-
-            # Recreate parent-child relationships for assertions
-            for orig in template_nodes:
-                if orig.kind == NodeKind.ASSERTION:
-                    clone = clone_map[orig.id]
-                    for parent in orig.iter_parents():
-                        parent_clone = clone_map.get(parent.id)
-                        if parent_clone:
-                            parent_clone.link(clone, EdgeKind.STRUCTURES)
+            # Implements: REQ-d00128-K, REQ-p00014-M
+            # Recreate the subtree's own edges among the clones, once each:
+            # STRUCTURES to the cloned *Assertions* and the intra-subtree
+            # REFINES edges, with the *Assertion* labels a refinement named.
+            recreate_subtree_edges(template_nodes, clone_map)
 
             # SATISFIES edge from declaring REQ to cloned root
             cloned_root = clone_map.get(template_id)
@@ -5478,62 +5468,67 @@ class GraphBuilder:
                 for clone in clone_map.values():
                     declaring_file.link(clone, EdgeKind.DEFINES)
 
-    # Implements: REQ-p00014-G
-    def _validate_template_marker_consistency(self) -> None:
-        """Validate template-marker rules that need full graph context.
+    # Implements: REQ-p00014-B, REQ-p00014-G
+    def _preresolve_template_refines(self) -> set[tuple[str, str, str]]:
+        """Link every template-to-template REFINES before instantiation.
 
-        Phase 2 of CUR-1353: walk the graph after link resolution and emit
-        typed ``ReferenceFault`` diagnostics for templates that violate
-        the static validation matrix.
+        A ``Refines:`` declared by a template-marked requirement against a
+        template-marked target is the edge that forms a template subtree,
+        and a ``Satisfies:`` declaration clones the subtree, so these edges
+        are needed before any clone is made. Every other pending link waits:
+        the validation matrix judges them against INSTANCE nodes that do
+        not exist until instantiation. An item the reader refused, a target
+        that does not resolve, and a retired *Assertion* are all left to the
+        main resolution loop, which reports them under the class they
+        reached.
 
-        Rule 7: A REQ marked ``**Template**`` may not declare behavioural
-        claims (``Implements:`` or ``Refines:`` metadata) targeting ANY
-        node. Templates are single-REQ scope -- they are pure specs with
-        no descendants, so any outbound behavioural metadata is invalid.
-
-        We use the parsed-and-stored ``implements_refs`` / ``refines_refs``
-        on each TEMPLATE REQ to identify the original declarations.
-
-        Rule 3/4/5/6/8 are detected in the link-resolution loop where we
-        have access to the would-be edge before it lands; they do not need
-        a post-pass.
+        Returns the ``(source, target, kind)`` triples that became edges so
+        the main loop links and judges none of them a second time.
         """
-        for node_id, node in list(self._nodes.items()):
-            if node.kind != NodeKind.REQUIREMENT:
+        linked: set[tuple[str, str, str]] = set()
+        for source_id, raw_target, edge_kind, verdicts in self._pending_links:
+            if edge_kind != EdgeKind.REFINES:
                 continue
-            if node.get_field("stereotype") != Stereotype.TEMPLATE:
+            if (edge_kind.value, raw_target) in verdicts:
                 continue
-            # Rule 7: a template declared behavioural metadata.
-            for ref_id in node.get_field("implements_refs") or []:
-                self._emit_template_metadata_diagnostic(node_id, ref_id, EdgeKind.IMPLEMENTS)
-            for ref_id in node.get_field("refines_refs") or []:
-                self._emit_template_metadata_diagnostic(node_id, ref_id, EdgeKind.REFINES)
+            source = self._nodes.get(source_id)
+            if (
+                source is None
+                or source.kind != NodeKind.REQUIREMENT
+                or source.get_field("stereotype") != Stereotype.TEMPLATE
+            ):
+                continue
+            for target_id in self._expand_multi_assertion(raw_target):
+                target = self._nodes.get(target_id)
+                if target is None or assertion_is_retired(target):
+                    continue
+                if target.get_field("stereotype") != Stereotype.TEMPLATE:
+                    continue
+                self._link_resolved(source, target, edge_kind)
+                linked.add((source_id, target_id, edge_kind.value))
+        return linked
 
-    # Implements: REQ-p00014-G
-    def _emit_template_metadata_diagnostic(
-        self, template_id: str, ref_id: str, edge_kind: EdgeKind
-    ) -> None:
-        """Emit rule-7 broken-ref for any behavioural metadata on a TEMPLATE.
+    @staticmethod
+    def _link_resolved(source: GraphNode, target: GraphNode, edge_kind: EdgeKind) -> None:
+        """Create the edge a resolved reference declares.
 
-        Single-REQ scope (CUR-1353): templates are pure specs with no
-        descendants, so any outbound Implements/Refines is invalid --
-        including targeting another template.
+        The cited node holds the edge to the citing one. A reference naming
+        an *Assertion* is held by the *Assertion*'s requirement with the
+        label recorded on the edge, so the citing node appears under the
+        requirement with an *Assertion* badge rather than under the
+        *Assertion* node itself.
         """
-        # Expand multi-assertion refs (e.g. REQ-X-A+B+C) to base targets.
-        for expanded in self._expand_multi_assertion(ref_id):
-            self._unresolved_references.append(
-                ReferenceFault(
-                    source_id=template_id,
-                    target_id=expanded,
-                    edge_kind=edge_kind.value,
-                    fault_class=FaultClass.FORBIDDEN,
-                    diagnostic=(
-                        f"Templates are pure specs; remove "
-                        f"behavioural-claim metadata or remove the "
-                        f"**Template** flag on {template_id}."
-                    ),
+        if target.kind == NodeKind.ASSERTION:
+            parent_reqs = [p for p in target.iter_parents() if p.kind == NodeKind.REQUIREMENT]
+            if parent_reqs:
+                assertion_label = target.get_field("label", "")
+                parent_reqs[0].link(
+                    source,
+                    edge_kind,
+                    assertion_targets=[assertion_label] if assertion_label else None,
                 )
-            )
+                return
+        target.link(source, edge_kind)
 
     # Implements: REQ-d00254-G, REQ-d00256
     def _step_scope_tests(self, result_node: GraphNode, source_file: str) -> list[GraphNode]:
@@ -5577,7 +5572,11 @@ class GraphBuilder:
         Returns:
             Complete TraceGraph with detection data populated.
         """
-        # Phase 2: Instantiate templates before resolving links
+        # Template subtrees are formed by template-to-template REFINES edges,
+        # and a Satisfies: declaration clones the subtree, so those edges
+        # must exist before instantiation while every other link waits for
+        # the INSTANCE nodes the validation matrix judges against.
+        preresolved = self._preresolve_template_refines()
         self._instantiate_satisfies_templates()
 
         # Expand multi-assertion references before resolving. Salvage
@@ -5608,8 +5607,12 @@ class GraphBuilder:
         # Resolve pending links. Track which (source, target, kind) refs
         # actually became edges so the stored ref fields can be re-scoped to
         # unresolved leftovers afterwards (REQ-d00132-F, REQ-d00132-G).
-        resolved_refs: set[tuple[str, str, str]] = set()
+        resolved_refs: set[tuple[str, str, str]] = set(preresolved)
         for source_id, target_id, edge_kind, verdicts in expanded_links:
+            if (source_id, target_id, edge_kind.value) in preresolved:
+                # A template-to-template REFINES edge already landed before
+                # instantiation; it is neither linked nor judged again.
+                continue
             source = self._nodes.get(source_id)
             # A verdict Task 3's reader carried for this raw item (an
             # unmatched item's grammar-level class, or a repeated target's
@@ -5634,83 +5637,13 @@ class GraphBuilder:
 
             if source and target:
                 # Implements: REQ-p00014-G
-                # CUR-1353 Phase 2 validation matrix: reject invalid edge
-                # combinations BEFORE creating the edge so the graph never
-                # contains structurally-inconsistent traceability.
-                target_stereotype = target.get_field("stereotype")
-                if edge_kind == EdgeKind.REFINES and target_stereotype == Stereotype.TEMPLATE:
-                    # Rules 3 and 8 describe the same illegal edge from two
-                    # perspectives (source: "don't refine templates"; target:
-                    # "templates have no descendants"). Emit a SINGLE broken-ref
-                    # so one mistake reads as one error — and name the remedy
-                    # (Satisfies:) plainly, since the bare "(refines)" line plus a
-                    # passing refines_resolve check is what misleads authors.
-                    self._unresolved_references.append(
-                        ReferenceFault(
-                            source_id=source_id,
-                            target_id=target_id,
-                            edge_kind=edge_kind.value,
-                            fault_class=FaultClass.FORBIDDEN,
-                            diagnostic=(
-                                f"{target_id} is a Template: target it with "
-                                f"Satisfies:, not Refines:. To add detail, "
-                                f"Satisfies: the template and Refines: a "
-                                f"concrete REQ in your own repo."
-                            ),
-                        )
-                    )
-                    continue
-                if edge_kind == EdgeKind.REFINES and target_stereotype == Stereotype.INSTANCE:
-                    # Rule 4: refining instance content is not supported.
-                    self._unresolved_references.append(
-                        ReferenceFault(
-                            source_id=source_id,
-                            target_id=target_id,
-                            edge_kind=edge_kind.value,
-                            fault_class=FaultClass.FORBIDDEN,
-                            diagnostic=(
-                                "Refining instance content is not supported. "
-                                "Instance subtrees are read-only synthetic "
-                                "content with no canonical on-disk identifier. "
-                                "To add detail, Satisfies: the template AND "
-                                "Refines: a concrete REQ in your own repo."
-                            ),
-                        )
-                    )
-                    continue
-                if edge_kind == EdgeKind.IMPLEMENTS and target_stereotype == Stereotype.INSTANCE:
-                    # Rule 5: composite IDs are not authoring syntax.
-                    self._unresolved_references.append(
-                        ReferenceFault(
-                            source_id=source_id,
-                            target_id=target_id,
-                            edge_kind=edge_kind.value,
-                            fault_class=FaultClass.FORBIDDEN,
-                            diagnostic=(
-                                "Instance assertions have no canonical "
-                                "on-disk identifier; target the template "
-                                "assertion directly or add a concrete "
-                                "assertion to your satisfier."
-                            ),
-                        )
-                    )
-                    continue
-                if edge_kind == EdgeKind.VERIFIES and target_stereotype == Stereotype.INSTANCE:
-                    # Rule 6: same reasoning as rule 5, TEST source.
-                    self._unresolved_references.append(
-                        ReferenceFault(
-                            source_id=source_id,
-                            target_id=target_id,
-                            edge_kind=edge_kind.value,
-                            fault_class=FaultClass.FORBIDDEN,
-                            diagnostic=(
-                                "Instance assertions have no canonical "
-                                "on-disk identifier; target the template "
-                                "assertion directly or add a concrete "
-                                "assertion to your satisfier."
-                            ),
-                        )
-                    )
+                # The validation matrix is applied BEFORE the edge is created,
+                # so the graph never holds an edge it also reports as a fault.
+                matrix_fault = stereotype_matrix_fault(
+                    source, target, source_id, target_id, edge_kind
+                )
+                if matrix_fault is not None:
+                    self._unresolved_references.append(matrix_fault)
                     continue
                 if edge_kind in (EdgeKind.IMPLEMENTS, EdgeKind.REFINES) and target.kind in (
                     NodeKind.USER_JOURNEY,
@@ -5732,29 +5665,7 @@ class GraphBuilder:
                     )
                     continue
 
-                # If target is an assertion, link from its parent requirement
-                # with assertion_targets set, so the child appears under the
-                # parent REQ (not the assertion node) with assertion badges
-                if target.kind == NodeKind.ASSERTION:
-                    # Find the parent requirement of this assertion
-                    parent_reqs = [
-                        p for p in target.iter_parents() if p.kind == NodeKind.REQUIREMENT
-                    ]
-                    if parent_reqs:
-                        parent_req = parent_reqs[0]
-                        assertion_label = target.get_field("label", "")
-                        parent_req.link(
-                            source,
-                            edge_kind,
-                            assertion_targets=[assertion_label] if assertion_label else None,
-                        )
-                    else:
-                        # Fallback: link directly if no parent found
-                        target.link(source, edge_kind)
-                else:
-                    # Link target as parent of source (implements relationship)
-                    target.link(source, edge_kind)
-
+                self._link_resolved(source, target, edge_kind)
                 resolved_refs.add((source_id, target_id, edge_kind.value))
 
             elif source and not target:
@@ -5836,11 +5747,6 @@ class GraphBuilder:
                         test_node.link(result_node, EdgeKind.YIELDS)
                     result_node.set_field("match_scope", "file")
 
-        # Phase 2.5 (CUR-1353): Validate template-marker consistency over the
-        # fully-resolved graph. Catches rules that need post-link context
-        # (currently rule 7: template REQs declaring behavioural metadata).
-        self._validate_template_marker_consistency()
-
         # Implements: REQ-d00132-F, REQ-d00132-G
         # Re-scope the stored implements/refines fields to unresolved
         # leftovers only. Refs that became edges are stripped — the render
@@ -5848,9 +5754,7 @@ class GraphBuilder:
         # deleting the LAST edge of a kind) are reflected in the output.
         # Refs that never resolved stay stored so a rewrite cannot silently
         # delete an author's broken reference. Multi-assertion refs keep
-        # only their unresolved expansions. Must run AFTER
-        # _validate_template_marker_consistency(), which reads the raw
-        # parsed fields.
+        # only their unresolved expansions.
         for node in self._nodes.values():
             if node.kind != NodeKind.REQUIREMENT:
                 continue

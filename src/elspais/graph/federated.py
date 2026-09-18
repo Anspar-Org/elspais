@@ -1663,6 +1663,33 @@ class FederatedGraph:
         label = target.get_field("label", "")
         return parent_reqs[0].id, [label] if label else None
 
+    # Implements: REQ-p00014-G
+    @staticmethod
+    def _matrix_fault(
+        source_entry: RepoEntry,
+        target_entry: RepoEntry,
+        br: ReferenceFault,
+        target_id: str,
+    ) -> ReferenceFault | None:
+        """The template-matrix fault ``br`` commits against ``target_id``, if any.
+
+        The one matrix authority is ``stereotype_matrix_fault``; this reads
+        the source node from the declaring repository and the target from
+        the owning one and reports the fault under ``target_id`` -- the node
+        it judged, which for a multi-label reference is one expanded label
+        rather than the item as written, the shape the same-repository
+        builder reports.
+        """
+        from elspais.graph.template_subtree import stereotype_matrix_fault
+
+        source = source_entry.graph._index.get(br.source_id)
+        target = target_entry.graph._index.get(target_id)
+        if source is None or target is None:
+            return None
+        return stereotype_matrix_fault(
+            source, target, br.source_id, target_id, EdgeKind(br.edge_kind)
+        )
+
     # Implements: REQ-d00269-B
     def _wire_cross_graph_edges(self) -> None:
         """Wire cross-graph edges by resolving broken references across repos.
@@ -1709,32 +1736,56 @@ class FederatedGraph:
                 if target_repo_name is None:
                     expansion = self._expand_foreign_multi_reference(br.target_id)
                     if expansion is not None and expansion[0] != source_entry.namespace:
-                        owner, present, missing = expansion
-                        wired = self._wire_expanded_labels(source_entry, br, owner, present)
+                        owner, canonical, present = expansion
+                        # Implements: REQ-p00014-G, REQ-p00014-R
+                        # Each expanded label is judged on its own, in the
+                        # order the grammar expands them, so the faults come
+                        # out in the shape and order the same-repository
+                        # builder produces (REQ-d00269-B): a label the
+                        # matrix refuses is one FORBIDDEN fault naming that
+                        # label, a label the owner does not hold is one
+                        # UNKNOWN_ASSERTION fault -- never a class further
+                        # along than the label reached -- and only the
+                        # labels no fault refused are wired.
+                        faults: list[ReferenceFault] = []
+                        admitted: list[str] = []
+                        for label_id in canonical:
+                            if label_id not in present:
+                                faults.append(
+                                    ReferenceFault(
+                                        source_id=br.source_id,
+                                        target_id=label_id,
+                                        edge_kind=br.edge_kind,
+                                        # At least one label of this same
+                                        # multi-assertion item resolved in
+                                        # `owner` (else `present` would be
+                                        # empty and this branch never
+                                        # reached), so the requirement
+                                        # itself is confirmed to exist there
+                                        # -- what is missing is only this
+                                        # label.
+                                        fault_class=FaultClass.UNKNOWN_ASSERTION,
+                                        diagnostic=(
+                                            f"repository '{owner}' owns {label_id} in the "
+                                            f"identifier grammar it declares, but has no such "
+                                            f"node; check the labels named in {br.target_id}."
+                                        ),
+                                    )
+                                )
+                                continue
+                            matrix_fault = self._matrix_fault(
+                                source_entry, self._repos[owner], br, label_id
+                            )
+                            if matrix_fault is not None:
+                                faults.append(matrix_fault)
+                                continue
+                            admitted.append(label_id)
+                        wired = self._wire_expanded_labels(source_entry, br, owner, admitted)
                         if wired and EdgeKind(br.edge_kind) in self._CONTENT_EDGE_KINDS:
                             wired_sources.setdefault(source_entry.namespace, set()).add(
                                 br.source_id
                             )
-                        replacements[i] = [
-                            ReferenceFault(
-                                source_id=br.source_id,
-                                target_id=missing_id,
-                                edge_kind=br.edge_kind,
-                                # At least one label of this same multi-
-                                # assertion item resolved in `owner` (else
-                                # `present` would be empty and this branch
-                                # never reached), so the requirement itself
-                                # is confirmed to exist there -- what is
-                                # missing is only this label.
-                                fault_class=FaultClass.UNKNOWN_ASSERTION,
-                                diagnostic=(
-                                    f"repository '{owner}' owns {missing_id} in the identifier "
-                                    f"grammar it declares, but has no such node; check the "
-                                    f"labels named in {br.target_id}."
-                                ),
-                            )
-                            for missing_id in missing
-                        ]
+                        replacements[i] = faults
                         continue
                 if target_repo_name and target_repo_name != source_entry.namespace:
                     target_entry = self._repos[target_repo_name]
@@ -1743,6 +1794,15 @@ class FederatedGraph:
                     # *Assertion* is not a target: the reference keeps the
                     # classification it arrived with and stays reported.
                     if not self._holds_live_target(target_entry.graph, br.target_id):
+                        continue
+                    # Implements: REQ-p00014-G
+                    # The validation matrix judges a target owned by an
+                    # associated repository by the rule a local one meets,
+                    # before any edge exists: the refusal replaces the
+                    # reference that would have wired it.
+                    matrix_fault = self._matrix_fault(source_entry, target_entry, br, br.target_id)
+                    if matrix_fault is not None:
+                        replacements[i] = [matrix_fault]
                         continue
                     # Wire the cross-graph edge in the same shape the
                     # same-repository builder produces (REQ-d00269-B):
@@ -1783,9 +1843,10 @@ class FederatedGraph:
     ) -> tuple[str, list[str], list[str]] | None:
         """Expand a multi-*Assertion* reference under its owner's grammar.
 
-        Returns ``(repo_name, present_ids, missing_ids)`` for the first
+        Returns ``(repo_name, canonical_ids, present_ids)`` for the first
         repository that claims ``target_id`` and holds at least one of the
-        nodes it expands to. Returns ``None`` when the reference names at
+        nodes it expands to: every label in the order the grammar expands
+        them, and the subset that repository holds. Returns ``None`` when the reference names at
         most one label (the single-target case the ownership index already
         answers) and when no repository holds any of the expansion -- a
         reference nothing in the federation can resolve keeps whatever
@@ -1805,8 +1866,7 @@ class FederatedGraph:
             present = [c for c in canonical if self._holds_live_target(entry.graph, c)]
             if not present:
                 continue
-            missing = [c for c in canonical if not self._holds_live_target(entry.graph, c)]
-            return entry.namespace, present, missing
+            return entry.namespace, canonical, present
         return None
 
     # Implements: REQ-d00269-B
@@ -1875,18 +1935,23 @@ class FederatedGraph:
         """Phase A: clone cross-repo Satisfies templates into declaring repos.
 
         For each per-repo broken-ref with ``edge_kind == SATISFIES`` whose
-        target lives in another federated repo, clone the template REQ
-        plus its directly-attached assertions into the declaring repo's
-        ``_nodes`` / ``_index`` with composite IDs (``declaring::original``),
-        wire intra-graph SATISFIES + STRUCTURES + DEFINES edges, and wire
-        cross-graph INSTANCE edges back to the template originals.
-
-        Single-REQ scope (CUR-1353 Phase 2): only the template root REQ
-        and its STRUCTURES-children-that-are-assertions are cloned.
-        Templates may not have descendant REQs (rule 8).
+        target lives in another federated repo, clone the template subtree
+        rooted at the target — the target REQ with its *Assertions*, plus
+        every template REQ refining a member, recursively, with theirs —
+        into the declaring repo's ``_index`` with composite IDs
+        (``declaring::original``), wire intra-graph SATISFIES, STRUCTURES,
+        REFINES and DEFINES edges, and wire cross-graph INSTANCE edges back
+        to the template originals. The owning repository's graph is fully
+        built by now, so its template-to-template REFINES edges are there
+        to walk.
         """
         from elspais.graph.GraphNode import GraphNode
         from elspais.graph.relations import Stereotype
+        from elspais.graph.template_subtree import (
+            UNCLONED_FIELDS,
+            recreate_subtree_edges,
+            subtree_nodes,
+        )
 
         for source_entry in self._repos.values():
             resolver = self._resolver_for(source_entry)
@@ -1962,13 +2027,7 @@ class FederatedGraph:
                 if declaring_node is None:
                     continue
 
-                # CUR-1353 Phase 2: single-REQ scope.  A template is the
-                # one REQ root plus its directly-attached assertions
-                # (STRUCTURES children).  Do not walk further.
-                template_nodes: list[GraphNode] = [template_node]
-                for child in template_node.iter_children(edge_kinds={EdgeKind.STRUCTURES}):
-                    if child.kind == NodeKind.ASSERTION:
-                        template_nodes.append(child)
+                template_nodes = subtree_nodes(template_node)
 
                 clone_map: dict[str, GraphNode] = {}
                 for orig in template_nodes:
@@ -1979,19 +2038,23 @@ class FederatedGraph:
                         label=orig.get_label(),
                     )
                     for key, value in orig.get_all_content().items():
-                        if key != "stereotype":
+                        if key not in UNCLONED_FIELDS:
                             clone.set_field(key, value)
                     clone.set_field("stereotype", Stereotype.INSTANCE)
-                    # Implements: REQ-p00014-K, REQ-p00014-O
-                    # Record the template's owning repo so viewers can show
-                    # "Template defined in <repo>" provenance without needing
-                    # to walk the cross-graph INSTANCE edge. The repository's
-                    # NAME, because this is shown to a reader; the namespace
-                    # identifies the member but is not what it is called.
-                    template_entry = self._repos.get(target_repo_name)
+                    # Implements: REQ-p00014-O
+                    # Record the repository owning this clone's ORIGINAL so
+                    # viewers can show "Template defined in <repo>" without
+                    # walking the cross-graph INSTANCE edge. Each clone's own
+                    # original, not the root's: a subtree spans repositories
+                    # where a template in one refines a template in another.
+                    # The repository's NAME, because this is shown to a
+                    # reader; the namespace identifies the member but is not
+                    # what it is called.
+                    owner_namespace = self._ownership.get(orig.id, target_repo_name)
+                    owner_entry = self._repos.get(owner_namespace)
                     clone.set_field(
                         "template_repo",
-                        template_entry.name if template_entry else target_repo_name,
+                        owner_entry.name if owner_entry else owner_namespace,
                     )
                     # Source files live in foreign repo; do NOT copy parse_line.
                     clone.set_field("parse_line", None)
@@ -2008,28 +2071,9 @@ class FederatedGraph:
                     # would invert the direction we want here).
                     clone.link(orig, EdgeKind.INSTANCE)
 
-                # Intra-graph STRUCTURES edges: cloned REQ -> cloned assertions.
-                #
-                # Note: unlike the in-repo path in builder.py
-                # (`_instantiate_satisfies_templates`), we DO NOT generically copy
-                # `orig.iter_outgoing_edges()` here. Under the Phase-2 single-REQ
-                # scope, the only outgoing edges from a template REQ are
-                # STRUCTURES edges to its directly-attached assertions, and the
-                # cloned assertions themselves have no outgoing edges between
-                # cloned nodes. The parent-loop below is therefore sufficient.
-                # If a future phase widens the template scope (e.g. allow
-                # cloned cross-REQ refinements or assertion-to-assertion edges),
-                # this omission must be revisited to avoid losing those edges --
-                # or, conversely, re-introducing the generic outgoing-edge pass
-                # without removing this loop would double-link STRUCTURES.
-                for orig in template_nodes:
-                    if orig.kind != NodeKind.ASSERTION:
-                        continue
-                    clone_assertion = clone_map[orig.id]
-                    for parent in orig.iter_parents():
-                        parent_clone = clone_map.get(parent.id)
-                        if parent_clone is not None:
-                            parent_clone.link(clone_assertion, EdgeKind.STRUCTURES)
+                # Intra-graph STRUCTURES and REFINES edges among the clones,
+                # the same way the in-repo path recreates them.
+                recreate_subtree_edges(template_nodes, clone_map)
 
                 # Intra-graph SATISFIES edge: declaring REQ -> cloned root.
                 cloned_root = clone_map.get(template_node.id)
