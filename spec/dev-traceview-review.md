@@ -85,3 +85,45 @@ Multi-repo federation users need visibility into which repos are current and whi
 - 2026-04-23 | b4fae1d0 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
 *End* *Server Federation and Staleness* | **Hash**: a8300f60
+
+---
+
+## REQ-d00295: Viewer Served Under a Configured Prefix
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-d00010
+
+The viewer server SHALL serve its whole surface under a configured path prefix, so that a router placing each workspace under a path of its own reaches the viewer, the page and the agent surface at that path.
+
+### Assertions
+
+A. When a prefix is configured, every route the server exposes SHALL answer under that prefix and at no other path.
+
+B. Every URL the served page requests SHALL carry the configured prefix.
+
+C. With no prefix configured, the server SHALL answer the same routes at the same paths as it does without this capability.
+
+D. The agent surface SHALL be reachable under the same prefix as the page.
+
+E. A prefix that is not empty and is not one or more path segments, each introduced by a single slash and made only of ASCII letters, ASCII digits and the characters `-`, `_`, `.` and `~`, no segment being `.` or `..`, SHALL be refused with a message naming that form.
+
+F. State the page keeps in the browser SHALL be kept apart per configured prefix, so that pages served under different prefixes on one host do not read each other's.
+
+G. A prefix applies to the served surface; a request to generate the page as a file while naming a prefix SHALL be refused with a message naming that the prefix applies to the server alone.
+
+H. With no prefix configured, the served page SHALL request the same URLs as it does without this capability.
+
+I. With no prefix configured, the state the page keeps in the browser SHALL have the same scope as it does without this capability.
+
+### Rationale
+
+A hosted deployment runs one viewer per workspace behind a single router that tells them apart by the leading part of the path. A viewer that assumed it owned the root of the site would answer only the first workspace. The prefix is configured on the viewer rather than rewritten by the router, because the page builds URLs of its own and a rewriting router cannot reach into a script. The accepted form is the one the page, a router and the mount all spell identically: a space, a `?`, a `#` or a `%` is spelt differently by each, so one such prefix would name a different path in each, and it is refused before the server starts rather than discovered as a page requesting one path of a server answering at another.
+
+### Changelog
+
+- 2026-09-18 | b3c8493f | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-09-18 | 041a7999 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-09-17 | c1ac9032 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-09-17 | cd69f63b | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-09-17 | - | - | Michael Lewis (<michael@anspar.org>) | Initial version
+
+*End* *Viewer Served Under a Configured Prefix* | **Hash**: b3c8493f

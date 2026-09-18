@@ -1475,7 +1475,7 @@ function editEdgeTargets(sourceId, targetId, btn) {
     if (existing) existing.remove();
 
     // Fetch target's assertions
-    fetch('/api/requirement/' + encodeURIComponent(targetId))
+    fetch(prefixedUrl('/api/requirement/' + encodeURIComponent(targetId)))
         .then(function(r) { return r.json(); })
         .then(function(data) {
             var assertions = data.assertions || [];
@@ -1538,7 +1538,7 @@ function applyEdgeTargets(sourceId, targetId, btn) {
 }
 
 function onMoveToFile(nodeId, currentPath) {
-    fetch('/api/spec-files').then(function(r) { return r.json(); }).then(function(data) {
+    fetch(prefixedUrl('/api/spec-files')).then(function(r) { return r.json(); }).then(function(data) {
         if (!data.files || !data.files.length) {
             showErrorModal('No Spec Files', 'No spec files found in the graph.');
             return;

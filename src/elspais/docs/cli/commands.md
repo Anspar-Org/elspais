@@ -458,14 +458,36 @@ also serves MCP tools at `/mcp` for AI agent integration.
   $ elspais viewer --static         # Generate static HTML file
   $ elspais viewer --server         # Start server without opening browser
   $ elspais viewer --path /my/repo  # Specify repository root
+  $ elspais viewer --base-path /w/abc   # Serve everything under a prefix
 
 **Options:**
 
   `--static`          Generate static HTML file instead of live server
   `--server`          Start server without opening browser
   `--port PORT`       Server port (default: 5001)
+  `--base-path PATH`  URL prefix the server sits under (default: none)
   `--embed-content`   Embed full markdown in HTML for offline viewing
   `--path DIR`        Path to repository root (default: auto-detect)
+
+`--base-path` mounts the whole server — the page, the API and the `/mcp`
+agent surface — under a prefix, for a router that places each workspace's
+viewer under a path of its own. The page builds every URL it requests under
+that prefix, and the address printed at startup carries it. The prefix is
+empty, or one or more path segments each introduced by a single `/` and made
+only of ASCII letters and digits, `-`, `_`, `.` and `~`, with no segment
+being `.` or `..`; anything else — a doubled slash, a `?` or `#`, a space, a
+`%`, a `.` or `..` segment — is refused naming that form, because the page,
+a router and the mount each spell such a prefix differently and so would
+name different paths under it. The flag applies to
+the server alone: with `--static` it is refused, since a generated file
+requests nothing under a prefix. With no prefix the server is exactly what
+it is without the flag.
+The viewer's record in `.elspais/daemon.json` names the prefix as
+`base_path`, so every command that reaches a running server through the
+record — the CLI's graph queries, `elspais doctor`, `elspais mcp env`
+— reaches a prefixed viewer where it answers. The state the page keeps in
+the browser is scoped to the prefix too, so viewers under different
+prefixes on one host keep state of their own.
 
 ## graph
 
