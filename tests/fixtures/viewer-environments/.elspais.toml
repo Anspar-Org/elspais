@@ -1,0 +1,52 @@
+# Fixture for the viewer's environment tag.
+#
+# One test, run in two browser projects, reported in ONE artifact. Each
+# `<testsuite>` names the project that wrote its records in `hostname`, which
+# is where Playwright puts it, so the target declares `suite-hostname`. The
+# card's Tested panel then draws one row for each project with the project
+# beside it.
+
+version = 5
+
+[project]
+name = "viewer-environments-fixture"
+namespace = "REQ"
+
+[levels.dev]
+rank = 1
+letter = "d"
+implements = ["dev"]
+
+[id-patterns]
+canonical = "{namespace}-{level.letter}{component}"
+
+[id-patterns.component]
+style = "numeric"
+digits = 5
+leading_zeros = true
+
+[scanning.spec]
+directories = ["spec"]
+
+[scanning.journey]
+directories = ["spec"]
+
+[scanning.test]
+enabled = true
+directories = ["tests"]
+file_patterns = ["test_*.py"]
+
+[[scanning.test.targets]]
+name = "browsers"
+reporter = "junit"
+results = "results.xml"
+environment = "suite-hostname"
+match = "source"
+
+[rules.hierarchy]
+allow_structural_orphans = true
+
+[rules.format]
+require_hash = false
+require_assertions = false
+require_status = true

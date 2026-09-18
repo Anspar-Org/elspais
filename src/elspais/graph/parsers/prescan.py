@@ -1148,8 +1148,13 @@ def external_prescan(
         fname = entry["function"]
         cname = entry.get("class")
         explicit_end = entry.get("end_line", 0)
-        if fname.startswith("test_"):
-            all_test_funcs.append((start, fname, cname))
+        # Implements: REQ-d00254-K+M
+        # A record names one test, so a record IS a test. Reading a naming
+        # convention here asked every framework to spell its tests the way
+        # pytest does, and a test named otherwise reached no node at all --
+        # which then stripped the citation above it of its relationship and
+        # reported the author for writing one.
+        all_test_funcs.append((start, fname, cname))
         # End is either next function's line - 1, or last source line
         if i + 1 < len(sorted_entries):
             heuristic_end = sorted_entries[i + 1]["line"] - 1
@@ -1176,5 +1181,20 @@ def external_prescan(
                 func_end = fend
                 break
         line_context[ln] = (func_name, class_name, func_line, func_end)
+
+    # Implements: REQ-d00254-D+N
+    # A citation written above a test belongs to that test, which is the
+    # reading every built-in route already takes. Without it this route
+    # bound a citation to its own line and so attributed worse than the
+    # attribution it takes precedence over.
+    by_start = {
+        start: (fname, cname, start, fend) for start, _end, fname, cname, fend in func_ranges
+    }
+    bind_unowned_comments(
+        lines,
+        lambda ln: bool(line_context[ln][2]),
+        lambda _idx, ahead_ln, _ahead_text: by_start.get(ahead_ln),
+        lambda ln, target: line_context.__setitem__(ln, target),
+    )
 
     return line_context, all_test_funcs, first_def_line

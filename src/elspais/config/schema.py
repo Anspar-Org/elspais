@@ -640,6 +640,13 @@ RESERVED_GROUPS = frozenset({GROUP_ALL, GROUP_DEFAULT})
 # "source-file" reads it as naming the test's source file.
 CLASSNAME_FORMS = ("python-module", "source-file")
 
+# Implements: REQ-d00294-C
+# The sources a target may declare for the environment a result was recorded
+# in. "results-path" reads the part of the path that the wildcard in the
+# target's results glob matched; "suite-hostname" reads the `hostname`
+# attribute of the `<testsuite>` that holds the record.
+ENVIRONMENT_SOURCES = ("results-path", "suite-hostname")
+
 
 class TestTargetConfig(_StrictModel):
     """One test target: how its results + coverage are produced and ingested."""
@@ -664,6 +671,11 @@ class TestTargetConfig(_StrictModel):
     # How this target's results name the test that produced them. Empty means
     # the form its reporter declares.
     classname: str = ""
+    # Implements: REQ-d00294-C
+    # Where the environment a result was recorded in is read from. Empty
+    # means the source its reporter declares, and where that is empty too
+    # the results of this target carry no environment.
+    environment: str = ""
     credit_coverage: str = "off"  # "off" | "tested" | "verified" (lcov_tested dimension)
     min_coverage_fraction: float = 0.0  # [0.0, 1.0]
     # Implements: REQ-d00254-O
@@ -692,6 +704,15 @@ class TestTargetConfig(_StrictModel):
         if v and v not in CLASSNAME_FORMS:
             forms = ", ".join(f'"{f}"' for f in CLASSNAME_FORMS)
             raise ValueError(f"classname must be empty or one of {forms}")
+        return v
+
+    @field_validator("environment")
+    @classmethod
+    # Implements: REQ-d00294-C
+    def _check_environment(cls, v: str) -> str:
+        if v and v not in ENVIRONMENT_SOURCES:
+            sources = ", ".join(f'"{s}"' for s in ENVIRONMENT_SOURCES)
+            raise ValueError(f"environment must be empty or one of {sources}")
         return v
 
     @field_validator("credit_coverage")

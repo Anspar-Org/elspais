@@ -1268,6 +1268,11 @@
           "title": "Classname",
           "type": "string"
         },
+        "environment": {
+          "default": "",
+          "title": "Environment",
+          "type": "string"
+        },
         "credit_coverage": {
           "default": "off",
           "title": "Credit Coverage",

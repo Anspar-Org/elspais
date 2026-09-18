@@ -4,7 +4,7 @@ Builds RESULT records carrying the test file's real path (from ``suite.path``)
 and each test's identity within it (name, line).
 
 Record shape mirrors sibling parsers (junit_xml, pytest_json):
-``{"id", "name", "classname", "status", "duration", "message",
+``{"ordinal", "name", "classname", "status", "duration", "message",
 "source_path", "line", "root_path", "root_line", "test_id"}``.
 
 ``line`` is the machine event's ``test.line``, counted from one, as the tool
@@ -89,7 +89,12 @@ class FlutterMachineParser(DiagnosticRecorder):
                 path = suites.get(meta["suiteID"], "")
                 results.append(
                     {
-                        "id": f"{path}::{meta['name']}",
+                        # Implements: REQ-d00294-B
+                        # This reporter reads a runner's stream, so there is
+                        # no artifact to name. The position among the results
+                        # read from the stream is what separates one run of a
+                        # test from another.
+                        "ordinal": len(results) + 1,
                         "name": meta["name"],
                         "classname": "",
                         "status": status,
@@ -100,9 +105,13 @@ class FlutterMachineParser(DiagnosticRecorder):
                         "root_line": meta["root_line"],
                         "root_path": meta["root_path"],
                         "test_id": None,
-                        # stdout-stream reporter: there is no results file to
-                        # point provenance at.
-                        "result_file": None,
+                        # This format usually arrives on a runner's output,
+                        # where there is no artifact to name. It is also saved
+                        # to files and read back by a pattern, and then the
+                        # artifact is what separates one run's records from
+                        # another's: without it every file's records start
+                        # their count again and collide (REQ-d00294-A).
+                        "result_file": source_path or None,
                         "result_line": None,
                     }
                 )

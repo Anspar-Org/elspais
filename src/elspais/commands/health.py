@@ -3703,14 +3703,18 @@ def _configured_test_targets(graph: FederatedGraph, config: dict | None) -> list
 
 # Implements: REQ-d00249-D
 def check_test_results(graph: FederatedGraph, config: dict | None = None) -> HealthCheck:
-    """Check test result status from JUnit/pytest output.
+    """Check the results ingested from JUnit/pytest output.
+
+    Counts RESULTS, not tests. One test that runs in several environments
+    writes one result in each of them, so the two counts are different
+    numbers and the report says which one it gives.
 
     Returns one of:
     - ``tests.results`` severity=info, passed=True -- no patterns configured.
     - ``tests.results`` severity=warning, passed=False -- patterns configured
       but no matching files on disk. Flips exit code unless ``--lenient``.
-    - ``tests.results`` severity=warning, passed=False -- some tests failed.
-    - ``tests.results`` severity=info, passed=True -- all tests passing.
+    - ``tests.results`` severity=warning, passed=False -- some results failed.
+    - ``tests.results`` severity=info, passed=True -- every result passed.
 
     Staleness is reported as a separate :func:`check_test_results_stale` check
     so consumers can key off the ``tests.results_stale`` name.
@@ -3748,16 +3752,24 @@ def check_test_results(graph: FederatedGraph, config: dict | None = None) -> Hea
             severity=severity,
         )
 
-    # Tally
+    # Implements: REQ-d00294-E
+    # The count is a count of RESULTS, not of tests: one test that runs in
+    # several environments writes one result in each of them. An errored
+    # result is a failure, which is how every other surface reads it.
+    from elspais.graph.aggregation import FAILING_STATUSES, PASSING_STATUSES
+
+    def _failed(node) -> bool:
+        return (node.get_field("status", "") or "").lower() in FAILING_STATUSES
+
     passed = 0
     failed = 0
     skipped = 0
 
     for node in result_nodes:
-        status = node.get_field("status", "unknown")
-        if status == "passed":
+        status = (node.get_field("status", "") or "").lower()
+        if status in PASSING_STATUSES:
             passed += 1
-        elif status == "failed":
+        elif _failed(node):
             failed += 1
         elif status == "skipped":
             skipped += 1
@@ -3767,21 +3779,38 @@ def check_test_results(graph: FederatedGraph, config: dict | None = None) -> Hea
     deselected_suffix = f", {deselected} deselected" if deselected else ""
 
     if failed > 0:
-        findings = [
-            HealthFinding(
-                message=f"Failed: {node.get_label() or node.id}",
-                node_id=node.id,
-                file_path=node.get_field("source_file", None),
+        # Implements: REQ-d00294-F
+        # The environment stands beside the result, so several failures of
+        # one test read apart. A finding points at the record that failed
+        # where the reporter said where it wrote it, and at the test's own
+        # source where it did not.
+        findings = []
+        for node in result_nodes:
+            if not _failed(node):
+                continue
+            environment = node.get_field("environment")
+            where = f" [{environment}]" if environment else ""
+            # The recorded line counts lines in the results artifact, so it
+            # belongs to that artifact and to nothing else. Where the result
+            # came from a runner's output there is no artifact, and carrying
+            # the line over to the test's own source would point a reader at
+            # a line that means nothing there.
+            result_file = node.get_field("result_file")
+            findings.append(
+                HealthFinding(
+                    message=f"Failed: {node.get_label() or node.id}{where}",
+                    node_id=node.id,
+                    file_path=result_file or node.get_field("source_file", None),
+                    line=node.get_field("result_line") if result_file else None,
+                )
             )
-            for node in result_nodes
-            if node.get_field("status", "unknown") == "failed"
-        ]
         return HealthCheck(
             name="tests.results",
             passed=False,
             message=(
-                f"Test failures: {passed} passed, {failed} failed, "
-                f"{skipped} skipped{deselected_suffix} ({pass_rate:.1f}% pass rate)"
+                f"Result failures: {failed} of {total} results failed "
+                f"({passed} passed, {skipped} skipped{deselected_suffix}, "
+                f"{pass_rate:.1f}% pass rate)"
             ),
             category="tests",
             severity=severity,
@@ -3798,7 +3827,7 @@ def check_test_results(graph: FederatedGraph, config: dict | None = None) -> Hea
     return HealthCheck(
         name="tests.results",
         passed=True,
-        message=f"All tests passing: {passed} passed, {skipped} skipped{deselected_suffix}",
+        message=f"All results passing: {passed} passed, {skipped} skipped{deselected_suffix}",
         category="tests",
         severity="info",
         details={

@@ -153,7 +153,7 @@ class _OneRecordParser:
     def parse(self, results_text: str, source_path: str = "") -> list[dict]:
         return [
             {
-                "id": "report.xml:login.spec.ts::logs in",
+                "ordinal": 1,
                 "name": "logs in",
                 "classname": "login.spec.ts",
                 "status": "passed",
@@ -200,6 +200,7 @@ def test_target_declaration_overrides_the_reporters(
         target,
         "",
         tmp_path,
+        namespace="REQ",
         scanned_tests=frozenset({"tests/e2e/login.spec.ts"}),
     )
 

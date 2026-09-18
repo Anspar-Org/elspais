@@ -261,7 +261,12 @@ reference_keyword = "Verifies"
 # External command for test structure discovery (optional).
 # Receives test file paths on stdin (one per line, repo-relative) and outputs
 # JSON on stdout:
-#   [{"file": "path", "function": "name", "class": "Name|null", "line": N}]
+#   [{"file": "path", "function": "name", "class": "Name|null", "line": N,
+#     "end_line": M}]
+# `line` is the line the test is declared on, counted from one. `end_line`
+# is optional; without it the test reaches to the next one. A record names
+# one test, so the name may be the test's own and need not be spelled any
+# particular way.
 # `file` may be repo-relative (as handed in) or absolute; either is matched
 # against the scanned file. Files the command reports on are attributed from
 # its records; every other scanned test file keeps built-in attribution, so a
@@ -308,6 +313,14 @@ coverage = "coverage/lcov.info"     # optional; lcov or coverage.py JSON
 #                                   # "python-module" (pytest) | "source-file"
 #                                   # (a spec basename, e.g. Playwright).
 #                                   # Default: whatever the reporter declares.
+# environment = "results-path"      # where the environment a result was
+#                                   # recorded in is read from:
+#                                   # "results-path" (the part of the path the
+#                                   # wildcard in the glob above matched) |
+#                                   # "suite-hostname" (the <testsuite>
+#                                   # hostname attribute).
+#                                   # Default: none, so results carry no
+#                                   # environment.
 
 # User journey file scanning
 [scanning.journey]

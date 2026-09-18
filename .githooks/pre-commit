@@ -89,7 +89,12 @@ hook_cli_src() {
 HOOK_REPO_SRC=$(cd "$HOOK_REPO_ROOT" && python3 -c 'import os,sys;print(os.path.realpath(sys.argv[1]))' "src/elspais") \
     || HOOK_REPO_SRC="$HOOK_REPO_ROOT/src/elspais"
 
-if [ "$(hook_cli_src)" != "$HOOK_REPO_SRC" ] && [ -x "$HOOK_REPO_ROOT/.venv/bin/elspais" ]; then
+# Prefer the worktree's venv always, not only where the `elspais` launcher
+# resolves elsewhere. This hook also runs pytest, whose tests re-enter a
+# fresh interpreter that inherits no sys.path, and the launcher and the
+# interpreter are separate installs that routinely disagree -- so a repair
+# keyed on the launcher leaves pytest running under whatever is on PATH.
+if [ -d "$HOOK_REPO_ROOT/.venv/bin" ]; then
     PATH="$HOOK_REPO_ROOT/.venv/bin:$PATH"
     export PATH
 fi

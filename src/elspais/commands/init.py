@@ -274,6 +274,10 @@ _FIELD_COMMENTS: dict[str, str] = {
         '"python-module" | "source-file" -- how results name their test'
         " (default: the reporter's own)"
     ),
+    "scanning.test.targets.environment": (
+        '"results-path" | "suite-hostname" -- where the environment a result'
+        " was recorded in is read from (default: none)"
+    ),
     "scanning.test.targets.credit_coverage": (
         '"off" | "tested" | "verified" -- lcov_tested dimension credit (default off)'
     ),

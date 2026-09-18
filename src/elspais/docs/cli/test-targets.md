@@ -46,6 +46,7 @@ This is the correct pattern for CI.
 | `coverage` | string | `""` | Path to an lcov.info or coverage.py JSON file (format auto-detected), relative to `cwd` |
 | `match` | string | `"source"` | `"source"` or `"aggregate"` -- matching strategy |
 | `classname` | string | `""` (the reporter's own) | `"python-module"` or `"source-file"` -- how this target's results name the test that produced them |
+| `environment` | string | `""` (the reporter's own) | `"results-path"` or `"suite-hostname"` -- where the environment a result was recorded in is read from |
 | `groups` | list | `[]` (the `default` group) | Which groups this target belongs to |
 | `credit_coverage` | string | `"off"` | `"off"`, `"tested"`, or `"verified"` -- lcov_tested credit |
 | `min_coverage_fraction` | float | `0.0` | Fraction of impl lines that must be covered (0.0-1.0) |
@@ -320,8 +321,13 @@ Three things must be true:
 
 1. **Specs are scanned as TEST nodes.**  elspais cannot parse TypeScript
    natively, so point `[scanning.test].prescan_command` at an external scanner
-   that emits `test_`-prefixed functions for each `test(...)` call, and add the
-   spec directories / `*.spec.ts` to the test `directories` / `file_patterns`.
+   that reports each `test(...)` call, and add the spec directories /
+   `*.spec.ts` to the test `directories` / `file_patterns`.  Each record
+   carries `file`, `function`, `line`, an optional `class` and an optional
+   `end_line`.  The name is the test's own -- a record names one test, so its
+   spelling decides nothing -- and `line` is the line the test is declared
+   on.  A citation written above that line belongs to the test below it, as
+   it does in every language elspais scans itself.
 2. **elspais knows what the recorded name means.**  Playwright's JUnit reporter
    omits the per-`<testcase>` `file` attribute and writes the spec's basename
    into `classname`.  Left to itself elspais reads a `classname` as a Python
@@ -348,6 +354,40 @@ happened -- a name pointing at a file that is not there, or two files sharing
 one name.  Post-processing the XML to inject `file="<repo-relative path>"` into
 each `<testcase>` still works and takes precedence, since a producer that names
 the source file leaves nothing to resolve.
+
+### A reporter that names each test's source
+
+Playwright holds each test's location and uses it only in the message of a
+failure. elspais ships a reporter that writes the same report and adds the
+location as attributes, so a result binds to the test that produced it rather
+than to every test in its file. The reporter is at
+`recipes/playwright-junit-reporter.mjs` in the installed package. Copy it into
+the repository that runs the tests.
+
+```ts
+// playwright.config.ts
+reporter: [['./elspais-junit-reporter.mjs', { outputFile: 'junit.xml' }]]
+```
+
+```toml
+[[scanning.test.targets]]
+name        = "e2e"
+reporter    = "junit"
+results     = "junit.xml"
+match       = "source"
+environment = "suite-hostname"
+line_base   = 1
+```
+
+`line_base` is required and is the part most easily missed. The `junit`
+reporter declares that its producers count lines from zero, because that is
+what pytest writes. This reporter counts from one, as Playwright does, so the
+target says so. Without it every line arrives one too high and no result finds
+its test.
+
+The reporter keeps `hostname` on each suite, so one report serves both
+readings: each project's records are told apart, and each result names the
+project it came from.
 
 Because JUnit `line` values are not true source lines, binding is
 **file-granular**: a passing spec credits all of its `// Verifies:` step-edges;
@@ -573,3 +613,76 @@ elspais checks --run-tests
 ```
 
 See also: `elspais docs checks`
+
+## The Environment a Result Was Recorded In
+
+One test suite run across several devices or browsers writes one result for
+each of them. Each of those results is held on its own, and it may also carry
+the environment it was recorded in.
+
+A result carries an environment only where the target declares where to read
+one. There is no default, because the same field means different things in
+different producers: the JUnit `hostname` attribute holds the machine that ran
+the tests when pytest writes it, and the project under test when Playwright
+does. A label naming the wrong thing is worse than no label, so the project
+says which it has.
+
+Two sources are available:
+
+| Source | Reads |
+|--------|-------|
+| `results-path` | The part of the path that the wildcard in this target's `results` glob matched |
+| `suite-hostname` | The `hostname` attribute of the `<testsuite>` holding the record |
+
+Use `results-path` where each environment writes its own artifact:
+
+```toml
+[[scanning.test.targets]]
+name        = "devices"
+reporter    = "junit"
+results     = "evidence/*/journey-results.xml"
+environment = "results-path"            # evidence/pixel-8/... -> "pixel-8"
+```
+
+The environment is what the wildcard stood for, and not the whole path
+segment it sits in. A pattern names the environment inside a segment as
+readily as it names a whole one:
+
+```toml
+results     = "evidence/junit-*.xml"    # evidence/junit-pixel-8.xml -> "pixel-8"
+```
+
+Use `suite-hostname` where one artifact holds every environment and the
+producer writes the environment into the suite:
+
+```toml
+[[scanning.test.targets]]
+name        = "browsers"
+reporter    = "junit"
+results     = "test-results/junit.xml"
+environment = "suite-hostname"          # <testsuite hostname="firefox">
+```
+
+A declared source does not always give an answer. A `results` glob holding
+`**`, holding more than one wildcard segment, or holding more than one
+wildcard within its wildcard segment, does not say which part of the path is
+the environment. A record may also hold no hostname at all. In each of these
+the result carries no environment and `elspais checks` reports that none was
+derived. The tool does not guess, because a guess reads exactly like a
+reading in every figure that follows.
+
+### Where the Environment Is Shown
+
+An environment belongs to the result that carries it, and it is shown
+there. The trace viewer prints it beside the result in the results panel,
+`elspais -v checks --tests` names it in each failing-result finding, and the MCP
+tools that read or list results carry it as a key of its own. A result
+that carries none is presented exactly as it was before.
+
+The name of the test does not change. One test is one test wherever it
+ran, so the environment is never added to its name.
+
+`elspais checks` counts RESULTS, not tests. One test run in several
+environments gives one result for each of them, and the tally counts them
+all. A result that errored counts as a failure, because the test did not
+pass.

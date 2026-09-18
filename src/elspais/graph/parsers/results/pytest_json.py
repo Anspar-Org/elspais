@@ -8,11 +8,9 @@ Matches a result to its test by recorded identity.
 from __future__ import annotations
 
 import json
-from collections.abc import Iterator
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from elspais.graph.parsers import ParseContext, ParsedContent
 from elspais.graph.parsers.results.diagnostics import DiagnosticRecorder
 from elspais.utilities.test_identity import build_test_id_from_nodeid, build_test_id_from_result
 
@@ -27,12 +25,7 @@ class PytestJSONParser(DiagnosticRecorder):
 
     Matches a result to its test by recorded identity, not by reading
     requirement references out of a reported test name.
-
-    Also implements the LineClaimingParser protocol via ``claim_and_parse()``
-    so it can be used in the standard ParserRegistry pipeline.
     """
-
-    priority = 90
 
     def __init__(
         self,
@@ -75,13 +68,17 @@ class PytestJSONParser(DiagnosticRecorder):
 
         Returns:
             List of test result dictionaries with keys:
-            - id: Unique test ID
+            - ordinal: Position of the record in this report
             - name: Test name
             - classname: Test class/module name
             - status: passed, failed, skipped, or error
             - duration: Test duration in seconds
             - message: Error/failure message (if any)
         """
+        # The position of a record is its place among the records this
+        # report yielded, so a test reported once for each environment it
+        # ran in keeps one record for each. A test entry this parser
+        # declines takes no position.
         results: list[dict[str, Any]] = []
         self._start_diagnostics()
 
@@ -103,12 +100,16 @@ class PytestJSONParser(DiagnosticRecorder):
             for test in data["tests"]:
                 result = self._parse_pytest_json_report_test(test, source_path)
                 if result:
+                    # Implements: REQ-d00294-A
+                    result["ordinal"] = len(results) + 1
                     results.append(result)
         # Handle simpler format with just a list of tests
         elif isinstance(data, list):
             for test in data:
                 result = self._parse_simple_test(test, source_path)
                 if result:
+                    # Implements: REQ-d00294-A
+                    result["ordinal"] = len(results) + 1
                     results.append(result)
         else:
             # Implements: REQ-d00285-G
@@ -183,7 +184,6 @@ class PytestJSONParser(DiagnosticRecorder):
         test_id = build_test_id_from_nodeid(nodeid)
 
         return {
-            "id": f"{source_path}::{nodeid}",
             "name": name,
             "classname": classname,
             "status": status,
@@ -235,7 +235,6 @@ class PytestJSONParser(DiagnosticRecorder):
         test_id = build_test_id_from_result(classname, name)
 
         return {
-            "id": f"{source_path}:{classname}::{name}",
             "name": name,
             "classname": classname,
             "status": status,
@@ -246,35 +245,6 @@ class PytestJSONParser(DiagnosticRecorder):
             "result_file": source_path or None,
             "result_line": None,
         }
-
-    # Implements: REQ-d00054-A
-    def claim_and_parse(
-        self,
-        lines: list[tuple[int, str]],
-        context: ParseContext,
-    ) -> Iterator[ParsedContent]:
-        """Claim and parse pytest JSON content via the standard pipeline.
-
-        Reassembles lines into full JSON content, delegates to ``parse()``,
-        and yields ``ParsedContent`` for each test result.
-
-        Args:
-            lines: List of (line_number, content) tuples.
-            context: Parsing context with file info.
-
-        Yields:
-            ParsedContent for each test result found.
-        """
-        content = "\n".join(text for _, text in lines)
-        results = self.parse(content, context.file_path)
-        for result in results:
-            yield ParsedContent(
-                content_type="test_result",
-                start_line=lines[0][0] if lines else 1,
-                end_line=lines[-1][0] if lines else 1,
-                raw_text="",
-                parsed_data=result,
-            )
 
     # Implements: REQ-d00054-A
     def can_parse(self, file_path: Path) -> bool:

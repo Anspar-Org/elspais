@@ -4975,6 +4975,12 @@ class GraphBuilder:
             # source_path/source_file which name the test's source.
             "result_file": data.get("result_file"),
             "result_line": data.get("result_line"),
+            # Implements: REQ-d00294-C+F
+            # The environment this record was written in, where the target
+            # declared where to read one. It is a field of its own and never
+            # part of the label, so a test whose results carry no environment
+            # is named exactly as it was before.
+            "environment": data.get("environment"),
             # Implements: REQ-d00284-C
             # Why a recorded name picked out no single test, and what it did
             # pick out, so a result that binds to nothing can be reported

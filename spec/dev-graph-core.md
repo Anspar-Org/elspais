@@ -612,6 +612,8 @@ A line number means nothing without its origin, and producers disagree: the `lin
 
 A test that returned no result is awaiting one, and nothing else is known about it. The inference this replaces -- reading a verdict for one test off the results of its neighbours, in the same file or the same application -- was built to work around test files that supposedly could not carry their own `Verifies:` annotation. They can, in every language the tool reads tests in, so the workaround bought nothing and cost the distinction: a deselected tier, an unbuilt target and a crashed runner all left their assertions reported as passing on the strength of tests that say nothing about them. Its failing half was worse, blaming an *Assertion* for a sibling test's failure, which REQ-d00292-D forbids one level down. Aggregate results still say something real about an application, and that is where they are read: the line-coverage dimension, which measures the code rather than the *Traceability*.
 
+I weighs a carried result as it weighs a fresh one, because a reporting command executes nothing and reads whatever is on disk: a carried result and a fresh one are each their own target's latest artifact, and neither is stale relative to the other. Both stand as results of the test they name, and both are weighed alike.
+
 K states the outcome the scanning side owes the crediting side: without per-test identity and extent, the line-level dimensions computed here have nothing to intersect implementation ranges against, and a framework's tests can only ever be credited at file granularity. The obligation is deliberately language-neutral — it fixes what attribution must yield, not whether a given language earns built-in support or is served through an external command.
 
 L, M and N cut the external route into a capability, a mechanism, and a precedence rule so each can change independently. L and M differ in kind: L survives a reimplementation that swaps the transport, while M memorializes the transport itself — file paths on standard input, attribution records on standard output. M is frozen not because it is an invariant but because it is a published integration point that third-party prescan scripts already implement, so breaking it breaks consumers outside this repository. Recording it as its own letter keeps that compatibility obligation targeted: a future transport change, or an added record field, edits M and leaves the capability and precedence untouched, and M can be retired without withdrawing either.
@@ -1183,6 +1185,81 @@ B keeps the match strict. The tests it looks among are the ones scanned for that
 C makes the failure visible. A result matching nothing is not an error where it happens, so without C nothing mentions it and the only sign is a coverage figure lower than expected. Saying whether the name matched nothing or matched several tells an author which problem they have: a name pointing at a file that is not there, or two files sharing one name.
 
 *End* *How a Result Names Its Test* | **Hash**: 7baae0b0
+
+## REQ-d00294: A Result Is Its Own Record
+
+**Level**: dev | **Status**: Draft | **Implements**: REQ-o00051
+
+A test that runs in more than one environment produces more than one result. Each
+of those results is a record in its own right, and each one says something the
+others do not. This says how one result is told from another.
+
+### Assertions
+
+A. Every result record a producer wrote SHALL be held as a result of its own, identified by the place the record was recorded in and the record's position among the records in that place.
+
+B. A result a producer reported through its output, with no artifact holding it, SHALL be identified by the target it was read from and the result's position among that target's results.
+
+C. Each test target SHALL declare where, if anywhere, the environment a result was recorded in is read from. A result SHALL carry an environment only where a source for one is declared.
+
+D. Where a declared source cannot yield an environment, the tool SHALL report that it derived none.
+
+E. A test SHALL read as failing where any of its own results failed.
+
+F. An environment a result carries SHALL be presented beside that result, and a test SHALL be named the same way whether or not its results carry an environment.
+
+### Rationale
+
+One test run across twenty devices writes twenty records, and until each one is
+held apart from the rest they are one result. Nineteen verdicts then go missing
+with nothing said about them, and a test that failed on one device reads as
+passing. An environment on the result and a discriminator in its identity are the
+whole of the answer.
+
+A puts identity in the record rather than in what the record met on arrival. The
+place of record is known for every result an artifact holds, and the position
+within that place separates records that agree about everything else. A scheme
+that separated records only where two of them clashed would make identity depend
+on the order the records were read, which is not a fact about the result. The
+rule speaks of records because that is what a producer writes. Whether a producer
+writes one record for each try of a test is the producer's business, and A holds
+either way.
+
+B covers the results that reach the tool through a command's output. There is no
+artifact for them, so the place of record A names does not exist and the identity
+has to come from somewhere else. The target is what the tool read them from, and
+the position within that target's results separates them from each other. Stating
+this case on its own keeps a reader from having to read it out of A.
+
+C asks the project to say where the environment is written, because it is written
+in a different place in each grid: a path an artifact sits under in one, a field
+the record carries in another. The reporter says what its format usually does and
+a target may say otherwise, which is the arrangement REQ-d00284-A already makes
+for the name a result gives its test. A source has to be declared before a result
+carries an environment at all, because the same field means the machine that ran
+the tests for one producer and the environment under test for another. A label
+naming the wrong thing is worse than no label, since a reader has no way to know
+which they are reading.
+
+D is what happens when the declared source is there but says nothing definite --
+a path pattern loose enough that more than one part of it could be the
+environment. The tool says it derived none. A guess would be indistinguishable
+from a reading, and the reader would carry it into every figure afterwards.
+
+E is about one test's own results. A test run in twenty places has twenty
+verdicts and the pessimistic one governs, because a test that fails anywhere has
+found something. REQ-d00254-A answers a different question, barring a verdict
+read off other tests' results; this one is about a test's own, so the two stand
+together. It is stated because holding each record apart makes it newly
+visible: a test passing in nineteen places and failing in one now reads as
+failing, and a reader should meet that rule here rather than discover it.
+
+F is what makes the results worth telling apart. An environment recorded against
+a result belongs to that result and is shown there. It is not attached to the
+name of the test, because the test is one test wherever it ran, and a test whose
+results record no environment is named exactly as it is named now.
+
+*End* *A Result Is Its Own Record* | **Hash**: 66e2737b
 
 ## REQ-d00281: Level Vocabulary of a Reported Graph
 

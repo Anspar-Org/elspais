@@ -209,7 +209,7 @@ class TestJUnitXMLParserSourceBinding:
         assert results[0]["source_path"] == "e2e/link.spec.ts"
         assert results[0]["test_id"] is None
         assert results[0]["line"] == 12
-        assert results[0]["id"].startswith("e2e/link.spec.ts:")
+        assert results[0]["ordinal"] == 1
 
     # Verifies: REQ-d00254-G
     def test_file_attr_without_line(self):
@@ -260,7 +260,7 @@ class TestJUnitXMLParserSourceBinding:
         assert results[0]["source_path"] == "test_results.xml"
         assert results[0]["test_id"] == "test:tests/test_auth.py::test_login"
         assert results[0]["line"] is None
-        assert results[0]["id"].startswith("test_results.xml:")
+        assert results[0]["ordinal"] == 1
 
     # Verifies: REQ-d00254-G
     def test_mixed_testcases_in_one_suite(self):

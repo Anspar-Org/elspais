@@ -6,6 +6,18 @@ All notable changes to elspais will be documented in this file.
 
 ### Changed
 
+- **Breaking: every recorded test result is now a result of its own (REQ-d00294-A+B)** — each reporter spelled its own result identifier out of the test name alone, so the records for one test collapsed into a single node and every verdict but one was lost with nothing reported. A suite run across a fleet of devices kept a single verdict, however many devices ran it.
+
+  A result is now identified by the place it was recorded in and by its position among the records in that place. `make_result_id()` is the one place such an identifier is spelled and `parse_structural_id()` the one place it is read; the factory spells it, because only the factory knows the repository root that keeps the path relative. A result read from a runner's output, which no artifact holds, is placed by the target it was read from.
+
+  Result identifiers therefore change shape, to `result:<namespace>:<place>:<ordinal>`. An identifier no longer carries an absolute path, so one run reads the same way in any checkout — except for an artifact outside the repository, which has no repository-relative form to take.
+
+- **A result may carry the environment that produced it (REQ-d00294-C+D)** — a target declares where to read the name from and a reporter declares a default, which is the arrangement REQ-d00284-A already makes for the name a result gives its test. `results-path` reads the part of the path that the target's pattern matched; `suite-hostname` reads the `hostname` attribute of the suite holding the record.
+
+  Every reporter default is empty, JUnit included, because that attribute names the project under test for one producer and the machine that ran the tests for another. A declared source that cannot give one name is reported rather than guessed at. The environment is shown beside its result and is never added to the name of the test: one test is one test wherever it ran.
+
+- **The test results check counts results and says so** — it counted results while calling them tests, which agreed with itself only while one test held one result. A result that errored was counted nowhere at all, falling out of every tally and out of the total, while every other surface treats an error as a failure; it now counts as failing.
+
 - **A federation member is identified by its namespace, never its declared name** (REQ-d00202-G+J, REQ-d00200) — the declared name is a label; two members named alike are two members.
 
 - **An associate declaration that cannot be read now stops the build** (REQ-d00203-C+D retired) — a partial federation answers questions about a corpus nobody chose. `build_graph()`'s `strict` parameter is gone; `health` and `doctor` still report the fault, citing the declaration chain that reached it.

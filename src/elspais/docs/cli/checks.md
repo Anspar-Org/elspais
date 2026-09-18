@@ -278,7 +278,7 @@ that changes to cross-cutting requirements are propagated to their consumers.
 | Check | Description | Default severity | Configured by | Remedy |
 | --- | --- | --- | --- | --- |
 | `tests.uncited_file` | A scanned test file in which no test cites anything -- either no test functions found, or no test in the file links to any requirement (a file with at least one linked test is not flagged). Not the same population as the unlinked NODES the graph API and the MCP `get_unlinked_nodes` tool answer about | info | `[rules.severity]` | `elspais uncited` |
-| `tests.results` | Test pass/fail status from JUnit XML or pytest JSON results | warning | `[rules.severity]` | `elspais failing` |
+| `tests.results` | The pass/fail status of every ingested result. One test that runs in several environments writes one result in each of them, so the count is a count of results, not of tests | warning | `[rules.severity]` | `elspais failing` |
 | `tests.results_stale` | Test results older than the code they cover | warning | `[rules.severity]` | `elspais checks --run-tests` |
 | `tests.unmatched_results` | Results matching no known test | warning | `[rules.severity]` | `elspais -v checks --tests` |
 | `tests.tested` | The `tested` coverage dimension (TEST nodes linked to assertions) | error | `[rules.severity]` | `elspais untested` |

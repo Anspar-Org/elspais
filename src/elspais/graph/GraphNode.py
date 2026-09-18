@@ -60,6 +60,7 @@ class FileType(Enum):
 FILE_ID_PREFIX = "file:"
 REMAINDER_ID_PREFIX = "rem:"
 DEFINITION_ID_PREFIX = "def:"
+RESULT_ID_PREFIX = "result:"
 CODE_ID_PREFIX = "code:"
 TEST_ID_PREFIX = "test:"
 
@@ -67,11 +68,13 @@ TEST_ID_PREFIX = "test:"
 # location (path and/or line), not by semantic identity, and which
 # therefore carry a namespace. DEFINITION nodes are REMAINDER nodes with a
 # separate prefix for definition blocks — same id shape as rem:, so they
-# belong here.
+# belong here. RESULT ids are keyed by the place the record was recorded in
+# and its position there, which is the same shape again.
 STRUCTURAL_ID_PREFIXES: tuple[str, ...] = (
     FILE_ID_PREFIX,
     REMAINDER_ID_PREFIX,
     DEFINITION_ID_PREFIX,
+    RESULT_ID_PREFIX,
 )
 
 
@@ -109,6 +112,25 @@ def make_definition_id(namespace: str, relative_path: str, start_line: int) -> s
     return f"{DEFINITION_ID_PREFIX}{namespace}:{relative_path}:{start_line}"
 
 
+# Implements: REQ-d00294-A+B
+def make_result_id(namespace: str, place: str, ordinal: int) -> str:
+    """Canonical RESULT node id for a place of record and a position in it.
+
+    The place is the repo-relative path of the artifact that holds the
+    record, or the name of the target the record was read from where the
+    producer wrote no artifact. One test run in several environments writes
+    one record for each of them, and those records agree about the test, the
+    class and often the line, so the position is what tells them apart.
+    """
+    _require_namespace(namespace, place)
+    if not place:
+        raise ValueError(
+            "Cannot make a result id without a place of record: the id names "
+            "the artifact or the target the record was read from."
+        )
+    return f"{RESULT_ID_PREFIX}{namespace}:{place}:{ordinal}"
+
+
 def parse_structural_id(node_id: str) -> tuple[str, str, str, int | None]:
     """Split a structural id into prefix, namespace, path and line.
 
@@ -120,7 +142,8 @@ def parse_structural_id(node_id: str) -> tuple[str, str, str, int | None]:
 
     Returns:
         ``(prefix, namespace, relative_path, start_line)`` with
-        ``start_line`` None for a FILE id.
+        ``start_line`` None for a FILE id. For a RESULT id the path is the
+        place of record and the last part is the position in it, not a line.
 
     Raises:
         ValueError: The id is not a structural id, or is malformed.
@@ -139,9 +162,10 @@ def parse_structural_id(node_id: str) -> tuple[str, str, str, int | None]:
             return prefix, namespace, remainder, None
         path, sep, line = remainder.rpartition(":")
         if not sep or not path or not line.isdigit():
+            part = "ordinal" if prefix == RESULT_ID_PREFIX else "line"
             raise ValueError(
-                f"Structural id '{node_id}' names no line. Ids are written "
-                f"'{prefix}<namespace>:<repo-relative-path>:<line>'."
+                f"Structural id '{node_id}' names no {part}. Ids are written "
+                f"'{prefix}<namespace>:<repo-relative-path>:<{part}>'."
             )
         return prefix, namespace, path, int(line)
     raise ValueError(f"'{node_id}' is not a structural id")
