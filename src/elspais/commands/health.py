@@ -2450,6 +2450,7 @@ def check_unmatched_file_pattern(
     )
 
 
+# Implements: REQ-d00080-B
 def check_no_requirements(
     graph: FederatedGraph, config: dict[str, Any] | None = None
 ) -> HealthCheck:
@@ -2505,6 +2506,7 @@ _GOVERNED_SETTING_ROOTS: tuple[str, ...] = (
 )
 
 
+# Implements: REQ-d00275-D
 def _flatten_settings(value: Any, prefix: str) -> dict[str, Any]:
     """Dotted-key view of a config subtree, for comparing two of them.
 
@@ -2793,6 +2795,7 @@ def run_spec_checks(
 # =============================================================================
 
 
+# Implements: REQ-d00291-I
 def _excluded_note(
     graph: FederatedGraph,
     config: dict[str, Any] | None = None,
@@ -3385,6 +3388,7 @@ def check_uncited_code(graph: FederatedGraph, config: dict[str, Any] | None = No
     )
 
 
+# Implements: REQ-d00291-G
 def _check_status_references(
     graph: FederatedGraph,
     source_kind: Any,  # NodeKind enum value
@@ -3486,7 +3490,7 @@ def _check_status_references(
     )
 
 
-# Implements: REQ-d00241-A, REQ-d00241-E
+# Implements: REQ-d00241-A, REQ-d00241-E, REQ-d00241-H
 def check_no_traceability(
     unlinked_files: list[str],
     severity: str | None = None,
@@ -4110,6 +4114,7 @@ def check_unvalidated_requirements(
     )
 
 
+# Implements: REQ-d00288-B
 def _journey_location(node: Any) -> tuple[str | None, int | None]:
     """The file and line a journey was written at."""
     fn = node.file_node()
@@ -4117,6 +4122,7 @@ def _journey_location(node: Any) -> tuple[str | None, int | None]:
     return path, node.get_field("parse_line")
 
 
+# Implements: REQ-d00288-A
 def _validating_targets(node: Any) -> list[Any]:
     """The requirements a journey validates.
 
@@ -4797,6 +4803,7 @@ def _target_reach(config: dict[str, Any] | None) -> list[str] | None:
     return [t.cwd.strip("/") for t in cfg.scanning.test.targets if t.command]
 
 
+# Implements: REQ-d00276-E
 def _reached_by(relative_path: str, reach: list[str]) -> bool:
     """Whether any runnable target's directory contains *relative_path*."""
     normalized = relative_path.replace("\\", "/").removeprefix("./")
@@ -4997,6 +5004,7 @@ def render_section(
 # =============================================================================
 
 
+# Implements: REQ-d00291-G
 def compute_checks(
     graph: FederatedGraph,
     config: dict[str, Any],
@@ -5460,6 +5468,7 @@ class FindingFilter:
         """
         return bool(self.names or self.codes or self.paths)
 
+    # Implements: REQ-d00282-F
     def unadmitted(self) -> list[str]:
         """The names this filter uses that the report's vocabulary does not admit.
 
@@ -5508,6 +5517,7 @@ class FindingFilter:
                 return False
         return True
 
+    # Implements: REQ-d00285-I
     def describe(self) -> str:
         """The filter as the flags that produced it, for echoing back."""
         parts: list[str] = []
@@ -5621,7 +5631,7 @@ def apply_finding_filter(report: HealthReport, filt: FindingFilter) -> _FilterOu
 
 
 # Implements: REQ-d00285-I
-# Implements: REQ-d00085-E+F, REQ-d00285-C+H
+# Implements: REQ-d00085-E+F, REQ-d00085-N, REQ-d00285-C+H
 def _format_report(
     report: HealthReport,
     args: argparse.Namespace,
