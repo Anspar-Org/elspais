@@ -18,6 +18,7 @@ failing-step identification are visible in the viewer.
 
 import json
 import os
+import random
 import shutil
 import signal
 import socket
@@ -51,10 +52,18 @@ pytestmark = [
 # window are handed the same one and the second viewer never comes up.
 _CLAIMED_PORTS: set[int] = set()
 
+# The range is shared by every session on the machine, and two sessions
+# scanning it from the same end are handed the same first free port. Each
+# session scans from its own offset, so a concurrent run in another checkout
+# meets this one only by chance; ``_wait_for_server`` catches that chance.
+_PORT_RANGE = range(15000, 15051)
+_PORT_OFFSET = random.randrange(len(_PORT_RANGE))
+
 
 def _find_free_port() -> int:
     """Find a free port in the 15000-15050 range, unclaimed by this session."""
-    for port in range(15000, 15051):
+    for i in range(len(_PORT_RANGE)):
+        port = _PORT_RANGE[(_PORT_OFFSET + i) % len(_PORT_RANGE)]
         if port in _CLAIMED_PORTS:
             continue
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -118,6 +127,11 @@ def _server_output(log_path: Path | None, limit: int = 4000) -> str:
     return text[-limit:]
 
 
+# What uvicorn writes on binding the port, and on failing to.
+_BIND_ANNOUNCED = "Uvicorn running on"
+_BIND_REFUSED = "address already in use"
+
+
 def _wait_for_server(
     base_url: str,
     *,
@@ -126,7 +140,14 @@ def _wait_for_server(
     timeout: float = _STARTUP_TIMEOUT,
     poll: float = 0.5,
 ) -> None:
-    """Poll /api/status until the server is ready, dies, or the deadline passes."""
+    """Poll /api/status until the server is ready, dies, or the deadline passes.
+
+    A 200 is accepted only once the spawned server has itself announced the
+    bind in its output. The port range is shared by every session on the
+    machine, so a viewer of another session may already answer on this port
+    while the spawned one is still building its graph; taking that answer
+    would run this session's tests against a foreign estate.
+    """
     import urllib.error
     import urllib.request
 
@@ -137,6 +158,16 @@ def _wait_for_server(
                 f"Server at {base_url} exited with code {proc.returncode} "
                 f"before becoming ready. Its output:\n{_server_output(log_path)}"
             )
+        if log_path is not None:
+            output = _server_output(log_path, limit=1 << 20)
+            if _BIND_REFUSED in output:
+                pytest.fail(
+                    f"Server at {base_url} could not bind its port (another "
+                    f"process holds it). Its output:\n{output}"
+                )
+            if _BIND_ANNOUNCED not in output:
+                time.sleep(0.5)
+                continue
         try:
             resp = urllib.request.urlopen(f"{base_url}/api/status", timeout=2)
             if resp.status == 200:

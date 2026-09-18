@@ -40,10 +40,12 @@ A. SHALL require admin role.
 *End* *Concrete Action*
 ```
 
-The graph builder clones the template REQ subtree (root plus directly-attached
-assertions) into the declaring node's scope with composite IDs of the form
-`declaring_id::original_id`. Each clone gets `Stereotype.INSTANCE` and an
-INSTANCE edge back to its template original.
+The graph builder clones the template subtree rooted at the target -- the
+target REQ with its assertions, plus every template REQ that refines a member,
+recursively, with theirs -- into the declaring node's scope with composite IDs
+of the form `declaring_id::original_id`. Each clone gets `Stereotype.INSTANCE`
+and an INSTANCE edge back to its template original, and the STRUCTURES and
+REFINES edges among the originals are recreated among the clones.
 
 ## Cross-repo Satisfies
 
@@ -58,13 +60,21 @@ namespace = "LIB"
 
 The federated graph builder then:
 
-- Clones the template REQ + assertions into the declaring repo's index with
-  composite IDs (`APP-p00001::LIB-p00001`, `APP-p00001::LIB-p00001-A`, ...).
-- Wires intra-graph `SATISFIES`, `STRUCTURES`, and `DEFINES` edges in the
-  declaring repo.
+- Clones the template subtree -- the target REQ with its assertions and every
+  template REQ refining a member, recursively -- into the declaring repo's
+  index with composite IDs (`APP-p00001::LIB-p00001`,
+  `APP-p00001::LIB-p00001-A`, ...).
+- Wires intra-graph `SATISFIES`, `STRUCTURES`, `REFINES` and `DEFINES` edges
+  in the declaring repo.
 - Wires cross-graph `INSTANCE` edges from each clone to its template original.
 - Records `template_repo` on each clone so viewers can show
   "Template defined in `<repo>`".
+
+A template subtree may span repositories: a template REQ in the declaring
+repo that refines a template owned by an associate is a member of that
+template's subtree, and a `Satisfies:` against the associate's template
+clones it too. Each clone records the repository owning its own original,
+so the clones of one subtree may name different repositories.
 
 Federation depth is capped at one: the template's repo must be a direct
 associate.
@@ -140,9 +150,11 @@ The builder enforces this matrix at build time, raising typed
 | `Satisfies: X`             | CONCRETE  | Error (target not marked **Template**)   |
 | `Satisfies: X`             | INSTANCE  | Error (chained instantiation)            |
 | `Satisfies: X` (cross-repo)| missing   | Error -- diagnostic lists associates     |
-| `Refines: X`               | TEMPLATE  | Error (compositing templates)            |
+| `Refines: X` (from a **Template** REQ) | TEMPLATE | OK -- forms the template subtree |
+| `Refines: X` (from any other REQ) | TEMPLATE | Error (a template's refiners must be templates) |
 | `Refines: X`               | INSTANCE  | Error (instance is read-only)            |
-| `Refines: X`               | CONCRETE  | OK                                       |
+| `Refines: X` (from a **Template** REQ) | CONCRETE | Error (outside its template subtree) |
+| `Refines: X` (from any other REQ) | CONCRETE | OK                                     |
 | `Implements: X` (CODE)     | TEMPLATE  | OK -- applies to every satisfier         |
 | `Implements: X` (CODE)     | CONCRETE  | OK                                       |
 | `Implements: X` (CODE)     | INSTANCE  | Error (composite IDs not author syntax)  |
@@ -150,11 +162,21 @@ The builder enforces this matrix at build time, raising typed
 | `Verifies: X` (TEST)       | CONCRETE  | OK                                       |
 | `Verifies: X` (TEST)       | INSTANCE  | Error                                    |
 
-Template REQs may not declare their own `Implements:` / `Refines:` against
-nodes outside their template subtree, and they may not be the target of an
-inbound `Refines:`. A `Satisfies:` cycle (transitively across SATISFIES and
+A template is a subtree: a template REQ refines another template REQ to
+decompose one cross-cutting obligation into levels of detail, and a
+`Satisfies:` against any member clones the subtree rooted there -- the
+member with its assertions, every template REQ refining a member,
+recursively, with theirs, and the REFINES edges among them. Template REQs
+may not declare `Implements:`, nor `Refines:` against a node outside their
+own template subtree; a REQ not marked **Template** may not refine a
+template (mark it **Template** to decompose the template, or declare
+`Satisfies:` to instantiate it). A `Satisfies:` cycle (transitively across SATISFIES and
 INSTANCE edges) is reported once per build with a diagnostic containing
 the word `cycle` and the cycle path.
+
+The matrix applies to a target owned by an associated repository exactly as
+to one in the declaring repository: a reference the matrix forbids is
+reported and never wired, whichever repository owns its target.
 
 All diagnostics surface in `elspais checks` and `elspais unresolved`.
 

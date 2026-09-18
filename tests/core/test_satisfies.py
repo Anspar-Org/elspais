@@ -346,6 +346,48 @@ class TestChangeDetection:
             f.node_id == "REQ-p00044" and "REQ-p80001" in (f.related or []) for f in result.findings
         )
 
+    # Verifies: REQ-p00004-K
+    def test_REQ_p00004_K_stale_interior_member_flags_the_satisfier(self):
+        """A change to a template refining the satisfied root still reaches the satisfier.
+
+        The satisfier declared against the root, so the finding names the
+        root as what was declared while relating the member that changed.
+        """
+        from elspais.commands.health import check_spec_hash_integrity
+        from tests.core.graph_test_helpers import build_graph
+
+        root = make_requirement(
+            "REQ-p80001",
+            title="Policy",
+            template=True,
+            assertions=[{"label": "A", "text": "obligation"}],
+        )
+        member = make_requirement(
+            "REQ-p80002",
+            title="Provision",
+            template=True,
+            refines=["REQ-p80001"],
+            hash_value="aabbccdd",  # Stale hash on the interior member only
+            assertions=[{"label": "A", "text": "detail"}],
+        )
+        declaring = make_requirement(
+            "REQ-p00044",
+            title="Subsystem",
+            satisfies=["REQ-p80001"],
+        )
+
+        graph = build_graph(root, member, declaring)
+        assert not list(graph.unresolved_references())
+
+        result = check_spec_hash_integrity(graph)
+
+        stale = {m["id"] for m in result.details["mismatches"]}
+        assert "REQ-p80002" in stale and "REQ-p80001" not in stale
+        flagged = [f for f in result.findings if f.node_id == "REQ-p00044"]
+        assert len(flagged) == 1, f"one review finding per satisfier, got {flagged}"
+        assert flagged[0].related == ["REQ-p80002"]
+        assert "Satisfies: REQ-p80001" in flagged[0].message
+
 
 class TestGraphNodeStereotype:
     """Validates REQ-p00014-C: GraphNode stereotype field.
@@ -521,17 +563,37 @@ class TestTemplateInstantiation:
         assertion_a = graph.find_by_id("REQ-p80001-A")
         assert assertion_a.get_field("stereotype") == Stereotype.TEMPLATE
 
-    # CUR-1353 Phase 2 (single-REQ scope): the former
-    # ``test_REQ_p00014_B_cloned_subtree_preserves_refines`` test exercised
-    # multi-REQ template authoring (two REQs both marked **Template**, child
-    # REFINES parent). The design spec at
-    # docs/superpowers/specs/2026-05-15-cross-repo-template-design.md locks
-    # single-REQ scope: a template is one REQ root plus its directly-attached
-    # assertions, with no child REQs and no transitive REFINES descendants.
-    # Inbound REFINES against any TEMPLATE is now a rule-8 error. The
-    # behaviour the deleted test asserted is no longer reachable; see
-    # tests/unit/graph/test_template_validation.py for the replacement
-    # coverage.
+    # Verifies: REQ-p00014-B, REQ-p00014-M
+    def test_REQ_p00014_B_cloned_subtree_preserves_refines(self):
+        """A template refined by a template is cloned whole, REFINES edge included."""
+        root = make_requirement(
+            "REQ-p80001",
+            title="Electronic Signature Standard",
+            template=True,
+            assertions=[{"label": "A", "text": "validate signer identity"}],
+        )
+        provision = make_requirement(
+            "REQ-p80002",
+            title="Signature Manifestation",
+            template=True,
+            refines=["REQ-p80001"],
+            assertions=[{"label": "A", "text": "print the signer's name"}],
+        )
+        declaring = make_requirement(
+            "REQ-p00044",
+            title="Document Management",
+            satisfies=["REQ-p80001"],
+        )
+        graph = build_graph(root, provision, declaring)
+
+        assert not list(graph.unresolved_references())
+        provision_clone = graph.find_by_id("REQ-p00044::REQ-p80002")
+        assert provision_clone is not None, "the refining template should be cloned too"
+        assert provision_clone.get_field("stereotype") == Stereotype.INSTANCE
+        assert graph.find_by_id("REQ-p00044::REQ-p80002-A") is not None
+        root_clone = graph.find_by_id("REQ-p00044::REQ-p80001")
+        refines_edges = list(root_clone.iter_edges_by_kind(EdgeKind.REFINES))
+        assert [e.target.id for e in refines_edges] == ["REQ-p00044::REQ-p80002"]
 
     # Verifies: REQ-p00014-B
     def test_REQ_p00014_B_multiple_satisfies_creates_separate_clones(self):
