@@ -1847,7 +1847,7 @@ class FederatedGraph:
             self._resolver_cache[entry.namespace] = cached
         return cached
 
-    # Implements: REQ-p00014-H
+    # Implements: REQ-p00014-H, REQ-p00014-N
     def _claim_for(self, target_id: str) -> tuple[str, str] | None:
         """Ask each associated repo's resolver whether it claims ``target_id``.
 
@@ -1982,7 +1982,7 @@ class FederatedGraph:
                         if key != "stereotype":
                             clone.set_field(key, value)
                     clone.set_field("stereotype", Stereotype.INSTANCE)
-                    # Implements: REQ-p00014-K
+                    # Implements: REQ-p00014-K, REQ-p00014-O
                     # Record the template's owning repo so viewers can show
                     # "Template defined in <repo>" provenance without needing
                     # to walk the cross-graph INSTANCE edge. The repository's

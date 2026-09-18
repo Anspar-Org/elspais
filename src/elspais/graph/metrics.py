@@ -567,7 +567,7 @@ def direct_coverage_for(node: GraphNode) -> int:
     return sum(1 for e in node.iter_incoming_edges() if e.kind.contributes_to_coverage())
 
 
-# Implements: REQ-p00014-K
+# Implements: REQ-p00014-K, REQ-p00014-P
 def inherited_coverage_for(node: GraphNode) -> int:
     """Return coverage for ``node``, inheriting from the template if INSTANCE.
 
@@ -615,7 +615,7 @@ class SatisfierRollup:
         return self.covered / self.total if self.total else 0.0
 
 
-# Implements: REQ-p00014-K
+# Implements: REQ-p00014-K, REQ-d00069-I
 def satisfier_rollup(node: GraphNode) -> SatisfierRollup:
     """Combine a satisfier REQ's own and inherited coverage.
 

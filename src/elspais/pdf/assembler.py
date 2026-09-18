@@ -94,7 +94,7 @@ _LIST_ITEM_RE = re.compile(r"^\s*(?:[-*+]\s|\d+[.)]\s)")
 log = logging.getLogger(__name__)
 
 
-# Implements: REQ-p00080-I, REQ-p00080-J
+# Implements: REQ-p00080-I, REQ-p00080-J, REQ-p00019-G
 @dataclass(frozen=True)
 class AssemblyDiagnostic:
     """Referenced content the assembler could not place in the document.

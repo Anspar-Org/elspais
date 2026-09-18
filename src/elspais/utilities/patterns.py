@@ -49,6 +49,7 @@ REF_LIST_SEPARATOR = ","
 PLACEHOLDER_PATTERN = re.compile(r"<[^<>]*>|\[[^\[\]]*\]")
 
 
+# Implements: REQ-d00287-H
 def _is_placeholder(item: str) -> bool:
     """Whether *item* is wholly a placeholder."""
     return PLACEHOLDER_PATTERN.fullmatch(item) is not None
@@ -167,6 +168,7 @@ def _schema_default_canonical() -> str:
     return IdPatternsConfig.model_fields["canonical"].default
 
 
+# Implements: REQ-d00251-L
 def _schema_default_assertion(field_name: str) -> Any:
     """A default the assertion grammar takes when a raw dict omits the field.
 
@@ -254,6 +256,7 @@ class IdPatternConfig:
     assertions: AssertionFormat
     output_forms: dict[str, str] = field(default_factory=dict)
 
+    # Implements: REQ-d00251-L, REQ-d00081-A
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> IdPatternConfig:
         """Create IdPatternConfig from a full configuration dictionary.
@@ -350,6 +353,7 @@ class ParsedId:
 class IdResolver:
     """Single authority for parsing, normalizing, and rendering requirement IDs."""
 
+    # Implements: REQ-d00251-L
     def __init__(self, config: IdPatternConfig):
         self.config = config
         # Build reverse alias lookup: {alias_name: {alias_value: canonical_type_code}}
@@ -411,6 +415,7 @@ class IdResolver:
         m = re.search(r"\{(?:type|level)\.(\w+)\}", template)
         return m.group(1) if m else None
 
+    # Implements: REQ-d00212-S, REQ-d00212-T
     def _compile_regex(
         self,
         template: str,
@@ -469,6 +474,7 @@ class IdResolver:
         multi = re.escape(af.multi_separator)
         return rf"(?:{sep}(?P<assertions>{label_pat}(?:{multi}{label_pat})*))?"
 
+    # Implements: REQ-d00251-H
     @property
     def assertion_label_pattern(self) -> str:
         """Regex matching one assertion label under the configured style.
@@ -779,6 +785,7 @@ class IdResolver:
         trailing = item[prefix.end() :]
         return trailing.startswith(self.config.assertions.separator)
 
+    # Implements: REQ-d00082-G
     def parse(self, raw_id: str) -> ParsedId | None:
         """Try all compiled forms. Returns ParsedId with canonical type_code.
 
@@ -795,6 +802,7 @@ class IdResolver:
                 return self._match_to_parsed_id(m, alias_used)
         return None
 
+    # Implements: REQ-d00251-L
     def is_local_id(self, raw_id: str) -> bool:
         """Return True if raw_id matches this repo's ID pattern.
 
@@ -877,6 +885,7 @@ class IdResolver:
             fqn=fqn,
         )
 
+    # Implements: REQ-d00212-R
     def _render_template(
         self, template: str, namespace: str, type_code: str, component: str
     ) -> str:
@@ -913,6 +922,7 @@ class IdResolver:
 
     # --- Task 4: Rendering, expand, validation, assertion labels ---
 
+    # Implements: REQ-p00014-U
     def render(self, parsed_id: ParsedId, form: str = "canonical") -> str:
         """Render a ParsedId using a named form."""
         if form not in self._renderers:
@@ -1064,6 +1074,7 @@ class IdResolver:
         af = self.config.assertions
         return f"{req_id}{af.separator}{af.multi_separator.join(labels)}"
 
+    # Implements: REQ-d00251-L
     def all_type_alias_values(self) -> list[str]:
         """All unique type alias values (or canonical codes if no aliases).
 
@@ -1172,6 +1183,7 @@ class IdResolver:
             result = self._canonicalize_case(cleaned)
         return result if result is not None else cleaned
 
+    # Implements: REQ-p00014-B
     def build_instance_id(self, prefix: str, template_id: str) -> str:
         """Build a unique INSTANCE node ID.
 
@@ -1223,6 +1235,7 @@ class FederatedIdReader:
     fragments, so a repository built alone is grammatically unchanged.
     """
 
+    # Implements: REQ-d00269-C
     def __init__(self, own: IdResolver, others: Sequence[IdResolver] = ()) -> None:
         resolvers = [own]
         seen = {own.config.namespace}
@@ -1245,6 +1258,7 @@ class FederatedIdReader:
         """Every member's resolver, the scanned repository's first."""
         return self._resolvers
 
+    # Implements: REQ-d00269-C
     @staticmethod
     def _alternate(fragments: Sequence[str]) -> str:
         """Join member fragments into one alternation.
@@ -1256,10 +1270,12 @@ class FederatedIdReader:
             return fragments[0]
         return "(?:" + "|".join(fragments) + ")"
 
+    # Implements: REQ-d00269-C
     def namespace_pattern(self) -> str:
         """A pattern matching any member's namespace."""
         return self._alternate([r.grammar().namespace for r in self._resolvers])
 
+    # Implements: REQ-d00269-C
     def identifier_pattern(self) -> str:
         """A pattern matching any member's canonical identifier."""
         return self._alternate([r.grammar().identifier for r in self._resolvers])
@@ -1333,7 +1349,7 @@ class FederatedIdReader:
             self._extra_item_regexes[key] = compiled
         return compiled
 
-    # Implements: REQ-d00287-A, REQ-d00272-C, REQ-d00272-O
+    # Implements: REQ-d00287-A, REQ-d00272-C, REQ-d00272-O, REQ-d00269-J
     def classify_unmatched(self, candidate: str) -> tuple[FaultClass, tuple[FaultCode, ...]]:
         """How far reading *candidate* got, for an item no grammar accepted.
 
@@ -1526,6 +1542,7 @@ class FederatedIdReader:
         return results
 
 
+# Implements: REQ-d00251-L
 def build_resolver(config: dict[str, Any]) -> IdResolver:
     """Create an IdResolver from a full configuration dictionary.
 
