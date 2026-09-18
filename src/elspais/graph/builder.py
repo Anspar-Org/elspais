@@ -58,6 +58,7 @@ from elspais.graph.template_subtree import (
 )
 from elspais.graph.template_subtree import (
     recreate_subtree_edges,
+    stereotype_matrix_fault,
     subtree_nodes,
 )
 from elspais.graph.terms import TermDictionary, TermEntry, compute_definition_hash
@@ -5634,130 +5635,11 @@ class GraphBuilder:
                 # Implements: REQ-p00014-G
                 # The validation matrix is applied BEFORE the edge is created,
                 # so the graph never holds an edge it also reports as a fault.
-                target_stereotype = target.get_field("stereotype")
-                source_is_template = (
-                    source.kind == NodeKind.REQUIREMENT
-                    and source.get_field("stereotype") == Stereotype.TEMPLATE
+                matrix_fault = stereotype_matrix_fault(
+                    source, target, source_id, target_id, edge_kind
                 )
-                if (
-                    edge_kind == EdgeKind.REFINES
-                    and target_stereotype == Stereotype.TEMPLATE
-                    and not source_is_template
-                ):
-                    # A template's refiners must themselves be templates: the
-                    # template-to-template REFINES edge is what forms a
-                    # template subtree, so a refiner that is not marked joins
-                    # nothing. One edge, one report: the author either meant
-                    # to decompose the template or to instantiate it.
-                    self._unresolved_references.append(
-                        ReferenceFault(
-                            source_id=source_id,
-                            target_id=target_id,
-                            edge_kind=edge_kind.value,
-                            fault_class=FaultClass.FORBIDDEN,
-                            diagnostic=(
-                                f"{target_id} is a Template and {source_id} is "
-                                f"not: a template's refiners must themselves be "
-                                f"templates. Mark {source_id} **Template** to "
-                                f"decompose {target_id}, or declare "
-                                f"Satisfies: {target_id} to instantiate it."
-                            ),
-                        )
-                    )
-                    continue
-                if source_is_template and edge_kind == EdgeKind.REFINES:
-                    if target_stereotype not in (Stereotype.TEMPLATE, Stereotype.INSTANCE):
-                        # A template's Refines: may only reach its own
-                        # subtree, and the subtree holds template-marked
-                        # nodes alone. A concrete *Assertion* carries no
-                        # stereotype of its own, so the test is for what is
-                        # admitted rather than for CONCRETE. An INSTANCE
-                        # target is refused below for what it is, once.
-                        self._unresolved_references.append(
-                            ReferenceFault(
-                                source_id=source_id,
-                                target_id=target_id,
-                                edge_kind=edge_kind.value,
-                                fault_class=FaultClass.FORBIDDEN,
-                                diagnostic=(
-                                    f"{source_id} is marked **Template** but "
-                                    f"refines {target_id}, which is not: a "
-                                    f"template's Refines: may only target its "
-                                    f"own template subtree. Mark {target_id} "
-                                    f"**Template** or remove the reference."
-                                ),
-                            )
-                        )
-                        continue
-                if source_is_template and edge_kind == EdgeKind.IMPLEMENTS:
-                    # A template subtree is formed by refinement alone, so an
-                    # implementation claim declared by a template reaches
-                    # outside it whatever it names.
-                    self._unresolved_references.append(
-                        ReferenceFault(
-                            source_id=source_id,
-                            target_id=target_id,
-                            edge_kind=edge_kind.value,
-                            fault_class=FaultClass.FORBIDDEN,
-                            diagnostic=(
-                                f"Templates are pure specs; remove the "
-                                f"Implements: metadata or remove the "
-                                f"**Template** flag on {source_id}."
-                            ),
-                        )
-                    )
-                    continue
-                if edge_kind == EdgeKind.REFINES and target_stereotype == Stereotype.INSTANCE:
-                    # Rule 4: refining instance content is not supported.
-                    self._unresolved_references.append(
-                        ReferenceFault(
-                            source_id=source_id,
-                            target_id=target_id,
-                            edge_kind=edge_kind.value,
-                            fault_class=FaultClass.FORBIDDEN,
-                            diagnostic=(
-                                "Refining instance content is not supported. "
-                                "Instance subtrees are read-only synthetic "
-                                "content with no canonical on-disk identifier. "
-                                "To add detail, Satisfies: the template AND "
-                                "Refines: a concrete REQ in your own repo."
-                            ),
-                        )
-                    )
-                    continue
-                if edge_kind == EdgeKind.IMPLEMENTS and target_stereotype == Stereotype.INSTANCE:
-                    # Rule 5: composite IDs are not authoring syntax.
-                    self._unresolved_references.append(
-                        ReferenceFault(
-                            source_id=source_id,
-                            target_id=target_id,
-                            edge_kind=edge_kind.value,
-                            fault_class=FaultClass.FORBIDDEN,
-                            diagnostic=(
-                                "Instance assertions have no canonical "
-                                "on-disk identifier; target the template "
-                                "assertion directly or add a concrete "
-                                "assertion to your satisfier."
-                            ),
-                        )
-                    )
-                    continue
-                if edge_kind == EdgeKind.VERIFIES and target_stereotype == Stereotype.INSTANCE:
-                    # Rule 6: same reasoning as rule 5, TEST source.
-                    self._unresolved_references.append(
-                        ReferenceFault(
-                            source_id=source_id,
-                            target_id=target_id,
-                            edge_kind=edge_kind.value,
-                            fault_class=FaultClass.FORBIDDEN,
-                            diagnostic=(
-                                "Instance assertions have no canonical "
-                                "on-disk identifier; target the template "
-                                "assertion directly or add a concrete "
-                                "assertion to your satisfier."
-                            ),
-                        )
-                    )
+                if matrix_fault is not None:
+                    self._unresolved_references.append(matrix_fault)
                     continue
                 if edge_kind in (EdgeKind.IMPLEMENTS, EdgeKind.REFINES) and target.kind in (
                     NodeKind.USER_JOURNEY,

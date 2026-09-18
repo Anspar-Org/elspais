@@ -346,6 +346,48 @@ class TestChangeDetection:
             f.node_id == "REQ-p00044" and "REQ-p80001" in (f.related or []) for f in result.findings
         )
 
+    # Verifies: REQ-p00004-K
+    def test_REQ_p00004_K_stale_interior_member_flags_the_satisfier(self):
+        """A change to a template refining the satisfied root still reaches the satisfier.
+
+        The satisfier declared against the root, so the finding names the
+        root as what was declared while relating the member that changed.
+        """
+        from elspais.commands.health import check_spec_hash_integrity
+        from tests.core.graph_test_helpers import build_graph
+
+        root = make_requirement(
+            "REQ-p80001",
+            title="Policy",
+            template=True,
+            assertions=[{"label": "A", "text": "obligation"}],
+        )
+        member = make_requirement(
+            "REQ-p80002",
+            title="Provision",
+            template=True,
+            refines=["REQ-p80001"],
+            hash_value="aabbccdd",  # Stale hash on the interior member only
+            assertions=[{"label": "A", "text": "detail"}],
+        )
+        declaring = make_requirement(
+            "REQ-p00044",
+            title="Subsystem",
+            satisfies=["REQ-p80001"],
+        )
+
+        graph = build_graph(root, member, declaring)
+        assert not list(graph.unresolved_references())
+
+        result = check_spec_hash_integrity(graph)
+
+        stale = {m["id"] for m in result.details["mismatches"]}
+        assert "REQ-p80002" in stale and "REQ-p80001" not in stale
+        flagged = [f for f in result.findings if f.node_id == "REQ-p00044"]
+        assert len(flagged) == 1, f"one review finding per satisfier, got {flagged}"
+        assert flagged[0].related == ["REQ-p80002"]
+        assert "Satisfies: REQ-p80001" in flagged[0].message
+
 
 class TestGraphNodeStereotype:
     """Validates REQ-p00014-C: GraphNode stereotype field.

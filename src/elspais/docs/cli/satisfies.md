@@ -60,13 +60,21 @@ namespace = "LIB"
 
 The federated graph builder then:
 
-- Clones the template REQ + assertions into the declaring repo's index with
-  composite IDs (`APP-p00001::LIB-p00001`, `APP-p00001::LIB-p00001-A`, ...).
-- Wires intra-graph `SATISFIES`, `STRUCTURES`, and `DEFINES` edges in the
-  declaring repo.
+- Clones the template subtree -- the target REQ with its assertions and every
+  template REQ refining a member, recursively -- into the declaring repo's
+  index with composite IDs (`APP-p00001::LIB-p00001`,
+  `APP-p00001::LIB-p00001-A`, ...).
+- Wires intra-graph `SATISFIES`, `STRUCTURES`, `REFINES` and `DEFINES` edges
+  in the declaring repo.
 - Wires cross-graph `INSTANCE` edges from each clone to its template original.
 - Records `template_repo` on each clone so viewers can show
   "Template defined in `<repo>`".
+
+A template subtree may span repositories: a template REQ in the declaring
+repo that refines a template owned by an associate is a member of that
+template's subtree, and a `Satisfies:` against the associate's template
+clones it too. Each clone records the repository owning its own original,
+so the clones of one subtree may name different repositories.
 
 Federation depth is capped at one: the template's repo must be a direct
 associate.
@@ -164,6 +172,10 @@ template (mark it **Template** to decompose the template, or declare
 `Satisfies:` to instantiate it). A `Satisfies:` cycle (transitively across SATISFIES and
 INSTANCE edges) is reported once per build with a diagnostic containing
 the word `cycle` and the cycle path.
+
+The matrix applies to a target owned by an associated repository exactly as
+to one in the declaring repository: a reference the matrix forbids is
+reported and never wired, whichever repository owns its target.
 
 All diagnostics surface in `elspais checks` and `elspais unresolved`.
 

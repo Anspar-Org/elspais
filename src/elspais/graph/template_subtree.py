@@ -14,7 +14,8 @@ from __future__ import annotations
 from collections.abc import Iterator
 
 from elspais.graph.GraphNode import GraphNode, NodeKind
-from elspais.graph.relations import EdgeKind
+from elspais.graph.reference_faults import FaultClass, ReferenceFault
+from elspais.graph.relations import EdgeKind, Stereotype
 
 # Fields an original holds that a clone of it does not copy. The stereotype
 # is the clone's own; the reference text is what the original declared, and
@@ -96,3 +97,99 @@ def recreate_subtree_edges(originals: list[GraphNode], clone_map: dict[str, Grap
             if target_clone is None:
                 continue
             clone.link(target_clone, edge.kind, assertion_targets=list(edge.assertion_targets))
+
+
+# Implements: REQ-p00014-G
+def stereotype_matrix_fault(
+    source: GraphNode,
+    target: GraphNode,
+    source_id: str,
+    target_id: str,
+    edge_kind: EdgeKind,
+) -> ReferenceFault | None:
+    """The fault a reference commits against the template validation matrix.
+
+    Returns the ``ReferenceFault`` for a reference whose source and target
+    stereotypes the matrix forbids for ``edge_kind``, or None where the
+    matrix admits it. Every builder reads it before creating an edge — the
+    one-repository builder and the federation wiring a reference into an
+    associated repository alike — so the graph never holds an edge it also
+    reports as a fault, and a target owned by another repository is judged
+    by the rule a local one is.
+    """
+    target_stereotype = target.get_field("stereotype")
+    source_is_template = (
+        source.kind == NodeKind.REQUIREMENT
+        and source.get_field("stereotype") == Stereotype.TEMPLATE
+    )
+
+    def fault(diagnostic: str) -> ReferenceFault:
+        return ReferenceFault(
+            source_id=source_id,
+            target_id=target_id,
+            edge_kind=edge_kind.value,
+            fault_class=FaultClass.FORBIDDEN,
+            diagnostic=diagnostic,
+        )
+
+    if (
+        edge_kind == EdgeKind.REFINES
+        and target_stereotype == Stereotype.TEMPLATE
+        and not source_is_template
+    ):
+        # A template's refiners must themselves be templates: the
+        # template-to-template REFINES edge is what forms a template
+        # subtree, so a refiner that is not marked joins nothing. One edge,
+        # one report: the author either meant to decompose the template or
+        # to instantiate it.
+        return fault(
+            f"{target_id} is a Template and {source_id} is "
+            f"not: a template's refiners must themselves be "
+            f"templates. Mark {source_id} **Template** to "
+            f"decompose {target_id}, or declare "
+            f"Satisfies: {target_id} to instantiate it."
+        )
+    if source_is_template and edge_kind == EdgeKind.REFINES:
+        if target_stereotype not in (Stereotype.TEMPLATE, Stereotype.INSTANCE):
+            # A template's Refines: may only reach its own subtree, and the
+            # subtree holds template-marked nodes alone. A concrete
+            # *Assertion* carries no stereotype of its own, so the test is
+            # for what is admitted rather than for CONCRETE. An INSTANCE
+            # target is refused below for what it is, once.
+            return fault(
+                f"{source_id} is marked **Template** but "
+                f"refines {target_id}, which is not: a "
+                f"template's Refines: may only target its "
+                f"own template subtree. Mark {target_id} "
+                f"**Template** or remove the reference."
+            )
+    if source_is_template and edge_kind == EdgeKind.IMPLEMENTS:
+        # A template subtree is formed by refinement alone, so an
+        # implementation claim declared by a template reaches outside it
+        # whatever it names.
+        return fault(
+            f"Templates are pure specs; remove the "
+            f"Implements: metadata or remove the "
+            f"**Template** flag on {source_id}."
+        )
+    if edge_kind == EdgeKind.REFINES and target_stereotype == Stereotype.INSTANCE:
+        # Refining instance content is not supported.
+        return fault(
+            "Refining instance content is not supported. "
+            "Instance subtrees are read-only synthetic "
+            "content with no canonical on-disk identifier. "
+            "To add detail, Satisfies: the template AND "
+            "Refines: a concrete REQ in your own repo."
+        )
+    if (
+        edge_kind in (EdgeKind.IMPLEMENTS, EdgeKind.VERIFIES)
+        and target_stereotype == Stereotype.INSTANCE
+    ):
+        # Composite ids are not authoring syntax, for CODE and TEST alike.
+        return fault(
+            "Instance assertions have no canonical "
+            "on-disk identifier; target the template "
+            "assertion directly or add a concrete "
+            "assertion to your satisfier."
+        )
+    return None

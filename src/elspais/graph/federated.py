@@ -1663,6 +1663,30 @@ class FederatedGraph:
         label = target.get_field("label", "")
         return parent_reqs[0].id, [label] if label else None
 
+    # Implements: REQ-p00014-G
+    @staticmethod
+    def _matrix_fault(
+        source_entry: RepoEntry,
+        target_entry: RepoEntry,
+        br: ReferenceFault,
+        target_id: str,
+    ) -> ReferenceFault | None:
+        """The template-matrix fault ``br`` commits against ``target_id``, if any.
+
+        The one matrix authority is ``stereotype_matrix_fault``; this reads
+        the source node from the declaring repository and the target from
+        the owning one and reports the fault under the reference as written.
+        """
+        from elspais.graph.template_subtree import stereotype_matrix_fault
+
+        source = source_entry.graph._index.get(br.source_id)
+        target = target_entry.graph._index.get(target_id)
+        if source is None or target is None:
+            return None
+        return stereotype_matrix_fault(
+            source, target, br.source_id, br.target_id, EdgeKind(br.edge_kind)
+        )
+
     # Implements: REQ-d00269-B
     def _wire_cross_graph_edges(self) -> None:
         """Wire cross-graph edges by resolving broken references across repos.
@@ -1710,6 +1734,15 @@ class FederatedGraph:
                     expansion = self._expand_foreign_multi_reference(br.target_id)
                     if expansion is not None and expansion[0] != source_entry.namespace:
                         owner, present, missing = expansion
+                        # Implements: REQ-p00014-G
+                        # Every label of one item names one requirement, so
+                        # the item is judged once, against the first.
+                        matrix_fault = self._matrix_fault(
+                            source_entry, self._repos[owner], br, present[0]
+                        )
+                        if matrix_fault is not None:
+                            replacements[i] = [matrix_fault]
+                            continue
                         wired = self._wire_expanded_labels(source_entry, br, owner, present)
                         if wired and EdgeKind(br.edge_kind) in self._CONTENT_EDGE_KINDS:
                             wired_sources.setdefault(source_entry.namespace, set()).add(
@@ -1743,6 +1776,15 @@ class FederatedGraph:
                     # *Assertion* is not a target: the reference keeps the
                     # classification it arrived with and stays reported.
                     if not self._holds_live_target(target_entry.graph, br.target_id):
+                        continue
+                    # Implements: REQ-p00014-G
+                    # The validation matrix judges a target owned by an
+                    # associated repository by the rule a local one meets,
+                    # before any edge exists: the refusal replaces the
+                    # reference that would have wired it.
+                    matrix_fault = self._matrix_fault(source_entry, target_entry, br, br.target_id)
+                    if matrix_fault is not None:
+                        replacements[i] = [matrix_fault]
                         continue
                     # Wire the cross-graph edge in the same shape the
                     # same-repository builder produces (REQ-d00269-B):
@@ -1981,16 +2023,20 @@ class FederatedGraph:
                         if key not in UNCLONED_FIELDS:
                             clone.set_field(key, value)
                     clone.set_field("stereotype", Stereotype.INSTANCE)
-                    # Implements: REQ-p00014-K
-                    # Record the template's owning repo so viewers can show
-                    # "Template defined in <repo>" provenance without needing
-                    # to walk the cross-graph INSTANCE edge. The repository's
-                    # NAME, because this is shown to a reader; the namespace
-                    # identifies the member but is not what it is called.
-                    template_entry = self._repos.get(target_repo_name)
+                    # Implements: REQ-p00014-O
+                    # Record the repository owning this clone's ORIGINAL so
+                    # viewers can show "Template defined in <repo>" without
+                    # walking the cross-graph INSTANCE edge. Each clone's own
+                    # original, not the root's: a subtree spans repositories
+                    # where a template in one refines a template in another.
+                    # The repository's NAME, because this is shown to a
+                    # reader; the namespace identifies the member but is not
+                    # what it is called.
+                    owner_namespace = self._ownership.get(orig.id, target_repo_name)
+                    owner_entry = self._repos.get(owner_namespace)
                     clone.set_field(
                         "template_repo",
-                        template_entry.name if template_entry else target_repo_name,
+                        owner_entry.name if owner_entry else owner_namespace,
                     )
                     # Source files live in foreign repo; do NOT copy parse_line.
                     clone.set_field("parse_line", None)
