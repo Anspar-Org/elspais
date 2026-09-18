@@ -175,7 +175,7 @@ def _scan_and_report_unfixable(graph) -> int:  # noqa: ANN001
     return 1 if found else 0
 
 
-# Implements: REQ-p00004-A
+# Implements: REQ-p00004-A, REQ-p00002-C
 def _detect_fixable(node, hash_mode: str, changelog_enforce: bool) -> list[str]:  # noqa: ANN001
     """Detect all fixable conditions on a requirement node.
 

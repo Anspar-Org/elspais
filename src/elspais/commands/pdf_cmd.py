@@ -117,7 +117,7 @@ def run(args: argparse.Namespace) -> int:
     if rc == 0:
         # A document missing content it was asked to carry is not an
         # unqualified success, and must not be reported as one.
-        # Implements: REQ-p00080-K
+        # Implements: REQ-p00080-K, REQ-p00019-C
         omitted = len(diagnostics) + len(extra)
         if omitted:
             noun = "reference" if omitted == 1 else "references"
