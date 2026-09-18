@@ -102,8 +102,7 @@ from elspais.server.state import AppState
 # One or more segments, each introduced by a single slash and made of
 # unreserved ASCII characters only: the form the page, a router and the
 # mount all spell identically. A space, a "?", a "#" or a "%" is spelt
-# differently by each (the mount matches it raw, the browser escapes or
-# cuts the path at it), so one such prefix would name a different path in
+# differently by each, so one such prefix would name a different path in
 # each; a "." or ".." segment is normalised away by the client before the
 # request arrives, to the same effect.
 _BASE_PATH_FORM = re.compile(r"^(?:/[A-Za-z0-9._~-]+)+$")
