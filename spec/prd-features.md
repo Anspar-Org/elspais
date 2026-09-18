@@ -711,7 +711,7 @@ the machine, so every comment and every changelog row from every user would
 carry one identity. The identity has to arrive with the request, from the
 proxy that authenticated the user, and only from there — the server still
 establishes the author itself, from a source it trusts, which is what the
-rule it refines has always required.
+rule it implements requires.
 
 Who is trusted is the whole question. The serving process listens on the
 local interface, and on a shared host every workspace process runs as the

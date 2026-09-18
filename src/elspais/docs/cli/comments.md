@@ -84,8 +84,9 @@ In Edit Mode, expanded threads show **Reply** and **Resolve** buttons. Reply add
 
 The author of a comment, reply or resolution is the identity established for
 the request's session: the one a trusted proxy supplied with the request, or,
-where none was, the server's own identity (the same lookup the changelog
-uses -- `gh` or git config, per `[changelog] id_source`). A client cannot
+where none was, the server's own identity -- the GitHub user `gh` is logged
+in as when `[changelog] id_source` is `gh`, else the name and email in git
+config. A client cannot
 name an author directly: anything in the request body is ignored, and an
 identity in the request headers counts only when the request also carries
 the secret the server shares with its proxy. See `elspais docs commands`
