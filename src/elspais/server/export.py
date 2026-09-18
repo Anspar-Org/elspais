@@ -87,9 +87,27 @@ def offered_formats(report: str) -> tuple[str, ...]:
     return tuple(offered)
 
 
-def export_offers() -> dict[str, list[str]]:
-    """Every exportable report with the formats it offers, for a page to show."""
-    return {report: list(offered_formats(report)) for report in EXPORT_REPORTS}
+# Implements: REQ-d00298-C
+def reads_scope(report: str) -> bool:
+    """Whether this report reads a scope at all.
+
+    Read off the command line's own table of sections that select over
+    requirements. A report absent from it (`checks` lists findings) reads no
+    scope, and a page that sent it one would narrow nothing while looking as
+    if it had.
+    """
+    from elspais.commands.report import VALUE_SECTIONS
+
+    return report in VALUE_SECTIONS
+
+
+def export_offers() -> dict[str, dict[str, Any]]:
+    """Every exportable report, the formats it offers and whether it reads a
+    scope, for a page to show and to send only what the route will read."""
+    return {
+        report: {"formats": list(offered_formats(report)), "scoped": reads_scope(report)}
+        for report in EXPORT_REPORTS
+    }
 
 
 # Implements: REQ-d00298-B
@@ -162,22 +180,22 @@ def markdown_to_pdf(markdown: str) -> bytes:
     return body
 
 
-# Implements: REQ-d00298-A, REQ-d00298-D, REQ-d00298-E
-def export_report(
+# Implements: REQ-d00298-A, REQ-d00298-E
+def export_document(
     graph: FederatedGraph, config: dict[str, Any], report: str, request: Any, fmt: str
-) -> bytes:
-    """The bytes of one report in one format, or a refusal.
+) -> str:
+    """The text of one report on its way to one format, or a refusal.
 
     Judged against the offer before anything is rendered, so a refusal has
-    produced nothing. A PDF is the markdown rendering converted, which is what
-    makes it state the same values the markdown states.
+    produced nothing. A PDF's text is the markdown rendering -- converting
+    it is the caller's step, off the event loop -- which is what makes the
+    PDF state the same values the markdown states.
     """
     offered = offered_formats(report)
     if fmt not in offered:
         raise UnofferedFormat(report, fmt, offered)
-    if fmt == PDF_FORMAT:
-        return markdown_to_pdf(render_document(graph, config, report, request, "markdown"))
-    return render_document(graph, config, report, request, fmt).encode("utf-8")
+    text_format = "markdown" if fmt == PDF_FORMAT else fmt
+    return render_document(graph, config, report, request, text_format)
 
 
 # Implements: REQ-d00298-F

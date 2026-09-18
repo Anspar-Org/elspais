@@ -331,6 +331,26 @@ class TestViewerExport:
         )
         assert gaps_formats == ["markdown", "pdf"]
 
+    # Verifies: REQ-d00298-C
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    def test_REQ_d00298_C_level_narrowing_reaches_only_a_report_that_reads_a_scope(
+        self, page, viewer_url
+    ):
+        """A level soloed in the header is sent as the scope the run route
+        reads, and only to a report that reads one: the checks listing reads
+        no scope, so sending it one would narrow nothing while looking as if
+        it had."""
+        page.goto(viewer_url, wait_until="networkidle")
+        page.wait_for_selector("#stat-level-prd")
+        page.click("#stat-level-prd", modifiers=["Shift"])
+        page.wait_for_timeout(300)
+        page.select_option("#export-report", "trace")
+        page.select_option("#export-format", "csv")
+        assert page.evaluate("exportUrl()") == "/api/export/trace?format=csv&scope_level=prd"
+        page.select_option("#export-report", "checks")
+        assert page.evaluate("exportUrl()") == "/api/export/checks?format=markdown"
+
 
 # ---------------------------------------------------------------------------
 # Pipe-table rendering fixture + browser test

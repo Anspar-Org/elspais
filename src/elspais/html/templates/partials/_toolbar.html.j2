@@ -72,7 +72,8 @@
                 {# Served pages only: an export is a route, and a static page has none. #}
                 {# The offer is the server's own, carried on the control rather than #}
                 {# spelled again in script, so the formats a page lists are the ones #}
-                {# the route accepts. #}
+                {# the route accepts, and a narrowing is sent only to a report that #}
+                {# reads one. #}
                 <span class="export-control" id="export-control"
                       data-offers='{{ export_offers | tojson }}'
                       data-help="Download the selected report as a document. The download states what the command line states for the same inputs; the level filter narrows it.">
@@ -83,7 +84,7 @@
                         {% endfor %}
                     </select>
                     <select id="export-format" title="Format to export as">
-                        {% for fmt in export_offers[export_offers | first] %}
+                        {% for fmt in export_offers[export_offers | first].formats %}
                         <option value="{{ fmt }}">{{ fmt }}</option>
                         {% endfor %}
                     </select>

@@ -1202,21 +1202,26 @@ async def api_run_trace(request: Request) -> JSONResponse:
 
 
 # Implements: REQ-d00298-A, REQ-d00298-C, REQ-d00298-D, REQ-d00298-E, REQ-d00298-F
-def api_export(request: Request) -> Response:
+async def api_export(request: Request) -> Response:
     """GET /api/export/{report}?format=... - The report as a document to download.
 
     Takes exactly the query the matching `/api/run/{report}` takes, read by the
-    same builder, plus `format`. Synchronous on purpose: a PDF is a pandoc run,
-    and Starlette moves a plain handler off the event loop.
+    same builder, plus `format`. The graph is read on the event loop like
+    every other read route, so a write serialized there is never seen half
+    applied; only the pandoc run, a pure text-to-bytes step, leaves the loop.
     """
+    from starlette.concurrency import run_in_threadpool
+
     from elspais.server.export import (
         EXPORT_REPORTS,
         MEDIA_TYPES,
+        PDF_FORMAT,
         RenderFailed,
         ToolingUnavailable,
         UnofferedFormat,
         download_filename,
-        export_report,
+        export_document,
+        markdown_to_pdf,
         offered_formats,
     )
 
@@ -1248,7 +1253,11 @@ def api_export(request: Request) -> Response:
         return built
     state = _st(request)
     try:
-        body = export_report(state.graph, state.config, report, built, fmt)
+        text = export_document(state.graph, state.config, report, built, fmt)
+        if fmt == PDF_FORMAT:
+            body = await run_in_threadpool(markdown_to_pdf, text)
+        else:
+            body = text.encode("utf-8")
     except UnofferedFormat as exc:
         return JSONResponse(
             {"error": "unoffered_format", "message": str(exc), "offered": list(exc.offered)},
