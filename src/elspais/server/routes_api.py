@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import functools
 import json
-import time
 from collections.abc import Callable
 from datetime import date as date_type
 from pathlib import Path
@@ -2049,7 +2048,7 @@ async def _history_json(request: Request) -> dict:
         return {}
 
 
-# Implements: REQ-d00132-A, REQ-p00083-H, REQ-d00296-A
+# Implements: REQ-d00132-A, REQ-p00083-H, REQ-d00296-A, REQ-o00062-O
 @_serialized_write
 async def api_save(request: Request) -> JSONResponse:
     """POST /api/save - Persist mutations to spec files on disk.
@@ -2059,6 +2058,11 @@ async def api_save(request: Request) -> JSONResponse:
     The write itself is the one shared with the MCP save tool and the
     daemon's own save, so a save requested here enforces the same
     changelog rule and retires the same record as one requested there.
+    So is the rebuild that follows a successful write: the changelog rows
+    a save owes are written to the files outside the graph, and a served
+    graph that still rendered from memory would write the next save over
+    them. The one rebuild path leaves the served graph agreeing with disk,
+    exactly as the MCP save tool does.
 
     Status codes distinguish what the caller can do about a refusal. A
     guard rejection is 409, the conflict family a client already knows to
@@ -2067,7 +2071,7 @@ async def api_save(request: Request) -> JSONResponse:
     because the caller has to supply something, and a write that failed
     is 500, because retrying the same request is not the answer.
     """
-    from elspais.mcp.shared_state import persist_pending
+    from elspais.mcp.shared_state import persist_pending, rebuild_shared_graph
 
     state = _st(request)
     # REQ-o00062-N: persisting affects every writer's pending work — the
@@ -2085,7 +2089,12 @@ async def api_save(request: Request) -> JSONResponse:
         author=proxied_identity(request),
     )
     if result.get("success"):
-        state.build_time = time.time()
+        # The files are written and the pending work retired, so the save
+        # succeeded whatever happens next; a rebuild that could not publish
+        # is reported beside it rather than dressed up as a failed save.
+        rebuilt = rebuild_shared_graph(state.shared)
+        if not rebuilt.get("success"):
+            result["rebuild_error"] = rebuilt.get("message", "")
         return JSONResponse(result, status_code=200)
     status_code = 400 if result.get("code") == "changelog_message_required" else 500
     return JSONResponse(result, status_code=status_code)

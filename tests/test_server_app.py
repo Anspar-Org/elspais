@@ -3684,10 +3684,100 @@ class TestSaveChangelogAuthorFromProxy:
         from elspais.server import proxy_trust
 
         monkeypatch.setattr(proxy_trust, "_SECRET", self.PROXY_SECRET)
+        # The save path signs its rows through the changelog author lookup,
+        # not the comment routes' helper; pin the process identity there so
+        # the shell running the suite cannot supply a different one.
+        monkeypatch.setattr(
+            "elspais.utilities.changelog_author._lookup_raw",
+            lambda _id_source: ("Alice Smith", "alice@co.org"),
+        )
         app, spec_file = disk_app
         headers = {**self.PROXIED, "X-Elspais-Proxy-Secret": "wrong"}
         self._mutate_and_save(TestClient(app), headers)
         content = spec_file.read_text(encoding="utf-8")
-        # conftest pins the process identity through GIT_AUTHOR_NAME/EMAIL.
-        assert "Test User (<test@test.org>) | retitled by the session" in content
+        assert "Alice Smith (<alice@co.org>) | retitled by the session" in content
         assert "Bob Jones" not in content
+
+
+class TestSaveLeavesServedGraphAgreeingWithDisk:
+    """A save through the viewer leaves the served graph agreeing with the
+    files it wrote, as one through the MCP save tool does, so a later save
+    keeps the changelog rows an earlier one added.
+    """
+
+    @staticmethod
+    def _make_project(tmp_path: Path) -> Path:
+        (tmp_path / ".elspais.toml").write_text(
+            'version = 5\n[project]\nname = "test"\nnamespace = "REQ"\n'
+            "[scanning.spec]\n"
+            'directories = ["spec"]\n'
+            "[changelog]\n"
+            "hash_current = true\n",
+            encoding="utf-8",
+        )
+        spec_dir = tmp_path / "spec"
+        spec_dir.mkdir()
+        spec_file = spec_dir / "requirements.md"
+        spec_file.write_text(
+            "# REQ-d00001: Test Req\n"
+            "\n"
+            "**Level**: DEV | **Status**: Active | **Implements**: -\n"
+            "\n"
+            "## Assertions\n"
+            "\n"
+            "A. The system SHALL do X.\n"
+            "\n"
+            "*End* *Test Req* | **Hash**: 00000000\n"
+            "---\n",
+            encoding="utf-8",
+        )
+        return spec_file
+
+    @staticmethod
+    def _retitle_and_save(client: TestClient, title: str, reason: str) -> None:
+        resp = client.post(
+            "/api/mutate/title",
+            json={
+                "node_id": "REQ-d00001",
+                "new_title": title,
+                "if_version": _version(client, "REQ-d00001"),
+            },
+        )
+        assert resp.status_code == 200, resp.text
+        resp = client.post(
+            "/api/save",
+            json={"if_tip_mutation_id": _tip(client), "message": reason},
+        )
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["success"] is True, resp.text
+
+    # Verifies: REQ-d00132-A, REQ-o00062-O
+    def test_REQ_d00132_A_second_save_keeps_the_first_changelog_row(self, tmp_path, monkeypatch):
+        from elspais.config import get_config
+        from elspais.graph.factory import build_graph
+
+        # The save signs its rows through the changelog author lookup; pin
+        # the process identity so the shell running the suite cannot leave
+        # the row unsigned.
+        monkeypatch.setattr(
+            "elspais.utilities.changelog_author._lookup_raw",
+            lambda _id_source: ("Alice Smith", "alice@co.org"),
+        )
+        spec_file = self._make_project(tmp_path)
+        config = get_config(start_path=tmp_path, quiet=True)
+        graph = build_graph(config=config, repo_root=tmp_path)
+        state = AppState(graph=graph, repo_root=tmp_path, config=config)
+        # The freshness middleware would rebuild on whichever request first
+        # follows its throttle, so left in place it could bring the served
+        # graph into agreement with disk by timing alone. Only the save
+        # itself may do so here.
+        monkeypatch.setattr(state, "ensure_fresh", lambda: False)
+        client = TestClient(create_app(state, mount_mcp=False))
+
+        self._retitle_and_save(client, "First title", "first reason")
+        self._retitle_and_save(client, "Second title", "second reason")
+
+        content = spec_file.read_text(encoding="utf-8")
+        assert "first reason" in content
+        assert "second reason" in content
+        assert "# REQ-d00001: Second title" in content

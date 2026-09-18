@@ -479,8 +479,10 @@ it only when the request also carries a secret the two share:
     X-Elspais-User-Name     the authenticated user's display name
     X-Elspais-User-Email    the authenticated user's email, used as the
                             author id in comments and changelog rows
-    X-Elspais-Git-Token     a credential for git operations on the
-                            user's behalf, under the same secret
+    X-Elspais-Git-Token     a git credential, read and trusted under the
+                            same secret; the git operations that consult
+                            it are documented with those operations, and
+                            none does yet
 
 A comment, reply, resolution or save made through a request carrying the
 secret and both identity headers is attributed to that user. A request
