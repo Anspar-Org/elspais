@@ -1354,14 +1354,53 @@ def check_spec_unknown_directive(graph: FederatedGraph, config: dict[str, Any]) 
 
 
 # Implements: REQ-p00004-K
+def _satisfiers_of_clone(clone):
+    """Yield ``(cloned_root, satisfier)`` for every Satisfies: that cloned ``clone``.
+
+    A clone of an interior subtree member reaches its satisfier by ascending
+    the cloned REFINES edges through INSTANCE-stereotyped requirements: the
+    requirement holding a SATISFIES edge to a clone on that path declared
+    against that clone's original. The ascent is cycle-safe, since a
+    template subtree may refine in a cycle and its clones then do too.
+    """
+    from elspais.graph.relations import EdgeKind, Stereotype
+
+    seen: set[str] = set()
+    stack = [clone]
+    while stack:
+        node = stack.pop()
+        if node.id in seen:
+            continue
+        seen.add(node.id)
+        for satisfier in node.iter_parents(edge_kinds={EdgeKind.SATISFIES}):
+            yield node, satisfier
+        for refined in node.iter_parents(edge_kinds={EdgeKind.REFINES}):
+            if refined.get_field("stereotype") == Stereotype.INSTANCE:
+                stack.append(refined)
+
+
+def _template_original_id(clone) -> str:
+    """The id of the template original a clone was made from."""
+    from elspais.graph.relations import EdgeKind
+
+    for edge in clone.iter_outgoing_edges():
+        if edge.kind == EdgeKind.INSTANCE:
+            return edge.target.id
+    return clone.id
+
+
+# Implements: REQ-p00004-K
 def check_spec_hash_integrity(
     graph: FederatedGraph, config: dict[str, Any] | None = None
 ) -> HealthCheck:
     """Flag Satisfies-linked requirements for review when their template has a stale hash.
 
     Stale hash detection happens at build time (parse_dirty_reasons contains
-    "stale_hash"). This check adds the Satisfies annotation: when a template
-    requirement is stale, any requirement that Satisfies it needs review.
+    "stale_hash"). This check adds the Satisfies annotation: when any member
+    of a template subtree is stale, every requirement whose Satisfies:
+    cloned that member needs review. A clone of the stale member leads to
+    the satisfier by ascending the cloned REFINES edges to the cloned root
+    the satisfier declared against.
     """
     severity = severity_for("spec.hash_integrity", config)
     if severity == Severity.OFF:
@@ -1379,23 +1418,26 @@ def check_spec_hash_integrity(
             continue
         stored = node.hash
         mismatches.append({"id": node.id, "stored": stored})
+        flagged: set[tuple[str, str]] = set()
         for edge in node.iter_incoming_edges():
-            if edge.kind == EdgeKind.INSTANCE:
-                clone = edge.source
-                for parent in clone.iter_parents():
-                    for parent_edge in parent.iter_outgoing_edges():
-                        if parent_edge.kind == EdgeKind.SATISFIES and parent_edge.target is clone:
-                            findings.append(
-                                HealthFinding(
-                                    message=(
-                                        f"Template {node.id} content changed;"
-                                        f" review {parent.id}"
-                                        f" (Satisfies: {node.id})"
-                                    ),
-                                    node_id=parent.id,
-                                    related=[node.id],
-                                )
-                            )
+            if edge.kind != EdgeKind.INSTANCE:
+                continue
+            for cloned_root, satisfier in _satisfiers_of_clone(edge.source):
+                declared = _template_original_id(cloned_root)
+                if (satisfier.id, declared) in flagged:
+                    continue
+                flagged.add((satisfier.id, declared))
+                findings.append(
+                    HealthFinding(
+                        message=(
+                            f"Template {node.id} content changed;"
+                            f" review {satisfier.id}"
+                            f" (Satisfies: {declared})"
+                        ),
+                        node_id=satisfier.id,
+                        related=[node.id],
+                    )
+                )
 
     if mismatches:
         ids = [m["id"] for m in mismatches]
