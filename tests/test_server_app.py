@@ -3781,3 +3781,74 @@ class TestSaveLeavesServedGraphAgreeingWithDisk:
         assert "first reason" in content
         assert "second reason" in content
         assert "# REQ-d00001: Second title" in content
+
+
+class TestSaveReportsAFailedRebuildBesideTheWrite:
+    """A save through the viewer whose rebuild cannot publish is still a
+    save -- the files are on disk -- and the failed rebuild is reported
+    beside it, under the same key the MCP save tool uses, with the graph
+    the save was made against left live.
+    """
+
+    # Verifies: REQ-p00015-B, REQ-p00015-F, REQ-o00062-O
+    def test_REQ_p00015_B_save_reports_the_failed_rebuild_beside_the_write(
+        self, tmp_path, monkeypatch
+    ):
+        from elspais.config import get_config
+        from elspais.graph.factory import build_graph
+
+        # The save signs its rows through the changelog author lookup; pin
+        # the process identity so the shell running the suite cannot leave
+        # the row unsigned.
+        monkeypatch.setattr(
+            "elspais.utilities.changelog_author._lookup_raw",
+            lambda _id_source: ("Alice Smith", "alice@co.org"),
+        )
+        spec_file = TestSaveLeavesServedGraphAgreeingWithDisk._make_project(tmp_path)
+        config = get_config(start_path=tmp_path, quiet=True)
+        graph = build_graph(config=config, repo_root=tmp_path)
+        state = AppState(graph=graph, repo_root=tmp_path, config=config)
+        # Only the save may rebuild here: the freshness middleware would
+        # otherwise reach the failing build on whichever request first
+        # follows its throttle.
+        monkeypatch.setattr(state, "ensure_fresh", lambda: False)
+        graph_before = state.graph
+        client = TestClient(create_app(state, mount_mcp=False))
+
+        # The served graph was built for real; only the rebuild that
+        # follows the write is made to fail.
+        cause = "cannot rebuild after the write"
+
+        def _refuse_to_build(*args, **kwargs):
+            raise RuntimeError(cause)
+
+        monkeypatch.setattr("elspais.graph.factory.build_graph", _refuse_to_build)
+
+        new_title = "Retitled before the rebuild failed"
+        resp = client.post(
+            "/api/mutate/title",
+            json={
+                "node_id": "REQ-d00001",
+                "new_title": new_title,
+                "if_version": _version(client, "REQ-d00001"),
+            },
+        )
+        assert resp.status_code == 200, resp.text
+        resp = client.post(
+            "/api/save",
+            json={"if_tip_mutation_id": _tip(client), "message": "retitled"},
+        )
+
+        # REQ-p00015-B: the write happened, so the save is reported as one,
+        # and the rebuild that did not is reported beside it with its cause,
+        # under the key the MCP save tool reports it under (REQ-o00062-O).
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["success"] is True, body
+        assert body["rebuild_error"].startswith("BUILD ERROR: RuntimeError:")
+        assert cause in body["rebuild_error"]
+        assert f"# REQ-d00001: {new_title}" in spec_file.read_text(encoding="utf-8")
+
+        # REQ-p00015-F: nothing was published, so the graph being served is
+        # the one the save was made against.
+        assert state.graph is graph_before

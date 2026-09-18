@@ -1405,12 +1405,25 @@ async function refreshAllOpenCards() {
 // Save / Revert / Undo
 // =====================================================================
 
+// A save that wrote its files but could not rebuild the served graph is
+// still a save: the files are on disk. What the page shows is then stale
+// against them, and the banner says so and offers the reload whose failure
+// report names the cause; a toast alone would be gone before it was read.
+{# Implements: REQ-p00015-E #}
+function reportRebuildAfterSave(result) {
+    if (result && result.rebuild_error) {
+        showStaleBanner('Saved to disk, but the served graph could not be rebuilt: '
+            + result.rebuild_error);
+    }
+}
+
 async function doSave() {
     showLoadingOverlay('Saving...');
     const result = await mutate('/api/save', {});
     hideLoadingOverlay();
     if (result && result.success) {
         showToast('Saved to disk', 'success');
+        reportRebuildAfterSave(result);
         refreshFileViewer();
         loadTreeData();
     }
@@ -1864,6 +1877,10 @@ function showCheckpointModal() {
         }
         mutate('/api/save', {}).then(function(saveResult) {
             if (saveResult && saveResult.success !== false) {
+                // The checkpoint commits what is on disk, which the save
+                // wrote, so a failed rebuild is reported and not a reason
+                // to stop.
+                reportRebuildAfterSave(saveResult);
                 refreshDirtyCount();
                 _openCheckpointModal();
             } else {

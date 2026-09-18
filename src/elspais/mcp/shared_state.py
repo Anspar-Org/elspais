@@ -474,8 +474,10 @@ def rebuild_shared_graph(state: SharedServerState) -> dict[str, Any]:
 
     Every surface that reloads the graph reaches this function: the viewer's
     automatic freshness check, its ``/api/reload`` and ``/api/revert`` routes,
-    the MCP ``refresh_graph`` tool, and the MCP tools that rebuild after
-    writing spec files. A rebuild is not just a graph swap — it must also
+    the MCP ``refresh_graph`` tool, and every surface that rebuilds after
+    writing spec files — the viewer's ``/api/save``, the MCP ``save_mutations``
+    tool and the MCP tools that write a file directly. A rebuild is not just
+    a graph swap — it must also
     re-read configuration from disk (REQ-p00004-J) and leave the tool's
     change-detection state agreeing with what it just loaded (REQ-p00004-O).
     Those two steps are exactly what nine hand-rolled copies of this logic
@@ -486,10 +488,12 @@ def rebuild_shared_graph(state: SharedServerState) -> dict[str, Any]:
     the holder, so they must see the new one.
 
     Nothing is published unless the new graph exists. A configuration that
-    cannot be parsed is reported as a failure with the previously served
-    graph left in place: replacing a working graph with an empty one because
-    a config file was mistyped would be a silent, destructive substitution
-    (REQ-p00015-F).
+    cannot be parsed, or a build that fails for any other reason, is reported
+    as a failure naming the cause, with the previously served graph left in
+    place: replacing a working graph with an empty one because a config file
+    was mistyped would be a silent, destructive substitution (REQ-p00015-F),
+    and a build failure raised out of a caller that had already written its
+    files would report a completed write as a failed one (REQ-p00015-B).
 
     Args:
         state: The process-wide holder. ``working_dir`` names the repo root.
@@ -518,7 +522,16 @@ def rebuild_shared_graph(state: SharedServerState) -> dict[str, Any]:
                 "node_count": 0,
                 "config": None,
             }
-        raise
+        # Any other build failure: the same shape, naming the exception type
+        # because a bare str() of a KeyError or AttributeError names nothing.
+        # Callers that wrote files before rebuilding report this beside the
+        # write that did happen (REQ-p00015-B); the previous graph stays live.
+        return {
+            "success": False,
+            "message": f"BUILD ERROR: {type(exc).__name__}: {message}",
+            "node_count": 0,
+            "config": None,
+        }
 
     if hasattr(new_graph, "load_comments"):
         new_graph.load_comments()

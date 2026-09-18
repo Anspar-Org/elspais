@@ -3193,6 +3193,21 @@ def _guard_mutation_tip(graph: Any, provided_tip: str) -> dict[str, Any] | None:
     }
 
 
+# Implements: REQ-p00015-B
+def _rebuild_after_write(state: Any, result: dict[str, Any]) -> dict[str, Any]:
+    """Rebuild through the one rebuild path after a tool wrote to disk.
+
+    The write happened, so the tool's result stays a success; a rebuild that
+    published nothing is reported beside it as ``rebuild_error`` naming the
+    cause, because the served graph now disagrees with the files and the
+    caller must be told rather than shown the previous graph as current.
+    """
+    rebuilt = rebuild_shared_graph(state)
+    if not rebuilt.get("success"):
+        result["rebuild_error"] = rebuilt.get("message", "")
+    return result
+
+
 # Implements: REQ-o00062-K
 def _reattach_version_after_rebuild(
     graph: Any, result: dict[str, Any], node_id: str
@@ -5388,15 +5403,16 @@ def _apply_link_impl(
         }
 
     # Refresh graph after file modification
-    rebuild_shared_graph(state)
-
-    return {
-        "success": True,
-        "comment": result,
-        "file": file_path,
-        "line": line,
-        "requirement_id": requirement_id,
-    }
+    return _rebuild_after_write(
+        state,
+        {
+            "success": True,
+            "comment": result,
+            "file": file_path,
+            "line": line,
+            "requirement_id": requirement_id,
+        },
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -7840,7 +7856,7 @@ def create_server(
         )
         # REQ-o00063-F: Refresh graph after file mutations
         if result.get("success"):
-            rebuild_shared_graph(_state)
+            _rebuild_after_write(_state, result)
         return _reattach_version_after_rebuild(_state["graph"], result, req_id)
 
     # Implements: REQ-o00063-B, REQ-o00063-F
@@ -7870,7 +7886,7 @@ def create_server(
         )
         # REQ-o00063-F: Refresh graph after file mutations
         if result.get("success"):
-            rebuild_shared_graph(_state)
+            _rebuild_after_write(_state, result)
         return _reattach_version_after_rebuild(_state["graph"], result, req_id)
 
     # Implements: REQ-o00062-N
@@ -7891,7 +7907,7 @@ def create_server(
         result = _restore_from_safety_branch(_state["working_dir"], branch_name)
         # REQ-o00063-F: Refresh graph after file mutations
         if result.get("success"):
-            rebuild_shared_graph(_state)
+            _rebuild_after_write(_state, result)
         return result
 
     @mcp.tool()
@@ -7939,9 +7955,12 @@ def create_server(
 
         result = persist_pending(_state, message=message, save_branch=save_branch)
 
-        # REQ-o00063-F: Refresh graph after file mutations
+        # REQ-o00063-F: Refresh graph after file mutations. The files are
+        # written and the pending work retired, so the save succeeded
+        # whatever happens next; a rebuild that could not publish is
+        # reported beside it as ``rebuild_error``, as the viewer's save does.
         if result.get("success"):
-            rebuild_shared_graph(_state)
+            _rebuild_after_write(_state, result)
 
         return result
 

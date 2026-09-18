@@ -2048,7 +2048,7 @@ async def _history_json(request: Request) -> dict:
         return {}
 
 
-# Implements: REQ-d00132-A, REQ-p00083-H, REQ-d00296-A, REQ-o00062-O
+# Implements: REQ-d00132-A, REQ-p00083-H, REQ-d00296-A, REQ-o00062-O, REQ-p00015-B
 @_serialized_write
 async def api_save(request: Request) -> JSONResponse:
     """POST /api/save - Persist mutations to spec files on disk.
