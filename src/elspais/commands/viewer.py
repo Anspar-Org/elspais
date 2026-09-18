@@ -402,6 +402,19 @@ def _run_static(args: argparse.Namespace) -> int:
 
     from elspais.graph.factory import build_graph
 
+    # Implements: REQ-d00295-G
+    # A generated file is opened from disk and requests nothing from a
+    # server, so a prefix has nothing to apply to. Refused before the graph
+    # is built, as the server refuses a malformed one.
+    if getattr(args, "base_path", ""):
+        print(
+            "Error: --base-path applies to the server only; a static file requests "
+            "nothing under a prefix. Remove --base-path, or drop --static to serve "
+            "under it.",
+            file=sys.stderr,
+        )
+        return 1
+
     spec_dir = getattr(args, "spec_dir", None)
     config_path = getattr(args, "config", None)
     explicit_path = getattr(args, "path", None)

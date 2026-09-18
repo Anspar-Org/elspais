@@ -451,7 +451,7 @@ class ViewerArgs:
     """Port number for the server (default: 5001)."""
 
     base_path: str = ""
-    """URL prefix the server and the page's URLs sit under (e.g. /w/abc); empty is the root."""
+    """URL prefix the server and page sit under (e.g. /w/abc); empty is the root. Server only."""
 
     path: Path | None = None
     """Path to repository root (default: auto-detect from cwd)."""

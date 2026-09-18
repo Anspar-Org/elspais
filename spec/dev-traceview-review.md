@@ -100,22 +100,25 @@ A. When a prefix is configured, every route the server exposes SHALL answer unde
 
 B. Every URL the served page requests SHALL carry the configured prefix.
 
-C. With no prefix configured, the server SHALL serve exactly what it serves without this capability: the same routes at the same paths and the same page.
+C. With no prefix configured, the server SHALL answer the same routes at the same paths as it does without this capability, the served page SHALL request the same URLs, and the state the page keeps in the browser SHALL have the same scope.
 
 D. The agent surface SHALL be reachable under the same prefix as the page.
 
-E. A prefix that is not empty and does not take the form of a path beginning with a slash and ending without one SHALL be refused with a message naming that form.
+E. A prefix that is not empty SHALL take the form of one or more path segments, each introduced by a single slash and made only of letters, digits and the characters `-`, `_`, `.` and `~`, no segment being `.` or `..`; a prefix of any other form SHALL be refused with a message naming that form.
 
 F. State the page keeps in the browser SHALL be kept apart per configured prefix, so that pages served under different prefixes on one host do not read each other's.
 
+G. A prefix applies to the served surface; a request to generate the page as a file while naming a prefix SHALL be refused with a message naming that the prefix applies to the server alone.
+
 ### Rationale
 
-A hosted deployment runs one viewer per workspace behind a single router that tells them apart by the leading part of the path. A viewer that assumed it owned the root of the site would answer only the first workspace. The prefix is configured on the viewer rather than rewritten by the router, because the page builds URLs of its own and a rewriting router cannot reach into a script.
+A hosted deployment runs one viewer per workspace behind a single router that tells them apart by the leading part of the path. A viewer that assumed it owned the root of the site would answer only the first workspace. The prefix is configured on the viewer rather than rewritten by the router, because the page builds URLs of its own and a rewriting router cannot reach into a script. The accepted form is the one a mount answers at: a slash-run, a query or a fragment character in a prefix leaves a server answering nothing at any path, so it is refused before the server starts rather than discovered afterwards.
 
 ### Changelog
 
+- 2026-09-18 | 041a7999 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-09-17 | c1ac9032 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-09-17 | cd69f63b | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-09-17 | - | - | Michael Lewis (<michael@anspar.org>) | Initial version
 
-*End* *Viewer Served Under a Configured Prefix* | **Hash**: c1ac9032
+*End* *Viewer Served Under a Configured Prefix* | **Hash**: 041a7999

@@ -11,6 +11,7 @@ State is stored on ``app.state.app_state`` as an ``AppState`` instance.
 from __future__ import annotations
 
 import contextlib
+import re
 import sys
 from pathlib import Path
 
@@ -98,24 +99,35 @@ from elspais.server.routes_git import (
 from elspais.server.routes_ui import _extract_viewer_config, index
 from elspais.server.state import AppState
 
+# One or more segments, each introduced by a single slash and made of
+# unreserved characters only. A slash-run, a query or fragment character,
+# a space or a percent-escape all pass through Mount unrefused and leave a
+# server that answers 404 at every path; a "." or ".." segment is
+# normalised away by the client before the request arrives, to the same
+# effect. The form is the one a mount actually answers at.
+_BASE_PATH_FORM = re.compile(r"^(?:/[A-Za-z0-9._~-]+)+$")
+_BASE_PATH_DESCRIPTION = (
+    "empty, or one or more path segments each introduced by a single '/' and "
+    "made only of letters, digits, '-', '_', '.' and '~', with no segment "
+    "being '.' or '..' (for example '/w/abc')"
+)
+
 
 # Implements: REQ-d00295-E
 def validate_base_path(base_path: str) -> str:
     """Return ``base_path`` when it has the one accepted form, else raise.
 
-    The accepted form is empty, or a path that begins with a slash and does
-    not end with one — the shape a Starlette ``Mount`` takes and the shape a
-    page can prepend to ``/api/...`` without producing a double slash. The
-    refusal names that form; it is the one message both the viewer command
-    and the application factory give.
+    The refusal names that form; it is the one message both the viewer
+    command and the application factory give.
     """
     if base_path == "":
         return base_path
-    if base_path.startswith("/") and not base_path.endswith("/"):
+    if _BASE_PATH_FORM.match(base_path) and not any(
+        segment in (".", "..") for segment in base_path.split("/")[1:]
+    ):
         return base_path
     raise ValueError(
-        f"base path {base_path!r} is not accepted: it must be empty, or a path "
-        "that starts with '/' and does not end with '/' (for example '/w/abc')"
+        f"base path {base_path!r} is not accepted: it must be {_BASE_PATH_DESCRIPTION}"
     )
 
 

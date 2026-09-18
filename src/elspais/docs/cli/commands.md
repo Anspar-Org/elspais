@@ -473,8 +473,13 @@ also serves MCP tools at `/mcp` for AI agent integration.
 agent surface — under a prefix, for a router that places each workspace's
 viewer under a path of its own. The page builds every URL it requests under
 that prefix, and the address printed at startup carries it. The prefix is
-empty, or begins with `/` and does not end with one; anything else is
-refused. With no prefix the server is exactly what it is without the flag.
+empty, or one or more path segments each introduced by a single `/` and made
+only of letters, digits, `-`, `_`, `.` and `~`; anything else — a doubled
+slash, a `?` or `#`, a space, a `.` or `..` segment — is refused naming that
+form, because a mount at such a path answers nothing. The flag applies to
+the server alone: with `--static` it is refused, since a generated file
+requests nothing under a prefix. With no prefix the server is exactly what
+it is without the flag.
 The viewer's record in `.elspais/daemon.json` names the prefix as
 `base_path`, so every command that reaches a running server through the
 record — the CLI's graph queries, `elspais doctor`, `elspais mcp env`

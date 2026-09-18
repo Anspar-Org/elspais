@@ -1,4 +1,4 @@
-# Verifies: REQ-d00295-A, REQ-d00295-B, REQ-d00295-C, REQ-d00295-D, REQ-d00295-E
+# Verifies: REQ-d00295-A, REQ-d00295-B, REQ-d00295-C, REQ-d00295-D, REQ-d00295-E, REQ-d00295-G
 """The viewer mounts its whole surface under a configured prefix.
 
 A hosted router places each workspace's viewer under a path of its own,
@@ -159,17 +159,67 @@ def test_the_mcp_mount_sits_under_the_prefix(canonical_federated_graph):
 # ---------------------------------------------------------------------------
 
 
+# The form a mount answers at, in the refusal's own words.
+_FORM = r"each introduced by a single '/' and made only of letters, digits"
+
+
 # Verifies: REQ-d00295-E
-@pytest.mark.parametrize("bad", ["w/abc", "/w/abc/", "/", "w"])
+@pytest.mark.parametrize(
+    "bad",
+    [
+        "w/abc",
+        "/w/abc/",
+        "/",
+        "w",
+        "//w",
+        "/w//x",
+        "/w?x",
+        "/w#x",
+        "/w abc",
+        "/w/%41",
+        "/w/./x",
+        "/w/../x",
+        "/.",
+        "/..",
+    ],
+    ids=[
+        "no-leading-slash",
+        "trailing-slash",
+        "root-alone",
+        "bare-word",
+        "doubled-leading-slash",
+        "doubled-inner-slash",
+        "query",
+        "fragment",
+        "space",
+        "percent-escape",
+        "dot-segment",
+        "dotdot-segment",
+        "dot-alone",
+        "dotdot-alone",
+    ],
+)
 def test_a_malformed_prefix_is_refused_naming_the_accepted_form(bad):
-    with pytest.raises(ValueError, match=r"starts with '/' and does not end with '/'"):
+    """Every shape here is one a Starlette mount takes without complaint
+    and then answers nothing at, so the refusal has to come first."""
+    with pytest.raises(ValueError, match=_FORM):
         validate_base_path(bad)
 
 
 # Verifies: REQ-d00295-E
-@pytest.mark.parametrize("good", ["", "/w", "/w/abc"])
+@pytest.mark.parametrize("good", ["", "/w", "/w/abc", "/w.x", "/w~x", "/w-1_2", "/w/..."])
 def test_an_accepted_prefix_passes_through_unchanged(good):
     assert validate_base_path(good) == good
+
+
+# Verifies: REQ-d00295-E
+@pytest.mark.parametrize("bad", ["//w", "/w?x"])
+def test_a_refused_prefix_is_one_a_mount_would_answer_nothing_at(canonical_federated_graph, bad):
+    """The factory refuses before building: a mount at this prefix would
+    start and 404 everywhere, which is the outcome the refusal exists to
+    forestall."""
+    with pytest.raises(ValueError, match=_FORM):
+        create_app(_state(canonical_federated_graph), mount_mcp=False, base_path=bad)
 
 
 # Verifies: REQ-d00295-E
@@ -187,4 +237,29 @@ def test_the_viewer_command_refuses_a_malformed_prefix_before_building(capsys, m
     monkeypatch.setattr(state_module.AppState, "from_config", _never)
     rc = viewer._run_server(argparse.Namespace(base_path="w/abc"), open_browser=False)
     assert rc == 1
-    assert "starts with '/' and does not end with '/'" in capsys.readouterr().err
+    assert re.search(_FORM, capsys.readouterr().err)
+
+
+# ---------------------------------------------------------------------------
+# G: a prefix applies to the server alone
+# ---------------------------------------------------------------------------
+
+
+# Verifies: REQ-d00295-G
+def test_the_static_generator_refuses_a_prefix_before_building(capsys, monkeypatch):
+    """A generated file requests nothing from a server, so a prefix has
+    nothing to apply to; it is refused rather than accepted and ignored."""
+    import argparse
+
+    from elspais.commands import viewer
+    from elspais.graph import factory
+
+    def _never(*_args, **_kwargs):
+        raise AssertionError("the graph was built for a static run already refused")
+
+    monkeypatch.setattr(factory, "build_graph", _never)
+    rc = viewer._run_static(argparse.Namespace(static=True, base_path="/w/abc"))
+    assert rc == 1
+    err = capsys.readouterr().err
+    assert "--base-path applies to the server only" in err
+    assert "Remove --base-path" in err
